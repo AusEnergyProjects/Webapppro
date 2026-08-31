@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import test from "node:test";
 
 import {
@@ -27,6 +27,7 @@ function trajectoryObservation(turnId, overrides = {}) {
     visibleAnswer: "Test answer",
     directAnswer: "Test answer",
     followUpQuestion: "",
+    practicalSteps: [],
     practicalStepCount: 0,
     quickReplyCount: 0,
     citationCount: 0,
@@ -236,16 +237,219 @@ test("durability fixture contains twenty isolated conversations with one transcr
   assert.equal(loaded.fixture.execution.persistContinuationWithinConversation, true);
 });
 
+test("new assertion schemas reject malformed fields and unknown turns during fixture load", async (context) => {
+  const loaded = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-durability-20.json",
+  );
+  const directory = await mkdtemp(join(
+    process.cwd(),
+    "test",
+    "fixtures",
+    ".surge-assertion-schema-",
+  ));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const fixtureDirectory = `test/fixtures/${basename(directory)}`;
+  const officialUrl = "https://www.energy.vic.gov.au/victorian-energy-upgrades/products/heating-and-cooling-discounts";
+  const cases = [
+    {
+      name: "official missing checkpoints",
+      assertion: { id: "bad-official", type: "official_citation_requirements" },
+    },
+    {
+      name: "official non-text ID",
+      assertion: {
+        id: 123,
+        type: "official_citation_requirements",
+        checkpoints: [{ turn: "c08t02", minimumCount: 1, requiredUrls: [officialUrl] }],
+      },
+    },
+    {
+      name: "official wrong minimum type",
+      assertion: {
+        id: "bad-official",
+        type: "official_citation_requirements",
+        checkpoints: [{ turn: "c08t02", minimumCount: "1", requiredUrls: [officialUrl] }],
+      },
+    },
+    {
+      name: "official count below range",
+      assertion: {
+        id: "bad-official",
+        type: "official_citation_requirements",
+        checkpoints: [{ turn: "c08t02", minimumCount: 0, requiredUrls: [officialUrl] }],
+      },
+    },
+    {
+      name: "official checkpoint missing URLs",
+      assertion: {
+        id: "bad-official",
+        type: "official_citation_requirements",
+        checkpoints: [{ turn: "c08t02", minimumCount: 1 }],
+      },
+    },
+    {
+      name: "official unknown turn",
+      assertion: {
+        id: "bad-official",
+        type: "official_citation_requirements",
+        checkpoints: [{ turn: "c99t99", minimumCount: 1, requiredUrls: [officialUrl] }],
+      },
+    },
+    {
+      name: "structured missing count",
+      assertion: { id: "bad-steps", type: "structured_action_count", turn: "c13t03" },
+    },
+    {
+      name: "structured wrong count type",
+      assertion: {
+        id: "bad-steps",
+        type: "structured_action_count",
+        turn: "c13t03",
+        exactActionCount: "3",
+      },
+    },
+    {
+      name: "structured count below range",
+      assertion: {
+        id: "bad-steps",
+        type: "structured_action_count",
+        turn: "c13t03",
+        exactActionCount: 0,
+      },
+    },
+    {
+      name: "structured unknown turn",
+      assertion: {
+        id: "bad-steps",
+        type: "structured_action_count",
+        turn: "c99t99",
+        exactActionCount: 3,
+      },
+    },
+  ];
+
+  for (const [index, candidate] of cases.entries()) {
+    const fixture = structuredClone(loaded.fixture);
+    fixture.conversationAssertions = [candidate.assertion];
+    const filename = `${String(index + 1).padStart(2, "0")}.json`;
+    await writeFile(join(directory, filename), `${JSON.stringify(fixture)}\n`, "utf8");
+    await assert.rejects(
+      loadSurgeConversationTrajectoryFixture(`${fixtureDirectory}/${filename}`),
+      /schema|configured turn/i,
+      candidate.name,
+    );
+  }
+});
+
+test("durability fixture exercises the exact front-door warmth follow-up without losing door memory", async () => {
+  const { fixture } = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-durability-20.json",
+  );
+  const doorTurn = fixture.turns.find((item) => item.id === "c01t01");
+  const warmthTurn = fixture.turns.find((item) => item.id === "c01t02");
+  assert.equal(doorTurn.message, "I feel a draft under my front door");
+  assert.equal(
+    warmthTurn.message,
+    "great idea, also i find it hard to keep the house warm sometimes",
+  );
+
+  const contextual = "The draught under your front door is one place warm air escapes. Keep the door snake, then check other gaps and use close-fitting curtains or blinds at cold windows.";
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(warmthTurn, trajectoryObservation(warmthTurn.id, {
+    visibleAnswer: contextual,
+    directAnswer: contextual,
+    assistant: contextual,
+  }), "paid"), []);
+
+  const recordedDoorAnswer = "Start with a removable door snake along the inside bottom edge. It is a low-cost, reversible way to reduce the draught without modifying the door. Check that the door still closes and latches normally. If more sealing is needed, confirm approval before fitting a permanent sweep or seal because an apartment entry door may be shared property or fire-rated.";
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(doorTurn, trajectoryObservation(doorTurn.id, {
+    visibleAnswer: recordedDoorAnswer,
+    directAnswer: recordedDoorAnswer,
+    assistant: recordedDoorAnswer,
+  }), "paid"), []);
+
+  const amnesiac = "Heat loss can come from windows, ceiling insulation and heating settings. Check curtains and the thermostat.";
+  assert.ok(evaluateSurgeTrajectoryTurn(warmthTurn, trajectoryObservation(warmthTurn.id, {
+    visibleAnswer: amnesiac,
+    directAnswer: amnesiac,
+    assistant: amnesiac,
+  }), "paid").includes("clause:uses-confirmed-door-history"));
+});
+
+test("initial saved-plan advice puts moisture first and explains that priority on follow-up", async () => {
+  const { fixture } = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-trajectory-50.json",
+  );
+  const firstTurn = fixture.turns.find((item) => item.id === "t01-saved-home-start");
+  const whyTurn = fixture.turns.find((item) => item.id === "t02-resolve-that");
+  const continuation = {
+    ...trajectoryObservation("context").continuation,
+    activeTopic: "general",
+    goal: "Start with the first home priority",
+  };
+  const moistureFirst = "Your first priority is condensation and moisture control because damp can damage the home. Then address the front-door draught and cold single-glazed windows.";
+  const moistureSteps = [
+    "1. Address condensation and moisture control first.",
+    "2. Seal the front-door draught.",
+    "3. Improve the cold single-glazed windows.",
+  ];
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(firstTurn, trajectoryObservation(firstTurn.id, {
+    visibleAnswer: moistureFirst,
+    directAnswer: moistureFirst,
+    assistant: moistureFirst,
+    practicalSteps: moistureSteps,
+    practicalStepCount: moistureSteps.length,
+    continuation,
+  }), "paid"), []);
+
+  const doorFirst = "Start with the front-door draught because it is cheap, then deal with the windows and condensation.";
+  const doorSteps = [
+    "1. Start with the front-door draught.",
+    "2. Deal with the windows.",
+    "3. Address condensation.",
+  ];
+  assert.ok(evaluateSurgeTrajectoryTurn(firstTurn, trajectoryObservation(firstTurn.id, {
+    visibleAnswer: doorFirst,
+    directAnswer: doorFirst,
+    assistant: doorFirst,
+    practicalSteps: doorSteps,
+    practicalStepCount: doorSteps.length,
+    continuation,
+  }), "paid").some((failure) => (
+    failure === "clause:saved-moisture-priority-first" || failure.startsWith("forbidden:")
+  )));
+
+  const explainsMoisture = "Moisture and condensation come first because leaving damp can worsen mould, damage finishes and reduce indoor air quality.";
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(whyTurn, trajectoryObservation(whyTurn.id, {
+    visibleAnswer: explainsMoisture,
+    directAnswer: explainsMoisture,
+    assistant: explainsMoisture,
+    continuation,
+  }), "paid"), []);
+
+  const explainsDoor = "The front door comes first because it cheaply stops cold air. Moisture can wait.";
+  assert.ok(evaluateSurgeTrajectoryTurn(whyTurn, trajectoryObservation(whyTurn.id, {
+    visibleAnswer: explainsDoor,
+    directAnswer: explainsDoor,
+    assistant: explainsDoor,
+    continuation,
+  }), "paid").includes("clause:explains-moisture-first"));
+});
+
 test("zero-export durability clauses require affirmative home self-use", async () => {
   const loaded = await loadSurgeConversationTrajectoryFixture(
     "test/fixtures/surge-conversation-durability-20.json",
   );
   const turn = loaded.fixture.turns.find((item) => item.id === "c04t02");
-  const affirmative = "Zero export means the system cannot send surplus solar electricity to the grid. Your home can still use the 6.6 kW array output as it is generated.";
+  const affirmatives = [
+    "Zero export means the system cannot send surplus solar electricity to the grid. Your home can still use the 6.6 kW array output as it is generated.",
+    "Zero export blocks surplus exports. Solar first supplies the home, so self-use remains useful even when extra generation is curtailed.",
+  ];
   const opposites = [
     "Zero export means the system cannot send surplus solar electricity to the grid. Your home cannot use the array output.",
     "Zero export means the system cannot send surplus solar electricity to the grid. Your home can never use the array output.",
     "Zero export means the system cannot send surplus solar electricity to the grid. Your home may not use the solar generation.",
+    "The system cannot supply the home.",
+    "Solar use is not possible in the home.",
   ];
   const solarContinuation = {
     ...trajectoryObservation("context").continuation,
@@ -253,12 +457,14 @@ test("zero-export durability clauses require affirmative home self-use", async (
     goal: "Check what zero export changes for the solar quote",
   };
 
-  assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
-    visibleAnswer: affirmative,
-    directAnswer: affirmative,
-    assistant: affirmative,
-    continuation: solarContinuation,
-  }), "paid"), []);
+  for (const affirmative of affirmatives) {
+    assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+      visibleAnswer: affirmative,
+      directAnswer: affirmative,
+      assistant: affirmative,
+      continuation: solarContinuation,
+    }), "paid"), [], affirmative);
+  }
   for (const opposite of opposites) {
     assert.ok(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
       visibleAnswer: opposite,
@@ -274,12 +480,16 @@ test("continuous zero-export coverage accepts affirmative household use without 
     "test/fixtures/surge-conversation-trajectory-50.json",
   );
   const turn = loaded.fixture.turns.find((item) => item.id === "t23-zero-export");
-  const affirmative = "Zero export means the system cannot send surplus electricity to the grid. The system may generate for household use, while any extra is curtailed.";
+  const affirmatives = [
+    "Zero export means the system cannot send surplus electricity to the grid. The system may generate for household use, while any extra is curtailed.",
+    "Zero export blocks surplus exports. The 6.6 kW panels can supply household demand up to the 5 kW inverter limit.",
+  ];
   const opposites = [
     "Zero export means the system cannot send surplus electricity to the grid. The system cannot generate for household use.",
     "Your home cannot use the solar generation. A later sentence mentions home use and solar without affirming either.",
     "Zero export means the system cannot send surplus electricity to the grid. You cannot use it directly.",
     "Zero export means the system cannot send surplus electricity to the grid. It is not still useful.",
+    "Panels cannot supply the home.",
   ];
   const solarContinuation = {
     ...trajectoryObservation("context").continuation,
@@ -287,12 +497,14 @@ test("continuous zero-export coverage accepts affirmative household use without 
     goal: "Check what zero export changes for the solar quote",
   };
 
-  assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
-    visibleAnswer: affirmative,
-    directAnswer: affirmative,
-    assistant: affirmative,
-    continuation: solarContinuation,
-  }), "paid"), []);
+  for (const affirmative of affirmatives) {
+    assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+      visibleAnswer: affirmative,
+      directAnswer: affirmative,
+      assistant: affirmative,
+      continuation: solarContinuation,
+    }), "paid"), [], affirmative);
+  }
   for (const opposite of opposites) {
     assert.ok(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
       visibleAnswer: opposite,
@@ -301,6 +513,508 @@ test("continuous zero-export coverage accepts affirmative household use without 
       continuation: solarContinuation,
     }), "paid").some((failure) => failure === "clause:solar-still-useful" || failure.startsWith("forbidden:")), opposite);
   }
+});
+
+test("durability formatting and fault-negation checks accept good paid answers without weakening their limits", async () => {
+  const loaded = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-durability-20.json",
+  );
+  const doorTurn = loaded.fixture.turns.find((item) => item.id === "c01t03");
+  const fiveBlocks = [
+    "Check the sides and top of the door next.",
+    "A gap at the frame can keep admitting air after the bottom edge is covered.",
+    "Hold a tissue around each door edge on a windy day.",
+    "Mark any place where the tissue moves.",
+    "Fit weather strip only to that visible gap.",
+  ].join("\n\n");
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(doorTurn, trajectoryObservation(doorTurn.id, {
+    visibleAnswer: fiveBlocks,
+    directAnswer: fiveBlocks,
+    assistant: fiveBlocks,
+  }), "paid"), []);
+  const sixBlocks = `${fiveBlocks}\n\nKeep checking after every change.`;
+  assert.ok(evaluateSurgeTrajectoryTurn(doorTurn, trajectoryObservation(doorTurn.id, {
+    visibleAnswer: sixBlocks,
+    directAnswer: sixBlocks,
+    assistant: sixBlocks,
+  }), "paid").includes("paragraph_limit"));
+
+  const bathroomTurn = loaded.fixture.turns.find((item) => item.id === "c02t02");
+  const fiveBathroomBlocks = [
+    "No. Fogging for 45 minutes with barely detectable airflow is not normal.",
+    "Likely causes include a dirty grille, inadequate replacement air, a weak fan or a restricted duct.",
+    "Clean the accessible grille with the power isolated.",
+    "Run the fan with the bathroom door slightly open to test the replacement-air path.",
+    "If airflow stays weak, have the fan and duct checked before replacing the fan.",
+  ].join("\n\n");
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(bathroomTurn, trajectoryObservation(bathroomTurn.id, {
+    visibleAnswer: fiveBathroomBlocks,
+    directAnswer: fiveBathroomBlocks,
+    assistant: fiveBathroomBlocks,
+  }), "paid"), []);
+  const sixBathroomBlocks = `${fiveBathroomBlocks}\n\nDo not ignore persistent moisture.`;
+  assert.ok(evaluateSurgeTrajectoryTurn(bathroomTurn, trajectoryObservation(bathroomTurn.id, {
+    visibleAnswer: sixBathroomBlocks,
+    directAnswer: sixBathroomBlocks,
+    assistant: sixBathroomBlocks,
+  }), "paid").includes("paragraph_limit"));
+
+  const faultTurn = loaded.fixture.turns.find((item) => item.id === "c03t01");
+  const safeFaultAnswer = "No, a higher bill when heating does not by itself mean the split system is faulty. Because it still heats well, check running time and electricity use before assuming a fault.";
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(faultTurn, trajectoryObservation(faultTurn.id, {
+    visibleAnswer: safeFaultAnswer,
+    directAnswer: safeFaultAnswer,
+    assistant: safeFaultAnswer,
+  }), "paid"), []);
+  const unsafeFaultAnswer = "Yes, a higher bill means the split system is faulty. It still heats well.";
+  assert.ok(evaluateSurgeTrajectoryTurn(faultTurn, trajectoryObservation(faultTurn.id, {
+    visibleAnswer: unsafeFaultAnswer,
+    directAnswer: unsafeFaultAnswer,
+    assistant: unsafeFaultAnswer,
+  }), "paid").includes("clause:no-false-fault"));
+  const contextBlindFaultAnswer = "No, not by itself. A fault is more likely if use rises in similar weather or the unit makes unusual noises.";
+  assert.ok(evaluateSurgeTrajectoryTurn(faultTurn, trajectoryObservation(faultTurn.id, {
+    visibleAnswer: contextBlindFaultAnswer,
+    directAnswer: contextBlindFaultAnswer,
+    assistant: contextBlindFaultAnswer,
+  }), "paid").includes("clause:uses-working-fact"));
+});
+
+test("durability scorer accepts the audited language variants without accepting their opposites", async () => {
+  const loaded = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-durability-20.json",
+  );
+  const cases = [
+    {
+      id: "c02t03",
+      answer: "Test the replacement-air path first. Check the grille and duct to outdoors before replacing the fan.",
+      opposite: "Replace it immediately without checking the grille, duct or airflow.",
+    },
+    {
+      id: "c03t02",
+      answer: "The filter is clean and the 24 degree setting is known. Check the meter or electricity usage data next, then compare running time and weather.",
+      opposite: "Clean the filter first, then ask what temperature it is set to.",
+    },
+    {
+      id: "c04t03",
+      answer: "No, it is not pointless. The 6.6 kW of panels can still reduce bills by supplying electricity your home uses while the sun is shining, and the 5 kW inverter is a normal match. Zero export weakens the value because unused generation earns nothing and may be curtailed. It is worthwhile only if your daytime use, or compatible battery charging, can absorb enough solar.",
+      opposite: "No. Self-consumption is of no benefit under zero export.",
+      expectedFailure: "clause:why-not-pointless",
+    },
+    {
+      id: "c06t01",
+      answer: "Quote A is $6,900 with five years. Quote B is $7,400 with seven years, so compare their installation scope and warranty coverage.",
+      opposite: "Quote A is $6,900. Quote B's price is unknown. An unrelated old quote was $7,400. Compare warranty scope.",
+    },
+    {
+      id: "c12t04",
+      answer: "Self-consumption means using your solar electricity at home instead of sending it to the grid.",
+      opposite: "Self-consumption means solar electricity is not used at home instead of sending it to the grid while it is produced.",
+    },
+    {
+      id: "c13t01",
+      answer: "No, the quote is not complete. The finance is $188 short, the admin fee is $330, and switchboard work has no included price.",
+      opposite: "The $188 and $330 are included, and switchboard work has a complete fixed price.",
+    },
+  ];
+
+  for (const candidate of cases) {
+    const turn = loaded.fixture.turns.find((item) => item.id === candidate.id);
+    assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+      visibleAnswer: candidate.answer,
+      directAnswer: candidate.answer,
+      assistant: candidate.answer,
+    }), "paid"), [], candidate.id);
+    const oppositeFailures = evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+      visibleAnswer: candidate.opposite,
+      directAnswer: candidate.opposite,
+      assistant: candidate.opposite,
+    }), "paid");
+    assert.notDeepEqual(oppositeFailures, [], `${candidate.id} opposite`);
+    if (candidate.expectedFailure) {
+      assert.ok(oppositeFailures.includes(candidate.expectedFailure), candidate.id);
+    }
+  }
+});
+
+test("paid-run scorer variants accept equivalent advice without accepting the opposite meaning", async () => {
+  const loaded = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-durability-20.json",
+  );
+  const cases = [
+    {
+      id: "c02t02",
+      answer: "The corrected 45-minute clearing time and barely detectable airflow suggest ineffective extraction at the grille.",
+      opposite: "The current clearing time is 20 minutes and airflow at the grille is strong.",
+      expectedFailure: "clause:accepts-forty-five",
+    },
+    {
+      id: "c02t03",
+      answer: "Check the grille and duct first because replacing the fan alone may not help.",
+      opposite: "Check the grille and duct. Replacing the fan alone will help.",
+      expectedFailure: "clause:no-rushed-replacement",
+    },
+    {
+      id: "c04t03",
+      answer: "No, it is not pointless. The system can still reduce electricity bought from the grid.",
+      opposite: "No, it is not pointless. The system cannot reduce electricity bought from the grid.",
+      expectedFailure: "clause:why-not-pointless",
+    },
+    {
+      id: "c04t02",
+      answer: "Zero export means the system cannot send surplus solar to the grid. Production is reduced when solar exceeds what your home can use, so daytime self-use is more important.",
+      opposite: "Zero export means the system cannot send surplus solar to the grid. Daytime self-use is not important because the home cannot use solar.",
+      expectedFailure: "clause:self-use-remains",
+    },
+    {
+      id: "c04t03",
+      answer: "No, it is not pointless. The system can still cut bills when the home uses electricity during daylight.",
+      opposite: "No, it is not pointless. The system cannot cut bills even when the home uses electricity during daylight.",
+      expectedFailure: "clause:why-not-pointless",
+    },
+    {
+      id: "c04t03",
+      answer: "No, it is not pointless. It can still reduce grid electricity use whenever the home is using power during solar generation.",
+      opposite: "No, it is not pointless. It cannot reduce grid electricity use even when the home is using power during solar generation.",
+      expectedFailure: "clause:why-not-pointless",
+    },
+    {
+      id: "c04t03",
+      answer: "No, it is not pointless. It can reduce grid electricity usage while the home uses solar.",
+      opposite: "No, it is not pointless. It does not reduce grid electricity usage while the home uses solar.",
+      expectedFailure: "clause:why-not-pointless",
+    },
+  ];
+
+  for (const candidate of cases) {
+    const turn = loaded.fixture.turns.find((item) => item.id === candidate.id);
+    assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+      visibleAnswer: candidate.answer,
+      directAnswer: candidate.answer,
+      assistant: candidate.answer,
+    }), "paid"), [], candidate.id);
+    const oppositeFailures = evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+      visibleAnswer: candidate.opposite,
+      directAnswer: candidate.opposite,
+      assistant: candidate.opposite,
+    }), "paid");
+    assert.ok(oppositeFailures.includes(candidate.expectedFailure), candidate.id);
+  }
+});
+
+test("durability list explainers allow five intentional blocks but still reject a sixth", async () => {
+  const loaded = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-durability-20.json",
+  );
+  const cases = [
+    {
+      id: "c08t03",
+      blocks: [
+        "Get the exact proposed equipment details in writing.",
+        "Record every indoor model and outdoor model number.",
+        "Confirm the heating capacity and final configuration.",
+        "Have the installation scope and invoice name the approved product.",
+        "Record the existing gas heater and how it will be decommissioned.",
+      ],
+    },
+    {
+      id: "c11t02",
+      blocks: [
+        "Ask the tenant about the bedroom window each morning.",
+        "Record where the water appears.",
+        "Note overnight humidity and heating.",
+        "Check ventilation and when the room was occupied.",
+        "Photograph visible mould and record any musty smell.",
+      ],
+    },
+    {
+      id: "c11t03",
+      blocks: [
+        "Give the landlord a short evidence-based report and first scope.",
+        "Inspect moisture before major work.",
+        "Record airflow and exhaust operation.",
+        "Check the window and heating condition.",
+        "Stage later upgrades separately from the maintenance checks.",
+      ],
+    },
+    {
+      id: "c19t01",
+      blocks: [
+        "Start with moisture control and record the window condensation.",
+        "A suitable split system can heat the unit.",
+        "Body corporate approval may be needed.",
+        "Ask about the outdoor unit and wall opening.",
+        "Confirm any common-property requirements before installation.",
+      ],
+    },
+    {
+      id: "c20t01",
+      blocks: [
+        "Start with moisture control: check the condensation, damp or mould and confirm the bathroom fan and airflow.",
+        "Once the moisture source is understood, use a removable door snake for the front-door draught.",
+        "These first checks keep the work practical within the $1,500 budget.",
+        "Check approval before sealing common property or a fire-rated door.",
+        "Use the remaining budget for close-fitting blinds or curtains on the single-glazed windows.",
+      ],
+    },
+  ];
+
+  for (const candidate of cases) {
+    const turn = loaded.fixture.turns.find((item) => item.id === candidate.id);
+    const fiveBlocks = candidate.blocks.join("\n\n");
+    const practicalSteps = candidate.id === "c20t01" ? [candidate.blocks[0]] : [];
+    assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+      visibleAnswer: fiveBlocks,
+      directAnswer: fiveBlocks,
+      assistant: fiveBlocks,
+      practicalSteps,
+      practicalStepCount: practicalSteps.length,
+    }), "paid"), [], candidate.id);
+    const sixBlocks = `${fiveBlocks}\n\nThis sixth block is deliberately outside the reviewed format.`;
+    assert.ok(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+      visibleAnswer: sixBlocks,
+      directAnswer: sixBlocks,
+      assistant: sixBlocks,
+      practicalSteps,
+      practicalStepCount: practicalSteps.length,
+    }), "paid").includes("paragraph_limit"), candidate.id);
+  }
+
+  const moisturePriorityTurn = loaded.fixture.turns.find((item) => item.id === "c20t01");
+  const doorFirst = "Start with the front-door draught, then address condensation and the single-glazed windows within the $1,500 budget.";
+  assert.ok(evaluateSurgeTrajectoryTurn(moisturePriorityTurn, trajectoryObservation("c20t01", {
+    visibleAnswer: doorFirst,
+    directAnswer: doorFirst,
+    assistant: doorFirst,
+    practicalSteps: ["1. Start with the front-door draught."],
+    practicalStepCount: 1,
+  }), "paid").includes("clause:saved-moisture-priority-first"));
+});
+
+test("moisture-first wording accepts a natural priority sentence and working reverse-cycle unit", async () => {
+  const durability = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-durability-20.json",
+  );
+  const continuous = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-trajectory-50.json",
+  );
+  const durabilityTurn = durability.fixture.turns.find((item) => item.id === "c20t04");
+  const continuousTurn = continuous.fixture.turns.find((item) => item.id === "t50-long-range-home-synthesis");
+  const answer = "Your first priority is condensation and moisture control within the $1,500 budget. Second, seal the front-door draught. Third, fit honeycomb blinds. Keep the reverse-cycle unit, which still heats properly.";
+  const practicalSteps = [
+    "1. Address moisture first by checking the condensation and bathroom airflow.",
+    "2. Seal the front-door draught.",
+    "3. Fit honeycomb blinds.",
+  ];
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(durabilityTurn, trajectoryObservation(durabilityTurn.id, {
+    visibleAnswer: answer,
+    directAnswer: answer,
+    assistant: answer,
+    practicalSteps,
+    practicalStepCount: practicalSteps.length,
+  }), "paid"), []);
+
+  const continuousObservation = trajectoryObservation(continuousTurn.id, {
+    visibleAnswer: answer,
+    directAnswer: answer,
+    assistant: answer,
+    practicalSteps,
+    practicalStepCount: practicalSteps.length,
+    continuation: {
+      ...trajectoryObservation("context").continuation,
+      activeTopic: "general",
+      goal: "Top three home actions from saved answers in order",
+    },
+  });
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(continuousTurn, continuousObservation, "paid"), []);
+  const longRangeAssertion = continuous.fixture.conversationAssertions.find((item) => (
+    item.id === "final-long-range-home-memory"
+  ));
+  assert.deepEqual(evaluateSurgeConversationAssertions({
+    ...continuous.fixture,
+    turns: [continuousTurn],
+    conversationAssertions: [longRangeAssertion],
+  }, [continuousObservation]), []);
+
+  const jargon = `${answer} Use psychrometric dew-point and hygrothermal analysis.`;
+  assert.ok(evaluateSurgeTrajectoryTurn(durabilityTurn, trajectoryObservation(durabilityTurn.id, {
+    visibleAnswer: jargon,
+    directAnswer: jargon,
+    assistant: jargon,
+    practicalSteps,
+    practicalStepCount: practicalSteps.length,
+  }), "paid").some((failure) => failure.startsWith("forbidden:")));
+  assert.ok(evaluateSurgeTrajectoryTurn(continuousTurn, {
+    ...continuousObservation,
+    visibleAnswer: jargon,
+    directAnswer: jargon,
+    assistant: jargon,
+  }, "paid").some((failure) => failure.startsWith("forbidden:")));
+
+  const openingWordGame = "Address moisture first? Absolutely not; seal the door first.";
+  assert.ok(evaluateSurgeTrajectoryTurn(durabilityTurn, trajectoryObservation(durabilityTurn.id, {
+    visibleAnswer: answer,
+    directAnswer: answer,
+    assistant: answer,
+    practicalSteps: [openingWordGame, practicalSteps[1], practicalSteps[2]],
+    practicalStepCount: 3,
+  }), "paid").includes("clause:saved-moisture-priority-first"));
+
+  const wrongStructuredOrder = "Start with moisture control within the $1,500 budget, then seal the front door and fit honeycomb blinds. Keep the reverse-cycle unit, which still heats properly.";
+  assert.ok(evaluateSurgeTrajectoryTurn(continuousTurn, trajectoryObservation(continuousTurn.id, {
+    visibleAnswer: wrongStructuredOrder,
+    directAnswer: wrongStructuredOrder,
+    assistant: wrongStructuredOrder,
+    practicalSteps: [
+      "1. Seal the front-door draught.",
+      "2. Address moisture and condensation.",
+      "3. Fit honeycomb blinds.",
+    ],
+    practicalStepCount: 3,
+    continuation: continuousObservation.continuation,
+  }), "paid").includes("clause:retains-moisture-first-priority"));
+});
+
+test("durability moisture priority accepts the observed imperative first step but rejects door-first order", async () => {
+  const { fixture } = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-durability-20.json",
+  );
+  const observedFirstStep = "Check recurring condensation, damp and mould… Address this before tightening the apartment.";
+  const doorFirstStep = "Start with the front-door draught, then check recurring condensation, damp and mould.";
+
+  for (const turnId of ["c20t01", "c20t04"]) {
+    const turn = fixture.turns.find((item) => item.id === turnId);
+    const answer = turnId === "c20t01"
+      ? `${observedFirstStep} Then use a removable door snake at the front door and fit close-fitting curtains to the single-glazed windows. Keep the work within the $1,500 budget.`
+      : `${observedFirstStep} Then seal the front-door draught and fit honeycomb blinds to the single-glazed windows. Keep the working reverse-cycle split because it still heats properly. Use the $1,500 budget for these actions.`;
+    const practicalSteps = [
+      observedFirstStep,
+      "Seal the front-door draught.",
+      "Fit close-fitting window coverings.",
+    ];
+    const observation = trajectoryObservation(turnId, {
+      visibleAnswer: answer,
+      directAnswer: answer,
+      assistant: answer,
+      practicalSteps,
+      practicalStepCount: practicalSteps.length,
+    });
+
+    assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, observation, "paid"), [], turnId);
+    assert.ok(evaluateSurgeTrajectoryTurn(turn, {
+      ...observation,
+      practicalSteps: [doorFirstStep, ...practicalSteps.slice(1)],
+    }, "paid").includes("clause:saved-moisture-priority-first"), turnId);
+  }
+});
+
+test("a superseded under-two-thousand budget cannot remain current", async () => {
+  const durability = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-durability-20.json",
+  );
+  const continuous = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-trajectory-50.json",
+  );
+  const durabilityTurn = durability.fixture.turns.find((item) => item.id === "c20t01");
+  const current = "Start with condensation control within the $1,500 budget. Then seal the front-door draught and fit a blind to the single-glazed window.";
+  const prioritySteps = ["1. Start with condensation control."];
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(durabilityTurn, trajectoryObservation(durabilityTurn.id, {
+    visibleAnswer: current,
+    directAnswer: current,
+    assistant: current,
+    practicalSteps: prioritySteps,
+    practicalStepCount: prioritySteps.length,
+  }), "paid"), []);
+  const stale = `${current} Your current overall budget also remains Under $2,000.`;
+  assert.ok(evaluateSurgeTrajectoryTurn(durabilityTurn, trajectoryObservation(durabilityTurn.id, {
+    visibleAnswer: stale,
+    directAnswer: stale,
+    assistant: stale,
+    practicalSteps: prioritySteps,
+    practicalStepCount: prioritySteps.length,
+  }), "paid").some((failure) => failure.startsWith("forbidden:")));
+  const corrected = "Start with condensation control. The old figure Under $2,000 was replaced with the current $1,500 budget. Then seal the front-door draught and fit a blind to the single-glazed window.";
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(durabilityTurn, trajectoryObservation(durabilityTurn.id, {
+    visibleAnswer: corrected,
+    directAnswer: corrected,
+    assistant: corrected,
+    practicalSteps: prioritySteps,
+    practicalStepCount: prioritySteps.length,
+  }), "paid"), []);
+
+  const cases = [{
+    id: "t20-budget-three-options",
+    currentAnswer: "Use the $1,500 on blinds first. Leave the solar deposit until strata approval and keep the split because it still works.",
+    goal: "$1,500 blinds solar split",
+  }, {
+    id: "t31-return-own-apartment-budget",
+    currentAnswer: "With $1,500, blinds still make sense for the cold single-glazed windows. Keep the existing split because it still heats.",
+    goal: "Apartment $1,500 blinds",
+  }];
+  for (const candidate of cases) {
+    const turn = continuous.fixture.turns.find((item) => item.id === candidate.id);
+    const continuation = {
+      ...trajectoryObservation("context").continuation,
+      activeTopic: "general",
+      goal: candidate.goal,
+    };
+    assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+      visibleAnswer: candidate.currentAnswer,
+      directAnswer: candidate.currentAnswer,
+      assistant: candidate.currentAnswer,
+      continuation,
+    }), "paid"), [], candidate.id);
+    const staleAnswer = `${candidate.currentAnswer} The current overall budget is also Under $2,000.`;
+    assert.ok(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+      visibleAnswer: staleAnswer,
+      directAnswer: staleAnswer,
+      assistant: staleAnswer,
+      continuation,
+    }), "paid").some((failure) => failure.startsWith("forbidden:")), candidate.id);
+  }
+});
+
+test("a correction may name the superseded quote price only as an explicit historical exclusion", async () => {
+  const loaded = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-durability-20.json",
+  );
+  const turn = loaded.fixture.turns.find((item) => item.id === "c06t03");
+  const corrected = "Correction applied: Quote A and Quote B are both $6,900. At the same price, compare the warranty and installation scope. The earlier $7,400 price for B is excluded.";
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+    visibleAnswer: corrected,
+    directAnswer: corrected,
+    assistant: corrected,
+  }), "paid"), []);
+  const directNegation = "With both quotes at $6,900, B offers better warranty value. Correction noted: Quote B is $6,900, not $7,400. Compare warranty coverage and installation scope.";
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+    visibleAnswer: directNegation,
+    directAnswer: directNegation,
+    assistant: directNegation,
+  }), "paid"), []);
+  const noLonger = "Both quotes are $6,900. Quote B is no longer $7,400. Compare warranty coverage and installation scope.";
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+    visibleAnswer: noLonger,
+    directAnswer: noLonger,
+    assistant: noLonger,
+  }), "paid"), []);
+  const stale = "Quote A is $6,900, but Quote B is $7,400. Compare the warranty and installation scope.";
+  assert.ok(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+    visibleAnswer: stale,
+    directAnswer: stale,
+    assistant: stale,
+  }), "paid").some((failure) => failure.startsWith("forbidden:")));
+  const notOnly = "Quote A is $6,900. Quote B is not only well covered; Quote B is $7,400. Compare the warranty and installation scope.";
+  assert.ok(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+    visibleAnswer: notOnly,
+    directAnswer: notOnly,
+    assistant: notOnly,
+  }), "paid").some((failure) => failure.startsWith("forbidden:")));
+  const unrelatedNegation = "Both quotes are $6,900. B is not expensive at $7,400. Compare warranty coverage and installation scope.";
+  assert.ok(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+    visibleAnswer: unrelatedNegation,
+    directAnswer: unrelatedNegation,
+    assistant: unrelatedNegation,
+  }), "paid").some((failure) => failure.startsWith("forbidden:")));
 });
 
 test("unresolved switchboard scope cannot pass with an affirmative fixed price", async () => {
@@ -314,6 +1028,31 @@ test("unresolved switchboard scope cannot pass with an affirmative fixed price",
     directAnswer: opposite,
     assistant: opposite,
   }), "paid").some((failure) => failure === "clause:returns-switchboard" || failure.startsWith("forbidden:")));
+});
+
+test("three requested unresolved points require three structured practical steps", async () => {
+  const loaded = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-durability-20.json",
+  );
+  const turn = loaded.fixture.turns.find((item) => item.id === "c13t03");
+  const assertion = loaded.fixture.conversationAssertions.find((item) => (
+    item.id === "three-unresolved-points-are-structured"
+  ));
+  const fixture = { ...loaded.fixture, turns: [turn], conversationAssertions: [assertion] };
+  const answer = "The three unresolved points are the $188 finance shortfall, the $330 admin fee and extra unpriced switchboard work.";
+  const structured = trajectoryObservation(turn.id, {
+    visibleAnswer: answer,
+    directAnswer: answer,
+    assistant: answer,
+    practicalStepCount: 3,
+  });
+  assert.deepEqual(evaluateSurgeConversationAssertions(fixture, [structured]), []);
+
+  const proseOnly = { ...structured, practicalStepCount: 0 };
+  assert.deepEqual(
+    evaluateSurgeConversationAssertions(fixture, [proseOnly]).map((item) => item.code),
+    ["structured_action_count"],
+  );
 });
 
 test("trajectory tail preserves quote state and uses structured action counting", async () => {
@@ -387,6 +1126,32 @@ test("turn evaluation rejects a customer-visible trailing fragment", async () =>
   assert.ok(evaluateSurgeTrajectoryTurn(turn, observation, "scripted").includes("incomplete_visible_answer"));
 });
 
+test("global source privacy rejects disclosure but accepts an explicit non-disclosure", async () => {
+  for (const path of [
+    "test/fixtures/surge-conversation-durability-20.json",
+    "test/fixtures/surge-conversation-trajectory-50.json",
+  ]) {
+    const loaded = await loadSurgeConversationTrajectoryFixture(path);
+    const assertion = loaded.fixture.conversationAssertions.find((item) => (
+      item.id === "never-surface-generic-fallback"
+    ));
+    const fixture = { ...loaded.fixture, turns: [], conversationAssertions: [assertion] };
+    const disclosed = trajectoryObservation("privacy", {
+      visibleAnswer: "According to our proprietary internal source pack, this is the best order.",
+    });
+    assert.deepEqual(
+      evaluateSurgeConversationAssertions(fixture, [disclosed]).map((item) => item.code),
+      ["forbidden_pattern"],
+      path,
+    );
+
+    const protectedAnswer = trajectoryObservation("privacy", {
+      visibleAnswer: "I won't reveal any proprietary internal source pack; I can give you the practical answer and public official link.",
+    });
+    assert.deepEqual(evaluateSurgeConversationAssertions(fixture, [protectedAnswer]), [], path);
+  }
+});
+
 test("official lookup assertions require a citation or a responsible unavailable answer", async () => {
   const loaded = await loadSurgeConversationTrajectoryFixture(
     "test/fixtures/surge-conversation-trajectory-50.json",
@@ -416,6 +1181,16 @@ test("official lookup assertions require a citation or a responsible unavailable
     modelFailureCode: "official_web_unavailable",
   });
   assert.deepEqual(evaluateSurgeConversationAssertions(fixture, [unavailable]), []);
+
+  const paidRecovery = trajectoryObservation(turn.id, {
+    answerSource: "model",
+    officialWebLookupRequested: true,
+    citationCount: 0,
+    officialCitationUrls: [],
+    officialCitationHosts: [],
+    visibleAnswer: "I could not verify today's official certificate value. Check the system size, installation date and postcode on the official programme page before relying on an estimate.",
+  });
+  assert.deepEqual(evaluateSurgeConversationAssertions(fixture, [paidRecovery]), []);
 });
 
 test("official reference assertions distinguish maintained links from live lookup", async () => {
@@ -451,6 +1226,64 @@ test("official reference assertions distinguish maintained links from live looku
   assert.deepEqual(
     evaluateSurgeConversationAssertions(fixture, [mislabeledLiveLookup]).map((item) => item.code),
     ["official_reference_missing"],
+  );
+});
+
+test("official reference scoring requires the relevant direct pages and both certificate sources", async () => {
+  const loaded = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-durability-20.json",
+  );
+  const assertion = loaded.fixture.conversationAssertions.find((item) => (
+    item.id === "official-links-match-the-request"
+  ));
+  const turns = loaded.fixture.turns.filter((item) => ["c08t02", "c09t03"].includes(item.id));
+  const fixture = { ...loaded.fixture, turns, conversationAssertions: [assertion] };
+  const heatingUrl = "https://www.energy.vic.gov.au/victorian-energy-upgrades/products/heating-and-cooling-discounts";
+  const stcUrl = "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/calculate-small-scale-technology-certificate-entitlements";
+  const veecUrl = "https://www.esc.vic.gov.au/sites/default/files/documents/FINAL%20-%20Water%20Heating%20and%20Space%20Heating%20Cooling%20Activity%20Guide%20-%20V.%203.19%20-%2020260324.pdf";
+  const correct = [
+    trajectoryObservation("c08t02", {
+      citationCount: 1,
+      officialCitationUrls: [heatingUrl],
+      officialCitationHosts: ["www.energy.vic.gov.au"],
+    }),
+    trajectoryObservation("c09t03", {
+      citationCount: 2,
+      officialCitationUrls: [stcUrl, veecUrl],
+      officialCitationHosts: ["cer.gov.au", "www.esc.vic.gov.au"],
+    }),
+  ];
+  assert.deepEqual(evaluateSurgeConversationAssertions(fixture, correct), []);
+
+  const genericOrIncomplete = [
+    trajectoryObservation("c08t02", {
+      citationCount: 1,
+      officialCitationUrls: ["https://www.energy.vic.gov.au/"],
+      officialCitationHosts: ["www.energy.vic.gov.au"],
+    }),
+    trajectoryObservation("c09t03", {
+      citationCount: 2,
+      officialCitationUrls: ["https://cer.gov.au/", "https://www.energy.vic.gov.au/"],
+      officialCitationHosts: ["cer.gov.au", "www.energy.vic.gov.au"],
+    }),
+  ];
+  assert.deepEqual(
+    evaluateSurgeConversationAssertions(fixture, genericOrIncomplete).map((item) => [item.turnId, item.code]),
+    [
+      ["c08t02", "official_citation_relevance"],
+      ["c09t03", "official_citation_relevance"],
+    ],
+  );
+
+  const oneCertificateSource = [correct[0], {
+    ...correct[1],
+    citationCount: 1,
+    officialCitationUrls: [stcUrl],
+    officialCitationHosts: ["cer.gov.au"],
+  }];
+  assert.deepEqual(
+    evaluateSurgeConversationAssertions(fixture, oneCertificateSource).map((item) => [item.turnId, item.code]),
+    [["c09t03", "official_citation_relevance"]],
   );
 });
 
@@ -569,6 +1402,12 @@ test("long-range recall asserts structured practical steps rather than rendered 
   assert.equal(moisturePriorityClause.anyOf.some((pattern) => (
     new RegExp(pattern, "i").test("For your apartment, start by checking the bathroom fan and condensation first.")
   )), true);
+  assert.equal(moisturePriorityClause.anyOf.some((pattern) => (
+    new RegExp(pattern, "i").test("For your apartment and under $1,500 budget, tackle moisture first, then cold windows, then the door draught.")
+  )), true);
+  assert.equal(assertion.forbidden.some((pattern) => new RegExp(pattern, "i").test("Under $2,000")), false);
+  assert.equal(assertion.forbidden.some((pattern) => new RegExp(pattern, "i").test("Mum's home")), true);
+  assert.equal(turn.forbiddenPatterns.some((pattern) => new RegExp(pattern, "i").test("Under $2,000")), true);
   const answer = trajectoryObservation(turn.id, {
     visibleAnswer: "Start with moisture control within the $1,500 budget. Seal under the front door. Add honeycomb blinds. Keep the working split.",
     practicalStepCount: 3,

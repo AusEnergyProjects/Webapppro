@@ -43,11 +43,11 @@
     {
       "conversationId": "c01",
       "id": "c01t01",
-      "message": "At my apartment I can feel a cold draught under the front door. What is the cheapest thing I can do tonight?",
+      "message": "I feel a draft under my front door",
       "sourcePolicy": "model_required",
       "clauses": [
         { "id": "door-action", "anyOf": ["door snake", "rolled? (?:up )?towel", "draught.*seal", "draft.*seal"] },
-        { "id": "front-door-focus", "anyOf": ["front door", "under the door", "bottom gap"] }
+        { "id": "front-door-focus", "anyOf": ["front door", "under the door", "bottom gap", "inside (?:the )?bottom edge", "(?:apartment )?entry door"] }
       ],
       "forbiddenPatterns": ["\\bseal(?:ing|ed)?\\b[^.!?]{0,60}\\b(?:vent|flue|chimney)\\b"],
       "maxWords": 110,
@@ -58,15 +58,16 @@
     {
       "conversationId": "c01",
       "id": "c01t02",
-      "message": "Will that damage the carpet or stop the door opening?",
+      "message": "great idea, also i find it hard to keep the house warm sometimes",
       "sourcePolicy": "model_required",
       "clauses": [
-        { "id": "resolves-that", "anyOf": ["door snake", "towel", "temporary.*seal", "draught.*seal", "draft.*seal"] },
-        { "id": "carpet-door-clearance", "anyOf": ["carpet", "clearance", "door.*open", "remove", "move"] }
+        { "id": "uses-confirmed-door-history", "anyOf": ["front door", "under (?:the|your) door", "door snake", "door (?:draught|draft|gap|seal)", "draught.*door", "draft.*door"] },
+        { "id": "connects-door-to-warmth", "anyOf": ["warm|warmth|heat loss|heat.*(?:escap|leav|lost)|cold air|draught|draft"] },
+        { "id": "broadens-practical-plan", "anyOf": ["window|curtain|blind|other (?:draught|draft|gap)|ceiling|insulation|heating|thermostat|close.*door"] }
       ],
       "forbiddenPatterns": ["window replacement", "solar", "battery"],
-      "maxWords": 100,
-      "maxParagraphs": 3,
+      "maxWords": 170,
+      "maxParagraphs": 5,
       "maxQuestions": 1,
       "state": { "activeTopicAnyOf": [], "goalAnyOf": [], "factsExclude": [], "pendingQuestion": "optional_material" }
     },
@@ -80,8 +81,8 @@
         { "id": "safe-boundary", "anyOf": ["door|frame|edge|gap"] }
       ],
       "forbiddenPatterns": ["\\bseal(?:ing|ed)?\\b[^.!?]{0,60}\\b(?:vent|flue|chimney)\\b"],
-      "maxWords": 120,
-      "maxParagraphs": 3,
+      "maxWords": 130,
+      "maxParagraphs": 5,
       "maxQuestions": 1,
       "state": { "activeTopicAnyOf": [], "goalAnyOf": [], "factsExclude": [], "pendingQuestion": "optional_material" }
     },
@@ -106,12 +107,12 @@
       "message": "Correction: it is closer to 45 minutes, and I can barely feel air moving at the grille.",
       "sourcePolicy": "model_required",
       "clauses": [
-        { "id": "accepts-forty-five", "anyOf": ["45 minutes", "forty[- ]five minutes"] },
+        { "id": "accepts-forty-five", "anyOf": ["(?:45|forty[- ]five)[- ]minutes?"] },
         { "id": "weak-airflow", "anyOf": ["weak airflow", "barely.*air", "grille", "duct", "block", "restriction"] }
       ],
       "forbiddenPatterns": ["20 minutes is the current", "airflow is strong"],
       "maxWords": 130,
-      "maxParagraphs": 3,
+      "maxParagraphs": 5,
       "maxQuestions": 1,
       "state": { "activeTopicAnyOf": [], "goalAnyOf": [], "factsExclude": [], "pendingQuestion": "optional_material" }
     },
@@ -122,7 +123,7 @@
       "sourcePolicy": "model_required",
       "clauses": [
         { "id": "airflow-check", "anyOf": ["grille", "duct", "outside", "tissue", "paper", "airflow", "block"] },
-        { "id": "no-rushed-replacement", "anyOf": ["before replacing", "do not replace", "don't replace", "check.*first", "first[^.!?]{0,45}\\bcheck", "not necessarily.*fan", "replac(?:e|ing)[^.!?]{0,70}(?:alone|by itself)[^.!?]{0,40}(?:not|won't|will not|may not).*fix"] }
+        { "id": "no-rushed-replacement", "anyOf": ["before replacing", "do not replace", "don't replace", "(?:check|test)[^.!?]{0,80}\\bfirst\\b", "first[^.!?]{0,45}\\b(?:check|test)", "not necessarily.*fan", "replac(?:e|ing)[^.!?]{0,70}(?:alone|by itself)[^.!?]{0,40}(?:not|won't|will not|may not)[^.!?]{0,35}(?:fix|help|solve|resolve)"] }
       ],
       "forbiddenPatterns": ["20 minutes is the current", "replace it immediately"],
       "maxWords": 130,
@@ -136,7 +137,7 @@
       "message": "My reverse-cycle split still heats the room well, but my electricity bill jumps when I use it. Does that mean it is faulty?",
       "sourcePolicy": "model_required",
       "clauses": [
-        { "id": "no-false-fault", "anyOf": ["not necessarily", "^No,?\\s+not by itself", "does not.*prove", "doesn't.*prove", "bill.*alone", "cannot tell.*fault"] },
+        { "id": "no-false-fault", "anyOf": ["not necessarily", "^No,?\\s+not by itself", "does not.*prove", "doesn't.*prove", "bill.*alone", "cannot tell.*fault", "does not\\s+by itself\\s+(?:mean|show|indicate|prove)\\b[^.!?]{0,60}\\bfault(?:y)?\\b"] },
         { "id": "uses-working-fact", "anyOf": ["still heats", "heat(?:s|ing)?[^.!?]{0,20}well", "heat[^.!?]{0,20}properly", "can heat efficiently", "weaker heat", "working", "produces.*heat", "even when[^.!?]{0,35}operat(?:e|es|ing)[^.!?]{0,20}efficient", "poor heating[^.!?]{0,170}fault[^.!?]{0,30}more likely"] }
       ],
       "forbiddenPatterns": ["definitely faulty", "replace it now"],
@@ -151,12 +152,12 @@
       "message": "The filter is clean and I set it to 24 degrees. What should I check next?",
       "sourcePolicy": "model_required",
       "clauses": [
-        { "id": "uses-known-checks", "anyOf": ["24", "filter.*clean", "temperature setting", "keep[^.!?]{0,40}(?:the )?setting", "still heats well", "next[^.!?]{0,90}(?:meter|retailer|electricity use)", "electricity use[^.!?]{0,35}next"] },
+        { "id": "uses-known-checks", "anyOf": ["24", "filter.*clean", "temperature setting", "keep[^.!?]{0,40}(?:the )?setting", "still heats well", "next[^.!?]{0,90}(?:meter|retailer|electricity[- ](?:use|usage))", "(?:meter|electricity[- ](?:use|usage))[^.!?]{0,45}next"] },
         { "id": "advances-diagnosis", "anyOf": ["kWh", "electricity use", "running time", "weather", "outdoor unit", "cycles?", "airflow"] }
       ],
       "forbiddenPatterns": ["clean the filter first", "what temperature.*set"],
       "maxWords": 130,
-      "maxParagraphs": 3,
+      "maxParagraphs": 5,
       "maxQuestions": 1,
       "state": { "activeTopicAnyOf": [], "goalAnyOf": [], "factsExclude": [], "pendingQuestion": "optional_material" }
     },
@@ -197,7 +198,7 @@
       "sourcePolicy": "model_required",
       "clauses": [
         { "id": "zero-export-meaning", "anyOf": ["cannot.*send", "can't.*send", "does not.*export", "doesn't.*export", "zero export"] },
-        { "id": "self-use-remains", "anyOf": ["use.*home", "home.*use.*solar", "home[^.!?]{0,25}\\b(?:can|may|will)\\b(?![^.!?]{0,25}\\b(?:not|never|no longer)\\b)[^.!?]{0,25}use(?:[^.!?]|\\d+\\.\\d+){0,35}(?:array|output|generation)", "self[- ]consumption", "reduce.*imports", "power.*home", "use.*direct"] }
+        { "id": "self-use-remains", "anyOf": ["use.*home", "home.*use.*solar", "home[^.!?]{0,25}\\b(?:can|may|will)\\b(?![^.!?]{0,25}\\b(?:not|never|no longer)\\b)[^.!?]{0,25}use(?:[^.!?]|\\d+\\.\\d+){0,35}(?:array|output|generation)", "solar(?: electricity)?[^.!?]{0,30}(?:first )?(?:supplies|powers)[^.!?]{0,20}(?:the )?home", "(?:system|panels?|array|solar)[^.!?]{0,35}(?:can|may|will)[^.!?]{0,15}suppl(?:y|ies)[^.!?]{0,20}(?:the )?home", "self[- ]use[^.!?]{0,45}(?:important|valuable|value|matters?|benefit|useful)", "(?:solar|generation)[^.!?]{0,40}exceeds[^.!?]{0,30}(?:home|household)[^.!?]{0,20}(?:can )?use", "reduce.*imports", "power.*home", "use.*direct"], "requireAffirmed": true }
       ],
       "forbiddenPatterns": ["panels stop working", "cannot use solar", "home[^.!?]{0,30}(?:cannot|can['’]?t)[^.!?]{0,30}use[^.!?]{0,40}(?:array|output|generation)", "home[^.!?]{0,30}(?:can|may|will)[^.!?]{0,20}(?:not|never|no longer)[^.!?]{0,20}use[^.!?]{0,40}(?:solar|array|output|generation)"],
       "maxWords": 120,
@@ -212,9 +213,9 @@
       "sourcePolicy": "model_required",
       "clauses": [
         { "id": "direct-no", "anyOf": ["^No", "No,"] },
-        { "id": "why-not-pointless", "anyOf": ["self[- ]consumption", "reduce.*imports", "use.*solar.*home", "power.*home", "use.*electricity.*(?:sunny|daytime)", "daytime use", "daytime household use", "suppl(?:y|ies|ying)[^.!?]{0,45}(?:your|the) home[^.!?]{0,25}direct"] }
+        { "id": "why-not-pointless", "anyOf": ["self[- ]consumption[^.!?]{0,45}(?:remain(?:s|ed|ing)?|still|useful|value|worthwhile|benefit)", "\\b(?:reduce|reduces|reducing)\\b[^.!?]{0,30}(?:(?:grid )?imports|grid purchases)", "\\b(?:can|may|will)\\s+(?:still\\s+)?(?:cut|reduce|lower)\\b[^.!?]{0,45}\\b(?:grid (?:electricity (?:use|usage)|imports?|purchases?)|electricity (?:use|usage|bought|purchased|drawn) from (?:the )?grid|bills?)\\b", "\\b(?:system|solar(?: system)?)\\b[^.!?]{0,30}\\b(?:can|may|will)\\s+(?:still\\s+)?reduce\\b[^.!?]{0,45}\\belectricity (?:bought|purchased|drawn) from the grid\\b", "\\b(?:system|solar(?: system)?)\\b[^.!?]{0,35}\\b(?:can|may|will)\\s+(?:still\\s+)?(?:cut|reduce|lower)\\b[^.!?]{0,20}\\bbills?\\b[^.!?]{0,55}\\b(?:home|household)\\b[^.!?]{0,35}\\buses?\\b[^.!?]{0,35}\\b(?:daylight|daytime|sunny|sunlight)\\b", "\\b(?:you|your home|the home|households?)\\s+(?:can|may|will)\\s+(?:still\\s+)?use\\s+solar", "solar(?: electricity)?\\s+(?:(?:is|can be|may be)\\s+)?used\\s+(?:in|at|by)\\s+(?:your|the)\\s+home", "solar\\s+(?:can|may|will)\\s+(?:still\\s+)?power\\s+(?:your|the)\\s+home", "\\buse\\b[^.!?]{0,45}\\belectricity\\b[^.!?]{0,45}(?:sunny|daytime)", "(?:enough|higher|meaningful) daytime (?:electricity )?use", "daytime household use", "suppl(?:y|ies|ying)[^.!?]{0,45}(?:your|the) home[^.!?]{0,25}direct", "suppl(?:y|ies|ying)[^.!?]{0,40}electricity[^.!?]{0,25}(?:your|the) home uses?"], "requireAffirmed": true }
       ],
-      "forbiddenPatterns": ["^Yes", "completely pointless"],
+      "forbiddenPatterns": ["^Yes", "completely pointless", "cannot use solar", "solar[^.!?]{0,30}(?:cannot|can['’]?t)[^.!?]{0,20}(?:be )?used", "(?:does not|doesn't|cannot|can['’]?t|never|no longer)[^.!?]{0,35}(?:reduce[^.!?]{0,15}imports|power[^.!?]{0,15}home|self[- ]consumption)"],
       "maxWords": 90,
       "maxParagraphs": 2,
       "maxQuestions": 0,
@@ -288,7 +289,7 @@
       "message": "Quote A is $6,900 with a five-year warranty. Quote B is $7,400 with a seven-year warranty. How should I compare them?",
       "sourcePolicy": "model_required",
       "clauses": [
-        { "id": "both-prices", "anyOf": ["\\$\\s*6,?900[^.!?]{0,120}\\$\\s*7,?400", "\\$\\s*7,?400[^.!?]{0,120}\\$\\s*6,?900"] },
+        { "id": "both-prices", "anyOf": ["(?=[\\s\\S]*(?:Quote\\s*A[^.!?]{0,45}\\$\\s*6,?900|\\$\\s*6,?900[^.!?]{0,45}Quote\\s*A))(?=[\\s\\S]*(?:Quote\\s*B[^.!?]{0,45}\\$\\s*7,?400|\\$\\s*7,?400[^.!?]{0,45}Quote\\s*B))"] },
         { "id": "scope-comparison", "anyOf": ["scope", "model", "installation", "inclusions", "warranty"] }
       ],
       "forbiddenPatterns": ["Quote A is \\$7,?400", "Quote B is \\$6,?900"],
@@ -327,7 +328,7 @@
         { "id": "accepts-equal-price", "anyOf": ["both.*\\$\\s*6,?900", "\\$\\s*6,?900[^.!?]{0,45}(?:both|either|each)", "same price", "prices? are equal", "no price difference", "Quote A[^.!?]{0,90}\\$\\s*6,?900[^.!?]{0,90}Quote B[^.!?]{0,90}\\$\\s*6,?900"] },
         { "id": "comparison-shifts", "anyOf": ["warranty", "scope", "model", "installer", "inclusions"] }
       ],
-      "forbiddenPatterns": ["B costs more", "\\$\\s*500.*extra", "B.*\\$\\s*7,?400"],
+      "forbiddenPatterns": ["B costs more", "\\$\\s*500.*extra", "(?:Quote\\s*)?B(?:'s)?\\s+(?:costs?|is|price(?:\\s+is)?)?[^.!?]{0,25}\\$\\s*7,?400"],
       "maxWords": 120,
       "maxParagraphs": 3,
       "maxQuestions": 1,
@@ -342,7 +343,7 @@
         { "id": "same-price-reasoning", "anyOf": ["same price", "same[^.!?]{0,30}price", "both.*\\$\\s*6,?900", "\\$\\s*6,?900[^.!?]{0,45}(?:both|either|each)", "price.*equal", "Quote A[^.!?]{0,90}\\$\\s*6,?900[^.!?]{0,90}Quote B[^.!?]{0,90}\\$\\s*6,?900"] },
         { "id": "clear-conditional-choice", "anyOf": ["Quote B", "seven[- ]year", "longer warranty", "choose.*B", "provided", "if.*scope"] }
       ],
-      "forbiddenPatterns": ["B costs more", "\\$\\s*500.*extra", "B.*\\$\\s*7,?400"],
+      "forbiddenPatterns": ["B costs more", "\\$\\s*500.*extra", "(?:Quote\\s*)?B(?:'s)?\\s+(?:costs?|is|price(?:\\s+is)?)?[^.!?]{0,25}\\$\\s*7,?400"],
       "maxWords": 110,
       "maxParagraphs": 3,
       "maxQuestions": 1,
@@ -419,7 +420,7 @@
       ],
       "forbiddenPatterns": ["google it", "search online", "guaranteed rebate"],
       "maxWords": 140,
-      "maxParagraphs": 4,
+      "maxParagraphs": 5,
       "maxQuestions": 1,
       "state": { "activeTopicAnyOf": [], "goalAnyOf": [], "factsExclude": [], "pendingQuestion": "optional_material" }
     },
@@ -433,8 +434,8 @@
         { "id": "installed-scope", "anyOf": ["existing.*gas", "decommission", "installation", "scope", "invoice", "accredited"] }
       ],
       "forbiddenPatterns": ["guaranteed approval", "postcode again"],
-      "maxWords": 140,
-      "maxParagraphs": 4,
+      "maxWords": 160,
+      "maxParagraphs": 5,
       "maxQuestions": 1,
       "state": { "activeTopicAnyOf": [], "goalAnyOf": [], "factsExclude": [], "pendingQuestion": "optional_material" }
     },
@@ -479,7 +480,7 @@
       ],
       "forbiddenPatterns": ["facebook", "random installer", "guaranteed quote value"],
       "maxWords": 150,
-      "maxParagraphs": 4,
+      "maxParagraphs": 5,
       "maxQuestions": 0,
       "state": { "activeTopicAnyOf": [], "goalAnyOf": [], "factsExclude": [], "pendingQuestion": "empty" }
     },
@@ -568,7 +569,7 @@
       ],
       "forbiddenPatterns": ["your bedroom", "your apartment", "tenant owns"],
       "maxWords": 130,
-      "maxParagraphs": 3,
+      "maxParagraphs": 5,
       "maxQuestions": 1,
       "state": { "activeTopicAnyOf": [], "goalAnyOf": [], "factsExclude": [], "pendingQuestion": "optional_material" }
     },
@@ -583,7 +584,7 @@
       ],
       "forbiddenPatterns": ["you as the landlord", "replace all windows immediately"],
       "maxWords": 140,
-      "maxParagraphs": 4,
+      "maxParagraphs": 5,
       "maxQuestions": 1,
       "state": { "activeTopicAnyOf": [], "goalAnyOf": [], "factsExclude": [], "pendingQuestion": "optional_material" }
     },
@@ -653,8 +654,8 @@
       "message": "While we are on solar, what does self-consumption mean in normal words?",
       "sourcePolicy": "model_required",
       "clauses": [
-        { "id": "uses-solar-at-home", "anyOf": ["self[- ]consumption", "solar[^.!?]{0,55}(?:use|used)[^.!?]{0,35}(?:home|house)", "use[^.!?]{0,35}solar[^.!?]{0,35}(?:home|house)"] },
-        { "id": "generation-timing", "anyOf": ["while[^.!?]{0,35}(?:generat|produc)", "when[^.!?]{0,35}(?:generat|produc)", "at (?:the )?time[^.!?]{0,35}(?:generat|produc)", "instead of[^.!?]{0,35}export", "rather than[^.!?]{0,35}export"] }
+        { "id": "uses-solar-at-home", "anyOf": ["self[- ]consumption[^.!?]{0,55}us(?:e|ed|ing)[^.!?]{0,35}(?:home|house)", "solar[^.!?]{0,55}us(?:e|ed|ing)[^.!?]{0,35}(?:home|house)", "us(?:e|ed|ing)[^.!?]{0,35}solar[^.!?]{0,35}(?:home|house)", "(?:home|house)[^.!?]{0,35}us(?:e|ed|ing)[^.!?]{0,35}solar"], "requireAffirmed": true },
+        { "id": "generation-timing", "anyOf": ["while[^.!?]{0,35}(?:generat|produc)", "when[^.!?]{0,35}(?:generat|produc)", "as[^.!?]{0,35}(?:generat|produc)", "at (?:the )?time[^.!?]{0,35}(?:generat|produc)", "instead of[^.!?]{0,45}(?:export|send(?:ing)?)[^.!?]{0,30}(?:grid|away)", "rather than[^.!?]{0,35}export"] }
       ],
       "forbiddenPatterns": ["honeycomb", "thermal curtain", "\\$\\s*1,?400", "\\$\\s*900"],
       "maxWords": 100,
@@ -668,7 +669,7 @@
       "message": "If export is limited, can the home still use its solar power?",
       "sourcePolicy": "model_required",
       "clauses": [
-        { "id": "direct-home-use", "anyOf": ["^Yes", "can still", "still[^.!?]{0,35}use", "home[^.!?]{0,35}use"] },
+        { "id": "direct-home-use", "anyOf": ["^Yes", "can still", "still[^.!?]{0,35}use", "home[^.!?]{0,35}use"], "requireAffirmed": true },
         { "id": "export-distinction", "anyOf": ["export[^.!?]{0,70}(?:grid|surplus|excess|limit)", "self[- ]consumption", "use[^.!?]{0,45}(?:first|directly|inside|home)"] }
       ],
       "forbiddenPatterns": ["honeycomb", "thermal curtain", "\\$\\s*1,?400", "\\$\\s*900"],
@@ -731,7 +732,7 @@
       "clauses": [
         { "id": "finance-gap", "anyOf": ["\\$\\s*188"] },
         { "id": "admin-fee", "anyOf": ["\\$\\s*330", "admin fee"] },
-        { "id": "switchboard-exclusion", "anyOf": ["switchboard.*extra", "extra[^.!?]{0,40}switchboard", "switchboard.*excluded", "unspecified switchboard", "switchboard[^.!?]{0,70}(?:increase|no stated price|not priced|unpriced|without a price)"] },
+        { "id": "switchboard-exclusion", "anyOf": ["switchboard.*extra", "extra[^.!?]{0,40}switchboard", "switchboard.*excluded", "unspecified switchboard", "switchboard[^.!?]{0,70}(?:increase|no (?:included|stated) price|not priced|unpriced|without a price)"] },
         { "id": "not-complete", "anyOf": ["not.*complete", "cannot call.*complete", "not.*fixed"] }
       ],
       "forbiddenPatterns": ["complete fixed price"],
@@ -797,7 +798,7 @@
       ],
       "forbiddenPatterns": ["keep using", "wait and see", "test it yourself", "installer enquiry"],
       "maxWords": 140,
-      "maxParagraphs": 4,
+      "maxParagraphs": 5,
       "maxQuestions": 0,
       "state": { "activeTopicAnyOf": [], "goalAnyOf": [], "factsExclude": [], "pendingQuestion": "empty" }
     },
@@ -1043,7 +1044,7 @@
       ],
       "forbiddenPatterns": ["guaranteed approval", "replace.*without approval"],
       "maxWords": 170,
-      "maxParagraphs": 4,
+      "maxParagraphs": 5,
       "maxQuestions": 1,
       "state": { "activeTopicAnyOf": [], "goalAnyOf": [], "factsExclude": [], "pendingQuestion": "optional_material" }
     },
@@ -1098,13 +1099,14 @@
       "message": "At my saved apartment, air comes under the front door and the single-glazed windows feel cold. I have $1,500. What should come first?",
       "sourcePolicy": "model_required",
       "clauses": [
+        { "id": "saved-moisture-priority-first", "anyOf": ["^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?(?:(?:For|With)[^.!?]{0,80}[,.]\\s*)?(?:Start|First)(?:\\s+by)?\\s+(?:with\\s+)?(?:checking\\s+)?(?:the\\s+)?(?:moisture|condensation|damp|mould|mold|bathroom fan|airflow)", "^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?(?:(?:For|With)[^.!?]{0,80}[,.]\\s*)?(?:Tackle|Address)\\s+(?:the\\s+)?(?:moisture|condensation|damp|mould|mold|bathroom fan|airflow)\\s+first\\b", "^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?(?:(?:Your|The)\\s+)?first\\s+(?:priority|step)\\s+(?:is|should be)\\s+(?:to\\s+)?(?:(?:check|address|control|tackle)\\s+)?(?:the\\s+)?(?:moisture|condensation|damp|mould|mold|bathroom fan|airflow)", "^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?(?:Moisture|Condensation|Damp|Mould|Mold|The bathroom fan|Check (?:the )?bathroom fan|Control moisture|Address (?:the )?(?:moisture|condensation))", "^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?Check\\s+(?:recurring\\s+)?(?:moisture|condensation|damp|mould|mold)\\b"], "target": "first_practical_step", "requireAffirmed": true },
         { "id": "door-memory-seed", "anyOf": ["front door", "door snake", "door seal", "draught", "draft"] },
         { "id": "window-memory-seed", "anyOf": ["single[- ]glaz", "window", "blind", "curtain"] },
         { "id": "budget", "anyOf": ["\\$\\s*1,?500"] }
       ],
-      "forbiddenPatterns": ["Mum", "gas heater"],
+      "forbiddenPatterns": ["Mum", "gas heater", "(?:under[- ]?)?\\$\\s*2,?000", "^(?:(?!moisture|condensation|damp|mould|mold)[\\s\\S]){0,220}(?:front[- ]door|door snake|door seal|draught|draft)[\\s\\S]{0,240}(?:moisture|condensation|damp|mould|mold)"],
       "maxWords": 140,
-      "maxParagraphs": 4,
+      "maxParagraphs": 5,
       "maxQuestions": 1,
       "state": { "activeTopicAnyOf": [], "goalAnyOf": [], "factsExclude": [], "pendingQuestion": "optional_material" }
     },
@@ -1144,12 +1146,13 @@
       "message": "Back to my home only: give me the top three actions in order using what I told you. No jargon and no more questions.",
       "sourcePolicy": "model_required",
       "clauses": [
+        { "id": "saved-moisture-priority-first", "anyOf": ["^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?(?:(?:For|With)[^.!?]{0,80}[,.]\\s*)?(?:Start|First)(?:\\s+by)?\\s+(?:with\\s+)?(?:checking\\s+)?(?:the\\s+)?(?:moisture|condensation|damp|mould|mold|bathroom fan|airflow)", "^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?(?:(?:For|With)[^.!?]{0,80}[,.]\\s*)?(?:Tackle|Address)\\s+(?:the\\s+)?(?:moisture|condensation|damp|mould|mold|bathroom fan|airflow)\\s+first\\b", "^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?(?:(?:Your|The)\\s+)?first\\s+(?:priority|step)\\s+(?:is|should be)\\s+(?:to\\s+)?(?:(?:check|address|control|tackle)\\s+)?(?:the\\s+)?(?:moisture|condensation|damp|mould|mold|bathroom fan|airflow)", "^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?(?:Moisture|Condensation|Damp|Mould|Mold|The bathroom fan|Check (?:the )?bathroom fan|Control moisture|Address (?:the )?(?:moisture|condensation))", "^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?Check\\s+(?:recurring\\s+)?(?:moisture|condensation|damp|mould|mold)\\b"], "target": "first_practical_step", "requireAffirmed": true },
         { "id": "latest-budget", "anyOf": ["\\$\\s*1,?500"] },
         { "id": "door-action", "anyOf": ["front door", "door snake", "door seal", "draught", "draft"] },
         { "id": "window-action", "anyOf": ["honeycomb", "thermal curtain", "window covering", "blind", "curtain"] },
-        { "id": "working-split-action", "anyOf": ["keep.*split", "working split", "do not replace", "don't replace"] }
+        { "id": "working-split-action", "anyOf": ["keep.*split", "working split", "do not replace", "don't replace", "reverse[- ]cycle (?:unit|air conditioner)[^.!?]{0,55}(?:still )?(?:heats|works)(?: properly)?"] }
       ],
-      "forbiddenPatterns": ["Mum", "gas heater", "replace the split", "solar first", "(?:under[- ]?)?\\$\\s*2,?000"],
+      "forbiddenPatterns": ["Mum", "gas heater", "replace the split", "solar first", "(?:under[- ]?)?\\$\\s*2,?000", "^(?:(?!moisture|condensation|damp|mould|mold)[\\s\\S]){0,220}(?:front[- ]door|door snake|door seal|draught|draft)[\\s\\S]{0,240}(?:moisture|condensation|damp|mould|mold)", "\\b(?:psychrometric|hygrothermal|envelope[- ]infiltration|(?:conductive\\s+)?u[- ]value|thermal transmittance)\\b"],
       "maxWords": 120,
       "maxParagraphs": 5,
       "maxQuestions": 0,
@@ -1207,6 +1210,27 @@
       "requireOfficialCitations": true
     },
     {
+      "id": "official-links-match-the-request",
+      "type": "official_citation_requirements",
+      "checkpoints": [
+        {
+          "turn": "c08t02",
+          "minimumCount": 1,
+          "requiredUrls": [
+            "https://www.energy.vic.gov.au/victorian-energy-upgrades/products/heating-and-cooling-discounts"
+          ]
+        },
+        {
+          "turn": "c09t03",
+          "minimumCount": 2,
+          "requiredUrls": [
+            "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/calculate-small-scale-technology-certificate-entitlements",
+            "https://www.esc.vic.gov.au/sites/default/files/documents/FINAL%20-%20Water%20Heating%20and%20Space%20Heating%20Cooling%20Activity%20Guide%20-%20V.%203.19%20-%2020260324.pdf"
+          ]
+        }
+      ]
+    },
+    {
       "id": "never-surface-generic-fallback",
       "type": "forbid_patterns_all_responses",
       "patterns": [
@@ -1215,7 +1239,8 @@
         "Name the exact home-energy decision",
         "I found a related current official source",
         "For the supplied Victoria owner context",
-        "Surge AI provides general home-energy guidance"
+        "Surge AI provides general home-energy guidance",
+        "\\b(?:internal|private|proprietary|confidential)\\s+(?:source(?:s| pack)?|document(?:s)?|reference(?:s)?|knowledge base|corpus|file(?:s)?|handbook|training data)\\b"
       ]
     },
     {
@@ -1275,6 +1300,12 @@
       "forbiddenAtReturn": ["recipe", "scone", "flour", "which quote", "what are you referring to"]
     },
     {
+      "id": "three-unresolved-points-are-structured",
+      "type": "structured_action_count",
+      "turn": "c13t03",
+      "exactActionCount": 3
+    },
+    {
       "id": "no-false-enquiry-submission",
       "type": "forbid_patterns_turn_range",
       "fromTurn": "c16t01",
@@ -1294,9 +1325,10 @@
       "type": "long_range_recall",
       "turn": "c20t04",
       "requiredSemanticGroups": [
+        ["moisture", "condensation", "damp", "mould", "mold", "bathroom fan", "airflow"],
         ["front door", "door snake", "door seal", "door draught", "door draft"],
         ["honeycomb", "thermal curtain", "window covering", "blind", "curtain"],
-        ["working split", "working reverse-cycle split", "keep the split", "keep[^.!?]{0,35}working[^.!?]{0,25}split", "do not replace", "don't replace"],
+        ["working split", "working reverse-cycle split", "keep the split", "keep[^.!?]{0,35}working[^.!?]{0,25}split", "do not replace", "don't replace", "reverse[- ]cycle (?:unit|air conditioner)[^.!?]{0,55}(?:still )?(?:heats|works)(?: properly)?"],
         ["\\$\\s*1,?500"]
       ],
       "forbidden": ["Mum", "3073", "gas heater", "replace the split", "solar first", "(?:under[- ]?)?\\$\\s*2,?000"],

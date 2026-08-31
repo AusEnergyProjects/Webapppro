@@ -326,6 +326,13 @@ export function composeSurgeSafetyAnswer(
   const abnormalEquipmentHeat = /\b(?:switchboard|meter box|electrical panel|main switch|inverter|solar isolator|DC isolator|EV charger|EV plug|charging plug|charging cable|powerboard|power board|power point|socket|outlet|electrical cables?|wiring|wires?|toaster|microwave|washing machine|washer|dishwasher|fridge|refrigerator|television|TV|tumble dryer|clothes dryer|dryer|portable (?:electric )?heater|electric heater|fan heater|air conditioner|aircon|reverse[- ]?cycle|split system|heat pump|appliance|unit|equipment|it)\b(?:['’]s|\s+(?:is|feels?|became|becomes|is becoming|is getting|gets?|runs?))\s+(?:(?:unusually|very|extremely|dangerously|too)\s+hot|(?:burning|smoking|red)[ -]?hot|hot\s+to\s+(?:the\s+)?touch)\b/i.test(activeMessage)
     && affirmed(activeMessage, /\b(?:(?:unusually|very|extremely|dangerously|too)\s+hot|(?:burning|smoking|red)[ -]?hot|hot\s+to\s+(?:the\s+)?touch)\b/i);
   const highRiskElectricalEquipment = /\b(?:switchboard|meter box|electrical panel|main switch|power point|socket|outlet|electrical cables?|wiring|wires?)\b/i.test(equipmentAnchor);
+  const switchboardCracklingOrBurning = /\b(?:switchboard|meter box|electrical panel|main switch)\b/i.test(equipmentAnchor)
+    && affirmedEquipmentSignal(
+      activeMessage,
+      /\b(?:switchboard|meter box|electrical panel|main switch)\b/i,
+      /\b(?:crackling|sparking|arcing|scorched|burnt|burning smell|smell(?:s|ing)? (?:burnt|burning)|melting)\b/i,
+      hasPriorEquipmentAnchor,
+    );
   const highRiskElectricalNoise = highRiskElectricalEquipment
     && affirmedEquipmentSignal(
       activeMessage,
@@ -338,6 +345,9 @@ export function composeSurgeSafetyAnswer(
     || exposedElectricalMoisture || scopedEquipmentSmokeOrFire)) {
     if (scopedEquipmentSmokeOrFire) {
       return safetyAnswer("Move everyone away and call 000 because visible smoke or fire is present. Do not touch, reset, unplug, open, dry or pour water on the equipment, and wait outside for firefighters.");
+    }
+    if (switchboardCracklingOrBurning) {
+      return safetyAnswer("Crackling or a burning smell from a switchboard indicates an urgent electrical fault. Keep away and have everyone leave the area if it is safe to do so. Do not touch, open or reset the switchboard. If there is smoke, flame, fire or immediate danger, call 000 from a safe place. Otherwise, call your electricity distributor or an urgent licensed electrician from a safe place.");
     }
     return safetyAnswer("Keep people away and leave the equipment unused because the heat, noise, sparking or water may indicate a serious electrical fault. Do not touch, reset, unplug, open, dry or pour water on it. Call the electricity network or an urgent licensed electrician from a safe place.");
   }

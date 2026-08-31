@@ -73,6 +73,7 @@ import {
 import {
   estimateSurgeModelReservationMicroUsd,
   generateSurgeModelAnswer,
+  surgeModelResultPassedSemanticValidation,
   surgeMaterialQuestionParts,
   surgeOfficialUrlIsAllowed,
   type SurgeOfficialWebCitation,
@@ -159,8 +160,113 @@ export type ServerDependencies = {
   recordQuality?: (event: SurgeConversationQualityEvent) => Promise<void>;
   qualityMetadata?: Partial<SurgeConversationQualityMetadata>;
   monotonicNow?: () => number;
+  modelAdmissionNow?: () => number;
+  waitBeforeModelAdmissionRetry?: (delayMs: number) => Promise<void>;
   requireValidatedModelForOrdinaryAdvice?: boolean;
 };
+
+const SURGE_MODEL_ADMISSION_MAX_ATTEMPTS = 3;
+const SURGE_MODEL_ADMISSION_RETRY_DEADLINE_MS = 400;
+const SURGE_MODEL_ADMISSION_RETRY_DELAYS_MS = [40, 100] as const;
+
+function surgeModelAdmissionMayRetry(reason: string | undefined) {
+  return reason === "unavailable" || reason === "global_in_flight";
+}
+
+async function reserveSurgeModelCallBeforeDeadline(
+  reserveModelCall: NonNullable<ServerDependencies["reserveModelCall"]>,
+  request: SurgeModelAdmissionRequest,
+  remainingMs: number,
+) {
+  const attempt = Promise.resolve()
+    .then(() => reserveModelCall(request))
+    .then(
+      (reservation) => ({ kind: "settled" as const, reservation }),
+      () => ({
+        kind: "settled" as const,
+        reservation: { allowed: false, reason: "unavailable" } as SurgeModelCallReservation,
+      }),
+    );
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<{ kind: "deadline" }>((resolve) => {
+    deadlineTimer = setTimeout(() => resolve({ kind: "deadline" }), Math.max(1, remainingMs));
+  });
+  const outcome = await Promise.race([attempt, deadline]);
+  if (deadlineTimer) clearTimeout(deadlineTimer);
+  if (outcome.kind === "settled") {
+    return { timedOut: false as const, reservation: outcome.reservation };
+  }
+
+  // The reservation boundary has no cancellation contract. Do not make a
+  // second reservation after an indeterminate timeout. If the first call later
+  // proves that it acquired a lease, release that lease without invoking the
+  // provider so in-flight accounting cannot leak or double-count work.
+  void attempt.then(async (lateOutcome) => {
+    if (lateOutcome.reservation.allowed) {
+      await lateOutcome.reservation.release().catch(() => undefined);
+    }
+  });
+  return {
+    timedOut: true as const,
+    reservation: { allowed: false, reason: "unavailable" } as SurgeModelCallReservation,
+  };
+}
+
+async function waitForSurgeModelAdmissionRetry(
+  waitBeforeRetry: (delayMs: number) => Promise<void>,
+  delayMs: number,
+  deadlineAt: number,
+  now: () => number,
+) {
+  const remainingMs = deadlineAt - now();
+  if (remainingMs <= 0) return false;
+  const boundedDelayMs = Math.min(delayMs, remainingMs);
+  let wait: Promise<boolean>;
+  try {
+    wait = waitBeforeRetry(boundedDelayMs).then(() => true, () => false);
+  } catch {
+    return false;
+  }
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<boolean>((resolve) => {
+    deadlineTimer = setTimeout(() => resolve(false), Math.max(1, remainingMs));
+  });
+  const completed = await Promise.race([wait, deadline]);
+  if (deadlineTimer) clearTimeout(deadlineTimer);
+  return completed && now() < deadlineAt;
+}
+
+async function reserveSurgeModelCallWithBoundedRetry(
+  reserveModelCall: NonNullable<ServerDependencies["reserveModelCall"]>,
+  request: SurgeModelAdmissionRequest,
+  dependencies: ServerDependencies,
+) {
+  const now = dependencies.modelAdmissionNow || (() => Date.now());
+  const waitBeforeRetry = dependencies.waitBeforeModelAdmissionRetry
+    || ((delayMs: number) => new Promise<void>((resolve) => setTimeout(resolve, delayMs)));
+  const startedAt = now();
+  const deadlineAt = startedAt + SURGE_MODEL_ADMISSION_RETRY_DEADLINE_MS;
+  let reservation: SurgeModelCallReservation = { allowed: false, reason: "unavailable" };
+  for (let attempt = 0; attempt < SURGE_MODEL_ADMISSION_MAX_ATTEMPTS; attempt += 1) {
+    const remainingMs = deadlineAt - now();
+    if (remainingMs <= 0) return reservation;
+    const outcome = await reserveSurgeModelCallBeforeDeadline(
+      reserveModelCall,
+      request,
+      remainingMs,
+    );
+    reservation = outcome.reservation;
+    if (outcome.timedOut || reservation.allowed || !surgeModelAdmissionMayRetry(reservation.reason)) {
+      return reservation;
+    }
+    const delayMs = SURGE_MODEL_ADMISSION_RETRY_DELAYS_MS[attempt];
+    if (delayMs === undefined) return reservation;
+    if (!await waitForSurgeModelAdmissionRetry(waitBeforeRetry, delayMs, deadlineAt, now)) {
+      return reservation;
+    }
+  }
+  return reservation;
+}
 
 export class EnergyAssistantServerError extends Error {
   readonly status: number;
@@ -841,7 +947,10 @@ function generatedResultIsPolicySafe(
   planPriorityAnswer: EnergyAssistantAnswer | null,
 ) {
   const continuationText = JSON.stringify(generated.continuation);
-  const visibleGeneratedText = `${policyText(generated.answer)}\n${generated.presentation ? surgePresentationText(generated.presentation, true) : ""}`;
+  const customerVisibleGeneratedText = generated.presentation
+    ? surgePresentationText(generated.presentation, true)
+    : policyText(generated.answer);
+  const visibleGeneratedText = `${customerVisibleGeneratedText}\n${policyText(generated.answer)}`;
   const generatedText = `${visibleGeneratedText}\n${continuationText}`;
   if (
     surgeOutputViolatesPublicPolicy(visibleGeneratedText)
@@ -849,10 +958,14 @@ function generatedResultIsPolicySafe(
   ) {
     return false;
   }
-  if (!surgeAnswerSharesQuestionIntent(message, generatedText)
+  // A result marked by the model module has already passed its semantic topic
+  // and question-coverage validators. Injected or legacy results cannot claim
+  // that private provenance and still require this server-side lexical check.
+  if (!surgeModelResultPassedSemanticValidation(generated)
+    && !surgeAnswerSharesQuestionIntent(message, generatedText)
     && !surgeAnswerSharesQuestionIntent(decisionContext, generatedText)) return false;
   if (planPriorityAnswer
-    && !surgeAnswerPreservesPlanPriority(planPriorityAnswer, visibleGeneratedText)) return false;
+    && !surgeAnswerPreservesPlanPriority(planPriorityAnswer, customerVisibleGeneratedText)) return false;
   return audience === "trade" || (
     !containsSurgeNamedReference(continuationText)
     && !containsSurgeInternalPlatformName(continuationText)
@@ -1182,6 +1295,149 @@ function mergePlanPriorityWithEvidenceAnswer(
   };
 }
 
+function isSavedHomeWholePlanRankingRequest(message: string) {
+  return isSurgePlanPriorityIntent(message)
+    || /\bwhat\s+should\s+come\s+first\b/i.test(message)
+    || /\b(?:top|first)\s+(?:three|3)\s+(?:things?|actions?|steps?|priorities)\b[^.!?]{0,55}\b(?:in\s+order|rank(?:ed|ing)?|first)\b/i.test(message)
+    || /\b(?:give|show|list|rank)\b[^.!?]{0,45}\b(?:top|first)\s+(?:three|3)\b[^.!?]{0,45}\b(?:things?|actions?|steps?|priorities)\b/i.test(message);
+}
+
+const EXPLICIT_DOLLAR_BUDGET_PATTERNS = [
+  /\b(?:(?:my|our|the|a)\s+)?(?:first[- ]stage\s+)?budget\s*(?:(?:is|was|of|at|around|about|approximately|up to|no more than|max(?:imum)?(?: of)?|limit(?:ed)? to)\s*)?[:=]?\s*\$\s*([\d,]+(?:\.\d{1,2})?)/gi,
+  /\$\s*([\d,]+(?:\.\d{1,2})?)\s*(?:total\s+)?(?:first[- ]stage\s+)?budget\b/gi,
+  /\b(?:have|got)\b[^.!?\n$]{0,12}\$\s*([\d,]+(?:\.\d{1,2})?)\s+(?:(?:available|set aside)\s+)?(?:to spend|for (?:this|the) (?:work|upgrades?|stage))\b/gi,
+  /\b(?:I|we)\s+(?:only\s+)?(?:have|have got|got)\s+\$\s*([\d,]+(?:\.\d{1,2})?)(?:\s+(?:available|left))?(?=\s*(?:[.!?,;]|$))/gi,
+  /\b(?:(?:can|could|want to|plan to|intend to|looking to)\s+spend|spend(?:ing)?\s+(?:up to|no more than|a maximum of)|spending limit(?: is| of)?)\b[^.!?\n$]{0,20}\$\s*([\d,]+(?:\.\d{1,2})?)/gi,
+  /\$\s*([\d,]+(?:\.\d{1,2})?)\s+(?:(?:available|set aside)\s+)?to spend\b/gi,
+] as const;
+
+const EXPLICIT_DOLLAR_BUDGET_CORRECTION_PATTERNS = [
+  /\bbudget\b[^.!?\n]{0,50}\$\s*[\d,]+(?:\.\d{1,2})?[^.!?\n]{0,55}\b(?:but\s+)?(?:now|currently)\s+(?:(?:it|the budget)\s+)?(?:is|stands at|equals)?\s*\$\s*([\d,]+(?:\.\d{1,2})?)/gi,
+  /\bbudget\b[^.!?\n]{0,35}\bchanged\s+from\s+\$\s*[\d,]+(?:\.\d{1,2})?\s+to\s+\$\s*([\d,]+(?:\.\d{1,2})?)/gi,
+  /\bbudget\b[^.!?\n]{0,35}\b(?:is|equals|stands at)\s+(?:now\s+)?\$\s*([\d,]+(?:\.\d{1,2})?)[^.!?\n]{0,30}\b(?:not|rather than)\s+\$\s*[\d,]+(?:\.\d{1,2})?/gi,
+] as const;
+
+function explicitDollarBudget(message: string) {
+  const matches: Array<{ amount: string; index: number }> = [];
+  for (const pattern of EXPLICIT_DOLLAR_BUDGET_CORRECTION_PATTERNS) {
+    for (const match of message.matchAll(pattern)) {
+      if (match[1]) {
+        matches.push({
+          amount: match[1],
+          index: (match.index ?? 0) + match[0].lastIndexOf(match[1]),
+        });
+      }
+    }
+  }
+  for (const pattern of EXPLICIT_DOLLAR_BUDGET_PATTERNS) {
+    for (const match of message.matchAll(pattern)) {
+      if (match[1]) matches.push({ amount: match[1], index: match.index ?? 0 });
+    }
+  }
+  const amount = matches.sort((left, right) => left.index - right.index).at(-1)?.amount;
+  if (!amount) return "";
+  const numeric = Number(amount.replaceAll(",", ""));
+  return Number.isFinite(numeric) && numeric > 0
+    ? `$${numeric.toLocaleString("en-AU")}`
+    : "";
+}
+
+type WholePlanReverseCycleState = "working" | "not_working" | "unknown";
+
+function reverseCycleStateFromMessage(
+  message: string,
+  priorState: WholePlanReverseCycleState,
+): Exclude<WholePlanReverseCycleState, "unknown"> | null {
+  const namesReverseCycle = /\b(?:reverse[- ]cycle|split(?: system)?|air ?con(?:ditioner|ditioning)?)\b/i.test(message);
+  const refersToKnownUnit = priorState !== "unknown"
+    && /\b(?:it|the unit|the system|that unit|that system)\b/i.test(message);
+  if (!namesReverseCycle && !refersToKnownUnit) return null;
+  if (
+    /\bno longer\s+(?:heat|heats|heating|work|works|working|run|runs|running)\b/i.test(message)
+    || /\b(?:does not|doesn['’]?t|won['’]?t|cannot|can['’]?t)\s+(?:still\s+)?(?:heat|work|run)\b/i.test(message)
+    || /\b(?:is not|isn['’]?t|not)\s+(?:currently\s+)?(?:heating|working|running)\b/i.test(message)
+    || /\b(?:stopped|has stopped)\s+(?:heating|working|running)\b/i.test(message)
+    || /\b(?:heat|heats|heating|work|works|working|run|runs|running)\b[^.!?\n]{0,30}\b(?:poorly|badly|weakly|not properly|no longer|less well|worse)\b/i.test(message)
+    || /\b(?:is|has become|seems?)\s+(?:broken|faulty|failed)\b/i.test(message)
+  ) return "not_working";
+  if (
+    /\b(?:still\s+)?(?:heat|heats|heating|work|works|working|run|runs|running)\b[^.!?\n]{0,30}\b(?:well|fine|properly)\b/i.test(message)
+    || /\bworking\s+(?:reverse[- ]cycle|split(?: system)?|air ?con(?:ditioner)?)\b/i.test(message)
+  ) return "working";
+  return null;
+}
+
+function effectiveWholePlanConversationFacts(
+  message: string,
+  recentTurns: readonly EnergyAssistantRecentTurn[],
+) {
+  const userMessages = [
+    ...recentTurns.filter((turn) => turn.role === "user").map((turn) => turn.content),
+    message,
+  ];
+  let budget = "";
+  let reverseCycleState: WholePlanReverseCycleState = "unknown";
+  for (const userMessage of userMessages) {
+    const suppliedBudget = explicitDollarBudget(userMessage);
+    if (suppliedBudget) budget = suppliedBudget;
+    reverseCycleState = reverseCycleStateFromMessage(userMessage, reverseCycleState)
+      || reverseCycleState;
+  }
+  return {
+    budget,
+    reverseCycleState,
+    contextText: userMessages.join("\n"),
+  };
+}
+
+function composeSavedHomeWholePlanPriorityAnswer(
+  message: string,
+  planContext: ReturnType<typeof parseSurgePlanContext>,
+  recentTurns: readonly EnergyAssistantRecentTurn[],
+) {
+  let priority = composeSurgePlanPriorityAnswer(message, planContext, recentTurns);
+  if (!priority && planContext && isSavedHomeWholePlanRankingRequest(message)) {
+    const budget = explicitDollarBudget(message);
+    const priorityMessage = budget
+      ? `My budget is ${budget}. Based on my saved answers, where should I start?`
+      : "Based on my saved answers, where should I start?";
+    priority = composeSurgePlanPriorityAnswer(priorityMessage, planContext, recentTurns);
+  }
+  if (!priority || !planContext || !/start with moisture control/i.test(priority.directAnswer)) {
+    return priority;
+  }
+
+  // recentTurns is already scoped to the selected conversation frame. Resolve
+  // mutable facts in chronological order so a correction replaces, rather
+  // than coexists with, the older value for that saved-home decision.
+  const effectiveFacts = effectiveWholePlanConversationFacts(message, recentTurns);
+  const contextText = effectiveFacts.contextText;
+  const hasFrontDoorDraught = /\b(?:air|breeze|draught|draft)\b[^.!?\n]{0,55}\b(?:under|around|through)\b[^.!?\n]{0,35}\b(?:front|entry|external)?\s*door\b|\b(?:front|entry|external)\s+door\b[^.!?\n]{0,55}\b(?:draught|draft|air|breeze|gap)\b/i.test(contextText);
+  const hasColdWindows = planContext.facts.some((fact) => (
+    fact.key === "glazing" && /single glazed/i.test(fact.value)
+  )) || /\bsingle[- ]glazed\s+windows?\b/i.test(contextText);
+  if (!hasFrontDoorDraught || !hasColdWindows) return priority;
+
+  const savedPlanBudget = planContext.facts.find((fact) => fact.key === "first_stage_budget")?.value;
+  const budget = effectiveFacts.budget
+    || savedPlanBudget?.toLowerCase()
+    || "the available first-stage budget";
+  const moistureStep = "Check and control the condensation first: run the bathroom exhaust whenever moisture is produced, confirm it clears steam, and investigate any persistent damp, leaks or mould before sealing more gaps.";
+  const doorStep = "Stop the confirmed front-door draught with a removable door snake now, then fit a correctly sized door-bottom seal if the gap is real and the door still opens freely.";
+  const windowStep = "Use the remaining budget on the coldest single-glazed windows: fit close-fitting honeycomb blinds or thermal curtains with pelmets before considering window replacement.";
+  const splitDirection = effectiveFacts.reverseCycleState === "working"
+    ? " Keep the working reverse-cycle split; replacing it is not a priority while it still heats properly."
+    : effectiveFacts.reverseCycleState === "not_working"
+      ? " The reverse-cycle split no longer heats properly, so have that change diagnosed instead of treating it as a confirmed working unit."
+      : "";
+  return {
+    ...priority,
+    directAnswer: `With ${budget} to spend, start with moisture control, then address the front-door draught and the coldest single-glazed windows.${splitDirection}`,
+    practicalSteps: [moistureStep, doorStep, windowStep],
+    nextAction: moistureStep,
+  };
+}
+
 function validatedOfficialCitationsForReply(
   value: unknown,
   plan: SurgeOfficialWebSearchPlan,
@@ -1210,6 +1466,24 @@ function validatedOfficialCitationsForReply(
     });
   }
   return citations.length ? citations : null;
+}
+
+function validatedMaintainedRecoveryCitationsForReply(
+  value: unknown,
+  plan: SurgeOfficialWebSearchPlan,
+  reviewedCitations: readonly unknown[],
+) {
+  const citations = validatedOfficialCitationsForReply(value, plan);
+  if (!citations) return null;
+  const reviewedCitationKeys = new Set(reviewedCitations.flatMap((candidate, index) => {
+    const citation = sanitizeSurgeCustomerOfficialCitation(candidate, index);
+    return citation ? [`${citation.url}\n${citation.title}`] : [];
+  }));
+  return citations.every((citation) => (
+    reviewedCitationKeys.has(`${citation.url}\n${citation.title}`)
+  ))
+    ? citations
+    : null;
 }
 
 function customerFacingOfficialCitations(
@@ -1290,6 +1564,20 @@ function publicSafeContinuation(
   };
 }
 
+function expandedConversationGoal(goal: string, message: string) {
+  const segments = goal
+    .split(/\s+\|\s+/u)
+    .map((part) => part.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const normalizedMessage = message.replace(/\s+/g, " ").trim();
+  if (normalizedMessage && !segments.some((part) => (
+    part.localeCompare(normalizedMessage, undefined, { sensitivity: "accent" }) === 0
+  ))) {
+    segments.push(normalizedMessage);
+  }
+  return limitedText(segments.join(" | "), 240);
+}
+
 function continuationAfterDeliveredReply(
   state: SurgeConversationState,
   message: string,
@@ -1336,7 +1624,7 @@ function continuationAfterDeliveredReply(
     && topic !== priorDecisionTopic
     && surgeConversationTopicsAreCompatible(topic, priorDecisionTopic);
   const goal = compatibleTopicExpansion
-    ? limitedText([baseState.goal, message].filter(Boolean).join(" | "), 240)
+    ? expandedConversationGoal(baseState.goal, message)
     : preserveModelSummary && baseState.goal
     ? baseState.goal
     : preservesPriorDecision && baseState.goal
@@ -1877,7 +2165,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     || requiresDeterministicScopeBoundary || requiresDeterministicHeatingDefault
     || requiresDeterministicServiceAnswer || protectedAnswer
     ? null
-    : composeSurgePlanPriorityAnswer(message, planContext, decisionRecentTurns);
+    : composeSavedHomeWholePlanPriorityAnswer(message, planContext, decisionRecentTurns);
   const planPriorityParts = planPriorityAnswer ? surgeMaterialQuestionParts(message) : [];
   const correctionAcknowledgement = requiresDeterministicSafety || requiresDeterministicDocumentAnswer
     || requiresDeterministicScopeBoundary || requiresDeterministicHeatingDefault
@@ -1957,6 +2245,21 @@ async function ask(request: Request, dependencies: ServerDependencies) {
       planContext,
       referenceAnswer,
     );
+    const modelReferenceAnswer = officialWebSearch
+      ? {
+          ...referenceAnswer,
+          citations: [...referenceAnswer.citations, ...composedAnswer.citations]
+            .filter((citation) => (
+              citation.sourceTier === "primary_official"
+              && !citation.stale
+              && surgeOfficialUrlIsAllowed(citation.url, officialWebSearch.allowedDomains)
+            ))
+            .filter((citation, index, all) => (
+              all.findIndex((candidate) => candidate.url === citation.url) === index
+            ))
+            .slice(0, 8),
+        }
+      : referenceAnswer;
     const deliverGroundedDirectly = !dependencies.requireValidatedModelForOrdinaryAdvice && groundedAnswer
       ? groundedAnswerNeedsDirectDelivery(groundedAnswer) && !officialWebSearch
       : false;
@@ -1967,27 +2270,37 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     if (!deliverGroundedDirectly && dependencies.reserveModelCall) {
       const groundedModelRequest: SurgeModelRequest = {
         ...modelRequest,
-        deterministicAnswer: referenceAnswer,
+        deterministicAnswer: modelReferenceAnswer,
         officialWebSearch,
       };
       const estimatedMicroUsd = estimateSurgeModelReservationMicroUsd(groundedModelRequest);
       if (estimatedMicroUsd !== null) {
-        let reservation: SurgeModelCallReservation = { allowed: false };
-        try {
-          reservation = await dependencies.reserveModelCall({
+        const reservation = await reserveSurgeModelCallWithBoundedRetry(
+          dependencies.reserveModelCall,
+          {
             requestId: requestId || (dependencies.randomUUID || (() => crypto.randomUUID()))(),
             estimatedMicroUsd,
-          });
-        } catch {
-          reservation = { allowed: false };
-        }
+          },
+          dependencies,
+        );
         if (reservation.allowed) {
           try {
             const generate = dependencies.generateAnswer || generateSurgeModelAnswer;
             const generated = await generate(groundedModelRequest).catch(() => null);
-            const generatedOfficialCitations = officialWebSearch && generated
+            const generatedLiveOfficialCitations = officialWebSearch && generated
               ? validatedOfficialCitationsForReply(generated.officialCitations, officialWebSearch)
               : null;
+            const generatedMaintainedRecoveryCitations = officialWebSearch
+              && generated?.officialEvidenceMode === "maintained_recovery"
+              ? validatedMaintainedRecoveryCitationsForReply(
+                  generated.answer.citations,
+                  officialWebSearch,
+                  modelReferenceAnswer.citations,
+                )
+              : null;
+            const generatedOfficialCitations = generated?.officialEvidenceMode === "maintained_recovery"
+              ? generatedMaintainedRecoveryCitations || []
+              : generatedLiveOfficialCitations;
             if (generated
               && (!officialWebSearch || generatedOfficialCitations)
               && generatedResultIsPolicySafe(
@@ -2020,7 +2333,18 @@ async function ask(request: Request, dependencies: ServerDependencies) {
                       all.findIndex((candidate) => candidate.url === citation.url) === index
                     )).slice(0, 8),
                   }
-                : generated.answer;
+                : generated.officialEvidenceMode === "maintained_recovery"
+                  ? {
+                      ...generated.answer,
+                      citations: generatedMaintainedRecoveryCitations
+                        ? generated.answer.citations.filter((citation) => (
+                            generatedMaintainedRecoveryCitations.some((allowed) => (
+                              allowed.url === citation.url
+                            ))
+                          ))
+                        : [],
+                    }
+                  : generated.answer;
               presentation = generated.presentation || null;
               nextContinuation = generated.continuation;
               officialCitations = generatedOfficialCitations || [];

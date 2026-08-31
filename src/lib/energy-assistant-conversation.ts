@@ -552,6 +552,59 @@ export function surgeConversationFactsFromMessage(
   return facts.slice(0, 6);
 }
 
+type ExplicitBudgetSemantics = {
+  amounts: number[];
+  qualifier: "exact" | "under" | "up_to" | "at_least" | "range";
+};
+
+function budgetQualifier(value: string, amountCount: number): ExplicitBudgetSemantics["qualifier"] {
+  if (amountCount > 1) return "range";
+  if (/\b(?:under|below|less than)\b/i.test(value)) return "under";
+  if (/\b(?:up to|maximum|max|cap)\b/i.test(value)) return "up_to";
+  if (/\b(?:at least|over|more than)\b|\bplus\s*$/i.test(value)) return "at_least";
+  return "exact";
+}
+
+function explicitBudgetSemantics(message: string) {
+  const semantics: ExplicitBudgetSemantics[] = [];
+  const moneyMatches = [...message.matchAll(/\$\s*([\d,]+(?:\.\d+)?)/g)];
+  for (const [matchIndex, match] of moneyMatches.entries()) {
+    const index = match.index || 0;
+    const before = message.slice(Math.max(0, index - 110), index);
+    const after = message.slice(index + match[0].length, index + match[0].length + 70);
+    const explicitlyAllocated = /(?:\b(?:my|our)\s+budget(?:\s+(?:is|of|to|at))?|\bbudget(?:\s+(?:is|of|to|at))?|\b(?:can|could|want to|able to)\s+(?:spend|afford|put)|\bset aside|\b(?:limit|cap|maximum|max)(?:\s+is)?|\bbest use of (?:my|our)|\b(?:i|we)\s+(?:still\s+)?have|\bunder|\bbelow|\bless than|\bup to|\bat least|\bover|\bmore than)\s*(?:[:=]\s*)?(?:(?:now|currently|about|around|roughly|approximately|exactly|under|below|less than|up to|between|from|over|more than|at least)\s*)?$/i.test(before)
+      || /^\s*(?:budget|to spend|to work with|available)\b/i.test(after);
+    if (!explicitlyAllocated) continue;
+    const firstAmount = Number(match[1].replaceAll(",", ""));
+    if (!Number.isFinite(firstAmount)) continue;
+    const amounts = [firstAmount];
+    const next = moneyMatches[matchIndex + 1];
+    const betweenAmounts = next?.index === undefined
+      ? ""
+      : message.slice(index + match[0].length, next.index);
+    if (next && /^\s*(?:to|through|and|[-\u2013\u2014])\s*$/i.test(betweenAmounts)) {
+      const nextAmount = Number(next[1].replaceAll(",", ""));
+      if (Number.isFinite(nextAmount)) amounts.push(nextAmount);
+    }
+    const localContext = `${before.slice(-70)} ${match[0]}${amounts.length > 1 ? `${betweenAmounts}${next?.[0] || ""}` : ""}`;
+    semantics.push({ amounts, qualifier: budgetQualifier(localContext, amounts.length) });
+  }
+  return semantics;
+}
+
+function budgetFactMatchesExplicitMessage(factValue: string, message: string) {
+  const amounts = [...factValue.matchAll(/\$\s*([\d,]+(?:\.\d+)?)/g)]
+    .map((match) => Number(match[1].replaceAll(",", "")))
+    .filter(Number.isFinite);
+  if (!amounts.length) return false;
+  const qualifier = budgetQualifier(factValue, amounts.length);
+  return explicitBudgetSemantics(message).some((candidate) => (
+    candidate.qualifier === qualifier
+    && candidate.amounts.length === amounts.length
+    && candidate.amounts.every((amount, index) => Math.abs(amount - amounts[index]) <= 0.01)
+  ));
+}
+
 export function mergeSurgeConversationFacts(
   prior: readonly SurgeConversationFact[],
   current: readonly SurgeConversationFact[],
@@ -845,10 +898,26 @@ function materiallyExpandsDecisionGoal(message: string, decision: SurgeConversat
 }
 
 function boundedCombinedGoal(priorGoal: string, nextGoal: string) {
-  const expanded = [priorGoal, nextGoal].filter(Boolean).join(" | ");
-  return expanded.length <= 300
-    ? expanded
-    : `${priorGoal.slice(0, 140).trim()} | ${nextGoal.slice(-150).trim()}`;
+  const segments: string[] = [];
+  const normalizedSegments = new Set<string>();
+  for (const segment of [priorGoal, nextGoal]
+    .flatMap((value) => value.split(/\s*\|\s*/u))
+    .map((value) => value.replace(/\s+/gu, " ").trim())
+    .filter(Boolean)) {
+    const normalized = segment
+      .normalize("NFKD")
+      .replace(/\p{M}/gu, "")
+      .toLocaleLowerCase("en-AU");
+    if (normalizedSegments.has(normalized)) continue;
+    normalizedSegments.add(normalized);
+    segments.push(segment);
+  }
+  const expanded = segments.join(" | ");
+  if (expanded.length <= 300) return expanded;
+  if (segments.length <= 1) return expanded.slice(0, 300).trim();
+  const retainedPrior = segments.slice(0, -1).join(" | ");
+  const latest = segments.at(-1) || "";
+  return `${retainedPrior.slice(0, 140).trim()} | ${latest.slice(-150).trim()}`;
 }
 
 function nextLedgerSubjectIdentity(
@@ -2693,6 +2762,7 @@ export function updateSurgeConversationLedger(
       .filter((fact) => /^(?:postcode|state_or_territory|tenure|ownership|property_type|household_size)$/.test(fact.key))
       .map((fact) => ({ ...fact, source: "plan" as const, updatedTurn: turn }))
     : [];
+  const exactAllPlanFacts = new Set(update.planFacts.map((fact) => `${fact.key}\u0000${fact.value}`));
   const savedHomeCorrectionFacts = identity.kind === "saved_home"
     ? (update.savedHomeCorrectionFacts || []).map((fact) => ({
         ...fact,
@@ -2963,9 +3033,42 @@ export function updateSurgeConversationLedger(
         || subjectWideCorrectionKey.test(replacement.key)
       ))
     : [];
+  const explicitMessageFacts = surgeConversationFactsFromMessage(update.message, topic);
+  const exactExplicitMessageFacts = new Set(explicitMessageFacts.map((fact) => `${fact.key}\u0000${fact.value}`));
+  const selectedSubjectIds = crossSubjectIdentities.length
+    ? crossSubjectIdentities.map((candidate) => candidate.id)
+    : [identity.id];
+  const selectedSubjectIdSet = new Set(selectedSubjectIds);
+  const selectedSubjectDecisionFacts = ledgerDecisions
+    .filter((candidate) => (
+      candidate.subjectIds.length === selectedSubjectIdSet.size
+      && candidate.subjectIds.every((subjectId) => selectedSubjectIdSet.has(subjectId))
+    ))
+    .flatMap((candidate) => candidate.facts);
+  const selectedSubjectFacts = selectedSubjectIds.length === 1
+    ? subjects.find((candidate) => candidate.id === identity.id)?.facts || []
+    : [];
+  const retainedFacts = [
+    ...selectedSubjectDecisionFacts,
+    ...selectedSubjectFacts,
+  ];
+  const modelStateFacts = update.modelState.facts.map((fact) => {
+    const explicitlySupplied = exactExplicitMessageFacts.has(`${fact.key}\u0000${fact.value}`)
+      || (/^(?:first_stage_)?budget$/i.test(fact.key)
+        && budgetFactMatchesExplicitMessage(fact.value, update.message));
+    if (explicitlySupplied) return { ...fact, source: "chat" as const, updatedTurn: turn };
+    const retained = retainedFacts
+      .filter((candidate) => candidate.key === fact.key && candidate.value === fact.value)
+      .sort((left, right) => right.updatedTurn - left.updatedTurn)[0];
+    if (retained) return { ...fact, source: retained.source, updatedTurn: retained.updatedTurn };
+    if (exactAllPlanFacts.has(`${fact.key}\u0000${fact.value}`)) {
+      return { ...fact, source: "plan" as const, updatedTurn: turn };
+    }
+    return { ...fact, source: "derived" as const, updatedTurn: turn };
+  });
   const currentFacts = [
-    ...update.modelState.facts.map((fact) => ({ ...fact, source: "chat" as const, updatedTurn: turn })),
-    ...surgeConversationFactsFromMessage(update.message, topic)
+    ...modelStateFacts,
+    ...explicitMessageFacts
       .map((fact) => ({ ...fact, source: "chat" as const, updatedTurn: turn })),
     ...(update.derivedFacts || [])
       .map((fact) => ({ ...fact, source: "derived" as const, updatedTurn: turn })),

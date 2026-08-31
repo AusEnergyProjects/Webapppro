@@ -5418,6 +5418,9 @@ export function composeEnergyAssistantAnswer(
     && /\b(?:what are|what do[^?]{0,30}mean|explain|normal words?|plain (?:english|words?)|simple words?)\b/i.test(query)
     && !/\b(?:current|today|latest|now|values?|worth|prices?|rates?|trading|market|how much|dollars?|per certificate|clearing house|spot|gross|net|eligib(?:le|ility)|qualif(?:y|ies|ication)|calculat(?:e|es|ion)|how many|quotes?|quoted|discounts?)\b/i.test(query)
     && !asksForOfficialCertificateSources;
+  const asksForMixedCurrentCertificateValue = namedCertificateIntent === "current_value"
+    && /\bSTCs?\b/i.test(query)
+    && /\b(?:VEECs?|Victorian Energy Upgrades?|VEU)\b/i.test(query);
   const duplicateStcDiscountQuestion = /\bSTCs?\b/i.test(query)
     && (/\b(?:another|second|twice|double|duplicat(?:e|ed|ion)|two|both|again|already)\b[\s\S]{0,120}\b(?:rebate|discount|benefit|deduct|deducted|subtract|subtracts|subtracted|subtraction|line item|quote line|amount|value|GST)\b/i.test(query)
       || /\b(?:before|pre)\s+GST\b[\s\S]{0,100}\b(?:after|post)\s+GST\b/i.test(query)
@@ -5522,6 +5525,28 @@ export function composeEnergyAssistantAnswer(
         "Reconcile certificate quantities, commercial rates, provider fees and the net customer credit separately in the quote.",
       ],
       toolActions: [{ id: "open-rebates", label: "Open the official programme sources", href: "/rebates" }],
+      suggestedQuestions: [],
+    });
+  }
+
+  if (asksForMixedCurrentCertificateValue) {
+    return structured("rebates_certificates", {
+      directAnswer:
+        "STC and VEEC trading values are separate and can move. The maintained official programme sources confirm the certificate and eligibility rules, but they do not prove today's live market prices. Check each market separately using a dated source, treat any market figure as a gross reference, then subtract provider, registration, compliance or brokerage costs to identify the net customer discount shown in the quote.",
+      status: "source_review_required",
+      citations: officialCitationsById([
+        "cer-stc-buy-sell",
+        "cer-stc-market-report-june-2026",
+        "veu-market-update-april-2026",
+      ]),
+      confidence: "high",
+      assumptions: ["No validated same-day STC and VEEC market evidence was supplied."],
+      practicalSteps: [
+        "Verify the dated STC and VEEC market references separately.",
+        "Ask the quote to show each certificate quantity and assumed unit value.",
+        "Reconcile provider fees and the resulting net customer discount before signing.",
+      ],
+      toolActions: [{ id: "open-rebates", label: "Open the official certificate sources", href: "/rebates" }],
       suggestedQuestions: [],
     });
   }
@@ -8635,7 +8660,7 @@ export function composeEnergyAssistantAnswer(
       return structured("rebates_certificates", {
         directAnswer,
         status: "needs_context",
-        citations: officialCitationsById(["veu-water-space-activity-guide-v3-19"]),
+        citations: officialCitationsById(["veu-heating-cooling-discounts"]),
         confidence: "medium",
         assumptions: ["The existing system, exact proposed model, property postcode, installer, installation date and current activity conditions have not been checked."],
         practicalSteps: [],

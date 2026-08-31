@@ -128,7 +128,7 @@ test("Surge gives a direct and evidence-bounded Electric Saul comparison", () =>
   assert.match(answer.directAnswer, /six operational guardrails and seven baseline fact sheets/i);
   assert.match(answer.directAnswer, /stronger choice for detailed, source-governed whole-home decisions/i);
   assert.match(answer.directAnswer, /45 structured details/i);
-  assert.match(answer.directAnswer, /111 maintained official Australian sources/i);
+  assert.match(answer.directAnswer, /115 maintained official Australian sources/i);
   assert.match(answer.directAnswer, /machine-learning-assisted reasoning/i);
   assert.match(answer.directAnswer, /continuous governed improvement.*accredited assessors monitoring, assessing and refining/i);
   assert.match(answer.directAnswer, /accountable human quality assurance/i);
@@ -780,7 +780,7 @@ test("a new Victorian air-conditioner support question does not repeat an earlie
   assert.match(answer.directAnswer, /exact air conditioner.*replacing.*installed/i);
   assert.deepEqual(answer.suggestedQuestions, ["What is the property postcode?"]);
   assert.doesNotMatch(answer.directAnswer, /not one right one for every job/i);
-  assert.equal(answer.citations[0]?.id, "veu-water-space-activity-guide-v3-19");
+  assert.equal(answer.citations[0]?.id, "veu-heating-cooling-discounts");
 });
 
 test("Victorian air-conditioner support keeps short answers in the same conversation", () => {

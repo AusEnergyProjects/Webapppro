@@ -358,6 +358,29 @@ function webJsonResponse(output, options = {}) {
   });
 }
 
+const INVALID_CERTIFICATE_RECOVERY = "Check the exact VEEC and STC certificate details using the system size, installation date, postcode, certificate quantities, fees and net quote credit before relying on a current value or rule.";
+
+function officialWebThenInvalidRecoveryFetch(
+  liveResponse,
+  bodies,
+  recoveryAnswer = INVALID_CERTIFICATE_RECOVERY,
+) {
+  return async (_url, options) => {
+    const body = JSON.parse(options.body);
+    bodies.push(body);
+    return Array.isArray(body.tools)
+      ? liveResponse()
+      : jsonResponse(modelPayload({ answer: recoveryAnswer }));
+  };
+}
+
+function assertOfficialWebRecoveryModes(bodies) {
+  assert.deepEqual(
+    bodies.map((body) => Array.isArray(body.tools) ? "web" : "recovery"),
+    ["web", "web", "recovery"],
+  );
+}
+
 test("model adapter sends a stateless strict Responses request with bounded schema", async () => {
   let observedUrl;
   let observedOptions;
@@ -464,6 +487,728 @@ test("official lookup keeps strict JSON and sends only the bounded official web-
   }]);
 });
 
+test("official timing accepts a 30 second live lookup response", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  let calls = 0;
+  const failures = [];
+  const answer = "The current Victorian VEEC rules depend on the official activity requirements for the exact upgrade.";
+  const resultPromise = generateSurgeModelAnswer(request({
+    message: "What are the current VEEC rules in Victoria?",
+    officialWebSearch: {
+      kind: "certificate",
+      jurisdiction: "Victoria",
+      allowedDomains: ["esc.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-sol",
+    fetch: async (_url, options) => {
+      calls += 1;
+      return new Promise((resolve, reject) => {
+        const responseTimer = setTimeout(() => {
+          resolve(webJsonResponse(modelPayload({ answer })));
+        }, 30_000);
+        const abort = () => {
+          clearTimeout(responseTimer);
+          reject(new DOMException("Timed out", "AbortError"));
+        };
+        if (options.signal.aborted) abort();
+        else options.signal.addEventListener("abort", abort, { once: true });
+      });
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(calls, 1);
+  t.mock.timers.tick(30_000);
+  const result = await resultPromise;
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls, 1);
+  assert.equal(Date.now(), 30_000);
+  assert.equal(result.officialEvidenceMode, "live_lookup");
+  assert.deepEqual(failures, []);
+});
+
+test("official timing accepts a 39 second maintained recovery response", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const calls = [];
+  const failures = [];
+  const resultPromise = generateSurgeModelAnswer(request({
+    message: "What current Victorian support may apply if I replace ducted gas heating with reverse-cycle air conditioning?",
+    officialWebSearch: {
+      kind: "rebate_program",
+      jurisdiction: "Victoria",
+      allowedDomains: ["esc.vic.gov.au", "energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-sol",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) throw new DOMException("Timed out", "AbortError");
+      return new Promise((resolve, reject) => {
+        const responseTimer = setTimeout(() => {
+          resolve(jsonResponse(structuredModelPayload({
+            verdict: "I could not verify the current Victorian Energy Upgrades offer or eligibility rules just now.",
+            reason: "Eligibility depends on the installation date, existing heater, exact approved new model, installer, decommissioning requirements and paperwork.",
+            steps: [
+              "Check that any quote separately shows the program discount, customer contribution, removal work and exclusions.",
+            ],
+            followUpQuestion: "Do you have a quote showing the exact old heater and proposed air-conditioner model?",
+          })));
+        }, 39_000);
+        const abort = () => {
+          clearTimeout(responseTimer);
+          reject(new DOMException("Timed out", "AbortError"));
+        };
+        if (options.signal.aborted) abort();
+        else options.signal.addEventListener("abort", abort, { once: true });
+      });
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(calls.length, 1);
+  await new Promise((resolve) => setImmediate(resolve));
+  t.mock.timers.tick(50);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.length, 2);
+  assert.equal("tools" in calls[1], false);
+  assert.deepEqual(calls[1].reasoning, { effort: "low" });
+  assert.equal(calls[1].max_output_tokens, 1_200);
+
+  t.mock.timers.tick(39_000);
+  const result = await resultPromise;
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(Date.now(), 39_050);
+  assert.equal(result.officialEvidenceMode, "maintained_recovery");
+  assert.deepEqual(failures, []);
+});
+
+test("official maintained recovery can use more than the old 40 second attempt cap", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const calls = [];
+  const failures = [];
+  const resultPromise = generateSurgeModelAnswer(request({
+    message: "What current Victorian support may apply if I replace ducted gas heating with reverse-cycle air conditioning?",
+    officialWebSearch: {
+      kind: "rebate_program",
+      jurisdiction: "Victoria",
+      allowedDomains: ["esc.vic.gov.au", "energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-sol",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) throw new DOMException("Timed out", "AbortError");
+      return new Promise((resolve, reject) => {
+        const responseTimer = setTimeout(() => {
+          resolve(jsonResponse(structuredModelPayload({
+            verdict: "I could not verify the current Victorian Energy Upgrades offer or eligibility rules just now.",
+            reason: "Eligibility depends on the installation date, existing heater, exact approved new model, installer, decommissioning requirements and paperwork.",
+            steps: [
+              "Check that any quote separately shows the program discount, customer contribution, removal work and exclusions.",
+            ],
+            followUpQuestion: "Do you have a quote showing the exact old heater and proposed air-conditioner model?",
+          })));
+        }, 45_000);
+        const abort = () => {
+          clearTimeout(responseTimer);
+          reject(new DOMException("Timed out", "AbortError"));
+        };
+        if (options.signal.aborted) abort();
+        else options.signal.addEventListener("abort", abort, { once: true });
+      });
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(calls.length, 1);
+  await new Promise((resolve) => setImmediate(resolve));
+  t.mock.timers.tick(50);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.length, 2);
+  assert.equal("tools" in calls[1], false);
+  assert.deepEqual(calls[1].reasoning, { effort: "low" });
+  assert.equal(calls[1].max_output_tokens, 1_200);
+
+  t.mock.timers.tick(45_000);
+  const result = await resultPromise;
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(Date.now(), 45_050);
+  assert.equal(calls.length, 2);
+  assert.equal(result.officialEvidenceMode, "maintained_recovery");
+  assert.deepEqual(failures, []);
+});
+
+test("official live and recovery timeouts cannot exceed the 70 second shared deadline", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  let calls = 0;
+  const failures = [];
+  const resultPromise = generateSurgeModelAnswer(request({
+    message: "What current Victorian support may apply to a reverse-cycle replacement?",
+    officialWebSearch: {
+      kind: "rebate_program",
+      jurisdiction: "Victoria",
+      allowedDomains: ["esc.vic.gov.au", "energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-sol",
+    fetch: async (_url, options) => {
+      calls += 1;
+      return new Promise((_, reject) => {
+        const abort = () => reject(new DOMException("Timed out", "AbortError"));
+        if (options.signal.aborted) abort();
+        else options.signal.addEventListener("abort", abort, { once: true });
+      });
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(calls, 1);
+  t.mock.timers.tick(30_500);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls, 1, "official recovery must retain the short bounded retry backoff");
+
+  t.mock.timers.tick(50);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls, 2);
+
+  t.mock.timers.tick(39_449);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls, 2);
+  t.mock.timers.tick(1);
+  const result = await resultPromise;
+
+  assert.equal(result, null);
+  assert.equal(Date.now(), 70_000);
+  assert.equal(calls, 2);
+  assert.deepEqual(failures, [{ code: "provider_timeout" }]);
+  t.mock.timers.tick(10_000);
+  assert.equal(calls, 2);
+});
+
+test("an official response-body timeout switches directly to maintained no-web recovery", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const calls = [];
+  const failures = [];
+  const resultPromise = generateSurgeModelAnswer(request({
+    message: "What current Victorian support may apply to a reverse-cycle replacement?",
+    officialWebSearch: {
+      kind: "rebate_program",
+      jurisdiction: "Victoria",
+      allowedDomains: ["esc.vic.gov.au", "energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-sol",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: () => new Promise((_, reject) => {
+            const abort = () => reject(new DOMException("Timed out", "AbortError"));
+            if (options.signal.aborted) abort();
+            else options.signal.addEventListener("abort", abort, { once: true });
+          }),
+        };
+      }
+      return jsonResponse(structuredModelPayload({
+        verdict: "I could not verify the current Victorian Energy Upgrades support just now.",
+        reason: "Eligibility depends on the existing heater, exact approved replacement, installation date, accredited provider and paperwork.",
+        steps: ["Have the provider confirm the exact equipment and itemised discount in writing before work starts."],
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(calls.length, 1);
+  t.mock.timers.tick(30_500);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.length, 1);
+  t.mock.timers.tick(50);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const result = await resultPromise;
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 2);
+  assert.ok(Array.isArray(calls[0].tools));
+  assert.equal("tools" in calls[1], false);
+  assert.deepEqual(calls[1].reasoning, { effort: "low" });
+  assert.equal(calls[1].max_output_tokens, 1_200);
+  assert.equal(result.officialEvidenceMode, "maintained_recovery");
+  assert.equal(Date.now(), 30_550);
+  assert.deepEqual(failures, []);
+});
+
+test("official response-body timeouts remain bounded by the 70 second shared deadline", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const calls = [];
+  const failures = [];
+  const resultPromise = generateSurgeModelAnswer(request({
+    message: "What current Victorian support may apply to a reverse-cycle replacement?",
+    officialWebSearch: {
+      kind: "rebate_program",
+      jurisdiction: "Victoria",
+      allowedDomains: ["esc.vic.gov.au", "energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-sol",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: () => new Promise((_, reject) => {
+          const abort = () => reject(new DOMException("Timed out", "AbortError"));
+          if (options.signal.aborted) abort();
+          else options.signal.addEventListener("abort", abort, { once: true });
+        }),
+      };
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(calls.length, 1);
+  t.mock.timers.tick(30_500);
+  await new Promise((resolve) => setImmediate(resolve));
+  t.mock.timers.tick(50);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.length, 2);
+  assert.equal("tools" in calls[1], false);
+
+  t.mock.timers.tick(39_449);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.length, 2);
+  t.mock.timers.tick(1);
+  const result = await resultPromise;
+
+  assert.equal(result, null);
+  assert.equal(Date.now(), 70_000);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(failures, [{ code: "provider_timeout" }]);
+});
+
+test("a response-body transport failure uses transient recovery while malformed JSON keeps format repair", async () => {
+  const officialCalls = [];
+  const officialFailures = [];
+  const officialResult = await generateSurgeModelAnswer(request({
+    message: "What current Victorian support may apply to a reverse-cycle replacement?",
+    officialWebSearch: {
+      kind: "rebate_program",
+      jurisdiction: "Victoria",
+      allowedDomains: ["esc.vic.gov.au", "energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      officialCalls.push(JSON.parse(options.body));
+      if (officialCalls.length === 1) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => { throw new TypeError("terminated"); },
+        };
+      }
+      return jsonResponse(modelPayload({
+        answer: "I could not verify the current Victorian Energy Upgrades support just now. Confirm the exact existing heater, approved replacement model, accredited provider and itemised discount before work starts.",
+      }));
+    },
+    waitBeforeRetry: async () => undefined,
+    onFailure: (failure) => officialFailures.push(failure),
+  });
+
+  assert.ok(officialResult, JSON.stringify(officialFailures));
+  assert.equal(officialCalls.length, 2);
+  assert.ok(Array.isArray(officialCalls[0].tools));
+  assert.equal("tools" in officialCalls[1], false);
+  assert.equal(officialResult.officialEvidenceMode, "maintained_recovery");
+  assert.deepEqual(officialFailures, []);
+
+  const formatCalls = [];
+  const formatFailures = [];
+  const formatResult = await generateSurgeModelAnswer(request(), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      formatCalls.push(JSON.parse(options.body));
+      if (formatCalls.length === 1) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => { throw new SyntaxError("Unexpected end of JSON input"); },
+        };
+      }
+      return jsonResponse(modelPayload());
+    },
+    onFailure: (failure) => formatFailures.push(failure),
+  });
+
+  assert.ok(formatResult, JSON.stringify(formatFailures));
+  assert.equal(formatCalls.length, 2);
+  assert.deepEqual(JSON.parse(formatCalls[1].input[1].content[0].text).repair, {
+    attempt: 1,
+    failureStage: "response_body_json",
+  });
+  assert.deepEqual(formatFailures, []);
+});
+
+test("an official lookup timeout recovers through the paid model without guessing a current fact", async () => {
+  const officialCitation = {
+    id: "veu-water-space-activity-guide-v3-19",
+    title: "Victorian Energy Upgrades",
+    publisher: "Essential Services Commission",
+    url: "https://www.esc.vic.gov.au/victorian-energy-upgrades",
+    sourceTier: "primary_official",
+    jurisdiction: "VIC",
+    effectiveFrom: null,
+    effectiveTo: null,
+    lastChecked: "2026-08-21",
+    reviewDue: "2026-11-21",
+    storagePolicy: "link_only",
+    stale: false,
+  };
+  const unrelatedOfficialCitation = {
+    ...officialCitation,
+    id: "unrelated-retail-source",
+    title: "Australian Energy Regulator consumer information",
+    publisher: "Australian Energy Regulator",
+    url: "https://www.aer.gov.au/consumers",
+  };
+  const calls = [];
+  const failures = [];
+  const modelRequest = request({
+    message: "What current Victorian support may apply if I replace ducted gas heating with reverse-cycle air conditioning?",
+    deterministicAnswer: {
+      ...deterministicAnswer("Check Victorian Energy Upgrades using the exact old heater, new model and installation details."),
+      citations: [officialCitation, unrelatedOfficialCitation],
+    },
+    officialWebSearch: {
+      kind: "rebate_program",
+      jurisdiction: "Victoria",
+      allowedDomains: ["esc.vic.gov.au", "energy.vic.gov.au"],
+    },
+  });
+  const recoveryAnswer = "I could not verify the current Victorian support just now. The official programme to check is Victorian Energy Upgrades. Ask the installer to show the exact old heater, outdoor and indoor model numbers, installed scope and itemised discount before relying on it.";
+  const result = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-sol",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) {
+        return new Promise((_resolve, reject) => {
+          options.signal.addEventListener("abort", () => {
+            reject(new DOMException("Timed out", "AbortError"));
+          }, { once: true });
+        });
+      }
+      return jsonResponse(modelPayload({ answer: recoveryAnswer }));
+    },
+    timeoutMs: 5,
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 2);
+  assert.ok(Array.isArray(calls[0].tools));
+  assert.equal(calls[0].tool_choice, "required");
+  assert.equal("tools" in calls[1], false);
+  assert.equal("tool_choice" in calls[1], false);
+  assert.match(calls[1].input[0].content[0].text, /could not be verified just now/i);
+  assert.deepEqual(JSON.parse(calls[1].input[1].content[0].text).officialLookupStatus, {
+    attempted: true,
+    liveEvidenceAvailable: false,
+  });
+  assert.equal(result.answer.directAnswer, recoveryAnswer);
+  assert.equal(result.officialEvidenceMode, "maintained_recovery");
+  assert.deepEqual(result.officialCitations, []);
+  assert.deepEqual(result.answer.citations.map((citation) => citation.url), [officialCitation.url]);
+  assert.deepEqual(failures, []);
+});
+
+test("Victorian ducted-gas replacement support names VEU even when the official URL is valid", async () => {
+  const sourceUrl = "https://www.energy.vic.gov.au/victorian-energy-upgrades/products/heating-and-cooling-discounts";
+  const officialCitation = {
+    id: "veu-heating-and-cooling-discounts",
+    title: "Heating and cooling discounts",
+    publisher: "Victorian Government",
+    url: sourceUrl,
+    sourceTier: "primary_official",
+    jurisdiction: "VIC",
+    effectiveFrom: null,
+    effectiveTo: null,
+    lastChecked: "2026-09-01",
+    reviewDue: "2026-12-01",
+    storagePolicy: "link_only",
+    stale: false,
+  };
+  const deficientFinal7Candidate = "The current discount amount and your eligibility could not be verified just now. Eligibility depends on the property, existing heater, exact replacement model, installation date and installation through an accredited provider.";
+  const compliantCandidate = "The current Victorian support and your eligibility could not be verified just now. The official programme to check is Victorian Energy Upgrades (VEU). Confirm the property, existing ducted gas heater, exact reverse-cycle model, installation date and accredited provider against the attached official link.";
+  const calls = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "What current Victorian support may apply if I replace ducted gas heating with reverse-cycle air conditioning?",
+    deterministicAnswer: {
+      ...deterministicAnswer("Check Victorian Energy Upgrades using the exact old heater, replacement model and installation details."),
+      citations: [officialCitation],
+    },
+    officialWebSearch: {
+      kind: "rebate_program",
+      jurisdiction: "Victoria",
+      allowedDomains: ["energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      const body = JSON.parse(options.body);
+      calls.push(body);
+      if (calls.length === 1) throw new DOMException("Timed out", "AbortError");
+      return jsonResponse(modelPayload({
+        answer: calls.length === 2 ? deficientFinal7Candidate : compliantCandidate,
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 3);
+  assert.ok(Array.isArray(calls[0].tools));
+  assert.equal("tools" in calls[1], false);
+  assert.equal("tools" in calls[2], false);
+  assert.equal(
+    JSON.parse(calls[2].input[1].content[0].text).repair.failureStage,
+    "question_coverage",
+  );
+  assert.match(calls[2].input[0].content[0].text, /explicitly name Victorian Energy Upgrades \(VEU\)/i);
+  assert.equal(result.officialEvidenceMode, "maintained_recovery");
+  assert.equal(result.answer.directAnswer, compliantCandidate);
+  assert.deepEqual(result.answer.citations.map((citation) => citation.url), [sourceUrl]);
+  assert.deepEqual(failures, []);
+});
+
+test("official recovery accepts specific eligibility checks when the equipment wording is in the follow-up", async () => {
+  const calls = [];
+  const failures = [];
+  const diagnostics = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "What current Victorian support may apply if I replace ducted gas heating with reverse-cycle air conditioning?",
+    officialWebSearch: {
+      kind: "rebate_program",
+      jurisdiction: "Victoria",
+      allowedDomains: ["esc.vic.gov.au", "energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) throw new DOMException("Timed out", "AbortError");
+      return jsonResponse(structuredModelPayload({
+        verdict: "I could not verify the current Victorian Energy Upgrades offer or eligibility rules just now.",
+        reason: "Eligibility depends on the installation date, existing heater, exact approved new model, installer, decommissioning requirements and paperwork.",
+        steps: [
+          "Check that any quote separately shows the program discount, customer contribution, removal work and exclusions.",
+        ],
+        followUpQuestion: "Do you have a quote showing the exact old heater and proposed air-conditioner model?",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+    syntheticEvaluation: {
+      onRejectedCandidate: (diagnostic) => diagnostics.push(diagnostic),
+    },
+  });
+
+  assert.ok(result, JSON.stringify({ failures, diagnostics }));
+  assert.equal(calls.length, 2);
+  assert.equal(result.officialEvidenceMode, "maintained_recovery");
+  assert.match(result.answer.directAnswer, /existing heater.*approved new model/is);
+  assert.match(result.answer.suggestedQuestions[0], /proposed air-conditioner model/i);
+  assert.deepEqual(failures, []);
+});
+
+test("official recovery cannot use an equipment-specific follow-up to hide a generic core answer", async () => {
+  let calls = 0;
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "What current Victorian support may apply if I replace ducted gas heating with reverse-cycle air conditioning?",
+    officialWebSearch: {
+      kind: "rebate_program",
+      jurisdiction: "Victoria",
+      allowedDomains: ["esc.vic.gov.au", "energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      calls += 1;
+      if (calls === 1) throw new DOMException("Timed out", "AbortError");
+      return jsonResponse(structuredModelPayload({
+        verdict: "I could not verify the current Victorian offer or eligibility rules just now.",
+        reason: "Eligibility depends on the installation date, installer and paperwork.",
+        steps: [
+          "Check that any quote separately shows the program discount, customer contribution and exclusions.",
+        ],
+        followUpQuestion: "Do you have a quote showing the exact old heater and proposed air-conditioner model?",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(result, null);
+  assert.equal(calls, 3);
+  assert.deepEqual(failures, [{
+    code: "provider_output_rejected",
+    stage: "question_coverage",
+  }]);
+});
+
+test("a transient live-lookup failure switches directly to paid no-web recovery", async () => {
+  const calls = [];
+  const failures = [];
+  const recoveryAnswer = "I could not verify the current STC value just now. Check the Clean Energy Regulator using the system size, installation date and postcode before relying on a certificate estimate.";
+  const result = await generateSurgeModelAnswer(request({
+    message: "What is the current STC value?",
+    officialWebSearch: {
+      kind: "certificate",
+      jurisdiction: "Australia",
+      allowedDomains: ["cer.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) return new Response("temporarily unavailable", { status: 503 });
+      if (calls.length === 2) {
+        return jsonResponse(modelPayload({ answer: "The current STC value is $40." }));
+      }
+      return jsonResponse(modelPayload({ answer: recoveryAnswer }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 3);
+  assert.ok(Array.isArray(calls[0].tools));
+  assert.equal("tools" in calls[1], false);
+  assert.equal("tools" in calls[2], false);
+  assert.deepEqual(calls[1].reasoning, { effort: "low" });
+  assert.deepEqual(calls[2].reasoning, { effort: "low" });
+  assert.equal(result.officialEvidenceMode, "maintained_recovery");
+  assert.equal(result.answer.directAnswer, recoveryAnswer);
+  assert.deepEqual(failures, []);
+});
+
+test("the paid no-web recovery gets its own transient retry within the three-call cap", async () => {
+  const calls = [];
+  const failures = [];
+  const recoveryAnswer = "I could not verify the current Victorian support just now. Check Victorian Energy Upgrades using the exact ducted-gas system, proposed reverse-cycle models, installed scope and itemised discount before relying on the quote.";
+  const result = await generateSurgeModelAnswer(request({
+    message: "What current Victorian support may apply to a ducted-gas to reverse-cycle replacement?",
+    officialWebSearch: {
+      kind: "rebate_program",
+      jurisdiction: "Victoria",
+      allowedDomains: ["esc.vic.gov.au", "energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) throw new DOMException("Timed out", "AbortError");
+      if (calls.length === 2) return new Response("temporarily unavailable", { status: 503 });
+      return jsonResponse(modelPayload({ answer: recoveryAnswer }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 3);
+  assert.ok(Array.isArray(calls[0].tools));
+  assert.equal("tools" in calls[1], false);
+  assert.equal("tools" in calls[2], false);
+  assert.equal(result.officialEvidenceMode, "maintained_recovery");
+  assert.equal(result.answer.directAnswer, recoveryAnswer);
+  assert.deepEqual(failures, []);
+});
+
+test("official recovery requires an explicit verification disclosure and rejects mutable programme claims", async (t) => {
+  const unsafeAnswers = [
+    "Check Victorian Energy Upgrades using the exact old heater and new model details.",
+    "I could not verify the current support just now. Victorian Energy Upgrades can cut the installed price.",
+    "I could not verify the current support just now. A VEU discount may apply.",
+    "I could not verify the current support just now. You can get a VEU discount.",
+    "I could not verify the current support just now. Victorian support may reduce the quote.",
+    "I could not verify the current support just now. Check Victorian Energy Upgrades because it can cut the installed price.",
+    "I could not verify the current support just now. Ask the installer because VEU gives a discount.",
+  ];
+  for (const unsafeAnswer of unsafeAnswers) {
+    await t.test(unsafeAnswer, async () => {
+      let calls = 0;
+      const failures = [];
+      const result = await generateSurgeModelAnswer(request({
+        message: "What current Victorian support may apply to a reverse-cycle replacement?",
+        officialWebSearch: {
+          kind: "rebate_program",
+          jurisdiction: "Victoria",
+          allowedDomains: ["esc.vic.gov.au", "energy.vic.gov.au"],
+        },
+      }), {
+        apiKey: "test-api-key",
+        fetch: async () => {
+          calls += 1;
+          if (calls === 1) throw new DOMException("Timed out", "AbortError");
+          return jsonResponse(modelPayload({ answer: unsafeAnswer }));
+        },
+        onFailure: (failure) => failures.push(failure),
+      });
+
+      assert.equal(result, null);
+      assert.equal(calls, 3);
+      assert.deepEqual(failures, [{
+        code: "provider_output_rejected",
+        stage: "official_web_evidence",
+      }]);
+    });
+  }
+});
+
+test("official recovery removes an unsupported current sentence when useful paid-model guidance remains", async () => {
+  let calls = 0;
+  const failures = [];
+  const candidate = "I could not verify the current Victorian support just now. Applications are open. Ask the installer to confirm the exact old heater, new model numbers, installed scope and itemised discount on the Victorian Energy Upgrades page.";
+  const result = await generateSurgeModelAnswer(request({
+    message: "What current Victorian support may apply to a ducted-gas to reverse-cycle replacement?",
+    officialWebSearch: {
+      kind: "rebate_program",
+      jurisdiction: "Victoria",
+      allowedDomains: ["esc.vic.gov.au", "energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      calls += 1;
+      if (calls === 1) throw new DOMException("Timed out", "AbortError");
+      return jsonResponse(modelPayload({ answer: candidate }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls, 2);
+  assert.match(result.answer.directAnswer, /could not verify the current Victorian support/i);
+  assert.match(result.answer.directAnswer, /Ask the installer/i);
+  assert.doesNotMatch(result.answer.directAnswer, /applications are open/i);
+  assert.deepEqual(failures, []);
+});
+
 test("official lookup accepts completed search, open-page and find-in-page actions without source arrays", async () => {
   const sourceUrl = "https://www.esc.vic.gov.au/victorian-energy-upgrades";
   const result = await generateSurgeModelAnswer(request({
@@ -562,39 +1307,59 @@ test("official lookup excludes allowed but unrenderable URLs without letting the
 
   const inventedAmount = "The current VEEC value is $999.";
   const amountFailures = [];
+  const amountBodies = [];
+  const amountRejections = [];
   const amountResult = await generateSurgeModelAnswer(
     requestFor("What are the current VEEC rules in Victoria?"),
     {
       apiKey: "test-api-key",
-      fetch: async () => responseFor(
-        `${safeClaim} ${inventedAmount}`,
-        safeClaim,
-        inventedAmount,
+      fetch: officialWebThenInvalidRecoveryFetch(
+        () => responseFor(
+          `${safeClaim} ${inventedAmount}`,
+          safeClaim,
+          inventedAmount,
+        ),
+        amountBodies,
       ),
+      syntheticEvaluation: {
+        onRejectedCandidate: (diagnostic) => amountRejections.push(diagnostic),
+      },
       onFailure: (failure) => amountFailures.push(failure),
     },
   );
   assert.equal(amountResult, null);
+  assertOfficialWebRecoveryModes(amountBodies);
+  assert.equal(amountRejections[0]?.stage, "quantity_grounding");
   assert.deepEqual(amountFailures, [{
     code: "provider_output_rejected",
-    stage: "quantity_grounding",
+    stage: "official_web_evidence",
   }]);
 
   const unsupportedStatus = "Applications are open.";
   const statusFailures = [];
+  const statusBodies = [];
+  const statusRejections = [];
   const statusResult = await generateSurgeModelAnswer(
     requestFor("Are Victorian Energy Upgrades applications currently open?"),
     {
       apiKey: "test-api-key",
-      fetch: async () => responseFor(
-        `${safeClaim} ${unsupportedStatus}`,
-        safeClaim,
-        unsupportedStatus,
+      fetch: officialWebThenInvalidRecoveryFetch(
+        () => responseFor(
+          `${safeClaim} ${unsupportedStatus}`,
+          safeClaim,
+          unsupportedStatus,
+        ),
+        statusBodies,
       ),
+      syntheticEvaluation: {
+        onRejectedCandidate: (diagnostic) => statusRejections.push(diagnostic),
+      },
       onFailure: (failure) => statusFailures.push(failure),
     },
   );
   assert.equal(statusResult, null);
+  assertOfficialWebRecoveryModes(statusBodies);
+  assert.equal(statusRejections[0]?.stage, "official_web_evidence");
   assert.deepEqual(statusFailures, [{
     code: "provider_output_rejected",
     stage: "official_web_evidence",
@@ -633,6 +1398,108 @@ test("official value lookups accept a fully cited partial answer and discard unt
   assert.equal(result.continuation.facts.some((fact) => fact.value === "OpenAI"), false);
   assert.doesNotMatch(result.continuation.lastAnswerSummary, /OpenAI/i);
   assert.deepEqual(result.officialCitations.map((citation) => citation.url), [sourceUrl]);
+});
+
+test("the exact final7 live certificate answer accepts a cited not-necessarily gross-to-net distinction", async () => {
+  const stcUrl = "https://cer.gov.au/markets/reports-and-data/quarterly-carbon-market-reports/quarterly-carbon-market-report-march-quarter-2026/small-scale-renewable-energy-scheme";
+  const veecUrl = "https://www.energy.vic.gov.au/victorian-energy-upgrades/installers/industry-market-update-work-program";
+  const stcClaim = "As at 31 August 2026, an STC has a fixed clearing-house price of $40 excluding GST. The latest official STC spot price confirmed was $39.62 on 15 May 2026, not today’s price.";
+  const veecClaim = "A current official VEEC price could not be confirmed, so it would be unsafe to guess.";
+  const answer = `${stcClaim} ${veecClaim} Certificate prices are gross references, not necessarily the household’s net quote discount after provider costs.`;
+  const output = modelPayload({ answer });
+  const responseText = JSON.stringify(output);
+  const failures = [];
+  const rejections = [];
+  let calls = 0;
+  const result = await generateSurgeModelAnswer(request({
+    message: "What are STCs and VEECs worth today?",
+    officialWebSearch: {
+      kind: "certificate",
+      jurisdiction: "Victoria",
+      allowedDomains: ["cer.gov.au", "energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      calls += 1;
+      return webJsonResponse(output, {
+        sourceUrl: stcUrl,
+        sources: [{ type: "url", url: stcUrl }, { type: "url", url: veecUrl }],
+        annotations: [
+          {
+            type: "url_citation",
+            start_index: responseText.indexOf(stcClaim),
+            end_index: responseText.indexOf(stcClaim) + stcClaim.length,
+            title: "Small-scale Renewable Energy Scheme",
+            url: stcUrl,
+          },
+          {
+            type: "url_citation",
+            start_index: responseText.indexOf(veecClaim),
+            end_index: responseText.indexOf(veecClaim) + veecClaim.length,
+            title: "Victorian Energy Upgrades market update",
+            url: veecUrl,
+          },
+        ],
+      });
+    },
+    onFailure: (failure) => failures.push(failure),
+    syntheticEvaluation: {
+      onRejectedCandidate: (diagnostic) => rejections.push(diagnostic),
+    },
+  });
+
+  assert.ok(result, JSON.stringify({ failures, rejections }));
+  assert.equal(calls, 1);
+  assert.equal(result.answer.directAnswer, answer);
+  assert.deepEqual(result.officialCitations.map((citation) => citation.url), [stcUrl, veecUrl]);
+  assert.deepEqual(rejections, []);
+  assert.deepEqual(failures, []);
+});
+
+test("mixed STC and VEEC recovery repairs eligibility-only drift into value checks for both", async () => {
+  const deficientFinal7Recovery = "Today’s STC and VEEC trading prices could not be verified just now. Both values can fluctuate, and the certificate price is not necessarily the household discount after provider costs. For VEECs, verify the Victorian Energy Upgrades activity, product, installation and quote. Ask the quote to show certificate quantity, assumed unit value, fees and net discount separately.";
+  const compliantRecovery = "I could not verify today’s current STC or VEEC values just now. For STCs, check the Clean Energy Regulator clearing-house page and latest market report. For VEECs, check the latest official Victorian market update. Ask the quote to list each certificate quantity, assumed unit value, fees and net credit separately.";
+  const calls = [];
+  const failures = [];
+  const rejections = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "What are STCs and VEECs worth today?",
+    officialWebSearch: {
+      kind: "certificate",
+      jurisdiction: "Victoria",
+      allowedDomains: ["cer.gov.au", "energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      const body = JSON.parse(options.body);
+      calls.push(body);
+      if (calls.length === 1) throw new DOMException("Timed out", "AbortError");
+      return jsonResponse(modelPayload({
+        answer: calls.length === 2 ? deficientFinal7Recovery : compliantRecovery,
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+    syntheticEvaluation: {
+      onRejectedCandidate: (diagnostic) => rejections.push(diagnostic),
+    },
+  });
+
+  assert.ok(result, JSON.stringify({ failures, rejections }));
+  assert.equal(calls.length, 3);
+  assert.ok(Array.isArray(calls[0].tools));
+  assert.equal("tools" in calls[1], false);
+  assert.equal("tools" in calls[2], false);
+  assert.equal(rejections[0]?.stage, "official_web_evidence");
+  assert.equal(
+    JSON.parse(calls[2].input[1].content[0].text).repair.failureStage,
+    "official_web_evidence",
+  );
+  assert.match(calls[2].input[0].content[0].text, /address both STCs and VEECs/i);
+  assert.equal(result.officialEvidenceMode, "maintained_recovery");
+  assert.equal(result.answer.directAnswer, compliantRecovery);
+  assert.deepEqual(failures, []);
 });
 
 test("official citation markers after decimal prices retain the complete cited sentence", async () => {
@@ -694,6 +1561,8 @@ test("a trailing official citation marker without preceding punctuation does not
   });
   const responseText = JSON.stringify(output);
   const failures = [];
+  const bodies = [];
+  const rejections = [];
   const result = await generateSurgeModelAnswer(request({
     message: "What are STCs and VEECs worth today?",
     officialWebSearch: {
@@ -703,22 +1572,30 @@ test("a trailing official citation marker without preceding punctuation does not
     },
   }), {
     apiKey: "test-api-key",
-    fetch: async () => webJsonResponse(output, {
-      sourceUrl,
-      annotationNeedle: supportedClaim,
-      annotations: [{
-        type: "url_citation",
-        start_index: responseText.indexOf(marker),
-        end_index: responseText.indexOf(marker) + marker.length,
-        title: "Clean Energy Regulator",
-        url: sourceUrl,
-      }],
-    }),
+    fetch: officialWebThenInvalidRecoveryFetch(
+      () => webJsonResponse(output, {
+        sourceUrl,
+        annotationNeedle: supportedClaim,
+        annotations: [{
+          type: "url_citation",
+          start_index: responseText.indexOf(marker),
+          end_index: responseText.indexOf(marker) + marker.length,
+          title: "Clean Energy Regulator",
+          url: sourceUrl,
+        }],
+      }),
+      bodies,
+    ),
+    syntheticEvaluation: {
+      onRejectedCandidate: (diagnostic) => rejections.push(diagnostic),
+    },
     onFailure: (failure) => failures.push(failure),
   });
 
   assert.equal(result, null);
-  assert.deepEqual(failures, [{ code: "provider_output_rejected", stage: "quantity_grounding" }]);
+  assertOfficialWebRecoveryModes(bodies);
+  assert.equal(rejections[0]?.stage, "quantity_grounding");
+  assert.deepEqual(failures, [{ code: "provider_output_rejected", stage: "official_web_evidence" }]);
 });
 
 test("lookup uncertainty cannot hide an uncited affirmative current-status claim", async () => {
@@ -828,7 +1705,7 @@ test("an official marker cannot ground an unrelated earlier claim in the same fi
   assert.equal(result, null);
   assert.deepEqual(failures, [{
     code: "provider_output_rejected",
-    stage: "quantity_grounding",
+    stage: "official_web_evidence",
   }]);
 });
 
@@ -842,6 +1719,8 @@ test("one STC citation cannot ground a mixed STC and VEEC sentence", async () =>
   });
   const responseText = JSON.stringify(output);
   const failures = [];
+  const bodies = [];
+  const rejections = [];
   const result = await generateSurgeModelAnswer(request({
     message: "What are STCs and VEECs worth today?",
     officialWebSearch: {
@@ -851,24 +1730,32 @@ test("one STC citation cannot ground a mixed STC and VEEC sentence", async () =>
     },
   }), {
     apiKey: "test-api-key",
-    fetch: async () => webJsonResponse(output, {
-      sourceUrl,
-      annotationNeedle: mixedClaim,
-      annotations: [{
-        type: "url_citation",
-        start_index: responseText.indexOf(marker),
-        end_index: responseText.indexOf(marker) + marker.length,
-        title: "Clean Energy Regulator",
-        url: sourceUrl,
-      }],
-    }),
+    fetch: officialWebThenInvalidRecoveryFetch(
+      () => webJsonResponse(output, {
+        sourceUrl,
+        annotationNeedle: mixedClaim,
+        annotations: [{
+          type: "url_citation",
+          start_index: responseText.indexOf(marker),
+          end_index: responseText.indexOf(marker) + marker.length,
+          title: "Clean Energy Regulator",
+          url: sourceUrl,
+        }],
+      }),
+      bodies,
+    ),
+    syntheticEvaluation: {
+      onRejectedCandidate: (diagnostic) => rejections.push(diagnostic),
+    },
     onFailure: (failure) => failures.push(failure),
   });
 
   assert.equal(result, null);
+  assertOfficialWebRecoveryModes(bodies);
+  assert.equal(rejections[0]?.stage, "quantity_grounding");
   assert.deepEqual(failures, [{
     code: "provider_output_rejected",
-    stage: "quantity_grounding",
+    stage: "official_web_evidence",
   }]);
 });
 
@@ -882,6 +1769,7 @@ test("escaped quotes inside a JSON field do not hide its cited sentence", async 
   });
   const responseText = JSON.stringify(output);
   const failures = [];
+  const rejections = [];
   const result = await generateSurgeModelAnswer(request({
     message: "What is the official STC clearing-house price?",
     officialWebSearch: {
@@ -903,9 +1791,12 @@ test("escaped quotes inside a JSON field do not hide its cited sentence", async 
       }],
     }),
     onFailure: (failure) => failures.push(failure),
+    syntheticEvaluation: {
+      onRejectedCandidate: (diagnostic) => rejections.push(diagnostic),
+    },
   });
 
-  assert.ok(result, JSON.stringify(failures));
+  assert.ok(result, JSON.stringify({ failures, rejections }));
   assert.match(result.answer.directAnswer, /\$40/);
 });
 
@@ -997,7 +1888,7 @@ test("public policy checks retained follow-ups but ignores a deliberately suppre
   }]);
 });
 
-test("official lookup fails closed without a completed supported and annotated official source", async () => {
+test("official lookup rejects unsupported live evidence and an unsafe current-claim recovery", async () => {
   const modelRequest = request({
     message: "What are the current VEEC rules in Victoria?",
     officialWebSearch: {
@@ -1038,15 +1929,20 @@ test("official lookup fails closed without a completed supported and annotated o
 
   for (const item of cases) {
     const failures = [];
+    const bodies = [];
     const result = await generateSurgeModelAnswer(modelRequest, {
       apiKey: "test-api-key",
       model: "gpt-5.6-sol",
-      fetch: async () => webJsonResponse(modelPayload({
-        answer: "The current Victorian VEEC rule is confirmed.",
-      }), item.options),
+      fetch: officialWebThenInvalidRecoveryFetch(
+        () => webJsonResponse(modelPayload({
+          answer: "The current Victorian VEEC rule is confirmed.",
+        }), item.options),
+        bodies,
+      ),
       onFailure: (failure) => failures.push(failure),
     });
     assert.equal(result, null, item.name);
+    assertOfficialWebRecoveryModes(bodies);
     assert.deepEqual(failures, [{
       code: "provider_output_rejected",
       stage: "official_web_evidence",
@@ -1079,20 +1975,32 @@ test("official lookup requires citation support for each nonnumeric current clai
     "The household income cap applies.",
   ];
   const ordinaryAdvice = "Compare the full installed price, warranty and backup scope before signing.";
+  const invalidBatteryRecovery = "Check the exact battery model, installation date, property and applicant details, installer, quote scope and itemised discount on the official programme page before relying on its current status.";
 
   for (const unsupportedClaim of unsupportedClaims) {
     const unsupportedFailures = [];
+    const bodies = [];
+    const rejections = [];
     const unsupported = await generateSurgeModelAnswer(modelRequest, {
       apiKey: "test-api-key",
-      fetch: async () => webJsonResponse(modelPayload({
-        answer: `${supportedClaim} ${unsupportedClaim}`,
-      }), {
-        sourceUrl,
-        annotationNeedle: supportedClaim,
-      }),
+      fetch: officialWebThenInvalidRecoveryFetch(
+        () => webJsonResponse(modelPayload({
+          answer: `${supportedClaim} ${unsupportedClaim}`,
+        }), {
+          sourceUrl,
+          annotationNeedle: supportedClaim,
+        }),
+        bodies,
+        invalidBatteryRecovery,
+      ),
+      syntheticEvaluation: {
+        onRejectedCandidate: (diagnostic) => rejections.push(diagnostic),
+      },
       onFailure: (failure) => unsupportedFailures.push(failure),
     });
     assert.equal(unsupported, null, unsupportedClaim);
+    assertOfficialWebRecoveryModes(bodies);
+    assert.equal(rejections[0]?.stage, "official_web_evidence", unsupportedClaim);
     assert.deepEqual(unsupportedFailures, [{
       code: "provider_output_rejected",
       stage: "official_web_evidence",
@@ -1148,18 +2056,28 @@ test("an official citation does not ground unrelated or invented numeric claims"
 
   for (const answer of cases) {
     const failures = [];
+    const bodies = [];
+    const rejections = [];
     const result = await generateSurgeModelAnswer(modelRequest, {
       apiKey: "test-api-key",
       model: "gpt-5.6-sol",
-      fetch: async () => webJsonResponse(modelPayload({ answer }), {
-        annotationNeedle: "The official guidance confirms the VEEC programme remains current.",
-      }),
+      fetch: officialWebThenInvalidRecoveryFetch(
+        () => webJsonResponse(modelPayload({ answer }), {
+          annotationNeedle: "The official guidance confirms the VEEC programme remains current.",
+        }),
+        bodies,
+      ),
+      syntheticEvaluation: {
+        onRejectedCandidate: (diagnostic) => rejections.push(diagnostic),
+      },
       onFailure: (failure) => failures.push(failure),
     });
     assert.equal(result, null, answer);
+    assertOfficialWebRecoveryModes(bodies);
+    assert.equal(rejections[0]?.stage, "quantity_grounding", answer);
     assert.deepEqual(failures, [{
       code: "provider_output_rejected",
-      stage: "quantity_grounding",
+      stage: "official_web_evidence",
     }], answer);
   }
 });
@@ -1331,6 +2249,129 @@ test("mentioning the requested topic once cannot hide unrelated upgrade advice",
     code: "provider_output_rejected",
     stage: "topic_drift",
   }]);
+});
+
+test("a priced multi-option comparison repairs above 140 words without losing prices or warranties", async () => {
+  const message = "Quote A is $6,900 with a five-year warranty. Quote B is $7,400 with a seven-year warranty. How should I compare them?";
+  const firstVerdict = "Compare the full installed scope before treating the longer warranty as better value. Quote A is $6,900 with a five-year warranty, while Quote B is $7,400 with a seven-year warranty.";
+  const firstReason = "B costs $500 more. Compare the exact equipment, installation work, labour cover, exclusions, claim support and who remains responsible if something fails.";
+  const overlongExtraDetail = "The written terms should say whether call-outs, travel, removal, replacement parts and installation labour are covered, how a claim starts, which business handles it, and what happens if the installer stops trading. Also compare approvals, final setup, commissioning checks, service access, payment terms and every exclusion line by line. Australian Consumer Law rights apply separately from either written warranty, so the headline five-year or seven-year term is not the whole protection. Do not let a longer headline term replace a careful check of workmanship coverage, response times, excluded consumables and the actual installed scope.";
+  const firstCore = `${firstVerdict} ${firstReason}`;
+  assert.ok(firstCore.split(/\s+/u).filter(Boolean).length <= 140);
+  assert.ok(`${firstCore} ${overlongExtraDetail}`.split(/\s+/u).filter(Boolean).length > 140);
+  const calls = [];
+  const failures = [];
+  const rejections = [];
+  const result = await generateSurgeModelAnswer(request({ message }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse(structuredModelPayload(calls.length === 1 ? {
+        verdict: firstVerdict,
+        reason: firstReason,
+        extraDetail: overlongExtraDetail,
+      } : {
+        verdict: "Compare the full installed scope first. Quote A is $6,900 with a five-year warranty, while Quote B is $7,400 with a seven-year warranty.",
+        reason: "B costs $500 more. That premium adds value only if the equipment, installation, labour cover, exclusions and claim support are otherwise comparable and the extra two years cover useful costs. Warranty length alone does not prove better value. Australian Consumer Law rights apply separately.",
+      }));
+    },
+    syntheticEvaluation: {
+      onRejectedCandidate: (diagnostic) => rejections.push(diagnostic),
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify({ failures, rejections }));
+  assert.equal(calls.length, 2);
+  assert.equal(rejections[0]?.stage, "answer_too_long");
+  assert.ok(rejections[0]?.answerWordCount > 140);
+  assert.equal(JSON.parse(calls[1].input[1].content[0].text).repair.failureStage, "answer_too_long");
+  assert.match(calls[1].input[0].content[0].text, /140 words or fewer/i);
+  assert.ok(result.answer.directAnswer.split(/\s+/u).filter(Boolean).length <= 140);
+  for (const pattern of [/\$6,900/, /\$7,400/, /five-year warranty/i, /seven-year warranty/i]) {
+    assert.match(result.answer.directAnswer, pattern);
+  }
+  assert.deepEqual(failures, []);
+});
+
+test("a same-home working-system constraint may preserve the active whole-home plan without admitting a new upgrade", async () => {
+  const firstMessage = "At my saved apartment, air comes under the front door and the single-glazed windows feel cold. I have $1,500. What should come first?";
+  const constraint = "My existing reverse-cycle split still heats properly, so I do not want to replace a working unit.";
+  const continuation = state({
+    activeTopic: "glazing_shading",
+    goal: firstMessage,
+    lastAnswerSummary: "Start with moisture control, then seal the front-door draught before improving the window coverings.",
+    ledger: {
+      turn: 1,
+      activeDecisionId: "decision_saved_home_plan",
+      subjects: [{
+        id: "saved_home",
+        kind: "saved_home",
+        label: "Saved home",
+        facts: [],
+        lastTouchedTurn: 1,
+      }],
+      decisions: [{
+        id: "decision_saved_home_plan",
+        subjectIds: ["saved_home"],
+        topic: "glazing_shading",
+        goal: firstMessage,
+        facts: [{ key: "budget", value: "$1,500", source: "chat", updatedTurn: 1 }],
+        outcomeSummary: "Start with moisture control, then seal the front-door draught before improving the window coverings.",
+        openItems: [],
+        pendingQuestion: "",
+        status: "resolved",
+        lastTouchedTurn: 1,
+      }],
+    },
+  });
+  const acceptedFailures = [];
+  const accepted = await generateSurgeModelAnswer(request({
+    message: constraint,
+    continuation,
+    planContext: savedHomePlanContext(),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Keep the working reverse-cycle split. There is no practical reason to replace it while it heats properly. Keep the $1,500 focused on moisture control, a compatible front-door seal, and better coverings for the coldest single-glazed windows.",
+    })),
+    onFailure: (failure) => acceptedFailures.push(failure),
+  });
+
+  assert.ok(accepted, JSON.stringify(acceptedFailures));
+  assert.deepEqual(acceptedFailures, []);
+
+  const retainedUpgradeFailures = [];
+  const retainedUpgrade = await generateSurgeModelAnswer(request({
+    message: constraint,
+    continuation,
+    planContext: savedHomePlanContext(),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Keep the working reverse-cycle split. Start with moisture control, then spend the $1,500 replacing every single-glazed window before considering the door seal.",
+    })),
+    onFailure: (failure) => retainedUpgradeFailures.push(failure),
+  });
+
+  assert.equal(retainedUpgrade, null);
+  assert.deepEqual(retainedUpgradeFailures, [{ code: "provider_output_rejected", stage: "topic_drift" }]);
+
+  const rejectedFailures = [];
+  const rejected = await generateSurgeModelAnswer(request({
+    message: constraint,
+    continuation,
+    planContext: savedHomePlanContext(),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Keep the working reverse-cycle split, but spend the $1,500 on a new home battery first.",
+    })),
+    onFailure: (failure) => rejectedFailures.push(failure),
+  });
+
+  assert.equal(rejected, null);
+  assert.deepEqual(rejectedFailures, [{ code: "provider_output_rejected", stage: "topic_drift" }]);
 });
 
 test("topic validation allows referential wording but a shared quote word cannot hide a competing topic", async () => {
@@ -1935,6 +2976,18 @@ test("a whole-home action order repairs stale budget and retained moisture-prior
           lastTouchedTurn: 2,
         },
         {
+          id: "decision_late_plan_refresh",
+          subjectIds: ["saved_home"],
+          topic: "glazing_shading",
+          goal: "Same five-year warranty. Honeycomb blinds are $1,400 and thermal curtains are $900 installed.",
+          facts: [{ key: "first_stage_budget", value: "Under $2,000", source: "chat", updatedTurn: 4 }],
+          outcomeSummary: "The $900 thermal curtains offer better winter value than the $1,400 blinds.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 4,
+        },
+        {
           id: "decision_fan_persistence",
           subjectIds: ["saved_home"],
           topic: "draughts_ventilation",
@@ -2011,6 +3064,102 @@ test("a whole-home action order repairs stale budget and retained moisture-prior
   assert.match(result.answer.directAnswer, /\$1,500/);
   assert.doesNotMatch(result.answer.directAnswer, /\$2,000/);
   assert.equal(result.presentation.steps.length, 3);
+  assert.deepEqual(failures, []);
+});
+
+test("a genuinely later user budget replaces the earlier explicit budget in whole-home synthesis", async () => {
+  const message = "Back to my saved home: give me the top three actions in order using what I told you.";
+  const continuation = state({
+    activeTopic: "general",
+    goal: "Change my budget to under $2,000.",
+    ledger: {
+      turn: 3,
+      activeDecisionId: "decision_new_budget",
+      subjects: [{
+        id: "saved_home",
+        kind: "saved_home",
+        label: "Saved home",
+        facts: [],
+        lastTouchedTurn: 3,
+      }],
+      decisions: [
+        {
+          id: "decision_priority",
+          subjectIds: ["saved_home"],
+          topic: "general",
+          goal: "Where should I start based on my saved answers?",
+          facts: [{ key: "comfort_concerns", value: "condensation", source: "chat", updatedTurn: 1 }],
+          outcomeSummary: "Start with moisture control before sealing gaps or upgrading windows.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 1,
+        },
+        {
+          id: "decision_old_budget",
+          subjectIds: ["saved_home"],
+          topic: "general",
+          goal: "I have $1,500 for the first stage.",
+          facts: [{ key: "budget", value: "$1,500", source: "chat", updatedTurn: 2 }],
+          outcomeSummary: "Use the $1,500 on the first-stage comfort work.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 2,
+        },
+        {
+          id: "decision_new_budget",
+          subjectIds: ["saved_home"],
+          topic: "general",
+          goal: "Change my budget to under $2,000.",
+          facts: [{ key: "first_stage_budget", value: "Under $2,000", source: "chat", updatedTurn: 3 }],
+          outcomeSummary: "Updated the current first-stage budget to under $2,000.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 3,
+        },
+      ],
+    },
+  });
+  const calls = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message,
+    continuation,
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [{ key: "first_stage_budget", value: "Under $2,000" }],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse(structuredModelPayload({
+        answerType: "starting_plan",
+        verdict: "Start with moisture control, then stop the door draught, then improve the cold windows.",
+        reason: "That order uses your latest under-$2,000 budget and keeps the unresolved moisture risk first.",
+        steps: [
+          "Check and repair weak bathroom extraction.",
+          "Use a reversible door snake before fitting a permanent seal.",
+          "Add close-fitting thermal curtains or honeycomb blinds.",
+        ],
+        state: continuation,
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 1);
+  assert.deepEqual(JSON.parse(calls[0].input[1].content[0].text).conversationSynthesis, {
+    latestExplicitBudget: "Under $2,000",
+    supersededBudgets: ["$1,500"],
+    retainedFirstPriority: "moisture_before_windows",
+  });
+  assert.match(result.answer.directAnswer, /\$2,000/);
+  assert.doesNotMatch(result.answer.directAnswer, /\$1,500/);
   assert.deepEqual(failures, []);
 });
 
@@ -2269,19 +3418,124 @@ test("the exact pelmet follow-up uses semantic coverage while declared indexes r
   assert.deepEqual(failures, []);
 });
 
-test("a working-heater fault question accepts a direct answer grounded in electricity use and fault symptoms", async () => {
-  const candidate = "Not necessarily. Heating can noticeably lift electricity use. A fault is more likely if consumption has suddenly increased under similar weather and settings, or the unit runs continuously, has weak airflow, ices up or shows errors. Clean the filters, then compare smart-meter usage during similar periods with the split on and off.";
+test("a working-heater fault verdict is repaired until it uses the decisive current performance fact", async () => {
+  const incompleteCandidate = "Not necessarily. Heating can noticeably lift electricity use. A fault is more likely if consumption has suddenly increased under similar weather and settings, or the unit runs continuously, has weak airflow, ices up or shows errors. Clean the filters, then compare smart-meter usage during similar periods with the split on and off.";
+  const repairedCandidate = "Not necessarily. Because the split still heats the room well, the higher bill alone does not show that it is faulty. A fault is more likely if heating weakens, airflow drops, ice builds up or an error appears. Compare smart-meter use during similar weather and settings before arranging a service.";
   const failures = [];
+  const bodies = [];
   const result = await generateSurgeModelAnswer(request({
     message: "The reverse-cycle split still heats fine, but the bill jumps when I use it. Is it faulty?",
   }), {
     apiKey: "test-api-key",
-    fetch: async () => jsonResponse(modelPayload({ answer: candidate })),
+    fetch: async (_url, options) => {
+      bodies.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: bodies.length === 1 ? incompleteCandidate : repairedCandidate,
+      }));
+    },
     onFailure: (failure) => failures.push(failure),
   });
 
   assert.ok(result, JSON.stringify(failures));
-  assert.equal(result.answer.directAnswer, candidate);
+  assert.equal(bodies.length, 2);
+  assert.equal(
+    JSON.parse(bodies[1].input[1].content[0].text).repair.failureStage,
+    "question_coverage",
+  );
+  assert.match(bodies[1].input[0].content[0].text, /material current observation supplied by the user/i);
+  assert.equal(result.answer.directAnswer, repairedCandidate);
+  assert.deepEqual(failures, []);
+});
+
+test("a clean-filter 24 degree heating-cost follow-up requires a lower like-for-like setting trial", async () => {
+  const message = "The filter is clean and I set it to 24 degrees. What should I check next?";
+  const recentTurns = [
+    {
+      role: "user",
+      content: "My reverse-cycle split still heats the room well, but my electricity bill jumps when I use it. Does that mean it is faulty?",
+    },
+    {
+      role: "assistant",
+      content: "Not necessarily. Strong heating performance makes a fault less likely, so compare its operation before replacing it.",
+    },
+  ];
+  const continuation = state({
+    activeTopic: "rcac",
+    goal: "Check whether the working reverse-cycle split is using too much electricity",
+  });
+  const incompleteCandidate = "Check your retailer's interval electricity-use data next. Match the usage spikes to when the split was running, then compare similar-weather periods. If consumption has increased under comparable conditions, servicing becomes more worthwhile.";
+  const repairedCandidate = "First try a lower comfortable setting. Compare the split's interval electricity use with the 24°C run in similar weather, operating hours and occupied rooms. A higher heating setting can raise consumption without proving a fault; arrange a service only if use stays unexpectedly high or performance declines.";
+  const bodies = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message,
+    recentTurns,
+    continuation,
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      bodies.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: bodies.length === 1 ? incompleteCandidate : repairedCandidate,
+        state: continuation,
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(bodies.length, 2);
+  assert.equal(
+    JSON.parse(bodies[1].input[1].content[0].text).repair.failureStage,
+    "question_coverage",
+  );
+  assert.match(bodies[0].input[0].content[0].text, /lower comfortable setting trial/i);
+  assert.match(bodies[1].input[0].content[0].text, /Heating-cost repair/i);
+  assert.equal(result.answer.directAnswer, repairedCandidate);
+  assert.deepEqual(failures, []);
+
+  let recordedCalls = 0;
+  const recordedFailures = [];
+  const recordedCandidate = await generateSurgeModelAnswer(request({
+    message,
+    recentTurns,
+    continuation,
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      recordedCalls += 1;
+      return jsonResponse(structuredModelPayload({
+        verdict: "First, trial a lower comfortable heating setting.",
+        reason: "A 24°C setting can materially increase electricity use because the system must work harder to maintain a larger temperature difference. Since it heats properly and the filter is clean, higher use alone does not prove a fault.",
+        steps: [
+          "Lower the setting to a still-comfortable level, then compare interval electricity use while keeping weather, operating hours, occupied rooms and other controls as similar as practical.",
+          "Arrange servicing only if electricity use remains unexpectedly high under comparable conditions or heating performance declines.",
+        ],
+        extraDetail: "There is no single ideal setting for every household.",
+        state: continuation,
+      }));
+    },
+    onFailure: (failure) => recordedFailures.push(failure),
+  });
+  assert.ok(recordedCandidate, JSON.stringify(recordedFailures));
+  assert.equal(recordedCalls, 1);
+  assert.deepEqual(recordedFailures, []);
+
+  const coolingControl = await generateSurgeModelAnswer(request({
+    message: "The filter is clean and I set it to 24 degrees. What should I check next?",
+    recentTurns: [{
+      role: "user",
+      content: "My reverse-cycle is cooling the room well on a hot afternoon, but I want to check its airflow.",
+    }],
+    continuation,
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Check that the indoor airflow is strong and even, the outdoor unit is clear, and the room reaches the selected setting without unusual cycling or noise.",
+      state: continuation,
+    })),
+  });
+  assert.ok(coolingControl);
 });
 
 test("recorded aluminium-frame remediation remains window-led when ventilation is only protected", async () => {
@@ -2550,7 +3804,7 @@ test("Mum follow-ups exclude saved-home context and saved-plan quantities from p
   });
 
   assert.equal(result, null);
-  assert.equal(observedBodies.length, 2, "the rejected cross-property quantity gets one bounded repair attempt");
+  assert.equal(observedBodies.length, 3, "the rejected cross-property quantity gets two bounded repair attempts");
   const context = JSON.parse(observedBodies[0].input[1].content[0].text);
   const serializedContext = JSON.stringify(context);
   assert.equal(context.devicePlanContext, null);
@@ -3111,7 +4365,7 @@ test("assistant outcome summaries are visible context but never quantity evidenc
   });
 
   assert.equal(result, null);
-  assert.equal(observedBodies.length, 2);
+  assert.equal(observedBodies.length, 3);
   const context = JSON.parse(observedBodies[0].input[1].content[0].text);
   assert.match(context.conversationFrame.decisions[0].outcomeSummary, /\$9,999/);
   assert.deepEqual(failures, [{ code: "provider_output_rejected", stage: "quantity_grounding" }]);
@@ -4346,7 +5600,7 @@ test("a unitless thermostat setting grounds the same Celsius setpoint only in HV
   }), {
     apiKey: "test-api-key",
     fetch: async () => jsonResponse(modelPayload({
-      answer: "Next, check whether the room reaches 24°C and whether the system then slows or cycles off. If it does, sustained running may reflect the weather and the home's heat loss rather than a fault.",
+      answer: "Try a lower comfortable setting, then compare electricity use with the 24°C run in similar weather, operating hours and rooms. If use stays unexpectedly high or performance declines, arrange a service check.",
     })),
     onFailure: (failure) => acceptedFailures.push(failure),
   });
@@ -5035,7 +6289,7 @@ test("a contextual quote return cannot hide an unanswered second question", asyn
   });
 
   assert.equal(result, null);
-  assert.equal(calls, 2);
+  assert.equal(calls, 3);
   assert.deepEqual(failures, [{ code: "provider_output_rejected", stage: "question_coverage" }]);
 });
 
@@ -5291,18 +6545,39 @@ test("asking what equipment details to obtain is not mistaken for a purchase ver
   const failures = [];
   const result = await generateSurgeModelAnswer(request({
     message: "What exact equipment details should I get from the installer before relying on that support?",
+    recentTurns: [
+      { role: "user", content: "What current Victorian support may apply if I replace ducted gas heating with reverse-cycle air conditioning?" },
+      { role: "assistant", content: "Victorian Energy Upgrades support may apply, subject to exact equipment and installation details." },
+      { role: "user", content: "Give me the useful official link and tell me what I should check there." },
+      { role: "assistant", content: "Use the official Victorian Energy Upgrades page and check product and provider eligibility." },
+    ],
+    continuation: state({
+      activeTopic: "rcac",
+      goal: "Check Victorian support for replacing ducted gas heating with reverse-cycle air conditioning",
+      facts: [
+        { key: "existing_heating", value: "ducted gas heating" },
+        { key: "proposed_heating", value: "reverse-cycle air conditioning" },
+      ],
+    }),
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [
+        { key: "state_or_territory", value: "VIC" },
+        { key: "property_type", value: "Apartment or unit" },
+      ],
+    },
   }), {
     apiKey: "test-api-key",
     fetch: async () => jsonResponse(structuredModelPayload({
       answerType: "starting_plan",
-      verdict: "Get the exact equipment schedule in writing before relying on the support.",
-      reason: "Eligibility depends on the approved product and installed combination, not just the brand.",
+      verdict: "Get the exact matched system details in writing before treating Victorian Energy Upgrades support as confirmed.",
+      reason: "Eligibility can depend on the precise equipment combination, replaced gas heater and installation arrangement, not just the brand or advertised series.",
       steps: [
-        "Ask for the manufacturer and full indoor and outdoor unit model numbers.",
-        "Record the system type, rated heating and cooling capacities, controls and included installation work.",
-        "Require the final invoice to show the installed model and serial numbers.",
+        "Record the full brand and model numbers for every outdoor and indoor unit, including each indoor head in a multi-split system and any supplementary electric heater.",
+        "Request rated heating and cooling capacity, electrical input, climate-zone energy label data, system type, zoning and the proposed installed configuration.",
+        "Ask for the Victorian Energy Upgrades approved-product reference and activity category, plus the existing gas heater's brand, model, type and nameplate details. Have the accredited provider confirm in writing that this exact replacement arrangement qualifies before work starts.",
       ],
-      extraDetail: "Match those written details against the relevant official register before signing.",
     })),
     onFailure: (failure) => failures.push(failure),
   });
@@ -5311,18 +6586,24 @@ test("asking what equipment details to obtain is not mistaken for a purchase ver
   assert.deepEqual(failures, []);
 });
 
-test("a second safe validator rejection returns null without a third provider call", async () => {
-  let calls = 0;
+test("two safe semantic rejections can use the already-reserved third provider call", async () => {
+  const calls = [];
   const failures = [];
   const result = await generateSurgeModelAnswer(request({
     message: "Should I get solar or a battery?",
   }), {
     apiKey: "test-api-key",
-    fetch: async () => {
-      calls += 1;
-      if (calls === 2) {
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 2) {
         return jsonResponse(modelPayload({
           answer: "I recommend buying Brand-X solar and battery products because they are the best.",
+          coveredQuestionPartIndexes: [0],
+        }));
+      }
+      if (calls.length === 3) {
+        return jsonResponse(modelPayload({
+          answer: "Solar can reduce daytime grid imports, while a battery can shift stored solar into the evening. Solar is usually the better first step when daytime use and roof conditions suit it. A battery is a separate decision based on evening use, exports and tariff.",
           coveredQuestionPartIndexes: [0],
         }));
       }
@@ -5334,11 +6615,48 @@ test("a second safe validator rejection returns null without a third provider ca
     onFailure: (failure) => failures.push(failure),
   });
 
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 3);
+  assert.deepEqual(JSON.parse(calls[1].input[1].content[0].text).repair, {
+    attempt: 1,
+    failureStage: "question_coverage",
+  });
+  assert.deepEqual(JSON.parse(calls[2].input[1].content[0].text).repair, {
+    attempt: 2,
+    failureStage: "public_policy",
+  });
+  assert.deepEqual(failures, []);
+});
+
+test("exactly three rejected semantic drafts stop at the provider-call cap", async () => {
+  const calls = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Should I get solar or a battery?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: "Solar can reduce daytime grid imports when the roof and daytime use suit it.",
+        coveredQuestionPartIndexes: [0],
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
   assert.equal(result, null);
-  assert.equal(calls, 2);
+  assert.equal(calls.length, 3);
+  assert.deepEqual(
+    calls.slice(1).map((body) => JSON.parse(body.input[1].content[0].text).repair),
+    [
+      { attempt: 1, failureStage: "question_coverage" },
+      { attempt: 2, failureStage: "question_coverage" },
+    ],
+  );
   assert.deepEqual(failures, [{
     code: "provider_output_rejected",
-    stage: "public_policy",
+    stage: "question_coverage",
   }]);
 });
 
@@ -5656,9 +6974,9 @@ test("official lookup quantity grounding gets one searched repair while protecte
     },
   });
   assert.equal(invalidOfficialResult, null);
-  assert.equal(invalidOfficialCalls, 2);
+  assert.equal(invalidOfficialCalls, 3);
 
-  let transientOfficialCalls = 0;
+  const transientOfficialCalls = [];
   const transientOfficialResult = await generateSurgeModelAnswer(request({
     message: "What is the current STC value?",
     officialWebSearch: {
@@ -5668,20 +6986,20 @@ test("official lookup quantity grounding gets one searched repair while protecte
     },
   }), {
     apiKey: "test-api-key",
-    fetch: async () => {
-      transientOfficialCalls += 1;
-      if (transientOfficialCalls === 1) {
+    fetch: async (_url, options) => {
+      transientOfficialCalls.push(JSON.parse(options.body));
+      if (transientOfficialCalls.length === 1) {
         return new Response("temporarily unavailable", { status: 503 });
       }
-      const answer = "The official STC clearing-house price is $40. This is a gross certificate value, not the household's net discount after provider and administration costs.";
-      return webJsonResponse(modelPayload({ answer }), {
-        sourceUrl,
-        annotationNeedle: answer,
-      });
+      const answer = "I could not verify the current STC value just now. Check the Clean Energy Regulator using the system size, installation date and postcode before relying on a certificate estimate.";
+      return jsonResponse(modelPayload({ answer }));
     },
   });
   assert.ok(transientOfficialResult);
-  assert.equal(transientOfficialCalls, 2);
+  assert.equal(transientOfficialCalls.length, 2);
+  assert.ok(Array.isArray(transientOfficialCalls[0].tools));
+  assert.equal("tools" in transientOfficialCalls[1], false);
+  assert.equal(transientOfficialResult.officialEvidenceMode, "maintained_recovery");
 
   let safetyCalls = 0;
   await generateSurgeModelAnswer(request({
@@ -5696,6 +7014,144 @@ test("official lookup quantity grounding gets one searched repair while protecte
     },
   });
   assert.equal(safetyCalls, 1);
+});
+
+test("ordinary first-attempt timing accepts the measured 35 to 48 second Sol range", async (t) => {
+  for (const latencyMs of [35_000, 48_000]) {
+    await t.test(`${latencyMs / 1_000} second response`, async (t) => {
+      t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+      let calls = 0;
+      const failures = [];
+      const resultPromise = generateSurgeModelAnswer(request(), {
+        apiKey: "test-api-key",
+        model: "gpt-5.6-sol",
+        fetch: async (_url, options) => {
+          calls += 1;
+          return new Promise((resolve, reject) => {
+            const responseTimer = setTimeout(() => {
+              resolve(jsonResponse(modelPayload()));
+            }, latencyMs);
+            const abort = () => {
+              clearTimeout(responseTimer);
+              reject(new DOMException("Timed out", "AbortError"));
+            };
+            if (options.signal.aborted) abort();
+            else options.signal.addEventListener("abort", abort, { once: true });
+          });
+        },
+        onFailure: (failure) => failures.push(failure),
+      });
+
+      assert.equal(calls, 1);
+      t.mock.timers.tick(latencyMs);
+      const result = await resultPromise;
+
+      assert.ok(result, JSON.stringify(failures));
+      assert.equal(calls, 1);
+      assert.equal(Date.now(), latencyMs);
+      assert.deepEqual(failures, []);
+    });
+  }
+});
+
+test("fast semantic failure still repairs within the reallocated ordinary deadline", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const bodies = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Should I get solar or a battery?",
+  }), {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-sol",
+    fetch: async (_url, options) => {
+      bodies.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: bodies.length === 1
+          ? "Solar can reduce daytime grid imports when the roof and daytime use suit it."
+          : "Solar can reduce daytime grid imports, while a battery can shift stored solar into the evening. Solar is usually the better first step when daytime use and roof conditions suit it. A battery is a separate decision based on evening use, exports and tariff.",
+        coveredQuestionPartIndexes: [0],
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(bodies.length, 2);
+  assert.equal(
+    JSON.parse(bodies[1].input[1].content[0].text).repair.failureStage,
+    "question_coverage",
+  );
+  assert.equal(Date.now(), 0);
+  assert.deepEqual(failures, []);
+});
+
+test("terminal provider errors remain terminal after the ordinary timeout reallocation", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  let calls = 0;
+  const retryDelays = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request(), {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-sol",
+    fetch: async () => {
+      calls += 1;
+      return Response.json({
+        error: { code: "invalid_api_key" },
+      }, { status: 401 });
+    },
+    waitBeforeRetry: async (delayMs) => retryDelays.push(delayMs),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(result, null);
+  assert.equal(calls, 1);
+  assert.deepEqual(retryDelays, []);
+  assert.deepEqual(failures, [{
+    code: "provider_http_error",
+    providerStatus: 401,
+    providerCode: "invalid_api_key",
+  }]);
+});
+
+test("ordinary timeout retries cannot exceed the existing 70 second shared deadline", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  let calls = 0;
+  const failures = [];
+  const resultPromise = generateSurgeModelAnswer(request(), {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-sol",
+    fetch: async (_url, options) => {
+      calls += 1;
+      return new Promise((_, reject) => {
+        const abort = () => reject(new DOMException("Timed out", "AbortError"));
+        if (options.signal.aborted) abort();
+        else options.signal.addEventListener("abort", abort, { once: true });
+      });
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(calls, 1);
+  t.mock.timers.tick(50_000);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls, 1, "the first timeout must use the short bounded retry backoff");
+
+  t.mock.timers.tick(50);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls, 2);
+
+  t.mock.timers.tick(19_949);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls, 2);
+  t.mock.timers.tick(1);
+  const result = await resultPromise;
+
+  assert.equal(result, null);
+  assert.equal(Date.now(), 70_000);
+  assert.equal(calls, 2);
+  assert.deepEqual(failures, [{ code: "provider_timeout" }]);
+  t.mock.timers.tick(10_000);
+  assert.equal(calls, 2);
 });
 
 test("transient provider failures retry the same paid model once and can recover", async (t) => {
@@ -5725,6 +7181,7 @@ test("transient provider failures retry the same paid model once and can recover
   for (const scenario of scenarios) {
     await t.test(scenario.name, async () => {
       const bodies = [];
+      const retryDelays = [];
       const failures = [];
       const result = await generateSurgeModelAnswer(request(), {
         apiKey: "test-api-key",
@@ -5734,18 +7191,76 @@ test("transient provider failures retry the same paid model once and can recover
           if (bodies.length === 1) return scenario.fail();
           return jsonResponse(modelPayload());
         },
+        waitBeforeRetry: async (delayMs) => retryDelays.push(delayMs),
         onFailure: (failure) => failures.push(failure),
       });
 
       assert.ok(result, JSON.stringify(failures));
       assert.equal(bodies.length, 2);
       assert.deepEqual(bodies.map((body) => body.model), ["gpt-5.6-sol", "gpt-5.6-sol"]);
+      assert.deepEqual(retryDelays, [50]);
       assert.deepEqual(failures, []);
     });
   }
 });
 
-test("repeated transient provider failures stop after one same-model retry", async (t) => {
+test("a retryable rate limit honors Retry-After within the bounded retry delay", async () => {
+  const retryDelays = [];
+  let calls = 0;
+  const result = await generateSurgeModelAnswer(request(), {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-sol",
+    fetch: async () => {
+      calls += 1;
+      if (calls === 1) {
+        return new Response("rate limited", {
+          status: 429,
+          headers: { "Retry-After": "1" },
+        });
+      }
+      return jsonResponse(modelPayload());
+    },
+    waitBeforeRetry: async (delayMs) => retryDelays.push(delayMs),
+  });
+
+  assert.ok(result);
+  assert.equal(calls, 2);
+  assert.deepEqual(retryDelays, [1_000]);
+});
+
+test("ordinary advice survives two paid-model timeouts when the third bounded attempt succeeds", async () => {
+  const bodies = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "My existing reverse-cycle split still heats properly, so I do not want to replace a working unit.",
+  }), {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-sol",
+    fetch: async (_url, options) => {
+      bodies.push(JSON.parse(options.body));
+      if (bodies.length < 3) {
+        await new Promise((_, reject) => {
+          const abort = () => reject(new DOMException("Timed out", "AbortError"));
+          if (options.signal.aborted) abort();
+          else options.signal.addEventListener("abort", abort, { once: true });
+        });
+      }
+      return jsonResponse(modelPayload({
+        answer: "Keep the existing reverse-cycle split because it still heats properly. Do not replace a working unit; check its electricity use and arrange service only if its performance changes.",
+      }));
+    },
+    timeoutMs: 5,
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(bodies.length, 3);
+  assert.deepEqual(bodies.slice(1), [bodies[0], bodies[0]]);
+  assert.match(result.answer.directAnswer, /keep.*existing reverse-cycle split.*still heats properly/is);
+  assert.deepEqual(failures, []);
+});
+
+test("repeated transient provider failures stop after two same-model retries", async (t) => {
   const scenarios = [
     {
       name: "HTTP 500",
@@ -5776,6 +7291,7 @@ test("repeated transient provider failures stop after one same-model retry", asy
   for (const scenario of scenarios) {
     await t.test(scenario.name, async () => {
       const bodies = [];
+      const retryDelays = [];
       const failures = [];
       const result = await generateSurgeModelAnswer(request(), {
         apiKey: "test-api-key",
@@ -5784,12 +7300,14 @@ test("repeated transient provider failures stop after one same-model retry", asy
           bodies.push(JSON.parse(options.body));
           return scenario.fail();
         },
+        waitBeforeRetry: async (delayMs) => retryDelays.push(delayMs),
         onFailure: (failure) => failures.push(failure),
       });
 
       assert.equal(result, null);
-      assert.equal(bodies.length, 2);
-      assert.deepEqual(bodies.map((body) => body.model), ["gpt-5.6-sol", "gpt-5.6-sol"]);
+      assert.equal(bodies.length, 3);
+      assert.deepEqual(bodies.map((body) => body.model), ["gpt-5.6-sol", "gpt-5.6-sol", "gpt-5.6-sol"]);
+      assert.deepEqual(retryDelays, [50, 100]);
       assert.deepEqual(failures, [scenario.expectedFailure]);
     });
   }
@@ -5797,6 +7315,7 @@ test("repeated transient provider failures stop after one same-model retry", asy
 
 test("an insufficient-quota 429 is terminal and retains its safe provider code", async () => {
   let calls = 0;
+  const retryDelays = [];
   const failures = [];
   const result = await generateSurgeModelAnswer(request(), {
     apiKey: "test-api-key",
@@ -5810,11 +7329,13 @@ test("an insufficient-quota 429 is terminal and retains its safe provider code",
         },
       }, { status: 429 });
     },
+    waitBeforeRetry: async (delayMs) => retryDelays.push(delayMs),
     onFailure: (failure) => failures.push(failure),
   });
 
   assert.equal(result, null);
   assert.equal(calls, 1);
+  assert.deepEqual(retryDelays, []);
   assert.deepEqual(failures, [{
     code: "provider_http_error",
     providerStatus: 429,
@@ -5822,7 +7343,65 @@ test("an insufficient-quota 429 is terminal and retains its safe provider code",
   }]);
 });
 
-test("malformed and incomplete provider output gets one bounded format repair", async (t) => {
+test("authentication and model-configuration provider errors do not retry", async (t) => {
+  const scenarios = [
+    { name: "invalid API key", status: 401, providerCode: "invalid_api_key" },
+    { name: "unavailable model", status: 404, providerCode: "model_not_found" },
+  ];
+
+  for (const scenario of scenarios) {
+    await t.test(scenario.name, async () => {
+      let calls = 0;
+      const retryDelays = [];
+      const failures = [];
+      const result = await generateSurgeModelAnswer(request(), {
+        apiKey: "test-api-key",
+        model: "gpt-5.6-sol",
+        fetch: async () => {
+          calls += 1;
+          return Response.json({
+            error: { code: scenario.providerCode },
+          }, { status: scenario.status });
+        },
+        waitBeforeRetry: async (delayMs) => retryDelays.push(delayMs),
+        onFailure: (failure) => failures.push(failure),
+      });
+
+      assert.equal(result, null);
+      assert.equal(calls, 1);
+      assert.deepEqual(retryDelays, []);
+      assert.deepEqual(failures, [{
+        code: "provider_http_error",
+        providerStatus: scenario.status,
+        providerCode: scenario.providerCode,
+      }]);
+    });
+  }
+});
+
+test("a provider timeout on an urgent safety request is a hard stop", async () => {
+  let calls = 0;
+  const retryDelays = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "My home battery is smoking right now. What do I do?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      calls += 1;
+      throw new DOMException("Timed out", "AbortError");
+    },
+    waitBeforeRetry: async (delayMs) => retryDelays.push(delayMs),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(result, null);
+  assert.equal(calls, 1);
+  assert.deepEqual(retryDelays, []);
+  assert.deepEqual(failures, [{ code: "provider_timeout" }]);
+});
+
+test("malformed and incomplete provider output gets up to two bounded format repairs", async (t) => {
   await t.test("malformed JSON first then valid output succeeds on the low-reasoning repair", async () => {
     const failures = [];
     const bodies = [];
@@ -5885,7 +7464,38 @@ test("malformed and incomplete provider output gets one bounded format repair", 
     assert.deepEqual(failures, []);
   });
 
-  await t.test("repeated malformed JSON fails closed after exactly two calls", async () => {
+  await t.test("two malformed JSON drafts can recover on the third reserved call", async () => {
+    const failures = [];
+    const bodies = [];
+    const result = await generateSurgeModelAnswer(request(), {
+      apiKey: "test-api-key",
+      model: "gpt-5.6-sol",
+      fetch: async (_url, options) => {
+        bodies.push(JSON.parse(options.body));
+        if (bodies.length < 3) {
+          return new Response(JSON.stringify({ output_text: "{not-json" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return jsonResponse(modelPayload());
+      },
+      onFailure: (failure) => failures.push(failure),
+    });
+
+    assert.ok(result, JSON.stringify(failures));
+    assert.equal(bodies.length, 3);
+    assert.deepEqual(
+      bodies.slice(1).map((body) => JSON.parse(body.input[1].content[0].text).repair),
+      [
+        { attempt: 1, failureStage: "response_output_json" },
+        { attempt: 2, failureStage: "response_output_json" },
+      ],
+    );
+    assert.deepEqual(failures, []);
+  });
+
+  await t.test("three malformed JSON drafts fail closed at the provider-call cap", async () => {
     const failures = [];
     let calls = 0;
     const result = await generateSurgeModelAnswer(request(), {
@@ -5901,7 +7511,7 @@ test("malformed and incomplete provider output gets one bounded format repair", 
       onFailure: (failure) => failures.push(failure),
     });
     assert.equal(result, null);
-    assert.equal(calls, 2);
+    assert.equal(calls, 3);
     assert.deepEqual(failures, [{
       code: "provider_response_invalid",
       stage: "response_output_json",
@@ -5975,7 +7585,7 @@ test("malformed and incomplete provider output gets one bounded format repair", 
     assert.deepEqual(failures, []);
   });
 
-  await t.test("repeated incomplete max-output responses fail closed after exactly two calls", async () => {
+  await t.test("repeated incomplete max-output responses fail closed after exactly three calls", async () => {
     const failures = [];
     let calls = 0;
     const result = await generateSurgeModelAnswer(request(), {
@@ -5992,7 +7602,7 @@ test("malformed and incomplete provider output gets one bounded format repair", 
       onFailure: (failure) => failures.push(failure),
     });
     assert.equal(result, null);
-    assert.equal(calls, 2);
+    assert.equal(calls, 3);
     assert.deepEqual(failures, [{
       code: "provider_response_invalid",
       stage: "response_output_incomplete_max_tokens",
@@ -6342,6 +7952,287 @@ test("model prompt applies assessor education response guardrails without leakin
     `${prompt}\n${JSON.stringify(context.reviewedEducation)}`,
     /48260e86e921a25b4e468ed93a3b6ed754137f2c1d0c70df3addd4667aecd32c|pdfSha256|extractedTextSha256|pageStart|pageEnd|pypdf|pdfplumber|Poppler/i,
   );
+});
+
+test("invented official page titles are repaired while generic attached-link wording remains valid", async () => {
+  const calls = [];
+  const candidates = [
+    "Open the attached official page titled Heating and cooling discounts and check the exact product and applicant details there.",
+    "Use the attached official link to check the Victorian heating discount. Match the exact product, applicant and installation details against the quote before relying on it.",
+  ];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Where can I check the Victorian heating-discount details?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({ answer: candidates[calls.length - 1] }));
+    },
+  });
+
+  assert.ok(result);
+  assert.equal(calls.length, 2);
+  assert.equal(
+    JSON.parse(calls[1].input[1].content[0].text).repair.failureStage,
+    "public_policy",
+  );
+  assert.match(calls[1].input[0].content[0].text, /Never invent a title for an official page or link/i);
+  assert.equal(result.answer.directAnswer, candidates[1]);
+
+  let genericCalls = 0;
+  const generic = await generateSurgeModelAnswer(request({
+    message: "Where can I check the Victorian heating-discount details?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      genericCalls += 1;
+      return jsonResponse(modelPayload({ answer: candidates[1] }));
+    },
+  });
+  assert.ok(generic);
+  assert.equal(genericCalls, 1);
+});
+
+test("a Victorian program-list question is repaired to specific conditional program examples", async () => {
+  const calls = [];
+  const genericAnswer = "Check the Victorian programs that match your planned work, because the right support depends on the household and upgrade.";
+  const specificAnswer = "Conditional examples to verify are Victorian Energy Upgrades for relevant eligible upgrades and Solar Homes or Solar Victoria for relevant solar, battery or hot-water support. Applicability depends on the upgrade type, so confirm whether you mean solar, a battery, heating or hot water.";
+  const modelRequest = request({
+    message: "Which state programs should I check?",
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [{ key: "state_or_territory", value: "VIC" }],
+    },
+  });
+  const result = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: calls.length === 1 ? genericAnswer : specificAnswer,
+      }));
+    },
+  });
+
+  assert.ok(result);
+  assert.equal(calls.length, 2);
+  assert.equal(
+    JSON.parse(calls[1].input[1].content[0].text).repair.failureStage,
+    "question_coverage",
+  );
+  assert.match(calls[0].input[0].content[0].text, /Victorian Energy Upgrades/i);
+  assert.match(calls[1].input[0].content[0].text, /Victorian-program repair/i);
+  assert.equal(result.answer.directAnswer, specificAnswer);
+
+  let specificCalls = 0;
+  const specific = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      specificCalls += 1;
+      return jsonResponse(modelPayload({ answer: specificAnswer }));
+    },
+  });
+  assert.ok(specific);
+  assert.equal(specificCalls, 1);
+});
+
+test("solar clipping is repaired when the draft credits clipping itself with extra generation", async () => {
+  const calls = [];
+  const incorrect = "No. A little clipping can be an intentional design trade-off. Modest clipping can improve generation in lower light and during the morning and afternoon.";
+  const corrected = "No. Clipping is output the inverter cannot convert, so it is capped and lost at that moment. A larger panel array relative to the inverter can improve morning, afternoon and lower-light energy even if it sometimes clips around peak production. The benefit comes from the larger array, not from clipping itself.";
+  const modelRequest = request({
+    message: "Does a little solar inverter clipping automatically mean the design is bad?",
+  });
+  const result = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: calls.length === 1 ? incorrect : corrected,
+      }));
+    },
+  });
+
+  assert.ok(result);
+  assert.equal(calls.length, 2);
+  assert.equal(
+    JSON.parse(calls[1].input[1].content[0].text).repair.failureStage,
+    "question_coverage",
+  );
+  assert.match(calls[1].input[0].content[0].text, /clipping is capped and lost output/i);
+  assert.equal(result.answer.directAnswer, corrected);
+
+  let correctedCalls = 0;
+  const direct = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      correctedCalls += 1;
+      return jsonResponse(modelPayload({ answer: corrected }));
+    },
+  });
+  assert.ok(direct);
+  assert.equal(correctedCalls, 1);
+});
+
+test("Victorian common-property answers repair NSW terminology and retain owners-corporation wording", async () => {
+  const calls = [];
+  const incorrect = "Ask the strata committee for the relevant by-law and written approval before changing the shared roof.";
+  const corrected = "Ask the owners corporation manager or committee whether the roof is common property and which rule, approval or resolution applies before any external change.";
+  const modelRequest = request({
+    message: "For my Ballarat apartment, who approves work on the shared roof?",
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [
+        { key: "state_or_territory", value: "VIC" },
+        { key: "postcode", value: "3350" },
+        { key: "property_type", value: "Apartment or unit" },
+      ],
+    },
+  });
+  const result = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: calls.length === 1 ? incorrect : corrected,
+      }));
+    },
+  });
+
+  assert.ok(result);
+  assert.equal(calls.length, 2);
+  assert.equal(
+    JSON.parse(calls[1].input[1].content[0].text).repair.failureStage,
+    "question_coverage",
+  );
+  assert.match(calls[1].input[0].content[0].text, /Victorian common-property repair/i);
+  assert.equal(result.answer.directAnswer, corrected);
+
+  let correctedCalls = 0;
+  const direct = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      correctedCalls += 1;
+      return jsonResponse(modelPayload({ answer: corrected }));
+    },
+  });
+  assert.ok(direct);
+  assert.equal(correctedCalls, 1);
+});
+
+test("saved moisture concerns stay ahead of door and window work even for a topic-specific first-step question", async () => {
+  const calls = [];
+  const incorrect = "Start with the draughty front door, then improve the cold windows. The door seal is the cheaper immediate comfort step.";
+  const corrected = "Start with condensation and moisture control before sealing the draughty front door or upgrading the windows. Confirm whether the moisture is room-side condensation or a leak, use effective bathroom and kitchen exhaust, and investigate persistent damp. Then tackle the door gap before more expensive window work.";
+  const modelRequest = request({
+    message: "For my saved home, between sealing the draughty front door or improving the cold windows, what should come first?",
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [
+        { key: "comfort_concerns", value: "Too cold in winter, Condensation, damp or mould" },
+        { key: "priorities", value: "Comfort, Improve indoor air quality and moisture control" },
+      ],
+    },
+  });
+  const result = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: calls.length === 1 ? incorrect : corrected,
+      }));
+    },
+  });
+
+  assert.ok(result);
+  assert.equal(calls.length, 2);
+  assert.equal(
+    JSON.parse(calls[1].input[1].content[0].text).repair.failureStage,
+    "priority_drift",
+  );
+  assert.match(calls[0].input[0].content[0].text, /saved home has an unresolved moisture priority/i);
+  assert.match(calls[1].input[0].content[0].text, /lead with moisture control/i);
+  assert.equal(result.answer.directAnswer, corrected);
+
+  let correctedCalls = 0;
+  const direct = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      correctedCalls += 1;
+      return jsonResponse(modelPayload({ answer: corrected }));
+    },
+  });
+  assert.ok(direct);
+  assert.equal(correctedCalls, 1);
+});
+
+test("exact paid-run door and self-consumption drafts pass while real cross-topic upgrades still fail", async () => {
+  const cases = [
+    {
+      id: "c10t04",
+      request: {
+        message: "Back to my 3072 apartment: what was the first low-cost action for my problem?",
+        recentTurns: [
+          { role: "user", content: "For my saved 3072 apartment, remember that the front door is draughty and the windows are single glazed." },
+          { role: "assistant", content: "The first low-cost action was to stop the confirmed door draught." },
+        ],
+        continuation: state({
+          activeTopic: "glazing_shading",
+          goal: "Reduce the draught and cold windows in my saved 3072 apartment",
+          facts: [
+            { key: "postcode", value: "3072" },
+            { key: "property_type", value: "apartment" },
+            { key: "front_door", value: "draughty" },
+            { key: "glazing", value: "single glazed" },
+          ],
+        }),
+      },
+      answer: "First, draught-seal the front door. Fit suitable weather seals around the door edges and use a door snake at the bottom if needed. This is cheaper and simpler than upgrading the single-glazed windows, and directly tackles the confirmed air leak without blocking any required ventilation.",
+      unrelated: "The first low-cost action is a door snake before spending on the windows. Install rooftop solar and a home battery next because they are the best fix for the draughty door.",
+    },
+    {
+      id: "c12t04",
+      request: {
+        message: "While we are on solar, what does self-consumption mean in normal words?",
+        recentTurns: [
+          { role: "user", content: "Does a little inverter clipping automatically mean the solar design is bad?" },
+          { role: "assistant", content: "No. A little clipping can be an intentional design trade-off." },
+        ],
+        continuation: state({
+          activeTopic: "solar",
+          goal: "Understand the apartment solar design",
+        }),
+      },
+      answer: "Self-consumption means using your own solar electricity in your home while it is being generated. For example, solar powering your air conditioner or dishwasher during the day is self-consumption. Any surplus sent to the grid is an export. Self-consuming solar usually reduces how much electricity you buy from the grid, although its bill value depends on your electricity and feed-in rates.",
+      unrelated: "Self-consumption means using solar in the home. Install an air conditioner now so the solar system has another load.",
+    },
+  ];
+
+  for (const candidate of cases) {
+    const failures = [];
+    const result = await generateSurgeModelAnswer(request(candidate.request), {
+      apiKey: "test-api-key",
+      fetch: async () => jsonResponse(modelPayload({ answer: candidate.answer })),
+      onFailure: (failure) => failures.push(failure),
+    });
+    assert.ok(result, `${candidate.id}: ${JSON.stringify(failures)}`);
+    assert.equal(result.answer.directAnswer, candidate.answer, candidate.id);
+
+    const unrelatedFailures = [];
+    const unrelated = await generateSurgeModelAnswer(request(candidate.request), {
+      apiKey: "test-api-key",
+      fetch: async () => jsonResponse(modelPayload({ answer: candidate.unrelated })),
+      onFailure: (failure) => unrelatedFailures.push(failure),
+    });
+    assert.equal(unrelated, null, candidate.id);
+    assert.deepEqual(unrelatedFailures, [{
+      code: "provider_output_rejected",
+      stage: "topic_drift",
+    }], candidate.id);
+  }
 });
 
 test("private industry source titles are rejected even when they are not in a fixed name list", async () => {
@@ -6815,15 +8706,29 @@ test("a cold-home symptom can broaden a door-draught decision without admitting 
     }),
   });
   const usefulFailures = [];
+  const usefulBodies = [];
   const useful = await generateSurgeModelAnswer(modelRequest, {
     apiKey: "test-api-key",
-    fetch: async () => jsonResponse(structuredModelPayload({
-      verdict: "The front-door draught is one confirmed heat-loss path, but it may not be the whole reason the house is hard to keep warm.",
-      reason: "Keep the door snake, then check window gaps and accessible ceiling insulation. Use the existing fixed reverse-cycle air conditioner for occupied rooms before relying on a plug-in heater.",
-    })),
+    fetch: async (_url, options) => {
+      usefulBodies.push(JSON.parse(options.body));
+      return jsonResponse(structuredModelPayload(usefulBodies.length === 1 ? {
+        verdict: "Start by keeping heat in, while using the reverse-cycle air conditioner for efficient heating.",
+        reason: "With mostly single glazing and basic blinds, window heat loss and draughts are likely comfort weak points. Close-fitting honeycomb blinds or thermal curtains with pelmets can help, alongside safe draught sealing.",
+      } : {
+        verdict: "The front-door draught is one confirmed heat-loss path, but it may not be the whole reason the house is hard to keep warm.",
+        reason: "Keep the door snake, then check window gaps and accessible ceiling insulation. Use the existing fixed reverse-cycle air conditioner for occupied rooms before relying on a plug-in heater.",
+      }));
+    },
     onFailure: (failure) => usefulFailures.push(failure),
   });
   assert.ok(useful, JSON.stringify(usefulFailures));
+  assert.equal(usefulBodies.length, 2);
+  assert.equal(
+    JSON.parse(usefulBodies[1].input[1].content[0].text).repair.failureStage,
+    "question_coverage",
+  );
+  assert.match(usefulBodies[0].input[0].content[0].text, /confirmed front-door draught/i);
+  assert.match(usefulBodies[1].input[0].content[0].text, /Door-memory repair/i);
   assert.equal(useful.continuation.activeTopic, "comfort_fabric");
   assert.deepEqual(usefulFailures, []);
 
@@ -6838,7 +8743,92 @@ test("a cold-home symptom can broaden a door-draught decision without admitting 
   assert.equal(unrelated, null);
   assert.deepEqual(unrelatedFailures, [{
     code: "provider_output_rejected",
-    stage: "topic_drift",
+    stage: "question_coverage",
+  }]);
+});
+
+test("assistant-introduced owners-corporation context does not hijack a cold-home follow-up", async () => {
+  const planContext = {
+    version: 1,
+    source: "home_energy_plan",
+    facts: [
+      { key: "postcode", value: "3072" },
+      { key: "state_or_territory", value: "VIC" },
+      { key: "property_type", value: "Apartment or unit" },
+      { key: "shared_property_approval", value: "Strata, owners corporation or common property may apply" },
+      { key: "glazing", value: "Mostly single glazed" },
+      { key: "window_coverings", value: "Basic roller, vertical or Venetian blinds" },
+      { key: "heating_cooling_systems", value: "Air-con, including reverse-cycle air-con" },
+    ],
+  };
+  const recentTurns = [
+    { role: "user", content: "I feel a draft under my front door" },
+    {
+      role: "assistant",
+      content: "Start with a removable door snake. The apartment entry door may be a fire door or controlled by the owners corporation.",
+    },
+  ];
+  const continuation = state({
+    activeTopic: "draughts_ventilation",
+    goal: "I feel a draft under my front door",
+    lastAnswerSummary: "Recommended a removable door snake without altering the apartment entry door.",
+  });
+  const final8Candidate = structuredModelPayload({
+    verdict: "Start by stopping the confirmed front-door draught, then check the other main heat-loss paths.",
+    reason: "The gap under the front door is one known heat-loss path, but single-glazed windows, basic blinds and incomplete ceiling insulation can also make this home difficult to keep warm.",
+    steps: [
+      "Keep using a removable door snake, or seek approval for a correctly sized compatible door seal if leakage continues. Do not alter the apartment entry door yourself.",
+      "Check windows for actual gaps and seal only unwanted leaks. Add close-fitting honeycomb blinds or thermal curtains with pelmets to reduce heat loss through the glass.",
+      "If ceiling insulation is safely accessible and within your property boundary, have its coverage checked. Use the existing reverse-cycle air conditioner to heat occupied rooms efficiently, while keeping bathroom and kitchen ventilation working.",
+    ],
+    state: continuation,
+  });
+  const coldHomeCalls = [];
+  const coldHomeFailures = [];
+  const coldHomeResult = await generateSurgeModelAnswer(request({
+    message: "great idea, also i find it hard to keep the house warm sometimes",
+    recentTurns,
+    continuation,
+    planContext,
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      coldHomeCalls.push(JSON.parse(options.body));
+      return jsonResponse(final8Candidate);
+    },
+    onFailure: (failure) => coldHomeFailures.push(failure),
+  });
+
+  assert.ok(coldHomeResult, JSON.stringify(coldHomeFailures));
+  assert.equal(coldHomeCalls.length, 1);
+  assert.equal(coldHomeResult.presentation.verdict, final8Candidate.verdict);
+  assert.deepEqual(coldHomeFailures, []);
+
+  const approvalCalls = [];
+  const approvalFailures = [];
+  const approvalResult = await generateSurgeModelAnswer(request({
+    message: "Do I need their approval before fitting a permanent door seal?",
+    recentTurns,
+    continuation,
+    planContext,
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      approvalCalls.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: "Yes. Get written approval before fitting a permanent seal because the apartment entry door may be controlled. Keep it operable and do not drill or plane it.",
+      }));
+    },
+    onFailure: (failure) => approvalFailures.push(failure),
+  });
+
+  assert.equal(approvalResult, null);
+  assert.equal(approvalCalls.length, 3);
+  assert.match(approvalCalls[0].input[0].content[0].text, /Use Victorian terminology/i);
+  assert.match(approvalCalls[1].input[0].content[0].text, /Victorian common-property repair/i);
+  assert.deepEqual(approvalFailures, [{
+    code: "provider_output_rejected",
+    stage: "question_coverage",
   }]);
 });
 

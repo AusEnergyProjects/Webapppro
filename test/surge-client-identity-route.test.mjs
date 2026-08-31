@@ -18,8 +18,8 @@ test("energy assistant route gates JSON before server handling and wires anonymo
   assert.match(source, /createSurgeGroundedProductGuidanceResolver\(database\)/);
   assert.match(source, /resolveGroundedAnswer,/);
   assert.match(source, /waitUntil\(recorder\(event\)\.catch\(\(\) => undefined\)\)/);
-  assert.match(source, /clientKey: identity\.clientKey/);
-  assert.match(source, /networkKey: identity\.networkKey/);
+  assert.match(source, /clientKey: identity!\.clientKey/);
+  assert.match(source, /networkKey: identity!\.networkKey/);
   assert.match(source, /requestKey: requestId/);
   assert.match(source, /estimatedMicroUsd/);
   assert.match(source, /requireValidatedModelForOrdinaryAdvice:\s*true/);
@@ -44,7 +44,12 @@ test("energy assistant route gates JSON before server handling and wires anonymo
     assert.match(source, new RegExp(`reason: "${reason}"`));
   }
   assert.match(source, /return deniedReservation\("unavailable"\)/);
-  assert.match(source, /reserveModelCall = async \(\) => deniedReservation\(\)/);
+  assert.match(source, /return deniedReservation\("configuration"\)/);
+  assert.match(source, /return deniedReservation\("invalid_identity"\)/);
+  assert.match(source, /const prepareAdmissionIdentity = async/);
+  assert.match(source, /usageGuard \|\|= createSharedSurgeUsageGuard/);
+  assert.match(source, /await prepareAdmissionIdentity\(\)/);
+  assert.match(source, /reservation\.reason === "unavailable"/);
   assert.match(source, /headers\.append\("Set-Cookie", setCookie\)/);
   assert.doesNotMatch(source, /x-forwarded-for|cf-connecting-ip|clientIp/);
 });

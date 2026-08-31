@@ -10,6 +10,7 @@ import {
   ENERGY_ASSISTANT_MAX_RESPONSE_BYTES,
   handleEnergyAssistantRequest,
 } from "../src/lib/energy-assistant-server.ts";
+import { generateSurgeModelAnswer } from "../src/lib/energy-assistant-model.ts";
 import { buildSurgePlanContextFromStoredAssessment } from "../src/lib/energy-assistant-plan-context.ts";
 import { parseSurgeConversationState } from "../src/lib/energy-assistant-conversation.ts";
 
@@ -300,6 +301,206 @@ test("an explicit current fact with missing maintained evidence uses only the se
   assertPublicReplyContract(payload);
 });
 
+test("a paid-model maintained-source recovery remains a model answer when live official lookup is unavailable", async () => {
+  let observedRequest;
+  const recoveryCitation = {
+    id: "veu-maintained",
+    title: "Victorian Energy Upgrades",
+    publisher: "Essential Services Commission",
+    url: "https://www.esc.vic.gov.au/victorian-energy-upgrades",
+  };
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "official-web-recovery-0001",
+    message: "What current Victorian support may apply if I replace ducted gas heating with reverse-cycle air conditioning?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => ({
+      ...sourceReviewAnswer("The current programme position needs official verification."),
+      citations: [{
+        ...recoveryCitation,
+        sourceTier: "primary_official",
+        stale: false,
+      }],
+    }),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return {
+        answer: {
+          ...fixedAnswer("I could not verify the current Victorian support just now. For the ducted-gas to reverse-cycle replacement, ask the installer to check Victorian Energy Upgrades using the old heater, exact new model numbers, installed scope and itemised discount."),
+          citations: [recoveryCitation],
+        },
+        continuation: continuation(),
+        officialCitations: [],
+        officialEvidenceMode: "maintained_recovery",
+      };
+    },
+    requireValidatedModelForOrdinaryAdvice: true,
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(observedRequest.officialWebSearch.kind, "rebate_program");
+  assert.equal(payload.quality.answerSource, "model");
+  assert.match(payload.reply.directAnswer, /could not verify the current Victorian support/i);
+  assert.deepEqual(payload.reply.citations, [{
+    id: "official-source-1",
+    title: recoveryCitation.title,
+    publisher: "www.esc.vic.gov.au",
+    url: recoveryCitation.url,
+  }]);
+  assertPublicReplyContract(payload);
+});
+
+test("a citation-free paid recovery is still delivered when no maintained link matches the official lookup plan", async () => {
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "official-web-recovery-no-link-0001",
+    message: "What current Victorian support may apply if I replace ducted gas heating with reverse-cycle air conditioning?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => sourceReviewAnswer(
+      "The current programme position needs official verification.",
+    ),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async () => ({
+      answer: {
+        ...fixedAnswer("I could not verify the current Victorian support just now. For the ducted-gas to reverse-cycle replacement, ask the installer to confirm the old heater, exact new model numbers, installed scope and itemised discount on the relevant official programme page."),
+        citations: [],
+      },
+      continuation: continuation(),
+      officialCitations: [],
+      officialEvidenceMode: "maintained_recovery",
+    }),
+    requireValidatedModelForOrdinaryAdvice: true,
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "model");
+  assert.match(payload.reply.directAnswer, /could not verify the current Victorian support/i);
+  assert.deepEqual(payload.reply.citations, []);
+  assertPublicReplyContract(payload);
+});
+
+test("maintained recovery exposes only exact reviewed official URL and title pairs", async (t) => {
+  const reviewedUrl = "https://www.energy.vic.gov.au/victorian-energy-upgrades/products/heating-and-cooling-discounts";
+  for (const scenario of [{
+    name: "invented path",
+    requestId: "official-web-recovery-invented-path-0001",
+    citation: {
+      id: "invented-provider-path",
+      title: "Heating and cooling discounts",
+      publisher: "Victorian Government",
+      url: "https://www.energy.vic.gov.au/not-a-reviewed-page",
+    },
+  }, {
+    name: "invented title on reviewed URL",
+    requestId: "official-web-recovery-invented-title-0001",
+    citation: {
+      id: "invented-provider-title",
+      title: "Guaranteed reverse-cycle rebate approval",
+      publisher: "Victorian Government",
+      url: reviewedUrl,
+    },
+  }]) {
+    await t.test(scenario.name, async () => {
+      let observedRequest;
+      const response = await handleEnergyAssistantRequest(request({
+        action: "ask",
+        requestId: scenario.requestId,
+        message: "What current Victorian support may apply if I replace ducted gas heating with reverse-cycle air conditioning?",
+        recentTurns: [],
+        pageContext: "/surge",
+        audience: "public",
+      }, { qualityRehearsal: true }), {
+        now: () => new Date(NOW),
+        composeAnswer: () => ({
+          ...sourceReviewAnswer("The current Victorian programme position needs official verification."),
+          citations: [{
+            id: "reviewed-heating-discounts",
+            title: "Heating and cooling discounts",
+            publisher: "Victorian Government",
+            url: reviewedUrl,
+            sourceTier: "primary_official",
+            stale: false,
+          }],
+        }),
+        reserveModelCall: allowModelCall,
+        generateAnswer: async (modelRequest) => {
+          observedRequest = modelRequest;
+          return {
+            answer: {
+              ...fixedAnswer("I could not verify the current Victorian support just now. Ask the installer to check the ducted-gas to reverse-cycle replacement against the reviewed programme material."),
+              citations: [scenario.citation],
+            },
+            continuation: continuation(),
+            officialCitations: [],
+            officialEvidenceMode: "maintained_recovery",
+          };
+        },
+        requireValidatedModelForOrdinaryAdvice: true,
+      });
+
+      assert.equal(response.status, 200);
+      assert.ok(observedRequest.deterministicAnswer.citations.some((citation) => citation.url === reviewedUrl));
+      const payload = await body(response);
+      assert.equal(payload.quality.answerSource, "model");
+      assert.deepEqual(payload.reply.citations, []);
+      assert.doesNotMatch(JSON.stringify(payload), /not-a-reviewed-page|Guaranteed reverse-cycle rebate approval/i);
+      assertPublicReplyContract(payload);
+    });
+  }
+});
+
+test("production composition carries a matching maintained official link into paid lookup recovery", async () => {
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "official-web-recovery-production-link-0001",
+    message: "What current Victorian support may apply if I replace ducted gas heating with reverse-cycle air conditioning?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date("2026-09-01T00:00:00.000Z"),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return {
+        answer: {
+          ...fixedAnswer("I could not verify the current Victorian support just now. For the ducted-gas to reverse-cycle replacement, ask the installer to confirm the old heater, exact new model numbers, installed scope and itemised discount."),
+          citations: modelRequest.deterministicAnswer.citations,
+        },
+        continuation: continuation(),
+        officialCitations: [],
+        officialEvidenceMode: "maintained_recovery",
+      };
+    },
+    requireValidatedModelForOrdinaryAdvice: true,
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(observedRequest.officialWebSearch.kind, "rebate_program");
+  assert.ok(observedRequest.deterministicAnswer.citations.some((citation) => (
+    citation.sourceTier === "primary_official"
+    && citation.url === "https://www.energy.vic.gov.au/victorian-energy-upgrades/products/heating-and-cooling-discounts"
+  )));
+  assert.equal(payload.quality.answerSource, "model");
+  assert.ok(payload.reply.citations.some((citation) => (
+    citation.url === "https://www.energy.vic.gov.au/victorian-energy-upgrades/products/heating-and-cooling-discounts"
+  )));
+  assertPublicReplyContract(payload);
+});
+
 test("Victorian support wording and explicit certificate-source requests require official evidence", async () => {
   const cases = [{
     requestId: "official-victorian-support-0001",
@@ -409,6 +610,56 @@ test("the maintained STC and VEEC source directory avoids a redundant live looku
   assert.doesNotMatch(JSON.stringify(payload), /cer-stc-entitlement-calculation|veu-water-space-activity-guide-v3-19/i);
 });
 
+test("a mixed current STC and VEEC lookup keeps exact certificate references for paid recovery", async () => {
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "mixed-current-certificate-recovery-0001",
+    message: "What are STCs and VEECs worth today?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date("2026-09-01T02:00:00.000Z"),
+    reserveModelCall: allowModelCall,
+    requireValidatedModelForOrdinaryAdvice: true,
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return {
+        answer: {
+          ...fixedAnswer("Today's live STC and VEEC prices could not be verified. Check both dated markets separately, then distinguish their gross values from the net customer discount after provider fees."),
+          citations: modelRequest.deterministicAnswer.citations,
+        },
+        continuation: continuation({
+          activeTopic: "rebates_certificates",
+          goal: "Verify current STC and VEEC values",
+        }),
+        officialCitations: [],
+        officialEvidenceMode: "maintained_recovery",
+      };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(observedRequest.officialWebSearch.kind, "certificate");
+  assert.match(observedRequest.deterministicAnswer.directAnswer, /STC and VEEC rates/i);
+  assert.match(observedRequest.deterministicAnswer.directAnswer, /gross rate/i);
+  assert.match(observedRequest.deterministicAnswer.directAnswer, /net credit/i);
+  const expectedUrls = [
+    "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/buy-and-sell-small-scale-technology-certificates",
+    "https://cer.gov.au/markets/reports-and-data/quarterly-carbon-market-reports/quarterly-carbon-market-report-june-quarter-2026",
+    "https://www.energy.vic.gov.au/victorian-energy-upgrades/installers/industry-market-update-work-program",
+  ];
+  assert.deepEqual(
+    observedRequest.deterministicAnswer.citations.map((citation) => citation.url),
+    expectedUrls,
+  );
+  const payload = await body(response);
+  assert.deepEqual(payload.reply.citations.map((citation) => citation.url), expectedUrls);
+  assert.doesNotMatch(JSON.stringify(payload), /https:\/\/www\.energy\.gov\.au\/rebates/i);
+  assert.doesNotMatch(JSON.stringify(payload), /cer-stc-entitlement-calculation|veu-water-space-activity-guide-v3-19/i);
+});
+
 test("a contextual Victorian support link request keeps the maintained official page and drops the repeated equipment question", async () => {
   const pendingQuestion = "What exact model and installed price are you considering?";
   let observedRequest;
@@ -455,7 +706,7 @@ test("a contextual Victorian support link request keeps the maintained official 
   assert.equal(payload.reply.followUpQuestion, "");
   assert.match(payload.reply.content, /official Victorian Energy Upgrades page/i);
   assert.deepEqual(payload.reply.citations.map((citation) => citation.url), [
-    "https://www.esc.vic.gov.au/sites/default/files/documents/FINAL%20-%20Water%20Heating%20and%20Space%20Heating%20Cooling%20Activity%20Guide%20-%20V.%203.19%20-%2020260324.pdf",
+    "https://www.energy.vic.gov.au/victorian-energy-upgrades/products/heating-and-cooling-discounts",
   ]);
 });
 
@@ -2117,7 +2368,7 @@ test("a targeted Electric Saul question returns Surge's verified competitive pos
   assert.match(payload.reply.directAnswer, /six operational guardrails and seven baseline fact sheets/i);
   assert.match(payload.reply.directAnswer, /stronger choice for detailed, source-governed whole-home decisions/i);
   assert.match(payload.reply.directAnswer, /45 structured details/i);
-  assert.match(payload.reply.directAnswer, /111 maintained official Australian sources/i);
+  assert.match(payload.reply.directAnswer, /115 maintained official Australian sources/i);
   assert.match(payload.reply.directAnswer, /machine-learning-assisted reasoning/i);
   assert.match(payload.reply.directAnswer, /continuous governed improvement.*accredited assessors monitoring, assessing and refining/i);
   assert.match(payload.reply.directAnswer, /accountable human quality assurance/i);
@@ -3694,6 +3945,272 @@ test("an admitted provider failure releases the lease and returns the determinis
   assert.match((await body(response)).reply.directAnswer, /no universal calendar date/i);
 });
 
+test("transient admission failures retry within one request and preserve one model lease", async () => {
+  let admissionCalls = 0;
+  let modelCalls = 0;
+  let releases = 0;
+  const waits = [];
+  const admissionRequests = [];
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "transient-admission-recovery-0001",
+    message: "How should I improve my ceiling insulation?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    modelAdmissionNow: () => 100,
+    waitBeforeModelAdmissionRetry: async (delayMs) => { waits.push(delayMs); },
+    composeAnswer: () => fixedAnswer("Inspect the accessible ceiling insulation before adding more."),
+    reserveModelCall: async (admission) => {
+      admissionCalls += 1;
+      admissionRequests.push(admission);
+      if (admissionCalls === 1) throw new Error("temporary D1 exception");
+      if (admissionCalls === 2) return { allowed: false, reason: "unavailable" };
+      return {
+        allowed: true,
+        release: async () => { releases += 1; },
+      };
+    },
+    generateAnswer: async () => {
+      modelCalls += 1;
+      return {
+        answer: fixedAnswer("Inspect accessible ceiling insulation for missing, compressed or damp sections before deciding how much to add."),
+        continuation: continuation({ activeTopic: "insulation" }),
+      };
+    },
+    requireValidatedModelForOrdinaryAdvice: true,
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(admissionCalls, 3);
+  assert.equal(modelCalls, 1);
+  assert.equal(releases, 1);
+  assert.deepEqual(waits, [40, 100]);
+  assert.equal(admissionRequests.every((admission) => admission === admissionRequests[0]), true);
+  assert.equal(admissionRequests[0].requestId, "transient-admission-recovery-0001");
+  assert.equal((await body(response)).quality.answerSource, "model");
+});
+
+test("policy admission denials never retry or reach the paid model", async (t) => {
+  for (const reason of [
+    "client_minute",
+    "global_daily_budget",
+    "duplicate_request",
+    "configuration",
+    "invalid_identity",
+  ]) {
+    await t.test(reason, async () => {
+      let admissionCalls = 0;
+      let modelCalls = 0;
+      const response = await handleEnergyAssistantRequest(request({
+        action: "ask",
+        requestId: `policy-admission-${reason}-0001`,
+        message: "How should I improve my ceiling insulation?",
+        recentTurns: [],
+        pageContext: "/surge",
+        audience: "public",
+      }), {
+        now: () => new Date(NOW),
+        waitBeforeModelAdmissionRetry: async () => {
+          throw new Error("a policy denial must not back off or retry");
+        },
+        composeAnswer: () => fixedAnswer("Deterministic advice must not be exposed in strict mode."),
+        reserveModelCall: async () => {
+          admissionCalls += 1;
+          return { allowed: false, reason };
+        },
+        generateAnswer: async () => {
+          modelCalls += 1;
+          return null;
+        },
+        requireValidatedModelForOrdinaryAdvice: true,
+      });
+
+      assert.equal(response.status, 503);
+      assert.equal(admissionCalls, 1);
+      assert.equal(modelCalls, 0);
+      assert.equal((await body(response)).error.code, "SURGE_AI_TEMPORARILY_UNAVAILABLE");
+    });
+  }
+});
+
+test("a 650 ms reservation is cut off at 400 ms and any late lease is released", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  let admissionCalls = 0;
+  let modelCalls = 0;
+  let releases = 0;
+  const responsePromise = handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "slow-admission-deadline-0001",
+    message: "How should I improve my ceiling insulation?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("Deterministic advice must not be exposed in strict mode."),
+    reserveModelCall: async () => {
+      admissionCalls += 1;
+      return new Promise((resolve) => {
+        setTimeout(() => resolve({
+          allowed: true,
+          release: async () => { releases += 1; },
+        }), 650);
+      });
+    },
+    generateAnswer: async () => {
+      modelCalls += 1;
+      return null;
+    },
+    requireValidatedModelForOrdinaryAdvice: true,
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(admissionCalls, 1);
+  t.mock.timers.tick(399);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(modelCalls, 0);
+  assert.equal(releases, 0);
+  t.mock.timers.tick(1);
+  const response = await responsePromise;
+
+  assert.equal(response.status, 503);
+  assert.equal(Date.now(), 400);
+  assert.equal(admissionCalls, 1);
+  assert.equal(modelCalls, 0);
+  assert.equal(releases, 0);
+  t.mock.timers.tick(250);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(releases, 1);
+});
+
+test("a never-settling reservation returns at the 400 ms admission deadline", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  let admissionCalls = 0;
+  let modelCalls = 0;
+  const responsePromise = handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "never-settling-admission-0001",
+    message: "How should I improve my ceiling insulation?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("Deterministic advice must not be exposed in strict mode."),
+    reserveModelCall: async () => {
+      admissionCalls += 1;
+      return new Promise(() => undefined);
+    },
+    generateAnswer: async () => {
+      modelCalls += 1;
+      return null;
+    },
+    requireValidatedModelForOrdinaryAdvice: true,
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(admissionCalls, 1);
+  t.mock.timers.tick(400);
+  const response = await responsePromise;
+
+  assert.equal(response.status, 503);
+  assert.equal(Date.now(), 400);
+  assert.equal(admissionCalls, 1);
+  assert.equal(modelCalls, 0);
+});
+
+test("temporary global in-flight admission pressure retries and recovers", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const admissionRequests = [];
+  let modelCalls = 0;
+  let releases = 0;
+  const responsePromise = handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "global-in-flight-recovery-0001",
+    message: "How should I improve my ceiling insulation?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("Inspect the accessible ceiling insulation before adding more."),
+    reserveModelCall: async (admission) => {
+      admissionRequests.push(admission);
+      if (admissionRequests.length === 1) {
+        return { allowed: false, reason: "global_in_flight", retryAfterSeconds: 1 };
+      }
+      return {
+        allowed: true,
+        release: async () => { releases += 1; },
+      };
+    },
+    generateAnswer: async () => {
+      modelCalls += 1;
+      return {
+        answer: fixedAnswer("Inspect accessible ceiling insulation for missing, compressed or damp sections before deciding how much to add."),
+        continuation: continuation({ activeTopic: "insulation" }),
+      };
+    },
+    requireValidatedModelForOrdinaryAdvice: true,
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(admissionRequests.length, 1);
+  t.mock.timers.tick(40);
+  const response = await responsePromise;
+
+  assert.equal(response.status, 200);
+  assert.equal(Date.now(), 40);
+  assert.equal(admissionRequests.length, 2);
+  assert.equal(admissionRequests[1], admissionRequests[0]);
+  assert.equal(modelCalls, 1);
+  assert.equal(releases, 1);
+  assert.equal((await body(response)).quality.answerSource, "model");
+});
+
+test("persistent global in-flight pressure exhausts bounded retries without a model call", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const admissionRequests = [];
+  let modelCalls = 0;
+  const responsePromise = handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "global-in-flight-exhaustion-0001",
+    message: "How should I improve my ceiling insulation?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("Deterministic advice must not be exposed in strict mode."),
+    reserveModelCall: async (admission) => {
+      admissionRequests.push(admission);
+      return { allowed: false, reason: "global_in_flight", retryAfterSeconds: 1 };
+    },
+    generateAnswer: async () => {
+      modelCalls += 1;
+      return null;
+    },
+    requireValidatedModelForOrdinaryAdvice: true,
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(admissionRequests.length, 1);
+  t.mock.timers.tick(40);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(admissionRequests.length, 2);
+  t.mock.timers.tick(100);
+  const response = await responsePromise;
+
+  assert.equal(response.status, 503);
+  assert.equal(Date.now(), 140);
+  assert.equal(admissionRequests.length, 3);
+  assert.equal(admissionRequests.every((admission) => admission === admissionRequests[0]), true);
+  assert.equal(modelCalls, 0);
+});
+
 test("strict evaluation mode never turns a failed or denied Sol call into an injected generic answer", async (t) => {
   for (const scenario of [
     {
@@ -3714,6 +4231,42 @@ test("strict evaluation mode never turns a failed or denied Sol call into an inj
       generateAnswer: async () => ({
         answer: fixedAnswer("Ceiling insulation should be checked before adding more roof batts."),
         continuation: continuation(),
+      }),
+      expectedModelCalls: 1,
+    },
+    {
+      name: "server rejects structured generic answer",
+      reserveModelCall: allowModelCall,
+      generateAnswer: async () => ({
+        answer: fixedAnswer("Start with the problem you notice most."),
+        presentation: {
+          answerType: "decision",
+          verdict: "Start with the problem you notice most.",
+          reason: "That is the simplest place to begin.",
+          steps: [],
+          extraDetail: "",
+          followUpQuestion: "",
+          quickReplies: [],
+        },
+        continuation: continuation(),
+      }),
+      expectedModelCalls: 1,
+    },
+    {
+      name: "server rejects injected structured window answer",
+      reserveModelCall: allowModelCall,
+      generateAnswer: async () => ({
+        answer: fixedAnswer("Seal moving-air gaps around opening windows, then add heat-shrink film and close-fitting curtains with pelmets."),
+        presentation: {
+          answerType: "decision",
+          verdict: "Start with moving-air gaps around opening windows.",
+          reason: "Heat-shrink film and close-fitting curtains then slow heat transfer through the glass.",
+          steps: ["Fit weather seals.", "Add heat-shrink film.", "Close curtains behind a pelmet."],
+          extraDetail: "Keep required ventilation openings usable.",
+          followUpQuestion: "",
+          quickReplies: [],
+        },
+        continuation: continuation({ activeTopic: "windows_glazing" }),
       }),
       expectedModelCalls: 1,
     },
@@ -3747,6 +4300,74 @@ test("strict evaluation mode never turns a failed or denied Sol call into an inj
       assert.equal("reply" in payload, false);
     });
   }
+});
+
+test("strict evaluation accepts a real post-validated model result without repeating its lexical heuristic", async () => {
+  let modelCalls = 0;
+  let providerCalls = 0;
+  let releases = 0;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "strict-post-validated-model-result-0001",
+    message: "what are some cheap ways to reduce heat loss from my windows",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("Start with real air leaks, then add a removable insulating layer and close-fitting window coverings."),
+    reserveModelCall: async () => ({
+      allowed: true,
+      release: async () => { releases += 1; },
+    }),
+    generateAnswer: async (modelRequest) => {
+      modelCalls += 1;
+      return generateSurgeModelAnswer(modelRequest, {
+        apiKey: "test-api-key",
+        enabled: true,
+        model: "gpt-5.6-sol",
+        fetch: async () => {
+          providerCalls += 1;
+          const output = {
+          answerType: "decision",
+          verdict: "Start with actual moving-air gaps, then add a low-cost insulating layer and fitted coverings.",
+          reason: "These measures address air leakage and heat transfer through the window.",
+          steps: [
+            "Fit removable weather seals around opening windows where air is moving, because stopping draughts is the cheapest immediate gain.",
+            "On suitable single glazing, clear heat-shrink window-insulation film traps still air like temporary secondary glazing. Bubble wrap uses the same idea where losing the view or daylight is acceptable.",
+            "Use close-fitting honeycomb blinds or lined curtains overlapping the frame, with a pelmet over the top gap to slow warm air circulating past cold glass. Keep opening windows and required ventilation usable.",
+          ],
+          extraDetail: "",
+          followUpQuestion: null,
+          quickReplies: [],
+          confidence: "medium",
+          coveredQuestionPartIndexes: [0],
+          state: continuation({
+            activeTopic: "windows_glazing",
+            goal: "Reduce heat loss through windows cheaply",
+            lastAnswerSummary: "Ranked seals, removable glazing layers and fitted coverings.",
+          }),
+          usedSourceIds: [],
+          };
+          return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        },
+      });
+    },
+    requireValidatedModelForOrdinaryAdvice: true,
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(modelCalls, 1);
+  assert.equal(providerCalls, 1);
+  assert.equal(releases, 1);
+  const payload = await body(response);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.quality.answerSource, "model");
+  assert.match(payload.reply.verdict, /moving-air gaps.*low-cost insulating layer.*fitted coverings/i);
+  assert.match(payload.reply.content, /heat-shrink.*bubble wrap.*pelmet/is);
 });
 
 test("dangerous questions bypass the model and keep the deterministic safety answer", async () => {
@@ -4494,6 +5115,293 @@ function completedMoisturePlannerContext(roofCondition = "good") {
     },
   }));
 }
+
+test("a saved-home door and window question keeps planner moisture first in the paid reference and accepted answer", async () => {
+  const planContext = completedMoisturePlannerContext();
+  assert.ok(planContext);
+  const message = "At my saved apartment, air comes under the front door and the single-glazed windows feel cold. I have $1,500. What should come first?";
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "saved-home-door-window-moisture-first-0001",
+    message,
+    recentTurns: [],
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    requireValidatedModelForOrdinaryAdvice: true,
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return {
+        answer: {
+          ...modelRequest.deterministicAnswer,
+          directAnswer: "Start with moisture and condensation control, then stop the front-door draught and improve the coldest single-glazed windows within the $1,500 budget.",
+          practicalSteps: [
+            "Check the bathroom exhaust clears steam and investigate persistent damp, leaks or mould.",
+            "Use a removable door snake, then fit a door-bottom seal only if the gap is confirmed.",
+            "Fit close-fitting honeycomb blinds or thermal curtains with pelmets to the coldest windows.",
+          ],
+          suggestedQuestions: [],
+          toolActions: [],
+        },
+        presentation: {
+          answerType: "starting_plan",
+          verdict: "Start with moisture and condensation control.",
+          reason: "Then use the $1,500 budget on the front-door draught and the coldest single-glazed windows.",
+          steps: [
+            "Check the bathroom exhaust clears steam and investigate persistent damp, leaks or mould.",
+            "Use a removable door snake, then fit a door-bottom seal only if the gap is confirmed.",
+            "Fit close-fitting honeycomb blinds or thermal curtains with pelmets to the coldest windows.",
+          ],
+          extraDetail: "",
+          followUpQuestion: "",
+          quickReplies: [],
+        },
+        continuation: continuation({
+          activeTopic: "comfort_fabric",
+          goal: "Prioritise moisture, the front-door draught and cold windows",
+          lastAnswerSummary: "Kept saved moisture first, then the front door and windows.",
+        }),
+      };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(observedRequest);
+  const referenceText = [
+    observedRequest.deterministicAnswer.directAnswer,
+    ...observedRequest.deterministicAnswer.practicalSteps,
+  ].join("\n");
+  assert.match(observedRequest.deterministicAnswer.directAnswer, /\$1,500[^.]*start with moisture control/i);
+  const referenceMoisture = referenceText.search(/moisture|condensation/i);
+  const referenceDoor = referenceText.search(/front-door|front door|door snake|door-bottom/i);
+  const referenceWindows = referenceText.search(/single-glazed windows|honeycomb blinds|thermal curtains/i);
+  assert.ok(referenceMoisture >= 0 && referenceMoisture < referenceDoor);
+  assert.ok(referenceDoor >= 0 && referenceDoor < referenceWindows);
+  assert.equal(observedRequest.deterministicAnswer.practicalSteps.length, 3);
+
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "model");
+  assert.match(payload.reply.verdict, /^Start with moisture and condensation control/i);
+  assert.equal(payload.reply.practicalSteps.length, 3);
+  assert.match(payload.reply.practicalSteps[1], /door snake|door-bottom/i);
+  assert.match(payload.reply.practicalSteps[2], /honeycomb blinds|thermal curtains/i);
+});
+
+test("whole-plan ranking keeps the explicit budget instead of mistaking newer quote prices for it", async () => {
+  const planContext = completedMoisturePlannerContext();
+  assert.ok(planContext);
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "saved-home-budget-versus-quotes-0001",
+    message: "My budget is $1,500. The front door still has a draught and the single-glazed windows feel cold. The door quote is $1,400 and the window-covering quote is $900. What should come first?",
+    recentTurns: [],
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return null;
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(observedRequest);
+  assert.match(observedRequest.deterministicAnswer.directAnswer, /With \$1,500 to spend/i);
+  assert.doesNotMatch(observedRequest.deterministicAnswer.directAnswer, /With \$(?:1,400|900) to spend/i);
+  const payload = await body(response);
+  assert.match(payload.reply.directAnswer, /With \$1,500 to spend/i);
+  assert.doesNotMatch(payload.reply.directAnswer, /With \$(?:1,400|900) to spend/i);
+});
+
+test("a door-first presentation cannot pass the saved moisture-priority gate", async () => {
+  const planContext = completedMoisturePlannerContext();
+  assert.ok(planContext);
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "saved-home-door-first-presentation-rejected-0001",
+    message: "At my saved apartment, air comes under the front door and the single-glazed windows feel cold. I have $1,500. What should come first?",
+    recentTurns: [],
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    requireValidatedModelForOrdinaryAdvice: true,
+    generateAnswer: async (modelRequest) => ({
+      answer: {
+        ...modelRequest.deterministicAnswer,
+        directAnswer: "Start with moisture control, then address the front door and windows.",
+      },
+      presentation: {
+        answerType: "starting_plan",
+        verdict: "Start by sealing the front-door draught.",
+        reason: "Tackle the condensation after the door and window work.",
+        steps: [
+          "Fit a door-bottom seal.",
+          "Add window coverings.",
+          "Check the bathroom moisture.",
+        ],
+        extraDetail: "",
+        followUpQuestion: "",
+        quickReplies: [],
+      },
+      continuation: continuation(),
+    }),
+  });
+
+  assert.equal(response.status, 503);
+  const payload = await body(response);
+  assert.equal(payload.ok, false);
+  assert.equal(payload.error.code, "SURGE_AI_TEMPORARILY_UNAVAILABLE");
+  assert.equal("reply" in payload, false);
+});
+
+test("the long-range saved-home top three keeps moisture, the working split, budget and ordered UI steps", async () => {
+  const planContext = completedMoisturePlannerContext();
+  assert.ok(planContext);
+  const recentTurns = [
+    { role: "user", content: "My earlier first-stage budget was $2,000." },
+    { role: "assistant", content: "I will use $2,000 until you give me a newer budget." },
+    { role: "user", content: "At my saved apartment, air comes under the front door and the single-glazed windows feel cold. I have $1,500. What should come first?" },
+    { role: "assistant", content: "Start with moisture control, then the front-door draught and windows." },
+    { role: "user", content: "My existing reverse-cycle split still heats properly, so I do not want to replace a working unit." },
+    { role: "assistant", content: "Keep the working split and use the budget on the home issues." },
+  ];
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "saved-home-top-three-ordered-0001",
+    message: "Back to my home only: give me the top three actions in order using what I told you. No jargon and no more questions.",
+    recentTurns,
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    requireValidatedModelForOrdinaryAdvice: true,
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return {
+        answer: {
+          ...modelRequest.deterministicAnswer,
+          directAnswer: "Start with moisture control. Keep the working split, and use the $1,500 budget next on the front-door draught and cold windows.",
+          practicalSteps: [
+            "Check the bathroom exhaust clears steam and investigate persistent damp, leaks or mould.",
+            "Use a removable door snake, then fit a door-bottom seal only if the gap is confirmed.",
+            "Fit close-fitting honeycomb blinds or thermal curtains with pelmets to the coldest windows.",
+          ],
+          suggestedQuestions: [],
+          toolActions: [],
+        },
+        presentation: {
+          answerType: "starting_plan",
+          verdict: "Start with moisture control.",
+          reason: "Keep the working split and use the $1,500 budget on the front door and cold windows.",
+          steps: [
+            "Check the bathroom exhaust clears steam and investigate persistent damp, leaks or mould.",
+            "Use a removable door snake, then fit a door-bottom seal only if the gap is confirmed.",
+            "Fit close-fitting honeycomb blinds or thermal curtains with pelmets to the coldest windows.",
+          ],
+          extraDetail: "",
+          followUpQuestion: "",
+          quickReplies: [],
+        },
+        continuation: continuation({
+          activeTopic: "comfort_fabric",
+          goal: "Keep the saved home's top three actions in order",
+          lastAnswerSummary: "Kept moisture first, the working split, front door and windows.",
+        }),
+      };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(observedRequest);
+  assert.match(observedRequest.deterministicAnswer.directAnswer, /\$1,500[^.]*start with moisture control/i);
+  assert.doesNotMatch(observedRequest.deterministicAnswer.directAnswer, /\$2,000/);
+  assert.match(observedRequest.deterministicAnswer.directAnswer, /keep the working reverse-cycle split/i);
+  assert.equal(observedRequest.deterministicAnswer.practicalSteps.length, 3);
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "model");
+  assert.equal(payload.reply.practicalSteps.length, 3);
+  assert.match(payload.reply.verdict, /^Start with moisture control/i);
+  assert.match(payload.reply.reason, /working split/i);
+  assert.equal(payload.reply.followUpQuestion, "");
+});
+
+test("whole-plan ranking uses the newest corrected saved-home budget", async () => {
+  const planContext = completedMoisturePlannerContext();
+  assert.ok(planContext);
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "saved-home-corrected-budget-0001",
+    message: "Back to my home only: give me the top three actions in order using what I told you. No jargon and no more questions.",
+    recentTurns: [
+      { role: "user", content: "At my saved apartment, air comes under the front door and the single-glazed windows feel cold." },
+      { role: "assistant", content: "I will retain those saved-home facts." },
+      { role: "user", content: "The budget was $2,000, but now it is $1,500." },
+      { role: "assistant", content: "Understood, the current saved-home budget is $1,500." },
+    ],
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return null;
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(observedRequest);
+  assert.match(observedRequest.deterministicAnswer.directAnswer, /With \$1,500 to spend/i);
+  assert.doesNotMatch(observedRequest.deterministicAnswer.directAnswer, /\$2,000/);
+});
+
+test("whole-plan ranking does not retain an obsolete working-split state", async () => {
+  const planContext = completedMoisturePlannerContext();
+  assert.ok(planContext);
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "saved-home-corrected-split-state-0001",
+    message: "Back to my home only: air comes under the front door, the windows are single-glazed, and correction, the split no longer heats properly. Give me the top three actions in order. No jargon and no more questions.",
+    recentTurns: [
+      { role: "user", content: "At my saved apartment, air comes under the front door and the single-glazed windows feel cold. My budget is $1,500." },
+      { role: "assistant", content: "I will use those saved-home facts." },
+      { role: "user", content: "My reverse-cycle split still heats properly, so keep it." },
+      { role: "assistant", content: "The working split does not need replacement." },
+    ],
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return null;
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(observedRequest);
+  assert.match(observedRequest.deterministicAnswer.directAnswer, /split no longer heats properly/i);
+  assert.doesNotMatch(observedRequest.deterministicAnswer.directAnswer, /keep the working reverse-cycle split/i);
+});
 
 test("a generic bills-first paid result cannot replace the moisture priority from a completed planner", async () => {
   const planContext = completedMoisturePlannerContext();
@@ -5359,6 +6267,73 @@ test("a denied model call keeps the exact cold-home follow-up useful and profile
   assert.equal(qualityEvents.length, 1);
   assert.equal(qualityEvents[0].answerSource, "deterministic");
   assertPublicReplyContract(payload);
+});
+
+test("a model-expanded goal does not append the current user message twice", async () => {
+  const firstMessage = "I feel a draught under my front door";
+  const currentMessage = "great idea, also i find it hard to keep the house warm sometimes";
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "deduplicated-expanded-goal-0001",
+    message: currentMessage,
+    recentTurns: [
+      { role: "user", content: firstMessage },
+      { role: "assistant", content: "Use a removable door snake first." },
+    ],
+    continuation: continuation({
+      activeTopic: "draughts_ventilation",
+      goal: firstMessage,
+      lastAnswerSummary: "Recommended a removable door snake.",
+      ledger: {
+        turn: 1,
+        activeDecisionId: "decision_1_draughts_ventilation",
+        subjects: [{
+          id: "saved_home",
+          kind: "saved_home",
+          label: "Saved home",
+          facts: [],
+          lastTouchedTurn: 1,
+        }],
+        decisions: [{
+          id: "decision_1_draughts_ventilation",
+          subjectIds: ["saved_home"],
+          topic: "draughts_ventilation",
+          goal: firstMessage,
+          facts: [],
+          outcomeSummary: "Recommended a removable door snake.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 1,
+        }],
+      },
+    }),
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async () => ({
+      answer: fixedAnswer("Keep the confirmed door draught in the plan, then check the other heat-loss paths."),
+      continuation: continuation({
+        activeTopic: "draughts_ventilation",
+        goal: `${firstMessage} | ${currentMessage}`,
+        lastAnswerSummary: "Connected the door draught to the wider cold-home problem.",
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  const activeDecision = payload.continuation.ledger.decisions.find((decision) => (
+    decision.id === payload.continuation.ledger.activeDecisionId
+  ));
+  assert.ok(activeDecision);
+  for (const goal of [payload.continuation.goal, activeDecision.goal]) {
+    assert.equal(goal.split(firstMessage).length - 1, 1);
+    assert.equal(goal.split(currentMessage).length - 1, 1);
+  }
+  assert.equal(payload.continuation.goal, `${firstMessage} | ${currentMessage}`);
 });
 
 test("a live-style continuation reselects the door decision after a solar detour", async () => {

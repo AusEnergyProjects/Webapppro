@@ -667,6 +667,27 @@ test("unresolved gas and electrical incidents keep immediate follow-ups determin
   assert.match(solar.directAnswer, /does not by itself mean the solar quote is a bad idea/i);
 });
 
+test("a crackling switchboard with a burning smell gets the specific electrical-emergency boundary", async () => {
+  const message = "The switchboard is crackling and I can smell burning. What should I do?";
+  const answer = composeSurgeSafetyAnswer(message);
+
+  assert.ok(answer);
+  assert.match(answer.directAnswer, /crackling or a burning smell[^.]*urgent electrical fault/i);
+  assert.match(answer.directAnswer, /keep away[^.]*leave the area if it is safe/i);
+  assert.match(answer.directAnswer, /do not touch, open or reset the switchboard/i);
+  assert.match(answer.directAnswer, /smoke, flame, fire or immediate danger[^.]*call 000/i);
+  assert.match(answer.directAnswer, /otherwise[^.]*electricity distributor[^.]*urgent licensed electrician/i);
+  assert.doesNotMatch(answer.directAnswer, /\b(?:water|dry|drying)\b/i);
+
+  const response = await handleEnergyAssistantRequest(request(message), {
+    now: () => NOW,
+    reserveModelCall: async () => ({ allowed: false }),
+  });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.reply.directAnswer, answer.directAnswer);
+});
+
 test("qualified safe clearance stops an old incident from controlling later decisions", () => {
   assert.equal(composeSurgeSafetyAnswer(
     "Does this mean the solar quote I was considering is a bad idea?",

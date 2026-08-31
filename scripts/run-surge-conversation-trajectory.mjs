@@ -63,6 +63,7 @@ const CONVERSATION_ASSERTION_TYPES = new Set([
   "valid_continuation_every_turn",
   "request_history_bounds",
   "source_policy_enforced",
+  "official_citation_requirements",
   "forbid_patterns_all_responses",
   "maximum_adjacent_normalized_similarity",
   "quick_reply_count_all_turns",
@@ -73,6 +74,7 @@ const CONVERSATION_ASSERTION_TYPES = new Set([
   "return_after_interruption",
   "forbid_patterns_turn_range",
   "property_boundary",
+  "structured_action_count",
   "long_range_recall",
   "quantity_grounding_all_turns",
   "all_turn_clauses_pass",
@@ -194,11 +196,23 @@ function validClauses(value) {
   if (!Array.isArray(value) || value.length < 1 || value.length > 12) return false;
   const ids = new Set();
   return value.every((clause) => {
-    if (!exactKeys(clause, ["id", "anyOf"])
-      || !/^[a-z0-9][a-z0-9_-]{1,79}$/u.test(clause.id)
-      || ids.has(clause.id)
-      || !validPatternList(clause.anyOf, { allowEmpty: false })) return false;
-    ids.add(clause.id);
+    const source = record(clause);
+    if (!source) return false;
+    const keys = [
+      "id",
+      "anyOf",
+      ...(Object.hasOwn(source, "target") ? ["target"] : []),
+      ...(Object.hasOwn(source, "requireAffirmed") ? ["requireAffirmed"] : []),
+    ];
+    if (!exactKeys(source, keys)
+      || !/^[a-z0-9][a-z0-9_-]{1,79}$/u.test(source.id)
+      || ids.has(source.id)
+      || !validPatternList(source.anyOf, { allowEmpty: false })
+      || (Object.hasOwn(source, "target")
+        && !["visible_answer", "first_practical_step"].includes(source.target))
+      || (Object.hasOwn(source, "requireAffirmed")
+        && source.requireAffirmed !== true)) return false;
+    ids.add(source.id);
     return true;
   });
 }
@@ -282,13 +296,49 @@ function safeFixtureValue(value, depth = 0) {
     ));
 }
 
+function validOfficialCitationCheckpoint(value) {
+  const source = record(value);
+  if (!exactKeys(source, ["turn", "minimumCount", "requiredUrls"])
+    || !boundedText(source.turn, 80)
+    || !Number.isSafeInteger(source.minimumCount)
+    || source.minimumCount < 1
+    || source.minimumCount > 8
+    || !Array.isArray(source.requiredUrls)
+    || source.requiredUrls.length < 1
+    || source.requiredUrls.length > source.minimumCount
+    || new Set(source.requiredUrls).size !== source.requiredUrls.length) return false;
+  return source.requiredUrls.every((url) => (
+    boundedText(url, 500)
+    && sanitizeSurgeCustomerOfficialUrl(url) === url
+  ));
+}
+
 function validConversationAssertion(value) {
   const source = record(value);
-  return Boolean(source)
-    && /^[a-z0-9][a-z0-9_-]{1,79}$/u.test(source.id)
-    && /^[a-z][a-z0-9_]{2,79}$/u.test(source.type)
-    && CONVERSATION_ASSERTION_TYPES.has(source.type)
-    && safeFixtureValue(source);
+  if (!source) return false;
+  if (!boundedText(source.id, 80)
+    || !/^[a-z0-9][a-z0-9_-]{1,79}$/u.test(source.id)
+    || !boundedText(source.type, 80)
+    || !/^[a-z][a-z0-9_]{2,79}$/u.test(source.type)
+    || !CONVERSATION_ASSERTION_TYPES.has(source.type)
+    || !safeFixtureValue(source)) return false;
+  if (source.type === "official_citation_requirements") {
+    return exactKeys(source, ["id", "type", "checkpoints"])
+      && Array.isArray(source.checkpoints)
+      && source.checkpoints.length >= 1
+      && source.checkpoints.length <= MAX_TRAJECTORY_TURNS
+      && source.checkpoints.every(validOfficialCitationCheckpoint)
+      && new Set(source.checkpoints.map((checkpoint) => checkpoint.turn)).size
+        === source.checkpoints.length;
+  }
+  if (source.type === "structured_action_count") {
+    return exactKeys(source, ["id", "type", "turn", "exactActionCount"])
+      && boundedText(source.turn, 80)
+      && Number.isSafeInteger(source.exactActionCount)
+      && source.exactActionCount >= 1
+      && source.exactActionCount <= 8;
+  }
+  return true;
 }
 
 export function validateSurgeConversationTrajectoryFixture(value) {
@@ -387,6 +437,19 @@ export function validateSurgeConversationTrajectoryFixture(value) {
   const turnIds = value.turns.map((turn) => turn.id);
   if (new Set(turnIds).size !== turnIds.length) {
     throw new Error("Conversation trajectory turn IDs must be unique.");
+  }
+  const knownTurnIds = new Set(turnIds);
+  const assertionReferencesKnownTurns = value.conversationAssertions.every((assertion) => {
+    if (assertion.type === "official_citation_requirements") {
+      return assertion.checkpoints.every((checkpoint) => knownTurnIds.has(checkpoint.turn));
+    }
+    if (assertion.type === "structured_action_count") {
+      return knownTurnIds.has(assertion.turn);
+    }
+    return true;
+  });
+  if (!assertionReferencesKnownTurns) {
+    throw new Error("Conversation trajectory assertions must reference a configured turn.");
   }
   const clauseIds = value.turns.flatMap((turn) => turn.clauses.map((clause) => `${turn.id}:${clause.id}`));
   if (new Set(clauseIds).size !== clauseIds.length) {
@@ -620,6 +683,40 @@ function match(value, pattern) {
   return new RegExp(pattern, "i").test(value);
 }
 
+function requiredMatchIsNegated(value, matchIndex, matchLength) {
+  const preceding = value.slice(Math.max(0, matchIndex - 140), matchIndex);
+  const affirmativeNegationPrefix = /\b(?:cannot|can['’]?t|does\s+not|doesn['’]?t|do\s+not|don['’]?t|will\s+not|won['’]?t)\s+(?:prevent|stop|block|rule\s+out)\b[^.!?;,\n]{0,60}$/iu
+    .test(preceding);
+  if (!affirmativeNegationPrefix && forbiddenMatchIsNegated(value, matchIndex)) return true;
+  const matchedText = value.slice(matchIndex, matchIndex + matchLength);
+  const following = value.slice(matchIndex + matchLength, matchIndex + matchLength + 140);
+  const precedingClause = preceding.split(/[.!?;\n]/u).at(-1) || "";
+  const followingClause = following.split(/[.!?;\n]/u)[0] || "";
+  const relevantClause = `${precedingClause}${matchedText}${followingClause}`;
+  const directlyNegatedAction = /\b(?:cannot|can['’]?t|do\s+not|don['’]?t|does\s+not|doesn['’]?t|will\s+not|won['’]?t|would\s+not|wouldn['’]?t|should\s+not|shouldn['’]?t|must\s+not|mustn['’]?t|may\s+not|might\s+not|is\s+not|isn['’]?t|are\s+not|aren['’]?t|never|no\s+longer)\s+(?:still\s+)?(?:be\s+)?(?:use(?:d|s|ing)?|suppl(?:y|ies|ied|ying)|power(?:s|ed|ing)?|generat(?:e|es|ed|ing)|remain(?:s|ed|ing)?|benefit(?:s|ed|ing)?|start|address|control|tackle)\b/iu;
+  const unavailableRelationship = /\b(?:solar\s+use|home\s+use|self[- ]consumption|use|using|suppl(?:y|ies|ied|ying)|power(?:s|ed|ing)?|generat(?:e|es|ed|ing))\b[^.!?;,\n]{0,55}\b(?:is|are|be|becomes?|remains?)\s+(?:not\s+(?:possible|available|useful|beneficial|worthwhile|allowed)|impossible|unavailable|pointless|unusable|worthless|of\s+no\s+(?:benefit|value|use))\b/iu;
+  const negativePriority = /\b(?:moisture|condensation|damp|mould|mold|bathroom\s+fan|airflow)\b[^.!?;,\n]{0,55}\b(?:is|are|should\s+be|must\s+be|would\s+be)\s+(?:(?:absolutely|definitely|certainly|clearly)\s+)?not\s+(?:the\s+)?(?:first\s+)?(?:priority|step)\b/iu;
+  if (directlyNegatedAction.test(relevantClause)
+    || unavailableRelationship.test(relevantClause)
+    || negativePriority.test(relevantClause)) {
+    return true;
+  }
+  return /^\s*(?:(?:as\s+)?(?:the\s+)?(?:first\s+)?(?:priority|step)|first)?\s*\?\s*(?:(?:absolutely|definitely|certainly|clearly|actually|of\s+course)\s+)*(?:no|not|never)\b/iu
+    .test(following);
+}
+
+function matchesRequired(value, pattern, requireAffirmed) {
+  if (!requireAffirmed) return match(value, pattern);
+  const expression = new RegExp(pattern, "ig");
+  let candidate = expression.exec(value);
+  while (candidate) {
+    if (!requiredMatchIsNegated(value, candidate.index, candidate[0].length)) return true;
+    if (!candidate[0]) expression.lastIndex += 1;
+    candidate = expression.exec(value);
+  }
+  return false;
+}
+
 function forbiddenMatchIsNegated(value, matchIndex) {
   const preceding = value.slice(Math.max(0, matchIndex - 120), matchIndex);
   const clausePrefix = preceding
@@ -627,7 +724,21 @@ function forbiddenMatchIsNegated(value, matchIndex) {
     .at(-1)
     ?.trim() || "";
   if (!clausePrefix || /\bnot only\b/iu.test(clausePrefix)) return false;
-  return /\b(?:not|never|cannot|can't|won't|shouldn't|mustn't|don't|doesn't|didn't|avoid(?:ed|ing|s)?|rather than|instead of|without|no need to|no reason to)\b[^.!?;,:\n]{0,80}$/iu.test(clausePrefix);
+  return /\b(?:not|never|no longer|cannot|can't|won't|shouldn't|mustn't|don't|doesn't|didn't|avoid(?:ed|ing|s)?|rather than|instead of|without|no need to|no reason to)\b[^.!?;,:\n]{0,80}$/iu.test(clausePrefix);
+}
+
+function forbiddenNumericMatchIsInternallyNegated(value, matchIndex, matchLength) {
+  const matchedText = value.slice(matchIndex, matchIndex + matchLength);
+  const numericMatches = [...matchedText.matchAll(/\$?\s*\d[\d,.]*/gu)];
+  const lastNumeric = numericMatches.at(-1);
+  if (!lastNumeric || lastNumeric.index === undefined) return false;
+  const beforeNumber = matchedText.slice(0, lastNumeric.index)
+    .split(/[.!?;:\n]|\b(?:but|however|although|yet)\b/iu)
+    .at(-1)
+    ?.trim() || "";
+  if (/\bnot only\b/iu.test(beforeNumber)) return false;
+  return /\b(?:not|never|no longer|isn['’]?t|wasn['’]?t|aren['’]?t|weren['’]?t|rather than|instead of)\b\s*(?:(?:the\s+)?(?:old|original|previous|earlier)\s+)?(?:(?:about|around|approximately|roughly|exactly)\s+)?$/iu
+    .test(beforeNumber);
 }
 
 function forbiddenMatchIsHistoricalContrast(value, matchIndex, matchLength) {
@@ -664,6 +775,7 @@ function matchesForbidden(value, pattern) {
   let candidate = expression.exec(value);
   while (candidate) {
     if (!forbiddenMatchIsNegated(value, candidate.index)
+      && !forbiddenNumericMatchIsInternallyNegated(value, candidate.index, candidate[0].length)
       && !forbiddenMatchIsHistoricalContrast(value, candidate.index, candidate[0].length)) return true;
     if (!candidate[0]) expression.lastIndex += 1;
     candidate = expression.exec(value);
@@ -717,9 +829,15 @@ function evaluateState(turn, continuation) {
 
 function officialLookupUnavailable(observation) {
   return observation.modelAttempted === true
-    && Boolean(observation.modelFailureCode?.trim())
-    && observation.answerSource === "deterministic"
-    && /\bcould not verify\b/i.test(`${observation.visibleAnswer}\n${observation.followUpQuestion}`);
+    && /\b(?:could not|couldn['’]t)\s+(?:be\s+)?(?:confirm(?:ed)?|verif(?:y|ied))\b/i.test(
+      `${observation.visibleAnswer}\n${observation.followUpQuestion}`,
+    )
+    && (
+      (Boolean(observation.modelFailureCode?.trim())
+        && observation.answerSource === "deterministic")
+      || (observation.officialWebLookupRequested === true
+        && observation.answerSource === "model")
+    );
 }
 
 function officialCitationEvidenceSatisfied(observation) {
@@ -762,7 +880,14 @@ export function evaluateSurgeTrajectoryTurn(turn, observation, mode) {
     .filter(Boolean)
     .join("\n");
   for (const clause of turn.clauses) {
-    if (!clause.anyOf.some((pattern) => match(answerSearchable, pattern))) failures.push(`clause:${clause.id}`);
+    const clauseSearchable = clause.target === "first_practical_step"
+      ? observation.practicalSteps?.[0] || ""
+      : answerSearchable;
+    if (!clause.anyOf.some((pattern) => matchesRequired(
+      clauseSearchable,
+      pattern,
+      clause.requireAffirmed === true,
+    ))) failures.push(`clause:${clause.id}`);
   }
   for (const pattern of turn.forbiddenPatterns) {
     if (matchesForbidden(searchable, pattern)) failures.push(`forbidden:${pattern}`);
@@ -862,6 +987,12 @@ async function runTurn(turn, index, fixture, state, options) {
   const reply = record(payload?.reply) || {};
   const continuation = boundedContinuation(payload?.continuation);
   const visibleAnswer = safeText(surgeVisibleAnswerFromReply(reply));
+  const practicalSteps = Array.isArray(reply.practicalSteps)
+    ? reply.practicalSteps
+      .map((step) => safeText(step, 500).trim())
+      .filter(Boolean)
+      .slice(0, 8)
+    : [];
   const replyCitations = Array.isArray(reply.citations) ? reply.citations : [];
   const officialCitationUrls = replyCitations
     .map((citation) => sanitizeSurgeCustomerOfficialUrl(record(citation)?.url))
@@ -876,9 +1007,8 @@ async function runTurn(turn, index, fixture, state, options) {
     visibleAnswer,
     directAnswer: safeText(reply.directAnswer),
     followUpQuestion: safeText(reply.followUpQuestion, 500),
-    practicalStepCount: Array.isArray(reply.practicalSteps)
-      ? reply.practicalSteps.filter((step) => typeof step === "string" && step.trim()).length
-      : 0,
+    practicalSteps,
+    practicalStepCount: practicalSteps.length,
     quickReplyCount: Array.isArray(reply.quickReplies) ? reply.quickReplies.length : 0,
     citationCount: replyCitations.length,
     officialCitationUrls,
@@ -1301,6 +1431,22 @@ export function evaluateSurgeConversationAssertions(fixture, observations, { mod
       }
       continue;
     }
+    if (assertion.type === "official_citation_requirements") {
+      if (mode === "scripted") continue;
+      for (const checkpoint of assertion.checkpoints) {
+        const observation = observationsByTurn.get(checkpoint.turn);
+        if (!observation) continue;
+        const urls = Array.isArray(observation.officialCitationUrls)
+          ? observation.officialCitationUrls
+          : [];
+        if (!Number.isSafeInteger(observation.citationCount)
+          || observation.citationCount < checkpoint.minimumCount
+          || checkpoint.requiredUrls.some((url) => !urls.includes(url))) {
+          fail("official_citation_relevance", checkpoint.turn);
+        }
+      }
+      continue;
+    }
     if (assertion.type === "forbid_patterns_all_responses") {
       for (const observation of observations) {
         if (assertion.patterns.some((pattern) => matchesForbidden(observationText(observation), pattern))) {
@@ -1422,6 +1568,13 @@ export function evaluateSurgeConversationAssertions(fixture, observations, { mod
         if (!subjectIds.includes("saved_home") || subjectIds.includes("mums_home")) {
           fail("saved_home_return", assertion.savedHomeReturnTurn);
         }
+      }
+      continue;
+    }
+    if (assertion.type === "structured_action_count") {
+      const observation = observationsByTurn.get(assertion.turn);
+      if (observation && observation.practicalStepCount !== assertion.exactActionCount) {
+        fail("structured_action_count", assertion.turn);
       }
       continue;
     }

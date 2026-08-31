@@ -42,9 +42,10 @@
       "sourcePolicy": "model_required",
       "clauses": [
         { "id": "direct-priority", "anyOf": ["\\bstart\\b", "\\bfirst\\b", "\\bpriority\\b"] },
-        { "id": "uses-home-context", "anyOf": ["condensation|moisture", "draught|draft", "single[- ]glaz|window", "blind|curtain", "cold|warm"] }
+        { "id": "saved-moisture-priority-first", "anyOf": ["^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?(?:(?:For|With)[^.!?]{0,80}[,.]\\s*)?(?:Start|First)(?:\\s+by)?\\s+(?:with\\s+)?(?:checking\\s+)?(?:the\\s+)?(?:moisture|condensation|damp|mould|mold|bathroom fan|airflow)", "^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?(?:(?:For|With)[^.!?]{0,80}[,.]\\s*)?(?:Tackle|Address)\\s+(?:the\\s+)?(?:moisture|condensation|damp|mould|mold|bathroom fan|airflow)\\s+first\\b", "^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?(?:(?:Your|The)\\s+)?first\\s+(?:priority|step)\\s+(?:is|should be)\\s+(?:to\\s+)?(?:(?:check|address|control|tackle)\\s+)?(?:the\\s+)?(?:moisture|condensation|damp|mould|mold|bathroom fan|airflow)", "^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?(?:Moisture|Condensation|Damp|Mould|Mold|The bathroom fan|Check (?:the )?bathroom fan|Control moisture|Address (?:the )?(?:moisture|condensation))"], "target": "first_practical_step", "requireAffirmed": true },
+        { "id": "uses-other-home-context", "anyOf": ["draught|draft", "single[- ]glaz|window", "blind|curtain", "cold|warm"] }
       ],
-      "forbiddenPatterns": ["staged whole-home diagnosis", "affected room or major end use", "what(?: is|'s) your postcode", "do you own or rent"],
+      "forbiddenPatterns": ["staged whole-home diagnosis", "affected room or major end use", "what(?: is|'s) your postcode", "do you own or rent", "^(?:(?!moisture|condensation|damp|mould|mold)[\\s\\S]){0,220}(?:front[- ]door|door snake|door seal|draught|draft|single[- ]glaz|window|blind|curtain)[\\s\\S]{0,240}(?:moisture|condensation|damp|mould|mold)"],
       "maxWords": 150,
       "maxParagraphs": 5,
       "maxQuestions": 0,
@@ -61,7 +62,7 @@
       "sourcePolicy": "model_required",
       "clauses": [
         { "id": "explains-prior-recommendation", "anyOf": ["because|means|helps|targets|reduces|stops|protects|avoids|prevents|comes first|can affect|damage|low-cost"] },
-        { "id": "stays-on-home-problem", "anyOf": ["condensation|moisture|draught|draft|window|blind|curtain|cold|warm"] }
+        { "id": "explains-moisture-first", "anyOf": ["(?:condensation|moisture|damp|mould|mold)[^.!?]{0,100}(?:air quality|\\b(?:damag|health|wors|source|caus|dry|ventilat|control|fix)\\w*\\b)", "(?:air quality|\\b(?:damag|health|wors|source|caus|dry|ventilat|control|fix)\\w*\\b)[^.!?]{0,100}(?:condensation|moisture|damp|mould|mold)"] }
       ],
       "forbiddenPatterns": ["tell me about your home", "what are you referring to", "staged whole-home diagnosis"],
       "maxWords": 80,
@@ -417,7 +418,7 @@
         { "id": "covers-solar", "anyOf": ["solar.*(?:later|approval|strata|roof|deposit)", "deposit.*solar"] },
         { "id": "covers-working-split", "anyOf": ["keep.*split", "do not replace.*split", "don't replace.*split", "split.*still works", "split.*still heats", "existing (?:unit|split).*(?:heat|working)", "existing reverse[- ]cycle air conditioner works", "replacing a working split"] }
       ],
-      "forbiddenPatterns": ["replace the split first", "solar first", "affected room or major end use"],
+      "forbiddenPatterns": ["replace the split first", "solar first", "affected room or major end use", "(?:under[- ]?)?\\$\\s*2,?000"],
       "maxWords": 150,
       "maxParagraphs": 5,
       "maxQuestions": 0,
@@ -473,7 +474,7 @@
       "sourcePolicy": "model_required",
       "clauses": [
         { "id": "zero-export-meaning", "anyOf": ["zero export|cannot send|can't send|does not send|doesn't send"] },
-        { "id": "solar-still-useful", "anyOf": ["(?:solar|system|generation)[^.!?\\n]{0,60}(?:generate|supply|power)[^.!?\\n]{0,35}(?:home|household)", "(?:solar|system|generation)[^.!?\\n]{0,60}(?:reduce|lower)[^.!?\\n]{0,35}(?:bills?|grid imports?)", "home(?:['’]s)? immediate use", "self[- ]consumption", "reduce[^.!?\\n]{0,35}imports"] }
+        { "id": "solar-still-useful", "anyOf": ["(?:solar|system|generation|panels?|array)[^.!?\\n]{0,60}(?:generate|supply|power)[^.!?\\n]{0,35}(?:home|household)", "(?:solar|system|generation)[^.!?\\n]{0,60}(?:reduce|lower)[^.!?\\n]{0,35}(?:bills?|grid imports?)", "home(?:['’]s)? immediate use", "self[- ]consumption", "reduce[^.!?\\n]{0,35}imports"], "requireAffirmed": true }
       ],
       "forbiddenPatterns": ["solar is pointless", "must export", "battery required", "your apartment", "(?:cannot|can['’]?t|do not|don['’]?t|will not|won['’]?t|never)\\s+use\\s+it\\s+directly", "not\\s+still\\s+(?:useful|sensible|worthwhile)", "home[^.!?]{0,30}(?:cannot|can['’]?t)[^.!?]{0,30}use[^.!?]{0,40}(?:solar|array|output|generation)", "home[^.!?]{0,30}(?:can|may|will)[^.!?]{0,20}(?:not|never|no longer)[^.!?]{0,20}use[^.!?]{0,40}(?:solar|array|output|generation)", "(?:solar|system|generation)[^.!?]{0,35}(?:cannot|can['’]?t|does not|doesn['’]?t|may not|will not|won['’]?t|never|no longer)[^.!?]{0,35}(?:generate|supply|power)[^.!?]{0,35}(?:home|household)"],
       "maxWords": 90,
@@ -628,7 +629,7 @@
         { "id": "own-home-verdict", "anyOf": ["blind|window covering|single[- ]glaz|cold"] },
         { "id": "working-system-context", "anyOf": ["working split|split.*works|split.*heats properly|keep.*split|not replace.*split|replacing.*not justified|existing.*(?:still )?(?:heats|works)|new split.*(?:only|lower priority).*existing.*(?:cannot|can't|faulty|poorly sized)"] }
       ],
-      "forbiddenPatterns": ["Mum's", "her bedroom", "gas heater", "postcode 3073"],
+      "forbiddenPatterns": ["Mum's", "her bedroom", "gas heater", "postcode 3073", "(?:under[- ]?)?\\$\\s*2,?000"],
       "maxWords": 110,
       "maxParagraphs": 3,
       "maxQuestions": 0,
@@ -999,13 +1000,13 @@
       "message": "Back to my home, not Mum's: based on my saved answers and what I told you earlier, give me the top three things to do in order. No jargon and no more questions.",
       "sourcePolicy": "model_required",
       "clauses": [
-        { "id": "retains-moisture-first-priority", "anyOf": ["^(?:For[^.!?]{0,80}[,.]\\s*)?(?:Start|First)(?:\\s+by)?\\s+(?:with\\s+)?(?:checking\\s+)?(?:the\\s+)?(?:moisture|condensation|bathroom fan|airflow)", "^(?:Moisture|Condensation|The bathroom fan|Check (?:the )?bathroom fan|Control moisture|Address (?:the )?(?:moisture|condensation))"] },
+        { "id": "retains-moisture-first-priority", "anyOf": ["^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?(?:(?:For|With)[^.!?]{0,80}[,.]\\s*)?(?:Start|First)(?:\\s+by)?\\s+(?:with\\s+)?(?:checking\\s+)?(?:the\\s+)?(?:moisture|condensation|damp|mould|mold|bathroom fan|airflow)", "^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?(?:(?:For|With)[^.!?]{0,80}[,.]\\s*)?(?:Tackle|Address)\\s+(?:the\\s+)?(?:moisture|condensation|damp|mould|mold|bathroom fan|airflow)\\s+first\\b", "^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?(?:(?:Your|The)\\s+)?first\\s+(?:priority|step)\\s+(?:is|should be)\\s+(?:to\\s+)?(?:(?:check|address|control|tackle)\\s+)?(?:the\\s+)?(?:moisture|condensation|damp|mould|mold|bathroom fan|airflow)", "^(?:\\s*(?:[-*•]|\\(?1[.)])\\s*)?(?:Moisture|Condensation|Damp|Mould|Mold|The bathroom fan|Check (?:the )?bathroom fan|Control moisture|Address (?:the )?(?:moisture|condensation))"], "target": "first_practical_step", "requireAffirmed": true },
         { "id": "uses-latest-budget", "anyOf": ["\\$\\s*1,?500"] },
         { "id": "door-draught-memory", "anyOf": ["front door|door snake|door seal|under the door|door draught|door draft"] },
         { "id": "cold-window-memory", "anyOf": ["honeycomb|thermal curtain|window covering|single[- ]glaz"] },
-        { "id": "working-split-or-moisture-memory", "anyOf": ["keep.*split|working split|split.*works|bathroom fan|airflow|condensation|moisture"] }
+        { "id": "working-split-memory", "anyOf": ["keep.*split|working split|split.*works|split.*heats properly|do not replace.*split|don't replace.*split|reverse[- ]cycle (?:unit|air conditioner)[^.!?]{0,55}(?:still )?(?:heats|works)(?: properly)?"] }
       ],
-      "forbiddenPatterns": ["Mum|3073|gas heater|her bedroom|replace the split|solar first|staged diagnosis|affected room or major end use", "(?:under[- ]?)?\\$\\s*2,?000"],
+      "forbiddenPatterns": ["Mum|3073|gas heater|her bedroom|replace the split|solar first|staged diagnosis|affected room or major end use", "(?:under[- ]?)?\\$\\s*2,?000", "^(?:(?!moisture|condensation|damp|mould|mold)[\\s\\S]){0,220}(?:front[- ]door|door snake|door seal|draught|draft)[\\s\\S]{0,240}(?:moisture|condensation|damp|mould|mold)", "\\b(?:psychrometric|hygrothermal|envelope[- ]infiltration|(?:conductive\\s+)?u[- ]value|thermal transmittance)\\b"],
       "maxWords": 120,
       "maxParagraphs": 5,
       "maxQuestions": 0,
@@ -1069,7 +1070,8 @@
         "Name the exact home-energy decision",
         "I found a related current official source",
         "For the supplied Victoria owner context",
-        "Surge AI provides general home-energy guidance"
+        "Surge AI provides general home-energy guidance",
+        "\\b(?:internal|private|proprietary|confidential)\\s+(?:source(?:s| pack)?|document(?:s)?|reference(?:s)?|knowledge base|corpus|file(?:s)?|handbook|training data)\\b"
       ]
     },
     {
@@ -1150,12 +1152,13 @@
       "type": "long_range_recall",
       "turn": "t50-long-range-home-synthesis",
       "requiredSemanticGroups": [
+        ["moisture", "condensation", "damp", "mould", "mold", "bathroom fan", "airflow"],
         ["front door", "door snake", "door seal", "door draught", "door draft"],
         ["honeycomb", "thermal curtain", "window covering", "single glazed"],
-        ["working split", "keep the split", "bathroom fan", "condensation", "moisture"],
+        ["working split", "keep the split", "split works", "split heats properly", "do not replace the split", "don't replace the split", "reverse[- ]cycle (?:unit|air conditioner)[^.!?]{0,55}(?:still )?(?:heats|works)(?: properly)?"],
         ["\\$\\s*1,?500"]
       ],
-      "forbidden": ["Mum", "3073", "gas heater", "replace the split", "solar first", "(?:under[- ]?)?\\$\\s*2,?000"],
+      "forbidden": ["Mum", "3073", "gas heater", "replace the split", "solar first"],
       "exactActionCount": 3,
       "maximumQuestions": 0
     },

@@ -261,70 +261,105 @@ async function handle(request: Request) {
   const resolveGroundedAnswer = database
     ? createSurgeGroundedProductGuidanceResolver(database)
     : undefined;
-  let reserveModelCall: (
-    request: SurgeModelAdmissionRequest,
-  ) => Promise<SurgeModelCallReservation> = async () => deniedReservation();
-  try {
-    const guardEnvironment = usageGuardEnvironment();
-    const identity = await resolveSurgeClientIdentity(request, {
-      secret: guardEnvironment[SURGE_USAGE_GUARD_ENV.secret],
-      production: guardEnvironment.NODE_ENV === "production",
-    });
-    setCookie = identity.setCookie;
-    if (identity.ready) {
-      try {
-        const usageDatabase = database;
-        if (!usageDatabase) throw new Error("Surge database is unavailable.");
-        const usageGuard = createSharedSurgeUsageGuard({
-          env: guardEnvironment,
-          getDatabase: () => usageDatabase,
-        });
-        reserveModelCall = async ({ requestId, estimatedMicroUsd }) => {
-          try {
-            const reservation = await usageGuard.reserve({
-              clientKey: identity.clientKey,
-              networkKey: identity.networkKey,
-              requestKey: requestId,
-              estimatedMicroUsd,
-            });
-            if (!reservation.allowed) {
-              console.warn("Surge model admission was denied.", {
-                ...requestLogContext(requestId),
-                reason: reservation.reason,
-                ...(reservation.retryAfterSeconds
-                  ? { retryAfterSeconds: reservation.retryAfterSeconds }
-                  : {}),
-              });
-            }
-            return reservation;
-          } catch {
-            console.warn("Surge model admission was unavailable.", {
-              ...requestLogContext(requestId),
-              reason: "reservation_unavailable",
-            });
-            return deniedReservation("unavailable");
-          }
-        };
-      } catch {
-        console.warn("Surge model admission was unavailable.", {
-          ...requestLogContext(requestId),
-          reason: "guard_setup_failed",
-        });
-        reserveModelCall = async () => deniedReservation();
-      }
-    } else {
-      console.warn("Surge model admission was unavailable.", {
+  const guardEnvironment = usageGuardEnvironment();
+  const identitySecret = guardEnvironment[SURGE_USAGE_GUARD_ENV.secret];
+  let identity: Awaited<ReturnType<typeof resolveSurgeClientIdentity>> | null = null;
+  let usageGuard: ReturnType<typeof createSharedSurgeUsageGuard> | null = null;
+  const prepareAdmissionIdentity = async (): Promise<SurgeModelCallReservation | null> => {
+    if (identity?.ready) return null;
+    if (!identitySecret || identitySecret.length < 32) {
+      console.warn("Surge model admission was denied.", {
         ...requestLogContext(requestId),
         reason: "identity_not_ready",
       });
+      return deniedReservation("configuration");
     }
-  } catch {
-    console.warn("Surge model admission was unavailable.", {
-      ...requestLogContext(requestId),
-      reason: "identity_resolution_failed",
-    });
-    reserveModelCall = async () => deniedReservation();
-  }
+    try {
+      const candidate = await resolveSurgeClientIdentity(request, {
+        secret: identitySecret,
+        production: guardEnvironment.NODE_ENV === "production",
+      });
+      setCookie = candidate.setCookie || setCookie;
+      if (!candidate.ready) {
+        console.warn("Surge model admission was denied.", {
+          ...requestLogContext(requestId),
+          reason: "identity_not_ready",
+        });
+        return deniedReservation("invalid_identity");
+      }
+      identity = candidate;
+      return null;
+    } catch {
+      console.warn("Surge model admission was unavailable.", {
+        ...requestLogContext(requestId),
+        reason: "identity_resolution_failed",
+      });
+      return deniedReservation("unavailable");
+    }
+  };
+  const reserveModelCall: (
+    admission: SurgeModelAdmissionRequest,
+  ) => Promise<SurgeModelCallReservation> = async ({ requestId, estimatedMicroUsd }) => {
+    const identityDenial = await prepareAdmissionIdentity();
+    if (identityDenial) return identityDenial;
+    if (!database) {
+      try {
+        database = getD1();
+      } catch {
+        console.warn("Surge model admission was unavailable.", {
+          ...requestLogContext(requestId),
+          reason: "database_unavailable",
+        });
+        return deniedReservation("unavailable");
+      }
+    }
+    try {
+      const usageDatabase = database;
+      if (!usageDatabase) return deniedReservation("unavailable");
+      usageGuard ||= createSharedSurgeUsageGuard({
+        env: guardEnvironment,
+        getDatabase: () => usageDatabase,
+      });
+    } catch {
+      usageGuard = null;
+      console.warn("Surge model admission was unavailable.", {
+        ...requestLogContext(requestId),
+        reason: "guard_setup_failed",
+      });
+      return deniedReservation("unavailable");
+    }
+    try {
+      const reservation = await usageGuard.reserve({
+        clientKey: identity!.clientKey,
+        networkKey: identity!.networkKey,
+        requestKey: requestId,
+        estimatedMicroUsd,
+      });
+      if (!reservation.allowed) {
+        console.warn(
+          reservation.reason === "unavailable"
+            ? "Surge model admission was unavailable."
+            : "Surge model admission was denied.",
+          {
+            ...requestLogContext(requestId),
+            reason: reservation.reason,
+            ...(reservation.retryAfterSeconds
+              ? { retryAfterSeconds: reservation.retryAfterSeconds }
+              : {}),
+          },
+        );
+      }
+      return reservation;
+    } catch {
+      usageGuard = null;
+      console.warn("Surge model admission was unavailable.", {
+        ...requestLogContext(requestId),
+        reason: "reservation_unavailable",
+      });
+      return deniedReservation("unavailable");
+    }
+  };
+  await prepareAdmissionIdentity();
 
   try {
     return withSetCookie(

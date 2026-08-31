@@ -284,6 +284,32 @@ test("an official-link request remains attached to the active support decision",
   );
 });
 
+test("combining a model-expanded active goal is segment-idempotent", () => {
+  const firstMessage = "I feel a draught under my front door";
+  const currentMessage = "great idea, also i find it hard to keep the house warm sometimes";
+  let current = recordLedgerTurn(emptySurgeConversationState(), {
+    message: firstMessage,
+    activeTopic: "draughts_ventilation",
+    goal: firstMessage,
+    answerSummary: "Recommended a removable door snake.",
+  });
+  const decisionId = current.ledger.activeDecisionId;
+
+  current = recordLedgerTurn(current, {
+    message: currentMessage,
+    activeTopic: "comfort_fabric",
+    goal: `${firstMessage} | ${currentMessage}`,
+    answerSummary: "Connected the door draught to the wider cold-home problem.",
+    intent: "contextual_follow_up",
+  });
+
+  const decision = current.ledger.decisions.find((candidate) => candidate.id === decisionId);
+  assert.ok(decision);
+  assert.equal(decision.goal, `${firstMessage} | ${currentMessage}`);
+  assert.equal(decision.goal.split(firstMessage).length - 1, 1);
+  assert.equal(decision.goal.split(currentMessage).length - 1, 1);
+});
+
 test("a topic noun with an explicit reference still uses the recent decision context", () => {
   const turns = [
     { role: "user", content: "The battery quote is $12,000 for 10 kWh and claims $700 yearly savings." },
@@ -830,6 +856,171 @@ test("structured ledger keeps saved-home and Mum property facts and decisions se
   assert.notEqual(savedDecision.id, mumsDecision.id);
   assert.equal(savedDecision.subjectIds.includes("mums_home"), false);
   assert.equal(mumsDecision.subjectIds.includes("saved_home"), false);
+});
+
+test("planner facts copied through model state retain plan provenance in later decisions", () => {
+  const plannerBudget = { key: "first_stage_budget", value: "Under $2,000" };
+  let current = recordLedgerTurn(emptySurgeConversationState(), {
+    message: "I have $1,500. Should I choose blinds, a solar deposit or a new split?",
+    activeTopic: "general",
+    goal: "Choose the best use of my $1,500",
+    answerSummary: "Use the $1,500 for window coverings while the split still works.",
+    planFacts: [plannerBudget],
+    facts: [{ key: "budget", value: "$1,500" }],
+  });
+  current = recordLedgerTurn(current, {
+    message: "Different question: honeycomb blinds are $1,400 and thermal curtains are $900 installed.",
+    activeTopic: "glazing_shading",
+    goal: "Compare the $1,400 and $900 window-covering quotes",
+    answerSummary: "The $900 curtains offer better value if they include pelmets.",
+    intent: "topic_change",
+    planFacts: [plannerBudget],
+    facts: [plannerBudget],
+  });
+  const firstCopiedTurn = current.ledger.decisions
+    .find((decision) => decision.topic === "glazing_shading")
+    ?.facts.find((fact) => fact.key === "first_stage_budget")?.updatedTurn;
+  current = recordLedgerTurn(current, {
+    message: "Same five-year warranty. I mostly care about winter cold, not looks.",
+    activeTopic: "glazing_shading",
+    goal: "Choose between the two window-covering quotes for winter cold",
+    answerSummary: "Keep the lower-cost close-fitting curtains ahead of the dearer blinds.",
+    intent: "contextual_follow_up",
+    planFacts: [plannerBudget],
+    facts: [plannerBudget],
+  });
+
+  const explicitBudget = current.ledger.decisions
+    .flatMap((decision) => decision.facts)
+    .find((fact) => fact.key === "budget" && fact.value === "$1,500");
+  const copiedPlannerBudget = current.ledger.decisions
+    .find((decision) => decision.topic === "glazing_shading")
+    ?.facts.find((fact) => fact.key === "first_stage_budget");
+
+  assert.equal(explicitBudget?.source, "chat");
+  assert.equal(copiedPlannerBudget?.value, "Under $2,000");
+  assert.equal(copiedPlannerBudget?.source, "plan");
+  assert.equal(firstCopiedTurn, 2);
+  assert.equal(copiedPlannerBudget?.updatedTurn, firstCopiedTurn);
+
+  current = recordLedgerTurn(current, {
+    message: "Change my budget to under $2,000.",
+    activeTopic: "general",
+    goal: "Change my budget to under $2,000",
+    answerSummary: "The current budget is now under $2,000.",
+    intent: "topic_change",
+    planFacts: [plannerBudget],
+    facts: [plannerBudget],
+  });
+  const explicitReplacement = current.ledger.decisions
+    .find((decision) => decision.id === current.ledger.activeDecisionId)
+    ?.facts.find((fact) => fact.key === "first_stage_budget");
+  assert.equal(explicitReplacement?.source, "chat");
+  assert.equal(explicitReplacement?.updatedTurn, 4);
+});
+
+test("an exact chat budget cannot promote a wider planner range to chat provenance", () => {
+  const plannerBudget = { key: "first_stage_budget", value: "$2,000 to $10,000" };
+  const current = recordLedgerTurn(emptySurgeConversationState(), {
+    message: "My budget is $2,000.",
+    activeTopic: "general",
+    goal: "Use my $2,000 budget",
+    planFacts: [plannerBudget],
+    facts: [
+      plannerBudget,
+      { key: "budget", value: "$2,000" },
+    ],
+  });
+  const decision = current.ledger.decisions.find((candidate) => (
+    candidate.id === current.ledger.activeDecisionId
+  ));
+
+  assert.deepEqual(decision?.facts.find((fact) => fact.key === "first_stage_budget"), {
+    ...plannerBudget,
+    source: "plan",
+    updatedTurn: 1,
+  });
+  assert.deepEqual(decision?.facts.find((fact) => fact.key === "budget"), {
+    key: "budget",
+    value: "$2,000",
+    source: "chat",
+    updatedTurn: 1,
+  });
+
+  const explicitRange = recordLedgerTurn(emptySurgeConversationState(), {
+    message: "My budget is between $2,000 and $10,000.",
+    activeTopic: "general",
+    goal: "Plan within my stated budget range",
+    planFacts: [plannerBudget],
+    facts: [plannerBudget],
+  });
+  assert.equal(
+    explicitRange.ledger.decisions[0].facts
+      .find((fact) => fact.key === "first_stage_budget")?.source,
+    "chat",
+  );
+});
+
+test("retained provenance stays inside the selected subject while same-home facts remain durable", () => {
+  const savedPlanFacts = [{ key: "postcode", value: "3000" }];
+  let sameHome = recordLedgerTurn(emptySurgeConversationState(), {
+    message: "For my saved home, I have $1,500 to spend on comfort.",
+    activeTopic: "comfort_fabric",
+    goal: "Use the saved home's $1,500 comfort budget",
+    planFacts: savedPlanFacts,
+    facts: [{ key: "budget", value: "$1,500" }],
+  });
+  sameHome = recordLedgerTurn(sameHome, {
+    message: "Different question for my saved home: should I fix the cold windows first?",
+    activeTopic: "glazing_shading",
+    goal: "Choose the saved home's first window action",
+    intent: "topic_change",
+    planFacts: savedPlanFacts,
+    facts: [{ key: "budget", value: "$1,500" }],
+  });
+  const retainedSameHomeBudget = sameHome.ledger.decisions
+    .find((decision) => decision.id === sameHome.ledger.activeDecisionId)
+    ?.facts.find((fact) => fact.key === "budget");
+  assert.deepEqual(retainedSameHomeBudget, {
+    key: "budget",
+    value: "$1,500",
+    source: "chat",
+    updatedTurn: 1,
+  });
+
+  let separateHomes = recordLedgerTurn(emptySurgeConversationState(), {
+    message: "Using my saved home details, should I improve the cold windows?",
+    activeTopic: "glazing_shading",
+    goal: "Improve the saved home's cold windows",
+    planFacts: savedPlanFacts,
+  });
+  separateHomes = recordLedgerTurn(separateHomes, {
+    message: "Mum's home budget is $1,500 for a new split system.",
+    activeTopic: "rcac",
+    goal: "Assess Mum's $1,500 heating budget",
+    intent: "topic_change",
+    facts: [{ key: "budget", value: "$1,500" }],
+  });
+  separateHomes = recordLedgerTurn(separateHomes, {
+    message: "Back to my saved home: should the cold windows still come first?",
+    activeTopic: "glazing_shading",
+    goal: "Choose the saved home's first window action",
+    intent: "topic_change",
+    planFacts: savedPlanFacts,
+    facts: [{ key: "budget", value: "$1,500" }],
+  });
+  const savedHomeDecision = separateHomes.ledger.decisions
+    .find((decision) => decision.id === separateHomes.ledger.activeDecisionId);
+  const unsupportedSavedHomeBudget = savedHomeDecision?.facts
+    .find((fact) => fact.key === "budget");
+
+  assert.deepEqual(savedHomeDecision?.subjectIds, ["saved_home"]);
+  assert.deepEqual(unsupportedSavedHomeBudget, {
+    key: "budget",
+    value: "$1,500",
+    source: "derived",
+    updatedTurn: 3,
+  });
 });
 
 test("a postcode embedded in the saved-home phrase survives a separate Mum-home detour", () => {

@@ -5,8 +5,9 @@ import {
   ENERGY_ASSISTANT_TOPICS,
   ENERGY_ASSISTANT_VOLATILITY_CLASSES,
 } from "../src/data/energy-assistant-knowledge.ts";
+import { searchEnergyAssistantKnowledge } from "../src/lib/energy-assistant.ts";
 
-const REVIEW_DAY = "2026-08-22";
+const REVIEW_DAY = "2026-09-01";
 const PROHIBITED_RUNTIME_HOSTS = [
   "choice.com.au",
   "drkarl.com",
@@ -36,6 +37,7 @@ const OFFICIAL_RUNTIME_HOSTS = new Set([
   "www.cbs.sa.gov.au",
   "www.energy.gov.au",
   "www.energy.nsw.gov.au",
+  "www.energy.vic.gov.au",
   "www.energysafe.vic.gov.au",
   "www.energymadeeasy.gov.au",
   "www.energysustainabilityschemes.nsw.gov.au",
@@ -57,8 +59,8 @@ const OFFICIAL_RUNTIME_HOSTS = new Set([
   "moneysmart.gov.au",
 ]);
 
-test("runtime knowledge is a 111-source official Australian corpus", () => {
-  assert.equal(ENERGY_ASSISTANT_KNOWLEDGE.length, 111);
+test("runtime knowledge is a 115-source official Australian corpus", () => {
+  assert.equal(ENERGY_ASSISTANT_KNOWLEDGE.length, 115);
   assert.deepEqual(
     [...new Set(ENERGY_ASSISTANT_KNOWLEDGE.map((source) => source.topic))].sort(),
     [...ENERGY_ASSISTANT_TOPICS].sort(),
@@ -189,6 +191,7 @@ test("official corpus covers every required Australian decision boundary", () =>
     "cer-rooftop-solar-trade-requirements",
     "cer-solar-battery-requirements",
     "cer-solar-battery-inspection-checklist",
+    "veu-heating-cooling-discounts",
     "veu-water-space-activity-guide-v3-19",
     "nsw-ess-rule-current-2026",
     "nsw-pdrs-rule-current-2026",
@@ -268,6 +271,24 @@ test("question-down facts are available locally without publisher referrals", ()
   assert.match(battery, /dwelling that is lived in/);
   assert.match(battery, /sheds or bore pumps, are not eligible/);
   assert.match(battery, /approved-list status is only one requirement/);
+});
+
+test("Victorian heating and cooling support uses the consumer page without displacing activity evidence", () => {
+  const consumer = searchEnergyAssistantKnowledge(
+    "Which Victorian support applies if I replace a gas heater with reverse-cycle air conditioning?",
+    { asOf: "2026-09-01", audience: "household", limit: 6 },
+  );
+  assert.equal(consumer[0]?.source.id, "veu-heating-cooling-discounts");
+  assert.equal(
+    consumer[0]?.source.url,
+    "https://www.energy.vic.gov.au/victorian-energy-upgrades/products/heating-and-cooling-discounts",
+  );
+
+  const activityEvidence = searchEnergyAssistantKnowledge(
+    "Which current VEEC activity guide and invoice evidence should a trade use?",
+    { asOf: "2026-09-01", audience: "trade", limit: 6 },
+  );
+  assert.equal(activityEvidence[0]?.source.id, "veu-water-space-activity-guide-v3-19");
 });
 
 test("whole-of-home teaching facts explain causes, trade-offs and safe next checks", () => {
