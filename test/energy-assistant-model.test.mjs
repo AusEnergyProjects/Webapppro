@@ -2082,6 +2082,86 @@ test("window-moisture advice may explain the comfort benefit without triggering 
   assert.equal(result.answer.directAnswer, candidate);
 });
 
+test("a heat-loss clarification may explain that the existing air conditioner works harder without permitting an upgrade pivot", async () => {
+  const message = "I don't get what you mean by heat loss. Say it normally.";
+  const continuation = state({
+    activeTopic: "general",
+    goal: "Where should I start based on the answers I already gave you?",
+    facts: [
+      { key: "comfort_concerns", value: "Too cold in cool weather, condensation, damp or mould" },
+    ],
+    lastAnswerSummary: "Moisture control comes first before sealing gaps or spending on window upgrades.",
+    ledger: {
+      turn: 2,
+      activeDecisionId: "decision_1_general",
+      subjects: [{
+        id: "saved_home",
+        kind: "saved_home",
+        label: "Saved home",
+        facts: [],
+        lastTouchedTurn: 2,
+      }],
+      decisions: [{
+        id: "decision_1_general",
+        subjectIds: ["saved_home"],
+        topic: "general",
+        goal: "Where should I start based on the answers I already gave you?",
+        facts: [{
+          key: "comfort_concerns",
+          value: "Too cold in cool weather, condensation, damp or mould",
+          source: "chat",
+          updatedTurn: 2,
+        }],
+        outcomeSummary: "Start with moisture control before sealing gaps or spending on window upgrades. Check that the bathroom exhaust removes humid air.",
+        openItems: [],
+        pendingQuestion: "",
+        status: "resolved",
+        lastTouchedTurn: 2,
+      }],
+    },
+  });
+  const recentTurns = [
+    { role: "user", content: "Where should I start based on the answers I already gave you?" },
+    { role: "assistant", content: "Start with moisture control before sealing gaps or spending on window upgrades." },
+    { role: "user", content: "Why that first?" },
+    { role: "assistant", content: "Moisture control comes first because unresolved condensation can worsen if the apartment is sealed more tightly." },
+  ];
+  const candidate = "“Heat loss” simply means warmth escaping from your home. In winter, warmth moves out through cold windows, gaps, walls and ceilings, so the room cools down and your air conditioner works harder. In your apartment, single-glazed windows and basic blinds may let warmth escape quickly. Moisture still comes first because sealing everything before dealing with damp air can worsen condensation and mould.";
+  const failures = [];
+  const accepted = await generateSurgeModelAnswer(request({
+    message,
+    continuation,
+    recentTurns,
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({ answer: candidate, state: continuation })),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(accepted, JSON.stringify(failures));
+  assert.equal(accepted.answer.directAnswer, candidate);
+
+  const rejectedFailures = [];
+  const rejected = await generateSurgeModelAnswer(request({
+    message,
+    continuation,
+    recentTurns,
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Heat loss means warmth escaping through the windows. Install a new air conditioner first to compensate for it.",
+      state: continuation,
+    })),
+    onFailure: (failure) => rejectedFailures.push(failure),
+  });
+
+  assert.equal(rejected, null);
+  assert.deepEqual(rejectedFailures, [{
+    code: "provider_output_rejected",
+    stage: "topic_drift",
+  }]);
+});
+
 test("the exact pelmet follow-up uses semantic coverage while declared indexes remain telemetry", async () => {
   const message = "why does the pelmet matter, and which of those would you try first in my home?";
   const declaredCoveredQuestionPartIndexes = [0];
