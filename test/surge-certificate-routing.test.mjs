@@ -71,6 +71,32 @@ test("routes current STC price questions to the governed national SRES sources",
   assertPlainPunctuation(result);
 });
 
+test("plain STC and VEEC definitions carry both maintained official references", () => {
+  const result = answer("What are STCs and VEECs in normal words?");
+
+  assert.equal(result.status, "answered");
+  assert.match(result.directAnswer, /STCs?.*national Small-scale Renewable Energy Scheme/is);
+  assert.match(result.directAnswer, /VEECs?.*Victorian Energy Upgrades/is);
+  assert.equal(result.suggestedQuestions.length, 0);
+  const ids = citationIds(result);
+  assert.ok(ids.has("cer-stc-entitlement-calculation"));
+  assert.ok(ids.has("veu-water-space-activity-guide-v3-19"));
+  assertPlainPunctuation(result);
+});
+
+test("current STC and VEEC values cannot be answered by the static definition", () => {
+  for (const query of [
+    "What are the current STC and VEEC values today?",
+    "What are STCs and VEECs trading for?",
+  ]) {
+    const result = answer(query);
+    assert.notEqual(result.status, "answered", query);
+    assert.doesNotMatch(result.directAnswer, /^STCs and VEECs are certificates that can reduce/i, query);
+    assert.match(result.directAnswer, /separate governed programmes|current|official|which programme|cannot safely|missing inputs|postcode/i, query);
+    assertPlainPunctuation(result);
+  }
+});
+
 test("fails closed when one question mixes certificate programmes", () => {
   const result = answer("Compare the current VEEC and ESC prices for my property.");
 

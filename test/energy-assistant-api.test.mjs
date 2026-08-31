@@ -907,6 +907,14 @@ test("a plain STC and VEEC definition does not inherit an old eligibility follow
   const payload = await body(response);
   assert.equal(payload.reply.followUpQuestion, "");
   assert.doesNotMatch(payload.reply.content, /installation postcode/i);
+  assert.deepEqual(
+    payload.reply.citations.map((citation) => citation.url),
+    [
+      "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/calculate-small-scale-technology-certificate-entitlements",
+      "https://www.esc.vic.gov.au/sites/default/files/documents/FINAL%20-%20Water%20Heating%20and%20Space%20Heating%20Cooling%20Activity%20Guide%20-%20V.%203.19%20-%2020260324.pdf",
+    ],
+  );
+  assert.doesNotMatch(JSON.stringify(payload), /cer-stc-entitlement-calculation|veu-water-space-activity-guide-v3-19/i);
 });
 
 test("a current-value pronoun resolves STCs, VEECs and Victoria from the selected decision only", async () => {

@@ -1144,11 +1144,12 @@
       "message": "Back to my home only: give me the top three actions in order using what I told you. No jargon and no more questions.",
       "sourcePolicy": "model_required",
       "clauses": [
+        { "id": "latest-budget", "anyOf": ["\\$\\s*1,?500"] },
         { "id": "door-action", "anyOf": ["front door", "door snake", "door seal", "draught", "draft"] },
         { "id": "window-action", "anyOf": ["honeycomb", "thermal curtain", "window covering", "blind", "curtain"] },
         { "id": "working-split-action", "anyOf": ["keep.*split", "working split", "do not replace", "don't replace"] }
       ],
-      "forbiddenPatterns": ["Mum", "gas heater", "replace the split", "solar first"],
+      "forbiddenPatterns": ["Mum", "gas heater", "replace the split", "solar first", "(?:under[- ]?)?\\$\\s*2,?000"],
       "maxWords": 120,
       "maxParagraphs": 5,
       "maxQuestions": 0,
@@ -1295,9 +1296,10 @@
       "requiredSemanticGroups": [
         ["front door", "door snake", "door seal", "door draught", "door draft"],
         ["honeycomb", "thermal curtain", "window covering", "blind", "curtain"],
-        ["working split", "working reverse-cycle split", "keep the split", "keep[^.!?]{0,35}working[^.!?]{0,25}split", "do not replace", "don't replace"]
+        ["working split", "working reverse-cycle split", "keep the split", "keep[^.!?]{0,35}working[^.!?]{0,25}split", "do not replace", "don't replace"],
+        ["\\$\\s*1,?500"]
       ],
-      "forbidden": ["Mum", "3073", "gas heater", "replace the split", "solar first"],
+      "forbidden": ["Mum", "3073", "gas heater", "replace the split", "solar first", "(?:under[- ]?)?\\$\\s*2,?000"],
       "exactActionCount": 3,
       "maximumQuestions": 0
     },
