@@ -4842,7 +4842,32 @@ test("official lookup quantity grounding gets one searched repair while protecte
     },
   });
   assert.equal(invalidOfficialResult, null);
-  assert.equal(invalidOfficialCalls, 1);
+  assert.equal(invalidOfficialCalls, 2);
+
+  let transientOfficialCalls = 0;
+  const transientOfficialResult = await generateSurgeModelAnswer(request({
+    message: "What is the current STC value?",
+    officialWebSearch: {
+      kind: "certificate",
+      jurisdiction: "Australia",
+      allowedDomains: ["cer.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      transientOfficialCalls += 1;
+      if (transientOfficialCalls === 1) {
+        return new Response("temporarily unavailable", { status: 503 });
+      }
+      const answer = "The official STC clearing-house price is $40.";
+      return webJsonResponse(modelPayload({ answer }), {
+        sourceUrl,
+        annotationNeedle: answer,
+      });
+    },
+  });
+  assert.ok(transientOfficialResult);
+  assert.equal(transientOfficialCalls, 2);
 
   let safetyCalls = 0;
   await generateSurgeModelAnswer(request({

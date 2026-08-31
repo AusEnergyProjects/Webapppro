@@ -196,6 +196,7 @@ const SAFE_MODEL_REPAIR_STAGES = [
   "response_output_incomplete_max_tokens",
   "response_output_json",
   "response_output_object",
+  "official_web_evidence",
   "answer_missing",
   "conversation_state",
   "public_policy",
@@ -3059,7 +3060,8 @@ function modelRepairIsAllowed(
   stage?: SurgeModelFailureStage,
 ) {
   if (request.officialWebSearch) {
-    return stage === "quantity_grounding" && modelRepairIsPossible(request);
+    return modelRepairIsPossible(request)
+      && (stage === undefined || safeModelRepairStage(stage));
   }
   return modelRepairIsPossible(request);
 }
@@ -3094,10 +3096,7 @@ function prepareProviderRequest(
     ? 2
     : 1;
   if (maxProviderCalls === 2) {
-    const repairStages = request.officialWebSearch
-      ? ["quantity_grounding"] as const
-      : SAFE_MODEL_REPAIR_STAGES;
-    repairSerializedBodyBytes = Math.max(...repairStages.map((stage) => (
+    repairSerializedBodyBytes = Math.max(...SAFE_MODEL_REPAIR_STAGES.map((stage) => (
       new TextEncoder().encode(JSON.stringify(providerBody(request, context, stage))).byteLength
     )));
     if (repairSerializedBodyBytes > MAX_PROVIDER_INPUT_BYTES) return null;
@@ -3300,11 +3299,7 @@ export async function generateSurgeModelAnswer(
       ? validatedOfficialWebEvidence(providerEnvelope, request.officialWebSearch)
       : null;
     if (request.officialWebSearch && !officialWebEvidence) {
-      reportFailure(dependencies, {
-        code: "provider_output_rejected",
-        stage: "official_web_evidence",
-      });
-      return null;
+      return retryRejectedOutput("official_web_evidence");
     }
     const officialCitations = officialWebEvidence?.citations || [];
 
