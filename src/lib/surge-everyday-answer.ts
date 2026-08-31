@@ -159,7 +159,7 @@ export function surgePresentationText(
     includeFollowUp ? presentation.followUpQuestion : "",
   ].filter(Boolean);
   const structured = presentation.answerType === "safety"
-    || (presentation.answerType === "starting_plan" && presentation.steps.length >= 2);
+    || presentation.steps.length >= 2;
   return sections.join(structured ? "\n\n" : " ");
 }
 
@@ -223,6 +223,12 @@ function comparable(value: string) {
   return value.toLowerCase().replace(/^\s*\d+[.)]\s*/u, "").replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function listItemText(value: string) {
+  return toSurgePlainLanguage(value, 360)
+    .replace(/^\s*(?:\d{1,2}[.)]|[-\u2022])\s+/u, "")
+    .trim();
+}
+
 function repeatsStep(value: string, steps: readonly string[]) {
   const candidate = comparable(value);
   if (!candidate) return true;
@@ -243,7 +249,7 @@ export function deriveSurgeAnswerPresentation(
   const directAnswer = toSurgePlainLanguage(answer.directAnswer, 2_400);
   const comparableDirectAnswer = comparable(directAnswer);
   const steps = answer.practicalSteps
-    .map((step) => toSurgePlainLanguage(step, 360))
+    .map(listItemText)
     .filter(Boolean)
     .filter((step) => {
       const comparableStep = comparable(step);
@@ -253,7 +259,7 @@ export function deriveSurgeAnswerPresentation(
     })
     .slice(0, 3);
   if (!steps.length && answer.nextAction && wantsOrderedSteps(message)) {
-    steps.push(toSurgePlainLanguage(answer.nextAction, 360));
+    steps.push(listItemText(answer.nextAction));
   }
   const directParagraphs = directAnswer.split(/\n{2,}|\n(?=\s*\d+[.)]\s+)/u).map((part) => part.trim()).filter(Boolean);
   const lead = directParagraphs[0] || directAnswer;
@@ -291,7 +297,7 @@ export function normalizeSurgeAnswerPresentation(
       : "general",
     verdict: toSurgePlainLanguage(presentation.verdict, 360),
     reason: toSurgePlainLanguage(presentation.reason, 700),
-    steps: presentation.steps.map((step) => toSurgePlainLanguage(step, 360)).filter(Boolean).slice(0, 3),
+    steps: presentation.steps.map(listItemText).filter(Boolean).slice(0, 3),
     extraDetail: toSurgePlainLanguage(presentation.extraDetail, 1_200),
     followUpQuestion,
     quickReplies: [],

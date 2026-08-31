@@ -187,11 +187,19 @@ function hostedBoolean(value: string | undefined) {
 }
 
 function reportModelFailure(failure: SurgeModelFailure, requestId?: string) {
-  console.warn("Surge model answer was unavailable.", {
+  const safeDetails = [
+    `code=${failure.code}`,
+    failure.stage ? `stage=${failure.stage}` : "",
+    failure.providerStatus ? `provider_status=${failure.providerStatus}` : "",
+    failure.providerCode ? `provider_code=${failure.providerCode}` : "",
+    requestId ? `request_id=${requestId}` : "",
+  ].filter(Boolean).join(" ");
+  console.warn(`Surge model answer was unavailable. ${safeDetails}`, {
     ...requestLogContext(requestId),
     code: failure.code,
     ...(failure.stage ? { stage: failure.stage } : {}),
     ...(failure.providerStatus ? { providerStatus: failure.providerStatus } : {}),
+    ...(failure.providerCode ? { providerCode: failure.providerCode } : {}),
   });
 }
 

@@ -561,7 +561,7 @@ function naturalFollowUpFor(message: AssistantMessage, audience: Audience): stri
 
 function usesSingleParagraphAnswer(message: AssistantMessage) {
   return message.answerType !== "safety"
-    && !(message.answerType === "starting_plan" && message.practicalSteps.length >= 2);
+    && message.practicalSteps.length < 2;
 }
 
 function singleParagraphAnswerFor(message: AssistantMessage, audience: Audience) {

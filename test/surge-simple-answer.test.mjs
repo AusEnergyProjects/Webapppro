@@ -63,6 +63,32 @@ test("common household fallback questions receive relevant plain answers", () =>
   }
 });
 
+test("pelmet follow-up keeps a relevant expert reference and first-step order", () => {
+  const message = "why does the pelmet matter, and which of those would you try first in my home?";
+  const result = simple(message, [
+    { role: "user", content: "what are some cheap ways to reduce heat loss from my windows" },
+    {
+      role: "assistant",
+      content: "Start with weather seals on real leaks, then compare temporary glazing layers and close-fitting window coverings with a pelmet.",
+    },
+  ]);
+
+  assert.ok(result);
+  assert.match(
+    result.directAnswer,
+    /pelmet closes the gap above a curtain.*slowing the convection loop.*warm room air.*cold glass.*fall back/is,
+  );
+  assert.match(
+    result.directAnswer,
+    /First check.*moving air.*weather seals.*real leak.*If there is no draught.*close-fitting.*pelmet/is,
+  );
+  assert.doesNotMatch(
+    result.directAnswer,
+    /Electric Saul|Home by Evidence|Comfort by Design|Power You Control|Comfort You Control|Community-Informed Home Energy AI Response Guide|saved home|single-glazed/i,
+  );
+  assert.deepEqual(result.practicalSteps, []);
+});
+
 test("deterministic fallbacks stay on cold-room, renter and strata questions", () => {
   const cases = [
     {

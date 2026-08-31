@@ -4599,6 +4599,126 @@ test("a validated paid window answer is the only customer-visible ordinary answe
   assert.doesNotMatch(payload.reply.directAnswer, /start with the problem you notice most|not a shopping list|which room or appliance/i);
 });
 
+test("the exact pelmet follow-up keeps the prior window exchange and completed planner context for the paid model", async () => {
+  const planContext = completedMoisturePlannerContext();
+  assert.ok(planContext);
+  assert.ok(planContext.facts.length >= 45);
+  const priorWindowQuestion = "what are some cheap ways to reduce heat loss from my windows";
+  const priorWindowAnswer = "Start with removable weather seals where opening windows leak air. For single glazing, clear heat-shrink film traps a still-air layer while keeping the view; bubble wrap uses the same idea where reduced daylight and an obscured view are acceptable. At night, close-fitting honeycomb blinds or lined curtains with a pelmet slow warm-air circulation past the cold glass. Keep opening windows and required ventilation usable.";
+  const followUp = "why does the pelmet matter, and which of those would you try first in my home?";
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "pelmet-follow-up-planner-0001",
+    message: followUp,
+    recentTurns: [
+      { role: "user", content: priorWindowQuestion },
+      { role: "assistant", content: priorWindowAnswer },
+    ],
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    requireValidatedModelForOrdinaryAdvice: true,
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return {
+        answer: {
+          ...modelRequest.deterministicAnswer,
+          directAnswer: "A pelmet closes the gap above a curtain, slowing the convection loop that lets warm room air cool against the cold glass and fall back into the room. In this single-glazed home, first check for a real draught at the opening sash and use removable weather seals only where air is moving. If there is no draught, try a close-fitting honeycomb blind or lined curtain with a pelmet on the coldest window.",
+          practicalSteps: [],
+          suggestedQuestions: [],
+          toolActions: [],
+        },
+        continuation: continuation({
+          activeTopic: "windows_glazing",
+          goal: "Reduce heat loss through the home's single-glazed windows",
+          lastAnswerSummary: "Explained the pelmet and selected the conditional first window step.",
+        }),
+      };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(observedRequest);
+  assert.deepEqual(observedRequest.recentTurns, [
+    { role: "user", content: priorWindowQuestion },
+    { role: "assistant", content: priorWindowAnswer },
+  ]);
+  assert.ok(observedRequest.planContext);
+  assert.ok(observedRequest.planContext.facts.length >= 45);
+  assert.match(observedRequest.deterministicAnswer.directAnswer, /pelmet closes the gap.*convection loop.*warm room air.*cold glass/is);
+  assert.match(observedRequest.deterministicAnswer.directAnswer, /first check.*moving air.*weather seals only where there is a real leak.*if there is no draught.*honeycomb blind.*pelmet/is);
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "model");
+  assert.match(payload.reply.directAnswer, /pelmet closes the gap.*convection loop/is);
+});
+
+test("the exact pelmet follow-up keeps the prior window exchange when an empty ledger has no selected decision", async () => {
+  const priorWindowQuestion = "what are some cheap ways to reduce heat loss from my windows";
+  const priorWindowAnswer = "Start with removable weather seals where opening windows leak air. For single glazing, clear heat-shrink film traps a still-air layer while keeping the view; bubble wrap uses the same idea where reduced daylight and an obscured view are acceptable. At night, close-fitting honeycomb blinds or lined curtains with a pelmet slow warm-air circulation past the cold glass. Keep opening windows and required ventilation usable.";
+  const followUp = "why does the pelmet matter, and which of those would you try first in my home?";
+  const noDecisionContinuation = continuation({
+    ledger: {
+      turn: 1,
+      activeDecisionId: "",
+      subjects: [],
+      decisions: [],
+    },
+  });
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "pelmet-follow-up-empty-ledger-0001",
+    message: followUp,
+    recentTurns: [
+      { role: "user", content: priorWindowQuestion },
+      { role: "assistant", content: priorWindowAnswer },
+    ],
+    continuation: noDecisionContinuation,
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    requireValidatedModelForOrdinaryAdvice: true,
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return {
+        answer: {
+          ...modelRequest.deterministicAnswer,
+          directAnswer: "A pelmet closes the gap above a curtain and slows the convection loop that carries warm room air behind the curtain to the cold glass. First check whether air is actually moving around the opening sash and seal only a confirmed leak. If there is no draught, try the close-fitting blind or lined curtain with a pelmet first.",
+          practicalSteps: [],
+          suggestedQuestions: [],
+          toolActions: [],
+        },
+        continuation: continuation({
+          activeTopic: "windows_glazing",
+          goal: "Choose the first low-cost window treatment",
+          lastAnswerSummary: "Explained the pelmet and retained the prior window options.",
+        }),
+      };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(observedRequest);
+  assert.deepEqual(observedRequest.recentTurns, [
+    { role: "user", content: priorWindowQuestion },
+    { role: "assistant", content: priorWindowAnswer },
+  ]);
+  assert.equal(observedRequest.planContext, null);
+  assert.equal(observedRequest.continuation.ledger.activeDecisionId, "");
+  assert.deepEqual(observedRequest.continuation.ledger.decisions, []);
+  assert.match(observedRequest.deterministicAnswer.directAnswer, /pelmet closes the gap.*convection loop.*warm room air.*cold glass/is);
+  assert.match(observedRequest.deterministicAnswer.directAnswer, /first check.*moving air.*weather seals only where there is a real leak.*if there is no draught.*honeycomb blind.*pelmet/is);
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "model");
+  assert.match(payload.reply.directAnswer, /pelmet closes the gap.*convection loop/is);
+});
+
 test("a generic paid result cannot replace roof water-entry control when moisture and roof damage are both reported", async () => {
   const planContext = completedMoisturePlannerContext("known_issue");
   assert.ok(planContext);
