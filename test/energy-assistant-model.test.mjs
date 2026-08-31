@@ -635,6 +635,161 @@ test("official value lookups accept a fully cited partial answer and discard unt
   assert.deepEqual(result.officialCitations.map((citation) => citation.url), [sourceUrl]);
 });
 
+test("official citation markers after decimal prices retain the complete cited sentence", async () => {
+  const stcUrl = "https://cer.gov.au/markets/reports-and-data/quarterly-carbon-market-reports/quarterly-carbon-market-report-march-quarter-2026/small-scale-renewable-energy-scheme";
+  const veecUrl = "https://www.energy.vic.gov.au/victorian-energy-upgrades/installers/industry-market-update-work-program";
+  const stcClaim = "The latest official STC figure available was $39.62 on 15 May 2026, while the clearing-house price is $40.";
+  const veecClaim = "The latest official VEEC market update only covers data to March 2026, so today's VEEC price cannot be confirmed without guessing.";
+  const stcMarker = `([cer.gov.au](${stcUrl}))`;
+  const veecMarker = `([energy.vic.gov.au](${veecUrl}))`;
+  const output = structuredModelPayload({
+    verdict: "A live value for both certificates could not be confirmed today.",
+    reason: `${stcClaim} ${stcMarker} ${veecClaim} ${veecMarker}`,
+  });
+  const responseText = JSON.stringify(output);
+  const annotations = [
+    { marker: stcMarker, title: "Clean Energy Regulator", url: stcUrl },
+    { marker: veecMarker, title: "Victorian Energy Upgrades", url: veecUrl },
+  ].map(({ marker, title, url }) => ({
+    type: "url_citation",
+    start_index: responseText.indexOf(marker),
+    end_index: responseText.indexOf(marker) + marker.length,
+    title,
+    url,
+  }));
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "What are STCs and VEECs worth today?",
+    officialWebSearch: {
+      kind: "certificate",
+      jurisdiction: "Victoria",
+      allowedDomains: ["cer.gov.au", "energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => webJsonResponse(output, {
+      sourceUrl: stcUrl,
+      annotationNeedle: stcClaim,
+      sources: [{ type: "url", url: stcUrl }, { type: "url", url: veecUrl }],
+      annotations,
+    }),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.match(result.answer.directAnswer, /\$39\.62/);
+  assert.match(result.answer.directAnswer, /\$40/);
+  assert.doesNotMatch(result.answer.directAnswer, /https?:\/\//i);
+  assert.deepEqual(result.officialCitations.map((citation) => citation.url), [stcUrl, veecUrl]);
+});
+
+test("a trailing official citation marker without preceding punctuation does not ground the following uncited price", async () => {
+  const sourceUrl = "https://cer.gov.au/markets/reports-and-data/quarterly-carbon-market-reports/quarterly-carbon-market-report-march-quarter-2026/small-scale-renewable-energy-scheme";
+  const supportedClaim = "The latest officially reported STC spot figure was $39.62";
+  const marker = `([cer.gov.au](${sourceUrl}))`;
+  const output = structuredModelPayload({
+    verdict: "The official STC page provides a reported market figure.",
+    reason: `${supportedClaim} ${marker} An uncited current VEEC value is $999.`,
+  });
+  const responseText = JSON.stringify(output);
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "What are STCs and VEECs worth today?",
+    officialWebSearch: {
+      kind: "certificate",
+      jurisdiction: "Victoria",
+      allowedDomains: ["cer.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => webJsonResponse(output, {
+      sourceUrl,
+      annotationNeedle: supportedClaim,
+      annotations: [{
+        type: "url_citation",
+        start_index: responseText.indexOf(marker),
+        end_index: responseText.indexOf(marker) + marker.length,
+        title: "Clean Energy Regulator",
+        url: sourceUrl,
+      }],
+    }),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(result, null);
+  assert.deepEqual(failures, [{ code: "provider_output_rejected", stage: "quantity_grounding" }]);
+});
+
+test("lookup uncertainty cannot hide an uncited affirmative current-status claim", async () => {
+  const sourceUrl = "https://www.esc.vic.gov.au/victorian-energy-upgrades";
+  const supportedClaim = "The official guidance describes the Victorian Energy Upgrades scheme.";
+  const output = structuredModelPayload({
+    verdict: "Applications are open, but I could not verify the closing date.",
+    reason: supportedClaim,
+  });
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Are Victorian Energy Upgrades applications open now?",
+    officialWebSearch: {
+      kind: "certificate",
+      jurisdiction: "Victoria",
+      allowedDomains: ["esc.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => webJsonResponse(output, {
+      sourceUrl,
+      annotationNeedle: supportedClaim,
+    }),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(result, null);
+  assert.deepEqual(failures, [{
+    code: "provider_output_rejected",
+    stage: "official_web_evidence",
+  }]);
+});
+
+test("validated official citation URLs do not consume the customer-visible field limit", async () => {
+  const sourceUrl = `https://cer.gov.au/official-market-report/${"validated-price-path-".repeat(32)}`;
+  const claim = "The latest officially reported STC spot figure was $39.62.";
+  const marker = `([cer.gov.au](${sourceUrl}))`;
+  const output = structuredModelPayload({
+    verdict: "The official page provides a reported STC market figure.",
+    reason: `${claim} ${marker}`,
+  });
+  assert.ok(output.reason.length > 700);
+  const responseText = JSON.stringify(output);
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "What is the latest officially reported STC spot figure?",
+    officialWebSearch: {
+      kind: "certificate",
+      jurisdiction: "Australia",
+      allowedDomains: ["cer.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => webJsonResponse(output, {
+      sourceUrl,
+      annotationNeedle: claim,
+      annotations: [{
+        type: "url_citation",
+        start_index: responseText.indexOf(marker),
+        end_index: responseText.indexOf(marker) + marker.length,
+        title: "Clean Energy Regulator",
+        url: sourceUrl,
+      }],
+    }),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.match(result.answer.directAnswer, /\$39\.62/);
+  assert.doesNotMatch(result.answer.directAnswer, /https?:\/\//i);
+});
+
 test("discarded legacy output cannot poison a safe structured presentation", async () => {
   const visibleAnswer = "Today’s live open-market values could not be fully confirmed from official pages.";
   const result = await generateSurgeModelAnswer(request({
@@ -3512,7 +3667,7 @@ test("whole-home synthesis can send all fifty bounded decision memories to Sol",
   assert.match(followUpDecisions, /Remember separate home-energy decision 50/i);
 });
 
-test("official web lookup reservation includes the maximum two-call search charge", async () => {
+test("official web lookup reservation covers one fully searched quantity repair", async () => {
   const modelRequest = request({
     message: "What are the current VEEC rules in Victoria?",
     officialWebSearch: {
@@ -3538,12 +3693,19 @@ test("official web lookup reservation includes the maximum two-call search charg
   assert.ok(estimate);
   const exactBytes = new TextEncoder().encode(serializedBody).byteLength;
   assert.equal(estimate.serializedBodyBytes, exactBytes);
-  assert.equal(estimate.maxProviderCalls, 1);
-  assert.equal(estimate.repairSerializedBodyBytes, 0);
+  assert.equal(estimate.maxProviderCalls, 2);
+  assert.ok(estimate.repairSerializedBodyBytes > exactBytes);
   assert.equal(estimate.maxOutputTokens, 2_000);
   assert.equal(
     estimate.worstCaseMicroUsd,
-    Math.ceil(((exactBytes * 4) + (2_000 * 20) + 20_000) * 1.25),
+    Math.ceil((
+      (exactBytes * 4)
+      + (2_000 * 20)
+      + 20_000
+      + (estimate.repairSerializedBodyBytes * 4)
+      + (2_000 * 20)
+      + 20_000
+    ) * 1.25),
   );
 });
 
@@ -4626,26 +4788,61 @@ test("an accepted first draft remains a single provider call", async () => {
   assert.equal(calls, 1);
 });
 
-test("official lookups and protected safety answers never enter model repair", async () => {
+test("official lookup quantity grounding gets one searched repair while protected safety answers do not", async () => {
   let officialCalls = 0;
+  const sourceUrl = "https://cer.gov.au/markets/reports-and-data/quarterly-carbon-market-reports/quarterly-carbon-market-report-march-quarter-2026/small-scale-renewable-energy-scheme";
   const officialResult = await generateSurgeModelAnswer(request({
-    message: "What are the current VEEC rules in Victoria?",
+    message: "What is the current STC value?",
     officialWebSearch: {
       kind: "certificate",
-      jurisdiction: "Victoria",
-      allowedDomains: ["esc.vic.gov.au"],
+      jurisdiction: "Australia",
+      allowedDomains: ["cer.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      officialCalls += 1;
+      const body = JSON.parse(options.body);
+      assert.equal(body.tool_choice, "required");
+      assert.deepEqual(body.tools[0].filters.allowed_domains, ["cer.gov.au"]);
+      if (officialCalls === 1) {
+        const unsupportedFirstSentence = "The STC clearing-house price is $999. The latest official spot figure is $39.62.";
+        return webJsonResponse(modelPayload({ answer: unsupportedFirstSentence }), {
+          sourceUrl,
+          annotationNeedle: "The latest official spot figure is $39.62.",
+        });
+      }
+      const repairContext = JSON.parse(body.input[1].content[0].text);
+      assert.equal(repairContext.repair.failureStage, "quantity_grounding");
+      const repaired = "The official STC clearing-house price is $40 and the latest reported spot figure is $39.62.";
+      return webJsonResponse(modelPayload({ answer: repaired }), {
+        sourceUrl,
+        annotationNeedle: repaired,
+      });
+    },
+  });
+  assert.ok(officialResult);
+  assert.equal(officialCalls, 2);
+  assert.match(officialResult.answer.directAnswer, /\$40/);
+  assert.match(officialResult.answer.directAnswer, /\$39\.62/);
+
+  let invalidOfficialCalls = 0;
+  const invalidOfficialResult = await generateSurgeModelAnswer(request({
+    message: "What is the current STC value?",
+    officialWebSearch: {
+      kind: "certificate",
+      jurisdiction: "Australia",
+      allowedDomains: ["cer.gov.au"],
     },
   }), {
     apiKey: "test-api-key",
     fetch: async () => {
-      officialCalls += 1;
-      return jsonResponse(modelPayload({
-        answer: "The result could not be confirmed.",
-      }));
+      invalidOfficialCalls += 1;
+      return jsonResponse(modelPayload({ answer: "The current value is $40." }));
     },
   });
-  assert.equal(officialResult, null);
-  assert.equal(officialCalls, 1);
+  assert.equal(invalidOfficialResult, null);
+  assert.equal(invalidOfficialCalls, 1);
 
   let safetyCalls = 0;
   await generateSurgeModelAnswer(request({
