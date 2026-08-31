@@ -3230,7 +3230,7 @@ test("UTC activation timestamps keep Australian regulator-date boundaries", asyn
   assert.equal(australianTenth.products[0].attributes.watts, 415);
 });
 
-test("failed refreshes stay auditable while quote planning can use the last accepted snapshot", async () => {
+test("failed refreshes stay auditable while the calculator can use the last accepted snapshot", async () => {
   const { d1, artifactStore } = fixture();
   await syncOfficialProductRegistry(d1, definition, {
     fetchImpl: fetchFixture(), artifactStore,

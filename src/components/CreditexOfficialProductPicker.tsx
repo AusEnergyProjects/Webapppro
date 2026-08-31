@@ -94,7 +94,7 @@ function registryQuotePlanningNotice(value: unknown) {
     month: "short",
     year: "numeric",
   });
-  return `Using the last accepted official product snapshot checked ${checkedDate} while the registry refresh completes. This result is for quote planning; confirm current product eligibility before a certificate claim.`;
+  return `Using the last accepted official product snapshot checked ${checkedDate}. The calculator remains available while refreshed product listings are checked; final certificate and eligibility checks remain separate.`;
 }
 
 export function creditexProductOptionLabel(

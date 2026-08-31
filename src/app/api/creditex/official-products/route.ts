@@ -26,7 +26,7 @@ import {
   type CreditexOfficialProductRegistryStatus,
 } from "@/lib/creditex-official-product-registry";
 import {
-  creditexOfficialProductRegistryCanServeQuotePlanning,
+  creditexOfficialProductRegistryCanServeCalculator,
   loadOfficialProductRegistryStatus,
   searchOfficialProducts,
   syncOfficialProductRegistry,
@@ -231,7 +231,7 @@ export async function GET(request: Request) {
                 CREDITEX_PRODUCT_REGISTRY_REFRESH_DESIGNS[registryCode],
               readiness: {
                 calculatorReady: isOfficialProductRegistryStatus(status)
-                  ? creditexOfficialProductRegistryCanServeQuotePlanning(status)
+                  ? creditexOfficialProductRegistryCanServeCalculator(status)
                   : status.status === "current",
                 refreshReady: registryCode === "cec-products"
                   ? creditexCecBatteryConnectorConfigurationIssue(
@@ -279,7 +279,7 @@ export async function GET(request: Request) {
     let result;
     try {
       result = await searchOfficialProducts(database, searchInput, {
-        allowStaleAcceptedSnapshot: access.accessType !== "compliance",
+        allowStaleAcceptedSnapshot: true,
       });
     } catch (error) {
       const automaticRecoveryRequired = error instanceof CreditexOfficialProductError

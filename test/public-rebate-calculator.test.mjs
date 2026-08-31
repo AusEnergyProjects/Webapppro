@@ -76,18 +76,23 @@ test("public calculator states the exact calculation boundary", () => {
   );
 });
 
-test("quote planning remains available from the last accepted registry snapshot", () => {
+test("the calculator remains available from the last accepted registry snapshot", () => {
   assert.match(
     officialProducts,
-    /searchOfficialProducts\(database, searchInput, \{\s*allowStaleAcceptedSnapshot: access\.accessType !== "compliance"/,
+    /searchOfficialProducts\(database, searchInput, \{\s*allowStaleAcceptedSnapshot: true/,
   );
   assert.match(
     programEstimates,
-    /allowStaleAcceptedSnapshot: estimatePurpose === "quote"/,
+    /allowStaleAcceptedSnapshot: true/,
+  );
+  assert.equal(
+    programEstimates.match(/allowStaleAcceptedSnapshot: true/g)?.length,
+    4,
   );
   assert.match(productPicker, /result\.registry/);
   assert.match(productPicker, /last accepted official product snapshot checked/);
-  assert.match(productPicker, /confirm current product eligibility before a certificate claim/);
+  assert.match(productPicker, /The calculator remains available/);
+  assert.match(productPicker, /final certificate and eligibility checks remain separate/);
 });
 
 test("anonymous estimate access is enabled only for explicit quote requests", () => {
