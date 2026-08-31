@@ -23,8 +23,10 @@ import {
   CREDITEX_PRODUCT_REGISTRY_REFRESH_DESIGNS,
   CREDITEX_PRODUCT_KIND_REGISTRY,
   CreditexOfficialProductError,
+  type CreditexOfficialProductRegistryStatus,
 } from "@/lib/creditex-official-product-registry";
 import {
+  creditexOfficialProductRegistryCanServeQuotePlanning,
   loadOfficialProductRegistryStatus,
   searchOfficialProducts,
   syncOfficialProductRegistry,
@@ -109,6 +111,12 @@ function requestRecord(value: unknown) {
     );
   }
   return value as Record<string, unknown>;
+}
+
+function isOfficialProductRegistryStatus(
+  value: object,
+): value is CreditexOfficialProductRegistryStatus {
+  return "snapshotId" in value;
 }
 
 function reviewedDecreaseSources(value: unknown) {
@@ -222,7 +230,9 @@ export async function GET(request: Request) {
               refreshDesign:
                 CREDITEX_PRODUCT_REGISTRY_REFRESH_DESIGNS[registryCode],
               readiness: {
-                calculatorReady: status.status === "current",
+                calculatorReady: isOfficialProductRegistryStatus(status)
+                  ? creditexOfficialProductRegistryCanServeQuotePlanning(status)
+                  : status.status === "current",
                 refreshReady: registryCode === "cec-products"
                   ? creditexCecBatteryConnectorConfigurationIssue(
                       runtimeEnvironment,
@@ -268,7 +278,9 @@ export async function GET(request: Request) {
     };
     let result;
     try {
-      result = await searchOfficialProducts(database, searchInput);
+      result = await searchOfficialProducts(database, searchInput, {
+        allowStaleAcceptedSnapshot: access.accessType !== "compliance",
+      });
     } catch (error) {
       const automaticRecoveryRequired = error instanceof CreditexOfficialProductError
         && (

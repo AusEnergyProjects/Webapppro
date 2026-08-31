@@ -9,6 +9,9 @@ const workspace = read(
   "../src/components/PublicRebateCalculatorWorkspace.tsx",
 );
 const calculator = read("../src/components/CreditexAllProgramCalculator.tsx");
+const productPicker = read(
+  "../src/components/CreditexOfficialProductPicker.tsx",
+);
 const access = read("../src/lib/creditex-calculator-access-server.ts");
 const officialProducts = read(
   "../src/app/api/creditex/official-products/route.ts",
@@ -71,6 +74,20 @@ test("public calculator states the exact calculation boundary", () => {
     workspace,
     /Certificate creation, eligibility and\s+provider acceptance are separate/,
   );
+});
+
+test("quote planning remains available from the last accepted registry snapshot", () => {
+  assert.match(
+    officialProducts,
+    /searchOfficialProducts\(database, searchInput, \{\s*allowStaleAcceptedSnapshot: access\.accessType !== "compliance"/,
+  );
+  assert.match(
+    programEstimates,
+    /allowStaleAcceptedSnapshot: estimatePurpose === "quote"/,
+  );
+  assert.match(productPicker, /result\.registry/);
+  assert.match(productPicker, /last accepted official product snapshot checked/);
+  assert.match(productPicker, /confirm current product eligibility before a certificate claim/);
 });
 
 test("anonymous estimate access is enabled only for explicit quote requests", () => {

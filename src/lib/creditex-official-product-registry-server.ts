@@ -3986,6 +3986,47 @@ function registryFailure(
   );
 }
 
+export function creditexOfficialProductRegistryCanServeQuotePlanning(
+  status: CreditexOfficialProductRegistryStatus,
+  now = new Date(),
+) {
+  if (status.status === "current") return true;
+  if (
+    status.status !== "stale"
+    || !status.snapshotId
+    || !status.sourceSha256
+    || !Number.isSafeInteger(status.recordCount)
+    || status.recordCount < 1
+    || !status.lastCheckedAt
+  ) {
+    return false;
+  }
+  const checkedAt = Date.parse(status.lastCheckedAt);
+  const currentTime = now.getTime();
+  return Number.isFinite(checkedAt)
+    && Number.isFinite(currentTime)
+    && checkedAt <= currentTime;
+}
+
+function requireOfficialProductRegistry(
+  status: CreditexOfficialProductRegistryStatus,
+  options: {
+    allowStaleAcceptedSnapshot?: boolean;
+    now?: Date;
+  },
+) {
+  if (
+    options.allowStaleAcceptedSnapshot
+    && creditexOfficialProductRegistryCanServeQuotePlanning(
+      status,
+      options.now,
+    )
+  ) {
+    return;
+  }
+  if (status.status !== "current") registryFailure(status);
+}
+
 function wait(milliseconds: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -4313,7 +4354,10 @@ export async function searchOfficialProducts(
     veuScenario?: unknown;
     limit?: unknown;
   },
-  options: { now?: Date } = {},
+  options: {
+    allowStaleAcceptedSnapshot?: boolean;
+    now?: Date;
+  } = {},
 ) {
   await ensureCreditexProductRegistrySchemaGuards(db);
   const kind = productKind(input.productKind);
@@ -4324,7 +4368,7 @@ export async function searchOfficialProducts(
     registryCode,
     options,
   );
-  if (status.status !== "current") registryFailure(status);
+  requireOfficialProductRegistry(status, options);
   const query = String(input.query || "").trim().toLowerCase();
   if (query.length > 120) {
     return fail(
@@ -4500,7 +4544,10 @@ export async function validateOfficialProductSelections(
     requiredKinds: readonly CreditexOfficialProductKind[];
     selectedProductIds: unknown;
   },
-  options: { now?: Date } = {},
+  options: {
+    allowStaleAcceptedSnapshot?: boolean;
+    now?: Date;
+  } = {},
 ): Promise<{
   selections: CreditexOfficialProductSelection[];
   registryReceipt: {
@@ -4548,7 +4595,7 @@ export async function validateOfficialProductSelections(
         registryCode,
         options,
       );
-      if (status.status !== "current") registryFailure(status);
+      requireOfficialProductRegistry(status, options);
       statuses.set(registryCode, status);
     }
   }

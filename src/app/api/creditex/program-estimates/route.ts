@@ -894,6 +894,7 @@ export async function POST(request: Request) {
                   veu_water_heater: item.selectedProductId,
                 },
               },
+              { allowStaleAcceptedSnapshot: estimatePurpose === "quote" },
             );
             const derivedInputs = deriveCreditexVeuOfficialProductInputs(
               activityCode,
@@ -1011,6 +1012,7 @@ export async function POST(request: Request) {
           requiredKinds,
           selectedProductIds: raw.selectedProductIds,
         },
+        { allowStaleAcceptedSnapshot: estimatePurpose === "quote" },
       );
       const derivedInputs = deriveCreditexVeuOfficialProductInputs(
         activityCode,
@@ -1106,6 +1108,7 @@ export async function POST(request: Request) {
           requiredKinds: requiredProductKinds,
           selectedProductIds: raw.selectedProductIds,
         },
+        { allowStaleAcceptedSnapshot: estimatePurpose === "quote" },
       );
       const derivedInputs = deriveCreditexNswOfficialProductInputs(
         programCode,
@@ -1186,6 +1189,7 @@ export async function POST(request: Request) {
         requiredKinds: requiredProductKinds,
         selectedProductIds: raw.selectedProductIds,
       },
+      { allowStaleAcceptedSnapshot: estimatePurpose === "quote" },
     );
     const derivedInputs = deriveProductBackedInputs(
       inputRecord(raw.inputs),

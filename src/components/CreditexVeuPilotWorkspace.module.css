@@ -1858,6 +1858,14 @@
   color: #ffd0d0;
 }
 
+.officialProductPicker > .productRegistryNotice {
+  border: 1px solid rgba(244, 192, 87, 0.42);
+  border-radius: 0.45rem;
+  background: rgba(98, 70, 9, 0.28);
+  color: #ffe5a6;
+  padding: 0.45rem 0.55rem;
+}
+
 .estimatorForm button {
   min-height: 34px;
   align-self: end;
