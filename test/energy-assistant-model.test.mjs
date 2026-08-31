@@ -2078,6 +2078,106 @@ test("returning to the saved home supplies its prior decision without leaking Mu
   assert.doesNotMatch(serializedContext, /\$7,400|8\.5 kW|3350/);
 });
 
+test("returning to a prior door fix after a solar detour keeps the paid model on the recalled decision", async () => {
+  const continuation = state({
+    activeTopic: "products_ratings",
+    goal: "Compare solar quotes and the inverter warranty",
+    lastAnswerSummary: "Explained which inverter warranty details to compare.",
+    ledger: {
+      turn: 2,
+      activeDecisionId: "decision_2_solar",
+      subjects: [
+        {
+          id: "saved_home",
+          kind: "saved_home",
+          label: "Saved home",
+          facts: [],
+          lastTouchedTurn: 1,
+        },
+        {
+          id: "general_advice",
+          kind: "general",
+          label: "General advice",
+          facts: [],
+          lastTouchedTurn: 2,
+        },
+      ],
+      decisions: [
+        {
+          id: "decision_1_door",
+          subjectIds: ["saved_home"],
+          topic: "comfort_fabric",
+          goal: "Stop the draught under the front door",
+          facts: [],
+          outcomeSummary: "Use a door snake first, then fit a correctly sized door-bottom weather seal.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 1,
+        },
+        {
+          id: "decision_2_solar",
+          subjectIds: ["general_advice"],
+          topic: "products_ratings",
+          goal: "Compare solar quotes and the inverter warranty",
+          facts: [],
+          outcomeSummary: "Compare the same site design and the written inverter warranty.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 2,
+        },
+      ],
+    },
+  });
+  const failures = [];
+  let observedBody;
+  const result = await generateSurgeModelAnswer(request({
+    message: "back to the front door, what lasting fix did you recommend?",
+    recentTurns: [
+      { role: "user", content: "i feel a draft under my front door" },
+      { role: "assistant", content: "Use a door snake first, then fit a correctly sized door-bottom weather seal." },
+      { role: "user", content: "what is the first thing to check when comparing solar quotes?" },
+      { role: "assistant", content: "Check that each quote uses the same site design and installed scope." },
+      { role: "user", content: "and what should i ask about the inverter warranty?" },
+      { role: "assistant", content: "Ask who handles the claim and which labour and freight costs are covered." },
+    ],
+    continuation,
+    planContext: savedHomePlanContext(),
+    deterministicAnswer: deterministicAnswer(
+      "The lasting fix was a correctly sized door-bottom weather seal after confirming the gap with a door snake.",
+    ),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      observedBody = JSON.parse(options.body);
+      return jsonResponse(structuredModelPayload({
+        verdict: "The lasting fix was a correctly sized door-bottom weather seal.",
+        reason: "Confirm the gap with a door snake first, then fit the seal without blocking required ventilation.",
+        state: state({
+          activeTopic: "comfort_fabric",
+          goal: "Stop the draught under the front door",
+          lastAnswerSummary: "Recalled the durable door-bottom weather seal.",
+        }),
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.deepEqual(failures, []);
+  const context = JSON.parse(observedBody.input[1].content[0].text);
+  assert.equal(context.conversationFrame.subject.id, "saved_home");
+  assert.deepEqual(
+    context.conversationFrame.decisions.map((decision) => decision.id),
+    ["decision_1_door"],
+  );
+  assert.match(context.decisionContext, /front door|door-bottom weather seal/i);
+  assert.match(JSON.stringify(context.conversationFrame), /door-bottom weather seal/i);
+  assert.match(JSON.stringify(context.priorTurns), /draft under my front door|door-bottom weather seal/i);
+  assert.doesNotMatch(JSON.stringify(context.priorTurns), /solar|inverter/i);
+});
+
 test("same-home constraint prompt history removes an intervening Mum decision", async () => {
   const savedGoal = "Fix the saved home door and windows within $1,500";
   const continuation = state({

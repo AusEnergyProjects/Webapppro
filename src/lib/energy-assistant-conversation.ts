@@ -101,7 +101,7 @@ const GENERIC_NEXT_STEP_PATTERN = /^(?:so\s+)?what should (?:i|we) do (?:first|n
 const DECISION_FACET_REFERENCE_PATTERN = /\b(?:price|cost|quote|warranty|installation|installer|model|size|capacity|rebate|discount|eligibility|payback|running costs?)\b/i;
 const LABELLED_OPTION_REFERENCE_PATTERN = /\b(?:option|quote|model|system)\s+[A-Z0-9][A-Z0-9-]*\b|\b[A-Z]\b(?=[^.!?\n]{0,60}\b(?:worth|price|cost|money|warranty|better|cheaper|dearer|choose|choice)\b)/;
 const PRIOR_DECISION_REVISIT_PATTERN = /\b(?:back to|return(?:ing)? to|going back to|do you still think)\b|\b(?:earlier|previous)\s+(?:quote|option|decision|plan|comparison|recommendation|answer)\b|\b(?:that|same)\s+(?:quote|option|decision|plan|comparison|recommendation)\b/i;
-const RECALL_PATTERN = /\b(?:remind me|what (?:did|have) (?:i|we) (?:say|tell you|mention|discuss|cover)|what (?:have|did) we (?:discuss|cover|talk about)|what do you remember|as i (?:said|mentioned|told you)(?: earlier)?|summary of everything so far|everything (?:we have|we['’]ve) covered so far)\b/i;
+const RECALL_PATTERN = /\b(?:remind me|what (?:did|have) (?:i|we) (?:say|tell you|mention|discuss|cover)|what (?:have|did) we (?:discuss|cover|talk about)|what do you remember|what\b[^.!?\n]{0,80}\b(?:(?:did|have)\s+you\s+(?:recommend|suggest|advise|say|tell me)|you\s+(?:recommended|suggested|advised|said|told me))\b|as i (?:said|mentioned|told you)(?: earlier)?|summary of everything so far|everything (?:we have|we['’]ve) covered so far)\b/i;
 const OPEN_ENDED_SUBJECT_PATTERN = /^(?:(?:and|also)\s+)?(?:what|how)\s+about\b/i;
 const QUESTION_OPENING_PATTERN = /^(?:is|are|am|can|could|should|would|will|do|does|did|what|which|why|how|where|when|who)\b|\?\s*$/i;
 const CLEAR_NEW_REQUEST_PATTERN = /^(?:please\s+)?(?:tell|show|explain|help|give|compare|check|review|calculate|work out|find)\b|^(?:let['’]?s|lets)\s+(?:talk|switch)|^(?:i['’]?d|i would)\s+like\s+to\s+(?:ask|talk|know)\b/i;
@@ -1013,6 +1013,8 @@ function hasAmbiguousRepeatedSubjectReference(message: string, state: SurgeConve
   if (rule && subjects.length >= 2 && !/\banother\b/i.test(message)) {
     return !resolvedRepeatedSubjectReference(message, state);
   }
+  if (!surgeConversationAsksForWholeDecision(message)
+    && lexicalPriorDecisionAnchor(message, state.ledger.decisions).ambiguous) return true;
   const otherProperties = state.ledger.subjects.filter((subject) => /^other_property(?:_\d+)?$/.test(subject.id));
   return otherProperties.length >= 2
     && /\b(?:other\s+property|(?:first|second|third|older|earlier|previous|latest|newer)\s+(?:other\s+)?property)\b/i.test(message)
@@ -1207,6 +1209,16 @@ function ledgerSubjectIdentity(
         return { id: returnedSubject.id, kind: returnedSubject.kind, label: returnedSubject.label };
       }
     }
+    const lexicalDecision = lexicalPriorDecisionAnchor(
+      clean,
+      state.ledger?.decisions || [],
+    ).decision;
+    const lexicalSubject = lexicalDecision?.subjectIds.length === 1
+      ? state.ledger?.subjects.find((candidate) => candidate.id === lexicalDecision.subjectIds[0])
+      : null;
+    if (lexicalSubject) {
+      return { id: lexicalSubject.id, kind: lexicalSubject.kind, label: lexicalSubject.label };
+    }
     const quoteDecision = contextualQuoteDecision(clean, state);
     const quoteSubject = quoteDecision?.subjectIds.length === 1
       ? state.ledger?.subjects.find((candidate) => candidate.id === quoteDecision.subjectIds[0])
@@ -1364,6 +1376,97 @@ function decisionSharedWordCount(message: string, decision: SurgeConversationDec
   return [...messageWords].filter((word) => decisionWords.has(word)).length;
 }
 
+const GENERIC_RETURN_ANCHOR_WORDS = new Set([
+  "advice",
+  "answer",
+  "apartment",
+  "decision",
+  "earlier",
+  "house",
+  "issue",
+  "option",
+  "plan",
+  "place",
+  "previous",
+  "problem",
+  "property",
+  "quote",
+  "recommendation",
+  "same",
+  "saved",
+  "solar",
+  "subject",
+  "system",
+  "thing",
+  "topic",
+  "unit",
+]);
+
+function explicitDecisionReturnAnchor(message: string) {
+  const tail = message.match(/\b(?:back to|return(?:ing)? to|going back to)\s+([^\n]+)/i)?.[1]?.trim() || "";
+  if (!tail) return "";
+  const boundary = tail.search(/[,;:.?!\n]|\b(?:what|which|who|where|when|why|how|do|does|did|is|are|was|were|can|could|should|would|will)\b/i);
+  return (boundary >= 0 ? tail.slice(0, boundary) : tail).trim();
+}
+
+function lexicalPriorDecisionAnchor(
+  message: string,
+  decisions: readonly SurgeConversationDecision[],
+) {
+  const anchor = explicitDecisionReturnAnchor(message);
+  const anchorWords = [...normalizedLedgerWords(anchor)]
+    .filter((word) => !GENERIC_RETURN_ANCHOR_WORDS.has(word));
+  if (!anchorWords.length) return { decision: null, ambiguous: false };
+  const explicitTopic = surgeConversationTechnologyTopicFor(anchor) || surgeConversationTopicFor(anchor);
+  const candidates = explicitTopic
+    ? decisions.filter((decision) => (
+        decision.topic === explicitTopic
+        || surgeConversationTopicsAreCompatible(decision.topic, explicitTopic)
+        || surgeConversationTopicsFor(decisionText(decision)).some((topic) => (
+          topic === explicitTopic || surgeConversationTopicsAreCompatible(topic, explicitTopic)
+        ))
+      ))
+    : decisions;
+  if (anchorWords.length === 1) {
+    const matches = candidates.filter((decision) => (
+      normalizedLedgerWords(decisionText(decision)).has(anchorWords[0])
+    ));
+    return matches.length === 1
+      ? { decision: matches[0], ambiguous: false }
+      : { decision: null, ambiguous: matches.length > 1 };
+  }
+  const ranked = candidates
+    .map((decision) => ({
+      decision,
+      sharedWords: anchorWords.filter((word) => normalizedLedgerWords(decisionText(decision)).has(word)).length,
+    }))
+    .filter(({ sharedWords }) => sharedWords >= 2)
+    .sort((left, right) => right.sharedWords - left.sharedWords
+      || right.decision.lastTouchedTurn - left.decision.lastTouchedTurn);
+  const [best, runnerUp] = ranked;
+  if (!best) return { decision: null, ambiguous: false };
+  if (runnerUp?.sharedWords === best.sharedWords) {
+    const tied = ranked
+      .filter((candidate) => candidate.sharedWords === best.sharedWords)
+      .map((candidate) => candidate.decision)
+      .sort(compareDecisionCreationOrder);
+    if (/\b(?:first|older|earlier|original)\b/i.test(anchor)) {
+      return { decision: tied[0] || null, ambiguous: false };
+    }
+    if (/\bsecond\b/i.test(anchor)) {
+      return { decision: tied[1] || null, ambiguous: tied.length < 2 };
+    }
+    if (/\bthird\b/i.test(anchor)) {
+      return { decision: tied[2] || null, ambiguous: tied.length < 3 };
+    }
+    if (/\b(?:latest|newer)\b/i.test(anchor)) {
+      return { decision: tied.at(-1) || null, ambiguous: false };
+    }
+    return { decision: null, ambiguous: true };
+  }
+  return { decision: best.decision, ambiguous: false };
+}
+
 function decisionScore(message: string, topic: string, decision: SurgeConversationDecision) {
   let score = 0;
   if (topic && decision.topic === topic) score += 8;
@@ -1375,6 +1478,86 @@ function decisionScore(message: string, topic: string, decision: SurgeConversati
 
 function normalizedDecisionReference(value: string) {
   return value.toLowerCase().replace(/[\s,]/g, "");
+}
+
+function concreteDecisionAnchors(message: string) {
+  return [...message.matchAll(
+    /\$\s*[\d,]+(?:\.\d+)?|\b\d+(?:\.\d+)?\s*(?:kW|kWh|L|litres?|heads?|units?)\b/gi,
+  )].map((match) => match[0]);
+}
+
+function uniquelyConcreteDecision(
+  message: string,
+  decisions: readonly SurgeConversationDecision[],
+) {
+  for (const anchor of concreteDecisionAnchors(message)) {
+    const normalizedAnchor = normalizedDecisionReference(anchor);
+    const matches = decisions.filter((decision) => (
+      concreteDecisionAnchors(decisionText(decision))
+        .some((candidate) => normalizedDecisionReference(candidate) === normalizedAnchor)
+    ));
+    if (matches.length === 1) return matches[0];
+  }
+  return null;
+}
+
+const GENERIC_DECISION_IDENTITY_WORDS = new Set([
+  ...GENERIC_RETURN_ANCHOR_WORDS,
+  "affect",
+  "apply",
+  "assume",
+  "better",
+  "check",
+  "compare",
+  "cost",
+  "could",
+  "discount",
+  "does",
+  "feed",
+  "installed",
+  "price",
+  "rebate",
+  "should",
+  "stcs",
+  "tariff",
+  "warranty",
+  "would",
+  "worth",
+]);
+
+function firstDecisionIdentitySegment(value: string) {
+  return value.split(/\s+\|\s+|\n---\n/, 1)[0]?.trim() || "";
+}
+
+function decisionCreationIdentityText(decision: SurgeConversationDecision) {
+  return [
+    firstDecisionIdentitySegment(decision.goal),
+    firstDecisionIdentitySegment(decision.outcomeSummary),
+    ...decision.facts.map((fact) => firstDecisionIdentitySegment(fact.value)),
+  ].join(" ");
+}
+
+function uniquelyNamedDecision(
+  message: string,
+  decisions: readonly SurgeConversationDecision[],
+) {
+  const identityWords = [...normalizedLedgerWords(message)]
+    .filter((word) => !GENERIC_DECISION_IDENTITY_WORDS.has(word));
+  if (!identityWords.length) return null;
+  const ranked = decisions
+    .map((decision) => ({
+      decision,
+      sharedWords: identityWords.filter((word) => (
+        normalizedLedgerWords(decisionCreationIdentityText(decision)).has(word)
+      )).length,
+    }))
+    .filter(({ sharedWords }) => sharedWords > 0)
+    .sort((left, right) => right.sharedWords - left.sharedWords
+      || right.decision.lastTouchedTurn - left.decision.lastTouchedTurn);
+  const [best, runnerUp] = ranked;
+  return best && best.sharedWords > (runnerUp?.sharedWords || 0)
+    ? best.decision
+    : null;
 }
 
 function decisionCreationTurn(decision: SurgeConversationDecision) {
@@ -1400,11 +1583,14 @@ function uniquelyAnchoredPriorDecision(
   if (!refersToDecision && !correction) return null;
   const anchorValues = correction
     ? [correction.superseded]
-    : [...message.matchAll(/\$\s*[\d,]+(?:\.\d+)?|\b\d+(?:\.\d+)?\s*(?:kW|kWh|L|litres?|heads?|units?)\b/gi)]
-      .map((match) => match[0]);
+    : concreteDecisionAnchors(message);
   for (const anchor of anchorValues) {
     const normalizedAnchor = normalizedDecisionReference(anchor);
-    const matches = decisions.filter((decision) => normalizedDecisionReference(decisionText(decision)).includes(normalizedAnchor));
+    const concreteAnchor = concreteDecisionAnchors(anchor).length > 0;
+    const matches = decisions.filter((decision) => concreteAnchor
+      ? concreteDecisionAnchors(decisionText(decision))
+        .some((candidate) => normalizedDecisionReference(candidate) === normalizedAnchor)
+      : normalizedDecisionReference(decisionText(decision)).includes(normalizedAnchor));
     if (matches.length === 1) return matches[0];
   }
   return null;
@@ -1478,6 +1664,8 @@ function selectedLedgerDecision(
     .filter((decision) => decision.subjectIds.includes(subjectId));
   const anchoredAcrossTopics = uniquelyAnchoredPriorDecision(message, subjectDecisions);
   if (anchoredAcrossTopics) return anchoredAcrossTopics;
+  const lexicallyAnchoredAcrossTopics = lexicalPriorDecisionAnchor(message, subjectDecisions).decision;
+  if (lexicallyAnchoredAcrossTopics) return lexicallyAnchoredAcrossTopics;
   const activeCrossTopicDecisionOwnsTopic = Boolean(active)
     && active?.topic === "general"
     && messageAsksCrossTopicDecision(active.goal)
@@ -1486,6 +1674,15 @@ function selectedLedgerDecision(
     ? ["rebates_certificates", "bills_tariffs", "products_ratings"].includes(active.topic)
       || activeCrossTopicDecisionOwnsTopic
     : false;
+  const activeDecisionCanOwnFacet = Boolean(active)
+    && ["rebates_certificates", "bills_tariffs", "products_ratings"].includes(topic)
+    && (topic === "products_ratings"
+      || surgeConversationTopicsAreCompatible(topic, active?.topic || ""));
+  const explicitlyAnchoredFacetDecision = continuing && activeDecisionCanOwnFacet
+    ? uniquelyConcreteDecision(message, subjectDecisions)
+      || uniquelyNamedDecision(message, subjectDecisions)
+    : null;
+  if (explicitlyAnchoredFacetDecision) return explicitlyAnchoredFacetDecision;
   const rankedSubjectDecisions = subjectDecisions
     .map((decision) => ({
       decision,
@@ -1515,6 +1712,11 @@ function selectedLedgerDecision(
   if (continuing
     && active?.subjectIds.includes(subjectId)
     && suppliesActiveComparisonAddendum(message)) {
+    return active;
+  }
+  if (continuing
+    && active?.subjectIds.includes(subjectId)
+    && activeDecisionCanOwnFacet) {
     return active;
   }
   if (continuing
@@ -1764,7 +1966,33 @@ export function filterSurgeRecentTurnsForFrame<
   if (targetFrame.subjects.length !== 1 || !targetFrame.decision) return [...recentTurns];
   const targetSubjectId = targetFrame.subjects[0].id;
   const targetDecisionId = targetFrame.decision.id;
+  const targetDecisions = targetFrame.relatedDecisions.some((decision) => decision.id === targetDecisionId)
+    ? targetFrame.relatedDecisions
+    : [targetFrame.decision, ...targetFrame.relatedDecisions];
+  const targetDecisionIds = new Set(targetDecisions.map((decision) => decision.id));
+  const targetTopics = new Set(targetDecisions.flatMap((decision) => [
+    decision.topic,
+    ...surgeConversationTopicsFor(decisionText(decision)),
+  ]).filter((topic) => topic && topic !== "general"));
+  const topicMatchForTarget = (topics: readonly string[]) => {
+    const exact = topics.some((topic) => targetTopics.has(topic));
+    return {
+      exact,
+      compatible: exact || topics.some((topic) => (
+        [...targetTopics].some((targetTopic) => surgeConversationTopicsAreCompatible(topic, targetTopic))
+      )),
+    };
+  };
+  const unresolvedExactTopicIsAmbiguous = (topics: readonly string[]) => topics.some((topic) => (
+    targetTopics.has(topic)
+    && (state.ledger?.decisions || []).some((decision) => (
+      !targetDecisionIds.has(decision.id)
+      && decision.subjectIds.includes(targetSubjectId)
+      && new Set([decision.topic, ...surgeConversationTopicsFor(decisionText(decision))]).has(topic)
+    ))
+  ));
   let segmentMatchesTarget = true;
+  let hasSeenDecisionBoundary = false;
   const filtered: T[] = [];
   const nonTargetSubjectMentioned = (content: string) => {
     const aliasesByPrefix: ReadonlyArray<readonly [string, string]> = [
@@ -1801,17 +2029,57 @@ export function filterSurgeRecentTurnsForFrame<
     if (turn.role === "user") {
       const explicitSubjectIds = explicitlyNamedSubjectIdentities(turn.content, state)
         .map((identity) => identity.id);
-      if (nonTargetSubjectMentioned(turn.content)) {
-        segmentMatchesTarget = false;
-      } else if (explicitSubjectIds.length) {
-        segmentMatchesTarget = explicitSubjectIds.length === 1
-          && explicitSubjectIds[0] === targetSubjectId;
-      } else if (SURGE_EXPLICIT_SEPARATE_PROPERTY_CONTEXT_PATTERN.test(turn.content)) {
+      const turnTopics = surgeConversationTopicsFor(turn.content);
+      const explicitlyNamesOnlyTargetSubject = explicitSubjectIds.length === 1
+        && explicitSubjectIds[0] === targetSubjectId;
+      let rejectsTargetSubject = nonTargetSubjectMentioned(turn.content)
+        || (explicitSubjectIds.length > 0 && !explicitlyNamesOnlyTargetSubject);
+      if (!rejectsTargetSubject
+        && SURGE_EXPLICIT_SEPARATE_PROPERTY_CONTEXT_PATTERN.test(turn.content)) {
         const separateFrame = selectSurgeConversationFrame(turn.content, state, hasPlanContext);
-        segmentMatchesTarget = separateFrame.subjects.some((subject) => subject.id === targetSubjectId);
+        rejectsTargetSubject = !separateFrame.subjects.some((subject) => subject.id === targetSubjectId);
+        if (!rejectsTargetSubject && !turnTopics.length) segmentMatchesTarget = true;
+      } else if (explicitlyNamesOnlyTargetSubject && !turnTopics.length) {
+        segmentMatchesTarget = true;
+      }
+      if (rejectsTargetSubject) {
+        segmentMatchesTarget = false;
+        hasSeenDecisionBoundary = true;
       } else if (PRIOR_DECISION_REVISIT_PATTERN.test(turn.content)) {
         const revisitFrame = selectSurgeConversationFrame(turn.content, state, hasPlanContext);
-        if (revisitFrame.decision?.id === targetDecisionId) segmentMatchesTarget = true;
+        if (revisitFrame.decision) {
+          segmentMatchesTarget = targetDecisionIds.has(revisitFrame.decision.id);
+          hasSeenDecisionBoundary = true;
+        }
+      } else {
+        if (turnTopics.length) {
+          const topicMatch = topicMatchForTarget(turnTopics);
+          if (!topicMatch.compatible) {
+            segmentMatchesTarget = false;
+            hasSeenDecisionBoundary = true;
+          } else {
+            const anchoredDecision = uniquelyConcreteDecision(turn.content, state.ledger?.decisions || [])
+              || uniquelyNamedDecision(turn.content, state.ledger?.decisions || []);
+            if (anchoredDecision) {
+              segmentMatchesTarget = targetDecisionIds.has(anchoredDecision.id);
+              hasSeenDecisionBoundary = true;
+            } else if (explicitlyIntroducesSeparateQuote(
+              turn.content,
+              classifySurgeConversationTurn(turn.content, state, []),
+            )) {
+              segmentMatchesTarget = false;
+              hasSeenDecisionBoundary = true;
+            } else if (!hasSeenDecisionBoundary) {
+              const historicalFrame = selectSurgeConversationFrame(turn.content, state, hasPlanContext);
+              if (historicalFrame.decision) {
+                segmentMatchesTarget = targetDecisionIds.has(historicalFrame.decision.id);
+                hasSeenDecisionBoundary = true;
+              } else if (!topicMatch.exact || unresolvedExactTopicIsAmbiguous(turnTopics)) {
+                segmentMatchesTarget = false;
+              }
+            }
+          }
+        }
       }
     }
     if (segmentMatchesTarget) filtered.push(turn);

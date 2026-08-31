@@ -815,8 +815,7 @@ function scopedPromptRecentTurns(
     Boolean(request.planContext),
     request.recentTurns,
   );
-  const selectedIsActive = selectedFrame.decision?.id === request.continuation.ledger.activeDecisionId;
-  if (!selectedIsActive && !/\b(?:too|as well)\s*[?.!]*$/i.test(request.message)) return [];
+  if (!selectedFrame.decision && !/\b(?:too|as well)\s*[?.!]*$/i.test(request.message)) return [];
   if (selectedFrame.subjects.length !== 1) return frameFilteredTurns;
   const anchorPattern = selectedSubjectAnchorPattern(selectedFrame.subjects[0].id);
   if (!anchorPattern) return frameFilteredTurns;

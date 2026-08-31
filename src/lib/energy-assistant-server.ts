@@ -457,7 +457,7 @@ function recentTurnsForActiveDecision(
   const sameSubjectConstraint = surgeMessageSuppliesSameSubjectConstraint(message);
   if (continuation?.ledger) {
     const frame = selectSurgeConversationFrame(message, continuation, false);
-    if (!frame.decision || frame.decision.id !== continuation.ledger.activeDecisionId) {
+    if (!frame.decision) {
       return /\b(?:too|as well)\s*[?.!]*$/i.test(message) ? recentTurns.slice(-2) : [];
     }
   }
@@ -514,7 +514,7 @@ function recentTurnsForActiveDecision(
   }
   const selectedTurns = goalTurnIndex >= 0
     ? recentTurns.slice(goalTurnIndex)
-    : continuation?.ledger ? recentTurns.slice(-4) : [...recentTurns];
+    : [...recentTurns];
   return filterSurgeRecentTurnsForFrame(message, continuation, false, selectedTurns);
 }
 

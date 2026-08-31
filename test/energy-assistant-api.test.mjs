@@ -4456,8 +4456,10 @@ test("a generic bills-first paid result cannot replace the moisture priority fro
   }, { qualityRehearsal: true }), {
     now: () => new Date(NOW),
     reserveModelCall: allowModelCall,
-    generateAnswer: async () => {
+    generateAnswer: async (modelRequest) => {
       modelCalls += 1;
+      assert.match(JSON.stringify(modelRequest.recentTurns), /draft under my front door|door-bottom weather seal/i);
+      assert.doesNotMatch(JSON.stringify(modelRequest.recentTurns), /solar quotes|solar quote|shade assumptions/i);
       return {
         answer: fixedAnswer(
           "Start by comparing your electricity and gas bills, then work on the largest energy cost first.",
@@ -5111,6 +5113,249 @@ test("a denied model call keeps the exact cold-home follow-up useful and profile
   assert.match(payload.reply.directAnswer, /existing reverse-cycle system/i);
   assert.equal(qualityEvents.length, 1);
   assert.equal(qualityEvents[0].answerSource, "deterministic");
+  assertPublicReplyContract(payload);
+});
+
+test("a live-style continuation reselects the door decision after a solar detour", async () => {
+  const planContext = {
+    version: 1,
+    source: "home_energy_plan",
+    facts: [
+      { key: "property_type", value: "Apartment or unit" },
+      { key: "comfort_concerns", value: "Too cold in cool weather, Condensation, damp or mould" },
+      { key: "glazing", value: "Mostly single glazed" },
+      { key: "heating_cooling_systems", value: "Air-con, including reverse-cycle air-con, Gas space or ducted heating" },
+    ],
+  };
+  let recentTurns = [];
+  let nextContinuation;
+  const seededTurns = [
+    {
+      requestId: "live-door-seed-0001",
+      message: "i feel a draft under my front door",
+      answer: "Use a door snake first, then fit a correctly sized door-bottom weather seal.",
+      topic: "comfort_fabric",
+      goal: "Stop the front-door draught",
+    },
+    {
+      requestId: "live-cold-follow-up-0001",
+      message: "great idea, also i find it hard to keep the house warm sometimes",
+      answer: "Test the front-door gap, then check other doors, windows and ceiling insulation.",
+      topic: "comfort_fabric",
+      goal: "Keep the home warm after fixing the front-door draught",
+    },
+    {
+      requestId: "live-solar-switch-0001",
+      message: "what is the first thing to check when comparing solar quotes?",
+      answer: "Check that every quote covers the same site-specific design and complete installed scope.",
+      topic: "solar",
+      goal: "Compare solar quotes",
+    },
+    {
+      requestId: "live-solar-review-follow-up-0001",
+      message: "what else should i check when comparing solar quotes?",
+      answer: "Also compare shade assumptions, equipment, warranties and exclusions.",
+      topic: "products_ratings",
+      goal: "Review the complete solar quote",
+    },
+  ];
+
+  for (const seeded of seededTurns) {
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: seeded.requestId,
+      message: seeded.message,
+      recentTurns,
+      ...(nextContinuation ? { continuation: nextContinuation } : {}),
+      planContext,
+      pageContext: "/surge",
+      audience: "public",
+    }), {
+      now: () => new Date(NOW),
+      reserveModelCall: allowModelCall,
+      generateAnswer: async () => ({
+        answer: fixedAnswer(seeded.answer),
+        continuation: continuation({
+          activeTopic: seeded.topic,
+          goal: seeded.goal,
+          lastAnswerSummary: seeded.answer,
+        }),
+      }),
+    });
+    const payload = await body(response);
+    assert.equal(response.status, 200, JSON.stringify(payload));
+    recentTurns = [
+      ...recentTurns,
+      { role: "user", content: seeded.message },
+      { role: "assistant", content: payload.reply.content },
+    ].slice(-12);
+    nextContinuation = payload.continuation;
+  }
+
+  const returnRequest = {
+    action: "ask",
+    message: "back to the front door, what lasting fix did you recommend?",
+    recentTurns,
+    continuation: nextContinuation,
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  };
+  let modelCalls = 0;
+  const modelResponse = await handleEnergyAssistantRequest(request({
+    ...returnRequest,
+    requestId: "live-door-return-after-solar-model-0001",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async () => {
+      modelCalls += 1;
+      return {
+        answer: fixedAnswer("The lasting fix was a correctly sized door-bottom weather seal after confirming the gap with a door snake."),
+        continuation: continuation({
+          activeTopic: "comfort_fabric",
+          goal: "Stop the front-door draught",
+          lastAnswerSummary: "Recalled the durable door-bottom weather seal.",
+        }),
+      };
+    },
+  });
+
+  const modelPayload = await body(modelResponse);
+  assert.equal(modelResponse.status, 200, JSON.stringify(modelPayload));
+  assert.equal(modelCalls, 1);
+  assert.equal(modelPayload.quality.answerSource, "model");
+  assert.match(modelPayload.reply.directAnswer, /door-bottom weather seal/i);
+  assert.doesNotMatch(modelPayload.reply.content, /solar proposals|solar quotes/i);
+  assertPublicReplyContract(modelPayload);
+
+  const fallbackResponse = await handleEnergyAssistantRequest(request({
+    ...returnRequest,
+    requestId: "live-door-return-after-solar-fallback-0001",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: async () => ({ allowed: false }),
+  });
+  const fallbackPayload = await body(fallbackResponse);
+  assert.equal(fallbackResponse.status, 200, JSON.stringify(fallbackPayload));
+  assert.equal(fallbackPayload.quality.answerSource, "deterministic");
+  assert.match(fallbackPayload.reply.directAnswer, /door (?:snake|seal)|door-bottom/i);
+  assert.doesNotMatch(fallbackPayload.reply.content, /solar proposals|solar quotes/i);
+  assertPublicReplyContract(fallbackPayload);
+
+  const returnOnlyMessage = "Back to the front door.";
+  const returnOnlyResponse = await handleEnergyAssistantRequest(request({
+    ...returnRequest,
+    requestId: "live-door-return-only-after-solar-0001",
+    message: returnOnlyMessage,
+  }), {
+    now: () => new Date(NOW),
+    reserveModelCall: async () => ({ allowed: false }),
+  });
+  const returnOnlyPayload = await body(returnOnlyResponse);
+  assert.equal(returnOnlyResponse.status, 200, JSON.stringify(returnOnlyPayload));
+  assert.match(returnOnlyPayload.reply.directAnswer, /draught|door/i);
+  assert.doesNotMatch(returnOnlyPayload.reply.content, /solar proposals|solar quotes/i);
+  assert.match(
+    returnOnlyPayload.continuation.ledger.decisions
+      .find((decision) => decision.id === returnOnlyPayload.continuation.ledger.activeDecisionId)
+      ?.outcomeSummary || "",
+    /door (?:snake|seal)|door-bottom/i,
+  );
+
+  const recallResponse = await handleEnergyAssistantRequest(request({
+    ...returnRequest,
+    requestId: "live-door-recall-after-return-0001",
+    message: "What lasting fix did you recommend?",
+    recentTurns: [
+      ...recentTurns,
+      { role: "user", content: returnOnlyMessage },
+      { role: "assistant", content: returnOnlyPayload.reply.content },
+    ].slice(-12),
+    continuation: returnOnlyPayload.continuation,
+  }), {
+    now: () => new Date(NOW),
+    reserveModelCall: async () => ({ allowed: false }),
+  });
+  const recallPayload = await body(recallResponse);
+  assert.equal(recallResponse.status, 200, JSON.stringify(recallPayload));
+  assert.match(recallPayload.reply.directAnswer, /door (?:snake|seal)|door-bottom/i);
+  assert.doesNotMatch(recallPayload.reply.content, /solar proposals|solar quotes/i);
+  assertPublicReplyContract(recallPayload);
+});
+
+test("an explicit return reselects an earlier decision on the same saved home", async () => {
+  const savedHomeSubject = {
+    id: "saved_home",
+    kind: "saved_home",
+    label: "Saved home",
+    facts: [],
+    lastTouchedTurn: 2,
+  };
+  const priorContinuation = continuation({
+    activeTopic: "solar",
+    goal: "Compare solar quotes",
+    lastAnswerSummary: "Check the inverter warranty.",
+    ledger: {
+      turn: 2,
+      activeDecisionId: "decision_2_solar",
+      subjects: [savedHomeSubject],
+      decisions: [
+        {
+          id: "decision_1_comfort_fabric",
+          subjectIds: ["saved_home"],
+          topic: "comfort_fabric",
+          goal: "Stop the draught under the front door",
+          facts: [],
+          outcomeSummary: "Use a door snake first, then fit a correctly sized door-bottom weather seal.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 1,
+        },
+        {
+          id: "decision_2_solar",
+          subjectIds: ["saved_home"],
+          topic: "solar",
+          goal: "Compare solar quotes and inverter warranties",
+          facts: [],
+          outcomeSummary: "Compare the same site design and check the written inverter warranty.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 2,
+        },
+      ],
+    },
+  });
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "same-home-door-return-after-solar-0001",
+    message: "back to the front door, what lasting fix did you recommend?",
+    recentTurns: [
+      { role: "user", content: "i feel a draft under my front door" },
+      { role: "assistant", content: "Use a door snake first, then fit a door-bottom weather seal." },
+      { role: "user", content: "what should i check in a solar quote?" },
+      { role: "assistant", content: "Compare the same site design and the inverter warranty." },
+    ],
+    continuation: priorContinuation,
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [{ key: "property_type", value: "Apartment or unit" }],
+    },
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: async () => ({ allowed: false }),
+  });
+
+  const payload = await body(response);
+  assert.equal(response.status, 200, JSON.stringify(payload));
+  assert.match(payload.reply.directAnswer, /door (?:snake|seal)|door-bottom/i);
+  assert.doesNotMatch(payload.reply.content, /solar proposals|solar quotes/i);
+  assert.equal(payload.continuation.ledger.activeDecisionId, "decision_1_comfort_fabric");
   assertPublicReplyContract(payload);
 });
 
