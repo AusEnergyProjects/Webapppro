@@ -3986,7 +3986,7 @@ function registryFailure(
   );
 }
 
-export function creditexOfficialProductRegistryCanServeQuotePlanning(
+export function creditexOfficialProductRegistryCanServeCalculator(
   status: CreditexOfficialProductRegistryStatus,
   now = new Date(),
 ) {
@@ -4017,7 +4017,7 @@ function requireOfficialProductRegistry(
 ) {
   if (
     options.allowStaleAcceptedSnapshot
-    && creditexOfficialProductRegistryCanServeQuotePlanning(
+    && creditexOfficialProductRegistryCanServeCalculator(
       status,
       options.now,
     )
