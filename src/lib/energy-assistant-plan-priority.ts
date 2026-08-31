@@ -12,6 +12,7 @@ type RecentTurn = {
 };
 
 const PRIORITY_INTENT = /\b(?:where|how)\s+(?:(?:should|do|can|could)\s+)(?:I|we)\s+(?:start|begin)|\bwhere(?:'s| is)\s+(?:the\s+)?best\s+place\s+to\s+(?:start|begin|star)\b|\bwhat\s+(?:do|should|can|could)\s+(?:I|we)\s+(?:do|upgrade|fix|tackle|spend)(?:\s+on)?\s+first|\bwhat\s+should\s+be\s+(?:my|our|the)\s+first\s+priority|\bwhat\s+(?:is|comes)\s+(?:the\s+)?first(?:\s+(?:thing|priority|step))?(?:\s+to\s+(?:do|fix|upgrade|tackle))?|\bwhat\s+to\s+(?:do|fix|upgrade|tackle)\s+first|\b(?:prioritise|prioritize|rank)\s+(?:my|our|the)\s+(?:home|energy|upgrade|plan)|\b(?:start|begin|first|spend|priority)\b[^.!?\n]{0,90}\b(?:based\s+on|using|use|given|from)\s+(?:my|our|the)\s+(?:saved\s+)?(?:answers|survey|plan|details|home details|home context)\b|\b(?:based\s+on|using|use|given|from)\s+(?:my|our|the)\s+(?:saved\s+)?(?:answers|survey|plan|details|home details|home context)\b[^.!?\n]{0,110}\b(?:start|begin|first|spend|budget|priority|comfort|bills?)\b/i;
+const TOPIC_SPECIFIC_PRIORITY_INTENT = /\b(?:solar|panels?|batter(?:y|ies)|quotes?|proposals?|tariffs?|heat pump|hot water|water heater|heating|heater|cooling|air ?con(?:ditioner|ditioning)?|insulation|windows?|glazing|draughts?|drafts?|doors?|roof|leaks?|condensation|damp|mould|mold|ventilation|switchboard|fuse box|EV|charger|rebates?|certificates?|STCs?|VEECs?|ESCs?|PRCs?|products?|models?|install(?:ation|ing)?)\b/i;
 const EXPLICIT_CORRECTION = /\b(?:correction|actually|instead|no longer|has changed|have changed|I now (?:rent|own|live)|my (?:new )?postcode is|not (?:an? )?(?:owner|renter|apartment|unit|house))\b/i;
 const CHANGE_NEGATED = /\b(?:not|never|wasn['’]?t|weren['’]?t|isn['’]?t|aren['’]?t|hasn['’]?t|haven['’]?t|hadn['’]?t|didn['’]?t)\b[^.!?\n]{0,28}\b(?:fix(?:ed)?|go(?:ne)?|clear(?:ed)?|resolv(?:e|ed)|repair(?:ed)?|seal(?:ed)?|stop(?:ped)?|remov(?:e|ed)|replac(?:e|ed)|upgrad(?:e|ed)|install(?:ed)?|add(?:ed)?|chang(?:e|ed)|new|double[- ]?glaz(?:e|ed))\b|^\s*(?:no\s+\w+|nobody\b|neither\b[^.!?\n]{0,80}\bnor\b)[^.!?\n]{0,100}\b(?:fixed|gone|cleared|resolved|repaired|sealed|stopped|removed|replaced|upgraded|installed|added|changed|new|double[- ]?glazed)\b/i;
 const INFORMAL_CHANGE_NEGATED = /\b(?:not|never|wasn['’]?t|weren['’]?t|isn['’]?t|aren['’]?t|hasn['’]?t|haven['’]?t|hadn['’]?t|didn['’]?t)\b[^!?\n]{0,60}\b(?:put\s+in|went\s+in|got)\b|^\s*no\b[^!?\n]{0,80}\b(?:put\s+in|went\s+in|got)\b/i;
@@ -518,7 +519,92 @@ export function surgeHasRecentHomeFactCorrection(
 }
 
 export function isSurgePlanPriorityIntent(message: string) {
-  return PRIORITY_INTENT.test(message);
+  if (PRIORITY_INTENT.test(message) && !TOPIC_SPECIFIC_PRIORITY_INTENT.test(message)) return true;
+  return message
+    .split(/\s*(?:,|;|\band\b|\balso\b)\s*/i)
+    .some((clause) => (
+      PRIORITY_INTENT.test(clause) && !TOPIC_SPECIFIC_PRIORITY_INTENT.test(clause)
+    ));
+}
+
+function firstVisibleSentence(value: string) {
+  return value.trim().split(/\n+|[.!?](?:\s+|$)/u)[0]?.trim() || "";
+}
+
+function withoutResolvedLeadingContext(value: string) {
+  return value.replace(
+    /^(?:(?:since|because|now that)\b\s*)?[^,;]{0,120}\b(?:fixed|resolved|repaired|ruled out|cleared|gone|no longer present)\b[^,;]*[,;]\s*(?:so\s+)?/i,
+    "",
+  );
+}
+
+function sentenceContradictsPriority(
+  sentence: string,
+  priorityIndex: number,
+  priorityLength: number,
+) {
+  const before = sentence.slice(0, priorityIndex);
+  const after = sentence.slice(priorityIndex + priorityLength);
+  if (/\b(?:do not|don['’]?t|never|avoid|skip)\b[^,;]{0,55}$/i.test(before)) return true;
+  if (/^[^,;]{0,45}\b(?:is|are|should be)?\s*(?:not|never)\b[^,;]{0,35}\b(?:first|priority|needed|required)\b/i.test(after)) return true;
+  if (/^[^,;]{0,55}\b(?:(?:only\s+)?after|afterwards?|once|until|later|second|instead)\b/i.test(after)) return true;
+  return /\b(?:but|however|instead)\b[^.!?]{0,85}\b(?:(?:the\s+)?(?:real|actual|true)\s+)?(?:first|starting)\b/i.test(after)
+    || /\b(?:but|however|instead)\b[^.!?]{0,85}\bbefore\s+(?:doing|starting|addressing|fixing|checking)\b/i.test(after);
+}
+
+function firstSentenceRanks(
+  candidateText: string,
+  prioritySignal: RegExp,
+) {
+  const sentence = withoutResolvedLeadingContext(firstVisibleSentence(candidateText));
+  const priorityMatch = sentence.match(prioritySignal);
+  if (!priorityMatch || priorityMatch.index === undefined) return false;
+  const priorityIndex = priorityMatch.index;
+  if (sentenceContradictsPriority(sentence, priorityIndex, priorityMatch[0].length)) return false;
+  const competingPriorityIndex = sentence.search(
+    /\b(?:electricity|gas)\s+bills?\b|\b(?:electricity|gas|bills?|tariffs?)\b|\bsolar\b|\bbatter(?:y|ies)\b|\b(?:roof|leaks?|water (?:entry|ingress))\b|\b(?:moisture|humidity|condensation|damp|mould|mold)\b|\b(?:windows?|glaz(?:e|ed|ing)|draughts?|drafts?|blinds?|curtains?)\b|\b(?:ceiling|insulation|roof[- ]?space|batts?)\b|\b(?:reverse[- ]?cycle|air[- ]?con|air conditioning|split system|heating|hot water|heat pump)\b|\b(?:switchboard|fuse board|electrician)\b/i,
+  );
+  return competingPriorityIndex < 0 || priorityIndex <= competingPriorityIndex;
+}
+
+export function surgeAnswerPreservesPlanPriority(
+  priority: EnergyAssistantAnswer,
+  candidateText: string,
+) {
+  const priorityText = `${priority.directAnswer}\n${priority.nextAction}`;
+  if (/start with the source of the moisture|reported roof issue as a possible moisture source/i.test(priorityText)) {
+    const first = firstVisibleSentence(candidateText);
+    return firstSentenceRanks(candidateText, /\b(?:roof|leaks?|watertight|water (?:entry|ingress))\b/i)
+      && /\b(?:leak|damage|water|watertight|moisture)\b/i.test(first);
+  }
+  if (/start with moisture control/i.test(priorityText)) {
+    return firstSentenceRanks(candidateText, /\b(?:moisture|humidity|condensation|damp|mould|mold)\b/i);
+  }
+  if (/start with the reported roof problem/i.test(priorityText)) {
+    return firstSentenceRanks(candidateText, /\b(?:roof|leak|damage|watertight)\b/i);
+  }
+  if (/start with the worst windows/i.test(priorityText)) {
+    return firstSentenceRanks(candidateText, /\b(?:windows?|glaz(?:e|ed|ing)|draughts?|drafts?|blinds?|curtains?)\b/i);
+  }
+  if (/start with the accessible ceiling insulation/i.test(priorityText)) {
+    return firstSentenceRanks(candidateText, /\b(?:ceiling|insulation|roof[- ]?space|batts?)\b/i);
+  }
+  if (/start with the existing reverse-cycle system/i.test(priorityText)) {
+    return firstSentenceRanks(candidateText, /\b(?:reverse[- ]?cycle|air[- ]?con|air conditioning|split system)\b/i);
+  }
+  if (/start with the first ranked action below/i.test(priorityText)) {
+    if (/reverse[- ]?cycle|air[- ]?con|air conditioning/i.test(priority.nextAction)) {
+      return firstSentenceRanks(candidateText, /\b(?:reverse[- ]?cycle|air[- ]?con|air conditioning)\b/i);
+    }
+    if (/compare electricity|compare gas|energy bills?|tariffs?/i.test(priority.nextAction)) {
+      return firstSentenceRanks(candidateText, /\b(?:electricity|gas|bills?|tariffs?)\b/i);
+    }
+    if (/fuse board|switchboard|licensed electrician/i.test(priority.nextAction)) {
+      return firstSentenceRanks(candidateText, /\b(?:switchboard|fuse board|electrician)\b/i);
+    }
+    return false;
+  }
+  return !/\bBased on your saved answers\b[^.!?]*\bstart with\b/i.test(priority.directAnswer);
 }
 
 export function composeSurgePlanPriorityAnswer(
@@ -569,7 +655,7 @@ export function composeSurgePlanPriorityAnswer(
     && !/no known/i.test(roofCondition);
   const ceilingUnavailable = /another dwelling is directly above|no roof or ceiling space/i.test(ceiling);
   const floorUnavailable = /slab|another dwelling is directly below/i.test(floor);
-  const ceilingNeedsWork = /no ceiling insulation|uninsulated|old|patchy|inadequate/i.test(ceiling)
+  const ceilingNeedsWork = /no (?:ceiling )?insulation(?: that I know of)?|uninsulated|old|patchy|inadequate/i.test(ceiling)
     && !ceilingUnavailable;
   const weakWindows = /single glazed/i.test(glazing)
     || /basic roller|vertical|venetian|no fitted internal/i.test(coverings)

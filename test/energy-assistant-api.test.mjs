@@ -4395,6 +4395,239 @@ test("a completed survey attempts the paid model and safely retains its ranked s
   }
 });
 
+function completedMoisturePlannerContext(roofCondition = "good") {
+  return buildSurgePlanContextFromStoredAssessment(JSON.stringify({
+    version: 1,
+    stage: 4,
+    draft: {
+      postcode: "3000",
+      situation: "owner",
+      approvalContext: "strata",
+      propertyType: "apartment",
+      occupants: "two",
+      goals: ["improve-comfort", "lower-bills"],
+      pace: "whole-home",
+      budgetRange: "under_2k",
+      storeys: "single",
+      ageBand: "1960_1999",
+      floorArea: "under_100",
+      sharedWalls: "two_plus_sides",
+      wallConstruction: "masonry_concrete",
+      floorConstruction: "suspended_concrete",
+      roofType: "tile",
+      roofColour: "light",
+      roofForm: "flat_low_pitch",
+      roofCondition,
+      switchboard: "modern_breakers",
+      timing: "planning",
+      occupancyPattern: "mostly-home",
+      energyUsePattern: "evening",
+      billPressure: "higher-than-expected",
+      gasConnection: "connected",
+      disruption: "staged",
+      plannedWorks: "maintenance",
+      features: [
+        "comfort-too-hot", "comfort-too-cold", "condensation-moisture",
+        "ceiling-insulation-not-applicable", "wall-insulation-none",
+        "floor-insulation-not-applicable", "single-glazing",
+        "window-coverings-basic", "external-shading-none", "sun-exposure-morning",
+        "ventilation-none-known", "kitchen-exhaust-fan", "bathroom-exhaust-fan",
+        "reverse-cycle", "gas-heating", "gas-storage-hot-water",
+        "gas-cooking", "electrical-supply-single-phase", "solar-none", "battery-none",
+        "ev", "lighting-mostly-led", "pool-spa-none",
+      ],
+    },
+  }));
+}
+
+test("a generic bills-first paid result cannot replace the moisture priority from a completed planner", async () => {
+  const planContext = completedMoisturePlannerContext();
+  assert.ok(planContext);
+  assert.ok(planContext.facts.length >= 45);
+  let modelCalls = 0;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "saved-moisture-generic-model-0001",
+    message: "where is the best place to star",
+    recentTurns: [],
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async () => {
+      modelCalls += 1;
+      return {
+        answer: fixedAnswer(
+          "Start by comparing your electricity and gas bills, then work on the largest energy cost first.",
+        ),
+        continuation: continuation({
+          activeTopic: "bills_tariffs",
+          goal: "Reduce household energy bills",
+          lastAnswerSummary: "Started with household bills.",
+        }),
+      };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(modelCalls, 1, "the paid model remains the first attempted answer path");
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "deterministic");
+  assert.match(payload.reply.directAnswer, /start with moisture control/i);
+  assert.match(payload.reply.directAnswer, /control condensation first/i);
+  assert.doesNotMatch(payload.reply.directAnswer, /start by comparing your electricity and gas bills/i);
+});
+
+test("a generic paid result cannot replace roof water-entry control when moisture and roof damage are both reported", async () => {
+  const planContext = completedMoisturePlannerContext("known_issue");
+  assert.ok(planContext);
+  assert.ok(planContext.facts.length >= 45);
+  let modelCalls = 0;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "saved-roof-moisture-generic-model-0001",
+    message: "Where should I start?",
+    recentTurns: [],
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async () => {
+      modelCalls += 1;
+      return {
+        answer: fixedAnswer(
+          "Start with indoor condensation control and ventilation, then check the reported roof damage later.",
+        ),
+        continuation: continuation({
+          activeTopic: "bills_tariffs",
+          goal: "Reduce household energy bills",
+          lastAnswerSummary: "Started with household bills.",
+        }),
+      };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(modelCalls, 1, "the paid model remains the first attempted answer path");
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "deterministic");
+  assert.match(payload.reply.directAnswer, /start with the source of the moisture/i);
+  assert.match(
+    payload.reply.directAnswer,
+    /roof issue as a possible moisture source[^.]*made watertight first/i,
+  );
+  const roofControlIndex = payload.reply.directAnswer.search(/roof issue as a possible moisture source/i);
+  const indoorMoistureIndex = payload.reply.directAnswer.search(/after the roof leak is ruled out or repaired/i);
+  assert.ok(roofControlIndex >= 0 && roofControlIndex < indoorMoistureIndex);
+  assert.doesNotMatch(payload.reply.directAnswer, /check the reported roof damage later/i);
+});
+
+test("an ambiguous start question stays with another active property instead of leaking the saved plan", async () => {
+  const planContext = completedMoisturePlannerContext();
+  assert.ok(planContext);
+  const mumsHomeConversation = continuation({
+    activeTopic: "insulation",
+    goal: "Work out where Mum should start with comfort improvements",
+    lastAnswerSummary: "Kept Mum's home separate from the saved apartment.",
+    ledger: {
+      turn: 2,
+      activeDecisionId: "decision_mum_comfort_priority",
+      subjects: [{
+        id: "mums_home",
+        kind: "property",
+        label: "Mum's home",
+        facts: [{ key: "comfort_concern", value: "Mum's home is cold", source: "chat", updatedTurn: 2 }],
+        lastTouchedTurn: 2,
+      }],
+      decisions: [{
+        id: "decision_mum_comfort_priority",
+        subjectIds: ["mums_home"],
+        topic: "insulation",
+        goal: "Work out where Mum should start with comfort improvements",
+        facts: [],
+        outcomeSummary: "Kept Mum's home separate from the saved apartment.",
+        openItems: [],
+        pendingQuestion: "",
+        status: "resolved",
+        lastTouchedTurn: 2,
+      }],
+    },
+  });
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "mum-active-ambiguous-priority-0001",
+    message: "Where should I start?",
+    recentTurns: [
+      { role: "user", content: "Mum's home is cold and I want to help her improve it." },
+      { role: "assistant", content: "I will keep Mum's home separate from your saved apartment." },
+    ],
+    continuation: mumsHomeConversation,
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return {
+        answer: fixedAnswer("For Mum's home, start by checking whether accessible ceiling insulation is missing or patchy before planning a larger upgrade."),
+        continuation: mumsHomeConversation,
+      };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(observedRequest);
+  assert.equal(observedRequest.planContext, null);
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "model");
+  assert.match(payload.reply.directAnswer, /Mum's home/i);
+  assert.doesNotMatch(payload.reply.directAnswer, /saved answers|moisture control/i);
+});
+
+test("a topic-specific first-step question is answered as that decision rather than a whole-home planner priority", async () => {
+  const planContext = completedMoisturePlannerContext();
+  assert.ok(planContext);
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "solar-quote-first-step-0001",
+    message: "What is the first thing to do when comparing solar quotes?",
+    recentTurns: [],
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return {
+        answer: fixedAnswer("First compare the exact solar system models, installed scope, warranties and material exclusions on each written quote."),
+        continuation: continuation({
+          activeTopic: "solar",
+          goal: "Compare solar quotes",
+          lastAnswerSummary: "Started with like-for-like written scope.",
+        }),
+      };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(observedRequest);
+  assert.doesNotMatch(observedRequest.deterministicAnswer.directAnswer, /start with moisture control/i);
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "model");
+  assert.match(payload.reply.directAnswer, /solar system models|written quote/i);
+  assert.doesNotMatch(payload.reply.directAnswer, /moisture control/i);
+});
+
 test("strict paid evaluation still validates a pure saved-plan priority answer through the model", async () => {
   const planContext = buildSurgePlanContextFromStoredAssessment(JSON.stringify({
     version: 1,
