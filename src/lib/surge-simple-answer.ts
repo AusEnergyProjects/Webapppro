@@ -12,6 +12,10 @@ import {
   surgeHasRecentResolvedMoistureConcern,
   surgePlanContextAfterRecentHomeFactChanges,
 } from "./energy-assistant-plan-priority.ts";
+import {
+  isSurgeBroadCheapWindowHeatLossOptionsRequest,
+  SURGE_CHEAP_WINDOW_HEAT_LOSS_EXPLAINER,
+} from "./surge-window-advice.ts";
 
 type RecentTurn = {
   role: "user" | "assistant";
@@ -468,6 +472,13 @@ export function composeSurgeSimpleAnswer(
     && /\b(?:expensive|costly|dear|high[- ]?priced|cost|price)\b/i.test(cleanMessage)
     && !/\b(?:quote|proposal)\b|\$/i.test(cleanMessage);
   const priorQuestionWasAboutCost = /\b(?:expensive|costly|dear|high[- ]?priced|cost|price)\b/i.test(priorUserText);
+
+  if (isSurgeBroadCheapWindowHeatLossOptionsRequest(message)) {
+    return answer(base, {
+      directAnswer: SURGE_CHEAP_WINDOW_HEAT_LOSS_EXPLAINER,
+      practicalSteps: [],
+    });
+  }
 
   if (currentSolarCostQuestion || (additiveBareSolarPrompt && priorQuestionWasAboutCost)) {
     return answer(base, {

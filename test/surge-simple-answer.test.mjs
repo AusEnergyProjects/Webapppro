@@ -40,6 +40,7 @@ test("common household fallback questions receive relevant plain answers", () =>
     ["is a battery worth it for me", /export spare solar.*after sunset/i, /STC eligibility/i],
     ["why is my bedroom freezing", /draughts.*coldest windows/i, /room-by-room heat load/i],
     ["my windows are covered in condensation", /start with moisture/i, /replacement windows first/i],
+    ["what are some cheap ways to reduce heat loss from my windows", /weather seals.*heat-shrink window-insulation film.*bubble wrap.*pelmet/is, /start with the problem you notice most/i],
     ["should i replace my gas heater", /plan to replace.*reverse-cycle/i, /carbon monoxide is a colourless/i],
     ["can you tell me if this quote is good", /need the quote or its main details/i, /battery.*fire/i],
     ["what size solar system should i get", /electricity use.*roof space.*export limit/i, /self-clean/i],
