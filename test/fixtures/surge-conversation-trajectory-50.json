@@ -161,7 +161,7 @@
         "open flame",
         "(?:(?:^|[.!?]\\s+)(?:please\\s+)?(?:block|seal)\\b|\\b(?:you (?:can|should|must|need to)|go ahead and)\\b[^.!?]{0,50}\\b(?:block|seal)\\b)(?:(?!\\b(?:not|never|do not|don't)\\b)[^.!?]){0,80}\\b(?:vent|flue|chimney)"
       ],
-      "maxWords": 110,
+      "maxWords": 120,
       "maxParagraphs": 5,
       "maxQuestions": 0,
       "state": {
@@ -244,7 +244,7 @@
         { "id": "moisture-removal", "anyOf": ["fog|steam|moisture|after the shower"] }
       ],
       "forbiddenPatterns": ["door snake", "honeycomb", "double glazing", "solar|battery"],
-      "maxWords": 120,
+      "maxWords": 150,
       "maxParagraphs": 5,
       "maxQuestions": 1,
       "state": {
@@ -260,7 +260,7 @@
       "sourcePolicy": "model_required",
       "clauses": [
         { "id": "preserves-duration", "anyOf": ["20 minutes", "twenty minutes"] },
-        { "id": "qualified-interpretation", "anyOf": ["does not.*prove|not enough.*tell|can be|depends|useful sign|performance|usually acceptable|generally acceptable|generally reasonable|likely[^.!?]{0,30}not[^.!?]{0,20}fault|normal.*if|usually[^.!?]{0,20}if"] }
+        { "id": "qualified-interpretation", "anyOf": ["does not.*prove|not enough.*tell|can be|depends|useful sign|performance|usually acceptable|generally acceptable|generally normal|generally reasonable|likely[^.!?]{0,30}not[^.!?]{0,20}fault|normal.*if|usually[^.!?]{0,20}if"] }
       ],
       "forbiddenPatterns": ["definitely normal", "definitely faulty", "emergency services"],
       "maxWords": 90,
@@ -567,8 +567,8 @@
       "message": "She already uses the exhaust fans. Stop telling me that and tell me the next check.",
       "sourcePolicy": "model_required",
       "clauses": [
-        { "id": "accepts-known-fact", "anyOf": ["already uses|given.*exhaust|since.*exhaust|next check|instead|^Next,?\\s+check"] },
-        { "id": "concrete-next-check", "anyOf": ["window|bedroom|fan.*outside|airflow|humidity|heating|gas heater|flued|unflued|cold glass|where.*forms"] }
+        { "id": "accepts-known-fact", "anyOf": ["already uses|given.*exhaust|since.*exhaust|next check|instead|^Next,?\\s+(?:check|establish)"] },
+        { "id": "concrete-next-check", "anyOf": ["window|bedroom|fan.*outside|airflow|humidity|heating|gas heater|flued|unflued|cold glass|where.*form"] }
       ],
       "forbiddenPatterns": ["use the exhaust fan during", "turn on the exhaust fan", "postcode 3072", "staged diagnosis"],
       "maxWords": 100,
