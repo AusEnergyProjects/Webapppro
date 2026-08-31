@@ -1242,7 +1242,21 @@ function coldHomeFollowUpRetainsConfirmedDoor(
   return /\b(?:front|entry)\s+door\b|\bdoor\s+(?:draught|draft|snake|seal|gap)\b|\b(?:draught|draft|air|breeze)\b[^.!?\n]{0,35}\b(?:under|around|through)\b[^.!?\n]{0,20}\b(?:the )?door\b/i.test(answer);
 }
 
+function isSimpleUnderDoorDraughtRequest(message: string) {
+  const asksAboutUnderDoorAir = /\b(?:draught|draft|air|breeze)\b[^.!?\n]{0,45}\b(?:under|beneath|bottom of)\b[^.!?\n]{0,25}\b(?:front|entry)?\s*door\b|\b(?:front|entry)?\s*door\b[^.!?\n]{0,45}\b(?:draught|draft|air|breeze|bottom gap)\b/i.test(message);
+  const topics = modelRelevanceTopics(message).primary;
+  return asksAboutUnderDoorAir
+    && topics.length === 1
+    && topics[0] === "draught"
+    && surgeMaterialQuestionParts(message).length === 1;
+}
+
 function requestSpecificModelInstructions(request: SurgeModelRequest) {
+  if (isSimpleUnderDoorDraughtRequest(request.message)) return `
+
+Current-question content requirements:
+- Answer in no more than three visible blocks and 110 words. Give the door snake once as the immediate action, then one lasting compatible seal option; do not repeat either.
+- Mention approval, a fire-rated door or required ventilation only when supplied context makes it relevant, and keep that limit within the practical explanation.`;
   if (isSurgeBroadCheapWindowHeatLossOptionsRequest(request.message)) return `
 
 Current-question content requirements:
@@ -4479,7 +4493,9 @@ export async function generateSurgeModelAnswer(
           : [candidate.verdict, candidate.reason, ...candidate.steps]
               .filter(Boolean)
               .join(" "),
-        candidate.steps.length >= 2 ? 5 : 3,
+        isSimpleUnderDoorDraughtRequest(request.message)
+          ? 3
+          : candidate.steps.length >= 2 ? 5 : 3,
       );
       const structuredRequirement = requiredStructuredResponse(request.message);
       const requiredStepStructurePassed = (

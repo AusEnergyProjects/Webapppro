@@ -5094,6 +5094,47 @@ test("structured compaction does not hide a missing battery quote facet", async 
   assert.deepEqual(failures, [{ code: "provider_output_rejected", stage: "question_coverage" }]);
 });
 
+test("a simple under-door answer is compacted to the reviewed three-block contract", async () => {
+  const calls = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "I feel a draft under my front door",
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [
+        { key: "property_type", value: "Apartment or unit" },
+        { key: "shared_property_approval", value: "Owners corporation or common property may apply" },
+      ],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse(structuredModelPayload({
+        verdict: "Start with a removable door snake across the inside bottom edge.",
+        reason: "It is a cheap, reversible way to stop the draught without altering your apartment’s front door, which may be fire-rated or common property.",
+        steps: [
+          "Fit a close-fitting door snake and check whether the draught stops; it suits immediate comfort but must be moved when opening the door.",
+          "If you want a permanent seal, first confirm the door’s fire rating and owners corporation requirements; use only a compatible professionally fitted seal.",
+        ],
+        extraDetail: "Do not drill, trim or modify a fire-rated door without approval.",
+        followUpQuestion: "Does the door or frame have a fire-door label?",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].input[0].content[0].text, /no more than three visible blocks and 110 words/i);
+  assert.ok(result.answer.directAnswer.split(/\n\s*\n/u).filter(Boolean).length <= 3);
+  assert.match(result.answer.directAnswer, /door snake/i);
+  assert.match(result.answer.directAnswer, /compatible professionally fitted seal/i);
+  assert.match(result.answer.directAnswer, /fire-rated door without approval/i);
+  assert.deepEqual(failures, []);
+});
+
 test("structured compaction still rejects content that remains over the word limit", async () => {
   const failures = [];
   const diagnostics = [];
