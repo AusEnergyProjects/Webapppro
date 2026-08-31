@@ -56,6 +56,7 @@ import {
   sanitizeSurgeCustomerOfficialCitation,
   sanitizeSurgeCustomerOfficialUrl,
 } from "./surge-official-citation.ts";
+import { isSurgeBroadCheapWindowHeatLossOptionsRequest } from "./surge-window-advice.ts";
 
 export type SurgeModelTurn = {
   role: "user" | "assistant";
@@ -766,7 +767,7 @@ function modelRepairInstructions(
 - Continuity repair: use resolved conversationFrame and priorTurns as retained context. Assistant turns recall only what Surge said. Never deny access to retained chat. Ask a clarification only when referenceResolution.status is needs_clarification.`;
   }
   if (stage === "question_coverage") {
-    if (request && asksForBroadCheapWindowHeatLossOptions(request.message)) {
+    if (request && isSurgeBroadCheapWindowHeatLossOptionsRequest(request.message)) {
       return `${MODEL_REPAIR_INSTRUCTIONS}
 - Window-options repair: rank draught seals, clear window-insulation film, bubble wrap where losing some view or light is acceptable, and close-fitting blinds or lined curtains with a pelmet. Explain the trapped still-air layer and how closing the top gap slows air circulation past cold glass. Keep required ventilation and opening windows usable.`;
     }
@@ -1846,19 +1847,8 @@ function isResolvedRetainedDecisionRecall(request: SurgeModelRequest) {
   ).status === "resolved_from_recent_context";
 }
 
-function asksForBroadCheapWindowHeatLossOptions(message: string) {
-  const namesSpecificTreatment = /\b(?:bubble wrap|window[- ]insulation film|heat[- ]?shrink film|draught seals?|draft seals?|weather seals?|curtains?|blinds?|pelmets?|secondary glazing|double glazing)\b/i.test(message);
-  const asksForSeveralOptions = /\b(?:ways|options|tips|ideas|suggestions)\b/i.test(message)
-    || (!namesSpecificTreatment
-      && /\b(?:what|how)\b[^?]{0,45}\b(?:can|could|should)\s+(?:I|we)\b/i.test(message));
-  return asksForSeveralOptions
-    && /\b(?:cheap|low[- ]cost|budget|inexpensive|affordable)\b/i.test(message)
-    && /\b(?:windows?|glazing|glass)\b/i.test(message)
-    && /\b(?:heat loss|keep(?:ing)? (?:the )?(?:heat|home|house|room) (?:in|warm)|warmer|cold)\b/i.test(message);
-}
-
 function cheapWindowHeatLossOptionsAreComplete(message: string, answer: string) {
-  if (!asksForBroadCheapWindowHeatLossOptions(message)) return true;
+  if (!isSurgeBroadCheapWindowHeatLossOptionsRequest(message)) return true;
 
   const coversDraughts = /\b(?:weather ?seals?|draught ?seals?|draft ?seals?|seal(?:ing)? (?:air )?(?:leaks?|gaps?)|air leaks?)\b/i.test(answer);
   const coversClearFilm = /\b(?:heat[- ]?shrink|shrink|window[- ]insulation|clear) film\b|\bfilm\b[^.!?]{0,35}\bwindow/i.test(answer);

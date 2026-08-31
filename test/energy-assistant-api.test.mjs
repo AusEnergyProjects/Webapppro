@@ -4482,6 +4482,40 @@ test("a generic bills-first paid result cannot replace the moisture priority fro
   assert.doesNotMatch(payload.reply.directAnswer, /start by comparing your electricity and gas bills/i);
 });
 
+test("a rejected paid window answer falls back to the complete window explainer with a completed planner", async () => {
+  const planContext = completedMoisturePlannerContext();
+  assert.ok(planContext);
+  assert.ok(planContext.facts.length >= 45);
+  let modelCalls = 0;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "cheap-window-paid-rejection-0001",
+    message: "what are some cheap ways to reduce heat loss from my windows",
+    recentTurns: [],
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (modelRequest) => {
+      modelCalls += 1;
+      assert.match(modelRequest.deterministicAnswer.directAnswer, /weather seals.*heat-shrink window-insulation film.*bubble wrap.*pelmet/is);
+      assert.match(modelRequest.deterministicAnswer.directAnswer, /still-air layer.*slows air circulation/is);
+      return null;
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(modelCalls, 1, "the paid model remains the first attempted answer path");
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "deterministic");
+  assert.match(payload.reply.directAnswer, /weather seals.*heat-shrink window-insulation film.*bubble wrap.*pelmet/is);
+  assert.match(payload.reply.directAnswer, /still-air layer.*slows air circulation/is);
+  assert.match(payload.reply.directAnswer, /losing a clear view and some daylight is acceptable/i);
+  assert.doesNotMatch(payload.reply.directAnswer, /start with the problem you notice most|compare actual bill usage|which room or appliance/i);
+});
+
 test("a generic paid result cannot replace roof water-entry control when moisture and roof damage are both reported", async () => {
   const planContext = completedMoisturePlannerContext("known_issue");
   assert.ok(planContext);
