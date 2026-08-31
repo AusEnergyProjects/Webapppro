@@ -1733,6 +1733,358 @@ test("an explicit return to my apartment selects the $1,500 blinds decision afte
   );
 });
 
+test("explicit return anchors select one prior decision without overriding named topics or ambiguity", () => {
+  let current = recordLedgerTurn(emptySurgeConversationState(), {
+    message: "I feel a draught under the front door.",
+    activeTopic: "comfort_fabric",
+    goal: "Stop the draught under the front door",
+    answerSummary: "Use a door snake first, then fit a correctly sized door-bottom weather seal.",
+    planFacts: [{ key: "property_type", value: "Apartment or unit" }],
+  });
+  const doorDecisionId = current.ledger.activeDecisionId;
+  current = recordLedgerTurn(current, {
+    message: "What should I check when comparing solar quotes?",
+    activeTopic: "solar",
+    goal: "Compare the solar quotes and inverter warranty",
+    answerSummary: "Compare the same site design and the written inverter warranty.",
+    intent: "topic_change",
+  });
+  const solarDecisionId = current.ledger.activeDecisionId;
+
+  const doorReturn = selectSurgeConversationFrame(
+    "Back to the front door, what lasting fix did you recommend?",
+    current,
+    true,
+  );
+  assert.equal(doorReturn.decision?.id, doorDecisionId);
+  assert.equal(selectSurgeConversationFrame("Back to door.", current, true).decision?.id, doorDecisionId);
+
+  const namedSolarReturn = selectSurgeConversationFrame(
+    "Back to the solar quote: what should I ask first?",
+    current,
+    true,
+  );
+  assert.equal(namedSolarReturn.decision?.id, solarDecisionId);
+
+  const genericReturn = selectSurgeConversationFrame(
+    "Back to the recommendation, what should I do first?",
+    current,
+    true,
+  );
+  assert.equal(genericReturn.decision?.id, solarDecisionId);
+
+  const doorDecision = current.ledger.decisions.find((decision) => decision.id === doorDecisionId);
+  assert.ok(doorDecision);
+  const tied = {
+    ...current,
+    ledger: {
+      ...current.ledger,
+      turn: current.ledger.turn + 1,
+      decisions: [
+        ...current.ledger.decisions,
+        {
+          ...doorDecision,
+          id: "decision_3_duplicate_front_door",
+          lastTouchedTurn: current.ledger.turn + 1,
+        },
+      ],
+    },
+  };
+  const ambiguousMessage = "Back to the front door, what lasting fix did you recommend?";
+  const ambiguousFrame = selectSurgeConversationFrame(ambiguousMessage, tied, true);
+  assert.equal(ambiguousFrame.subject, null);
+  assert.equal(ambiguousFrame.decision, null);
+  assert.equal(
+    resolveSurgeConversationReference(ambiguousMessage, [], tied).status,
+    "needs_clarification",
+  );
+  assert.equal(
+    selectSurgeConversationFrame(
+      "Back to the first front door, what lasting fix did you recommend?",
+      tied,
+      true,
+    ).decision?.id,
+    doorDecisionId,
+  );
+  assert.equal(
+    selectSurgeConversationFrame(
+      "Back to the latest front door, what lasting fix did you recommend?",
+      tied,
+      true,
+    ).decision?.id,
+    "decision_3_duplicate_front_door",
+  );
+
+  const returnedToDoor = {
+    ...current,
+    activeTopic: doorDecision.topic,
+    goal: doorDecision.goal,
+    lastAnswerSummary: doorDecision.outcomeSummary,
+    ledger: {
+      ...current.ledger,
+      activeDecisionId: doorDecisionId,
+    },
+  };
+  const recallMessage = "What lasting fix did you recommend?";
+  assert.equal(isSurgeContextDependentMessage(recallMessage), true);
+  assert.equal(classifySurgeConversationTurn(recallMessage, returnedToDoor, []), "contextual_follow_up");
+  assert.equal(selectSurgeConversationFrame(recallMessage, returnedToDoor, true).decision?.id, doorDecisionId);
+  for (const newSolarQuestion of [
+    "What solar system would you recommend?",
+    "What do you recommend for solar?",
+  ]) {
+    assert.equal(isSurgeContextDependentMessage(newSolarQuestion), false);
+    assert.equal(classifySurgeConversationTurn(newSolarQuestion, returnedToDoor, []), "new_question");
+  }
+
+  const filteredRecallTurns = filterSurgeRecentTurnsForFrame(
+    recallMessage,
+    returnedToDoor,
+    true,
+    [
+      { role: "user", content: "Which reverse-cycle air conditioner should I choose?" },
+      { role: "assistant", content: "Compare capacity, efficiency and installation scope." },
+      { role: "user", content: "Back to the front door." },
+      { role: "assistant", content: "Back to the draught and the lasting door seal." },
+    ],
+  );
+  assert.doesNotMatch(JSON.stringify(filteredRecallTurns), /reverse-cycle|capacity|efficiency/i);
+  assert.match(JSON.stringify(filteredRecallTurns), /front door|door seal/i);
+
+  const sameSubjectTopicDetourText = JSON.stringify(filterSurgeRecentTurnsForFrame(
+    recallMessage,
+    returnedToDoor,
+    true,
+    [
+      { role: "user", content: "At my home, what else should I check when comparing solar quotes?" },
+      { role: "assistant", content: "Compare the site design, equipment, warranties and exclusions." },
+      { role: "user", content: "Back to the front door." },
+      { role: "assistant", content: "Back to the lasting door seal." },
+    ],
+  ));
+  assert.doesNotMatch(sameSubjectTopicDetourText, /solar|equipment|warranties|exclusions/i);
+  assert.match(sameSubjectTopicDetourText, /front door|door seal/i);
+
+  const returnedAfterMoistureDetour = {
+    ...returnedToDoor,
+    ledger: {
+      ...returnedToDoor.ledger,
+      decisions: [
+        ...returnedToDoor.ledger.decisions,
+        {
+          ...doorDecision,
+          id: "decision_3_bedroom_moisture",
+          goal: "Fix bedroom humidity and mould",
+          facts: [],
+          outcomeSummary: "Find and stop the moisture source before treating the mould.",
+          lastTouchedTurn: current.ledger.turn + 1,
+        },
+      ],
+    },
+  };
+  const moistureFilteredText = JSON.stringify(filterSurgeRecentTurnsForFrame(
+    recallMessage,
+    returnedAfterMoistureDetour,
+    true,
+    [
+      { role: "user", content: "The bedroom has humidity." },
+      { role: "assistant", content: "Find and stop the moisture source before treating mould." },
+      { role: "user", content: "Back to the front door." },
+      { role: "assistant", content: "Back to the lasting door seal." },
+    ],
+  ));
+  assert.doesNotMatch(moistureFilteredText, /bedroom|humidity|moisture|mould/i);
+  assert.match(moistureFilteredText, /front door|door seal/i);
+
+  const glazingDecision = {
+    ...doorDecision,
+    id: "decision_2_glazing",
+    topic: "glazing_shading",
+    goal: "Reduce heat loss through the single-glazed windows",
+    facts: [],
+    outcomeSummary: "Use close-fitting window coverings before replacing glazing.",
+    lastTouchedTurn: 2,
+  };
+  const rcacDecision = {
+    ...doorDecision,
+    id: "decision_3_rcac",
+    topic: "rcac",
+    goal: "Choose a correctly sized reverse-cycle air conditioner",
+    facts: [],
+    outcomeSummary: "Compare capacity, efficiency and installation scope.",
+    lastTouchedTurn: 3,
+  };
+  const activeRcacState = {
+    ...returnedToDoor,
+    activeTopic: "rcac",
+    goal: rcacDecision.goal,
+    lastAnswerSummary: rcacDecision.outcomeSummary,
+    ledger: {
+      ...returnedToDoor.ledger,
+      turn: 3,
+      activeDecisionId: rcacDecision.id,
+      decisions: [doorDecision, glazingDecision, rcacDecision],
+    },
+  };
+  const historicalDoorText = JSON.stringify(filterSurgeRecentTurnsForFrame(
+    "Back to the front door, what lasting fix did you recommend?",
+    activeRcacState,
+    true,
+    [
+      { role: "user", content: "I feel a draught under the front door." },
+      { role: "assistant", content: "Use a door snake, then fit a door-bottom seal." },
+      { role: "user", content: "The single-glazed windows also feel cold." },
+      { role: "assistant", content: "Try close-fitting window coverings." },
+      { role: "user", content: "Which reverse-cycle air conditioner should I choose?" },
+      { role: "assistant", content: "Compare capacity, efficiency and installation scope." },
+    ],
+  ));
+  assert.match(historicalDoorText, /front door|door-bottom seal/i);
+  assert.doesNotMatch(historicalDoorText, /single-glazed|window coverings|reverse-cycle|capacity|efficiency/i);
+});
+
+test("return history isolates one of two same-home solar quotes", () => {
+  let current = recordLedgerTurn(emptySurgeConversationState(), {
+    message: "My first solar quote is $8,000 for 6.6 kW with an Alpha inverter.",
+    activeTopic: "solar",
+    goal: "Review the first $8,000 6.6 kW solar quote",
+    answerSummary: "The Alpha inverter has a five-year warranty.",
+    planFacts: [{ key: "postcode", value: "3072" }],
+  });
+  const firstQuoteId = current.ledger.activeDecisionId;
+  current = recordLedgerTurn(current, {
+    message: "For my saved home, how does the feed-in tariff affect it?",
+    activeTopic: "solar",
+    goal: "Review the first $8,000 6.6 kW solar quote",
+    answerSummary: "The feed-in tariff affects the value of exported solar.",
+    intent: "contextual_follow_up",
+  });
+  assert.equal(current.ledger.activeDecisionId, firstQuoteId);
+  current = recordLedgerTurn(current, {
+    message: "Different solar quote: $12,000 for 16.6 kW with a Beta inverter.",
+    activeTopic: "solar",
+    goal: "Review the second $12,000 16.6 kW solar quote",
+    answerSummary: "The Beta inverter has a ten-year warranty.",
+    intent: "topic_change",
+  });
+  const secondQuoteId = current.ledger.activeDecisionId;
+  assert.notEqual(secondQuoteId, firstQuoteId);
+  current = recordLedgerTurn(current, {
+    message: "For my saved home, how should the STC rebate affect it?",
+    activeTopic: "solar",
+    goal: "Review the second $12,000 16.6 kW solar quote",
+    answerSummary: "The STC discount should be shown clearly in the second quote.",
+    intent: "contextual_follow_up",
+  });
+  assert.equal(current.ledger.activeDecisionId, secondQuoteId);
+  for (const genericFacetMessage of [
+    "For my saved home, how does the STC rebate affect it?",
+    "For my saved home, how should we apply the STC rebate to it?",
+  ]) {
+    const genericFacet = recordLedgerTurn(current, {
+      message: genericFacetMessage,
+      activeTopic: "solar",
+      goal: "Review the second $12,000 16.6 kW solar quote",
+      answerSummary: "The STC discount should be shown clearly in the active quote.",
+      intent: "contextual_follow_up",
+    });
+    assert.equal(genericFacet.ledger.activeDecisionId, secondQuoteId, genericFacetMessage);
+  }
+  for (const priorQuoteReference of ["Alpha", "$8,000", "6.6 kW"]) {
+    const priorQuoteMessage = `For the ${priorQuoteReference} quote, how should the STC rebate affect it?`;
+    assert.equal(
+      classifySurgeConversationTurn(priorQuoteMessage, current, []),
+      "contextual_follow_up",
+      `intent: ${priorQuoteReference}`,
+    );
+    assert.equal(
+      selectSurgeConversationFrame(priorQuoteMessage, current, true).decision?.id,
+      firstQuoteId,
+      `frame: ${priorQuoteReference}`,
+    );
+    const explicitlyRevisited = recordLedgerTurn(current, {
+      message: priorQuoteMessage,
+      activeTopic: "solar",
+      goal: "Review the first $8,000 6.6 kW solar quote",
+      answerSummary: "The STC discount should be shown clearly in the first quote.",
+      intent: "contextual_follow_up",
+    });
+    assert.equal(explicitlyRevisited.ledger.activeDecisionId, firstQuoteId, priorQuoteReference);
+  }
+
+  const recentTurns = [
+    { role: "user", content: "My first solar quote is $8,000 for 6.6 kW with an Alpha inverter." },
+    { role: "assistant", content: "The Alpha inverter has a five-year warranty." },
+    { role: "user", content: "For my saved home, how does the feed-in tariff affect it?" },
+    { role: "assistant", content: "The feed-in tariff affects the value of exported solar." },
+    { role: "user", content: "Different solar quote: $12,000 for 16.6 kW with a Beta inverter." },
+    { role: "assistant", content: "The Beta inverter has a ten-year warranty." },
+    { role: "user", content: "For my saved home, how should the STC rebate affect it?" },
+    { role: "assistant", content: "The STC discount should be shown clearly in the second quote." },
+    { role: "user", content: "Does that second quote need optimisers?" },
+    { role: "assistant", content: "Only if the site design has a reason for them." },
+  ];
+  for (const message of [
+    "Back to the first solar quote: what warranty did it have?",
+    "Back to the $8,000 solar quote: what warranty did it have?",
+  ]) {
+    const frame = selectSurgeConversationFrame(message, current, true);
+    assert.equal(frame.decision?.id, firstQuoteId);
+    const filteredText = JSON.stringify(filterSurgeRecentTurnsForFrame(
+      message,
+      current,
+      true,
+      recentTurns,
+    ));
+    assert.match(filteredText, /\$8,000|6\.6 kW|Alpha|five-year/i);
+    assert.match(filteredText, /feed-in tariff|exported solar/i);
+    assert.doesNotMatch(filteredText, /\$12,000|16\.6 kW|Beta|ten-year|STC discount|optimisers/i);
+  }
+
+  const secondQuoteReturn = "Back to the $12,000 solar quote: what did the STC discount change?";
+  assert.equal(selectSurgeConversationFrame(secondQuoteReturn, current, true).decision?.id, secondQuoteId);
+  const secondQuoteHistory = JSON.stringify(filterSurgeRecentTurnsForFrame(
+    secondQuoteReturn,
+    current,
+    true,
+    recentTurns,
+  ));
+  assert.match(secondQuoteHistory, /\$12,000|16\.6 kW|Beta|ten-year|STC discount/i);
+  assert.doesNotMatch(secondQuoteHistory, /\$8,000|(?:^|[^0-9.])6\.6 kW|Alpha|five-year|feed-in tariff/i);
+
+  let lexicalTarget = recordLedgerTurn(emptySurgeConversationState(), {
+    message: "I have another solar quote using an Alpha inverter; is it better?",
+    activeTopic: "solar",
+    goal: "Review another solar quote using an Alpha inverter and warranty",
+    answerSummary: "Check the Alpha inverter warranty and complete installed scope.",
+    planFacts: [{ key: "postcode", value: "3072" }],
+  });
+  const alphaDecisionId = lexicalTarget.ledger.activeDecisionId;
+  lexicalTarget = recordLedgerTurn(lexicalTarget, {
+    message: "Different topic: should I replace my hot-water system?",
+    activeTopic: "heat_pump_hot_water",
+    goal: "Review a hot-water system replacement",
+    answerSummary: "Check the existing system before choosing a replacement.",
+    intent: "topic_change",
+  });
+  const alphaReturn = "Back to the Alpha inverter solar quote: what warranty did it have?";
+  assert.equal(selectSurgeConversationFrame(alphaReturn, lexicalTarget, true).decision?.id, alphaDecisionId);
+  assert.equal(selectSurgeConversationFrame("Back to Alpha.", lexicalTarget, true).decision?.id, alphaDecisionId);
+  const lexicalFilteredText = JSON.stringify(filterSurgeRecentTurnsForFrame(
+    alphaReturn,
+    lexicalTarget,
+    true,
+    [
+      { role: "user", content: "I have another solar quote using an Alpha inverter; is it better?" },
+      { role: "assistant", content: "Check the Alpha inverter warranty and complete installed scope." },
+      { role: "user", content: "Different topic: should I replace my hot-water system?" },
+      { role: "assistant", content: "Check the existing system before choosing a replacement." },
+    ],
+  ));
+  assert.match(lexicalFilteredText, /Alpha inverter|installed scope/i);
+  assert.doesNotMatch(lexicalFilteredText, /hot-water|replacement/i);
+});
+
 test("comparison addenda keep the active priced quote instead of jumping to an older same-topic decision", () => {
   let current = recordLedgerTurn(emptySurgeConversationState(), {
     message: "My single-glazed windows feel freezing even when there is no wind.",
