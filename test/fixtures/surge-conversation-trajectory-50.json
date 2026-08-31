@@ -135,7 +135,7 @@
       "sourcePolicy": "model_required",
       "clauses": [
         { "id": "covers-door-snake", "anyOf": ["door snake|bottom gap|under the door"] },
-        { "id": "covers-edge-seal", "anyOf": ["stick[- ]on|adhesive|weather strip|edge|sides|top"] }
+        { "id": "covers-edge-seal", "anyOf": ["stick[- ]on|adhesive|weather strip|edge|sides|top|door sweep|correctly sized seal|fitted seal"] }
       ],
       "forbiddenPatterns": ["buy both regardless", "replace the door", "double glazing"],
       "maxWords": 85,
@@ -418,8 +418,8 @@
         { "id": "covers-working-split", "anyOf": ["keep.*split", "do not replace.*split", "don't replace.*split", "split.*still works", "split.*still heats", "existing (?:unit|split).*(?:heat|working)", "existing reverse[- ]cycle air conditioner works", "replacing a working split"] }
       ],
       "forbiddenPatterns": ["replace the split first", "solar first", "affected room or major end use"],
-      "maxWords": 120,
-      "maxParagraphs": 3,
+      "maxWords": 150,
+      "maxParagraphs": 5,
       "maxQuestions": 0,
       "state": {
         "activeTopicAnyOf": ["glazing_shading", "rcac", "solar", "general"],
