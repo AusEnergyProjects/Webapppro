@@ -5,6 +5,7 @@ import {
   HOME_ENERGY_PLANNER_FEATURE_SECTIONS,
   HOME_ENERGY_PLANNER_HOME_BASIC_QUESTIONS,
   HOME_ENERGY_PLANNER_OPTIONS,
+  HOME_ENERGY_PLANNER_SUPPLEMENTAL_QUESTIONS,
   createHomeEnergyPlannerSession,
   homeEnergyPlannerCompletion,
   parseHomeEnergyPlannerSession,
@@ -74,8 +75,6 @@ export type SurgeProfileStep = {
   fields: ReadonlyArray<SurgeProfileField>;
 };
 
-const NOT_SURE = { value: "not-sure", label: "Not sure yet" } as const;
-
 const optionRecords = (options: HomeEnergyPlannerOption[]) =>
   options.map(([value, label]) => ({ value, label }));
 
@@ -103,14 +102,6 @@ const plannerField = (
 
 const propertyField = (id: string, shortLabel?: string) => plannerField(directQuestion(id), shortLabel);
 
-const supplementalField = (
-  key: SurgeProfileValueKey,
-  label: string,
-  shortLabel: string,
-  options: ReadonlyArray<Readonly<{ value: string; label: string }>>,
-  hint?: string,
-): SurgeProfileField => ({ id: `supplemental:${key}`, key, label, shortLabel, kind: "select", options, hint, unknownValue: "not-sure" });
-
 const canonicalFeatureSteps: SurgeProfileStep[] = HOME_ENERGY_PLANNER_FEATURE_SECTIONS.map((section) => ({
   id: `planner:${section.id}`,
   title: section.title,
@@ -137,13 +128,7 @@ export const SURGE_PROFILE_STEPS: ReadonlyArray<SurgeProfileStep> = [
       plannerField(directQuestion("postcode"), "Postcode"),
       plannerField(directQuestion("situation"), "Relationship"),
       plannerField(directQuestion("occupants"), "Household"),
-      supplementalField("occupancyPattern", "When is the home usually occupied?", "Occupancy", [
-        { value: "mostly-home", label: "Someone is home most days" },
-        { value: "mostly-away", label: "Mostly empty on weekdays" },
-        { value: "mixed", label: "It changes through the week" },
-        { value: "weekends", label: "Mostly used on weekends" },
-        NOT_SURE,
-      ]),
+      plannerField(directQuestion("supplemental:occupancyPattern"), "Occupancy"),
     ],
   },
   {
@@ -152,7 +137,7 @@ export const SURGE_PROFILE_STEPS: ReadonlyArray<SurgeProfileStep> = [
     description: "Basic size and ownership details help Surge AI avoid advice that does not suit the property.",
     fields: [
       plannerField(directQuestion("propertyType"), "Home"),
-      plannerField(directQuestion("approvalContext"), "Approvals"),
+      plannerField(directQuestion("approvalContext"), "Strata or body corporate"),
       ...HOME_ENERGY_PLANNER_HOME_BASIC_QUESTIONS.map((question) => propertyField(question.key)),
     ],
   },
@@ -173,14 +158,7 @@ export const SURGE_PROFILE_STEPS: ReadonlyArray<SurgeProfileStep> = [
       plannerField(directQuestion("goals"), "Priorities"),
       plannerField(directQuestion("pace"), "Approach"),
       plannerField(directQuestion("budgetRange"), "Budget"),
-      {
-        id: "supplemental:timing",
-        key: "timing",
-        label: "When would you like to act?",
-        shortLabel: "Timing",
-        kind: "select",
-        options: optionRecords(HOME_ENERGY_PLANNER_OPTIONS.timings),
-      },
+      plannerField(directQuestion("supplemental:timing"), "Timing"),
     ],
   },
   ...canonicalFeatureSteps,
@@ -189,43 +167,11 @@ export const SURGE_PROFILE_STEPS: ReadonlyArray<SurgeProfileStep> = [
     title: "Routines and practical limits",
     description: "Finish with everyday use and the amount of disruption that feels realistic.",
     fields: [
-      supplementalField("energyUsePattern", "When is most energy used?", "Use pattern", [
-        { value: "morning", label: "Mostly mornings" },
-        { value: "evening", label: "Mostly late afternoon and evening" },
-        { value: "all-day", label: "Steady use through the day" },
-        { value: "overnight", label: "A lot of overnight use" },
-        { value: "varies", label: "It changes a lot" },
-        NOT_SURE,
-      ]),
-      supplementalField("billPressure", "How do energy bills feel?", "Bills", [
-        { value: "comfortable", label: "Generally manageable" },
-        { value: "higher-than-expected", label: "Higher than expected" },
-        { value: "hard-to-manage", label: "Hard to manage" },
-        NOT_SURE,
-      ]),
-      supplementalField("gasConnection", "Gas connection", "Gas", [
-        { value: "connected", label: "Mains gas connection" },
-        { value: "bottled-lpg", label: "Bottled gas or LPG" },
-        { value: "not-connected", label: "No gas supply" },
-        { value: "disconnecting", label: "Planning to disconnect mains gas" },
-        NOT_SURE,
-      ]),
-      supplementalField("disruption", "How much installation disruption is acceptable?", "Disruption", [
-        { value: "minimal", label: "Keep disruption minimal" },
-        { value: "some-work", label: "Some building work is acceptable" },
-        { value: "major-work", label: "Major work is acceptable for the right result" },
-        { value: "staged", label: "Prefer work in stages" },
-        NOT_SURE,
-      ]),
-      supplementalField("plannedWorks", "Other work already planned", "Planned work", [
-        { value: "none", label: "No other work planned" },
-        { value: "maintenance", label: "General repairs or maintenance" },
-        { value: "renovation", label: "Renovation or extension" },
-        { value: "equipment-replacement", label: "Replacing major equipment" },
-        { value: "solar-battery", label: "Solar or battery work" },
-        { value: "new-build", label: "New build or major rebuild" },
-        NOT_SURE,
-      ]),
+      plannerField(directQuestion("supplemental:energyUsePattern"), "Use pattern"),
+      plannerField(directQuestion("supplemental:billPressure"), "Bills"),
+      plannerField(directQuestion("supplemental:gasConnection"), "Gas"),
+      plannerField(directQuestion("supplemental:disruption"), "Disruption"),
+      plannerField(directQuestion("supplemental:plannedWorks"), "Planned work"),
     ],
   },
 ] as const;
@@ -254,7 +200,7 @@ export const EMPTY_SURGE_STARTER_PROFILE: SurgeStarterProfile = {
   wallConstruction: "",
   floorConstruction: "",
   features: [],
-  timing: "",
+  timing: "not-sure",
   occupancyPattern: "not-sure",
   energyUsePattern: "not-sure",
   billPressure: "not-sure",
@@ -568,8 +514,7 @@ export function surgeProfileToHomeEnergyPlannerDraft(profile: SurgeStarterProfil
   const direct: Partial<HomeEnergyPlannerDraft> = {};
   for (const field of SURGE_PROFILE_FIELDS) {
     if (!surgeProfileFieldWasReviewed(profile, field) || field.plannerQuestionId) continue;
-    if (field.key === "features" || field.key === "timing") continue;
-    if (["occupancyPattern", "energyUsePattern", "billPressure", "gasConnection", "disruption", "plannedWorks"].includes(field.key)) continue;
+    if (field.key === "features") continue;
     (direct as Record<string, unknown>)[field.key] = surgeProfileFieldValue(profile, field);
   }
   let selectedFeatures: string[] = [];
@@ -611,14 +556,20 @@ export function mergeHomeEnergyPlannerSessionIntoSurgeProfile(profile: SurgeStar
         : updateSurgeProfileField(next, field, value, true);
     }
   }
-  if (session.stage >= 4) {
-    for (const id of ["pace", "budgetRange"]) {
+  const importDirectAnswers = (ids: string[]) => {
+    for (const id of ids) {
       const field = fieldById.get(id);
-      const value = session.draft[id as "pace" | "budgetRange"];
+      const value = field ? session.draft[field.key as keyof HomeEnergyPlannerDraft] : "";
       if (field && value && surgeProfileFieldIsUnknown(next, field)) {
-        next = updateSurgeProfileField(next, field, value, true);
+        next = updateSurgeProfileField(next, field, String(value), true);
       }
     }
+  };
+  for (const question of HOME_ENERGY_PLANNER_SUPPLEMENTAL_QUESTIONS) {
+    if (session.stage > question.plannerStage) importDirectAnswers([question.id]);
+  }
+  if (session.stage >= 4) {
+    importDirectAnswers(["pace", "budgetRange"]);
   }
   const allowedFeatureSections = session.stage >= 3
     ? HOME_ENERGY_PLANNER_FEATURE_SECTIONS
@@ -638,34 +589,6 @@ export function mergeHomeEnergyPlannerSessionIntoSurgeProfile(profile: SurgeStar
     ...inferred,
     completed: surgeProfileKnownAnswerCount(inferred) === SURGE_PROFILE_FIELDS.length,
   };
-}
-
-const PROFILE_CONTEXT_FIELD_ORDER = [
-  "postcode", "situation", "goals", "budgetRange", "supplemental:timing", "approvalContext",
-  "supplemental:disruption", "supplemental:plannedWorks", "occupants", "supplemental:occupancyPattern",
-  "propertyType", "storeys", "ageBand", "floorArea", "sharedWalls", "switchboard",
-  ...HOME_ENERGY_PLANNER_FEATURE_SECTIONS.flatMap((section) => section.questions.map((question) => `feature:${question.id}`)),
-  "supplemental:gasConnection", "supplemental:energyUsePattern", "supplemental:billPressure",
-] as const;
-
-export function surgeStarterProfileContext(profile: SurgeStarterProfile) {
-  const prefix = "Customer supplied home context: ";
-  const suffix = ". Treat newer chat details as corrections.";
-  const maximum = 1_050;
-  const facts: string[] = [];
-  let length = prefix.length + suffix.length;
-  for (const id of PROFILE_CONTEXT_FIELD_ORDER) {
-    const field = fieldById.get(id);
-    if (!field || surgeProfileFieldIsUnknown(profile, field)) continue;
-    const value = surgeProfileFieldValue(profile, field);
-    const compact = Array.isArray(value) ? value.join(",") : value;
-    const segment = `${id.replace(/^supplemental:/, "")}=${compact}`;
-    const separatorLength = facts.length ? 2 : 0;
-    if (length + separatorLength + segment.length > maximum) continue;
-    facts.push(segment);
-    length += separatorLength + segment.length;
-  }
-  return facts.length ? `${prefix}${facts.join("; ")}${suffix}` : "";
 }
 
 export type SurgePlannerProfileAdapter = {

@@ -90,6 +90,115 @@ test("deterministic fallbacks stay on cold-room, renter and strata questions", (
   }
 });
 
+test("a cold-home follow-up advances from the door draught and uses saved moisture context", () => {
+  const result = simple(
+    "great idea, also i find it hard to keep the house warm sometimes",
+    [
+      { role: "user", content: "i feel a draft under my front door" },
+      { role: "assistant", content: "Use a door snake first, then fit a correctly sized door seal." },
+    ],
+    {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [
+        { key: "comfort_concerns", value: "Too cold in cool weather, Condensation, damp or mould" },
+        { key: "glazing", value: "Mostly single glazed" },
+        { key: "exhaust_fans", value: "Kitchen exhaust fan, Bathroom exhaust fan" },
+        { key: "heating_cooling_systems", value: "Reverse-cycle air conditioning, Gas space or ducted heating" },
+      ],
+    },
+  );
+  assert.ok(result);
+  assert.match(result.directAnswer, /door draught you reported/i);
+  assert.match(result.directAnswer, /saved answers also show mostly single glazing/i);
+  assert.match(result.directAnswer, /moisture control first/i);
+  assert.match(result.directAnswer, /kitchen and bathroom exhaust fans/i);
+  assert.match(result.directAnswer, /existing reverse-cycle system/i);
+  assert.doesNotMatch(result.directAnswer, /buying a bigger heater/i);
+});
+
+test("cold-home advice never invents a door draught from questions, denials, window gaps or assistant text", () => {
+  const planContext = {
+    version: 1,
+    source: "home_energy_plan",
+    facts: [
+      { key: "comfort_concerns", value: "Too cold in cool weather, Condensation, damp or mould" },
+      { key: "glazing", value: "Mostly single glazed" },
+      { key: "exhaust_fans", value: "Kitchen exhaust fan, Bathroom exhaust fan" },
+      { key: "heating_cooling_systems", value: "Reverse-cycle air conditioning" },
+    ],
+  };
+  const histories = [
+    [],
+    [{ role: "user", content: "Would a door snake help?" }],
+    [{ role: "user", content: "Could a draft under my front door be the problem?" }],
+    [{ role: "user", content: "I wonder if there is a draught under the door." }],
+    [{ role: "user", content: "The assessor asked whether there is a draft under the door." }],
+    [{ role: "assistant", content: "You have a confirmed door draught." }],
+    [{ role: "user", content: "There is no draft under my front door." }],
+    [{ role: "user", content: "I found a gap under the window." }],
+    [
+      { role: "user", content: "I feel a draft under my front door." },
+      { role: "user", content: "Actually there is no draft under the door." },
+    ],
+  ];
+  for (const recentTurns of histories) {
+    const result = simple("I cannot keep my house warm", recentTurns, planContext);
+    assert.ok(result, JSON.stringify(recentTurns));
+    assert.match(result.directAnswer, /moisture control first/i, JSON.stringify(recentTurns));
+    assert.match(result.directAnswer, /mostly single glazing/i, JSON.stringify(recentTurns));
+    assert.doesNotMatch(
+      result.directAnswer,
+      /confirmed door draught|door draught you reported|use the door snake/i,
+      JSON.stringify(recentTurns),
+    );
+  }
+
+  const reported = simple(
+    "I feel a draft under my front door and I can't keep my house warm",
+    [],
+    planContext,
+  );
+  assert.ok(reported);
+  assert.match(reported.directAnswer, /door draught you reported/i);
+  assert.match(reported.directAnswer, /use the door snake/i);
+});
+
+test("newer home-fact changes prevent stale saved moisture or glazing claims", () => {
+  const planContext = {
+    version: 1,
+    source: "home_energy_plan",
+    facts: [
+      { key: "comfort_concerns", value: "Too cold in cool weather, Condensation, damp or mould" },
+      { key: "glazing", value: "Mostly single glazed" },
+      { key: "exhaust_fans", value: "Kitchen exhaust fan, Bathroom exhaust fan" },
+      { key: "heating_cooling_systems", value: "Reverse-cycle air conditioning" },
+    ],
+  };
+  for (const correction of [
+    "We fixed the condensation last month.",
+    "The mould is gone now.",
+  ]) {
+    const result = simple(
+      "I still find it hard to keep the house warm sometimes",
+      [{ role: "user", content: correction }],
+      planContext,
+    );
+    assert.ok(result, correction);
+    assert.doesNotMatch(result.directAnswer, /moisture control first/i, correction);
+    assert.match(result.directAnswer, /coldest windows/i, correction);
+  }
+
+  const glazingChanged = simple(
+    "I still find it hard to keep the house warm sometimes",
+    [{ role: "user", content: "The windows have been replaced with double glazing." }],
+    planContext,
+  );
+  assert.ok(glazingChanged);
+  assert.doesNotMatch(glazingChanged.directAnswer, /mostly single glazing/i);
+  assert.match(glazingChanged.directAnswer, /moisture control first/i);
+});
+
 test("specific heating-use jumps receive a direct check that preserves both readings", () => {
   const cases = [
     {

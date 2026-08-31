@@ -5,6 +5,9 @@ import {
   normalizeHomeFeatureSelections,
 } from "./customer-projects.mjs";
 import { HOME_ENERGY_ASSESSMENT_STORAGE_KEY } from "./home-energy-assessment-storage.ts";
+import {
+  HOME_ENERGY_PLANNER_SUPPLEMENTAL_QUESTIONS,
+} from "./home-energy-planner-schema.ts";
 
 export { HOME_ENERGY_ASSESSMENT_STORAGE_KEY };
 
@@ -51,9 +54,9 @@ export type SurgePlanContext = {
 };
 
 export const SURGE_PLAN_CONTEXT_VERSION = 1 as const;
-export const SURGE_PLAN_CONTEXT_MAX_FACTS = 40;
-export const SURGE_PLAN_CONTEXT_MAX_VALUE_CHARS = 180;
-export const SURGE_PLAN_CONTEXT_MAX_TOTAL_CHARS = 2_600;
+export const SURGE_PLAN_CONTEXT_MAX_FACTS = 48;
+export const SURGE_PLAN_CONTEXT_MAX_VALUE_CHARS = 300;
+export const SURGE_PLAN_CONTEXT_MAX_TOTAL_CHARS = 2_800;
 
 const projectOptions = rawCustomerProjectOptions as unknown as ProjectOptions;
 const homeFeatureSections = rawCustomerHomeFeatureSections as unknown as HomeFeatureSection[];
@@ -105,6 +108,12 @@ const allowedFieldValues = new Map<string, Set<string>>(
   ]),
 );
 const allowedGoalValues = new Set(projectOptions.goals.map(([, label]) => label));
+const allowedSupplementalFactValues = new Map<string, Set<string>>(
+  HOME_ENERGY_PLANNER_SUPPLEMENTAL_QUESTIONS.map((question) => [
+    question.contextKey,
+    new Set(question.options.map(([, label]) => label)),
+  ]),
+);
 
 function allowedFeatureCombinations(question: HomeFeatureQuestion) {
   if (question.mode === "single") {
@@ -148,6 +157,9 @@ function allowedFactValue(key: string, value: string) {
   }
   if (key === "first_stage_budget") {
     return projectOptions.budgets.some(([, label]) => label === value);
+  }
+  if (allowedSupplementalFactValues.has(key)) {
+    return allowedSupplementalFactValues.get(key)?.has(value) || false;
   }
   return allowedFieldValues.get(key)?.has(value)
     || allowedFeatureValues.get(key)?.has(value)
@@ -276,6 +288,15 @@ export function buildSurgePlanContextFromStoredAssessment(
   if (stage >= 4) {
     appendFact(facts, "upgrade_pace", optionLabel(projectOptions.paces, draft.pace));
     appendFact(facts, "first_stage_budget", optionLabel(projectOptions.budgets, draft.budgetRange));
+  }
+
+  for (const question of HOME_ENERGY_PLANNER_SUPPLEMENTAL_QUESTIONS) {
+    if (stage <= question.plannerStage || draft[question.draftKey] === "not-sure") continue;
+    appendFact(
+      facts,
+      question.contextKey,
+      optionLabel(question.options, draft[question.draftKey]),
+    );
   }
 
   const selectedFeatures = new Set(normalizeHomeFeatureSelections(

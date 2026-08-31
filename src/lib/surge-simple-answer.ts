@@ -6,7 +6,12 @@ import type { SurgePlanContext } from "./energy-assistant-plan-context.ts";
 import {
   isSurgeContextDependentMessage,
   surgeConversationTopicFor,
+  SURGE_HOME_COMFORT_INTENT_PATTERN,
 } from "./energy-assistant-conversation.ts";
+import {
+  surgeHasRecentResolvedMoistureConcern,
+  surgePlanContextAfterRecentHomeFactChanges,
+} from "./energy-assistant-plan-priority.ts";
 
 type RecentTurn = {
   role: "user" | "assistant";
@@ -21,6 +26,10 @@ type SimpleAnswer = {
 };
 
 const NUMBER_WORD_PATTERN = "one|two|three|four|five|six|seven|eight|nine|ten";
+const COLD_HOME_SYMPTOM = SURGE_HOME_COMFORT_INTENT_PATTERN;
+const DOOR_DRAUGHT_REPORT = /\b(?:draught|draft|breeze|cold air|air leak)\b[^.!?\n]{0,36}\b(?:under|around|through)\b[^.!?\n]{0,18}\b(?:(?:my|our|the)\s+)?(?:(?:front|back|external)\s+)?door\b|\b(?:(?:my|our|the)\s+)?(?:(?:front|back|external)\s+)?door\b[^.!?\n]{0,24}\b(?:is|feels?)\s+(?:very\s+)?(?:draughty|drafty)\b/i;
+const DOOR_DRAUGHT_DENIAL = /\b(?:no|not|never|no longer|don['’]?t|do not|isn['’]?t|is not|wasn['’]?t|was not|can['’]?t|cannot)\b[^.!?\n]{0,45}\b(?:draught|draft|breeze|cold air|air leak)\b[^.!?\n]{0,45}\bdoor\b|\bdoor\b[^.!?\n]{0,35}\b(?:isn['’]?t|is not|wasn['’]?t|was not|no longer)\b[^.!?\n]{0,18}\b(?:draughty|drafty)|\b(?:draught|draft|breeze|cold air|air leak)\b[^.!?\n]{0,45}\bdoor\b[^.!?\n]{0,24}\b(?:gone|stopped|fixed|sealed)\b/i;
+const DOOR_DRAUGHT_NON_ASSERTION = /\?\s*$|^\s*(?:could|would|can|might|may|is|are|was|were|do|does|did)\b|\b(?:wonder(?:ing)?\s+(?:if|whether)|asked?\s+(?:if|whether)|asks?\s+(?:if|whether)|might|maybe|perhaps|possibly)\b/i;
 const NUMBER_WORD_VALUES: Readonly<Record<string, number>> = {
   one: 1,
   two: 2,
@@ -36,6 +45,19 @@ const NUMBER_WORD_VALUES: Readonly<Record<string, number>> = {
 
 function extractQuantityBeforeNoun(text: string, nouns: string) {
   return text.match(new RegExp(`\\b(\\d+(?:\\.\\d+)?|${NUMBER_WORD_PATTERN})\\s+(?:${nouns})\\b`, "i"))?.[1];
+}
+
+function userReportedDoorDraught(message: string, recentTurns: readonly RecentTurn[]) {
+  const userMessages = [
+    ...recentTurns.filter((turn) => turn.role === "user").map((turn) => turn.content),
+    message,
+  ];
+  for (let index = userMessages.length - 1; index >= 0; index -= 1) {
+    if (DOOR_DRAUGHT_DENIAL.test(userMessages[index])) return false;
+    if (DOOR_DRAUGHT_REPORT.test(userMessages[index])
+      && !DOOR_DRAUGHT_NON_ASSERTION.test(userMessages[index])) return true;
+  }
+  return false;
 }
 
 function extractYears(text: string) {
@@ -433,8 +455,12 @@ export function composeSurgeSimpleAnswer(
   }
 
   const text = conversationText(message, recentTurns);
-  const solar = planFact(context, "solar");
-  const heating = planFact(context, "heating_cooling_systems");
+  const effectiveContext = surgePlanContextAfterRecentHomeFactChanges(context, message, recentTurns);
+  const solar = planFact(effectiveContext, "solar");
+  const heating = planFact(effectiveContext, "heating_cooling_systems");
+  const comfort = planFact(effectiveContext, "comfort_concerns");
+  const glazing = planFact(effectiveContext, "glazing");
+  const exhaust = planFact(effectiveContext, "exhaust_fans");
   const cleanMessage = message.trim();
   const bareSolarPrompt = /^(?:(?:(?:what|how)\s+about|tell me about)\s+|(?:and|also)\s+)?(?:(?:my|our|the)\s+)?(?:rooftop\s+)?solar(?:\s+(?:power|panels?|system))?(?:\s+(?:instead|next|too|as well))?[?.!]*$/i.test(cleanMessage);
   const additiveBareSolarPrompt = /\bsolar(?:\s+(?:power|panels?|system))?\s+(?:too|as well)[?.!]*$/i.test(cleanMessage);
@@ -883,7 +909,7 @@ export function composeSurgeSimpleAnswer(
     });
   }
 
-  if (/\b(?:draughts?|drafts?|air leaks?)\b/i.test(text)) {
+  if (/\b(?:draughts?|drafts?|air leaks?)\b/i.test(text) && !COLD_HOME_SYMPTOM.test(message)) {
     return answer(base, {
       directAnswer: "Start by sealing the gaps that are actually letting air into the room. Check around opening windows, the door and obvious fixed cracks on a windy day. Use removable weather seals or a door snake, and suitable sealant only on fixed gaps. Do not block exhausts or required vents. If the glass feels cold but no air is moving, close-fitting honeycomb blinds or thermal curtains will help more than extra sealing.",
       practicalSteps: [],
@@ -1375,7 +1401,9 @@ export function composeSurgeSimpleAnswer(
     });
   }
 
-  if (/\b(?:condensation|water on (?:the )?(?:glass|windows?)|wet windows?|mould|mold)\b/i.test(text)) {
+  if (/\b(?:condensation|water on (?:the )?(?:glass|windows?)|wet windows?|mould|mold)\b/i.test(text)
+    && !COLD_HOME_SYMPTOM.test(message)
+    && !surgeHasRecentResolvedMoistureConcern(message, recentTurns)) {
     return answer(base, {
       directAnswer: "Start with moisture, not replacement windows. Condensation forms when damp indoor air hits cold glass, so reduce the moisture first and then make the window surface warmer.",
       practicalSteps: [
@@ -1387,7 +1415,18 @@ export function composeSurgeSimpleAnswer(
     });
   }
 
-  if (/\b(?:bedroom|lounge|room|house|home)\b.*\b(?:freez\w*|very cold|too cold|hard to heat|won't warm|wont warm)\b|\b(?:freez\w*|very cold|too cold|hard to heat)\b.*\b(?:bedroom|lounge|room|house|home)\b/i.test(text)) {
+  if (COLD_HOME_SYMPTOM.test(message)) {
+    const reportedMoisture = /condensation|damp|mould|mold/i.test(comfort);
+    const reportedDraught = userReportedDoorDraught(message, recentTurns);
+    const singleGlazing = /single glazed/i.test(glazing);
+    const hasBothExhausts = /kitchen/i.test(exhaust) && /bathroom/i.test(exhaust);
+    const hasReverseCycle = /air-con|air conditioning|reverse-cycle/i.test(heating);
+    if (reportedMoisture) {
+      return answer(base, {
+        directAnswer: `${reportedDraught ? "The door draught you reported is one heat-loss path" : "A cold home can have several heat-loss paths"}${singleGlazing ? "; your saved answers also show mostly single glazing" : ""}. Because your saved answers also report condensation, damp or mould, keep moisture control first: ${hasBothExhausts ? "run the kitchen and bathroom exhaust fans whenever moisture is produced and check they clear steam" : "use effective kitchen and bathroom exhaust whenever moisture is produced"}, then investigate leaks or persistent mould before sealing more gaps. After that, ${reportedDraught ? "use the door snake and " : "check doors and windows for moving air, seal only confirmed gaps, and use "}close-fitting window coverings${hasReverseCycle ? ", and heat occupied rooms with the existing reverse-cycle system" : ""}.`,
+        practicalSteps: [],
+      });
+    }
     return answer(base, {
       directAnswer: "For better comfort, start with draughts and the coldest windows before buying a bigger heater. If warm air is escaping or the glass is very cold, a larger heater will still waste energy.",
       practicalSteps: [

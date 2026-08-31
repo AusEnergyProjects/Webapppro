@@ -132,13 +132,13 @@ async function concurrentBurst(guard, count, makeReservation) {
 
 test("production configuration exposes the exact fixed default ceilings", () => {
   assert.deepEqual(SURGE_USAGE_GUARD_DEFAULTS, {
-    clientMinuteLimit: 6,
-    clientDailyLimit: 60,
-    networkMinuteLimit: 60,
-    networkDailyLimit: 600,
-    globalMinuteLimit: 20,
-    globalInFlightLimit: 5,
-    globalDailyMicroUsdLimit: 20_000_000,
+    clientMinuteLimit: 20,
+    clientDailyLimit: 200,
+    networkMinuteLimit: 120,
+    networkDailyLimit: 2_000,
+    globalMinuteLimit: 120,
+    globalInFlightLimit: 20,
+    globalDailyMicroUsdLimit: 100_000_000,
     inFlightLeaseMs: 70_000,
     requestIdempotencyMs: 600_000,
   });
@@ -146,8 +146,8 @@ test("production configuration exposes the exact fixed default ceilings", () => 
   assert.equal(SURGE_USAGE_GUARD_ENV.globalDailyMicroUsdLimit, "SURGE_GLOBAL_DAILY_MICRO_USD");
 });
 
-test("1000 concurrent reservations cannot cross any configured client, network or global ceiling", async (t) => {
-  await t.test("client minute 6", async () => {
+test("concurrent reservations cannot cross any configured client, network or global ceiling", async (t) => {
+  await t.test("client minute 20", async () => {
     const { guard } = fixture({ env: {
       SURGE_CLIENT_DAILY_LIMIT: "1000",
       SURGE_NETWORK_MINUTE_LIMIT: "1000",
@@ -160,10 +160,10 @@ test("1000 concurrent reservations cannot cross any configured client, network o
       clientKey: opaqueKey("same-client"),
     }));
     assert.ok(admitted(results).length > 0);
-    assert.ok(admitted(results).length <= 6);
+    assert.ok(admitted(results).length <= SURGE_USAGE_GUARD_DEFAULTS.clientMinuteLimit);
   });
 
-  await t.test("client day 60", async () => {
+  await t.test("client day 200", async () => {
     const { guard } = fixture({ env: {
       SURGE_CLIENT_MINUTE_LIMIT: "1000",
       SURGE_NETWORK_MINUTE_LIMIT: "1000",
@@ -176,10 +176,10 @@ test("1000 concurrent reservations cannot cross any configured client, network o
       clientKey: opaqueKey("same-client"),
     }));
     assert.ok(admitted(results).length > 0);
-    assert.ok(admitted(results).length <= 60);
+    assert.ok(admitted(results).length <= SURGE_USAGE_GUARD_DEFAULTS.clientDailyLimit);
   });
 
-  await t.test("network minute 60", async () => {
+  await t.test("network minute 120", async () => {
     const { guard } = fixture({ env: {
       SURGE_CLIENT_MINUTE_LIMIT: "1000",
       SURGE_CLIENT_DAILY_LIMIT: "1000",
@@ -192,10 +192,10 @@ test("1000 concurrent reservations cannot cross any configured client, network o
       networkKey: opaqueKey("same-network"),
     }));
     assert.ok(admitted(results).length > 0);
-    assert.ok(admitted(results).length <= 60);
+    assert.ok(admitted(results).length <= SURGE_USAGE_GUARD_DEFAULTS.networkMinuteLimit);
   });
 
-  await t.test("network day 600", async () => {
+  await t.test("network day 2000", async () => {
     const { guard } = fixture({ env: {
       SURGE_CLIENT_MINUTE_LIMIT: "1000",
       SURGE_CLIENT_DAILY_LIMIT: "1000",
@@ -204,14 +204,14 @@ test("1000 concurrent reservations cannot cross any configured client, network o
       SURGE_GLOBAL_INFLIGHT_LIMIT: "1000",
       SURGE_GLOBAL_DAILY_MICRO_USD: "1000000000",
     } });
-    const results = await concurrentBurst(guard, 1_000, (index) => reservation(index, {
+    const results = await concurrentBurst(guard, 2_500, (index) => reservation(index, {
       networkKey: opaqueKey("same-network"),
     }));
     assert.ok(admitted(results).length > 0);
-    assert.ok(admitted(results).length <= 600);
+    assert.ok(admitted(results).length <= SURGE_USAGE_GUARD_DEFAULTS.networkDailyLimit);
   });
 
-  await t.test("global minute 20", async () => {
+  await t.test("global minute 120", async () => {
     const { database, guard } = fixture({ env: {
       SURGE_CLIENT_MINUTE_LIMIT: "1000",
       SURGE_CLIENT_DAILY_LIMIT: "1000",
@@ -222,11 +222,11 @@ test("1000 concurrent reservations cannot cross any configured client, network o
     } });
     const results = await concurrentBurst(guard, 1_000, (index) => reservation(index));
     assert.ok(admitted(results).length > 0);
-    assert.ok(admitted(results).length <= 20);
-    assert.ok(database.globalState().minuteCount <= 20);
+    assert.ok(admitted(results).length <= SURGE_USAGE_GUARD_DEFAULTS.globalMinuteLimit);
+    assert.ok(database.globalState().minuteCount <= SURGE_USAGE_GUARD_DEFAULTS.globalMinuteLimit);
   });
 
-  await t.test("global active leases 5", async () => {
+  await t.test("global active leases 20", async () => {
     const { database, guard } = fixture({ env: {
       SURGE_CLIENT_MINUTE_LIMIT: "1000",
       SURGE_CLIENT_DAILY_LIMIT: "1000",
@@ -237,8 +237,8 @@ test("1000 concurrent reservations cannot cross any configured client, network o
     } });
     const results = await concurrentBurst(guard, 1_000, (index) => reservation(index));
     assert.ok(admitted(results).length > 0);
-    assert.ok(admitted(results).length <= 5);
-    assert.ok(database.globalState().leases.length <= 5);
+    assert.ok(admitted(results).length <= SURGE_USAGE_GUARD_DEFAULTS.globalInFlightLimit);
+    assert.ok(database.globalState().leases.length <= SURGE_USAGE_GUARD_DEFAULTS.globalInFlightLimit);
   });
 
   await t.test("global daily micro-USD", async () => {

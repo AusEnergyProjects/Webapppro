@@ -18,6 +18,7 @@ import {
 import { composeSurgeSafetyAnswer } from "./surge-safety-answer.ts";
 import {
   classifySurgeConversationTurn,
+  filterSurgeRecentTurnsForFrame,
   isSurgeContextDependentMessage,
   parseSurgeConversationState,
   projectSurgeConversationStateToFrame,
@@ -27,6 +28,7 @@ import {
   surgeConversationDecisionContext,
   surgeConversationTopicFor,
   surgeConversationTopicsAreCompatible,
+  SURGE_HOME_COMFORT_INTENT_PATTERN,
   SURGE_CONVERSATION_STATE_VERSION,
   SURGE_MAX_FACTS,
   type SurgeConversationState,
@@ -664,7 +666,7 @@ function instructions(audience: EnergyAssistantAudience) {
 
 Response contract:
 - Lead with the conclusion. Start yes/no or value answers with the verdict and starting-point answers with the first action.
-- Categories route evidence; they are not answers. currentQuestion sets the topic and saved facts only tailor it.
+- Categories route evidence; they are not answers. Treat the current question or symptom as the request; keep confirmed facts if the same-home problem broadens.
 - If one message contains several material questions, use questionParts as a coverage checklist and answer every part. Set each coveredQuestionPartIndexes value exactly once.
 - Return the required fields, no more than three steps and one followUpQuestion. quickReplies must always be empty.
 - Default to one natural 35 to 100 word paragraph. Use steps only for a real plan, checklist or safety sequence. For a short follow-up asking what to do first, give one first action and one later distinction at most. Keep the visible answer complete, useful and understandable.
@@ -685,7 +687,8 @@ Response contract:
 
 Conversation contract:
 - Treat devicePlanContext as a user-supplied baseline. Fact priority is the current question, then the newest explicit user chat statement, older user turns, state and saved plan. A newer explicit correction always replaces a conflicting saved-plan fact.
-- For a next-check request, briefly acknowledge the relevant check or result the user just supplied, then advance. For a requested action ranking or recap, rank the selected chat decisions before older saved-plan concerns; never replace a chat action with an unrelated baseline concern.
+- Same-home constraint or rejected option: keep the current goal and budget visible, acknowledge it and state the priority.
+- For next checks, acknowledge the result and advance. Rank the selected chat decisions before older saved-plan concerns.
 - A current question about another property, site or job overrides conflicting saved-home facts.
 - Never treat an assistant turn as evidence or a household fact; use it only to resolve references. A short reply normally answers pendingQuestion.
 - Infer the most likely meaning from the newest compatible user turns, pendingQuestion and goal. Do not let one isolated word pull the conversation into an unrelated topic. Ask once only if two meanings remain.
@@ -752,7 +755,7 @@ function modelRepairInstructions(stage: SafeModelRepairStage) {
 - Quantity repair: remove every number not explicitly supplied or evidenced. Do not derive a percentage, ratio, difference, total or average unless currentQuestion explicitly asks for that calculation.`;
 }
 
-function materialQuestionParts(message: string) {
+export function surgeMaterialQuestionParts(message: string) {
   const splitParts = splitSurgeQuestionFacets(message);
   const rawParts = splitParts.length ? splitParts : [message.trim()];
   const parts: string[] = [];
@@ -796,24 +799,30 @@ function scopedPromptRecentTurns(
   selectedFrame: ReturnType<typeof selectSurgeConversationFrame>,
 ) {
   if (!request.continuation?.ledger) return request.recentTurns;
+  const frameFilteredTurns = filterSurgeRecentTurnsForFrame(
+    request.message,
+    request.continuation,
+    Boolean(request.planContext),
+    request.recentTurns,
+  );
   const selectedIsActive = selectedFrame.decision?.id === request.continuation.ledger.activeDecisionId;
   if (!selectedIsActive && !/\b(?:too|as well)\s*[?.!]*$/i.test(request.message)) return [];
-  if (selectedFrame.subjects.length !== 1) return request.recentTurns;
+  if (selectedFrame.subjects.length !== 1) return frameFilteredTurns;
   const anchorPattern = selectedSubjectAnchorPattern(selectedFrame.subjects[0].id);
-  if (!anchorPattern) return request.recentTurns;
+  if (!anchorPattern) return frameFilteredTurns;
   let anchorIndex = -1;
-  for (let index = request.recentTurns.length - 1; index >= 0; index -= 1) {
-    const turn = request.recentTurns[index];
+  for (let index = frameFilteredTurns.length - 1; index >= 0; index -= 1) {
+    const turn = frameFilteredTurns[index];
     if (turn.role === "user" && anchorPattern.test(turn.content)) {
       anchorIndex = index;
       break;
     }
   }
-  return anchorIndex >= 0 ? request.recentTurns.slice(anchorIndex) : request.recentTurns;
+  return anchorIndex >= 0 ? frameFilteredTurns.slice(anchorIndex) : frameFilteredTurns;
 }
 
 function contextPayload(request: SurgeModelRequest) {
-  const questionParts = materialQuestionParts(request.message);
+  const questionParts = surgeMaterialQuestionParts(request.message);
   const selectedFrame = selectSurgeConversationFrame(
     request.message,
     request.continuation,
@@ -1073,7 +1082,8 @@ function recentAssistantQuestions(request: SurgeModelRequest) {
 }
 
 const MODEL_RELEVANCE_TOPIC_PATTERNS = [
-  { id: "solar", primary: true, pattern: /\b(?:solar|photovoltaic|PV|panels?|inverter|rooftop generation)\b/i },
+  { id: "comfort", primary: true, pattern: SURGE_HOME_COMFORT_INTENT_PATTERN },
+  { id: "solar", primary: true, pattern: /\b(?:solar|photovoltaic|PV|panels?|inverter|rooftop generation|zero[- ]?export|export limit(?:ation)?)\b/i },
   { id: "battery", primary: true, pattern: /\b(?:batter(?:y|ies)|home storage|stored electricity|VPP)\b/i },
   { id: "hot_water", primary: true, pattern: /\b(?:heat[- ]?pump hot[- ]?water|hot[- ]?water|water heater|hot[- ]?water tank)\b/i },
   { id: "rcac", primary: true, pattern: /\b(?:air ?con(?:ditioner)?|reverse[- ]?cycle|split systems?|(?:new|old|existing|current|working|replacement) split|ducted heating|room heater|portable (?:electric )?heater|plug[- ]?in heater|space heater|(?:room|home|space) cooling|cooling (?:system|unit|equipment|mode|load))\b/i },
@@ -1097,6 +1107,7 @@ const SUPPORTING_ANSWER_TOPICS: Partial<
   Record<ModelRelevanceTopicId, readonly ModelRelevanceTopicId[]>
 > = {
   battery: ["solar", "phase"],
+  comfort: ["draught", "windows", "insulation", "rcac", "condensation", "ventilation"],
   condensation: ["windows", "ventilation", "insulation"],
   draught: ["windows", "gas", "ventilation"],
   ev: ["solar", "battery", "phase"],
@@ -1114,6 +1125,7 @@ const SUPPORTING_ANSWER_TOPICS: Partial<
 const ACTIONABLE_SUPPORTING_ANSWER_TOPICS: Partial<
   Record<ModelRelevanceTopicId, readonly ModelRelevanceTopicId[]>
 > = {
+  comfort: ["draught", "windows", "insulation", "rcac"],
   condensation: ["ventilation"],
   insulation: ["ventilation"],
   windows: ["draught"],
@@ -1141,6 +1153,7 @@ const TRUSTED_ACTIVE_TOPIC_BY_RELEVANCE: Partial<
   Record<ModelRelevanceTopicId, (typeof ENERGY_ASSISTANT_TOPICS)[number]>
 > = {
   battery: "battery_vpp",
+  comfort: "comfort_fabric",
   condensation: "draughts_ventilation",
   draught: "draughts_ventilation",
   ev: "ev_charging",

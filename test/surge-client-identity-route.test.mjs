@@ -22,8 +22,20 @@ test("energy assistant route gates JSON before server handling and wires anonymo
   assert.match(source, /networkKey: identity\.networkKey/);
   assert.match(source, /requestKey: requestId/);
   assert.match(source, /estimatedMicroUsd/);
-  assert.match(source, /requireValidatedModelForOrdinaryAdvice: true/);
-  assert.match(source, /return deniedReservation\(\)/);
+  assert.doesNotMatch(source, /requireValidatedModelForOrdinaryAdvice:\s*true/);
+  assert.match(source, /failure\.stage \? \{ stage: failure\.stage \}/);
+  assert.match(source, /requestIdForLog\(request\)/);
+  for (const reason of [
+    "database_unavailable",
+    "reservation_unavailable",
+    "guard_setup_failed",
+    "identity_not_ready",
+    "identity_resolution_failed",
+  ]) {
+    assert.match(source, new RegExp(`reason: "${reason}"`));
+  }
+  assert.match(source, /return deniedReservation\("unavailable"\)/);
+  assert.match(source, /reserveModelCall = async \(\) => deniedReservation\(\)/);
   assert.match(source, /headers\.append\("Set-Cookie", setCookie\)/);
   assert.doesNotMatch(source, /x-forwarded-for|cf-connecting-ip|clientIp/);
 });

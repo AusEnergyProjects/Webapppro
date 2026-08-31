@@ -1918,6 +1918,80 @@ test("returning to the saved home supplies its prior decision without leaking Mu
   assert.doesNotMatch(serializedContext, /\$7,400|8\.5 kW|3350/);
 });
 
+test("same-home constraint prompt history removes an intervening Mum decision", async () => {
+  const savedGoal = "Fix the saved home door and windows within $1,500";
+  const continuation = state({
+    activeTopic: "glazing_shading",
+    goal: savedGoal,
+    lastAnswerSummary: "Returned to the saved-home comfort plan.",
+    ledger: {
+      turn: 3,
+      activeDecisionId: "decision_saved_comfort",
+      subjects: [
+        { id: "saved_home", kind: "saved_home", label: "Saved home", facts: [], lastTouchedTurn: 3 },
+        { id: "mums_home", kind: "property", label: "Mum's home", facts: [], lastTouchedTurn: 2 },
+      ],
+      decisions: [
+        {
+          id: "decision_saved_comfort",
+          subjectIds: ["saved_home"],
+          topic: "glazing_shading",
+          goal: savedGoal,
+          facts: [{ key: "budget", value: "$1,500", source: "chat", updatedTurn: 1 }],
+          outcomeSummary: "Use the budget on the saved home's door and windows.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 3,
+        },
+        {
+          id: "decision_mum_battery",
+          subjectIds: ["mums_home"],
+          topic: "battery_vpp",
+          goal: "Review Mum's $9,000 battery quote",
+          facts: [{ key: "quoted_price", value: "$9,000", source: "chat", updatedTurn: 2 }],
+          outcomeSummary: "Kept Mum's battery quote separate.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 2,
+        },
+      ],
+    },
+  });
+  const recentTurns = [
+    { role: "user", content: savedGoal },
+    { role: "assistant", content: "Use $1,500 on the saved-home door and windows." },
+    { role: "user", content: "Mum's home has a $9,000 battery quote." },
+    { role: "assistant", content: "I will keep Mum's battery quote separate." },
+    { role: "user", content: "Back to the first one." },
+    { role: "assistant", content: "Back to your saved home's door and windows." },
+  ];
+  let observedBody;
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "My existing reverse-cycle split still heats properly, so I do not want to replace a working unit.",
+    continuation,
+    recentTurns,
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      observedBody = JSON.parse(options.body);
+      return jsonResponse(modelPayload({
+        answer: "Keep the working split and use the $1,500 on the saved home's door draught and cold windows.",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  const context = JSON.parse(observedBody.input[1].content[0].text);
+  const priorText = JSON.stringify(context.priorTurns);
+  assert.match(priorText, /\$1,500/);
+  assert.match(priorText, /Back to the first one/i);
+  assert.doesNotMatch(priorText, /Mum|\$9,000|battery/i);
+});
+
 test("assistant outcome summaries are visible context but never quantity evidence", async () => {
   const observedBodies = [];
   const failures = [];
@@ -4293,6 +4367,8 @@ test("model prompt applies assessor education response guardrails without leakin
   assert.match(prompt, /Default to one natural 35 to 100 word paragraph/i);
   assert.match(prompt, /Categories route evidence; they are not answers/i);
   assert.match(prompt, /another property, site or job overrides conflicting saved-home facts/i);
+  assert.match(prompt, /same-home constraint or rejected option/i);
+  assert.match(prompt, /keep the current goal and budget visible/i);
   assert.match(prompt, /short "why not", "do you still think" or prior-option follow-up/i);
   assert.ok(prompt.length < 8_500, `prompt length: ${prompt.length}`);
   assert.ok(Array.isArray(context.industryLibrary));
@@ -4517,6 +4593,20 @@ test("complete option comparisons and ordinary single-topic answers remain accep
     })),
   });
   assert.ok(singleTopic);
+});
+
+test("a useful zero-export explanation is recognised as solar coverage", async () => {
+  const result = await generateSurgeModelAnswer(request({
+    message: "The quote also says zero export. What does that change?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Zero export means the system cannot send surplus solar to the grid. Your home can still use solar as it is generated, but the inverter will reduce output when generation exceeds household use. This can reduce generation, feed-in credits and overall value.",
+    })),
+  });
+
+  assert.ok(result);
+  assert.match(result.answer.directAnswer, /cannot send surplus solar to the grid/i);
 });
 
 test("joined multi-topic explanations require every named topic without treating context as another decision", async () => {
@@ -4762,6 +4852,66 @@ test("solar battery context remains conditional and cannot become unrelated purc
     onFailure: (failure) => failures.push(failure),
   });
 
+  assert.equal(result, null);
+  assert.deepEqual(failures, [{
+    code: "provider_output_rejected",
+    stage: "topic_drift",
+  }]);
+});
+
+test("a cold-home symptom can broaden a door-draught decision without admitting unrelated upgrades", async () => {
+  const modelRequest = request({
+    message: "great idea, also i find it hard to keep the house warm sometimes",
+    recentTurns: [
+      { role: "user", content: "i feel a draft under my front door" },
+      { role: "assistant", content: "Use a door snake first, then fit a correctly sized door seal." },
+    ],
+    continuation: state({
+      activeTopic: "draughts_ventilation",
+      goal: "Stop the breeze under the front door",
+      lastAnswerSummary: "Recommended a door snake and correctly sized door seal.",
+    }),
+  });
+  const usefulFailures = [];
+  const useful = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(structuredModelPayload({
+      verdict: "The front-door draught is one confirmed heat-loss path, but it may not be the whole reason the house is hard to keep warm.",
+      reason: "Keep the door snake, then check window gaps and accessible ceiling insulation. Use the existing fixed reverse-cycle air conditioner for occupied rooms before relying on a plug-in heater.",
+    })),
+    onFailure: (failure) => usefulFailures.push(failure),
+  });
+  assert.ok(useful, JSON.stringify(usefulFailures));
+  assert.equal(useful.continuation.activeTopic, "comfort_fabric");
+  assert.deepEqual(usefulFailures, []);
+
+  const unrelatedFailures = [];
+  const unrelated = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Install rooftop solar and a home battery first. That is the best way to keep the house warm.",
+    })),
+    onFailure: (failure) => unrelatedFailures.push(failure),
+  });
+  assert.equal(unrelated, null);
+  assert.deepEqual(unrelatedFailures, [{
+    code: "provider_output_rejected",
+    stage: "topic_drift",
+  }]);
+});
+
+test("a cold home battery cannot admit unrelated insulation or heating advice", async () => {
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "My home battery sometimes gets cold outside. Is that normal?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(structuredModelPayload({
+      verdict: "Add ceiling insulation above the home battery first.",
+      reason: "Then use reverse-cycle heating to keep the house warm, because the battery temperature shows the home is losing heat.",
+    })),
+    onFailure: (failure) => failures.push(failure),
+  });
   assert.equal(result, null);
   assert.deepEqual(failures, [{
     code: "provider_output_rejected",
