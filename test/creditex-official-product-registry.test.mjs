@@ -3230,7 +3230,7 @@ test("UTC activation timestamps keep Australian regulator-date boundaries", asyn
   assert.equal(australianTenth.products[0].attributes.watts, 415);
 });
 
-test("failed refreshes stay auditable while the last exact snapshot expires on its original TTL", async () => {
+test("failed refreshes stay auditable while quote planning can use the last accepted snapshot", async () => {
   const { d1, artifactStore } = fixture();
   await syncOfficialProductRegistry(d1, definition, {
     fetchImpl: fetchFixture(), artifactStore,
@@ -3280,6 +3280,36 @@ test("failed refreshes stay auditable while the last exact snapshot expires on i
     }, { now: expiredAt }),
     expectedError("OFFICIAL_PRODUCT_REGISTRY_STALE"),
   );
+  await assert.rejects(
+    validateOfficialProductSelections(d1, {
+      installationDate: "2026-08-10",
+      requiredKinds: ["pv_module"],
+      selectedProductIds: { pv_module: withinTtl.products[0].id },
+    }, { now: expiredAt }),
+    expectedError("OFFICIAL_PRODUCT_REGISTRY_STALE"),
+  );
+
+  const quoteSearch = await searchOfficialProducts(d1, {
+    productKind: "pv_module",
+    installationDate: "2026-08-10",
+    brand: "Bright Panel",
+  }, {
+    allowStaleAcceptedSnapshot: true,
+    now: expiredAt,
+  });
+  assert.equal(quoteSearch.registry.status, "stale");
+  assert.equal(quoteSearch.matchCount, 1);
+  assert.equal(quoteSearch.products[0].id, withinTtl.products[0].id);
+
+  const quoteSelection = await validateOfficialProductSelections(d1, {
+    installationDate: "2026-08-10",
+    requiredKinds: ["pv_module"],
+    selectedProductIds: { pv_module: quoteSearch.products[0].id },
+  }, {
+    allowStaleAcceptedSnapshot: true,
+    now: expiredAt,
+  });
+  assert.equal(quoteSelection.selections[0].id, quoteSearch.products[0].id);
 });
 
 test("a future-dated registry check is never treated as current", async () => {
@@ -3303,7 +3333,10 @@ test("a future-dated registry check is never treated as current", async () => {
       productKind: "pv_module",
       installationDate: "2026-08-08",
       brand: "Bright Panel",
-    }, { now: beforeCheck }),
+    }, {
+      allowStaleAcceptedSnapshot: true,
+      now: beforeCheck,
+    }),
     expectedError("OFFICIAL_PRODUCT_REGISTRY_STALE"),
   );
 });

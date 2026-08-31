@@ -83,6 +83,20 @@ function requestWasSuperseded(value: unknown) {
   );
 }
 
+function registryQuotePlanningNotice(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const registry = value as Record<string, unknown>;
+  if (registry.status !== "stale") return "";
+  const checkedAt = new Date(String(registry.lastCheckedAt || ""));
+  if (Number.isNaN(checkedAt.getTime())) return "";
+  const checkedDate = checkedAt.toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  return `Using the last accepted official product snapshot checked ${checkedDate} while the registry refresh completes. This result is for quote planning; confirm current product eligibility before a certificate claim.`;
+}
+
 export function creditexProductOptionLabel(
   product: Pick<
     CreditexOfficialProductOption,
@@ -216,6 +230,7 @@ export function CreditexOfficialProductPicker({
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [registryNotice, setRegistryNotice] = useState("");
   const [retryNonce, setRetryNonce] = useState(0);
   const requestRef = useRef(0);
   const onSelectRef = useRef(onSelect);
@@ -235,6 +250,7 @@ export function CreditexOfficialProductPicker({
     const timer = window.setTimeout(() => {
       setBusy(true);
       setError("");
+      setRegistryNotice("");
       const parameters = new URLSearchParams({
         productKind: kind,
         installationDate,
@@ -254,6 +270,7 @@ export function CreditexOfficialProductPicker({
           if (requestRef.current !== requestVersion) return;
           const nextProducts = (result.products || []) as CreditexOfficialProductOption[];
           const nextFacets = productFacets(result.facets);
+          setRegistryNotice(registryQuotePlanningNotice(result.registry));
           setProducts(nextProducts);
           setFacets(nextFacets);
           if (
@@ -281,6 +298,7 @@ export function CreditexOfficialProductPicker({
           if (requestWasSuperseded(caught)) return;
           setProducts([]);
           setFacets({ brands: [], models: [], productTypes: [] });
+          setRegistryNotice("");
           setError(
             caught instanceof Error
               ? caught.message
@@ -418,6 +436,11 @@ export function CreditexOfficialProductPicker({
             ))}
           </select>
         </label>
+      )}
+      {registryNotice && (
+        <small className={styles.productRegistryNotice} role="status">
+          {registryNotice}
+        </small>
       )}
       {error ? (
         <div>
