@@ -23,7 +23,7 @@ export type SiteActive = "start" | "plan" | "calculator" | "account" | "direct-t
 
 export function SiteNav({ active }: { active: SiteActive }) {
   const links = [
-    { key: "start", href: "/", label: "Start" },
+    { key: "start", href: "/", label: "Home" },
     { key: "plan", href: "/plan", label: "My energy plan" },
     { key: "calculator", href: "/calculator", label: "Rebate calculator" },
     { key: "electricity", href: "/compare", label: "Electricity compare" },
@@ -61,17 +61,6 @@ export function SiteHeader({ active }: { active: SiteActive }) {
               <span aria-hidden="true">&#9679;</span> Account
             </Link>
           ) : null}
-          <SurgeHeaderButton active={active === "surge"} />
-          <Link
-            className="site-tlink-link"
-            href="/direct-trade/dashboard"
-            prefetch={false}
-            aria-label="Open the TLink trade workspace"
-            title="TLink trade workspace"
-          >
-            <img className="site-tlink-mark" src="/tlink-icon-192.png" width="38" height="38" alt="" aria-hidden="true" decoding="async" />
-            <span className="site-tlink-copy"><strong>TLink</strong><small>Trade workspace</small></span>
-          </Link>
           <Link
             className="site-book-link"
             href="/book-an-assessment"
@@ -87,6 +76,17 @@ export function SiteHeader({ active }: { active: SiteActive }) {
           >
             Call
           </a>
+          <SurgeHeaderButton active={active === "surge"} />
+          <Link
+            className="site-tlink-link"
+            href="/direct-trade/dashboard"
+            prefetch={false}
+            aria-label="Open the TLink trade workspace"
+            title="TLink trade workspace"
+          >
+            <img className="site-tlink-mark" src="/tlink-icon-192.png" width="38" height="38" alt="" aria-hidden="true" decoding="async" />
+            <span className="site-tlink-copy"><strong>TLink</strong><small>Trade workspace</small></span>
+          </Link>
         </div>
       </header>
       <span className="site-content-anchor" id="site-content" tabIndex={-1} />
@@ -95,7 +95,7 @@ export function SiteHeader({ active }: { active: SiteActive }) {
 }
 
 export function SiteFooter({ children }: { children: ReactNode }) {
-  return <footer className="site-footer"><p>{children}</p><p>Powered by <a href={`${PUBLIC_SITE.apexUrl}/`}>Australian Energy Assessments</a> | <Link href="/privacy" prefetch={false}>Privacy</Link> | <Link href="/book-an-assessment" prefetch={false}>Book a 5-minute call</Link> | <a href={PUBLIC_SITE.phoneHref}>{PUBLIC_SITE.phoneDisplay}</a> | <a href={`mailto:${PUBLIC_SITE.email}`}>Email</a></p><p>{PUBLIC_SITE.legalName} | ABN {PUBLIC_SITE.abn} | {PUBLIC_SITE.address.streetAddress}, {PUBLIC_SITE.address.addressLocality} {PUBLIC_SITE.address.addressRegion} {PUBLIC_SITE.address.postalCode}</p><p className="site-footer-profiles"><a href={PUBLIC_SITE.googleBusinessProfile} target="_blank" rel="noopener noreferrer">Google Business Profile</a> | <a href={PUBLIC_SITE.facebook} target="_blank" rel="noopener noreferrer">Facebook</a> | <a href={PUBLIC_SITE.instagram} target="_blank" rel="noopener noreferrer">Instagram</a> | <a href={PUBLIC_SITE.linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a></p></footer>;
+  return <footer className="site-footer"><p>{children}</p><p>Powered by <a href={`${PUBLIC_SITE.apexUrl}/`}>Australian Energy Assessments</a> | <Link href="/privacy" prefetch={false}>Privacy</Link> | <Link href="/book-an-assessment" prefetch={false}>Book now</Link> | <a href={PUBLIC_SITE.phoneHref}>{PUBLIC_SITE.phoneDisplay}</a> | <a href={`mailto:${PUBLIC_SITE.email}`}>Email</a></p><p>{PUBLIC_SITE.legalName} | ABN {PUBLIC_SITE.abn} | {PUBLIC_SITE.address.streetAddress}, {PUBLIC_SITE.address.addressLocality} {PUBLIC_SITE.address.addressRegion} {PUBLIC_SITE.address.postalCode}</p><p className="site-footer-profiles"><a href={PUBLIC_SITE.googleBusinessProfile} target="_blank" rel="noopener noreferrer">Google Business Profile</a> | <a href={PUBLIC_SITE.facebook} target="_blank" rel="noopener noreferrer">Facebook</a> | <a href={PUBLIC_SITE.instagram} target="_blank" rel="noopener noreferrer">Instagram</a> | <a href={PUBLIC_SITE.linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a></p></footer>;
 }
 
 export function ComparatorHero({ title, children }: { title: string; children: ReactNode }) {

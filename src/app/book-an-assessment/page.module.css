@@ -15,12 +15,12 @@
 
 .hero::before {
   animation: plasmaDrift 22s ease-in-out infinite alternate;
-  background: url("/booking-plasma-hero.webp") center / cover no-repeat;
+  background: url("/booking-energy-hero.webp") center / cover no-repeat;
   content: "";
-  inset: -7%;
+  inset: -3%;
   opacity: .92;
   position: absolute;
-  transform: scale(1.05) translate3d(-1%, -.6%, 0);
+  transform: scale(1.015) translate3d(-.35%, -.25%, 0);
 }
 
 .heroContent {
@@ -129,6 +129,7 @@
   border: 1px solid #c8e1da;
   border-radius: 18px;
   display: grid;
+  gap: 12px;
   grid-template-columns: minmax(0, 1fr) auto auto;
   margin: 18px 0 28px;
   padding: 17px 18px;
@@ -199,16 +200,16 @@
 @media (prefers-reduced-motion: reduce) {
   .hero::before {
     animation: none;
-    transform: scale(1.05);
+    transform: scale(1.015);
   }
 }
 
 @keyframes plasmaDrift {
   from {
-    transform: scale(1.05) translate3d(-1%, -.6%, 0);
+    transform: scale(1.015) translate3d(-.35%, -.25%, 0);
   }
 
   to {
-    transform: scale(1.1) translate3d(1%, .6%, 0);
+    transform: scale(1.03) translate3d(.35%, .25%, 0);
   }
 }

@@ -85,7 +85,7 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(chrome, /className="site-header"/);
   assert.match(chrome, /import \{ SurgeHeaderButton \} from "@\/components\/SurgeHeaderButton"/);
   assert.match(chrome, /<SurgeHeaderButton active=\{active === "surge"\} \/>/);
-  assert.match(chrome, /href: "\/", label: "Start"/);
+  assert.match(chrome, /href: "\/", label: "Home"/);
   assert.match(chrome, /href: "\/plan", label: "My energy plan"/);
   assert.match(chrome, /href: "\/calculator", label: "Rebate calculator"/);
   assert.match(chrome, /href: "\/compare", label: "Electricity compare"/);
@@ -122,18 +122,18 @@ test("the futuristic header links to one dedicated always-present Wattzun AI pag
   assert.match(surgeHeaderButton, /eslint-disable @next\/next\/no-img-element/);
   assert.match(surgeHeaderButton, /className="site-surge-copy"[\s\S]*?<strong>Wattzun AI<\/strong>/);
   assert.doesNotMatch(surgeHeaderButton, /Energy upgrade guide|site-surge-copy"[\s\S]{0,120}<small>/);
-  assert.match(surgeHeaderButton, /className="site-surge-status"[\s\S]*?>AI guide<\/span>/);
+  assert.doesNotMatch(surgeHeaderButton, /site-surge-status|AI guide/);
   assert.match(wattzunRoute, /SiteHeader active="surge"/);
   assert.match(wattzunRoute, /Wattzun AI \| Australian Energy Assessments/);
   assert.match(wattzunRoute, /canonical: "\/wattzun"/);
   assert.match(legacySurgeRoute, /permanentRedirect\("\/wattzun"\)/);
-  assert.match(styles, /\.site-surge-link \{[^}]*min-height: 44px;/);
+  assert.match(styles, /\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{[^}]*flex: 0 0 126px;[^}]*min-height: 44px;/);
   assert.match(styles, /\.site-surge-link\.active \{/);
   assert.match(styles, /\.site-surge-core \{[^}]*box-shadow:/);
   assert.doesNotMatch(styles, /animation: site-surge-(?:pulse|spin)/);
   assert.doesNotMatch(styles, /\.site-surge-core::before \{/);
   assert.match(styles, /\.site-surge-core img \{[^}]*filter: drop-shadow/);
-  assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-surge-link \{ min-height: 40px;/);
+  assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{[^}]*flex: 1 1 0;[^}]*min-height: 40px;/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.site-header::before, \.site-surge-core, \.customer-journey-scene::after \{ animation: none !important; \}/);
   assert.match(styles, /@media \(forced-colors: active\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{ border: 1px solid ButtonText;/);
 });
@@ -148,9 +148,18 @@ test("public navigation keeps the TLink trade workspace clearly branded", () => 
   assert.doesNotMatch(guide, /account is optional|Save or ask trades|Create an account after seeing your roadmap/);
 });
 
+test("header actions use the requested order, equal sizing and energy backdrop", () => {
+  assert.match(chrome, /className="site-book-link"[\s\S]*?className="site-call-link"[\s\S]*?<SurgeHeaderButton[\s\S]*?className="site-tlink-link"/);
+  assert.match(styles, /\.site-book-link \{[^}]*booking-energy-hero\.webp/);
+  assert.match(styles, /\.site-call-link \{[^}]*booking-energy-hero\.webp/);
+  assert.match(chrome, /href="\/book-an-assessment"[^>]*>[\s\S]*?Book now/);
+  assert.doesNotMatch(chrome, />Book a 5-minute call<\/Link>/);
+});
+
 test("desktop navigation shows every option and mobile restores the compact swipe strip", () => {
   assert.match(chrome, /<ResponsiveSiteNav>/);
   assert.match(responsiveNav, /aria-label="Primary navigation"/);
+  assert.match(responsiveNav, /className="site-nav-scroll-cue"[^>]*>Swipe/);
   assert.doesNotMatch(responsiveNav, /Energy services|Scroll for more options|ResizeObserver|MutationObserver|hasHiddenOptions/);
   assert.match(
     styles,
@@ -161,6 +170,8 @@ test("desktop navigation shows every option and mobile restores the compact swip
     /\.comparator-nav \{[^}]*justify-content: flex-end;/,
   );
   assert.doesNotMatch(styles, /site-nav-discovery|has-hidden-options/);
+  assert.match(styles, /body\.aea-platform \.site-header \.site-nav-shell::after \{[^}]*linear-gradient/);
+  assert.match(styles, /body\.aea-platform \.site-header \.site-nav-scroll-cue \{[^}]*display: flex;/);
   assert.match(styles, /@media \(min-width: 721px\) \{[\s\S]*?\.site-header \.comparator-nav \{[^}]*display: grid;[^}]*grid-template-columns: repeat\(8, minmax\(0, 1fr\)\);[^}]*overflow: visible;/);
   assert.match(styles, /@media screen and \(max-width: 720px\) \{[\s\S]*?body\.aea-platform \.site-header \.comparator-nav \{[^}]*display: flex;[^}]*overflow-x: auto;[^}]*scroll-snap-type: x proximity;/);
   assert.match(styles, /body\.aea-platform \.site-header \.comparator-nav a \{[^}]*flex: 0 0 auto;[^}]*scroll-snap-align: start;[^}]*white-space: nowrap;/);
@@ -175,7 +186,7 @@ test("desktop navigation shows every option and mobile restores the compact swip
   );
   assert.match(
     styles,
-    /@media \(max-width: 520px\) \{[\s\S]*?\.site-header-actions \{[^}]*display: flex;[^}]*grid-column: 1;[^}]*grid-row: 2;/,
+    /@media \(max-width: 720px\) \{[\s\S]*?\.site-header-actions \{[^}]*display: flex;[^}]*grid-column: 1;[^}]*grid-row: 2;/,
   );
   assert.match(
     styles,

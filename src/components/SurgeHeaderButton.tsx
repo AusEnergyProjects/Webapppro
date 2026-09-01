@@ -17,7 +17,6 @@ export function SurgeHeaderButton({ active = false }: { active?: boolean }) {
       <span className="site-surge-copy">
         <strong>Wattzun AI</strong>
       </span>
-      <span className="site-surge-status" aria-hidden="true">AI guide</span>
     </Link>
   );
 }

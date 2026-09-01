@@ -6,6 +6,7 @@ export function ResponsiveSiteNav({ children }: { children: ReactNode }) {
       <nav aria-label="Primary navigation" className="comparator-nav">
         {children}
       </nav>
+      <span className="site-nav-scroll-cue" aria-hidden="true">Swipe <b>&rsaquo;</b></span>
     </div>
   );
 }

@@ -122,6 +122,7 @@ test("booking is a focused five-minute Calendly call with truthful calendar and 
   assert.doesNotMatch(booking, /BreadcrumbList|guide-source-links|AssessmentServicePage|PublicAssessmentBookingForm/);
   assert.match(bookingStyles, /@media \(max-width: 720px\)/);
   assert.match(bookingStyles, /@media \(forced-colors: active\)/);
+  assert.match(bookingStyles, /\.help\s*\{[^}]*gap:\s*12px;/);
   assert.match(legacyBookingRedirect, /permanentRedirect\("\/book-an-assessment"\)/);
 });
 
