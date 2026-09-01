@@ -6,7 +6,7 @@ import { PUBLIC_SITE } from "@/lib/public-site";
 
 export const metadata: Metadata = {
   title: "Home Energy Assessments, NatHERS and BASIX | Australian Energy Assessments",
-  description: "Choose the right home energy assessment: NatHERS and Home Energy Rating for new or existing homes, Whole of Home for new homes, and BASIX support in NSW.",
+  description: "Australia-wide NatHERS and home energy assessment support, with primary on-site coverage in NSW and Victoria, plus Whole of Home and NSW BASIX guidance.",
   alternates: { canonical: "/assessments" },
   openGraph: {
     title: "Home Energy Assessments, NatHERS and BASIX",
@@ -80,7 +80,7 @@ export default function AssessmentsPage() {
   return <main className="wrap assessments-page">
     <JsonLd data={assessmentHubSchema} />
     <SiteHeader active="assessments" />
-    <header className="guide-hero assessments-hero"><span>Home energy assessments and ratings</span><h1>NatHERS, Home Energy Rating and BASIX assessment pathways</h1><p>Australian Energy Assessments helps homeowners and project teams identify the right energy assessment for a new design, an existing home or a NSW residential project. Start with the building stage, location and approval pathway so the right evidence is assessed.</p></header>
+    <header className="guide-hero assessments-hero"><span>Home energy assessments and ratings</span><h1>NatHERS, Home Energy Rating and BASIX assessment pathways</h1><p>Australian Energy Assessments supports projects across Australia and helps homeowners and project teams identify the right assessment for a new design, an existing home or a NSW residential project. On-site assessments are primarily delivered in New South Wales and Victoria, with other locations confirmed case by case.</p></header>
 
     <div className="assessment-asat"><strong>Official guidance checked 1 September 2026</strong><span>Building, planning and assessment requirements can change. Confirm the current rules for the project location and approval pathway before relying on a certificate or rating.</span></div>
 

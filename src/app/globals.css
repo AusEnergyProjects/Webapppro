@@ -2102,6 +2102,9 @@ h3, h4 { font-family: var(--font-aea-heading); font-size: var(--type-card-title)
 .assessment-asat { align-items: flex-start; background: #f8fcf9; border: 1px solid #b8ddc6; border-radius: 12px; display: flex; flex-direction: column; gap: 3px; margin: 18px 0 34px; padding: 14px 17px; }
 .assessment-asat strong { color: var(--color-aea-ink); font-size: .82rem; }
 .assessment-asat span { color: var(--color-aea-muted); font-size: .76rem; line-height: 1.5; }
+.assessment-coverage { align-items: flex-start; background: #eff8fb; border: 1px solid #b9dce4; border-radius: 12px; display: flex; flex-direction: column; gap: 4px; margin: -18px 0 34px; padding: 14px 17px; }
+.assessment-coverage strong { color: var(--color-aea-ink); font-size: .86rem; }
+.assessment-coverage span { color: var(--color-aea-muted); font-size: .78rem; line-height: 1.55; }
 .assessment-section { margin: 38px 0; }
 .assessment-card-grid { align-items: stretch; column-gap: 14px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 0; }
 .assessment-card { background: #fff; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); box-shadow: var(--shadow-card); display: grid; grid-row: span 5; grid-template-rows: subgrid; min-height: 680px; overflow: hidden; padding: 24px; row-gap: 0; }

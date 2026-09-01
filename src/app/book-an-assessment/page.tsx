@@ -10,7 +10,7 @@ import { PublicAssessmentBookingForm } from "@/components/PublicAssessmentBookin
 
 const path = "/book-an-assessment";
 const title = "Book Home Energy Assessment | Australian Energy Assessments";
-const description = "Discuss a NatHERS new-home certificate, an existing-home Home Energy Rating or a NSW BASIX pathway. Call 1300 241 149 or email our assessment team.";
+const description = "Request Australia-wide NatHERS and home energy assessment support, with primary on-site coverage in NSW and Victoria and NSW BASIX support.";
 
 export const metadata = buildAssessmentMetadata({ path, title, description });
 
@@ -110,7 +110,7 @@ export default function BookAnAssessmentPage() {
       breadcrumbLabel="Book an assessment"
       eyebrow="Book an assessment"
       title="Start with the right home energy assessment pathway"
-      introduction="Whether you searched for a NatHERS assessor, home energy assessor, existing-home energy assessment or BASIX assessor, begin by confirming the building stage, location and purpose. Call or email Australian Energy Assessments to discuss the correct pathway before supplying detailed project documents."
+      introduction="Australian Energy Assessments supports projects across Australia, with on-site assessments primarily delivered in New South Wales and Victoria and other locations confirmed case by case. Whether you searched for a NatHERS assessor, home energy assessor, existing-home energy assessment or BASIX assessor, begin by confirming the building stage, location and purpose so we can discuss the correct pathway before supplying detailed project documents."
       reviewed="1 September 2026"
       reviewNote="Assessment names and approval requirements can change. The official scheme, planning portal and relevant approval authority remain the source of truth for the project."
       cardsEyebrow="Choose the starting point"
@@ -132,6 +132,7 @@ export default function BookAnAssessmentPage() {
       ]}
       serviceName="Home energy assessment pathway consultation"
       serviceType="NatHERS, Home Energy Rating and BASIX assessment pathway consultation"
+      areaServed="Australia"
       footer="The correct assessment depends on the project location, building stage, evidence and approval purpose. Requirements must be confirmed for the specific property and approval pathway."
     />
   );

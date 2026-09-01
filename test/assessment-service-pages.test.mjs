@@ -63,8 +63,10 @@ test("service and FAQ structured data are derived from visible page copy", () =>
   assert.match(routes.newHome, /areaServed="Australia"/);
   assert.match(routes.wholeOfHome, /areaServed="Australia"/);
   assert.match(routes.basix, /areaServed="New South Wales"/);
-  assert.doesNotMatch(routes.existingHome, /areaServed=/);
-  assert.doesNotMatch(routes.book, /areaServed=/);
+  assert.match(routes.existingHome, /areaServed="Australia"/);
+  assert.match(routes.book, /areaServed="Australia"/);
+  assert.match(shared, /Australia-wide service area/);
+  assert.match(shared, /On-site assessments are primarily delivered in New South Wales and Victoria/);
   assert.match(shared, /telephoneIsVisible/);
   assert.match(shared, /emailIsVisible/);
   assert.match(shared, /"@type": "FAQPage"/);

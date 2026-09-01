@@ -9,7 +9,7 @@ import {
 
 const path = "/home-energy-rating-for-existing-homes";
 const title = "Existing Home Energy Rating | Australian Energy Assessments";
-const description = "An existing-home assessment provides a Home Energy Rating from 0 to 100+, a Star Rating from 0 to 10, estimated annual energy use and upgrade guidance.";
+const description = "Home Energy Rating assessments for existing homes, with on-site availability confirmed by location and primary field coverage in NSW and Victoria.";
 
 export const metadata = buildAssessmentMetadata({ path, title, description });
 
@@ -103,7 +103,7 @@ export default function HomeEnergyRatingForExistingHomesPage() {
       breadcrumbLabel="Existing-home rating"
       eyebrow="Homes that are already built"
       title="Home Energy Rating for an existing home"
-      introduction="The current assessment for a completed home provides a Home Energy Rating from 0 to 100+, a Star Rating from 0 to 10, estimated annual energy use and upgrade guidance. If you previously searched for a Residential Efficiency Scorecard assessment, NatHERS existing home assessment or home energy audit, use the current Home Energy Rating pathway and confirm the purpose before booking."
+      introduction="Australian Energy Assessments supports completed-home assessments across Australia. On-site assessments are primarily delivered in New South Wales and Victoria, with other locations confirmed case by case. The current assessment provides a Home Energy Rating from 0 to 100+, a Star Rating from 0 to 10, estimated annual energy use and upgrade guidance."
       reviewed="1 September 2026"
       reviewNote="Home Energy Rating launched nationally on 1 July 2026. Older articles and search results may still use Residential Efficiency Scorecard or apply new-home NatHERS terms to existing homes."
       cardsEyebrow="What the current rating provides"
@@ -124,6 +124,7 @@ export default function HomeEnergyRatingForExistingHomesPage() {
       ]}
       serviceName="Home Energy Rating for existing homes"
       serviceType="On-site existing-home energy assessment"
+      areaServed="Australia"
       footer="An existing-home rating supports household decisions and upgrade planning. It does not replace a new-home certificate, building approval or site-specific trade design."
     />
   );
