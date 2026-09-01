@@ -104,9 +104,11 @@ export default function BookAnAssessmentPage() {
       <SiteHeader active="assessments" />
 
       <header className={styles.hero}>
-        <span className={styles.eyebrow}>5-minute call</span>
-        <h1>Book a quick call</h1>
-        <p>Choose a time that suits you. This short call is for logistics: we confirm the property location, what you need and the right assessment pathway. It is not the assessment itself.</p>
+        <div className={styles.heroContent}>
+          <span className={styles.eyebrow}>Australian Energy Assessments</span>
+          <h1>Book a five-minute call</h1>
+          <p>Choose a time that suits you. This short call is for logistics: we confirm the property location, what you need and the right assessment pathway. It is not the assessment itself.</p>
+        </div>
       </header>
 
       <section className={styles.bookingCard} aria-labelledby="choose-call-time">
@@ -115,9 +117,6 @@ export default function BookAnAssessmentPage() {
             <span>Choose a time</span>
             <h2 id="choose-call-time">Available five-minute calls</h2>
           </div>
-          <a className="btn ghost" href={calendlyBookingUrl} target="_blank" rel="noopener noreferrer">
-            Open Calendly separately
-          </a>
         </div>
 
         <div className={styles.embedShell}>
@@ -133,12 +132,12 @@ export default function BookAnAssessmentPage() {
         <div className={styles.confirmation}>
           <span aria-hidden="true">&#10003;</span>
           <div>
-            <strong>Your booking updates the AEA calendar</strong>
+            <strong>Your booking updates the Australian Energy Assessments calendar</strong>
             <p>After you choose a time and complete the basic booking questions, Calendly adds the call to the connected Australian Energy Assessments calendar and emails the booking details to the address you enter. Our team receives the appointment notification.</p>
           </div>
         </div>
 
-        <p className={styles.privacyNote}>Calendly handles the booking details and calendar event. Read the <Link href="/privacy">AEA privacy notice</Link> and <a href="https://calendly.com/privacy" target="_blank" rel="noopener noreferrer">Calendly privacy notice</a>.</p>
+        <p className={styles.privacyNote}>Calendly handles the booking details and calendar event. Read the <Link href="/privacy">Australian Energy Assessments privacy notice</Link> and <a href="https://calendly.com/privacy" target="_blank" rel="noopener noreferrer">Calendly privacy notice</a>.</p>
       </section>
 
       <aside className={styles.help} aria-label="Alternative contact options">

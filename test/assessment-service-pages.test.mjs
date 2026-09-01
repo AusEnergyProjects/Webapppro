@@ -108,11 +108,13 @@ test("booking is a focused five-minute Calendly call with truthful calendar and 
   assert.match(booking, /https:\/\/calendly\.com\/info-58a\/precall/);
   assert.match(booking, /<iframe/);
   assert.match(booking, /hide_event_type_details=1/);
-  assert.match(booking, /Book a quick call/);
+  assert.match(booking, /Book a five-minute call/);
   assert.match(booking, /It is not the assessment itself/);
+  assert.match(booking, /Your booking updates the Australian Energy Assessments calendar/);
   assert.match(booking, /Calendly adds the call to the connected Australian Energy Assessments calendar/);
   assert.match(booking, /emails the booking details to the address you enter/);
   assert.match(booking, /Our team receives the appointment notification/);
+  assert.doesNotMatch(booking, /Open Calendly separately/);
   assert.match(booking, /href=\{PUBLIC_SITE\.phoneHref\}/);
   assert.match(booking, /mailto:\$\{PUBLIC_SITE\.email\}/);
   assert.match(booking, /"@type": "ContactPage"/);
