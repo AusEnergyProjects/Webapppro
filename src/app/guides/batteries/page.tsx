@@ -1,9 +1,11 @@
 import { GuideShell, GuideSection } from "@/components/GuideShell";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
-export const metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/guides/batteries",
   title: "Home Battery Guide | Australian Energy Assessments",
   description: "Assess home battery sizing, backup, warranties, cycling, VPP terms and current federal support.",
-};
+});
 
 export default function BatteryGuidePage() {
   return <GuideShell label="Home battery guide" title="A battery needs both surplus energy and somewhere useful to send it" introduction="The strongest battery case usually combines solar exports available for charging with grid imports later in the day. Capacity alone does not show how much a household will save.">

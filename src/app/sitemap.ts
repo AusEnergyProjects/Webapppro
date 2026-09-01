@@ -1,10 +1,13 @@
 import type { MetadataRoute } from "next";
 
 const SITE_ORIGIN = "https://compare.ausenergyassessments.com";
+// Pages that mirror established apex URLs stay out of this sitemap while they
+// canonicalize to the apex during the parallel pre-cutover phase.
 const routes = [
   "",
   "/plan",
   "/wattzun",
+  "/calculator",
   "/compare",
   "/gas-compare",
   "/guides",
@@ -16,8 +19,10 @@ const routes = [
   "/guides/cooking",
   "/guides/ev-charging",
   "/guides/insulation-draught-proofing",
+  "/guides/project-preparation",
   "/rebates",
   "/assessments",
+  "/home-energy-rating-vs-nathers-vs-scorecard",
   "/case-studies",
   "/platform",
   "/privacy",
@@ -29,11 +34,9 @@ const routes = [
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const lastModified = new Date("2026-07-16T00:00:00.000Z");
   return routes.map((route) => ({
     url: `${SITE_ORIGIN}${route}`,
-    lastModified,
     changeFrequency: route === "" ? "weekly" : "monthly",
-    priority: route === "" ? 1 : route === "/plan" ? 0.9 : 0.7,
+    priority: route === "" ? 1 : route === "/assessments" ? 0.95 : route === "/plan" ? 0.9 : 0.7,
   }));
 }

@@ -1,9 +1,11 @@
 import { GuideShell, GuideSection } from "@/components/GuideShell";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
-export const metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/guides/hot-water",
   title: "Hot Water Guide | Australian Energy Assessments",
   description: "Independent guidance for comparing heat pump, solar, electric and gas hot water systems in Australia.",
-};
+});
 
 export default function HotWaterGuidePage() {
   return <GuideShell label="Hot water guide" title="Match capacity and timing to household demand" introduction="A suitable hot water system must cover the household's peak demand, climate and available energy supply. Compare the full installed scope and likely operating schedule, not the tank price alone.">

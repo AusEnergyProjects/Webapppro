@@ -1,9 +1,11 @@
 import { GuideShell, GuideSection } from "@/components/GuideShell";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
-export const metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/guides/ev-charging",
   title: "Home EV Charging Guide | Australian Energy Assessments",
   description: "Independent guidance for matching home EV charging to driving, solar, tariffs, electrical capacity and strata requirements.",
-};
+});
 
 export default function EvChargingGuidePage() {
   return <GuideShell label="Home EV charging guide" title="Match charging speed to driving and the home's capacity" introduction="A dedicated charger is not automatically necessary. Start with daily driving, parking, charging windows and the existing electrical installation, then decide whether a standard outlet or controlled charger is appropriate.">

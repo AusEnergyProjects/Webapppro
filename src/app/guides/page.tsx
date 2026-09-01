@@ -1,9 +1,11 @@
 import { GuideShell, GuideSection } from "@/components/GuideShell";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
-export const metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/guides",
   title: "Home Energy Guides and Support | Australian Energy Assessments",
   description: "Independent guidance for home comfort, electrification, solar, batteries, EV charging, rebates and project-ready decisions.",
-};
+});
 
 export default function GuidesPage() {
   return <GuideShell label="Learn and prepare" title="Find the right evidence without opening ten tabs" introduction="Start with the decision you are making. Each guide explains what to check, what belongs in a written quote and which official source should confirm incentives or requirements.">

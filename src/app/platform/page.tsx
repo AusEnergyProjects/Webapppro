@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
-export const metadata: Metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/platform",
   title: "Full service energy and trade platform | Australian Energy Assessments",
   description: "See how no-account household planning, the installer CRM, wholesaler catalogue and protected administration layer work together.",
-};
+});
 
 const workspaces = [
   {

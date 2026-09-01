@@ -13,7 +13,7 @@ const chrome = read("../src/components/ComparatorChrome.tsx");
 const styles = read("../src/app/globals.css");
 
 test("assessment services are first class routes across the site", () => {
-  assert.match(chrome, /href: "\/assessments", label: "Assessments"/);
+  assert.match(chrome, /href: "\/assessments", label: "NatHERS & ratings"/);
   assert.match(home, /Use NatHERS, BASIX or an existing-home rating where it fits/);
   assert.match(home, /href="\/assessments"/);
   assert.match(guides, /Need a NatHERS or BASIX assessment/);
@@ -25,13 +25,16 @@ test("the hub separates new homes, existing homes and NSW BASIX", () => {
   assert.match(page, /uses plans and design documents before construction/);
   assert.match(page, /Homes that are already built/);
   assert.match(page, /assesses the home as it exists/);
+  assert.match(page, /Home Energy Rating from 0 to 100\+/);
+  assert.match(page, /Star Rating from 0 to 10/);
+  assert.match(page, /cannot demonstrate National Construction Code compliance/);
   assert.match(page, /BASIX is a NSW planning requirement/);
   assert.match(page, /alterations and additions costing \$50,000 or more/);
   assert.match(page, /swimming pools of 40,000 litres or more/);
 });
 
 test("official sources, date and approval boundaries remain visible", () => {
-  assert.match(page, /Official guidance checked 14 July 2026/);
+  assert.match(page, /Official guidance checked 1 September 2026/);
   assert.match(page, /requirements can change/);
   assert.match(page, /homeenergyrating\.gov\.au\/households\/new-homes/);
   assert.match(page, /homeenergyrating\.gov\.au\/households\/existing-homes/);
@@ -41,10 +44,13 @@ test("official sources, date and approval boundaries remain visible", () => {
   assert.doesNotMatch(page, /cdr\.|\/cds-au\/|\/api\//);
 });
 
-test("future document review is explicitly outside the live public flow", () => {
-  assert.match(page, /Secure online document review is not available yet/);
-  assert.match(page, /Do not upload or place house plans, NatHERS certificates, BASIX files, addresses or identity documents/);
-  assert.match(page, /controlled storage, access, retention and audit safeguards/);
+test("the hub explains the 2026 brand transition and provides a booking path", () => {
+  assert.match(page, /Home Energy Rating is the new existing-home consumer brand/);
+  assert.match(page, /Residential Efficiency Scorecard service closed on 23 June 2026/);
+  assert.match(page, /Whole of Home is a new-home rating/);
+  assert.match(page, /href="\/home-energy-rating-vs-nathers-vs-scorecard"/);
+  assert.match(page, /href="\/residential-efficiency-scorecard"/);
+  assert.match(page, /href="\/book-an-assessment"/);
   assert.doesNotMatch(page, /type="file"|<input/);
 });
 

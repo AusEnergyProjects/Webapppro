@@ -1,10 +1,12 @@
 import { ComparatorHero, SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 import { GasComparator } from "@/components/GasComparator";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
-export const metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/gas-compare",
   title: "Compare Gas Plans | Australian Energy Assessments",
   description: "Compare current gas plans using your annual gas use.",
-};
+});
 
 export default function GasComparisonPage() {
   return (

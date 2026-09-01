@@ -1,17 +1,18 @@
-import type { Metadata } from "next";
 import { HomeEnergyPlanner } from "@/components/HomeEnergyPlanner";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
+import { buildPlatformMetadata } from "@/lib/public-site";
 import {
   MAX_HOME_FEATURE_SELECTIONS,
   createCustomerProjectPlan,
   customerProjectOptions,
 } from "@/lib/customer-projects.mjs";
 
-export const metadata: Metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/plan",
   title: "Build My Home Energy Plan | Australian Energy Assessments",
   description:
     "Create a private, ordered roadmap for home comfort, electrification, solar, storage, energy plans, assessments and project-ready next steps.",
-};
+});
 
 type PlanSearchParams = Promise<
   Record<string, string | string[] | undefined>

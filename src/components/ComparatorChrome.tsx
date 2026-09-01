@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AEA_BRANDMARK_PNG_DATA_URI } from "@/lib/aea-brand-assets.mjs";
 import { ResponsiveSiteNav } from "@/components/ResponsiveSiteNav";
 import { SurgeHeaderButton } from "@/components/SurgeHeaderButton";
+import { PUBLIC_SITE } from "@/lib/public-site";
 
 export function BrandBar() {
   return (
@@ -29,7 +30,7 @@ export function SiteNav({ active }: { active: SiteActive }) {
     { key: "gas", href: "/gas-compare", label: "Gas compare" },
     { key: "certificates", href: "/guides/certificate-prices", label: "Certificates" },
     { key: "guides", href: "/guides", label: "Guides and rebates" },
-    { key: "assessments", href: "/assessments", label: "Assessments" },
+    { key: "assessments", href: "/assessments", label: "NatHERS & ratings" },
   ] as const;
   return (
     <ResponsiveSiteNav>
@@ -71,6 +72,21 @@ export function SiteHeader({ active }: { active: SiteActive }) {
             <img className="site-tlink-mark" src="/tlink-icon-192.png" width="38" height="38" alt="" aria-hidden="true" decoding="async" />
             <span className="site-tlink-copy"><strong>TLink</strong><small>Trade workspace</small></span>
           </Link>
+          <Link
+            className="site-book-link"
+            href="/book-an-assessment"
+            prefetch={false}
+            aria-label="Book a home energy assessment"
+          >
+            Book now
+          </Link>
+          <a
+            className="site-call-link"
+            href={PUBLIC_SITE.phoneHref}
+            aria-label={`Call Australian Energy Assessments on ${PUBLIC_SITE.phoneDisplay}`}
+          >
+            Call
+          </a>
         </div>
       </header>
       <span className="site-content-anchor" id="site-content" tabIndex={-1} />
@@ -79,7 +95,7 @@ export function SiteHeader({ active }: { active: SiteActive }) {
 }
 
 export function SiteFooter({ children }: { children: ReactNode }) {
-  return <footer className="site-footer"><p>{children}</p><p>Powered by <a href="https://www.ausenergyassessments.com/" target="_blank" rel="noreferrer">Australian Energy Assessments</a> | <Link href="/privacy" prefetch={false}>Privacy</Link> | Independent energy assessments | 1300 241 149</p></footer>;
+  return <footer className="site-footer"><p>{children}</p><p>Powered by <a href={`${PUBLIC_SITE.apexUrl}/`}>Australian Energy Assessments</a> | <Link href="/privacy" prefetch={false}>Privacy</Link> | <Link href="/book-an-assessment" prefetch={false}>Book an assessment</Link> | <a href={PUBLIC_SITE.phoneHref}>{PUBLIC_SITE.phoneDisplay}</a> | <a href={`mailto:${PUBLIC_SITE.email}`}>Email</a></p><p>{PUBLIC_SITE.legalName} | ABN {PUBLIC_SITE.abn} | {PUBLIC_SITE.address.streetAddress}, {PUBLIC_SITE.address.addressLocality} {PUBLIC_SITE.address.addressRegion} {PUBLIC_SITE.address.postalCode}</p><p className="site-footer-profiles"><a href={PUBLIC_SITE.googleBusinessProfile} target="_blank" rel="noopener noreferrer">Google Business Profile</a> | <a href={PUBLIC_SITE.facebook} target="_blank" rel="noopener noreferrer">Facebook</a> | <a href={PUBLIC_SITE.instagram} target="_blank" rel="noopener noreferrer">Instagram</a> | <a href={PUBLIC_SITE.linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a></p></footer>;
 }
 
 export function ComparatorHero({ title, children }: { title: string; children: ReactNode }) {

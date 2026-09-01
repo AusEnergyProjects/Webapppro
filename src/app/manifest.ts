@@ -2,10 +2,11 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Australian Energy Assessments",
-    short_name: "Australian Energy Assessments",
-    description: "Private home energy planning, plan comparison and project preparation tools.",
-    start_url: "/",
+    name: "TLink by Australian Energy Assessments",
+    short_name: "TLink",
+    description: "The TLink trade workspace for approved installers and suppliers.",
+    start_url: "/direct-trade/dashboard",
+    scope: "/direct-trade/",
     display: "standalone",
     background_color: "#03192d",
     theme_color: "#03192d",

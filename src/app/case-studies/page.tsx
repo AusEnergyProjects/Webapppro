@@ -1,9 +1,11 @@
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
-export const metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/case-studies",
   title: "Energy Assessment Worked Examples | Australian Energy Assessments",
   description: "Transparent worked examples showing how household evidence, timing and assumptions affect energy assessment decisions.",
-};
+});
 
 const examples = [
   {

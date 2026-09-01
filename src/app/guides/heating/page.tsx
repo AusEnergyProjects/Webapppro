@@ -1,9 +1,11 @@
 import { GuideShell, GuideSection } from "@/components/GuideShell";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
-export const metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/guides/heating",
   title: "Heating and Cooling Guide | Australian Energy Assessments",
   description: "Independent guidance for assessing efficient home heating and cooling in Australia.",
-};
+});
 
 export default function HeatingGuidePage() {
   return <GuideShell label="Heating and cooling guide" title="Reduce the load before sizing the system" introduction="Comfort depends on the home, climate, rooms and operating pattern as well as the appliance. Start with draughts, insulation and shading, then compare equipment sized for the spaces you will actually use.">

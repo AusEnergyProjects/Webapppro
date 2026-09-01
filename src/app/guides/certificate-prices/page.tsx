@@ -1,10 +1,12 @@
 import { CertificatePriceTracker } from "@/components/CertificatePriceTracker";
 import { GuideSection, GuideShell } from "@/components/GuideShell";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
-export const metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/guides/certificate-prices",
   title: "Australian Certificate Price Tracker | Australian Energy Assessments",
   description: "Understand STC, ESC, VEEC, PRC, LGC, ACCU and SMC certificates and explore six months of indicative reported spot prices.",
-};
+});
 
 export default function CertificatePricesPage() {
   return <GuideShell active="certificates" label="Certificate price tracker" title="See what energy certificates are worth and what they actually mean" introduction="Certificate markets can help fund eligible upgrades, renewable generation and emissions reduction. Start with the plain-English explanation, then inspect the latest reported trade and six months of price history.">

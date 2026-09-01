@@ -1,30 +1,46 @@
 import type { Metadata, Viewport } from "next";
+import { JsonLd } from "@/components/JsonLd";
 import { LazyEnergyAssistantWidget } from "@/components/LazyEnergyAssistantWidget";
 import { SiteDatePicker } from "@/components/SiteDatePicker";
+import { PUBLIC_SITE, publicOrganizationSchema } from "@/lib/public-site";
 import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://compare.ausenergyassessments.com"),
   applicationName: "Australian Energy Assessments",
-  title: "Home Energy Planning | Australian Energy Assessments",
-  description: "Build a private home energy roadmap, compare electricity and gas plans, understand upgrades, check support and prepare a clear scope for licensed trades.",
+  title: "Home Energy Assessments, NatHERS and Energy Planning | Australian Energy Assessments",
+  description: "Independent home energy assessments, NatHERS and Home Energy Rating guidance, energy planning, rebates and comparison tools for Australian homes.",
+  creator: "Australian Energy Assessments",
+  publisher: "Australian Energy Assessments",
+  category: "Home energy assessment",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
   openGraph: {
-    title: "One Clear Home Energy Plan",
-    description: "Build a private roadmap, compare electricity and gas, understand upgrades and prepare a clear project scope.",
+    title: "Home Energy Assessments and Planning",
+    description: "Independent assessment guidance and practical tools for more comfortable, efficient Australian homes.",
     type: "website",
+    url: "/",
+    locale: "en_AU",
     siteName: "Australian Energy Assessments",
     images: [{ url: "/aea-home-energy-plan-og-v2.png", width: 1731, height: 909, alt: "An immersive home energy plan connecting solar, battery, efficient hot water, heating, cooling and EV charging" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "One Clear Home Energy Plan",
-    description: "Build a private roadmap, compare electricity and gas, understand upgrades and prepare a clear project scope.",
+    title: "Home Energy Assessments and Planning",
+    description: "Independent assessment guidance and practical tools for more comfortable, efficient Australian homes.",
     images: ["/aea-home-energy-plan-og-v2.png"],
   },
-  manifest: "/manifest.webmanifest",
   icons: {
-    icon: [{ url: "/tlink-icon-192.png", type: "image/png", sizes: "192x192" }],
-    apple: [{ url: "/tlink-icon-192.png", type: "image/png", sizes: "192x192" }],
+    icon: [{ url: PUBLIC_SITE.logo, type: "image/svg+xml", sizes: "any" }],
   },
 };
 
@@ -34,5 +50,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body className="aea-platform"><a className="skip-link" href="#site-content">Skip to main content</a>{children}<SiteDatePicker /><LazyEnergyAssistantWidget /></body></html>;
+  return <html lang="en-AU"><body className="aea-platform"><JsonLd data={publicOrganizationSchema} /><a className="skip-link" href="#site-content">Skip to main content</a>{children}<SiteDatePicker /><LazyEnergyAssistantWidget /></body></html>;
 }

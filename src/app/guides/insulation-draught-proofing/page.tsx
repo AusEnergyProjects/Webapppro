@@ -1,4 +1,5 @@
 import { GuideShell, GuideSection } from "@/components/GuideShell";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
 const assessmentChecks = [
   "Rooms that are hardest to keep comfortable and the seasons when problems occur",
@@ -20,10 +21,11 @@ const quoteChecks = [
   "The complete price with any rebate, certificate or provider discount shown separately",
 ];
 
-export const metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/guides/insulation-draught-proofing",
   title: "Insulation and Draught Proofing Guide | Australian Energy Assessments",
   description: "Assess insulation, airtightness, ventilation, moisture, safety and written quotes before improving an Australian home.",
-};
+});
 
 export default function InsulationGuidePage() {
   return <GuideShell label="Insulation and draught proofing guide" title="Reduce the building load before replacing equipment" introduction="Insulation slows unwanted heat flow and draught proofing limits uncontrolled air leakage. A good upgrade also protects ventilation, moisture management, electrical safety and the performance of the whole building fabric.">

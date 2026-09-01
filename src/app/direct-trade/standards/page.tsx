@@ -1,12 +1,13 @@
-import type { Metadata } from "next";
 import { SiteFooter } from "@/components/ComparatorChrome";
 import { TLinkHeader } from "@/components/TLinkChrome";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
-export const metadata: Metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/direct-trade/standards",
   title: "TLink marketplace standards",
   description:
     "How TLink reviews participants, matches projects and expects household upgrade quotes to be presented.",
-};
+});
 
 const standards = [
   {

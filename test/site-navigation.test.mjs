@@ -35,6 +35,7 @@ const planPdfClient = read("../src/lib/customer-plan-pdf-client.ts");
 const newProjectRoute = read("../src/app/account/projects/new/page.tsx");
 const gettingStartedRoute = read("../src/app/getting-started/page.tsx");
 const layout = read("../src/app/layout.tsx");
+const directTradeLayout = read("../src/app/direct-trade/layout.tsx");
 const legacyComparator = read("../public/electricity-comparator.html");
 const customerAndToolTypography = [
   "CustomerDraftDeleteDialog.module.css",
@@ -94,7 +95,7 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(chrome, /className="site-tlink-mark" src="\/tlink-icon-192\.png"/);
   assert.match(chrome, /className="site-tlink-copy"[\s\S]*<strong>TLink<\/strong>[\s\S]*<small>Trade workspace<\/small>/);
   assert.match(guide, /href="\/calculator"[\s\S]*estimate a rebate/);
-  assert.match(chrome, /href: "\/assessments", label: "Assessments"/);
+  assert.match(chrome, /href: "\/assessments", label: "NatHERS & ratings"/);
   assert.match(assessments, /SiteHeader active="assessments"/);
   assert.match(electricity, /SiteHeader active="electricity"/);
   assert.match(gas, /SiteHeader active="gas"/);
@@ -103,7 +104,7 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(rebatesRoute, /RebatesHub/);
   assert.match(rebates, /SiteHeader active="rebates"/);
   assert.match(guide, /href="\/rebates"/);
-  assert.match(gettingStartedRoute, /redirect\("\/plan"\)/);
+  assert.match(gettingStartedRoute, /permanentRedirect\("\/plan"\)/);
 });
 
 test("the futuristic header links to one dedicated always-present Wattzun AI page", () => {
@@ -134,7 +135,7 @@ test("the futuristic header links to one dedicated always-present Wattzun AI pag
   assert.match(styles, /\.site-surge-core img \{[^}]*filter: drop-shadow/);
   assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-surge-link \{ min-height: 40px;/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.site-header::before, \.site-surge-core, \.customer-journey-scene::after \{ animation: none !important; \}/);
-  assert.match(styles, /@media \(forced-colors: active\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link \{ border: 1px solid ButtonText;/);
+  assert.match(styles, /@media \(forced-colors: active\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{ border: 1px solid ButtonText;/);
 });
 
 test("public navigation keeps the TLink trade workspace clearly branded", () => {
@@ -174,7 +175,7 @@ test("desktop navigation shows every option and mobile restores the compact swip
   );
   assert.match(
     styles,
-    /@media \(max-width: 520px\) \{[\s\S]*?\.site-header-actions \{[^}]*display: flex;[^}]*grid-column: 2;[^}]*grid-row: 1;/,
+    /@media \(max-width: 520px\) \{[\s\S]*?\.site-header-actions \{[^}]*display: flex;[^}]*grid-column: 1;[^}]*grid-row: 2;/,
   );
   assert.match(
     styles,
@@ -321,7 +322,8 @@ test("social sharing metadata uses one launch-ready AEA energy card", () => {
 });
 
 test("public discovery metadata is complete and private operations stay excluded", () => {
-  assert.match(layout, /manifest: "\/manifest\.webmanifest"/);
+  assert.doesNotMatch(layout, /manifest: "\/manifest\.webmanifest"/);
+  assert.match(directTradeLayout, /manifest: "\/manifest\.webmanifest"/);
   assert.match(layout, /themeColor: "#03192d"/);
   assert.match(robots, /\/operations\//);
   assert.match(robots, /\/api\//);

@@ -29,6 +29,7 @@ const partners = read("../src/components/DirectTradePartnerForm.tsx");
 const tlinkChrome = read("../src/components/TLinkChrome.tsx");
 const manifest = read("../src/app/manifest.ts");
 const appLayout = read("../src/app/layout.tsx");
+const directTradeLayout = read("../src/app/direct-trade/layout.tsx");
 
 test("unified Business settings remain durable and owner protected", () => {
   assert.match(schema, /availabilityStatus: text\("availability_status"\)/);
@@ -208,7 +209,12 @@ test("TLink has a consistent trade platform identity and installable app icon", 
   assert.match(tlinkChrome, /TLink trade ecosystem dashboard/);
   assert.match(manifest, /tlink-icon-192\.png/);
   assert.match(manifest, /tlink-icon-512\.png/);
-  assert.match(appLayout, /tlink-icon-192\.png/);
+  assert.match(manifest, /name: "TLink by Australian Energy Assessments"/);
+  assert.match(manifest, /start_url: "\/direct-trade\/dashboard"/);
+  assert.match(manifest, /scope: "\/direct-trade\/"/);
+  assert.match(directTradeLayout, /tlink-icon-192\.png/);
+  assert.doesNotMatch(appLayout, /tlink-icon-192\.png/);
+  assert.match(appLayout, /url: PUBLIC_SITE\.logo/);
   assert.ok(fs.statSync(new URL("../public/tlink-icon-192.png", import.meta.url)).size > 10_000);
   assert.ok(fs.statSync(new URL("../public/tlink-icon-512.png", import.meta.url)).size > 50_000);
 });

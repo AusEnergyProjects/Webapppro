@@ -1,4 +1,5 @@
 import { GuideShell, GuideSection } from "@/components/GuideShell";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
 const quoteChecks = [
   "System size in kW and the exact panel and inverter models",
@@ -9,10 +10,11 @@ const quoteChecks = [
   "Product, performance and workmanship warranties plus local support details",
 ];
 
-export const metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/guides/solar",
   title: "Rooftop Solar Guide | Australian Energy Assessments",
   description: "Assess rooftop solar sizing, self-consumption, quotes, installers and network limits.",
-};
+});
 
 export default function SolarGuidePage() {
   return <GuideShell label="Rooftop solar guide" title="Size solar around when your home uses electricity" introduction="Annual consumption is only the starting point. A useful design also considers daytime demand, roof conditions, export limits, future appliances and the tariff that values imports and exports.">

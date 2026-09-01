@@ -65,6 +65,7 @@ export function createLeadPostHandler({
   resolveSystemAdminNotifications,
   isPublicPlanEnquiry,
   isPublicRentalAssessmentRequest = () => false,
+  isPublicAssessmentBookingRequest = () => false,
   enqueuePublicPlanDelivery,
   createOpportunityFromLead,
   confirmPublicPlanIntakeOpportunity,
@@ -110,7 +111,9 @@ export function createLeadPostHandler({
       && isPublicPlanEnquiry(raw?.enquiry);
     const rentalAssessmentRequest = raw?.submissionType === "upgrade"
       && isPublicRentalAssessmentRequest(raw?.enquiry);
-    if (raw?.submissionType !== "comparison" && !publicPlanEnquiry && !rentalAssessmentRequest) {
+    const assessmentBookingRequest = raw?.submissionType === "upgrade"
+      && isPublicAssessmentBookingRequest(raw?.enquiry);
+    if (raw?.submissionType !== "comparison" && !publicPlanEnquiry && !rentalAssessmentRequest && !assessmentBookingRequest) {
       return respond(
         { ok: false, error: "This type of upgrade project must be created inside a free private customer account." },
         400,

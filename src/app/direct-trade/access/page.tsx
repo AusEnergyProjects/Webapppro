@@ -1,12 +1,13 @@
-import type { Metadata } from "next";
 import { SiteFooter } from "@/components/ComparatorChrome";
 import { TLinkHeader } from "@/components/TLinkChrome";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
-export const metadata: Metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/direct-trade/access",
   title: "Free TLink trade access",
   description:
     "Approved trades receive TLink CRM, jobs, scheduling, marketplace, team, field and purchasing tools at no cost.",
-};
+});
 
 const coreTools = [
   "Marketplace leads and privacy-safe opportunity responses",

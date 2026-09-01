@@ -1,9 +1,11 @@
 import { GuideShell, GuideSection } from "@/components/GuideShell";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
-export const metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/guides/cooking",
   title: "Electric Cooking Guide | Australian Energy Assessments",
   description: "Independent guidance for planning an induction cooktop and electric oven upgrade in an Australian home.",
-};
+});
 
 export default function CookingGuidePage() {
   return <GuideShell label="Electric cooking guide" title="Plan the appliance, electrical work and kitchen fit together" introduction="Moving from gas cooking is more than choosing a cooktop. Check the household's cooking needs, cookware, ventilation, electrical capacity, bench opening and gas decommissioning before accepting a quote.">

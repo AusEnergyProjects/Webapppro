@@ -1,4 +1,5 @@
 import { GuideSection, GuideShell } from "@/components/GuideShell";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
 const evidenceFirst = [
   "The comfort, safety or equipment problem in plain language",
@@ -9,11 +10,12 @@ const evidenceFirst = [
   "A written scope with exclusions before comparing quotes",
 ];
 
-export const metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/guides/project-preparation",
   title: "Home Energy Project Preparation | Australian Energy Assessments",
   description:
     "Understand urgent, permission and budget requirements before progressing a brand-agnostic Australian home energy project.",
-};
+});
 
 export default function ProjectPreparationGuidePage() {
   return (

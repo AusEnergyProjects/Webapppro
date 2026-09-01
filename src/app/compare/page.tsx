@@ -1,10 +1,12 @@
 import { ComparatorHero, SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 import { NativeElectricityComparator } from "@/components/electricity/NativeElectricityComparator";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
-export const metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/compare",
   title: "Electricity Plan Comparison | Australian Energy Assessments",
   description: "Compare published electricity plans using your location, household load pattern and optional locally processed NEM12 interval data.",
-};
+});
 
 export default function ElectricityComparisonPage() {
   return <main className="wrap electricity-comparison-page">

@@ -1,12 +1,13 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
-export const metadata: Metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/privacy",
   title: "Privacy notice | Australian Energy Assessments",
   description:
     "How Australian Energy Assessments collects, uses, protects and shares account, job, customer and integration information.",
-};
+});
 
 const sections = [
   {
