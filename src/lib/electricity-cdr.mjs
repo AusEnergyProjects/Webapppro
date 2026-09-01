@@ -13,7 +13,7 @@ const DETAIL_API_VERSION = "3";
 const MAX_LIST_PAGES = 5;
 const PAGE_SIZE = 1000;
 const UPSTREAM_REQUEST_TIMEOUT_MS = 4_000;
-export const ELECTRICITY_PLAN_OPERATION_DEADLINE_MS = 9_000;
+export const ELECTRICITY_PLAN_OPERATION_DEADLINE_MS = 7_000;
 
 export function validateElectricityPlanQuery(postcode, customerType) {
   const normalizedType = String(customerType || "").toUpperCase();

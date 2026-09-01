@@ -152,7 +152,7 @@ test('operation deadline is injectable, stops new detail work and reports timed-
     ELECTRICITY_PLAN_OPERATION_DEADLINE_MS,
     loadElectricityPlans,
   } = await import('../src/lib/electricity-cdr.mjs');
-  assert.equal(ELECTRICITY_PLAN_OPERATION_DEADLINE_MS, 9_000);
+  assert.equal(ELECTRICITY_PLAN_OPERATION_DEADLINE_MS, 7_000);
 
   const retailerBase = 'https://deadline.example/cdr';
   const listUrl = retailerBase + '/cds-au/v1/energy/plans?fuelType=ELECTRICITY&effective=CURRENT&page-size=1000&page=1';
