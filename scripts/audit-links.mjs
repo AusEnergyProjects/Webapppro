@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   isAuditableUrl,
   linkNetworkFailureDisposition,
+  linkResponseIsAutomationBlocked,
   linkResponseIsBroken,
 } from "./lib/link-audit-policy.mjs";
 
@@ -53,7 +54,7 @@ async function checkOnce(entry, attemptTimeoutMs) {
     } else {
       await response.body?.cancel().catch(() => {});
     }
-    const broken = linkResponseIsBroken(entry.kind, response.status, apiShapeValid);
+    const broken = linkResponseIsBroken(entry.kind, response.status, apiShapeValid, entry.url);
     return {
       ...entry,
       status: response.status,
@@ -111,7 +112,10 @@ await Promise.all(Array.from({ length: 6 }, () => linkWorker()));
 
 const broken = results.filter((result) => result.broken);
 const unverified = results.filter((result) => result.unverified);
-const blocked = results.filter((result) => !result.broken && [401, 403, 405, 429].includes(result.status));
+const blocked = results.filter((result) => (
+  !result.broken
+  && linkResponseIsAutomationBlocked(result.kind, result.status, result.url)
+));
 const verbose = process.argv.includes("--verbose");
 const report = {
   checked: results.length,

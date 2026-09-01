@@ -6,6 +6,14 @@ const RESERVED_EXAMPLE_HOSTS = new Set([
 
 const NON_NAVIGABLE_SERVICE_URLS = new Set([
   "https://oauth2.googleapis.com/token",
+  "https://identity.xero.com/connect/token",
+  "https://secure.myob.com/oauth2/v1/authorize",
+  "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer",
+  "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+]);
+
+const AUTOMATION_BLOCKED_LINK_RESPONSES = new Map([
+  ["https://www.facebook.com/ausenergyassessments/", new Set([400])],
 ]);
 
 const FATAL_NETWORK_CODES = new Set([
@@ -42,10 +50,17 @@ export function linkNetworkFailureDisposition(error) {
   return FATAL_NETWORK_CODES.has(code) ? "broken" : "unverified";
 }
 
-export function linkResponseIsBroken(kind, status, apiShapeValid = true) {
+export function linkResponseIsAutomationBlocked(kind, status, url = "") {
+  if (kind !== "link") return false;
+  const code = Number(status);
+  if ([401, 403, 405, 429].includes(code)) return true;
+  return AUTOMATION_BLOCKED_LINK_RESPONSES.get(url)?.has(code) || false;
+}
+
+export function linkResponseIsBroken(kind, status, apiShapeValid = true, url = "") {
   const code = Number(status);
   if (kind === "page") return code !== 200;
   if (kind === "api") return code !== 200 || !apiShapeValid;
-  const automationBlocked = [401, 403, 405, 429].includes(code);
+  const automationBlocked = linkResponseIsAutomationBlocked(kind, code, url);
   return (code >= 400 && !automationBlocked) || !apiShapeValid;
 }
