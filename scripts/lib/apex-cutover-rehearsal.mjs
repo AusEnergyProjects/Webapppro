@@ -129,6 +129,30 @@ export function robotsBlocksSearchCrawlers(robots) {
   return false;
 }
 
+export function dmarcRecordSetIsValid(records) {
+  if (!Array.isArray(records) || records.length !== 1 || typeof records[0] !== "string") return false;
+
+  const segments = records[0]
+    .split(";")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (!segments.length) return false;
+
+  const tags = new Map();
+  for (const segment of segments) {
+    const separator = segment.indexOf("=");
+    if (separator <= 0) return false;
+    const name = segment.slice(0, separator).trim().toLowerCase();
+    const value = segment.slice(separator + 1).trim();
+    if (!/^[a-z][a-z0-9_]*$/i.test(name) || !value || tags.has(name)) return false;
+    tags.set(name, value);
+  }
+
+  return segments[0].toLowerCase() === "v=dmarc1"
+    && tags.get("v")?.toLowerCase() === "dmarc1"
+    && /^(?:none|quarantine|reject)$/i.test(tags.get("p") || "");
+}
+
 export function extractXmlLocations(xml) {
   return [...String(xml || "").matchAll(/<loc>([\s\S]*?)<\/loc>/gi)]
     .map((match) => match[1].trim())

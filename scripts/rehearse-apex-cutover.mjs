@@ -8,6 +8,7 @@ import {
 } from "./lib/apex-url-migration-contract.mjs";
 import {
   canonicalFromHtml,
+  dmarcRecordSetIsValid,
   evaluateExternalEvidence,
   expectedRedirectUrl,
   extractXmlLocations,
@@ -368,9 +369,7 @@ async function inspectDns(baseline) {
     check("dns_dkim_preserved", sameValues(dkimTxt, baseline.dkim), dkimTxt.length ? "present" : "missing"),
     check(
       "dns_dmarc_valid",
-      dmarcTxt.length === 1
-        && /^v=DMARC1\s*;/i.test(dmarcTxt[0])
-        && /(?:^|;)\s*p=(?:none|quarantine|reject)(?:;|$)/i.test(dmarcTxt[0]),
+      dmarcRecordSetIsValid(dmarcTxt),
       dmarcTxt.join(" | ") || "missing",
     ),
     check("dns_caa_preserved", sameValues(caa, baseline.observedCaa || []), caa.join(", ") || "none"),

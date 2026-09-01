@@ -158,7 +158,7 @@ test("the team page uses every project-owned portrait", () => {
   }
 });
 
-test("the trusted resources page does not republish unverified commercial suppliers or logos", () => {
+test("the trusted resources page uses official organisations and a complete local logo library", () => {
   const source = readPage("/trusted-suppliers");
   const legacyCommercialNames = [
     "Sustainable Home Loans",
@@ -188,14 +188,20 @@ test("the trusted resources page does not republish unverified commercial suppli
   const requiredResources = [
     "Home Energy Rating (NatHERS)",
     "Your Home",
+    "energy.gov.au",
+    "Energy Rating",
+    "Australian Building Codes Board",
     "Clean Energy Regulator",
     "Energy Made Easy",
+    "NSW Climate and Energy Action",
     "Solar Victoria",
     "Victorian Energy Upgrades",
     "SEC Victoria",
+    "Victorian Energy Compare",
     "Rewiring Australia",
     "Renew",
     "Energy Consumers Australia",
+    "Australian Building Sustainability Accreditation",
     "Design Matters National",
     "Home Energy Raters Association",
     "Energy Efficiency Council",
@@ -203,16 +209,17 @@ test("the trusted resources page does not republish unverified commercial suppli
     "Australian Refrigeration Council",
     "Clean Energy Council",
     "AIRAH",
+    "Australian Glass and Window Association",
   ];
   for (const name of requiredResources) assert.match(source, new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
   const logoReferences = [...source.matchAll(/logo: "\/(trusted-resources\/[^\"]+)"/g)].map((match) => match[1]);
-  assert.ok(logoReferences.length >= 12, "Use a substantial local official-logo library");
+  assert.equal(logoReferences.length, requiredResources.length, "Every trusted resource needs a local official logo");
+  assert.equal(new Set(logoReferences).size, logoReferences.length, "Trusted resource logos should have unique local paths");
   for (const logo of logoReferences) {
     assert.equal(fs.existsSync(path.join(root, "public", logo)), true, `Missing trusted resource logo ${logo}`);
   }
-  assert.match(source, /name: "SEC Victoria"[\s\S]*?mark: "SEC"/);
-  assert.match(source, /name: "AIRAH"[\s\S]*?mark: "AIRAH"/);
+  assert.doesNotMatch(source, /\bmark:\s*"/, "Do not replace official logos with plain text marks");
 });
 
 test("the rental page sends readers to the regulator and keeps compliance and gas safety boundaries clear", () => {

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   canonicalFromHtml,
+  dmarcRecordSetIsValid,
   evaluateExternalEvidence,
   expectedRedirectUrl,
   extractXmlLocations,
@@ -32,6 +33,27 @@ test("cutover rehearsal fails closed when required identity arguments are missin
     "--external-evidence=scripts/data/evidence.json",
     "--phase=post-cutover",
   ]), /candidate-origin must equal expected-apex-origin/);
+
+  assert.throws(() => parseCutoverArguments([
+    "--candidate-origin=https://compare.ausenergyassessments.com",
+    "--expected-apex-origin=https://ausenergyassessments.com",
+    "--expected-release=0123456789abcdef0123456789abcdef01234567",
+    "--dns-baseline=scripts/data/baseline.json",
+    "--external-evidence=scripts/data/evidence.json",
+    "--phase=attached",
+  ]), /phase must be one of: candidate, post-cutover/);
+});
+
+test("mail DNS evidence requires one well-formed DMARC record with one policy", () => {
+  assert.equal(dmarcRecordSetIsValid(["v=DMARC1; p=none; rua=mailto:dmarc@example.com"]), true);
+  assert.equal(dmarcRecordSetIsValid(["v=DMARC1; p=quarantine"]), true);
+  assert.equal(dmarcRecordSetIsValid(["v=DMARC1; p=reject"]), true);
+  assert.equal(dmarcRecordSetIsValid([]), false);
+  assert.equal(dmarcRecordSetIsValid(["v=DMARC1; rua=mailto:dmarc@example.com"]), false);
+  assert.equal(dmarcRecordSetIsValid(["v=DMARC1; p=none; p=reject"]), false);
+  assert.equal(dmarcRecordSetIsValid(["v=DMARC1; p=none", "v=DMARC1; p=reject"]), false);
+  assert.equal(dmarcRecordSetIsValid(["p=none; v=DMARC1"]), false);
+  assert.equal(dmarcRecordSetIsValid(["v=DMARC1; p"]), false);
 });
 
 test("canonical, Open Graph, noindex and sitemap evidence are parsed exactly", () => {

@@ -20,9 +20,8 @@ type TrustedResource = {
   description: string;
   href: string;
   group: ResourceGroupId;
-  logo?: string;
-  logoSource?: string;
-  mark?: string;
+  logo: string;
+  logoSource: string;
 };
 
 const resourceGroups: readonly { id: ResourceGroupId; eyebrow: string; title: string; introduction: string }[] = [
@@ -52,8 +51,8 @@ const resourceGroups: readonly { id: ResourceGroupId; eyebrow: string; title: st
   },
 ];
 
-// Logo copies come from the linked organisation's own website. Where reuse terms
-// are restrictive or a stable standalone asset is unavailable, a text mark is used.
+// Logo copies come from each linked organisation's own website or official
+// publication. Local copies keep the page dependable and preserve source provenance.
 const resources: readonly TrustedResource[] = [
   {
     name: "Home Energy Rating (NatHERS)",
@@ -124,7 +123,8 @@ const resources: readonly TrustedResource[] = [
     description: "NSW household guidance for energy assessments, electrification, solar, batteries and current rebates.",
     href: "https://www.energy.nsw.gov.au/households",
     group: "government",
-    mark: "NSW",
+    logo: "/trusted-resources/nsw-government.svg",
+    logoSource: "https://www.energy.nsw.gov.au/sites/default/files/2026-05/low-carbon-grantee-logo-files.zip",
   },
   {
     name: "Solar Victoria",
@@ -141,7 +141,8 @@ const resources: readonly TrustedResource[] = [
     description: "Check eligible upgrades, discounts, approved products, accredited providers and your consumer rights in Victoria.",
     href: "https://www.energy.vic.gov.au/victorian-energy-upgrades/homes",
     group: "government",
-    mark: "VEU",
+    logo: "/trusted-resources/victorian-energy-upgrades.png",
+    logoSource: "https://www.energy.vic.gov.au/__data/assets/file/0029/721685/Factsheet-Households241015.pdf",
   },
   {
     name: "SEC Victoria",
@@ -149,7 +150,8 @@ const resources: readonly TrustedResource[] = [
     description: "Household electrification guidance and tools from Victoria's publicly owned energy company.",
     href: "https://www.secvictoria.com.au/households",
     group: "government",
-    mark: "SEC",
+    logo: "/trusted-resources/sec-victoria.svg",
+    logoSource: "https://www.secvictoria.com.au/__data/assets/file/0003/210/sec-logo.svg",
   },
   {
     name: "Victorian Energy Compare",
@@ -157,7 +159,8 @@ const resources: readonly TrustedResource[] = [
     description: "Victoria's free independent electricity and gas plan comparison service.",
     href: "https://compare.energy.vic.gov.au/start",
     group: "government",
-    mark: "VIC",
+    logo: "/trusted-resources/victorian-energy-compare.svg",
+    logoSource: "https://compare.energy.vic.gov.au/assets/images/sec_rebrand/vec_sunburst_logo.svg",
   },
   {
     name: "Rewiring Australia",
@@ -174,7 +177,8 @@ const resources: readonly TrustedResource[] = [
     description: "Long-running practical guidance about sustainable homes, electrification, renewable energy and household technology.",
     href: "https://renew.org.au/",
     group: "consumer",
-    mark: "renew",
+    logo: "/trusted-resources/renew.svg",
+    logoSource: "https://renew.org.au/wp-content/themes/renew/assets/img/svgs.svg#logo",
   },
   {
     name: "Energy Consumers Australia",
@@ -191,7 +195,8 @@ const resources: readonly TrustedResource[] = [
     description: "Use the current BDAA directory to check an ABSA-accredited NatHERS assessor for new-home work.",
     href: "https://bdaa.com.au/Web/Web/Accreditation/Search-Accredited-Professionals.aspx",
     group: "industry",
-    mark: "ABSA",
+    logo: "/trusted-resources/absa.png",
+    logoSource: "https://bdaa.com.au/common/Uploaded%20files/BDAA/ABSA/ABSA-logo-large-transparent.png",
   },
   {
     name: "Design Matters National",
@@ -253,7 +258,8 @@ const resources: readonly TrustedResource[] = [
     description: "Technical resources and professional standards for heating, ventilation, air conditioning and refrigeration.",
     href: "https://www.airah.org.au/",
     group: "industry",
-    mark: "AIRAH",
+    logo: "/trusted-resources/airah.png",
+    logoSource: "https://www.airah.org.au/images/resources/new-favicon2.png",
   },
   {
     name: "Australian Glass and Window Association",
@@ -266,11 +272,10 @@ const resources: readonly TrustedResource[] = [
   },
 ];
 
-const resourceStyles: Record<"card" | "logo" | "logoImage" | "mark" | "type" | "title" | "copy" | "link", CSSProperties> = {
+const resourceStyles: Record<"card" | "logo" | "logoImage" | "type" | "title" | "copy" | "link", CSSProperties> = {
   card: { display: "flex", flexDirection: "column", padding: 14 },
   logo: { alignItems: "center", background: "#fff", border: "1px solid #dbe7e2", borderRadius: 10, display: "flex", height: 76, justifyContent: "center", marginBottom: 13, overflow: "hidden", padding: "9px 14px" },
   logoImage: { height: 54, maxWidth: 180, objectFit: "contain", width: "100%" },
-  mark: { color: "var(--color-aea-navy)", fontFamily: "var(--font-aea-heading)", fontSize: "1.35rem", fontWeight: 950, letterSpacing: ".04em" },
   type: { color: "var(--color-aea-green-dark)", fontSize: ".65rem", fontWeight: 900, letterSpacing: ".035em", lineHeight: 1.35, textTransform: "uppercase" },
   title: { color: "var(--color-aea-ink)", fontSize: ".94rem", lineHeight: 1.3, marginTop: 6 },
   copy: { color: "var(--color-aea-muted)", fontSize: ".76rem", lineHeight: 1.52, margin: "6px 0 13px" },
@@ -367,9 +372,7 @@ export default function TrustedSuppliersPage() {
       <div className="guide-principle-grid">
         {resources.filter((resource) => resource.group === group.id).map((resource) => <article style={resourceStyles.card} key={resource.href}>
           <div style={resourceStyles.logo} aria-hidden="true">
-            {resource.logo
-              ? <Image src={resource.logo} alt="" width={180} height={64} sizes="180px" style={resourceStyles.logoImage} />
-              : <span style={resourceStyles.mark}>{resource.mark}</span>}
+            <Image src={resource.logo} alt="" width={180} height={64} sizes="180px" style={resourceStyles.logoImage} />
           </div>
           <span style={resourceStyles.type}>{resource.type}</span>
           <h3 style={resourceStyles.title}>{resource.name}</h3>

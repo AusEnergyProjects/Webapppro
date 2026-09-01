@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  combineLinkAuditAttempts,
   isAuditableUrl,
   linkNetworkFailureDisposition,
   linkResponseIsAutomationBlocked,
@@ -56,4 +57,43 @@ test("link audit keeps confirmed DNS and certificate failures fatal", () => {
   assert.equal(linkNetworkFailureDisposition({ cause: { code: "CERT_HAS_EXPIRED" } }), "broken");
   assert.equal(linkNetworkFailureDisposition({ name: "AbortError" }), "unverified");
   assert.equal(linkNetworkFailureDisposition(new TypeError("fetch failed")), "unverified");
+});
+
+test("link audit retries preserve a confirmed first failure", () => {
+  const timeout = {
+    kind: "link",
+    status: 0,
+    broken: false,
+    unverified: true,
+    failureDisposition: "unverified",
+    error: "AbortError: timed out",
+  };
+  const serverFailure = {
+    kind: "link",
+    status: 500,
+    broken: true,
+    unverified: false,
+    failureDisposition: undefined,
+  };
+  const certificateFailure = {
+    kind: "link",
+    status: 0,
+    broken: false,
+    unverified: true,
+    failureDisposition: "broken",
+    errorCode: "CERT_HAS_EXPIRED",
+  };
+
+  for (const first of [serverFailure, certificateFailure]) {
+    const result = combineLinkAuditAttempts(first, timeout, "link");
+    assert.equal(result.broken, true);
+    assert.equal(result.unverified, false);
+    assert.equal(result.failureDisposition, "broken");
+    assert.equal(result.firstAttempt.status, first.status);
+  }
+
+  const uncertain = combineLinkAuditAttempts(timeout, timeout, "link");
+  assert.equal(uncertain.broken, false);
+  assert.equal(uncertain.unverified, true);
+  assert.equal(uncertain.failureDisposition, "unverified");
 });

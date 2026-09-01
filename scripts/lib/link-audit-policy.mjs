@@ -64,3 +64,26 @@ export function linkResponseIsBroken(kind, status, apiShapeValid = true, url = "
   const automationBlocked = linkResponseIsAutomationBlocked(kind, code, url);
   return (code >= 400 && !automationBlocked) || !apiShapeValid;
 }
+
+export function combineLinkAuditAttempts(first, retried, kind = first?.kind) {
+  const firstAttempt = {
+    status: first.status,
+    broken: first.broken,
+    unverified: first.unverified,
+    error: first.error,
+    errorCode: first.errorCode,
+    failureDisposition: first.failureDisposition,
+  };
+  if (!retried.unverified) return { ...retried, retried: true, firstAttempt };
+
+  const firstConfirmedFailure = first.broken || first.failureDisposition === "broken";
+  const broken = firstConfirmedFailure || kind !== "link" || retried.failureDisposition === "broken";
+  return {
+    ...retried,
+    broken,
+    unverified: !broken,
+    failureDisposition: broken ? "broken" : retried.failureDisposition,
+    retried: true,
+    firstAttempt,
+  };
+}

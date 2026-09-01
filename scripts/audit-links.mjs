@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  combineLinkAuditAttempts,
   isAuditableUrl,
   linkNetworkFailureDisposition,
   linkResponseIsAutomationBlocked,
@@ -84,18 +85,7 @@ async function check(entry) {
   if (!first.unverified && !first.retryable) return first;
 
   const retried = await checkOnce(entry, retryTimeoutMs);
-  const firstAttempt = {
-    status: first.status,
-    broken: first.broken,
-    unverified: first.unverified,
-    error: first.error,
-    errorCode: first.errorCode,
-    failureDisposition: first.failureDisposition,
-  };
-  if (!retried.unverified) return { ...retried, retried: true, firstAttempt };
-  const firstConfirmedFailure = first.broken || first.failureDisposition === "broken";
-  const broken = firstConfirmedFailure || entry.kind !== "link" || retried.failureDisposition === "broken";
-  return { ...retried, broken, unverified: !broken, retried: true, firstAttempt };
+  return combineLinkAuditAttempts(first, retried, entry.kind);
 }
 
 const results = [];
