@@ -50,7 +50,7 @@ export function AdminSurgeAnswerReviews({
         if (active) setReviews(nextReviews);
       })
       .catch((error) => {
-        if (active) setStatus(error instanceof Error ? error.message : "Surge answer reviews could not be loaded.");
+        if (active) setStatus(error instanceof Error ? error.message : "Wattzun AI answer reviews could not be loaded.");
       });
     return () => { active = false; };
   }, [load, setStatus]);
@@ -59,7 +59,7 @@ export function AdminSurgeAnswerReviews({
     try {
       setReviews(await load());
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Surge answer reviews could not be loaded.");
+      setStatus(error instanceof Error ? error.message : "Wattzun AI answer reviews could not be loaded.");
     }
   };
 
@@ -73,9 +73,9 @@ export function AdminSurgeAnswerReviews({
         body: JSON.stringify({ id: review.id, status, reviewNote: notes[review.id] || "" }),
       });
       setReviews((current) => current.filter((item) => item.id !== review.id));
-      setStatus(`Surge answer marked ${status}.`);
+      setStatus(`Wattzun AI answer marked ${status}.`);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "The Surge answer review could not be updated.");
+      setStatus(error instanceof Error ? error.message : "The Wattzun AI answer review could not be updated.");
     } finally {
       setBusyId("");
     }
@@ -84,9 +84,9 @@ export function AdminSurgeAnswerReviews({
   return (
     <section className="admin-surge-reviews">
       <header className="admin-page-heading">
-        <span>Surge quality</span>
+        <span>Wattzun AI quality</span>
         <h1>Answers sent for review</h1>
-        <p>Each item contains only the question and the single Surge answer the customer deliberately submitted.</p>
+        <p>Each item contains only the question and the single Wattzun AI answer the customer deliberately submitted.</p>
       </header>
       <div className="admin-surge-review-filter">
         <label htmlFor="surge-review-status">Show</label>
@@ -103,7 +103,7 @@ export function AdminSurgeAnswerReviews({
             <article key={review.id}>
               <header><strong>{dateTime(review.createdAt)}</strong><span>{review.status}</span></header>
               <section><small>Customer asked</small><p>{review.question}</p></section>
-              <section><small>Surge answered</small><p>{review.answer}</p></section>
+              <section><small>Wattzun AI answered</small><p>{review.answer}</p></section>
               {filter === "pending" ? (
                 <div className="admin-surge-review-actions">
                   <label htmlFor={`surge-review-note-${review.id}`}>Internal note, optional</label>
@@ -123,7 +123,7 @@ export function AdminSurgeAnswerReviews({
             </article>
           ))}
         </div>
-      ) : <p className="admin-empty-state">No {filter} Surge answers.</p>}
+      ) : <p className="admin-empty-state">No {filter} Wattzun AI answers.</p>}
     </section>
   );
 }

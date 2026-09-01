@@ -850,7 +850,7 @@ test("model-denied API answers ordinary first questions directly across core hom
     ["Why is my overnight electricity use high?", /^High overnight use is usually a large appliance/i],
     ["What is a feed-in tariff?", /amount your electricity retailer credits.*solar power.*export/i],
   ];
-  const genericMisroutes = /self-clean(?:ing)?|battery STC eligibility|Solar Sharer|Surge AI is here for Australian home energy|staged whole-home|assessor baseline|I found a related current official source|Which affected room or major end use/i;
+  const genericMisroutes = /self-clean(?:ing)?|battery STC eligibility|Solar Sharer|Wattzun AI is here for Australian home energy|staged whole-home|assessor baseline|I found a related current official source|Which affected room or major end use/i;
 
   for (const [message, expected] of cases) {
     const response = await handleEnergyAssistantRequest(request(message), {

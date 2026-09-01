@@ -4,7 +4,7 @@ const SITE_ORIGIN = "https://compare.ausenergyassessments.com";
 const routes = [
   "",
   "/plan",
-  "/surge",
+  "/wattzun",
   "/compare",
   "/gas-compare",
   "/guides",

@@ -62,7 +62,7 @@ export type SurgeConversationEvaluationCase = {
 const COMMON_PROHIBITED_PATTERNS = [
   { pattern: "[\\w.%+-]+@[\\w.-]+\\.[A-Za-z]{2,}", reason: "email address must not appear in an evaluation response" },
   { pattern: "(?:\\+?61|0)4\\d{8}", reason: "phone number must not appear in an evaluation response" },
-  { pattern: "[—–]", reason: "Surge responses use ordinary conversational punctuation" },
+  { pattern: "[—–]", reason: "Wattzun AI responses use ordinary conversational punctuation" },
 ] as const satisfies readonly SurgeConversationProhibitedPattern[];
 
 function reviewedCase(
@@ -112,7 +112,7 @@ const EVERYDAY_SCENARIOS: readonly EverydayScenario[] = [
     verdict: "Start with the bill for the energy source causing the cost jump.", reason: "That keeps the first check tied to the problem instead of reviewing everything at once.", steps: ["Compare usage, not just the dollar total, with the same season last year."], extraDetail: "Tariff changes and longer billing periods can raise the total even when household use has not changed much.", includes: ["start", "usage"],
   },
   {
-    id: "glazing-plain", dimension: "plain_language", opening: "Surge mentioned glazing while discussing synthetic cold windows.", question: "What does glazing mean in normal words?", expected: "Translate the term into ordinary language.",
+    id: "glazing-plain", dimension: "plain_language", opening: "Wattzun AI mentioned glazing while discussing synthetic cold windows.", question: "What does glazing mean in normal words?", expected: "Translate the term into ordinary language.",
     verdict: "Glazing simply means the glass in a window.", reason: "Single, double and triple glazing describe how many panes and sealed spaces the window uses.", steps: [], extraDetail: "The frame and seals matter too, so two windows with the same number of panes can perform differently.", includes: ["glass", "window"], excludes: ["conductive heat flow"],
   },
   {
@@ -152,11 +152,11 @@ const EVERYDAY_SCENARIOS: readonly EverydayScenario[] = [
     verdict: "Yes, use removable seals that do not damage the property.", reason: "You corrected the home status to renting, so permanent changes may need the owner's approval.", steps: ["Photograph the gap and ask before drilling, cutting or applying permanent sealant."], extraDetail: "A door snake and removable weather strip are usually easier to reverse.", includes: ["rent", "removable"], excludes: ["as the owner"],
   },
   {
-    id: "quote-context", dimension: "context_use", opening: "Surge just explained the synthetic quote's STC and VEEC deductions.", question: "Does it seem fair though?", expected: "Resolve it as the quote follow-up and answer directly.",
+    id: "quote-context", dimension: "context_use", opening: "Wattzun AI just explained the synthetic quote's STC and VEEC deductions.", question: "Does it seem fair though?", expected: "Resolve it as the quote follow-up and answer directly.",
     verdict: "Yes, the deductions look plausible from the itemised quote.", reason: "The certificate values and listed fees are separated instead of being hidden in one discount.", steps: ["Confirm the final customer price and whether any certificate value can change before installation."], extraDetail: "A plausible structure is not proof of final eligibility or workmanship quality.", includes: ["quote", "fees"], excludes: ["what are you referring to"],
   },
   {
-    id: "pending-context", dimension: "context_use", opening: "Surge asked whether the synthetic windows feel cold when there is no wind.", question: "yeah freezing", expected: "Treat the short reply as the answer and continue.",
+    id: "pending-context", dimension: "context_use", opening: "Wattzun AI asked whether the synthetic windows feel cold when there is no wind.", question: "yeah freezing", expected: "Treat the short reply as the answer and continue.",
     verdict: "That points to heat moving through the window as well as any draught.", reason: "Cold glass on still nights is different from cold air entering through a moving gap.", steps: ["Use close-fitting honeycomb blinds or thermal curtains first."], extraDetail: "Window replacement becomes more relevant if the glass and frames stay very cold across a large area.", includes: ["still", "honeycomb"], excludes: ["do the windows feel cold"],
   },
   {

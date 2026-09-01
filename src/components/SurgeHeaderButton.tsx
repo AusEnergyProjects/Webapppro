@@ -5,17 +5,17 @@ import Link from "next/link";
 export function SurgeHeaderButton({ active = false }: { active?: boolean }) {
   return (
     <Link
-      aria-label="Open Surge AI energy guide"
+      aria-label="Open Wattzun AI energy guide"
       aria-current={active ? "page" : undefined}
       className={`site-surge-link${active ? " active" : ""}`}
-      href="/surge"
+      href="/wattzun"
       prefetch={false}
     >
       <span className="site-surge-core" aria-hidden="true">
         <img src="/surge-mascot.webp" alt="" width="28" height="35" decoding="async" />
       </span>
       <span className="site-surge-copy">
-        <strong>Surge AI</strong>
+        <strong>Wattzun AI</strong>
       </span>
       <span className="site-surge-status" aria-hidden="true">AI guide</span>
     </Link>

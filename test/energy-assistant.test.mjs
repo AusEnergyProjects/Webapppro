@@ -16,6 +16,22 @@ import {
   searchEnergyAssistantKnowledge,
   surgeOutputViolatesPublicPolicy,
 } from "../src/lib/energy-assistant.ts";
+import { normalizeEnergyAssistantBrandText } from "../src/lib/energy-assistant-brand.ts";
+
+test("public assistant text migrates the legacy name without changing electrical surge wording", () => {
+  assert.equal(
+    normalizeEnergyAssistantBrandText("Surge AI answered. Surge's next check can help."),
+    "Wattzun AI answered. Wattzun AI's next check can help.",
+  );
+  assert.equal(
+    normalizeEnergyAssistantBrandText("Check surge power, surge capacity and surge protection."),
+    "Check surge power, surge capacity and surge protection.",
+  );
+  assert.equal(
+    normalizeEnergyAssistantBrandText("Surge power and Surge protection remain technical terms."),
+    "Surge power and Surge protection remain technical terms.",
+  );
+});
 
 test("Surge reference answers never expose en or em dashes", () => {
   assert.equal(
@@ -123,6 +139,8 @@ test("Surge gives a direct and evidence-bounded Electric Saul comparison", () =>
   );
 
   assert.equal(answer.status, "answered");
+  assert.match(answer.directAnswer, /Wattzun AI is the stronger choice/i);
+  assert.doesNotMatch(answer.directAnswer, /\bSurge(?: AI)?\b/);
   assert.match(answer.directAnswer, /Electric Saul's own chat describes what is, by comparison, an entry-level Google-hosted AI configuration/i);
   assert.match(answer.directAnswer, /four main persona and formatting instruction groups/i);
   assert.match(answer.directAnswer, /six operational guardrails and seven baseline fact sheets/i);
@@ -352,7 +370,7 @@ test("everyday covering plurals remain inside the home-energy domain", () => {
     "Can I seal gaps around my doors?",
   ]) {
     const result = composeEnergyAssistantAnswer(message, { asOf: "2026-08-28T00:00:00.000Z" });
-    assert.doesNotMatch(result.directAnswer, /Surge AI is here for Australian home energy|only covers Australian home energy/i, message);
+    assert.doesNotMatch(result.directAnswer, /Wattzun AI is here for Australian home energy|only covers Australian home energy/i, message);
   }
 });
 

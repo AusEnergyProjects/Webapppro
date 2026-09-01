@@ -134,7 +134,7 @@ test("rebate clarification and equipment details remain one useful conversation 
   const answers = results.map((result) => result.reply.content);
   for (const [index, answer] of answers.entries()) {
     assert.match(answer, /Victorian Energy Upgrades|discount|exact (?:outdoor and indoor )?model/i, `turn ${index + 1}`);
-    assert.doesNotMatch(answer, /Surge AI is here|only covers|SRES|solar panels?|inverter|roof layout|battery/i, `turn ${index + 1}`);
+    assert.doesNotMatch(answer, /Wattzun AI is here|only covers|SRES|solar panels?|inverter|roof layout|battery/i, `turn ${index + 1}`);
     assert.doesNotMatch(answer, /what (?:is )?the property postcode|do you own|rent it|strata approval/i, `turn ${index + 1}`);
     assert.ok(answer.split(/\s+/u).filter(Boolean).length <= 90, `turn ${index + 1}: ${answer}`);
   }

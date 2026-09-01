@@ -745,7 +745,7 @@ export function AdminOperationsPortal() {
             className={tab === "assistant-reviews" ? "active" : ""}
             onClick={() => setTab("assistant-reviews")}
           >
-            <span>R</span>Surge answer reviews
+            <span>R</span>Wattzun AI answer reviews
           </button>}
           <button
             className={tab === "opportunities" ? "active" : ""}

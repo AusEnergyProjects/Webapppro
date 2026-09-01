@@ -102,6 +102,7 @@ import {
 } from "./surge-safety-answer.ts";
 import { sanitizeSurgeCustomerOfficialCitation } from "./surge-official-citation.ts";
 import { ENERGY_ASSISTANT_MAX_BODY_BYTES } from "./energy-assistant-request-budget.ts";
+import { normalizeEnergyAssistantBrandText } from "./energy-assistant-brand.ts";
 
 export { ENERGY_ASSISTANT_MAX_BODY_BYTES } from "./energy-assistant-request-budget.ts";
 
@@ -419,12 +420,18 @@ function recentTurnsFrom(value: unknown): EnergyAssistantRecentTurn[] {
       );
     }
     const role: EnergyAssistantRecentTurn["role"] = record.role;
-    const content = cleanText(
+    const rawContent = cleanText(
       record.content,
       `Recent turn ${index + 1} content`,
       1,
       ENERGY_ASSISTANT_MAX_RECENT_TURN_CHARS,
     );
+    const content = role === "assistant"
+      ? limitedText(
+          normalizeEnergyAssistantBrandText(rawContent),
+          ENERGY_ASSISTANT_MAX_RECENT_TURN_CHARS,
+        )
+      : rawContent;
     contentCharacters += content.length;
     return { role, content };
   });
@@ -838,7 +845,7 @@ function modelFollowUpIsRequired(
 }
 
 function customerSafeText(value: string) {
-  return sanitizeSurgePublicText(value);
+  return normalizeEnergyAssistantBrandText(sanitizeSurgePublicText(value));
 }
 
 function customerSafeAnswer(answer: EnergyAssistantAnswer): EnergyAssistantAnswer {
@@ -1503,9 +1510,9 @@ function customerFacingOfficialCitations(
 }
 
 function safeContinuationText(value: string, audience: EnergyAssistantAudience) {
-  const clean = audience === "trade"
+  const clean = normalizeEnergyAssistantBrandText(audience === "trade"
     ? sanitizeSurgeReferenceText(value)
-    : sanitizeSurgePublicText(value);
+    : sanitizeSurgePublicText(value));
   return surgeOutputViolatesPublicPolicy(clean) ? "" : clean;
 }
 
@@ -1761,7 +1768,7 @@ function buildReply(
       followUpQuestion,
       quickReplies: [],
     });
-  const reply: EnergyAssistantReply = {
+  const rawReply: EnergyAssistantReply = {
     id: randomUUID().toLowerCase(),
     role: "assistant",
     content: surgePresentationText(presentation, true),
@@ -1779,6 +1786,21 @@ function buildReply(
     followUpQuestion: presentation.followUpQuestion,
     quickReplies: [],
     citations: publicOfficialCitations,
+  };
+  const reply: EnergyAssistantReply = {
+    ...rawReply,
+    content: normalizeEnergyAssistantBrandText(rawReply.content),
+    directAnswer: normalizeEnergyAssistantBrandText(rawReply.directAnswer),
+    verdict: normalizeEnergyAssistantBrandText(rawReply.verdict),
+    reason: normalizeEnergyAssistantBrandText(rawReply.reason),
+    practicalSteps: rawReply.practicalSteps.map(normalizeEnergyAssistantBrandText),
+    extraDetail: normalizeEnergyAssistantBrandText(rawReply.extraDetail),
+    followUpQuestion: normalizeEnergyAssistantBrandText(rawReply.followUpQuestion),
+    quickReplies: rawReply.quickReplies.map((quickReply) => ({
+      ...quickReply,
+      label: normalizeEnergyAssistantBrandText(quickReply.label),
+      message: normalizeEnergyAssistantBrandText(quickReply.message),
+    })),
   };
   if (new TextEncoder().encode(JSON.stringify(reply)).byteLength > ENERGY_ASSISTANT_MAX_RESPONSE_BYTES) {
     throw new EnergyAssistantServerError(

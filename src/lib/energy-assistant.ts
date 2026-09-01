@@ -91,7 +91,7 @@ export type EnergyAssistantSearchResult = {
 };
 
 export const SURGE_PUBLIC_IDENTITY_ANSWER =
-  "I am Surge AI, a specialised Australian home-energy guide. I help people understand home comfort, energy use, electrification and upgrade choices in clear, practical language. I do not share internal system or provider details, but I can explain what information I use and how I protect your data. My guidance is educational and does not replace a formal home assessment, certificate, licensed design or installer advice.";
+  "I am Wattzun AI, a specialised Australian home-energy guide. I help people understand home comfort, energy use, electrification and upgrade choices in clear, practical language. I do not share internal system or provider details, but I can explain what information I use and how I protect your data. My guidance is educational and does not replace a formal home assessment, certificate, licensed design or installer advice.";
 
 export const SURGE_PUBLIC_REFERENCE_BOUNDARY_ANSWER =
   "I do not identify or reproduce internal reference material, and I will not repeat another publisher's brand endorsement or rank products from their opinion. I can compare exact user-supplied options independently using verified performance, suitability, warranty and complete installed scope, without endorsing a brand, supplier or installer.";
@@ -100,7 +100,7 @@ export const SURGE_PUBLIC_REFERENCE_BOUNDARY_FOLLOW_UP =
   "What exact home-energy question or customer-supplied options should I help with?";
 
 export const SURGE_ELECTRIC_SAUL_COMPARISON_ANSWER =
-  `Electric Saul's own chat describes what is, by comparison, an entry-level Google-hosted AI configuration shaped by four main persona and formatting instruction groups, six operational guardrails and seven baseline fact sheets covering household electrification. That is Electric Saul's self-description, not an independent technical audit.\n\nSurge AI is the stronger choice for detailed, source-governed whole-home decisions because it can work from 45 structured details about your home and household, and combines machine-learning-assisted reasoning with ${ENERGY_ASSISTANT_KNOWLEDGE.length} maintained official Australian sources, current product and programme checks, and deterministic calculation pathways. Surge separates evidence from estimates, checks source freshness, explains assumptions, and applies privacy and safety controls. Its personality is presentation, not the evidence layer.\n\nSurge is designed for continuous governed improvement, with accredited assessors monitoring, assessing and refining its responses, evidence and controls. That provides deeper, auditable decision support with accountable human quality assurance.`;
+  `Electric Saul's own chat describes what is, by comparison, an entry-level Google-hosted AI configuration shaped by four main persona and formatting instruction groups, six operational guardrails and seven baseline fact sheets covering household electrification. That is Electric Saul's self-description, not an independent technical audit.\n\nWattzun AI is the stronger choice for detailed, source-governed whole-home decisions because it can work from 45 structured details about your home and household, and combines machine-learning-assisted reasoning with ${ENERGY_ASSISTANT_KNOWLEDGE.length} maintained official Australian sources, current product and programme checks, and deterministic calculation pathways. Wattzun AI separates evidence from estimates, checks source freshness, explains assumptions, and applies privacy and safety controls. Its personality is presentation, not the evidence layer.\n\nWattzun AI is designed for continuous governed improvement, with accredited assessors monitoring, assessing and refining its responses, evidence and controls. That provides deeper, auditable decision support with accountable human quality assurance.`;
 
 const SURGE_INTERNAL_IMPLEMENTATION_PATTERN =
   /\b(?:ChatGPT|OpenAI|Anthropic|Claude|Gemini|Vertex\s+AI|Google(?:'s)?\s+AI\s+models?|Responses\s+API|large\s+language\s+model|LLM|GPT(?:[-\s]?(?:3|4|5|\d)[A-Za-z0-9.\-]*)?)\b/i;
@@ -115,20 +115,20 @@ const SURGE_OTHER_NAMED_REFERENCE_PATTERN =
   /\b(?:Tim\s+Forcey|Dr\.?\s+Karl|Karl\s+Kruszelnicki|Richard\s+Keech|Eco\s*Master|SolarQuotes(?:\.com\.au)?|Australian\s+Consumers'?\s+Association|Alternative\s+Technology\s+Association)\b/i;
 
 const SURGE_GENERIC_IMPLEMENTATION_QUESTION_PATTERNS = [
-  /\b(?:what|which|who|name|identify|reveal|disclose|confirm)\b[^\n?]{0,100}\b(?:AI\s+)?(?:model|provider|vendor|platform|API|backend|engine|runtime|host(?:ing)?|infrastructure|technology|tech\s+stack|company)\b[^\n?]{0,100}\b(?:you|your|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b/i,
-  /\b(?:your|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b[^\n?]{0,100}\b(?:AI\s+)?(?:model|provider|vendor|platform|API|backend|engine|runtime|host(?:ing)?|infrastructure|technology|tech\s+stack|neural\s+network|language\s+model|foundation\s+model)\b/i,
-  /\b(?:who|what)\s+(?:hosts?|powers?|runs?|built|made|trained|supplies?)\s+(?:you|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b/i,
-  /\b(?:are|is)\s+(?:you|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b[^\n?]{0,60}\b(?:neural\s+network|language\s+model|foundation\s+model|generative\s+AI|hosted|powered|built|trained|running)\b/i,
-  /\b(?:company|vendor|provider|model|engine|platform|backend|runtime|API)\b[^\n?]{0,80}\b(?:behind|hosting|powering|running|used\s+by)\s+(?:you|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b/i,
+  /\b(?:what|which|who|name|identify|reveal|disclose|confirm)\b[^\n?]{0,100}\b(?:AI\s+)?(?:model|provider|vendor|platform|API|backend|engine|runtime|host(?:ing)?|infrastructure|technology|tech\s+stack|company)\b[^\n?]{0,100}\b(?:you|your|(?:Wattzun|Surge)\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b/i,
+  /\b(?:your|(?:Wattzun|Surge)\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b[^\n?]{0,100}\b(?:AI\s+)?(?:model|provider|vendor|platform|API|backend|engine|runtime|host(?:ing)?|infrastructure|technology|tech\s+stack|neural\s+network|language\s+model|foundation\s+model)\b/i,
+  /\b(?:who|what)\s+(?:hosts?|powers?|runs?|built|made|trained|supplies?)\s+(?:you|(?:Wattzun|Surge)\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b/i,
+  /\b(?:are|is)\s+(?:you|(?:Wattzun|Surge)\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b[^\n?]{0,60}\b(?:neural\s+network|language\s+model|foundation\s+model|generative\s+AI|hosted|powered|built|trained|running)\b/i,
+  /\b(?:company|vendor|provider|model|engine|platform|backend|runtime|API)\b[^\n?]{0,80}\b(?:behind|hosting|powering|running|used\s+by)\s+(?:you|(?:Wattzun|Surge)\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b/i,
 ] as const;
 
 const SURGE_IMPLEMENTATION_DISCLOSURE_PATTERNS = [
-  /\b(?:my|Surge\s+AI'?s|this\s+(?:assistant|chat\s*bot|chatbot|guide)'?s)\s+(?:underlying\s+)?(?:inference\s+)?(?:engine|model|provider|vendor|platform|API|backend|runtime)\s+(?:is|runs|uses|calls|connects)\b/i,
-  /\b(?:I|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\s+(?:am|is|run|runs|operate|operates|was|were)?[^\n.]{0,60}\b(?:powered|built|trained|hosted|deployed|served|running)\s+(?:by|on|with|through|using)\b/i,
-  /\b(?:I|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\s+(?:use|uses|call|calls|rely|relies|connect|connects|run|runs|operate|operates)\b[^\n.]{0,90}\b(?:AI|model|provider|vendor|platform|API|backend|engine|runtime|neural\s+network|infrastructure)\b/i,
-  /\b(?:my|Surge\s+AI'?s|this\s+(?:assistant|chat\s*bot|chatbot|guide)'?s)\s+(?:underlying\s+|base\s+|inference\s+)?(?:AI\s+)?(?:model|provider|vendor|platform|API|backend|engine|runtime|stack|infrastructure|hosting|training)\b[^\n.]{0,100}\b(?:is|uses|runs|comes|relies|calls|connects)\b/i,
-  /\b(?:the\s+)?(?:company|vendor|provider|model|engine|platform|backend|runtime|API)\s+(?:behind|hosting|powering|running|serving)\s+(?:me|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b/i,
-  /\b(?:I|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\s+(?:am|is)\s+(?:an?\s+)?(?:proprietary\s+|generative\s+|foundation\s+)?(?:language\s+model|neural\s+network|foundation\s+model)\b/i,
+  /\b(?:my|(?:Wattzun|Surge)\s+AI'?s|this\s+(?:assistant|chat\s*bot|chatbot|guide)'?s)\s+(?:underlying\s+)?(?:inference\s+)?(?:engine|model|provider|vendor|platform|API|backend|runtime)\s+(?:is|runs|uses|calls|connects)\b/i,
+  /\b(?:I|(?:Wattzun|Surge)\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\s+(?:am|is|run|runs|operate|operates|was|were)?[^\n.]{0,60}\b(?:powered|built|trained|hosted|deployed|served|running)\s+(?:by|on|with|through|using)\b/i,
+  /\b(?:I|(?:Wattzun|Surge)\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\s+(?:use|uses|call|calls|rely|relies|connect|connects|run|runs|operate|operates)\b[^\n.]{0,90}\b(?:AI|model|provider|vendor|platform|API|backend|engine|runtime|neural\s+network|infrastructure)\b/i,
+  /\b(?:my|(?:Wattzun|Surge)\s+AI'?s|this\s+(?:assistant|chat\s*bot|chatbot|guide)'?s)\s+(?:underlying\s+|base\s+|inference\s+)?(?:AI\s+)?(?:model|provider|vendor|platform|API|backend|engine|runtime|stack|infrastructure|hosting|training)\b[^\n.]{0,100}\b(?:is|uses|runs|comes|relies|calls|connects)\b/i,
+  /\b(?:the\s+)?(?:company|vendor|provider|model|engine|platform|backend|runtime|API)\s+(?:behind|hosting|powering|running|serving)\s+(?:me|(?:Wattzun|Surge)\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b/i,
+  /\b(?:I|(?:Wattzun|Surge)\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\s+(?:am|is)\s+(?:an?\s+)?(?:proprietary\s+|generative\s+|foundation\s+)?(?:language\s+model|neural\s+network|foundation\s+model)\b/i,
 ] as const;
 
 const SURGE_INTERNAL_EDITORIAL_OUTPUT_PATTERNS = [
@@ -138,13 +138,13 @@ const SURGE_INTERNAL_EDITORIAL_OUTPUT_PATTERNS = [
 ] as const;
 
 const SURGE_PRODUCT_ENDORSEMENT_PATTERNS = [
-  /\b(?:I|Surge\s+AI)\s+(?:strongly\s+)?recommend(?:s|ed)?\s+(?!(?:(?:that\s+)?you\s+)?(?:compar(?:e|ing)|check(?:ing)?|confirm(?:ing)?|ask(?:ing)?|review(?:ing)?|measur(?:e|ing)|contact(?:ing)?|verif(?:y|ying)|visit(?:ing)?|read(?:ing)?|appl(?:y|ying)|obtain(?:ing)?|wait(?:ing)?)\b)/i,
-  /\b(?:I|Surge\s+AI)\s+(?:strongly\s+)?recommend(?:s|ed)?\s+(?:buying|choosing|using|hiring)\b/i,
-  /\b(?:I|Surge\s+AI)\s+(?:suggest|advise)\s+(?:buying|choosing|picking|selecting|using|hiring)\b/i,
+  /\b(?:I|(?:Wattzun|Surge)\s+AI)\s+(?:strongly\s+)?recommend(?:s|ed)?\s+(?!(?:(?:that\s+)?you\s+)?(?:compar(?:e|ing)|check(?:ing)?|confirm(?:ing)?|ask(?:ing)?|review(?:ing)?|measur(?:e|ing)|contact(?:ing)?|verif(?:y|ying)|visit(?:ing)?|read(?:ing)?|appl(?:y|ying)|obtain(?:ing)?|wait(?:ing)?)\b)/i,
+  /\b(?:I|(?:Wattzun|Surge)\s+AI)\s+(?:strongly\s+)?recommend(?:s|ed)?\s+(?:buying|choosing|using|hiring)\b/i,
+  /\b(?:I|(?:Wattzun|Surge)\s+AI)\s+(?:suggest|advise)\s+(?:buying|choosing|picking|selecting|using|hiring)\b/i,
   /\b(?:you\s+should|I\s+would|I'd|my\s+advice\s+is\s+to|I\s+suggest(?:\s+that)?\s+you)\s+(?:buy|choose|pick|select|use|hire|order|purchase|go\s+with)\b/i,
   /(?:^|[.!?]\s*)(?:[Bb]uy|[Cc]hoose|[Pp]ick|[Ss]elect|[Oo]rder|[Pp]urchase|[Gg]o\s+with|[Hh]ire)\s+(?:the\s+)?(?:[Oo]ption\s+[A-Z0-9]|[A-Z][A-Za-z0-9-]*(?:\s+[A-Z0-9][A-Za-z0-9-]*){0,5})\b/,
   /\b(?:buy|choose|pick|select|go\s+with)\s+(?:this|that)\s+(?:brand|model|product|unit|supplier|installer|option)\b/i,
-  /\b(?:I|Surge\s+AI)\s+(?:endorse|prefer)\b[^.\n]{0,100}\b(?:brand|model|product|supplier|installer|manufacturer|option)\b/i,
+  /\b(?:I|(?:Wattzun|Surge)\s+AI)\s+(?:endorse|prefer)\b[^.\n]{0,100}\b(?:brand|model|product|supplier|installer|manufacturer|option)\b/i,
   /\b(?:the|my)\s+(?:best|top|preferred)\s+(?:brand|model|product|supplier|installer|manufacturer|option)\s+is\b/i,
   /\b(?:best|right|recommended|preferred)\s+(?:choice|option)\s+(?:for\s+you\s+)?is\b/i,
   /\bmy\s+(?:recommendation|pick|choice|winner)\s+(?:would\s+be|is)\b/i,
@@ -156,14 +156,14 @@ const SURGE_PRODUCT_ENDORSEMENT_PATTERNS = [
 ] as const;
 
 const SURGE_FALSE_ASSESSOR_CLAIM_PATTERNS = [
-  /\b(?:I(?:\s+am|'m)|Surge\s+AI\s+is)\s+(?!not\b)(?:an?|your|the)\s+(?:[a-z-]+\s+){0,5}(?:home[- ]?energy\s+|energy\s+)?assessor\b/i,
+  /\b(?:I(?:\s+am|'m)|(?:Wattzun|Surge)\s+AI\s+is)\s+(?!not\b)(?:an?|your|the)\s+(?:[a-z-]+\s+){0,5}(?:home[- ]?energy\s+|energy\s+)?assessor\b/i,
   /\bAs\s+(?:an?|your)\s+(?:[a-z-]+\s+){0,5}(?:home[- ]?energy\s+|energy\s+)?assessor\b/i,
-  /\b(?:I|Surge\s+AI)\s+(?:am|is)\s+(?:fully\s+)?(?:accredited|certified|licensed|registered)\s+(?:to|for)\s+(?:conduct|perform|provide|complete|issue)\b[^.\n]{0,90}\b(?:assessments?|ratings?|certificates?)\b/i,
-  /\b(?:I|Surge\s+AI)\s+(?:hold|holds|have|has)\b[^.\n]{0,60}\b(?:NatHERS|home[- ]?energy|energy)\s+(?:assessor\s+)?(?:accreditation|certification|licen[cs]e|registration)\b/i,
-  /\b(?:I|Surge\s+AI)\s+(?:hold(?:s)?\s+)?(?:an?\s+)?(?:accreditation|certification|licen[cs]e|registration)\s+(?:as\s+)?(?:an?\s+)?(?:home[- ]?energy\s+|energy\s+)?assessor\b/i,
-  /\b(?:I|Surge\s+AI)\s+(?:have|has)?\s*(?:formally\s+|officially\s+)?(?:assessed|certified|rated)\s+(?:this|your)\s+(?:home|property)\b/i,
-  /\b(?:I|Surge\s+AI)\s+(?:have|has)?\s*(?:issued|approved)\s+(?:this|your|the)\s+(?:home[- ]?energy\s+|energy\s+|NatHERS\s+)?(?:assessment|rating|certificate)\b/i,
-  /\b(?:I|Surge\s+AI)\s+(?:have|has|just)?\s*(?:completed|performed|conducted|delivered)\s+(?:an?\s+|your\s+)?(?:formal|official|accredited|certified)\s+(?:home[- ]?energy\s+|energy\s+)?(?:assessment|rating|certificate)\b/i,
+  /\b(?:I|(?:Wattzun|Surge)\s+AI)\s+(?:am|is)\s+(?:fully\s+)?(?:accredited|certified|licensed|registered)\s+(?:to|for)\s+(?:conduct|perform|provide|complete|issue)\b[^.\n]{0,90}\b(?:assessments?|ratings?|certificates?)\b/i,
+  /\b(?:I|(?:Wattzun|Surge)\s+AI)\s+(?:hold|holds|have|has)\b[^.\n]{0,60}\b(?:NatHERS|home[- ]?energy|energy)\s+(?:assessor\s+)?(?:accreditation|certification|licen[cs]e|registration)\b/i,
+  /\b(?:I|(?:Wattzun|Surge)\s+AI)\s+(?:hold(?:s)?\s+)?(?:an?\s+)?(?:accreditation|certification|licen[cs]e|registration)\s+(?:as\s+)?(?:an?\s+)?(?:home[- ]?energy\s+|energy\s+)?assessor\b/i,
+  /\b(?:I|(?:Wattzun|Surge)\s+AI)\s+(?:have|has)?\s*(?:formally\s+|officially\s+)?(?:assessed|certified|rated)\s+(?:this|your)\s+(?:home|property)\b/i,
+  /\b(?:I|(?:Wattzun|Surge)\s+AI)\s+(?:have|has)?\s*(?:issued|approved)\s+(?:this|your|the)\s+(?:home[- ]?energy\s+|energy\s+|NatHERS\s+)?(?:assessment|rating|certificate)\b/i,
+  /\b(?:I|(?:Wattzun|Surge)\s+AI)\s+(?:have|has|just)?\s*(?:completed|performed|conducted|delivered)\s+(?:an?\s+|your\s+)?(?:formal|official|accredited|certified)\s+(?:home[- ]?energy\s+|energy\s+)?(?:assessment|rating|certificate)\b/i,
   /\b(?:this|the)\s+(?:chat|conversation|answer|guidance|review)\s+(?:is|counts?\s+as|constitutes?)\s+(?:an?\s+)?(?:formal|official|accredited|certified)\s+(?:home[- ]?energy\s+|energy\s+)?(?:assessment|rating|certificate)\b/i,
   /\b(?:this|your)\s+(?:home|property)\s+(?:is|was|has\s+(?:now\s+)?been)\s+(?:formally\s+|officially\s+)?(?:assessed|certified|rated)\b/i,
 ] as const;
@@ -223,7 +223,7 @@ const SURGE_COMPETING_QUOTES_PATTERN = new RegExp(
   [
     String.raw`\b(?:get|seek|request|want|find|source|arrange|obtain)\s+(?:me\s+)?(?:(?:some|more|another|additional|second|third|multiple|two|three|competing|comparative)\s+)?(?:an?\s+)?(?:${SURGE_QUOTE_SERVICE_PATTERN.source})?quotes?\b`,
     String.raw`\bneed\s+(?:some|more|another|additional|second|third|multiple|two|three|competing|comparative|an?)\s+(?:${SURGE_QUOTE_SERVICE_PATTERN.source})?quotes?\b`,
-    String.raw`\b(?:can|could|would|will)\s+(?:you|surge)\b[^.!?\n]{0,80}\b(?:find|send|source|arrange|obtain|get)\b[^.!?\n]{0,80}\bquotes?\b`,
+    String.raw`\b(?:can|could|would|will)\s+(?:you|wattzun(?:\s+ai)?|surge(?:\s+ai)?)\b[^.!?\n]{0,80}\b(?:find|send|source|arrange|obtain|get)\b[^.!?\n]{0,80}\bquotes?\b`,
     String.raw`\b(?:can|could|would)\s+i\s+(?:get|have|request|arrange|obtain)\s+(?:(?:some|more|another|additional|second|third|multiple|two|three|competing|comparative)\s+)?(?:an?\s+)?(?:${SURGE_QUOTE_SERVICE_PATTERN.source})?quotes?\b`,
     String.raw`^(?:please\s+)?(?:another|one|two|three|some|more|multiple|competing|comparative)\s+(?:${SURGE_QUOTE_SERVICE_PATTERN.source})?quotes?(?:\s+please)?[.!?]*$`,
     String.raw`\b(?:send|submit|share|forward|put)\s+(?:my|our|the)\s+(?:(?:${SURGE_QUOTE_SERVICE_PATTERN.source}))?(?:enquiry|inquiry|request|details?)\b[^.!?\n]{0,80}\b(?:to|with)\s+(?:local\s+|approved\s+|licensed\s+)?(?:installers?|companies?|providers?|contractors?|trades?|tradies?|electricians?|plumbers?)\b`,
@@ -467,7 +467,7 @@ function surgeServiceAndQuoteAnswer(context: SurgeServiceConversationContext) {
     return `Yes. We can help you send one enquiry for ${scope} at ${site} to all relevant local trades that cover the area. We do not prefer or endorse a company, product or installer. Tap Get competing quotes below${locationStep} to review the details; nothing is sent until you submit it.`;
   }
   if (context.wantsAllRelevant) {
-    return `That is how it should work: Surge does not prefer a company, product or installer. The enquiry for ${scope} at ${site} can go to all relevant local trades that cover the area. Tap Get competing quotes below to review it; nothing is sent until you submit it.`;
+    return `That is how it should work: Wattzun AI does not prefer a company, product or installer. The enquiry for ${scope} at ${site} can go to all relevant local trades that cover the area. Tap Get competing quotes below to review it; nothing is sent until you submit it.`;
   }
   const existingQuoteNote = hasExistingQuote ? " You can compare their replies with the quote you already have." : "";
   const trades = context.services.length === 1 && context.services[0] === "solar"
@@ -3527,7 +3527,7 @@ export function composeEnergyAssistantAnswer(
     && !/\b(?:ignore|bypass|override)\b[^.!?\n]{0,80}\b(?:scope|rules?|instructions?)\b/i.test(query)) {
     return structured("products_ratings", {
       directAnswer:
-        "Surge AI does not recommend, rank or endorse brands or manufacturers. I will not repeat a commercial or editorial brand endorsement. I can compare exact user-supplied options independently using official eligibility, capacity, performance, site fit, safety, warranty, service and complete installed-price evidence. An approved register or favourable review proves only its stated fact, not overall quality or suitability for the home.",
+        "Wattzun AI does not recommend, rank or endorse brands or manufacturers. I will not repeat a commercial or editorial brand endorsement. I can compare exact user-supplied options independently using official eligibility, capacity, performance, site fit, safety, warranty, service and complete installed-price evidence. An approved register or favourable review proves only its stated fact, not overall quality or suitability for the home.",
       status: "needs_context",
       citations: officialCitationsById(["energy-rating-product-register", "accc-consumer-guarantees"]),
       confidence: "high",
@@ -5319,7 +5319,7 @@ export function composeEnergyAssistantAnswer(
       : "";
     return structured("bills_tariffs", {
       directAnswer:
-        `Compare the loan against the same installed cash scope and price, not against projected savings alone.${arithmetic} Add the lender's comparison rate, every fee, balloon, early-repayment terms and total repayment because the disclosure can change that simplified result. Keep rebates and energy savings as separate, independently verified lines. Surge AI can calculate supplied terms but does not give personal financial advice.`,
+        `Compare the loan against the same installed cash scope and price, not against projected savings alone.${arithmetic} Add the lender's comparison rate, every fee, balloon, early-repayment terms and total repayment because the disclosure can change that simplified result. Keep rebates and energy savings as separate, independently verified lines. Wattzun AI can calculate supplied terms but does not give personal financial advice.`,
       status: "needs_context",
       citations: officialCitationsById(["asic-moneysmart-personal-loans", "energy-gov-reduce-energy-bills"]),
       confidence: arithmetic ? "medium" : "low",
@@ -5434,7 +5434,7 @@ export function composeEnergyAssistantAnswer(
   if (/\b(?:stock|share) market\b|\bshare price\b/i.test(query)) {
     return structured(options.audience === "trade" ? "trades" : "comfort_fabric", {
       directAnswer:
-        "Surge AI only covers Australian home energy and upgrades. It cannot answer stock-market or share-price questions. Tell me the home-energy, bill, equipment, rebate, quote or trade decision you want help with.",
+        "Wattzun AI only covers Australian home energy and upgrades. It cannot answer stock-market or share-price questions. Tell me the home-energy, bill, equipment, rebate, quote or trade decision you want help with.",
       status: "needs_context",
       citations: [],
       confidence: "high",
@@ -5448,7 +5448,7 @@ export function composeEnergyAssistantAnswer(
     && !/\b(?:home energy|insulation|thermal|heat|cool|slab performance)\b/i.test(query)) {
     return structured(options.audience === "trade" ? "trades" : "comfort_fabric", {
       directAnswer:
-        "Surge AI only covers Australian home energy and upgrades. A current concrete price is a general construction-market question, so I cannot give a reliable price here. I can help if the decision is about a slab's insulation, heating, cooling or effect on home comfort.",
+        "Wattzun AI only covers Australian home energy and upgrades. A current concrete price is a general construction-market question, so I cannot give a reliable price here. I can help if the decision is about a slab's insulation, heating, cooling or effect on home comfort.",
       status: "needs_context",
       citations: [],
       confidence: "high",
@@ -5464,7 +5464,7 @@ export function composeEnergyAssistantAnswer(
   if (domainIntent === "out" && !namedCertificateIntent) {
     return structured(options.audience === "trade" ? "trades" : "comfort_fabric", {
       directAnswer:
-        "Sorry, that does not appear to be related to Australian home energy. Surge only covers Australian home energy questions, so I cannot assess it here.",
+        "Sorry, that does not appear to be related to Australian home energy. Wattzun AI only covers Australian home energy questions, so I cannot assess it here.",
       status: "needs_context",
       citations: [],
       confidence: "low",
@@ -6586,7 +6586,7 @@ export function composeEnergyAssistantAnswer(
     && /\b(?:best|most|rank|recommend|trust|trustworth(?:y|iness)|choose|compare|buy|purchase|select|shortlist|claims?|reputable|good)\b/i.test(query)) {
     return structured("products_ratings", {
       directAnswer:
-        "Surge AI does not rank or endorse suppliers, installers, event exhibitors, brands or models. An event listing or marketing badge is not proof of suitability: compare the required licences, official product and recall records, site-specific scope, commissioning, warranty and local remedy process for the same job.",
+        "Wattzun AI does not rank or endorse suppliers, installers, event exhibitors, brands or models. An event listing or marketing badge is not proof of suitability: compare the required licences, official product and recall records, site-specific scope, commissioning, warranty and local remedy process for the same job.",
       status: "needs_context",
       citations: officialCitationsById([
         "energy-rating-product-register",
@@ -7938,7 +7938,7 @@ export function composeEnergyAssistantAnswer(
               };
     return structured(comparedQuoteTopic, {
       directAnswer:
-        `Compare the ${comparison.label} proposals against one written job and the same evidence before comparing price. Surge AI does not rank or endorse a brand, supplier or model. Put ${comparison.criteria} side by side. Registration or programme listing proves only the stated official fact; it does not prove site suitability, complete installation or a savings claim. Any unknown remains a quote question or site-visit requirement, not a default.`,
+        `Compare the ${comparison.label} proposals against one written job and the same evidence before comparing price. Wattzun AI does not rank or endorse a brand, supplier or model. Put ${comparison.criteria} side by side. Registration or programme listing proves only the stated official fact; it does not prove site suitability, complete installation or a savings claim. Any unknown remains a quote question or site-visit requirement, not a default.`,
       status: "needs_context",
       citations: officialCitationsById(comparison.citations),
       confidence: "medium",
@@ -7995,7 +7995,7 @@ export function composeEnergyAssistantAnswer(
       : ` At ${annualKm.toLocaleString("en-AU")} km a year, that Wh/km difference equals about ${annualDifferenceKwh.toLocaleString("en-AU", { maximumFractionDigits: 1 })} kWh of vehicle energy a year before charging losses.`;
     return structured("ev_charging", {
       directAnswer:
-        `${energyComparison}${rangeComparison}${annualComparison} This compares only the supplied same-cycle energy and certified-range facts. It does not prove real-world range, charging cost, reliability, safety, value or which vehicle a household should choose, and Surge AI does not endorse either model.`,
+        `${energyComparison}${rangeComparison}${annualComparison} This compares only the supplied same-cycle energy and certified-range facts. It does not prove real-world range, charging cost, reliability, safety, value or which vehicle a household should choose, and Wattzun AI does not endorse either model.`,
       status: "answered",
       citations: officialCitationsById(["green-vehicle-guide-compare"]),
       confidence: "medium",
@@ -8019,7 +8019,7 @@ export function composeEnergyAssistantAnswer(
   if (comparedVehicles) {
     return structured("ev_charging", {
       directAnswer:
-        `Surge AI will not recommend either brand or model from the name alone. “${comparedVehicles.left}” and “${comparedVehicles.right}” may each cover multiple model years and variants, so first compare the exact variants on the same official Green Vehicle Guide test basis: certified electric range and energy use in Wh/km or kWh/100 km. Those laboratory figures are useful for like-for-like comparison, not a promise of usable real-world range; temperature, speed, load, tyres, battery state and charging losses change actual results. The local guide does not hold current variant rows and will not scrape or reverse-engineer the government service, so use the exact current GVG or windscreen-label values supplied for the two variants.`,
+        `Wattzun AI will not recommend either brand or model from the name alone. “${comparedVehicles.left}” and “${comparedVehicles.right}” may each cover multiple model years and variants, so first compare the exact variants on the same official Green Vehicle Guide test basis: certified electric range and energy use in Wh/km or kWh/100 km. Those laboratory figures are useful for like-for-like comparison, not a promise of usable real-world range; temperature, speed, load, tyres, battery state and charging losses change actual results. The local guide does not hold current variant rows and will not scrape or reverse-engineer the government service, so use the exact current GVG or windscreen-label values supplied for the two variants.`,
       status: "needs_context",
       citations: officialCitationsById(["green-vehicle-guide-compare", "energy-gov-ev-home-strata-charging"]),
       confidence: "medium",
@@ -8174,7 +8174,7 @@ export function composeEnergyAssistantAnswer(
       : ` If $${financeAmount.toLocaleString("en-AU")} is both the cash price and amount borrowed, ${financeAnnualRate}% is a nominal annual rate charged monthly, the term is ${financeTermYears} years and there are no fees or balloon, the standard repayment is about $${calculatedMonthlyRepayment.toLocaleString("en-AU", { maximumFractionDigits: 2 })} a month and total repayments are about $${calculatedTotalRepayment.toLocaleString("en-AU", { maximumFractionDigits: 0 })}, about $${(calculatedTotalRepayment - financeAmount).toLocaleString("en-AU", { maximumFractionDigits: 0 })} above cash. The lender's comparison rate and disclosure can change that result.`;
     return structured("rebates_certificates", {
       directAnswer:
-        `Finance is not a rebate and does not prove that the energy upgrade will save money.${mortgageBoundary}${suppliedFinanceArithmetic} Compare the cash installed price with the added loan amount, term, comparison rate and every fee, and calculate the extra total repayments. Model bill savings separately under low and high cases, and subtract only independently confirmed support. Surge AI can structure the comparison but does not give personal financial advice.`,
+        `Finance is not a rebate and does not prove that the energy upgrade will save money.${mortgageBoundary}${suppliedFinanceArithmetic} Compare the cash installed price with the added loan amount, term, comparison rate and every fee, and calculate the extra total repayments. Model bill savings separately under low and high cases, and subtract only independently confirmed support. Wattzun AI can structure the comparison but does not give personal financial advice.`,
       status: "needs_context",
       citations: officialCitationsById([
         "energy-gov-household-energy-upgrades-fund",
@@ -8327,7 +8327,7 @@ export function composeEnergyAssistantAnswer(
       "rebates_certificates",
     ]);
     const independence =
-      "Surge AI does not recommend, rank or endorse brands. I will help you compare the right things without pushing a brand.";
+      "Wattzun AI does not recommend, rank or endorse brands. I will help you compare the right things without pushing a brand.";
     const hotWaterPurpose = /\b(?:hot[- ]?water|HWS|HPHW|HPWH|water heater)\b/i.test(playbookConversation);
     const spaceHeatingPurpose = /\b(?:reverse[ -]cycle|RCAC|heater|heating system|air conditioner|air conditioning|space heating|heating and cooling)\b/i.test(playbookConversation);
     const immediateCategoryAnswer = hotWaterPurpose

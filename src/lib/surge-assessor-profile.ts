@@ -134,7 +134,7 @@ export const SURGE_PROFILE_STEPS: ReadonlyArray<SurgeProfileStep> = [
   {
     id: "home-basics",
     title: "The home",
-    description: "Basic size and ownership details help Surge AI avoid advice that does not suit the property.",
+    description: "Basic size and ownership details help Wattzun AI avoid advice that does not suit the property.",
     fields: [
       plannerField(directQuestion("propertyType"), "Home"),
       plannerField(directQuestion("approvalContext"), "Strata or body corporate"),
@@ -153,7 +153,7 @@ export const SURGE_PROFILE_STEPS: ReadonlyArray<SurgeProfileStep> = [
   {
     id: "goals-plan",
     title: "Goals and starting plan",
-    description: "Tell Surge AI what matters and how you would prefer to approach improvements.",
+    description: "Tell Wattzun AI what matters and how you would prefer to approach improvements.",
     fields: [
       plannerField(directQuestion("goals"), "Priorities"),
       plannerField(directQuestion("pace"), "Approach"),

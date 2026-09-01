@@ -74,7 +74,7 @@ export async function PATCH(request: Request) {
       SET status = ?, reviewer_uid = ?, review_note = ?, updated_at = ?
       WHERE id = ?`).bind(status, admin.uid, reviewNote, now, id).run();
     await writeAdminAudit(admin, "surge_answer_reviewed", "surge_answer_review", id,
-      `Surge answer review marked ${status}.`, { previousStatus: current.status, status });
+      `Wattzun AI answer review marked ${status}.`, { previousStatus: current.status, status });
     const updated = await database.prepare(`SELECT id, answer_id, question, answer, status,
         reviewer_uid, review_note, created_at, updated_at
       FROM surge_answer_reviews

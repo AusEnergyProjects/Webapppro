@@ -19,10 +19,10 @@ export function SurgeOpenButton({
   return (
     <Link
       className={styles.button}
-      href="/surge"
+      href="/wattzun"
       prefetch={false}
-      onPointerEnter={() => router.prefetch("/surge")}
-      onFocus={() => router.prefetch("/surge")}
+      onPointerEnter={() => router.prefetch("/wattzun")}
+      onFocus={() => router.prefetch("/wattzun")}
       onClick={() => storePendingSurgeDraft(draft)}
     >
       <span className={styles.mascot} aria-hidden="true" />

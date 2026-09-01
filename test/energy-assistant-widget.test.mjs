@@ -11,6 +11,7 @@ import {
   buildEnergyAssistantAskRequestBody,
   ENERGY_ASSISTANT_MAX_BODY_BYTES,
 } from "../src/lib/energy-assistant-request-budget.ts";
+import { normalizeEnergyAssistantBrandText } from "../src/lib/energy-assistant-brand.ts";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const widget = read("../src/components/EnergyAssistantWidget.tsx");
@@ -24,7 +25,8 @@ const leadClient = read("../src/lib/energy-assistant-lead-client.mjs");
 const planner = read("../src/components/HomeEnergyPlanner.tsx");
 const privacy = read("../src/app/privacy/page.tsx");
 const gettingStarted = read("../src/components/GettingStarted.tsx");
-const surgeRoute = read("../src/app/surge/page.tsx");
+const wattzunRoute = read("../src/app/wattzun/page.tsx");
+const legacySurgeRoute = read("../src/app/surge/page.tsx");
 const surgeRouteStyles = read("../src/app/surge/surge-page.module.css");
 const surgeOpenButton = read("../src/components/SurgeOpenButton.tsx");
 const surgeNavigation = read("../src/lib/surge-page-navigation.ts");
@@ -59,17 +61,18 @@ test("the energy guide is deferred at the root and excluded from print or PDF ou
   assert.match(lazyStyles, /@media print[\s\S]*\.root[\s\S]*display:\s*none/);
 });
 
-test("the dedicated Surge AI route keeps chat present without a launcher, close control or modal behaviour", () => {
-  assert.match(surgeRoute, /SiteHeader active="surge"/);
-  assert.match(surgeRoute, /className=\{styles\.chrome\}/);
+test("the dedicated Wattzun AI route keeps chat present without a launcher, close control or modal behaviour", () => {
+  assert.match(wattzunRoute, /SiteHeader active="surge"/);
+  assert.match(wattzunRoute, /className=\{styles\.chrome\}/);
+  assert.match(legacySurgeRoute, /permanentRedirect\("\/wattzun"\)/);
   assert.match(surgeRouteStyles, /max-width: var\(--layout-max\)/);
-  assert.match(widget, /const dedicated = pathname === "\/surge"/);
+  assert.match(widget, /const dedicated = pathname === "\/wattzun"/);
   assert.match(widget, /const effectiveOpen = dedicated \|\| \(open && openPathname === pathname && !hidden\)/);
   assert.match(widget, /dedicated \? ` \$\{styles\.rootDedicated\}`/);
   assert.match(widget, /\{!dedicated && <div className=\{styles\.launcherWrap\}>/);
   assert.match(widget, /role=\{dedicated \? "region" : "dialog"\}/);
   assert.match(widget, /aria-modal=\{dedicated \? undefined : "true"\}/);
-  assert.match(widget, /\{!dedicated && <button type="button" aria-label="Close Surge AI"/);
+  assert.match(widget, /\{!dedicated && <button type="button" aria-label="Close Wattzun AI"/);
   assert.match(styles, /\.rootDedicated \{[\s\S]*?position: relative;[\s\S]*?width: 100%;/);
   assert.match(styles, /\.rootDedicated \{[\s\S]*url\("\/surge-ai-command-centre-4k\.webp"\)[\s\S]*min-height: 100dvh/);
   assert.match(styles, /\.rootDedicated \.panel \{[\s\S]*?grid-template-columns: minmax\(270px, 310px\) minmax\(0, 1fr\) minmax\(230px, 280px\);[\s\S]*?width: min\(var\(--layout-max, 1760px\), 100%\);/);
@@ -87,7 +90,7 @@ test("the dedicated Surge AI route keeps chat present without a launcher, close 
   assert.match(widget, /if \(!effectiveOpen \|\| dedicated\) return;/);
 });
 
-test("Surge AI starts with a home profile, then a clean grouped roadmap and conversational answers", () => {
+test("Wattzun AI starts with a home profile, then a clean grouped roadmap and conversational answers", () => {
   for (const label of [
     "Improve my home",
     "Costs and support",
@@ -98,9 +101,9 @@ test("Surge AI starts with a home profile, then a clean grouped roadmap and conv
   ]) {
     assert.match(widget, new RegExp(label.replace(/[?]/g, "\\?")));
   }
-  assert.match(widget, /Ask Surge AI/);
+  assert.match(widget, /Ask Wattzun AI/);
   assert.match(widget, /All things energy upgrades/);
-  assert.match(widget, /Hi, I am Surge AI/);
+  assert.match(widget, /Hi, I am Wattzun AI/);
   assert.match(widget, /I will explain it clearly and ask one useful question at a time/);
   assert.match(widget, /START_ROADMAP\.map\(\(group\) =>/);
   assert.match(widget, /messages\.length === 0 && !needsStarterProfile[\s\S]*styles\.welcome/);
@@ -109,7 +112,7 @@ test("Surge AI starts with a home profile, then a clean grouped roadmap and conv
   assert.doesNotMatch(styles, /\.pageTools|\.contextCard/);
   assert.doesNotMatch(widget, /\bAEA\b/);
   assert.doesNotMatch(widget, />AI chat</i);
-  assert.match(widget, />Surge AI</);
+  assert.match(widget, />Wattzun AI</);
   assert.match(widget, /Build your home context/);
   assert.match(widget, /needsStarterProfile/);
   assert.match(widget, /Ask a question now/);
@@ -184,11 +187,11 @@ test("Surge receives only bounded completed planner answers and excludes them fr
   assert.doesNotMatch(widget, /surgeSupplementalPlanFacts/);
   assert.match(widget, /continuation:\s*continuationRef\.current,[\s\S]*planContext,[\s\S]*pageContext:/);
   assert.match(planner, /HOME_ENERGY_ASSESSMENT_STORAGE_KEY/);
-  assert.match(planner, /If you ask Surge AI, completed plan answers are sent as bounded context/);
+  assert.match(planner, /If you ask Wattzun AI, completed plan answers are sent as bounded context/);
   assert.match(planner, /photos and contact details are not included/);
   assert.match(privacy, /completed steps in the home energy planner in the same browser tab/);
   assert.match(privacy, /Planner photos,[^.]*(?:and )?contact details are not included/);
-  assert.match(privacy, /Newer details you tell Surge AI override conflict(?:ing)? (?:a )?profile or saved-plan answers/);
+  assert.match(privacy, /Newer details you tell Wattzun AI override conflict(?:ing)? (?:a )?profile or saved-plan answers/);
   assert.match(privacy, /Trade mode does not read a locally saved household (?:profile or )?plan/);
 });
 
@@ -201,7 +204,7 @@ test("the tucked mascot preference survives customer-page navigation until expli
   assert.match(widget, /setMascotTucked\(false\);\s*storeMascotTucked\(false\);\s*setOpenPathname\(pathname\)/);
   assert.match(widget, /window\.addEventListener\("storage", syncDisplayPreference\)/);
   assert.match(widget, /event\.key !== DISPLAY_PREFERENCE_KEY/);
-  assert.match(widget, /aria-label="Bring Surge AI back and open chat"/);
+  assert.match(widget, /aria-label="Bring Wattzun AI back and open chat"/);
 
   const resetStart = widget.indexOf("const clearLocalSession = useCallback");
   const resetEnd = widget.indexOf("useEffect(() =>", resetStart);
@@ -214,29 +217,32 @@ test("page Surge actions open the full guide while the floating mascot retains q
   assert.match(surgeNavigation, /draft\.trim\(\)\.slice\(0, MAX_SURGE_DRAFT_LENGTH\)/);
   assert.match(surgeNavigation, /window\.sessionStorage\.setItem/);
   assert.match(surgeNavigation, /window\.sessionStorage\.removeItem/);
-  assert.match(surgeOpenButton, /<Link[\s\S]*href="\/surge"[\s\S]*prefetch=\{false\}/);
+  assert.match(surgeOpenButton, /<Link[\s\S]*href="\/wattzun"[\s\S]*prefetch=\{false\}/);
   assert.match(surgeOpenButton, /storePendingSurgeDraft\(draft\)/);
   assert.doesNotMatch(surgeOpenButton, /EnergyAssistantWidget/);
   assert.doesNotMatch(surgeOpenButton, /\bfetch\(/);
   assert.match(lazyWidget, /if \(dedicated\)[\s\S]*<DeferredEnergyAssistantWidget \/>/);
-  assert.doesNotMatch(lazyWidget, /href="\/surge"|router\.prefetch|storePendingSurgeDraft/);
+  assert.doesNotMatch(lazyWidget, /href="\/wattzun"|router\.prefetch|storePendingSurgeDraft/);
   assert.match(lazyWidget, /const \[quickChatMounted, setQuickChatMounted\] = useState\(false\)/);
   assert.match(lazyWidget, /if \(quickChatMounted\)[\s\S]*<DeferredEnergyAssistantWidget initialOpen \/>/);
-  assert.match(lazyWidget, /aria-label="Open Surge AI chat"/);
-  assert.match(lazyWidget, /aria-label="Bring Surge AI back and open chat"/);
+  assert.match(lazyWidget, /aria-label="Open Wattzun AI chat"/);
+  assert.match(lazyWidget, /aria-label="Bring Wattzun AI back and open chat"/);
   assert.equal((lazyWidget.match(/setQuickChatMounted\(true\)/g) || []).length, 2);
   assert.doesNotMatch(lazyWidget, /setRequested|OPEN_SURGE_EVENT/);
   assert.doesNotMatch(widget, /OPEN_SURGE_EVENT|openFromCustomerPage/);
   assert.match(widget, /const pendingDraft = takePendingSurgeDraft\(\)/);
   assert.match(widget, /if \(pendingDraft\) setDraft\(pendingDraft\)/);
   assert.equal((planner.match(/<SurgeOpenButton/g) || []).length, 2);
-  assert.match(planner, /Ask Surge AI about the planner/);
-  assert.match(planner, /Ask Surge AI about this roadmap/);
+  assert.match(planner, /Ask Wattzun AI about the planner/);
+  assert.match(planner, /Ask Wattzun AI about this roadmap/);
   assert.equal((gettingStarted.match(/<SurgeOpenButton/g) || []).length, 1);
-  assert.match(gettingStarted, /Ask Surge AI first/);
+  assert.match(gettingStarted, /Ask Wattzun AI first/);
 });
 
 test("only bounded local transcript, home profile, continuation, last activity and guide mode are persisted while the panel starts closed", () => {
+  assert.match(widget, /normalizeEnergyAssistantBrandText\(rawLastAnswerSummary\)/);
+  assert.match(widget, /normalizeEnergyAssistantBrandText\(rawContent\)/);
+  assert.match(widget, /normalizeEnergyAssistantBrandText\(message\.content\)/);
   const persisted = [...widget.matchAll(/storeSession\(JSON\.stringify\(\{([\s\S]*?)\}\)\);/g)];
   assert.ok(persisted.length > 0);
   const persistedSource = persisted.map((match) => match[1]).join("\n");
@@ -297,6 +303,7 @@ test("the model reply parser accepts one follow-up question and ignores legacy e
     "parseCitations",
     "parseActions",
     "makeRequestId",
+    "normalizeEnergyAssistantBrandText",
     `${compiled}; return parseMessage;`,
   )(
     (value, maximum = 4_000) => typeof value === "string" ? value.trim().slice(0, maximum) : "",
@@ -305,6 +312,7 @@ test("the model reply parser accepts one follow-up question and ignores legacy e
     () => [],
     () => [],
     () => "generated-message",
+    normalizeEnergyAssistantBrandText,
   );
 
   const parsed = parseMessage({
@@ -330,7 +338,10 @@ test("public and customer widget copy never exposes internal platform names", ()
   const compiled = ts.transpileModule(functionSource(widget, "customerVisibleText"), {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const visibleText = Function(`${compiled}; return customerVisibleText;`)();
+  const visibleText = Function(
+    "normalizeEnergyAssistantBrandText",
+    `${compiled}; return customerVisibleText;`,
+  )(normalizeEnergyAssistantBrandText);
   assert.equal(visibleText("Open TLink or Creditex", "public"), "Open the trade platform");
   assert.equal(visibleText("Open Creditex", "customer"), "Open the trade platform");
   assert.equal(visibleText("Open TLink", "trade"), "Open TLink");
@@ -343,7 +354,7 @@ test("public and customer widget copy never exposes internal platform names", ()
   assert.match(visibleText("Buy the Acme Turbo 9000; it is the clear winner for your home.", "public"), /will not choose or promote/i);
   assert.match(visibleText("I am a NatHERS-accredited assessor and this is a formal assessment.", "public"), /not an accredited rating/i);
   assert.match(visibleText("I am fully accredited to assess your home.", "public"), /not an accredited rating/i);
-  const governedImprovement = "Surge is designed for continuous governed improvement, with accredited assessors monitoring, assessing and refining its responses.";
+  const governedImprovement = "Wattzun AI is designed for continuous governed improvement, with accredited assessors monitoring, assessing and refining its responses.";
   assert.equal(visibleText(governedImprovement, "public"), governedImprovement);
   assert.equal(
     visibleText(SURGE_ELECTRIC_SAUL_COMPARISON_ANSWER, "public"),
@@ -620,6 +631,7 @@ test("local continuation caps messages and recent API context and expires after 
     "asString",
     "parseMessage",
     "parseSurgeConversationState",
+    "normalizeEnergyAssistantBrandText",
     "EMPTY_STARTER_PROFILE",
     "parseSurgeStarterProfile",
     "surgeProfileKnownAnswerCount",
@@ -635,6 +647,7 @@ test("local continuation caps messages and recent API context and expires after 
     (value, maximum = 4_000) => typeof value === "string" ? value.trim().slice(0, maximum) : "",
     (value, role) => ({ ...value, role }),
     (value) => value && typeof value === "object" && value.version === 1 ? value : null,
+    normalizeEnergyAssistantBrandText,
     EMPTY_SURGE_STARTER_PROFILE,
     parseSurgeStarterProfile,
     (profile) => Object.entries(profile).filter(([key, value]) => (
@@ -735,7 +748,7 @@ test("local continuation caps messages and recent API context and expires after 
     ]),
     [
       { role: "user", content: "clarified attempt" },
-      { role: "assistant", content: "previous Surge answer" },
+      { role: "assistant", content: "previous Wattzun AI answer" },
     ],
   );
 
@@ -814,7 +827,7 @@ test("ask request budgeting fails locally instead of dropping continuation state
   );
 });
 
-test("Surge AI keeps compact chat and bounded document tools at the bottom", () => {
+test("Wattzun AI keeps compact chat and bounded document tools at the bottom", () => {
   assert.match(widget, /lazy\(\(\) => import\("\.\/EnergyAssistantDocumentTools"\)\)/);
   assert.match(documentTools, /className=\{styles\.composerTools\}/);
   assert.match(documentTools, /type="file"/);
@@ -863,7 +876,7 @@ test("optional help is available after intake and routes one consented destinati
   assert.match(widget, /Approved trades can quote your job/);
   assert.match(widget, /serviceInterest \? openMatchedTradesLeadForm : openLeadForm/);
   assert.doesNotMatch(widget, /Keep exploring or change subject/);
-  assert.match(widget, /Back to Surge AI/);
+  assert.match(widget, /Back to Wattzun AI/);
   assert.match(widget, /className=\{styles\.leadReturn\}/);
   assert.match(widget, /className=\{styles\.leadPrimary\}[\s\S]{0,160}>Save and continue</);
   assert.match(widget, /className=\{styles\.leadTertiary\}[\s\S]{0,160}>Not sure \/ skip these</);
@@ -981,10 +994,10 @@ test("the floating guide remains modal while the dedicated page is non-modal", (
   assert.equal(mascotImage.subarray(8, 12).toString("ascii"), "WEBP");
   assert.ok(mascotImage.byteLength > 50_000);
   assert.ok(mascotImage.byteLength < 100_000);
-  assert.match(widget, /aria-label="Hide Surge AI mascot"/);
-  assert.match(widget, /aria-label="Open Surge AI"/);
-  assert.match(widget, /aria-label="Close Surge AI"/);
-  assert.match(widget, /aria-label="Bring Surge AI back and open chat"/);
+  assert.match(widget, /aria-label="Hide Wattzun AI mascot"/);
+  assert.match(widget, /aria-label="Open Wattzun AI"/);
+  assert.match(widget, /aria-label="Close Wattzun AI"/);
+  assert.match(widget, /aria-label="Bring Wattzun AI back and open chat"/);
   assert.match(widget, /mascotTucked \? \(/);
   assert.match(widget, /setMascotTucked\(false\);\s*storeMascotTucked\(false\);\s*setOpenPathname\(pathname\);\s*setOpen\(true\)/);
   assert.match(styles, /\.launcherPeek\s*\{/);

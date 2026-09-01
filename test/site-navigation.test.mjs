@@ -13,7 +13,8 @@ const plannerJourneyPath = path.resolve(directory, "../src/components/PlannerHom
 const chrome = read("../src/components/ComparatorChrome.tsx");
 const responsiveNav = read("../src/components/ResponsiveSiteNav.tsx");
 const surgeHeaderButton = read("../src/components/SurgeHeaderButton.tsx");
-const surgeRoute = read("../src/app/surge/page.tsx");
+const wattzunRoute = read("../src/app/wattzun/page.tsx");
+const legacySurgeRoute = read("../src/app/surge/page.tsx");
 const brandAssets = read("../src/lib/aea-brand-assets.mjs");
 const electricity = read("../src/app/compare/page.tsx");
 const gas = read("../src/app/gas-compare/page.tsx");
@@ -105,24 +106,26 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(gettingStartedRoute, /redirect\("\/plan"\)/);
 });
 
-test("the futuristic header links to one dedicated always-present Surge AI page", () => {
+test("the futuristic header links to one dedicated always-present Wattzun AI page", () => {
   assert.equal(chrome.match(/<SurgeHeaderButton active=\{active === "surge"\} \/>/g)?.length, 1);
   assert.doesNotMatch(chrome, /EnergyAssistantWidget|requestSurgeOpen/);
-  assert.match(surgeHeaderButton, /href="\/surge"/);
+  assert.match(surgeHeaderButton, /href="\/wattzun"/);
   assert.match(surgeHeaderButton, /active = false/);
   assert.match(surgeHeaderButton, /aria-current=\{active \? "page" : undefined\}/);
   assert.doesNotMatch(surgeHeaderButton, /requestSurgeOpen|onClick|aria-haspopup|aria-controls|type="button"/);
-  assert.match(surgeHeaderButton, /aria-label="Open Surge AI energy guide"/);
+  assert.match(surgeHeaderButton, /aria-label="Open Wattzun AI energy guide"/);
   assert.match(surgeHeaderButton, /className=\{`site-surge-link\$\{active \? " active" : ""\}`\}/);
   assert.match(surgeHeaderButton, /className="site-surge-core"/);
   assert.match(surgeHeaderButton, /src="\/surge-mascot\.webp"[\s\S]*?width="28" height="35"/);
   assert.match(surgeHeaderButton, /prefetch=\{false\}/);
   assert.match(surgeHeaderButton, /eslint-disable @next\/next\/no-img-element/);
-  assert.match(surgeHeaderButton, /className="site-surge-copy"[\s\S]*?<strong>Surge AI<\/strong>/);
+  assert.match(surgeHeaderButton, /className="site-surge-copy"[\s\S]*?<strong>Wattzun AI<\/strong>/);
   assert.doesNotMatch(surgeHeaderButton, /Energy upgrade guide|site-surge-copy"[\s\S]{0,120}<small>/);
   assert.match(surgeHeaderButton, /className="site-surge-status"[\s\S]*?>AI guide<\/span>/);
-  assert.match(surgeRoute, /SiteHeader active="surge"/);
-  assert.match(surgeRoute, /Surge AI \| Australian Energy Assessments/);
+  assert.match(wattzunRoute, /SiteHeader active="surge"/);
+  assert.match(wattzunRoute, /Wattzun AI \| Australian Energy Assessments/);
+  assert.match(wattzunRoute, /canonical: "\/wattzun"/);
+  assert.match(legacySurgeRoute, /permanentRedirect\("\/wattzun"\)/);
   assert.match(styles, /\.site-surge-link \{[^}]*min-height: 44px;/);
   assert.match(styles, /\.site-surge-link\.active \{/);
   assert.match(styles, /\.site-surge-core \{[^}]*box-shadow:/);
@@ -324,7 +327,8 @@ test("public discovery metadata is complete and private operations stay excluded
   assert.match(robots, /\/api\//);
   assert.match(robots, /sitemap\.xml/);
   assert.match(sitemap, /\/direct-trade\/access/);
-  assert.match(sitemap, /\/surge/);
+  assert.match(sitemap, /\/wattzun/);
+  assert.doesNotMatch(sitemap, /url: `\$\{SITE_URL\}\/surge`/);
   assert.doesNotMatch(sitemap, /\/operations/);
   assert.match(manifest, /display: "standalone"/);
 });

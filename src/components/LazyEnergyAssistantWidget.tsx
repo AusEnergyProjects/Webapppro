@@ -34,14 +34,14 @@ function storeTucked(tucked: boolean) {
 function Loader() {
   return (
     <div className={styles.dedicatedLoading} role="status">
-      Loading Surge AI...
+      Loading Wattzun AI...
     </div>
   );
 }
 
 function QuickChatLoader() {
   return (
-    <div className={styles.root} data-surge-loader role="status" aria-label="Opening Surge AI chat">
+    <div className={styles.root} data-surge-loader role="status" aria-label="Opening Wattzun AI chat">
       <span className={styles.launcher}>
         <span className={styles.mascot} aria-hidden="true" />
       </span>
@@ -51,7 +51,7 @@ function QuickChatLoader() {
 
 export function LazyEnergyAssistantWidget() {
   const pathname = usePathname() || "/";
-  const dedicated = pathname === "/surge";
+  const dedicated = pathname === "/wattzun";
   const [tucked, setTucked] = useState(false);
   const [quickChatMounted, setQuickChatMounted] = useState(false);
 
@@ -102,7 +102,7 @@ export function LazyEnergyAssistantWidget() {
         <button
           className={styles.peek}
           type="button"
-          aria-label="Bring Surge AI back and open chat"
+          aria-label="Bring Wattzun AI back and open chat"
           onClick={() => {
             setTucked(false);
             storeTucked(false);
@@ -116,7 +116,7 @@ export function LazyEnergyAssistantWidget() {
           <button
             className={styles.launcher}
             type="button"
-            aria-label="Open Surge AI chat"
+            aria-label="Open Wattzun AI chat"
             onClick={() => setQuickChatMounted(true)}
           >
             <span className={styles.mascot} aria-hidden="true" />
@@ -124,8 +124,8 @@ export function LazyEnergyAssistantWidget() {
           <button
             className={styles.dismiss}
             type="button"
-            aria-label="Hide Surge AI mascot"
-            title="Hide Surge AI"
+            aria-label="Hide Wattzun AI mascot"
+            title="Hide Wattzun AI"
             onClick={() => {
               setTucked(true);
               storeTucked(true);

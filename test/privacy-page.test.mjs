@@ -15,7 +15,7 @@ const sitemap = read("../src/app/sitemap.ts");
 test("the public privacy route covers the operational data boundary", () => {
   assert.match(privacy, /Privacy notice/);
   assert.match(privacy, /Protected leads and direct customers/);
-  assert.match(privacy, /Surge AI conversations/);
+  assert.match(privacy, /Wattzun AI conversations/);
   assert.match(privacy, /Up to 40 recent messages, a small conversation summary and the home profile/);
   assert.match(privacy, /kept in that browser for up to 30 days/);
   assert.match(privacy, /stateless guide endpoint/);
@@ -25,7 +25,7 @@ test("the public privacy route covers the operational data boundary", () => {
   assert.match(privacy, /provider-side response storage disabled/);
   assert.match(privacy, /Planner photos, document attachments and contact details are not included in that question context/);
   assert.match(privacy, /processed transiently and not saved to server storage or sent to an external AI provider/);
-  assert.match(privacy, /Newer details you tell Surge AI override conflicting profile or saved-plan answers/);
+  assert.match(privacy, /Newer details you tell Wattzun AI override conflicting profile or saved-plan answers/);
   assert.match(privacy, /does not create or read a server-side conversation record/);
   assert.match(privacy, /conversation text is not placed in analytics/);
   assert.match(privacy, /random first-party security cookie and short-lived, one-way security counters/);

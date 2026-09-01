@@ -33,7 +33,7 @@ export function buildEnergyAssistantAskRequestBody(
 
   if (encoder.encode(body).byteLength > maximumBytes) {
     throw new Error(
-      "Surge kept your conversation intact but could not fit this turn into one request. "
+      "Wattzun AI kept your conversation intact but could not fit this turn into one request. "
       + "Please clear the chat to start a new conversation; your saved home details will remain.",
     );
   }

@@ -169,6 +169,30 @@ test("conversation parser trims values and normalises an empty active topic to g
   assert.equal(parsed.lastAnswerSummary, "Asked for tenure.");
 });
 
+test("conversation parser migrates only assistant-authored legacy summaries to Wattzun AI", () => {
+  const ledger = validLedger();
+  ledger.decisions[0] = {
+    ...ledger.decisions[0],
+    outcomeSummary: "Surge said solar may suit the home.",
+    openItems: ["What should Surge check next?"],
+    pendingQuestion: "What should Surge check next?",
+    status: "open",
+  };
+  const parsed = parseSurgeConversationState(state({
+    goal: "Ask Surge about the saved home's options",
+    pendingQuestion: "What should Surge check next?",
+    lastAnswerSummary: "Surge said the postcode changes the answer.",
+    ledger,
+  }));
+
+  assert.equal(parsed.goal, "Ask Surge about the saved home's options");
+  assert.equal(parsed.pendingQuestion, "What should Wattzun AI check next?");
+  assert.equal(parsed.lastAnswerSummary, "Wattzun AI said the postcode changes the answer.");
+  assert.equal(parsed.ledger.decisions[0].outcomeSummary, "Wattzun AI said solar may suit the home.");
+  assert.deepEqual(parsed.ledger.decisions[0].openItems, ["What should Wattzun AI check next?"]);
+  assert.equal(parsed.ledger.decisions[0].pendingQuestion, "What should Wattzun AI check next?");
+});
+
 test("conversation parser rejects invalid versions, keys, control characters and oversized strings", () => {
   const cases = [
     state({ version: 2 }),
@@ -3439,7 +3463,7 @@ test("service-enquiry follow-ups keep the normalized Mum 3073 enquiry goal", () 
     message: "Before I do, why don't you just tell me who the best installer is?",
     activeTopic: "service_enquiry",
     goal: enquiryGoal,
-    answerSummary: "Surge does not prefer one installer and can send the enquiry to relevant local trades.",
+    answerSummary: "Wattzun AI does not prefer one installer and can send the enquiry to relevant local trades.",
     intent: "contextual_follow_up",
   });
 

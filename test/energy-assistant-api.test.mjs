@@ -135,6 +135,102 @@ function assertPublicReplyContract(payload) {
   assert.equal(Array.isArray(payload.reply.citations), true);
 }
 
+test("all chat audiences receive Wattzun AI branding across every assistant-authored response field", async () => {
+  for (const audience of ["public", "customer", "trade"]) {
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `brand-boundary-${audience}`,
+      message: "How can I reduce winter heat loss through my windows?",
+      recentTurns: [
+        { role: "user", content: "I mentioned Surge protection, but my current issue is window heat loss." },
+        { role: "assistant", content: "Surge said we should focus on the windows first." },
+      ],
+      pageContext: "/wattzun",
+      audience,
+    }), {
+      now: () => new Date(NOW),
+      composeAnswer: () => fixedAnswer("Seal confirmed air gaps around the windows first."),
+      reserveModelCall: allowModelCall,
+      requireValidatedModelForOrdinaryAdvice: true,
+      generateAnswer: async (modelRequest) => {
+        assert.equal(
+          modelRequest.recentTurns.find((turn) => turn.role === "user")?.content,
+          "I mentioned Surge protection, but my current issue is window heat loss.",
+          audience,
+        );
+        assert.equal(
+          modelRequest.recentTurns.find((turn) => turn.role === "assistant")?.content,
+          "Wattzun AI said we should focus on the windows first.",
+          audience,
+        );
+        return {
+          answer: {
+            ...fixedAnswer("Surge AI says sealing confirmed air gaps around the windows can reduce winter heat loss."),
+            practicalSteps: ["Surge can help check the opening parts and fixed frames separately."],
+            nextAction: "Ask Surge for the next window check.",
+            assumptions: ["Surge AI has not inspected the windows."],
+            suggestedQuestions: ["What should Surge check next around the windows?"],
+            toolActions: [{ id: "guides", label: "Open Surge AI guidance", href: "/guides" }],
+            sourceBoundary: "Surge AI used only the supplied window details.",
+          },
+          presentation: {
+            answerType: "explanation",
+            verdict: "Surge AI says to seal confirmed window air gaps first.",
+            reason: "Surge said uncontrolled air leakage can increase winter heat loss.",
+            steps: ["Surge's next check is to separate opening gaps from fixed-frame gaps."],
+            extraDetail: "The previous Surge answer did not rely on a site inspection.",
+            followUpQuestion: "What should Surge check next around the windows?",
+            quickReplies: [],
+          },
+          continuation: continuation({
+            activeTopic: "comfort_fabric",
+            goal: "Ask Surge about Surge protection for the windows",
+            facts: [{ key: "user_note", value: "Ask Surge about Surge protection" }],
+            pendingQuestion: "What should Surge check next around the windows?",
+            lastAnswerSummary: "Surge said to seal confirmed window air gaps first.",
+          }),
+        };
+      },
+    });
+
+    assert.equal(response.status, 200, audience);
+    const payload = await body(response);
+    assert.equal(payload.ok, true, audience);
+    assertPublicReplyContract(payload);
+    for (const assistantText of [
+      payload.reply.content,
+      payload.reply.directAnswer,
+      payload.reply.verdict,
+      payload.reply.reason,
+      ...payload.reply.practicalSteps,
+      payload.reply.extraDetail,
+      payload.reply.followUpQuestion,
+      payload.continuation.pendingQuestion,
+      payload.continuation.lastAnswerSummary,
+      ...payload.continuation.ledger.decisions.flatMap((decision) => [
+        decision.outcomeSummary,
+        ...decision.openItems,
+        decision.pendingQuestion,
+      ]),
+    ]) {
+      assert.doesNotMatch(assistantText, /\bSurge(?: AI)?\b/, `${audience}: ${assistantText}`);
+    }
+    assert.match(payload.reply.content, /Wattzun AI/, audience);
+    assert.match(payload.continuation.lastAnswerSummary, /Wattzun AI/, audience);
+    assert.match(
+      payload.continuation.goal,
+      /^Ask Surge about Surge protection for the windows(?: \||$)/,
+      audience,
+    );
+    assert.doesNotMatch(payload.continuation.goal, /Wattzun AI/, audience);
+    assert.equal(
+      payload.continuation.facts.find((fact) => fact.key === "user_note")?.value,
+      "Ask Surge about Surge protection",
+      audience,
+    );
+  }
+});
+
 test("canonical ask API is stateless and performs zero D1 operations", async () => {
   const d1 = noDatabaseOperations();
   const response = await handleEnergyAssistantRequest(request({
@@ -1072,7 +1168,7 @@ test("a conversational lead-in cannot turn an exact-product rebate question into
   const payload = await body(response);
   assert.equal(payload.reply.status, "source_review_required");
   assert.match(payload.reply.directAnswer, /could not verify.*postcode 3005/i);
-  assert.doesNotMatch(payload.reply.directAnswer, /I am Surge AI|implementation|provider/i);
+  assert.doesNotMatch(payload.reply.directAnswer, /I am Wattzun AI|implementation|provider/i);
 });
 
 test("the mixed STC and VEEC value regression case reaches the Victorian certificate lookup", async () => {
@@ -2266,7 +2362,7 @@ test("public identity and prompt-injection requests bypass the paid model and di
     const payload = await body(response);
     assert.equal(admissionCalls, 0);
     assert.equal(modelCalls, 0);
-    assert.match(payload.reply.directAnswer, /^I am Surge AI, a specialised Australian home-energy guide\./i);
+    assert.match(payload.reply.directAnswer, /^I am Wattzun AI, a specialised Australian home-energy guide\./i);
     assert.match(payload.reply.directAnswer, /do not share internal system or provider details/i);
     assert.match(payload.reply.directAnswer, /does not replace a formal home assessment/i);
     assert.doesNotMatch(JSON.stringify(payload), /ChatGPT|OpenAI|Claude|Gemini|GPT|Responses API/i);
@@ -3061,7 +3157,7 @@ test("model-denied plain follow-up answers stay tied to Surge's pending question
         ],
       },
       expected: /start with the lounge and bedroom/i,
-      forbidden: /outside.*scope|Surge AI is here/i,
+      forbidden: /outside.*scope|Wattzun AI is here/i,
     },
   ];
 

@@ -85,7 +85,7 @@ const GENERIC_FAILURE_PATTERNS = [
   "Name the exact home-energy decision",
   "I found a related current official source",
   "For the supplied Victoria owner context",
-  "Surge AI provides general home-energy guidance",
+  "Wattzun AI provides general home-energy guidance",
 ];
 
 function usage(message = "") {

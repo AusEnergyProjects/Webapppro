@@ -53,5 +53,5 @@ export const SURGE_REVIEWED_GUIDANCE = Object.freeze([
   reviewed("mains-gas-sequence", "Sequence mains gas replacement carefully", "Reduce demand first, then confirm electrical capacity before replacing major mains gas appliances.", ["energy-gov-electrification-sequence"], ["Gas disconnection and fixed electrical work require appropriately licensed trades."], "2026-10-20"),
   reviewed("lpg-sequence", "Plan around bottled gas use", "Identify which appliances use LPG, then compare staged electric replacements after checking switchboard capacity.", ["energy-gov-electrification-sequence"], ["Gas and fixed electrical work require appropriately licensed trades."], "2026-10-20"),
   reviewed("planned-work", "Coordinate upgrades with building work", "Use planned works to improve access, insulation continuity and electrical capacity before closing finishes.", ["yourhome-renovations-additions"], ["Confirm permits, structure and regulated trade scopes before work."]),
-  reviewed("context-ready", "Your context is ready", "Ask Surge AI what to prioritise from your details.", ["energy-gov-reduce-energy-bills"], [], "2026-11-20"),
+  reviewed("context-ready", "Your context is ready", "Ask Wattzun AI what to prioritise from your details.", ["energy-gov-reduce-energy-bills"], [], "2026-11-20"),
 ] as const satisfies readonly ReviewedSurgeGuidance[]);

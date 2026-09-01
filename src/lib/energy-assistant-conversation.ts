@@ -1,3 +1,5 @@
+import { normalizeEnergyAssistantBrandText } from "./energy-assistant-brand.ts";
+
 export const SURGE_CONVERSATION_STATE_VERSION = 1 as const;
 export const SURGE_MAX_FACTS = 16;
 // A retained decision may compare up to three separate subjects. Keep enough
@@ -720,8 +722,14 @@ function parseConversationLedger(value: unknown): SurgeConversationLedger | null
     const id = boundedString(decision?.id, 64);
     const topic = boundedString(decision?.topic, 48);
     const goal = boundedString(decision?.goal, 300);
-    const outcomeSummary = boundedString(decision?.outcomeSummary, 640);
-    const pendingQuestion = boundedString(decision?.pendingQuestion, 220);
+    const rawOutcomeSummary = boundedString(decision?.outcomeSummary, 640);
+    const outcomeSummary = rawOutcomeSummary === null
+      ? null
+      : normalizeEnergyAssistantBrandText(rawOutcomeSummary);
+    const rawPendingQuestion = boundedString(decision?.pendingQuestion, 220);
+    const pendingQuestion = rawPendingQuestion === null
+      ? null
+      : normalizeEnergyAssistantBrandText(rawPendingQuestion);
     const lastTouchedTurn = boundedLedgerInteger(decision?.lastTouchedTurn);
     if (
       !id
@@ -743,7 +751,10 @@ function parseConversationLedger(value: unknown): SurgeConversationLedger | null
       || (decision?.status !== "open" && decision?.status !== "resolved")
     ) return null;
     const facts = decision.facts.map(parseLedgerFact);
-    const openItems = decision.openItems.map((openItem) => boundedString(openItem, 220));
+    const openItems = decision.openItems.map((openItem) => {
+      const bounded = boundedString(openItem, 220);
+      return bounded === null ? null : normalizeEnergyAssistantBrandText(bounded);
+    });
     if (facts.some((fact) => fact === null || fact.updatedTurn > turn) || openItems.some((openItem) => openItem === null)) return null;
     const parsedOpenItems = [...new Map(
       (openItems as string[])
@@ -788,8 +799,14 @@ export function parseSurgeConversationState(value: unknown): SurgeConversationSt
 
   const activeTopic = boundedString(source.activeTopic, 48);
   const goal = boundedString(source.goal, 240);
-  const pendingQuestion = boundedString(source.pendingQuestion, 220);
-  const lastAnswerSummary = boundedString(source.lastAnswerSummary, 320);
+  const rawPendingQuestion = boundedString(source.pendingQuestion, 220);
+  const pendingQuestion = rawPendingQuestion === null
+    ? null
+    : normalizeEnergyAssistantBrandText(rawPendingQuestion);
+  const rawLastAnswerSummary = boundedString(source.lastAnswerSummary, 320);
+  const lastAnswerSummary = rawLastAnswerSummary === null
+    ? null
+    : normalizeEnergyAssistantBrandText(rawLastAnswerSummary);
   if (
     activeTopic === null
     || !/^[a-z][a-z0-9_]*$/.test(activeTopic || "general")

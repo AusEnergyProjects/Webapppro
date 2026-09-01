@@ -137,10 +137,10 @@ const routeDefinitions = {
       ["src/components/GettingStarted.tsx", "SurgeOpenButton"],
     ],
   },
-  surge: {
-    page: "src/app/surge/page.tsx",
+  wattzun: {
+    page: "src/app/wattzun/page.tsx",
     clientEntries: [],
-    boundaries: [["src/app/surge/page.tsx", "surge-page.module.css"]],
+    boundaries: [["src/app/wattzun/page.tsx", "surge-page.module.css"]],
   },
   plan: {
     page: "src/app/plan/page.tsx",
@@ -155,7 +155,7 @@ const routeDefinitions = {
 };
 const routeBudgets = {
   home: { javascript: 328_000, css: 750_000 },
-  surge: { javascript: 317_000, css: 750_000 },
+  wattzun: { javascript: 317_000, css: 750_000 },
   plan: { javascript: 484_000, css: 779_000 },
   calculator: { javascript: 597_000, css: 814_000 },
 };

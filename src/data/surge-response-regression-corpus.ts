@@ -485,7 +485,7 @@ const STANDARD_FAMILIES: FamilySpec[] = [
       clause("shift-load", "battery", "shift", "free hours"),
     ],
     requiredNumbers: (i) => [wordOrDigit("free-hours", i % 3 === 0 ? "two" : i % 3 === 1 ? "three" : "four", 2 + (i % 3), "free hours?"), quantity("evening-rate", 42 + i, "cents? per kWh")],
-    forbiddenPatterns: () => ["Surge is here for Australian energy", "flat rate is simpler"],
+    forbiddenPatterns: () => ["Wattzun AI is here for Australian energy", "flat rate is simpler"],
     maxQuestions: 1,
   },
   {
@@ -719,7 +719,7 @@ const STANDARD_FAMILIES: FamilySpec[] = [
   {
     family: "trade_referral",
     modelPolicy: "forbidden",
-    question: (i) => question(i, `Can Surge help me find licensed heat-pump and solar trades that service postcode ${3300 + i}?`),
+    question: (i) => question(i, `Can Wattzun AI help me find licensed heat-pump and solar trades that service postcode ${3300 + i}?`),
     clauses: () => [
       clause("can-help", "can help", "enquiry", "trades"),
       clause("local-service", "postcode", "area", "service"),
@@ -732,7 +732,7 @@ const STANDARD_FAMILIES: FamilySpec[] = [
   {
     family: "surge_vs_saul",
     modelPolicy: "forbidden",
-    question: (i) => question(i, `What is the practical difference between Surge AI and Electric Saul for household question ${i + 1}?`),
+    question: (i) => question(i, `What is the practical difference between Wattzun AI and Electric Saul for household question ${i + 1}?`),
     clauses: () => [
       clause("surge-context", "saved", "home details", "45"),
       clause("knowledge", "official", "source", "research"),

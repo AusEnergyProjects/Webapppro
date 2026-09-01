@@ -53,6 +53,7 @@ import { ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
 import { publicPlanQuoteQuestionsForSnapshot } from "@/lib/public-plan-quote-preparation.mjs";
 import type { DocumentConversationMessage } from "@/lib/energy-assistant-document-client";
 import { buildEnergyAssistantAskRequestBody } from "@/lib/energy-assistant-request-budget";
+import { normalizeEnergyAssistantBrandText } from "@/lib/energy-assistant-brand";
 import styles from "./EnergyAssistantWidget.module.css";
 
 const EnergyAssistantDocumentTools = lazy(() => import("./EnergyAssistantDocumentTools"));
@@ -284,6 +285,7 @@ const SAFE_EXACT_ACTIONS = new Set([
   "/privacy",
   "/rebates",
   "/surge",
+  "/wattzun",
 ]);
 
 const RESET_LEAD_CONSENT = {
@@ -344,7 +346,10 @@ function parseSurgeConversationState(value: unknown): SurgeConversationState | n
   const activeTopic = boundedText(source.activeTopic, 48);
   const goal = boundedText(source.goal, 240);
   const pendingQuestion = boundedText(source.pendingQuestion, 220);
-  const lastAnswerSummary = boundedText(source.lastAnswerSummary, 320);
+  const rawLastAnswerSummary = boundedText(source.lastAnswerSummary, 320);
+  const lastAnswerSummary = rawLastAnswerSummary === null
+    ? null
+    : normalizeEnergyAssistantBrandText(rawLastAnswerSummary);
   if (activeTopic === null || !/^[a-z][a-z0-9_]*$/.test(activeTopic || "general")
     || goal === null || pendingQuestion === null || lastAnswerSummary === null) return null;
   const facts = source.facts.map((item) => {
@@ -457,7 +462,10 @@ function parseActions(value: unknown): AssistantAction[] {
 
 function parseMessage(value: unknown, fallbackRole: "user" | "assistant" = "assistant"): AssistantMessage | null {
   if (typeof value === "string") {
-    const content = asString(value);
+    const rawContent = asString(value);
+    const content = fallbackRole === "assistant"
+      ? normalizeEnergyAssistantBrandText(rawContent)
+      : rawContent;
     return content ? {
       id: makeRequestId("message"),
       role: fallbackRole,
@@ -478,9 +486,15 @@ function parseMessage(value: unknown, fallbackRole: "user" | "assistant" = "assi
   const record = asRecord(value);
   if (!record) return null;
   const role = record.role === "user" ? "user" : fallbackRole;
-  const content = asString(record.content ?? record.text ?? record.answer);
-  const directAnswer = asString(record.directAnswer ?? record.direct_answer)
+  const rawContent = asString(record.content ?? record.text ?? record.answer);
+  const content = role === "assistant"
+    ? normalizeEnergyAssistantBrandText(rawContent)
+    : rawContent;
+  const rawDirectAnswer = asString(record.directAnswer ?? record.direct_answer)
     || (role === "assistant" ? content : "");
+  const directAnswer = role === "assistant"
+    ? normalizeEnergyAssistantBrandText(rawDirectAnswer)
+    : rawDirectAnswer;
   if (!content && !directAnswer) return null;
   return {
     id: asString(record.id, 120) || makeRequestId("message"),
@@ -514,29 +528,30 @@ function parseMessage(value: unknown, fallbackRole: "user" | "assistant" = "assi
 }
 
 function customerVisibleText(value: string, audience: Audience): string {
-  const conversationalPunctuation = value.replace(/\s*[\u2013\u2014]\s*/gu, ", ");
+  const conversationalPunctuation = normalizeEnergyAssistantBrandText(value)
+    .replace(/\s*[\u2013\u2014]\s*/gu, ", ");
   if (audience === "trade") return conversationalPunctuation;
   const safePlatformNames = conversationalPunctuation.replace(
     /\b(?:TLink|Creditex)(?:\s+or\s+(?:TLink|Creditex))?\b/gi,
     "the trade platform",
   );
   if (
-    /\b(?:I|Surge(?: AI)?)\s+(?:am\s+)?(?:run(?:ning)?|built|powered|hosted|provided|based)\s+(?:on|by|with|through)\b/i.test(safePlatformNames)
+    /\b(?:I|Wattzun AI|Surge(?: AI)?)\s+(?:am\s+)?(?:run(?:ning)?|built|powered|hosted|provided|based)\s+(?:on|by|with|through)\b/i.test(safePlatformNames)
     || /\b(?:my|the)\s+(?:underlying\s+)?(?:model|provider|platform|implementation)\s+is\b/i.test(safePlatformNames)
   ) {
-    return "Surge AI is a specialised Australian home-energy guide. Its implementation details stay private so the answer can stay focused on your home and decision.";
+    return "Wattzun AI is a specialised Australian home-energy guide. Its implementation details stay private so the answer can stay focused on your home and decision.";
   }
   if (
     /\b(?:private|internal|hidden)\s+(?:source|sources|reference|references|research|training data)\b/i.test(safePlatformNames)
-    || /\b(?:I|we|Surge(?: AI)?)\b[^.!?\n]{0,100}\b(?:use|uses|draw|draws|rely|relies|trained|based)\b[^.!?\n]{0,100}\b(?:source|sources|research|reference|references|training data)\b/i.test(safePlatformNames)
+    || /\b(?:I|we|Wattzun AI|Surge(?: AI)?)\b[^.!?\n]{0,100}\b(?:use|uses|draw|draws|rely|relies|trained|based)\b[^.!?\n]{0,100}\b(?:source|sources|research|reference|references|training data)\b/i.test(safePlatformNames)
   ) {
     return "I keep the background research private and focus on explaining what matters for your home.";
   }
   if (
-    /\b(?:I am|I'm|Surge(?: AI)?\s+is)\s+(?:(?:an?|fully)\s+)?(?:NatHERS[- ]?)?(?:accredited|licensed|certified|registered|qualified)\b/i.test(safePlatformNames)
+    /\b(?:I am|I'm|Wattzun AI\s+is|Surge(?: AI)?\s+is)\s+(?:(?:an?|fully)\s+)?(?:NatHERS[- ]?)?(?:accredited|licensed|certified|registered|qualified)\b/i.test(safePlatformNames)
     || /\b(?:this is|I provide|I issue)\b[^.!?\n]{0,80}\b(?:formal assessment|formal rating|certificate decision)\b/i.test(safePlatformNames)
   ) {
-    return "Surge AI provides general home-energy guidance, not an accredited rating, certificate or formal assessment.";
+    return "Wattzun AI provides general home-energy guidance, not an accredited rating, certificate or formal assessment.";
   }
   if (
     /\b(?:clear|obvious|definite)\s+winner\b/i.test(safePlatformNames)
@@ -659,7 +674,7 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
       intro: "Tell me what you want to improve or understand. I will explain it clearly and ask one useful question at a time. I do not read customer, job or certificate records.",
     };
   }
-  const safePublicPath = /^\/(?:|assessments|calculator|compare(?:\/gas)?|direct-trade\/standards|guides(?:\/[a-z0-9-]+)?|plan|platform|privacy|rebates|surge)$/.test(pathname)
+  const safePublicPath = /^\/(?:|assessments|calculator|compare(?:\/gas)?|direct-trade\/standards|guides(?:\/[a-z0-9-]+)?|plan|platform|privacy|rebates|surge|wattzun)$/.test(pathname)
     ? pathname
     : "/";
   if (isSharedUtilityRoute(pathname) && rememberedAudience === "trade") {
@@ -682,7 +697,7 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
     audience: "public",
     apiPath: safePublicPath,
     modeLabel: "Household guide",
-    intro: "Hi, I am Surge AI. Tell me what you want to improve or understand. I will explain it clearly and ask one useful question at a time. No contact details needed.",
+    intro: "Hi, I am Wattzun AI. Tell me what you want to improve or understand. I will explain it clearly and ask one useful question at a time. No contact details needed.",
   };
 }
 
@@ -727,7 +742,9 @@ function localSessionLastActive(
 function recentTurnsForRequest(messages: readonly AssistantMessage[]) {
   const turns: Array<{ role: "user" | "assistant"; content: string }> = [];
   for (const message of messages) {
-    const content = message.content.trim().slice(0, MAX_MESSAGE_LENGTH);
+    const content = (message.role === "assistant"
+      ? normalizeEnergyAssistantBrandText(message.content)
+      : message.content).trim().slice(0, MAX_MESSAGE_LENGTH);
     if (!content) continue;
     const turn = { role: message.role, content };
     if (turns.at(-1)?.role === turn.role) turns[turns.length - 1] = turn;
@@ -959,7 +976,7 @@ export function EnergyAssistantWidget({
 } = {}) {
   const pathname = usePathname() || "/";
   const router = useRouter();
-  const dedicated = pathname === "/surge";
+  const dedicated = pathname === "/wattzun";
   const [mode, setMode] = useState<Audience>("public");
   const explicitAudience = explicitRouteAudience(pathname);
   const context = useMemo(
@@ -1897,7 +1914,7 @@ export function EnergyAssistantWidget({
             className={styles.launcher}
             type="button"
             data-mascot-state={messages.length > 0 ? "returning" : "idle"}
-            aria-label="Close Surge AI"
+            aria-label="Close Wattzun AI"
             aria-controls="aea-energy-guide"
             aria-expanded="true"
             onClick={close}
@@ -1909,7 +1926,7 @@ export function EnergyAssistantWidget({
               ref={launcherRef}
               className={styles.launcherPeek}
               type="button"
-              aria-label="Bring Surge AI back and open chat"
+              aria-label="Bring Wattzun AI back and open chat"
               aria-controls="aea-energy-guide"
               aria-expanded="false"
               onClick={() => {
@@ -1928,7 +1945,7 @@ export function EnergyAssistantWidget({
                 className={styles.launcher}
                 type="button"
                 data-mascot-state={messages.length > 0 ? "returning" : "idle"}
-                aria-label="Open Surge AI"
+                aria-label="Open Wattzun AI"
                 aria-controls="aea-energy-guide"
                 aria-expanded="false"
                 onClick={() => {
@@ -1941,8 +1958,8 @@ export function EnergyAssistantWidget({
               <button
                 className={styles.launcherDismiss}
                 type="button"
-                aria-label="Hide Surge AI mascot"
-                title="Hide Surge AI"
+                aria-label="Hide Wattzun AI mascot"
+                title="Hide Wattzun AI"
                 onClick={() => {
                   setMascotTucked(true);
                   storeMascotTucked(true);
@@ -1984,7 +2001,7 @@ export function EnergyAssistantWidget({
               <summary className={styles.contextRailSummary}>
                 <Image src="/surge-mascot.webp" alt="" width={54} height={68} />
                 <span className={styles.contextRailTitle}>
-                  <span>Surge AI knows</span>
+                  <span>Wattzun AI knows</span>
                   <strong>Your home context</strong>
                   <small>{profileKnownAnswerCount} of {SURGE_PROFILE_FIELDS.length} details confirmed</small>
                 </span>
@@ -2097,9 +2114,9 @@ export function EnergyAssistantWidget({
           <header className={styles.header}>
             <div>
               <span className={styles.mode}>{dedicated ? "Your future-focused Australian home-energy guide" : "All things energy upgrades"}</span>
-              <h2 id="aea-energy-guide-title">Ask Surge AI</h2>
+              <h2 id="aea-energy-guide-title">Ask Wattzun AI</h2>
             </div>
-            {!dedicated && <button type="button" aria-label="Close Surge AI" onClick={close}>
+            {!dedicated && <button type="button" aria-label="Close Wattzun AI" onClick={close}>
               <span aria-hidden="true">×</span>
             </button>}
           </header>
@@ -2225,7 +2242,7 @@ export function EnergyAssistantWidget({
                   <span>Suggested questions</span>
                   <small>{START_ROADMAP.reduce((total, group) => total + group.questions.length, 0)} options</small>
                 </summary>
-                <section className={styles.starters} aria-label="Ways Surge AI can help">
+                <section className={styles.starters} aria-label="Ways Wattzun AI can help">
                   {START_ROADMAP.map((group) => (
                     <div className={styles.starterGroup} key={group.label}>
                       <h4>{group.label}</h4>
@@ -2276,7 +2293,7 @@ export function EnergyAssistantWidget({
                   setLeadOpen(false);
                   window.requestAnimationFrame(() => composerRef.current?.focus());
                 }}>
-                  <span aria-hidden="true">←</span> Back to Surge AI
+                  <span aria-hidden="true">←</span> Back to Wattzun AI
                 </button>
                 {leadStage === "destination" && (
                   <section className={styles.leadStep} aria-labelledby="aea-lead-destination">
@@ -2463,7 +2480,7 @@ export function EnergyAssistantWidget({
                           <Image src="/surge-mascot.webp" alt="" width={56} height={70} />
                         </span>
                         <article className={styles.answerCard}>
-                          <header><span>Surge AI</span></header>
+                          <header><span>Wattzun AI</span></header>
                           {message.answerStatus === "source_review_required" && (
                             <p className={styles.reviewRequired}>I need a current official rule check before you rely on this for a rebate or eligibility decision.</p>
                           )}
@@ -2533,14 +2550,14 @@ export function EnergyAssistantWidget({
                 ))}
               </ol>
             )}
-            {busy && <p className={styles.thinking} role="status">Surge AI is checking that...</p>}
+            {busy && <p className={styles.thinking} role="status">Wattzun AI is checking that...</p>}
             {error && <p className={styles.error} role="alert">{error}</p>}
             {status && <p className={styles.status} role="status">{status}</p>}
             <div ref={conversationEndRef} data-testid="surge-conversation-end" className={styles.conversationEnd} aria-hidden="true" />
           </div>
 
           {(context.audience === "trade" || profile.completed || profileDeferred || messages.length > 0) && <form className={styles.composer} onSubmit={submitQuestion}>
-            <label htmlFor="aea-energy-guide-question">Ask Surge AI</label>
+            <label htmlFor="aea-energy-guide-question">Ask Wattzun AI</label>
             <div>
               <textarea
                 ref={composerRef}
@@ -2559,7 +2576,7 @@ export function EnergyAssistantWidget({
                   }
                 }}
               />
-              <button data-testid="surge-composer-submit" type="submit" disabled={busy || !draft.trim()} aria-label="Ask Surge AI">
+              <button data-testid="surge-composer-submit" type="submit" disabled={busy || !draft.trim()} aria-label="Ask Wattzun AI">
                 <span aria-hidden="true">Send</span>
               </button>
             </div>

@@ -1239,7 +1239,7 @@
         "Name the exact home-energy decision",
         "I found a related current official source",
         "For the supplied Victoria owner context",
-        "Surge AI provides general home-energy guidance",
+        "Wattzun AI provides general home-energy guidance",
         "\\b(?:internal|private|proprietary|confidential)\\s+(?:source(?:s| pack)?|document(?:s)?|reference(?:s)?|knowledge base|corpus|file(?:s)?|handbook|training data)\\b"
       ]
     },

@@ -87,7 +87,7 @@ test("public identity, source secrecy and prompt-injection boundaries stay deter
 
   for (const query of identityCases) {
     const answer = ask(query, "public");
-    assert.match(answer.directAnswer, /^I am Surge AI, a specialised Australian home-energy guide\./i, query);
+    assert.match(answer.directAnswer, /^I am Wattzun AI, a specialised Australian home-energy guide\./i, query);
     assert.match(answer.directAnswer, /do not share internal system or provider details/i, query);
     assert.match(answer.directAnswer, /does not replace a formal home assessment/i, query);
     assert.doesNotMatch(JSON.stringify(answer), /ChatGPT|OpenAI|Claude|Gemini|GPT|Responses API/i, query);

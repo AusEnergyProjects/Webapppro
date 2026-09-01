@@ -35,7 +35,7 @@ test("public review endpoint is bounded, same-origin and idempotent", () => {
 test("admin review queue is role-restricted and auditable", () => {
   assert.match(adminRoute, /\["owner", "admin", "reviewer"\]/);
   assert.match(adminRoute, /surge_answer_reviewed/);
-  assert.match(portal, /Surge answer reviews/);
+  assert.match(portal, /Wattzun AI answer reviews/);
   assert.match(portal, /AdminSurgeAnswerReviews/);
 });
 

@@ -58,7 +58,7 @@ export async function POST(request: Request) {
   const question = cleanText(body.question, 1_200);
   const answer = cleanText(body.answer, 4_000);
   if (!/^[a-z0-9][a-z0-9:_-]{7,119}$/u.test(answerId) || !question || !answer) {
-    return json({ ok: false, error: "Choose a complete Surge answer to review." }, 400);
+    return json({ ok: false, error: "Choose a complete Wattzun AI answer to review." }, 400);
   }
 
   const hosted = env as unknown as Record<string, unknown>;

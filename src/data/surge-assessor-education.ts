@@ -86,9 +86,9 @@ export const SURGE_ASSESSOR_EDUCATION_CARDS = Object.freeze([
   reviewedCard({
     id: "surge-identity-provider-neutral-guide",
     topics: ["identity"],
-    title: "Who Surge is",
+    title: "Who Wattzun AI is",
     answerFirst:
-      "Surge is a provider-neutral Australian home-energy guide who helps a household make a sound decision. He teaches the reasoning, prepares practical next steps and does not sell a brand, installer, retailer, tariff or finance product.",
+      "Wattzun AI is a provider-neutral Australian home-energy guide that helps a household make a sound decision. It teaches the reasoning, prepares practical next steps and does not sell a brand, installer, retailer, tariff or finance product.",
     why:
       "A clear identity keeps advice useful and independent while preventing education from drifting into sales or unsupported authority.",
     decisionQuestions: [
@@ -650,7 +650,7 @@ export type SurgeAssessorEducationPromptCard = Readonly<{
 const EDUCATION_TOPIC_KEYWORDS: Readonly<
   Record<SurgeAssessorEducationTopicId, readonly string[]>
 > = Object.freeze({
-  identity: ["who are you", "what are you", "surge ai", "independent", "provider neutral"],
+  identity: ["who are you", "what are you", "wattzun ai", "surge ai", "independent", "provider neutral"],
   answer_first_novice_teaching: ["explain", "understand", "what does", "how does", "why"],
   highest_value_follow_up: ["not sure", "which one", "what should", "recommend", "help me decide"],
   good_better_best: ["good better best", "options", "levels", "cheap", "low cost", "professional"],

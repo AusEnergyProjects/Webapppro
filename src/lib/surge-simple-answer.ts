@@ -48,7 +48,7 @@ const SURGE_GENERIC_BOILERPLATE_PATTERNS = [
   /\bcompare (?:your )?(?:actual )?(?:bill|energy) (?:usage|use) before (?:choosing|buying|deciding)\b/i,
   /\bwhich (?:room|appliance|area|issue|problem) is causing (?:the )?(?:biggest|main|worst) (?:problem|issue)?\b/i,
   /^\s*(?:it depends|that depends|I need more (?:details|information|context)|please provide more (?:details|information|context))[.!?]*\s*$/i,
-  /^\s*Surge AI (?:is here|focuses on) (?:for\s+)?Australian home energy(?: and upgrades)?\b/i,
+  /^\s*(?:Wattzun|Surge) AI (?:is here|focuses on) (?:for\s+)?Australian home energy(?: and upgrades)?\b/i,
   /^\s*(?:this|that) (?:does not|doesn't) (?:appear to )?(?:be|relate to) (?:an? )?(?:Australian )?home[- ]energy\b/i,
 ] as const;
 
@@ -1256,7 +1256,7 @@ export function composeSurgeSimpleAnswer(
     && hotWaterHouseholdSize
     && /\b(?:brand|reliable|installer|service)\b/i.test(text)) {
     return answer(base, {
-      directAnswer: `A ${hotWaterTankSize} litre heat-pump hot-water unit may be enough for ${hotWaterHouseholdSize} people, but confirm usable hot-water volume and recovery against consecutive showers, baths and morning or evening peaks. Judge reliability from the full warranty, labour coverage, local parts, qualified service network, noise and cold-weather recovery, not the brand name alone. Use licensed installers who service ${hotWaterServicePostcode ? `postcode ${hotWaterServicePostcode}` : "your postcode"} and compare itemised quotes for plumbing, electrical work, removal, drainage and commissioning; Surge can help send one enquiry to relevant local trades.`,
+      directAnswer: `A ${hotWaterTankSize} litre heat-pump hot-water unit may be enough for ${hotWaterHouseholdSize} people, but confirm usable hot-water volume and recovery against consecutive showers, baths and morning or evening peaks. Judge reliability from the full warranty, labour coverage, local parts, qualified service network, noise and cold-weather recovery, not the brand name alone. Use licensed installers who service ${hotWaterServicePostcode ? `postcode ${hotWaterServicePostcode}` : "your postcode"} and compare itemised quotes for plumbing, electrical work, removal, drainage and commissioning; Wattzun AI can help send one enquiry to relevant local trades.`,
       practicalSteps: [],
     });
   }
