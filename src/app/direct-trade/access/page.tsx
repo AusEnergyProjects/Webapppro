@@ -1,12 +1,13 @@
 import { SiteFooter } from "@/components/ComparatorChrome";
+import { JsonLd } from "@/components/JsonLd";
 import { TLinkHeader } from "@/components/TLinkChrome";
-import { buildPlatformMetadata } from "@/lib/public-site";
+import { buildPlatformMetadata, PUBLIC_SITE } from "@/lib/public-site";
 
 export const metadata = buildPlatformMetadata({
   path: "/direct-trade/access",
   title: "Free TLink trade access",
   description:
-    "Approved trades receive TLink CRM, jobs, scheduling, marketplace, team, field and purchasing tools at no cost.",
+    "TLink is rolling out CRM, jobs, scheduling, marketplace, team, field and purchasing tools at no cost to approved trade businesses across Australia.",
 });
 
 const coreTools = [
@@ -17,9 +18,52 @@ const coreTools = [
   "Accounting integrations and customer portal foundations",
 ];
 
+const tlinkAccessUrl = `${PUBLIC_SITE.platformUrl}/direct-trade/access`;
+const tlinkAccessSchema = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Service",
+      "@id": `${tlinkAccessUrl}#service`,
+      name: "TLink trade platform access",
+      serviceType: "Digital trade business operating platform",
+      url: tlinkAccessUrl,
+      provider: { "@id": PUBLIC_SITE.organizationId },
+      areaServed: { "@type": "Country", name: "Australia" },
+      availableChannel: {
+        "@type": "ServiceChannel",
+        serviceUrl: tlinkAccessUrl,
+        availableLanguage: "English",
+      },
+      offers: { "@id": `${tlinkAccessUrl}#offer` },
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": `${tlinkAccessUrl}#application`,
+      name: "TLink",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web browser",
+      url: tlinkAccessUrl,
+      provider: { "@id": PUBLIC_SITE.organizationId },
+      isAccessibleForFree: true,
+      offers: { "@id": `${tlinkAccessUrl}#offer` },
+    },
+    {
+      "@type": "Offer",
+      "@id": `${tlinkAccessUrl}#offer`,
+      price: "0",
+      priceCurrency: "AUD",
+      availability: "https://schema.org/LimitedAvailability",
+      areaServed: { "@type": "Country", name: "Australia" },
+      itemOffered: { "@id": `${tlinkAccessUrl}#application` },
+    },
+  ],
+} as const;
+
 export default function DirectTradeAccessPage() {
   return (
     <main className="wrap trade-information-page">
+      <JsonLd data={tlinkAccessSchema} />
       <TLinkHeader active="access" />
       <header className="trade-information-hero">
         <div>
@@ -29,6 +73,12 @@ export default function DirectTradeAccessPage() {
             Approved installers and wholesalers receive the role-appropriate
             operating tools with no card details, seat fee, job fee, quote fee
             or marketplace lead fee.
+          </p>
+          <p>
+            TLink is designed for digital access by approved businesses
+            anywhere in Australia. During rollout, access remains subject to
+            business approval and platform availability, while each business
+            controls the real service areas where it accepts work.
           </p>
           <div>
             <a className="btn" href="/direct-trade/partners">

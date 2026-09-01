@@ -126,6 +126,8 @@ export default function NathersForNewHomesPage() {
       serviceName="NatHERS assessment for new homes"
       serviceType="Plan-based NatHERS thermal performance and Whole of Home assessment"
       areaServed="Australia"
+      coverageTitle="Desktop assessment across Australia"
+      coverageDescription="New-home NatHERS assessments are completed from coordinated plans and specifications, so projects can be assessed remotely across Australia. The state or territory and approval authority still determine the applicable pathway and evidence."
       footer="New-home rating evidence is project specific. The assessment model, certificate, plans and approval requirements must remain coordinated as the design changes."
     />
   );

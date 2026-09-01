@@ -66,6 +66,8 @@ type AssessmentServicePageProps = {
   serviceName: string;
   serviceType: string;
   areaServed?: string;
+  coverageTitle?: string;
+  coverageDescription?: string;
   footer: string;
 };
 
@@ -147,6 +149,8 @@ export function AssessmentServicePage({
   serviceName,
   serviceType,
   areaServed,
+  coverageTitle,
+  coverageDescription,
   footer,
 }: AssessmentServicePageProps) {
   const canonical = canonicalUrl(path);
@@ -241,11 +245,9 @@ export function AssessmentServicePage({
         <span>{reviewNote}</span>
       </div>
 
-      {areaServed && <div className="assessment-coverage">
-        <strong>{areaServed === "Australia" ? "Australia-wide service area" : `${areaServed} service area`}</strong>
-        <span>{areaServed === "Australia"
-          ? "Australian Energy Assessments supports projects across Australia. On-site assessments are primarily delivered in New South Wales and Victoria; availability, travel and timing for other locations are confirmed for the property before booking."
-          : "BASIX is a New South Wales planning pathway. Project eligibility, service availability and timing are confirmed before assessment work begins."}</span>
+      {coverageTitle && coverageDescription && <div className="assessment-coverage">
+        <strong>{coverageTitle}</strong>
+        <span>{coverageDescription}</span>
       </div>}
 
       <section className="assessment-section" aria-labelledby="assessment-service-scope">

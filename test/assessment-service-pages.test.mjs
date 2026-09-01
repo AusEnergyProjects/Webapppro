@@ -65,8 +65,11 @@ test("service and FAQ structured data are derived from visible page copy", () =>
   assert.match(routes.basix, /areaServed="New South Wales"/);
   assert.match(routes.existingHome, /areaServed="Australia"/);
   assert.match(routes.book, /areaServed="Australia"/);
-  assert.match(shared, /Australia-wide service area/);
-  assert.match(shared, /On-site assessments are primarily delivered in New South Wales and Victoria/);
+  assert.match(shared, /coverageTitle && coverageDescription/);
+  assert.match(routes.newHome, /Desktop assessment across Australia/);
+  assert.match(routes.wholeOfHome, /Desktop assessment across Australia/);
+  assert.match(routes.existingHome, /On-site availability by location/);
+  assert.match(routes.book, /Remote and on-site service coverage/);
   assert.match(shared, /telephoneIsVisible/);
   assert.match(shared, /emailIsVisible/);
   assert.match(shared, /"@type": "FAQPage"/);

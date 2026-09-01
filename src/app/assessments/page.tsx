@@ -6,7 +6,7 @@ import { PUBLIC_SITE } from "@/lib/public-site";
 
 export const metadata: Metadata = {
   title: "Home Energy Assessments, NatHERS and BASIX | Australian Energy Assessments",
-  description: "Australia-wide NatHERS and home energy assessment support, with primary on-site coverage in NSW and Victoria, plus Whole of Home and NSW BASIX guidance.",
+  description: "Australia-wide desktop NatHERS and Whole of Home services, plus on-site existing-home ratings with primary field coverage in NSW and Victoria.",
   alternates: { canonical: "/assessments" },
   openGraph: {
     title: "Home Energy Assessments, NatHERS and BASIX",
@@ -80,7 +80,7 @@ export default function AssessmentsPage() {
   return <main className="wrap assessments-page">
     <JsonLd data={assessmentHubSchema} />
     <SiteHeader active="assessments" />
-    <header className="guide-hero assessments-hero"><span>Home energy assessments and ratings</span><h1>NatHERS, Home Energy Rating and BASIX assessment pathways</h1><p>Australian Energy Assessments supports projects across Australia and helps homeowners and project teams identify the right assessment for a new design, an existing home or a NSW residential project. On-site assessments are primarily delivered in New South Wales and Victoria, with other locations confirmed case by case.</p></header>
+    <header className="guide-hero assessments-hero"><span>Home energy assessments and ratings</span><h1>NatHERS, Home Energy Rating and BASIX assessment pathways</h1><p>Plan-based NatHERS and Whole of Home assessments can be delivered remotely for projects across Australia. Existing-home ratings require an on-site visit and are primarily delivered in New South Wales and Victoria, with other locations confirmed case by case.</p></header>
 
     <div className="assessment-asat"><strong>Official guidance checked 1 September 2026</strong><span>Building, planning and assessment requirements can change. Confirm the current rules for the project location and approval pathway before relying on a certificate or rating.</span></div>
 
