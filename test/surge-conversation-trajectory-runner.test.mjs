@@ -367,6 +367,20 @@ test("durability fixture exercises the exact front-door warmth follow-up without
     assistant: recordedDoorAnswer,
   }), "paid"), []);
 
+  const observedDoorAnswer = "Block the gap now with a door snake. This should quickly reduce the cold draught and heat loss. For a lasting fix, have a close-fitting automatic drop seal fitted after confirming owners corporation approval and that it is compatible with any fire-rated door or required ventilation.";
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(doorTurn, trajectoryObservation(doorTurn.id, {
+    visibleAnswer: observedDoorAnswer,
+    directAnswer: observedDoorAnswer,
+    assistant: observedDoorAnswer,
+  }), "paid"), []);
+
+  const genericDoorSnake = "Use a door snake to reduce draughts.";
+  assert.ok(evaluateSurgeTrajectoryTurn(doorTurn, trajectoryObservation(doorTurn.id, {
+    visibleAnswer: genericDoorSnake,
+    directAnswer: genericDoorSnake,
+    assistant: genericDoorSnake,
+  }), "paid").includes("clause:front-door-focus"));
+
   const amnesiac = "Heat loss can come from windows, ceiling insulation and heating settings. Check curtains and the thermostat.";
   assert.ok(evaluateSurgeTrajectoryTurn(warmthTurn, trajectoryObservation(warmthTurn.id, {
     visibleAnswer: amnesiac,
@@ -702,6 +716,33 @@ test("paid-run scorer variants accept equivalent advice without accepting the op
   }
 });
 
+test("durability correct-subject accepts after-waking bedroom context without crossing properties", async () => {
+  const { fixture } = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-durability-20.json",
+  );
+  const turn = fixture.turns.find((item) => item.id === "c10t03");
+  const answer = "First, check the room before opening windows or wiping anything, ideally after waking. Note whether water is only on the glass or also on frames, walls, ceiling or behind furniture. Moisture mainly on cold glass points to indoor humidity and a cold surface. Persistent damp elsewhere may indicate a leak or another moisture source.";
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+    visibleAnswer: answer,
+    directAnswer: answer,
+    assistant: answer,
+  }), "paid"), []);
+
+  const wrongSubject = "Check your room after waking and measure the humidity near the cold window.";
+  assert.ok(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+    visibleAnswer: wrongSubject,
+    directAnswer: wrongSubject,
+    assistant: wrongSubject,
+  }), "paid").includes("clause:correct-subject"));
+
+  const crossedProperty = "At your saved 3072 apartment, check the room after waking and measure humidity near the cold glass.";
+  assert.ok(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+    visibleAnswer: crossedProperty,
+    directAnswer: crossedProperty,
+    assistant: crossedProperty,
+  }), "paid").some((failure) => failure.startsWith("forbidden:")));
+});
+
 test("durability list explainers allow five intentional blocks but still reject a sixth", async () => {
   const loaded = await loadSurgeConversationTrajectoryFixture(
     "test/fixtures/surge-conversation-durability-20.json",
@@ -884,10 +925,12 @@ test("durability moisture priority accepts observed imperative first steps but r
     c20t01: [
       earlierObservedFirstStep,
       "Check that the bathroom fan removes air outside and use it whenever moisture is produced; investigate persistent damp or mould before tightening the apartment.",
+      "Check and control the moisture source first. Use the bathroom exhaust fan, confirm it works properly and keep required ventilation open.",
     ],
     c20t04: [
       earlierObservedFirstStep,
       "Control condensation, damp and mould first by using the bathroom exhaust fan and fixing any leak or persistent mould source. This protects indoor air and avoids trapping moisture.",
+      "Check and control the moisture source first. Use the bathroom exhaust fan, confirm it works properly and keep required ventilation open.",
     ],
   };
   const doorFirstStep = "Start with the front-door draught, then check recurring condensation, damp and mould.";
@@ -898,8 +941,14 @@ test("durability moisture priority accepts observed imperative first steps but r
       "Check that the bathroom fan removes air outside; you cannot investigate persistent damp before tightening the apartment.",
       "Check that the bathroom fan removes air outside; you can't investigate persistent damp before tightening the apartment.",
       "Check that the bathroom fan removes air outside; investigate persistent damp, but not before tightening the apartment.",
+      "Check and control the moisture source, but not first; seal the front-door draught first.",
+      "Check and don't control the moisture source first; seal the front-door draught first.",
     ],
-    c20t04: ["Control condensation, but not first by using the bathroom exhaust fan; seal the front-door draught first."],
+    c20t04: [
+      "Control condensation, but not first by using the bathroom exhaust fan; seal the front-door draught first.",
+      "Check and control the moisture source, but not first; seal the front-door draught first.",
+      "Check and don't control the moisture source first; seal the front-door draught first.",
+    ],
   };
 
   for (const turnId of ["c20t01", "c20t04"]) {
@@ -1431,6 +1480,7 @@ test("long-range recall asserts structured practical steps rather than rendered 
     "Check recurring condensation, damp and mould… Address this before tightening the apartment.",
     "Check that the bathroom fan removes air outside and use it whenever moisture is produced; investigate persistent damp or mould before tightening the apartment.",
     "Control condensation, damp and mould first by using the bathroom exhaust fan and fixing any leak or persistent mould source. This protects indoor air and avoids trapping moisture.",
+    "Check and control the moisture source first. Use the bathroom exhaust fan, confirm it works properly and keep required ventilation open.",
   ];
   const negatedNaturalFirstSteps = [
     "Check that the bathroom fan removes air outside; do not investigate persistent damp before tightening the apartment.",
@@ -1439,6 +1489,8 @@ test("long-range recall asserts structured practical steps rather than rendered 
     "Check that the bathroom fan removes air outside; you can't investigate persistent damp before tightening the apartment.",
     "Check that the bathroom fan removes air outside; investigate persistent damp, but not before tightening the apartment.",
     "Control condensation, but not first by using the bathroom exhaust fan.",
+    "Check and control the moisture source, but not first; seal the front-door draught first.",
+    "Check and don't control the moisture source first; seal the front-door draught first.",
   ];
   for (const clause of [initialMoisturePriorityClause, moisturePriorityClause]) {
     for (const firstStep of acceptedNaturalFirstSteps) {
