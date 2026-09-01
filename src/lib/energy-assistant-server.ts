@@ -166,7 +166,7 @@ export type ServerDependencies = {
 };
 
 const SURGE_MODEL_ADMISSION_MAX_ATTEMPTS = 3;
-const SURGE_MODEL_ADMISSION_RETRY_DEADLINE_MS = 400;
+const SURGE_MODEL_ADMISSION_RETRY_DEADLINE_MS = 1_500;
 const SURGE_MODEL_ADMISSION_RETRY_DELAYS_MS = [40, 100] as const;
 
 function surgeModelAdmissionMayRetry(reason: string | undefined) {

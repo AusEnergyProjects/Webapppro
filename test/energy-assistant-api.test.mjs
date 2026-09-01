@@ -4036,7 +4036,7 @@ test("policy admission denials never retry or reach the paid model", async (t) =
   }
 });
 
-test("a 650 ms reservation is cut off at 400 ms and any late lease is released", async (t) => {
+test("a 650 ms reservation completes within the 1500 ms deadline and reaches the model", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
   let admissionCalls = 0;
   let modelCalls = 0;
@@ -4062,6 +4062,56 @@ test("a 650 ms reservation is cut off at 400 ms and any late lease is released",
     },
     generateAnswer: async () => {
       modelCalls += 1;
+      return {
+        answer: fixedAnswer("Inspect accessible ceiling insulation for missing, compressed or damp sections before deciding how much to add."),
+        continuation: continuation({ activeTopic: "insulation" }),
+      };
+    },
+    requireValidatedModelForOrdinaryAdvice: true,
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(admissionCalls, 1);
+  t.mock.timers.tick(649);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(modelCalls, 0);
+  assert.equal(releases, 0);
+  t.mock.timers.tick(1);
+  const response = await responsePromise;
+
+  assert.equal(response.status, 200);
+  assert.equal(Date.now(), 650);
+  assert.equal(admissionCalls, 1);
+  assert.equal(modelCalls, 1);
+  assert.equal(releases, 1);
+});
+
+test("a 1750 ms reservation is cut off at 1500 ms and any late lease is released", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  let admissionCalls = 0;
+  let modelCalls = 0;
+  let releases = 0;
+  const responsePromise = handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "slow-admission-deadline-0002",
+    message: "How should I improve my ceiling insulation?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("Deterministic advice must not be exposed in strict mode."),
+    reserveModelCall: async () => {
+      admissionCalls += 1;
+      return new Promise((resolve) => {
+        setTimeout(() => resolve({
+          allowed: true,
+          release: async () => { releases += 1; },
+        }), 1_750);
+      });
+    },
+    generateAnswer: async () => {
+      modelCalls += 1;
       return null;
     },
     requireValidatedModelForOrdinaryAdvice: true,
@@ -4069,7 +4119,7 @@ test("a 650 ms reservation is cut off at 400 ms and any late lease is released",
 
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(admissionCalls, 1);
-  t.mock.timers.tick(399);
+  t.mock.timers.tick(1_499);
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(modelCalls, 0);
   assert.equal(releases, 0);
@@ -4077,7 +4127,7 @@ test("a 650 ms reservation is cut off at 400 ms and any late lease is released",
   const response = await responsePromise;
 
   assert.equal(response.status, 503);
-  assert.equal(Date.now(), 400);
+  assert.equal(Date.now(), 1_500);
   assert.equal(admissionCalls, 1);
   assert.equal(modelCalls, 0);
   assert.equal(releases, 0);
@@ -4086,7 +4136,7 @@ test("a 650 ms reservation is cut off at 400 ms and any late lease is released",
   assert.equal(releases, 1);
 });
 
-test("a never-settling reservation returns at the 400 ms admission deadline", async (t) => {
+test("a never-settling reservation returns at the 1500 ms admission deadline", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
   let admissionCalls = 0;
   let modelCalls = 0;
@@ -4113,11 +4163,11 @@ test("a never-settling reservation returns at the 400 ms admission deadline", as
 
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(admissionCalls, 1);
-  t.mock.timers.tick(400);
+  t.mock.timers.tick(1_500);
   const response = await responsePromise;
 
   assert.equal(response.status, 503);
-  assert.equal(Date.now(), 400);
+  assert.equal(Date.now(), 1_500);
   assert.equal(admissionCalls, 1);
   assert.equal(modelCalls, 0);
 });

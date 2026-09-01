@@ -1567,6 +1567,202 @@ test("mixed STC and VEEC recovery repairs eligibility-only drift into value chec
   assert.deepEqual(failures, []);
 });
 
+test("mixed certificate recovery accepts an explicitly dated maintained STC snapshot without presenting it as live", async () => {
+  const sourceUrl = "https://cer.gov.au/markets/reports-and-data/quarterly-carbon-market-reports/quarterly-carbon-market-report-june-quarter-2026";
+  const maintainedCitation = {
+    id: "cer-stc-market-report-june-2026",
+    title: "Quarterly Carbon Market Report, June quarter 2026",
+    publisher: "Clean Energy Regulator",
+    url: sourceUrl,
+    sourceTier: "primary_official",
+    jurisdiction: "Australia",
+    effectiveFrom: "2026-08-28",
+    effectiveTo: null,
+    lastChecked: "2026-09-01",
+    reviewDue: "2026-10-01",
+    storagePolicy: "local_factual_summary",
+    stale: false,
+  };
+  const exactPaidCandidate = "Today’s live STC and VEEC market values could not be verified just now. The latest reviewed official STC snapshot was $39.85 per certificate on 14 August 2026. For both schemes, compare the certificate quantity, unit value, administration fees and net credit shown on the quote. Check STCs through the Small-scale Renewable Energy Scheme and VEECs through Victorian Energy Upgrades.";
+  const calls = [];
+  const failures = [];
+  const rejections = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "What are STCs and VEECs worth today?",
+    asOf: new Date("2026-09-01T02:00:00.000Z"),
+    deterministicAnswer: {
+      ...deterministicAnswer("Use dated official STC and VEEC market references, then reconcile gross values against the net quote credit."),
+      citations: [maintainedCitation],
+    },
+    officialWebSearch: {
+      kind: "certificate",
+      jurisdiction: "Victoria",
+      allowedDomains: ["cer.gov.au", "energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      const body = JSON.parse(options.body);
+      calls.push(body);
+      if (calls.length === 1) throw new DOMException("Timed out", "AbortError");
+      const context = JSON.parse(body.input[1].content[0].text);
+      const maintainedSource = context.maintainedEvidence.find((source) => (
+        source.summary.includes("$39.85")
+      ));
+      assert.ok(maintainedSource);
+      return jsonResponse(modelPayload({
+        answer: exactPaidCandidate,
+        usedSourceIds: [maintainedSource.id],
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+    syntheticEvaluation: {
+      onRejectedCandidate: (diagnostic) => rejections.push(diagnostic),
+    },
+  });
+
+  assert.ok(result, JSON.stringify({ failures, rejections }));
+  assert.equal(calls.length, 2);
+  assert.equal(result.officialEvidenceMode, "maintained_recovery");
+  assert.equal(result.answer.directAnswer, exactPaidCandidate);
+  assert.deepEqual(result.answer.citations, [maintainedCitation]);
+  assert.deepEqual(rejections, []);
+  assert.deepEqual(failures, []);
+});
+
+test("maintained certificate recovery strips an unselected snapshot or any attempt to present it as live", async (t) => {
+  const sourceUrl = "https://cer.gov.au/markets/reports-and-data/quarterly-carbon-market-reports/quarterly-carbon-market-report-june-quarter-2026";
+  const maintainedCitation = {
+    id: "cer-stc-market-report-june-2026",
+    title: "Quarterly Carbon Market Report, June quarter 2026",
+    publisher: "Clean Energy Regulator",
+    url: sourceUrl,
+    sourceTier: "primary_official",
+    jurisdiction: "Australia",
+    effectiveFrom: "2026-08-28",
+    effectiveTo: null,
+    lastChecked: "2026-09-01",
+    reviewDue: "2026-10-01",
+    storagePolicy: "local_factual_summary",
+    stale: false,
+  };
+  const cases = [
+    {
+      name: "the matching maintained alias was not selected",
+      answer: "Today’s live STC and VEEC market values could not be verified just now. The latest reviewed official STC snapshot was $39.85 per certificate on 14 August 2026. For both schemes, compare the certificate quantity, unit value, administration fees and net credit shown on the quote. Check STCs through the Small-scale Renewable Energy Scheme and VEECs through Victorian Energy Upgrades.",
+      selectAlias: false,
+    },
+    {
+      name: "a dated snapshot was promoted to a live value",
+      answer: "Today’s live STC and VEEC market values could not be verified just now. The current live STC value is $39.85 as of 14 August 2026. For both schemes, compare the certificate quantity, unit value, administration fees and net credit shown on the quote. Check STCs through the Small-scale Renewable Energy Scheme and VEECs through Victorian Energy Upgrades.",
+      selectAlias: true,
+    },
+    {
+      name: "a report publication date was cross-paired with a value from another evidence sentence",
+      answer: "Today’s live STC and VEEC market values could not be verified just now. The latest reviewed official STC snapshot was $39.85 per certificate on 28 August 2026. For both schemes, compare the certificate quantity, unit value, administration fees and net credit shown on the quote. Check STCs through the Small-scale Renewable Energy Scheme and VEECs through Victorian Energy Upgrades.",
+      selectAlias: true,
+    },
+  ];
+
+  for (const scenario of cases) {
+    await t.test(scenario.name, async () => {
+      let calls = 0;
+      const failures = [];
+      const result = await generateSurgeModelAnswer(request({
+        message: "What are STCs and VEECs worth today?",
+        asOf: new Date("2026-09-01T02:00:00.000Z"),
+        deterministicAnswer: {
+          ...deterministicAnswer("Use dated official STC and VEEC market references, then reconcile gross values against the net quote credit."),
+          citations: [maintainedCitation],
+        },
+        officialWebSearch: {
+          kind: "certificate",
+          jurisdiction: "Victoria",
+          allowedDomains: ["cer.gov.au", "energy.vic.gov.au"],
+        },
+      }), {
+        apiKey: "test-api-key",
+        fetch: async (_url, options) => {
+          calls += 1;
+          if (calls === 1) throw new DOMException("Timed out", "AbortError");
+          const body = JSON.parse(options.body);
+          const context = JSON.parse(body.input[1].content[0].text);
+          const maintainedSource = context.maintainedEvidence.find((source) => (
+            source.summary.includes("$39.85")
+          ));
+          assert.ok(maintainedSource);
+          return jsonResponse(modelPayload({
+            answer: scenario.answer,
+            usedSourceIds: scenario.selectAlias ? [maintainedSource.id] : [],
+          }));
+        },
+        onFailure: (failure) => failures.push(failure),
+      });
+
+      assert.ok(result, JSON.stringify(failures));
+      assert.doesNotMatch(result.answer.directAnswer, /\$39\.85|current live STC value/i);
+      assert.match(result.answer.directAnswer, /could not be verified just now/i);
+      assert.deepEqual(failures, []);
+    });
+  }
+});
+
+test("a maintained evidence alias cannot restore an unapproved URL or title", async () => {
+  const unsafeCitation = {
+    id: "cer-stc-market-report-june-2026",
+    title: "Invented instant certificate price page",
+    publisher: "Not the regulator",
+    url: "https://cer.gov.au.example.com/instant-price",
+    sourceTier: "primary_official",
+    jurisdiction: "Australia",
+    effectiveFrom: "2026-08-28",
+    effectiveTo: null,
+    lastChecked: "2026-09-01",
+    reviewDue: "2026-10-01",
+    storagePolicy: "local_factual_summary",
+    stale: false,
+  };
+  const recoveryAnswer = "Today’s live STC and VEEC market values could not be verified just now. For both schemes, compare the certificate quantity, unit value, administration fees and net credit shown on the quote. Check STCs through the Small-scale Renewable Energy Scheme and VEECs through Victorian Energy Upgrades.";
+  let calls = 0;
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "What are STCs and VEECs worth today?",
+    asOf: new Date("2026-09-01T02:00:00.000Z"),
+    deterministicAnswer: {
+      ...deterministicAnswer("Use dated official STC and VEEC market references, then reconcile gross values against the net quote credit."),
+      citations: [unsafeCitation],
+    },
+    officialWebSearch: {
+      kind: "certificate",
+      jurisdiction: "Victoria",
+      allowedDomains: ["cer.gov.au", "energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls += 1;
+      if (calls === 1) throw new DOMException("Timed out", "AbortError");
+      const body = JSON.parse(options.body);
+      const context = JSON.parse(body.input[1].content[0].text);
+      const maintainedSource = context.maintainedEvidence.find((source) => (
+        source.summary.includes("$39.85")
+      ));
+      assert.ok(maintainedSource);
+      return jsonResponse(modelPayload({
+        answer: recoveryAnswer,
+        usedSourceIds: [maintainedSource.id],
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls, 2);
+  assert.deepEqual(result.answer.citations, []);
+  assert.doesNotMatch(JSON.stringify(result), /cer\.gov\.au\.example\.com|Invented instant certificate price page/i);
+  assert.deepEqual(failures, []);
+});
+
 test("official citation markers after decimal prices retain the complete cited sentence", async () => {
   const stcUrl = "https://cer.gov.au/markets/reports-and-data/quarterly-carbon-market-reports/quarterly-carbon-market-report-march-quarter-2026/small-scale-renewable-energy-scheme";
   const veecUrl = "https://www.energy.vic.gov.au/victorian-energy-upgrades/installers/industry-market-update-work-program";

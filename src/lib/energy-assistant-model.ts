@@ -594,6 +594,12 @@ type ValidatedOfficialWebEvidence = {
   citedClaimText: string;
 };
 
+type MaintainedRecoveryEvidence = {
+  id: string;
+  reviewedAt: string;
+  summary: string;
+};
+
 type CitedCertificateKind = "stc" | "veec" | "esc" | "prc";
 
 function jsonStringStartBefore(value: string, beforeIndex: number) {
@@ -869,9 +875,13 @@ function mixedCertificateRecoveryCoveragePassed(
     && /\bVEECs?\b/i.test(clause)
     && usefulValueCheck(clause)
   ));
+  const anaphoricSharedValueCheck = clauses.some((clause) => (
+    /\bboth\s+(?:certificates?|schemes?|markets?|values?)\b/i.test(clause)
+    && usefulValueCheck(clause)
+  ));
   return mentionsStc
     && mentionsVeec
-    && (sharedValueCheck || (stcValueCheck && veecValueCheck));
+    && (sharedValueCheck || anaphoricSharedValueCheck || (stcValueCheck && veecValueCheck));
 }
 
 function officialLookupRecoveryUsefulnessPassed(
@@ -885,11 +895,77 @@ function officialLookupRecoveryUsefulnessPassed(
     && mixedCertificateRecoveryCoveragePassed(answer, request);
 }
 
-function stripUnverifiedOfficialClaims(value: string) {
+function normalizedMaintainedAmount(value: string) {
+  const amount = Number(value.replace(/[$,\s]/g, ""));
+  return Number.isFinite(amount) ? amount.toFixed(4) : "";
+}
+
+function sentenceMakesDatedCertificateSnapshotClaim(value: string) {
+  return /\b(?:STCs?|VEECs?|ESCs?|PRCs?)\b/i.test(value)
+    && /\$\s*[\d,]+(?:\.\d+)?/i.test(value)
+    && /\b(?:\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}|\d{4}-\d{2}-\d{2})\b/i.test(value)
+    && /\b(?:dated|report(?:s|ed)?|reviewed|snapshot|values?|prices?)\b/i.test(value);
+}
+
+function maintainedEvidenceSupportsDatedCertificateSnapshot(
+  claim: string,
+  evidence: MaintainedRecoveryEvidence[],
+) {
+  if (!/\b(?:STCs?|VEECs?|ESCs?|PRCs?)\b/i.test(claim)) return false;
+  if (!/\b(?:dated|report(?:ed)?|reviewed|snapshot)\b/i.test(claim)) return false;
+  if (/\b(?:current(?:ly)?|today(?:['’]s)?|live|right now|as of)\b/i.test(claim)) return false;
+  const amounts = [...claim.matchAll(/\$\s*[\d,]+(?:\.\d+)?/g)]
+    .map((match) => normalizedMaintainedAmount(match[0]))
+    .filter(Boolean);
+  const dates = [...claim.matchAll(/\b(?:\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}|\d{4}-\d{2}-\d{2})\b/gi)]
+    .map((match) => normalizedReply(match[0]));
+  if (!amounts.length || !dates.length) return false;
+  const claimKinds = citedCertificateKinds(claim);
+  return evidence.some((source) => source.summary
+    .split(/\n+|(?<=[.!?])\s+/u)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+    .some((sentence) => {
+      if (!/\b(?:snapshot|report(?:s|ed)?|reviewed|values?|prices?)\b/i.test(sentence)) {
+        return false;
+      }
+      const sentenceAmounts = new Set(
+        [...sentence.matchAll(/\$\s*[\d,]+(?:\.\d+)?/g)]
+          .map((match) => normalizedMaintainedAmount(match[0]))
+          .filter(Boolean),
+      );
+      const normalizedSentence = normalizedReply(sentence);
+      const sentenceKinds = citedCertificateKinds(sentence);
+      return amounts.every((amount) => sentenceAmounts.has(amount))
+        && dates.every((date) => normalizedSentence.includes(date))
+        && [...claimKinds].every((kind) => sentenceKinds.has(kind));
+    }));
+}
+
+function maintainedRecoveryCurrentClaimsAreSupported(
+  answer: string,
+  evidence: MaintainedRecoveryEvidence[],
+) {
+  return answerCoverageClauses(answer)
+    .filter((claim) => (
+      sentenceMakesExternallyVerifiableCurrentClaim(claim)
+      || sentenceMakesDatedCertificateSnapshotClaim(claim)
+    ))
+    .every((claim) => maintainedEvidenceSupportsDatedCertificateSnapshot(claim, evidence));
+}
+
+function stripUnverifiedOfficialClaims(
+  value: string,
+  evidence: MaintainedRecoveryEvidence[] = [],
+) {
   return value
     .split(/\n+|(?<=[.!?])\s+/u)
     .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence && !sentenceMakesExternallyVerifiableCurrentClaim(sentence))
+    .filter((sentence) => sentence && (
+      (!sentenceMakesExternallyVerifiableCurrentClaim(sentence)
+        && !sentenceMakesDatedCertificateSnapshotClaim(sentence))
+      || maintainedEvidenceSupportsDatedCertificateSnapshot(sentence, evidence)
+    ))
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
@@ -898,17 +974,18 @@ function stripUnverifiedOfficialClaims(value: string) {
 function sanitizeOfficialRecoveryPresentation(
   presentation: SurgeAnswerPresentation,
   request: SurgeModelRequest,
+  evidence: MaintainedRecoveryEvidence[] = [],
 ) {
   if (!request.officialWebLookupUnavailable) return presentation;
   return normalizeSurgeAnswerPresentation({
     ...presentation,
-    verdict: stripUnverifiedOfficialClaims(presentation.verdict),
-    reason: stripUnverifiedOfficialClaims(presentation.reason),
+    verdict: stripUnverifiedOfficialClaims(presentation.verdict, evidence),
+    reason: stripUnverifiedOfficialClaims(presentation.reason, evidence),
     steps: presentation.steps
-      .map(stripUnverifiedOfficialClaims)
+      .map((step) => stripUnverifiedOfficialClaims(step, evidence))
       .filter(Boolean),
-    extraDetail: stripUnverifiedOfficialClaims(presentation.extraDetail),
-    followUpQuestion: stripUnverifiedOfficialClaims(presentation.followUpQuestion),
+    extraDetail: stripUnverifiedOfficialClaims(presentation.extraDetail, evidence),
+    followUpQuestion: stripUnverifiedOfficialClaims(presentation.followUpQuestion, evidence),
     quickReplies: [],
   });
 }
@@ -1345,6 +1422,7 @@ const OFFICIAL_WEB_UNAVAILABLE_INSTRUCTIONS = `
 Live official-source lookup recovery for this request:
 - The application already attempted the required official lookup, but the live lookup did not complete. Do not retry it and do not guess a current value, availability, eligibility rule, programme status or date.
 - Still give a specific useful answer as Surge AI. Start by saying which current fact could not be verified just now. Then identify the relevant official programme or check only when maintainedEvidence or deterministicReference supports it, and name the exact product, applicant, installation or quote details the customer should verify there.
+- A dated certificate value may be used only when maintainedEvidence contains that exact value and date. Call it a reviewed dated snapshot, never today's, current or live value, and include that evidence alias in usedSourceIds.
 - If the question asks for both current STC and VEEC values, address both certificates. Give a value-checking path for each, or one clearly shared check covering both certificate quantities, unit values, fees and net quote credits. Do not drift into VEEC eligibility alone.
 - Use no externally verifiable current claim. Keep conditional wording conditional, and never turn a known programme category into a claim that this customer currently qualifies.
 - Include the relevant maintainedEvidence aliases in usedSourceIds. The application will attach only reviewed public official links.
@@ -1427,7 +1505,7 @@ function modelRepairInstructions(
     && request.officialWebLookupUnavailable
     && asksForMixedCurrentStcAndVeecValues(request)) {
     return `${MODEL_REPAIR_INSTRUCTIONS}
-- Mixed-certificate recovery repair: address both STCs and VEECs, with a useful current-value checking path for each or one shared quote check covering both certificate quantities, assumed unit values, fees and net credits. Do not substitute VEEC eligibility guidance for the unanswered STC value.`;
+- Mixed-certificate recovery repair: address both STCs and VEECs, with a useful current-value checking path for each or one shared quote check covering both certificate quantities, assumed unit values, fees and net credits. A maintained certificate value is allowed only as an explicitly dated reviewed snapshot, never as today's, current or live value, and only with its evidence alias in usedSourceIds. Do not substitute VEEC eligibility guidance for the unanswered STC value.`;
   }
   if (stage === "answer_too_long" && request && isPricedMultiOptionComparisonRequest(request.message)) {
     return `${MODEL_REPAIR_INSTRUCTIONS}
@@ -4348,6 +4426,22 @@ export async function generateSurgeModelAnswer(
       return retryInvalidProviderOutput("response_output_object");
     }
     const record = parsed as Record<string, unknown>;
+    const declaredUsedSourceIds = new Set(
+      Array.isArray(record.usedSourceIds)
+        ? record.usedSourceIds.filter((id): id is string => typeof id === "string")
+        : [],
+    );
+    const selectedMaintainedRecoveryEvidence = prepared.context.payload.maintainedEvidence
+      .filter((source) => {
+        if (!declaredUsedSourceIds.has(source.id)) return false;
+        const citation = prepared.context.maintainedCitationByAlias.get(source.id);
+        return Boolean(
+          citation
+          && sanitizeSurgeCustomerOfficialCitation(citation)
+          && (!request.officialWebSearch
+            || surgeOfficialUrlIsAllowed(citation.url, request.officialWebSearch.allowedDomains)),
+        );
+      });
     const visibleFieldsFitCharacterLimits = modelVisibleFieldsFitCharacterLimits(
       record,
       Boolean(officialWebEvidence),
@@ -4424,7 +4518,7 @@ export async function generateSurgeModelAnswer(
       ...basePresentation,
       followUpQuestion: followUp,
       quickReplies: [],
-    }), request);
+    }), request, selectedMaintainedRecoveryEvidence);
     const confidence = record.confidence === "high" || record.confidence === "medium"
       ? record.confidence
       : "low";
@@ -4477,7 +4571,10 @@ export async function generateSurgeModelAnswer(
           officialWebEvidence.citedClaimText,
         )
         : !request.officialWebLookupUnavailable
-          || !sentenceMakesExternallyVerifiableCurrentClaim(candidateAnswerText);
+          || maintainedRecoveryCurrentClaimsAreSupported(
+            candidateAnswerText,
+            selectedMaintainedRecoveryEvidence,
+          );
       const officialRecoveryDisclosureIsPresent = officialLookupRecoveryDisclosurePassed(
         candidateAnswerText,
         request,
@@ -4613,7 +4710,12 @@ export async function generateSurgeModelAnswer(
     }
     const selectedMaintainedCitations = (record.usedSourceIds as string[]).flatMap((id) => {
       const citation = prepared.context.maintainedCitationByAlias.get(id);
-      return citation ? [citation] : [];
+      return citation
+        && sanitizeSurgeCustomerOfficialCitation(citation)
+        && (!request.officialWebSearch
+          || surgeOfficialUrlIsAllowed(citation.url, request.officialWebSearch.allowedDomains))
+        ? [citation]
+        : [];
     });
     const recoveryOfficialCitations = request.officialWebLookupUnavailable
       ? request.deterministicAnswer.citations.filter((citation, index) => (
