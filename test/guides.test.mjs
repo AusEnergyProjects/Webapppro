@@ -15,6 +15,7 @@ const hotWater = read("../src/app/guides/hot-water/page.tsx");
 const insulation = read("../src/app/guides/insulation-draught-proofing/page.tsx");
 const cooking = read("../src/app/guides/cooking/page.tsx");
 const evCharging = read("../src/app/guides/ev-charging/page.tsx");
+const homeUpgrades = read("../src/app/guides/home-energy-upgrades/page.tsx");
 const start = read("../src/components/GettingStarted.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
 const rebates = read("../src/components/RebatesHub.tsx");
@@ -95,10 +96,17 @@ test("insulation guidance covers building fabric, ventilation and safety boundar
   assert.match(insulation, /Your Home ventilation and airtightness/);
 });
 
+test("home upgrade guidance puts the scope before incentives", () => {
+  assert.match(homeUpgrades, /rebates and finance after the scope is clear/i);
+  assert.match(homeUpgrades, /Do not assume two incentives can be combined/);
+  assert.match(homeUpgrades, /Household Energy Upgrades Fund/);
+  assert.match(homeUpgrades, /href: "\/rebates"/);
+});
+
 test("heating and hot water copy avoids prohibited dash characters", () => {
   assert.doesNotMatch(`${heating}${hotWater}${insulation}`, /\u2013|\u2014/);
 });
 
 test("guide copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(`${overview}${solar}${batteries}${cooking}${evCharging}`, /[–—]/);
+  assert.doesNotMatch(`${overview}${solar}${batteries}${cooking}${evCharging}${homeUpgrades}`, /[–—]/);
 });

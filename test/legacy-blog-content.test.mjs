@@ -43,10 +43,11 @@ test("reviewed guides publish honest article metadata and source-backed schema",
   for (let index = 0; index < guideRoutes.length; index += 1) {
     const route = guideRoutes[index];
     const source = guideSources[index];
+    const expectedReviewedIso = route === "home-energy-upgrades" ? "2026-09-02" : "2026-09-01";
     assert.match(source, /buildGuideMetadata\(\{/);
     assert.match(source, new RegExp(`path: "\\/guides\\/${route}"`));
     assert.match(source, /publishedIso: "2026-09-01"/);
-    assert.match(source, /reviewedIso: "2026-09-01"/);
+    assert.match(source, new RegExp(`reviewedIso: "${expectedReviewedIso}"`));
     assert.match(guideIndex, new RegExp(`href="\\/guides\\/${route}"`));
     assert.match(sitemap, new RegExp(`"\\/guides\\/${route}"`));
   }

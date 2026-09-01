@@ -35,17 +35,6 @@ const readyRetirement = (sourcePath) => ({
   note: "Return HTTP 404 because the reviewed legacy article has no honest equivalent destination.",
 });
 
-const pending = (sourcePath, status, note) => ({
-  sourcePath,
-  targetPath: null,
-  action: "review",
-  status,
-  canonicalOwner: "unresolved",
-  indexable: null,
-  sitemap: null,
-  note,
-});
-
 export const EXPECTED_APEX_SITEMAP = Object.freeze({
   url: "https://ausenergyassessments.com/sitemap",
   capturedAt: "2026-09-01",
@@ -59,26 +48,26 @@ export const EXPECTED_APEX_SITEMAP = Object.freeze({
 // Every captured blog URL is also listed explicitly as either a direct
 // redirect or a retirement. New, uncaptured URLs remain blocked by default.
 export const APEX_EXACT_ROUTE_CONTRACT = Object.freeze([
-  pending("/", "pending_review", "The apex and parallel homepages need a final content, title and canonical ownership decision."),
+  readyPage("/", "The current homepage keeps the established root URL and canonical ownership."),
   readyPage("/basix-nsw", "Current BASIX service page exists at the same path."),
   readyRedirect("/blog", "/guides", "Replace the legacy article index with the reviewed consumer guide library."),
   readyPage("/book-an-assessment", "Simple five-minute call booking page exists at the same path."),
-  pending("/commercial-and-industrial-assessments", "pending_content", "No equivalent reviewed service page exists yet."),
-  pending("/communities-schools", "pending_content", "No equivalent reviewed audience page exists yet."),
-  pending("/e-learning-resources", "pending_review", "Existing resources require a keep, merge or redirect decision."),
-  pending("/email", "pending_review", "The legacy intent must be confirmed before choosing a destination."),
-  pending("/energyupgradeinformation-2", "pending_review", "The legacy content must be compared with the current guides before mapping it."),
+  readyPage("/commercial-and-industrial-assessments", "Reviewed commercial energy assessment scope exists at the same path."),
+  readyPage("/communities-schools", "Reviewed community and school energy education page exists at the same path."),
+  readyRedirect("/e-learning-resources", "/guides", "Replace the thin third-party resource widget with the reviewed guide library."),
+  readyRedirect("/email", "/book-an-assessment", "The booking page provides the current call, phone and email contact routes with privacy notices."),
+  readyRedirect("/energyupgradeinformation-2", "/guides/home-energy-upgrades", "Consolidate the legacy upgrade and finance copy into the reviewed home upgrade guide."),
   readyPage("/faq", "Current terminology FAQ exists at the same path."),
   readyPage("/home-energy-rating-for-existing-homes", "Current existing-home Home Energy Rating page exists at the same path."),
-  pending("/minimum-rental-standards", "pending_content", "The public information page is not equivalent to the current request workflow."),
+  readyPage("/minimum-rental-standards", "Reviewed Victorian rental minimum energy standards guide exists at the same path."),
   readyPage("/nathers-for-new-homes", "Nationwide plan-based NatHERS service page exists at the same path."),
   readyPage("/nathers-whole-of-home", "Current Whole of Home service page exists at the same path."),
   readyRedirect("/privacy-policy", "/privacy", "Consolidate the legacy privacy URL into the current privacy page."),
-  pending("/referral-program", "pending_content", "No equivalent reviewed referral page exists yet."),
+  readyRetirement("/referral-program"),
   readyPage("/residential-efficiency-scorecard", "Legacy search-term transition page exists at the same path."),
   readyRedirect("/schedule-call", "/book-an-assessment", "Consolidate the legacy call URL into the current booking page."),
-  pending("/team", "pending_content", "Named people and credentials require verified business evidence before publication."),
-  pending("/trusted-suppliers", "pending_review", "Supplier relationships and outbound links require current verification."),
+  readyPage("/team", "The published team roster and business-owned portraits are preserved without invented credentials."),
+  readyPage("/trusted-suppliers", "The same path now provides independent sources and transparent supplier-selection checks without unverified endorsements."),
 ]);
 
 const exactContractByPath = new Map(

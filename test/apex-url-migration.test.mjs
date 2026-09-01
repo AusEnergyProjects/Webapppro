@@ -38,6 +38,10 @@ test("captured apex contract covers all 249 sitemap routes exactly once", () => 
 
 test("ready page destinations exist and redirects remain one hop", () => {
   for (const entry of APEX_EXACT_ROUTE_CONTRACT.filter((route) => route.status === "ready")) {
+    if (entry.action === "retire") {
+      assert.equal(entry.targetPath, null);
+      continue;
+    }
     assert.ok(entry.targetPath, `${entry.sourcePath} must have a target`);
     const segments = entry.targetPath === "/" ? [] : entry.targetPath.slice(1).split("/");
     const pageFile = path.join(root, "src", "app", ...segments, "page.tsx");
@@ -137,19 +141,17 @@ test("uncaptured articles and unknown URLs fail closed", () => {
     "/new-unmapped-route",
   ]);
   const byPath = new Map(inventory.map((entry) => [entry.sourcePath, entry]));
-  assert.equal(byPath.get("/").status, "pending_review");
+  assert.equal(byPath.get("/").status, "ready");
   assert.equal(byPath.get("/faq").status, "ready");
   assert.equal(byPath.get("/blog/example-legacy-article").status, "blocked");
   assert.equal(byPath.get("/blog/example-legacy-article").action, "unmapped");
   assert.equal(byPath.get("/new-unmapped-route").status, "blocked");
-  assert.throws(() => assertApexCutoverReady(inventory), /Apex cutover is blocked by 3 unresolved URLs/);
+  assert.throws(() => assertApexCutoverReady(inventory), /Apex cutover is blocked by 2 unresolved URLs/);
 });
 
-test("the current contract cannot declare cutover ready", () => {
-  assert.throws(
-    () => assertApexCutoverReady(APEX_URL_MIGRATION_CONTRACT),
-    /Apex cutover is blocked by 10 unresolved URLs/,
-  );
+test("the reviewed sitemap contract declares every captured URL ready", () => {
+  assert.equal(assertApexCutoverReady(APEX_URL_MIGRATION_CONTRACT), true);
+  assert.equal(APEX_URL_MIGRATION_CONTRACT.every((entry) => entry.status === "ready"), true);
 });
 
 test("redirects are direct, path-only and never blanket homepage redirects", () => {

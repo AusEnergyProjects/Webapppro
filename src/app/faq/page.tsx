@@ -3,7 +3,7 @@ import Link from "next/link";
 import { JsonLd } from "@/components/JsonLd";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 import { PUBLIC_SITE } from "@/lib/public-site";
-import styles from "./faq.module.css";
+import styles from "@/components/FaqAccordion.module.css";
 
 const canonical = `${PUBLIC_SITE.apexUrl}/faq`;
 const title = "Home Energy Assessment FAQ | NatHERS and Ratings";

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativePath), "utf8");
 const faq = read("../src/app/faq/page.tsx");
-const faqStyles = read("../src/app/faq/faq.module.css");
+const faqStyles = read("../src/components/FaqAccordion.module.css");
 const serviceTemplate = read("../src/components/AssessmentServicePage.tsx");
 
 test("FAQ publishes a curated visible answer set with matching schema data", () => {

@@ -4,7 +4,7 @@ import { buildGuideMetadata } from "@/lib/public-site";
 const title = "Home Energy Upgrades: What to Improve First";
 const description = "A practical order for improving comfort and energy performance without assuming every Australian home needs the same products.";
 
-export const metadata = buildGuideMetadata({ path: "/guides/home-energy-upgrades", title, description, publishedIso: "2026-09-01", reviewedIso: "2026-09-01" });
+export const metadata = buildGuideMetadata({ path: "/guides/home-energy-upgrades", title, description, publishedIso: "2026-09-01", reviewedIso: "2026-09-02" });
 
 export default function HomeEnergyUpgradesGuidePage() {
   return <AuthoritativeGuidePage
@@ -14,7 +14,7 @@ export default function HomeEnergyUpgradesGuidePage() {
     description={description}
     introduction="There is no universal top-five list. The best order depends on the home's safety, moisture, climate, building fabric, current equipment, energy use and budget. Start with the problem you are trying to solve."
     publishedIso="2026-09-01"
-    reviewedIso="2026-09-01"
+    reviewedIso="2026-09-02"
     topics={["Home energy upgrades", "Energy efficiency", "Comfort", "Electrification", "Solar and batteries"]}
     sections={[
       {
@@ -54,12 +54,31 @@ export default function HomeEnergyUpgradesGuidePage() {
         ],
         note: { title: "Savings are indicative", text: "Bills, prices, weather and household behaviour change. A rating or model supports a decision but cannot guarantee a bill reduction, payback period or property-value increase." },
       },
+      {
+        eyebrow: "Step 5",
+        title: "Check rebates and finance after the scope is clear",
+        paragraphs: [
+          "A discount or lower-rate loan can help with a suitable project, but it does not make the wrong product, size or installation good value. Start with the work the home needs, then check the current support for that exact scope.",
+          "Program amounts, approved products, provider rules and lender criteria change. Confirm them with the program owner or lender before signing a quote or finance contract.",
+        ],
+        items: [
+          "Check eligibility on the current official program page.",
+          "Confirm the exact product and provider meet the program rules.",
+          "Ask for the discount, fees and customer contribution in writing.",
+          "Do not assume two incentives can be combined unless both programs allow it.",
+          "Compare the full repayment and ownership terms of any finance, not just the advertised rate.",
+        ],
+        note: { title: "A rating is not universal finance approval", text: "Some lenders use home energy ratings or other sustainability evidence, but their thresholds and accepted documents differ. Check the current product criteria with the lender." },
+      },
     ]}
     sources={[
       { label: "Australian Government household energy guidance", href: "https://www.energy.gov.au/households" },
       { label: "Your Home renovation guidance", href: "https://www.yourhome.gov.au/buy-build-renovate/renovations-and-additions" },
       { label: "Understanding an existing-home certificate", href: "https://www.homeenergyrating.gov.au/households/existing-homes/understanding-your-certificate" },
+      { label: "Household Energy Upgrades Fund", href: "https://www.cefc.com.au/where-we-invest/special-investment-programs/household-energy-upgrades-fund/" },
+      { label: "Victorian Energy Upgrades products", href: "https://www.energy.vic.gov.au/victorian-energy-upgrades/products" },
+      { label: "NSW Home Energy Saver", href: "https://www.energy.nsw.gov.au/households/grants-rebates/home-energy-saver" },
     ]}
-    cta={{ title: "Turn the list into a home-specific order", text: "Build a private roadmap from the home's current problems, equipment and goals.", href: "/plan", label: "Build my energy plan" }}
+    cta={{ title: "Check current support for the right project", text: "Choose your state or territory and verify current rebates, certificates, loans and provider discounts before using them in a budget.", href: "/rebates", label: "Check rebates and assistance" }}
   />;
 }

@@ -14,7 +14,7 @@ const homepageSchema = {
       "@type": "WebPage",
       "@id": `${PUBLIC_SITE.platformUrl}/#webpage`,
       url: `${PUBLIC_SITE.platformUrl}/`,
-      name: "Home Energy Assessments and NatHERS",
+      name: "Australian Energy Assessments | Home Energy Assessments and NatHERS",
       description: "Independent home energy assessment guidance, NatHERS services, planning tools, rebates and energy comparison for Australian homes.",
       inLanguage: "en-AU",
       isPartOf: { "@id": PUBLIC_SITE.platformWebsiteId },

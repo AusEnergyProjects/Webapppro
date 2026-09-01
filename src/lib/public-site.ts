@@ -100,6 +100,44 @@ export const publicOrganizationSchema = {
   ],
 } as const;
 
+export function buildApexMetadata({
+  path,
+  title,
+  description,
+}: {
+  path: `/${string}` | "/";
+  title: string;
+  description: string;
+}): Metadata {
+  const canonical = new URL(path, `${APEX_ORIGIN}/`).toString();
+
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      title,
+      description,
+      url: canonical,
+      type: "website",
+      siteName: PUBLIC_SITE.name,
+      locale: "en_AU",
+      images: [{
+        url: `${PLATFORM_ORIGIN}/aea-home-energy-plan-og-v2.png`,
+        width: 1731,
+        height: 909,
+        alt: "Australian Energy Assessments home energy services and guidance",
+      }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [`${PLATFORM_ORIGIN}/aea-home-energy-plan-og-v2.png`],
+    },
+  };
+}
+
 export function buildPlatformMetadata({
   path,
   title,
