@@ -103,21 +103,21 @@ export default function HomeEnergyRatingForExistingHomesPage() {
       breadcrumbLabel="Existing-home rating"
       eyebrow="Homes that are already built"
       title="Home Energy Rating for an existing home"
-      introduction="The current on-site assessment for a completed home provides a Home Energy Rating from 0 to 100+, a Star Rating from 0 to 10, estimated annual energy use and upgrade guidance. Australian Energy Assessments primarily delivers these visits in New South Wales and Victoria, with other locations confirmed case by case. Older searches may call this a NatHERS existing-home assessment, home energy audit or Residential Efficiency Scorecard assessment."
+      introduction="Want to know how your existing home performs and what to improve first? An assessor visits the property and gives you two ratings, estimated energy use and practical upgrade guidance. Australian Energy Assessments currently completes most on-site visits in New South Wales and Victoria, with other locations checked when you enquire."
       reviewed="1 September 2026"
       reviewNote="Home Energy Rating launched nationally on 1 July 2026. Older articles and search results may still use Residential Efficiency Scorecard or apply new-home NatHERS terms to existing homes."
-      cardsEyebrow="What the current rating provides"
-      cardsTitle="On-site evidence, two rating scales and upgrade guidance"
+      cardsEyebrow="What you receive"
+      cardsTitle="A visit, two clear ratings and practical next steps"
       cards={cards}
-      processEyebrow="Assess the completed home"
-      processTitle="Turn current-home evidence into practical next steps"
+      processEyebrow="How it works"
+      processTitle="From the home visit to a useful upgrade plan"
       steps={steps}
       sources={sources}
       faqTitle="Existing-home rating questions"
       faqs={faqs}
-      ctaEyebrow="Discuss an existing-home rating"
-      ctaTitle="Explain the home and the decision you need to make"
-      ctaDescription="Start with the suburb and state, why you want the rating and any known access limits or renovations. The assessment team can confirm whether the current Home Energy Rating pathway fits."
+      ctaEyebrow="Thinking about an assessment?"
+      ctaTitle="Tell us about the home and what you want to improve"
+      ctaDescription="Start with the suburb, why you want the rating and any known renovations or access limits. We will confirm whether Home Energy Rating is the right service."
       ctaActions={[
         { label: "Book a 5-minute call", href: "/book-an-assessment" },
         { label: "Call 1300 241 149", href: "tel:+611300241149" },

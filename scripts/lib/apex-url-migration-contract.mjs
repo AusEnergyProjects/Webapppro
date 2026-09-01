@@ -1,4 +1,5 @@
 import { APEX_SITEMAP_PATHS } from "../data/apex-url-snapshot.mjs";
+import { resolveLegacyBlogRedirect } from "../../src/lib/legacy-blog-redirects.mjs";
 
 const readyPage = (sourcePath, note) => ({
   sourcePath,
@@ -48,7 +49,7 @@ export const EXPECTED_APEX_SITEMAP = Object.freeze({
 export const APEX_EXACT_ROUTE_CONTRACT = Object.freeze([
   pending("/", "pending_review", "The apex and parallel homepages need a final content, title and canonical ownership decision."),
   readyPage("/basix-nsw", "Current BASIX service page exists at the same path."),
-  pending("/blog", "pending_content", "The article index needs a reviewed replacement before cutover."),
+  readyRedirect("/blog", "/guides", "Replace the legacy article index with the reviewed consumer guide library."),
   readyPage("/book-an-assessment", "Simple five-minute call booking page exists at the same path."),
   pending("/commercial-and-industrial-assessments", "pending_content", "No equivalent reviewed service page exists yet."),
   pending("/communities-schools", "pending_content", "No equivalent reviewed audience page exists yet."),
@@ -124,6 +125,15 @@ export function resolveApexMigrationPath(value) {
   if (exact) return exact;
 
   if (sourcePath.startsWith("/blog/")) {
+    const approvedTarget = resolveLegacyBlogRedirect(sourcePath);
+    if (approvedTarget) {
+      return readyRedirect(
+        sourcePath,
+        approvedTarget,
+        "Consolidate the legacy article into a reviewed guide with matching search intent.",
+      );
+    }
+
     const proposedTarget = blogConsolidationByPath.get(sourcePath);
     if (proposedTarget) {
       return {

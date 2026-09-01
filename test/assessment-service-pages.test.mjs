@@ -91,15 +91,15 @@ test("existing-home terminology matches the 2026 Home Energy Rating service", ()
 
 test("Whole of Home stays within the new-home certificate pathway", () => {
   assert.match(routes.newHome, /new-home certificate can demonstrate the relevant National Construction Code energy performance/);
-  assert.match(routes.wholeOfHome, /Whole of Home is the 0 to 100\+ rating used for the applicable new-home certificate pathway/);
-  assert.match(routes.wholeOfHome, /A completed home uses the separate Home Energy Rating service, not the Whole of Home name/);
+  assert.match(routes.wholeOfHome, /Whole of Home is the 0 to 100\+ score on a new-home certificate/);
+  assert.match(routes.wholeOfHome, /If the home is already built, you need the separate Home Energy Rating service/);
   assert.match(routes.wholeOfHome, /Existing homes use the Home Energy Rating pathway and cannot use that rating to demonstrate new-home NCC compliance/);
 });
 
 test("BASIX copy preserves the NSW planning and authority boundary", () => {
-  assert.match(routes.basix, /BASIX is a NSW planning requirement for applicable residential development/);
+  assert.match(routes.basix, /Building or renovating in NSW\? BASIX is part of the planning process/);
   assert.match(routes.basix, /NSW Planning Portal and the relevant consent authority remain the source of truth/);
-  assert.match(routes.basix, /planningportal\.nsw\.gov\.au\/basix\/about-basix/);
+  assert.match(routes.basix, /planningportal\.nsw\.gov\.au\/development-and-assessment\/basix/);
   assert.match(routes.basix, /planningportal\.nsw\.gov\.au\/basix-thermal-performance-section/);
   assert.match(routes.basix, /A NatHERS simulation can be the thermal performance method used within an eligible BASIX pathway/);
 });
@@ -134,6 +134,9 @@ test("all routes show the review date, official sources and conservative public 
   }
   assert.doesNotMatch(routeSource, /\u2013|\u2014/);
   assert.doesNotMatch(routeSource, /#1|number one|most experienced|accredited assessor|fixed price|guaranteed turnaround/i);
+  assert.doesNotMatch(routeSource, /\bAEA\b/);
+  assert.match(routes.newHome, /Building a new home or planning a major renovation\?/);
+  assert.match(routes.existingHome, /Want to know how your existing home performs/);
 });
 
 test("the legacy Scorecard route preserves its apex canonical without advertising a closed service", () => {

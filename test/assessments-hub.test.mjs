@@ -22,23 +22,23 @@ test("assessment services are first class routes across the site", () => {
 
 test("the hub separates new homes, existing homes and NSW BASIX", () => {
   assert.match(page, /New homes and major renovations/);
-  assert.match(page, /uses plans and design documents before construction/);
+  assert.match(page, /Still working from plans\? A NatHERS assessor models the proposed home before construction/);
   assert.match(page, /Homes that are already built/);
-  assert.match(page, /assesses the home as it exists/);
+  assert.match(page, /Want to understand how your current home performs and what to improve first/);
   assert.match(page, /Home Energy Rating from 0 to 100\+/);
   assert.match(page, /Star Rating from 0 to 10/);
-  assert.match(page, /cannot demonstrate National Construction Code compliance/);
-  assert.match(page, /BASIX is a NSW planning requirement/);
+  assert.match(page, /not the certificate used to prove new-home building-code compliance/);
+  assert.match(page, /Building or renovating in NSW\? BASIX is part of the planning process/);
   assert.match(page, /alterations and additions costing \$50,000 or more/);
   assert.match(page, /swimming pools of 40,000 litres or more/);
 });
 
 test("official sources, date and approval boundaries remain visible", () => {
   assert.match(page, /Official guidance checked 1 September 2026/);
-  assert.match(page, /requirements can change/);
+  assert.match(page, /Requirements can change/);
   assert.match(page, /homeenergyrating\.gov\.au\/households\/new-homes/);
   assert.match(page, /homeenergyrating\.gov\.au\/households\/existing-homes/);
-  assert.match(page, /planningportal\.nsw\.gov\.au\/basix\/about-basix/);
+  assert.match(page, /planningportal\.nsw\.gov\.au\/development-and-assessment\/basix/);
   assert.match(page, /planningportal\.nsw\.gov\.au\/basix-thermal-performance-section/);
   assert.match(page, /does not replace the approval authority/);
   assert.doesNotMatch(page, /cdr\.|\/cds-au\/|\/api\//);
@@ -63,4 +63,7 @@ test("assessment cards align on desktop and stack on mobile", () => {
 
 test("assessment customer copy contains no prohibited dash characters", () => {
   assert.doesNotMatch(`${page}${home}${guides}`, /\u2013|\u2014/);
+  assert.doesNotMatch(page, /\bAEA\b/);
+  assert.match(page, /Which do I need: NatHERS, Home Energy Rating or BASIX\?/);
+  assert.match(page, /Not sure where to start\?/);
 });

@@ -24,7 +24,7 @@ const cards: readonly AssessmentServiceCard[] = [
     evidence: ["NSW project address", "Development type and proposed work", "Approval stage and consent authority", "Current Planning Portal project details"],
     outputTitle: "Pathway result",
     output: "A confirmed BASIX scope before detailed water, energy, thermal performance and materials or embodied emissions information is entered or relied on.",
-    href: "https://www.planningportal.nsw.gov.au/basix/about-basix",
+    href: "https://www.planningportal.nsw.gov.au/development-and-assessment/basix",
     linkLabel: "Read the official BASIX overview",
   },
   {
@@ -50,7 +50,7 @@ const cards: readonly AssessmentServiceCard[] = [
     evidence: ["Water fixtures and landscape information", "Thermal construction and glazing", "Fixed energy systems", "Materials and current plan revisions"],
     outputTitle: "Project use",
     output: "A BASIX certificate and commitments that describe the same project as the drawings and specifications submitted through the confirmed NSW approval pathway.",
-    href: "https://www.planningportal.nsw.gov.au/basix/about-basix",
+    href: "https://www.planningportal.nsw.gov.au/development-and-assessment/basix",
     linkLabel: "Confirm current BASIX requirements",
   },
 ];
@@ -67,7 +67,7 @@ const sources: readonly AssessmentServiceSource[] = [
   {
     title: "NSW BASIX overview",
     description: "The NSW Planning Portal explains the purpose of BASIX, the sustainability areas assessed and its role in the residential planning pathway.",
-    href: "https://www.planningportal.nsw.gov.au/basix/about-basix",
+    href: "https://www.planningportal.nsw.gov.au/development-and-assessment/basix",
     linkLabel: "Read the official BASIX overview",
   },
   {
@@ -104,21 +104,21 @@ export default function BasixNswPage() {
       breadcrumbLabel="BASIX NSW"
       eyebrow="New South Wales residential planning"
       title="BASIX assessment support for NSW residential projects"
-      introduction="BASIX is a NSW planning requirement for applicable residential development. It considers project commitments for water, energy, thermal performance and materials or embodied emissions where relevant. A BASIX assessment needs to use the current Planning Portal pathway and stay aligned with the plans and specifications submitted for approval."
+      introduction="Building or renovating in NSW? BASIX is part of the planning process. It checks water, energy, thermal performance and materials for the project. The BASIX certificate and commitments need to match the plans you submit for approval."
       reviewed="1 September 2026"
       reviewNote="BASIX rules, tools and eligible thermal methods can change. Confirm the current requirements in the NSW Planning Portal and with the relevant consent authority."
-      cardsEyebrow="Plan the NSW pathway"
-      cardsTitle="Scope, thermal method and coordinated commitments"
+      cardsEyebrow="What BASIX covers"
+      cardsTitle="The project, the assessment method and the commitments"
       cards={cards}
-      processEyebrow="One project record"
-      processTitle="Keep the BASIX assessment and design evidence consistent"
+      processEyebrow="How it works"
+      processTitle="Keep the BASIX certificate and plans matching"
       steps={steps}
       sources={sources}
       faqTitle="BASIX assessment questions"
       faqs={faqs}
-      ctaEyebrow="Discuss a NSW project"
-      ctaTitle="Confirm the BASIX scope before detailed assessment"
-      ctaDescription="Start with the NSW project address, development type, approval stage, consent authority and current plans so the applicable pathway and evidence can be identified."
+      ctaEyebrow="Need help with BASIX?"
+      ctaTitle="Tell us what you are building or renovating"
+      ctaDescription="Start with the NSW address, project type, approval stage and current plans. We will explain the likely pathway and what information is needed next."
       ctaActions={[
         { label: "Book a 5-minute call", href: "/book-an-assessment" },
         { label: "Call 1300 241 149", href: "tel:+611300241149" },

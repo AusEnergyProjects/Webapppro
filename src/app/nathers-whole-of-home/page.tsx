@@ -104,21 +104,21 @@ export default function NathersWholeOfHomePage() {
       breadcrumbLabel="NatHERS Whole of Home"
       eyebrow="New-home certificate rating"
       title="NatHERS Whole of Home rating for new-home certificates"
-      introduction="NatHERS Whole of Home is the 0 to 100+ rating used for the applicable new-home certificate pathway. It models major fixed appliances and on-site energy systems alongside the thermal Star Rating. A completed home uses the separate Home Energy Rating service, not the Whole of Home name."
+      introduction="Whole of Home is the 0 to 100+ score on a new-home certificate. It looks at fixed energy systems such as heating, cooling, hot water and solar alongside the thermal Star Rating. If the home is already built, you need the separate Home Energy Rating service."
       reviewed="1 September 2026"
       reviewNote="Whole of Home requirements depend on the National Construction Code pathway adopted for the project location. Confirm the current requirements with the relevant approval authority."
-      cardsEyebrow="Use the rating correctly"
-      cardsTitle="Fixed systems, thermal performance and clear terminology"
+      cardsEyebrow="What the score means"
+      cardsTitle="The home design and its fixed energy systems"
       cards={cards}
-      processEyebrow="One coordinated design"
-      processTitle="Model the building shell and fixed systems together"
+      processEyebrow="How it works"
+      processTitle="Keep the plans and energy-system details together"
       steps={steps}
       sources={sources}
       faqTitle="Whole of Home questions"
       faqs={faqs}
-      ctaEyebrow="Discuss Whole of Home"
-      ctaTitle="Confirm the certificate and project pathway"
-      ctaDescription="Start with the project location, design stage, certifier or approval pathway and the current drawings and fixed system selections."
+      ctaEyebrow="Need a Whole of Home rating?"
+      ctaTitle="Tell us about the project and current plans"
+      ctaDescription="Start with the location, design stage, approval contact and the fixed systems already selected. We will explain what evidence is still needed."
       ctaActions={[
         { label: "Book a 5-minute call", href: "/book-an-assessment" },
         { label: "Call 1300 241 149", href: "tel:+611300241149" },

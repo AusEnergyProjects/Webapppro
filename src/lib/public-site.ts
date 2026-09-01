@@ -139,3 +139,48 @@ export function buildPlatformMetadata({
     },
   };
 }
+
+export function buildGuideMetadata({
+  path,
+  title,
+  description,
+  publishedIso,
+  reviewedIso,
+}: {
+  path: `/${string}`;
+  title: string;
+  description: string;
+  publishedIso: `${number}-${number}-${number}`;
+  reviewedIso: `${number}-${number}-${number}`;
+}): Metadata {
+  const canonical = new URL(path, `${PLATFORM_ORIGIN}/`).toString();
+
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      title,
+      description,
+      url: canonical,
+      type: "article",
+      siteName: PUBLIC_SITE.name,
+      locale: "en_AU",
+      publishedTime: publishedIso,
+      modifiedTime: reviewedIso,
+      authors: [`${PUBLIC_SITE.apexUrl}/`],
+      images: [{
+        url: `${PLATFORM_ORIGIN}/aea-home-energy-plan-og-v2.png`,
+        width: 1731,
+        height: 909,
+        alt: "Australian Energy Assessments home energy guidance",
+      }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [`${PLATFORM_ORIGIN}/aea-home-energy-plan-og-v2.png`],
+    },
+  };
+}

@@ -104,21 +104,21 @@ export default function NathersForNewHomesPage() {
       breadcrumbLabel="NatHERS for new homes"
       eyebrow="New homes and major renovations"
       title="NatHERS assessments for new homes and major renovations"
-      introduction="A NatHERS assessment for a new home uses plans and specifications to model the proposed design before construction. The resulting new-home certificate can provide the thermal Star Rating, the applicable Whole of Home rating and evidence used to demonstrate National Construction Code energy performance for the confirmed approval pathway."
+      introduction="Building a new home or planning a major renovation? We assess the plans before construction and show how the design performs. Because the work is plan-based, Australian Energy Assessments can help with projects anywhere in Australia."
       reviewed="1 September 2026"
       reviewNote="National Construction Code requirements and jurisdictional adoption can change. Confirm the current project pathway with the relevant certifier, council or approval authority."
-      cardsEyebrow="What the assessment covers"
-      cardsTitle="Thermal performance, Whole of Home and approval evidence"
+      cardsEyebrow="What you are getting"
+      cardsTitle="The rating, the energy systems and the certificate"
       cards={cards}
-      processEyebrow="Evidence first"
-      processTitle="Keep the model, certificate and approved design aligned"
+      processEyebrow="How it works"
+      processTitle="From current plans to the right certificate"
       steps={steps}
       sources={sources}
       faqTitle="New-home NatHERS questions"
       faqs={faqs}
-      ctaEyebrow="Discuss a new-home assessment"
-      ctaTitle="Confirm the design stage and approval pathway"
-      ctaDescription="Start with the project location, current design stage, approval contact and available plans. The assessment scope can then be matched to the evidence the project actually needs."
+      ctaEyebrow="Ready to check the plans?"
+      ctaTitle="Tell us where the project is up to"
+      ctaDescription="Start with the project location, design stage and any plans you already have. We will explain what is needed next and what the assessment will provide."
       ctaActions={[
         { label: "Book a 5-minute call", href: "/book-an-assessment" },
         { label: "Call 1300 241 149", href: "tel:+611300241149" },

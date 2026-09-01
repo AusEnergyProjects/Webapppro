@@ -324,12 +324,12 @@ export default function FrequentlyAskedQuestionsPage() {
       <header className="guide-hero assessments-hero">
         <span>Home energy assessment answers</span>
         <h1>Home Energy Rating, NatHERS, BASIX and energy assessor FAQ</h1>
-        <p>Thirty-six clear answers, consolidated from the questions people ask most. Use the building stage and required output to separate current existing-home terminology, plan-based new-home certificates, NSW BASIX requirements and legacy Scorecard searches.</p>
+        <p>Start with one simple question: is the home already built or still on plans? The answers below explain Home Energy Rating, NatHERS, BASIX, old Scorecard terms, costs and what happens during an assessment without assuming you already know the industry language.</p>
       </header>
 
       <div className="assessment-asat">
         <strong>Official guidance reviewed 1 September 2026</strong>
-        <span>Building, planning and assessment requirements can change. Confirm the current project location, approval pathway, assessment method and required evidence before relying on a rating or certificate.</span>
+        <span>Rules can change by location and project. These answers help you understand the options, while the relevant authority confirms what a building or planning application must include.</span>
       </div>
 
       {faqGroups.map((group) => (

@@ -45,6 +45,14 @@ const platformMetadataRoutes = [
   "direct-trade/access",
   "direct-trade/standards",
 ];
+const guideMetadataRoutes = [
+  "guides/heat-pumps",
+  "guides/ncc-nathers-basix",
+  "guides/free-home-energy-assessments",
+  "guides/home-energy-upgrades",
+  "guides/prepare-for-home-energy-assessment",
+  "guides/home-energy-assessment-myths",
+];
 
 test("one verified public identity graph links the business and platform", () => {
   assert.match(identity, /legalName: "Australian Energy Assessments Pty Ltd"/);
@@ -79,12 +87,18 @@ test("JSON-LD is server rendered and escapes markup-sensitive characters", () =>
 
 test("public platform pages receive unique canonical and social metadata", () => {
   assert.match(identity, /export function buildPlatformMetadata/);
+  assert.match(identity, /export function buildGuideMetadata/);
   assert.match(identity, /alternates: \{ canonical \}/);
   assert.match(identity, /openGraph:/);
   assert.match(identity, /twitter:/);
   for (const route of platformMetadataRoutes) {
     const page = read(`../src/app/${route}/page.tsx`);
     assert.match(page, /buildPlatformMetadata\(\{/);
+    assert.match(page, new RegExp(`path: "\\/${route.replaceAll("/", "\\/")}"`));
+  }
+  for (const route of guideMetadataRoutes) {
+    const page = read(`../src/app/${route}/page.tsx`);
+    assert.match(page, /buildGuideMetadata\(\{/);
     assert.match(page, new RegExp(`path: "\\/${route.replaceAll("/", "\\/")}"`));
   }
 });
@@ -113,6 +127,9 @@ test("crawl controls exclude private surfaces and remove false sitemap dates", (
   assert.match(robots, /"\/trade-photo\/"/);
   assert.match(sitemap, /"\/calculator"/);
   assert.match(sitemap, /"\/guides\/project-preparation"/);
+  for (const route of guideMetadataRoutes) {
+    assert.match(sitemap, new RegExp(`"\\/${route.replaceAll("/", "\\/")}"`));
+  }
   assert.match(sitemap, /"\/home-energy-rating-vs-nathers-vs-scorecard"/);
   assert.doesNotMatch(sitemap, /"\/residential-efficiency-scorecard"/);
   assert.doesNotMatch(sitemap, /lastModified/);

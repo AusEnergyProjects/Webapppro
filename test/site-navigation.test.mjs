@@ -134,7 +134,11 @@ test("the futuristic header links to one dedicated always-present Wattzun AI pag
   assert.doesNotMatch(styles, /animation: site-surge-(?:pulse|spin)/);
   assert.doesNotMatch(styles, /\.site-surge-core::before \{/);
   assert.match(styles, /\.site-surge-core img \{[^}]*filter: drop-shadow/);
-  assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{[^}]*flex: 1 1 0;[^}]*min-height: 40px;/);
+  assert.match(styles, /\.site-surge-copy \{[^}]*flex: none;/);
+  assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{[^}]*flex: 1 1 0;[^}]*min-height: 40px;[\s\S]*?\.site-surge-link \{[^}]*flex-grow: 1\.2;/);
+  assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-surge-core img \{[^}]*height: 31px;[^}]*width: auto;/);
+  assert.match(styles, /@media \(max-width: 520px\) \{[\s\S]*?\.site-surge-link \{[^}]*flex-basis: 96px;[\s\S]*?\.site-tlink-link \{[^}]*flex-basis: 74px;[\s\S]*?\.site-book-link, \.site-call-link \{[^}]*flex-basis: 55px;/);
+  assert.match(styles, /@media \(max-width: 360px\) \{[\s\S]*?\.site-header-actions \{[^}]*display: grid;[^}]*grid-template-columns: 1fr 1fr;/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.site-header::before, \.site-surge-core, \.customer-journey-scene::after \{ animation: none !important; \}/);
   assert.match(styles, /@media \(forced-colors: active\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{ border: 1px solid ButtonText;/);
 });
@@ -188,7 +192,7 @@ test("desktop navigation shows every option and mobile restores the compact swip
   );
   assert.match(
     styles,
-    /@media \(max-width: 720px\) \{[\s\S]*?\.site-header-actions \{[^}]*display: flex;[^}]*grid-column: 1;[^}]*grid-row: 2;/,
+    /@media \(max-width: 720px\) \{[\s\S]*?\.site-header-actions \{[^}]*gap: 6px;[^}]*grid-column: 1;[^}]*grid-row: 2;/,
   );
   assert.match(
     styles,
