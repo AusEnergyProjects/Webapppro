@@ -5,7 +5,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   APEX_EXACT_ROUTE_CONTRACT,
-  APEX_BLOG_CONSOLIDATION_CANDIDATES,
   APEX_URL_MIGRATION_CONTRACT,
   EXPECTED_APEX_SITEMAP,
   assertApexCutoverReady,
@@ -16,6 +15,10 @@ import {
   LEGACY_BLOG_REDIRECT_ENTRIES,
   resolveLegacyBlogRedirect,
 } from "../src/lib/legacy-blog-redirects.mjs";
+import {
+  LEGACY_BLOG_RETIREMENT_PATHS,
+  isLegacyBlogRetirement,
+} from "../src/lib/legacy-blog-retirements.mjs";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(directory, "..");
@@ -67,7 +70,7 @@ test("ready page destinations exist and redirects remain one hop", () => {
 });
 
 test("approved legacy articles redirect to reviewed local guides", () => {
-  assert.ok(LEGACY_BLOG_REDIRECT_ENTRIES.length > 100);
+  assert.equal(LEGACY_BLOG_REDIRECT_ENTRIES.length, 168);
   assert.equal(
     new Set(LEGACY_BLOG_REDIRECT_ENTRIES.map((entry) => entry.sourcePath)).size,
     LEGACY_BLOG_REDIRECT_ENTRIES.length,
@@ -92,46 +95,61 @@ test("approved legacy articles redirect to reviewed local guides", () => {
   assert.equal(resolveApexMigrationPath("/blog").status, "ready");
 });
 
-test("legacy articles and unknown URLs fail closed", () => {
+test("every captured legacy article has one explicit redirect or retirement decision", () => {
+  const capturedBlogs = APEX_URL_MIGRATION_CONTRACT.filter((entry) => entry.sourcePath.startsWith("/blog/"));
+  const redirected = capturedBlogs.filter((entry) => entry.action === "permanent_redirect");
+  const retired = capturedBlogs.filter((entry) => entry.action === "retire");
+  const redirectPaths = new Set(LEGACY_BLOG_REDIRECT_ENTRIES.map((entry) => entry.sourcePath));
+  const retirementPaths = new Set(LEGACY_BLOG_RETIREMENT_PATHS);
+
+  assert.equal(capturedBlogs.length, 229);
+  assert.equal(redirected.length, 168);
+  assert.equal(retired.length, 61);
+  assert.equal(capturedBlogs.every((entry) => entry.status === "ready"), true);
+  assert.equal(retirementPaths.size, 61);
+  assert.equal([...retirementPaths].some((sourcePath) => redirectPaths.has(sourcePath)), false);
+
+  for (const sourcePath of retirementPaths) {
+    assert.equal(isLegacyBlogRetirement(sourcePath), true);
+    assert.equal(resolveLegacyBlogRedirect(sourcePath), null);
+    assert.deepEqual(resolveApexMigrationPath(sourcePath), {
+      sourcePath,
+      targetPath: null,
+      action: "retire",
+      status: "ready",
+      canonicalOwner: "none",
+      indexable: false,
+      sitemap: false,
+      note: "Return HTTP 404 because the reviewed legacy article has no honest equivalent destination.",
+    });
+  }
+
+  const unsupportedCaseStudy = "/blog/case-study--successful-energy-upgrades-in-melbourne-homes-2";
+  assert.equal(isLegacyBlogRetirement(unsupportedCaseStudy), true);
+  assert.equal(resolveApexMigrationPath(unsupportedCaseStudy).action, "retire");
+});
+
+test("uncaptured articles and unknown URLs fail closed", () => {
   const inventory = buildApexMigrationInventory([
     "/",
     "/faq",
     "/blog/example-legacy-article",
     "/new-unmapped-route",
   ]);
-  assert.equal(inventory[0].status, "pending_review");
-  assert.equal(inventory[1].status, "pending_review");
-  assert.equal(inventory[2].status, "ready");
-  assert.equal(inventory[3].status, "blocked");
+  const byPath = new Map(inventory.map((entry) => [entry.sourcePath, entry]));
+  assert.equal(byPath.get("/").status, "pending_review");
+  assert.equal(byPath.get("/faq").status, "ready");
+  assert.equal(byPath.get("/blog/example-legacy-article").status, "blocked");
+  assert.equal(byPath.get("/blog/example-legacy-article").action, "unmapped");
+  assert.equal(byPath.get("/new-unmapped-route").status, "blocked");
   assert.throws(() => assertApexCutoverReady(inventory), /Apex cutover is blocked by 3 unresolved URLs/);
 });
 
 test("the current contract cannot declare cutover ready", () => {
-  assert.throws(() => assertApexCutoverReady(APEX_URL_MIGRATION_CONTRACT), /unresolved URLs/);
-});
-
-test("duplicate-title blogs are approved only when their destination was reviewed", () => {
-  assert.equal(APEX_BLOG_CONSOLIDATION_CANDIDATES.length, 26);
-  const manifestPaths = new Set(APEX_URL_MIGRATION_CONTRACT.map((entry) => entry.sourcePath));
-  for (const [sourcePath, targetPath] of APEX_BLOG_CONSOLIDATION_CANDIDATES) {
-    assert.equal(manifestPaths.has(sourcePath), true, `Missing duplicate source ${sourcePath}`);
-    assert.equal(manifestPaths.has(targetPath), true, `Missing duplicate target ${targetPath}`);
-    const entry = resolveApexMigrationPath(sourcePath);
-    const approvedTarget = resolveLegacyBlogRedirect(sourcePath);
-    if (approvedTarget) {
-      assert.equal(entry.action, "permanent_redirect");
-      assert.equal(entry.status, "ready");
-      assert.equal(entry.targetPath, approvedTarget);
-    } else {
-      assert.equal(entry.action, "proposed_redirect");
-      assert.equal(entry.status, "pending_review");
-      assert.equal(entry.targetPath, targetPath);
-    }
-  }
-
-  const unsupportedCaseStudy = resolveApexMigrationPath("/blog/case-study--successful-energy-upgrades-in-melbourne-homes-2");
-  assert.equal(unsupportedCaseStudy.action, "proposed_redirect");
-  assert.equal(unsupportedCaseStudy.status, "pending_review");
+  assert.throws(
+    () => assertApexCutoverReady(APEX_URL_MIGRATION_CONTRACT),
+    /Apex cutover is blocked by 10 unresolved URLs/,
+  );
 });
 
 test("redirects are direct, path-only and never blanket homepage redirects", () => {

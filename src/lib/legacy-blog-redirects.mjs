@@ -1,7 +1,16 @@
 const redirectGroups = Object.freeze({
   "/guides/insulation-draught-proofing": [
+    "/blog/boost-your-home-s-comfort-and-efficiency-with-insulation",
     "/blog/the-role-of-insulation-in-creating-an-efficient-thermal-envelope",
     "/blog/top-15-tips-for-draught-proofing-your-home--start-your-energy-efficiency-journey-right",
+  ],
+  "/guides/solar": [
+    "/blog/choosing-the-right-solar-panels-for-your-melbourne-home--expert-tips",
+    "/blog/solar-panel-installation-advice-for-victoria--what-homeowners-need-to-know",
+    "/blog/the-ultimate-guide-to-solar-panel-installation-in-victoria",
+  ],
+  "/guides/batteries": [
+    "/blog/from-feed-in-tariffs-to-batteries--why-solar-consumers-must-rethink-their-energy-strategy",
   ],
   "/guides/heat-pumps": [
     "/blog/heat-pumps-in-australia--a-comprehensive-guide-for-homeowners",
@@ -11,6 +20,7 @@ const redirectGroups = Object.freeze({
   ],
   "/guides/ncc-nathers-basix": [
     "/blog/a-comprehensive-guide-to-building-standards-and-energy-assessments-in-victoria",
+    "/blog/comprehensive-guide-to-australian-building-energy-standards",
     "/blog/expert-insights--navigating-building-standards-for-energy-efficiency-in-melbourne",
     "/blog/expert-tips-for-navigating-building-standards-in-victoria",
     "/blog/expert-tips-for-navigating-building-standards-in-victoria-2",
@@ -18,9 +28,18 @@ const redirectGroups = Object.freeze({
     "/blog/navigating-melbourne-s-energy-assessment-regulations--what-homeowners-need-to-know",
     "/blog/understanding-australian-building-energy-standards--a-comprehensive-guide",
     "/blog/understanding-australian-building-energy-standards--a-comprehensive-guide-2",
+    "/blog/understanding-australian-building-energy-standards--a-homeowner-s-guide",
+    "/blog/understanding-australian-building-energy-standards--what-every-homeowner-should-know",
+    "/blog/understanding-australian-building-energy-standards-for-property-owners",
     "/blog/understanding-building-standards--what-melbourne-homeowners-need-to-know",
     "/blog/understanding-building-standards-in-victoria--a-guide-for-homeowners",
     "/blog/understanding-building-standards-in-victoria--what-homeowners-need-to-know",
+    "/blog/understanding-melbourne-s-energy-efficiency-standards--a-homeowner-s-guide",
+  ],
+  "/guides/green-building-certifications-australia": [
+    "/blog/top-myths-about-green-building-certifications-in-australia-debunked",
+    "/blog/understanding-green-building-certifications-in-australia--a-comprehensive-guide",
+    "/blog/understanding-green-building-certifications-in-australia--a-guide-for-homeowners",
   ],
   "/guides/free-home-energy-assessments": [
     "/blog/how-free-energy-assessments-can-cut-your-melbourne-home-costs",
@@ -42,13 +61,20 @@ const redirectGroups = Object.freeze({
     "/blog/comparing-energy-upgrade-options--finding-the-best-solution-for-your-melbourne-home",
     "/blog/comprehensive-guide-to-energy-upgrades-for-victorian-homes",
     "/blog/diy-energy-upgrades--simple-steps-for-melbourne-homeowners",
+    "/blog/diy-energy-efficiency-improvements-before-your-property-inspection",
     "/blog/energy-efficiency-upgrades--a-step-by-step-guide-for-melbourne-properties",
     "/blog/energy-upgrade-information-for-melbourne-homes--boosting-efficiency-and-value",
     "/blog/expert-advice--navigating-energy-upgrade-information-for-victorian-homes",
+    "/blog/expert-tips-for-improving-your-home-s-energy-efficiency-in-victoria",
     "/blog/home-energy-savings",
     "/blog/how-melbourne-homes-can-benefit-from-energy-efficiency-upgrades",
+    "/blog/how-to-improve-your-home-s-energy-efficiency-before-a-property-inspection",
+    "/blog/how-to-improve-your-property-s-energy-efficiency-in-melbourne",
     "/blog/how-to-optimize-your-melbourne-home-with-energy-upgrades",
+    "/blog/how-to-prepare-your-melbourne-home-for-seasonal-energy-efficiency",
     "/blog/maximizing-energy-efficiency-in-victorian-homes--a-seasonal-checklist",
+    "/blog/maximizing-melbourne-s-energy-efficiency--tips-for-homeowners",
+    "/blog/maximizing-property-efficiency--tips-for-melbourne-homeowners",
     "/blog/melbourne-s-best-practices-for-energy-upgrades--expert-insights",
     "/blog/seasonal-energy-efficiency-tips-for-melbourne-homeowners",
     "/blog/seasonal-energy-efficiency-tips-for-melbourne-homeowners-2",
@@ -61,6 +87,9 @@ const redirectGroups = Object.freeze({
     "/blog/seasonal-energy-saving-tips-for-melbourne-homes",
     "/blog/seasonal-energy-upgrades--preparing-your-melbourne-home-for-temperature-changes",
     "/blog/seasonal-tips--preparing-your-melbourne-home-for-energy-efficiency",
+    "/blog/preparing-your-melbourne-home-for-summer--energy-saving-strategies",
+    "/blog/summer-energy-efficiency-tips-for-victoria-homes--stay-cool-and-save-money",
+    "/blog/summer-energy-efficiency-tips-for-victoria-homes-2",
     "/blog/the-benefits-of-energy-upgrades--a-guide-for-melbourne-homeowners",
     "/blog/the-benefits-of-energy-upgrades--a-melbourne-homeowner-s-perspective",
     "/blog/the-benefits-of-energy-upgrades--transforming-your-melbourne-home",
@@ -70,10 +99,13 @@ const redirectGroups = Object.freeze({
     "/blog/top-australian-energy-upgrade-tips-for-homeowners",
     "/blog/top-australian-energy-upgrade-tips-for-improving-your-home-s-efficiency",
     "/blog/top-energy-efficiency-upgrades-for-melbourne-homes",
+    "/blog/top-energy-efficient-upgrades-for-victorian-homes",
+    "/blog/top-energy-saving-tips-for-melbourne-properties",
     "/blog/top-energy-upgrade-information-for-melbourne-homes",
     "/blog/top-energy-upgrade-information-for-property-owners-in-victoria",
     "/blog/top-energy-upgrade-information-for-victorian-properties",
     "/blog/top-energy-upgrade-options-for-homes-in-melbourne--a-seasonal-perspective",
+    "/blog/why-energy-efficiency-matters-for-melbourne-homes",
   ],
   "/guides/prepare-for-home-energy-assessment": [
     "/blog/how-to-prepare-your-home-for-an-energy-assessment",
@@ -127,28 +159,41 @@ const redirectGroups = Object.freeze({
     "/blog/the-ultimate-guide-to-energy-assessments-in-melbourne",
     "/blog/the-ultimate-guide-to-energy-assessments-in-melbourne-2",
     "/blog/the-ultimate-guide-to-energy-assessments-in-melbourne-3",
+    "/blog/the-benefits-of-energy-assessments-for-melbourne-properties",
+    "/blog/top-5-benefits-of-conducting-regular-energy-assessments-in-melbourne",
+    "/blog/top-benefits-of-energy-assessments-in-melbourne--improve-your-property-s-efficiency",
     "/blog/top-rated-energy-assessment-companies-in-australia--how-to-choose-the-best-for-your-property",
     "/blog/top-tips-for-hiring-an-energy-assessor-in-victoria",
     "/blog/why-hire-an-energy-assessor-in-melbourne--key-benefits-and-insights",
   ],
   "/home-energy-rating-for-existing-homes": [
+    "/blog/comprehensive-guide-to-melbourne-property-energy-audits",
     "/blog/comprehensive-guide-to-efficiency-ratings-for-melbourne-properties",
     "/blog/comparing-property-efficiency-ratings--melbourne-vs--other-cities",
     "/blog/how-melbourne-s-climate-impacts-energy-efficiency-ratings",
     "/blog/how-melbourne-s-unique-climate-affects-property-efficiency-ratings-and-what-you-can-do",
+    "/blog/expert-tips-on-improving-your-property-s-efficiency-ratings",
+    "/blog/how-accurate-property-efficiency-ratings-can-save-you-money-in-melbourne",
+    "/blog/how-accurate-property-efficiency-ratings-can-save-you-money-in-victoria",
+    "/blog/how-energy-efficiency-ratings-impact-melbourne-properties",
     "/blog/how-to-improve-property-efficiency-ratings-for-melbourne-homes",
     "/blog/how-to-improve-your-property-s-energy-efficiency-rating-in-melbourne",
     "/blog/maximizing-property-efficiency-ratings-in-victoria--a-comprehensive-guide",
+    "/blog/melbourne-property-energy-audits--a-step-by-step-guide-to-improve-your-home-s-efficiency",
     "/blog/the-ultimate-guide-to-accurate-property-efficiency-ratings-in-victoria",
     "/blog/top-property-efficiency-ratings-in-victoria--how-your-home-measures-up",
+    "/blog/top-benefits-of-melbourne-property-energy-audits-for-homeowners",
     "/blog/understanding-efficiency-ratings-for-melbourne-properties",
     "/blog/understanding-melbourne-s-property-efficiency-ratings-and-standards",
     "/blog/understanding-property-efficiency-ratings--what-melbourne-homeowners-need-to-know",
     "/blog/understanding-property-efficiency-ratings--what-melbourne-residents-should-know",
     "/blog/understanding-property-efficiency-ratings-in-victoria--a-comprehensive-guide",
     "/blog/understanding-property-efficiency-ratings-in-victoria--a-comprehensive-guide-2",
+    "/blog/why-melbourne-property-energy-audits-are-essential-for-homeowners",
   ],
   "/nathers-for-new-homes": [
+    "/blog/exploring-the-nationwide-house-energy-rating-scheme--what-melbourne-residents-need-to-know",
+    "/blog/how-the-nationwide-house-energy-rating-scheme-benefits-melbourne-homeowners",
     "/blog/understanding-nathers--a-comprehensive-guide-for-melbourne-homeowners",
     "/blog/understanding-nathers--the-key-to-better-property-efficiency-ratings",
   ],
@@ -164,7 +209,12 @@ const redirectByPath = new Map(
   LEGACY_BLOG_REDIRECT_ENTRIES.map(({ sourcePath, targetPath }) => [sourcePath, targetPath]),
 );
 
+export function normaliseLegacyBlogPath(value) {
+  return value.startsWith("/blog/")
+    ? value.replace(/\/+$/, "")
+    : `/blog/${value.replace(/^\/+|\/+$/g, "")}`;
+}
+
 export function resolveLegacyBlogRedirect(value) {
-  const path = value.startsWith("/blog/") ? value.replace(/\/+$/, "") : `/blog/${value.replace(/^\/+|\/+$/g, "")}`;
-  return redirectByPath.get(path) ?? null;
+  return redirectByPath.get(normaliseLegacyBlogPath(value)) ?? null;
 }

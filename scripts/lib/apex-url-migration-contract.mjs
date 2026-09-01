@@ -1,5 +1,6 @@
 import { APEX_SITEMAP_PATHS } from "../data/apex-url-snapshot.mjs";
 import { resolveLegacyBlogRedirect } from "../../src/lib/legacy-blog-redirects.mjs";
+import { isLegacyBlogRetirement } from "../../src/lib/legacy-blog-retirements.mjs";
 
 const readyPage = (sourcePath, note) => ({
   sourcePath,
@@ -23,6 +24,17 @@ const readyRedirect = (sourcePath, targetPath, note) => ({
   note,
 });
 
+const readyRetirement = (sourcePath) => ({
+  sourcePath,
+  targetPath: null,
+  action: "retire",
+  status: "ready",
+  canonicalOwner: "none",
+  indexable: false,
+  sitemap: false,
+  note: "Return HTTP 404 because the reviewed legacy article has no honest equivalent destination.",
+});
+
 const pending = (sourcePath, status, note) => ({
   sourcePath,
   targetPath: null,
@@ -44,8 +56,8 @@ export const EXPECTED_APEX_SITEMAP = Object.freeze({
 });
 
 // Every non-blog URL in the captured apex sitemap has an explicit decision.
-// Blog articles are covered by the fail-closed wildcard below and remain held
-// until each article receives a keep, merge, redirect or retire decision.
+// Every captured blog URL is also listed explicitly as either a direct
+// redirect or a retirement. New, uncaptured URLs remain blocked by default.
 export const APEX_EXACT_ROUTE_CONTRACT = Object.freeze([
   pending("/", "pending_review", "The apex and parallel homepages need a final content, title and canonical ownership decision."),
   readyPage("/basix-nsw", "Current BASIX service page exists at the same path."),
@@ -69,43 +81,9 @@ export const APEX_EXACT_ROUTE_CONTRACT = Object.freeze([
   pending("/trusted-suppliers", "pending_review", "Supplier relationships and outbound links require current verification."),
 ]);
 
-// These 26 source URLs share an exact title with their clean-slug target.
-// They are recommendations only: no redirect becomes ready until the winner is
-// rewritten, Search Console/backlink evidence is checked and any case-study
-// claims are verified as genuine rather than duplicated generated content.
-export const APEX_BLOG_CONSOLIDATION_CANDIDATES = Object.freeze([
-  ["/blog/case-study--successful-energy-upgrades-in-melbourne-homes-2", "/blog/case-study--successful-energy-upgrades-in-melbourne-homes"],
-  ["/blog/case-study--successful-energy-upgrades-in-melbourne-homes-3", "/blog/case-study--successful-energy-upgrades-in-melbourne-homes"],
-  ["/blog/case-study--successful-energy-upgrades-in-melbourne-homes-4", "/blog/case-study--successful-energy-upgrades-in-melbourne-homes"],
-  ["/blog/case-study--successful-energy-upgrades-in-melbourne-homes-5", "/blog/case-study--successful-energy-upgrades-in-melbourne-homes"],
-  ["/blog/case-study--successful-energy-upgrades-in-melbourne-homes-6", "/blog/case-study--successful-energy-upgrades-in-melbourne-homes"],
-  ["/blog/case-study--successful-energy-upgrades-in-melbourne-homes-7", "/blog/case-study--successful-energy-upgrades-in-melbourne-homes"],
-  ["/blog/case-study--successful-energy-upgrades-in-melbourne-homes-8", "/blog/case-study--successful-energy-upgrades-in-melbourne-homes"],
-  ["/blog/case-study--successful-energy-upgrades-in-melbourne-homes-9", "/blog/case-study--successful-energy-upgrades-in-melbourne-homes"],
-  ["/blog/case-study--successful-energy-upgrades-in-melbourne-homes-10", "/blog/case-study--successful-energy-upgrades-in-melbourne-homes"],
-  ["/blog/case-study--successful-energy-upgrades-in-melbourne-homes-11", "/blog/case-study--successful-energy-upgrades-in-melbourne-homes"],
-  ["/blog/debunking-common-myths-about-energy-assessments-in-australia-2", "/blog/debunking-common-myths-about-energy-assessments-in-australia"],
-  ["/blog/debunking-common-myths-about-energy-assessments-in-australia-3", "/blog/debunking-common-myths-about-energy-assessments-in-australia"],
-  ["/blog/debunking-common-myths-about-energy-assessments-in-victoria-2", "/blog/debunking-common-myths-about-energy-assessments-in-victoria"],
-  ["/blog/expert-insights--common-misconceptions-about-energy-assessments-2", "/blog/expert-insights--common-misconceptions-about-energy-assessments"],
-  ["/blog/expert-tips-for-navigating-building-standards-in-victoria-2", "/blog/expert-tips-for-navigating-building-standards-in-victoria"],
-  ["/blog/how-to-prepare-your-melbourne-home-for-an-energy-assessment-2", "/blog/how-to-prepare-your-melbourne-home-for-an-energy-assessment"],
-  ["/blog/how-to-prepare-your-melbourne-home-for-an-energy-audit-2", "/blog/how-to-prepare-your-melbourne-home-for-an-energy-audit"],
-  ["/blog/seasonal-energy-efficiency-tips-for-melbourne-homeowners-2", "/blog/seasonal-energy-efficiency-tips-for-melbourne-homeowners"],
-  ["/blog/seasonal-energy-efficiency-tips-for-melbourne-homes-3", "/blog/seasonal-energy-efficiency-tips-for-melbourne-homes"],
-  ["/blog/seasonal-energy-efficiency-tips-for-melbourne-homes-4", "/blog/seasonal-energy-efficiency-tips-for-melbourne-homes"],
-  ["/blog/the-ultimate-guide-to-energy-assessments-in-melbourne-2", "/blog/the-ultimate-guide-to-energy-assessments-in-melbourne"],
-  ["/blog/the-ultimate-guide-to-energy-assessments-in-melbourne-3", "/blog/the-ultimate-guide-to-energy-assessments-in-melbourne"],
-  ["/blog/top-5-myths-about-energy-assessments-in-victoria-debunked-2", "/blog/top-5-myths-about-energy-assessments-in-victoria-debunked"],
-  ["/blog/top-myths-about-energy-assessments-debunked-2", "/blog/top-myths-about-energy-assessments-debunked"],
-  ["/blog/understanding-australian-building-energy-standards--a-comprehensive-guide-2", "/blog/understanding-australian-building-energy-standards--a-comprehensive-guide"],
-  ["/blog/understanding-property-efficiency-ratings-in-victoria--a-comprehensive-guide-2", "/blog/understanding-property-efficiency-ratings-in-victoria--a-comprehensive-guide"],
-]);
-
 const exactContractByPath = new Map(
   APEX_EXACT_ROUTE_CONTRACT.map((entry) => [entry.sourcePath, entry]),
 );
-const blogConsolidationByPath = new Map(APEX_BLOG_CONSOLIDATION_CANDIDATES);
 
 export function normaliseApexPath(value) {
   const rawPath = value instanceof URL
@@ -134,30 +112,7 @@ export function resolveApexMigrationPath(value) {
       );
     }
 
-    const proposedTarget = blogConsolidationByPath.get(sourcePath);
-    if (proposedTarget) {
-      return {
-        sourcePath,
-        targetPath: proposedTarget,
-        action: "proposed_redirect",
-        status: "pending_review",
-        canonicalOwner: "unresolved",
-        indexable: null,
-        sitemap: null,
-        note: "Exact-title duplicate candidate. Merge useful evidence, verify performance and claims, then approve a direct redirect.",
-      };
-    }
-
-    return {
-      sourcePath,
-      targetPath: null,
-      action: "review",
-      status: "pending_review",
-      canonicalOwner: "unresolved",
-      indexable: null,
-      sitemap: null,
-      note: "Legacy article requires an evidence and intent review before a keep, merge, redirect or retire decision.",
-    };
+    if (isLegacyBlogRetirement(sourcePath)) return readyRetirement(sourcePath);
   }
 
   return {

@@ -7,6 +7,7 @@ import {
   LEGACY_BLOG_REDIRECT_ENTRIES,
   resolveLegacyBlogRedirect,
 } from "../src/lib/legacy-blog-redirects.mjs";
+import { LEGACY_BLOG_RETIREMENT_PATHS } from "../src/lib/legacy-blog-retirements.mjs";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(directory, "..");
@@ -25,6 +26,8 @@ const guideTemplate = read("../src/components/AuthoritativeGuidePage.tsx");
 const guideIndex = read("../src/app/guides/page.tsx");
 const sitemap = read("../src/app/sitemap.ts");
 const legacyRoute = read("../src/app/blog/[slug]/page.tsx");
+const certificationGuide = read("../src/app/guides/green-building-certifications-australia/page.tsx");
+const notFoundPage = read("../src/app/not-found.tsx");
 
 test("reviewed guides publish honest article metadata and source-backed schema", () => {
   assert.match(guideTemplate, /"@type": "Article"/);
@@ -62,7 +65,8 @@ test("new consumer copy avoids the legacy site's unsupported claims and abbrevia
 });
 
 test("approved legacy redirects preserve high-value intent without a blanket fallback", () => {
-  assert.ok(LEGACY_BLOG_REDIRECT_ENTRIES.length > 100);
+  assert.equal(LEGACY_BLOG_REDIRECT_ENTRIES.length, 168);
+  assert.equal(LEGACY_BLOG_RETIREMENT_PATHS.length, 61);
   assert.equal(
     resolveLegacyBlogRedirect("/blog/the-role-of-insulation-in-creating-an-efficient-thermal-envelope"),
     "/guides/insulation-draught-proofing",
@@ -84,6 +88,7 @@ test("approved legacy redirects preserve high-value intent without a blanket fal
   assert.match(legacyRoute, /if \(destination\) permanentRedirect\(destination\)/);
   assert.match(legacyRoute, /notFound\(\)/);
   assert.doesNotMatch(legacyRoute, /permanentRedirect\("\/guides"\)/);
+  assert.doesNotMatch(sitemap, /["']\/blog(?:\/|["'])/);
 });
 
 test("every approved legacy destination is a local page and redirects stay one hop", () => {
@@ -95,4 +100,29 @@ test("every approved legacy destination is a local page and redirects stay one h
     assert.notEqual(targetPath, "/");
     assert.equal(sourcePaths.has(targetPath), false, `Redirect chain starts at ${sourcePath}`);
   }
+});
+
+test("the replacement certification guide is source-backed and clearly bounded", () => {
+  assert.match(certificationGuide, /buildGuideMetadata\(\{/);
+  assert.match(certificationGuide, /path: "\/guides\/green-building-certifications-australia"/);
+  assert.match(certificationGuide, /publishedIso: "2026-09-02"/);
+  assert.match(certificationGuide, /reviewedIso: "2026-09-02"/);
+  assert.match(certificationGuide, /ncc\.abcb\.gov\.au/);
+  assert.match(certificationGuide, /homeenergyrating\.gov\.au/);
+  assert.match(certificationGuide, /planningportal\.nsw\.gov\.au/);
+  assert.match(certificationGuide, /new\.gbca\.org\.au/);
+  assert.match(certificationGuide, /nabers\.gov\.au/);
+  assert.match(certificationGuide, /Designed assessment is not final certification/i);
+  assert.match(certificationGuide, /exclude energy used inside individual residences/i);
+  assert.doesNotMatch(certificationGuide, /\bAEA\b|guaranteed savings|property-value increase|government-accredited Green Star/i);
+  assert.match(guideIndex, /href="\/guides\/green-building-certifications-australia"/);
+  assert.match(sitemap, /"\/guides\/green-building-certifications-australia"/);
+});
+
+test("retired articles render a useful noindex 404 destination", () => {
+  assert.match(notFoundPage, /robots: \{ index: false, follow: true \}/);
+  assert.match(notFoundPage, /That page is no longer available/);
+  assert.match(notFoundPage, /did not meet our current evidence standards/);
+  assert.match(notFoundPage, /href="\/guides"/);
+  assert.match(notFoundPage, /href="\/assessments"/);
 });

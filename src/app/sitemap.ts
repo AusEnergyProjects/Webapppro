@@ -17,6 +17,7 @@ const routes = [
   "/guides/free-home-energy-assessments",
   "/guides/home-energy-assessment-myths",
   "/guides/ncc-nathers-basix",
+  "/guides/green-building-certifications-australia",
   "/guides/solar",
   "/guides/batteries",
   "/guides/heating",
