@@ -1,0 +1,11 @@
+.breadcrumb a { border: 0; color: #9fe7ce; padding: 4px 2px; text-decoration: underline; }
+.list { background: #fff; border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; }
+.item + .item { border-top: 1px solid #dce8e5; }
+.question { align-items: center; cursor: pointer; display: flex; font-weight: 850; gap: 14px; justify-content: space-between; list-style: none; min-height: 56px; padding: 13px 17px; }
+.question::-webkit-details-marker { display: none; }
+.question::after { color: #08794c; content: "+"; font-size: 1.25rem; }
+.item[open] > .question { background: #eef9f4; }
+.item[open] > .question::after { content: "−"; }
+.answer { color: var(--color-aea-muted); font-size: .82rem; line-height: 1.6; padding: 0 48px 16px 17px; }
+.answer p { margin: 0; }
+.support article { min-height: 0; }

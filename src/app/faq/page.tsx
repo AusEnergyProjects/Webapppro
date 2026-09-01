@@ -3,6 +3,7 @@ import Link from "next/link";
 import { JsonLd } from "@/components/JsonLd";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 import { PUBLIC_SITE } from "@/lib/public-site";
+import styles from "./faq.module.css";
 
 const canonical = `${PUBLIC_SITE.apexUrl}/faq`;
 const title = "Home Energy Assessment FAQ | NatHERS and Ratings";
@@ -41,6 +42,7 @@ type FaqEntry = {
 };
 
 type FaqGroup = {
+  id: string;
   eyebrow: string;
   title: string;
   questions: readonly FaqEntry[];
@@ -48,12 +50,36 @@ type FaqGroup = {
 
 const faqGroups: readonly FaqGroup[] = [
   {
+    id: "rating-basics",
+    eyebrow: "Start with the terms",
+    title: "Home energy rating and NatHERS basics",
+    questions: [
+      {
+        question: "What is NatHERS?",
+        answer: "NatHERS is the Nationwide House Energy Rating Scheme. It provides nationally consistent methods and approved software for rating the energy performance of Australian homes. The assessment process and output differ for a proposed new home and a completed existing home, so the property stage must be confirmed first.",
+      },
+      {
+        question: "What does a NatHERS thermal Star Rating measure?",
+        answer: "The 0 to 10 Star Rating models how much heating and cooling a home's design needs to remain comfortable in its climate. It considers features such as orientation, layout, insulation, glazing, shading, sealing assumptions and construction. It is a model of the building shell, not a prediction of one household's bills.",
+      },
+      {
+        question: "What is a Whole of Home rating?",
+        answer: "Whole of Home is a 0 to 100+ rating that models energy used by major fixed systems and the contribution of on-site generation. Depending on the applicable method, this can include heating and cooling, hot water, lighting, pool or spa pumps, solar and batteries. It complements the thermal Star Rating rather than replacing it.",
+      },
+      {
+        question: "Can a Home Energy Rating or Whole of Home score exceed 100?",
+        answer: "Yes. A score above 100 can occur when modelled annual on-site generation is greater than the modelled energy use included in the rating method. It does not guarantee a zero electricity bill because tariffs, export limits, household plug loads, behaviour, weather and system performance still affect the real result.",
+      },
+    ],
+  },
+  {
+    id: "choose-an-assessment",
     eyebrow: "Choose the right pathway",
-    title: "Assessment names and building stages",
+    title: "Existing homes, new homes and BASIX",
     questions: [
       {
         question: "Which energy assessment applies to a home that is already built?",
-        answer: "Ask about the current Home Energy Rating pathway. It is an on-site assessment of the completed home and provides a Home Energy Rating from 0 to 100+, a Star Rating from 0 to 10, estimated annual energy use and upgrade guidance.",
+        answer: "Ask about the current Home Energy Rating pathway. It requires an on-site assessment of the completed home and can provide a Home Energy Rating from 0 to 100+, a Star Rating from 0 to 10, estimated annual energy use and upgrade guidance. Confirm the exact output before booking because a general energy audit is not automatically an official rating.",
       },
       {
         question: "Which assessment applies to a proposed new home?",
@@ -61,63 +87,158 @@ const faqGroups: readonly FaqGroup[] = [
       },
       {
         question: "Is Home Energy Rating the same as NatHERS Whole of Home?",
-        answer: "No. Home Energy Rating is the current consumer service for a completed home. Whole of Home is the 0 to 100+ rating used with the thermal Star Rating in the applicable new-home NatHERS certificate pathway.",
+        answer: "No. Home Energy Rating is the current consumer service for a completed home. Whole of Home is the 0 to 100+ rating used with the thermal Star Rating in applicable NatHERS certificate pathways. The names are related, but they are not interchangeable services.",
       },
       {
-        question: "Can I still book a Residential Efficiency Scorecard assessment?",
-        answer: "No. Residential Efficiency Scorecard closed on 23 June 2026. The term remains useful when reading older pages or certificates, but a household seeking a current existing-home assessment should ask about Home Energy Rating.",
+        question: "How do BASIX and NatHERS relate for a NSW project?",
+        answer: "BASIX is the NSW planning pathway for sustainability requirements. NatHERS modelling and certificates may form part of the thermal and energy evidence for a project, but BASIX and NatHERS are not the same approval. The NSW Planning Portal, the project's certifier and the current project settings determine what must be lodged.",
       },
       {
-        question: "Does an existing-home Home Energy Rating prove National Construction Code compliance?",
-        answer: "No. An existing-home certificate cannot demonstrate National Construction Code compliance. A new home or applicable major renovation that needs regulatory evidence must use the relevant new-home certificate and approval pathway.",
+        question: "Is a general home energy audit automatically an official rating?",
+        answer: "No. Home energy audit and energy assessment are broad terms. Before relying on a service, confirm the assessment method, assessor pathway, certificate or report produced, property stage and the decision or approval the output is meant to support.",
       },
     ],
   },
   {
-    eyebrow: "Coverage and delivery",
-    title: "Where and how assessments are completed",
+    id: "new-homes",
+    eyebrow: "Plan-based assessments",
+    title: "New homes, apartments and renovations",
     questions: [
       {
         question: "Can Australian Energy Assessments complete new-home NatHERS work anywhere in Australia?",
         answer: "Plan-based NatHERS and Whole of Home work can be delivered remotely for projects across Australia, subject to complete plans and specifications and the current requirements for the project location and approval pathway.",
       },
       {
+        question: "When should a new-home NatHERS assessment begin?",
+        answer: "Begin while the design can still change, ideally before construction documentation and product selections are locked in. Early modelling makes it easier to test orientation, glazing, shading, insulation and layout changes before they become expensive variations.",
+      },
+      {
+        question: "What documents are needed for a new-home NatHERS assessment?",
+        answer: "Prepare current floor plans, elevations, sections, orientation and site details, construction and insulation specifications, glazing and shading information, and the proposed fixed appliances needed for Whole of Home. The assessor should identify material gaps instead of treating assumptions as confirmed selections.",
+      },
+      {
+        question: "Does every new home in Australia simply need a 7 Star rating?",
+        answer: "No single sentence covers every approval. The National Construction Code provides a national framework, but adoption dates, building classifications, apartment averaging, state pathways such as BASIX and project-specific approvals matter. Confirm the current target and Whole of Home requirement with the relevant authority before design decisions are finalised.",
+      },
+      {
+        question: "What happens if a design misses its required rating target?",
+        answer: "The model can be used to test changes such as glazing, insulation, shading, sealing assumptions, ceiling fans or layout refinements. The appropriate response depends on the cause of the shortfall, buildability and cost. Changes should be agreed with the designer and reflected consistently in the final plans, specifications and certificate.",
+      },
+      {
+        question: "Do apartments, extensions and major renovations use the same process?",
+        answer: "Not always. Apartments can have unit and building-level requirements, while an extension or renovation may follow a different state or approval pathway depending on its scope. Confirm the building classification, jurisdiction and approval authority before commissioning a certificate.",
+      },
+    ],
+  },
+  {
+    id: "existing-homes",
+    eyebrow: "On-site assessments",
+    title: "Existing-home visits and outputs",
+    questions: [
+      {
         question: "Where are on-site existing-home assessments available?",
         answer: "Existing-home ratings require a property visit. Current field delivery is primarily in New South Wales and Victoria. Availability, travel and timing for other Australian locations are confirmed before a booking is accepted.",
       },
       {
+        question: "What happens during an existing-home assessment?",
+        answer: "The assessor records the home's construction, insulation, glazing, shading, orientation and relevant fixed systems using the current assessment method. Safe access, observable evidence and any reliable supporting records matter. The visit is evidence gathering, not invasive building work.",
+      },
+      {
+        question: "Do I need building plans for an existing-home rating?",
+        answer: "Plans are not normally essential because the home is inspected on site. Available plans, renovation records, product documents or photographs can still help confirm details that are difficult to observe. Unknown information must be handled under the method rather than guessed as verified.",
+      },
+      {
+        question: "How should I prepare, and does someone need to attend?",
+        answer: "Arrange lawful access to the home and relevant services, make accessible areas safe to inspect, and gather any useful renovation or product records. An owner, occupier or authorised person should be available when access, consent or property-specific questions need to be resolved.",
+      },
+      {
         question: "How long does an existing-home assessment take?",
-        answer: "Official guidance says an on-site existing-home assessment typically takes about two to three hours, depending on the home and the evidence that can be recorded safely. The five-minute call on this website is only a logistics call and is not the assessment itself.",
+        answer: "Official guidance says an on-site existing-home assessment typically takes about two to three hours. The actual duration depends on the home, access and the evidence that can be recorded safely. The five-minute call on this website is only a logistics call and is not the assessment itself.",
+      },
+      {
+        question: "What do I receive, and how long does the final result take?",
+        answer: "The agreed scope should state the certificate or report, ratings, modelled energy information and upgrade guidance to be delivered. Turnaround depends on the property, evidence quality and any follow-up needed, so Australian Energy Assessments confirms timing after reviewing the scope rather than promising one universal deadline.",
+      },
+    ],
+  },
+  {
+    id: "evidence-and-certificates",
+    eyebrow: "Evidence and boundaries",
+    title: "Accuracy, certificates and compliance",
+    questions: [
+      {
+        question: "Who can issue an official NatHERS assessment or certificate?",
+        answer: "Use an assessor who is authorised for the relevant scheme, software and assessment pathway. Ask for the assessor's current accreditation or authorisation details and confirm that the output is accepted for the decision or approval you need. A business description alone is not proof of a current credential.",
+      },
+      {
+        question: "How accurate is a home energy rating?",
+        answer: "A rating is a standardised model built from the recorded property, climate data and the assumptions required by the method. Its usefulness depends on accurate inputs and evidence. It is not a live measurement of future household behaviour, workmanship, tariffs or weather.",
+      },
+      {
+        question: "Does an existing-home Home Energy Rating prove National Construction Code compliance?",
+        answer: "No. An existing-home certificate cannot demonstrate National Construction Code compliance. A new home or applicable major renovation that needs regulatory evidence must use the relevant new-home certificate and approval pathway.",
+      },
+      {
+        question: "Can I reuse a rating after the design, products or home have changed?",
+        answer: "Do not assume so. A certificate or report describes the assessed design or property at a particular time. Material changes to construction, glazing, insulation, appliances, solar or the building itself may require the model, recommendations or certificate to be reviewed.",
+      },
+      {
+        question: "Does a rating guarantee my bills, comfort or upgrade savings?",
+        answer: "No. Ratings and annual energy estimates are modelled decision support. Actual bills, comfort and savings depend on household behaviour, tariffs, weather, product selection, design, installation quality, maintenance and changes made after the assessment.",
+      },
+    ],
+  },
+  {
+    id: "upgrades-and-decisions",
+    eyebrow: "Using the result",
+    title: "Upgrades, rebates, rentals and finance",
+    questions: [
+      {
+        question: "How should I compare upgrade recommendations?",
+        answer: "Start with the verified constraint, then compare scopes, assumptions, product evidence, installation requirements and interactions between measures. A rating can guide priorities, but site-specific design, regulated work and final quotes remain separate decisions.",
+      },
+      {
+        question: "How do solar and batteries affect a Whole of Home rating?",
+        answer: "Eligible on-site generation and storage can improve the modelled Whole of Home result, but the effect depends on the current method, system size, orientation and the rest of the home. A higher modelled score does not by itself prove bill savings or financial payback.",
+      },
+      {
+        question: "Does electrification always come before insulation or draught sealing?",
+        answer: "No. The best sequence depends on the home's verified weaknesses, safety, equipment condition, climate, budget and planned works. Improving the building shell can reduce heating and cooling demand, while efficient electric systems and solar may address different parts of energy use. The measures should be assessed as a system.",
+      },
+      {
+        question: "Can an assessment confirm a rebate or green-loan approval?",
+        answer: "Not by itself. Programs and lenders set their own current eligibility, evidence, product and timing rules. A rating or report may support an application, but eligibility should be checked directly before committing to an upgrade or finance contract.",
+      },
+      {
+        question: "Does a Home Energy Rating prove rental minimum-standard compliance?",
+        answer: "Not automatically. Rental standards are set by each state or territory and can require specific evidence, products, installation work or exemptions. A rating may help plan improvements, but the relevant tenancy rules and regulator determine legal compliance.",
+      },
+      {
+        question: "Can energy upgrades fix condensation, mould or health problems?",
+        answer: "They may reduce contributing factors such as cold surfaces, uncontrolled air leakage or temperature extremes, but they are not a universal diagnosis or treatment. Moisture sources, ventilation, drainage, leaks and health concerns may require qualified building, ventilation or health advice.",
+      },
+    ],
+  },
+  {
+    id: "booking-and-legacy-terms",
+    eyebrow: "Before you book",
+    title: "Costs, independence and legacy Scorecard searches",
+    questions: [
+      {
+        question: "Can I still book a Residential Efficiency Scorecard assessment?",
+        answer: "No. Residential Efficiency Scorecard closed on 23 June 2026. An older Scorecard certificate can still describe the home at the time it was assessed, but it is not interchangeable with a current Home Energy Rating. Ask about the current pathway if a new rating is required.",
+      },
+      {
+        question: "How much does a home energy assessment cost?",
+        answer: "Cost depends on the property stage, assessment pathway, dwelling size and complexity, number and quality of documents, location, travel and required output. Australian Energy Assessments confirms the scope before quoting so a five-minute logistics call is not mistaken for the paid assessment.",
       },
       {
         question: "What happens during the five-minute booking call?",
         answer: "The call confirms the property location, building stage, reason for the assessment, likely pathway and the evidence needed next. It helps prevent the wrong service being booked and does not replace the assessment.",
       },
-    ],
-  },
-  {
-    eyebrow: "Evidence and results",
-    title: "What to prepare and how to use the output",
-    questions: [
       {
-        question: "What documents are needed for a new-home NatHERS assessment?",
-        answer: "Prepare current floor plans, elevations, sections, orientation and site details, construction and insulation specifications, glazing and shading information, and the proposed fixed appliances needed for Whole of Home. The assessor will identify gaps before treating the model as final.",
-      },
-      {
-        question: "What should I prepare for an existing-home rating?",
-        answer: "Provide safe access to the relevant parts of the home, known renovation history, information about major fixed appliances and the decision the rating should support. Unknown or inaccessible details must be handled under the current assessment method rather than guessed as verified facts.",
-      },
-      {
-        question: "Does a rating guarantee my bills or upgrade savings?",
-        answer: "No. Ratings and annual energy estimates are modelled decision support. Actual bills and savings depend on household behaviour, tariffs, weather, product selection, design, installation quality and changes made after the assessment.",
-      },
-      {
-        question: "Is a general home energy audit automatically an official rating?",
-        answer: "No. Home energy audit and energy assessment are broad search terms. Before relying on a service, confirm the assessment method, assessor pathway, certificate or report produced, property stage and the decision or approval the output is meant to support.",
-      },
-      {
-        question: "How should I compare upgrade recommendations?",
-        answer: "Start with the verified constraint, then compare scopes, assumptions, product evidence, installation requirements and interactions between measures. A rating can guide priorities, but site-specific design, regulated work and final quotes remain separate decisions.",
+        question: "Is Australian Energy Assessments independent of product sales?",
+        answer: "Australian Energy Assessments provides assessment and guidance services rather than using the rating to sell a nominated insulation, glazing, heating, cooling or solar product. Any supplier, installer, referral or commercial relationship relevant to a recommendation should still be disclosed before a customer relies on it.",
       },
     ],
   },
@@ -192,18 +313,18 @@ export default function FrequentlyAskedQuestionsPage() {
       <JsonLd data={structuredData} />
       <SiteHeader active="assessments" />
 
-      <nav className="guide-source-links" aria-label="Breadcrumb">
+      <nav className={`guide-source-links ${styles.breadcrumb}`} aria-label="Breadcrumb">
         <Link href="/">Home</Link>
         <span aria-hidden="true">/</span>
         <Link href="/assessments">Assessments</Link>
         <span aria-hidden="true">/</span>
-        <span aria-current="page">Frequently asked questions</span>
+        <span aria-current="page">FAQ</span>
       </nav>
 
       <header className="guide-hero assessments-hero">
         <span>Home energy assessment answers</span>
         <h1>Home Energy Rating, NatHERS, BASIX and energy assessor FAQ</h1>
-        <p>Use the building stage and required output to choose the right pathway. These answers separate current existing-home terminology, plan-based new-home certificates, NSW BASIX requirements and legacy Scorecard searches.</p>
+        <p>Thirty-six clear answers, consolidated from the questions people ask most. Use the building stage and required output to separate current existing-home terminology, plan-based new-home certificates, NSW BASIX requirements and legacy Scorecard searches.</p>
       </header>
 
       <div className="assessment-asat">
@@ -212,18 +333,21 @@ export default function FrequentlyAskedQuestionsPage() {
       </div>
 
       {faqGroups.map((group) => (
-        <section className="assessment-section" aria-labelledby={`faq-${group.eyebrow.replaceAll(" ", "-").toLowerCase()}`} key={group.title}>
+        <section className="assessment-section" aria-labelledby={`${group.id}-heading`} id={group.id} key={group.id}>
           <div className="guide-section-heading">
             <span>{group.eyebrow}</span>
-            <h2 id={`faq-${group.eyebrow.replaceAll(" ", "-").toLowerCase()}`}>{group.title}</h2>
+            <h2 id={`${group.id}-heading`}>{group.title}</h2>
           </div>
-          <div className="assessment-two-column">
+          <div className={styles.list}>
             {group.questions.map((faq) => (
-              <article key={faq.question}>
-                <span>Question</span>
-                <h2>{faq.question}</h2>
-                <p>{faq.answer}</p>
-              </article>
+              <details className={styles.item} key={faq.question}>
+                <summary className={styles.question}>
+                  <span>{faq.question}</span>
+                </summary>
+                <div className={styles.answer}>
+                  <p>{faq.answer}</p>
+                </div>
+              </details>
             ))}
           </div>
         </section>
@@ -234,7 +358,7 @@ export default function FrequentlyAskedQuestionsPage() {
           <span>Check the source</span>
           <h2 id="faq-official-sources">Official assessment and planning guidance</h2>
         </div>
-        <div className="assessment-two-column">
+        <div className={`assessment-two-column ${styles.support}`}>
           {officialSources.map((source) => (
             <article key={source.href}>
               <span>Official source</span>
@@ -246,18 +370,30 @@ export default function FrequentlyAskedQuestionsPage() {
         </div>
       </section>
 
-      <section className="assessment-two-column">
+      <section className={`assessment-two-column ${styles.support}`} aria-label="Related assessment guides">
         <article>
-          <span>Current and legacy terms</span>
-          <h2>Compare Home Energy Rating, NatHERS and Scorecard</h2>
-          <p>See the three terms side by side before choosing an assessment or relying on an older search result.</p>
-          <Link href="/home-energy-rating-vs-nathers-vs-scorecard">Open the terminology guide</Link>
+          <span>Existing homes</span>
+          <h2>Home Energy Rating</h2>
+          <p>See the current on-site pathway, evidence and output for a completed home.</p>
+          <Link href="/home-energy-rating-for-existing-homes">Explore existing-home ratings</Link>
         </article>
         <article>
-          <span>Assessment pathways</span>
-          <h2>Start with the property stage and location</h2>
-          <p>Compare existing-home, new-home and NSW BASIX services, the evidence each pathway needs and the output it provides.</p>
-          <Link href="/assessments">Compare assessment pathways</Link>
+          <span>New homes</span>
+          <h2>NatHERS assessments</h2>
+          <p>Understand plan-based modelling, documentation and approval boundaries.</p>
+          <Link href="/nathers-for-new-homes">Explore new-home NatHERS</Link>
+        </article>
+        <article>
+          <span>Energy use</span>
+          <h2>Whole of Home</h2>
+          <p>Learn how fixed systems and on-site generation complement the thermal Star Rating.</p>
+          <Link href="/nathers-whole-of-home">Explore Whole of Home</Link>
+        </article>
+        <article>
+          <span>NSW projects</span>
+          <h2>BASIX assessments</h2>
+          <p>See how NSW sustainability requirements and project evidence fit together.</p>
+          <Link href="/basix-nsw">Explore BASIX</Link>
         </article>
       </section>
 
