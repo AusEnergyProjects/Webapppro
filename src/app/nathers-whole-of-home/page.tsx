@@ -125,7 +125,9 @@ export default function NathersWholeOfHomePage() {
       ]}
       serviceName="NatHERS Whole of Home rating"
       serviceType="Whole of Home modelling for the new-home NatHERS certificate pathway"
+      alternateNames={["Whole of Home assessment", "NatHERS Whole of Home assessment"]}
       areaServed="Australia"
+      reviewedIso="2026-09-01"
       coverageTitle="Desktop assessment across Australia"
       coverageDescription="Whole of Home modelling uses the project's coordinated plans, specifications and fixed-system selections, so the desktop assessment can be delivered for projects across Australia. Jurisdictional approval requirements still apply."
       footer="Whole of Home is new-home certificate terminology. Existing homes use the Home Energy Rating pathway and cannot use that rating to demonstrate new-home NCC compliance."

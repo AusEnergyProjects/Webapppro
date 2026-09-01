@@ -125,7 +125,9 @@ export default function NathersForNewHomesPage() {
       ]}
       serviceName="NatHERS assessment for new homes"
       serviceType="Plan-based NatHERS thermal performance and Whole of Home assessment"
+      alternateNames={["7 star NatHERS assessment", "NCC home energy assessment", "new home energy rating"]}
       areaServed="Australia"
+      reviewedIso="2026-09-01"
       coverageTitle="Desktop assessment across Australia"
       coverageDescription="New-home NatHERS assessments are completed from coordinated plans and specifications, so projects can be assessed remotely across Australia. The state or territory and approval authority still determine the applicable pathway and evidence."
       footer="New-home rating evidence is project specific. The assessment model, certificate, plans and approval requirements must remain coordinated as the design changes."

@@ -1,6 +1,5 @@
 import type { MetadataRoute } from "next";
-
-const SITE_ORIGIN = "https://compare.ausenergyassessments.com";
+import { PUBLIC_SITE } from "@/lib/public-site";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -9,6 +8,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: "/",
       disallow: ["/api/", "/operations/", "/account", "/plan/print", "/compare/electricity-next", "/quote-review/", "/trade-photo/"],
     },
-    sitemap: `${SITE_ORIGIN}/sitemap.xml`,
+    sitemap: `${PUBLIC_SITE.platformUrl}/sitemap.xml`,
   };
 }

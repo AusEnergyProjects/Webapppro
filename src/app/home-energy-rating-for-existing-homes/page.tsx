@@ -124,7 +124,9 @@ export default function HomeEnergyRatingForExistingHomesPage() {
       ]}
       serviceName="Home Energy Rating for existing homes"
       serviceType="On-site existing-home energy assessment"
+      alternateNames={["NatHERS existing home assessment", "home energy audit", "Residential Efficiency Scorecard assessment"]}
       areaServed="Australia"
+      reviewedIso="2026-09-01"
       coverageTitle="On-site availability by location"
       coverageDescription="Existing-home assessments require a property visit. Current field delivery is primarily in New South Wales and Victoria; availability, travel and timing for other Australian locations are confirmed before booking."
       footer="An existing-home rating supports household decisions and upgrade planning. It does not replace a new-home certificate, building approval or site-specific trade design."

@@ -6,6 +6,7 @@
     "dev": "vinext dev",
     "build": "vinext build && npm run audit:sites-server-bundle && npm run audit:public-performance",
     "audit:links": "node scripts/audit-links.mjs",
+    "audit:seo-migration": "node scripts/audit-apex-url-migration.mjs",
     "audit:customer-plan-pdf": "node scripts/audit-customer-plan-pdf.mjs",
     "audit:public-performance": "node scripts/audit-public-performance-budgets.mjs",
     "audit:surge-conversation-quality": "node --experimental-strip-types scripts/report-surge-conversation-quality.mjs",

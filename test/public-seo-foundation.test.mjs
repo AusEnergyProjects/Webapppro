@@ -20,6 +20,7 @@ const gasAlias = read("../src/app/compare/gas/page.tsx");
 const startAlias = read("../src/app/getting-started/page.tsx");
 const legacyNewHomeAlias = read("../src/app/nathers-new-homes/page.tsx");
 const legacyExistingHomeAlias = read("../src/app/nathers-existing-homes/page.tsx");
+const legacyPrivacyAlias = read("../src/app/privacy-policy/page.tsx");
 const platformMetadataRoutes = [
   "plan",
   "calculator",
@@ -68,6 +69,12 @@ test("JSON-LD is server rendered and escapes markup-sensitive characters", () =>
   assert.match(layout, /url: PUBLIC_SITE\.logo/);
   assert.doesNotMatch(layout, /tlink-icon-192\.png/);
   assert.match(home, /alternates: \{ canonical: "\/" \}/);
+  assert.match(home, /"@type": "ItemList"/);
+  assert.match(home, /\/nathers-for-new-homes/);
+  assert.match(home, /\/home-energy-rating-for-existing-homes/);
+  assert.match(layout, /metadataBase: new URL\(PUBLIC_SITE\.platformUrl\)/);
+  assert.match(sitemap, /PUBLIC_SITE\.platformUrl/);
+  assert.match(robots, /PUBLIC_SITE\.platformUrl/);
 });
 
 test("public platform pages receive unique canonical and social metadata", () => {
@@ -88,6 +95,7 @@ test("header and footer expose assessment conversion and verified profiles", () 
   assert.match(chrome, /className="site-book-link"[\s\S]*href="\/book-an-assessment"/);
   assert.match(chrome, /className="site-call-link"[\s\S]*href=\{PUBLIC_SITE\.phoneHref\}/);
   assert.match(chrome, /Google Business Profile/);
+  assert.match(chrome, /href="\/faq"/);
   assert.match(chrome, /Facebook/);
   assert.match(chrome, /Instagram/);
   assert.match(chrome, /LinkedIn/);
@@ -112,4 +120,5 @@ test("crawl controls exclude private surfaces and remove false sitemap dates", (
   assert.match(startAlias, /permanentRedirect\("\/plan"\)/);
   assert.match(legacyNewHomeAlias, /permanentRedirect\("\/nathers-for-new-homes"\)/);
   assert.match(legacyExistingHomeAlias, /permanentRedirect\("\/home-energy-rating-for-existing-homes"\)/);
+  assert.match(legacyPrivacyAlias, /permanentRedirect\("\/privacy"\)/);
 });

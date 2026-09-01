@@ -1288,6 +1288,7 @@ h3, h4 { font-family: var(--font-aea-heading); font-size: var(--type-card-title)
 .home-entry-grid p { color: var(--color-aea-muted); font-size: .78rem; line-height: 1.6; margin: 9px 0 18px; }
 .home-entry-grid a { align-self: flex-start; color: var(--color-aea-green-dark); font-size: .78rem; font-weight: 900; margin-top: auto; }
 .home-entry-grid .home-entry-featured { background: radial-gradient(circle at 100% 0%, rgba(32, 203, 184, .2), transparent 17rem), linear-gradient(145deg, var(--color-aea-navy), #0b4651); border-color: rgba(68, 219, 192, .28); }
+.home-assessment-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .home-entry-featured > span, .home-entry-featured h3, .home-entry-featured a { color: #6ee7b7; }
 .home-entry-featured h3 { color: #fff; }
 .home-entry-featured p { color: #c9dfe1; }

@@ -125,7 +125,9 @@ export default function BasixNswPage() {
       ]}
       serviceName="BASIX assessment support for NSW residential projects"
       serviceType="NSW BASIX assessment and NatHERS thermal performance support"
+      alternateNames={["BASIX energy assessment", "NSW BASIX assessment"]}
       areaServed="New South Wales"
+      reviewedIso="2026-09-01"
       coverageTitle="New South Wales service area"
       coverageDescription="BASIX is a New South Wales planning pathway. Project eligibility, service availability and timing are confirmed before assessment work begins."
       footer="BASIX support is project specific. The NSW Planning Portal and relevant consent authority determine the current scope, eligible methods and evidence required for approval."

@@ -6,9 +6,9 @@ import { PUBLIC_SITE, publicOrganizationSchema } from "@/lib/public-site";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://compare.ausenergyassessments.com"),
+  metadataBase: new URL(PUBLIC_SITE.platformUrl),
   applicationName: "Australian Energy Assessments",
-  title: "Home Energy Assessments, NatHERS and Energy Planning | Australian Energy Assessments",
+  title: "Home Energy Assessments & NatHERS | Australian Energy Assessments",
   description: "Independent home energy assessments, NatHERS and Home Energy Rating guidance, energy planning, rebates and comparison tools for Australian homes.",
   creator: "Australian Energy Assessments",
   publisher: "Australian Energy Assessments",

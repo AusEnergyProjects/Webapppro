@@ -63,7 +63,9 @@ type AssessmentServicePageProps = {
   ctaActions: readonly AssessmentServiceAction[];
   serviceName: string;
   serviceType: string;
+  alternateNames?: readonly string[];
   areaServed?: string;
+  reviewedIso: `${number}-${number}-${number}`;
   coverageTitle?: string;
   coverageDescription?: string;
   footer: string;
@@ -145,7 +147,9 @@ export function AssessmentServicePage({
   ctaActions,
   serviceName,
   serviceType,
+  alternateNames,
   areaServed,
+  reviewedIso,
   coverageTitle,
   coverageDescription,
   footer,
@@ -174,6 +178,7 @@ export function AssessmentServicePage({
         "@type": "Service",
         "@id": `${canonical}#service`,
         name: serviceName,
+        ...(alternateNames && alternateNames.length > 0 ? { alternateName: alternateNames } : {}),
         serviceType,
         description: introduction,
         url: canonical,
@@ -193,6 +198,9 @@ export function AssessmentServicePage({
         name: title,
         description: introduction,
         inLanguage: "en-AU",
+        dateModified: reviewedIso,
+        isPartOf: { "@id": PUBLIC_SITE.apexWebsiteId },
+        publisher: { "@id": PUBLIC_SITE.organizationId },
         about: { "@id": `${canonical}#service` },
         breadcrumb: { "@id": `${canonical}#breadcrumb` },
       },

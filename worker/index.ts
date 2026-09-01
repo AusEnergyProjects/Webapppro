@@ -63,11 +63,12 @@ import {
 } from "../src/lib/service-reminder-delivery";
 import { drainTradeQuoteDeliveries } from "../src/lib/trade-quote-delivery-server";
 import { queueTradeQuoteDeliveryDispatch } from "../src/lib/trade-quote-delivery-dispatch";
+import { PUBLIC_SITE } from "../src/lib/public-site";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
 const PRIVATE_HTML_CACHE_CONTROL = "private, no-store, max-age=0";
 const LEGACY_SITE_HOST = "aea-energy-comparison.info294029.chatgpt.site";
-const CANONICAL_SITE_HOST = "compare.ausenergyassessments.com";
+const CANONICAL_SITE_HOST = new URL(PUBLIC_SITE.platformUrl).hostname;
 const NOTIFICATION_DELIVERY_CRON = "* * * * *";
 const DAILY_MAINTENANCE_CRON = "15 20 * * *";
 

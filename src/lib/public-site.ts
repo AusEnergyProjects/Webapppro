@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 
 const APEX_ORIGIN = "https://ausenergyassessments.com";
 const PLATFORM_ORIGIN = "https://compare.ausenergyassessments.com";
+const APEX_WEBSITE_ID = `${APEX_ORIGIN}/#website`;
+const PLATFORM_WEBSITE_ID = `${PLATFORM_ORIGIN}/#website`;
 
 export const PUBLIC_SITE = {
   name: "Australian Energy Assessments",
@@ -10,7 +12,9 @@ export const PUBLIC_SITE = {
   apexUrl: APEX_ORIGIN,
   platformUrl: PLATFORM_ORIGIN,
   organizationId: `${APEX_ORIGIN}/#organization`,
-  websiteId: `${PLATFORM_ORIGIN}/#website`,
+  apexWebsiteId: APEX_WEBSITE_ID,
+  platformWebsiteId: PLATFORM_WEBSITE_ID,
+  websiteId: PLATFORM_WEBSITE_ID,
   phoneDisplay: "1300 241 149",
   phoneHref: "tel:+611300241149",
   telephone: "+61-1300-241-149",
@@ -79,9 +83,17 @@ export const publicOrganizationSchema = {
     },
     {
       "@type": "WebSite",
-      "@id": PUBLIC_SITE.websiteId,
-      url: `${PUBLIC_SITE.platformUrl}/`,
+      "@id": PUBLIC_SITE.apexWebsiteId,
+      url: `${PUBLIC_SITE.apexUrl}/`,
       name: PUBLIC_SITE.name,
+      inLanguage: "en-AU",
+      publisher: { "@id": PUBLIC_SITE.organizationId },
+    },
+    {
+      "@type": "WebSite",
+      "@id": PUBLIC_SITE.platformWebsiteId,
+      url: `${PUBLIC_SITE.platformUrl}/`,
+      name: "Australian Energy Assessments home energy platform",
       inLanguage: "en-AU",
       publisher: { "@id": PUBLIC_SITE.organizationId },
     },
