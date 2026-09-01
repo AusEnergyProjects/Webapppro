@@ -1623,7 +1623,7 @@ export function CreditexActivityWorkPackGovernance({
                             ...current,
                             sourceUrl: event.target.value,
                           }))}
-                          placeholder="https://www.example.gov.au/current-source"
+                          placeholder="Paste the current official source URL"
                         />
                       </label>
                       <label>

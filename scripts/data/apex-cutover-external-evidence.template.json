@@ -1,0 +1,44 @@
+{
+  "reviewedAt": "2026-09-02T04:15:00+10:00",
+  "candidateOrigin": "https://compare.ausenergyassessments.com",
+  "expectedApexOrigin": "https://ausenergyassessments.com",
+  "expectedRelease": null,
+  "searchConsole": {
+    "property": "sc-domain:ausenergyassessments.com",
+    "ownerVerified": true,
+    "newSitemapSubmitted": false
+  },
+  "googleBusinessProfile": {
+    "placeId": "ChIJS2WVhrVD1moRFxEPRjRPxtE",
+    "continuityVerified": true,
+    "replacementProfileRequired": false
+  },
+  "destination": {
+    "apexAttached": false,
+    "wwwAttached": false,
+    "tlsVerified": false
+  },
+  "analytics": {
+    "legacyMeasurementId": "G-3PGGJ0JX4H",
+    "destinationMeasurementId": null,
+    "destinationConfigured": false
+  },
+  "firebase": {
+    "authorisedDomains": []
+  },
+  "oauthCallbacks": {
+    "xero": null,
+    "myob": null,
+    "quickbooks": null,
+    "google_calendar": null,
+    "microsoft_calendar": null
+  },
+  "criticalFlows": {
+    "bookingCalendarAndEmails": false,
+    "apexQuoteLink": false
+  },
+  "dns": {
+    "baselineApproved": false,
+    "rollbackReady": false
+  }
+}

@@ -37,7 +37,7 @@ test("every worker response receives baseline browser security headers", () => {
 
 test("the generated Sites hostname permanently redirects to the custom domain", () => {
   assert.match(worker, /LEGACY_SITE_HOST = "aea-energy-comparison\.info294029\.chatgpt\.site"/);
-  assert.match(worker, /CANONICAL_SITE_HOST = "compare\.ausenergyassessments\.com"/);
+  assert.match(worker, /CANONICAL_SITE_HOST = new URL\(PUBLIC_SITE\.platformUrl\)\.hostname/);
   assert.match(worker, /Response\.redirect\(url\.toString\(\), 308\)/);
   assert.match(worker, /url\.hostname !== LEGACY_SITE_HOST/);
 });

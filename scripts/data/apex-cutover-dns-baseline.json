@@ -1,0 +1,29 @@
+{
+  "capturedAt": "2026-09-02T04:05:00+10:00",
+  "apex": "ausenergyassessments.com",
+  "nameservers": [
+    "ns-cloud-d1.googledomains.com",
+    "ns-cloud-d2.googledomains.com",
+    "ns-cloud-d3.googledomains.com",
+    "ns-cloud-d4.googledomains.com"
+  ],
+  "mailExchanges": [
+    { "exchange": "aspmx.l.google.com", "priority": 1 },
+    { "exchange": "alt1.aspmx.l.google.com", "priority": 5 },
+    { "exchange": "alt2.aspmx.l.google.com", "priority": 5 },
+    { "exchange": "alt3.aspmx.l.google.com", "priority": 10 },
+    { "exchange": "alt4.aspmx.l.google.com", "priority": 10 }
+  ],
+  "spfRecords": ["v=spf1 include:_spf.google.com ~all"],
+  "dkimSelector": "google",
+  "dkim": [
+    "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApxzimFhtH/2SoFpBZNqvIi5HRlXvXrKdlfujo7co4WZ6RdB13zOt/TQn/pKN8T2T9pSBYCAF6/d6Giw+3i5iSEPwfrz5GFcyhU+DerCj+Jy8aCXdsL4lCoxsP626FHtRHZXbCMkCypTmkk6QSt7zAKZZ+m0uCnYsRT7ZaPgmdA98C8TNP54Jx88sEgo6INDtHIL9RiEGScYePSiMLoVCB3BnPGXVYjQb4ceoxEqRNYXwNYZx/e1WeCgICCUXac+I5TldOurogfx7onORg74saZRAgOecPpKe6Fec9ElWtp4KeaC/YBcwmtawR69t0puNig0VqFwDMdTu4yXY4EA88QIDAQAB"
+  ],
+  "dnssecDsRequired": true,
+  "observedApexA": ["172.66.0.42"],
+  "observedApexAaaa": [],
+  "observedWwwCname": "websites.mydurable.com",
+  "observedCompareCname": "custom-domains.chatgpt.site",
+  "observedDmarc": null,
+  "observedCaa": []
+}

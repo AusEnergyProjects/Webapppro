@@ -7,7 +7,7 @@ import {
   APEX_EXACT_ROUTE_CONTRACT,
   APEX_URL_MIGRATION_CONTRACT,
   EXPECTED_APEX_SITEMAP,
-  assertApexCutoverReady,
+  assertApexContentContractReady,
   buildApexMigrationInventory,
   resolveApexMigrationPath,
 } from "../scripts/lib/apex-url-migration-contract.mjs";
@@ -146,11 +146,11 @@ test("uncaptured articles and unknown URLs fail closed", () => {
   assert.equal(byPath.get("/blog/example-legacy-article").status, "blocked");
   assert.equal(byPath.get("/blog/example-legacy-article").action, "unmapped");
   assert.equal(byPath.get("/new-unmapped-route").status, "blocked");
-  assert.throws(() => assertApexCutoverReady(inventory), /Apex cutover is blocked by 2 unresolved URLs/);
+  assert.throws(() => assertApexContentContractReady(inventory), /Apex content contract is blocked by 2 unresolved URLs/);
 });
 
 test("the reviewed sitemap contract declares every captured URL ready", () => {
-  assert.equal(assertApexCutoverReady(APEX_URL_MIGRATION_CONTRACT), true);
+  assert.equal(assertApexContentContractReady(APEX_URL_MIGRATION_CONTRACT), true);
   assert.equal(APEX_URL_MIGRATION_CONTRACT.every((entry) => entry.status === "ready"), true);
 });
 

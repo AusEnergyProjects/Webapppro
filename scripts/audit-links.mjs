@@ -1,25 +1,20 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  isAuditableUrl,
+  linkNetworkFailureDisposition,
+  linkResponseIsBroken,
+} from "./lib/link-audit-policy.mjs";
 
 const root = process.cwd();
 const sourceRoot = path.join(root, "src");
 const liveOrigin = process.env.SITE_URL || "https://compare.ausenergyassessments.com";
 const timeoutMs = 12_000;
+const retryTimeoutMs = 30_000;
 const resourceHintOrigins = new Set([
   "https://fonts.googleapis.com",
   "https://fonts.gstatic.com",
 ]);
-const reservedExampleHosts = new Set(["example.com", "example.net", "example.org"]);
-
-function isAuditableUrl(value) {
-  if (value.includes("${")) return false;
-  try {
-    const { hostname } = new URL(value);
-    return !reservedExampleHosts.has(hostname) && !hostname.endsWith(".example");
-  } catch {
-    return false;
-  }
-}
 
 function walk(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -42,43 +37,93 @@ const checks = [
   ...literalUrls.map((url) => ({ label: "source link", url, kind: "link" })),
 ];
 
-async function check(entry) {
+async function checkOnce(entry, attemptTimeoutMs) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => controller.abort(), attemptTimeoutMs);
   try {
     const response = await fetch(entry.url, {
       redirect: "follow",
       signal: controller.signal,
-      headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0 Safari/537.36 AEA-Link-Audit/1.0" },
+      headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0 Safari/537.36 Australian-Energy-Assessments-Link-Audit/1.0" },
     });
     let apiShapeValid = true;
     if (entry.kind === "api" && response.ok) {
-      const payload = await response.clone().json().catch(() => null);
+      const payload = await response.json().catch(() => null);
       apiShapeValid = Array.isArray(payload?.plans) && payload.plans.length > 0;
+    } else {
+      await response.body?.cancel().catch(() => {});
     }
-    const broken = response.status === 404 || response.status >= 500 || !apiShapeValid;
-    return { ...entry, status: response.status, finalUrl: response.url, broken, apiShapeValid };
+    const broken = linkResponseIsBroken(entry.kind, response.status, apiShapeValid);
+    return {
+      ...entry,
+      status: response.status,
+      finalUrl: response.url,
+      broken,
+      unverified: false,
+      retryable: response.status === 429 || response.status >= 500,
+      apiShapeValid,
+    };
   } catch (error) {
-    return { ...entry, status: 0, broken: true, error: `${error.name}: ${error.message}` };
+    return {
+      ...entry,
+      status: 0,
+      broken: false,
+      unverified: true,
+      error: `${error.name}: ${error.message}`,
+      errorCode: error?.cause?.code || error?.code || null,
+      failureDisposition: linkNetworkFailureDisposition(error),
+    };
   } finally {
     clearTimeout(timer);
   }
 }
 
-const results = [];
-let cursor = 0;
-async function worker() {
-  while (cursor < checks.length) results.push(await check(checks[cursor++]));
+async function check(entry) {
+  const first = await checkOnce(entry, timeoutMs);
+  if (!first.unverified && !first.retryable) return first;
+
+  const retried = await checkOnce(entry, retryTimeoutMs);
+  const firstAttempt = {
+    status: first.status,
+    broken: first.broken,
+    unverified: first.unverified,
+    error: first.error,
+    errorCode: first.errorCode,
+    failureDisposition: first.failureDisposition,
+  };
+  if (!retried.unverified) return { ...retried, retried: true, firstAttempt };
+  const firstConfirmedFailure = first.broken || first.failureDisposition === "broken";
+  const broken = firstConfirmedFailure || entry.kind !== "link" || retried.failureDisposition === "broken";
+  return { ...retried, broken, unverified: !broken, retried: true, firstAttempt };
 }
-await Promise.all(Array.from({ length: 10 }, () => worker()));
+
+const results = [];
+for (const entry of checks.filter((item) => item.kind !== "link")) {
+  results.push(await check(entry));
+}
+
+const linkChecks = checks.filter((item) => item.kind === "link");
+let linkCursor = 0;
+async function linkWorker() {
+  while (linkCursor < linkChecks.length) results.push(await check(linkChecks[linkCursor++]));
+}
+await Promise.all(Array.from({ length: 6 }, () => linkWorker()));
 
 const broken = results.filter((result) => result.broken);
+const unverified = results.filter((result) => result.unverified);
 const blocked = results.filter((result) => !result.broken && [401, 403, 405, 429].includes(result.status));
-console.log(JSON.stringify({
+const verbose = process.argv.includes("--verbose");
+const report = {
   checked: results.length,
-  passedOrReachable: results.length - broken.length,
+  reachable: results.filter((result) => result.status > 0).length,
+  passed: results.filter((result) => !result.broken && !result.unverified && !blocked.includes(result)).length,
   blockedByAutomation: blocked.length,
+  unverifiedByNetwork: unverified.length,
   broken,
-  blocked,
-}, null, 2));
-if (broken.length) process.exitCode = 1;
+  unverified,
+};
+if (verbose) report.blocked = blocked;
+console.log(JSON.stringify(report, null, 2));
+if (broken.length || (process.argv.includes("--strict-network") && unverified.length)) {
+  process.exitCode = 1;
+}

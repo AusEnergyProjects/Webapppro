@@ -134,12 +134,12 @@ export function summariseApexMigrationInventory(inventory) {
   }, { total: 0 });
 }
 
-export function assertApexCutoverReady(inventory) {
+export function assertApexContentContractReady(inventory) {
   const blockers = inventory.filter((entry) => entry.status !== "ready");
   if (blockers.length > 0) {
     const counts = summariseApexMigrationInventory(blockers);
     throw new Error(
-      `Apex cutover is blocked by ${blockers.length} unresolved URLs: ${JSON.stringify(counts)}`,
+      `Apex content contract is blocked by ${blockers.length} unresolved URLs: ${JSON.stringify(counts)}`,
     );
   }
   return true;

@@ -22,6 +22,9 @@ test('CDR base validation permits HTTPS and rejects local or private targets', a
 test('retailer customer links never fall back to CDR API namespaces', async () => {
   const { resolveCustomerPlanUrl, retailerWebsite, safeCustomerUrl } = await import('../src/lib/retailer-links.mjs');
   assert.equal(retailerWebsite('https://cdr.energymadeeasy.gov.au/ovo-energy', 'OVO Energy'), 'https://www.ovoenergy.com.au/');
+  assert.equal(retailerWebsite('https://cdr.energymadeeasy.gov.au/qenergy', 'QEnergy'), null);
+  assert.equal(retailerWebsite('https://cdr.energymadeeasy.gov.au/reamped', 'ReAmped Energy'), null);
+  assert.equal(retailerWebsite('https://cdr.energymadeeasy.gov.au/real-utilities', 'Real Utilities'), 'https://myaccount.realutilities.com.au/');
   assert.equal(safeCustomerUrl('https://cdr.energymadeeasy.gov.au/ovo-energy'), null);
   assert.equal(safeCustomerUrl('javascript:alert(1)'), null);
   assert.equal(resolveCustomerPlanUrl(['https://cdr.energymadeeasy.gov.au/ovo-energy'], 'https://www.ovoenergy.com.au/'), 'https://www.ovoenergy.com.au/');

@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   APEX_URL_MIGRATION_CONTRACT,
-  assertApexCutoverReady,
+  assertApexContentContractReady,
   resolveApexMigrationPath,
 } from "../scripts/lib/apex-url-migration-contract.mjs";
 
@@ -88,7 +88,7 @@ test("the ten reviewed non-blog routes have explicit ready migration decisions",
     }
   }
 
-  assert.equal(assertApexCutoverReady(APEX_URL_MIGRATION_CONTRACT), true);
+  assert.equal(assertApexContentContractReady(APEX_URL_MIGRATION_CONTRACT), true);
 });
 
 test("preserved pages own their canonical, schema and human public copy", () => {

@@ -683,7 +683,7 @@ export function CreditexOfficialSourceWorkbench({
               required
               inputMode="url"
               maxLength={1000}
-              placeholder="https://..."
+              placeholder="Paste the official source URL"
               type="url"
               value={upload.sourceUrl}
               onChange={(event) => updateUpload("sourceUrl", event.target.value)}

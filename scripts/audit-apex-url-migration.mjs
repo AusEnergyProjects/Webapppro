@@ -3,7 +3,7 @@ import {
   APEX_EXACT_ROUTE_CONTRACT,
   APEX_URL_MIGRATION_CONTRACT,
   EXPECTED_APEX_SITEMAP,
-  assertApexCutoverReady,
+  assertApexContentContractReady,
   buildApexMigrationInventory,
   summariseApexMigrationInventory,
 } from "./lib/apex-url-migration-contract.mjs";
@@ -73,7 +73,7 @@ console.log(JSON.stringify({
   snapshotMatches,
   nonBlogContractMatches,
   explicitManifestMatches,
-  cutoverReady: inventory.every((entry) => entry.status === "ready"),
+  contentContractReady: inventory.every((entry) => entry.status === "ready"),
   migrationSummary: summary,
   pendingNonBlog,
 }, null, 2));
@@ -83,5 +83,11 @@ if (!snapshotMatches || !nonBlogContractMatches || !explicitManifestMatches || p
 }
 
 if (process.argv.includes("--assert-cutover-ready")) {
-  assertApexCutoverReady(inventory);
+  throw new Error(
+    "This audit proves URL content mapping only. Use rehearse:apex-cutover for operational cutover readiness.",
+  );
+}
+
+if (process.argv.includes("--assert-content-ready")) {
+  assertApexContentContractReady(inventory);
 }
