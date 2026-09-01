@@ -875,36 +875,64 @@ test("moisture-first wording accepts a natural priority sentence and working rev
   }), "paid").includes("clause:retains-moisture-first-priority"));
 });
 
-test("durability moisture priority accepts the observed imperative first step but rejects door-first order", async () => {
+test("durability moisture priority accepts observed imperative first steps but rejects door-first order", async () => {
   const { fixture } = await loadSurgeConversationTrajectoryFixture(
     "test/fixtures/surge-conversation-durability-20.json",
   );
-  const observedFirstStep = "Check recurring condensation, damp and mould… Address this before tightening the apartment.";
+  const earlierObservedFirstStep = "Check recurring condensation, damp and mould… Address this before tightening the apartment.";
+  const observedFirstSteps = {
+    c20t01: [
+      earlierObservedFirstStep,
+      "Check that the bathroom fan removes air outside and use it whenever moisture is produced; investigate persistent damp or mould before tightening the apartment.",
+    ],
+    c20t04: [
+      earlierObservedFirstStep,
+      "Control condensation, damp and mould first by using the bathroom exhaust fan and fixing any leak or persistent mould source. This protects indoor air and avoids trapping moisture.",
+    ],
+  };
   const doorFirstStep = "Start with the front-door draught, then check recurring condensation, damp and mould.";
+  const negatedFirstSteps = {
+    c20t01: [
+      "Check that the bathroom fan removes air outside; do not investigate persistent damp before tightening the apartment.",
+      "Check that the bathroom fan removes air outside; you shouldn't investigate persistent damp before tightening the apartment.",
+      "Check that the bathroom fan removes air outside; you cannot investigate persistent damp before tightening the apartment.",
+      "Check that the bathroom fan removes air outside; you can't investigate persistent damp before tightening the apartment.",
+      "Check that the bathroom fan removes air outside; investigate persistent damp, but not before tightening the apartment.",
+    ],
+    c20t04: ["Control condensation, but not first by using the bathroom exhaust fan; seal the front-door draught first."],
+  };
 
   for (const turnId of ["c20t01", "c20t04"]) {
     const turn = fixture.turns.find((item) => item.id === turnId);
-    const answer = turnId === "c20t01"
-      ? `${observedFirstStep} Then use a removable door snake at the front door and fit close-fitting curtains to the single-glazed windows. Keep the work within the $1,500 budget.`
-      : `${observedFirstStep} Then seal the front-door draught and fit honeycomb blinds to the single-glazed windows. Keep the working reverse-cycle split because it still heats properly. Use the $1,500 budget for these actions.`;
-    const practicalSteps = [
-      observedFirstStep,
-      "Seal the front-door draught.",
-      "Fit close-fitting window coverings.",
-    ];
-    const observation = trajectoryObservation(turnId, {
-      visibleAnswer: answer,
-      directAnswer: answer,
-      assistant: answer,
-      practicalSteps,
-      practicalStepCount: practicalSteps.length,
-    });
+    for (const observedFirstStep of observedFirstSteps[turnId]) {
+      const answer = turnId === "c20t01"
+        ? `${observedFirstStep} Then use a removable door snake at the front door and fit close-fitting curtains to the single-glazed windows. Keep the work within the $1,500 budget.`
+        : `${observedFirstStep} Then seal the front-door draught and fit honeycomb blinds to the single-glazed windows. Keep the working reverse-cycle split because it still heats properly. Use the $1,500 budget for these actions.`;
+      const practicalSteps = [
+        observedFirstStep,
+        "Seal the front-door draught.",
+        "Fit close-fitting window coverings.",
+      ];
+      const observation = trajectoryObservation(turnId, {
+        visibleAnswer: answer,
+        directAnswer: answer,
+        assistant: answer,
+        practicalSteps,
+        practicalStepCount: practicalSteps.length,
+      });
 
-    assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, observation, "paid"), [], turnId);
-    assert.ok(evaluateSurgeTrajectoryTurn(turn, {
-      ...observation,
-      practicalSteps: [doorFirstStep, ...practicalSteps.slice(1)],
-    }, "paid").includes("clause:saved-moisture-priority-first"), turnId);
+      assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, observation, "paid"), [], `${turnId}: ${observedFirstStep}`);
+      assert.ok(evaluateSurgeTrajectoryTurn(turn, {
+        ...observation,
+        practicalSteps: [doorFirstStep, ...practicalSteps.slice(1)],
+      }, "paid").includes("clause:saved-moisture-priority-first"), turnId);
+      for (const negatedFirstStep of negatedFirstSteps[turnId]) {
+        assert.ok(evaluateSurgeTrajectoryTurn(turn, {
+          ...observation,
+          practicalSteps: [negatedFirstStep, ...practicalSteps.slice(1)],
+        }, "paid").includes("clause:saved-moisture-priority-first"), `${turnId}: ${negatedFirstStep}`);
+      }
+    }
   }
 });
 
@@ -1396,6 +1424,33 @@ test("long-range recall asserts structured practical steps rather than rendered 
   const turn = loaded.fixture.turns.find((item) => item.id === assertion.turn);
   const fixture = { ...loaded.fixture, turns: [turn], conversationAssertions: [assertion] };
   const moisturePriorityClause = turn.clauses.find((item) => item.id === "retains-moisture-first-priority");
+  const initialMoisturePriorityClause = loaded.fixture.turns
+    .find((item) => item.id === "t01-saved-home-start")
+    .clauses.find((item) => item.id === "saved-moisture-priority-first");
+  const acceptedNaturalFirstSteps = [
+    "Check recurring condensation, damp and mould… Address this before tightening the apartment.",
+    "Check that the bathroom fan removes air outside and use it whenever moisture is produced; investigate persistent damp or mould before tightening the apartment.",
+    "Control condensation, damp and mould first by using the bathroom exhaust fan and fixing any leak or persistent mould source. This protects indoor air and avoids trapping moisture.",
+  ];
+  const negatedNaturalFirstSteps = [
+    "Check that the bathroom fan removes air outside; do not investigate persistent damp before tightening the apartment.",
+    "Check that the bathroom fan removes air outside; you shouldn't investigate persistent damp before tightening the apartment.",
+    "Check that the bathroom fan removes air outside; you cannot investigate persistent damp before tightening the apartment.",
+    "Check that the bathroom fan removes air outside; you can't investigate persistent damp before tightening the apartment.",
+    "Check that the bathroom fan removes air outside; investigate persistent damp, but not before tightening the apartment.",
+    "Control condensation, but not first by using the bathroom exhaust fan.",
+  ];
+  for (const clause of [initialMoisturePriorityClause, moisturePriorityClause]) {
+    for (const firstStep of acceptedNaturalFirstSteps) {
+      assert.equal(clause.anyOf.some((pattern) => new RegExp(pattern, "i").test(firstStep)), true, firstStep);
+    }
+    for (const firstStep of negatedNaturalFirstSteps) {
+      assert.equal(clause.anyOf.some((pattern) => new RegExp(pattern, "i").test(firstStep)), false, firstStep);
+    }
+    assert.equal(clause.anyOf.some((pattern) => (
+      new RegExp(pattern, "i").test("Start with the front-door draught, then check recurring condensation and damp.")
+    )), false);
+  }
   assert.equal(moisturePriorityClause.anyOf.some((pattern) => (
     new RegExp(pattern, "i").test("For your apartment, start with the windows, then moisture control, then the front-door gap.")
   )), false);

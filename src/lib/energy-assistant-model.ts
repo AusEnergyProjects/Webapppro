@@ -1338,6 +1338,87 @@ function isSimpleUnderDoorDraughtRequest(message: string) {
     && surgeMaterialQuestionParts(message).length === 1;
 }
 
+function isLandlordFirstScopeBeforeMajorWorkRequest(message: string) {
+  const namesLandlord = /\b(?:landlord|rental provider|property owner)\b/i.test(message);
+  const asksForFirstScope = /\b(?:sensible|practical|initial|first|preliminary)\s+(?:inspection\s+|repair\s+)?scope\b/i.test(message);
+  const majorWorkNeedsApproval = /\b(?:approv(?:e|al|ing)|before)\b[^.!?\n]{0,70}\bmajor (?:work|repairs?|upgrades?)\b|\bmajor (?:work|repairs?|upgrades?)\b[^.!?\n]{0,70}\bapprov/i.test(message);
+  const asksWhatToReport = /\bwhat\b[^.!?\n]{0,45}\b(?:report|include|document|scope)\b|\bwhat should I report\b/i.test(message);
+  return namesLandlord && asksForFirstScope && majorWorkNeedsApproval && asksWhatToReport;
+}
+
+function isOrderedWholeSubjectThreeActionSynthesisRequest(request: SurgeModelRequest) {
+  if (!explicitlyRequestsThreeActions(request.message)
+    || isPricedMultiOptionComparisonRequest(request.message)
+    || isSurgeBroadCheapWindowHeatLossOptionsRequest(request.message)
+    || !/\b(?:back to|based on|using|what I told you|saved answers?|my home only|whole home|in order)\b/i.test(request.message)) {
+    return false;
+  }
+  const frame = selectSurgeConversationFrame(
+    request.message,
+    request.continuation,
+    Boolean(request.planContext),
+  );
+  return frame.subjects.length === 1 && frame.relatedDecisions.length > 1;
+}
+
+function orderedThreeActionMoisturePriorityKind(
+  request: SurgeModelRequest,
+): "" | "roof_source" | "moisture_control" {
+  const directPriority = unresolvedSavedMoisturePriorityKind(request);
+  if (directPriority || !isOrderedWholeSubjectThreeActionSynthesisRequest(request)) {
+    return directPriority;
+  }
+  const frame = selectSurgeConversationFrame(
+    request.message,
+    request.continuation,
+    Boolean(request.planContext),
+  );
+  return conversationSynthesisFor(
+    request.message,
+    frame,
+    request.planContext,
+    request.continuation,
+  )?.retainedFirstPriority === "moisture_before_windows"
+    ? "moisture_control"
+    : "";
+}
+
+function requestRetainsWorkingHeaterConstraint(request: SurgeModelRequest) {
+  if (!isOrderedWholeSubjectThreeActionSynthesisRequest(request)) return false;
+  const frame = selectSurgeConversationFrame(
+    request.message,
+    request.continuation,
+    Boolean(request.planContext),
+  );
+  const scopedUserTurns = scopedPromptRecentTurns(request, frame)
+      .filter((turn) => turn.role === "user")
+      .map((turn) => turn.content);
+  const selectedDecisionEvidence = frame.relatedDecisions.flatMap((decision) => [
+      decision.goal,
+      ...decision.facts.map((fact) => `${fact.key}: ${fact.value}`),
+    ]);
+  const selectedFactsContainCanonicalWorkingSplit = frame.relatedDecisions.some((decision) => (
+    decision.facts.some((fact) => fact.value.trim().toLowerCase() === "working_reverse_cycle_split")
+  ));
+  const scopedEvidence = [...scopedUserTurns, ...selectedDecisionEvidence];
+  const hasNegativeSplitEvidence = scopedEvidence.some((value) => (
+    /\b(?:broken|faulty|failed|failing|not[- ]working)\b[^.!?\n]{0,55}\b(?:reverse[- ]?cycle|split(?: system)?)\b|\b(?:reverse[- ]?cycle|split(?: system)?)\b[^.!?\n]{0,80}\b(?:broken|faulty|failed|failing|stopped|not[- ]working|isn['’]?t (?:working|heating|running|operating)|doesn['’]?t (?:work|heat|run|operate)|does not (?:reliably )?(?:work|heat|run|operate)|not (?:reliably )?(?:work(?:ing)?|heat(?:ing)?|run(?:ning)?|operat(?:e|ing))|no longer (?:works?|heats?|runs?|operates?)|(?:never|hardly(?: ever)?|rarely|seldom|barely) (?:works?|heats?|runs?|operates?)|can(?:not|['’]?t| not) (?:reliably )?(?:work|heat|run|operate|keep\b[^.!?\n]{0,25}\bwarm)|can (?:hardly|barely) (?:work|heat|run|operate)|(?:is|was) (?:not )?(?:able|unable) to (?:work|heat|run|operate|keep\b[^.!?\n]{0,25}\bwarm)|(?:fails?|struggles?) to (?:work|heat|run|operate|keep\b[^.!?\n]{0,25}\bwarm))\b/i.test(value)
+  ));
+  if (hasNegativeSplitEvidence) return false;
+  const hasAffirmativeWorkingSplitEvidence = scopedEvidence.some((value) => (
+    /\b(?:reverse[- ]?cycle|split(?: system)?)\b[^.!?\n]{0,70}\b(?:still )?(?:works?|working|runs?|operates?|heat(?:s|ing)? (?:properly|well|fine|normally))\b|\b(?:working|works?|runs?|operates?|heat(?:s|ing)? (?:properly|well|fine|normally))\b[^.!?\n]{0,55}\b(?:reverse[- ]?cycle|split(?: system)?)\b/i.test(value)
+  ));
+  return selectedFactsContainCanonicalWorkingSplit || hasAffirmativeWorkingSplitEvidence;
+}
+
+function explicitThreeActionAnswerRetainsWorkingHeater(
+  answer: string,
+  request: SurgeModelRequest,
+) {
+  if (!requestRetainsWorkingHeaterConstraint(request)) return true;
+  return /\b(?:keep(?:ing)?|retain(?:ing)?|continu(?:e using|e to use|ing to use)|do not replace|don['’]?t replace|without replacing|rather than replacing)\b[^.!?\n]{0,80}\b(?:working|existing)?\s*(?:reverse[- ]?cycle|split(?: system)?)\b|\b(?:working|existing)?\s*(?:reverse[- ]?cycle|split(?: system)?)\b[^.!?\n]{0,80}\b(?:keep(?:ing)?|retain(?:ing)?|continu(?:e using|e to use|ing to use)|do not replace|don['’]?t replace|without replacing|rather than replacing)\b/i.test(answer);
+}
+
 function requestSpecificModelInstructions(request: SurgeModelRequest) {
   if (isSimpleUnderDoorDraughtRequest(request.message)) return `
 
@@ -1396,22 +1477,35 @@ Current-question content requirements:
 Current-question content requirements:
 - Keep the complete customer-visible comparison to 140 words or fewer.
 - Retain every supplied option price, warranty and material scope difference. Compare the added value neutrally and remove repetition before removing decision-critical facts.`;
+  if (isLandlordFirstScopeBeforeMajorWorkRequest(request.message)) return `
+
+Current-question content requirements:
+- Keep the complete customer-visible answer to about 130 words and never more than 140 words.
+- Give the landlord a sensible first scope before major work: record the observed problem and evidence, inspect likely defects or maintenance causes, separate repairs from optional upgrades, and request a staged itemised proposal with responsibilities, approvals and relevant licensed trades.
+- Remove repetition before removing supplied facts, quantities or scope details.`;
+  const structuredRequirement = requiredStructuredResponse(request.message);
+  if (structuredRequirement) {
+    if (structuredRequirement.topics.length) return `
+
+Current-question structure requirements:
+- Use exactly ${structuredRequirement.count} steps array items, one for each named alternative. Do not combine the alternatives into one paragraph or one step.
+- Give the direct comparison first, then make each step explain that option's fit or limit.`;
+    const moisturePriority = orderedThreeActionMoisturePriorityKind(request);
+    const isWholeSubjectSynthesis = isOrderedWholeSubjectThreeActionSynthesisRequest(request);
+    const workingHeaterConstraint = requestRetainsWorkingHeaterConstraint(request);
+    return `
+
+Current-question structure requirements:
+- Use exactly ${structuredRequirement.count} ranked steps array items in the requested order. Do not place the three actions only in verdict or reason.
+- Keep each step to one distinct action for this home.${isWholeSubjectSynthesis ? " Keep the complete customer-visible answer to 120 words or fewer." : ""}
+- Preserve the selected home's material retained facts, quantities and constraints; remove repetition before any price, material or decision-critical fact.${moisturePriority ? `
+- The saved home has an unresolved moisture priority. Put ${moisturePriority === "roof_source" ? "the possible roof source of the moisture" : "moisture control"} first, before door draughts or window upgrades.` : ""}${workingHeaterConstraint ? `
+- The retained reverse-cycle heater still works properly. Explicitly keep it rather than replacing it; do not turn heater replacement into one of the three actions.` : ""}`;
+  }
   if (unresolvedSavedMoisturePriorityKind(request)) return `
 
 Current-question content requirements:
 - The saved home has an unresolved moisture priority. Lead with moisture control${unresolvedSavedMoisturePriorityKind(request) === "roof_source" ? " and its possible roof source" : ""} before door draughts or window upgrades, then answer the requested comparison.`;
-  const structuredRequirement = requiredStructuredResponse(request.message);
-  if (structuredRequirement) return structuredRequirement.topics.length
-    ? `
-
-Current-question structure requirements:
-- Use exactly ${structuredRequirement.count} steps array items, one for each named alternative. Do not combine the alternatives into one paragraph or one step.
-- Give the direct comparison first, then make each step explain that option's fit or limit.`
-    : `
-
-Current-question structure requirements:
-- Use exactly ${structuredRequirement.count} ranked steps array items in the requested order. Do not place the three actions only in verdict or reason.
-- Keep each step to one distinct action for this home.`;
   return "";
 }
 
@@ -1507,6 +1601,15 @@ function modelRepairInstructions(
       return `${MODEL_REPAIR_INSTRUCTIONS}
 - Heating-cost repair: before servicing or replacement, suggest a lower comfortable setting trial and compare electricity use under similar weather, operating hours, rooms and controls. Explain that the supplied 24°C heating setting can raise use without proving a fault. Do not invent a universal target temperature.`;
     }
+    if (request && isOrderedWholeSubjectThreeActionSynthesisRequest(request)) {
+      const moisturePriority = orderedThreeActionMoisturePriorityKind(request);
+      return `${MODEL_REPAIR_INSTRUCTIONS}
+- Three-action repair: use exactly three ranked steps in the requested order and keep the complete customer-visible answer to 120 words or fewer. Preserve material retained facts, supplied quantities, prices and constraints.${moisturePriority ? ` Put ${moisturePriority === "roof_source" ? "the possible roof source of the moisture" : "moisture control"} first.` : ""}${requestRetainsWorkingHeaterConstraint(request) ? " Explicitly keep the working reverse-cycle heater rather than replacing it." : ""}`;
+    }
+    if (request && explicitlyRequestsThreeActions(request.message)) {
+      return `${MODEL_REPAIR_INSTRUCTIONS}
+- Three-action repair: use exactly three ranked steps in the requested order. Preserve material supplied facts, quantities, prices and constraints; remove repetition before decision-critical detail.`;
+    }
     return `${MODEL_REPAIR_INSTRUCTIONS}
 - Coverage repair: answer every requested part. Explicitly use any material current observation supplied by the user that changes the verdict. For ways, options or tips, rank the practical choices and give the action, why it helps and its main fit or limit.`;
   }
@@ -1516,6 +1619,15 @@ function modelRepairInstructions(
     && asksForMixedCurrentStcAndVeecValues(request)) {
     return `${MODEL_REPAIR_INSTRUCTIONS}
 - Mixed-certificate recovery repair: address both STCs and VEECs, with a useful current-value checking path for each or one shared quote check covering both certificate quantities, assumed unit values, fees and net credits. A maintained certificate value is allowed only as an explicitly dated reviewed snapshot, never as today's, current or live value, and only with its evidence alias in usedSourceIds. Do not substitute VEEC eligibility guidance for the unanswered STC value.`;
+  }
+  if (stage === "answer_too_long" && request && isOrderedWholeSubjectThreeActionSynthesisRequest(request)) {
+    const moisturePriority = orderedThreeActionMoisturePriorityKind(request);
+    return `${MODEL_REPAIR_INSTRUCTIONS}
+- Three-action length repair: keep exactly three ranked steps and the complete customer-visible answer to 120 words or fewer. Preserve the requested order, material retained facts, supplied quantities, prices and constraints; remove repetition first.${moisturePriority ? ` Put ${moisturePriority === "roof_source" ? "the possible roof source of the moisture" : "moisture control"} first.` : ""}${requestRetainsWorkingHeaterConstraint(request) ? " Explicitly keep the working reverse-cycle heater rather than replacing it." : ""}`;
+  }
+  if (stage === "answer_too_long" && request && isLandlordFirstScopeBeforeMajorWorkRequest(request.message)) {
+    return `${MODEL_REPAIR_INSTRUCTIONS}
+- Landlord first-scope length repair: keep the complete customer-visible answer to 140 words or fewer. Retain the observed evidence, defect or maintenance inspection, separation of repairs from optional upgrades, and staged itemised scope with responsibilities and approvals. Remove repetition first.`;
   }
   if (stage === "answer_too_long" && request && isPricedMultiOptionComparisonRequest(request.message)) {
     return `${MODEL_REPAIR_INSTRUCTIONS}
@@ -2887,6 +2999,12 @@ function modelAnswerConversationQualityFailure(
   const wordCount = answer.split(/\s+/).filter(Boolean).length;
   const maximumWords = turnIntent === "clarification" ? 100 : 180;
   if (wordCount > maximumWords) return "answer_too_long";
+  if (isOrderedWholeSubjectThreeActionSynthesisRequest(request) && wordCount > 120) {
+    return "answer_too_long";
+  }
+  if (isLandlordFirstScopeBeforeMajorWorkRequest(request.message) && wordCount > 140) {
+    return "answer_too_long";
+  }
   if (isPricedMultiOptionComparisonRequest(request.message) && wordCount > 140) {
     return "answer_too_long";
   }
@@ -2911,6 +3029,9 @@ function modelAnswerConversationQualityFailure(
     return "question_coverage";
   }
   if (!coldHomeFollowUpRetainsConfirmedDoor(answer, request)) {
+    return "question_coverage";
+  }
+  if (!explicitThreeActionAnswerRetainsWorkingHeater(answer, request)) {
     return "question_coverage";
   }
   if (!victorianProgramQuestionGetsSpecificExamples(answer, request)) {

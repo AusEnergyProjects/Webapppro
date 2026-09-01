@@ -3210,6 +3210,459 @@ test("a returned prior comparison may answer every remembered option without a f
   assert.equal(result.answer.directAnswer, candidate);
 });
 
+test("a landlord first-scope answer repairs the exact 143-word paid miss without losing scope", async () => {
+  const message = "The landlord wants a sensible first scope before approving major work. What should I report?";
+  const paidCandidate = {
+    answerType: "starting_plan",
+    verdict: "Start with a written, evidence-based inspection and repair scope, not a major upgrade proposal.",
+    reason: "This lets the landlord confirm the cause, fix maintenance defects first and price larger work separately. Keep copies of the report and all correspondence. Use your state or territory tenancy process if the issue may involve minimum rental standards or necessary repairs.",
+    steps: [
+      "Record each problem by room with photos, dates, weather conditions and the comfort, moisture or bill impact. Identify any visible gaps, damage, leaks or failed equipment.",
+      "Request an inspection covering draughts, window and door seals, water entry, insulation condition and existing heating or cooling performance. Ask for defects and maintenance items to be listed separately from upgrades.",
+      "Request a staged, itemised proposal: minor repairs first, then optional major work with installed scope, approvals, responsibilities and exclusions. Fixed building work needs written owner approval and appropriately licensed trades.",
+    ],
+  };
+  const paidCandidateText = [
+    paidCandidate.verdict,
+    paidCandidate.reason,
+    ...paidCandidate.steps,
+  ].join(" ");
+  assert.equal(paidCandidateText.split(/\s+/u).filter(Boolean).length, 143);
+
+  const repairedCandidate = {
+    answerType: "starting_plan",
+    verdict: "Report a written inspection and repair scope before proposing major upgrades.",
+    reason: "This gives the landlord evidence of the cause and separates maintenance defects from optional improvements.",
+    steps: [
+      "Record each affected room with photos, dates, weather, moisture and comfort impacts, plus visible gaps, damage, leaks or failed equipment.",
+      "Inspect water entry, window and door seals, insulation condition, and heating or cooling performance. List maintenance defects separately from upgrades.",
+      "Request a staged, itemised proposal showing repairs first, optional major work, installed scope, responsibilities, approvals, exclusions and any licensed trades required.",
+    ],
+  };
+  const calls = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({ message }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse(structuredModelPayload(
+        calls.length === 1 ? paidCandidate : repairedCandidate,
+      ));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].input[0].content[0].text, /about 130 words and never more than 140 words/i);
+  assert.equal(JSON.parse(calls[1].input[1].content[0].text).repair.failureStage, "answer_too_long");
+  assert.match(calls[1].input[0].content[0].text, /landlord first-scope length repair/i);
+  assert.ok(result.answer.directAnswer.split(/\s+/u).filter(Boolean).length <= 140);
+  assert.match(result.answer.directAnswer, /photos, dates, weather/i);
+  assert.match(result.answer.directAnswer, /maintenance defects separately from upgrades/i);
+  assert.match(result.answer.directAnswer, /staged, itemised proposal/i);
+  assert.match(result.answer.directAnswer, /responsibilities, approvals, exclusions/i);
+  assert.deepEqual(failures, []);
+});
+
+test("the landlord first-scope cap does not apply to an adjacent completed-work report", async () => {
+  const message = "The landlord has approved the major work. What should the completion report include?";
+  const candidate = {
+    answerType: "starting_plan",
+    verdict: "Keep one clear completion record for the landlord, tenant and future maintenance.",
+    reason: "A complete file shows what was approved, who carried out each task and whether the finished work matches the agreed scope. Keep the approval, contract, variations, invoices and correspondence together so later questions can be checked against the same record. Include the final inspection date and any agreed monitoring period.",
+    steps: [
+      "Photograph each area before, during and after the work. Label the room, date and relevant defect, and note any change from the approved drawings or written scope.",
+      "List the contractor, licence details, installed products, model numbers, commissioning results, warranties and maintenance instructions. Attach certificates and test records supplied for electrical, plumbing or building work.",
+      "Record outstanding defects, who must fix them and the agreed date. Ask the tenant to confirm whether the original comfort or moisture problem has changed after normal use.",
+    ],
+  };
+  const candidateText = [candidate.verdict, candidate.reason, ...candidate.steps].join(" ");
+  assert.ok(candidateText.split(/\s+/u).filter(Boolean).length > 140);
+  assert.ok(candidateText.split(/\s+/u).filter(Boolean).length <= 150);
+  let calls = 0;
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({ message }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      calls += 1;
+      return jsonResponse(structuredModelPayload(candidate));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls, 1);
+  assert.ok(result.answer.directAnswer.split(/\s+/u).filter(Boolean).length > 140);
+  assert.match(result.answer.directAnswer, /approval, contract, variations, invoices/i);
+  assert.match(result.answer.directAnswer, /final setup and checks results/i);
+  assert.deepEqual(failures, []);
+});
+
+test("an ordered saved-home top-three answer repairs the exact 131-word paid miss", async () => {
+  const message = "Back to my home only: give me the top three actions in order using what I told you. No jargon and no more questions.";
+  const continuation = state({
+    activeTopic: "rcac",
+    goal: "My existing reverse-cycle split still heats properly, so I do not want to replace a working unit.",
+    ledger: {
+      turn: 3,
+      activeDecisionId: "decision_split",
+      subjects: [{
+        id: "saved_home",
+        kind: "saved_home",
+        label: "Saved home",
+        facts: [{ key: "postcode", value: "3072", source: "plan", updatedTurn: 1 }],
+        lastTouchedTurn: 3,
+      }],
+      decisions: [
+        {
+          id: "decision_priority",
+          subjectIds: ["saved_home"],
+          topic: "general",
+          goal: "Where should I start based on my saved answers?",
+          facts: [{ key: "comfort_concerns", value: "condensation, damp or mould", source: "chat", updatedTurn: 1 }],
+          outcomeSummary: "Start with moisture control before sealing gaps or upgrading windows.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 1,
+        },
+        {
+          id: "decision_windows",
+          subjectIds: ["saved_home"],
+          topic: "glazing_shading",
+          goal: "At my saved apartment, air comes under the front door and the single-glazed windows feel cold. I have $1,500.",
+          facts: [
+            { key: "user_context", value: "I have $1,500 for the front-door draught and cold single-glazed windows.", source: "chat", updatedTurn: 2 },
+            { key: "budget", value: "$1,500", source: "chat", updatedTurn: 2 },
+            { key: "windows", value: "single glazed and feel cold", source: "chat", updatedTurn: 2 },
+          ],
+          outcomeSummary: "After moisture control, seal the door gap and improve close-fitting window coverings.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 2,
+        },
+        {
+          id: "decision_split",
+          subjectIds: ["saved_home"],
+          topic: "rcac",
+          goal: "My existing reverse-cycle split still heats properly, so I do not want to replace a working unit.",
+          facts: [{ key: "existing_heating", value: "working_reverse_cycle_split", source: "chat", updatedTurn: 3 }],
+          outcomeSummary: "Keep the working reverse-cycle split rather than replacing it.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 3,
+        },
+      ],
+    },
+  });
+  const paidCandidate = {
+    answerType: "starting_plan",
+    verdict: "For your apartment and $1,500 budget, deal with moisture first, then the front-door draught, then the cold windows. Keep the working reverse-cycle split.",
+    reason: "These actions target your damp, winter discomfort and heat loss without spending money replacing a heater that still works properly.",
+    steps: [
+      "Control condensation, damp and mould first by using the bathroom exhaust fan and fixing any leak or persistent mould source. This protects indoor air and avoids trapping moisture.",
+      "Seal the gap under the front door with a suitable door seal or door snake. This is the clearest low-cost way to stop the draught, but do not cover any required vent.",
+      "Add close-fitting honeycomb blinds or thermal curtains with pelmets to the main cold windows. They reduce discomfort from single glazing, although they will not perform like replacement glazing.",
+    ],
+  };
+  const paidCandidateText = [paidCandidate.verdict, paidCandidate.reason, ...paidCandidate.steps].join(" ");
+  assert.equal(paidCandidateText.split(/\s+/u).filter(Boolean).length, 131);
+  const repairedCandidate = {
+    answerType: "starting_plan",
+    verdict: "Start with moisture control, then the front-door draught, then the cold windows within your $1,500 budget.",
+    reason: "Keep the working reverse-cycle split rather than replacing it; these three actions address the retained apartment problems first.",
+    steps: [
+      "Use the bathroom exhaust and investigate any continuing leak, damp or mould source before tightening the apartment.",
+      "Stop air under the front door with a door snake or suitable seal, without blocking required ventilation.",
+      "Fit close-fitting honeycomb blinds or thermal curtains with pelmets to the cold single-glazed windows.",
+    ],
+  };
+  const calls = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message,
+    continuation,
+    recentTurns: [{
+      role: "user",
+      content: "My existing reverse-cycle split still heats properly, so I do not want to replace a working unit.",
+    }],
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [
+        { key: "postcode", value: "3072" },
+        { key: "comfort_concerns", value: "Condensation, damp or mould" },
+      ],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse(structuredModelPayload({
+        ...(calls.length === 1 ? paidCandidate : repairedCandidate),
+        state: continuation,
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].input[0].content[0].text, /exactly 3 ranked steps array items/i);
+  assert.match(calls[0].input[0].content[0].text, /120 words or fewer/i);
+  assert.match(calls[0].input[0].content[0].text, /unresolved moisture priority/i);
+  assert.match(calls[0].input[0].content[0].text, /still works properly/i);
+  assert.equal(JSON.parse(calls[1].input[1].content[0].text).repair.failureStage, "answer_too_long");
+  assert.match(calls[1].input[0].content[0].text, /three-action length repair/i);
+  assert.ok(result.answer.directAnswer.split(/\s+/u).filter(Boolean).length <= 120);
+  assert.equal(result.presentation.steps.length, 3);
+  assert.match(result.answer.directAnswer, /^Start with moisture control/i);
+  assert.match(result.answer.directAnswer, /\$1,500/);
+  assert.match(result.answer.directAnswer, /front door/i);
+  assert.match(result.answer.directAnswer, /single-glazed windows/i);
+  assert.match(result.answer.directAnswer, /keep the working reverse-cycle split rather than replacing it/i);
+  assert.deepEqual(failures, []);
+});
+
+test("whole-home working-split constraints use only affirmative selected-home evidence", async () => {
+  const message = "Back to my home only: give me the top three actions in order using what I told you. No jargon and no more questions.";
+  const baseSavedDecisions = [
+    {
+      id: "decision_saved_door",
+      subjectIds: ["saved_home"],
+      topic: "draughts_ventilation",
+      goal: "Stop the draught under my front door",
+      facts: [{ key: "door_draught", value: "air under front door", source: "chat", updatedTurn: 1 }],
+      outcomeSummary: "Use a door snake, then check whether a compatible seal is needed.",
+      openItems: [],
+      pendingQuestion: "",
+      status: "resolved",
+      lastTouchedTurn: 1,
+    },
+    {
+      id: "decision_saved_windows",
+      subjectIds: ["saved_home"],
+      topic: "glazing_shading",
+      goal: "Reduce cold from my single-glazed windows",
+      facts: [{ key: "glazing", value: "single_glazed", source: "chat", updatedTurn: 2 }],
+      outcomeSummary: "Check window gaps and use close-fitting coverings.",
+      openItems: [],
+      pendingQuestion: "",
+      status: "resolved",
+      lastTouchedTurn: 2,
+    },
+  ];
+  const scenarios = [
+    {
+      name: "Mum-only working reverse-cycle",
+      topLevelGoal: "Mum's reverse-cycle split still heats properly, so she does not want to replace it.",
+      subjects: [{
+        id: "mums_home",
+        kind: "property",
+        label: "Mum's home",
+        facts: [],
+        lastTouchedTurn: 3,
+      }],
+      decisions: [{
+        id: "decision_mum_split",
+        subjectIds: ["mums_home"],
+        topic: "rcac",
+        goal: "Mum's reverse-cycle split still heats properly, so she does not want to replace it.",
+        facts: [{ key: "existing_heating", value: "working_reverse_cycle_split", source: "chat", updatedTurn: 3 }],
+        outcomeSummary: "Keep Mum's working split.",
+        openItems: [],
+        pendingQuestion: "",
+        status: "resolved",
+        lastTouchedTurn: 3,
+      }],
+      recentTurns: [
+        { role: "user", content: "At my own home, air comes under the front door and the windows feel cold." },
+        { role: "assistant", content: "Address your own door and windows first." },
+        { role: "user", content: "Mum's reverse-cycle split still heats properly, so she does not want to replace it." },
+        { role: "assistant", content: "Keep Mum's working split." },
+      ],
+    },
+    {
+      name: "broken own-home split",
+      topLevelGoal: "My reverse-cycle split is broken and is not heating properly.",
+      subjects: [],
+      decisions: [{
+        id: "decision_saved_broken_split",
+        subjectIds: ["saved_home"],
+        topic: "rcac",
+        goal: "My reverse-cycle split is broken and is not heating properly.",
+        facts: [{ key: "existing_heating", value: "broken_reverse_cycle_split", source: "chat", updatedTurn: 3 }],
+        outcomeSummary: "The split needs fault diagnosis.",
+        openItems: [],
+        pendingQuestion: "",
+        status: "resolved",
+        lastTouchedTurn: 3,
+      }],
+      recentTurns: [{ role: "user", content: "My reverse-cycle split is broken and is not heating properly." }],
+    },
+    ...[
+      ["never heats properly", "My reverse-cycle split never heats properly."],
+      ["cannot heat properly", "My reverse-cycle split cannot heat the room properly."],
+      ["can't heat properly", "My reverse-cycle split can't heat the room properly."],
+      ["hardly heats properly", "My reverse-cycle split hardly ever heats properly."],
+      ["rarely heats properly", "My reverse-cycle split rarely heats properly."],
+      ["unable to heat properly", "My reverse-cycle split is unable to heat the room properly."],
+    ].map(([name, wording], index) => ({
+      name,
+      topLevelGoal: wording,
+      subjects: [],
+      decisions: [{
+        id: `decision_saved_negated_split_${index + 1}`,
+        subjectIds: ["saved_home"],
+        topic: "rcac",
+        goal: wording,
+        facts: [{ key: "existing_heating", value: "working_reverse_cycle_split", source: "chat", updatedTurn: 3 }],
+        outcomeSummary: "The retained split performance needs checking.",
+        openItems: [],
+        pendingQuestion: "",
+        status: "resolved",
+        lastTouchedTurn: 3,
+      }],
+      recentTurns: [{ role: "user", content: wording }],
+    })),
+    {
+      name: "working gas heater",
+      topLevelGoal: "My working gas heater still heats properly, so do not replace it.",
+      subjects: [],
+      decisions: [{
+        id: "decision_saved_gas_heater",
+        subjectIds: ["saved_home"],
+        topic: "rcac",
+        goal: "My working gas heater still heats properly, so do not replace it.",
+        facts: [{ key: "existing_heating", value: "working_gas_heater", source: "chat", updatedTurn: 3 }],
+        outcomeSummary: "Recorded that the gas heater works.",
+        openItems: [],
+        pendingQuestion: "",
+        status: "resolved",
+        lastTouchedTurn: 3,
+      }],
+      recentTurns: [{ role: "user", content: "My working gas heater still heats properly, so do not replace it." }],
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const continuation = state({
+      activeTopic: "general",
+      goal: scenario.topLevelGoal,
+      ledger: {
+        turn: 3,
+        activeDecisionId: scenario.decisions[0].id,
+        subjects: [{
+          id: "saved_home",
+          kind: "saved_home",
+          label: "Saved home",
+          facts: [],
+          lastTouchedTurn: 3,
+        }, ...scenario.subjects],
+        decisions: [...baseSavedDecisions, ...scenario.decisions],
+      },
+    });
+    const calls = [];
+    const failures = [];
+    const result = await generateSurgeModelAnswer(request({
+      message,
+      continuation,
+      recentTurns: scenario.recentTurns,
+      planContext: { version: 1, source: "home_energy_plan", facts: [] },
+    }), {
+      apiKey: "test-api-key",
+      fetch: async (_url, options) => {
+        calls.push(JSON.parse(options.body));
+        return jsonResponse(structuredModelPayload({
+          answerType: "starting_plan",
+          verdict: "Start with the front-door draught, then the cold windows, then check the remaining window gaps.",
+          reason: "These are the retained comfort problems for your own home.",
+          steps: [
+            "Use a door snake, then check whether the entry door needs a compatible seal.",
+            "Add close-fitting honeycomb blinds or thermal curtains with pelmets to the coldest windows.",
+            "Check window frames, latches and seals for actual moving-air gaps before fitting more seals.",
+          ],
+          state: continuation,
+        }));
+      },
+      onFailure: (failure) => failures.push(failure),
+    });
+
+    assert.ok(result, `${scenario.name}: ${JSON.stringify(failures)}`);
+    assert.equal(calls.length, 1, scenario.name);
+    const developerPrompt = calls[0].input[0].content[0].text;
+    assert.match(developerPrompt, /120 words or fewer/i, scenario.name);
+    assert.doesNotMatch(developerPrompt, /retained reverse-cycle heater still works properly/i, scenario.name);
+    assert.doesNotMatch(developerPrompt, /explicitly keep the working reverse-cycle heater/i, scenario.name);
+    assert.doesNotMatch(result.answer.directAnswer, /reverse[- ]?cycle/i, scenario.name);
+    assert.deepEqual(failures, [], scenario.name);
+  }
+});
+
+test("the whole-home 120-word cap does not override priced or broad cheap-window contracts", async () => {
+  const continuation = fiftyDecisionLedgerState();
+  const pricedCalls = [];
+  const pricedFailures = [];
+  const pricedResult = await generateSurgeModelAnswer(request({
+    message: "Back to my home: compare the $6,900 and $7,400 quotes and give me exactly three actions in order.",
+    continuation,
+    planContext: savedHomePlanContext(),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      pricedCalls.push(JSON.parse(options.body));
+      return jsonResponse(structuredModelPayload({
+        answerType: "comparison",
+        verdict: "The $6,900 and $7,400 quotes need a like-for-like scope check before judging the $500 premium.",
+        reason: "The higher price adds value only if its included work or warranty is materially better.",
+        steps: [
+          "Confirm that both quotes cover the same equipment, labour and removal work.",
+          "Compare warranty length, exclusions and who provides after-sales service.",
+          "Ask each contractor to itemise any switchboard, access or approval costs.",
+        ],
+        state: continuation,
+      }));
+    },
+    onFailure: (failure) => pricedFailures.push(failure),
+  });
+
+  assert.ok(pricedResult, JSON.stringify(pricedFailures));
+  assert.equal(pricedCalls.length, 1);
+  assert.match(pricedCalls[0].input[0].content[0].text, /140 words or fewer/i);
+  assert.doesNotMatch(pricedCalls[0].input[0].content[0].text, /120 words or fewer/i);
+  assert.equal(pricedResult.presentation.steps.length, 3);
+  assert.deepEqual(pricedFailures, []);
+
+  const windowCalls = [];
+  const windowFailures = [];
+  const windowResult = await generateSurgeModelAnswer(request({
+    message: "Back to my home: give me exactly three actions in order, covering cheap ways to reduce heat loss from my windows using what I told you.",
+    continuation,
+    planContext: savedHomePlanContext(),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      windowCalls.push(JSON.parse(options.body));
+      return jsonResponse(completeCheapWindowPayload({
+        extraDetail: "These treatments are reversible, so test the coldest window before repeating them elsewhere.",
+        state: continuation,
+      }));
+    },
+    onFailure: (failure) => windowFailures.push(failure),
+  });
+
+  assert.ok(windowResult, JSON.stringify(windowFailures));
+  assert.equal(windowCalls.length, 1);
+  assert.match(windowCalls[0].input[0].content[0].text, /110 to 150 words/i);
+  assert.doesNotMatch(windowCalls[0].input[0].content[0].text, /120 words or fewer/i);
+  assert.ok(windowResult.answer.directAnswer.split(/\s+/u).filter(Boolean).length > 120);
+  assert.equal(windowResult.presentation.steps.length, 3);
+  assert.deepEqual(windowFailures, []);
+});
+
 test("a whole-home action order repairs stale budget and retained moisture-priority drift", async () => {
   const message = "Back to my home only: give me the top three actions in order using what I told you. No jargon and no more questions.";
   const continuation = state({
