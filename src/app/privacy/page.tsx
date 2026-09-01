@@ -39,6 +39,10 @@ const sections = [
     body: "A trade account owner chooses whether to connect Google Calendar, Outlook, Xero, MYOB or QuickBooks. The trade workspace sends only the information needed for the chosen action. The trade workspace remains the operational source of truth, and connected providers apply their own privacy terms. The trade workspace does not offer payment-provider connections or initiate customer payments. Account owners can disconnect a connected calendar or accounting provider from the integration workspace.",
   },
   {
+    title: "Five-minute call bookings",
+    body: "The public booking page embeds Calendly. When you choose a call time, Calendly receives the name, email address, booking answers and scheduling details you enter, creates the calendar event for Australian Energy Assessments and sends the related booking notifications. Calendly applies its own privacy terms. Do not enter identity documents, payment details, access codes or unrelated private information in the booking questions.",
+  },
+  {
     title: "Files, photos and meter information",
     body: "Job evidence is attached only to the authorised job and must not include people, identity documents, number plates, account paperwork or unrelated private information. Customer evidence must relate directly to the requested work and is available only through the authorised job workflow.",
   },
@@ -62,7 +66,7 @@ export default function PrivacyPage() {
       <SiteHeader active="direct-trade-dashboard" />
       <header className="trade-information-hero">
         <div>
-          <span>Effective 27 August 2026</span>
+          <span>Effective 1 September 2026</span>
           <h1>Privacy notice</h1>
           <p>
             This notice explains what Australian Energy Assessments collects,

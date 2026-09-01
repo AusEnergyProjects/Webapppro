@@ -120,7 +120,7 @@ export default function NathersWholeOfHomePage() {
       ctaTitle="Confirm the certificate and project pathway"
       ctaDescription="Start with the project location, design stage, certifier or approval pathway and the current drawings and fixed system selections."
       ctaActions={[
-        { label: "Book an assessment discussion", href: "/book-an-assessment" },
+        { label: "Book a 5-minute call", href: "/book-an-assessment" },
         { label: "Call 1300 241 149", href: "tel:+611300241149" },
       ]}
       serviceName="NatHERS Whole of Home rating"

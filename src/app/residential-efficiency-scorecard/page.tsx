@@ -186,7 +186,7 @@ export default function ResidentialEfficiencyScorecardPage() {
       <section className="assessment-upload-boundary">
         <div><span>Need a current assessment?</span><h2>Use the Home Energy Rating pathway for an existing home</h2><p>Explain the property location, why you need the rating and whether the home is already built. The assessment team can confirm the current pathway before detailed documents are supplied.</p></div>
         <Link href="/home-energy-rating-for-existing-homes">Read the current rating guide</Link>
-        <Link href="/book-an-assessment">Book an assessment discussion</Link>
+        <Link href="/book-an-assessment">Book a 5-minute call</Link>
       </section>
 
       <SiteFooter>Residential Efficiency Scorecard closed on 23 June 2026. Current existing-home assessments use Home Energy Rating, while regulatory new-home evidence uses the relevant new-home NatHERS pathway.</SiteFooter>

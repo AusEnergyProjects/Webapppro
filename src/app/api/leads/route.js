@@ -11,7 +11,6 @@ import {
 } from "@/lib/admin-notifications";
 import { isPublicPlanEnquiry } from "@/lib/public-plan-enquiry.mjs";
 import { isPublicRentalAssessmentRequest } from "@/lib/public-rental-assessment-request.mjs";
-import { isPublicAssessmentBookingRequest } from "@/lib/public-assessment-booking.mjs";
 import {
   confirmPublicPlanIntakeOpportunity,
   enqueuePublicPlanDelivery,
@@ -53,7 +52,6 @@ export const POST = createLeadPostHandler({
   resolveSystemAdminNotifications,
   isPublicPlanEnquiry,
   isPublicRentalAssessmentRequest,
-  isPublicAssessmentBookingRequest,
   enqueuePublicPlanDelivery,
   createOpportunityFromLead,
   confirmPublicPlanIntakeOpportunity,

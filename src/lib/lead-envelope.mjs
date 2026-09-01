@@ -7,10 +7,6 @@ import {
   isPublicRentalAssessmentRequest,
   PUBLIC_RENTAL_ASSESSMENT_SOURCE_JOURNEY,
 } from "./public-rental-assessment-request.mjs";
-import {
-  isPublicAssessmentBookingRequest,
-  PUBLIC_ASSESSMENT_BOOKING_SOURCE_JOURNEY,
-} from "./public-assessment-booking.mjs";
 
 const EVENT_TYPES = new Set([
   "comparison.results",
@@ -35,7 +31,6 @@ export function leadEventType(payload) {
   if (payload?.submissionType === "comparison") return "comparison.results";
   if (isPublicPlanEnquiry(payload?.enquiry)) return "direct_trade.project";
   if (isPublicRentalAssessmentRequest(payload?.enquiry)) return "direct_trade.project";
-  if (isPublicAssessmentBookingRequest(payload?.enquiry)) return "direct_trade.project";
   if (payload?.enquiry === "direct-trade-project")
     return "direct_trade.project";
   if (payload?.enquiry === "direct-trade-partner")
@@ -87,12 +82,7 @@ export function publicPlanSubmissionFingerprint(payload) {
     customerStreetAddress: payload?.customerStreetAddress || "",
     customerSuburb: payload?.customerSuburb || "",
     customerState: payload?.customerState || "",
-    state: payload?.state || "",
     postcode: payload?.postcode || "",
-    assessmentPathway: payload?.assessmentPathway || "",
-    assessmentStage: payload?.assessmentStage || "",
-    preferredContact: payload?.preferredContact || "",
-    preferredTiming: payload?.preferredTiming || "",
     projectCategories: payload?.projectCategories || [],
     projectNotes: payload?.projectNotes || "",
     requesterRole: payload?.requesterRole || "",
@@ -116,8 +106,7 @@ export function createLeadEnvelope(payload, options = {}) {
   const leadPayload = { ...(payload || {}) };
   const publicPlanEnquiry = isPublicPlanEnquiry(leadPayload.enquiry);
   const rentalAssessmentRequest = isPublicRentalAssessmentRequest(leadPayload.enquiry);
-  const assessmentBookingRequest = isPublicAssessmentBookingRequest(leadPayload.enquiry);
-  const publicRequest = publicPlanEnquiry || rentalAssessmentRequest || assessmentBookingRequest;
+  const publicRequest = publicPlanEnquiry || rentalAssessmentRequest;
   const submissionFingerprint = publicRequest
     ? publicPlanSubmissionFingerprint(leadPayload)
     : "";
@@ -142,36 +131,10 @@ export function createLeadEnvelope(payload, options = {}) {
     ? ""
     : residentialStateFromPostcode(leadPayload.postcode);
   const resolvedState = publicRequest
-    ? leadPayload.customerState || leadPayload.state || ""
+    ? leadPayload.customerState || ""
     : leadPayload.state || inferredState || "";
   const directTradeTriage =
-    assessmentBookingRequest
-      ? {
-          version: "public-assessment-booking-request-1",
-          status: "manual_review_required",
-          priority: "standard_review",
-          autoSend: false,
-          reviewFlags: ["appointment_confirmation_required"],
-          contactConsentReceipt: {
-            accepted: true,
-            purpose: leadPayload.consent?.purpose || "",
-            noticeVersion: leadPayload.consent?.noticeVersion || "",
-            grantedAt: leadPayload.consent?.grantedAt || "",
-            disclosedFields: [
-              "customer_name",
-              ...(leadPayload.email ? ["customer_email"] : []),
-              ...(leadPayload.phone ? ["customer_phone"] : []),
-              "postcode",
-              "state",
-              "assessment_pathway",
-              "project_stage",
-              "preferred_contact",
-              ...(leadPayload.preferredTiming ? ["preferred_timing"] : []),
-              ...(leadPayload.projectNotes ? ["customer_message"] : []),
-            ],
-          },
-        }
-      : rentalAssessmentRequest
+    rentalAssessmentRequest
       ? {
           version: "public-rental-assessment-request-1",
           status: "manual_review_required",
@@ -246,7 +209,6 @@ export function createLeadEnvelope(payload, options = {}) {
     source: "aea-energy-web",
     ...(publicPlanEnquiry ? { sourceJourney: "public-home-energy-plan" } : {}),
     ...(rentalAssessmentRequest ? { sourceJourney: PUBLIC_RENTAL_ASSESSMENT_SOURCE_JOURNEY } : {}),
-    ...(assessmentBookingRequest ? { sourceJourney: PUBLIC_ASSESSMENT_BOOKING_SOURCE_JOURNEY } : {}),
     ...(publicRequest ? { submissionFingerprint } : {}),
     ...(directTradeTriage ? { directTradeTriage } : {}),
     ...(participantReview ? { participantReview } : {}),

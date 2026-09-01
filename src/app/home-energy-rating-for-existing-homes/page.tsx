@@ -119,7 +119,7 @@ export default function HomeEnergyRatingForExistingHomesPage() {
       ctaTitle="Explain the home and the decision you need to make"
       ctaDescription="Start with the suburb and state, why you want the rating and any known access limits or renovations. The assessment team can confirm whether the current Home Energy Rating pathway fits."
       ctaActions={[
-        { label: "Book an assessment discussion", href: "/book-an-assessment" },
+        { label: "Book a 5-minute call", href: "/book-an-assessment" },
         { label: "Call 1300 241 149", href: "tel:+611300241149" },
       ]}
       serviceName="Home Energy Rating for existing homes"

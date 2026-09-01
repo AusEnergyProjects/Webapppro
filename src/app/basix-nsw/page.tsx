@@ -120,7 +120,7 @@ export default function BasixNswPage() {
       ctaTitle="Confirm the BASIX scope before detailed assessment"
       ctaDescription="Start with the NSW project address, development type, approval stage, consent authority and current plans so the applicable pathway and evidence can be identified."
       ctaActions={[
-        { label: "Book an assessment discussion", href: "/book-an-assessment" },
+        { label: "Book a 5-minute call", href: "/book-an-assessment" },
         { label: "Call 1300 241 149", href: "tel:+611300241149" },
       ]}
       serviceName="BASIX assessment support for NSW residential projects"

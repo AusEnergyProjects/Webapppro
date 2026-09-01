@@ -20,15 +20,6 @@ import {
   PUBLIC_RENTAL_ASSESSMENT_CONSENT_NOTICE_VERSION,
   PUBLIC_RENTAL_ASSESSMENT_CONSENT_PURPOSE,
 } from "./public-rental-assessment-request.mjs";
-import {
-  isPublicAssessmentBookingContactMethod,
-  isPublicAssessmentBookingPathway,
-  isPublicAssessmentBookingRequest,
-  isPublicAssessmentBookingStage,
-  isPublicAssessmentBookingSubmissionId,
-  PUBLIC_ASSESSMENT_BOOKING_CONSENT_NOTICE_VERSION,
-  PUBLIC_ASSESSMENT_BOOKING_CONSENT_PURPOSE,
-} from "./public-assessment-booking.mjs";
 import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -166,7 +157,6 @@ export function validateLeadPayload(raw) {
   const enquiry = cleanText(raw.enquiry, 80);
   const publicPlanEnquiry = isPublicPlanEnquiry(enquiry);
   const rentalAssessmentRequest = isPublicRentalAssessmentRequest(enquiry);
-  const assessmentBookingRequest = isPublicAssessmentBookingRequest(enquiry);
   const name = publicPlanEnquiry
     ? [customerFirstName, customerLastName].filter(Boolean).join(" ")
     : suppliedName;
@@ -194,12 +184,6 @@ export function validateLeadPayload(raw) {
     || consentVersion !== PUBLIC_RENTAL_ASSESSMENT_CONSENT_NOTICE_VERSION
   )) {
     return { ok: false, error: "Please confirm the current contact notice for this rental assessment request." };
-  }
-  if (assessmentBookingRequest && (
-    consentPurpose !== PUBLIC_ASSESSMENT_BOOKING_CONSENT_PURPOSE
-    || consentVersion !== PUBLIC_ASSESSMENT_BOOKING_CONSENT_NOTICE_VERSION
-  )) {
-    return { ok: false, error: "Please confirm the current contact notice for this assessment booking request." };
   }
 
   const annualKwh = cleanNumber(raw.annualKwh, 0, 100000000);
@@ -282,78 +266,6 @@ export function validateLeadPayload(raw) {
         propertyRelationship: "landlord-manager",
         preferredContact: phone ? "either" : "email",
         projectNotes: cleanText(raw.projectNotes, 1200),
-      },
-    };
-  }
-  if (assessmentBookingRequest) {
-    if (submissionType !== "upgrade") return { ok: false, error: "Unknown enquiry type." };
-    const submissionId = cleanText(raw.submissionId, 64);
-    if (!isPublicAssessmentBookingSubmissionId(submissionId)) {
-      return { ok: false, error: "Start a new assessment booking request and try again." };
-    }
-    const assessmentPathway = cleanText(raw.assessmentPathway, 40);
-    if (!isPublicAssessmentBookingPathway(assessmentPathway)) {
-      return { ok: false, error: "Choose the assessment pathway you want to discuss." };
-    }
-    const assessmentStage = cleanText(raw.assessmentStage, 40);
-    if (!isPublicAssessmentBookingStage(assessmentStage)) {
-      return { ok: false, error: "Choose the current home or project stage." };
-    }
-    const preferredContact = cleanText(raw.preferredContact, 16);
-    if (!isPublicAssessmentBookingContactMethod(preferredContact)) {
-      return { ok: false, error: "Choose how you prefer to be contacted." };
-    }
-    if (preferredContact === "email" && !email) {
-      return { ok: false, error: "Enter an email address for your preferred contact method." };
-    }
-    if (preferredContact === "phone" && !phone) {
-      return { ok: false, error: "Enter a phone number for your preferred contact method." };
-    }
-    const phoneDigits = phone.replace(/\D/g, "");
-    if (phone && (!PUBLIC_PLAN_PHONE_RE.test(phone) || phoneDigits.length < 8 || phoneDigits.length > 15)) {
-      return { ok: false, error: "Please enter a valid phone number." };
-    }
-    const state = canonicalAustralianState(raw.state) || "";
-    if (!state) return { ok: false, error: "Choose the state or territory for the property." };
-    if (!postcode) return { ok: false, error: "Enter the property's postcode." };
-    if (!postcodeMatchesState(postcode, state)) {
-      return { ok: false, error: `Postcode ${postcode} is usually in ${australianStateLabel(residentialStateFromPostcode(postcode))}. Please check the postcode or state.` };
-    }
-    if (assessmentPathway === "basix-nsw" && state !== "NSW") {
-      return { ok: false, error: "BASIX booking requests must be for a New South Wales property." };
-    }
-    const projectStage = assessmentStage === "early-planning" || assessmentStage === "unsure"
-      ? "researching"
-      : "assessment-ready";
-    return {
-      ok: true,
-      value: {
-        submissionType,
-        submissionId,
-        submittedAt: new Date().toISOString(),
-        name,
-        email,
-        phone,
-        postcode,
-        state,
-        assessmentPathway,
-        assessmentStage,
-        preferredContact,
-        preferredTiming: cleanSingleLine(raw.preferredTiming, 160),
-        projectCategories: ["assessment"],
-        projectPriorities: ["assessment-compliance"],
-        projectStage,
-        projectNotes: cleanText(raw.projectNotes, 1200),
-        website: cleanText(raw.website, 200),
-        clientStartedAt: cleanNumber(raw.clientStartedAt, 0, Number.MAX_SAFE_INTEGER),
-        consent: {
-          accepted: true,
-          purpose: consentPurpose,
-          noticeVersion: consentVersion,
-          grantedAt: consentGrantedAt,
-        },
-        upgrades: true,
-        enquiry,
       },
     };
   }

@@ -120,7 +120,7 @@ export default function NathersForNewHomesPage() {
       ctaTitle="Confirm the design stage and approval pathway"
       ctaDescription="Start with the project location, current design stage, approval contact and available plans. The assessment scope can then be matched to the evidence the project actually needs."
       ctaActions={[
-        { label: "Book an assessment discussion", href: "/book-an-assessment" },
+        { label: "Book a 5-minute call", href: "/book-an-assessment" },
         { label: "Call 1300 241 149", href: "tel:+611300241149" },
       ]}
       serviceName="NatHERS assessment for new homes"

@@ -9,8 +9,10 @@ const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativeP
 
 const shared = read("../src/components/AssessmentServicePage.tsx");
 const styles = read("../src/app/globals.css");
+const booking = read("../src/app/book-an-assessment/page.tsx");
+const bookingStyles = read("../src/app/book-an-assessment/page.module.css");
+const legacyBookingRedirect = read("../src/app/schedule-call/page.tsx");
 const routes = {
-  book: read("../src/app/book-an-assessment/page.tsx"),
   newHome: read("../src/app/nathers-for-new-homes/page.tsx"),
   existingHome: read("../src/app/home-energy-rating-for-existing-homes/page.tsx"),
   wholeOfHome: read("../src/app/nathers-whole-of-home/page.tsx"),
@@ -24,7 +26,8 @@ const educationSource = `${scorecard}\n${terminologyGuide}`;
 test("service routes keep the established apex paths canonical during the parallel build", () => {
   assert.match(shared, /new URL\(path, PUBLIC_SITE\.apexUrl\)/);
   assert.match(shared, /alternates: \{ canonical \}/);
-  assert.match(routes.book, /const path = "\/book-an-assessment"/);
+  assert.match(booking, /const path = "\/book-an-assessment"/);
+  assert.match(booking, /const canonical = `\$\{PUBLIC_SITE\.apexUrl\}\$\{path\}`/);
   assert.match(routes.newHome, /const path = "\/nathers-for-new-homes"/);
   assert.match(routes.existingHome, /const path = "\/home-energy-rating-for-existing-homes"/);
   assert.match(routes.wholeOfHome, /const path = "\/nathers-whole-of-home"/);
@@ -33,8 +36,9 @@ test("service routes keep the established apex paths canonical during the parall
 });
 
 test("every route has distinct search, Open Graph and Twitter metadata", () => {
-  const titles = Object.values(routes).map((source) => source.match(/const title = "([^"]+)"/)?.[1]);
-  const descriptions = Object.values(routes).map((source) => source.match(/const description = "([^"]+)"/)?.[1]);
+  const sources = [...Object.values(routes), booking];
+  const titles = sources.map((source) => source.match(/const title = "([^"]+)"/)?.[1]);
+  const descriptions = sources.map((source) => source.match(/const description = "([^"]+)"/)?.[1]);
   assert.equal(new Set(titles).size, 5);
   assert.equal(new Set(descriptions).size, 5);
   assert.match(shared, /openGraph: \{/);
@@ -64,12 +68,10 @@ test("service and FAQ structured data are derived from visible page copy", () =>
   assert.match(routes.wholeOfHome, /areaServed="Australia"/);
   assert.match(routes.basix, /areaServed="New South Wales"/);
   assert.match(routes.existingHome, /areaServed="Australia"/);
-  assert.match(routes.book, /areaServed="Australia"/);
   assert.match(shared, /coverageTitle && coverageDescription/);
   assert.match(routes.newHome, /Desktop assessment across Australia/);
   assert.match(routes.wholeOfHome, /Desktop assessment across Australia/);
   assert.match(routes.existingHome, /On-site availability by location/);
-  assert.match(routes.book, /Remote and on-site service coverage/);
   assert.match(shared, /telephoneIsVisible/);
   assert.match(shared, /emailIsVisible/);
   assert.match(shared, /"@type": "FAQPage"/);
@@ -102,11 +104,23 @@ test("BASIX copy preserves the NSW planning and authority boundary", () => {
   assert.match(routes.basix, /A NatHERS simulation can be the thermal performance method used within an eligible BASIX pathway/);
 });
 
-test("booking provides direct phone and email channels and a pathway discussion", () => {
-  assert.match(routes.book, /href: "tel:\+611300241149"/);
-  assert.match(routes.book, /href: "mailto:info@ausenergyassessments\.com"/);
-  assert.match(routes.book, /NatHERS assessor, home energy assessor, existing-home energy assessment or BASIX assessor/);
-  assert.match(routes.book, /discuss the correct pathway before supplying detailed project documents/);
+test("booking is a focused five-minute Calendly call with truthful calendar and email guidance", () => {
+  assert.match(booking, /https:\/\/calendly\.com\/info-58a\/precall/);
+  assert.match(booking, /<iframe/);
+  assert.match(booking, /hide_event_type_details=1/);
+  assert.match(booking, /Book a quick call/);
+  assert.match(booking, /It is not the assessment itself/);
+  assert.match(booking, /Calendly adds the call to the connected Australian Energy Assessments calendar/);
+  assert.match(booking, /emails the booking details to the address you enter/);
+  assert.match(booking, /Our team receives the appointment notification/);
+  assert.match(booking, /href=\{PUBLIC_SITE\.phoneHref\}/);
+  assert.match(booking, /mailto:\$\{PUBLIC_SITE\.email\}/);
+  assert.match(booking, /"@type": "ContactPage"/);
+  assert.match(booking, /"@type": "ReserveAction"/);
+  assert.doesNotMatch(booking, /BreadcrumbList|guide-source-links|AssessmentServicePage|PublicAssessmentBookingForm/);
+  assert.match(bookingStyles, /@media \(max-width: 720px\)/);
+  assert.match(bookingStyles, /@media \(forced-colors: active\)/);
+  assert.match(legacyBookingRedirect, /permanentRedirect\("\/book-an-assessment"\)/);
 });
 
 test("all routes show the review date, official sources and conservative public claims", () => {

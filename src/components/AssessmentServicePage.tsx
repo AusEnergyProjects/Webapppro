@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import type { ReactNode } from "react";
 import { JsonLd } from "@/components/JsonLd";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 import { PUBLIC_SITE } from "@/lib/public-site";
@@ -55,7 +54,6 @@ type AssessmentServicePageProps = {
   processEyebrow: string;
   processTitle: string;
   steps: readonly AssessmentServiceStep[];
-  beforeSources?: ReactNode;
   sources: readonly AssessmentServiceSource[];
   faqTitle: string;
   faqs: readonly AssessmentServiceFaq[];
@@ -138,7 +136,6 @@ export function AssessmentServicePage({
   processEyebrow,
   processTitle,
   steps,
-  beforeSources,
   sources,
   faqTitle,
   faqs,
@@ -298,8 +295,6 @@ export function AssessmentServicePage({
           ))}
         </ol>
       </section>
-
-      {beforeSources}
 
       <section className="assessment-two-column" aria-label="Official sources">
         {sources.map((source) => (

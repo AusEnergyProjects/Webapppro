@@ -194,7 +194,7 @@ export default function HomeEnergyRatingComparisonPage() {
 
       <section className="assessment-upload-boundary">
         <div><span>Still unsure?</span><h2>Describe the building stage and purpose first</h2><p>Tell the assessment team whether the home is proposed or already built, where it is located and what the rating must support. That is enough to identify the current pathway before detailed evidence is supplied.</p></div>
-        <Link href="/book-an-assessment">Book an assessment discussion</Link>
+        <Link href="/book-an-assessment">Book a 5-minute call</Link>
       </section>
 
       <SiteFooter>Home Energy Rating, NatHERS Whole of Home and Residential Efficiency Scorecard describe different assessment pathways and periods. Choose the current service by building stage and required evidence.</SiteFooter>
