@@ -356,6 +356,10 @@
     top: 83px;
   }
 
+  .rootDedicated .contextProgress {
+    padding-inline: 16px;
+  }
+
   .rootDedicated .contextRailSummary {
     cursor: default;
     pointer-events: none;
