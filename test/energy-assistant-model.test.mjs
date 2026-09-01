@@ -1567,7 +1567,7 @@ test("mixed STC and VEEC recovery repairs eligibility-only drift into value chec
   assert.deepEqual(failures, []);
 });
 
-test("mixed certificate recovery accepts an explicitly dated maintained STC snapshot without presenting it as live", async () => {
+test("mixed certificate recovery accepts exact paid dated-snapshot variants without presenting them as live", async (t) => {
   const sourceUrl = "https://cer.gov.au/markets/reports-and-data/quarterly-carbon-market-reports/quarterly-carbon-market-report-june-quarter-2026";
   const maintainedCitation = {
     id: "cer-stc-market-report-june-2026",
@@ -1583,17 +1583,74 @@ test("mixed certificate recovery accepts an explicitly dated maintained STC snap
     storagePolicy: "local_factual_summary",
     stale: false,
   };
-  const exactPaidCandidate = "Today’s live STC and VEEC market values could not be verified just now. The latest reviewed official STC snapshot was $39.85 per certificate on 14 August 2026. For both schemes, compare the certificate quantity, unit value, administration fees and net credit shown on the quote. Check STCs through the Small-scale Renewable Energy Scheme and VEECs through Victorian Energy Upgrades.";
-  const calls = [];
+  const exactPaidCandidates = [
+    {
+      name: "both schemes",
+      answer: "Today’s live STC and VEEC market values could not be verified just now. The latest reviewed official STC snapshot was $39.85 per certificate on 14 August 2026. For both schemes, compare the certificate quantity, unit value, administration fees and net credit shown on the quote. Check STCs through the Small-scale Renewable Energy Scheme and VEECs through Victorian Energy Upgrades.",
+    },
+    {
+      name: "bare for both",
+      answer: "Today’s live STC and VEEC prices could not be verified just now. For STCs, the reviewed official snapshot was $39.85 per certificate on 14 August 2026. For both, check the quote’s certificate quantity, unit value, fees and final net credit, as the market value is not necessarily your discount.",
+    },
+  ];
+
+  for (const exactPaidCandidate of exactPaidCandidates) {
+    await t.test(exactPaidCandidate.name, async () => {
+      const calls = [];
+      const failures = [];
+      const rejections = [];
+      const result = await generateSurgeModelAnswer(request({
+        message: "What are STCs and VEECs worth today?",
+        asOf: new Date("2026-09-01T02:00:00.000Z"),
+        deterministicAnswer: {
+          ...deterministicAnswer("Use dated official STC and VEEC market references, then reconcile gross values against the net quote credit."),
+          citations: [maintainedCitation],
+        },
+        officialWebSearch: {
+          kind: "certificate",
+          jurisdiction: "Victoria",
+          allowedDomains: ["cer.gov.au", "energy.vic.gov.au"],
+        },
+      }), {
+        apiKey: "test-api-key",
+        fetch: async (_url, options) => {
+          const body = JSON.parse(options.body);
+          calls.push(body);
+          if (calls.length === 1) throw new DOMException("Timed out", "AbortError");
+          const context = JSON.parse(body.input[1].content[0].text);
+          const maintainedSource = context.maintainedEvidence.find((source) => (
+            source.summary.includes("$39.85")
+          ));
+          assert.ok(maintainedSource);
+          return jsonResponse(modelPayload({
+            answer: exactPaidCandidate.answer,
+            usedSourceIds: [maintainedSource.id],
+          }));
+        },
+        onFailure: (failure) => failures.push(failure),
+        syntheticEvaluation: {
+          onRejectedCandidate: (diagnostic) => rejections.push(diagnostic),
+        },
+      });
+
+      assert.ok(result, JSON.stringify({ failures, rejections }));
+      assert.equal(calls.length, 2);
+      assert.equal(result.officialEvidenceMode, "maintained_recovery");
+      assert.equal(result.answer.directAnswer, exactPaidCandidate.answer);
+      assert.deepEqual(result.answer.citations, [maintainedCitation]);
+      assert.deepEqual(rejections, []);
+      assert.deepEqual(failures, []);
+    });
+  }
+});
+
+test("unrelated bare both wording cannot satisfy mixed certificate value recovery", async () => {
+  const unrelatedBoth = "Today’s live STC and VEEC prices could not be verified just now. For both, check the installers’ quoted prices, accreditation and installation dates before proceeding.";
+  let calls = 0;
   const failures = [];
-  const rejections = [];
   const result = await generateSurgeModelAnswer(request({
     message: "What are STCs and VEECs worth today?",
     asOf: new Date("2026-09-01T02:00:00.000Z"),
-    deterministicAnswer: {
-      ...deterministicAnswer("Use dated official STC and VEEC market references, then reconcile gross values against the net quote credit."),
-      citations: [maintainedCitation],
-    },
     officialWebSearch: {
       kind: "certificate",
       jurisdiction: "Victoria",
@@ -1601,33 +1658,20 @@ test("mixed certificate recovery accepts an explicitly dated maintained STC snap
     },
   }), {
     apiKey: "test-api-key",
-    fetch: async (_url, options) => {
-      const body = JSON.parse(options.body);
-      calls.push(body);
-      if (calls.length === 1) throw new DOMException("Timed out", "AbortError");
-      const context = JSON.parse(body.input[1].content[0].text);
-      const maintainedSource = context.maintainedEvidence.find((source) => (
-        source.summary.includes("$39.85")
-      ));
-      assert.ok(maintainedSource);
-      return jsonResponse(modelPayload({
-        answer: exactPaidCandidate,
-        usedSourceIds: [maintainedSource.id],
-      }));
+    fetch: async () => {
+      calls += 1;
+      if (calls === 1) throw new DOMException("Timed out", "AbortError");
+      return jsonResponse(modelPayload({ answer: unrelatedBoth }));
     },
     onFailure: (failure) => failures.push(failure),
-    syntheticEvaluation: {
-      onRejectedCandidate: (diagnostic) => rejections.push(diagnostic),
-    },
   });
 
-  assert.ok(result, JSON.stringify({ failures, rejections }));
-  assert.equal(calls.length, 2);
-  assert.equal(result.officialEvidenceMode, "maintained_recovery");
-  assert.equal(result.answer.directAnswer, exactPaidCandidate);
-  assert.deepEqual(result.answer.citations, [maintainedCitation]);
-  assert.deepEqual(rejections, []);
-  assert.deepEqual(failures, []);
+  assert.equal(result, null);
+  assert.equal(calls, 3);
+  assert.deepEqual(failures, [{
+    code: "provider_output_rejected",
+    stage: "official_web_evidence",
+  }]);
 });
 
 test("maintained certificate recovery strips an unselected snapshot or any attempt to present it as live", async (t) => {

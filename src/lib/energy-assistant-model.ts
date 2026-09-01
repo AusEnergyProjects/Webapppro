@@ -879,9 +879,19 @@ function mixedCertificateRecoveryCoveragePassed(
     /\bboth\s+(?:certificates?|schemes?|markets?|values?)\b/i.test(clause)
     && usefulValueCheck(clause)
   ));
+  const bareBothSharedValueCheck = clauses.some((clause) => (
+    /(?:^\s*(?:for\s+)?both\b|\b(?:check|ask|confirm|compare|verify|show|list|review|read)\s+both\b)/i.test(clause)
+    && usefulValueCheck(clause)
+    && /\b(?:certificate (?:quantit(?:y|ies)|details?)|unit values?|gross (?:values?|references?)|net (?:credits?|discounts?))\b/i.test(clause)
+  ));
   return mentionsStc
     && mentionsVeec
-    && (sharedValueCheck || anaphoricSharedValueCheck || (stcValueCheck && veecValueCheck));
+    && (
+      sharedValueCheck
+      || anaphoricSharedValueCheck
+      || bareBothSharedValueCheck
+      || (stcValueCheck && veecValueCheck)
+    );
 }
 
 function officialLookupRecoveryUsefulnessPassed(
