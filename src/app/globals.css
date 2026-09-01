@@ -5470,11 +5470,10 @@ body input[type="number"]::-webkit-outer-spin-button {
 .site-surge-copy { display: grid; gap: 1px; line-height: 1.05; position: relative; z-index: 1; }
 .site-surge-copy strong { color: #f4fffd; font-size: .7rem; font-weight: 850; letter-spacing: .005em; }
 .site-surge-link.active { background: linear-gradient(145deg, rgba(7, 108, 91, .98), rgba(12, 153, 128, .94)); border-color: #a4ffe9; box-shadow: 0 0 0 1px rgba(123, 255, 229, .18), 0 12px 30px rgba(13, 198, 161, .28); }
-.site-tlink-link { background: linear-gradient(145deg, rgba(3, 21, 41, .98), rgba(5, 53, 66, .94)); box-shadow: 0 9px 22px rgba(0, 5, 20, .32), inset 0 1px rgba(255, 255, 255, .07); gap: 7px; padding: 3px 7px 3px 4px; }
-.site-tlink-mark { border-radius: 9px; display: block; flex: 0 0 auto; height: 35px; width: 35px; }
-.site-tlink-copy { display: grid; gap: 1px; line-height: 1.07; text-align: left; }
+.site-tlink-link { background: linear-gradient(145deg, rgba(3, 21, 41, .98), rgba(5, 53, 66, .94)); box-shadow: 0 9px 22px rgba(0, 5, 20, .32), inset 0 1px rgba(255, 255, 255, .07); gap: 8px; padding: 4px 10px; }
+.site-tlink-mark { border-radius: 9px; display: block; flex: 0 0 34px; height: 34px; object-fit: contain; width: 34px; }
+.site-tlink-copy { display: block; flex: 0 0 auto; line-height: 1; text-align: left; }
 .site-tlink-copy strong { color: #fff; font-family: var(--font-aea-heading); font-size: .67rem; font-weight: 800; letter-spacing: -.01em; }
-.site-tlink-copy small { color: #8fc5c3; font-size: .49rem; font-weight: 700; white-space: nowrap; }
 .site-book-link, .site-call-link { font-size: .7rem; font-weight: 850; padding: 7px 10px; text-align: center; }
 .site-book-link { background: linear-gradient(145deg, rgba(4, 137, 96, .7), rgba(3, 48, 54, .76)), url("/booking-energy-hero.webp") 7% 50% / 390% auto no-repeat; box-shadow: 0 9px 22px rgba(4, 128, 91, .28); }
 .site-call-link { background: linear-gradient(145deg, rgba(2, 27, 47, .7), rgba(2, 57, 65, .78)), url("/booking-energy-hero.webp") 93% 50% / 390% auto no-repeat; box-shadow: 0 9px 22px rgba(0, 8, 24, .32); }
@@ -5623,9 +5622,8 @@ body input[type="number"]::-webkit-outer-spin-button {
   .site-surge-link { gap: 5px; padding: 3px 4px; }
   .site-surge-core { flex-basis: 29px; height: 32px; width: 29px; }
   .site-surge-core img { height: 31px; width: 25px; }
-  .site-tlink-link { gap: 4px; padding: 3px 4px; }
-  .site-tlink-mark { height: 29px; width: 29px; }
-  .site-tlink-copy small { display: none; }
+  .site-tlink-link { gap: 5px; padding: 3px 6px; }
+  .site-tlink-mark { flex-basis: 29px; height: 29px; width: 29px; }
   .site-book-link, .site-call-link { padding: 6px 4px; }
   .start-hero-planner { min-height: clamp(700px, 100svh, 820px); padding: 28px 20px 265px; }
   .start-hero-planner::after { background: linear-gradient(180deg, rgba(2,12,28,.995) 0%, rgba(3,25,45,.98) 50%, rgba(3,25,45,.9) 72%, rgba(3,25,45,.58) 100%); }

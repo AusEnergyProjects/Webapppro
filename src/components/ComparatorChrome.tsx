@@ -81,11 +81,11 @@ export function SiteHeader({ active }: { active: SiteActive }) {
             className="site-tlink-link"
             href="/direct-trade/dashboard"
             prefetch={false}
-            aria-label="Open the TLink trade workspace"
-            title="TLink trade workspace"
+            aria-label="Open TLink"
+            title="TLink"
           >
             <img className="site-tlink-mark" src="/tlink-icon-192.png" width="38" height="38" alt="" aria-hidden="true" decoding="async" />
-            <span className="site-tlink-copy"><strong>TLink</strong><small>Trade workspace</small></span>
+            <span className="site-tlink-copy"><strong>TLink</strong></span>
           </Link>
         </div>
       </header>

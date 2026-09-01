@@ -91,9 +91,10 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(chrome, /href: "\/compare", label: "Electricity compare"/);
   assert.match(chrome, /href: "\/gas-compare", label: "Gas compare"/);
   assert.match(chrome, /href: "\/guides", label: "Guides and rebates"/);
-  assert.match(chrome, /href="\/direct-trade\/dashboard"[\s\S]*?aria-label="Open the TLink trade workspace"/);
+  assert.match(chrome, /href="\/direct-trade\/dashboard"[\s\S]*?aria-label="Open TLink"/);
   assert.match(chrome, /className="site-tlink-mark" src="\/tlink-icon-192\.png"/);
-  assert.match(chrome, /className="site-tlink-copy"[\s\S]*<strong>TLink<\/strong>[\s\S]*<small>Trade workspace<\/small>/);
+  assert.match(chrome, /className="site-tlink-copy"><strong>TLink<\/strong><\/span>/);
+  assert.doesNotMatch(chrome, /Trade workspace/);
   assert.match(guide, /href="\/calculator"[\s\S]*estimate a rebate/);
   assert.match(chrome, /href: "\/assessments", label: "NatHERS & ratings"/);
   assert.match(assessments, /SiteHeader active="assessments"/);
@@ -138,10 +139,11 @@ test("the futuristic header links to one dedicated always-present Wattzun AI pag
   assert.match(styles, /@media \(forced-colors: active\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{ border: 1px solid ButtonText;/);
 });
 
-test("public navigation keeps the TLink trade workspace clearly branded", () => {
+test("public navigation keeps TLink clearly branded", () => {
   assert.match(chrome, /active === "account" \? \([\s\S]*?<Link className="site-account-link active" href="\/account"/);
-  assert.match(chrome, /href="\/direct-trade\/dashboard"[\s\S]*?aria-label="Open the TLink trade workspace"/);
-  assert.match(chrome, /title="TLink trade workspace"/);
+  assert.match(chrome, /href="\/direct-trade\/dashboard"[\s\S]*?aria-label="Open TLink"/);
+  assert.match(chrome, /title="TLink"/);
+  assert.match(styles, /\.site-tlink-mark \{[^}]*flex: 0 0 34px;[^}]*object-fit: contain;[^}]*width: 34px;/);
   assert.equal(chrome.match(/href="\/account"/g)?.length, 1);
   assert.match(guide, /No account is needed to build a plan or send an enquiry to matching trades/);
   assert.match(guide, /Ask matching trades/);
