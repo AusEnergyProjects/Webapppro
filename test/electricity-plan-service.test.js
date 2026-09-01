@@ -14,10 +14,15 @@ test('browser requests normalized electricity plans only from the same-origin AP
   assert.doesNotMatch(comparator, /cds-au\/v1\/energy\/plans\?fuelType=ELECTRICITY/);
 });
 
-test('same-origin API caches by postcode and customer type', () => {
-  assert.match(route, /postcode \+ ":" \+ customerType/);
+test('same-origin API uses the bounded electricity plan cache', () => {
+  assert.match(route, /createElectricityPlanCache/);
   assert.match(route, /s-maxage=3600/);
   assert.match(route, /loadElectricityPlans\(\{ postcode, customerType \}\)/);
+  assert.match(route, /planCache\.get\(query\.postcode, query\.customerType\)/);
+  assert.match(route, /last_known_good/);
+  assert.match(route, /s-maxage=60, stale-while-revalidate=300/);
+  assert.match(route, /Warning: '110 - "Response is stale"'/);
+  assert.match(route, /status: 502[\s\S]*?"Cache-Control": "no-store"/);
 });
 
 test('plan API emits privacy-safe operational metrics and a correlation ID', () => {
@@ -25,6 +30,10 @@ test('plan API emits privacy-safe operational metrics and a correlation ID', () 
   assert.match(route, /"X-Request-Id": operations\.requestId/);
   assert.match(route, /detailPlansRejected/);
   assert.match(route, /detailPlansUnavailable/);
+  assert.match(route, /listSourcesTimedOut/);
+  assert.match(route, /detailPlansTimedOut/);
+  assert.match(route, /detailPlansSkipped/);
+  assert.match(route, /cacheFallback/);
 });
 
 test('comparison discloses tariff freshness and partial source coverage', () => {
@@ -36,4 +45,6 @@ test('comparison discloses tariff freshness and partial source coverage', () => 
   assert.match(comparator, /Calculation engine/);
   assert.match(comparator, /Source evidence/);
   assert.match(comparator, /failed tariff validation/);
+  assert.match(comparator, /timed out/);
+  assert.match(comparator, /last successful/);
 });

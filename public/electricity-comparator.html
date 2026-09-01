@@ -1715,7 +1715,7 @@ async function run(){
       }
     }
     if(planBundle.source&&planBundle.source.partial){
-      appendNotice('Some published tariff records could not be used. The result includes '+planBundle.source.detailPlansSucceeded+' of '+planBundle.source.candidatePlans+' eligible plan details from '+planBundle.source.listSourcesSucceeded+' of '+planBundle.source.retailersDiscovered+' retailer sources. '+(planBundle.source.detailPlansRejected||0)+' failed tariff validation and '+(planBundle.source.detailPlansUnavailable||0)+' could not be retrieved, so this may not represent the complete market.');
+      appendNotice('Some published tariff records could not be used. The result includes '+planBundle.source.detailPlansSucceeded+' of '+planBundle.source.candidatePlans+' eligible plan details from '+planBundle.source.listSourcesSucceeded+' of '+planBundle.source.retailersDiscovered+' retailer sources. '+(planBundle.source.detailPlansRejected||0)+' failed tariff validation, '+(planBundle.source.detailPlansTimedOut||0)+' timed out and '+(planBundle.source.detailPlansSkipped||0)+' were not started before the safe time limit. This may not represent the complete market.');
     }
   }catch(e){
     $('prog').style.display='none';
@@ -2120,7 +2120,8 @@ function render(){
     quality.insertAdjacentHTML('beforeend','<div class="dqmeta"><b>Tariff source check:</b> '+esc(checked)+'. '
       +source.detailPlansSucceeded+' of '+source.candidatePlans+' postcode eligible market plan details loaded from '
       +source.listSourcesSucceeded+' of '+source.retailersDiscovered+' published retailer sources.'
-      +(source.partial?' '+(source.detailPlansRejected||0)+' failed tariff validation and '+(source.detailPlansUnavailable||0)+' could not be retrieved, so the comparison may not cover the complete market.':' All discovered retailer sources and eligible plan details responded and passed validation.')
+      +(source.cacheFallback?' The live refresh did not finish, so these are the last successfully retrieved results.':'')
+      +(source.partial?' '+(source.detailPlansRejected||0)+' failed tariff validation, '+(source.detailPlansTimedOut||0)+' timed out and '+(source.detailPlansSkipped||0)+' were not started before the safe time limit. The comparison may not cover the complete market.':' All discovered retailer sources and eligible plan details responded and passed validation.')
       +(I.tariffSourceHash?' Evidence '+esc(I.tariffSourceHash.replace('sha256:','').slice(0,12))+'.':'')+'</div>');
   }
 

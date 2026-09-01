@@ -3,32 +3,25 @@ import {
   loadElectricityPlans,
   validateElectricityPlanQuery,
 } from "@/lib/electricity-cdr.mjs";
+import { createElectricityPlanCache } from "@/lib/electricity-plan-cache.mjs";
 import { createOperationalRecorder } from "@/lib/operational-events.mjs";
 
 export const runtime = "nodejs";
 
-const MEMORY_TTL_MS = 60 * 60 * 1000;
-const planCache = new Map();
+const planCache = createElectricityPlanCache({
+  loadPlans: ({ postcode, customerType }) => loadElectricityPlans({ postcode, customerType }),
+});
 
-function responseHeaders(requestId) {
+function responseHeaders(requestId, cache) {
+  const fallback = cache.startsWith("last_known_good");
   return {
-    "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+    "Cache-Control": fallback
+      ? "public, s-maxage=60, stale-while-revalidate=300"
+      : "public, s-maxage=3600, stale-while-revalidate=86400",
+    ...(fallback ? { Warning: '110 - "Response is stale"' } : {}),
+    "X-Electricity-Plan-Cache": cache,
     "X-Request-Id": requestId,
   };
-}
-
-async function cachedPlans(postcode, customerType) {
-  const key = postcode + ":" + customerType;
-  const existing = planCache.get(key);
-  if (existing && Date.now() - existing.createdAt < MEMORY_TTL_MS) {
-    return { result: await existing.promise, cache: "memory_hit" };
-  }
-  const promise = loadElectricityPlans({ postcode, customerType }).catch((error) => {
-    if (planCache.get(key)?.promise === promise) planCache.delete(key);
-    throw error;
-  });
-  planCache.set(key, { createdAt: Date.now(), promise });
-  return { result: await promise, cache: "miss" };
 }
 
 export async function GET(request) {
@@ -46,24 +39,43 @@ export async function GET(request) {
   }
 
   try {
-    const { result, cache } = await cachedPlans(query.postcode, query.customerType);
-    operations.record("success", 200, {
+    const { result, cache } = await planCache.get(query.postcode, query.customerType);
+    const fallback = cache.startsWith("last_known_good");
+    operations.record(fallback ? "degraded_success" : "success", 200, {
       cache,
       planCount: result.plans.length,
       partial: result.source.partial,
       listSourcesSucceeded: result.source.listSourcesSucceeded,
       listSourcesFailed: result.source.listSourcesFailed,
+      listSourcesTimedOut: result.source.listSourcesTimedOut,
+      listSourcesSkipped: result.source.listSourcesSkipped,
       detailPlansSucceeded: result.source.detailPlansSucceeded,
       detailPlansRejected: result.source.detailPlansRejected,
       detailPlansUnavailable: result.source.detailPlansUnavailable,
+      detailPlansTimedOut: result.source.detailPlansTimedOut,
+      detailPlansSkipped: result.source.detailPlansSkipped,
+      deadlineExceeded: result.source.deadlineExceeded,
+      cacheFallback: result.source.cacheFallback,
+      cacheFallbackAgeSeconds: result.source.cacheFallbackAgeSeconds,
       plansWithLastUpdated: result.source.plansWithLastUpdated,
       plansMissingLastUpdated: result.source.plansMissingLastUpdated,
       detailApiVersion: result.source.detailApiVersion,
     });
-    return NextResponse.json(result, { headers: responseHeaders(operations.requestId) });
+    return NextResponse.json(result, { headers: responseHeaders(operations.requestId, cache) });
   } catch (error) {
     operations.record("upstream_failure", 502, {
       errorType: error instanceof Error ? error.name : "UnknownError",
+      errorCode: error?.code || "UNKNOWN_UPSTREAM_FAILURE",
+      listSourcesSucceeded: error?.source?.listSourcesSucceeded,
+      listSourcesFailed: error?.source?.listSourcesFailed,
+      listSourcesTimedOut: error?.source?.listSourcesTimedOut,
+      listSourcesSkipped: error?.source?.listSourcesSkipped,
+      detailPlansSucceeded: error?.source?.detailPlansSucceeded,
+      detailPlansRejected: error?.source?.detailPlansRejected,
+      detailPlansUnavailable: error?.source?.detailPlansUnavailable,
+      detailPlansTimedOut: error?.source?.detailPlansTimedOut,
+      detailPlansSkipped: error?.source?.detailPlansSkipped,
+      deadlineExceeded: error?.source?.deadlineExceeded,
     });
     return NextResponse.json(
       { error: "The electricity-plan service is temporarily unavailable. Please try again shortly." },

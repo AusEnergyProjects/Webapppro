@@ -183,6 +183,36 @@ test("the trusted resources page does not republish unverified commercial suppli
     );
   }
   assert.doesNotMatch(source, /cdn\.durable\.co/i);
+  assert.doesNotMatch(source, /Electrify Yarra/i);
+
+  const requiredResources = [
+    "Home Energy Rating (NatHERS)",
+    "Your Home",
+    "Clean Energy Regulator",
+    "Energy Made Easy",
+    "Solar Victoria",
+    "Victorian Energy Upgrades",
+    "SEC Victoria",
+    "Rewiring Australia",
+    "Renew",
+    "Energy Consumers Australia",
+    "Design Matters National",
+    "Home Energy Raters Association",
+    "Energy Efficiency Council",
+    "Solar Accreditation Australia",
+    "Australian Refrigeration Council",
+    "Clean Energy Council",
+    "AIRAH",
+  ];
+  for (const name of requiredResources) assert.match(source, new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+  const logoReferences = [...source.matchAll(/logo: "\/(trusted-resources\/[^\"]+)"/g)].map((match) => match[1]);
+  assert.ok(logoReferences.length >= 12, "Use a substantial local official-logo library");
+  for (const logo of logoReferences) {
+    assert.equal(fs.existsSync(path.join(root, "public", logo)), true, `Missing trusted resource logo ${logo}`);
+  }
+  assert.match(source, /name: "SEC Victoria"[\s\S]*?mark: "SEC"/);
+  assert.match(source, /name: "AIRAH"[\s\S]*?mark: "AIRAH"/);
 });
 
 test("the rental page sends readers to the regulator and keeps compliance and gas safety boundaries clear", () => {

@@ -12,6 +12,8 @@ export const ELECTRICITY_CDR_DIRECTORY_URL =
 const DETAIL_API_VERSION = "3";
 const MAX_LIST_PAGES = 5;
 const PAGE_SIZE = 1000;
+const UPSTREAM_REQUEST_TIMEOUT_MS = 4_000;
+export const ELECTRICITY_PLAN_OPERATION_DEADLINE_MS = 9_000;
 
 export function validateElectricityPlanQuery(postcode, customerType) {
   const normalizedType = String(customerType || "").toUpperCase();
@@ -142,48 +144,115 @@ export function normalizePlanDetail(summary, payload) {
   };
 }
 
-async function fetchJson(url, { fetchImpl, version, timeoutMs }) {
+function electricityLoadError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+async function fetchJson(url, { fetchImpl, version, timeoutMs, operationSignal }) {
+  if (operationSignal?.aborted) {
+    throw electricityLoadError("ELECTRICITY_OPERATION_DEADLINE", "The electricity-plan operation reached its deadline.");
+  }
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let rejectAbort;
+  let settled = false;
+  const abortPromise = new Promise((_, reject) => { rejectAbort = reject; });
+  const abortWith = (error) => {
+    if (settled) return;
+    rejectAbort(error);
+    controller.abort();
+  };
+  const handleOperationAbort = () => abortWith(
+    electricityLoadError("ELECTRICITY_OPERATION_DEADLINE", "The electricity-plan operation reached its deadline."),
+  );
+  operationSignal?.addEventListener("abort", handleOperationAbort, { once: true });
+  const timer = setTimeout(() => abortWith(
+    electricityLoadError("ELECTRICITY_UPSTREAM_TIMEOUT", "An electricity retailer did not respond in time."),
+  ), timeoutMs);
   try {
-    const response = await fetchImpl(url, {
-      headers: version ? { "x-v": version, "x-min-v": version } : {},
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error("Retailer returned HTTP " + response.status);
-    return await response.json();
+    return await Promise.race([
+      (async () => {
+        const response = await fetchImpl(url, {
+          headers: version ? { "x-v": version, "x-min-v": version } : {},
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("Retailer returned HTTP " + response.status);
+        return await response.json();
+      })(),
+      abortPromise,
+    ]);
   } finally {
+    settled = true;
     clearTimeout(timer);
+    operationSignal?.removeEventListener("abort", handleOperationAbort);
   }
 }
 
-async function mapWithConcurrency(items, limit, task) {
+function failedWork(error, skipped = false) {
+  return {
+    ok: false,
+    error,
+    skipped,
+    timedOut: !skipped && ["ELECTRICITY_OPERATION_DEADLINE", "ELECTRICITY_UPSTREAM_TIMEOUT"].includes(error?.code),
+  };
+}
+
+async function mapWithConcurrency(items, limit, task, operationSignal) {
   const results = new Array(items.length);
   let cursor = 0;
   async function worker() {
-    while (cursor < items.length) {
+    while (cursor < items.length && !operationSignal?.aborted) {
       const index = cursor++;
       try {
         results[index] = { ok: true, value: await task(items[index], index) };
       } catch (error) {
-        results[index] = { ok: false, error };
+        results[index] = failedWork(error);
       }
     }
   }
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+  for (let index = 0; index < results.length; index += 1) {
+    if (!results[index]) results[index] = failedWork(
+      electricityLoadError("ELECTRICITY_OPERATION_DEADLINE", "The electricity-plan operation reached its deadline."),
+      true,
+    );
+  }
   return results;
 }
 
-export async function loadElectricityPlans({
+export function interleaveElectricityPlanWork(items, keyForItem) {
+  const queues = new Map();
+  items.forEach((item) => {
+    const key = keyForItem(item);
+    if (!queues.has(key)) queues.set(key, []);
+    queues.get(key).push(item);
+  });
+  const interleaved = [];
+  while (interleaved.length < items.length) {
+    for (const queue of queues.values()) {
+      if (queue.length) interleaved.push(queue.shift());
+    }
+  }
+  return interleaved;
+}
+
+async function loadElectricityPlansWithinDeadline({
   postcode,
   customerType,
-  fetchImpl = fetch,
-  timeoutMs = 15000,
+  fetchImpl,
+  timeoutMs,
+  operationDeadlineMs,
+  operationSignal,
 }) {
   const query = validateElectricityPlanQuery(postcode, customerType);
   if (!query.ok) throw new Error(query.error);
-  const directoryPayload = await fetchJson(ELECTRICITY_CDR_DIRECTORY_URL, { fetchImpl, timeoutMs });
+  const directoryPayload = await fetchJson(ELECTRICITY_CDR_DIRECTORY_URL, {
+    fetchImpl,
+    timeoutMs,
+    operationSignal,
+  });
   const retailers = normalizeRetailerDirectory(directoryPayload);
   if (!retailers.length) throw new Error("No electricity retailers were present in the CDR directory.");
 
@@ -193,7 +262,12 @@ export async function loadElectricityPlans({
     let totalPages = 1;
     while (page <= totalPages && page <= MAX_LIST_PAGES) {
       const url = retailer.base + "/cds-au/v1/energy/plans?fuelType=ELECTRICITY&effective=CURRENT&page-size=" + PAGE_SIZE + "&page=" + page;
-      const payload = await fetchJson(url, { fetchImpl, version: "1", timeoutMs });
+      const payload = await fetchJson(url, {
+        fetchImpl,
+        version: "1",
+        timeoutMs,
+        operationSignal,
+      });
       const batch = Array.isArray(payload?.data?.plans) ? payload.data.plans : [];
       plans.push(...batch);
       totalPages = Math.max(1, Number(payload?.meta?.totalPages || 1));
@@ -201,15 +275,20 @@ export async function loadElectricityPlans({
       page += 1;
     }
     return plans.map((plan) => normalizePlanSummary(plan, retailer, query.postcode, query.customerType)).filter(Boolean);
-  });
+  }, operationSignal);
 
   const summaries = listResults.flatMap((result) => result.ok ? result.value : []);
   const distinctSummaries = [...new Map(summaries.map((plan) => [plan.base + "|" + plan.planId, plan])).values()];
   const marketSummaries = distinctSummaries.filter((plan) => plan.type !== "REGULATED");
-  const detailResults = await mapWithConcurrency(marketSummaries, 12, async (summary) => {
+  const detailWork = interleaveElectricityPlanWork(
+    marketSummaries.map((summary, originalIndex) => ({ summary, originalIndex })),
+    (work) => work.summary.base,
+  );
+  const interleavedDetailResults = await mapWithConcurrency(detailWork, 12, async (work) => {
+    const summary = work.summary;
     const payload = await fetchJson(
       summary.base + "/cds-au/v1/energy/plans/" + encodeURIComponent(summary.planId),
-      { fetchImpl, version: DETAIL_API_VERSION, timeoutMs },
+      { fetchImpl, version: DETAIL_API_VERSION, timeoutMs, operationSignal },
     );
     const detail = normalizePlanDetail(summary, payload);
     if (!detail) throw new Error("Electricity contract missing from plan detail.");
@@ -238,6 +317,10 @@ export async function loadElectricityPlans({
         limitations: validation.limitations,
       },
     };
+  }, operationSignal);
+  const detailResults = new Array(marketSummaries.length);
+  interleavedDetailResults.forEach((result, index) => {
+    detailResults[detailWork[index].originalIndex] = result;
   });
 
   const plans = detailResults.filter((result) => result.ok).map((result) => result.value);
@@ -274,6 +357,8 @@ export async function loadElectricityPlans({
       detailsPassed: results.filter((result) => result?.ok).length,
       detailsRejected: results.filter((result) => !result?.ok && result?.error?.code === "INVALID_TARIFF").length,
       detailsUnavailable: results.filter((result) => !result?.ok && result?.error?.code !== "INVALID_TARIFF").length,
+      detailsTimedOut: results.filter((result) => result?.timedOut).length,
+      detailsSkipped: results.filter((result) => result?.skipped).length,
     };
   });
   const source = {
@@ -284,11 +369,15 @@ export async function loadElectricityPlans({
     retailersDiscovered: retailers.length,
     listSourcesSucceeded,
     listSourcesFailed: retailers.length - listSourcesSucceeded,
+    listSourcesTimedOut: listResults.filter((result) => result.timedOut).length,
+    listSourcesSkipped: listResults.filter((result) => result.skipped).length,
     candidatePlans: marketSummaries.length,
     detailPlansSucceeded,
     detailPlansFailed: marketSummaries.length - detailPlansSucceeded,
     detailPlansRejected: invalidResults.length,
     detailPlansUnavailable: marketSummaries.length - detailPlansSucceeded - invalidResults.length,
+    detailPlansTimedOut: detailResults.filter((result) => result.timedOut).length,
+    detailPlansSkipped: detailResults.filter((result) => result.skipped).length,
     validationFailures,
     retailerCoverage,
     plansWithEligibility: plans.filter((plan) => plan.eligibility?.length).length,
@@ -297,8 +386,19 @@ export async function loadElectricityPlans({
     plansMissingLastUpdated: plans.length - updatedTimes.length,
     oldestPlanUpdatedAt: updatedTimes.length ? new Date(updatedTimes[0]).toISOString() : null,
     newestPlanUpdatedAt: updatedTimes.length ? new Date(updatedTimes.at(-1)).toISOString() : null,
-    partial: listSourcesSucceeded < retailers.length || detailPlansSucceeded < marketSummaries.length,
+    operationDeadlineMs,
+    deadlineExceeded: operationSignal.aborted,
+    operationTimedOut: operationSignal.aborted,
+    partial: operationSignal.aborted || listSourcesSucceeded < retailers.length || detailPlansSucceeded < marketSummaries.length,
   };
+  if (!plans.length) {
+    const error = electricityLoadError(
+      "NO_USABLE_ELECTRICITY_PLANS",
+      "No validated electricity plans were available from the current retailer sources.",
+    );
+    error.source = source;
+    throw error;
+  }
   return {
     plans,
     fetchedAt: new Date().toISOString(),
@@ -306,4 +406,30 @@ export async function loadElectricityPlans({
     tariffSchemaVersion: ELECTRICITY_TARIFF_SCHEMA_VERSION,
     source,
   };
+}
+
+export async function loadElectricityPlans({
+  postcode,
+  customerType,
+  fetchImpl = fetch,
+  timeoutMs = UPSTREAM_REQUEST_TIMEOUT_MS,
+  operationDeadlineMs = ELECTRICITY_PLAN_OPERATION_DEADLINE_MS,
+}) {
+  const operationController = new AbortController();
+  const deadline = setTimeout(
+    () => operationController.abort(),
+    Math.max(1, Number(operationDeadlineMs) || ELECTRICITY_PLAN_OPERATION_DEADLINE_MS),
+  );
+  try {
+    return await loadElectricityPlansWithinDeadline({
+      postcode,
+      customerType,
+      fetchImpl,
+      timeoutMs: Math.max(1, Number(timeoutMs) || UPSTREAM_REQUEST_TIMEOUT_MS),
+      operationDeadlineMs: Math.max(1, Number(operationDeadlineMs) || ELECTRICITY_PLAN_OPERATION_DEADLINE_MS),
+      operationSignal: operationController.signal,
+    });
+  } finally {
+    clearTimeout(deadline);
+  }
 }

@@ -98,8 +98,8 @@ test('loader reports partial source coverage without discarding successful plans
   assert.equal(result.source.plansMissingLastUpdated, 0);
   assert.equal(result.source.oldestPlanUpdatedAt, '2026-07-10T00:00:00.000Z');
   assert.deepEqual(result.source.retailerCoverage, [
-    { retailer: 'Good Energy', listAvailable: true, candidatePlans: 1, detailsPassed: 1, detailsRejected: 0, detailsUnavailable: 0 },
-    { retailer: 'Unavailable Energy', listAvailable: false, candidatePlans: 0, detailsPassed: 0, detailsRejected: 0, detailsUnavailable: 0 },
+    { retailer: 'Good Energy', listAvailable: true, candidatePlans: 1, detailsPassed: 1, detailsRejected: 0, detailsUnavailable: 0, detailsTimedOut: 0, detailsSkipped: 0 },
+    { retailer: 'Unavailable Energy', listAvailable: false, candidatePlans: 0, detailsPassed: 0, detailsRejected: 0, detailsUnavailable: 0, detailsTimedOut: 0, detailsSkipped: 0 },
   ]);
   assert.deepEqual(calls.find((call) => call.url.includes('/energy/plans?')).headers, { 'x-v': '1', 'x-min-v': '1' });
   assert.deepEqual(calls.find((call) => call.url.endsWith('/energy/plans/p1')).headers, { 'x-v': '3', 'x-min-v': '3' });
@@ -117,9 +117,111 @@ test('loader rejects malformed tariffs and reports validation separately from un
     if (url === detailUrl) return { ok: true, json: async () => ({ data: { electricityContract: { tariffPeriod: [{ dailySupplyCharge: '1', rateBlockUType: 'singleRate', singleRate: { rates: [] } }] } } }) };
     return { ok: false, status: 404, json: async () => ({}) };
   };
-  const result = await loadElectricityPlans({ postcode: '3000', customerType: 'RESIDENTIAL', fetchImpl, timeoutMs: 100 });
-  assert.equal(result.plans.length, 0);
-  assert.equal(result.source.detailPlansRejected, 1);
-  assert.equal(result.source.detailPlansUnavailable, 0);
-  assert.equal(result.source.validationFailures['tariffPeriod[].singleRate.rates is required'], 1);
+  await assert.rejects(
+    () => loadElectricityPlans({ postcode: '3000', customerType: 'RESIDENTIAL', fetchImpl, timeoutMs: 100 }),
+    (error) => {
+      assert.equal(error.code, 'NO_USABLE_ELECTRICITY_PLANS');
+      assert.equal(error.source.detailPlansRejected, 1);
+      assert.equal(error.source.detailPlansUnavailable, 0);
+      assert.equal(error.source.validationFailures['tariffPeriod[].singleRate.rates is required'], 1);
+      return true;
+    },
+  );
+});
+
+test('electricity plan work is interleaved across retailers before returning to the same retailer', async () => {
+  const { interleaveElectricityPlanWork } = await import('../src/lib/electricity-cdr.mjs');
+  const work = [
+    { retailer: 'Alpha', plan: 'a1' },
+    { retailer: 'Alpha', plan: 'a2' },
+    { retailer: 'Alpha', plan: 'a3' },
+    { retailer: 'Beta', plan: 'b1' },
+    { retailer: 'Beta', plan: 'b2' },
+    { retailer: 'Gamma', plan: 'g1' },
+  ];
+
+  assert.deepEqual(
+    interleaveElectricityPlanWork(work, (item) => item.retailer).map((item) => item.plan),
+    ['a1', 'b1', 'g1', 'a2', 'b2', 'a3'],
+  );
+});
+
+test('operation deadline is injectable, stops new detail work and reports timed-out and skipped plans', async () => {
+  const {
+    ELECTRICITY_CDR_DIRECTORY_URL,
+    ELECTRICITY_PLAN_OPERATION_DEADLINE_MS,
+    loadElectricityPlans,
+  } = await import('../src/lib/electricity-cdr.mjs');
+  assert.equal(ELECTRICITY_PLAN_OPERATION_DEADLINE_MS, 9_000);
+
+  const retailerBase = 'https://deadline.example/cdr';
+  const listUrl = retailerBase + '/cds-au/v1/energy/plans?fuelType=ELECTRICITY&effective=CURRENT&page-size=1000&page=1';
+  const summaries = Array.from({ length: 15 }, (_, index) => ({
+    planId: 'plan-' + index,
+    displayName: 'Plan ' + index,
+    customerType: 'RESIDENTIAL',
+    fuelType: 'ELECTRICITY',
+    type: 'MARKET',
+    geography: { includedPostcodes: ['3000'], distributors: ['CitiPower'] },
+  }));
+  const validDetail = {
+    data: {
+      electricityContract: {
+        tariffPeriod: [{
+          dailySupplyCharge: '1',
+          rateBlockUType: 'singleRate',
+          singleRate: { rates: [{ unitPrice: '0.25' }] },
+        }],
+      },
+    },
+  };
+  const detailCalls = [];
+  const fetchImpl = async (url) => {
+    if (url === ELECTRICITY_CDR_DIRECTORY_URL) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: [{
+            brandName: 'Deadline Energy',
+            industries: ['energy'],
+            productReferenceDataBaseUri: retailerBase,
+          }],
+        }),
+      };
+    }
+    if (url === listUrl) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { plans: summaries }, meta: { totalPages: 1 } }),
+      };
+    }
+    if (url.startsWith(retailerBase + '/cds-au/v1/energy/plans/')) {
+      detailCalls.push(url);
+      if (url.endsWith('/plan-0')) {
+        return { ok: true, status: 200, json: async () => validDetail };
+      }
+      return await new Promise(() => {});
+    }
+    throw new Error('Unexpected URL: ' + url);
+  };
+
+  const startedAt = Date.now();
+  const result = await loadElectricityPlans({
+    postcode: '3000',
+    customerType: 'RESIDENTIAL',
+    fetchImpl,
+    timeoutMs: 250,
+    operationDeadlineMs: 35,
+  });
+
+  assert.equal(result.plans.length, 1);
+  assert.equal(result.source.operationTimedOut, true);
+  assert.equal(result.source.detailPlansTimedOut, 12);
+  assert.equal(result.source.detailPlansSkipped, 2);
+  assert.equal(result.source.detailPlansUnavailable, 14);
+  assert.equal(result.source.partial, true);
+  assert.equal(detailCalls.length, 13);
+  assert.ok(Date.now() - startedAt < 500, 'the injected operation deadline should bound the request');
 });
