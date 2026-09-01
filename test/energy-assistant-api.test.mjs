@@ -4036,7 +4036,7 @@ test("policy admission denials never retry or reach the paid model", async (t) =
   }
 });
 
-test("a 650 ms reservation completes within the 1500 ms deadline and reaches the model", async (t) => {
+test("a 2500 ms reservation completes within the 5000 ms deadline and reaches the model", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
   let admissionCalls = 0;
   let modelCalls = 0;
@@ -4057,7 +4057,7 @@ test("a 650 ms reservation completes within the 1500 ms deadline and reaches the
         setTimeout(() => resolve({
           allowed: true,
           release: async () => { releases += 1; },
-        }), 650);
+        }), 2_500);
       });
     },
     generateAnswer: async () => {
@@ -4072,7 +4072,7 @@ test("a 650 ms reservation completes within the 1500 ms deadline and reaches the
 
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(admissionCalls, 1);
-  t.mock.timers.tick(649);
+  t.mock.timers.tick(2_499);
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(modelCalls, 0);
   assert.equal(releases, 0);
@@ -4080,13 +4080,13 @@ test("a 650 ms reservation completes within the 1500 ms deadline and reaches the
   const response = await responsePromise;
 
   assert.equal(response.status, 200);
-  assert.equal(Date.now(), 650);
+  assert.equal(Date.now(), 2_500);
   assert.equal(admissionCalls, 1);
   assert.equal(modelCalls, 1);
   assert.equal(releases, 1);
 });
 
-test("a 1750 ms reservation is cut off at 1500 ms and any late lease is released", async (t) => {
+test("a 5250 ms reservation is cut off at 5000 ms and any late lease is released", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
   let admissionCalls = 0;
   let modelCalls = 0;
@@ -4107,7 +4107,7 @@ test("a 1750 ms reservation is cut off at 1500 ms and any late lease is released
         setTimeout(() => resolve({
           allowed: true,
           release: async () => { releases += 1; },
-        }), 1_750);
+        }), 5_250);
       });
     },
     generateAnswer: async () => {
@@ -4119,7 +4119,7 @@ test("a 1750 ms reservation is cut off at 1500 ms and any late lease is released
 
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(admissionCalls, 1);
-  t.mock.timers.tick(1_499);
+  t.mock.timers.tick(4_999);
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(modelCalls, 0);
   assert.equal(releases, 0);
@@ -4127,7 +4127,7 @@ test("a 1750 ms reservation is cut off at 1500 ms and any late lease is released
   const response = await responsePromise;
 
   assert.equal(response.status, 503);
-  assert.equal(Date.now(), 1_500);
+  assert.equal(Date.now(), 5_000);
   assert.equal(admissionCalls, 1);
   assert.equal(modelCalls, 0);
   assert.equal(releases, 0);
@@ -4136,7 +4136,7 @@ test("a 1750 ms reservation is cut off at 1500 ms and any late lease is released
   assert.equal(releases, 1);
 });
 
-test("a never-settling reservation returns at the 1500 ms admission deadline", async (t) => {
+test("a never-settling reservation returns at the 5000 ms admission deadline", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
   let admissionCalls = 0;
   let modelCalls = 0;
@@ -4163,11 +4163,11 @@ test("a never-settling reservation returns at the 1500 ms admission deadline", a
 
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(admissionCalls, 1);
-  t.mock.timers.tick(1_500);
+  t.mock.timers.tick(5_000);
   const response = await responsePromise;
 
   assert.equal(response.status, 503);
-  assert.equal(Date.now(), 1_500);
+  assert.equal(Date.now(), 5_000);
   assert.equal(admissionCalls, 1);
   assert.equal(modelCalls, 0);
 });
