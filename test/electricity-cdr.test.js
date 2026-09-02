@@ -149,10 +149,12 @@ test('electricity plan work is interleaved across retailers before returning to 
 test('operation deadline is injectable, stops new detail work and reports timed-out and skipped plans', async () => {
   const {
     ELECTRICITY_CDR_DIRECTORY_URL,
+    ELECTRICITY_PLAN_LIST_PHASE_MAX_MS,
     ELECTRICITY_PLAN_OPERATION_DEADLINE_MS,
     loadElectricityPlans,
   } = await import('../src/lib/electricity-cdr.mjs');
-  assert.equal(ELECTRICITY_PLAN_OPERATION_DEADLINE_MS, 7_000);
+  assert.equal(ELECTRICITY_PLAN_OPERATION_DEADLINE_MS, 10_000);
+  assert.equal(ELECTRICITY_PLAN_LIST_PHASE_MAX_MS, 3_500);
 
   const retailerBase = 'https://deadline.example/cdr';
   const listUrl = retailerBase + '/cds-au/v1/energy/plans?fuelType=ELECTRICITY&effective=CURRENT&page-size=1000&page=1';
@@ -224,4 +226,81 @@ test('operation deadline is injectable, stops new detail work and reports timed-
   assert.equal(result.source.partial, true);
   assert.equal(detailCalls.length, 13);
   assert.ok(Date.now() - startedAt < 500, 'the injected operation deadline should bound the request');
+});
+
+test('list-source deadline preserves time to validate details from responsive retailers', async () => {
+  const {
+    ELECTRICITY_CDR_DIRECTORY_URL,
+    loadElectricityPlans,
+  } = await import('../src/lib/electricity-cdr.mjs');
+  const fastBase = 'https://fast-list.example/cdr';
+  const retailers = [
+    { brandName: 'Fast Energy', industries: ['energy'], productReferenceDataBaseUri: fastBase },
+    ...Array.from({ length: 12 }, (_, index) => ({
+      brandName: `Slow Energy ${index}`,
+      industries: ['energy'],
+      productReferenceDataBaseUri: `https://slow-${index}.example/cdr`,
+    })),
+  ];
+  const fastListUrl = fastBase + '/cds-au/v1/energy/plans?fuelType=ELECTRICITY&effective=CURRENT&page-size=1000&page=1';
+  const fastDetailUrl = fastBase + '/cds-au/v1/energy/plans/fast-plan';
+  const fetchImpl = async (url) => {
+    if (url === ELECTRICITY_CDR_DIRECTORY_URL) {
+      return { ok: true, status: 200, json: async () => ({ data: retailers }) };
+    }
+    if (url === fastListUrl) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            plans: [{
+              planId: 'fast-plan',
+              displayName: 'Fast Plan',
+              customerType: 'RESIDENTIAL',
+              fuelType: 'ELECTRICITY',
+              type: 'MARKET',
+              lastUpdated: '2026-09-01T00:00:00Z',
+              geography: { includedPostcodes: ['3000'], distributors: ['CitiPower'] },
+            }],
+          },
+          meta: { totalPages: 1 },
+        }),
+      };
+    }
+    if (url === fastDetailUrl) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            electricityContract: {
+              tariffPeriod: [{
+                dailySupplyCharge: '1',
+                rateBlockUType: 'singleRate',
+                singleRate: { rates: [{ unitPrice: '0.25' }] },
+              }],
+            },
+          },
+        }),
+      };
+    }
+    return await new Promise(() => {});
+  };
+
+  const startedAt = Date.now();
+  const result = await loadElectricityPlans({
+    postcode: '3000',
+    customerType: 'RESIDENTIAL',
+    fetchImpl,
+    timeoutMs: 1_000,
+    operationDeadlineMs: 100,
+  });
+
+  assert.equal(result.plans.length, 1);
+  assert.equal(result.source.detailPlansSucceeded, 1);
+  assert.ok(result.source.listSourcesTimedOut > 0);
+  assert.ok(result.source.listSourcesSkipped > 0);
+  assert.equal(result.source.deadlineExceeded, false);
+  assert.ok(Date.now() - startedAt < 500, 'the list phase should leave time for plan details');
 });

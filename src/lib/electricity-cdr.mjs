@@ -13,7 +13,8 @@ const DETAIL_API_VERSION = "3";
 const MAX_LIST_PAGES = 5;
 const PAGE_SIZE = 1000;
 const UPSTREAM_REQUEST_TIMEOUT_MS = 4_000;
-export const ELECTRICITY_PLAN_OPERATION_DEADLINE_MS = 7_000;
+export const ELECTRICITY_PLAN_OPERATION_DEADLINE_MS = 10_000;
+export const ELECTRICITY_PLAN_LIST_PHASE_MAX_MS = 3_500;
 
 export function validateElectricityPlanQuery(postcode, customerType) {
   const normalizedType = String(customerType || "").toUpperCase();
@@ -199,6 +200,20 @@ function failedWork(error, skipped = false) {
   };
 }
 
+function createPhaseDeadline(parentSignal, timeoutMs) {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  const timer = setTimeout(abort, Math.max(1, timeoutMs));
+  parentSignal?.addEventListener("abort", abort, { once: true });
+  return {
+    signal: controller.signal,
+    clear() {
+      clearTimeout(timer);
+      parentSignal?.removeEventListener("abort", abort);
+    },
+  };
+}
+
 async function mapWithConcurrency(items, limit, task, operationSignal) {
   const results = new Array(items.length);
   let cursor = 0;
@@ -256,26 +271,38 @@ async function loadElectricityPlansWithinDeadline({
   const retailers = normalizeRetailerDirectory(directoryPayload);
   if (!retailers.length) throw new Error("No electricity retailers were present in the CDR directory.");
 
-  const listResults = await mapWithConcurrency(retailers, 10, async (retailer) => {
-    const plans = [];
-    let page = 1;
-    let totalPages = 1;
-    while (page <= totalPages && page <= MAX_LIST_PAGES) {
-      const url = retailer.base + "/cds-au/v1/energy/plans?fuelType=ELECTRICITY&effective=CURRENT&page-size=" + PAGE_SIZE + "&page=" + page;
-      const payload = await fetchJson(url, {
-        fetchImpl,
-        version: "1",
-        timeoutMs,
-        operationSignal,
-      });
-      const batch = Array.isArray(payload?.data?.plans) ? payload.data.plans : [];
-      plans.push(...batch);
-      totalPages = Math.max(1, Number(payload?.meta?.totalPages || 1));
-      if (!batch.length) break;
-      page += 1;
-    }
-    return plans.map((plan) => normalizePlanSummary(plan, retailer, query.postcode, query.customerType)).filter(Boolean);
-  }, operationSignal);
+  const listPhase = createPhaseDeadline(
+    operationSignal,
+    Math.min(
+      ELECTRICITY_PLAN_LIST_PHASE_MAX_MS,
+      Math.max(1, Math.floor(operationDeadlineMs * 0.4)),
+    ),
+  );
+  let listResults;
+  try {
+    listResults = await mapWithConcurrency(retailers, 10, async (retailer) => {
+      const plans = [];
+      let page = 1;
+      let totalPages = 1;
+      while (page <= totalPages && page <= MAX_LIST_PAGES) {
+        const url = retailer.base + "/cds-au/v1/energy/plans?fuelType=ELECTRICITY&effective=CURRENT&page-size=" + PAGE_SIZE + "&page=" + page;
+        const payload = await fetchJson(url, {
+          fetchImpl,
+          version: "1",
+          timeoutMs,
+          operationSignal: listPhase.signal,
+        });
+        const batch = Array.isArray(payload?.data?.plans) ? payload.data.plans : [];
+        plans.push(...batch);
+        totalPages = Math.max(1, Number(payload?.meta?.totalPages || 1));
+        if (!batch.length) break;
+        page += 1;
+      }
+      return plans.map((plan) => normalizePlanSummary(plan, retailer, query.postcode, query.customerType)).filter(Boolean);
+    }, listPhase.signal);
+  } finally {
+    listPhase.clear();
+  }
 
   const summaries = listResults.flatMap((result) => result.ok ? result.value : []);
   const distinctSummaries = [...new Map(summaries.map((plan) => [plan.base + "|" + plan.planId, plan])).values()];
