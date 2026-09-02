@@ -2,6 +2,7 @@ import { resolveLegacyBlogRedirect } from "./legacy-blog-redirects.mjs";
 
 const APEX_ORIGIN = "https://ausenergyassessments.com";
 const APEX_HOST = new URL(APEX_ORIGIN).hostname;
+export const APEX_CANONICAL_REDIRECTS_ENV = "APEX_CANONICAL_REDIRECTS_ENABLED";
 const PUBLIC_ALIAS_HOSTS = new Set([
   "www.ausenergyassessments.com",
   "compare.ausenergyassessments.com",
@@ -51,4 +52,15 @@ export function canonicalPublicTarget(requestUrl, method = "GET") {
   source.hostname = APEX_HOST;
   source.port = "";
   return source.toString();
+}
+
+export function canonicalAliasRedirectsEnabled(environment) {
+  if (!environment || typeof environment !== "object") return false;
+  return String(environment[APEX_CANONICAL_REDIRECTS_ENV] || "").trim().toLowerCase() === "true";
+}
+
+export function shouldApplyCanonicalHostRedirect(requestUrl, environment) {
+  const source = new URL(String(requestUrl));
+  const isPlainHttpApex = source.hostname === APEX_HOST && source.protocol === "http:";
+  return isPlainHttpApex || canonicalAliasRedirectsEnabled(environment);
 }

@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-09-02T04:05:00+10:00",
+  "capturedAt": "2026-09-02T16:21:58+10:00",
   "apex": "ausenergyassessments.com",
   "nameservers": [
     "ns-cloud-d1.googledomains.com",
@@ -20,10 +20,75 @@
     "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApxzimFhtH/2SoFpBZNqvIi5HRlXvXrKdlfujo7co4WZ6RdB13zOt/TQn/pKN8T2T9pSBYCAF6/d6Giw+3i5iSEPwfrz5GFcyhU+DerCj+Jy8aCXdsL4lCoxsP626FHtRHZXbCMkCypTmkk6QSt7zAKZZ+m0uCnYsRT7ZaPgmdA98C8TNP54Jx88sEgo6INDtHIL9RiEGScYePSiMLoVCB3BnPGXVYjQb4ceoxEqRNYXwNYZx/e1WeCgICCUXac+I5TldOurogfx7onORg74saZRAgOecPpKe6Fec9ElWtp4KeaC/YBcwmtawR69t0puNig0VqFwDMdTu4yXY4EA88QIDAQAB"
   ],
   "dnssecDsRequired": true,
+  "dnssecDs": [
+    "47741 8 2 48f60b3bdaa50c80e22caae7fce0c9eca6196e58f6383efebd7f326e186eb76d"
+  ],
   "observedApexA": ["172.66.0.42"],
   "observedApexAaaa": [],
   "observedWwwCname": "websites.mydurable.com",
   "observedCompareCname": "custom-domains.chatgpt.site",
-  "observedDmarc": null,
-  "observedCaa": []
+  "maxRoutingTtlSeconds": {
+    "apexA": 1800,
+    "wwwCname": 1800,
+    "compareCname": 14400
+  },
+  "observedDmarc": ["v=DMARC1; p=none; pct=100"],
+  "observedCaa": [],
+  "preserveRecords": [
+    {
+      "name": "_domainconnect.ausenergyassessments.com",
+      "type": "CNAME",
+      "values": ["_domainconnect.domains.squarespace.com"]
+    },
+    {
+      "name": "subdomain-owner-verification.ausenergyassessments.com",
+      "type": "TXT",
+      "values": ["cd3ba0b2585e4192744af4d9257af49f"]
+    },
+    {
+      "name": "_openai-site-verification.ausenergyassessments.com",
+      "type": "TXT",
+      "values": ["openai-site-verification=PlKr8YH3Bmdv-DUAfpwiBQsUIjBRVPG5KmTnUjzsFWw"]
+    },
+    {
+      "name": "_cf-custom-hostname.ausenergyassessments.com",
+      "type": "TXT",
+      "values": ["189abbbb-e747-4653-ad83-47598fb44a95"]
+    },
+    {
+      "name": "_openai-site-verification.www.ausenergyassessments.com",
+      "type": "TXT",
+      "values": ["openai-site-verification=aqVwIP9lpTwFn9ujs-JkeTxjP64cAgX3TmP4XIv8uxs"]
+    },
+    {
+      "name": "_cf-custom-hostname.www.ausenergyassessments.com",
+      "type": "TXT",
+      "values": ["5bc572eb-b171-4b98-a2c3-a5c000266027"]
+    },
+    {
+      "name": "_openai-site-verification.compare.ausenergyassessments.com",
+      "type": "TXT",
+      "values": ["openai-site-verification=sTraFdyJZRrKgEIE4GDCQiZodYPnfhM7F953IlY6DS4"]
+    },
+    {
+      "name": "_cf-custom-hostname.compare.ausenergyassessments.com",
+      "type": "TXT",
+      "values": ["926dd566-bc9d-439d-ba02-2080fdf34a73"]
+    },
+    {
+      "name": "resend._domainkey.reminders.ausenergyassessments.com",
+      "type": "TXT",
+      "values": ["p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDf8xZ/2D3Tai0yxno+hEEvwJUenPzPaDO5sna0/fG1oGCZVOz4mrWYaPIZlrVssWkDah/9eFvY5DW2yAA/9wu5KqrImGlWIunoMM8Tw0Rr8ZdObs59p/uBuZnxup33V2xf2xlVAmBc+NN5QZ3HdLOME1BlPJtWH83/G0I3H1AiiwIDAQAB"]
+    },
+    {
+      "name": "send.reminders.ausenergyassessments.com",
+      "type": "MX",
+      "values": ["10 feedback-smtp.ap-northeast-1.amazonses.com"]
+    },
+    {
+      "name": "send.reminders.ausenergyassessments.com",
+      "type": "TXT",
+      "values": ["v=spf1 include:amazonses.com ~all"]
+    }
+  ]
 }

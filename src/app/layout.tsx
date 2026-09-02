@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { AnalyticsConsent } from "@/components/AnalyticsConsent";
 import { JsonLd } from "@/components/JsonLd";
 import { LazyEnergyAssistantWidget } from "@/components/LazyEnergyAssistantWidget";
 import { SiteDatePicker } from "@/components/SiteDatePicker";
@@ -50,5 +51,16 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en-AU"><body className="aea-platform"><JsonLd data={publicOrganizationSchema} /><a className="skip-link" href="#site-content">Skip to main content</a>{children}<SiteDatePicker /><LazyEnergyAssistantWidget /></body></html>;
+  return (
+    <html lang="en-AU">
+      <body className="aea-platform">
+        <JsonLd data={publicOrganizationSchema} />
+        <a className="skip-link" href="#site-content">Skip to main content</a>
+        {children}
+        <SiteDatePicker />
+        <LazyEnergyAssistantWidget />
+        <AnalyticsConsent />
+      </body>
+    </html>
+  );
 }

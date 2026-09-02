@@ -37,9 +37,10 @@ test("every worker response receives baseline browser security headers", () => {
 
 test("public alias hosts, plain HTTP and retired paths redirect to the apex domain", () => {
   assert.match(worker, /canonicalPublicTarget\(request\.url, request\.method\)/);
+  assert.match(worker, /shouldApplyCanonicalHostRedirect\(request\.url, environment\)/);
   assert.match(worker, /Response\.redirect\(target, 308\)/);
   assert.match(worker, /publicRedirectTarget\(request\.url\)/);
-  assert.match(worker, /const pathRedirect = legacyPathRedirect\(request\);[\s\S]*const redirect = canonicalHostRedirect\(request\);/);
+  assert.match(worker, /const pathRedirect = legacyPathRedirect\(request\);[\s\S]*const redirect = canonicalHostRedirect\(request, env\);/);
 });
 
 test("gas comparison bounds slow upstream calls and reuses successful results", () => {

@@ -63,7 +63,11 @@ import {
 } from "../src/lib/service-reminder-delivery";
 import { drainTradeQuoteDeliveries } from "../src/lib/trade-quote-delivery-server";
 import { queueTradeQuoteDeliveryDispatch } from "../src/lib/trade-quote-delivery-dispatch";
-import { canonicalPublicTarget, publicRedirectTarget } from "../src/lib/public-redirects.mjs";
+import {
+  canonicalPublicTarget,
+  publicRedirectTarget,
+  shouldApplyCanonicalHostRedirect,
+} from "../src/lib/public-redirects.mjs";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
 const PRIVATE_HTML_CACHE_CONTROL = "private, no-store, max-age=0";
@@ -436,7 +440,8 @@ function queueBackgroundDispatches(
   });
 }
 
-function canonicalHostRedirect(request: Request) {
+function canonicalHostRedirect(request: Request, environment: unknown) {
+  if (!shouldApplyCanonicalHostRedirect(request.url, environment)) return null;
   const target = canonicalPublicTarget(request.url, request.method);
   return target
     ? secureResponse(Response.redirect(target, 308), request)
@@ -473,7 +478,7 @@ const worker = {
   async fetch(request: Request, env: unknown, ctx: ExecutionContext): Promise<Response> {
     const pathRedirect = legacyPathRedirect(request);
     if (pathRedirect) return pathRedirect;
-    const redirect = canonicalHostRedirect(request);
+    const redirect = canonicalHostRedirect(request, env);
     if (redirect) return redirect;
 
     if (request.method === "GET" && new URL(request.url).pathname === "/api/health") {

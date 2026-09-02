@@ -16,6 +16,7 @@ import {
   hasNoindexDirective,
   openGraphUrlFromHtml,
   parseCutoverArguments,
+  publicResolverRoutingTtlEvidenceIsValid,
   robotsBlocksSearchCrawlers,
   summariseCutoverReport,
 } from "./lib/apex-cutover-rehearsal.mjs";
@@ -69,6 +70,113 @@ async function resolveOr(name, type, fallback = []) {
     if (["ENODATA", "ENOTFOUND"].includes(error?.code)) return fallback;
     throw error;
   }
+}
+
+const PUBLIC_DNS_RESOLVERS = Object.freeze([
+  {
+    id: "cloudflare",
+    endpoint: (name, type) => `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=${type}`,
+  },
+  {
+    id: "google",
+    endpoint: (name, type) => `https://dns.google/resolve?name=${encodeURIComponent(name)}&type=${type}`,
+  },
+]);
+const DNS_JSON_TYPES = Object.freeze({ A: 1, CNAME: 5 });
+
+async function observePublicRoutingRecord(resolver, name, type, timeoutMs = 10_000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(resolver.endpoint(name, type), {
+      signal: controller.signal,
+      headers: {
+        accept: "application/dns-json",
+        "user-agent": "Australian-Energy-Assessments-Apex-Cutover-Rehearsal/1.0",
+      },
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!payload || payload.Status !== 0) throw new Error(`DNS status ${payload?.Status ?? "missing"}`);
+    const recordType = DNS_JSON_TYPES[type];
+    const records = Array.isArray(payload.Answer)
+      ? payload.Answer
+        .filter((answer) => answer?.type === recordType && normalizeDnsName(answer?.name) === normalizeDnsName(name))
+        .map((answer) => ({
+          name: normalizeDnsName(answer.name),
+          type,
+          ttl: answer.TTL,
+          value: type === "CNAME" ? normalizeDnsName(answer.data) : String(answer.data || "").trim(),
+        }))
+      : [];
+    return { resolver: resolver.id, name, type, records };
+  } catch (error) {
+    return {
+      resolver: resolver.id,
+      name,
+      type,
+      records: [],
+      error: error instanceof Error ? error.message : "Public DNS query failed.",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function inspectPublicResolverRoutingTtls(baseline) {
+  const apex = normalizeDnsName(baseline.apex);
+  const expectedResolvers = PUBLIC_DNS_RESOLVERS.map((resolver) => resolver.id);
+  const definitions = [
+    {
+      id: "dns_apex_routing_ttl_public_resolvers",
+      name: apex,
+      type: "A",
+      maxTtl: baseline.maxRoutingTtlSeconds?.apexA,
+      expectedValues: options.phase === "candidate" ? baseline.observedApexA : null,
+    },
+    {
+      id: "dns_www_routing_ttl_public_resolvers",
+      name: `www.${apex}`,
+      type: "CNAME",
+      maxTtl: baseline.maxRoutingTtlSeconds?.wwwCname,
+      expectedValues: options.phase === "candidate" ? [baseline.observedWwwCname] : null,
+    },
+    {
+      id: "dns_compare_routing_ttl_public_resolvers",
+      name: `compare.${apex}`,
+      type: "CNAME",
+      maxTtl: baseline.maxRoutingTtlSeconds?.compareCname,
+      expectedValues: [baseline.observedCompareCname],
+    },
+  ];
+
+  return Promise.all(definitions.map(async (definition) => {
+    const observations = await Promise.all(PUBLIC_DNS_RESOLVERS.map((resolver) => (
+      observePublicRoutingRecord(resolver, definition.name, definition.type)
+    )));
+    const passed = publicResolverRoutingTtlEvidenceIsValid(observations, {
+      ...definition,
+      expectedResolvers,
+    });
+    const detail = observations.map((observation) => {
+      if (observation.error) return `${observation.resolver}: ${observation.error}`;
+      return `${observation.resolver}: ${observation.records.map((record) => `${record.value} TTL ${record.ttl}`).join(", ") || "missing"}`;
+    }).join(" | ");
+    return check(definition.id, passed, detail || "missing public resolver evidence");
+  }));
+}
+
+async function resolvePreservedRecord(record) {
+  const type = String(record?.type || "").toUpperCase();
+  const name = String(record?.name || "");
+  if (!name || !["A", "AAAA", "CNAME", "MX", "TXT"].includes(type)) return [];
+  const resolved = await resolveOr(name, type);
+  if (type === "TXT") return resolved.map((segments) => segments.join(""));
+  if (type === "CNAME") return resolved.map(normalizeDnsName);
+  if (type === "MX") {
+    return resolved.map((entry) => `${entry.priority} ${normalizeDnsName(entry.exchange)}`);
+  }
+  return resolved.map(String);
 }
 
 async function fetchManual(url, timeoutMs = requestTimeoutMs) {
@@ -343,6 +451,7 @@ async function inspectDns(baseline) {
   const currentAaaa = await resolveOr(apex, "AAAA");
   const wwwCname = (await resolveOr(`www.${apex}`, "CNAME")).map(normalizeDnsName);
   const compareCname = (await resolveOr(`compare.${apex}`, "CNAME")).map(normalizeDnsName);
+  const publicResolverRoutingTtlChecks = await inspectPublicResolverRoutingTtls(baseline);
 
   const dnssecResponse = await fetch(
     `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(apex)}&type=DS`,
@@ -353,6 +462,20 @@ async function inspectDns(baseline) {
     && dnssec?.AD === true
     && Array.isArray(dnssec?.Answer)
     && dnssec.Answer.some((answer) => answer.type === 43);
+  const dnssecDs = Array.isArray(dnssec?.Answer)
+    ? dnssec.Answer
+      .filter((answer) => answer.type === 43)
+      .map((answer) => String(answer.data || "").trim().toLowerCase().replace(/\s+/g, " "))
+    : [];
+  const preserveChecks = await Promise.all((baseline.preserveRecords || []).map(async (record) => {
+    const actual = await resolvePreservedRecord(record);
+    const expected = (record.values || []).map((value) => record.type === "CNAME" ? normalizeDnsName(value) : String(value));
+    return check(
+      `dns_preserve_${String(record.name).replace(/[^a-z0-9]+/gi, "_").replace(/^_|_$/g, "").toLowerCase()}_${String(record.type).toLowerCase()}`,
+      sameValues(actual, expected),
+      actual.join(" | ") || "missing",
+    );
+  }));
 
   const checks = [
     check("dns_nameservers_preserved", sameValues(nameservers, baseline.nameservers.map(normalizeDnsName)), nameservers.join(", ")),
@@ -372,8 +495,20 @@ async function inspectDns(baseline) {
       dmarcRecordSetIsValid(dmarcTxt),
       dmarcTxt.join(" | ") || "missing",
     ),
+    check(
+      "dns_dmarc_preserved",
+      sameValues(dmarcTxt, baseline.observedDmarc || []),
+      dmarcTxt.join(" | ") || "missing",
+    ),
     check("dns_caa_preserved", sameValues(caa, baseline.observedCaa || []), caa.join(", ") || "none"),
+    ...publicResolverRoutingTtlChecks,
     check("dnssec_preserved", !baseline.dnssecDsRequired || dnssecPresent, dnssecPresent ? "validated DS" : "missing or unvalidated DS"),
+    check(
+      "dnssec_ds_matches_baseline",
+      !Array.isArray(baseline.dnssecDs) || sameValues(dnssecDs, baseline.dnssecDs.map((value) => String(value).trim().toLowerCase().replace(/\s+/g, " "))),
+      dnssecDs.join(" | ") || "missing",
+    ),
+    ...preserveChecks,
   ];
 
   if (options.phase === "candidate") {
@@ -434,6 +569,14 @@ const sourceChecks = [
     source("src/lib/public-redirects.mjs").includes(`const APEX_ORIGIN = "${options.expectedApexOrigin}"`)
       && /canonicalPublicTarget\(request\.url, request\.method\)/.test(source("worker/index.ts")),
     "worker canonical redirect helper must use the expected apex origin",
+  ),
+  check(
+    "worker_canonical_redirect_cutover_flag",
+    source("src/lib/public-redirects.mjs").includes('APEX_CANONICAL_REDIRECTS_ENABLED')
+      && /shouldApplyCanonicalHostRedirect\(request\.url, environment\)/.test(source("worker/index.ts"))
+      && /canonicalHostRedirect\(request, env\)/.test(source("worker/index.ts"))
+      && source(".env.example").includes("APEX_CANONICAL_REDIRECTS_ENABLED=false"),
+    "public alias redirects must stay behind the explicit runtime cutover flag",
   ),
   check("quote_links_accept_apex", tradeQuoteDeliveryPublicOrigin(options.expectedApexOrigin) === options.expectedApexOrigin, tradeQuoteDeliveryPublicOrigin(options.expectedApexOrigin)),
   check("quote_links_default_to_apex", tradeQuoteDeliveryPublicOrigin() === options.expectedApexOrigin, tradeQuoteDeliveryPublicOrigin()),

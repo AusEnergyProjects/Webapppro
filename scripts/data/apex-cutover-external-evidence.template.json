@@ -1,5 +1,5 @@
 {
-  "reviewedAt": "2026-09-02T04:15:00+10:00",
+  "reviewedAt": null,
   "candidateOrigin": "https://compare.ausenergyassessments.com",
   "expectedApexOrigin": "https://ausenergyassessments.com",
   "expectedRelease": null,
@@ -16,29 +16,34 @@
   "destination": {
     "apexAttached": false,
     "wwwAttached": false,
-    "tlsVerified": false
+    "tlsVerified": false,
+    "canonicalAliasRedirectsEnabled": false
   },
   "analytics": {
     "legacyMeasurementId": "G-3PGGJ0JX4H",
     "destinationMeasurementId": null,
-    "destinationConfigured": false
+    "destinationConfigured": false,
+    "manualPageViewsOnly": false,
+    "historyPageViewsDisabled": false
   },
   "firebase": {
     "authorisedDomains": []
   },
   "oauthCallbacks": {
-    "xero": null,
-    "myob": null,
-    "quickbooks": null,
-    "google_calendar": null,
-    "microsoft_calendar": null
+    "xero": { "status": "not-configured", "callback": null },
+    "myob": { "status": "not-configured", "callback": null },
+    "quickbooks": { "status": "not-configured", "callback": null },
+    "google_calendar": { "status": "configured", "callback": null },
+    "microsoft_calendar": { "status": "not-configured", "callback": null }
   },
   "criticalFlows": {
+    "origin": "https://compare.ausenergyassessments.com",
     "bookingCalendarAndEmails": false,
-    "apexQuoteLink": false
+    "quoteLink": false
   },
   "dns": {
     "baselineApproved": false,
+    "routingTtlControlPlaneVerified": false,
     "rollbackReady": false
   }
 }

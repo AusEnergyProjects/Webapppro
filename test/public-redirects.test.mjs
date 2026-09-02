@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canonicalPublicTarget, publicRedirectTarget } from "../src/lib/public-redirects.mjs";
+import {
+  canonicalAliasRedirectsEnabled,
+  canonicalPublicTarget,
+  publicRedirectTarget,
+  shouldApplyCanonicalHostRedirect,
+} from "../src/lib/public-redirects.mjs";
 
 test("legacy public redirects are one-hop apex URLs and preserve the full query", () => {
   assert.equal(
@@ -47,4 +52,24 @@ test("canonical host redirects never absorb API posts or unknown hosts", () => {
   assert.equal(canonicalPublicTarget("https://compare.ausenergyassessments.com/api/leads"), null);
   assert.equal(canonicalPublicTarget("https://compare.ausenergyassessments.com/faq", "POST"), null);
   assert.equal(canonicalPublicTarget("https://attacker.example/faq"), null);
+});
+
+test("alias redirects remain off during candidate testing and turn on only with the exact cutover flag", () => {
+  assert.equal(canonicalAliasRedirectsEnabled(undefined), false);
+  assert.equal(canonicalAliasRedirectsEnabled({ APEX_CANONICAL_REDIRECTS_ENABLED: "false" }), false);
+  assert.equal(canonicalAliasRedirectsEnabled({ APEX_CANONICAL_REDIRECTS_ENABLED: "TRUE" }), true);
+  assert.equal(
+    shouldApplyCanonicalHostRedirect("https://compare.ausenergyassessments.com/faq", {}),
+    false,
+  );
+  assert.equal(
+    shouldApplyCanonicalHostRedirect("https://compare.ausenergyassessments.com/faq", {
+      APEX_CANONICAL_REDIRECTS_ENABLED: "true",
+    }),
+    true,
+  );
+  assert.equal(
+    shouldApplyCanonicalHostRedirect("http://ausenergyassessments.com/faq", {}),
+    true,
+  );
 });

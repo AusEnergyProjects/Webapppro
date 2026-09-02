@@ -4,6 +4,82 @@ export const APEX_CUTOVER_PHASES = new Set(["candidate", "post-cutover"]);
 export const LEGACY_ANALYTICS_MEASUREMENT_ID = "G-3PGGJ0JX4H";
 const MAX_EXTERNAL_EVIDENCE_AGE_MS = 24 * 60 * 60 * 1000;
 
+function normaliseDnsRecordName(value) {
+  return String(value || "").trim().toLowerCase().replace(/\.+$/u, "");
+}
+
+function normaliseRoutingValue(value, type) {
+  const recordType = String(type || "").toUpperCase();
+  if (recordType === "CNAME") return normaliseDnsRecordName(value);
+  return String(value || "").trim();
+}
+
+function sameDnsValues(actual, expected) {
+  const sorted = (values) => [...values].sort((left, right) => left.localeCompare(right));
+  return JSON.stringify(sorted(actual)) === JSON.stringify(sorted(expected));
+}
+
+function isIpv4(value) {
+  const parts = String(value || "").split(".");
+  return parts.length === 4 && parts.every((part) => /^\d{1,3}$/u.test(part) && Number(part) <= 255);
+}
+
+export function publicResolverRoutingTtlEvidenceIsValid(observations, {
+  expectedResolvers,
+  expectedValues,
+  maxTtl,
+  name,
+  type,
+}) {
+  const expectedName = normaliseDnsRecordName(name);
+  const expectedType = String(type || "").toUpperCase();
+  const resolvers = [...new Set((expectedResolvers || []).map(normaliseDnsRecordName).filter(Boolean))];
+  if (!expectedName || !["A", "CNAME"].includes(expectedType) || resolvers.length !== 2) return false;
+  if (!Number.isInteger(maxTtl) || maxTtl <= 0 || !Array.isArray(observations)) return false;
+  if (expectedValues !== null && (!Array.isArray(expectedValues) || expectedValues.length === 0)) return false;
+
+  const evidenceByResolver = new Map();
+  for (const observation of observations) {
+    const resolver = normaliseDnsRecordName(observation?.resolver);
+    if (!resolver || evidenceByResolver.has(resolver)) return false;
+    evidenceByResolver.set(resolver, observation);
+  }
+  if (evidenceByResolver.size !== resolvers.length) return false;
+
+  const explicitValues = Array.isArray(expectedValues)
+    ? expectedValues.map((value) => normaliseRoutingValue(value, expectedType))
+    : null;
+  let consensusValues = null;
+  for (const resolver of resolvers) {
+    const observation = evidenceByResolver.get(resolver);
+    if (
+      normaliseDnsRecordName(observation?.name) !== expectedName
+      || String(observation?.type || "").toUpperCase() !== expectedType
+      || !Array.isArray(observation?.records)
+      || observation.records.length === 0
+    ) return false;
+
+    const values = [];
+    for (const record of observation.records) {
+      if (
+        normaliseDnsRecordName(record?.name) !== expectedName
+        || String(record?.type || "").toUpperCase() !== expectedType
+        || !Number.isInteger(record?.ttl)
+        || record.ttl < 0
+        || record.ttl > maxTtl
+      ) return false;
+      const value = normaliseRoutingValue(record?.value, expectedType);
+      if ((expectedType === "A" && !isIpv4(value)) || (expectedType === "CNAME" && !value)) return false;
+      values.push(value);
+    }
+
+    const requiredValues = explicitValues || consensusValues;
+    if (requiredValues && !sameDnsValues(values, requiredValues)) return false;
+    consensusValues ??= values;
+  }
+  return true;
+}
+
 export function normaliseOrigin(value, label) {
   let url;
   try {
@@ -200,19 +276,31 @@ export function evaluateExternalEvidence(evidence, {
     ["destination_www_attached", evidence?.destination?.wwwAttached === true],
     ["destination_tls_verified", evidence?.destination?.tlsVerified === true],
     [
+      "canonical_alias_redirect_state",
+      evidence?.destination?.canonicalAliasRedirectsEnabled === (phase === "post-cutover"),
+    ],
+    [
       "analytics_continuity",
       evidence?.analytics?.destinationConfigured === true
         && evidence?.analytics?.legacyMeasurementId === LEGACY_ANALYTICS_MEASUREMENT_ID
-        && evidence?.analytics?.destinationMeasurementId === evidence?.analytics?.legacyMeasurementId,
+        && evidence?.analytics?.destinationMeasurementId === evidence?.analytics?.legacyMeasurementId
+        && evidence?.analytics?.manualPageViewsOnly === true
+        && evidence?.analytics?.historyPageViewsDisabled === true,
     ],
     ["firebase_apex_authorised", evidence?.firebase?.authorisedDomains?.includes(expectedHost) === true],
+    ["firebase_www_authorised", evidence?.firebase?.authorisedDomains?.includes(`www.${expectedHost}`) === true],
+    ["critical_flow_origin", evidence?.criticalFlows?.origin === candidateOrigin],
     ["booking_flow_verified", evidence?.criticalFlows?.bookingCalendarAndEmails === true],
-    ["quote_link_verified", evidence?.criticalFlows?.apexQuoteLink === true],
+    ["quote_link_verified", evidence?.criticalFlows?.quoteLink === true],
     ["dns_baseline_approved", evidence?.dns?.baselineApproved === true],
+    ["dns_routing_ttl_control_plane_verified", evidence?.dns?.routingTtlControlPlaneVerified === true],
     ["rollback_ready", evidence?.dns?.rollbackReady === true],
     ...requiredCallbackProviders.map((provider) => [
       `oauth_callback_${provider}`,
-      callbacks[provider] === `${expectedApexOrigin}/api/trade-integrations/callback/${provider}`,
+      callbacks[provider]?.status === "not-configured"
+        ? callbacks[provider]?.callback === null
+        : callbacks[provider]?.status === "configured"
+          && callbacks[provider]?.callback === `${expectedApexOrigin}/api/trade-integrations/callback/${provider}`,
     ]),
   ];
 

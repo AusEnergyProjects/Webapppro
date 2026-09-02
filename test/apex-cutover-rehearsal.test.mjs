@@ -10,6 +10,7 @@ import {
   hasNoindexDirective,
   openGraphUrlFromHtml,
   parseCutoverArguments,
+  publicResolverRoutingTtlEvidenceIsValid,
   robotsBlocksSearchCrawlers,
   summariseCutoverReport,
 } from "../scripts/lib/apex-cutover-rehearsal.mjs";
@@ -56,6 +57,47 @@ test("mail DNS evidence requires one well-formed DMARC record with one policy", 
   assert.equal(dmarcRecordSetIsValid(["v=DMARC1; p"]), false);
 });
 
+test("public resolver TTL evidence requires both resolvers and rejects stale or wrong records", () => {
+  const resolvers = ["cloudflare", "google"];
+  const record = {
+    name: "www.ausenergyassessments.com",
+    type: "CNAME",
+    ttl: 1800,
+    value: "websites.mydurable.com",
+  };
+  const observation = (resolver, overrides = {}) => ({
+    resolver,
+    name: record.name,
+    type: record.type,
+    records: [record],
+    ...overrides,
+  });
+  const expectation = {
+    expectedResolvers: resolvers,
+    expectedValues: [record.value],
+    maxTtl: 1800,
+    name: record.name,
+    type: record.type,
+  };
+
+  assert.equal(publicResolverRoutingTtlEvidenceIsValid(
+    resolvers.map((resolver) => observation(resolver)),
+    expectation,
+  ), true);
+  assert.equal(publicResolverRoutingTtlEvidenceIsValid(
+    [observation(resolvers[0])],
+    expectation,
+  ), false, "both independent resolver observations are required");
+  assert.equal(publicResolverRoutingTtlEvidenceIsValid([
+    observation(resolvers[0]),
+    observation(resolvers[1], { records: [{ ...record, ttl: 1801 }] }),
+  ], expectation), false, "a remaining cache TTL over the limit must fail");
+  assert.equal(publicResolverRoutingTtlEvidenceIsValid([
+    observation(resolvers[0]),
+    observation(resolvers[1], { records: [{ ...record, value: "unexpected.example" }] }),
+  ], expectation), false, "the current record value must match exactly");
+});
+
 test("canonical, Open Graph, noindex and sitemap evidence are parsed exactly", () => {
   const html = '<link rel="canonical" href="https://ausenergyassessments.com/team"><meta property="og:url" content="https://ausenergyassessments.com/team"><meta name="robots" content="noindex, follow">';
   assert.equal(canonicalFromHtml(html), "https://ausenergyassessments.com/team");
@@ -87,17 +129,36 @@ test("external readiness requires every provider, domain and critical flow", () 
     expectedRelease: "0123456789abcdef0123456789abcdef01234567",
     searchConsole: { property: "sc-domain:ausenergyassessments.com", ownerVerified: true, newSitemapSubmitted: true },
     googleBusinessProfile: { continuityVerified: true, replacementProfileRequired: false },
-    destination: { apexAttached: true, wwwAttached: true, tlsVerified: true },
-    analytics: { legacyMeasurementId: "G-3PGGJ0JX4H", destinationMeasurementId: "G-3PGGJ0JX4H", destinationConfigured: true },
-    firebase: { authorisedDomains: ["ausenergyassessments.com"] },
-    criticalFlows: { bookingCalendarAndEmails: true, apexQuoteLink: true },
-    dns: { baselineApproved: true, rollbackReady: true },
+    destination: {
+      apexAttached: true,
+      wwwAttached: true,
+      tlsVerified: true,
+      canonicalAliasRedirectsEnabled: false,
+    },
+    analytics: {
+      legacyMeasurementId: "G-3PGGJ0JX4H",
+      destinationMeasurementId: "G-3PGGJ0JX4H",
+      destinationConfigured: true,
+      manualPageViewsOnly: true,
+      historyPageViewsDisabled: true,
+    },
+    firebase: { authorisedDomains: ["ausenergyassessments.com", "www.ausenergyassessments.com"] },
+    criticalFlows: {
+      origin: "https://compare.ausenergyassessments.com",
+      bookingCalendarAndEmails: true,
+      quoteLink: true,
+    },
+    dns: {
+      baselineApproved: true,
+      routingTtlControlPlaneVerified: true,
+      rollbackReady: true,
+    },
     oauthCallbacks: {
-      xero: "https://ausenergyassessments.com/api/trade-integrations/callback/xero",
-      myob: "https://ausenergyassessments.com/api/trade-integrations/callback/myob",
-      quickbooks: "https://ausenergyassessments.com/api/trade-integrations/callback/quickbooks",
-      google_calendar: "https://ausenergyassessments.com/api/trade-integrations/callback/google_calendar",
-      microsoft_calendar: "https://ausenergyassessments.com/api/trade-integrations/callback/microsoft_calendar",
+      xero: { status: "not-configured", callback: null },
+      myob: { status: "not-configured", callback: null },
+      quickbooks: { status: "not-configured", callback: null },
+      google_calendar: { status: "configured", callback: "https://ausenergyassessments.com/api/trade-integrations/callback/google_calendar" },
+      microsoft_calendar: { status: "not-configured", callback: null },
     },
   };
   const context = {
@@ -112,6 +173,8 @@ test("external readiness requires every provider, domain and critical flow", () 
   const postCutoverChecks = evaluateExternalEvidence({
     ...evidence,
     candidateOrigin: "https://ausenergyassessments.com",
+    destination: { ...evidence.destination, canonicalAliasRedirectsEnabled: true },
+    criticalFlows: { ...evidence.criticalFlows, origin: "https://ausenergyassessments.com" },
     searchConsole: { ...evidence.searchConsole, newSitemapSubmitted: false },
   }, { ...context, candidateOrigin: "https://ausenergyassessments.com", phase: "post-cutover" });
   assert.equal(
@@ -125,7 +188,13 @@ test("external readiness requires every provider, domain and critical flow", () 
   });
   assert.equal(staleChecks.find((check) => check.id === "evidence_fresh")?.passed, false);
 
-  const missingCallback = checks.map((check) => check.id === "oauth_callback_xero" ? { ...check, passed: false } : check);
+  const missingCallback = evaluateExternalEvidence({
+    ...evidence,
+    oauthCallbacks: {
+      ...evidence.oauthCallbacks,
+      xero: { status: "configured", callback: null },
+    },
+  }, context);
   assert.deepEqual(summariseCutoverReport({
     sourceChecks: [{ id: "contract", passed: true }],
     candidateChecks: [{ id: "candidate", passed: true }],
