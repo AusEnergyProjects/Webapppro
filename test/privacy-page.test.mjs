@@ -33,11 +33,15 @@ test("the public privacy route covers the operational data boundary", () => {
   assert.match(privacy, /random first-party security cookie and short-lived, one-way security counters/);
   assert.match(privacy, /do not contain conversation text, a raw network address or a cross-device identity/);
   assert.match(privacy, /Wattzun AI does not use a visitor fingerprint/);
-  assert.match(privacy, /Optional website analytics/);
-  assert.match(privacy, /Google Analytics is off until you select Allow basic analytics/);
-  assert.match(privacy, /We send page views manually on public pages, with automatic browser-history page views turned off/);
-  assert.match(privacy, /Google signals and advertising personalisation are turned off/);
-  assert.match(privacy, /select Privacy choices at the bottom of any public page/);
+  assert.match(privacy, /Basic website analytics/);
+  assert.match(privacy, /uses Google Analytics on public information pages to count visits/);
+  assert.match(privacy, /Analytics storage is always denied/);
+  assert.match(privacy, /does not create Google Analytics cookies/);
+  assert.match(privacy, /sends a manual page view when a public page path changes and turns off the tag's automatic initial page view/);
+  assert.match(privacy, /Google signals, advertising storage and advertising personalisation are turned off/);
+  assert.match(privacy, /outside Australia, including in the United States/);
+  assert.match(privacy, /You can stop or restart this cookieless measurement below/);
+  assert.match(privacy, /<AnalyticsPrivacyControl \/>/);
   assert.match(privacy, /Measurement stays disabled on protected account, operations, job-link and report-link pages/);
   assert.doesNotMatch(privacy, /No customer question or conversation content is sent to a paid external AI service/);
   assert.match(privacy, /Optional Energy Guide contact requests/);
@@ -53,13 +57,16 @@ test("the public privacy route covers the operational data boundary", () => {
   assert.match(privacy, /Open trade workspace/);
 });
 
-test("optional website analytics requires a clear stored choice before Google Analytics loads", () => {
+test("basic website analytics is cookieless, bounded and can be disabled without a popup", () => {
   assert.match(layout, /<AnalyticsConsent \/>/);
   assert.match(analyticsConsent, /G-3PGGJ0JX4H/);
   assert.match(analyticsConsent, /australian-energy-assessments-analytics-consent-v1/);
-  assert.match(analyticsConsent, /if \(choice === undefined\) return/);
+  assert.match(analyticsConsent, /if \(preference === undefined\) return/);
   assert.match(analyticsConsent, /PRIVATE_PATH_PREFIXES/);
-  assert.match(analyticsConsent, /choice !== CONSENT_GRANTED \|\| !analyticsAllowed/);
+  assert.match(analyticsConsent, /pathname\.includes\("\/print\/"\)/);
+  assert.match(analyticsConsent, /pathname\.includes\("\/pdf\/"\)/);
+  assert.match(analyticsConsent, /readStoredChoice\(\) === CONSENT_DENIED/);
+  assert.match(analyticsConsent, /preference !== "enabled" \|\| !analyticsAllowed/);
   assert.match(analyticsConsent, /document\.createElement\("script"\)/);
   assert.match(analyticsConsent, /googletagmanager\.com\/gtag\/js\?id=/);
   assert.match(analyticsConsent, /localStorage\.setItem\(CONSENT_STORAGE_KEY, choice\)/);
@@ -67,23 +74,30 @@ test("optional website analytics requires a clear stored choice before Google An
   assert.match(analyticsConsent, /ad_personalization: "denied"/);
   assert.match(analyticsConsent, /ad_storage: "denied"/);
   assert.match(analyticsConsent, /ad_user_data: "denied"/);
-  assert.match(analyticsConsent, /analytics_storage: "granted"/);
   assert.match(analyticsConsent, /analytics_storage: "denied"/);
+  assert.doesNotMatch(analyticsConsent, /analytics_storage: "granted"/);
   assert.match(analyticsConsent, /allow_ad_personalization_signals: false/);
   assert.match(analyticsConsent, /allow_google_signals: false/);
   assert.match(analyticsConsent, /send_page_view: false/);
   assert.match(analyticsConsent, /trackPageView\(pathname\)/);
   assert.doesNotMatch(analyticsConsent, /send_page_view: true/);
-  assert.match(analyticsConsent, />\s*Allow basic analytics\s*</);
-  assert.match(analyticsConsent, />\s*No thanks\s*</);
-  assert.match(analyticsConsent, />\s*Privacy choices\s*</);
+  assert.match(analyticsConsent, /clearGoogleAnalyticsCookies\(\);\s*window\["ga-disable-G-3PGGJ0JX4H"\] = false/);
+  assert.match(analyticsConsent, /navigator\.globalPrivacyControl === true/);
+  assert.match(analyticsConsent, /navigator\.doNotTrack === "1"/);
+  assert.match(analyticsConsent, /PREFERENCE_CHANGE_EVENT/);
+  assert.match(analyticsConsent, /new CustomEvent\(PREFERENCE_CHANGE_EVENT, \{ detail: choice \}\)/);
+  assert.match(analyticsConsent, /Turn off basic analytics/);
+  assert.match(analyticsConsent, /Allow basic analytics/);
+  assert.doesNotMatch(analyticsConsent, /Help us improve this website/);
+  assert.doesNotMatch(analyticsConsent, /position: "fixed"/);
   assert.doesNotMatch(layout, /googletagmanager|G-3PGGJ0JX4H/);
   assert.doesNotMatch(analyticsConsent, /dangerouslySetInnerHTML/);
+  assert.equal(analyticsConsent.match(/"page_view"/g)?.length, 1);
 });
 
 test("customer evidence and shared navigation resolve to the public privacy route", () => {
   assert.match(upload, /href="\/privacy"/);
-  assert.match(chrome, /href="\/privacy"[^>]*>Privacy/);
+  assert.match(chrome, /href="\/privacy"[^>]*>Privacy and analytics/);
   assert.match(sitemap, /"\/privacy"/);
 });
 
