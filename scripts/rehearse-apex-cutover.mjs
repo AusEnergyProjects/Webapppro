@@ -429,7 +429,12 @@ const sourceChecks = [
   check("metadata_base_apex", /metadataBase:\s*new URL\(PUBLIC_SITE\.apexUrl\)/.test(source("src/app/layout.tsx")), "layout metadataBase must use apexUrl"),
   check("sitemap_origin_apex", /PUBLIC_SITE\.apexUrl/.test(source("src/app/sitemap.ts")), "sitemap must emit apex URLs"),
   check("robots_origin_apex", /PUBLIC_SITE\.apexUrl/.test(source("src/app/robots.ts")), "robots must advertise the apex sitemap"),
-  check("worker_canonical_origin_apex", /CANONICAL_SITE_HOST = new URL\(PUBLIC_SITE\.apexUrl\)\.hostname/.test(source("worker/index.ts")), "worker canonical host must use apexUrl"),
+  check(
+    "worker_canonical_origin_apex",
+    source("src/lib/public-redirects.mjs").includes(`const APEX_ORIGIN = "${options.expectedApexOrigin}"`)
+      && /canonicalPublicTarget\(request\.url, request\.method\)/.test(source("worker/index.ts")),
+    "worker canonical redirect helper must use the expected apex origin",
+  ),
   check("quote_links_accept_apex", tradeQuoteDeliveryPublicOrigin(options.expectedApexOrigin) === options.expectedApexOrigin, tradeQuoteDeliveryPublicOrigin(options.expectedApexOrigin)),
   check("quote_links_default_to_apex", tradeQuoteDeliveryPublicOrigin() === options.expectedApexOrigin, tradeQuoteDeliveryPublicOrigin()),
   check(
