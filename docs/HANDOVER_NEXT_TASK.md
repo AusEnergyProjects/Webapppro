@@ -1,36 +1,69 @@
 # Next task handover
 
-Status: `TLINK-FIELD-APP-71` is validated, pushed and deployed. It stops the schedule sync feedback loop and restores readable dark-theme text inputs in the native new-job flow.
+Status: the Australian Energy Assessments public website is live on the apex domain. Sites version 497 is deployed; the next executable task is `PUBLIC-MEASUREMENT-PROVENANCE-86`.
 
-Prepared: 25 August 2026
+Prepared: 2 September 2026
 
-Milestone ID: `TLINK-FIELD-APP-71`
+Milestone ID: `PUBLIC-MEASUREMENT-PROVENANCE-86`
 
-Working branch: `codex/tlink-field-app`
+Working branch: `codex/surge-durability-release`
 
-Current-main integration baseline: `6fa65d7233266f71b0ab2583f6977613d01126ac`
+Released application source: `e558e7b94625afddf536ab96bd5d9a1bf77909f9`
+
+Current production: Sites version 497 at `https://ausenergyassessments.com`
+
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_cc1874a68a9c8191bb75f1496cabe735`
+
+Current deployment: `appgdep_6a981712ea788191a968ab219f4f0dc7`, status `succeeded`, environment revision 34
+
+Canonical public origin: `https://ausenergyassessments.com`
+
+Legacy public origin: `https://compare.ausenergyassessments.com`, permanent 308 redirect for public non-API routes; API routes remain available where required
+
+Current Google Analytics stream: `G-3PGGJ0JX4H`
+
+Current migration inventory: 164 migrations through `0165_surge_answer_review_queue.sql`
+
+Current Google Apps Script relay: version 16 on deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`; source SHA-256 `a57866eaa403c3b15c5c2ea469e9dd17dfc2dff556f89656acdc27d80e34c55a`.
+
+## Next executable task contract
+
+- User outcome: the live website has trustworthy release provenance and useful, privacy-bounded analytics without a popup or accidental tracking of private customer activity.
+- Owning workflow: OpenAI Sites release identity, the exact Google Analytics property attached to measurement ID `G-3PGGJ0JX4H`, and post-cutover search measurement.
+- In scope: update the hosted `AEA_RELEASE_SHA` value to exact deployed application source `e558e7b94625afddf536ab96bd5d9a1bf77909f9`, redeploy saved version 497, verify the health header, inspect the correct Australian Energy Assessments Google Analytics web stream, disable unapproved Enhanced Measurement events, verify approved public page views, confirm private, print and PDF exclusions, and monitor the sitemap already accepted by Search Console with 47 discovered current pages.
+- Out of scope: advertising, remarketing, Google Signals, session replay, user profiling, form-content collection, Wattzun transcript collection, the separate finance domain, unrelated page redesign and any TLink or Creditex data mutation.
+- Acceptance: the health response reports the exact Sites version 497 source; the analytics property and measurement ID match the Australian Energy Assessments domain; only approved cookieless public page views are observed; opt-out, Do Not Track and Global Privacy Control are respected; private routes emit no analytics events; and Search Console reports no blocking sitemap or indexing error during the initial monitoring window.
+- Stop condition: stop before changing a Google property if the measurement ID or domain does not match, or if the signed-in account cannot distinguish Australian Energy Assessments from the finance property.
+
+## Current operating boundary
+
+The public Australian Energy Assessments website is live. Historical statements later in this file that describe the public website or comparison hostname as pre-launch are retained as release history, not current instructions. Durable no longer serves the apex or `www`; it remains available only as an emergency rollback target during the initial 48-hour observation window. Protected TLink, Android preview and Creditex operational records remain separately governed and are not converted to live customer data by the public-site launch. Any final test-data wipe or Durable cancellation remains a separately authorised operation.
+
+## Previous handover: TLINK-FIELD-APP-71
+
+Previous working branch: `codex/tlink-field-app`
+
+Previous current-main integration baseline: `6fa65d7233266f71b0ab2583f6977613d01126ac`
 
 Original rental workflow commit: `724218fc90f7c4c741721ba443f8ba00c21ef431`
 
-Released application source: `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488`
+Previous released application source: `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488`
 
-Released mobile update source: `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488`
+Previous released mobile update source: `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488`
 
 Released mobile native source: `f325d924242be20429edc7806b968b72d8a5d26c`
 
-Current production: Sites version 403 at `https://compare.ausenergyassessments.com`
+Previous production: Sites version 403 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_fae830ad12dc8191873f5bde961b51c9`
+Previous saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_fae830ad12dc8191873f5bde961b51c9`
 
-Current deployment: `appgdep_6a8c68f328b88191b2c2a6d4ce53a7f4`, status `succeeded`, environment revision 28
+Previous deployment: `appgdep_6a8c68f328b88191b2c2a6d4ce53a7f4`, status `succeeded`, environment revision 28
 
 Current Android build: `233c6924-48ca-4417-abd8-9447135ad74f`, Expo project `@ausenergy/aea-field`, version 1.0.1, build 2, runtime 1.0.1, signed internal APK `https://expo.dev/artifacts/eas/cFVT_w5DmGllF2kIxs-eGg5DJlYZ23oewaErhK9fHqg.apk`, APK SHA-256 `6BC7610FC419086C0EAF41C81C97F063970A4241525E4B1BF5AE9937D4F63121`, expires 7 September 2026
 
 Current Android update: preview group `29fe8909-903b-481d-99d6-8db0b3ccdba2`, update `01a03475-deab-7cce-93b2-6f9afa26b287`, runtime 1.0.1, exact commit `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488`
 
-Current Google Apps Script relay: version 16 on deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`; source SHA-256 `a57866eaa403c3b15c5c2ea469e9dd17dfc2dff556f89656acdc27d80e34c55a`.
-
-Current migration inventory: 161 migrations through `0162_trade_field_username.sql`
+Previous migration inventory: 161 migrations through `0162_trade_field_username.sql`
 
 ## Released task contract
 
@@ -122,11 +155,11 @@ Victorian rental minimum standards are selected by default but can be unticked. 
 
 ## Next five logical product steps
 
-1. Open the top-right cog, choose Check for update, restart into preview update `01a03475-deab-7cce-93b2-6f9afa26b287`, and confirm the existing `test` session shows `All field work is safely synced` without a spinner and typed new-job text remains visible against the dark inputs.
-2. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
-3. Reconcile the client service schedule and obtain licensed-practitioner review of optional electrical, gas and smoke-alarm declarations, test logic, exclusions and completion rules.
-4. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.
-5. Replace the internal test APK with the approved permanent distribution lifecycle, or refresh it before 7 September 2026, while retaining the in-app update check and signed full-build fallback.
+1. Correct the hosted `AEA_RELEASE_SHA` to exact deployed application source `e558e7b94625afddf536ab96bd5d9a1bf77909f9`, redeploy saved Sites version 497 and prove the live health header matches the saved-version source.
+2. Add an automated release-provenance gate that blocks promotion when the accepted GitHub source, Sites source branch, saved version and health header do not all identify the same application commit.
+3. Verify the Australian Energy Assessments Google Analytics property for `G-3PGGJ0JX4H`, disable unapproved Enhanced Measurement events and prove private, print and PDF routes emit no analytics events.
+4. Complete the initial 48-hour observation window across apex health, public redirects, electricity and gas plan services, enquiry delivery and the Search Console sitemap already reporting 47 discovered pages.
+5. If the observation window remains healthy, obtain explicit owner approval before cancelling Durable or removing any rollback configuration, then record the irreversible retirement evidence.
 
 ## Incorporated release candidate: AEA-SURGE-GOVERNED-DEPTH-83
 

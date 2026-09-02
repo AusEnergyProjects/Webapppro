@@ -1,4 +1,4 @@
-# AEA Energy and TLink forward roadmap
+# Australian Energy Assessments and TLink forward roadmap
 
 Status: current
 
@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 25 August 2026
+Last reconciled: 2 September 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -27,10 +27,32 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 - Household planning remains independent, brand-agnostic and advisory. It is not represented as a NatHERS assessment, certificate, quote or savings guarantee.
 - Household advice records owner or renter tenure separately from strata or common-property approval and supports several concurrent goals because authority, comfort, budget and upgrade sequencing can differ.
 - TLink remains the authoritative trade record until an approved migration changes that boundary.
-- The hosted product remains a pre-launch test environment until the product owner explicitly declares it live. Test customer, wholesaler, trade-account and job data may be replaced during testing, but the final wipe remains a separately authorised launch operation.
+- The public Australian Energy Assessments website is live at `https://ausenergyassessments.com`. The apex is the canonical public origin and public non-API requests to the previous comparison hostname are permanently redirected. Durable no longer serves the apex or `www` and remains only as the emergency rollback target for the initial 48-hour monitoring window. Protected TLink, Android-preview and Creditex records remain separately governed pre-launch or test data until their own release record declares otherwise. Any final wipe or Durable cancellation remains a separately authorised operation.
 - Applied database migration history is immutable. Database change uses staged forward migrations: a compatible expansion before application activation, followed by a separately reconciled contract cleanup only after the new application is live.
 
-## Released milestone: TLINK-FIELD-APP-71
+## Released milestone: PUBLIC-APEX-LIVE-85
+
+Release status: application commit `e558e7b94625afddf536ab96bd5d9a1bf77909f9` is proportionately validated, pushed to branch `codex/surge-durability-release` and the Sites managed source branch, and deployed publicly as OpenAI Sites version 497. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_cc1874a68a9c8191bb75f1496cabe735` and deployment `appgdep_6a981712ea788191a968ab219f4f0dc7` identify the exact source and environment revision 34.
+
+### Outcome
+
+Move apex and `www` traffic off Durable to the reviewed Australian Energy Assessments application, preserve old links, provide clear consumer education and assessment booking, retain national desktop services and governed on-site coverage language, remove low-quality legacy articles, strengthen official resources and FAQ coverage, and use quiet privacy-bounded analytics without an obstructive popup.
+
+### Acceptance result
+
+- `https://ausenergyassessments.com` is the canonical live origin and returned HTTP 200 after release.
+- A representative public non-API route on `https://compare.ausenergyassessments.com` returned a permanent 308 redirect to the same apex path and query; API routes are intentionally excluded.
+- The sitemap and health endpoint returned HTTP 200, public metadata and schema use the apex, and the replaced low-quality article routes use reviewed guides or deliberate redirects.
+- The public booking, header, FAQ, trusted-resource, assessment and home-page flows are present in the released application.
+- Fixed analytics consent UI is removed. Public analytics remain cookieless with storage denied, a privacy-page opt-out, Do Not Track and Global Privacy Control handling, and private, print and PDF exclusions.
+- Focused tests, typecheck, lint, all 164 migrations, customer-plan PDF audit, production build, Sites bundle audit and public performance budgets passed. One unrelated Creditex operations-control test remains failing in the complete suite with `COMPLIANCE_ACCESS_REQUIRED`.
+- Google Search Console accepted `/sitemap.xml` and reported 47 discovered current pages. Coverage and indexing remain subject to ongoing search-platform processing.
+
+## Next milestone: PUBLIC-MEASUREMENT-PROVENANCE-86
+
+Correct the hosted `AEA_RELEASE_SHA` so `/api/health` reports exact Sites version 497 source `e558e7b94625afddf536ab96bd5d9a1bf77909f9`. Then verify the Google Analytics property attached to `G-3PGGJ0JX4H`, disable automatic Enhanced Measurement events outside the approved public page-view scope, prove private routes remain excluded, and monitor the accepted Search Console sitemap and initial coverage without touching the separate finance property.
+
+## Previous released milestone: TLINK-FIELD-APP-71
 
 Release status: application and mobile update commit `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488` is validated, pushed to branch `codex/tlink-field-app` and the Sites managed source branch, deployed as public Sites version 403, and published as Android preview update `01a03475-deab-7cce-93b2-6f9afa26b287` for runtime 1.0.1. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_fae830ad12dc8191873f5bde961b51c9` and deployment `appgdep_6a8c68f328b88191b2c2a6d4ce53a7f4` report the exact source and environment revision 28. Signed TLink Android build `233c6924-48ca-4417-abd8-9447135ad74f` remains compatible version 1.0.1 build 2.
 
@@ -3455,11 +3477,11 @@ The next five Surge priorities are independent subject-matter review, broader cu
 
 ## Next five logical product steps
 
-1. Open the top-right cog, choose Check for update, restart into preview update `01a03475-deab-7cce-93b2-6f9afa26b287`, and confirm the existing `test` session shows `All field work is safely synced` without a spinner and typed new-job text remains visible against the dark inputs.
-2. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
-3. Reconcile the client service schedule and obtain licensed-practitioner review of optional electrical, gas and smoke-alarm declarations, test logic, exclusions and completion rules.
-4. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.
-5. Replace the internal test APK with the approved permanent distribution lifecycle, or refresh it before 7 September 2026, while retaining the in-app update check and signed full-build fallback.
+1. Correct the hosted `AEA_RELEASE_SHA` to exact deployed application source `e558e7b94625afddf536ab96bd5d9a1bf77909f9`, redeploy saved Sites version 497 and prove the live health header matches the saved-version source.
+2. Add an automated release-provenance gate that blocks promotion when the accepted GitHub source, Sites source branch, saved version and health header do not all identify the same application commit.
+3. Verify the Australian Energy Assessments Google Analytics property for `G-3PGGJ0JX4H`, disable unapproved Enhanced Measurement events and prove private, print and PDF routes emit no analytics events.
+4. Complete the initial 48-hour observation window across apex health, public redirects, electricity and gas plan services, enquiry delivery and the Search Console sitemap already reporting 47 discovered pages.
+5. If the observation window remains healthy, obtain explicit owner approval before cancelling Durable or removing any rollback configuration, then record the irreversible retirement evidence.
 
 ## Global stop conditions
 

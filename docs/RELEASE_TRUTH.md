@@ -1,16 +1,55 @@
-# TLink and AEA release truth
+# TLink and Australian Energy Assessments release truth
 
 Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 25 August 2026
+Last reconciled locally: 2 September 2026
 
-Deployment evidence last verified: 25 August 2026
+Deployment evidence last verified: 2 September 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current production release: settled field sync and readable new-job inputs
+## Current public production release: apex launch and quiet cookieless analytics
+
+Australian Energy Assessments is live at `https://ausenergyassessments.com`. The apex hostname is the canonical public origin. Public GET and HEAD requests to the previous `https://compare.ausenergyassessments.com` hostname return a permanent 308 redirect to the same path and query on the apex; `/api` routes are deliberately excluded. Durable no longer serves the apex or `www` and is retained only as the emergency rollback target for the initial 48-hour monitoring window.
+
+Application source `e558e7b94625afddf536ab96bd5d9a1bf77909f9` on branch `codex/surge-durability-release` is the exact source deployed publicly as OpenAI Sites version 497. This release incorporates the public content migration, reviewed replacement guides, expanded accordion FAQ, official resource library, assessment and booking improvements, homepage booking path, consumer-language revisions, electricity-plan resilience, apex canonicalisation, robots and sitemap changes, structured data, social linking and the version 497 privacy correction.
+
+Version 497 removes the fixed analytics-consent popup and its floating privacy-choice button. Public pages use basic cookieless Google Analytics measurement with analytics and advertising storage denied. Do Not Track, Global Privacy Control, a stored opt-out, private routes, print routes and PDF routes disable measurement. The privacy page contains the persistent inline control. Wattzun conversations, form answers, contact details and uploaded files are not sent to Google Analytics by this implementation.
+
+| Release evidence | Exact identity |
+| --- | --- |
+| Application source | `e558e7b94625afddf536ab96bd5d9a1bf77909f9` |
+| Git branch | `codex/surge-durability-release` |
+| Sites project | `appgprj_6a550c378000819185caf094173422bb` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_cc1874a68a9c8191bb75f1496cabe735` |
+| Public version | Sites version 497 |
+| Deployment | `appgdep_6a981712ea788191a968ab219f4f0dc7`, status `succeeded` |
+| Provider deployment | `https://aea-energy-comparison.info294029.chatgpt.site` |
+| Hosted environment | Revision 34 |
+| Stored archive | 50,370,560 bytes, 551 files, `sha256:2499cdb2b5a1cd3201c879a7b64c842d8d8b3b51806dcfb55091c0228197ad3f` |
+| Canonical public domain | `https://ausenergyassessments.com` |
+| Legacy public hostname | `https://compare.ausenergyassessments.com`, permanent redirect for public non-API routes |
+| Google Analytics stream | `G-3PGGJ0JX4H` |
+
+### Validation and live evidence
+
+- The focused privacy-page tests passed 4 of 4. Typecheck, warning-free lint, all 164 migrations, the customer-plan PDF audit, production build, Sites server-bundle audit and public performance budgets passed.
+- The complete `npm.cmd run validate` sequence reached the repository suite and reported 3,756 passed, 11 intentionally skipped and one unrelated Creditex operations-control failure at `test/creditex-operations-control.test.mjs:1169` with `COMPLIANCE_ACCESS_REQUIRED`. The same test failed alone; no analytics or public-page file is in that failure path.
+- Sites reports version 497 as the latest saved version with exact source `e558e7b94625afddf536ab96bd5d9a1bf77909f9`; deployment `appgdep_6a981712ea788191a968ab219f4f0dc7` reports `succeeded` at environment revision 34.
+- Fresh live checks on 2 September 2026 returned HTTP 200 for the apex home page, privacy page, sitemap and health endpoint. The former comparison hostname returned HTTP 308 for a representative public page while its `/api/health` route remained available with HTTP 200 as designed.
+- The GitHub release branch resolved to exact application source `e558e7b94625afddf536ab96bd5d9a1bf77909f9` after publication.
+
+### Current boundaries and follow-up
+
+- The public Australian Energy Assessments website is live. Historical statements below that call the public website or comparison hostname pre-launch are retained only as release history and are not current status.
+- Protected TLink, mobile-preview and Creditex operational records remain separately governed. This public-site launch does not convert their test records into production customer data. Any final test-data wipe remains a separately authorised operation.
+- The live health response currently exposes `X-Release-Id: e425d5ab9f9ef21305e1ea27ea7929e16b783752`, the version 496 source, while Sites proves version 497 is sourced from `e558e7b94625afddf536ab96bd5d9a1bf77909f9`. The hosted `AEA_RELEASE_SHA` value must be corrected and version 497 redeployed before the header is used as exact runtime provenance.
+- Google Analytics property-level Enhanced Measurement settings remain unverified. Confirm the property attached to measurement ID `G-3PGGJ0JX4H`, disable automatic events outside the approved page-view scope, and verify that private, print and PDF routes produce no analytics events.
+- Google Search Console accepted `/sitemap.xml` after cutover and reported 47 discovered current pages. Indexing and coverage remain ongoing search-platform processes rather than a ranking guarantee.
+
+## Previous production release: settled field sync and readable new-job inputs
 
 Application and mobile update source `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488` on branch `codex/tlink-field-app` is the exact source deployed publicly as Sites version 403 and published to the Android preview update channel for runtime 1.0.1. Signed Android build `233c6924-48ca-4417-abd8-9447135ad74f` remains the compatible native build from mobile source `f325d924242be20429edc7806b968b72d8a5d26c`.
 
@@ -1168,11 +1207,11 @@ sent or received and no provider callback was reconciled.
 
 ## Next five logical product steps
 
-1. Open the top-right cog, choose Check for update, restart into preview update `01a03475-deab-7cce-93b2-6f9afa26b287`, and confirm the existing `test` session shows `All field work is safely synced` without a spinner and typed new-job text remains visible against the dark inputs.
-2. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
-3. Reconcile the client service schedule and obtain licensed-practitioner review of optional electrical, gas and smoke-alarm declarations, test logic, exclusions and completion rules.
-4. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.
-5. Replace the internal test APK with the approved permanent distribution lifecycle, or refresh it before 7 September 2026, while retaining the in-app update check and signed full-build fallback.
+1. Correct the hosted `AEA_RELEASE_SHA` to exact deployed application source `e558e7b94625afddf536ab96bd5d9a1bf77909f9`, redeploy saved Sites version 497 and prove the live health header matches the saved-version source.
+2. Add an automated release-provenance gate that blocks promotion when the accepted GitHub source, Sites source branch, saved version and health header do not all identify the same application commit.
+3. Verify the Australian Energy Assessments Google Analytics property for `G-3PGGJ0JX4H`, disable unapproved Enhanced Measurement events and prove private, print and PDF routes emit no analytics events.
+4. Complete the initial 48-hour observation window across apex health, public redirects, electricity and gas plan services, enquiry delivery and the Search Console sitemap already reporting 47 discovered pages.
+5. If the observation window remains healthy, obtain explicit owner approval before cancelling Durable or removing any rollback configuration, then record the irreversible retirement evidence.
 
 ## Previous quote, job and invoice usability release
 
