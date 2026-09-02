@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { JsonLd } from "@/components/JsonLd";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
+import { CALENDLY_BOOKING_URL, CALENDLY_EMBED_URL } from "@/lib/assessment-booking";
 import { PUBLIC_SITE } from "@/lib/public-site";
+import bookingStyles from "@/components/AssessmentBooking.module.css";
 import styles from "./page.module.css";
 
 const path = "/book-an-assessment";
 const canonical = `${PUBLIC_SITE.apexUrl}${path}`;
-const calendlyBookingUrl = "https://calendly.com/info-58a/precall";
-const calendlyEmbedUrl = `${calendlyBookingUrl}?hide_event_type_details=1&background_color=ffffff&text_color=092c38&primary_color=0b9b72&utm_source=aea_website&utm_medium=embedded_booking&utm_campaign=five_minute_call`;
 const title = "Book a 5-Minute Assessment Call | Australian Energy Assessments";
 const description = "Choose a time for a five-minute call to confirm your property, assessment needs and next step with Australian Energy Assessments.";
 const image = `${PUBLIC_SITE.platformUrl}/aea-home-energy-plan-og-v2.png`;
@@ -47,7 +47,7 @@ const structuredData = {
       "@id": `${canonical}#service`,
       name: "Five-minute home energy assessment call",
       alternateName: "NatHERS and Home Energy Rating booking call",
-      serviceType: "Home energy assessment booking and logistics call",
+      serviceType: "Home energy assessment booking and planning call",
       description,
       url: canonical,
       provider: { "@id": PUBLIC_SITE.organizationId },
@@ -55,7 +55,7 @@ const structuredData = {
       availableChannel: [
         {
           "@type": "ServiceChannel",
-          serviceUrl: calendlyBookingUrl,
+          serviceUrl: CALENDLY_BOOKING_URL,
         },
         {
           "@type": "ServiceChannel",
@@ -71,7 +71,7 @@ const structuredData = {
         name: "Book a five-minute assessment call",
         target: {
           "@type": "EntryPoint",
-          urlTemplate: calendlyBookingUrl,
+          urlTemplate: CALENDLY_BOOKING_URL,
           actionPlatform: [
             "https://schema.org/DesktopWebPlatform",
             "https://schema.org/MobileWebPlatform",
@@ -107,11 +107,11 @@ export default function BookAnAssessmentPage() {
         <div className={styles.heroContent}>
           <span className={styles.eyebrow}>Australian Energy Assessments</span>
           <h1>Book a five-minute call</h1>
-          <p>Choose a time that suits you. This short call is for logistics: we confirm the property location, what you need and the right assessment pathway. It is not the assessment itself.</p>
+          <p>Choose a time that suits you. We will confirm the property, what you need and the next step. This short call is for planning only. It is not the assessment itself.</p>
         </div>
       </header>
 
-      <section className={styles.bookingCard} aria-labelledby="choose-call-time">
+      <section className={bookingStyles.bookingCard} aria-labelledby="choose-call-time">
         <div className={styles.bookingHeading}>
           <div>
             <span>Choose a time</span>
@@ -119,10 +119,10 @@ export default function BookAnAssessmentPage() {
           </div>
         </div>
 
-        <div className={styles.embedShell}>
+        <div className={bookingStyles.embedShell}>
           <iframe
-            className={styles.embed}
-            src={calendlyEmbedUrl}
+            className={bookingStyles.embed}
+            src={CALENDLY_EMBED_URL}
             title="Choose a five-minute call time with Australian Energy Assessments"
             loading="eager"
             referrerPolicy="strict-origin-when-cross-origin"
@@ -137,7 +137,7 @@ export default function BookAnAssessmentPage() {
           </div>
         </div>
 
-        <p className={styles.privacyNote}>Calendly handles the booking details and calendar event. Read the <Link href="/privacy">Australian Energy Assessments privacy notice</Link> and <a href="https://calendly.com/privacy" target="_blank" rel="noopener noreferrer">Calendly privacy notice</a>.</p>
+        <p className={bookingStyles.privacyNote}>Calendly handles the booking details and calendar event. Read the <Link href="/privacy" style={{ color: "#087f73", fontWeight: 800 }}>Australian Energy Assessments privacy notice</Link> and <a href="https://calendly.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "#087f73", fontWeight: 800 }}>Calendly privacy notice</a>.</p>
       </section>
 
       <aside className={styles.help} aria-label="Alternative contact options">
@@ -149,7 +149,7 @@ export default function BookAnAssessmentPage() {
         <a className="btn ghost" href={`mailto:${PUBLIC_SITE.email}`}>Email us</a>
       </aside>
 
-      <SiteFooter>Book a five-minute logistics call before an assessment. The call confirms the property, service pathway and next step. It is not the assessment itself.</SiteFooter>
+      <SiteFooter>Book a five-minute planning call before an assessment. We will confirm the property, what you need and the next step. It is not the assessment itself.</SiteFooter>
     </main>
   );
 }

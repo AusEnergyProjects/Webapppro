@@ -10,6 +10,7 @@ const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativeP
 const shared = read("../src/components/AssessmentServicePage.tsx");
 const styles = read("../src/app/globals.css");
 const booking = read("../src/app/book-an-assessment/page.tsx");
+const bookingConfig = read("../src/lib/assessment-booking.ts");
 const bookingStyles = read("../src/app/book-an-assessment/page.module.css");
 const legacyBookingRedirect = read("../src/app/schedule-call/page.tsx");
 const routes = {
@@ -105,9 +106,12 @@ test("BASIX copy preserves the NSW planning and authority boundary", () => {
 });
 
 test("booking is a focused five-minute Calendly call with truthful calendar and email guidance", () => {
-  assert.match(booking, /https:\/\/calendly\.com\/info-58a\/precall/);
+  assert.match(bookingConfig, /https:\/\/calendly\.com\/info-58a\/precall/);
   assert.match(booking, /<iframe/);
-  assert.match(booking, /hide_event_type_details=1/);
+  assert.match(bookingConfig, /hide_event_type_details=1/);
+  assert.match(booking, /CALENDLY_BOOKING_URL/);
+  assert.match(booking, /CALENDLY_EMBED_URL/);
+  assert.doesNotMatch(bookingConfig, /aea_website/);
   assert.match(booking, /Book a five-minute call/);
   assert.match(booking, /It is not the assessment itself/);
   assert.match(booking, /Your booking updates the Australian Energy Assessments calendar/);

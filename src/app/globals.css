@@ -5480,7 +5480,7 @@ body input[type="number"]::-webkit-outer-spin-button {
 .site-call-link { background: linear-gradient(145deg, rgba(2, 27, 47, .7), rgba(2, 57, 65, .78)), url("/booking-energy-hero.webp") 93% 50% / 390% auto no-repeat; box-shadow: 0 9px 22px rgba(0, 8, 24, .32); }
 .site-surge-link:hover, .site-surge-link:focus-visible, .site-tlink-link:hover, .site-tlink-link:focus-visible, .site-book-link:hover, .site-book-link:focus-visible, .site-call-link:hover, .site-call-link:focus-visible { border-color: #a4ffe9; box-shadow: 0 0 0 3px rgba(52, 228, 196, .14), 0 12px 28px rgba(0, 9, 24, .28); transform: translateY(-1px); }
 
-.start-hero-planner { isolation: isolate; min-height: clamp(680px, calc(100svh - 108px), 860px); overflow: hidden; }
+.start-hero-planner { isolation: isolate; margin-bottom: 18px; min-height: clamp(680px, calc(100svh - 108px), 860px); overflow: hidden; }
 .start-hero-planner::before { background: radial-gradient(circle at 72% 51%, rgba(46,255,211,.16), transparent 24rem), radial-gradient(circle at 91% 8%, rgba(107,128,255,.13), transparent 20rem); content: ""; inset: 0; pointer-events: none; position: absolute; z-index: 2; }
 .start-hero-planner::after { background: linear-gradient(90deg, rgba(3,25,45,.995) 0%, rgba(3,25,45,.965) 33%, rgba(3,25,45,.72) 49%, rgba(3,25,45,.12) 76%, rgba(3,25,45,.02) 100%), linear-gradient(0deg, rgba(3,25,45,.62), transparent 36%); }
 .start-hero-planner .start-hero-copy { align-self: center; max-width: 650px; padding-block: 44px 148px; z-index: 8; }

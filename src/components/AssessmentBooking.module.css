@@ -1,0 +1,47 @@
+.bookingCard {
+  background: #fff;
+  border: 1px solid #c8e2dc;
+  border-radius: 24px;
+  overflow: hidden;
+}
+
+.embedShell {
+  border-bottom: 1px solid #d7e8e4;
+  border-top: 1px solid #d7e8e4;
+}
+
+.embed {
+  background: #fff;
+  border: 0;
+  display: block;
+  height: 720px;
+  width: 100%;
+}
+
+.privacyNote {
+  color: #637b75;
+  line-height: 1.55;
+  margin: 0;
+  padding: 14px 24px 17px;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .bookingCard {
+    border-radius: 19px;
+  }
+
+  .embed {
+    height: 760px;
+  }
+
+  .privacyNote {
+    padding-inline: 17px;
+  }
+}
+
+@media (forced-colors: active) {
+  .bookingCard {
+    border: 1px solid ButtonText;
+  }
+}

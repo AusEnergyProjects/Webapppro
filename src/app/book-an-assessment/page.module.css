@@ -54,13 +54,6 @@
   max-width: 740px;
 }
 
-.bookingCard {
-  background: #fff;
-  border: 1px solid #c8e2dc;
-  border-radius: 24px;
-  overflow: hidden;
-}
-
 .bookingHeading {
   padding: 22px 24px;
 }
@@ -72,19 +65,6 @@
 .bookingHeading h2 {
   color: #092c38;
   margin: 4px 0 0;
-}
-
-.embedShell {
-  border-bottom: 1px solid #d7e8e4;
-  border-top: 1px solid #d7e8e4;
-}
-
-.embed {
-  background: #fff;
-  border: 0;
-  display: block;
-  height: 720px;
-  width: 100%;
 }
 
 .confirmation {
@@ -109,19 +89,6 @@
   color: #496961;
   line-height: 1.55;
   margin: 4px 0 0;
-}
-
-.privacyNote {
-  color: #637b75;
-  line-height: 1.55;
-  margin: 0;
-  padding: 14px 24px 17px;
-  text-align: center;
-}
-
-.privacyNote a {
-  color: #087f73;
-  font-weight: 800;
 }
 
 .help {
@@ -160,24 +127,12 @@
     background-position: 52% center;
   }
 
-  .bookingCard {
-    border-radius: 19px;
-  }
-
   .bookingHeading {
     padding: 19px 17px;
   }
 
-  .embed {
-    height: 760px;
-  }
-
   .confirmation {
     padding: 18px 17px;
-  }
-
-  .privacyNote {
-    padding-inline: 17px;
   }
 
   .help {
@@ -191,7 +146,6 @@
 
 @media (forced-colors: active) {
   .hero,
-  .bookingCard,
   .help {
     border: 1px solid ButtonText;
   }

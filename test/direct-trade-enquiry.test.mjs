@@ -22,7 +22,8 @@ test("legacy Direct Trade projects stay account scoped while the homepage uses t
   assert.match(route, /DirectTradeProjectBrief/);
   assert.match(route, /Direct Trade Project Brief/);
   assert.match(homepage, /href="\/plan">Build my home energy plan/);
-  assert.match(homepage, /No account is needed to build a plan or send an enquiry to matching trades/);
+  assert.match(homepage, /contact matching trades without creating an account/);
+  assert.match(homepage, /Send one enquiry without creating an account/);
   assert.match(brief, /href="\/account\/projects\/new">Create a free private project/);
   assert.match(brief, /href="\/account">Open my account/);
   assert.match(brief, /No public lead form/);

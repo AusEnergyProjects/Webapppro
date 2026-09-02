@@ -8,6 +8,7 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativePath), "utf8");
 const home = read("../src/app/page.tsx");
 const guide = read("../src/components/GettingStarted.tsx");
+const guideStyles = read("../src/components/AssessmentBooking.module.css");
 const customerScene = read("../src/components/CustomerJourneyScene.tsx");
 const plannerJourneyPath = path.resolve(directory, "../src/components/PlannerHomeJourney.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
@@ -149,8 +150,8 @@ test("public navigation keeps TLink clearly branded", () => {
   assert.match(chrome, /title="TLink"/);
   assert.match(styles, /\.site-tlink-mark \{[^}]*flex: 0 0 34px;[^}]*object-fit: contain;[^}]*width: 34px;/);
   assert.equal(chrome.match(/href="\/account"/g)?.length, 1);
-  assert.match(guide, /No account is needed to build a plan or send an enquiry to matching trades/);
-  assert.match(guide, /Ask matching trades/);
+  assert.match(guide, /contact matching trades without creating an account/);
+  assert.match(guide, /Find matching trades/);
   assert.doesNotMatch(guide, /account is optional|Save or ask trades|Create an account after seeing your roadmap/);
 });
 
@@ -203,22 +204,21 @@ test("desktop navigation shows every option and mobile restores the compact swip
 });
 
 test("direct trade proposition presents the free verified operating model honestly", () => {
-  assert.match(guide, /Traditional upgrade channels can include sales and administration businesses/);
-  assert.match(guide, /Quotes should separate equipment, labour, certificates or rebates/);
-  assert.match(guide, /Australian Energy Assessments gives approved trade businesses the core operating tools at A\$0/);
-  assert.match(guide, /Household details remain protected, individual leads are not sold and placement is not auctioned/);
+  assert.match(guide, /Approved trade businesses can use the core TLink workspace free of charge/);
+  assert.match(guide, /Household details stay private, leads are not sold and placement is not auctioned/);
+  assert.doesNotMatch(guide, /sales and administration businesses|Bring verified capability/);
   assert.doesNotMatch(guide, /Live service, expanding tool|direct-trade-status/);
 });
 
 test("direct trade marketplace includes reputable wholesalers", () => {
-  assert.match(guide, /For licensed installers and reputable suppliers/);
-  assert.match(guide, /reputable suppliers (?:can|to) connect proven products with qualified trades and suitable households/i);
+  assert.match(guide, /For trades and suppliers/);
+  assert.match(guide, /Reputable suppliers can show proven products to suitable trades and households/);
 });
 
 test("trade workspace approval does not imply government accreditation", () => {
-  assert.match(guide, /Trade workspace approval is not a government accreditation/);
-  assert.match(guide, /submitted ABN and required business evidence passed the Australian Energy Assessments review/);
-  assert.match(guide, /does not replace a trade licence, government accreditation or scheme-specific installer approval/);
+  assert.match(guide, /Approval is not a licence or government accreditation/);
+  assert.match(guide, /We review the ABN and business information provided by each applicant/);
+  assert.match(guide, /Trades still need the licences, insurance, accreditations and scheme approvals required for each job/);
   assert.doesNotMatch(guide, /accredited Direct Trade Specialist/i);
   assert.doesNotMatch(guide, /\u2013|\u2014/);
 });
@@ -385,11 +385,32 @@ test("homepage makes the guided plan the only dominant hero action", () => {
   assert.match(guide, /className="start-hero-secondary"/);
 });
 
+test("homepage places one accessible lazy Calendly booking directly below the hero", () => {
+  const sceneIndex = guide.indexOf("<CustomerJourneyScene />");
+  const bookingIndex = guide.indexOf('id="home-booking"');
+  const guidedEntryIndex = guide.indexOf('className="home-entry home-entry-guided"');
+  assert.ok(sceneIndex >= 0 && bookingIndex > sceneIndex && guidedEntryIndex > bookingIndex);
+  assert.equal(guide.match(/<iframe/g)?.length, 1);
+  assert.match(guide, /className=\{bookingStyles\.bookingCard\}[\s\S]*?aria-labelledby="home-booking-title"/);
+  assert.match(guide, /<h2 id="home-booking-title"[^>]*>Book a five-minute call<\/h2>/);
+  assert.match(guide, /title="Choose a five-minute call time with Australian Energy Assessments"/);
+  assert.match(guide, /loading="lazy"/);
+  assert.match(guide, /referrerPolicy="strict-origin-when-cross-origin"/);
+  assert.match(guide, /This call is not the assessment itself/);
+  assert.match(guide, /Calendly adds the call to our calendar and emails the booking details to you/);
+  assert.doesNotMatch(guide, /CalendlyInlineWidget|Open Calendly separately/);
+  assert.match(guideStyles, /\.embed \{[\s\S]*?border: 0;[\s\S]*?height: 720px;[\s\S]*?width: 100%;/);
+  assert.match(guideStyles, /@media \(max-width: 720px\) \{[\s\S]*?\.embed \{[\s\S]*?height: 760px;/);
+});
+
 test("getting-started copy preserves comparison and privacy boundaries", () => {
-  assert.match(guide, /Mains gas plans only, not LPG/);
-  assert.match(guide, /Your plan and meter file stay on your device/);
-  assert.match(guide, /not included in saved links or enquiry data/);
-  assert.match(guide, /Estimates are indicative/);
+  assert.match(guide, /Mains gas plans only, not bottled LPG/);
+  assert.match(guide, /Start privately, without an account/);
+  assert.match(guide, /not added to saved links or trade enquiries/);
+  assert.match(guide, /Prices, rebates and rules can change/);
+  assert.match(guide, /detailed meter-data file, called a NEM12 file/);
+  assert.doesNotMatch(guide, /household evidence|Charge-level calculation evidence|recorded capability|confirmed NSW approval pathway/i);
+  assert.doesNotMatch(guide, /\bAEA\b/);
   assert.doesNotMatch(guide, /[–—]/);
 });
 
