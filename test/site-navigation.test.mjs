@@ -12,6 +12,9 @@ const guideStyles = read("../src/components/AssessmentBooking.module.css");
 const customerScene = read("../src/components/CustomerJourneyScene.tsx");
 const plannerJourneyPath = path.resolve(directory, "../src/components/PlannerHomeJourney.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
+const publicSiteSearch = read("../src/components/PublicSiteSearch.tsx");
+const publicSiteSearchStyles = read("../src/components/PublicSiteSearch.module.css");
+const publicSiteSearchIndex = read("../src/lib/public-site-search.ts");
 const responsiveNav = read("../src/components/ResponsiveSiteNav.tsx");
 const surgeHeaderButton = read("../src/components/SurgeHeaderButton.tsx");
 const wattzunRoute = read("../src/app/wattzun/page.tsx");
@@ -109,6 +112,36 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(gettingStartedRoute, /permanentRedirect\("\/plan"\)/);
 });
 
+test("the shared header includes private, typo-tolerant predictive page search", () => {
+  assert.match(chrome, /import \{ PublicSiteSearch \} from "@\/components\/PublicSiteSearch"/);
+  assert.match(chrome, /<BrandBar \/>[\s\S]*?<PublicSiteSearch \/>[\s\S]*?<SiteNav active=\{active\} \/>/);
+  assert.match(publicSiteSearch, /^"use client";/);
+  assert.match(publicSiteSearch, /role="search"/);
+  assert.match(publicSiteSearch, /type="search"/);
+  assert.match(publicSiteSearch, /role="combobox"/);
+  assert.match(publicSiteSearch, /aria-label="Search Australian Energy Assessments"/);
+  assert.match(publicSiteSearch, /aria-autocomplete="list"/);
+  assert.match(publicSiteSearch, /aria-activedescendant=/);
+  assert.match(publicSiteSearch, /role="listbox"/);
+  assert.match(publicSiteSearch, /role="option"/);
+  assert.match(publicSiteSearch, /event\.key === "ArrowDown"/);
+  assert.match(publicSiteSearch, /event\.key === "ArrowUp"/);
+  assert.match(publicSiteSearch, /event\.key === "Enter"/);
+  assert.match(publicSiteSearch, /event\.key === "Escape"/);
+  assert.match(publicSiteSearchIndex, /damerauLevenshtein/);
+  assert.match(publicSiteSearchIndex, /path: "\/nathers-for-new-homes"/);
+  assert.match(publicSiteSearchIndex, /path: "\/home-energy-rating-for-existing-homes"/);
+  assert.doesNotMatch(publicSiteSearchIndex, /path: "\/(?:account|operations|creditex|direct-trade\/dashboard)/);
+  assert.doesNotMatch(publicSiteSearch, /fetch\(|localStorage|sessionStorage|gtag|dataLayer/);
+  assert.match(styles, /\.site-header \{ display: grid; grid-template-columns: auto minmax\(150px, 1fr\) auto;[^}]*overflow: visible;[^}]*z-index: 40;/);
+  assert.match(styles, /\.public-site-search \{ grid-column: 2; grid-row: 1; \}/);
+  assert.match(publicSiteSearchStyles, /\.root \{[^}]*max-width: 360px;/);
+  assert.match(styles, /\.site-header-actions \{[^}]*grid-column: 3; grid-row: 1;/);
+  assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.public-site-search \{[^}]*grid-column: 2; grid-row: 1;[\s\S]*?\.site-header-actions \{[^}]*grid-column: 1 \/ -1; grid-row: 2;[\s\S]*?\.site-header \.site-nav-shell \{[^}]*grid-column: 1 \/ -1; grid-row: 3;/);
+  assert.match(publicSiteSearchStyles, /@media \(max-width: 360px\) \{[\s\S]*?\.root \{[^}]*max-width: 44px;[\s\S]*?\.root:focus-within/);
+  assert.match(publicSiteSearchStyles, /@media \(forced-colors: active\) \{[\s\S]*?\.field,[\s\S]*?\.results \{[\s\S]*?border: 1px solid ButtonText;/);
+});
+
 test("the futuristic header links to one dedicated always-present Wattzun AI page", () => {
   assert.equal(chrome.match(/<SurgeHeaderButton active=\{active === "surge"\} \/>/g)?.length, 1);
   assert.doesNotMatch(chrome, /EnergyAssistantWidget|requestSurgeOpen/);
@@ -185,7 +218,7 @@ test("desktop navigation shows every option and mobile restores the compact swip
   assert.match(styles, /\.start-hero-planner \.start-hero-secondary \{[^}]*background: rgba\(2, 18, 34, \.94\);[^}]*padding: 10px 12px;/);
   assert.match(
     styles,
-    /\.site-header \{ display: grid; grid-template-columns: minmax\(0, 1fr\) auto; \}/,
+    /\.site-header \{ display: grid; grid-template-columns: auto minmax\(150px, 1fr\) auto;/,
   );
   assert.match(
     styles,
@@ -193,7 +226,7 @@ test("desktop navigation shows every option and mobile restores the compact swip
   );
   assert.match(
     styles,
-    /@media \(max-width: 720px\) \{[\s\S]*?\.site-header-actions \{[^}]*gap: 6px;[^}]*grid-column: 1;[^}]*grid-row: 2;/,
+    /@media \(max-width: 720px\) \{[\s\S]*?\.site-header-actions \{[^}]*gap: 6px;[^}]*grid-column: 1 \/ -1;[^}]*grid-row: 2;/,
   );
   assert.match(
     styles,
@@ -248,8 +281,8 @@ test("shared visual foundation uses the polished responsive system without persi
   assert.doesNotMatch(styles, /\.electricity-comparison-page \.brandname/);
   assert.doesNotMatch(`${styles}\n${customerAndToolTypography}\n${legacyComparator}`, /Source Serif|Georgia, serif|font-family:'Lato'/);
   assert.match(styles, /\.site-header \{/);
-  assert.match(styles, /\.site-header \{ display: grid; grid-template-columns: minmax\(0, 1fr\) auto;/);
-  assert.match(styles, /\.site-header \{ display: grid;[^}]*overflow: hidden;/);
+  assert.match(styles, /\.site-header \{ display: grid; grid-template-columns: auto minmax\(150px, 1fr\) auto;/);
+  assert.match(styles, /\.site-header \{ display: grid;[^}]*overflow: visible;/);
   assert.match(styles, /\.site-header \.site-nav-shell \{[^}]*grid-column: 1 \/ -1; grid-row: 2;/);
   assert.doesNotMatch(styles, /@keyframes site-header-(?:atmosphere|sheen)/);
   assert.doesNotMatch(styles, /@keyframes site-surge-(?:pulse|spin)/);

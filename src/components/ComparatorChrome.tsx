@@ -4,6 +4,7 @@ import { ReactNode } from "react";
 import Link from "next/link";
 import { AEA_BRANDMARK_PNG_DATA_URI } from "@/lib/aea-brand-assets.mjs";
 import { ResponsiveSiteNav } from "@/components/ResponsiveSiteNav";
+import { PublicSiteSearch } from "@/components/PublicSiteSearch";
 import { SurgeHeaderButton } from "@/components/SurgeHeaderButton";
 import { PUBLIC_SITE } from "@/lib/public-site";
 
@@ -54,6 +55,7 @@ export function SiteHeader({ active }: { active: SiteActive }) {
     <>
       <header className="site-header">
         <BrandBar />
+        <PublicSiteSearch />
         <SiteNav active={active} />
         <div className="site-header-actions">
           {active === "account" ? (
