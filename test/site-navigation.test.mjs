@@ -137,6 +137,7 @@ test("the shared header includes private, typo-tolerant predictive page search",
   assert.match(styles, /\.public-site-search \{ grid-column: 2; grid-row: 1; \}/);
   assert.match(publicSiteSearchStyles, /\.root \{[^}]*max-width: 360px;/);
   assert.match(styles, /\.site-header-actions \{[^}]*grid-column: 3; grid-row: 1;/);
+  assert.match(styles, /\.site-header > \.public-site-search \{ z-index: 4; \}/);
   assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.public-site-search \{[^}]*grid-column: 2; grid-row: 1;[\s\S]*?\.site-header-actions \{[^}]*grid-column: 1 \/ -1; grid-row: 2;[\s\S]*?\.site-header \.site-nav-shell \{[^}]*grid-column: 1 \/ -1; grid-row: 3;/);
   assert.match(publicSiteSearchStyles, /@media \(max-width: 360px\) \{[\s\S]*?\.root \{[^}]*max-width: 44px;[\s\S]*?\.root:focus-within/);
   assert.match(publicSiteSearchStyles, /@media \(forced-colors: active\) \{[\s\S]*?\.field,[\s\S]*?\.results \{[\s\S]*?border: 1px solid ButtonText;/);
@@ -162,7 +163,7 @@ test("the futuristic header links to one dedicated always-present Wattzun AI pag
   assert.match(wattzunRoute, /Wattzun AI \| Australian Energy Assessments/);
   assert.match(wattzunRoute, /buildPlatformMetadata\(\{[\s\S]*?path: "\/wattzun"/);
   assert.match(legacySurgeRoute, /permanentRedirect\("\/wattzun"\)/);
-  assert.match(styles, /\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{[^}]*flex: 0 0 126px;[^}]*min-height: 44px;/);
+  assert.match(styles, /\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{[^}]*flex: 0 0 116px;[^}]*min-height: 44px;/);
   assert.match(styles, /\.site-surge-link\.active \{/);
   assert.match(styles, /\.site-surge-core \{[^}]*box-shadow:/);
   assert.doesNotMatch(styles, /animation: site-surge-(?:pulse|spin)/);
