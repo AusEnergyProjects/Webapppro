@@ -68,6 +68,7 @@ import {
   publicRedirectTarget,
   shouldApplyCanonicalHostRedirect,
 } from "../src/lib/public-redirects.mjs";
+import { releaseIdentityFromEnvironment } from "../src/lib/release-identity.mjs";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
 const PRIVATE_HTML_CACHE_CONTROL = "private, no-store, max-age=0";
@@ -76,7 +77,7 @@ const DAILY_MAINTENANCE_CRON = "15 20 * * *";
 
 type RuntimeCacheStorage = CacheStorage & { default?: Cache };
 
-function secureResponse(response: Response, request: Request) {
+function secureResponse(response: Response, request: Request, environment?: unknown) {
   const headers = new Headers(response.headers);
   const pathname = new URL(request.url).pathname;
   if (
@@ -89,6 +90,10 @@ function secureResponse(response: Response, request: Request) {
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Frame-Options", "SAMEORIGIN");
+  if (pathname === "/api/health") {
+    const releaseId = releaseIdentityFromEnvironment(environment);
+    if (releaseId) headers.set("X-Release-Id", releaseId);
+  }
   if (new URL(request.url).protocol === "https:") {
     headers.set("Strict-Transport-Security", "max-age=31536000");
   }
@@ -486,7 +491,7 @@ const worker = {
     }
     if (!isCacheablePageRequest(request)) {
       const handled = await handler.fetch(request, env as never, ctx as never);
-      return secureResponse(queueBackgroundDispatches(handled, ctx, request, env), request);
+      return secureResponse(queueBackgroundDispatches(handled, ctx, request, env), request, env);
     }
 
     const cache = (globalThis as unknown as { caches?: RuntimeCacheStorage }).caches?.default;
