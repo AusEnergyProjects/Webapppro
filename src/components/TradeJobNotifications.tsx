@@ -33,6 +33,7 @@ export function TradeJobNotifications({
   const [items, setItems] = useState<JobNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [status, setStatus] = useState("");
+  const [clearing, setClearing] = useState(false);
   const navigationNonce = useRef(0);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const dialogRef = useRef<HTMLElement | null>(null);
@@ -105,6 +106,29 @@ export function TradeJobNotifications({
     onNavigate({ workspace: "work", kind: "job", id: item.workOrderId, query: item.workNumber, nonce: navigationNonce.current, jobTab: item.targetTab });
   }
 
+  async function clearNotifications() {
+    if (clearing || unreadCount < 1) return;
+    setClearing(true);
+    setStatus("");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/trade-job-notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "mark_all_read" }),
+      });
+      const result = await response.json().catch(() => ({})) as Result;
+      if (!response.ok) throw new Error(result.error || "Work updates could not be cleared.");
+      setItems(result.items || []);
+      setUnreadCount(Number(result.unreadCount || 0));
+      setStatus("Work updates cleared. Their records remain available below.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Work updates could not be cleared.");
+    } finally {
+      setClearing(false);
+    }
+  }
+
   return <div className="tlink-job-notifications">
     <button ref={triggerRef} type="button" className={unreadCount ? "has-unread" : ""} onClick={() => { if (open) closeNotifications(); else { setOpen(true); void load(); } }} aria-haspopup="dialog" aria-expanded={open} aria-label={unreadCount ? `${unreadCount} unread work updates` : "Work updates"}>
       <span className="tlink-bell-icon" aria-hidden="true" />
@@ -112,7 +136,13 @@ export function TradeJobNotifications({
     </button>
     {open && <>
       <section ref={dialogRef} tabIndex={-1} className="tlink-notification-popover" role="dialog" aria-modal="false" aria-labelledby="job-update-title">
-        <header><div><span>Review queue</span><strong id="job-update-title">Work updates</strong></div><button type="button" onClick={closeNotifications} aria-label="Close work updates">Close</button></header>
+        <header>
+          <div><span>Review queue</span><strong id="job-update-title">Work updates</strong></div>
+          <div className="tlink-notification-header-actions" style={{ display: "flex", gap: 8 }}>
+            <button type="button" className="tlink-notification-clear" onClick={() => void clearNotifications()} disabled={clearing || unreadCount < 1}>{clearing ? "Clearing..." : "Clear"}</button>
+            <button type="button" onClick={closeNotifications} aria-label="Close work updates">Close</button>
+          </div>
+        </header>
         <div className="tlink-notification-list">
           {status && <p role="status">{status}</p>}
           {!status && !items.length && <div className="tlink-notification-empty"><strong>You are up to date</strong><span>New leads, customer decisions, quote delivery issues, questions, uploads, document expiry warnings, schedule requests and field team progress will appear here.</span></div>}

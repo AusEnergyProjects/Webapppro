@@ -40,9 +40,17 @@ test("customer and field activity powers one unread installer review queue", () 
   assert.doesNotMatch(route, /trade_crm_payment_events|Customer payment received/);
   assert.match(route, /Field job completed/);
   assert.match(route, /requireInstallerTeamAccess/);
+  assert.match(route, /action === "mark_all_read"/);
+  assert.match(route, /current\.items\.filter\(\(item\) => !item\.read\)/);
+  assert.match(route, /\.bind\(crypto\.randomUUID\(\), access\.ownerUid, item\.id, access\.actorUid, readAt\)/);
+  const clearBranch = route.match(/if \(action === "mark_all_read"\) \{([\s\S]*?)\n    \}/)?.[1] || "";
+  assert.doesNotMatch(clearBranch, /DELETE|UPDATE trade_|status =/);
   assert.match(route, /current\.items\.some\(\(item\) => item\.id === notificationKey\)/);
   assert.match(notifications, /30_000/);
   assert.match(notifications, /unread work updates/);
+  assert.match(notifications, /JSON\.stringify\(\{ action: "mark_all_read" \}\)/);
+  assert.match(notifications, /className="tlink-notification-clear"/);
+  assert.match(notifications, /Work updates cleared\. Their records remain available below\./);
   assert.match(notifications, /jobTab: item\.targetTab/);
   assert.match(notifications, /ref=\{triggerRef\}/);
   assert.match(

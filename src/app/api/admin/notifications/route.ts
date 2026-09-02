@@ -213,9 +213,18 @@ export async function PATCH(request: Request) {
     const now = new Date().toISOString();
 
     if (action === "mark_all_read") {
-      await db.prepare("UPDATE admin_notifications SET status = 'read', read_at = ?, read_by_uid = ?, updated_at = ? WHERE status = 'open' AND event_type != 'platform.backfill_marker'")
+      const result = await db.prepare("UPDATE admin_notifications SET status = 'read', read_at = ?, read_by_uid = ?, updated_at = ? WHERE status = 'open' AND event_type != 'platform.backfill_marker'")
         .bind(now, admin.uid, now).run();
-      return adminJson({ ok: true });
+      const cleared = Number(result.meta.changes || 0);
+      await writeAdminAudit(
+        admin,
+        "notification.mark_all_read",
+        "admin_notification_queue",
+        "unread",
+        `Cleared ${cleared} unread operations alert${cleared === 1 ? "" : "s"}.`,
+        { cleared },
+      );
+      return adminJson({ ok: true, cleared });
     }
     if (action === "send_test") {
       if (!["owner", "admin"].includes(admin.role)) {

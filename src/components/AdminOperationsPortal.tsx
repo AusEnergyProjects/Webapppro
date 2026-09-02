@@ -682,7 +682,7 @@ export function AdminOperationsPortal() {
             }}
           >
             Alerts
-            <strong>{notificationCounts.unread || 0}</strong>
+            {notificationCounts.unread > 0 && <strong>{notificationCounts.unread}</strong>}
           </a>
           <span className={`admin-role admin-role-${session.role}`}>
             {session.role}
@@ -703,7 +703,7 @@ export function AdminOperationsPortal() {
             onClick={() => setTab("inbox")}
           >
             <span>01</span>Inbox
-            {notificationCounts.action_required > 0 && <strong className="admin-nav-count">{notificationCounts.action_required}</strong>}
+            {notificationCounts.unread > 0 && <strong className="admin-nav-count">{notificationCounts.unread}</strong>}
           </button>
           <button
             className={tab === "overview" ? "active" : ""}

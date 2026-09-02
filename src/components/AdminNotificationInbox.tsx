@@ -132,6 +132,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
   const [queue, setQueueState] = useState("all");
   const [actionOnly, setActionOnly] = useState(false);
   const [status, setStatus] = useState("");
+  const [clearingAlerts, setClearingAlerts] = useState(false);
   const [browserAlerts, setBrowserAlerts] = useState(false);
   const [expandedId, setExpandedId] = useState("");
   const [caseNote, setCaseNote] = useState("");
@@ -276,11 +277,25 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
           }
         });
       }
-      setStatus(action === "resolve" ? "Case resolved and added to the audit history." : "Operations case updated and audited.");
+      setStatus(action === "resolve"
+        ? "Case resolved and added to the audit history."
+        : action === "mark_all_read"
+          ? "Alerts cleared. Cases that still need action remain in the inbox."
+          : "Operations case updated and audited.");
       return true;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "The operations case could not be updated.");
       return false;
+    }
+  }
+
+  async function clearAlerts() {
+    if (clearingAlerts || counts.unread < 1) return;
+    setClearingAlerts(true);
+    try {
+      await update("mark_all_read");
+    } finally {
+      setClearingAlerts(false);
     }
   }
 
@@ -363,6 +378,12 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
         </div>
         <div className="admin-alert-controls">
           <button type="button" onClick={() => void load()} className="secondary">Refresh now</button>
+          <button
+            type="button"
+            onClick={() => void clearAlerts()}
+            disabled={clearingAlerts || counts.unread < 1}
+            title="Marks every new alert as read. Cases that still need action stay in the inbox."
+          >{clearingAlerts ? "Clearing..." : "Clear alerts"}</button>
           {["owner", "admin"].includes(role) && <button type="button" onClick={() => void update("send_test")} disabled={!delivery.configured}>Send test alert</button>}
           <button type="button" onClick={() => void enableBrowserAlerts()}>{browserAlerts ? "Disable browser alerts" : "Enable browser alerts"}</button>
         </div>
@@ -415,7 +436,6 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
         </select>
         <label className="admin-check-filter"><input type="checkbox" checked={actionOnly} onChange={(event) => changeActionOnly(event.target.checked)} />Action required only</label>
         <button type="submit">Apply filters</button>
-        {counts.unread > 0 && <button type="button" className="secondary" onClick={() => void update("mark_all_read")}>Mark all read</button>}
       </form>
       <div className="admin-queue-summary"><strong>{readable(queue)} queue</strong><span>{visible.length} matching cases</span><button type="button" onClick={() => setQueue("all")}>Clear saved queue</button></div>
       <section className="admin-notification-list" aria-label="Operations notifications">

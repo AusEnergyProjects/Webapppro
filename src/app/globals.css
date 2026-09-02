@@ -4855,7 +4855,7 @@ body input[type="number"]::-webkit-outer-spin-button {
 .tlink-notification-dismiss { background: rgba(0, 17, 25, .42) !important; border: 0 !important; border-radius: 0 !important; height: 100vh !important; inset: 0 !important; min-height: 0 !important; padding: 0 !important; position: fixed !important; width: 100vw !important; z-index: 900; }
 .tlink-notification-popover { background: #fff; border: 1px solid #91c4b4; border-radius: 15px; box-shadow: 0 22px 64px rgba(0, 22, 31, .32); color: #143d38; overflow: hidden; position: absolute; right: 0; top: calc(100% + 10px); width: min(420px, calc(100vw - 24px)); z-index: 903; }
 .tlink-notification-popover > header { align-items: center; border-bottom: 1px solid #d9e7e2; display: flex; justify-content: space-between; padding: 13px 15px; }
-.tlink-notification-popover > header > div { display: grid; gap: 2px; }
+.tlink-notification-popover > header > div:first-child { display: grid; gap: 2px; }
 .tlink-notification-popover > header span { color: #12805e; font-size: .5rem; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
 .tlink-notification-popover > header strong { font-size: .82rem; }
 .tlink-notification-popover > header button { background: transparent; border: 1px solid #cbdcd6; border-radius: 7px; color: #4c6d65; cursor: pointer; font-size: .54rem; font-weight: 850; padding: 7px 9px; }

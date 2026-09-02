@@ -67,6 +67,10 @@ test("the notification API is filtered, role protected and auditable", () => {
   assert.match(notificationRoute, /requireAdminIdentity\(request/);
   assert.match(notificationRoute, /Cache-Control.*no-store|adminJson/);
   assert.match(notificationRoute, /action === "mark_all_read"/);
+  assert.match(notificationRoute, /status = 'open' AND event_type != 'platform\.backfill_marker'/);
+  assert.match(notificationRoute, /writeAdminAudit\([\s\S]*?"notification\.mark_all_read"[\s\S]*?\{ cleared \}/);
+  const clearBranch = notificationRoute.match(/if \(action === "mark_all_read"\) \{([\s\S]*?)\n    \}/)?.[1] || "";
+  assert.doesNotMatch(clearBranch, /DELETE|status = 'resolved'/);
   assert.match(notificationRoute, /action === "resolve"/);
   assert.match(notificationRoute, /Record how the action was resolved/);
   assert.match(notificationRoute, /writeAdminAudit\(admin, "notification\.resolve"/);
@@ -106,8 +110,13 @@ test("the operations portal prioritises alerts and provides a filterable account
   assert.match(portal, /<span>03<\/span>All accounts/);
   assert.match(portal, /AdminNotificationInbox/);
   assert.match(portal, /AdminAccountDirectory/);
-  assert.match(portal, /notificationCounts\.action_required/);
+  assert.equal((portal.match(/notificationCounts\.unread > 0 && <strong/g) || []).length, 2);
+  assert.match(portal, /Open operations inbox, \$\{notificationCounts\.unread/);
+  assert.match(portal, /Alerts\s*\{notificationCounts\.unread > 0 && <strong>\{notificationCounts\.unread/);
+  assert.match(portal, /<span>Action notifications<\/span>\s*<strong>\{notificationCounts\.action_required/);
   assert.match(inbox, /30_000/);
+  assert.match(inbox, />\{clearingAlerts \? "Clearing\.\.\." : "Clear alerts"\}<\/button>/);
+  assert.match(inbox, /Cases that still need action remain in the inbox/);
   assert.match(inbox, /Enable browser alerts/);
   assert.match(inbox, /Action required only/);
   assert.match(inbox, /Open record/);

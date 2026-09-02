@@ -329,8 +329,20 @@ export async function PATCH(request: Request) {
   try {
     const access = await requireInstallerTeamAccess(request);
     const body = await request.json().catch(() => ({})) as Row;
+    const action = cleanAdminText(body.action, 30);
     const notificationKey = cleanAdminText(body.notificationKey, 240);
     const current = await notifications(access);
+    if (action === "mark_all_read") {
+      const unread = current.items.filter((item) => !item.read);
+      if (unread.length) {
+        const db = getD1();
+        const readAt = new Date().toISOString();
+        await db.batch(unread.map((item) => db.prepare(`INSERT OR IGNORE INTO trade_job_notification_reads
+          (id, firebase_uid, notification_key, read_by_uid, read_at) VALUES (?, ?, ?, ?, ?)`)
+          .bind(crypto.randomUUID(), access.ownerUid, item.id, access.actorUid, readAt)));
+      }
+      return adminJson({ ok: true, ...(await notifications(access)) });
+    }
     if (!current.items.some((item) => item.id === notificationKey)) {
       return adminJson({ ok: false, error: "Job notification not found." }, 404);
     }
