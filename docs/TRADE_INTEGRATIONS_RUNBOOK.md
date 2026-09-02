@@ -18,7 +18,7 @@ Invoice and provider-neutral accounting status remain operational business recor
 
 1. Register the production Xero OAuth application and allow:
 
-   `https://compare.ausenergyassessments.com/api/trade-integrations/callback/xero`
+   `https://ausenergyassessments.com/api/trade-integrations/callback/xero`
 
 2. Store the client ID as `XERO_CLIENT_ID` and client secret as `XERO_CLIENT_SECRET`.
 3. Confirm the app is approved for `offline_access`, `accounting.invoices` and `accounting.contacts`.
@@ -32,7 +32,7 @@ Xero exports remain drafts so the installer can check account coding and tax tre
 
 1. Register the production MYOB OAuth application and allow:
 
-   `https://compare.ausenergyassessments.com/api/trade-integrations/callback/myob`
+   `https://ausenergyassessments.com/api/trade-integrations/callback/myob`
 
 2. Store the API key as `MYOB_CLIENT_ID` and API secret as `MYOB_CLIENT_SECRET`.
 3. Confirm the app requests `sme-company-settings`, `sme-sales`, `sme-contacts-customer` and `sme-general-ledger`.
@@ -46,7 +46,7 @@ The MYOB income account is selected for each first export. This avoids guessing 
 
 1. Register the production QuickBooks Online OAuth application and allow:
 
-   `https://compare.ausenergyassessments.com/api/trade-integrations/callback/quickbooks`
+   `https://ausenergyassessments.com/api/trade-integrations/callback/quickbooks`
 
 2. Store the client ID as `QUICKBOOKS_CLIENT_ID` and client secret as `QUICKBOOKS_CLIENT_SECRET`.
 3. Confirm the app requests `com.intuit.quickbooks.accounting` and returns a company `realmId` to the callback.
@@ -55,6 +55,20 @@ The MYOB income account is selected for each first export. This avoids guessing 
 6. Connect a test company from an installer account and confirm the encrypted connection and selected product or service remain isolated to that trade owner.
 
 QuickBooks invoice export is available only after the production OAuth application is configured and the installer connects a company. A disconnected provider leaves the accepted TLink handoff intact.
+
+## Business calendars
+
+1. Register the production Google Calendar OAuth application with this exact redirect URI:
+
+   `https://ausenergyassessments.com/api/trade-integrations/callback/google_calendar`
+
+2. Register the production Microsoft identity application with this exact redirect URI:
+
+   `https://ausenergyassessments.com/api/trade-integrations/callback/microsoft_calendar`
+
+3. Store each provider client ID and secret only in protected Sites runtime secrets.
+4. Connect one test calendar from the owning trade account and create, move and cancel a test appointment.
+5. Confirm TLink updates only the appointment events it created and does not read unrelated calendar events.
 
 ## Release checks
 

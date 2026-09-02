@@ -60,8 +60,8 @@ const pathways = [
 const assessmentHubSchema = {
   "@context": "https://schema.org",
   "@type": "CollectionPage",
-  "@id": `${PUBLIC_SITE.platformUrl}/assessments#webpage`,
-  url: `${PUBLIC_SITE.platformUrl}/assessments`,
+  "@id": `${PUBLIC_SITE.apexUrl}/assessments#webpage`,
+  url: `${PUBLIC_SITE.apexUrl}/assessments`,
   name: "Home Energy Assessments, NatHERS and BASIX",
   description: metadata.description,
   inLanguage: "en-AU",
@@ -70,8 +70,8 @@ const assessmentHubSchema = {
   breadcrumb: {
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: `${PUBLIC_SITE.platformUrl}/` },
-      { "@type": "ListItem", position: 2, name: "Home energy assessments", item: `${PUBLIC_SITE.platformUrl}/assessments` },
+      { "@type": "ListItem", position: 1, name: "Home", item: `${PUBLIC_SITE.apexUrl}/` },
+      { "@type": "ListItem", position: 2, name: "Home energy assessments", item: `${PUBLIC_SITE.apexUrl}/assessments` },
     ],
   },
 } as const;

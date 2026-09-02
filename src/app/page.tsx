@@ -12,18 +12,18 @@ const homepageSchema = {
   "@graph": [
     {
       "@type": "WebPage",
-      "@id": `${PUBLIC_SITE.platformUrl}/#webpage`,
-      url: `${PUBLIC_SITE.platformUrl}/`,
+      "@id": `${PUBLIC_SITE.apexUrl}/#webpage`,
+      url: `${PUBLIC_SITE.apexUrl}/`,
       name: "Australian Energy Assessments | Home Energy Assessments and NatHERS",
       description: "Independent home energy assessment guidance, NatHERS services, planning tools, rebates and energy comparison for Australian homes.",
       inLanguage: "en-AU",
-      isPartOf: { "@id": PUBLIC_SITE.platformWebsiteId },
+      isPartOf: { "@id": PUBLIC_SITE.apexWebsiteId },
       about: { "@id": PUBLIC_SITE.organizationId },
-      mainEntity: { "@id": `${PUBLIC_SITE.platformUrl}/#assessment-pathways` },
+      mainEntity: { "@id": `${PUBLIC_SITE.apexUrl}/#assessment-pathways` },
     },
     {
       "@type": "ItemList",
-      "@id": `${PUBLIC_SITE.platformUrl}/#assessment-pathways`,
+      "@id": `${PUBLIC_SITE.apexUrl}/#assessment-pathways`,
       name: "Australian home energy assessment pathways",
       itemListElement: [
         { "@type": "ListItem", position: 1, name: "NatHERS for new homes", url: `${PUBLIC_SITE.apexUrl}/nathers-for-new-homes` },

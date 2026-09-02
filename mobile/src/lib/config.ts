@@ -6,7 +6,7 @@ const nativeVersion = Application.nativeApplicationVersion?.trim() || '';
 const configuredVersion = Constants.expoConfig?.version?.trim() || '';
 export const APP_VERSION = nativeVersion || configuredVersion || '0.0.0';
 export const SYNC_CONTRACT_VERSION = 3;
-export const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || 'https://compare.ausenergyassessments.com').replace(/\/$/, '');
+export const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || 'https://ausenergyassessments.com').replace(/\/$/, '');
 
 export const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyBL9P793q5z7o6Baqg-o2yuIteYU6IHrug',

@@ -57,7 +57,7 @@ const schema = {
       "@id": `${canonical}#${person.image.split("/").at(-1)?.split(".")[0]}`,
       name: person.name,
       jobTitle: person.role,
-      image: `${PUBLIC_SITE.platformUrl}${person.image}`,
+      image: `${PUBLIC_SITE.apexUrl}${person.image}`,
       worksFor: { "@id": PUBLIC_SITE.organizationId },
     })),
     {

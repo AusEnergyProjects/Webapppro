@@ -41,7 +41,7 @@ type PublicPlanDeliveryDependencies = {
 type IntakeRow = Record<string, unknown>;
 
 const CALLBACK_URL =
-  "https://compare.ausenergyassessments.com/api/service-reminder-provider-events/resend";
+  "https://ausenergyassessments.com/api/service-reminder-provider-events/resend";
 const MAX_PAYLOAD_BYTES = 64 * 1024;
 const MAX_PDF_BYTES = 1_500_000;
 

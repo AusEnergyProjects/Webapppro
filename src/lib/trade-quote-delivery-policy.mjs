@@ -21,12 +21,13 @@ export function tradeQuoteDeliveryPublicOrigin(value) {
     if (
       new URL(origin).protocol === "https:"
       && [
+        "ausenergyassessments.com",
         "compare.ausenergyassessments.com",
         "aea-energy-comparison.info294029.chatgpt.site",
       ].includes(host)
     ) return origin;
   } catch { /* Use the canonical public origin below. */ }
-  return "https://compare.ausenergyassessments.com";
+  return "https://ausenergyassessments.com";
 }
 
 export function tradeQuoteDeliveryPresentation(status, attempts = 0, nextAttemptAt = "", failureCode = "", generation = 1) {

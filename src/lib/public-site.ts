@@ -1,20 +1,16 @@
 import type { Metadata } from "next";
 
 const APEX_ORIGIN = "https://ausenergyassessments.com";
-const PLATFORM_ORIGIN = "https://compare.ausenergyassessments.com";
 const APEX_WEBSITE_ID = `${APEX_ORIGIN}/#website`;
-const PLATFORM_WEBSITE_ID = `${PLATFORM_ORIGIN}/#website`;
 
 export const PUBLIC_SITE = {
   name: "Australian Energy Assessments",
   legalName: "Australian Energy Assessments Pty Ltd",
   abn: "73 675 233 557",
   apexUrl: APEX_ORIGIN,
-  platformUrl: PLATFORM_ORIGIN,
   organizationId: `${APEX_ORIGIN}/#organization`,
   apexWebsiteId: APEX_WEBSITE_ID,
-  platformWebsiteId: PLATFORM_WEBSITE_ID,
-  websiteId: PLATFORM_WEBSITE_ID,
+  websiteId: APEX_WEBSITE_ID,
   phoneDisplay: "1300 241 149",
   phoneHref: "tel:+611300241149",
   telephone: "+61-1300-241-149",
@@ -32,7 +28,7 @@ export const PUBLIC_SITE = {
   instagram: "https://www.instagram.com/ausenergyassessments",
   linkedin: "https://au.linkedin.com/company/australian-energy-assessments",
   twitter: "https://twitter.com/AusEnergyAssess",
-  logo: `${PLATFORM_ORIGIN}/aea-brandmark.svg`,
+  logo: `${APEX_ORIGIN}/aea-brandmark.svg`,
 } as const;
 
 export const publicOrganizationSchema = {
@@ -89,14 +85,6 @@ export const publicOrganizationSchema = {
       inLanguage: "en-AU",
       publisher: { "@id": PUBLIC_SITE.organizationId },
     },
-    {
-      "@type": "WebSite",
-      "@id": PUBLIC_SITE.platformWebsiteId,
-      url: `${PUBLIC_SITE.platformUrl}/`,
-      name: "Australian Energy Assessments home energy platform",
-      inLanguage: "en-AU",
-      publisher: { "@id": PUBLIC_SITE.organizationId },
-    },
   ],
 } as const;
 
@@ -123,7 +111,7 @@ export function buildApexMetadata({
       siteName: PUBLIC_SITE.name,
       locale: "en_AU",
       images: [{
-        url: `${PLATFORM_ORIGIN}/aea-home-energy-plan-og-v2.png`,
+        url: `${APEX_ORIGIN}/aea-home-energy-plan-og-v2.png`,
         width: 1731,
         height: 909,
         alt: "Australian Energy Assessments home energy services and guidance",
@@ -133,7 +121,7 @@ export function buildApexMetadata({
       card: "summary_large_image",
       title,
       description,
-      images: [`${PLATFORM_ORIGIN}/aea-home-energy-plan-og-v2.png`],
+      images: [`${APEX_ORIGIN}/aea-home-energy-plan-og-v2.png`],
     },
   };
 }
@@ -147,7 +135,7 @@ export function buildPlatformMetadata({
   title: string;
   description: string;
 }): Metadata {
-  const canonical = new URL(path, `${PLATFORM_ORIGIN}/`).toString();
+  const canonical = new URL(path, `${APEX_ORIGIN}/`).toString();
 
   return {
     title,
@@ -162,7 +150,7 @@ export function buildPlatformMetadata({
       locale: "en_AU",
       images: [
         {
-          url: `${PLATFORM_ORIGIN}/aea-home-energy-plan-og-v2.png`,
+          url: `${APEX_ORIGIN}/aea-home-energy-plan-og-v2.png`,
           width: 1731,
           height: 909,
           alt: "Australian Energy Assessments home energy planning and assessment platform",
@@ -173,7 +161,7 @@ export function buildPlatformMetadata({
       card: "summary_large_image",
       title,
       description,
-      images: [`${PLATFORM_ORIGIN}/aea-home-energy-plan-og-v2.png`],
+      images: [`${APEX_ORIGIN}/aea-home-energy-plan-og-v2.png`],
     },
   };
 }
@@ -191,7 +179,7 @@ export function buildGuideMetadata({
   publishedIso: `${number}-${number}-${number}`;
   reviewedIso: `${number}-${number}-${number}`;
 }): Metadata {
-  const canonical = new URL(path, `${PLATFORM_ORIGIN}/`).toString();
+  const canonical = new URL(path, `${APEX_ORIGIN}/`).toString();
 
   return {
     title,
@@ -208,7 +196,7 @@ export function buildGuideMetadata({
       modifiedTime: reviewedIso,
       authors: [`${PUBLIC_SITE.apexUrl}/`],
       images: [{
-        url: `${PLATFORM_ORIGIN}/aea-home-energy-plan-og-v2.png`,
+        url: `${APEX_ORIGIN}/aea-home-energy-plan-og-v2.png`,
         width: 1731,
         height: 909,
         alt: "Australian Energy Assessments home energy guidance",
@@ -218,7 +206,7 @@ export function buildGuideMetadata({
       card: "summary_large_image",
       title,
       description,
-      images: [`${PLATFORM_ORIGIN}/aea-home-energy-plan-og-v2.png`],
+      images: [`${APEX_ORIGIN}/aea-home-energy-plan-og-v2.png`],
     },
   };
 }

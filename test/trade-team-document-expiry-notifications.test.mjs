@@ -211,7 +211,7 @@ test("email goes to the owning account once and retries with one provider idempo
   assert.match(attempts[0].subject, /Alex Field: Public liability insurance expires soon/);
   assert.match(attempts[0].body, /20 August 2026/);
   assert.equal(attempts[0].callbackUrl,
-    "https://compare.ausenergyassessments.com/direct-trade/dashboard?workspace=team&teamMemberId=member-a");
+    "https://ausenergyassessments.com/direct-trade/dashboard?workspace=team&teamMemberId=member-a");
   assert.match(attempts[0].body, /workspace=team&teamMemberId=member-a/);
 
   const beforeRetry = await drainTradeTeamDocumentExpiryEmails({

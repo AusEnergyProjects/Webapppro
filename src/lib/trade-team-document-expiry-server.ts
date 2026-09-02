@@ -1,7 +1,7 @@
 const WARNING_WINDOW_DAYS = 30;
 const CLAIM_TIMEOUT_MS = 10 * 60 * 1000;
 const TEAM_WORKSPACE_URL =
-  "https://compare.ausenergyassessments.com/direct-trade/dashboard?workspace=team";
+  "https://ausenergyassessments.com/direct-trade/dashboard?workspace=team";
 
 type ExpiryCandidate = {
   owner_uid: string;

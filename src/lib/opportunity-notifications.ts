@@ -1,7 +1,7 @@
 import { ENERGY_SERVICE_LABELS } from "./energy-service-catalogue.mjs";
 
 export const OPPORTUNITY_INBOX_URL =
-  "https://compare.ausenergyassessments.com/direct-trade/dashboard?workspace=leads#opportunity-inbox";
+  "https://ausenergyassessments.com/direct-trade/dashboard?workspace=leads#opportunity-inbox";
 
 type OpportunityNotificationDraftInput = {
   businessName: string;

@@ -8,7 +8,7 @@ import styles from "@/components/FaqAccordion.module.css";
 const canonical = `${PUBLIC_SITE.apexUrl}/faq`;
 const title = "Home Energy Assessment FAQ | NatHERS and Ratings";
 const description = "Clear answers about Home Energy Rating, NatHERS, Whole of Home, BASIX, legacy Scorecard searches, coverage, evidence and booking an energy assessor.";
-const image = `${PUBLIC_SITE.platformUrl}/aea-home-energy-plan-og-v2.png`;
+const image = `${PUBLIC_SITE.apexUrl}/aea-home-energy-plan-og-v2.png`;
 
 export const metadata: Metadata = {
   title,

@@ -10,7 +10,7 @@ import {
 
 const root = process.cwd();
 const sourceRoot = path.join(root, "src");
-const liveOrigin = process.env.SITE_URL || "https://compare.ausenergyassessments.com";
+const liveOrigin = process.env.SITE_URL || "https://ausenergyassessments.com";
 const timeoutMs = 12_000;
 const retryTimeoutMs = 30_000;
 const resourceHintOrigins = new Set([

@@ -47,7 +47,7 @@ export const OPPORTUNITY_NOTIFICATION_DISPATCH_HEADER =
   "X-AEA-Opportunity-Notification-Dispatch";
 
 const CALLBACK_URL =
-  "https://compare.ausenergyassessments.com/api/service-reminder-provider-events/resend";
+  "https://ausenergyassessments.com/api/service-reminder-provider-events/resend";
 const RECOVERABLE_PUBLIC_EMAIL_SKIP_REASONS = [
   "Opportunity email consent is not active.",
   "Optional opportunity emails are disabled.",

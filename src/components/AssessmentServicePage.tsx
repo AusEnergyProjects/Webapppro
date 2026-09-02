@@ -96,7 +96,7 @@ export function buildAssessmentMetadata({ path, title, description }: Assessment
       siteName: "Australian Energy Assessments",
       locale: "en_AU",
       images: [{
-        url: `${PUBLIC_SITE.platformUrl}/aea-home-energy-plan-og-v2.png`,
+        url: `${PUBLIC_SITE.apexUrl}/aea-home-energy-plan-og-v2.png`,
         width: 1731,
         height: 909,
         alt: "Australian Energy Assessments home energy assessment services",
@@ -106,7 +106,7 @@ export function buildAssessmentMetadata({ path, title, description }: Assessment
       card: "summary_large_image",
       title,
       description,
-      images: [`${PUBLIC_SITE.platformUrl}/aea-home-energy-plan-og-v2.png`],
+      images: [`${PUBLIC_SITE.apexUrl}/aea-home-energy-plan-og-v2.png`],
     },
   };
 }

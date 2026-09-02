@@ -85,7 +85,7 @@ Configure a separate random token of at least 32 characters as `AEA_LEAD_WEBHOOK
 
 ```powershell
 $headers = @{ Authorization = "Bearer $env:AEA_LEAD_WEBHOOK_TEST_TOKEN" }
-Invoke-RestMethod -Method Post -Uri "https://compare.ausenergyassessments.com/api/internal/lead-webhook-probe" -Headers $headers
+Invoke-RestMethod -Method Post -Uri "https://ausenergyassessments.com/api/internal/lead-webhook-probe" -Headers $headers
 ```
 
 An `ok: true` response proves that the application reached the processor and received its exact `ok` acknowledgement. The Apps Script branch for this event must return before opening the customer sheet or sending mail. Confirming any downstream audit record still requires checking the processor itself by `probeId`.

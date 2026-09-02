@@ -18,7 +18,7 @@ const coreTools = [
   "Accounting integrations and customer portal foundations",
 ];
 
-const tlinkAccessUrl = `${PUBLIC_SITE.platformUrl}/direct-trade/access`;
+const tlinkAccessUrl = `${PUBLIC_SITE.apexUrl}/direct-trade/access`;
 const tlinkAccessSchema = {
   "@context": "https://schema.org",
   "@graph": [

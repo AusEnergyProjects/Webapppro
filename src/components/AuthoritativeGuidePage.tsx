@@ -43,7 +43,7 @@ export function AuthoritativeGuidePage({
   sources,
   cta,
 }: AuthoritativeGuidePageProps) {
-  const canonical = new URL(path, `${PUBLIC_SITE.platformUrl}/`).toString();
+  const canonical = new URL(path, `${PUBLIC_SITE.apexUrl}/`).toString();
   const schema = {
     "@context": "https://schema.org",
     "@graph": [
@@ -56,7 +56,7 @@ export function AuthoritativeGuidePage({
         mainEntityOfPage: { "@id": `${canonical}#webpage` },
         author: { "@id": PUBLIC_SITE.organizationId },
         publisher: { "@id": PUBLIC_SITE.organizationId },
-        image: `${PUBLIC_SITE.platformUrl}/aea-home-energy-plan-og-v2.png`,
+        image: `${PUBLIC_SITE.apexUrl}/aea-home-energy-plan-og-v2.png`,
         datePublished: publishedIso,
         dateModified: reviewedIso,
         inLanguage: "en-AU",
@@ -72,7 +72,7 @@ export function AuthoritativeGuidePage({
         description,
         dateModified: reviewedIso,
         inLanguage: "en-AU",
-        isPartOf: { "@id": PUBLIC_SITE.platformWebsiteId },
+        isPartOf: { "@id": PUBLIC_SITE.apexWebsiteId },
         breadcrumb: { "@id": `${canonical}#breadcrumb` },
         mainEntity: { "@id": `${canonical}#article` },
       },
@@ -80,8 +80,8 @@ export function AuthoritativeGuidePage({
         "@type": "BreadcrumbList",
         "@id": `${canonical}#breadcrumb`,
         itemListElement: [
-          { "@type": "ListItem", position: 1, name: "Home", item: `${PUBLIC_SITE.platformUrl}/` },
-          { "@type": "ListItem", position: 2, name: "Guides", item: `${PUBLIC_SITE.platformUrl}/guides` },
+          { "@type": "ListItem", position: 1, name: "Home", item: `${PUBLIC_SITE.apexUrl}/` },
+          { "@type": "ListItem", position: 2, name: "Guides", item: `${PUBLIC_SITE.apexUrl}/guides` },
           { "@type": "ListItem", position: 3, name: title, item: canonical },
         ],
       },

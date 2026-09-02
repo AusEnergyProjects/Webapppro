@@ -127,7 +127,7 @@ test("the futuristic header links to one dedicated always-present Wattzun AI pag
   assert.doesNotMatch(surgeHeaderButton, /site-surge-status|AI guide/);
   assert.match(wattzunRoute, /SiteHeader active="surge"/);
   assert.match(wattzunRoute, /Wattzun AI \| Australian Energy Assessments/);
-  assert.match(wattzunRoute, /canonical: "\/wattzun"/);
+  assert.match(wattzunRoute, /buildPlatformMetadata\(\{[\s\S]*?path: "\/wattzun"/);
   assert.match(legacySurgeRoute, /permanentRedirect\("\/wattzun"\)/);
   assert.match(styles, /\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{[^}]*flex: 0 0 126px;[^}]*min-height: 44px;/);
   assert.match(styles, /\.site-surge-link\.active \{/);

@@ -27,7 +27,7 @@ export const CUSTOMER_PLAN_REPORT_VERSION =
 export const INSTALLER_ENQUIRY_PACK_VERSION =
   "2026-07-31-installer-enquiry-pack-v1";
 export const CUSTOMER_PLAN_EMAIL_SUBJECT = "Your home energy plan is ready";
-export const CUSTOMER_PLAN_PUBLIC_ORIGIN = "https://compare.ausenergyassessments.com";
+export const CUSTOMER_PLAN_PUBLIC_ORIGIN = "https://ausenergyassessments.com";
 export const AEA_BRANDMARK_PUBLIC_URL =
   `${CUSTOMER_PLAN_PUBLIC_ORIGIN}/api/aea-brandmark`;
 

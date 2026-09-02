@@ -422,10 +422,10 @@ for (const page of pdf.getPages()) {
 }
 assert.ok(linkCount > 0);
 for (const href of [
-  "https://compare.ausenergyassessments.com/calculator",
-  "https://compare.ausenergyassessments.com/rebates",
-  "https://compare.ausenergyassessments.com/compare",
-  "https://compare.ausenergyassessments.com/gas-compare",
+  "https://ausenergyassessments.com/calculator",
+  "https://ausenergyassessments.com/rebates",
+  "https://ausenergyassessments.com/compare",
+  "https://ausenergyassessments.com/gas-compare",
   "https://www.homeenergyrating.gov.au/resources/existing-homes-guidance-note",
   "https://www.homeenergyrating.gov.au/resources/existing-homes-technical-note",
 ]) {

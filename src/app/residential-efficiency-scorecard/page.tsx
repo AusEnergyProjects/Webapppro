@@ -7,7 +7,7 @@ import { PUBLIC_SITE } from "@/lib/public-site";
 const canonical = `${PUBLIC_SITE.apexUrl}/residential-efficiency-scorecard`;
 const title = "Residential Efficiency Scorecard Closed | 2026 Update";
 const description = "Residential Efficiency Scorecard closed on 23 June 2026. Learn what changed and use the current Home Energy Rating pathway for an existing home.";
-const image = `${PUBLIC_SITE.platformUrl}/aea-home-energy-plan-og-v2.png`;
+const image = `${PUBLIC_SITE.apexUrl}/aea-home-energy-plan-og-v2.png`;
 
 export const metadata: Metadata = {
   title,

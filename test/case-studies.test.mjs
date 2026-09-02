@@ -15,7 +15,7 @@ test("worked examples are connected to the shared journey", () => {
   assert.match(chrome, /"case-studies"/);
   assert.match(page, /SiteHeader active="case-studies"/);
   assert.match(guides, /href="\/case-studies"/);
-  assert.match(start, /Open all guides, rebates and worked examples/);
+  assert.match(start, /Browse all guides, rebates and examples/);
 });
 
 test("worked examples expose evidence, method, lessons and limitations", () => {

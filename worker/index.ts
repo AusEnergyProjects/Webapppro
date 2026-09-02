@@ -63,12 +63,10 @@ import {
 } from "../src/lib/service-reminder-delivery";
 import { drainTradeQuoteDeliveries } from "../src/lib/trade-quote-delivery-server";
 import { queueTradeQuoteDeliveryDispatch } from "../src/lib/trade-quote-delivery-dispatch";
-import { PUBLIC_SITE } from "../src/lib/public-site";
+import { canonicalPublicTarget, publicRedirectTarget } from "../src/lib/public-redirects.mjs";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
 const PRIVATE_HTML_CACHE_CONTROL = "private, no-store, max-age=0";
-const LEGACY_SITE_HOST = "aea-energy-comparison.info294029.chatgpt.site";
-const CANONICAL_SITE_HOST = new URL(PUBLIC_SITE.platformUrl).hostname;
 const NOTIFICATION_DELIVERY_CRON = "* * * * *";
 const DAILY_MAINTENANCE_CRON = "15 20 * * *";
 
@@ -439,12 +437,18 @@ function queueBackgroundDispatches(
 }
 
 function canonicalHostRedirect(request: Request) {
-  const url = new URL(request.url);
-  if (url.hostname !== LEGACY_SITE_HOST) return null;
-  url.protocol = "https:";
-  url.hostname = CANONICAL_SITE_HOST;
-  url.port = "";
-  return secureResponse(Response.redirect(url.toString(), 308), request);
+  const target = canonicalPublicTarget(request.url, request.method);
+  return target
+    ? secureResponse(Response.redirect(target, 308), request)
+    : null;
+}
+
+function legacyPathRedirect(request: Request) {
+  if (!["GET", "HEAD"].includes(request.method)) return null;
+  const target = publicRedirectTarget(request.url);
+  return target
+    ? secureResponse(Response.redirect(target, 308), request)
+    : null;
 }
 
 function isCacheablePageRequest(request: Request) {
@@ -467,6 +471,8 @@ function cacheableHtmlResponse(response: Response) {
 
 const worker = {
   async fetch(request: Request, env: unknown, ctx: ExecutionContext): Promise<Response> {
+    const pathRedirect = legacyPathRedirect(request);
+    if (pathRedirect) return pathRedirect;
     const redirect = canonicalHostRedirect(request);
     if (redirect) return redirect;
 

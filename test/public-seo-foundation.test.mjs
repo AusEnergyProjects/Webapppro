@@ -23,6 +23,7 @@ const legacyExistingHomeAlias = read("../src/app/nathers-existing-homes/page.tsx
 const legacyPrivacyAlias = read("../src/app/privacy-policy/page.tsx");
 const platformMetadataRoutes = [
   "plan",
+  "wattzun",
   "calculator",
   "compare",
   "gas-compare",
@@ -40,6 +41,7 @@ const platformMetadataRoutes = [
   "case-studies",
   "platform",
   "privacy",
+  "rental-assessment/request",
   "direct-trade",
   "direct-trade/partners",
   "direct-trade/access",
@@ -54,7 +56,7 @@ const guideMetadataRoutes = [
   "guides/home-energy-assessment-myths",
 ];
 
-test("one verified public identity graph links the business and platform", () => {
+test("one verified public identity graph links the business and canonical website", () => {
   assert.match(identity, /legalName: "Australian Energy Assessments Pty Ltd"/);
   assert.match(identity, /abn: "73 675 233 557"/);
   assert.match(identity, /telephone: "\+61-1300-241-149"/);
@@ -65,6 +67,8 @@ test("one verified public identity graph links the business and platform", () =>
   assert.match(identity, /twitter\.com\/AusEnergyAssess/);
   assert.match(identity, /"@type": "ProfessionalService"/);
   assert.match(identity, /"@type": "WebSite"/);
+  assert.match(identity, /websiteId: APEX_WEBSITE_ID/);
+  assert.doesNotMatch(identity, /url: `\$\{PUBLIC_SITE\.platformUrl\}/);
   assert.doesNotMatch(identity, /aggregateRating|SearchAction|speakable/);
 });
 
@@ -80,9 +84,9 @@ test("JSON-LD is server rendered and escapes markup-sensitive characters", () =>
   assert.match(home, /"@type": "ItemList"/);
   assert.match(home, /\/nathers-for-new-homes/);
   assert.match(home, /\/home-energy-rating-for-existing-homes/);
-  assert.match(layout, /metadataBase: new URL\(PUBLIC_SITE\.platformUrl\)/);
-  assert.match(sitemap, /PUBLIC_SITE\.platformUrl/);
-  assert.match(robots, /PUBLIC_SITE\.platformUrl/);
+  assert.match(layout, /metadataBase: new URL\(PUBLIC_SITE\.apexUrl\)/);
+  assert.match(sitemap, /PUBLIC_SITE\.apexUrl/);
+  assert.match(robots, /PUBLIC_SITE\.apexUrl/);
 });
 
 test("public platform pages receive unique canonical and social metadata", () => {
@@ -131,7 +135,8 @@ test("crawl controls exclude private surfaces and remove false sitemap dates", (
     assert.match(sitemap, new RegExp(`"\\/${route.replaceAll("/", "\\/")}"`));
   }
   assert.match(sitemap, /"\/home-energy-rating-vs-nathers-vs-scorecard"/);
-  assert.doesNotMatch(sitemap, /"\/residential-efficiency-scorecard"/);
+  assert.match(sitemap, /"\/residential-efficiency-scorecard"/);
+  assert.match(sitemap, /"\/rental-assessment\/request"/);
   assert.doesNotMatch(sitemap, /lastModified/);
   assert.match(gasAlias, /permanentRedirect\("\/gas-compare"\)/);
   assert.match(startAlias, /permanentRedirect\("\/plan"\)/);

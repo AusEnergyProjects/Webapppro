@@ -1,10 +1,21 @@
 import type { MetadataRoute } from "next";
 import { PUBLIC_SITE } from "@/lib/public-site";
 
-// Pages that mirror established apex URLs stay out of this sitemap while they
-// canonicalize to the apex during the parallel pre-cutover phase.
+// This is the canonical post-cutover inventory. The candidate host deliberately
+// emits apex URLs so the same sitemap can be submitted without changing every
+// entry during the DNS move.
 const routes = [
   "",
+  "/assessments",
+  "/basix-nsw",
+  "/book-an-assessment",
+  "/commercial-and-industrial-assessments",
+  "/communities-schools",
+  "/faq",
+  "/home-energy-rating-for-existing-homes",
+  "/minimum-rental-standards",
+  "/nathers-for-new-homes",
+  "/nathers-whole-of-home",
   "/plan",
   "/wattzun",
   "/calculator",
@@ -28,11 +39,14 @@ const routes = [
   "/guides/insulation-draught-proofing",
   "/guides/project-preparation",
   "/rebates",
-  "/assessments",
+  "/rental-assessment/request",
   "/home-energy-rating-vs-nathers-vs-scorecard",
+  "/residential-efficiency-scorecard",
   "/case-studies",
   "/platform",
   "/privacy",
+  "/team",
+  "/trusted-suppliers",
   "/direct-trade",
   "/direct-trade/partners",
   "/direct-trade/integrations",
@@ -42,7 +56,7 @@ const routes = [
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return routes.map((route) => ({
-    url: `${PUBLIC_SITE.platformUrl}${route}`,
+    url: `${PUBLIC_SITE.apexUrl}${route}`,
     changeFrequency: route === "" ? "weekly" : "monthly",
     priority: route === "" ? 1 : route === "/assessments" ? 0.95 : route === "/plan" ? 0.9 : 0.7,
   }));

@@ -7,11 +7,11 @@
 const FOLLOW_UP_DAYS = 182;
 const BRAND = "Australian Energy Assessments";
 const BRAND_PHONE = "1300 241 149";
-const BRAND_SITE = "https://www.ausenergyassessments.com";
+const BRAND_SITE = "https://ausenergyassessments.com";
 const REPLY_TO = "info@ausenergyassessments.com";
 const TIME_ZONE = "Australia/Sydney";
 const LEGACY_SECRET = "CHANGE-ME-to-any-random-phrase";
-const OPS_SITE_URL = "https://compare.ausenergyassessments.com";
+const OPS_SITE_URL = "https://ausenergyassessments.com";
 const OPS_ALERT_EMAIL = REPLY_TO;
 const OPS_STATE_KEY = "AEA_OPS_HEALTH_STATE_V1";
 const OPS_REPEAT_ALERT_MS = 6 * 60 * 60 * 1000;

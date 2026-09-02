@@ -4,10 +4,10 @@ import { JsonLd } from "@/components/JsonLd";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 import { PUBLIC_SITE } from "@/lib/public-site";
 
-const canonical = `${PUBLIC_SITE.platformUrl}/home-energy-rating-vs-nathers-vs-scorecard`;
+const canonical = `${PUBLIC_SITE.apexUrl}/home-energy-rating-vs-nathers-vs-scorecard`;
 const title = "Home Energy Rating vs NatHERS vs Scorecard | 2026 Guide";
 const description = "Compare Home Energy Rating for existing homes, NatHERS and Whole of Home for new homes, and the Scorecard program that closed in 2026.";
-const image = `${PUBLIC_SITE.platformUrl}/aea-home-energy-plan-og-v2.png`;
+const image = `${PUBLIC_SITE.apexUrl}/aea-home-energy-plan-og-v2.png`;
 
 export const metadata: Metadata = {
   title,
@@ -97,8 +97,8 @@ const structuredData = {
       "@type": "BreadcrumbList",
       "@id": `${canonical}#breadcrumb`,
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Home", item: `${PUBLIC_SITE.platformUrl}/` },
-        { "@type": "ListItem", position: 2, name: "Assessments", item: `${PUBLIC_SITE.platformUrl}/assessments` },
+        { "@type": "ListItem", position: 1, name: "Home", item: `${PUBLIC_SITE.apexUrl}/` },
+        { "@type": "ListItem", position: 2, name: "Assessments", item: `${PUBLIC_SITE.apexUrl}/assessments` },
         { "@type": "ListItem", position: 3, name: "Home Energy Rating vs NatHERS vs Scorecard", item: canonical },
       ],
     },

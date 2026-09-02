@@ -6,7 +6,7 @@ import { PUBLIC_SITE, publicOrganizationSchema } from "@/lib/public-site";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(PUBLIC_SITE.platformUrl),
+  metadataBase: new URL(PUBLIC_SITE.apexUrl),
   applicationName: "Australian Energy Assessments",
   title: "Home Energy Assessments & NatHERS | Australian Energy Assessments",
   description: "Independent home energy assessments, NatHERS and Home Energy Rating guidance, energy planning, rebates and comparison tools for Australian homes.",

@@ -34,7 +34,7 @@ test("Wattzun owns the canonical public route and Surge remains only a permanent
   const sitemap = fs.readFileSync(path.resolve(sourceRoot, "app/sitemap.ts"), "utf8");
 
   assert.match(wattzun, /title: "Wattzun AI \| Australian Energy Assessments"/);
-  assert.match(wattzun, /canonical: "\/wattzun"/);
+  assert.match(wattzun, /buildPlatformMetadata\(\{[\s\S]*?path: "\/wattzun"/);
   assert.match(legacy, /permanentRedirect\("\/wattzun"\)/);
   assert.doesNotMatch(legacy, /export const metadata|SiteHeader/);
   assert.match(sitemap, /"\/wattzun"/);

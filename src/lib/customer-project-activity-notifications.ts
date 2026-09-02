@@ -5,9 +5,9 @@ export type CustomerProjectActivityEventType =
 export type CustomerProjectActivityAudience = "customer" | "installer";
 
 export const CUSTOMER_QUOTE_INBOX_URL =
-  "https://compare.ausenergyassessments.com/account/quotes";
+  "https://ausenergyassessments.com/account/quotes";
 export const INSTALLER_LEAD_INBOX_URL =
-  "https://compare.ausenergyassessments.com/direct-trade/dashboard?workspace=leads#opportunity-inbox";
+  "https://ausenergyassessments.com/direct-trade/dashboard?workspace=leads#opportunity-inbox";
 
 const encoder = new TextEncoder();
 const UUID_PATTERN =
@@ -101,7 +101,7 @@ export function customerProjectActivityDraft({
   const exactInstallerLeadUrl = UUID_PATTERN.test(
     String(opportunityMatchId || ""),
   )
-    ? `https://compare.ausenergyassessments.com/direct-trade/dashboard?workspace=leads&matchId=${encodeURIComponent(String(opportunityMatchId))}#opportunity-inbox`
+    ? `https://ausenergyassessments.com/direct-trade/dashboard?workspace=leads&matchId=${encodeURIComponent(String(opportunityMatchId))}#opportunity-inbox`
     : INSTALLER_LEAD_INBOX_URL;
   const link = customerMessage
     ? CUSTOMER_QUOTE_INBOX_URL

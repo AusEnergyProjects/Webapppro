@@ -11,7 +11,7 @@ const path = "/book-an-assessment";
 const canonical = `${PUBLIC_SITE.apexUrl}${path}`;
 const title = "Book a 5-Minute Assessment Call | Australian Energy Assessments";
 const description = "Choose a time for a five-minute call to confirm your property, assessment needs and next step with Australian Energy Assessments.";
-const image = `${PUBLIC_SITE.platformUrl}/aea-home-energy-plan-og-v2.png`;
+const image = `${PUBLIC_SITE.apexUrl}/aea-home-energy-plan-og-v2.png`;
 
 export const metadata: Metadata = {
   title,

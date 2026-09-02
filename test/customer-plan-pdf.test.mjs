@@ -606,11 +606,11 @@ test("direct plan PDF keeps friendly guide labels clickable", async () => {
   }
 
   assert.deepEqual(new Set(urls), new Set([
-    "https://compare.ausenergyassessments.com/guides/heating",
-    "https://compare.ausenergyassessments.com/rebates",
-    "https://compare.ausenergyassessments.com/calculator",
-    "https://compare.ausenergyassessments.com/compare",
-    "https://compare.ausenergyassessments.com/gas-compare",
+    "https://ausenergyassessments.com/guides/heating",
+    "https://ausenergyassessments.com/rebates",
+    "https://ausenergyassessments.com/calculator",
+    "https://ausenergyassessments.com/compare",
+    "https://ausenergyassessments.com/gas-compare",
   ]));
 });
 
@@ -681,11 +681,11 @@ test("personalised customer PDF includes the named home summary and trusted offi
   assert.match(text, /SAFETY/);
   assert.doesNotMatch(text, /\bAEA\b/);
   assert.doesNotMatch(text, /Questions that could|Home details to check/i);
-  assert.ok(urls.includes("https://compare.ausenergyassessments.com/calculator"));
-  assert.ok(urls.includes("https://compare.ausenergyassessments.com/rebates"));
-  assert.ok(urls.includes("https://compare.ausenergyassessments.com/compare"));
-  assert.ok(urls.includes("https://compare.ausenergyassessments.com/gas-compare"));
-  assert.ok(urls.includes("https://compare.ausenergyassessments.com/plan"));
+  assert.ok(urls.includes("https://ausenergyassessments.com/calculator"));
+  assert.ok(urls.includes("https://ausenergyassessments.com/rebates"));
+  assert.ok(urls.includes("https://ausenergyassessments.com/compare"));
+  assert.ok(urls.includes("https://ausenergyassessments.com/gas-compare"));
+  assert.ok(urls.includes("https://ausenergyassessments.com/plan"));
   assert.ok(urls.includes("https://www.energy.gov.au/households"));
   assert.equal(
     customerPlanPdfFileName(report),

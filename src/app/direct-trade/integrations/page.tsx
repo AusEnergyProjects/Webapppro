@@ -17,6 +17,7 @@ export const metadata: Metadata = {
       "Connect TLink to business calendars and accounting platforms through secure provider sign-in.",
     siteName: "TLink",
     type: "website",
+    url: "/direct-trade/integrations",
   },
   twitter: {
     card: "summary",

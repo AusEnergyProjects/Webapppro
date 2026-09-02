@@ -308,12 +308,12 @@ test("email markup keeps one accessible hosted brandmark and trusted links", () 
   for (const link of links) {
     assert.match(
       link,
-      /^https:\/\/compare\.ausenergyassessments\.com\/(?:guides\/|calculator$|rebates$|compare$|gas-compare$)/,
+      /^https:\/\/ausenergyassessments\.com\/(?:guides\/|calculator$|rebates$|compare$|gas-compare$)/,
     );
   }
   for (const href of ["calculator", "rebates", "compare", "gas-compare"]) {
     assert.ok(
-      links.includes(`https://compare.ausenergyassessments.com/${href}`),
+      links.includes(`https://ausenergyassessments.com/${href}`),
       `email is missing the guided ${href} link`,
     );
   }

@@ -154,7 +154,7 @@ test("the legacy Scorecard route preserves its apex canonical without advertisin
 });
 
 test("the compare-native terminology guide keeps the three pathways distinct", () => {
-  assert.match(terminologyGuide, /const canonical = `\$\{PUBLIC_SITE\.platformUrl\}\/home-energy-rating-vs-nathers-vs-scorecard`/);
+  assert.match(terminologyGuide, /const canonical = `\$\{PUBLIC_SITE\.apexUrl\}\/home-energy-rating-vs-nathers-vs-scorecard`/);
   assert.match(terminologyGuide, /Home Energy Rating from 0 to 100\+/);
   assert.match(terminologyGuide, /Star Rating from 0 to 10/);
   assert.match(terminologyGuide, /Whole of Home rating from 0 to 100\+/);

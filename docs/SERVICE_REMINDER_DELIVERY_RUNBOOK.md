@@ -19,7 +19,7 @@ The AEA Twilio account is upgraded. The `AEA service reminders` Messaging Servic
 5. Store the customer reply destination as `RESEND_REPLY_TO`.
 6. Create a webhook for:
 
-   `https://compare.ausenergyassessments.com/api/service-reminder-provider-events/resend`
+   `https://ausenergyassessments.com/api/service-reminder-provider-events/resend`
 
 7. Subscribe to `email.sent`, `email.delivered`, `email.failed`, `email.bounced`, `email.suppressed` and `email.complained`.
 8. Store the webhook signing secret as the protected `RESEND_WEBHOOK_SECRET` Sites secret.
@@ -42,7 +42,7 @@ Generating a PIN requires a saved worker email. TLink emails the exact username,
 4. Store `TWILIO_ACCOUNT_SID`, protected `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID` and `TWILIO_VERIFY_SERVICE_SID` in Sites.
 5. Store this exact non-secret callback URL:
 
-   `https://compare.ausenergyassessments.com/api/service-reminder-provider-events/twilio`
+   `https://ausenergyassessments.com/api/service-reminder-provider-events/twilio`
 
    as `SERVICE_REMINDER_TWILIO_CALLBACK_URL`.
 6. Set the Messaging Service delivery status callback and inbound message webhook to the same URL.

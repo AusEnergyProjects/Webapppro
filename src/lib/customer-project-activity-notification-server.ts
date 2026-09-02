@@ -38,7 +38,7 @@ type DrainOptions = {
 };
 
 const CALLBACK_URL =
-  "https://compare.ausenergyassessments.com/api/service-reminder-provider-events/resend";
+  "https://ausenergyassessments.com/api/service-reminder-provider-events/resend";
 const MAX_ATTEMPTS = 3;
 const CLAIM_TIMEOUT_MS = 10 * 60 * 1000;
 

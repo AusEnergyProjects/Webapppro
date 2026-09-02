@@ -538,7 +538,7 @@ test("plan email HTML is escaped, inline styled and has a complete plain-text al
     new RegExp(`x-aea-report-design" content="${CUSTOMER_PLAN_REPORT_DESIGN_VERSION}`),
   );
   assert.match(html, /style="/);
-  assert.match(html, /https:\/\/compare\.ausenergyassessments\.com\/guides\//);
+  assert.match(html, /https:\/\/ausenergyassessments\.com\/guides\//);
   assert.doesNotMatch(html, /attacker\.example/);
   assert.match(html, /29 July 2026/);
   assert.match(html, /@media only screen and \(max-width: 680px\)/);

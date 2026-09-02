@@ -6,7 +6,7 @@ type Row = Record<string, unknown>;
 export type CalendarProvider = "google_calendar" | "microsoft_calendar";
 export const CALENDAR_PROVIDERS: CalendarProvider[] = ["google_calendar", "microsoft_calendar"];
 const CALENDAR_PROVIDER_TIMEOUT_MS = 4_000;
-const TLINK_WORK_URL = "https://compare.ausenergyassessments.com/direct-trade/dashboard?workspace=work";
+const TLINK_WORK_URL = "https://ausenergyassessments.com/direct-trade/dashboard?workspace=work";
 type CalendarSyncOptions = { force?: boolean };
 
 const ianaTimeZones: Record<string, string> = {

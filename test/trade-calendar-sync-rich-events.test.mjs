@@ -251,7 +251,7 @@ for (const provider of ["google_calendar", "microsoft_calendar"]) {
         ]) assert.match(text, new RegExp(detail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
         assert.match(text, /installation/i);
         assert.match(text, /https:\/\/www\.google\.com\/maps\/dir\/\?api=1&destination=/i);
-        assert.match(text, /https:\/\/compare\.ausenergyassessments\.com\/direct-trade\/dashboard\?workspace=work/i);
+        assert.match(text, /https:\/\/ausenergyassessments\.com\/direct-trade\/dashboard\?workspace=work/i);
         assert.match(text, /jobId=job-1/i);
 
         const location = provider === "google_calendar" ? payload.location : payload.location?.displayName;

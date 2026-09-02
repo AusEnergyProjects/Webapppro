@@ -2,11 +2,13 @@ import Link from "next/link";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 import { PublicRentalAssessmentRequestForm } from "@/components/PublicRentalAssessmentRequestForm";
 import { TLinkBrand } from "@/components/TLinkChrome";
+import { buildPlatformMetadata } from "@/lib/public-site";
 
-export const metadata = {
+export const metadata = buildPlatformMetadata({
+  path: "/rental-assessment/request",
   title: "Request a Victorian Rental Assessment | TLink",
   description: "Request a Victorian rental minimum standards assessment, with optional electrical, gas and smoke alarm checks.",
-};
+});
 
 export default function RentalAssessmentRequestPage() {
   return <main className="wrap rental-assessment-request-page">
