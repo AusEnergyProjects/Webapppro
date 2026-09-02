@@ -81,7 +81,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(agents, /immutable dated evidence baseline; never rewrite it as current status/);
   assert.match(readme, /immutable evidence baseline/);
   assert.match(releaseTruth, /only current implementation and release-status document/);
-  assert.match(roadmap, /Last reconciled: 2 September 2026/);
+  assert.match(roadmap, /Last reconciled: 3 September 2026/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-PRACTICAL-ASSESSOR-GUIDANCE-81/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80/);
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-69/);
@@ -90,19 +90,19 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-71/);
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-70/);
   assert.match(roadmap, /## Previous released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79/);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 2 September 2026/);
+  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 3 September 2026/);
   assert.match(
     handover,
-    /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,240}`PUBLIC-MEASUREMENT-PROVENANCE-86`[\s\S]{0,240}Prepared: 2 September 2026/,
+    /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,240}`PUBLIC-MEASUREMENT-PROVENANCE-86`[\s\S]{0,240}Prepared: 3 September 2026/,
   );
-  assert.match(handover, /Current production: Sites version 497/);
-  assert.match(releaseTruth, /Last reconciled locally: 2 September 2026/);
-  assert.match(releaseTruth, /## Current public production release: apex launch and quiet cookieless analytics/);
-  assert.match(releaseTruth, /Deployment evidence last verified: 2 September 2026/);
-  assert.match(releaseTruth, /e558e7b94625afddf536ab96bd5d9a1bf77909f9/);
-  assert.match(releaseTruth, /Sites version 497/);
-  assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_cc1874a68a9c8191bb75f1496cabe735/);
-  assert.match(releaseTruth, /appgdep_6a981712ea788191a968ab219f4f0dc7/);
+  assert.match(handover, /Current production: Sites version 499/);
+  assert.match(releaseTruth, /Last reconciled locally: 3 September 2026/);
+  assert.match(releaseTruth, /## Current public production release: predictive navigation and exact provenance/);
+  assert.match(releaseTruth, /Deployment evidence last verified: 3 September 2026/);
+  assert.match(releaseTruth, /4908a1467d90b2fff57b70517fad5e41e18e12b0/);
+  assert.match(releaseTruth, /Sites version 499/);
+  assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_a43c371ac43c8191ad99a0f4189e7508/);
+  assert.match(releaseTruth, /appgdep_6a982fa069b08191b87ec51ce7beb2a3/);
   assert.match(releaseTruth, /## Previous production release: grounded product and certificate guidance/);
   assert.match(releaseTruth, /## Previous production release: practical Surge assessor guidance and account-copy removal/);
   assert.match(releaseTruth, /0944c9b91765535b873b30029f545bde8f744831/);
@@ -1073,7 +1073,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*`PUBLIC-MEASUREMENT-PROVENANCE-86`/);
   assert.match(currentHandover, /Milestone ID: `PUBLIC-MEASUREMENT-PROVENANCE-86`/);
   assert.match(currentHandover, /Working branch: `codex\/surge-durability-release`/);
-  assert.match(currentHandover, /Released application source: `e558e7b94625afddf536ab96bd5d9a1bf77909f9`/);
+  assert.match(currentHandover, /Released application source: `4908a1467d90b2fff57b70517fad5e41e18e12b0`/);
   assert.match(currentHandover, /Original rental workflow commit: `724218fc90f7c4c741721ba443f8ba00c21ef431`/);
   assert.match(currentHandover, /Current migration inventory: 164 migrations through `0165_surge_answer_review_queue\.sql`/);
   assert.match(currentHandover, /Current Google Apps Script relay: version 16 on deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`/);
@@ -1103,9 +1103,9 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(currentHandover, /Previous released application source: `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488`/);
   assert.match(currentHandover, /Previous released mobile update source: `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488`/);
   assert.match(currentHandover, /Released mobile native source: `f325d924242be20429edc7806b968b72d8a5d26c`/);
-  assert.match(currentHandover, /Current production: Sites version 497 at `https:\/\/ausenergyassessments\.com`/);
-  assert.match(currentHandover, /Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_cc1874a68a9c8191bb75f1496cabe735`/);
-  assert.match(currentHandover, /Current deployment: `appgdep_6a981712ea788191a968ab219f4f0dc7`, status `succeeded`, environment revision 34/);
+  assert.match(currentHandover, /Current production: Sites version 499 at `https:\/\/ausenergyassessments\.com`/);
+  assert.match(currentHandover, /Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_a43c371ac43c8191ad99a0f4189e7508`/);
+  assert.match(currentHandover, /Current deployment: `appgdep_6a982fa069b08191b87ec51ce7beb2a3`, status `succeeded`, environment revision 36/);
   assert.match(currentHandover, /Current migration inventory: 164 migrations through `0165_surge_answer_review_queue\.sql`/);
   assert.match(handover, /32-pixel 30-minute card[\s\S]{0,80}64-pixel hour/);
   assert.match(handover, /a2af47a15e5fe7d1[\s\S]{0,120}a2af489e3eb1e7d1[\s\S]{0,80}outcome `ok`/);
@@ -1884,10 +1884,10 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.deepEqual(releaseTruthStepNumbers, [1, 2, 3, 4, 5]);
   assert.equal(normalisedHandoverNextFive, normalisedRoadmapNextFive);
   assert.equal(normalisedReleaseTruthNextFive, normalisedRoadmapNextFive);
-  assert.match(normalisedRoadmapNextFive, /^1\. Correct the hosted `AEA_RELEASE_SHA`[\s\S]{0,260}Sites version 497/);
+  assert.match(normalisedRoadmapNextFive, /^1\. Verify the Australian Energy Assessments Google Analytics property[\s\S]{0,320}private, print and PDF routes emit none/);
   assert.match(normalisedRoadmapNextFive, /\n2\. Add an automated release-provenance gate/);
-  assert.match(normalisedRoadmapNextFive, /\n3\. Verify the Australian Energy Assessments Google Analytics property/);
-  assert.match(normalisedRoadmapNextFive, /\n4\. Complete the initial 48-hour observation window/);
+  assert.match(normalisedRoadmapNextFive, /\n3\. Complete the initial 48-hour observation window/);
+  assert.match(normalisedRoadmapNextFive, /\n4\. Review Search Console coverage/);
   assert.match(
     normalisedRoadmapNextFive,
     /\n5\. If the observation window remains healthy, obtain explicit owner approval before cancelling Durable/,

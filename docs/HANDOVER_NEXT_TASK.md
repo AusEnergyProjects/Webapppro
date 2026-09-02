@@ -1,20 +1,20 @@
 # Next task handover
 
-Status: the Australian Energy Assessments public website is live on the apex domain. Sites version 497 is deployed; the next executable task is `PUBLIC-MEASUREMENT-PROVENANCE-86`.
+Status: the Australian Energy Assessments public website is live on the apex domain. Sites version 499 is deployed with exact release provenance; the next executable task is `PUBLIC-MEASUREMENT-PROVENANCE-86`.
 
-Prepared: 2 September 2026
+Prepared: 3 September 2026
 
 Milestone ID: `PUBLIC-MEASUREMENT-PROVENANCE-86`
 
 Working branch: `codex/surge-durability-release`
 
-Released application source: `e558e7b94625afddf536ab96bd5d9a1bf77909f9`
+Released application source: `4908a1467d90b2fff57b70517fad5e41e18e12b0`
 
-Current production: Sites version 497 at `https://ausenergyassessments.com`
+Current production: Sites version 499 at `https://ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_cc1874a68a9c8191bb75f1496cabe735`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_a43c371ac43c8191ad99a0f4189e7508`
 
-Current deployment: `appgdep_6a981712ea788191a968ab219f4f0dc7`, status `succeeded`, environment revision 34
+Current deployment: `appgdep_6a982fa069b08191b87ec51ce7beb2a3`, status `succeeded`, environment revision 36
 
 Canonical public origin: `https://ausenergyassessments.com`
 
@@ -28,16 +28,18 @@ Current Google Apps Script relay: version 16 on deployment `AKfycbxBjHL_I3aw0FsG
 
 ## Next executable task contract
 
-- User outcome: the live website has trustworthy release provenance and useful, privacy-bounded analytics without a popup or accidental tracking of private customer activity.
-- Owning workflow: OpenAI Sites release identity, the exact Google Analytics property attached to measurement ID `G-3PGGJ0JX4H`, and post-cutover search measurement.
-- In scope: update the hosted `AEA_RELEASE_SHA` value to exact deployed application source `e558e7b94625afddf536ab96bd5d9a1bf77909f9`, redeploy saved version 497, verify the health header, inspect the correct Australian Energy Assessments Google Analytics web stream, disable unapproved Enhanced Measurement events, verify approved public page views, confirm private, print and PDF exclusions, and monitor the sitemap already accepted by Search Console with 47 discovered current pages.
+- User outcome: the live website has useful, privacy-bounded analytics without a popup, duplicate page views or accidental tracking of private customer activity.
+- Owning workflow: the exact Google Analytics property attached to measurement ID `G-3PGGJ0JX4H`, automated OpenAI Sites release identity and post-cutover search measurement.
+- In scope: inspect the correct Australian Energy Assessments Google Analytics web stream, disable unapproved Enhanced Measurement events, verify one approved cookieless public page view per navigation, confirm private, print and PDF exclusions, add an automated provenance gate that preserves the exact version 499 identity, and monitor the sitemap already accepted by Search Console with 47 discovered current pages.
 - Out of scope: advertising, remarketing, Google Signals, session replay, user profiling, form-content collection, Wattzun transcript collection, the separate finance domain, unrelated page redesign and any TLink or Creditex data mutation.
-- Acceptance: the health response reports the exact Sites version 497 source; the analytics property and measurement ID match the Australian Energy Assessments domain; only approved cookieless public page views are observed; opt-out, Do Not Track and Global Privacy Control are respected; private routes emit no analytics events; and Search Console reports no blocking sitemap or indexing error during the initial monitoring window.
+- Acceptance: the existing health response continues to report exact Sites version 499 source; the analytics property and measurement ID match the Australian Energy Assessments domain; only one approved cookieless page view is observed per public navigation; opt-out, Do Not Track and Global Privacy Control are respected; private, print and PDF routes emit no analytics events; and Search Console reports no blocking sitemap or indexing error during the initial monitoring window.
 - Stop condition: stop before changing a Google property if the measurement ID or domain does not match, or if the signed-in account cannot distinguish Australian Energy Assessments from the finance property.
 
 ## Current operating boundary
 
-The public Australian Energy Assessments website is live. Historical statements later in this file that describe the public website or comparison hostname as pre-launch are retained as release history, not current instructions. Durable no longer serves the apex or `www`; it remains available only as an emergency rollback target during the initial 48-hour observation window. Protected TLink, Android preview and Creditex operational records remain separately governed and are not converted to live customer data by the public-site launch. Any final test-data wipe or Durable cancellation remains a separately authorised operation.
+The public Australian Energy Assessments website is live. Durable no longer serves the apex or `www`; it remains available only as an emergency rollback target during the initial 48-hour observation window. Any final test-data wipe or Durable cancellation remains a separately authorised operation.
+
+Version 499 provides private typo-tolerant predictive navigation across the 47 canonical public pages, keeps typed search terms in the browser, excludes private routes and fixes the results panel above the navigation while retaining all four readable header actions. Historical statements later in this file that describe the public website or comparison hostname as pre-launch are retained as release history, not current instructions. Protected TLink, Android preview and Creditex operational records remain separately governed and are not converted to live customer data by the public-site launch.
 
 ## Previous handover: TLINK-FIELD-APP-71
 
@@ -155,10 +157,10 @@ Victorian rental minimum standards are selected by default but can be unticked. 
 
 ## Next five logical product steps
 
-1. Correct the hosted `AEA_RELEASE_SHA` to exact deployed application source `e558e7b94625afddf536ab96bd5d9a1bf77909f9`, redeploy saved Sites version 497 and prove the live health header matches the saved-version source.
+1. Verify the Australian Energy Assessments Google Analytics property for `G-3PGGJ0JX4H`, disable unapproved Enhanced Measurement events and prove only one approved cookieless page-view event is emitted per public navigation while private, print and PDF routes emit none.
 2. Add an automated release-provenance gate that blocks promotion when the accepted GitHub source, Sites source branch, saved version and health header do not all identify the same application commit.
-3. Verify the Australian Energy Assessments Google Analytics property for `G-3PGGJ0JX4H`, disable unapproved Enhanced Measurement events and prove private, print and PDF routes emit no analytics events.
-4. Complete the initial 48-hour observation window across apex health, public redirects, electricity and gas plan services, enquiry delivery and the Search Console sitemap already reporting 47 discovered pages.
+3. Complete the initial 48-hour observation window across apex health, public redirects, electricity and gas plan services, enquiry delivery and the Search Console sitemap already reporting 47 discovered pages.
+4. Review Search Console coverage for those 47 pages and correct only evidence-backed crawl, canonical or indexing problems without treating submission as a ranking guarantee.
 5. If the observation window remains healthy, obtain explicit owner approval before cancelling Durable or removing any rollback configuration, then record the irreversible retirement evidence.
 
 ## Incorporated release candidate: AEA-SURGE-GOVERNED-DEPTH-83

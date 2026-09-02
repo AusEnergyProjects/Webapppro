@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 2 September 2026
+Last reconciled: 3 September 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -32,7 +32,7 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 
 ## Released milestone: PUBLIC-APEX-LIVE-85
 
-Release status: application commit `e558e7b94625afddf536ab96bd5d9a1bf77909f9` is proportionately validated, pushed to branch `codex/surge-durability-release` and the Sites managed source branch, and deployed publicly as OpenAI Sites version 497. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_cc1874a68a9c8191bb75f1496cabe735` and deployment `appgdep_6a981712ea788191a968ab219f4f0dc7` identify the exact source and environment revision 34.
+Release status: application commit `4908a1467d90b2fff57b70517fad5e41e18e12b0` is proportionately validated, pushed to branch `codex/surge-durability-release`, GitHub `main` and the Sites managed source branch, and deployed publicly as OpenAI Sites version 499. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_a43c371ac43c8191ad99a0f4189e7508` and deployment `appgdep_6a982fa069b08191b87ec51ce7beb2a3` identify the exact application source and environment revision 36.
 
 ### Outcome
 
@@ -44,13 +44,15 @@ Move apex and `www` traffic off Durable to the reviewed Australian Energy Assess
 - A representative public non-API route on `https://compare.ausenergyassessments.com` returned a permanent 308 redirect to the same apex path and query; API routes are intentionally excluded.
 - The sitemap and health endpoint returned HTTP 200, public metadata and schema use the apex, and the replaced low-quality article routes use reviewed guides or deliberate redirects.
 - The public booking, header, FAQ, trusted-resource, assessment and home-page flows are present in the released application.
+- The shared header now includes private, typo-tolerant predictive navigation across all 47 canonical public pages. Search terms stay in the browser, private routes are excluded, suggestions appear above the navigation and the four action buttons fit without cutting off the search or either brand mark.
 - Fixed analytics consent UI is removed. Public analytics remain cookieless with storage denied, a privacy-page opt-out, Do Not Track and Global Privacy Control handling, and private, print and PDF exclusions.
-- Focused tests, typecheck, lint, all 164 migrations, customer-plan PDF audit, production build, Sites bundle audit and public performance budgets passed. One unrelated Creditex operations-control test remains failing in the complete suite with `COMPLIANCE_ACCESS_REQUIRED`.
+- The focused search, navigation and public SEO suite passed 36 of 36 checks. Typecheck, focused lint, the production build, Sites bundle audit with all 164 migrations and public performance budgets passed.
+- The live apex and health routes returned HTTP 200, the deployed CSS contains the search stacking and compact-action fixes, both legacy-host samples returned the expected HTTP 308 redirects, and `/api/health` reports exact application source `4908a1467d90b2fff57b70517fad5e41e18e12b0`.
 - Google Search Console accepted `/sitemap.xml` and reported 47 discovered current pages. Coverage and indexing remain subject to ongoing search-platform processing.
 
 ## Next milestone: PUBLIC-MEASUREMENT-PROVENANCE-86
 
-Correct the hosted `AEA_RELEASE_SHA` so `/api/health` reports exact Sites version 497 source `e558e7b94625afddf536ab96bd5d9a1bf77909f9`. Then verify the Google Analytics property attached to `G-3PGGJ0JX4H`, disable automatic Enhanced Measurement events outside the approved public page-view scope, prove private routes remain excluded, and monitor the accepted Search Console sitemap and initial coverage without touching the separate finance property.
+Verify the Google Analytics property attached to `G-3PGGJ0JX4H`, disable automatic Enhanced Measurement events outside the approved public page-view scope, prove private, print and PDF routes remain excluded, and confirm only one cookieless page-view event is emitted per public navigation without touching the separate finance property. Release provenance is now exact at version 499; add an automated gate so it cannot drift again.
 
 ## Previous released milestone: TLINK-FIELD-APP-71
 
@@ -3477,10 +3479,10 @@ The next five Surge priorities are independent subject-matter review, broader cu
 
 ## Next five logical product steps
 
-1. Correct the hosted `AEA_RELEASE_SHA` to exact deployed application source `e558e7b94625afddf536ab96bd5d9a1bf77909f9`, redeploy saved Sites version 497 and prove the live health header matches the saved-version source.
+1. Verify the Australian Energy Assessments Google Analytics property for `G-3PGGJ0JX4H`, disable unapproved Enhanced Measurement events and prove only one approved cookieless page-view event is emitted per public navigation while private, print and PDF routes emit none.
 2. Add an automated release-provenance gate that blocks promotion when the accepted GitHub source, Sites source branch, saved version and health header do not all identify the same application commit.
-3. Verify the Australian Energy Assessments Google Analytics property for `G-3PGGJ0JX4H`, disable unapproved Enhanced Measurement events and prove private, print and PDF routes emit no analytics events.
-4. Complete the initial 48-hour observation window across apex health, public redirects, electricity and gas plan services, enquiry delivery and the Search Console sitemap already reporting 47 discovered pages.
+3. Complete the initial 48-hour observation window across apex health, public redirects, electricity and gas plan services, enquiry delivery and the Search Console sitemap already reporting 47 discovered pages.
+4. Review Search Console coverage for those 47 pages and correct only evidence-backed crawl, canonical or indexing problems without treating submission as a ranking guarantee.
 5. If the observation window remains healthy, obtain explicit owner approval before cancelling Durable or removing any rollback configuration, then record the irreversible retirement evidence.
 
 ## Global stop conditions
