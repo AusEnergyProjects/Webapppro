@@ -4,7 +4,7 @@
 .statusDot { background: #6de4b8; border-radius: 50%; box-shadow: 0 0 10px #6de4b840; flex: 0 0 7px; height: 7px; }
 .statusDot.delayed { background: #ffcb76; }
 .statusRow button { background: #0a2739; border: 1px solid #315060; border-radius: 9px; color: #eaf9fb; cursor: pointer; font: inherit; font-size: .78rem; min-height: 40px; padding: 6px 16px; }
-.statusRow button:disabled { cursor: wait; opacity: .7; }
+.statusRow button:disabled { opacity: .7; }
 .regions { display: grid; gap: 12px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .regionCard { background: linear-gradient(145deg, #0b2639, #061925); border: 1px solid #284654; border-radius: 14px; color: #edf9ff; cursor: pointer; display: flex; flex-direction: column; font-family: inherit; gap: 10px; min-height: 156px; min-width: 0; overflow: hidden; padding: 19px; position: relative; text-align: left; }
 .regionCard[aria-pressed="true"] { border-color: var(--region-colour); box-shadow: inset 0 3px var(--region-colour), 0 0 24px color-mix(in srgb, var(--region-colour) 8%, transparent); }
@@ -35,7 +35,7 @@
 .cursor { stroke: #d9f3ff99; stroke-dasharray: 4 5; }
 .point { fill: var(--region-colour); stroke: #071b2a; stroke-width: 2.5; }
 .timeControl { align-items: center; color: #bfd4df; display: flex; font-size: .72rem; gap: 15px; margin-top: 12px; }
-.timeControl input { accent-color: var(--region-colour); cursor: pointer; flex: 1; min-height: 35px; min-width: 0; }
+.timeControl input { accent-color: var(--region-colour); flex: 1; min-height: 35px; min-width: 0; }
 .chartFoot { color: #9ebbc9; display: flex; flex-wrap: wrap; font-size: .66rem; gap: 6px 18px; justify-content: space-between; margin-top: 10px; }
 .flowList { margin-top: 15px; }
 .flow { border-top: 1px solid #203e4e; padding: 12px 0; }

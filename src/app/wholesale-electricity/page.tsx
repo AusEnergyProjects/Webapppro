@@ -8,7 +8,7 @@ import { NEM_SOURCE_URL } from "@/lib/nem-wholesale";
 export const metadata = buildPlatformMetadata({
   path: "/wholesale-electricity",
   title: "Live Wholesale Energy Prices | Australian Energy Assessments",
-  description: "Compare live wholesale electricity and gas energy prices in c/kWh, then see real room-heating and hot-water examples using the selected price.",
+  description: "Compare wholesale electricity and gas prices in c/kWh, then explore illustrative room-heating and hot-water examples using 24-hour average wholesale prices.",
 });
 
 export default function WholesaleElectricityPage() {
