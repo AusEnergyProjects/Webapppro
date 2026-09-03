@@ -198,8 +198,8 @@ test("the futuristic header links to one dedicated always-present Wattzun AI pag
   assert.match(styles, /\.site-surge-copy \{[^}]*flex: none;/);
   assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{[^}]*flex: 1 1 0;[^}]*min-height: 40px;[\s\S]*?\.site-surge-link \{[^}]*flex-grow: 1\.2;/);
   assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-surge-core img \{[^}]*height: 31px;[^}]*width: auto;/);
-  assert.match(styles, /@media \(max-width: 520px\) \{[\s\S]*?\.site-surge-link \{[^}]*flex-basis: 96px;[\s\S]*?\.site-tlink-link \{[^}]*flex-basis: 74px;[\s\S]*?\.site-book-link \{[^}]*flex-basis: 72px;[\s\S]*?\.site-call-link \{[^}]*flex-basis: 58px;/);
-  assert.match(styles, /@media \(max-width: 360px\) \{[\s\S]*?\.site-header-actions \{[^}]*display: grid;[^}]*grid-template-columns: 1fr 1fr;/);
+  assert.doesNotMatch(styles, /\.site-header-actions \{[^}]*display: grid;/);
+  assert.match(styles, /\.site-surge-core \{ flex-basis: 26px; height: 30px; \}/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.site-header::before, \.site-surge-core, \.customer-journey-scene::after \{ animation: none !important; \}/);
   assert.match(styles, /@media \(forced-colors: active\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{ border: 1px solid ButtonText;/);
 });
@@ -252,10 +252,10 @@ test("desktop categories and the mobile page browser use lightweight native disc
   assert.match(publicSiteSearch, /document\.addEventListener\("keydown", closeNavigationOnEscape\)/);
   assert.match(publicSiteSearch, /document\.removeEventListener\("keydown", closeNavigationOnEscape\)/);
   assert.match(publicSiteSearch, /focusedDisclosure\?\.querySelector<HTMLElement>\("summary"\)\?\.focus\(\)/);
-  assert.match(styles, /@media \(max-width: 460px\) \{[\s\S]*?\.site-book-link \.site-action-icon, \.site-call-link \.site-action-icon \{ display: none; \}/);
+  assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-book-link \.site-action-icon, \.site-call-link \.site-action-icon \{ display: none; \}/);
   assert.match(styles, /\.comparator-nav \{[^}]*display: grid;[^}]*grid-template-columns: minmax\(96px, \.62fr\) minmax\(0, 4fr\);[^}]*overflow: visible;/);
   assert.match(styles, /\.site-nav-desktop-categories \{[^}]*display: flex;[^}]*justify-content: center;/);
-  assert.match(styles, /\.site-nav-category \{[^}]*flex: 0 1 230px;/);
+  assert.match(styles, /\.site-nav-category \{[^}]*flex: 1 1 150px;/);
   assert.match(styles, /\.site-nav-panel \{[^}]*position: absolute;[^}]*width: min\(360px, calc\(100vw - 48px\)\);/);
   assert.match(styles, /\.site-nav-category\[open\] > \.site-nav-category-trigger/);
   assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-nav-desktop-categories \{ display: none; \}[\s\S]*?\.site-nav-mobile-trigger \{[^}]*display: flex;/);

@@ -1,0 +1,67 @@
+.dashboard { color: #ecf7fc; font-size: .9rem; margin-top: 24px; }
+.statusRow { align-items: center; display: flex; gap: 12px; justify-content: space-between; margin-bottom: 16px; }
+.statusRow p { align-items: center; color: #bfd4dd; display: flex; font-size: .78rem; gap: 9px; margin: 0; }
+.statusDot { background: #6de4b8; border-radius: 50%; box-shadow: 0 0 10px #6de4b840; flex: 0 0 7px; height: 7px; }
+.statusDot.delayed { background: #ffcb76; }
+.statusRow button { background: #0a2739; border: 1px solid #315060; border-radius: 9px; color: #eaf9fb; cursor: pointer; font: inherit; font-size: .78rem; min-height: 40px; padding: 6px 16px; }
+.statusRow button:disabled { cursor: wait; opacity: .7; }
+.regions { display: grid; gap: 12px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.regionCard { background: linear-gradient(145deg, #0b2639, #061925); border: 1px solid #284654; border-radius: 14px; color: #edf9ff; cursor: pointer; display: flex; flex-direction: column; font-family: inherit; gap: 10px; min-height: 156px; min-width: 0; overflow: hidden; padding: 19px; position: relative; text-align: left; }
+.regionCard[aria-pressed="true"] { border-color: var(--region-colour); box-shadow: inset 0 3px var(--region-colour), 0 0 24px color-mix(in srgb, var(--region-colour) 8%, transparent); }
+.regionCard:hover { background: #102e42; }
+.regionCard:focus-visible, .statusRow button:focus-visible { outline: 3px solid #e4fcff; outline-offset: 3px; }
+.regionCard > :not(svg) { position: relative; z-index: 1; }
+.regionName { color: var(--region-colour); font-size: .85rem; font-weight: 850; letter-spacing: .04em; }
+.regionCard strong { font-size: clamp(1.3rem, 2vw, 1.85rem); font-weight: 750; line-height: 1.2; white-space: nowrap; }
+.regionCard strong small { color: #c2d8e2; font-size: .66rem; font-weight: 500; }
+.interval { color: #bacfd9; font-size: .66rem; margin-top: auto; }
+.sparkline { bottom: 0; height: 70%; left: 0; opacity: .23; position: absolute; width: 100%; }
+.sparkline path { fill: none; stroke: var(--region-colour); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.mainGrid { align-items: start; display: grid; gap: 20px; grid-template-columns: minmax(0, 2.4fr) minmax(260px, 1fr); margin-top: 22px; }
+.chart, .flows { background: linear-gradient(145deg, #081e30, #061927); border: 1px solid #284552; border-radius: 16px; min-width: 0; padding: 23px; }
+.chartHeading { align-items: flex-start; display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; }
+.chart h2, .flows h2 { color: #f4faff; font-size: 1.15rem; line-height: 1.25; margin: 0; }
+.chartHeading p, .flows > p { color: #adc8d3; font-size: .76rem; line-height: 1.55; margin: 7px 0 0; }
+.readout { min-width: 145px; text-align: right; }
+.readout span { color: #b9ced8; display: block; font-size: .7rem; }
+.readout strong { color: var(--region-colour); display: block; font-size: 1.55rem; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.readout small { font-size: .75rem; font-weight: 500; }
+.plot { margin: 22px -10px 0; }
+.plot svg { cursor: crosshair; display: block; overflow: visible; touch-action: pan-y; width: 100%; }
+.plot text { fill: #b4cbd5; font-family: inherit; font-size: 14px; }
+.gridline { stroke: #315064; stroke-dasharray: 3 6; stroke-width: .7; }
+.zeroLine { stroke: #91acb9; stroke-width: .8; }
+.priceLine { fill: none; stroke: var(--region-colour); stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.cursor { stroke: #d9f3ff99; stroke-dasharray: 4 5; }
+.point { fill: var(--region-colour); stroke: #071b2a; stroke-width: 2.5; }
+.timeControl { align-items: center; color: #bfd4df; display: flex; font-size: .72rem; gap: 15px; margin-top: 12px; }
+.timeControl input { accent-color: var(--region-colour); cursor: pointer; flex: 1; min-height: 35px; min-width: 0; }
+.chartFoot { color: #9ebbc9; display: flex; flex-wrap: wrap; font-size: .66rem; gap: 6px 18px; justify-content: space-between; margin-top: 10px; }
+.flowList { margin-top: 15px; }
+.flow { border-top: 1px solid #203e4e; padding: 12px 0; }
+.flow > span { color: #aec8d5; display: block; font-size: .67rem; }
+.flow > div { align-items: center; display: flex; gap: 9px; margin: 4px 0; }
+.flow b { font-size: .78rem; }
+.flow strong { color: #ecfaff; font-size: .85rem; margin-left: auto; white-space: nowrap; }
+.flow strong small { color: #a8c5d3; font-size: .67rem; font-weight: 500; }
+.flow > small { color: #92afbf; font-size: .62rem; }
+.flowArrow { color: #78ead5; font-size: 1.2rem; }
+.unavailable { color: #b2c6d1; font-size: .76rem; }
+.dataCredit { color: #adc6d2; font-size: .7rem; }
+.dataCredit a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.loading { background: #092131; border: 1px solid #294b5b; border-radius: 16px; padding: 28px; }
+.loading h2 { color: #effaff; font-size: 1.2rem; }
+.loading p { color: #bbd1da; margin: 10px 0 16px; }
+.warning { color: #ffda91; font-size: .75rem; line-height: 1.6; margin-top: 14px; }
+.intro { margin: 32px 0 0; }
+.intro h1 { color: #f3fbff; font-size: clamp(1.8rem, 3.4vw, 2.7rem); line-height: 1.1; margin: 0; }
+.intro > p { color: #b8cfda; font-size: .9rem; line-height: 1.6; margin: 12px 0 0; max-width: 900px; }
+.intro strong { color: #e8f8fc; }
+.explainers { display: grid; gap: 28px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 36px 0; }
+.explainers h2 { color: #e4f8fc; font-size: 1rem; margin: 0 0 8px; }
+.explainers p { color: #b4cdd7; font-size: .8rem; line-height: 1.65; margin: 0; }
+.explainers a { color: #8cf2d4; text-decoration: underline; }
+@media (max-width: 1100px) { .mainGrid { grid-template-columns: 1fr; } .flowList { display: grid; gap: 0 22px; grid-template-columns: repeat(2, minmax(0, 1fr)); } .regionCard { padding: 15px 12px; } .regionCard strong small { display: block; margin-top: 4px; } }
+@media (max-width: 720px) { .regions { gap: 9px; grid-template-columns: repeat(2, minmax(0, 1fr)); } .regionCard { min-height: 133px; padding: 16px; } .regionCard:last-child { grid-column: 1 / -1; min-height: 115px; } .regionCard:last-child .sparkline { left: auto; right: 0; width: 62%; } .regionCard strong { font-size: 1.65rem; } .regionCard strong small { display: inline; } .chart, .flows { padding: 18px 13px; } .chartHeading { gap: 12px; } .readout { text-align: left; } .plot { margin: 20px -5px 0; } .plot svg { min-height: 235px; } .explainers { grid-template-columns: 1fr; gap: 24px; } .chartFoot { flex-direction: column; } .statusRow { align-items: flex-start; } }
+@media (max-width: 460px) { .flowList { grid-template-columns: 1fr; } .regionCard strong { font-size: 1.4rem; } .regionCard strong small { display: block; font-size: .6rem; margin-top: 4px; } }
+@media (forced-colors: active) { .priceLine, .sparkline path { stroke: CanvasText; } .regionCard[aria-pressed="true"] { outline: 2px solid Highlight; } }

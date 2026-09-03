@@ -11,6 +11,12 @@ export type PublicSiteSearchResult = PublicSiteSearchEntry & {
 
 export const PUBLIC_SITE_SEARCH_ENTRIES: readonly PublicSiteSearchEntry[] = [
   {
+    path: "/wholesale-electricity",
+    title: "Live wholesale electricity prices",
+    description: "Explore five-minute regional spot prices, 24-hour charts and power flows.",
+    keywords: ["aemo", "nem", "wholesale", "spot price", "live energy price", "electricity market", "grid flows"],
+  },
+  {
     path: "/",
     title: "Home",
     description: "Return to the Australian Energy Assessments home page.",

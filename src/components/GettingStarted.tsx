@@ -31,8 +31,8 @@ export function GettingStarted() {
         <h1>Home energy assessments without the confusion</h1>
         <p>Whether your home is already built or still on plans, we help you understand which assessment fits and what it will tell you. If you already know which upgrades you want, send one simple request to suitable trades in your area.</p>
         <div className="start-actions"><QuickUpgradeEnquiry /><Link className="btn ghost start-secondary-action" href="/plan">Build my home energy plan</Link><SurgeOpenButton label="Ask Wattzun AI first" description="Talk through the first decision in plain English." draft="I am not sure where to start with my home energy upgrades. Help me work out the first decision." /></div>
-        <p className="start-hero-secondary">Choose one or more services and send one request to approved TLink trade businesses that cover your area. Australian Energy Assessments does not sell leads or let businesses pay for placement. No account, no obligation.</p>
-        <aside aria-label="What the guided plan includes"><strong>About three minutes</strong><ul><li>No account to begin</li><li>Skip anything you do not know</li><li>See your roadmap first</li><li>Decide what happens next</li></ul></aside>
+        <p className="start-hero-secondary">Already know what you need? <Link href="/assessments">Compare home energy assessments</Link>, <Link href="#compare-energy-plans" prefetch={false}>compare electricity or gas</Link>, <Link href="/calculator">estimate a rebate</Link> or <Link href="#home-booking" prefetch={false}>book a quick call</Link>. You can build a plan or contact matching trades without creating an account.</p>
+        <aside aria-label="What the guided plan includes"><strong>Building your home plan</strong><ul><li>No account to begin</li><li>Skip anything you do not know</li><li>See your roadmap first</li><li>Decide what happens next</li></ul></aside>
       </div>
       <CustomerJourneyScene />
     </header>

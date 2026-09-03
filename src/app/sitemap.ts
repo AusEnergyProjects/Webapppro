@@ -21,6 +21,7 @@ const routes = [
   "/calculator",
   "/compare",
   "/gas-compare",
+  "/wholesale-electricity",
   "/guides",
   "/guides/certificate-prices",
   "/guides/home-energy-upgrades",
@@ -56,6 +57,7 @@ const routes = [
 
 const lastModifiedByRoute = new Map<(typeof routes)[number], string>([
   ["", "2026-09-03"],
+  ["/wholesale-electricity", "2026-09-04"],
   ["/assessments", "2026-09-03"],
   ["/book-an-assessment", "2026-09-03"],
   ["/home-energy-rating-for-existing-homes", "2026-09-03"],

@@ -9,6 +9,12 @@ type NavigationCategory = {
   links: readonly NavigationLink[];
 };
 
+const DESKTOP_SHORTCUTS = [
+  { href: "/compare", label: "Electricity compare", active: "electricity" },
+  { href: "/gas-compare", label: "Gas compare", active: "gas" },
+  { href: "/calculator", label: "Rebate calculator", active: "calculator" },
+] as const;
+
 const NAVIGATION_CATEGORIES: readonly NavigationCategory[] = [
   {
     label: "Assessments",
@@ -36,11 +42,12 @@ const NAVIGATION_CATEGORIES: readonly NavigationCategory[] = [
   },
   {
     label: "Bills & rebates",
-    activeFor: ["calculator", "electricity", "gas", "certificates", "rebates"],
+    activeFor: ["calculator", "electricity", "gas", "certificates", "rebates", "wholesale"],
     links: [
       ["/compare", "Compare electricity"],
       ["/gas-compare", "Compare gas"],
       ["/calculator", "Rebate calculator"],
+      ["/wholesale-electricity", "Live wholesale electricity"],
       ["/rebates", "Rebates and assistance"],
       ["/guides/certificate-prices", "Certificate prices"],
     ],
@@ -73,6 +80,9 @@ export function ResponsiveSiteNav({ active }: { active: SiteActive }) {
         </Link>
 
         <div className="site-nav-desktop-categories">
+          {DESKTOP_SHORTCUTS.map((shortcut) => (
+            <Link key={shortcut.href} href={shortcut.href} className={`site-nav-shortcut${active === shortcut.active ? " active" : ""}`} aria-current={active === shortcut.active ? "page" : undefined}>{shortcut.label}</Link>
+          ))}
           {NAVIGATION_CATEGORIES.map((category) => {
             const isActive = category.activeFor.includes(active);
 

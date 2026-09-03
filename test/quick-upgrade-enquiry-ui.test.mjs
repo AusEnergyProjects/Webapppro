@@ -11,7 +11,8 @@ test("homepage offers a direct independent upgrade request without replacing pla
   assert.match(homepage, /<QuickUpgradeEnquiry \/>/);
   assert.match(homepage, /Build my home energy plan/);
   assert.match(homepage, /Ask Wattzun AI first/);
-  assert.match(homepage, /does not sell leads or let businesses pay for placement/);
+  assert.match(homepage, /Already know what you need\?/);
+  assert.match(dialog, /do not sell leads or let businesses pay for placement/);
 });
 
 test("quick request uses a short two-step service and contact flow", () => {
