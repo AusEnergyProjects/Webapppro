@@ -5,6 +5,10 @@ import {
   normalizeHomeFeatureSelections,
 } from "./customer-projects.mjs";
 import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
+import {
+  QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  QUICK_UPGRADE_CONSENT_PURPOSE,
+} from "./quick-upgrade-enquiry.mjs";
 
 export const PUBLIC_PLAN_ENQUIRY_KIND = "home-plan-upgrade";
 
@@ -33,6 +37,21 @@ const publicPlanContactReleaseRequiredFields = Object.freeze([
 ]);
 
 const publicPlanContactReleasePolicies = Object.freeze([
+  Object.freeze({
+    noticeVersion: QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+    purpose: QUICK_UPGRADE_CONSENT_PURPOSE,
+    requiredDisclosedFields: Object.freeze([
+      ...publicPlanContactReleaseRequiredFields,
+      "customer_address",
+    ]),
+    allowedDisclosedFields: Object.freeze([
+      ...publicPlanContactReleaseRequiredFields,
+      "customer_address",
+      "customer_name",
+      "customer_phone",
+      "customer_message",
+    ]),
+  }),
   Object.freeze({
     noticeVersion: PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
     purpose: PUBLIC_PLAN_CONSENT_PURPOSE,

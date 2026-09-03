@@ -22,6 +22,11 @@ import {
   PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,
   PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
 } from "@/lib/public-plan-quote-preparation.mjs";
+import {
+  QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  QUICK_UPGRADE_CONSENT_PURPOSE,
+  QUICK_UPGRADE_SOURCE_JOURNEY,
+} from "@/lib/quick-upgrade-enquiry.mjs";
 
 export const DEFAULT_CONNECTED_INSTALLERS = 3;
 export const DEFAULT_CONTACT_LIMIT = 2;
@@ -264,7 +269,8 @@ async function persistPublicQuotePreparation(
 function publicContactRelease(payload: DirectTradeLead) {
   const publicPlanJourney = payload.sourceJourney === "public-home-energy-plan";
   const assistantJourney = payload.sourceJourney === "energy-assistant";
-  if (!publicPlanJourney && !assistantJourney) return null;
+  const quickUpgradeJourney = payload.sourceJourney === QUICK_UPGRADE_SOURCE_JOURNEY;
+  if (!publicPlanJourney && !assistantJourney && !quickUpgradeJourney) return null;
   const receipt = payload.directTradeTriage?.contactConsentReceipt;
   const sourceReference = String(payload.reference || "").trim();
   const customerFirstName = String(payload.customerFirstName || "")
@@ -348,6 +354,57 @@ function publicContactRelease(payload: DirectTradeLead) {
       disclosedFields: assistantDisclosedFields,
     };
   }
+  if (quickUpgradeJourney) {
+    const customerMessage = String(payload.projectNotes || "").trim().slice(0, 500);
+    const disclosedFields = [
+      "customer_email",
+      "postcode",
+      "service_categories",
+      "customer_address",
+      ...(tradeSharing?.name ? ["customer_name"] : []),
+      ...(tradeSharing?.phone ? ["customer_phone"] : []),
+      ...(customerMessage ? ["customer_message"] : []),
+    ];
+    if (
+      receipt?.accepted !== true
+      || !sourceReference
+      || !customerEmail
+      || !customerStreetAddress
+      || !customerSuburb
+      || !customerAddressState
+      || customerAddressState !== canonicalAustralianState(payload.state)
+      || tradeSharing?.email !== true
+      || tradeSharing?.postcode !== true
+      || tradeSharing?.address !== true
+      || typeof tradeSharing?.name !== "boolean"
+      || typeof tradeSharing?.phone !== "boolean"
+      || (tradeSharing.name && (!customerFirstName || !customerLastName))
+      || (tradeSharing.phone && !customerPhone)
+      || noticeVersion !== QUICK_UPGRADE_CONSENT_NOTICE_VERSION
+      || consentPurpose !== QUICK_UPGRADE_CONSENT_PURPOSE
+      || !publicPlanContactReleaseDisclosedFieldsAreValid(
+        noticeVersion,
+        consentPurpose,
+        disclosedFields,
+      )
+      || !Number.isFinite(Date.parse(grantedAt))
+    ) return null;
+    return {
+      customerFirstName,
+      customerLastName,
+      customerEmail,
+      customerPhone,
+      customerUnitNumber,
+      customerStreetAddress,
+      customerSuburb,
+      customerAddressState,
+      customerMessage,
+      noticeVersion,
+      consentPurpose,
+      grantedAt: new Date(grantedAt).toISOString(),
+      disclosedFields,
+    };
+  }
   if (
     receipt?.accepted !== true
     || !sourceReference
@@ -422,6 +479,8 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
   const stage = readable(String(payload.projectStage || "planning"));
   const summary = `${property} project at the ${stage.toLowerCase()} stage. ${priorities.length ? `Priorities: ${priorities.join(", ")}. ` : ""}${payload.sourceJourney === "public-home-energy-plan"
     ? "Only the contact fields the customer consented to share are available to approved matching TLink trades. The private home plan and PDF are not shared with trades."
+    : payload.sourceJourney === QUICK_UPGRADE_SOURCE_JOURNEY
+      ? "The customer requested upgrade options without completing a home plan. Only the request and contact fields they consented to share are available to approved matching TLink trades."
     : payload.sourceJourney === "energy-assistant"
       ? `${String(payload.projectNotes || "").trim().slice(0, 1_500)} Only the immutable quote brief and contact fields explicitly consented for trade sharing are available. Chat history, documents, bills, photos, NMI and account identifiers are not shared.`
     : "Detailed household notes and contact details remain in the protected enquiry record and are not displayed in the opportunity feed."}`;
@@ -440,7 +499,8 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
   const createdAt = submittedAt.toISOString();
   const contactRelease = publicContactRelease(payload);
   const protectedPublicLead = payload.sourceJourney === "public-home-energy-plan"
-    || payload.sourceJourney === "energy-assistant";
+    || payload.sourceJourney === "energy-assistant"
+    || payload.sourceJourney === QUICK_UPGRADE_SOURCE_JOURNEY;
   const assistantDurableDispatch = payload.sourceJourney === "energy-assistant";
   const opportunityStatus =
     assistantDurableDispatch
@@ -471,10 +531,14 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
   } : null, {
     noticeVersion: payload.sourceJourney === "energy-assistant"
       ? ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION
-      : PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+      : payload.sourceJourney === QUICK_UPGRADE_SOURCE_JOURNEY
+        ? QUICK_UPGRADE_CONSENT_NOTICE_VERSION
+        : PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
     purpose: payload.sourceJourney === "energy-assistant"
       ? ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE
-      : PUBLIC_PLAN_CONSENT_PURPOSE,
+      : payload.sourceJourney === QUICK_UPGRADE_SOURCE_JOURNEY
+        ? QUICK_UPGRADE_CONSENT_PURPOSE
+        : PUBLIC_PLAN_CONSENT_PURPOSE,
   });
   if (payload.sourceJourney === "public-home-energy-plan") {
     await persistPublicQuotePreparation(

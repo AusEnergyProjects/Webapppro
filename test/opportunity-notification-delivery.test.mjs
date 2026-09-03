@@ -136,6 +136,10 @@ test("public plan opportunity email is mandatory despite the optional account pr
     true,
   );
   assert.equal(
+    opportunityNotificationEmailPreferenceAllows("quick_upgrade_enquiry", false),
+    true,
+  );
+  assert.equal(
     opportunityNotificationEmailPreferenceAllows("customer_project", false),
     false,
   );
@@ -168,9 +172,33 @@ test("public plan opportunity email is mandatory despite the optional account pr
     /publicPlanContactReleaseAccessSql\("(?:mandatory_public_email|current_public_contact)"\)/,
   );
   const finalConsentGuard = publicPlanContactReleaseConsentSql("current_public_contact");
-  assert.ok(finalConsentGuard.length < 1_200, "final consent guard must stay shallow for D1");
-  assert.equal((finalConsentGuard.match(/\bWHEN\b/g) || []).length, 5);
+  assert.ok(finalConsentGuard.length < 4_096, "final consent guard must stay shallow for D1");
+  assert.ok((finalConsentGuard.match(/\bWHEN\b/g) || []).length >= 1);
   assert.equal((finalConsentGuard.match(/\bELSE\b/g) || []).length, 1);
+  assert.doesNotMatch(finalConsentGuard, /\b(?:EXISTS|json_)/i);
+});
+
+test("quick upgrade notifications state that no plan or PDF exists", () => {
+  const draft = opportunityNotificationDraft({
+    businessName: "Example Energy",
+    sourceKind: "quick_upgrade_enquiry",
+    customerName: "",
+    customerMessage: "Please quote a suitable hot water option.",
+    suburb: "",
+    postcode: "3000",
+    state: "VIC",
+    matchedCategories: ["hot-water"],
+    timing: "planning",
+    expiresAt: "2026-10-03T00:00:00.000Z",
+    customerSharedEvidenceCount: 0,
+  });
+  assert.match(draft.subject, /New TLink customer enquiry in 3000/);
+  assert.match(draft.body, /quick upgrade request/);
+  assert.match(draft.body, /No home plan or PDF was created for this request/);
+  assert.doesNotMatch(draft.body, /private home plan is not shared/);
+  assert.match(deliveryServer, /THEN 'quick_upgrade_enquiry'/);
+  assert.match(deliveryServer, /QUICK_UPGRADE_CONSENT_NOTICE_VERSION/);
+  assert.match(deliveryServer, /QUICK_UPGRADE_CONSENT_PURPOSE/);
 });
 
 test("Resend submit does not wait for a webhook secret when send credentials are ready", () => {

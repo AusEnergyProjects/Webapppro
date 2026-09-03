@@ -9,11 +9,11 @@ const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativeP
 const page = read("../src/app/assessments/page.tsx");
 const home = read("../src/components/GettingStarted.tsx");
 const guides = read("../src/app/guides/page.tsx");
-const chrome = read("../src/components/ComparatorChrome.tsx");
+const navigation = read("../src/components/ResponsiveSiteNav.tsx");
 const styles = read("../src/app/globals.css");
 
 test("assessment services are first class routes across the site", () => {
-  assert.match(chrome, /href: "\/assessments", label: "Home assessments"/);
+  assert.match(navigation, /\["\/assessments", "Assessment types"\]/);
   assert.match(home, /Building or designing a new home\? NatHERS assesses the plans/);
   assert.match(home, /href="\/assessments"/);
   assert.match(guides, /Need a NatHERS or BASIX assessment/);

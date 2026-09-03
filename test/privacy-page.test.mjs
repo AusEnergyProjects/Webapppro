@@ -10,7 +10,7 @@ const privacy = read("../src/app/privacy/page.tsx");
 const analyticsConsent = read("../src/components/AnalyticsConsent.tsx");
 const layout = read("../src/app/layout.tsx");
 const integrations = read("../src/app/direct-trade/integrations/page.tsx");
-const chrome = read("../src/components/ComparatorChrome.tsx");
+const siteFooter = read("../src/components/SiteFooter.tsx");
 const upload = read("../src/components/JobInformationUpload.tsx");
 const sitemap = read("../src/app/sitemap.ts");
 
@@ -53,7 +53,8 @@ test("the public privacy route covers the operational data boundary", () => {
   assert.match(privacy, /does not offer payment-provider connections or initiate customer payments/);
   assert.match(privacy, /do not sell personal information/i);
   assert.match(privacy, /info@ausenergyassessments\.com/);
-  assert.doesNotMatch(privacy, /\b(?:TLink|Creditex)\b/);
+  assert.match(privacy, /every approved TLink trade business/);
+  assert.doesNotMatch(privacy, /\bCreditex\b/);
   assert.match(privacy, /Open trade workspace/);
 });
 
@@ -97,7 +98,7 @@ test("basic website analytics is cookieless, bounded and can be disabled without
 
 test("customer evidence and shared navigation resolve to the public privacy route", () => {
   assert.match(upload, /href="\/privacy"/);
-  assert.match(chrome, /href="\/privacy"[^>]*>Privacy and analytics/);
+  assert.match(siteFooter, /href="\/privacy"[^>]*>Privacy and analytics/);
   assert.match(sitemap, /"\/privacy"/);
 });
 

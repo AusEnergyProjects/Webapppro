@@ -62,13 +62,16 @@ export function createLeadPostHandler({
   createOperationalRecorder,
   leadRateLimiter,
   recordLeadIncident,
+  recordQuickUpgradeNoMatch,
   resolveSystemAdminNotifications,
   isPublicPlanEnquiry,
+  isQuickUpgradeEnquiry = () => false,
   isPublicRentalAssessmentRequest = () => false,
   enqueuePublicPlanDelivery,
   createOpportunityFromLead,
   confirmPublicPlanIntakeOpportunity,
   publicPlanDeliveryDispatchHeader = "",
+  opportunityNotificationDispatchHeader = "",
   env = process.env,
   fetchImpl = fetch,
   timeoutMs = 20_000,
@@ -108,9 +111,11 @@ export function createLeadPostHandler({
 
     const publicPlanEnquiry = raw?.submissionType === "upgrade"
       && isPublicPlanEnquiry(raw?.enquiry);
+    const quickUpgradeEnquiry = raw?.submissionType === "upgrade"
+      && isQuickUpgradeEnquiry(raw?.enquiry);
     const rentalAssessmentRequest = raw?.submissionType === "upgrade"
       && isPublicRentalAssessmentRequest(raw?.enquiry);
-    if (raw?.submissionType !== "comparison" && !publicPlanEnquiry && !rentalAssessmentRequest) {
+    if (raw?.submissionType !== "comparison" && !publicPlanEnquiry && !quickUpgradeEnquiry && !rentalAssessmentRequest) {
       return respond(
         { ok: false, error: "This type of upgrade project must be created inside a free private customer account." },
         400,
@@ -130,7 +135,7 @@ export function createLeadPostHandler({
     }
 
     const webhook = env.AEA_LEAD_WEBHOOK_URL;
-    if (!publicPlanEnquiry && !webhook) {
+    if (!publicPlanEnquiry && !quickUpgradeEnquiry && !webhook) {
       await recordLeadIncident(
         "platform.lead_delivery_unconfigured",
         "Public enquiry delivery is not configured",
@@ -171,6 +176,86 @@ export function createLeadPostHandler({
 
     payload.magicLink = safeMagicLink(payload.magicLink, request.url);
     try {
+      if (quickUpgradeEnquiry) {
+        if (typeof createOpportunityFromLead !== "function") {
+          throw new Error("QUICK_UPGRADE_OPPORTUNITY_INTAKE_UNCONFIGURED");
+        }
+        let createdOpportunity;
+        try {
+          createdOpportunity = await createOpportunityFromLead(payload);
+        } catch (error) {
+          if (error instanceof Error && error.message === "OPPORTUNITY_SOURCE_REFERENCE_MISMATCH") {
+            return respond({
+              ok: false,
+              error: "This request reference belongs to different details. Start a new request before sending again.",
+            }, 409, "submission_identity_conflict", metrics);
+          }
+          await recordLeadIncident(
+            "platform.quick_upgrade_intake_failed",
+            "Quick upgrade request was not prepared",
+            "The marketplace could not safely confirm the request, matching and notification records. No customer details are included in this alert.",
+            "urgent",
+          );
+          return respond({
+            ok: false,
+            error: "Your request could not be saved. Please try again or call 1300 241 149.",
+          }, 502, "quick_upgrade_intake_failed", {
+            ...metrics,
+            errorType: error instanceof Error ? error.name : "UnknownError",
+          });
+        }
+        const opportunityId = String(createdOpportunity?.id || "").trim();
+        if (!opportunityId) throw new Error("QUICK_UPGRADE_OPPORTUNITY_UNAVAILABLE");
+        const matchedBusinessCount = Math.max(
+          0,
+          Number(createdOpportunity?.allocation?.activeCount || 0),
+        );
+        if (!matchedBusinessCount) {
+          try {
+            if (typeof recordQuickUpgradeNoMatch !== "function") {
+              throw new Error("QUICK_UPGRADE_NO_MATCH_REVIEW_UNCONFIGURED");
+            }
+            await recordQuickUpgradeNoMatch(opportunityId);
+          } catch (error) {
+            await recordLeadIncident(
+              "platform.quick_upgrade_review_queue_failed",
+              "Quick upgrade follow-up was not queued",
+              "A saved quick upgrade request had no current trade match, but its Australian Energy Assessments follow-up could not be queued. No customer details are included in this alert.",
+              "urgent",
+            );
+            return respond({
+              ok: false,
+              reference: payload.reference,
+              error: "Your request was saved, but follow-up could not be scheduled. Please call 1300 241 149 and quote the reference shown.",
+            }, 502, "quick_upgrade_review_queue_failed", {
+              ...metrics,
+              errorType: error instanceof Error ? error.name : "UnknownError",
+            });
+          }
+        }
+        await resolveSystemAdminNotifications({
+          eventTypes: [
+            "platform.lead_delivery_unconfigured",
+            "platform.lead_delivery_failed",
+            "platform.lead_marketplace_preparation_failed",
+            "platform.quick_upgrade_intake_failed",
+            "platform.lead_rate_limit_unavailable",
+          ],
+          entityType: "platform_service",
+          entityId: "comparison_lead_delivery",
+          note: "A quick upgrade request was durably prepared for matching.",
+        }).catch(() => null);
+        return respond({
+          ok: true,
+          reference: payload.reference,
+          matchedBusinessCount,
+          notificationStatus: matchedBusinessCount ? "queued" : "no_match",
+        }, 200, "quick_upgrade_prepared", metrics, matchedBusinessCount
+          && opportunityNotificationDispatchHeader
+          ? { [opportunityNotificationDispatchHeader]: opportunityId }
+          : {});
+      }
+
       if (publicPlanEnquiry) {
         if (typeof enqueuePublicPlanDelivery !== "function") {
           throw new Error("PUBLIC_PLAN_DURABLE_INTAKE_UNCONFIGURED");

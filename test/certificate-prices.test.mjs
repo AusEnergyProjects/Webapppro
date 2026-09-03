@@ -105,7 +105,7 @@ test("tracker is linked from guides and exposes accessible chart controls", () =
   const guides = fs.readFileSync(path.join(root, "src", "app", "guides", "page.tsx"), "utf8");
   const page = fs.readFileSync(path.join(root, "src", "app", "guides", "certificate-prices", "page.tsx"), "utf8");
   const tracker = fs.readFileSync(path.join(root, "src", "components", "CertificatePriceTracker.tsx"), "utf8");
-  const chrome = fs.readFileSync(path.join(root, "src", "components", "ComparatorChrome.tsx"), "utf8");
+  const navigation = fs.readFileSync(path.join(root, "src", "components", "ResponsiveSiteNav.tsx"), "utf8");
   const worker = fs.readFileSync(path.join(root, "worker", "index.ts"), "utf8");
   assert.match(guides, /\/guides\/certificate-prices/);
   assert.match(page, /What “spot price” means here/);
@@ -114,7 +114,7 @@ test("tracker is linked from guides and exposes accessible chart controls", () =
   assert.match(tracker, /aria-live="polite"/);
   assert.match(tracker, /Plain-English guide/);
   assert.match(worker, /syncCertificatePriceHistory/);
-  assert.match(chrome, /href: "\/guides\/certificate-prices", label: "Certificates"/);
+  assert.match(navigation, /\["\/guides\/certificate-prices", "Certificate prices"\]/);
   assert.doesNotMatch(tracker, /<span>{dateLabel\(active\.tradedOn\)}<\/span>/);
   assert.doesNotMatch(`${page}\n${tracker}`, /[\u2013\u2014]/);
 });

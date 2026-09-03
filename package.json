@@ -26,7 +26,7 @@
     "rehearse:surge-browser-continuity": "node scripts/rehearse-surge-browser-continuity.mjs",
     "validate:creditex-certificate-activation": "node --experimental-strip-types scripts/validate-creditex-certificate-activation.mjs",
     "start": "vinext start",
-    "lint": "eslint --concurrency 4",
+    "lint": "eslint --concurrency 2",
     "typecheck": "tsc --noEmit --pretty false",
     "test": "node --experimental-strip-types --test",
     "test:coverage": "node --experimental-strip-types --experimental-test-coverage --test",

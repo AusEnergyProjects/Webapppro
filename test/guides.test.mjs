@@ -17,13 +17,13 @@ const cooking = read("../src/app/guides/cooking/page.tsx");
 const evCharging = read("../src/app/guides/ev-charging/page.tsx");
 const homeUpgrades = read("../src/app/guides/home-energy-upgrades/page.tsx");
 const start = read("../src/components/GettingStarted.tsx");
-const chrome = read("../src/components/ComparatorChrome.tsx");
+const navigation = read("../src/components/ResponsiveSiteNav.tsx");
 const rebates = read("../src/components/RebatesHub.tsx");
 
 test("solar and battery guides are connected to the shared journey", () => {
   assert.match(overview, /import Link from "next\/link"/);
   assert.doesNotMatch(overview, /<a\s+href="\//);
-  assert.match(chrome, /href: "\/guides"/);
+  assert.match(navigation, /\["\/guides", "Guides"\]/);
   assert.match(overview, /href="\/guides\/solar"/);
   assert.match(overview, /href="\/guides\/batteries"/);
   assert.match(overview, /href="\/guides\/heating"/);

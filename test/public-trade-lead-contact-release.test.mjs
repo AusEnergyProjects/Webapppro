@@ -10,6 +10,10 @@ import {
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "../src/lib/public-plan-enquiry.mjs";
+import {
+  QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  QUICK_UPGRADE_CONSENT_PURPOSE,
+} from "../src/lib/quick-upgrade-enquiry.mjs";
 import { projectPublicMarketplaceEnquiry } from "../src/lib/public-marketplace-enquiry-projection.mjs";
 
 const LEGACY_V4_NOTICE = "2026-08-10-customer-selected-trade-sharing-v4";
@@ -143,7 +147,7 @@ function marketplaceSearchTextSql() {
   return sql.replaceAll("${enquiryAlias}", "enquiry");
 }
 
-test("stored public contact releases accept only exact v4, v6 and v7 policy-field pairs", () => {
+test("stored public contact releases accept only recognized policy and field pairs", () => {
   const database = new DatabaseSync(":memory:");
   database.exec(`CREATE TABLE releases (
     id text PRIMARY KEY,
@@ -167,6 +171,11 @@ test("stored public contact releases accept only exact v4, v6 and v7 policy-fiel
     "customer_address",
   ]));
   insert.run("v7-good", PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE, JSON.stringify(required));
+  insert.run("quick-good", QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE, JSON.stringify([
+    ...required,
+    "customer_address",
+  ]));
+  insert.run("quick-missing-address", QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE, JSON.stringify(required));
   insert.run("wrong-purpose", LEGACY_V6_NOTICE, LEGACY_V4_PURPOSE, JSON.stringify(required));
   insert.run("unknown-version", "2026-08-10-unknown-v5", LEGACY_V6_PURPOSE, JSON.stringify(required));
   insert.run("malformed-fields", LEGACY_V6_NOTICE, LEGACY_V6_PURPOSE, "not-json");
@@ -183,7 +192,7 @@ test("stored public contact releases accept only exact v4, v6 and v7 policy-fiel
   const eligible = database.prepare(`SELECT id FROM releases release
     WHERE ${publicPlanContactReleaseAccessSql("release")} ORDER BY id`)
     .all().map((row) => row.id);
-  assert.deepEqual(eligible, ["v4-good", "v6-good", "v7-good"]);
+  assert.deepEqual(eligible, ["quick-good", "v4-good", "v6-good", "v7-good"]);
   const recognizedConsentPairs = database.prepare(`SELECT id FROM releases release
     WHERE ${publicPlanContactReleaseConsentSql("release")} ORDER BY id`)
     .all().map((row) => row.id);
@@ -191,6 +200,8 @@ test("stored public contact releases accept only exact v4, v6 and v7 policy-fiel
     "duplicate-field",
     "malformed-fields",
     "missing-services",
+    "quick-good",
+    "quick-missing-address",
     "v4-address-overreach",
     "v4-good",
     "v6-good",

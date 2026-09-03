@@ -3,6 +3,7 @@ import bookingStyles from "./AssessmentBooking.module.css";
 import { SiteFooter, SiteHeader } from "./ComparatorChrome";
 import { CustomerJourneyScene } from "./CustomerJourneyScene";
 import { HomepageCalendlyEmbed } from "./HomepageCalendlyEmbed";
+import { QuickUpgradeEnquiry } from "./QuickUpgradeEnquiry";
 import { SurgeOpenButton } from "./SurgeOpenButton";
 
 const preparation = [
@@ -28,9 +29,9 @@ export function GettingStarted() {
       <div className="start-hero-copy">
         <span className="start-eyebrow">Independent home energy planning</span>
         <h1>Home energy assessments without the confusion</h1>
-        <p>Whether your home is already built or still on plans, we help you understand which assessment fits and what it will tell you. If an assessment is not the first step, our free planner will put the next moves in order.</p>
-        <div className="start-actions"><Link className="btn start-primary-action" href="/plan">Build my home energy plan</Link><SurgeOpenButton label="Ask Wattzun AI first" description="Talk through the first decision in plain English." draft="I am not sure where to start with my home energy upgrades. Help me work out the first decision." /></div>
-        <p className="start-hero-secondary">Already know what you need? <Link href="/assessments">Compare home energy assessments</Link>, <Link href="#compare-energy-plans" prefetch={false}>compare electricity or gas</Link>, <Link href="/calculator">estimate a rebate</Link> or <Link href="#home-booking" prefetch={false}>book a quick call</Link>. You can build a plan or contact matching trades without creating an account.</p>
+        <p>Whether your home is already built or still on plans, we help you understand which assessment fits and what it will tell you. If you already know which upgrades you want, send one simple request to suitable trades in your area.</p>
+        <div className="start-actions"><QuickUpgradeEnquiry /><Link className="btn ghost start-secondary-action" href="/plan">Build my home energy plan</Link><SurgeOpenButton label="Ask Wattzun AI first" description="Talk through the first decision in plain English." draft="I am not sure where to start with my home energy upgrades. Help me work out the first decision." /></div>
+        <p className="start-hero-secondary">Choose one or more services and send one request to approved TLink trade businesses that cover your area. Australian Energy Assessments does not sell leads or let businesses pay for placement. No account, no obligation.</p>
         <aside aria-label="What the guided plan includes"><strong>About three minutes</strong><ul><li>No account to begin</li><li>Skip anything you do not know</li><li>See your roadmap first</li><li>Decide what happens next</li></ul></aside>
       </div>
       <CustomerJourneyScene />
@@ -46,7 +47,7 @@ export function GettingStarted() {
       <p className={bookingStyles.privacyNote}>Calendly adds the call to our calendar and emails the booking details to you. Calendly handles the booking details. Read our <Link href="/privacy" style={{ color: "#087f73", fontWeight: 800 }}>privacy notice</Link>.</p>
     </section>
 
-    <section className="home-entry home-entry-guided" aria-labelledby="home-entry-title"><div className="start-heading"><span>Start where you are</span><h2 id="home-entry-title">What do you need today?</h2><p>Not sure? Start with the home plan. It will show whether you should compare energy plans, look at upgrades, book an assessment or speak with a trade.</p></div><div className="home-entry-explainers"><article><span>Best place to start</span><h3>Build my home energy plan</h3><p>Answer a few simple questions to see which upgrades or assessments could help and what to do first.</p></article><article><span>Only checking your bill?</span><h3>Compare energy plans</h3><p>Use this when you only want to check your current electricity or mains gas plan.</p></article><article><span>Ready to ask for help?</span><h3>Find matching trades</h3><p>Send one enquiry without creating an account. You choose which contact details are shared with matching trades.</p></article></div><Link className="btn home-entry-primary" href="/plan">Build my home energy plan</Link></section>
+    <section className="home-entry home-entry-guided" aria-labelledby="home-entry-title"><div className="start-heading"><span>Start where you are</span><h2 id="home-entry-title">What do you need today?</h2><p>Not sure? Start with the home plan. It will show whether you should compare energy plans, look at upgrades, book an assessment or speak with a trade.</p></div><div className="home-entry-explainers"><article><span>Best place to start</span><h3>Build my home energy plan</h3><p>Answer a few simple questions to see which upgrades or assessments could help and what to do first.</p></article><article><span>Only checking your bill?</span><h3>Compare energy plans</h3><p>Use this when you only want to check your current electricity or mains gas plan.</p></article><article><span>Already know what you need?</span><h3>Find matching trades</h3><p>Send one quick request without creating an account. Email and the property address go to matching businesses; name and phone are optional.</p></article></div><Link className="btn home-entry-primary" href="/plan">Build my home energy plan</Link></section>
 
     <section className="start-section start-prepare" aria-labelledby="prepare-title"><div className="start-heading"><span>Before you decide</span><h2 id="prepare-title">Get ready in three simple steps</h2></div><div className="start-step-grid">{preparation.map((item) => <article key={item.number}><span>{item.number}</span><div><h3>{item.title}</h3><p>{item.text}</p></div></article>)}</div></section>
 

@@ -10,12 +10,16 @@ import {
   resolveSystemAdminNotifications,
 } from "@/lib/admin-notifications";
 import { isPublicPlanEnquiry } from "@/lib/public-plan-enquiry.mjs";
+import { isQuickUpgradeEnquiry } from "@/lib/quick-upgrade-enquiry.mjs";
 import { isPublicRentalAssessmentRequest } from "@/lib/public-rental-assessment-request.mjs";
 import {
   confirmPublicPlanIntakeOpportunity,
   enqueuePublicPlanDelivery,
 } from "@/lib/public-plan-delivery-server";
 import { createOpportunityFromLead } from "@/lib/opportunity-server";
+import {
+  OPPORTUNITY_NOTIFICATION_DISPATCH_HEADER,
+} from "@/lib/opportunity-notification-server";
 import {
   PUBLIC_PLAN_DELIVERY_DISPATCH_HEADER,
 } from "@/lib/public-plan-delivery-retry";
@@ -43,18 +47,36 @@ async function recordLeadIncident(eventType, title, summary, priority = "urgent"
   }).catch(() => null);
 }
 
+async function recordQuickUpgradeNoMatch(opportunityId) {
+  await createAdminNotification({
+    eventKey: `quick-upgrade-no-match:${opportunityId}`,
+    eventType: "customer.quick_upgrade_no_match",
+    category: "customer",
+    priority: "high",
+    title: "Quick upgrade request needs matching",
+    summary: "No approved TLink trade business matched this request. Review the saved opportunity and arrange follow-up.",
+    entityType: "trade_opportunity",
+    entityId: opportunityId,
+    actorType: "system",
+    requiresAction: true,
+  });
+}
+
 export const POST = createLeadPostHandler({
   validateLeadPayload,
   createLeadEnvelope,
   createOperationalRecorder,
   leadRateLimiter,
   recordLeadIncident,
+  recordQuickUpgradeNoMatch,
   resolveSystemAdminNotifications,
   isPublicPlanEnquiry,
+  isQuickUpgradeEnquiry,
   isPublicRentalAssessmentRequest,
   enqueuePublicPlanDelivery,
   createOpportunityFromLead,
   confirmPublicPlanIntakeOpportunity,
   publicPlanDeliveryDispatchHeader: PUBLIC_PLAN_DELIVERY_DISPATCH_HEADER,
+  opportunityNotificationDispatchHeader: OPPORTUNITY_NOTIFICATION_DISPATCH_HEADER,
   timeoutMs: LEAD_PROCESSOR_TIMEOUT_MS,
 });

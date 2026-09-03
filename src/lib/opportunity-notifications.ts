@@ -5,7 +5,7 @@ export const OPPORTUNITY_INBOX_URL =
 
 type OpportunityNotificationDraftInput = {
   businessName: string;
-  sourceKind?: "customer_project" | "public_plan_enquiry" | "legacy_marketplace";
+  sourceKind?: "customer_project" | "public_plan_enquiry" | "quick_upgrade_enquiry" | "legacy_marketplace";
   customerName?: string;
   customerMessage?: string;
   suburb: string;
@@ -20,13 +20,16 @@ type OpportunityNotificationDraftInput = {
 export type OpportunityNotificationSourceKind =
   | "customer_project"
   | "public_plan_enquiry"
+  | "quick_upgrade_enquiry"
   | "legacy_marketplace";
 
 export function opportunityNotificationEmailPreferenceAllows(
   sourceKind: OpportunityNotificationSourceKind,
   emailOpportunities: unknown,
 ) {
-  return sourceKind === "public_plan_enquiry" || Boolean(emailOpportunities);
+  return sourceKind === "public_plan_enquiry"
+    || sourceKind === "quick_upgrade_enquiry"
+    || Boolean(emailOpportunities);
 }
 
 const CATEGORY_LABELS = ENERGY_SERVICE_LABELS as Readonly<Record<string, string>>;
@@ -103,7 +106,8 @@ export function opportunityNotificationDraft(input: OpportunityNotificationDraft
   const location = broadLocation(input.suburb, input.postcode, input.state);
   const services = serviceLabels(input.matchedCategories);
   const timing = TIMING_LABELS[bounded(input.timing, 40)] || "Planning";
-  if (input.sourceKind === "public_plan_enquiry") {
+  if (input.sourceKind === "public_plan_enquiry" || input.sourceKind === "quick_upgrade_enquiry") {
+    const quickUpgradeEnquiry = input.sourceKind === "quick_upgrade_enquiry";
     const customerName = bounded(input.customerName, 120);
     const customerMessage = bounded(input.customerMessage, 500);
     const postcode = broadPostcode(input.postcode);
@@ -112,7 +116,9 @@ export function opportunityNotificationDraft(input: OpportunityNotificationDraft
     const body = [
       `Hello ${businessName},`,
       "",
-      "A customer chose to share a matched energy upgrade enquiry with your verified business.",
+      quickUpgradeEnquiry
+        ? "A customer sent a quick upgrade request to verified businesses that match their services and area."
+        : "A customer chose to share a matched energy upgrade enquiry with your verified business.",
       "",
       ...(customerName ? [`Customer: ${customerName}`] : []),
       `Postcode: ${postcode || "Check the signed-in workspace"}`,
@@ -122,7 +128,9 @@ export function opportunityNotificationDraft(input: OpportunityNotificationDraft
       "",
       `Review the enquiry and contact details: ${OPPORTUNITY_INBOX_URL}`,
       "",
-      "Only the contact details named in the customer's consent are available after sign-in. The customer's private home plan is not shared with trades.",
+      quickUpgradeEnquiry
+        ? "Only the contact details named in the customer's consent are available after sign-in. No home plan or PDF was created for this request."
+        : "Only the contact details named in the customer's consent are available after sign-in. The customer's private home plan is not shared with trades.",
     ].join("\n");
     return { subject, body: body.slice(0, 1800) };
   }

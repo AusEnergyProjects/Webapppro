@@ -17,6 +17,10 @@ import {
   publicPlanContactReleaseDisclosedFieldsAreValid,
 } from "@/lib/public-plan-enquiry.mjs";
 import {
+  QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  QUICK_UPGRADE_CONSENT_PURPOSE,
+} from "@/lib/quick-upgrade-enquiry.mjs";
+import {
   sendServiceReminderProviderMessage,
   serviceReminderProviderConfiguration,
 } from "@/lib/service-reminder-delivery";
@@ -81,6 +85,9 @@ async function deliveryContext(deliveryId: string) {
       opportunity.state, opportunity.timing, opportunity.expires_at,
       opportunity.created_at opportunity_created_at, opportunity.status opportunity_status,
       CASE
+        WHEN public_contact.notice_version = '${QUICK_UPGRADE_CONSENT_NOTICE_VERSION}'
+          AND public_contact.consent_purpose = '${QUICK_UPGRADE_CONSENT_PURPOSE}'
+          THEN 'quick_upgrade_enquiry'
         WHEN public_contact.id IS NOT NULL THEN 'public_plan_enquiry'
         WHEN project.id IS NOT NULL THEN 'customer_project'
         ELSE 'legacy_marketplace'
@@ -170,7 +177,7 @@ function ineligibility(context: DeliveryRow) {
   )) {
     return "Optional opportunity emails are disabled.";
   }
-  if (context.notification_source === "public_plan_enquiry") {
+  if (["public_plan_enquiry", "quick_upgrade_enquiry"].includes(String(context.notification_source))) {
     const disclosedFields = list(context.public_contact_disclosed_fields);
     const hasEmail = Number(context.public_contact_has_email || 0) === 1;
     const hasPhone = Number(context.public_contact_has_phone || 0) === 1;
@@ -389,11 +396,12 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
   const idempotencyKey = previousAttempts > 0
     ? storedIdempotencyKey
     : await opportunityNotificationIdempotencyKey(String(context.match_id));
-  const publicPlanEnquiry = context.notification_source === "public_plan_enquiry";
+  const publicContactEnquiry = ["public_plan_enquiry", "quick_upgrade_enquiry"]
+    .includes(String(context.notification_source));
   const publicDisclosedFields = new Set(
-    publicPlanEnquiry ? list(context.public_contact_disclosed_fields) : [],
+    publicContactEnquiry ? list(context.public_contact_disclosed_fields) : [],
   );
-  const matchingLocality = publicPlanEnquiry
+  const matchingLocality = publicContactEnquiry
     ? {
         suburb: "",
         postcode: text(context.public_contact_postcode, 4),
@@ -414,7 +422,7 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
     : opportunityNotificationDraft({
       businessName: String(context.business_name || ""),
       sourceKind: String(context.notification_source || "legacy_marketplace") as
-        "customer_project" | "public_plan_enquiry" | "legacy_marketplace",
+        "customer_project" | "public_plan_enquiry" | "quick_upgrade_enquiry" | "legacy_marketplace",
       customerName: publicDisclosedFields.has("customer_name")
         ? String(context.public_customer_name || "")
         : "",

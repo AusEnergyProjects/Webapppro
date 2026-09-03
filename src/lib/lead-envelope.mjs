@@ -4,6 +4,10 @@ import { buildDirectTradeTriage } from "./direct-trade-matching.mjs";
 import { buildParticipantApplicationReview } from "./direct-trade-participants.mjs";
 import { isPublicPlanEnquiry } from "./public-plan-enquiry.mjs";
 import {
+  isQuickUpgradeEnquiry,
+  QUICK_UPGRADE_SOURCE_JOURNEY,
+} from "./quick-upgrade-enquiry.mjs";
+import {
   isPublicRentalAssessmentRequest,
   PUBLIC_RENTAL_ASSESSMENT_SOURCE_JOURNEY,
 } from "./public-rental-assessment-request.mjs";
@@ -30,6 +34,7 @@ const GAS_ENQUIRIES = new Set(["gas-heating", "gas-hot-water"]);
 export function leadEventType(payload) {
   if (payload?.submissionType === "comparison") return "comparison.results";
   if (isPublicPlanEnquiry(payload?.enquiry)) return "direct_trade.project";
+  if (isQuickUpgradeEnquiry(payload?.enquiry)) return "direct_trade.project";
   if (isPublicRentalAssessmentRequest(payload?.enquiry)) return "direct_trade.project";
   if (payload?.enquiry === "direct-trade-project")
     return "direct_trade.project";
@@ -105,8 +110,9 @@ export function publicPlanSubmissionFingerprint(payload) {
 export function createLeadEnvelope(payload, options = {}) {
   const leadPayload = { ...(payload || {}) };
   const publicPlanEnquiry = isPublicPlanEnquiry(leadPayload.enquiry);
+  const quickUpgradeEnquiry = isQuickUpgradeEnquiry(leadPayload.enquiry);
   const rentalAssessmentRequest = isPublicRentalAssessmentRequest(leadPayload.enquiry);
-  const publicRequest = publicPlanEnquiry || rentalAssessmentRequest;
+  const publicRequest = publicPlanEnquiry || quickUpgradeEnquiry || rentalAssessmentRequest;
   const submissionFingerprint = publicRequest
     ? publicPlanSubmissionFingerprint(leadPayload)
     : "";
@@ -156,6 +162,37 @@ export function createLeadEnvelope(payload, options = {}) {
               ...(leadPayload.projectNotes ? ["customer_message"] : []),
             ],
           },
+        }
+      : quickUpgradeEnquiry
+      ? {
+          version: "quick-upgrade-options-open-matching-1",
+          status: "automatic_verified_area_allocation",
+          priority: "standard_allocation",
+          autoSend: true,
+          reviewFlags: [],
+          contactConsentReceipt: {
+            accepted: true,
+            purpose: leadPayload.consent?.purpose || "",
+            noticeVersion: leadPayload.consent?.noticeVersion || "",
+            grantedAt: leadPayload.consent?.grantedAt || "",
+            disclosedFields: [
+              "customer_email",
+              "postcode",
+              "service_categories",
+              "customer_address",
+              ...(leadPayload.tradeSharing?.name ? ["customer_name"] : []),
+              ...(leadPayload.tradeSharing?.phone ? ["customer_phone"] : []),
+              ...(leadPayload.projectNotes ? ["customer_message"] : []),
+            ],
+          },
+          matchCriteria: {
+            state: resolvedState,
+            postcode: leadPayload.postcode || "",
+            capabilities: leadPayload.projectCategories || [],
+            participantStatus: "active_verified",
+            credentials: "verified_current",
+          },
+          quoteEvidence: [],
         }
       : publicPlanEnquiry
       ? {
@@ -208,6 +245,7 @@ export function createLeadEnvelope(payload, options = {}) {
     state: resolvedState,
     source: "aea-energy-web",
     ...(publicPlanEnquiry ? { sourceJourney: "public-home-energy-plan" } : {}),
+    ...(quickUpgradeEnquiry ? { sourceJourney: QUICK_UPGRADE_SOURCE_JOURNEY } : {}),
     ...(rentalAssessmentRequest ? { sourceJourney: PUBLIC_RENTAL_ASSESSMENT_SOURCE_JOURNEY } : {}),
     ...(publicRequest ? { submissionFingerprint } : {}),
     ...(directTradeTriage ? { directTradeTriage } : {}),

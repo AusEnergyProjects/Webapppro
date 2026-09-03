@@ -1166,7 +1166,8 @@ test("operations migrations provision only the Creditex organisation and bootstr
   assert.equal(database.prepare("SELECT COUNT(*) count FROM compliance_submission_batches").get().count, 0);
 });
 
-test("the verified bootstrap identity claims the invitation exactly once", async () => {
+test("the verified bootstrap identity claims the invitation exactly once", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date(TEST_NOW) });
   const database = databaseWithComplianceOperations();
   const d1 = testD1(database);
   const access = loadTypescriptModule("../src/lib/compliance-access-server.ts", {

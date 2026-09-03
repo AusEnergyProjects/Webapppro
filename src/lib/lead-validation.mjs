@@ -20,6 +20,12 @@ import {
   PUBLIC_RENTAL_ASSESSMENT_CONSENT_NOTICE_VERSION,
   PUBLIC_RENTAL_ASSESSMENT_CONSENT_PURPOSE,
 } from "./public-rental-assessment-request.mjs";
+import {
+  isQuickUpgradeEnquiry,
+  isQuickUpgradeSubmissionId,
+  QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  QUICK_UPGRADE_CONSENT_PURPOSE,
+} from "./quick-upgrade-enquiry.mjs";
 import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -38,6 +44,12 @@ const CONTACT_METHODS = new Set(["email", "phone", "either"]);
 const PARTNER_TYPES = new Set(["installer", "supplier"]);
 const ELECTRICITY_ENQUIRIES = new Set(["electricity-solar", "electricity-solar-battery", "electricity-battery", "solar", "solar-battery", "battery"]);
 const GAS_ENQUIRIES = new Set(["gas-heating", "gas-hot-water"]);
+const PRIVATE_TRADE_NOTE_IDENTIFIER_PATTERN = new RegExp([
+  String.raw`\b(?:nmi|account|customer|meter)\s*(?:number|no\.?|id|identifier)\b`,
+  String.raw`\b(?:access|security|alarm|gate|door|lockbox|safe)\s*(?:code|pin|password|passcode)\b`,
+  String.raw`\b(?:pin|password|passcode|credit\s*card|debit\s*card|card\s*(?:number|no\.?)|payment\s*(?:details|information)|bank(?:ing)?\s*(?:details|account)|bsb)\b`,
+  String.raw`(?:\d[\s.-]*){10,16}`,
+].join("|"), "i");
 
 function cleanText(value, maxLength) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
@@ -135,6 +147,34 @@ function publicPlanTradeSharing(value) {
   };
 }
 
+function quickUpgradeTradeSharing(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, error: "Choose which optional contact details matching trades may receive." };
+  }
+  const allowedKeys = new Set(["email", "postcode", "name", "phone", "address"]);
+  if (Object.keys(value).some((key) => !allowedKeys.has(key))) {
+    return { ok: false, error: "The trade sharing selection contained an unsupported field." };
+  }
+  if (value.email !== true || value.postcode !== true || value.address !== true) {
+    return { ok: false, error: "Email, postcode and property address must be shared so matching trades can respond." };
+  }
+  for (const key of ["name", "phone"]) {
+    if (typeof value[key] !== "boolean") {
+      return { ok: false, error: "Choose each optional trade sharing preference." };
+    }
+  }
+  return {
+    ok: true,
+    value: {
+      email: true,
+      postcode: true,
+      address: true,
+      name: value.name,
+      phone: value.phone,
+    },
+  };
+}
+
 export function validateLeadPayload(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return { ok: false, error: "Invalid request." };
@@ -157,14 +197,16 @@ export function validateLeadPayload(raw) {
   const enquiry = cleanText(raw.enquiry, 80);
   const publicPlanEnquiry = isPublicPlanEnquiry(enquiry);
   const rentalAssessmentRequest = isPublicRentalAssessmentRequest(enquiry);
-  const name = publicPlanEnquiry
+  const quickUpgradeEnquiry = isQuickUpgradeEnquiry(enquiry);
+  const name = publicPlanEnquiry || quickUpgradeEnquiry
     ? [customerFirstName, customerLastName].filter(Boolean).join(" ")
     : suppliedName;
-  if (!publicPlanEnquiry && !name) return { ok: false, error: "Please enter your name." };
+  if (!publicPlanEnquiry && !quickUpgradeEnquiry && !name) return { ok: false, error: "Please enter your name." };
   if (email && !EMAIL_RE.test(email)) return { ok: false, error: "Please enter a valid email address." };
   if (submissionType === 'comparison' && !email) return { ok: false, error: "An email address is required for comparison results." };
   if (submissionType === 'upgrade' && !email && !phone) return { ok: false, error: "Please enter an email address or phone number." };
   if (rentalAssessmentRequest && !email) return { ok: false, error: "Please enter an email address." };
+  if (quickUpgradeEnquiry && !email) return { ok: false, error: "Please enter an email address." };
 
   const consent = raw.consent;
   const consentPurpose = cleanText(consent?.purpose, 160);
@@ -185,11 +227,94 @@ export function validateLeadPayload(raw) {
   )) {
     return { ok: false, error: "Please confirm the current contact notice for this rental assessment request." };
   }
+  if (quickUpgradeEnquiry && (
+    consentPurpose !== QUICK_UPGRADE_CONSENT_PURPOSE
+    || consentVersion !== QUICK_UPGRADE_CONSENT_NOTICE_VERSION
+  )) {
+    return { ok: false, error: "Please confirm the current sharing notice for this upgrade request." };
+  }
 
   const annualKwh = cleanNumber(raw.annualKwh, 0, 100000000);
   const annualMj = cleanNumber(raw.annualMj, 0, 100000000);
   const postcode = cleanText(raw.postcode, 4);
   if (postcode && !/^\d{4}$/.test(postcode)) return { ok: false, error: "Invalid postcode." };
+  if (quickUpgradeEnquiry) {
+    if (submissionType !== "upgrade") return { ok: false, error: "Unknown enquiry type." };
+    if (!customerStreetAddress || !customerSuburb || !customerState || !postcode) {
+      return { ok: false, error: "Enter the property's street address, postcode and suburb." };
+    }
+    const addressLocality = resolveAddressLocalityTuple({
+      postcode,
+      suburb: customerSuburb,
+      state: customerState,
+    });
+    if (!addressLocality) {
+      return { ok: false, error: "Choose a suburb and state listed for this postcode." };
+    }
+    const projectCategories = cleanDirectTradeCategories(raw.projectCategories);
+    if (!projectCategories.length) {
+      return { ok: false, error: "Please choose at least one service." };
+    }
+    const submissionId = cleanText(raw.submissionId, 64);
+    if (!isQuickUpgradeSubmissionId(submissionId)) {
+      return { ok: false, error: "Start a new upgrade request and try again." };
+    }
+    const phoneDigits = phone.replace(/\D/g, "");
+    if (phone && (
+      !PUBLIC_PLAN_PHONE_RE.test(phone)
+      || phoneDigits.length < 8
+      || phoneDigits.length > 15
+    )) return { ok: false, error: "Please enter a valid phone number." };
+    const tradeSharing = quickUpgradeTradeSharing(raw.tradeSharing);
+    if (!tradeSharing.ok) return tradeSharing;
+    if (tradeSharing.value.name && (!customerFirstName || !customerLastName)) {
+      return { ok: false, error: "Enter both first and last name before sharing your name with trades." };
+    }
+    if (tradeSharing.value.phone && !phone) {
+      return { ok: false, error: "Enter a phone number before sharing it with trades." };
+    }
+    const projectNotes = cleanText(raw.projectNotes, 500);
+    if (PRIVATE_TRADE_NOTE_IDENTIFIER_PATTERN.test(projectNotes)) {
+      return { ok: false, error: "Remove NMI, meter, account, access, payment and banking details from the message." };
+    }
+    const clientStartedAt = cleanNumber(raw.clientStartedAt, 1, Number.MAX_SAFE_INTEGER);
+    if (clientStartedAt === null) {
+      return { ok: false, error: "Start a new upgrade request and try again." };
+    }
+    return {
+      ok: true,
+      value: {
+        submissionType,
+        submissionId,
+        submittedAt: new Date().toISOString(),
+        name,
+        customerFirstName,
+        customerLastName,
+        email,
+        phone,
+        customerUnitNumber,
+        customerStreetAddress,
+        customerSuburb: addressLocality.suburb,
+        customerState: addressLocality.state,
+        website: cleanText(raw.website, 200),
+        clientStartedAt,
+        consent: {
+          accepted: true,
+          purpose: consentPurpose,
+          noticeVersion: consentVersion,
+          grantedAt: consentGrantedAt,
+        },
+        upgrades: true,
+        enquiry,
+        postcode,
+        state: addressLocality.state,
+        projectCategories,
+        preferredContact: phone ? "either" : "email",
+        projectNotes,
+        tradeSharing: tradeSharing.value,
+      },
+    };
+  }
   if (rentalAssessmentRequest) {
     if (submissionType !== "upgrade") return { ok: false, error: "Unknown enquiry type." };
     const requesterRole = cleanText(raw.requesterRole, 40);

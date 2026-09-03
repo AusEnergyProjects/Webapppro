@@ -38,7 +38,7 @@ const sections = [
   },
   {
     title: "Protected leads and direct customers",
-    body: "Australian Energy Assessments keeps the household name, email, phone, unit number, street address, suburb, state and postcode in the protected enquiry record. When a household submits a trade enquiry, every approved matched trade whose services and active service area match the selected work receives the email, postcode, selected services and any message the household writes. The household separately chooses whether those trades also receive the name, phone or full property address. The full home plan, PDF, bills, meter data and uploaded documents stay private. Wholesalers do not receive household lead details.",
+    body: "Australian Energy Assessments keeps the details entered in a household enquiry in a protected record. The quick upgrade options form shares the email, full property address, selected services and any message with every approved TLink trade business whose services and active service area match the request. Name and phone are shared only when the household ticks those choices. Other trade request forms may offer different sharing choices, which are shown before the person agrees and sends the form. Home plans, PDFs, bills, meter data and uploaded documents stay private. Wholesalers do not receive household lead details.",
   },
   {
     title: "Connected services",
@@ -72,7 +72,7 @@ export default function PrivacyPage() {
       <SiteHeader active="direct-trade-dashboard" />
       <header className="trade-information-hero">
         <div>
-          <span>Effective 2 September 2026</span>
+          <span>Effective 3 September 2026</span>
           <h1>Privacy notice</h1>
           <p>
             This notice explains what Australian Energy Assessments collects,

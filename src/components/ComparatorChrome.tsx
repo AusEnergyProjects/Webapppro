@@ -2,7 +2,6 @@
 /* eslint-disable @next/next/no-img-element */
 import { ReactNode } from "react";
 import Link from "next/link";
-import { AEA_BRANDMARK_PNG_DATA_URI } from "@/lib/aea-brand-assets.mjs";
 import { ResponsiveSiteNav } from "@/components/ResponsiveSiteNav";
 import { PublicSiteSearch } from "@/components/PublicSiteSearch";
 import { SurgeHeaderButton } from "@/components/SurgeHeaderButton";
@@ -11,7 +10,7 @@ import { PUBLIC_SITE } from "@/lib/public-site";
 export function BrandBar() {
   return (
     <Link href="/" className="brandbar" aria-label="Australian Energy Assessments home">
-      <span className="brandmark" aria-hidden="true"><img src={AEA_BRANDMARK_PNG_DATA_URI} alt="" width="30" height="30" decoding="async" /></span>
+      <span className="brandmark" aria-hidden="true"><img src="/api/aea-brandmark" alt="" width="30" height="30" decoding="async" /></span>
       <span className="brandtext">
         <strong className="brandname">Australian Energy Assessments</strong>
         <span className="brandtag">Independent energy assessments</span>
@@ -23,30 +22,7 @@ export function BrandBar() {
 export type SiteActive = "start" | "plan" | "calculator" | "account" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-dashboard" | "direct-trade-verification" | "direct-trade-access" | "direct-trade-standards" | "assessments" | "electricity" | "gas" | "certificates" | "guides" | "rebates" | "case-studies" | "surge";
 
 export function SiteNav({ active }: { active: SiteActive }) {
-  const links = [
-    { key: "start", href: "/", label: "Home" },
-    { key: "plan", href: "/plan", label: "My energy plan" },
-    { key: "calculator", href: "/calculator", label: "Rebate calculator" },
-    { key: "electricity", href: "/compare", label: "Electricity compare" },
-    { key: "gas", href: "/gas-compare", label: "Gas compare" },
-    { key: "certificates", href: "/guides/certificate-prices", label: "Certificates" },
-    { key: "guides", href: "/guides", label: "Guides and rebates" },
-    { key: "assessments", href: "/assessments", label: "Home assessments" },
-  ] as const;
-  return (
-    <ResponsiveSiteNav>
-      {links.map((link) => (
-        <Link
-          className={active === link.key ? "active" : "inactive"}
-          href={link.href}
-          key={link.key}
-          aria-current={active === link.key ? "page" : undefined}
-        >
-          {link.label}
-        </Link>
-      ))}
-    </ResponsiveSiteNav>
-  );
+  return <ResponsiveSiteNav active={active} />;
 }
 
 export function SiteHeader({ active }: { active: SiteActive }) {
@@ -94,9 +70,7 @@ export function SiteHeader({ active }: { active: SiteActive }) {
   );
 }
 
-export function SiteFooter({ children }: { children: ReactNode }) {
-  return <footer className="site-footer"><p>{children}</p><p>Powered by <a href={`${PUBLIC_SITE.apexUrl}/`}>Australian Energy Assessments</a> | <Link href="/assessments" prefetch={false}>Home energy assessments</Link> | <Link href="/home-energy-rating-for-existing-homes" prefetch={false}>Home Energy Rating</Link> | <Link href="/faq" prefetch={false}>FAQ</Link> | <Link href="/privacy" prefetch={false}>Privacy and analytics</Link> | <Link href="/book-an-assessment" prefetch={false}>Book now</Link> | <a href={PUBLIC_SITE.phoneHref}>{PUBLIC_SITE.phoneDisplay}</a> | <a href={`mailto:${PUBLIC_SITE.email}`}>Email</a></p><p><Link href="/team" prefetch={false}>Our team</Link> | <Link href="/communities-schools" prefetch={false}>Community education</Link> | <Link href="/trusted-suppliers" prefetch={false}>Trusted resources</Link></p><p>{PUBLIC_SITE.legalName} | ABN {PUBLIC_SITE.abn} | {PUBLIC_SITE.address.streetAddress}, {PUBLIC_SITE.address.addressLocality} {PUBLIC_SITE.address.addressRegion} {PUBLIC_SITE.address.postalCode}</p><p className="site-footer-profiles"><a href={PUBLIC_SITE.googleBusinessProfile} target="_blank" rel="noopener noreferrer">Google Business Profile</a> | <a href={PUBLIC_SITE.facebook} target="_blank" rel="noopener noreferrer">Facebook</a> | <a href={PUBLIC_SITE.instagram} target="_blank" rel="noopener noreferrer">Instagram</a> | <a href={PUBLIC_SITE.linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a></p></footer>;
-}
+export { SiteFooter } from "./SiteFooter";
 
 export function ComparatorHero({ title, children }: { title: string; children: ReactNode }) {
   return (

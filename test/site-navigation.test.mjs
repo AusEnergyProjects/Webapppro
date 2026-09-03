@@ -9,10 +9,13 @@ const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativeP
 const home = read("../src/app/page.tsx");
 const guide = read("../src/components/GettingStarted.tsx");
 const guideStyles = read("../src/components/AssessmentBooking.module.css");
+const quickUpgradeEnquiry = read("../src/components/QuickUpgradeEnquiry.tsx");
 const homepageCalendly = read("../src/components/HomepageCalendlyEmbed.tsx");
 const customerScene = read("../src/components/CustomerJourneyScene.tsx");
 const plannerJourneyPath = path.resolve(directory, "../src/components/PlannerHomeJourney.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
+const siteFooter = read("../src/components/SiteFooter.tsx");
+const tradeDashboard = read("../src/components/DirectTradeDashboard.tsx");
 const publicSiteSearch = read("../src/components/PublicSiteSearch.tsx");
 const publicSiteSearchStyles = read("../src/components/PublicSiteSearch.module.css");
 const publicSiteSearchIndex = read("../src/lib/public-site-search.ts");
@@ -62,11 +65,9 @@ const manifest = read("../src/app/manifest.ts");
 const socialAsset = path.resolve(directory, "../public/aea-home-energy-plan-og-v2.png");
 const surgeHomeAsset = path.resolve(directory, "../public/surge-command-centre-home.webp");
 
-test("site navigation and customer reports share one exact AEA brandmark", () => {
-  assert.match(
-    chrome,
-    /import \{ AEA_BRANDMARK_PNG_DATA_URI \} from "@\/lib\/aea-brand-assets\.mjs"/,
-  );
+test("site navigation loads the exact brandmark through the immutable image route", () => {
+  assert.match(chrome, /src="\/api\/aea-brandmark"/);
+  assert.doesNotMatch(chrome, /AEA_BRANDMARK_PNG_DATA_URI/);
   assert.doesNotMatch(chrome, /data:image\/png;base64/);
   assert.equal(
     brandAssets.match(/data:image\/png;base64/g)?.length,
@@ -85,23 +86,27 @@ test("the homepage provides one clear starting journey instead of redirecting", 
   assert.match(guide, /Check before committing/);
 });
 
-test("shared navigation prioritises the planner, electricity and gas journeys", () => {
+test("shared navigation groups public pages into clear consumer journeys", () => {
   assert.match(chrome, /export function SiteHeader/);
   assert.match(chrome, /className="site-header"/);
   assert.match(chrome, /import \{ SurgeHeaderButton \} from "@\/components\/SurgeHeaderButton"/);
   assert.match(chrome, /<SurgeHeaderButton active=\{active === "surge"\} \/>/);
-  assert.match(chrome, /href: "\/", label: "Home"/);
-  assert.match(chrome, /href: "\/plan", label: "My energy plan"/);
-  assert.match(chrome, /href: "\/calculator", label: "Rebate calculator"/);
-  assert.match(chrome, /href: "\/compare", label: "Electricity compare"/);
-  assert.match(chrome, /href: "\/gas-compare", label: "Gas compare"/);
-  assert.match(chrome, /href: "\/guides", label: "Guides and rebates"/);
+  assert.match(chrome, /<ResponsiveSiteNav active=\{active\} \/>/);
+  assert.match(responsiveNav, /href="\/"[\s\S]*?>[\s\S]*?Home/);
+  assert.match(responsiveNav, /label: "Assessments"/);
+  assert.match(responsiveNav, /label: "Plan & upgrades"/);
+  assert.match(responsiveNav, /label: "Bills & rebates"/);
+  assert.match(responsiveNav, /label: "Learn & support"/);
+  assert.match(responsiveNav, /\["\/plan", "My home energy plan"\]/);
+  assert.match(responsiveNav, /\["\/calculator", "Rebate calculator"\]/);
+  assert.match(responsiveNav, /\["\/compare", "Compare electricity"\]/);
+  assert.match(responsiveNav, /\["\/gas-compare", "Compare gas"\]/);
+  assert.match(responsiveNav, /\["\/guides", "Guides"\]/);
   assert.match(chrome, /href="\/direct-trade\/dashboard"[\s\S]*?aria-label="Open TLink"/);
   assert.match(chrome, /className="site-tlink-mark" src="\/tlink-icon-192\.png"/);
   assert.match(chrome, /className="site-tlink-copy"><strong>TLink<\/strong><\/span>/);
   assert.doesNotMatch(chrome, /Trade workspace/);
-  assert.match(guide, /href="\/calculator"[\s\S]*estimate a rebate/);
-  assert.match(chrome, /href: "\/assessments", label: "Home assessments"/);
+  assert.match(responsiveNav, /\["\/assessments", "Assessment types"\]/);
   assert.match(assessments, /SiteHeader active="assessments"/);
   assert.match(electricity, /SiteHeader active="electricity"/);
   assert.match(gas, /SiteHeader active="gas"/);
@@ -182,7 +187,7 @@ test("the futuristic header links to one dedicated always-present Wattzun AI pag
 });
 
 test("public header pages are prepared before a click while private workspaces stay on demand", () => {
-  const primaryNav = chrome.slice(chrome.indexOf("export function SiteNav"), chrome.indexOf("export function SiteHeader"));
+  const primaryNav = `${chrome.slice(chrome.indexOf("export function SiteNav"), chrome.indexOf("export function SiteHeader"))}\n${responsiveNav}`;
   const bookLink = chrome.match(/<Link\s+className="site-book-link"[\s\S]*?<\/Link>/)?.[0] || "";
   const tlinkLink = chrome.match(/<Link\s+className="site-tlink-link"[\s\S]*?<\/Link>/)?.[0] || "";
   assert.doesNotMatch(primaryNav, /prefetch=\{false\}/);
@@ -198,7 +203,7 @@ test("public navigation keeps TLink clearly branded", () => {
   assert.match(chrome, /title="TLink"/);
   assert.match(styles, /\.site-tlink-mark \{[^}]*flex: 0 0 34px;[^}]*object-fit: contain;[^}]*width: 34px;/);
   assert.equal(chrome.match(/href="\/account"/g)?.length, 1);
-  assert.match(guide, /contact matching trades without creating an account/);
+  assert.match(guide, /quick request without creating an account/);
   assert.match(guide, /Find matching trades/);
   assert.doesNotMatch(guide, /account is optional|Save or ask trades|Create an account after seeing your roadmap/);
 });
@@ -211,25 +216,25 @@ test("header actions use the requested order, equal sizing and energy backdrop",
   assert.doesNotMatch(chrome, />Book a 5-minute call<\/Link>/);
 });
 
-test("desktop navigation shows every option and mobile restores the compact swipe strip", () => {
-  assert.match(chrome, /<ResponsiveSiteNav>/);
+test("desktop categories and the mobile page browser use lightweight native disclosures", () => {
+  assert.match(chrome, /<ResponsiveSiteNav active=\{active\} \/>/);
+  assert.doesNotMatch(responsiveNav, /^"use client";|usePathname|useState|useEffect/);
   assert.match(responsiveNav, /aria-label="Primary navigation"/);
-  assert.match(responsiveNav, /className="site-nav-scroll-cue"[^>]*>Swipe/);
-  assert.doesNotMatch(responsiveNav, /Energy services|Scroll for more options|ResizeObserver|MutationObserver|hasHiddenOptions/);
-  assert.match(
-    styles,
-    /\.comparator-nav \{[^}]*justify-content: flex-start;[^}]*overflow-x: auto;/,
-  );
-  assert.doesNotMatch(
-    styles,
-    /\.comparator-nav \{[^}]*justify-content: flex-end;/,
-  );
-  assert.doesNotMatch(styles, /site-nav-discovery|has-hidden-options/);
-  assert.match(styles, /body\.aea-platform \.site-header \.site-nav-shell::after \{[^}]*linear-gradient/);
-  assert.match(styles, /body\.aea-platform \.site-header \.site-nav-scroll-cue \{[^}]*display: flex;/);
-  assert.match(styles, /@media \(min-width: 721px\) \{[\s\S]*?\.site-header \.comparator-nav \{[^}]*display: grid;[^}]*grid-template-columns: repeat\(8, minmax\(0, 1fr\)\);[^}]*overflow: visible;/);
-  assert.match(styles, /@media screen and \(max-width: 720px\) \{[\s\S]*?body\.aea-platform \.site-header \.comparator-nav \{[^}]*display: flex;[^}]*overflow-x: auto;[^}]*scroll-snap-type: x proximity;/);
-  assert.match(styles, /body\.aea-platform \.site-header \.comparator-nav a \{[^}]*flex: 0 0 auto;[^}]*scroll-snap-align: start;[^}]*white-space: nowrap;/);
+  assert.match(responsiveNav, /<details className=\{`site-nav-category/);
+  assert.match(responsiveNav, /name="site-navigation-categories"/);
+  assert.match(responsiveNav, /<summary[\s\S]*?className="site-nav-category-trigger"/);
+  assert.match(responsiveNav, /<details className="site-nav-mobile-disclosure">[\s\S]*?<summary className="site-nav-mobile-trigger">[\s\S]*?Browse pages/);
+  assert.match(responsiveNav, /className="site-nav-mobile-groups"/);
+  assert.match(responsiveNav, /aria-current=\{isActive \? "true" : undefined\}/);
+  assert.doesNotMatch(responsiveNav, /role="menu|role="menuitem|site-nav-scroll-cue|Swipe/);
+  assert.match(styles, /\.comparator-nav \{[^}]*display: grid;[^}]*grid-template-columns: minmax\(96px, \.62fr\) minmax\(0, 4fr\);[^}]*overflow: visible;/);
+  assert.match(styles, /\.site-nav-desktop-categories \{[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.site-nav-panel \{[^}]*position: absolute;[^}]*width: min\(360px, calc\(100vw - 48px\)\);/);
+  assert.match(styles, /\.site-nav-category\[open\] > \.site-nav-category-trigger/);
+  assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-nav-desktop-categories \{ display: none; \}[\s\S]*?\.site-nav-mobile-trigger \{[^}]*display: flex;/);
+  assert.match(styles, /\.site-nav-mobile-panel \{[^}]*max-height: min\(72vh, 640px\);[^}]*overflow-y: auto;/);
+  assert.match(styles, /\.site-nav-mobile-groups a \{[^}]*min-height: 44px;/);
+  assert.doesNotMatch(styles, /site-nav-scroll-cue|site-nav-shell::after/);
   assert.match(styles, /\.start-hero-planner \.start-hero-secondary \{[^}]*background: rgba\(2, 18, 34, \.94\);[^}]*padding: 10px 12px;/);
   assert.match(
     styles,
@@ -272,8 +277,11 @@ test("trade workspace approval does not imply government accreditation", () => {
 });
 
 test("customer-facing pages use the shared powered-by footer", () => {
-  assert.match(chrome, /export function SiteFooter/);
-  assert.match(chrome, /Powered by/);
+  assert.match(chrome, /export \{ SiteFooter \} from "\.\/SiteFooter"/);
+  assert.match(siteFooter, /export function SiteFooter/);
+  assert.match(siteFooter, /Powered by/);
+  assert.match(tradeDashboard, /import \{ SiteFooter \} from "\.\/SiteFooter"/);
+  assert.doesNotMatch(tradeDashboard, /from "\.\/ComparatorChrome"/);
   assert.match(guide, /<SiteFooter>/);
   assert.match(electricity, /<SiteFooter>/);
   assert.match(gas, /<SiteFooter>/);
@@ -282,7 +290,7 @@ test("customer-facing pages use the shared powered-by footer", () => {
   assert.match(caseStudies, /<SiteFooter>/);
   assert.match(assessments, /<SiteFooter>/);
   assert.match(plannerRoute, /<SiteFooter>/);
-  assert.doesNotMatch(`${chrome}${guide}${electricity}${gas}${rebates}${guideShell}${caseStudies}${assessments}${planner}`, /Provided by/);
+  assert.doesNotMatch(`${siteFooter}${guide}${electricity}${gas}${rebates}${guideShell}${caseStudies}${assessments}${planner}`, /Provided by/);
 });
 
 test("shared visual foundation uses the polished responsive system without persistent compositor effects", () => {
@@ -304,7 +312,7 @@ test("shared visual foundation uses the polished responsive system without persi
   assert.doesNotMatch(styles, /\.site-header \{[^}]*backdrop-filter: blur/);
   assert.doesNotMatch(styles, /\.site-header::after \{/);
   assert.match(styles, /radial-gradient\(circle at 8% -4%/);
-  assert.match(styles, /\.comparator-nav::-webkit-scrollbar \{ display: none; \}/);
+  assert.match(styles, /\.site-nav-category\[open\] > \.site-nav-category-trigger/);
   assert.match(styles, /a:focus-visible/);
 });
 
@@ -425,11 +433,11 @@ test("rebates hub contains no prohibited dash characters", () => {
   assert.doesNotMatch(`${rebates}${rebatesRoute}`, /\u2013|\u2014/);
 });
 
-test("homepage makes the guided plan the only dominant hero action", () => {
+test("homepage makes the quick upgrade request dominant and keeps guided help secondary", () => {
   const heroActions = guide.match(/<div className="start-actions">([\s\S]*?)<\/div>/)?.[1] || "";
-  assert.equal(heroActions.match(/<Link\b/g)?.length, 1);
-  assert.match(heroActions, /start-primary-action[\s\S]*Build my home energy plan/);
-  assert.doesNotMatch(heroActions, /ghost|Compare energy plans/);
+  assert.match(heroActions, /<QuickUpgradeEnquiry \/>[\s\S]*?<Link className="btn ghost start-secondary-action" href="\/plan">Build my home energy plan<\/Link>[\s\S]*?<SurgeOpenButton/);
+  assert.match(quickUpgradeEnquiry, /Get independent upgrade options/);
+  assert.doesNotMatch(heroActions, /start-primary-action[\s\S]*Build my home energy plan/);
   assert.match(guide, /className="start-hero-secondary"/);
 });
 

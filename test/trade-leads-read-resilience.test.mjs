@@ -10,6 +10,10 @@ import {
   PUBLIC_PLAN_CONSENT_PURPOSE,
   publicPlanContactReleaseConsentSql,
 } from "../src/lib/public-plan-enquiry.mjs";
+import {
+  QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  QUICK_UPGRADE_CONSENT_PURPOSE,
+} from "../src/lib/quick-upgrade-enquiry.mjs";
 import { publicTradeContactForMatchedLead } from "../src/lib/public-trade-lead-access.mjs";
 import {
   arrivalProposalForMatchedLead,
@@ -125,8 +129,8 @@ function releaseRow(overrides = {}) {
 
 test("trade lead reads split base rows from any-release context and validate before serialization", () => {
   const consentGuard = publicPlanContactReleaseConsentSql("public_contact");
-  assert.ok(consentGuard.length < 1_200, "lead read consent guard must stay shallow for D1");
-  assert.equal((consentGuard.match(/\bWHEN\b/g) || []).length, 5);
+  assert.ok(consentGuard.length < 1_400, "lead read consent guard must stay shallow for D1");
+  assert.equal((consentGuard.match(/\bWHEN\b/g) || []).length, 6);
   assert.equal((consentGuard.match(/\bELSE\b/g) || []).length, 1);
 
   const database = new DatabaseSync(":memory:");
@@ -145,13 +149,18 @@ test("trade lead reads split base rows from any-release context and validate bef
     ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
     ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
   );
+  insert.run(
+    "quick",
+    QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+    QUICK_UPGRADE_CONSENT_PURPOSE,
+  );
   insert.run("swapped", V7_NOTICE, V6_PURPOSE);
   insert.run("unknown", "unknown", "unknown");
   assert.deepEqual(
     database.prepare(`SELECT id FROM public_contact WHERE ${consentGuard} ORDER BY id`)
       .all()
       .map((row) => row.id),
-    ["assistant", "current", "v4", "v6", "v7"],
+    ["assistant", "current", "quick", "v4", "v6", "v7"],
   );
   database.close();
 
