@@ -47,8 +47,6 @@
 .flow > small { color: #92afbf; font-size: .62rem; }
 .flowArrow { color: #78ead5; font-size: 1.2rem; }
 .unavailable { color: #b2c6d1; font-size: .76rem; }
-.dataCredit { color: #adc6d2; font-size: .7rem; }
-.dataCredit a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .loading { background: #092131; border: 1px solid #294b5b; border-radius: 16px; padding: 28px; }
 .loading h2 { color: #effaff; font-size: 1.2rem; }
 .loading p { color: #bbd1da; margin: 10px 0 16px; }

@@ -13,8 +13,8 @@ export const PUBLIC_SITE_SEARCH_ENTRIES: readonly PublicSiteSearchEntry[] = [
   {
     path: "/wholesale-electricity",
     title: "Live wholesale energy prices",
-    description: "Compare live electricity and gas energy prices on regional 24-hour charts.",
-    keywords: ["aemo", "nem", "wholesale", "spot price", "live energy price", "electricity market", "gas market", "gas price", "grid flows"],
+    description: "Compare live electricity and gas energy prices, then explore room-heating and hot-water examples.",
+    keywords: ["aemo", "nem", "wholesale", "spot price", "live energy price", "electricity market", "gas market", "gas price", "grid flows", "heating cost", "hot water cost", "heat pump"],
   },
   {
     path: "/",
