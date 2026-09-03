@@ -31,7 +31,9 @@ export function publicTradeContactForMatchedLead(row) {
   ) return null;
 
   const disclosed = new Set(disclosedFields);
-  const email = String(row.public_customer_email || "").trim().toLowerCase();
+  const email = disclosed.has("customer_email")
+    ? String(row.public_customer_email || "").trim().toLowerCase()
+    : "";
   const postcode = String(row.public_contact_postcode || "").trim();
   const firstName = disclosed.has("customer_name")
     ? String(row.public_customer_first_name || "").trim()
@@ -59,7 +61,7 @@ export function publicTradeContactForMatchedLead(row) {
     ? String(row.public_customer_message || "").trim()
     : "";
   if (
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    (disclosed.has("customer_email") && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     || !/^\d{4}$/.test(postcode)
     || (disclosed.has("customer_name") && (!firstName || !lastName))
     || (disclosed.has("customer_phone") && !phone)

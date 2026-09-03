@@ -12,6 +12,11 @@ import {
   PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
 } from "../src/lib/public-plan-quote-preparation.mjs";
 import {
+  QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  QUICK_UPGRADE_CONSENT_PURPOSE,
+} from "../src/lib/quick-upgrade-enquiry.mjs";
+import {
+  publicLeadAcceptedDisclosure,
   publicLeadAcceptedCrmCustomerName,
   publicLeadQuoteNavigationTarget,
   publicLeadQuoteAccessSnapshot,
@@ -47,7 +52,7 @@ function workflowAccessSql() {
   );
 }
 
-function publicLeadRow(disclosedFields) {
+function publicLeadRow(disclosedFields, overrides = {}) {
   return {
     public_contact_release_id: "release-1",
     public_contact_status: "active",
@@ -89,6 +94,7 @@ function publicLeadRow(disclosedFields) {
     match_status: "interested",
     opportunity_status: "open",
     expires_at: "2099-08-12T01:00:00.000Z",
+    ...overrides,
   };
 }
 
@@ -162,6 +168,46 @@ test("workflow snapshot keeps undisclosed private fields out and filters quote a
     opportunity_title: "   ",
     title: "   ",
   })?.title, "Customer enquiry");
+});
+
+test("quick request quote workflow keeps collected contact details private unless the customer shares them", () => {
+  const row = publicLeadRow([
+    "postcode",
+    "service_categories",
+    "customer_address",
+  ], {
+    public_contact_notice_version: QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+    public_contact_consent_purpose: QUICK_UPGRADE_CONSENT_PURPOSE,
+    public_quote_preparation_id: "",
+    public_quote_answers: "[]",
+  });
+  const snapshot = publicLeadQuoteWorkflowSnapshot(row);
+  assert.ok(snapshot);
+  assert.equal(snapshot.contact.email, "");
+  assert.equal(snapshot.contact.firstName, "");
+  assert.equal(snapshot.contact.lastName, "");
+  assert.equal(snapshot.contact.phone, "");
+  assert.equal(snapshot.contact.addressLine1, "1 Secret Street");
+  assert.equal(snapshot.contact.addressLine2, "Unit 9");
+
+  const disclosure = publicLeadAcceptedDisclosure(
+    snapshot,
+    { ...row, match_id: matchId },
+    "2026-09-04T01:00:00.000Z",
+  );
+  assert.ok(disclosure);
+  assert.deepEqual({
+    firstName: disclosure.customer.firstName,
+    lastName: disclosure.customer.lastName,
+    email: disclosure.customer.email,
+    phone: disclosure.customer.phone,
+  }, {
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+  });
+  assert.equal(disclosure.customer.addressLine1, "1 Secret Street");
 });
 
 test("released lead quote access fails closed after withdrawal, expiry, closure or invalid consent", () => {

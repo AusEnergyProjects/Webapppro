@@ -6,6 +6,8 @@ import {
 } from "./customer-projects.mjs";
 import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
 import {
+  LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   QUICK_UPGRADE_CONSENT_PURPOSE,
 } from "./quick-upgrade-enquiry.mjs";
@@ -36,10 +38,28 @@ const publicPlanContactReleaseRequiredFields = Object.freeze([
   "service_categories",
 ]);
 
+const quickUpgradeContactReleaseRequiredFields = Object.freeze([
+  "postcode",
+  "service_categories",
+  "customer_address",
+]);
+
 const publicPlanContactReleasePolicies = Object.freeze([
   Object.freeze({
     noticeVersion: QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
     purpose: QUICK_UPGRADE_CONSENT_PURPOSE,
+    requiredDisclosedFields: quickUpgradeContactReleaseRequiredFields,
+    allowedDisclosedFields: Object.freeze([
+      ...quickUpgradeContactReleaseRequiredFields,
+      "customer_email",
+      "customer_name",
+      "customer_phone",
+      "customer_message",
+    ]),
+  }),
+  Object.freeze({
+    noticeVersion: LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+    purpose: LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
     requiredDisclosedFields: Object.freeze([
       ...publicPlanContactReleaseRequiredFields,
       "customer_address",

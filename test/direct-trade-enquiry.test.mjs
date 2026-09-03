@@ -24,7 +24,7 @@ test("legacy Direct Trade projects stay account scoped while the homepage offers
   assert.match(homepage, /href="\/plan">Build my home energy plan/);
   assert.match(homepage, /QuickUpgradeEnquiry/);
   assert.match(homepage, /Send one quick request without creating an account/);
-  assert.match(homepage, /Email and the property address go to matching businesses; name and phone are optional/);
+  assert.match(homepage, /You choose whether matching businesses receive your email, name or phone/);
   assert.match(brief, /href="\/account\/projects\/new">Create a free private project/);
   assert.match(brief, /href="\/account">Open my account/);
   assert.match(brief, /No public lead form/);

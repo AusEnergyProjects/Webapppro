@@ -315,8 +315,8 @@
 
 .actions .primary,
 .success button {
-  background: #078858;
-  border-color: #078858;
+  background: #08794c;
+  border-color: #08794c;
   color: #fff;
 }
 
@@ -347,7 +347,7 @@
 
 .success > span {
   align-items: center;
-  background: #078858;
+  background: #08794c;
   border-radius: 50%;
   color: #fff;
   display: flex;

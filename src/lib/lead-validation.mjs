@@ -155,18 +155,18 @@ function quickUpgradeTradeSharing(value) {
   if (Object.keys(value).some((key) => !allowedKeys.has(key))) {
     return { ok: false, error: "The trade sharing selection contained an unsupported field." };
   }
-  if (value.email !== true || value.postcode !== true || value.address !== true) {
-    return { ok: false, error: "Email, postcode and property address must be shared so matching trades can respond." };
+  if (value.postcode !== true || value.address !== true) {
+    return { ok: false, error: "Postcode and property address must be shared so businesses can assess the request." };
   }
-  for (const key of ["name", "phone"]) {
+  for (const key of ["email", "name", "phone"]) {
     if (typeof value[key] !== "boolean") {
-      return { ok: false, error: "Choose each optional trade sharing preference." };
+      return { ok: false, error: "Choose each contact detail sharing preference." };
     }
   }
   return {
     ok: true,
     value: {
-      email: true,
+      email: value.email,
       postcode: true,
       address: true,
       name: value.name,
@@ -206,7 +206,9 @@ export function validateLeadPayload(raw) {
   if (submissionType === 'comparison' && !email) return { ok: false, error: "An email address is required for comparison results." };
   if (submissionType === 'upgrade' && !email && !phone) return { ok: false, error: "Please enter an email address or phone number." };
   if (rentalAssessmentRequest && !email) return { ok: false, error: "Please enter an email address." };
-  if (quickUpgradeEnquiry && !email) return { ok: false, error: "Please enter an email address." };
+  if (quickUpgradeEnquiry && (!customerFirstName || !customerLastName || !email || !phone)) {
+    return { ok: false, error: "Enter your first name, last name, email address and phone number so Australian Energy Assessments can manage the request." };
+  }
 
   const consent = raw.consent;
   const consentPurpose = cleanText(consent?.purpose, 160);

@@ -15,6 +15,8 @@ import { publicTradeContactForMatchedLead } from "../src/lib/public-trade-lead-a
 import {
   isQuickUpgradeEnquiry,
   isQuickUpgradeSubmissionId,
+  LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_ENQUIRY_KIND,
@@ -38,7 +40,7 @@ function validQuickUpgrade(overrides = {}) {
     projectCategories: ["heating-cooling", "insulation"],
     projectNotes: "Please help me compare practical options.",
     tradeSharing: {
-      email: true,
+      email: false,
       postcode: true,
       address: true,
       name: false,
@@ -79,7 +81,7 @@ test("quick upgrade validation canonicalizes the verified address and keeps only
   assert.equal(result.value.preferredContact, "either");
   assert.deepEqual(result.value.projectCategories, ["heating-cooling", "insulation"]);
   assert.deepEqual(result.value.tradeSharing, {
-    email: true,
+    email: false,
     postcode: true,
     address: true,
     name: false,
@@ -96,6 +98,9 @@ test("quick upgrade validation fails closed at every public trust boundary", () 
     [validQuickUpgrade({ submissionType: "comparison" }), /unknown enquiry type/i],
     [validQuickUpgrade({ submissionId: "bad" }), /new upgrade request/i],
     [validQuickUpgrade({ email: "" }), /email address/i],
+    [validQuickUpgrade({ customerFirstName: "" }), /first name, last name, email address and phone number/i],
+    [validQuickUpgrade({ customerLastName: "" }), /first name, last name, email address and phone number/i],
+    [validQuickUpgrade({ phone: "" }), /first name, last name, email address and phone number/i],
     [validQuickUpgrade({ email: "not-email" }), /valid email/i],
     [validQuickUpgrade({ customerStreetAddress: "" }), /street address/i],
     [validQuickUpgrade({ customerSuburb: "Sydney", customerState: "NSW" }), /listed for this postcode/i],
@@ -103,9 +108,8 @@ test("quick upgrade validation fails closed at every public trust boundary", () 
     [validQuickUpgrade({ projectCategories: ["not-a-service"] }), /at least one service/i],
     [validQuickUpgrade({ phone: "call me" }), /valid phone/i],
     [validQuickUpgrade({ tradeSharing: { email: true, postcode: true, address: false, name: false, phone: false } }), /address must be shared/i],
-    [validQuickUpgrade({ tradeSharing: { email: true, postcode: true, address: true, name: false } }), /optional trade sharing preference/i],
-    [validQuickUpgrade({ phone: "", tradeSharing: { email: true, postcode: true, address: true, name: false, phone: true } }), /enter a phone number/i],
-    [validQuickUpgrade({ customerLastName: "", tradeSharing: { email: true, postcode: true, address: true, name: true, phone: false } }), /both first and last name/i],
+    [validQuickUpgrade({ tradeSharing: { postcode: true, address: true, name: false, phone: false } }), /contact detail sharing preference/i],
+    [validQuickUpgrade({ tradeSharing: { email: true, postcode: true, address: true, name: false } }), /contact detail sharing preference/i],
     [validQuickUpgrade({ projectNotes: "My NMI number is 6407123456" }), /remove nmi/i],
     [validQuickUpgrade({ projectNotes: "Access code 123456" }), /remove nmi/i],
     [validQuickUpgrade({ projectNotes: "Card 4111 1111 1111 1111" }), /remove nmi/i],
@@ -145,10 +149,10 @@ test("the quick envelope opens automatic matching without manufacturing a plan o
   assert.equal(envelope.directTradeTriage.autoSend, true);
   assert.equal(envelope.directTradeTriage.status, "automatic_verified_area_allocation");
   assert.deepEqual(envelope.directTradeTriage.contactConsentReceipt.disclosedFields, [
-    "customer_email",
     "postcode",
     "service_categories",
     "customer_address",
+    "customer_email",
     "customer_name",
     "customer_phone",
     "customer_message",
@@ -163,9 +167,8 @@ test("the quick envelope opens automatic matching without manufacturing a plan o
   );
 });
 
-test("quick contact releases require address and reveal only customer-selected optional fields", () => {
+test("quick contact releases require address and reveal only customer-selected contact fields", () => {
   const requiredFields = [
-    "customer_email",
     "postcode",
     "service_categories",
     "customer_address",
@@ -214,7 +217,7 @@ test("quick contact releases require address and reveal only customer-selected o
   }, {
     name: "",
     phone: "",
-    email: "jamie@example.com",
+    email: "",
     addressLine1: "15 Example Street",
     message: "Please help me compare practical options.",
   });
@@ -222,12 +225,19 @@ test("quick contact releases require address and reveal only customer-selected o
     ...baseRow,
     public_contact_disclosed_fields: JSON.stringify([
       ...requiredFields,
+      "customer_email",
       "customer_name",
       "customer_phone",
     ]),
   });
   assert.equal(allSelected.name, "Jamie Customer");
+  assert.equal(allSelected.email, "jamie@example.com");
   assert.equal(allSelected.phone, "0400 000 000");
+  assert.equal(publicPlanContactReleaseDisclosedFieldsAreValid(
+    LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+    LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
+    ["customer_email", "postcode", "service_categories", "customer_address"],
+  ), true);
 });
 
 function quickHandler({
@@ -237,13 +247,14 @@ function quickHandler({
   }),
   recordLeadIncident = async () => {},
   recordQuickUpgradeNoMatch = async () => {},
+  operationRecords = [],
 } = {}) {
   return createLeadPostHandler({
     validateLeadPayload,
     createLeadEnvelope,
     createOperationalRecorder: () => ({
       requestId: "request-quick-1",
-      record() {},
+      record(outcome, status, metrics) { operationRecords.push({ outcome, status, metrics }); },
     }),
     leadRateLimiter: { async check() { return { allowed: true }; } },
     recordLeadIncident,
@@ -274,20 +285,21 @@ async function submitQuick(handler, payload = validQuickUpgrade()) {
 
 test("the quick route persists, allocates and queues background trade notifications without webhook or plan delivery", async () => {
   let createdPayload;
+  const operationRecords = [];
   const response = await submitQuick(quickHandler({
     createOpportunityFromLead: async (payload) => {
       createdPayload = payload;
       return { id: "opportunity-quick-1", allocation: { activeCount: 2 } };
     },
+    operationRecords,
   }));
   const body = await response.json();
   assert.equal(response.status, 200);
   assert.deepEqual(body, {
     ok: true,
     reference: "AEA-20260903-12345678ABCD4ABC",
-    matchedBusinessCount: 2,
-    notificationStatus: "queued",
   });
+  assert.equal(operationRecords.at(-1).metrics.matchedBusinessCount, 2);
   assert.equal(createdPayload.sourceJourney, QUICK_UPGRADE_SOURCE_JOURNEY);
   assert.equal(
     response.headers.get("X-AEA-Opportunity-Notification-Dispatch"),
@@ -297,18 +309,21 @@ test("the quick route persists, allocates and queues background trade notificati
 
 test("a quick request with no current match queues Australian Energy Assessments follow-up without scheduling an empty trade drain", async () => {
   const reviewQueue = [];
+  const operationRecords = [];
   const response = await submitQuick(quickHandler({
     createOpportunityFromLead: async () => ({
       id: "opportunity-no-match-1",
       allocation: { activeCount: 0 },
     }),
     recordQuickUpgradeNoMatch: async (opportunityId) => reviewQueue.push(opportunityId),
+    operationRecords,
   }));
   const body = await response.json();
   assert.equal(response.status, 200);
   assert.equal(body.ok, true);
-  assert.equal(body.notificationStatus, "no_match");
-  assert.equal(body.matchedBusinessCount, 0);
+  assert.equal("notificationStatus" in body, false);
+  assert.equal("matchedBusinessCount" in body, false);
+  assert.equal(operationRecords.at(-1).metrics.matchedBusinessCount, 0);
   assert.deepEqual(reviewQueue, ["opportunity-no-match-1"]);
   assert.equal(response.headers.has("X-AEA-Opportunity-Notification-Dispatch"), false);
 });
@@ -403,12 +418,12 @@ function durableContact(id, overrides = {}) {
     noticeVersion: QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
     consentPurpose: QUICK_UPGRADE_CONSENT_PURPOSE,
     disclosedFields: [
-      "customer_email", "postcode", "service_categories", "customer_address",
+      "postcode", "service_categories", "customer_address",
     ],
-    customerFirstName: "",
-    customerLastName: "",
+    customerFirstName: "Jamie",
+    customerLastName: "Customer",
     customerEmail: "jamie@example.test",
-    customerPhone: "",
+    customerPhone: "0400 000 000",
     customerUnitNumber: "Unit 4",
     customerStreetAddress: "15 Example Street",
     customerSuburb: "MELBOURNE",
@@ -435,10 +450,37 @@ test("quick retries converge on one durable opportunity and reject a changed add
   assert.equal(retry.contactIsCurrent, true);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_opportunities").get().count, 1);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM public_trade_lead_contact_releases").get().count, 1);
+  const stored = database.prepare("SELECT * FROM public_trade_lead_contact_releases").get();
+  assert.equal(stored.customer_first_name, "Jamie");
+  assert.equal(stored.customer_last_name, "Customer");
+  assert.equal(stored.customer_email, "jamie@example.test");
+  assert.equal(stored.customer_phone, "0400 000 000");
+  const shared = publicTradeContactForMatchedLead({
+    source_reference: stored.source_reference, opportunity_postcode: "3000", state: "VIC",
+    public_contact_release_id: stored.id, public_contact_source_reference: stored.source_reference,
+    public_contact_status: stored.status, public_contact_withdrawn_at: stored.withdrawn_at,
+    public_contact_granted_at: stored.granted_at, public_contact_postcode: stored.postcode,
+    public_contact_notice_version: stored.notice_version, public_contact_consent_purpose: stored.consent_purpose,
+    public_contact_disclosed_fields: stored.disclosed_fields,
+    public_customer_first_name: stored.customer_first_name, public_customer_last_name: stored.customer_last_name,
+    public_customer_email: stored.customer_email, public_customer_phone: stored.customer_phone,
+    public_customer_street_address: stored.customer_street_address,
+    public_customer_unit_number: stored.customer_unit_number, public_customer_suburb: stored.customer_suburb,
+    public_customer_address_state: stored.customer_address_state,
+  });
+  assert.ok(shared);
+  for (const field of ["firstName", "lastName", "name", "email", "phone"]) assert.equal(shared[field], "");
+  assert.equal(shared.addressLine1, "15 Example Street");
   await assert.rejects(() => persistLeadOpportunity(
     adapter,
     durableOpportunity("opportunity-c"),
     durableContact("contact-c", { customerStreetAddress: "99 Changed Street" }),
+    currentConsent,
+  ), /OPPORTUNITY_SOURCE_REFERENCE_MISMATCH/);
+  await assert.rejects(() => persistLeadOpportunity(
+    adapter,
+    durableOpportunity("opportunity-d"),
+    durableContact("contact-d", { disclosedFields: [...durableContact("unused").disclosedFields, "customer_email"] }),
     currentConsent,
   ), /OPPORTUNITY_SOURCE_REFERENCE_MISMATCH/);
   database.close();

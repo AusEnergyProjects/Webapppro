@@ -11,6 +11,8 @@ import {
   PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "../src/lib/public-plan-enquiry.mjs";
 import {
+  LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   QUICK_UPGRADE_CONSENT_PURPOSE,
 } from "../src/lib/quick-upgrade-enquiry.mjs";
@@ -160,6 +162,7 @@ test("stored public contact releases accept only recognized policy and field pai
   const insert = database.prepare(`INSERT INTO releases
     (id, notice_version, consent_purpose, disclosed_fields) VALUES (?, ?, ?, ?)`);
   const required = ["customer_email", "postcode", "service_categories"];
+  const quickRequired = ["postcode", "service_categories", "customer_address"];
   insert.run("v4-good", LEGACY_V4_NOTICE, LEGACY_V4_PURPOSE, JSON.stringify([
     ...required,
     "customer_name",
@@ -172,10 +175,13 @@ test("stored public contact releases accept only recognized policy and field pai
   ]));
   insert.run("v7-good", PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE, JSON.stringify(required));
   insert.run("quick-good", QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE, JSON.stringify([
+    ...quickRequired,
+  ]));
+  insert.run("quick-v1-good", LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE, JSON.stringify([
     ...required,
     "customer_address",
   ]));
-  insert.run("quick-missing-address", QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE, JSON.stringify(required));
+  insert.run("quick-missing-address", QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE, JSON.stringify(quickRequired.slice(0, 2)));
   insert.run("wrong-purpose", LEGACY_V6_NOTICE, LEGACY_V4_PURPOSE, JSON.stringify(required));
   insert.run("unknown-version", "2026-08-10-unknown-v5", LEGACY_V6_PURPOSE, JSON.stringify(required));
   insert.run("malformed-fields", LEGACY_V6_NOTICE, LEGACY_V6_PURPOSE, "not-json");
@@ -192,7 +198,7 @@ test("stored public contact releases accept only recognized policy and field pai
   const eligible = database.prepare(`SELECT id FROM releases release
     WHERE ${publicPlanContactReleaseAccessSql("release")} ORDER BY id`)
     .all().map((row) => row.id);
-  assert.deepEqual(eligible, ["quick-good", "v4-good", "v6-good", "v7-good"]);
+  assert.deepEqual(eligible, ["quick-good", "quick-v1-good", "v4-good", "v6-good", "v7-good"]);
   const recognizedConsentPairs = database.prepare(`SELECT id FROM releases release
     WHERE ${publicPlanContactReleaseConsentSql("release")} ORDER BY id`)
     .all().map((row) => row.id);
@@ -202,6 +208,7 @@ test("stored public contact releases accept only recognized policy and field pai
     "missing-services",
     "quick-good",
     "quick-missing-address",
+    "quick-v1-good",
     "v4-address-overreach",
     "v4-good",
     "v6-good",

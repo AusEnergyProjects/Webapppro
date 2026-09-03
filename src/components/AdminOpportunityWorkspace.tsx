@@ -30,6 +30,7 @@ type OpportunityAllocation = {
 };
 type Opportunity = {
   id: string;
+  sourceReference: string;
   title: string;
   projectType: string;
   postcode: string;
@@ -49,6 +50,18 @@ type Opportunity = {
   updatedAt: string;
   allocations: OpportunityAllocation[];
 };
+type RetainedContact = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  unitNumber: string;
+  streetAddress: string;
+  suburb: string;
+  state: string;
+  postcode: string;
+  grantedAt: string;
+};
 type AdminApiResult = {
   allocated?: unknown[];
   eligibleCount?: number;
@@ -57,6 +70,7 @@ type AdminApiResult = {
   pagination?: Partial<ListPagination>;
   preferences?: WorkspaceListPreferences;
   saved?: boolean;
+  retainedContact?: RetainedContact;
 };
 
 const states = AUSTRALIAN_STATE_CODES;
@@ -89,6 +103,9 @@ export function AdminOpportunityWorkspace({ api, demoOnlyRequest, role, setStatu
   const [opportunityViewBusy, setOpportunityViewBusy] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState("");
   const [selectedBusiness, setSelectedBusiness] = useState("");
+  const [retainedContact, setRetainedContact] = useState<{ opportunityId: string; details: RetainedContact } | null>(null);
+  const [retainedContactBusy, setRetainedContactBusy] = useState("");
+  const retainedContactRequest = useRef(0);
   const [opportunityDraft, setOpportunityDraft] = useState({
     title: "", projectType: "", postcode: "", state: "", categories: [] as string[],
     priority: "standard", timing: "planning", summary: "", status: "draft",
@@ -109,6 +126,9 @@ export function AdminOpportunityWorkspace({ api, demoOnlyRequest, role, setStatu
   }, [api]);
 
   const loadOpportunities = useCallback(async (announce = false) => {
+    retainedContactRequest.current += 1;
+    setRetainedContact(null);
+    setRetainedContactBusy("");
     const params = new URLSearchParams({ page: String(opportunityPage), pageSize: String(opportunityPageSize), sort: opportunitySort });
     const cursor = opportunityCursors.current[opportunityPage - 1] || "";
     if (cursor) params.set("cursor", cursor);
@@ -131,6 +151,25 @@ export function AdminOpportunityWorkspace({ api, demoOnlyRequest, role, setStatu
       if (announce) setStatus(`${result.pagination?.total || 0} leads and opportunities match this view.`);
     } catch (error) { setStatus(errorMessage(error)); }
   }, [api, opportunityPage, opportunityPageSize, opportunitySearch, opportunityServiceFilter, opportunitySort, opportunityStateFilter, opportunityStatusFilter, opportunitySynthetic, setStatus]);
+
+  useEffect(() => () => { retainedContactRequest.current += 1; }, []);
+
+  async function showRetainedContact(opportunityId: string) {
+    const requestNumber = ++retainedContactRequest.current;
+    setRetainedContact(null);
+    setRetainedContactBusy(opportunityId);
+    try {
+      const result = await api(`/api/admin/opportunities?contact=${encodeURIComponent(opportunityId)}`);
+      if (requestNumber !== retainedContactRequest.current) return;
+      if (!result.retainedContact) throw new Error("The retained contact record could not be opened.");
+      setRetainedContact({ opportunityId, details: result.retainedContact });
+      setStatus("Retained contact opened. This access has been recorded in the audit log.");
+    } catch (error) {
+      if (requestNumber === retainedContactRequest.current) setStatus(errorMessage(error));
+    } finally {
+      if (requestNumber === retainedContactRequest.current) setRetainedContactBusy("");
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -275,7 +314,35 @@ export function AdminOpportunityWorkspace({ api, demoOnlyRequest, role, setStatu
         <label>Initial status<select value={opportunityDraft.status} onChange={(event) => setOpportunityDraft({ ...opportunityDraft, status: event.target.value })}><option value="draft">Draft</option><option value="open">Open for matching</option></select></label>
         <button type="submit">Create opportunity</button>
       </form>
-      <section className="admin-panel admin-opportunity-list tlink-data-table"><div className="admin-panel-heading"><span>Pipeline</span><h2>Current leads and opportunities</h2></div>{opportunities.length ? opportunities.map((opportunity) => <article key={opportunity.id}><header><div><span>{opportunity.state} {opportunity.postcode}</span><h3>{opportunity.title}{opportunity.isSynthetic && <b className="admin-synthetic-marker">Demo</b>}</h3></div><span className={`admin-pill admin-pill-${opportunity.status}`}>{opportunity.status}</span></header><p>{opportunity.summary}</p><div className="admin-opportunity-meta"><span>{readable(opportunity.priority)}</span><span>{readable(opportunity.timing)}</span><span>{opportunity.matchCount} assigned</span><span>{opportunity.interestedCount} interested</span><span>{opportunity.connectedCount} connected</span><span>Expires {dateTime(opportunity.expiresAt)}</span></div>{opportunity.allocations?.length > 0 && <div className="admin-allocation-list">{opportunity.allocations.map((allocation) => <article key={allocation.id}><div><strong>{allocation.allocationRank}. {allocation.businessName}</strong><span>{allocation.distanceKm.toFixed(1)} km · {readable(allocation.status)} · {readable(allocation.matchSource)}</span></div><div><small>Platform-only response</small>{allocation.status === "interested" && opportunity.connectedCount < opportunity.maximumConnectedInstallers && <button type="button" onClick={() => void updateAllocation(allocation.id, "connected")}>Progress in platform</button>}</div></article>)}</div>}<div className="admin-opportunity-actions">{opportunity.status === "open" && <button type="button" onClick={() => void allocateOpportunity(opportunity.id)}>Send to every eligible service-area trade</button>}{opportunity.status !== "open" && opportunity.status !== "closed" && <button onClick={() => void setOpportunityStatus(opportunity.id, "open")}>Open</button>}{opportunity.status === "open" && <button onClick={() => void setOpportunityStatus(opportunity.id, "paused")}>Pause</button>}{opportunity.status !== "closed" && <button onClick={() => void setOpportunityStatus(opportunity.id, "closed")}>Close</button>}</div></article>) : <p className="admin-empty">No opportunities have been created.</p>}</section>
+      <section className="admin-panel admin-opportunity-list tlink-data-table">
+        <div className="admin-panel-heading"><span>Pipeline</span><h2>Current leads and opportunities</h2></div>
+        {opportunities.length ? opportunities.map((opportunity) => {
+          const contact = retainedContact?.opportunityId === opportunity.id ? retainedContact.details : null;
+          return <article key={opportunity.id}>
+            <header><div><span>{opportunity.state} {opportunity.postcode}</span><h3>{opportunity.title}{opportunity.isSynthetic && <b className="admin-synthetic-marker">Demo</b>}</h3></div><span className={`admin-pill admin-pill-${opportunity.status}`}>{opportunity.status}</span></header>
+            <p>{opportunity.summary}</p>
+            <div className="admin-opportunity-meta"><span>{readable(opportunity.priority)}</span><span>{readable(opportunity.timing)}</span><span>{opportunity.matchCount} assigned</span><span>{opportunity.interestedCount} interested</span><span>{opportunity.connectedCount} connected</span><span>Expires {dateTime(opportunity.expiresAt)}</span></div>
+            {opportunity.allocations?.length > 0 && <div className="admin-allocation-list">{opportunity.allocations.map((allocation) => <article key={allocation.id}><div><strong>{allocation.allocationRank}. {allocation.businessName}</strong><span>{allocation.distanceKm.toFixed(1)} km · {readable(allocation.status)} · {readable(allocation.matchSource)}</span></div><div><small>Platform-only response</small>{allocation.status === "interested" && opportunity.connectedCount < opportunity.maximumConnectedInstallers && <button type="button" onClick={() => void updateAllocation(allocation.id, "connected")}>Progress in platform</button>}</div></article>)}</div>}
+            <div className="admin-opportunity-actions">
+              {opportunity.sourceReference && ["owner", "admin", "support"].includes(role) && <button type="button" disabled={Boolean(retainedContactBusy)} aria-expanded={Boolean(contact)} onClick={() => contact ? setRetainedContact(null) : void showRetainedContact(opportunity.id)}>{retainedContactBusy === opportunity.id ? "Opening contact..." : contact ? "Hide retained contact" : "Show retained contact"}</button>}
+              {opportunity.status === "open" && <button type="button" onClick={() => void allocateOpportunity(opportunity.id)}>Send to every eligible service-area trade</button>}
+              {opportunity.status !== "open" && opportunity.status !== "closed" && <button onClick={() => void setOpportunityStatus(opportunity.id, "open")}>Open</button>}
+              {opportunity.status === "open" && <button onClick={() => void setOpportunityStatus(opportunity.id, "paused")}>Pause</button>}
+              {opportunity.status !== "closed" && <button onClick={() => void setOpportunityStatus(opportunity.id, "closed")}>Close</button>}
+            </div>
+            {contact && <section className={styles.retainedContact} aria-label="Retained customer contact">
+              <strong>For Australian Energy Assessments support</strong>
+              <p>This access is audited. Trades only receive the contact details the customer chose to share.</p>
+              <dl>
+                <div><dt>Name</dt><dd>{[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "Not provided"}</dd></div>
+                <div><dt>Email</dt><dd>{contact.email}</dd></div>
+                <div><dt>Phone</dt><dd>{contact.phone || "Not provided"}</dd></div>
+                <div><dt>Property</dt><dd>{[contact.unitNumber, contact.streetAddress, contact.suburb, contact.state, contact.postcode].filter(Boolean).join(", ")}</dd></div>
+              </dl>
+            </section>}
+          </article>;
+        }) : <p className="admin-empty">No opportunities have been created.</p>}
+      </section>
     </div>
     {["owner", "admin"].includes(role) && <form className="admin-panel admin-assignment-form" onSubmit={assignOpportunity}><div><span>Capability matching</span><h2>Manual allocation exception</h2><p>Use only when an otherwise eligible installer needs to be added manually. Service radius, capability, availability and verified-business checks still apply.</p></div><SearchableLookup label="Open opportunity" value={selectedOpportunity} required placeholder="Search title or postcode" load={loadOpportunityOptions} onChange={setSelectedOpportunity} /><SearchableLookup label="Active installer" value={selectedBusiness} required placeholder="Search business or postcode" load={loadInstallerOptions} onChange={setSelectedBusiness} /><button type="submit">Add eligible installer</button></form>}
   </div>;

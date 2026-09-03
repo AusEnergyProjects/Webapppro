@@ -357,10 +357,10 @@ function publicContactRelease(payload: DirectTradeLead) {
   if (quickUpgradeJourney) {
     const customerMessage = String(payload.projectNotes || "").trim().slice(0, 500);
     const disclosedFields = [
-      "customer_email",
       "postcode",
       "service_categories",
       "customer_address",
+      ...(tradeSharing?.email ? ["customer_email"] : []),
       ...(tradeSharing?.name ? ["customer_name"] : []),
       ...(tradeSharing?.phone ? ["customer_phone"] : []),
       ...(customerMessage ? ["customer_message"] : []),
@@ -368,12 +368,15 @@ function publicContactRelease(payload: DirectTradeLead) {
     if (
       receipt?.accepted !== true
       || !sourceReference
+      || !customerFirstName
+      || !customerLastName
       || !customerEmail
+      || !customerPhone
       || !customerStreetAddress
       || !customerSuburb
       || !customerAddressState
       || customerAddressState !== canonicalAustralianState(payload.state)
-      || tradeSharing?.email !== true
+      || typeof tradeSharing?.email !== "boolean"
       || tradeSharing?.postcode !== true
       || tradeSharing?.address !== true
       || typeof tradeSharing?.name !== "boolean"

@@ -64,6 +64,10 @@ const sitemap = read("../src/app/sitemap.ts");
 const manifest = read("../src/app/manifest.ts");
 const socialAsset = path.resolve(directory, "../public/aea-home-energy-plan-og-v2.png");
 const surgeHomeAsset = path.resolve(directory, "../public/surge-command-centre-home.webp");
+const rootIcon = fs.readFileSync(path.resolve(directory, "../src/app/icon.png"));
+const rootAppleIcon = fs.readFileSync(path.resolve(directory, "../src/app/apple-icon.png"));
+const rootFavicon = fs.readFileSync(path.resolve(directory, "../src/app/favicon.ico"));
+const tlinkIcon = fs.readFileSync(path.resolve(directory, "../public/tlink-icon-512.png"));
 
 test("site navigation loads the exact brandmark through the immutable image route", () => {
   assert.match(chrome, /src="\/api\/aea-brandmark"/);
@@ -73,6 +77,20 @@ test("site navigation loads the exact brandmark through the immutable image rout
     brandAssets.match(/data:image\/png;base64/g)?.length,
     1,
   );
+});
+
+test("root browser icons use the Australian Energy Assessments mark instead of TLink", () => {
+  assert.notDeepEqual(rootIcon, tlinkIcon);
+  assert.equal(rootIcon.subarray(1, 4).toString("ascii"), "PNG");
+  assert.equal(rootIcon.readUInt32BE(16), 512);
+  assert.equal(rootIcon.readUInt32BE(20), 512);
+  assert.equal(rootAppleIcon.readUInt32BE(16), 180);
+  assert.equal(rootAppleIcon.readUInt32BE(20), 180);
+  assert.equal(rootFavicon.readUInt16LE(2), 1);
+  assert.equal(rootFavicon.readUInt16LE(4), 1);
+  assert.equal(rootFavicon.subarray(23, 26).toString("ascii"), "PNG");
+  assert.doesNotMatch(directTradeLayout, /aea-brandmark/);
+  assert.match(directTradeLayout, /tlink-icon-192\.png/);
 });
 
 test("the homepage provides one clear starting journey instead of redirecting", () => {
@@ -143,7 +161,7 @@ test("the shared header includes private, typo-tolerant predictive page search",
   assert.doesNotMatch(publicSiteSearch, /\bfetch\(|localStorage|sessionStorage|gtag|dataLayer/);
   assert.match(styles, /\.site-header \{ display: grid; grid-template-columns: auto minmax\(150px, 1fr\) auto;[^}]*overflow: visible;[^}]*z-index: 40;/);
   assert.match(styles, /\.public-site-search \{ grid-column: 2; grid-row: 1; \}/);
-  assert.match(publicSiteSearchStyles, /\.root \{[^}]*max-width: 360px;/);
+  assert.match(publicSiteSearchStyles, /\.root \{[^}]*max-width: 560px;/);
   assert.match(styles, /\.site-header-actions \{[^}]*grid-column: 3; grid-row: 1;/);
   assert.match(styles, /\.site-header > \.public-site-search \{ z-index: 4; \}/);
   assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.public-site-search \{[^}]*grid-column: 2; grid-row: 1;[\s\S]*?\.site-header-actions \{[^}]*grid-column: 1 \/ -1; grid-row: 2;[\s\S]*?\.site-header \.site-nav-shell \{[^}]*grid-column: 1 \/ -1; grid-row: 3;/);
@@ -180,7 +198,7 @@ test("the futuristic header links to one dedicated always-present Wattzun AI pag
   assert.match(styles, /\.site-surge-copy \{[^}]*flex: none;/);
   assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{[^}]*flex: 1 1 0;[^}]*min-height: 40px;[\s\S]*?\.site-surge-link \{[^}]*flex-grow: 1\.2;/);
   assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-surge-core img \{[^}]*height: 31px;[^}]*width: auto;/);
-  assert.match(styles, /@media \(max-width: 520px\) \{[\s\S]*?\.site-surge-link \{[^}]*flex-basis: 96px;[\s\S]*?\.site-tlink-link \{[^}]*flex-basis: 74px;[\s\S]*?\.site-book-link, \.site-call-link \{[^}]*flex-basis: 55px;/);
+  assert.match(styles, /@media \(max-width: 520px\) \{[\s\S]*?\.site-surge-link \{[^}]*flex-basis: 96px;[\s\S]*?\.site-tlink-link \{[^}]*flex-basis: 74px;[\s\S]*?\.site-book-link \{[^}]*flex-basis: 72px;[\s\S]*?\.site-call-link \{[^}]*flex-basis: 58px;/);
   assert.match(styles, /@media \(max-width: 360px\) \{[\s\S]*?\.site-header-actions \{[^}]*display: grid;[^}]*grid-template-columns: 1fr 1fr;/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.site-header::before, \.site-surge-core, \.customer-journey-scene::after \{ animation: none !important; \}/);
   assert.match(styles, /@media \(forced-colors: active\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{ border: 1px solid ButtonText;/);
@@ -213,6 +231,9 @@ test("header actions use the requested order, equal sizing and energy backdrop",
   assert.match(styles, /\.site-book-link \{[^}]*booking-energy-hero\.webp/);
   assert.match(styles, /\.site-call-link \{[^}]*booking-energy-hero\.webp/);
   assert.match(chrome, /href="\/book-an-assessment"[^>]*>[\s\S]*?Book now/);
+  assert.match(chrome, /className="site-book-link"[\s\S]*?site-action-icon[\s\S]*?<svg[\s\S]*?<span>Book now<\/span>/);
+  assert.match(chrome, /className="site-call-link"[\s\S]*?site-action-icon[\s\S]*?<svg[\s\S]*?<span>Call<\/span>/);
+  assert.equal(chrome.match(/className="site-action-icon" aria-hidden="true"/g)?.length, 2);
   assert.doesNotMatch(chrome, />Book a 5-minute call<\/Link>/);
 });
 
@@ -227,8 +248,14 @@ test("desktop categories and the mobile page browser use lightweight native disc
   assert.match(responsiveNav, /className="site-nav-mobile-groups"/);
   assert.match(responsiveNav, /aria-current=\{isActive \? "true" : undefined\}/);
   assert.doesNotMatch(responsiveNav, /role="menu|role="menuitem|site-nav-scroll-cue|Swipe/);
+  assert.match(publicSiteSearch, /\.site-nav-shell details\[open\]/);
+  assert.match(publicSiteSearch, /document\.addEventListener\("keydown", closeNavigationOnEscape\)/);
+  assert.match(publicSiteSearch, /document\.removeEventListener\("keydown", closeNavigationOnEscape\)/);
+  assert.match(publicSiteSearch, /focusedDisclosure\?\.querySelector<HTMLElement>\("summary"\)\?\.focus\(\)/);
+  assert.match(styles, /@media \(max-width: 460px\) \{[\s\S]*?\.site-book-link \.site-action-icon, \.site-call-link \.site-action-icon \{ display: none; \}/);
   assert.match(styles, /\.comparator-nav \{[^}]*display: grid;[^}]*grid-template-columns: minmax\(96px, \.62fr\) minmax\(0, 4fr\);[^}]*overflow: visible;/);
-  assert.match(styles, /\.site-nav-desktop-categories \{[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.site-nav-desktop-categories \{[^}]*display: flex;[^}]*justify-content: center;/);
+  assert.match(styles, /\.site-nav-category \{[^}]*flex: 0 1 230px;/);
   assert.match(styles, /\.site-nav-panel \{[^}]*position: absolute;[^}]*width: min\(360px, calc\(100vw - 48px\)\);/);
   assert.match(styles, /\.site-nav-category\[open\] > \.site-nav-category-trigger/);
   assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-nav-desktop-categories \{ display: none; \}[\s\S]*?\.site-nav-mobile-trigger \{[^}]*display: flex;/);

@@ -176,10 +176,10 @@ export function createLeadEnvelope(payload, options = {}) {
             noticeVersion: leadPayload.consent?.noticeVersion || "",
             grantedAt: leadPayload.consent?.grantedAt || "",
             disclosedFields: [
-              "customer_email",
               "postcode",
               "service_categories",
               "customer_address",
+              ...(leadPayload.tradeSharing?.email ? ["customer_email"] : []),
               ...(leadPayload.tradeSharing?.name ? ["customer_name"] : []),
               ...(leadPayload.tradeSharing?.phone ? ["customer_phone"] : []),
               ...(leadPayload.projectNotes ? ["customer_message"] : []),

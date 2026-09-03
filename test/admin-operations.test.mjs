@@ -172,11 +172,11 @@ test("opportunities remain privacy-safe and partner responses stay owner scoped"
   assert.match(partnerOpportunities, /action === "submit_quote"/);
   assert.match(
     dashboard,
-    /Public-plan enquiries include the email, postcode, message and any optional name, phone or address/,
+    /Quick upgrade requests include the postcode, selected services, any written message and full property address\. Email, name and phone appear only when selected/,
   );
   assert.match(
     dashboard,
-    /Customer-account project contact and street details stay protected until the customer chooses this business/,
+    /Customer account project contact and street details stay protected until the customer chooses this business/,
   );
   assert.match(dashboard, /Platform coordination active/);
   assert.match(dashboard, /no active contact release is available/);

@@ -10,7 +10,7 @@ import { PUBLIC_SITE } from "@/lib/public-site";
 export function BrandBar() {
   return (
     <Link href="/" className="brandbar" aria-label="Australian Energy Assessments home">
-      <span className="brandmark" aria-hidden="true"><img src="/api/aea-brandmark" alt="" width="30" height="30" decoding="async" /></span>
+      <span className="brandmark" aria-hidden="true"><img src="/api/aea-brandmark" alt="" width="34" height="34" decoding="async" /></span>
       <span className="brandtext">
         <strong className="brandname">Australian Energy Assessments</strong>
         <span className="brandtag">Independent energy assessments</span>
@@ -43,14 +43,25 @@ export function SiteHeader({ active }: { active: SiteActive }) {
             href="/book-an-assessment"
             aria-label="Book a five-minute assessment call"
           >
-            Book now
+            <span className="site-action-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+                <path d="M7 3v3m10-3v3M5 9h14M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                <path d="m9.2 14 1.8 1.8 3.9-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+              </svg>
+            </span>
+            <span>Book now</span>
           </Link>
           <a
             className="site-call-link"
             href={PUBLIC_SITE.phoneHref}
             aria-label={`Call Australian Energy Assessments on ${PUBLIC_SITE.phoneDisplay}`}
           >
-            Call
+            <span className="site-action-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+                <path d="M7.4 4.2 10 8.7 8.2 10a13.5 13.5 0 0 0 5.8 5.8l1.3-1.8 4.5 2.6-.8 2.7c-.2.7-.9 1.2-1.7 1.1A15.4 15.4 0 0 1 3.6 6.7c-.1-.8.4-1.5 1.1-1.7l2.7-.8Z" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+              </svg>
+            </span>
+            <span>Call</span>
           </a>
           <SurgeHeaderButton active={active === "surge"} />
           <Link

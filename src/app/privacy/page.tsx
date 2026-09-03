@@ -38,7 +38,7 @@ const sections = [
   },
   {
     title: "Protected leads and direct customers",
-    body: "Australian Energy Assessments keeps the details entered in a household enquiry in a protected record. The quick upgrade options form shares the email, full property address, selected services and any message with every approved TLink trade business whose services and active service area match the request. Name and phone are shared only when the household ticks those choices. Other trade request forms may offer different sharing choices, which are shown before the person agrees and sends the form. Home plans, PDFs, bills, meter data and uploaded documents stay private. Wholesalers do not receive household lead details.",
+    body: "Australian Energy Assessments keeps the contact and property details entered in a household enquiry in a protected record so we can manage the request and help if needed. The quick upgrade options form shares the full property address, selected services and any message with approved TLink trade businesses whose services and active service area match the request. Email, name and phone are shared only when the household ticks those choices. Other trade request forms may offer different sharing choices, which are shown before the person agrees and sends the form. Home plans, PDFs, bills, meter data and uploaded documents stay private. Wholesalers do not receive household lead details.",
   },
   {
     title: "Connected services",

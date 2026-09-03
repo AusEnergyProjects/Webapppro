@@ -60,6 +60,7 @@ export function QuickUpgradeEnquiryDialog({ onClose }: { onClose: () => void }) 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
+  const [shareEmail, setShareEmail] = useState(false);
   const [shareName, setShareName] = useState(false);
   const [sharePhone, setSharePhone] = useState(false);
   const [notes, setNotes] = useState("");
@@ -218,7 +219,7 @@ export function QuickUpgradeEnquiryDialog({ onClose }: { onClose: () => void }) 
     const core = JSON.stringify({
       services: [...services].sort(), postcode, locality, streetAddress: streetAddress.trim(),
       unitNumber: unitNumber.trim(), email: email.trim().toLowerCase(), firstName: firstName.trim(),
-      lastName: lastName.trim(), phone: phone.trim(), shareName, sharePhone, notes: notes.trim(), consentAccepted,
+      lastName: lastName.trim(), phone: phone.trim(), shareEmail, shareName, sharePhone, notes: notes.trim(), consentAccepted,
     });
     if (!submissionId.current || (lastAttemptCore.current && lastAttemptCore.current !== core)) {
       submissionId.current = createSubmissionId();
@@ -255,7 +256,7 @@ export function QuickUpgradeEnquiryDialog({ onClose }: { onClose: () => void }) 
           projectCategories: services,
           projectNotes: notes.trim(),
           tradeSharing: {
-            email: true,
+            email: shareEmail,
             postcode: true,
             address: true,
             name: shareName,
@@ -275,16 +276,12 @@ export function QuickUpgradeEnquiryDialog({ onClose }: { onClose: () => void }) 
         ok?: boolean;
         error?: string;
         reference?: string;
-        matchedBusinessCount?: number;
       };
       if (!response.ok || !result.ok) throw new Error(result.error || "Your request could not be sent.");
-      const matchedCount = Number(result.matchedBusinessCount || 0);
       setSubmitState({
         kind: "success",
         reference: result.reference,
-        message: matchedCount > 0
-          ? `Your request was sent to ${matchedCount} matching ${matchedCount === 1 ? "trade business" : "trade businesses"}. They can now review it and respond.`
-          : "Your request is safe. No matching trade business was available immediately, so Australian Energy Assessments will review it.",
+        message: "Your request has been saved for matching. Australian Energy Assessments will help if no suitable business is available.",
       });
     } catch (caught) {
       setSubmitState({
@@ -353,20 +350,21 @@ export function QuickUpgradeEnquiryDialog({ onClose }: { onClose: () => void }) 
                   <label className={styles.street}><span>Street address *</span><input value={streetAddress} onChange={(event) => setStreetAddress(event.target.value)} autoComplete="address-line1" maxLength={140} required /></label>
                 </div>
 
-                <div className={styles.stepHeading}><h3>How can trades respond?</h3><p>Email is required for the no-account quote path. Name and phone are optional.</p></div>
+                <div className={styles.stepHeading}><h3>Your contact details</h3><p>Australian Energy Assessments needs these details to manage the request and help if something gets stuck. You choose which contact details matching businesses can see.</p></div>
                 <div className={styles.contactGrid}>
-                  <label className={styles.full}><span>Email *</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" maxLength={254} required /></label>
-                  <label><span>First name</span><input value={firstName} onChange={(event) => { setFirstName(event.target.value); if (!event.target.value.trim() || !lastName.trim()) setShareName(false); }} autoComplete="given-name" maxLength={60} /></label>
-                  <label><span>Last name</span><input value={lastName} onChange={(event) => { setLastName(event.target.value); if (!event.target.value.trim() || !firstName.trim()) setShareName(false); }} autoComplete="family-name" maxLength={60} /></label>
-                  <label className={styles.full}><span>Phone</span><input type="tel" value={phone} onChange={(event) => { setPhone(event.target.value); if (!event.target.value.trim()) setSharePhone(false); }} autoComplete="tel" maxLength={40} /></label>
+                  <label className={styles.full}><span>Email *</span><input type="email" value={email} onChange={(event) => { setEmail(event.target.value); if (!event.target.value.trim()) setShareEmail(false); }} autoComplete="email" maxLength={254} required /></label>
+                  <label><span>First name *</span><input value={firstName} onChange={(event) => { setFirstName(event.target.value); if (!event.target.value.trim() || !lastName.trim()) setShareName(false); }} autoComplete="given-name" maxLength={60} required /></label>
+                  <label><span>Last name *</span><input value={lastName} onChange={(event) => { setLastName(event.target.value); if (!event.target.value.trim() || !firstName.trim()) setShareName(false); }} autoComplete="family-name" maxLength={60} required /></label>
+                  <label className={styles.full}><span>Phone *</span><input type="tel" value={phone} onChange={(event) => { setPhone(event.target.value); if (!event.target.value.trim()) setSharePhone(false); }} autoComplete="tel" maxLength={40} required /></label>
                 </div>
                 <div className={styles.optionalSharing}>
-                  <span>Optional contact details to share</span>
+                  <span>Choose contact details to share with matching businesses</span>
+                  <label><input type="checkbox" checked={shareEmail} disabled={!email.trim()} onChange={(event) => setShareEmail(event.target.checked)} /> Share my email</label>
                   <label><input type="checkbox" checked={shareName} disabled={!firstName.trim() || !lastName.trim()} onChange={(event) => setShareName(event.target.checked)} /> Share my name</label>
                   <label><input type="checkbox" checked={sharePhone} disabled={!phone.trim()} onChange={(event) => setSharePhone(event.target.checked)} /> Share my phone number</label>
                 </div>
                 <label className={styles.notes}><span>Anything useful to add?</span><textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} maxLength={500} placeholder="For example: what you want to improve, when you hope to start, or what you are unsure about." /><small>Do not include account numbers, meter numbers, access codes or payment details.</small></label>
-                <div className={styles.sharingSummary}><strong>What every matching business will receive</strong><p>Your selected services, email, full property address and anything you write above go to every approved TLink trade business that matches the services and area. Your name and phone are only included if you tick them.</p><p>Australian Energy Assessments does not sell leads or let businesses pay for placement.</p></div>
+                <div className={styles.sharingSummary}><strong>What matching businesses will receive</strong><p>Your selected services, full property address and anything you write above go to approved TLink businesses that match the services and area. Your email, name and phone are included only if you tick them.</p><p>Australian Energy Assessments securely keeps all contact details so we can manage the request and help if needed. We do not sell leads or let businesses pay for placement.</p></div>
                 <label className={styles.consent}><input type="checkbox" checked={consentAccepted} onChange={(event) => changeConsent(event.target.checked)} required /><span><strong>I agree to send this request *</strong><small>{QUICK_UPGRADE_CONSENT_PURPOSE} This is a request for options, not an agreement to buy or authorise work.</small></span></label>
                 <label className={styles.honeypot} aria-hidden="true"><span>Website</span><input value={website} onChange={(event) => setWebsite(event.target.value)} tabIndex={-1} autoComplete="off" /></label>
                 {submitState.kind === "error" ? <p className={styles.error} role="alert">{submitState.message}</p> : null}

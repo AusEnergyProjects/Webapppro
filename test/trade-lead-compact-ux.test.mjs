@@ -80,7 +80,7 @@ test("trade-facing quote copy uses contact choice rather than purchase acceptanc
   assert.match(quote, /With customer/);
   assert.doesNotMatch(quote, />Accepted for next step</);
   assert.doesNotMatch(quote, />Shortlisted</);
-  assert.match(dashboard, /Customer-account project contact and street details stay protected until the customer chooses this business/);
+  assert.match(dashboard, /Customer account project contact and street details stay protected until the customer chooses this business/);
   assert.match(dashboard, /Waiting for the customer to choose a business/);
   assert.doesNotMatch(dashboard, /Waiting for customer acceptance/);
 });

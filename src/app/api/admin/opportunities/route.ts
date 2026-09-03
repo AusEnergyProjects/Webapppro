@@ -6,6 +6,7 @@ import { performanceJson, routeTimer } from "@/lib/route-performance";
 import { ftsPrefixQuery } from "@/lib/fts-search";
 import { AUSTRALIAN_STATE_CODES, canonicalAustralianState } from "@/lib/australian-postcodes.mjs";
 import { ENERGY_SERVICE_IDS } from "@/lib/energy-service-catalogue.mjs";
+import { publicPlanContactReleaseAccessSql } from "@/lib/public-plan-enquiry.mjs";
 
 export const runtime = "edge";
 
@@ -51,11 +52,44 @@ function shape(row: Record<string, unknown>) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    await requireAdminIdentity(request);
-    await expireStaleOpportunities();
-    const db = getD1();
-    const timer = routeTimer();
     const url = new URL(request.url);
+    const contactId = cleanAdminText(url.searchParams.get("contact"), 180);
+    const admin = contactId
+      ? await requireAdminIdentity(request, ["owner", "admin", "support"])
+      : await requireAdminIdentity(request);
+    const db = getD1();
+    if (contactId) {
+      const contact = await db.prepare(`SELECT contact.id, contact.customer_first_name,
+        contact.customer_last_name, contact.customer_email, contact.customer_phone,
+        contact.customer_unit_number, contact.customer_street_address, contact.customer_suburb,
+        contact.customer_address_state, contact.postcode, contact.notice_version, contact.granted_at
+        FROM trade_opportunities o
+        JOIN public_trade_lead_contact_releases contact ON contact.id = (
+          SELECT current_contact.id FROM public_trade_lead_contact_releases current_contact
+          WHERE current_contact.opportunity_id = o.id
+            AND current_contact.source_reference = o.source_reference
+          ORDER BY current_contact.updated_at DESC, current_contact.id DESC LIMIT 1
+        )
+        WHERE o.id = ? AND contact.source_reference = o.source_reference
+          AND contact.postcode = o.postcode AND contact.status = 'active'
+          AND contact.withdrawn_at = '' AND datetime(contact.granted_at) IS NOT NULL
+          AND ${publicPlanContactReleaseAccessSql("contact")}
+        ORDER BY contact.updated_at DESC, contact.id DESC LIMIT 1`)
+        .bind(contactId).first<Record<string, unknown>>();
+      if (!contact) return adminJson({ ok: false, error: "No active retained contact record is available for this enquiry." }, 404);
+      await writeAdminAudit(admin, "opportunity.contact_view", "trade_opportunity", contactId,
+        "Opened retained customer contact details for enquiry support.",
+        { role: admin.role, releaseId: contact.id, noticeVersion: contact.notice_version });
+      return adminJson({ ok: true, retainedContact: {
+        firstName: contact.customer_first_name, lastName: contact.customer_last_name,
+        email: contact.customer_email, phone: contact.customer_phone,
+        unitNumber: contact.customer_unit_number, streetAddress: contact.customer_street_address,
+        suburb: contact.customer_suburb, state: contact.customer_address_state,
+        postcode: contact.postcode, grantedAt: contact.granted_at,
+      } });
+    }
+    await expireStaleOpportunities();
+    const timer = routeTimer();
     const search = cleanAdminText(url.searchParams.get("search"), 100).toLowerCase();
     const status = cleanAdminText(url.searchParams.get("status"), 20);
     const service = cleanAdminText(url.searchParams.get("service"), 40);

@@ -17,6 +17,8 @@ import {
   publicPlanContactReleaseDisclosedFieldsAreValid,
 } from "@/lib/public-plan-enquiry.mjs";
 import {
+  LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   QUICK_UPGRADE_CONSENT_PURPOSE,
 } from "@/lib/quick-upgrade-enquiry.mjs";
@@ -85,8 +87,10 @@ async function deliveryContext(deliveryId: string) {
       opportunity.state, opportunity.timing, opportunity.expires_at,
       opportunity.created_at opportunity_created_at, opportunity.status opportunity_status,
       CASE
-        WHEN public_contact.notice_version = '${QUICK_UPGRADE_CONSENT_NOTICE_VERSION}'
-          AND public_contact.consent_purpose = '${QUICK_UPGRADE_CONSENT_PURPOSE}'
+        WHEN (public_contact.notice_version = '${QUICK_UPGRADE_CONSENT_NOTICE_VERSION}'
+          AND public_contact.consent_purpose = '${QUICK_UPGRADE_CONSENT_PURPOSE}')
+          OR (public_contact.notice_version = '${LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION}'
+          AND public_contact.consent_purpose = '${LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE}')
           THEN 'quick_upgrade_enquiry'
         WHEN public_contact.id IS NOT NULL THEN 'public_plan_enquiry'
         WHEN project.id IS NOT NULL THEN 'customer_project'

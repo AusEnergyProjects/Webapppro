@@ -199,6 +199,8 @@ test("quick upgrade notifications state that no plan or PDF exists", () => {
   assert.match(deliveryServer, /THEN 'quick_upgrade_enquiry'/);
   assert.match(deliveryServer, /QUICK_UPGRADE_CONSENT_NOTICE_VERSION/);
   assert.match(deliveryServer, /QUICK_UPGRADE_CONSENT_PURPOSE/);
+  assert.match(deliveryServer, /LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION/);
+  assert.match(deliveryServer, /LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE/);
 });
 
 test("Resend submit does not wait for a webhook secret when send credentials are ready", () => {

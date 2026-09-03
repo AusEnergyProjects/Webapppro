@@ -38,8 +38,8 @@
   --shadow-card: 0 18px 46px rgba(0, 5, 14, .38), 0 0 0 1px rgba(32, 203, 184, .025);
   --shadow-card-hover: 0 24px 56px rgba(0, 5, 14, .5), 0 0 0 1px rgba(32, 203, 184, .14);
   --shadow-panel: 0 28px 70px rgba(0, 4, 12, .52), 0 0 0 1px rgba(32, 203, 184, .08);
-  --action-primary: linear-gradient(135deg, #0e9f68, #18bd78);
-  --action-primary-hover: linear-gradient(135deg, #08794c, #0e9f68);
+  --action-primary: linear-gradient(135deg, #08794c, #05643f);
+  --action-primary-hover: linear-gradient(135deg, #05643f, #034d32);
   --action-on-dark: #6ee7b7;
   --action-shadow: 0 10px 24px rgba(18, 166, 106, .25);
   --type-display: clamp(2.2rem, 4.3vw, 4.4rem);
@@ -2172,8 +2172,8 @@ body input[type="number"]::-webkit-outer-spin-button {
 .site-header > .public-site-search { z-index: 4; }
 .site-header .site-nav-shell { align-self: center; grid-column: 1 / -1; grid-row: 2; min-width: 0; width: 100%; }
 .site-header-actions { align-items: center; display: flex; flex: 0 0 auto; gap: 6px; grid-column: 3; grid-row: 1; min-width: 0; }
-.site-nav-desktop-categories { display: grid; gap: 3px; grid-template-columns: repeat(4, minmax(0, 1fr)); min-width: 0; }
-.site-nav-category { min-width: 0; position: relative; }
+.site-nav-desktop-categories { display: flex; gap: 7px; justify-content: center; min-width: 0; }
+.site-nav-category { flex: 0 1 230px; min-width: 0; position: relative; width: min(230px, 22vw); }
 .site-nav-category-trigger { cursor: pointer; gap: 7px; list-style: none; width: 100%; }
 .site-nav-category-trigger::-webkit-details-marker, .site-nav-mobile-trigger::-webkit-details-marker { display: none; }
 .site-nav-category[open] > .site-nav-category-trigger { background: rgba(8, 75, 80, .96); border-color: rgba(126, 247, 222, .42); color: #fff; }
@@ -2187,7 +2187,7 @@ body input[type="number"]::-webkit-outer-spin-button {
 .site-nav-panel a strong { font-size: .72rem; line-height: 1.25; }
 .site-nav-mobile-disclosure, .site-nav-mobile-trigger, .site-nav-mobile-panel { display: none; }
 
-@media (min-width: 721px) and (max-width: 1080px) {
+@media (min-width: 721px) and (max-width: 1180px) {
   .site-header { grid-template-columns: auto minmax(150px, 1fr); }
   .site-header .brandbar { grid-column: 1; grid-row: 1; }
   .public-site-search { grid-column: 2; grid-row: 1; }
@@ -2210,8 +2210,11 @@ body input[type="number"]::-webkit-outer-spin-button {
 .site-tlink-copy { display: block; flex: 0 0 auto; line-height: 1; text-align: left; }
 .site-tlink-copy strong { color: #fff; font-family: var(--font-aea-heading); font-size: .67rem; font-weight: 800; letter-spacing: -.01em; }
 .site-book-link, .site-call-link { font-size: .7rem; font-weight: 850; padding: 7px 10px; text-align: center; }
-.site-book-link { background: linear-gradient(145deg, rgba(4, 137, 96, .7), rgba(3, 48, 54, .76)), url("/booking-energy-hero.webp") 7% 50% / 390% auto no-repeat; box-shadow: 0 9px 22px rgba(4, 128, 91, .28); }
-.site-call-link { background: linear-gradient(145deg, rgba(2, 27, 47, .7), rgba(2, 57, 65, .78)), url("/booking-energy-hero.webp") 93% 50% / 390% auto no-repeat; box-shadow: 0 9px 22px rgba(0, 8, 24, .32); }
+.site-book-link, .site-call-link { gap: 6px; padding: 4px 8px 4px 5px; }
+.site-action-icon { align-items: center; background: rgba(1, 20, 34, .72); border: 1px solid rgba(134, 250, 225, .2); border-radius: 9px; box-shadow: 0 0 12px rgba(75, 235, 204, .2), inset 0 1px rgba(255, 255, 255, .09); color: #77f2d0; display: inline-flex; flex: 0 0 30px; height: 34px; justify-content: center; width: 30px; }
+.site-action-icon svg { display: block; }
+.site-book-link { background: linear-gradient(145deg, rgba(3, 96, 69, .94), rgba(2, 40, 48, .96)), url("/booking-energy-hero.webp") 7% 50% / 390% auto no-repeat; box-shadow: 0 9px 22px rgba(4, 128, 91, .28); }
+.site-call-link { background: linear-gradient(145deg, rgba(2, 23, 42, .96), rgba(2, 52, 61, .96)), url("/booking-energy-hero.webp") 93% 50% / 390% auto no-repeat; box-shadow: 0 9px 22px rgba(0, 8, 24, .32); }
 .site-surge-link:hover, .site-surge-link:focus-visible, .site-tlink-link:hover, .site-tlink-link:focus-visible, .site-book-link:hover, .site-book-link:focus-visible, .site-call-link:hover, .site-call-link:focus-visible { border-color: #a4ffe9; box-shadow: 0 0 0 3px rgba(52, 228, 196, .14), 0 12px 28px rgba(0, 9, 24, .28); transform: translateY(-1px); }
 
 .start-hero-planner { isolation: isolate; margin-bottom: 18px; min-height: clamp(680px, calc(100svh - 108px), 860px); overflow: hidden; }
@@ -2219,6 +2222,22 @@ body input[type="number"]::-webkit-outer-spin-button {
 .start-hero-planner::after { background: linear-gradient(90deg, rgba(3,25,45,.995) 0%, rgba(3,25,45,.965) 33%, rgba(3,25,45,.72) 49%, rgba(3,25,45,.12) 76%, rgba(3,25,45,.02) 100%), linear-gradient(0deg, rgba(3,25,45,.62), transparent 36%); }
 .start-hero-planner .start-hero-copy { align-self: center; max-width: 650px; padding-block: 44px 148px; z-index: 8; }
 .start-primary-action { box-shadow: 0 16px 36px rgba(12, 215, 139, .3); font-size: .96rem; min-height: 50px; padding: 13px 20px; }
+.start-actions .start-secondary-action,
+.start-actions .start-secondary-action:link,
+.start-actions .start-secondary-action:visited { background: rgba(2, 29, 44, .96); border-color: rgba(210, 255, 245, .84); color: #fff; text-shadow: 0 1px 3px rgba(0, 8, 20, .8); }
+.start-actions .start-secondary-action:hover,
+.start-actions .start-secondary-action:focus-visible { background: #eafff8; border-color: #a7f3d0; color: #043b46; text-shadow: none; }
+
+@media (min-width: 1181px) {
+  .site-header { gap: 7px 14px; padding: 7px 9px 7px 12px; }
+  .site-header .brandmark { flex-basis: 50px; height: 50px; width: 50px; }
+  .site-header .brandmark img { height: 36px; width: 36px; }
+  .site-header .brandname { font-size: 1.08rem; }
+  .site-header .brandtag { font-size: .61rem; }
+  .site-header-actions { gap: 5px; }
+  .site-surge-link, .site-tlink-link, .site-book-link, .site-call-link { flex-basis: 112px; }
+  .site-header .comparator-nav > .site-nav-home, .site-nav-category-trigger { min-height: 40px; }
+}
 .start-hero-secondary { color: #b8d3d6 !important; font-size: .76rem !important; line-height: 1.55 !important; margin-top: 14px !important; max-width: 560px !important; }
 .start-hero-secondary a { color: #7cf3c9; font-weight: 800; }
 .customer-journey-scene { inset: 0; overflow: hidden; position: absolute; z-index: 3; }
@@ -2368,7 +2387,9 @@ body input[type="number"]::-webkit-outer-spin-button {
   .site-surge-core img { height: 31px; width: auto; }
   .site-tlink-link { gap: 5px; padding: 3px 6px; }
   .site-tlink-mark { flex-basis: 29px; height: 29px; }
-  .site-book-link, .site-call-link { padding: 6px 4px; }
+  .site-book-link, .site-call-link { gap: 4px; padding: 3px 4px; }
+  .site-action-icon { border-radius: 7px; flex-basis: 24px; height: 28px; width: 24px; }
+  .site-action-icon svg { height: 15px; width: 15px; }
   .start-hero-planner { min-height: clamp(700px, 100svh, 820px); padding: 28px 20px 265px; }
   .start-hero-planner::after { background: linear-gradient(180deg, rgba(2,12,28,.995) 0%, rgba(3,25,45,.98) 50%, rgba(3,25,45,.9) 72%, rgba(3,25,45,.58) 100%); }
   .start-hero-planner .start-hero-copy { align-self: start; padding-block: 0; }
@@ -2423,7 +2444,8 @@ body input[type="number"]::-webkit-outer-spin-button {
   .site-surge-core img { height: 29px; width: 23px; }
   .site-surge-copy strong { font-size: .59rem; }
   .site-tlink-link { flex-basis: 74px; padding-inline: 4px; }
-  .site-book-link, .site-call-link { flex-basis: 55px; padding-inline: 3px; }
+  .site-book-link { flex-basis: 72px; }
+  .site-call-link { flex-basis: 58px; }
   .site-nav-mobile-groups section > div { grid-template-columns: 1fr; }
   .start-hero-copy { min-width: 0; }
   .start-hero h1 { font-size: clamp(2rem, 10vw, 2.55rem); overflow-wrap: break-word; }
@@ -2440,6 +2462,9 @@ body input[type="number"]::-webkit-outer-spin-button {
   .planner-quick-wins-grid article > a { width: 100%; }
   .planner-results { padding: 12px; }
   .planner-result-decision { gap: 12px; margin-top: 14px; padding: 10px; }
+}
+@media (max-width: 460px) {
+  .site-book-link .site-action-icon, .site-call-link .site-action-icon { display: none; }
 }
 @media (max-width: 360px) {
   .site-header-actions { display: grid; grid-template-columns: 1fr 1fr; }

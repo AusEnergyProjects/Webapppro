@@ -27,14 +27,22 @@ test("quick request uses a short two-step service and contact flow", () => {
 });
 
 test("quick request makes required and optional sharing explicit", () => {
-  assert.match(dialog, /Your selected services, email, full property address/);
-  assert.match(dialog, /every approved TLink trade business that matches the services and area/);
+  assert.match(dialog, /Australian Energy Assessments needs these details to manage the request/);
+  assert.match(dialog, /Your selected services, full property address/);
+  assert.match(dialog, /Your email, name and phone are included only if you tick them/);
+  assert.match(dialog, /Share my email/);
   assert.match(dialog, /Share my name/);
   assert.match(dialog, /Share my phone number/);
+  assert.match(dialog, /<span>First name \*<\/span>[\s\S]*?required/);
+  assert.match(dialog, /<span>Last name \*<\/span>[\s\S]*?required/);
+  assert.match(dialog, /<span>Phone \*<\/span>[\s\S]*?required/);
+  assert.match(dialog, /const \[shareEmail, setShareEmail\] = useState\(false\)/);
   assert.match(dialog, /QUICK_UPGRADE_CONSENT_PURPOSE/);
   assert.match(dialog, /consentAccepted/);
   assert.match(dialog, /type="checkbox"/);
   assert.doesNotMatch(dialog, /defaultChecked/);
+  assert.doesNotMatch(dialog, /matchedBusinessCount|matching \$\{matchedCount\}/);
+  assert.match(dialog, /Your request has been saved for matching\. Australian Energy Assessments will help if no suitable business is available/);
 });
 
 test("quick request modal has keyboard and mobile safeguards", () => {

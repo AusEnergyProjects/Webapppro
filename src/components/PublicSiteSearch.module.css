@@ -1,7 +1,7 @@
 .root {
   align-self: center;
   margin-inline: auto;
-  max-width: 360px;
+  max-width: 560px;
   min-width: 0;
   position: relative;
   width: 100%;
@@ -71,7 +71,7 @@
   position: absolute;
   right: 0;
   top: calc(100% + 7px);
-  width: min(420px, calc(100vw - 32px));
+  width: min(560px, calc(100vw - 32px));
   z-index: 80;
 }
 

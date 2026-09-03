@@ -2275,7 +2275,7 @@ export function DirectTradeDashboard() {
                       Privacy-safe scopes matched to this business
                     </h2>
                     <p>
-                      Public-plan enquiries include the email, postcode, message and any optional name, phone or address the customer agreed to share with every eligible matched trade. Customer-account project contact and street details stay protected until the customer chooses this business.
+                      Public enquiries show each business only the details the household agreed to share. Quick upgrade requests include the postcode, selected services, any written message and full property address. Email, name and phone appear only when selected. Customer account project contact and street details stay protected until the customer chooses this business.
                     </p>
                   </div>
                   {opportunityNavigationStatus && (

@@ -359,11 +359,11 @@ test("lead summaries explain both public-plan consent and protected customer-acc
   );
   assert.match(
     dashboard,
-    /Public-plan enquiries include the email, postcode, message and any optional name, phone or address the customer agreed to share with every eligible matched trade/,
+    /Quick upgrade requests include the postcode, selected services, any written message and full property address\. Email, name and phone appear only when selected/,
   );
   assert.match(
     dashboard,
-    /Customer-account project contact and street details stay protected until the customer chooses this business/,
+    /Customer account project contact and street details stay protected until the customer chooses this business/,
   );
   assert.match(
     dashboard,

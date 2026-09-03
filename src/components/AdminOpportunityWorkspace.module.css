@@ -24,7 +24,7 @@
 .workspace :global(.admin-opportunity-list article > p) { color: var(--color-aea-muted); font-size: .63rem; line-height: 1.5; }
 .workspace :global(.admin-opportunity-meta) { display: flex; flex-wrap: wrap; gap: 6px; }
 .workspace :global(.admin-opportunity-meta span) { background: #eef5f2; border-radius: 999px; color: #365d50; font-size: .54rem; font-weight: 800; padding: 3px 7px; }
-.workspace :global(.admin-opportunity-actions) { display: flex; gap: 6px; margin-top: 10px; }
+.workspace :global(.admin-opportunity-actions) { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .workspace :global(.admin-opportunity-actions button) { background: #0b7251; border: 0; border-radius: 9px; color: #fff; cursor: pointer; font-size: .66rem; font-weight: 850; padding: 9px 12px; }
 .workspace :global(.admin-allocation-list) { background: #f7fbf9; border: 1px solid var(--color-aea-line); border-radius: 10px; margin-top: 10px; padding: 4px 10px; }
 .workspace :global(.admin-allocation-list > article) { align-items: center; border: 0; border-bottom: 1px solid #e0ece7; border-radius: 0; display: flex; gap: 12px; justify-content: space-between; padding: 8px 0; }
@@ -39,6 +39,12 @@
 .workspace :global(.admin-assignment-form h2) { color: var(--color-aea-ink); font-size: 1.15rem; margin-top: 4px; }
 .workspace :global(.admin-assignment-form p) { color: var(--color-aea-muted); font-size: .65rem; line-height: 1.5; margin: 5px 0 0; }
 .workspace :global(.admin-assignment-form > button) { min-width: 150px; }
+.retainedContact { background: #eef7f3; border: 1px solid #9fc8b9; border-radius: 10px; color: #103b31; margin-top: 12px; padding: 14px; }
+.retainedContact > strong { font-size: .9rem; }
+.retainedContact p { font-size: .8rem; line-height: 1.5; margin: 6px 0 12px; }
+.retainedContact dl { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+.retainedContact dt { font-size: .75rem; font-weight: 800; }
+.retainedContact dd { font-size: .875rem; margin: 3px 0 0; overflow-wrap: anywhere; }
 
 @media (max-width: 1100px) {
   .workspace :global(.admin-opportunity-filters) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -48,5 +54,6 @@
 }
 
 @media (max-width: 560px) {
+  .retainedContact dl { grid-template-columns: 1fr; }
   .workspace :global(.admin-form-row), .workspace :global(.admin-category-grid), .workspace :global(.admin-assignment-form), .workspace :global(.admin-opportunity-filters) { grid-template-columns: 1fr; }
 }

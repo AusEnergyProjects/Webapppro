@@ -48,13 +48,13 @@ test("matching and funding rules do not permit paid ranking claims", () => {
 
 test("standards enforce open qualified matching and household-controlled contact release", () => {
   assert.match(standards, /Households control what is shared/);
-  assert.match(standards, /email, postcode, selected services and any written message to all approved matching trades/);
+  assert.match(standards, /Approved matching trades receive the postcode, selected services, full property address and any written message/);
   assert.match(
     standards,
     /full home plan, PDF, bills, meter data and documents stay private/,
   );
-  assert.match(standards, /chooses whether those trades also receive the name, phone or full property address/);
-  assert.match(standards, /unit number, street address, suburb, state and postcode in the protected administration record/);
+  assert.match(standards, /chooses whether those trades also receive the email, name or phone/);
+  assert.match(standards, /contact and property details entered in a quick upgrade request in the protected administration record/);
   assert.match(standards, /Property photos and documents are shared only when the household explicitly approves/);
   assert.match(standards, /Wholesalers manage products and pricing only/);
   assert.match(standards, /never see household opportunities or customer contact/);

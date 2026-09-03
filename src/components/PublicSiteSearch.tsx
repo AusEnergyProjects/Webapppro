@@ -24,10 +24,28 @@ export function PublicSiteSearch() {
   useEffect(() => {
     function closeWhenOutside(event: PointerEvent) {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      document.querySelectorAll<HTMLDetailsElement>(".site-nav-shell details[open]").forEach((disclosure) => {
+        if (!disclosure.contains(event.target as Node)) disclosure.open = false;
+      });
+    }
+
+    function closeNavigationOnEscape(event: globalThis.KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      const disclosures = [...document.querySelectorAll<HTMLDetailsElement>(".site-nav-shell details[open]")];
+      if (!disclosures.length) return;
+      const focusedDisclosure = document.activeElement instanceof Element
+        ? document.activeElement.closest<HTMLDetailsElement>("details[open]")
+        : null;
+      disclosures.forEach((disclosure) => { disclosure.open = false; });
+      focusedDisclosure?.querySelector<HTMLElement>("summary")?.focus();
     }
 
     document.addEventListener("pointerdown", closeWhenOutside);
-    return () => document.removeEventListener("pointerdown", closeWhenOutside);
+    document.addEventListener("keydown", closeNavigationOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeWhenOutside);
+      document.removeEventListener("keydown", closeNavigationOnEscape);
+    };
   }, []);
 
   function goTo(result: PublicSiteSearchResult) {

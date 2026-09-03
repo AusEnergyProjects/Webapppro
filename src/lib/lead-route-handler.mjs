@@ -248,9 +248,10 @@ export function createLeadPostHandler({
         return respond({
           ok: true,
           reference: payload.reference,
+        }, 200, "quick_upgrade_prepared", {
+          ...metrics,
           matchedBusinessCount,
-          notificationStatus: matchedBusinessCount ? "queued" : "no_match",
-        }, 200, "quick_upgrade_prepared", metrics, matchedBusinessCount
+        }, matchedBusinessCount
           && opportunityNotificationDispatchHeader
           ? { [opportunityNotificationDispatchHeader]: opportunityId }
           : {});

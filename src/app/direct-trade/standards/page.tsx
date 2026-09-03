@@ -33,7 +33,7 @@ const standards = [
   {
     number: "05",
     title: "Households control what is shared",
-    text: "Submitting a trade enquiry releases the email, postcode, selected services and any written message to all approved matching trades. The household independently chooses whether those trades also receive the name, phone or full property address. Australian Energy Assessments keeps the unit number, street address, suburb, state and postcode in the protected administration record. The full home plan, PDF, bills, meter data and documents stay private.",
+    text: "Australian Energy Assessments keeps the contact and property details entered in a quick upgrade request in the protected administration record. Approved matching trades receive the postcode, selected services, full property address and any written message. The household chooses whether those trades also receive the email, name or phone. Other enquiry forms show their own sharing choices before submission. The full home plan, PDF, bills, meter data and documents stay private.",
   },
   {
     number: "06",
