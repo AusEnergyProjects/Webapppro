@@ -4,7 +4,10 @@ import fs from "node:fs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const accountPanel = read("../src/components/FirebaseAccountPanel.tsx");
-const styles = read("../src/app/globals.css");
+const styles = [
+  read("../src/app/globals.css"),
+  read("../src/app/protected-workspaces.css"),
+].join("\n");
 
 test("email account choices are equal, responsive and expose their selected state", () => {
   assert.match(accountPanel, /role="group" aria-label="Choose an email account action"/);

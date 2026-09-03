@@ -8,9 +8,6 @@ import {
   type ImmutableIssuedPdfIdentity,
   type ImmutableIssuedPdfReference,
 } from "@/lib/trade-issued-document-store";
-import {
-  renderTradeQuotePdf,
-} from "@/lib/trade-quote-pdf-server";
 import type {
   TradeQuoteDocumentSnapshot,
 } from "@/lib/trade-quote-review-server";
@@ -169,6 +166,7 @@ export async function issuedTradeQuotePdf(input: {
 
   // Legacy issued versions predate exact-byte storage. Re-rendering is only
   // safe when it reproduces an attachment hash already recorded at delivery.
+  const { renderTradeQuotePdf } = await import("@/lib/trade-quote-pdf-server");
   const legacyBytes = await renderTradeQuotePdf(input.snapshot, {
     origin: input.origin,
   });

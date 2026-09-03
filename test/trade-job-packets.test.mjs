@@ -13,7 +13,10 @@ const quoteRoute = read("../src/app/api/trade-quotes/route.ts");
 const workspace = read("../src/components/TradeJobPacketWorkspace.tsx");
 const priceBookWorkspace = read("../src/components/TradePriceBookWorkspace.tsx");
 const quoteUi = read("../src/components/TradeQuotePanel.tsx");
-const globalCss = read("../src/app/globals.css");
+const globalCss = [
+  read("../src/app/globals.css"),
+  read("../src/app/protected-workspaces.css"),
+].join("\n");
 
 const apply = (db, sql) => {
   for (const statement of sql.split("--> statement-breakpoint").map((item) => item.trim()).filter(Boolean)) db.exec(statement);

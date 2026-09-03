@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-const styles = fs.readFileSync(
-  new URL("../src/app/globals.css", import.meta.url),
-  "utf8",
-);
+const styles = [
+  fs.readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8"),
+  fs.readFileSync(new URL("../src/app/protected-workspaces.css", import.meta.url), "utf8"),
+].join("\n");
 
 test("project detail controls stay compact beside a tall project plan", () => {
   assert.match(

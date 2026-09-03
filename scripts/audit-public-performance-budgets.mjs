@@ -27,6 +27,17 @@ function requireEntry(manifest, key) {
   return entry;
 }
 
+function requireNamedEntryKey(manifest, name) {
+  const normalizedName = name.toLowerCase();
+  const matches = Object.entries(manifest)
+    .filter(([, entry]) => entry?.name?.toLowerCase() === normalizedName)
+    .map(([key]) => key);
+  if (matches.length !== 1) {
+    fail(`expected one ${name} manifest entry, found ${matches.length}`);
+  }
+  return matches[0];
+}
+
 function collectStaticGraph(manifest, key, seen = new Set()) {
   if (seen.has(key)) return seen;
   const entry = requireEntry(manifest, key);
@@ -115,23 +126,47 @@ const assistantKey = "src/components/EnergyAssistantWidget.tsx";
 const plannerKey = "src/components/HomeEnergyPlanner.tsx";
 const planEnquiryKey = "src/components/PublicPlanEnquiryForm.tsx";
 const adminKey = "src/components/AdminOperationsPortal.tsx";
+const protectedStylesKey = "src/components/ProtectedWorkspaceStyles.tsx";
 const adapterKey = "src/lib/energy-assistant-enquiry-adapter.mjs";
+const publicSearchKey = requireNamedEntryKey(manifest, "PublicSiteSearch");
+const linkKey = requireNamedEntryKey(manifest, "Link");
+const imageKey = requireNamedEntryKey(manifest, "Image");
+const teamStylesKey = requireNamedEntryKey(manifest, "TeamPageStyles");
+const layoutSegmentKey = "node_modules/vinext/dist/shims/layout-segment-context.js";
 const lazy = requireEntry(manifest, lazyKey);
 const assistant = requireEntry(manifest, assistantKey);
 const planner = requireEntry(manifest, plannerKey);
 const planEnquiry = requireEntry(manifest, planEnquiryKey);
 const admin = requireEntry(manifest, adminKey);
-const rootLayoutEntries = [lazyKey, "src/components/SiteDatePicker.tsx"];
+const protectedStyles = requireEntry(manifest, protectedStylesKey);
+const tlinkStyles = requireEntry(
+  manifest,
+  requireNamedEntryKey(manifest, "TLinkChromeStyles"),
+);
+const teamStyles = requireEntry(manifest, teamStylesKey);
+const rootLayoutEntries = [
+  lazyKey,
+  "src/components/SiteDatePicker.tsx",
+  "src/components/AnalyticsConsent.tsx",
+  publicSearchKey,
+  linkKey,
+  layoutSegmentKey,
+];
 const surfaceEntries = {
   public: lazyKey,
   customer: "src/components/CustomerDashboard.tsx",
   trade: "src/components/DirectTradeDashboard.tsx",
   creditex: "src/components/CreditexCompliancePortal.tsx",
+  admin: adminKey,
 };
 const routeDefinitions = {
   home: {
     page: "src/app/page.tsx",
-    clientEntries: ["src/components/SurgeOpenButton.tsx"],
+    clientEntries: [
+      "src/components/SurgeOpenButton.tsx",
+      "src/components/HomepageCalendlyEmbed.tsx",
+      imageKey,
+    ],
     boundaries: [
       ["src/app/page.tsx", "GettingStarted"],
       ["src/components/GettingStarted.tsx", "SurgeOpenButton"],
@@ -152,16 +187,35 @@ const routeDefinitions = {
     clientEntries: ["src/components/PublicRebateCalculatorWorkspace.tsx"],
     boundaries: [["src/app/calculator/page.tsx", "PublicRebateCalculatorWorkspace"]],
   },
+  team: {
+    page: "src/app/team/page.tsx",
+    clientEntries: [teamStylesKey, imageKey],
+    boundaries: [
+      ["src/app/team/page.tsx", "TeamPageStyles"],
+      ["src/app/team/page.tsx", "next/image"],
+      ["src/app/team/TeamPageStyles.tsx", "team-page.css"],
+    ],
+  },
 };
 const routeBudgets = {
-  home: { javascript: 328_000, css: 750_000 },
-  wattzun: { javascript: 317_000, css: 750_000 },
-  plan: { javascript: 484_000, css: 779_000 },
-  calculator: { javascript: 597_000, css: 814_000 },
+  home: { javascript: 395_000, css: 400_000 },
+  wattzun: { javascript: 347_000, css: 400_000 },
+  plan: { javascript: 509_000, css: 410_000 },
+  calculator: { javascript: 625_000, css: 450_000 },
+  team: { javascript: 395_000, css: 400_000 },
 };
 
 assertSourceBoundary("src/app/layout.tsx", "LazyEnergyAssistantWidget");
 assertSourceBoundary("src/app/layout.tsx", "SiteDatePicker");
+assertSourceBoundary("src/app/layout.tsx", "AnalyticsConsent");
+for (const layout of [
+  "src/app/account/layout.tsx",
+  "src/app/direct-trade/layout.tsx",
+  "src/app/operations/layout.tsx",
+]) {
+  assertSourceBoundary(layout, "ProtectedWorkspaceStyles");
+}
+assertSourceBoundary("src/components/TLinkChrome.tsx", "TLinkChromeStyles");
 for (const definition of Object.values(routeDefinitions)) {
   readSource(definition.page);
   for (const [file, token] of definition.boundaries) assertSourceBoundary(file, token);
@@ -184,11 +238,16 @@ const surfaceEntryFiles = Object.fromEntries(
   Object.entries(surfaceEntries).map(([surface, key]) => [surface, requireEntry(manifest, key).file]),
 );
 if (new Set(Object.values(surfaceEntryFiles)).size !== Object.keys(surfaceEntryFiles).length) {
-  fail("public, customer, trade and Creditex surfaces must keep separate entry chunks");
+  fail("public, customer, trade, Creditex and admin surfaces must keep separate entry chunks");
 }
 
 const publicGraph = collectStaticGraph(manifest, surfaceEntries.public);
-for (const protectedKey of [surfaceEntries.customer, surfaceEntries.trade, surfaceEntries.creditex]) {
+for (const protectedKey of [
+  surfaceEntries.customer,
+  surfaceEntries.trade,
+  surfaceEntries.creditex,
+  surfaceEntries.admin,
+]) {
   if (publicGraph.has(protectedKey)) {
     fail(`the public launcher statically includes protected surface ${protectedKey}`);
   }
@@ -204,7 +263,52 @@ if (assistantBytes > 89_000) fail(`deferred Surge assistant is ${assistantBytes}
 const rootGlobalCss = rscManifest.serverResources?.["src/app/layout.tsx"]?.css?.map(normalizeAsset) || [];
 if (rootGlobalCss.length !== 1) fail(`expected one root layout stylesheet, found ${rootGlobalCss.length}`);
 const globalCss = { file: rootGlobalCss[0], bytes: assetBytes(rootGlobalCss[0]) };
-if (globalCss.bytes > 725_000) fail(`global stylesheet is ${globalCss.bytes} bytes; budget is 725000`);
+if (globalCss.bytes > 395_000) fail(`global stylesheet is ${globalCss.bytes} bytes; budget is 395000`);
+
+const protectedCss = (protectedStyles.css || []).map(normalizeAsset);
+if (protectedCss.length !== 1) {
+  fail(`expected one protected-workspace stylesheet, found ${protectedCss.length}`);
+}
+const tlinkCss = (tlinkStyles.css || []).map(normalizeAsset);
+if (tlinkCss.length !== 1) {
+  fail(`expected one TLink chrome stylesheet, found ${tlinkCss.length}`);
+}
+const rootCssSource = fs.readFileSync(path.join(clientRoot, globalCss.file), "utf8");
+for (const selector of [
+  ".enquiry-workspace",
+  ".customer-account-page",
+  ".trade-portal-shell",
+  ".tlink-site-header",
+]) {
+  if (rootCssSource.includes(selector)) {
+    fail(`root stylesheet contains route-owned selector ${selector}`);
+  }
+}
+const protectedCssSource = fs.readFileSync(path.join(clientRoot, protectedCss[0]), "utf8");
+for (const selector of [
+  ".enquiry-workspace",
+  ".customer-account-page",
+  ".trade-portal-shell",
+]) {
+  if (!protectedCssSource.includes(selector)) {
+    fail(`protected-workspace stylesheet is missing ${selector}`);
+  }
+}
+const tlinkCssSource = fs.readFileSync(path.join(clientRoot, tlinkCss[0]), "utf8");
+if (!tlinkCssSource.includes(".tlink-site-header")) {
+  fail("TLink chrome stylesheet is missing its site-header styles");
+}
+const teamCss = (teamStyles.css || []).map(normalizeAsset);
+if (teamCss.length !== 1) {
+  fail(`expected one team-page stylesheet, found ${teamCss.length}`);
+}
+const teamCssSource = fs.readFileSync(path.join(clientRoot, teamCss[0]), "utf8");
+if (!teamCssSource.includes(".team-page-section")) {
+  fail("team-page stylesheet is missing its route-owned styles");
+}
+if (rootCssSource.includes(".team-page-section")) {
+  fail("team-page styles returned to root globals");
+}
 
 const surfaceBytes = Object.fromEntries(
   Object.entries(surfaceEntries).map(([surface, key]) => [surface, graphBytes(manifest, key)]),
@@ -214,6 +318,7 @@ for (const [surface, maximum] of Object.entries({
   customer: 960_000,
   trade: 1_000_000,
   creditex: 1_850_000,
+  admin: 1_400_000,
 })) {
   if (surfaceBytes[surface] > maximum) {
     fail(`${surface} static graph is ${surfaceBytes[surface]} bytes; budget is ${maximum}`);
@@ -227,6 +332,25 @@ for (const [route, budgets] of Object.entries(routeBudgets)) {
   for (const assetType of ["javascript", "css"]) {
     if (routeGraphs[route][assetType] > budgets[assetType]) {
       fail(`${route} ${assetType} graph is ${routeGraphs[route][assetType]} bytes; budget is ${budgets[assetType]}`);
+    }
+  }
+}
+for (const [route, graph] of Object.entries(routeGraphs)) {
+  for (const stylesheet of protectedCss) {
+    if (graph.files.has(stylesheet)) {
+      fail(`${route} initial graph includes protected-workspace stylesheet ${stylesheet}`);
+    }
+  }
+  for (const stylesheet of tlinkCss) {
+    if (graph.files.has(stylesheet)) {
+      fail(`${route} initial graph includes TLink chrome stylesheet ${stylesheet}`);
+    }
+  }
+  if (route !== "team") {
+    for (const stylesheet of teamCss) {
+      if (graph.files.has(stylesheet)) {
+        fail(`${route} initial graph includes team-page stylesheet ${stylesheet}`);
+      }
     }
   }
 }
@@ -280,6 +404,6 @@ const routeSummary = Object.entries(routeGraphs)
   .join("; ");
 
 console.log(
-  `Public performance budgets passed: root launcher ${lazyBytes} bytes, deferred assistant ${assistantBytes} bytes, root layout CSS ${globalCss.bytes} bytes. Surface graphs: public ${surfaceBytes.public}, customer ${surfaceBytes.customer}, trade ${surfaceBytes.trade}, Creditex ${surfaceBytes.creditex} bytes.`,
+  `Public performance budgets passed: root launcher ${lazyBytes} bytes, deferred assistant ${assistantBytes} bytes, root layout CSS ${globalCss.bytes} bytes. Surface graphs: public ${surfaceBytes.public}, customer ${surfaceBytes.customer}, trade ${surfaceBytes.trade}, Creditex ${surfaceBytes.creditex}, admin ${surfaceBytes.admin} bytes.`,
   `Actual route graphs (page + root layout): ${routeSummary}.`,
 );

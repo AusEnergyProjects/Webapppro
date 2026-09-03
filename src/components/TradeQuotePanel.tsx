@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import "./TradeRebateDocumentActions.css";
 import type { User } from "firebase/auth";
 import {
   consolidateTradeQuotePercentDiscountLines,

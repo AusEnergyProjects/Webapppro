@@ -1,9 +1,4 @@
 import {
-  buildTradeQuoteAcceptancePdfSnapshot,
-  renderTradeQuoteAcceptancePdf,
-  tradeQuoteAcceptancePdfFilename,
-} from "@/lib/trade-quote-acceptance-pdf-server";
-import {
   authoriseTradeQuoteDecisionLink,
   storedQuoteDecision,
 } from "@/lib/trade-quote-decision-server";
@@ -66,6 +61,11 @@ export async function GET(request: Request, context: Context) {
     if (!stored || stored.receipt.decision !== "accepted") {
       throw new Error("QUOTE_DECISION_RECEIPT_INVALID");
     }
+    const {
+      buildTradeQuoteAcceptancePdfSnapshot,
+      renderTradeQuoteAcceptancePdf,
+      tradeQuoteAcceptancePdfFilename,
+    } = await import("@/lib/trade-quote-acceptance-pdf-server");
     const snapshot = buildTradeQuoteAcceptancePdfSnapshot(quote, stored);
     const bytes = await renderTradeQuoteAcceptancePdf(snapshot, {
       origin: new URL(request.url).origin,

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ProtectedWorkspaceStyles } from "@/components/ProtectedWorkspaceStyles";
 
 export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
@@ -9,5 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default function DirectTradeLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return children;
+  return <><ProtectedWorkspaceStyles />{children}</>;
 }

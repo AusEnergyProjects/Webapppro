@@ -7,7 +7,10 @@ const read = (path) =>
 
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const quote = read("../src/components/InstallerPlatformQuote.tsx");
-const styles = read("../src/app/globals.css");
+const styles = [
+  read("../src/app/globals.css"),
+  read("../src/app/protected-workspaces.css"),
+].join("\n");
 
 test("lead results default to compact accessible summaries with one expandable workflow", () => {
   assert.match(

@@ -14,7 +14,10 @@ const newJob = read("../src/components/TradeNewJobForm.tsx");
 const workspace = read("../src/components/InstallerCrmWorkspace.tsx");
 const fieldPanel = read("../src/components/TradeFieldWorkPanel.tsx");
 const menu = read("../src/components/AccessibleMenu.tsx");
-const styles = read("../src/app/globals.css");
+const styles = [
+  read("../src/app/globals.css"),
+  read("../src/app/protected-workspaces.css"),
+].join("\n");
 const mobile = read("../mobile/src/app/job/[id].tsx");
 const mobileTypes = read("../mobile/src/lib/types.ts");
 const migration = read("../drizzle/0073_phone_first_field_job.sql");

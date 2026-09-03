@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { AEA_BRANDMARK_PNG_DATA_URI } from "@/lib/aea-brand-assets.mjs";
+import { TLinkChromeStyles } from "./TLinkChromeStyles";
 
 type TLinkSection = "dashboard" | "partners" | "access" | "standards" | "verification" | "team";
 
@@ -55,10 +56,13 @@ export function TLinkBrand({
   context?: string;
 }) {
   return (
-    <span className="tlink-brand">
-      <TLinkMark />
-      <span><strong>TLink</strong><small>{context}</small></span>
-    </span>
+    <>
+      <TLinkChromeStyles />
+      <span className="tlink-brand">
+        <TLinkMark />
+        <span><strong>TLink</strong><small>{context}</small></span>
+      </span>
+    </>
   );
 }
 

@@ -1,0 +1,21 @@
+/* Rebate estimate actions shared by public calculators and protected trade documents. */
+
+/* Rebate estimate handoff stays compact and workmanlike inside the trade workspace. */
+.trade-rebate-document-action, .trade-rebate-document-offer { align-items: end; background: #f1f8f5; border: 1px solid #badacf; border-left: 4px solid #14976d; border-radius: 11px; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) minmax(170px, .42fr) auto; margin: 12px 0; padding: 14px; }
+.trade-rebate-document-action > div, .trade-rebate-document-offer > div { display: grid; gap: 3px; min-width: 0; }
+.trade-rebate-document-action > div > span, .trade-rebate-document-offer > div > span { color: #0b7a58; font-size: .57rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+.trade-rebate-document-action > div > strong, .trade-rebate-document-offer > div > strong { color: #073f35; font-size: .78rem; overflow-wrap: anywhere; }
+.trade-rebate-document-action small, .trade-rebate-document-offer small { color: #4d6b61; font-size: .59rem; line-height: 1.45; }
+.trade-rebate-document-action > label { color: #244f43; display: grid; font-size: .59rem; font-weight: 850; gap: 5px; }
+.trade-rebate-document-amount { align-items: center; background: #fff; border: 1px solid #9fc9bb; border-radius: 8px; display: grid; grid-template-columns: auto minmax(0, 1fr); min-height: 39px; overflow: hidden; }
+.trade-rebate-document-amount b { border-right: 1px solid #d0e2dc; color: #0b7153; padding: 0 10px; }
+.trade-rebate-document-amount input { background: transparent; border: 0; color: #133d34; min-height: 37px; min-width: 0; padding: 8px 10px; width: 100%; }
+.trade-rebate-document-action > button, .trade-rebate-document-offer > button { background: #0b8f66; border: 1px solid #0b8f66; border-radius: 8px; color: #fff; cursor: pointer; font-size: .62rem; font-weight: 900; min-height: 40px; padding: 9px 12px; }
+.trade-rebate-document-action > button:hover, .trade-rebate-document-action > button:focus-visible, .trade-rebate-document-offer > button:hover, .trade-rebate-document-offer > button:focus-visible { background: #087752; border-color: #087752; }
+.trade-rebate-document-action > button:disabled { cursor: not-allowed; opacity: .48; }
+.trade-rebate-document-offer { align-items: center; grid-template-columns: minmax(0, 1fr) auto; }
+
+@media (max-width: 760px) {
+  .trade-rebate-document-action, .trade-rebate-document-offer { align-items: stretch; grid-template-columns: 1fr; }
+  .trade-rebate-document-action > button, .trade-rebate-document-offer > button { width: 100%; }
+}

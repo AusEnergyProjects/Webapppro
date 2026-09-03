@@ -31,7 +31,6 @@ import {
   rentalReportRequestHash,
   splitRentalReportToken,
 } from "@/lib/trade-rental-report-links";
-import { createRentalAssessmentPdfBytes } from "@/lib/trade-rental-report-pdf.mjs";
 import { loadCustomerPlanPdfFonts } from "@/lib/customer-plan-pdf-fonts";
 import { rentalEvidenceCapture, rentalEvidencePhotoCapture } from "@/lib/trade-rental-evidence.mjs";
 import { assertRentalModuleCredentialCurrent } from "@/lib/trade-rental-credentials";
@@ -670,6 +669,9 @@ export async function issueRentalAssessmentReport(input: {
 
     await storePreparedRentalEvidence(preparedObjects, { reportId, revision: reportRevision });
     const fonts = await loadCustomerPlanPdfFonts();
+    const { createRentalAssessmentPdfBytes } = await import(
+      "@/lib/trade-rental-report-pdf.mjs"
+    );
     const pdfBytes = await createRentalAssessmentPdfBytes(snapshot, assets, fonts);
     pdfReference = await prepareImmutableIssuedPdfReference({
       kind: "rental-report",

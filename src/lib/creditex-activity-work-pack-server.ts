@@ -86,9 +86,8 @@ import {
 } from "./creditex-source-lookup-review-server.ts";
 import { getCreditexCustodyBucket } from "./creditex-custody-bucket.ts";
 import { verifyJpegExif } from "./jpeg-exif-verifier.ts";
-import {
-  renderCreditexActivityWorkPackPdf,
-  type CreditexWorkPackPdfSignature,
+import type {
+  CreditexWorkPackPdfSignature,
 } from "./creditex-activity-work-pack-pdf-renderer.ts";
 import {
   loadCreditexSresActivationState,
@@ -8717,6 +8716,9 @@ export async function finaliseAssignedCreditexActivityWorkPack(
       signedAt: String(signature.signed_at),
       payload: storedSignaturePayload(signature),
     }),
+  );
+  const { renderCreditexActivityWorkPackPdf } = await import(
+    "./creditex-activity-work-pack-pdf-renderer.ts"
   );
   const rendered = await renderCreditexActivityWorkPackPdf({
     templateBytes: templateBytes.bytes,

@@ -7,7 +7,12 @@ const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const businessSettings = read(
   "../src/components/TradeBusinessSettingsWorkspace.tsx",
 );
-const styles = read("../src/app/globals.css");
+const styles = [
+  read("../src/app/globals.css"),
+  read("../src/app/protected-workspaces.css"),
+  read("../src/components/TLinkChrome.css"),
+  read("../src/components/TradeRebateDocumentActions.css"),
+].join("\n");
 const supplierCatalogue = read(
   "../src/components/SupplierCatalogueWorkspace.tsx",
 );

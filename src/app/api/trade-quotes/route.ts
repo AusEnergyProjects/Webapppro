@@ -35,6 +35,7 @@ import { buildQuoteExecutionSnapshot } from "@/lib/trade-quote-execution-server"
 import {
   buildTradeQuoteDocumentSnapshot,
   parseTradeQuoteDocumentSnapshot,
+  type TradeQuoteDocumentSnapshot,
 } from "@/lib/trade-quote-review-server";
 import {
   buildTradeQuoteEmail,
@@ -43,10 +44,6 @@ import {
   resolveTradeQuoteEmailRendererRevision,
   tradeQuoteEmailContentSha256,
 } from "@/lib/trade-quote-email";
-import {
-  renderTradeQuotePdf,
-  tradeQuotePdfFilename,
-} from "@/lib/trade-quote-pdf-server";
 import {
   deleteTradeQuoteIssuedPdf,
   issuedTradeQuotePdf,
@@ -208,17 +205,23 @@ function errorResponse(error: unknown) {
 }
 
 async function renderQuotePdfOrThrow(
-  snapshot: Parameters<typeof renderTradeQuotePdf>[0],
+  snapshot: TradeQuoteDocumentSnapshot,
   origin: string,
   stage: string,
 ) {
   try {
+    const { renderTradeQuotePdf } = await import("@/lib/trade-quote-pdf-server");
     return await renderTradeQuotePdf(snapshot, { origin });
   } catch {
     const error = new Error("QUOTE_PDF_UNAVAILABLE") as StagedQuoteError;
     error.stage = stage;
     throw error;
   }
+}
+
+async function quotePdfFilename(snapshot: TradeQuoteDocumentSnapshot) {
+  const { tradeQuotePdfFilename } = await import("@/lib/trade-quote-pdf-server");
+  return tradeQuotePdfFilename(snapshot);
 }
 
 async function directJob(ownerUid: string, workOrderId: string) {
@@ -856,7 +859,7 @@ export async function POST(request: Request) {
         const shareUrl = `${publicOrigin}${quoteReviewPath(linkId, secret)}`;
         const emailContent = buildTradeQuoteEmail({ snapshot: documentSnapshot, shareUrl, expiresAt });
         const emailContentSha256 = await tradeQuoteEmailContentSha256(emailContent);
-        const attachmentFilename = tradeQuotePdfFilename(documentSnapshot);
+        const attachmentFilename = await quotePdfFilename(documentSnapshot);
         const idempotencyKey = `quote:${version.id}:${tokenIssue}:email:initial`;
         const providerIdempotencyKey = await tradeQuoteRecipientEmailSha256(idempotencyKey);
         const deliveryId = crypto.randomUUID();
@@ -1418,7 +1421,7 @@ export async function POST(request: Request) {
         });
         const emailContentSha256 = await tradeQuoteEmailContentSha256(emailContent);
         const attachmentSha256 = issuedPdf.reference.sha256;
-        const attachmentFilename = tradeQuotePdfFilename(snapshot);
+        const attachmentFilename = await quotePdfFilename(snapshot);
         const recipientEmailSha256 = await tradeQuoteRecipientEmailSha256(email);
         const recipientRole = String(job.customer_email || "").trim().toLowerCase() === email
           ? "primary_customer"

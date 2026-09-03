@@ -3,7 +3,6 @@ import type {
   QuickInvoiceBrandAssetSnapshot,
   QuickInvoiceDocumentSnapshot,
 } from "@/lib/trade-quick-invoice";
-import { createTradeQuickInvoicePdfBytes } from "@/lib/trade-quick-invoice-pdf.mjs";
 
 const FONT_PATHS = {
   regular: "/fonts/LiberationSans-Regular.ttf",
@@ -112,6 +111,9 @@ export async function renderTradeQuickInvoicePdf(
     loadAsset(snapshot.business.logo).catch(() => undefined),
     loadAsset(snapshot.business.banner).catch(() => undefined),
   ]);
+  const { createTradeQuickInvoicePdfBytes } = await import(
+    "@/lib/trade-quick-invoice-pdf.mjs"
+  );
   return new Uint8Array(
     await createTradeQuickInvoicePdfBytes(snapshot, fonts, {
       logo,

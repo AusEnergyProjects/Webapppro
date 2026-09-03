@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ProtectedWorkspaceStyles } from "@/components/ProtectedWorkspaceStyles";
 
 export const metadata: Metadata = {
   robots: {
@@ -11,5 +12,5 @@ export const metadata: Metadata = {
 };
 
 export default function AccountLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return children;
+  return <><ProtectedWorkspaceStyles />{children}</>;
 }

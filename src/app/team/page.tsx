@@ -1,8 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import { JsonLd } from "@/components/JsonLd";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 import { PUBLIC_SITE, buildApexMetadata } from "@/lib/public-site";
+import { TeamPageStyles } from "./TeamPageStyles";
 
 const path = "/team";
 const canonical = `${PUBLIC_SITE.apexUrl}${path}`;
@@ -12,18 +14,18 @@ const description = "Meet the people behind Australian Energy Assessments, from 
 export const metadata = buildApexMetadata({ path, title, description });
 
 const team = [
-  { name: "Gary Morris", role: "Managing Director", group: "Leadership and operations", image: "/team/gary-morris.jpg" },
-  { name: "Kris Chen", role: "General Manager", group: "Leadership and operations", image: "/team/kris-chen.jpg" },
-  { name: "James William", role: "Founder", group: "Leadership and operations", image: "/team/james-william.jpg" },
-  { name: "Katja Rosic", role: "Human Resources and Talent Manager", group: "Leadership and operations", image: "/team/katja-rosic.jpg" },
-  { name: "Joshua Lewis", role: "Business Development Manager", group: "Leadership and operations", image: "/team/joshua-lewis.jpg" },
-  { name: "Sarah Mosseveld", role: "Marketing and Communications Manager", group: "Leadership and operations", image: "/team/sarah-mosseveld.jpg" },
-  { name: "Thomas Curtis", role: "Accredited Assessor", group: "Assessment team", image: "/team/thomas-curtis.jpg" },
-  { name: "Max Charters", role: "Accredited Assessor", group: "Assessment team", image: "/team/max-charters.jpg" },
-  { name: "Jabez Tang", role: "Accredited Assessor", group: "Assessment team", image: "/team/jabez-tang.jpg" },
-  { name: "Olen Dymke", role: "Accredited Assessor", group: "Assessment team", image: "/team/olen-dymke.png" },
-  { name: "Dan Markov", role: "Accredited Assessor", group: "Assessment team", image: "/team/dan-markov.png" },
-  { name: "Malcolm Guy", role: "Accredited Assessor", group: "Assessment team", image: "/team/malcolm-guy.jpg" },
+  { name: "Gary Morris", role: "Managing Director", group: "Leadership and operations", image: "/team/gary-morris.jpg", position: "50% 38%", scale: "1.04" },
+  { name: "Kris Chen", role: "General Manager", group: "Leadership and operations", image: "/team/kris-chen.jpg", position: "50% 35%", scale: ".98" },
+  { name: "James William", role: "Founder", group: "Leadership and operations", image: "/team/james-william.jpg", position: "50% 34%", scale: ".86" },
+  { name: "Katja Rosic", role: "Human Resources and Talent Manager", group: "Leadership and operations", image: "/team/katja-rosic.jpg", position: "50% 38%", scale: ".96" },
+  { name: "Joshua Lewis", role: "Business Development Manager", group: "Leadership and operations", image: "/team/joshua-lewis.jpg", position: "56% 38%", scale: "1.08" },
+  { name: "Sarah Mosseveld", role: "Marketing and Communications Manager", group: "Leadership and operations", image: "/team/sarah-mosseveld.jpg", position: "51% 35%", scale: "1.12" },
+  { name: "Thomas Curtis", role: "Accredited Assessor", group: "Assessment team", image: "/team/thomas-curtis.jpg", position: "52% 38%", scale: "1" },
+  { name: "Max Charters", role: "Accredited Assessor", group: "Assessment team", image: "/team/max-charters.jpg", position: "50% 37%", scale: ".88" },
+  { name: "Jabez Tang", role: "Accredited Assessor", group: "Assessment team", image: "/team/jabez-tang.jpg", position: "50% 72%", scale: "1.16" },
+  { name: "Olen Dymke", role: "Accredited Assessor", group: "Assessment team", image: "/team/olen-dymke.png", position: "50% 38%", scale: ".98" },
+  { name: "Dan Markov", role: "Accredited Assessor", group: "Assessment team", image: "/team/dan-markov.png", position: "50% 56%", scale: "1.34" },
+  { name: "Malcolm Guy", role: "Accredited Assessor", group: "Assessment team", image: "/team/malcolm-guy.jpg", position: "50% 32%", scale: ".84" },
 ] as const;
 
 const schema = {
@@ -73,14 +75,26 @@ const schema = {
 
 function TeamGroup({ group }: { group: (typeof team)[number]["group"] }) {
   const people = team.filter((person) => person.group === group);
-  return <section className="guide-section" aria-labelledby={`team-${group === "Assessment team" ? "assessors" : "operations"}`}>
+  return <section className="guide-section team-page-section" aria-labelledby={`team-${group === "Assessment team" ? "assessors" : "operations"}`}>
     <div className="guide-section-heading">
       <span>{group}</span>
       <h2 id={`team-${group === "Assessment team" ? "assessors" : "operations"}`}>{group === "Assessment team" ? "The people who complete the technical work" : "The people who keep the work moving"}</h2>
     </div>
-    <div className="guide-principle-grid">
-      {people.map((person) => <article key={person.name}>
-        <Image src={person.image} alt={`Portrait of ${person.name}, ${person.role} at Australian Energy Assessments`} width={640} height={640} sizes="(max-width: 720px) 100vw, 33vw" style={{ aspectRatio: "1", borderRadius: "12px", height: "auto", objectFit: "cover", width: "100%" }} />
+    <div className="guide-principle-grid team-page-grid">
+      {people.map((person) => <article className="team-page-card" key={person.name}>
+        <div
+          className="team-page-portrait"
+          style={{ "--portrait-position": person.position, "--portrait-scale": person.scale } as CSSProperties}
+        >
+          <Image
+            className="team-page-photo"
+            src={person.image}
+            alt={`Portrait of ${person.name}, ${person.role} at Australian Energy Assessments`}
+            width={360}
+            height={450}
+            sizes="(max-width: 420px) 44vw, 220px"
+          />
+        </div>
         <strong>{person.name}</strong><p>{person.role}</p>
       </article>)}
     </div>
@@ -89,6 +103,7 @@ function TeamGroup({ group }: { group: (typeof team)[number]["group"] }) {
 
 export default function TeamPage() {
   return <main className="wrap guide-page">
+    <TeamPageStyles />
     <JsonLd data={schema} />
     <SiteHeader active="assessments" />
     <header className="guide-hero"><span>Our team</span><h1>Real people, clear explanations</h1><p>Meet the people behind Australian Energy Assessments. Our assessment team handles the technical work, while our operations and customer team keeps the process clear from your first question to the finished report.</p></header>

@@ -3,9 +3,7 @@ import {
   getCustomerProjectEvidenceBucket,
   type CustomerProjectEvidenceBucket,
 } from "@/lib/customer-project-evidence-bucket";
-import { createPublicPlanCustomerPdfBundle } from "@/lib/public-plan-customer-pdf.mjs";
 import { loadCustomerPlanPdfFonts } from "@/lib/customer-plan-pdf-fonts";
-import { customerPlanPdfFileName } from "@/lib/customer-plan-pdf.mjs";
 import {
   createSignedInternalLeadEnvelope,
   internalRelayPayload,
@@ -222,7 +220,15 @@ async function ensurePdf(
       sha256: clean(row.attachment_sha256, 64),
     };
   }
-  const fonts = await loadCustomerPlanPdfFonts();
+  const [
+    fonts,
+    { createPublicPlanCustomerPdfBundle },
+    { customerPlanPdfFileName },
+  ] = await Promise.all([
+    loadCustomerPlanPdfFonts(),
+    import("@/lib/public-plan-customer-pdf.mjs"),
+    import("@/lib/customer-plan-pdf.mjs"),
+  ]);
   const { report, bytes } = await createPublicPlanCustomerPdfBundle(payload.reportInput, fonts);
   if (bytes.byteLength < 20_000 || bytes.byteLength > MAX_PDF_BYTES) {
     throw new Error("CUSTOMER_PLAN_PDF_SIZE_INVALID");

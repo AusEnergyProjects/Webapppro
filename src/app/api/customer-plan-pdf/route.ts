@@ -1,13 +1,7 @@
 import {
-  CustomerPlanPdfUnsupportedTextError,
-  createCustomerPlanPdfBytes,
-  customerPlanPdfFileName,
-} from "@/lib/customer-plan-pdf.mjs";
-import {
   CustomerPlanPdfFontError,
   loadCustomerPlanPdfFonts,
 } from "@/lib/customer-plan-pdf-fonts";
-import { createPublicPlanCustomerPdfBundle } from "@/lib/public-plan-customer-pdf.mjs";
 import {
   isPublicPlanUpgradeInterest,
 } from "@/lib/public-plan-enquiry.mjs";
@@ -128,20 +122,29 @@ export async function POST(request: Request) {
     return messageResponse("The PDF request was not valid.", 400);
   }
 
+  let CustomerPlanPdfUnsupportedTextError:
+    | (typeof import("@/lib/customer-plan-pdf.mjs"))["CustomerPlanPdfUnsupportedTextError"]
+    | undefined;
   try {
+    const customerPlanPdf = await import("@/lib/customer-plan-pdf.mjs");
+    CustomerPlanPdfUnsupportedTextError =
+      customerPlanPdf.CustomerPlanPdfUnsupportedTextError;
     const fonts = await loadCustomerPlanPdfFonts();
     let report;
     let bytes;
     if (pdfSource.kind === "publicPlan") {
+      const { createPublicPlanCustomerPdfBundle } = await import(
+        "@/lib/public-plan-customer-pdf.mjs"
+      );
       ({ report, bytes } = await createPublicPlanCustomerPdfBundle(
         canonicalPublicPlanInput(pdfSource.value),
         fonts,
       ));
     } else {
       report = pdfSource.value;
-      bytes = await createCustomerPlanPdfBytes(report, fonts);
+      bytes = await customerPlanPdf.createCustomerPlanPdfBytes(report, fonts);
     }
-    const fileName = customerPlanPdfFileName(report);
+    const fileName = customerPlanPdf.customerPlanPdfFileName(report);
     const body = new ArrayBuffer(bytes.byteLength);
     new Uint8Array(body).set(bytes);
     return new Response(body, {
@@ -155,7 +158,10 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    if (error instanceof CustomerPlanPdfUnsupportedTextError) {
+    if (
+      CustomerPlanPdfUnsupportedTextError
+      && error instanceof CustomerPlanPdfUnsupportedTextError
+    ) {
       return messageResponse(
         "The PDF cannot display some characters in this plan yet. Email the plan instead, or replace the unsupported text before downloading.",
         422,

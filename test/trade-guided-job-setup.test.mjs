@@ -8,7 +8,10 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (file) => fs.readFileSync(path.join(here, file), "utf8");
 const form = read("../src/components/TradeNewJobForm.tsx");
 const schedule = read("../src/components/TradeScheduleWorkspace.tsx");
-const styles = read("../src/app/globals.css");
+const styles = [
+  read("../src/app/globals.css"),
+  read("../src/app/protected-workspaces.css"),
+].join("\n");
 const workspace = read("../src/components/InstallerCrmWorkspace.tsx");
 const enquiryInbox = read("../src/components/TradeEnquiryInbox.tsx");
 const crm = read("../src/app/api/trade-crm/route.ts");

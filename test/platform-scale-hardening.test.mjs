@@ -8,7 +8,10 @@ const performance = read("../src/lib/route-performance.ts");
 const performanceRoute = read("../src/app/api/admin/performance/route.ts");
 const lookupRoute = read("../src/app/api/admin/lookups/route.ts");
 const lookupUi = read("../src/components/SearchableLookup.tsx");
-const styles = read("../src/app/globals.css");
+const styles = [
+  read("../src/app/globals.css"),
+  read("../src/app/protected-workspaces.css"),
+].join("\n");
 const paginationUi = read("../src/components/WorkspaceListControls.tsx");
 
 const pagedRoutes = [

@@ -1,0 +1,79 @@
+.team-page-section {
+  margin-block: 30px 38px;
+}
+
+.team-page-grid {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 180px));
+  gap: clamp(14px, 1.8vw, 20px);
+  justify-content: center;
+}
+
+.team-page-grid .team-page-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  padding: 10px 10px 14px;
+}
+
+.team-page-portrait {
+  aspect-ratio: 4 / 5;
+  background: radial-gradient(circle at 50% 30%, #ffffff, #e8f2ef 76%);
+  border: 1px solid rgba(5, 86, 78, .16);
+  border-radius: 10px;
+  box-shadow: inset 0 0 28px rgba(3, 25, 45, .08);
+  overflow: hidden;
+  position: relative;
+}
+
+.team-page-portrait::after {
+  background: linear-gradient(155deg, rgba(3, 25, 45, .08), transparent 45%, rgba(16, 145, 117, .12));
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
+}
+
+.team-page-photo {
+  filter: saturate(.78) contrast(.96) brightness(.94);
+  height: 130%;
+  left: -15%;
+  max-width: none;
+  object-fit: cover;
+  object-position: var(--portrait-position, 50% 38%);
+  position: absolute;
+  top: -15%;
+  transform: scale(var(--portrait-scale, 1));
+  transform-origin: center;
+  width: 130%;
+}
+
+.team-page-grid .team-page-card > strong {
+  font-size: .82rem;
+  margin-top: 11px;
+}
+
+.team-page-grid .team-page-card > p {
+  color: var(--color-aea-muted);
+  font-size: .68rem;
+  line-height: 1.4;
+  margin-top: 3px;
+}
+
+@media (max-width: 520px) {
+  .team-page-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .team-page-grid .team-page-card {
+    padding: 8px 8px 12px;
+  }
+}
+
+@media (max-width: 340px) {
+  .team-page-grid {
+    grid-template-columns: minmax(0, 220px);
+  }
+}

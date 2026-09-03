@@ -3,10 +3,6 @@ import {
   quoteDocumentSnapshotForAuthorisedLink,
   tradeQuoteTokenErrorResponse,
 } from "@/lib/trade-quote-review-server";
-import {
-  loadTradeQuoteBrandAsset,
-} from "@/lib/trade-quote-pdf-server";
-
 export const runtime = "edge";
 
 type Context = {
@@ -34,6 +30,7 @@ export async function GET(_request: Request, context: Context) {
     }
     const row = await authoriseTradeQuoteLink(params.token);
     const snapshot = await quoteDocumentSnapshotForAuthorisedLink(row);
+    const { loadTradeQuoteBrandAsset } = await import("@/lib/trade-quote-pdf-server");
     const asset = await loadTradeQuoteBrandAsset(snapshot, params.kind);
     if (!asset) {
       return new Response("Brand image not found.", {

@@ -22,7 +22,11 @@ const resend = read("../src/app/api/service-reminder-provider-events/resend/rout
 const twilio = read("../src/app/api/service-reminder-provider-events/twilio/route.ts");
 const adminRoute = read("../src/app/api/admin/service-reminder-delivery/route.ts");
 const adminUi = read("../src/components/AdminServiceReminderDelivery.tsx");
-const globalStyles = read("../src/app/globals.css");
+const globalStyles = [
+  read("../src/app/globals.css"),
+  read("../src/app/protected-workspaces.css"),
+  read("../src/components/TradeRebateDocumentActions.css"),
+].join("\n");
 
 test("delivery identity is bound to request revision, token issue, intent and channel", async () => {
   const base = { requestId: "request-1", requestRevision: 3, tokenIssue: 2, intent: "initial", channel: "email" };

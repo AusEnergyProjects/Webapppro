@@ -3,9 +3,6 @@ import {
   quoteDocumentSnapshotForAuthorisedLink,
   tradeQuoteTokenErrorResponse,
 } from "@/lib/trade-quote-review-server";
-import {
-  tradeQuotePdfFilename,
-} from "@/lib/trade-quote-pdf-server";
 import { issuedTradeQuotePdf } from "@/lib/trade-quote-issued-pdf-server";
 
 export const runtime = "edge";
@@ -33,6 +30,7 @@ export async function GET(request: Request, context: Context) {
       new URL(request.url).searchParams.get("download") === "1"
         ? "attachment"
         : "inline";
+    const { tradeQuotePdfFilename } = await import("@/lib/trade-quote-pdf-server");
     return new Response(bytesBody(bytes), {
       status: 200,
       headers: {

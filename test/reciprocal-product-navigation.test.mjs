@@ -6,7 +6,11 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const customerDashboard = read("../src/components/CustomerDashboard.tsx");
 const directTradeDashboard = read("../src/components/DirectTradeDashboard.tsx");
 const tlinkChrome = read("../src/components/TLinkChrome.tsx");
-const styles = read("../src/app/globals.css");
+const styles = [
+  read("../src/app/globals.css"),
+  read("../src/app/protected-workspaces.css"),
+  read("../src/components/TLinkChrome.css"),
+].join("\n");
 
 const customerNavigation = customerDashboard.match(
   /<nav\s+className="customer-dashboard-nav customer-product-navigation"[\s\S]*?<\/nav>/,

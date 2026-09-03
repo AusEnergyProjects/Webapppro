@@ -2,6 +2,7 @@
 
 import type { User } from "firebase/auth";
 import { useCallback, useEffect, useRef, useState } from "react";
+import "./TradeRebateDocumentActions.css";
 import { australiaLocalDateTime } from "@/lib/trade-schedule";
 import {
   moveInvoiceLine,

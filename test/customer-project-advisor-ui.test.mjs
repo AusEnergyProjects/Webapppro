@@ -7,7 +7,10 @@ const dashboard = read("../src/components/CustomerDashboard.tsx");
 const installerDashboard = read("../src/components/DirectTradeDashboard.tsx");
 const adminDirectory = read("../src/components/AdminAccountDirectory.tsx");
 const adminDirectoryRoute = read("../src/app/api/admin/directory/route.ts");
-const styles = read("../src/app/globals.css");
+const styles = [
+  read("../src/app/globals.css"),
+  read("../src/app/protected-workspaces.css"),
+].join("\n");
 const projectPreparationGuide = read("../src/app/guides/project-preparation/page.tsx");
 const projectPlan = read("../src/lib/customer-projects.mjs");
 const homePlan = read("../src/lib/home-energy-plan.mjs");
@@ -335,7 +338,14 @@ test("plan email saves before delivery while PDF download is mutation-free and s
     planPdfRoute,
     /createPublicPlanCustomerPdfBundle\(\s*canonicalPublicPlanInput\(pdfSource\.value\),\s*fonts,\s*\)/,
   );
-  assert.match(planPdfRoute, /bytes = await createCustomerPlanPdfBytes\(report, fonts\)/);
+  assert.match(
+    planPdfRoute,
+    /bytes = await customerPlanPdf\.createCustomerPlanPdfBytes\(report, fonts\)/,
+  );
+  assert.match(
+    planPdfRoute,
+    /const customerPlanPdf = await import\("@\/lib\/customer-plan-pdf\.mjs"\)/,
+  );
   assert.match(planPdfRoute, /Content-Disposition/);
   assert.match(planPdfRoute, /application\/pdf/);
   assert.match(planPdfRoute, /"Cache-Control": "no-store"/);

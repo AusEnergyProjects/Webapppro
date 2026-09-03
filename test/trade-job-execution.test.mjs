@@ -10,7 +10,10 @@ const quoteRoute = read("src/app/api/trade-quotes/route.ts");
 const snapshotServer = read("src/lib/trade-quote-execution-server.ts");
 const executionRoute = read("src/app/api/trade-job-readiness/route.ts");
 const panel = read("src/components/TradeJobReadinessPanel.tsx");
-const styles = read("src/app/globals.css");
+const styles = [
+  read("src/app/globals.css"),
+  read("src/app/protected-workspaces.css"),
+].join("\n");
 
 const apply = (db, sql) => {
   for (const statement of sql.split("--> statement-breakpoint").map((item) => item.trim()).filter(Boolean)) db.exec(statement);

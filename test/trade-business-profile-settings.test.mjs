@@ -33,7 +33,11 @@ const enquiryRoute = read("../src/app/api/trade-enquiries/route.ts");
 const enquiryInbox = read("../src/components/TradeEnquiryInbox.tsx");
 const crmRoute = read("../src/app/api/trade-crm/route.ts");
 const newJobUi = read("../src/components/TradeNewJobForm.tsx");
-const globalStyles = read("../src/app/globals.css");
+const globalStyles = [
+  read("../src/app/globals.css"),
+  read("../src/app/protected-workspaces.css"),
+  read("../src/components/TLinkChrome.css"),
+].join("\n");
 
 function pngChunk(type, payload = []) {
   const bytes = new Uint8Array(12 + payload.length);

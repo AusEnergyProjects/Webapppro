@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import "./TradeRebateDocumentActions.css";
 import {
   saveTradeRebateEstimateDraft,
   type TradeRebateEstimateDraft,

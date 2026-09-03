@@ -10,7 +10,11 @@ const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const products = read("../src/components/InstallerProductMarketplace.tsx");
 const supplierProducts = read("../src/components/SupplierCatalogueWorkspace.tsx");
 const purchasing = read("../src/components/TradePurchasingWorkspace.tsx");
-const styles = read("../src/app/globals.css");
+const styles = [
+  read("../src/app/globals.css"),
+  read("../src/app/protected-workspaces.css"),
+  read("../src/components/TLinkChrome.css"),
+].join("\n");
 const adminCatalogueStyles = read("../src/components/AdminCatalogueWorkspace.module.css");
 
 test("the TLink command centre uses a bounded role scoped server search", () => {

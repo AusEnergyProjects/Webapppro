@@ -25,10 +25,10 @@ const activityNotificationServer = fs.readFileSync(
   ),
   "utf8",
 );
-const styles = fs.readFileSync(
-  new URL("../src/app/globals.css", import.meta.url),
-  "utf8",
-);
+const styles = [
+  fs.readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8"),
+  fs.readFileSync(new URL("../src/app/protected-workspaces.css", import.meta.url), "utf8"),
+].join("\n");
 
 test("project installer quotes awaiting review drive the account quote count", () => {
   assert.match(
