@@ -8,12 +8,9 @@ const CACHE_RETAIN_MS = 60 * 60_000;
 type SourceFetch = (url: string, init?: RequestInit) => Promise<Response>;
 type MarketCache = Pick<Cache, "match" | "put">;
 
-export function runtimeMarketCache(): MarketCache | undefined {
-  // Cloudflare adds caches.default to the standard CacheStorage interface.
-  if (typeof caches === "undefined" || !("default" in caches)) return undefined;
-  const cache = caches.default;
-  if (typeof cache === "object" && cache !== null && "match" in cache && "put" in cache && typeof cache.match === "function" && typeof cache.put === "function") return cache as MarketCache;
-  return undefined;
+export async function runtimeMarketCache(cacheStorage: Pick<CacheStorage, "open"> | undefined = typeof caches === "undefined" ? undefined : caches): Promise<MarketCache | undefined> {
+  // Namespaced Sites Workers cannot use caches.default. A named cache is isolated to this script.
+  return cacheStorage?.open("aea-nem-wholesale-v1");
 }
 
 async function readSource(fetchImpl: SourceFetch, url: string, signal: AbortSignal, body?: string): Promise<unknown> {

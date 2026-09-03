@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { NEM_DAY_MS, NEM_INTERVAL_MS, NEM_REGIONS, isNemSnapshot, latestNemPoint, nemChartPath, nemTimeLabel, normaliseNemFlows, normaliseNemHistory, parseNemTime } from "../src/lib/nem-wholesale.ts";
-import { loadNemSnapshot, NEM_HISTORY_URL, NEM_SUMMARY_URL } from "../src/lib/nem-wholesale-server.ts";
+import { loadNemSnapshot, NEM_HISTORY_URL, NEM_SUMMARY_URL, runtimeMarketCache } from "../src/lib/nem-wholesale-server.ts";
 import { searchPublicSite } from "../src/lib/public-site-search.ts";
 
 const now = Date.parse("2026-09-03T16:20:00Z");
@@ -92,6 +92,16 @@ test("upstream data becomes a bounded validated public snapshot", async () => {
   assert.ok(JSON.stringify(result).length < 100_000);
   assert.ok(!isNemSnapshot({...result,regions:[...result.regions.slice(0,4),result.regions[0]]}));
   assert.ok(!isNemSnapshot({...result,regions:[]}));
+});
+
+test("Sites opens an isolated named cache without touching the disabled default cache", async () => {
+  const namedCache = { match: async () => undefined, put: async () => {} };
+  const storage = {
+    get default() { throw new Error("Disabled in namespaced Workers"); },
+    open: async (name) => { assert.equal(name, "aea-nem-wholesale-v1"); return namedCache; },
+  };
+  assert.equal(await runtimeMarketCache(storage), namedCache);
+  assert.equal(await runtimeMarketCache(undefined), undefined);
 });
 
 test("shared cache avoids repeated upstream calls and serves labelled last-good data only for a bounded time", async () => {
