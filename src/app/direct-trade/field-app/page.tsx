@@ -6,6 +6,13 @@ import { FieldAppDownload } from "@/components/FieldAppDownload";
 export const metadata: Metadata = {
   title: "TLink app",
   description: "Install and update the TLink field app for technicians, trades and assessors.",
+  robots: {
+    index: false,
+    follow: false,
+    noarchive: true,
+    noimageindex: true,
+    nosnippet: true,
+  },
 };
 
 export default function FieldAppPage() {

@@ -13,7 +13,7 @@ const chrome = read("../src/components/ComparatorChrome.tsx");
 const styles = read("../src/app/globals.css");
 
 test("assessment services are first class routes across the site", () => {
-  assert.match(chrome, /href: "\/assessments", label: "NatHERS & ratings"/);
+  assert.match(chrome, /href: "\/assessments", label: "Home assessments"/);
   assert.match(home, /Building or designing a new home\? NatHERS assesses the plans/);
   assert.match(home, /href="\/assessments"/);
   assert.match(guides, /Need a NatHERS or BASIX assessment/);
@@ -52,6 +52,10 @@ test("the hub explains the 2026 brand transition and provides a booking path", (
   assert.match(page, /href="\/residential-efficiency-scorecard"/);
   assert.match(page, /href="\/book-an-assessment"/);
   assert.doesNotMatch(page, /type="file"|<input/);
+  assert.match(page, /What is a home energy assessment\?/);
+  assert.match(page, /How much does a home energy assessment cost\?/);
+  assert.match(page, /"@type": "ItemList"/);
+  assert.match(page, /assessmentServiceNodes/);
 });
 
 test("assessment cards align on desktop and stack on mobile", () => {
@@ -64,6 +68,6 @@ test("assessment cards align on desktop and stack on mobile", () => {
 test("assessment customer copy contains no prohibited dash characters", () => {
   assert.doesNotMatch(`${page}${home}${guides}`, /\u2013|\u2014/);
   assert.doesNotMatch(page, /\bAEA\b/);
-  assert.match(page, /Which do I need: NatHERS, Home Energy Rating or BASIX\?/);
+  assert.match(page, /Choose the right home energy assessment/);
   assert.match(page, /Not sure where to start\?/);
 });

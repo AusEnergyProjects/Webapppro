@@ -61,7 +61,7 @@ export const PUBLIC_SITE_SEARCH_ENTRIES: readonly PublicSiteSearchEntry[] = [
   {
     path: "/residential-efficiency-scorecard",
     title: "Residential Efficiency Scorecard",
-    description: "Understand Victoria's existing-home assessment and star-rating service.",
+    description: "Learn why Residential Efficiency Scorecard closed and what the current Home Energy Rating replaced it.",
     keywords: ["scorecard", "victorian scorecard", "home efficiency scorecard", "existing home assessment victoria"],
   },
   {

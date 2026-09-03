@@ -27,10 +27,10 @@ export function GettingStarted() {
     <header className="start-hero start-hero-planner">
       <div className="start-hero-copy">
         <span className="start-eyebrow">Independent home energy planning</span>
-        <h1>One clear plan for a more comfortable, lower-cost home</h1>
-        <p>Not sure what comes first? Answer a few simple questions and skip anything you do not know. We will put the next steps in order, and you can see your plan before creating an account or speaking to anyone.</p>
+        <h1>Home energy assessments without the confusion</h1>
+        <p>Whether your home is already built or still on plans, we help you understand which assessment fits and what it will tell you. If an assessment is not the first step, our free planner will put the next moves in order.</p>
         <div className="start-actions"><Link className="btn start-primary-action" href="/plan">Build my home energy plan</Link><SurgeOpenButton label="Ask Wattzun AI first" description="Talk through the first decision in plain English." draft="I am not sure where to start with my home energy upgrades. Help me work out the first decision." /></div>
-        <p className="start-hero-secondary">Already know what you need? <Link href="#compare-energy-plans" prefetch={false}>Compare electricity or gas</Link>, <Link href="/calculator">estimate a rebate</Link> or <Link href="#home-booking" prefetch={false}>book a quick call</Link>. You can build a plan or contact matching trades without creating an account.</p>
+        <p className="start-hero-secondary">Already know what you need? <Link href="/assessments">Compare home energy assessments</Link>, <Link href="#compare-energy-plans" prefetch={false}>compare electricity or gas</Link>, <Link href="/calculator">estimate a rebate</Link> or <Link href="#home-booking" prefetch={false}>book a quick call</Link>. You can build a plan or contact matching trades without creating an account.</p>
         <aside aria-label="What the guided plan includes"><strong>About three minutes</strong><ul><li>No account to begin</li><li>Skip anything you do not know</li><li>See your roadmap first</li><li>Decide what happens next</li></ul></aside>
       </div>
       <CustomerJourneyScene />

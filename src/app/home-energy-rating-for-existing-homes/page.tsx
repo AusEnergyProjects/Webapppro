@@ -8,8 +8,8 @@ import {
 } from "@/components/AssessmentServicePage";
 
 const path = "/home-energy-rating-for-existing-homes";
-const title = "Existing Home Energy Rating | Australian Energy Assessments";
-const description = "Existing-home Home Energy Rating assessments, with primary on-site coverage in NSW and Victoria and other locations confirmed case by case.";
+const title = "Home Energy Rating for Existing Homes | Australian Energy Assessments";
+const description = "Book an existing-home Home Energy Rating with two ratings, estimated energy use and practical upgrade guidance. On-site visits are mainly in NSW and Victoria.";
 
 export const metadata = buildAssessmentMetadata({ path, title, description });
 
@@ -17,7 +17,7 @@ const cards: readonly AssessmentServiceCard[] = [
   {
     label: "On-site assessment",
     title: "Record the home as it is now",
-    description: "The assessor visits the completed home and records the building fabric, layout, orientation, windows, shading and major fixed appliances used by the official existing-home method.",
+    description: "The assessor visits the completed home and records the walls, roof, floors, layout, orientation, windows, shading, heating, cooling, hot water and other major equipment used by the official method.",
     boundaryTitle: "Existing condition matters",
     boundary: "The assessment describes the home and installed systems at the time of the visit. Unknown or inaccessible details need to be handled under the current method rather than guessed as verified facts.",
     evidenceTitle: "Useful preparation",
@@ -91,6 +91,18 @@ const faqs: readonly AssessmentServiceFaq[] = [
     answer: "It provides a Home Energy Rating from 0 to 100+, a Star Rating from 0 to 10, estimated annual energy use and upgrade guidance for the assessed home.",
   },
   {
+    question: "How long does a Home Energy Rating assessment take?",
+    answer: "Official guidance says an existing-home visit usually takes about two to three hours. A larger or more complex home can take longer, and safe access to the relevant areas matters.",
+  },
+  {
+    question: "How much does a Home Energy Rating cost?",
+    answer: "The price depends on the home, location, travel, access and the agreed scope. Australian Energy Assessments confirms the service and quote before paid work starts. Some households may qualify for a current funded program, but eligibility must be checked with that program.",
+  },
+  {
+    question: "Is a Home Energy Rating worth getting?",
+    answer: "It can be useful when you want an independent picture of how the home performs and a sensible order for upgrades. It is not a promise of lower bills, a building approval or a construction quote.",
+  },
+  {
     question: "Can this rating demonstrate NCC compliance for a major renovation?",
     answer: "No. An existing-home rating cannot demonstrate National Construction Code compliance. If a major renovation must demonstrate compliance, official guidance says it needs the relevant new-home certificate pathway. The approval authority determines the evidence required for the project.",
   },
@@ -102,8 +114,8 @@ export default function HomeEnergyRatingForExistingHomesPage() {
       path={path}
       breadcrumbLabel="Existing-home rating"
       eyebrow="Homes that are already built"
-      title="Home Energy Rating for an existing home"
-      introduction="Want to know how your existing home performs and what to improve first? An assessor visits the property and gives you two ratings, estimated energy use and practical upgrade guidance. Australian Energy Assessments currently completes most on-site visits in New South Wales and Victoria, with other locations checked when you enquire."
+      title="Home Energy Rating for existing homes"
+      introduction="If your home is already built, a Home Energy Rating gives you a clear picture of how it performs now. An assessor visits the property, records the home and its major equipment, then provides two ratings, estimated energy use and practical upgrade guidance. Australian Energy Assessments completes most on-site visits in New South Wales and Victoria, with other locations checked when you enquire."
       reviewed="1 September 2026"
       reviewNote="Home Energy Rating launched nationally on 1 July 2026. Older articles and search results may still use Residential Efficiency Scorecard or apply new-home NatHERS terms to existing homes."
       cardsEyebrow="What you receive"
@@ -124,9 +136,8 @@ export default function HomeEnergyRatingForExistingHomesPage() {
       ]}
       serviceName="Home Energy Rating for existing homes"
       serviceType="On-site existing-home energy assessment"
-      alternateNames={["NatHERS existing home assessment", "home energy audit", "Residential Efficiency Scorecard assessment"]}
       areaServed="Australia"
-      reviewedIso="2026-09-01"
+      reviewedIso="2026-09-03"
       coverageTitle="On-site availability by location"
       coverageDescription="Existing-home assessments require a property visit. Current field delivery is primarily in New South Wales and Victoria; availability, travel and timing for other Australian locations are confirmed before booking."
       footer="An existing-home rating supports household decisions and upgrade planning. It does not replace a new-home certificate, building approval or site-specific trade design."

@@ -21,6 +21,7 @@ const startAlias = read("../src/app/getting-started/page.tsx");
 const legacyNewHomeAlias = read("../src/app/nathers-new-homes/page.tsx");
 const legacyExistingHomeAlias = read("../src/app/nathers-existing-homes/page.tsx");
 const legacyPrivacyAlias = read("../src/app/privacy-policy/page.tsx");
+const fieldApp = read("../src/app/direct-trade/field-app/page.tsx");
 const platformMetadataRoutes = [
   "plan",
   "wattzun",
@@ -80,7 +81,10 @@ test("JSON-LD is server rendered and escapes markup-sensitive characters", () =>
   assert.match(layout, /"max-image-preview": "large"/);
   assert.match(layout, /url: PUBLIC_SITE\.logo/);
   assert.doesNotMatch(layout, /tlink-icon-192\.png/);
-  assert.match(home, /alternates: \{ canonical: "\/" \}/);
+  assert.match(home, /buildApexMetadata\(\{/);
+  assert.match(home, /path: "\/"/);
+  assert.match(home, /Home Energy Assessments Australia/);
+  assert.match(home, /#home-energy-assessment-service/);
   assert.match(home, /"@type": "ItemList"/);
   assert.match(home, /\/nathers-for-new-homes/);
   assert.match(home, /\/home-energy-rating-for-existing-homes/);
@@ -113,6 +117,8 @@ test("header and footer expose assessment conversion and verified profiles", () 
   assert.match(chrome, /className="site-book-link"[\s\S]*href="\/book-an-assessment"/);
   assert.match(chrome, /className="site-call-link"[\s\S]*href=\{PUBLIC_SITE\.phoneHref\}/);
   assert.match(chrome, /Google Business Profile/);
+  assert.match(chrome, />Home energy assessments<\/Link>/);
+  assert.match(chrome, />Home Energy Rating<\/Link>/);
   assert.match(chrome, /href="\/faq"/);
   assert.match(chrome, /Facebook/);
   assert.match(chrome, /Instagram/);
@@ -123,7 +129,7 @@ test("header and footer expose assessment conversion and verified profiles", () 
   assert.match(styles, /@media \(max-width: 520px\)[\s\S]*grid-row: 3/);
 });
 
-test("crawl controls exclude private surfaces and remove false sitemap dates", () => {
+test("crawl controls exclude private surfaces and publish only verified sitemap dates", () => {
   assert.match(accountLayout, /index: false/);
   assert.match(accountLayout, /noimageindex: true/);
   assert.match(robots, /"\/account"/);
@@ -137,10 +143,15 @@ test("crawl controls exclude private surfaces and remove false sitemap dates", (
   assert.match(sitemap, /"\/home-energy-rating-vs-nathers-vs-scorecard"/);
   assert.match(sitemap, /"\/residential-efficiency-scorecard"/);
   assert.match(sitemap, /"\/rental-assessment\/request"/);
-  assert.doesNotMatch(sitemap, /lastModified/);
+  assert.match(sitemap, /lastModifiedByRoute/);
+  assert.match(sitemap, /\["\/assessments", "2026-09-03"\]/);
+  assert.match(sitemap, /new URL\(route \|\| "\/", `\$\{PUBLIC_SITE\.apexUrl\}\/`\)\.toString\(\)/);
+  assert.doesNotMatch(sitemap, /changeFrequency|priority:/);
   assert.match(gasAlias, /permanentRedirect\("\/gas-compare"\)/);
   assert.match(startAlias, /permanentRedirect\("\/plan"\)/);
   assert.match(legacyNewHomeAlias, /permanentRedirect\("\/nathers-for-new-homes"\)/);
   assert.match(legacyExistingHomeAlias, /permanentRedirect\("\/home-energy-rating-for-existing-homes"\)/);
   assert.match(legacyPrivacyAlias, /permanentRedirect\("\/privacy"\)/);
+  assert.match(fieldApp, /index: false/);
+  assert.match(fieldApp, /noarchive: true/);
 });

@@ -31,7 +31,7 @@ export function SiteNav({ active }: { active: SiteActive }) {
     { key: "gas", href: "/gas-compare", label: "Gas compare" },
     { key: "certificates", href: "/guides/certificate-prices", label: "Certificates" },
     { key: "guides", href: "/guides", label: "Guides and rebates" },
-    { key: "assessments", href: "/assessments", label: "NatHERS & ratings" },
+    { key: "assessments", href: "/assessments", label: "Home assessments" },
   ] as const;
   return (
     <ResponsiveSiteNav>
@@ -95,7 +95,7 @@ export function SiteHeader({ active }: { active: SiteActive }) {
 }
 
 export function SiteFooter({ children }: { children: ReactNode }) {
-  return <footer className="site-footer"><p>{children}</p><p>Powered by <a href={`${PUBLIC_SITE.apexUrl}/`}>Australian Energy Assessments</a> | <Link href="/faq" prefetch={false}>FAQ</Link> | <Link href="/privacy" prefetch={false}>Privacy and analytics</Link> | <Link href="/book-an-assessment" prefetch={false}>Book now</Link> | <a href={PUBLIC_SITE.phoneHref}>{PUBLIC_SITE.phoneDisplay}</a> | <a href={`mailto:${PUBLIC_SITE.email}`}>Email</a></p><p><Link href="/team" prefetch={false}>Our team</Link> | <Link href="/communities-schools" prefetch={false}>Community education</Link> | <Link href="/trusted-suppliers" prefetch={false}>Trusted resources</Link></p><p>{PUBLIC_SITE.legalName} | ABN {PUBLIC_SITE.abn} | {PUBLIC_SITE.address.streetAddress}, {PUBLIC_SITE.address.addressLocality} {PUBLIC_SITE.address.addressRegion} {PUBLIC_SITE.address.postalCode}</p><p className="site-footer-profiles"><a href={PUBLIC_SITE.googleBusinessProfile} target="_blank" rel="noopener noreferrer">Google Business Profile</a> | <a href={PUBLIC_SITE.facebook} target="_blank" rel="noopener noreferrer">Facebook</a> | <a href={PUBLIC_SITE.instagram} target="_blank" rel="noopener noreferrer">Instagram</a> | <a href={PUBLIC_SITE.linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a></p></footer>;
+  return <footer className="site-footer"><p>{children}</p><p>Powered by <a href={`${PUBLIC_SITE.apexUrl}/`}>Australian Energy Assessments</a> | <Link href="/assessments" prefetch={false}>Home energy assessments</Link> | <Link href="/home-energy-rating-for-existing-homes" prefetch={false}>Home Energy Rating</Link> | <Link href="/faq" prefetch={false}>FAQ</Link> | <Link href="/privacy" prefetch={false}>Privacy and analytics</Link> | <Link href="/book-an-assessment" prefetch={false}>Book now</Link> | <a href={PUBLIC_SITE.phoneHref}>{PUBLIC_SITE.phoneDisplay}</a> | <a href={`mailto:${PUBLIC_SITE.email}`}>Email</a></p><p><Link href="/team" prefetch={false}>Our team</Link> | <Link href="/communities-schools" prefetch={false}>Community education</Link> | <Link href="/trusted-suppliers" prefetch={false}>Trusted resources</Link></p><p>{PUBLIC_SITE.legalName} | ABN {PUBLIC_SITE.abn} | {PUBLIC_SITE.address.streetAddress}, {PUBLIC_SITE.address.addressLocality} {PUBLIC_SITE.address.addressRegion} {PUBLIC_SITE.address.postalCode}</p><p className="site-footer-profiles"><a href={PUBLIC_SITE.googleBusinessProfile} target="_blank" rel="noopener noreferrer">Google Business Profile</a> | <a href={PUBLIC_SITE.facebook} target="_blank" rel="noopener noreferrer">Facebook</a> | <a href={PUBLIC_SITE.instagram} target="_blank" rel="noopener noreferrer">Instagram</a> | <a href={PUBLIC_SITE.linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a></p></footer>;
 }
 
 export function ComparatorHero({ title, children }: { title: string; children: ReactNode }) {

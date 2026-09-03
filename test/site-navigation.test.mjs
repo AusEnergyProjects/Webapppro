@@ -77,7 +77,7 @@ test("site navigation and customer reports share one exact AEA brandmark", () =>
 test("the homepage provides one clear starting journey instead of redirecting", () => {
   assert.match(home, /GettingStarted/);
   assert.doesNotMatch(home, /redirect\(/);
-  assert.match(guide, /One clear plan for a more comfortable, lower-cost home/);
+  assert.match(guide, /Home energy assessments without the confusion/);
   assert.match(guide, /Build my home energy plan/);
   assert.match(guide, /What do you need today/);
   assert.match(guide, /Direct Trade Services/);
@@ -101,7 +101,7 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(chrome, /className="site-tlink-copy"><strong>TLink<\/strong><\/span>/);
   assert.doesNotMatch(chrome, /Trade workspace/);
   assert.match(guide, /href="\/calculator"[\s\S]*estimate a rebate/);
-  assert.match(chrome, /href: "\/assessments", label: "NatHERS & ratings"/);
+  assert.match(chrome, /href: "\/assessments", label: "Home assessments"/);
   assert.match(assessments, /SiteHeader active="assessments"/);
   assert.match(electricity, /SiteHeader active="electricity"/);
   assert.match(gas, /SiteHeader active="gas"/);

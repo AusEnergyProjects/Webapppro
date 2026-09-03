@@ -62,6 +62,6 @@ export default function StandardsGuidePage() {
       { label: "Understanding a new-home certificate", href: "https://www.homeenergyrating.gov.au/households/new-homes/understanding-your-new-homes-certificate" },
       { label: "NSW Planning Portal BASIX overview", href: "https://www.planningportal.nsw.gov.au/development-and-assessment/basix" },
     ]}
-    cta={{ title: "Confirm the project pathway before ordering the assessment", text: "Send the location, design stage and current plans. Australian Energy Assessments can complete plan-based NatHERS work anywhere in Australia and BASIX support for NSW projects.", href: "/book-an-assessment", label: "Book a five-minute call" }}
+    cta={{ title: "Need a plan-based NatHERS assessment?", text: "See what the assessor needs, what the certificate includes and how Australia-wide desktop assessment works before you book.", href: "/nathers-for-new-homes", label: "Explore new-home NatHERS assessments" }}
   />;
 }

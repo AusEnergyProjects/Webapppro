@@ -67,6 +67,6 @@ export default function AssessmentPreparationGuidePage() {
       { label: "How new homes are measured", href: "https://www.homeenergyrating.gov.au/households/new-homes/measuring-energy-efficiency-new-homes" },
       { label: "Understanding a new-home certificate", href: "https://www.homeenergyrating.gov.au/households/new-homes/understanding-your-new-homes-certificate" },
     ]}
-    cta={{ title: "Confirm the assessment before collecting every document", text: "The five-minute call checks the property stage, location and required output so you can prepare the right evidence.", href: "/book-an-assessment", label: "Book a five-minute call" }}
+    cta={{ title: "Confirm the assessment before collecting every document", text: "Start with the property stage, location and result you need. The assessment guide will show which service fits and what to prepare.", href: "/assessments", label: "Compare home energy assessments" }}
   />;
 }

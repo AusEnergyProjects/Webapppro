@@ -8,8 +8,8 @@ import {
 } from "@/components/AssessmentServicePage";
 
 const path = "/nathers-for-new-homes";
-const title = "New Home NatHERS Assessment | Australian Energy Assessments";
-const description = "Understand plan-based NatHERS assessments, thermal Star Ratings, Whole of Home ratings and new-home certificate evidence for Australian residential projects.";
+const title = "NatHERS Assessment Australia | Australian Energy Assessments";
+const description = "Plan-based NatHERS assessments for new homes and major renovations Australia-wide, including thermal Star Rating and Whole of Home support.";
 
 export const metadata = buildAssessmentMetadata({ path, title, description });
 
@@ -95,6 +95,10 @@ const faqs: readonly AssessmentServiceFaq[] = [
     question: "Is the rating a forecast of the future energy bill?",
     answer: "No. It is a standardised model of the proposed design under defined assumptions. Actual energy use and bills also depend on weather, occupancy, behaviour, tariffs, equipment settings and construction quality.",
   },
+  {
+    question: "How is a NatHERS assessment quoted?",
+    answer: "The quote depends on the project type, design stage, number of dwellings, quality of the plans and specifications, certificate requirements and any option testing or later revisions. Australian Energy Assessments confirms the scope and price before modelling starts.",
+  },
 ];
 
 export default function NathersForNewHomesPage() {
@@ -127,7 +131,7 @@ export default function NathersForNewHomesPage() {
       serviceType="Plan-based NatHERS thermal performance and Whole of Home assessment"
       alternateNames={["7 star NatHERS assessment", "NCC home energy assessment", "new home energy rating"]}
       areaServed="Australia"
-      reviewedIso="2026-09-01"
+      reviewedIso="2026-09-03"
       coverageTitle="Desktop assessment across Australia"
       coverageDescription="New-home NatHERS assessments are completed from coordinated plans and specifications, so projects can be assessed remotely across Australia. The state or territory and approval authority still determine the applicable pathway and evidence."
       footer="New-home rating evidence is project specific. The assessment model, certificate, plans and approval requirements must remain coordinated as the design changes."

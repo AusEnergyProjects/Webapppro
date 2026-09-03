@@ -63,6 +63,6 @@ export default function FreeAssessmentGuidePage() {
       { label: "How to get an existing-home assessment", href: "https://www.homeenergyrating.gov.au/households/existing-homes/how-get-assessment" },
       { label: "Official Scorecard closure notice", href: "https://www.homeenergyrating.gov.au/news/nathers-news-june-edition-nathers-expansion-stage-2-rolling-out-july" },
     ]}
-    cta={{ title: "Find out which assessment applies", text: "Tell us the suburb, whether the home is built and what decision the assessment needs to support. We will explain the next step before quoting any paid work.", href: "/book-an-assessment", label: "Book the free five-minute call" }}
+    cta={{ title: "Looking for an existing-home assessment?", text: "See what the current Home Energy Rating includes, how the visit works and which older assessment names have been replaced.", href: "/home-energy-rating-for-existing-homes", label: "Explore Home Energy Ratings" }}
   />;
 }

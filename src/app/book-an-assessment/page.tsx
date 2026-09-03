@@ -9,7 +9,7 @@ import styles from "./page.module.css";
 
 const path = "/book-an-assessment";
 const canonical = `${PUBLIC_SITE.apexUrl}${path}`;
-const title = "Book a 5-Minute Assessment Call | Australian Energy Assessments";
+const title = "Book a 5-Minute Call | Australian Energy Assessments";
 const description = "Choose a time for a five-minute call to confirm your property, assessment needs and next step with Australian Energy Assessments.";
 const image = `${PUBLIC_SITE.apexUrl}/aea-home-energy-plan-og-v2.png`;
 
@@ -45,9 +45,8 @@ const structuredData = {
     {
       "@type": "Service",
       "@id": `${canonical}#service`,
-      name: "Five-minute home energy assessment call",
-      alternateName: "NatHERS and Home Energy Rating booking call",
-      serviceType: "Home energy assessment booking and planning call",
+      name: "Five-minute assessment enquiry call",
+      serviceType: "Customer enquiry and booking support",
       description,
       url: canonical,
       provider: { "@id": PUBLIC_SITE.organizationId },
@@ -68,7 +67,7 @@ const structuredData = {
       ],
       potentialAction: {
         "@type": "ReserveAction",
-        name: "Book a five-minute assessment call",
+        name: "Book a five-minute enquiry call",
         target: {
           "@type": "EntryPoint",
           urlTemplate: CALENDLY_BOOKING_URL,

@@ -52,12 +52,25 @@ const routes = [
   "/direct-trade/integrations",
   "/direct-trade/access",
   "/direct-trade/standards",
-];
+] as const;
+
+const lastModifiedByRoute = new Map<(typeof routes)[number], string>([
+  ["", "2026-09-03"],
+  ["/assessments", "2026-09-03"],
+  ["/book-an-assessment", "2026-09-03"],
+  ["/home-energy-rating-for-existing-homes", "2026-09-03"],
+  ["/nathers-for-new-homes", "2026-09-03"],
+  ["/guides/prepare-for-home-energy-assessment", "2026-09-03"],
+  ["/guides/free-home-energy-assessments", "2026-09-03"],
+  ["/guides/ncc-nathers-basix", "2026-09-03"],
+]);
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  return routes.map((route) => ({
-    url: `${PUBLIC_SITE.apexUrl}${route}`,
-    changeFrequency: route === "" ? "weekly" : "monthly",
-    priority: route === "" ? 1 : route === "/assessments" ? 0.95 : route === "/plan" ? 0.9 : 0.7,
-  }));
+  return routes.map((route) => {
+    const lastModified = lastModifiedByRoute.get(route);
+    return {
+      url: new URL(route || "/", `${PUBLIC_SITE.apexUrl}/`).toString(),
+      ...(lastModified ? { lastModified } : {}),
+    };
+  });
 }

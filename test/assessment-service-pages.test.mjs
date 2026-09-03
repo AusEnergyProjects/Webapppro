@@ -88,6 +88,9 @@ test("existing-home terminology matches the 2026 Home Energy Rating service", ()
   assert.match(routes.existingHome, /launched nationally on 1 July 2026/);
   assert.match(routes.existingHome, /cannot demonstrate National Construction Code compliance/);
   assert.match(routes.existingHome, /not called a Whole of Home rating/);
+  assert.match(routes.existingHome, /How much does a Home Energy Rating cost\?/);
+  assert.match(routes.existingHome, /How long does a Home Energy Rating assessment take\?/);
+  assert.doesNotMatch(routes.existingHome, /alternateNames=/);
 });
 
 test("Whole of Home stays within the new-home certificate pathway", () => {
@@ -140,7 +143,7 @@ test("all routes show the review date, official sources and conservative public 
   assert.doesNotMatch(routeSource, /#1|number one|most experienced|accredited assessor|fixed price|guaranteed turnaround/i);
   assert.doesNotMatch(routeSource, /\bAEA\b/);
   assert.match(routes.newHome, /Building a new home or planning a major renovation\?/);
-  assert.match(routes.existingHome, /Want to know how your existing home performs/);
+  assert.match(routes.existingHome, /If your home is already built, a Home Energy Rating gives you a clear picture/);
 });
 
 test("the legacy Scorecard route preserves its apex canonical without advertising a closed service", () => {
