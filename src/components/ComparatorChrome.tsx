@@ -10,7 +10,7 @@ import { PUBLIC_SITE } from "@/lib/public-site";
 
 export function BrandBar() {
   return (
-    <Link href="/" prefetch={false} className="brandbar" aria-label="Australian Energy Assessments home">
+    <Link href="/" className="brandbar" aria-label="Australian Energy Assessments home">
       <span className="brandmark" aria-hidden="true"><img src={AEA_BRANDMARK_PNG_DATA_URI} alt="" width="30" height="30" decoding="async" /></span>
       <span className="brandtext">
         <strong className="brandname">Australian Energy Assessments</strong>
@@ -39,7 +39,6 @@ export function SiteNav({ active }: { active: SiteActive }) {
         <Link
           className={active === link.key ? "active" : "inactive"}
           href={link.href}
-          prefetch={false}
           key={link.key}
           aria-current={active === link.key ? "page" : undefined}
         >
@@ -66,7 +65,6 @@ export function SiteHeader({ active }: { active: SiteActive }) {
           <Link
             className="site-book-link"
             href="/book-an-assessment"
-            prefetch={false}
             aria-label="Book a five-minute assessment call"
           >
             Book now

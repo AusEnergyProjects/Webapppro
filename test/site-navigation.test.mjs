@@ -9,6 +9,7 @@ const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativeP
 const home = read("../src/app/page.tsx");
 const guide = read("../src/components/GettingStarted.tsx");
 const guideStyles = read("../src/components/AssessmentBooking.module.css");
+const homepageCalendly = read("../src/components/HomepageCalendlyEmbed.tsx");
 const customerScene = read("../src/components/CustomerJourneyScene.tsx");
 const plannerJourneyPath = path.resolve(directory, "../src/components/PlannerHomeJourney.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
@@ -128,11 +129,13 @@ test("the shared header includes private, typo-tolerant predictive page search",
   assert.match(publicSiteSearch, /event\.key === "ArrowUp"/);
   assert.match(publicSiteSearch, /event\.key === "Enter"/);
   assert.match(publicSiteSearch, /event\.key === "Escape"/);
+  assert.match(publicSiteSearch, /router\.prefetch\(results\[activeIndex >= 0 \? activeIndex : 0\]\.path\)/);
+  assert.match(publicSiteSearch, /onFocus=\{\(\) => router\.prefetch\(result\.path\)\}/);
   assert.match(publicSiteSearchIndex, /damerauLevenshtein/);
   assert.match(publicSiteSearchIndex, /path: "\/nathers-for-new-homes"/);
   assert.match(publicSiteSearchIndex, /path: "\/home-energy-rating-for-existing-homes"/);
   assert.doesNotMatch(publicSiteSearchIndex, /path: "\/(?:account|operations|creditex|direct-trade\/dashboard)/);
-  assert.doesNotMatch(publicSiteSearch, /fetch\(|localStorage|sessionStorage|gtag|dataLayer/);
+  assert.doesNotMatch(publicSiteSearch, /\bfetch\(|localStorage|sessionStorage|gtag|dataLayer/);
   assert.match(styles, /\.site-header \{ display: grid; grid-template-columns: auto minmax\(150px, 1fr\) auto;[^}]*overflow: visible;[^}]*z-index: 40;/);
   assert.match(styles, /\.public-site-search \{ grid-column: 2; grid-row: 1; \}/);
   assert.match(publicSiteSearchStyles, /\.root \{[^}]*max-width: 360px;/);
@@ -154,7 +157,7 @@ test("the futuristic header links to one dedicated always-present Wattzun AI pag
   assert.match(surgeHeaderButton, /className=\{`site-surge-link\$\{active \? " active" : ""\}`\}/);
   assert.match(surgeHeaderButton, /className="site-surge-core"/);
   assert.match(surgeHeaderButton, /src="\/surge-mascot\.webp"[\s\S]*?width="28" height="35"/);
-  assert.match(surgeHeaderButton, /prefetch=\{false\}/);
+  assert.doesNotMatch(surgeHeaderButton, /prefetch=\{false\}/);
   assert.match(surgeHeaderButton, /eslint-disable @next\/next\/no-img-element/);
   assert.match(surgeHeaderButton, /className="site-surge-copy"[\s\S]*?<strong>Wattzun AI<\/strong>/);
   assert.doesNotMatch(surgeHeaderButton, /Energy upgrade guide|site-surge-copy"[\s\S]{0,120}<small>/);
@@ -176,6 +179,17 @@ test("the futuristic header links to one dedicated always-present Wattzun AI pag
   assert.match(styles, /@media \(max-width: 360px\) \{[\s\S]*?\.site-header-actions \{[^}]*display: grid;[^}]*grid-template-columns: 1fr 1fr;/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.site-header::before, \.site-surge-core, \.customer-journey-scene::after \{ animation: none !important; \}/);
   assert.match(styles, /@media \(forced-colors: active\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{ border: 1px solid ButtonText;/);
+});
+
+test("public header pages are prepared before a click while private workspaces stay on demand", () => {
+  const primaryNav = chrome.slice(chrome.indexOf("export function SiteNav"), chrome.indexOf("export function SiteHeader"));
+  const bookLink = chrome.match(/<Link\s+className="site-book-link"[\s\S]*?<\/Link>/)?.[0] || "";
+  const tlinkLink = chrome.match(/<Link\s+className="site-tlink-link"[\s\S]*?<\/Link>/)?.[0] || "";
+  assert.doesNotMatch(primaryNav, /prefetch=\{false\}/);
+  assert.doesNotMatch(bookLink, /prefetch=\{false\}/);
+  assert.doesNotMatch(surgeHeaderButton, /prefetch=\{false\}/);
+  assert.match(tlinkLink, /prefetch=\{false\}/);
+  assert.match(chrome, /className="site-account-link active" href="\/account" prefetch=\{false\}/);
 });
 
 test("public navigation keeps TLink clearly branded", () => {
@@ -419,20 +433,26 @@ test("homepage makes the guided plan the only dominant hero action", () => {
   assert.match(guide, /className="start-hero-secondary"/);
 });
 
-test("homepage places one accessible lazy Calendly booking directly below the hero", () => {
+test("homepage keeps booking directly below the hero and loads Calendly only when requested", () => {
   const sceneIndex = guide.indexOf("<CustomerJourneyScene />");
   const bookingIndex = guide.indexOf('id="home-booking"');
   const guidedEntryIndex = guide.indexOf('className="home-entry home-entry-guided"');
   assert.ok(sceneIndex >= 0 && bookingIndex > sceneIndex && guidedEntryIndex > bookingIndex);
-  assert.equal(guide.match(/<iframe/g)?.length, 1);
+  assert.equal(guide.match(/<iframe/g)?.length || 0, 0);
   assert.match(guide, /className=\{bookingStyles\.bookingCard\}[\s\S]*?aria-labelledby="home-booking-title"/);
   assert.match(guide, /<h2 id="home-booking-title"[^>]*>Book a five-minute call<\/h2>/);
-  assert.match(guide, /title="Choose a five-minute call time with Australian Energy Assessments"/);
-  assert.match(guide, /loading="lazy"/);
-  assert.match(guide, /referrerPolicy="strict-origin-when-cross-origin"/);
+  assert.match(guide, /<HomepageCalendlyEmbed \/>/);
+  assert.match(homepageCalendly, /^"use client";/);
+  assert.match(homepageCalendly, /const \[opened, setOpened\] = useState\(false\)/);
+  assert.match(homepageCalendly, />Choose a time<\/button>/);
+  assert.equal(homepageCalendly.match(/<iframe/g)?.length, 1);
+  assert.match(homepageCalendly, /title="Choose a five-minute call time with Australian Energy Assessments"/);
+  assert.match(homepageCalendly, /loading="eager"/);
+  assert.match(homepageCalendly, /referrerPolicy="strict-origin-when-cross-origin"/);
   assert.match(guide, /This call is not the assessment itself/);
   assert.match(guide, /Calendly adds the call to our calendar and emails the booking details to you/);
-  assert.doesNotMatch(guide, /CalendlyInlineWidget|Open Calendly separately/);
+  assert.doesNotMatch(`${guide}${homepageCalendly}`, /CalendlyInlineWidget|Open Calendly separately/);
+  assert.match(homepageCalendly, /minHeight: 112/);
   assert.match(guideStyles, /\.embed \{[\s\S]*?border: 0;[\s\S]*?height: 720px;[\s\S]*?width: 100%;/);
   assert.match(guideStyles, /@media \(max-width: 720px\) \{[\s\S]*?\.embed \{[\s\S]*?height: 760px;/);
 });

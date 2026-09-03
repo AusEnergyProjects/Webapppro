@@ -17,6 +17,11 @@ export function PublicSiteSearch() {
   const showResults = open && query.trim().length > 0;
 
   useEffect(() => {
+    if (!showResults || results.length === 0) return;
+    router.prefetch(results[activeIndex >= 0 ? activeIndex : 0].path);
+  }, [activeIndex, results, router, showResults]);
+
+  useEffect(() => {
     function closeWhenOutside(event: PointerEvent) {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     }
@@ -94,7 +99,11 @@ export function PublicSiteSearch() {
               role="option"
               aria-selected={activeIndex === index}
               onPointerDown={(event) => event.preventDefault()}
-              onMouseEnter={() => setActiveIndex(index)}
+              onMouseEnter={() => {
+                setActiveIndex(index);
+                router.prefetch(result.path);
+              }}
+              onFocus={() => router.prefetch(result.path)}
               onClick={() => goTo(result)}
             >
               <strong>{result.title}</strong>

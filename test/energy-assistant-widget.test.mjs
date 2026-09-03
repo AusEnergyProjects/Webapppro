@@ -225,6 +225,9 @@ test("page Surge actions open the full guide while the floating mascot retains q
   assert.doesNotMatch(lazyWidget, /href="\/wattzun"|router\.prefetch|storePendingSurgeDraft/);
   assert.match(lazyWidget, /const \[quickChatMounted, setQuickChatMounted\] = useState\(false\)/);
   assert.match(lazyWidget, /if \(quickChatMounted\)[\s\S]*<DeferredEnergyAssistantWidget initialOpen \/>/);
+  assert.match(lazyWidget, /onPointerEnter=\{loadEnergyAssistant\}/);
+  assert.match(lazyWidget, /onFocusCapture=\{loadEnergyAssistant\}/);
+  assert.match(lazyWidget, /onTouchStart=\{loadEnergyAssistant\}/);
   assert.match(lazyWidget, /aria-label="Open Wattzun AI chat"/);
   assert.match(lazyWidget, /aria-label="Bring Wattzun AI back and open chat"/);
   assert.equal((lazyWidget.match(/setQuickChatMounted\(true\)/g) || []).length, 2);

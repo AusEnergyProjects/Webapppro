@@ -9,7 +9,6 @@ export function SurgeHeaderButton({ active = false }: { active?: boolean }) {
       aria-current={active ? "page" : undefined}
       className={`site-surge-link${active ? " active" : ""}`}
       href="/wattzun"
-      prefetch={false}
     >
       <span className="site-surge-core" aria-hidden="true">
         <img src="/surge-mascot.webp" alt="" width="28" height="35" decoding="async" />

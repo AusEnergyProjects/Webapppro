@@ -97,7 +97,13 @@ export function LazyEnergyAssistantWidget() {
   }
 
   return (
-    <div className={`${styles.root}${tucked ? ` ${styles.rootTucked}` : ""}`} data-surge-loader>
+    <div
+      className={`${styles.root}${tucked ? ` ${styles.rootTucked}` : ""}`}
+      data-surge-loader
+      onPointerEnter={loadEnergyAssistant}
+      onFocusCapture={loadEnergyAssistant}
+      onTouchStart={loadEnergyAssistant}
+    >
       {tucked ? (
         <button
           className={styles.peek}

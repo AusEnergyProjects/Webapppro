@@ -21,6 +21,8 @@ const chrome = read("../src/components/ComparatorChrome.tsx");
 const rebates = read("../src/components/RebatesHub.tsx");
 
 test("solar and battery guides are connected to the shared journey", () => {
+  assert.match(overview, /import Link from "next\/link"/);
+  assert.doesNotMatch(overview, /<a\s+href="\//);
   assert.match(chrome, /href: "\/guides"/);
   assert.match(overview, /href="\/guides\/solar"/);
   assert.match(overview, /href="\/guides\/batteries"/);
