@@ -12,9 +12,9 @@ export type PublicSiteSearchResult = PublicSiteSearchEntry & {
 export const PUBLIC_SITE_SEARCH_ENTRIES: readonly PublicSiteSearchEntry[] = [
   {
     path: "/wholesale-electricity",
-    title: "Live wholesale electricity prices",
-    description: "Explore five-minute regional spot prices, 24-hour charts and power flows.",
-    keywords: ["aemo", "nem", "wholesale", "spot price", "live energy price", "electricity market", "grid flows"],
+    title: "Live wholesale energy prices",
+    description: "Compare live electricity and gas energy prices on regional 24-hour charts.",
+    keywords: ["aemo", "nem", "wholesale", "spot price", "live energy price", "electricity market", "gas market", "gas price", "grid flows"],
   },
   {
     path: "/",

@@ -47,7 +47,7 @@ const NAVIGATION_CATEGORIES: readonly NavigationCategory[] = [
       ["/compare", "Compare electricity"],
       ["/gas-compare", "Compare gas"],
       ["/calculator", "Rebate calculator"],
-      ["/wholesale-electricity", "Live wholesale electricity"],
+      ["/wholesale-electricity", "Live wholesale prices"],
       ["/rebates", "Rebates and assistance"],
       ["/guides/certificate-prices", "Certificate prices"],
     ],
