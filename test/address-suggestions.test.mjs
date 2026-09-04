@@ -521,6 +521,34 @@ test("provider failures expose one bounded manual-entry error", async () => {
   assert.equal(knownProviderError.providerReason, "API_KEY_SERVICE_BLOCKED");
 });
 
+test("provider transport failures expose only a bounded runtime class", async () => {
+  process.env.TLINK_ADDRESS_AUTOCOMPLETE_ENDPOINT = "https://places.googleapis.com/v1/places:autocomplete";
+  process.env.TLINK_ADDRESS_AUTOCOMPLETE_TOKEN = "provider-token";
+  globalThis.fetch = async () => {
+    throw new TypeError("Network detail and query must not cross the boundary.");
+  };
+
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  try {
+    await assert.rejects(
+      fetchAustralianAddressSuggestions("10 Main"),
+      (error) => error instanceof AddressSuggestionProviderError
+        && error.providerStatus === 0
+        && error.providerCode === "FETCH_FAILED"
+        && error.providerReason === "TYPEERROR",
+    );
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.deepEqual(warnings, [[
+    "Address suggestion provider request failed",
+    { providerCode: "FETCH_FAILED", providerReason: "TYPEERROR" },
+  ]]);
+  assert.doesNotMatch(JSON.stringify(warnings), /Network detail|10 Main/);
+});
+
 test("the public provider boundary requires an explicit matching browser origin", () => {
   const url = "https://example.test/api/address-suggestions";
   assert.equal(acceptedAddressSuggestionOrigin(new Request(url)), false);

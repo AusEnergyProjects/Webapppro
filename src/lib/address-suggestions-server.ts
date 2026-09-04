@@ -31,6 +31,18 @@ function providerDiagnosticToken(value: unknown) {
   return /^[A-Z][A-Z0-9_.-]{0,79}$/.test(token) ? token : "";
 }
 
+function runtimeProviderError(code: string, error: unknown) {
+  const providerError = new AddressSuggestionProviderError(undefined, {
+    providerCode: code,
+    providerReason: error instanceof Error ? error.name : "UNKNOWN",
+  });
+  console.warn("Address suggestion provider request failed", {
+    providerCode: providerError.providerCode,
+    providerReason: providerError.providerReason || "UNKNOWN",
+  });
+  return providerError;
+}
+
 type ProviderSuggestion = {
   id?: unknown;
   label?: unknown;
@@ -361,7 +373,19 @@ async function responseJson(response: Response) {
     });
     throw providerError;
   }
-  return response.json() as Promise<unknown>;
+  try {
+    return await response.json() as unknown;
+  } catch (error) {
+    throw runtimeProviderError("RESPONSE_PARSE_FAILED", error);
+  }
+}
+
+async function providerFetch(input: URL, init: RequestInit) {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    throw runtimeProviderError("FETCH_FAILED", error);
+  }
 }
 
 async function googlePlacesPredictions(
@@ -370,7 +394,7 @@ async function googlePlacesPredictions(
   token: string,
   sessionToken: string,
 ) {
-  const response = await fetch(new URL(configured.url), {
+  const response = await providerFetch(new URL(configured.url), {
     method: "POST",
     body: JSON.stringify({
       input: query,
@@ -416,7 +440,7 @@ async function googleLegacySelections(
     url.searchParams.set("components", "country:AU");
   }
   url.searchParams.set("language", "en-AU");
-  const response = await fetch(url, {
+  const response = await providerFetch(url, {
     headers: {
       Accept: "application/json",
       "X-Goog-Api-Key": token,
@@ -446,7 +470,7 @@ async function neutralSelections(
   const url = new URL(configured.url);
   url.searchParams.set("query", query);
   url.searchParams.set("country", "AU");
-  const response = await fetch(url, {
+  const response = await providerFetch(url, {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
@@ -538,7 +562,7 @@ export async function resolveAustralianAddressSuggestion(
       url.searchParams.set("languageCode", "en-AU");
       url.searchParams.set("regionCode", "au");
       if (sessionToken) url.searchParams.set("sessionToken", sessionToken);
-      const response = await fetch(url, {
+      const response = await providerFetch(url, {
         headers: {
           Accept: "application/json",
           "X-Goog-Api-Key": token,
