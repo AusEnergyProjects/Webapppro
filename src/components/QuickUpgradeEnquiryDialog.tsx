@@ -8,7 +8,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { ENERGY_SERVICE_CATALOGUE } from "@/lib/energy-service-catalogue.mjs";
+import {
+  ENERGY_SERVICE_CATALOGUE,
+  normalizeEnergyServiceIds,
+} from "@/lib/energy-service-catalogue.mjs";
 import {
   AustralianAddressLookup,
   type AustralianAddressSuggestion,
@@ -40,7 +43,17 @@ function serviceLabel(id: string, label: string) {
   return id === "other" ? "Something else or not sure" : label;
 }
 
-export function QuickUpgradeEnquiryDialog({ onClose }: { onClose: () => void }) {
+export function QuickUpgradeEnquiryDialog({
+  initialPostcode = "",
+  initialServices = [],
+  onClose,
+}: {
+  initialPostcode?: string;
+  initialServices?: string[];
+  onClose: () => void;
+}) {
+  const startingPostcode = /^\d{4}$/.test(initialPostcode) ? initialPostcode : "";
+  const startingServices = normalizeEnergyServiceIds(initialServices) || [];
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef<HTMLElement>(null);
@@ -52,11 +65,11 @@ export function QuickUpgradeEnquiryDialog({ onClose }: { onClose: () => void }) 
   const consentGrantedAt = useRef("");
   const lastAttemptCore = useRef("");
   const [step, setStep] = useState<1 | 2>(1);
-  const [services, setServices] = useState<string[]>([]);
-  const [postcode, setPostcode] = useState("");
+  const [services, setServices] = useState<string[]>(startingServices);
+  const [postcode, setPostcode] = useState(startingPostcode);
   const [localities, setLocalities] = useState<AddressLocality[]>([]);
   const [locality, setLocality] = useState<AddressLocality | null>(null);
-  const [lookupState, setLookupState] = useState<LookupState>("idle");
+  const [lookupState, setLookupState] = useState<LookupState>(startingPostcode ? "loading" : "idle");
   const [lookupError, setLookupError] = useState("");
   const selectedAddressLocality = useRef<{ postcode: string; suburb: string; state: string } | null>(null);
   const [localityLookupRequest, setLocalityLookupRequest] = useState(0);

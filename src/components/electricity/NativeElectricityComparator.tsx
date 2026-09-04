@@ -4,6 +4,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { DragEvent, FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import {
   Field,
   StepCard,
@@ -39,6 +40,7 @@ import {
   DISTRIBUTOR_INFO,
   cleanNmi,
   distributorFromNmi,
+  hasValidNmiCheckDigit,
   maskNmi,
   type ElectricityCustomerType,
 } from "@/lib/electricity/location";
@@ -113,6 +115,16 @@ type ScenarioResult = {
 
 type ChoiceOption<T extends string> = { value: T; title: string; description: string };
 const LEAD_NOTICE_VERSION = "2026-07-13";
+const QuickUpgradeEnquiryDialog = dynamic(
+  () => import("@/components/QuickUpgradeEnquiryDialog").then((module) => module.QuickUpgradeEnquiryDialog),
+  { ssr: false },
+);
+
+function enquiryServicesForScenario(scenario: ScenarioResult): string[] {
+  if (scenario.label === "Solar only") return ["solar"];
+  if (scenario.label === "Solar + battery") return ["solar", "battery"];
+  return ["battery"];
+}
 
 const MANUAL_USAGE_OPTIONS: ChoiceOption<ElectricityUsageMode>[] = [
   { value: "bill", title: "One recent bill", description: "Enter its exact dates and total kWh. We account for the season automatically." },
@@ -286,11 +298,11 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   const auditReturnRef = useRef<HTMLButtonElement | null>(null);
   const comparisonInputKeyRef = useRef("");
   const nmiDistributor = useMemo(() => distributorFromNmi(nmi), [nmi]);
-  const guidanceDistributor = nmiDistributor || meterGuideDistributor || distributor;
+  const guidanceDistributor = distributor || meterGuideDistributor || nmiDistributor || "";
   const distributorInfo = guidanceDistributor ? DISTRIBUTOR_INFO[guidanceDistributor] : null;
   const usingMeter = usageEvidence === "meter" && meter;
   const meterAllocation = useMemo(() => usingMeter ? allocateNem12Registers(usingMeter.registers, registerRoles) : null, [registerRoles, usingMeter]);
-  const usageDistributor = nmiDistributor || distributor || meterGuideDistributor;
+  const usageDistributor = distributor || meterGuideDistributor || nmiDistributor || "";
   const manualAnnualised = useMemo(() => annualiseElectricityUsage({
     usageKwh: Number(manualUsageKwh), mode: manualUsageMode, billStart, billEnd, distributor: usageDistributor, postcode,
   }), [billEnd, billStart, manualUsageKwh, manualUsageMode, postcode, usageDistributor]);
@@ -556,6 +568,10 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       setError("An NMI must contain 10 characters, plus an optional checksum character.");
       return;
     }
+    if (cleanedNmi.length === 11 && !hasValidNmiCheckDigit(cleanedNmi)) {
+      setError("The last digit does not match this NMI. Check the number printed on your bill.");
+      return;
+    }
     moveToStep(2);
   }
 
@@ -600,6 +616,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     if (!/^\d{4}$/.test(postcode)) { setError("Enter a valid 4 digit postcode."); return; }
     const cleanedNmi = cleanNmi(nmi);
     if (cleanedNmi && (cleanedNmi.length < 10 || cleanedNmi.length > 11)) { setError("An NMI must contain 10 characters, plus an optional checksum character."); return; }
+    if (cleanedNmi.length === 11 && !hasValidNmiCheckDigit(cleanedNmi)) { setError("The last digit does not match this NMI. Check the number printed on your bill."); return; }
     const totalKwh = annualUsageNumber;
     if (usingMeter && !meterAllocation?.ok) { setError("Confirm whether every meter register is general usage or controlled load before comparing."); return; }
     if (!usingMeter && !manualAnnualised.ok) { setError(manualAnnualised.error); return; }
@@ -633,16 +650,16 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       setBundle(data);
       const availableDistributors = [...new Set(data.plans.flatMap((plan) => plan.distributors || []))].sort();
       setDistributors(availableDistributors);
-      if (nmiDistributor && !availableDistributors.includes(nmiDistributor)) {
-        setError(`The NMI resolves to ${nmiDistributor}, which does not match plans published for postcode ${postcode}. Check both values before comparing.`);
+      if (nmiDistributor && !availableDistributors.includes(nmiDistributor) && !distributor) {
+        setError(`The NMI allocation suggests ${nmiDistributor}, which does not match plans published for postcode ${postcode}. Check the postcode or choose the network name printed on your bill.`);
         return;
       }
-      const selectedDistributor = nmiDistributor || distributor || (availableDistributors.length === 1 ? availableDistributors[0] : "");
+      const selectedDistributor = distributor || nmiDistributor || (availableDistributors.length === 1 ? availableDistributors[0] : "");
       if (!selectedDistributor && availableDistributors.length > 1) {
         setError("This postcode crosses electricity networks. Choose your distributor below, then compare again.");
         return;
       }
-      if (selectedDistributor && distributor !== selectedDistributor) setDistributor(selectedDistributor);
+      if (selectedDistributor && !distributor) setDistributor(selectedDistributor);
       const candidates = selectedDistributor ? data.plans.filter((plan) => plan.distributors?.includes(selectedDistributor)) : data.plans;
       const profile = meterAllocation?.ok ? meterAllocation.generalProfile : manualProfile(profileKind);
       const controlledProfile = meterAllocation?.ok ? meterAllocation.controlledProfile : profile;
@@ -822,12 +839,12 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         </div>
         <div className="grid c3 native-location-grid">
           <Field label="Postcode"><input type="text" value={postcode} inputMode="numeric" maxLength={4} onChange={(event) => { setPostcode(event.target.value); setDistributor(""); setDistributors([]); }} placeholder="e.g. 3000" /></Field>
-          <Field label="NMI" optional="(optional)" hint="A 10 or 11 character number, usually near the top of your bill. It identifies your electricity connection."><input type="text" value={nmi} maxLength={11} autoComplete="off" onChange={(event) => { setNmi(cleanNmi(event.target.value).slice(0, 11)); setDistributor(""); }} placeholder="e.g. 6407123456" /></Field>
+          <Field label="NMI" optional="(optional)" hint="Enter the 10 character NMI, or the 11 character version shown on your electricity bill. It stays in this browser."><input type="text" value={nmi} maxLength={11} autoComplete="off" onChange={(event) => { setNmi(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11)); setDistributor(""); setMeterGuideDistributor(""); }} placeholder="e.g. 6407123456" /></Field>
           <Field label="Customer type"><select value={customerType} onChange={(event) => setCustomerType(event.target.value as ElectricityCustomerType)}><option value="RESIDENTIAL">Residential</option><option value="BUSINESS">Small business</option></select></Field>
-          {distributors.length > 1 && <Field label="Network distributor" hint={nmiDistributor ? "Confirmed from your NMI." : "Required because this postcode crosses network boundaries."}><select value={nmiDistributor || distributor} disabled={Boolean(nmiDistributor)} onChange={(event) => setDistributor(event.target.value)}><option value="">Choose distributor</option>{distributors.map((name) => <option key={name}>{name}</option>)}</select></Field>}
+          {distributors.length > 1 && <Field label="Network distributor" hint={nmiDistributor ? "Preselected from the NMI allocation range. Check the network name on your bill if it looks wrong." : "Required because this postcode crosses network boundaries."}><select value={distributor || nmiDistributor || ""} onChange={(event) => setDistributor(event.target.value)}><option value="">Choose distributor</option>{distributors.map((name) => <option key={name}>{name}</option>)}</select></Field>}
         </div>
         <p className="native-nmi-help">Have your NMI but still need the usage file? <a href="#meter-data-help">Follow the meter-data guide below</a>.</p>
-        {nmi && <div className={nmiDistributor ? "native-location-evidence ok" : "native-location-evidence"} aria-live="polite">{nmiDistributor ? <><b>{nmiDistributor}</b> was identified from NMI {maskNmi(nmi)}. The full NMI stays in this browser and is not included in the plan request.</> : cleanNmi(nmi).length >= 10 ? <>This NMI prefix is not in the supported National Electricity Market allocation table. We will use postcode and ask you to confirm the distributor if needed.</> : <>Enter the complete NMI to confirm the exact distributor.</>}</div>}
+        {nmi && <div className={nmiDistributor ? "native-location-evidence ok" : "native-location-evidence"} aria-live="polite">{cleanNmi(nmi).length === 11 && !hasValidNmiCheckDigit(nmi) ? <>The last digit does not match this NMI. Check the number printed on your bill.</> : nmiDistributor ? <><b>Likely electricity distributor: {nmiDistributor}.</b> This is based on the allocation range for NMI {maskNmi(nmi)}. Check the network name on your bill if this looks wrong. The full NMI stays in this browser.</> : cleanNmi(nmi).length >= 10 ? <>We could not match this NMI to a supported household electricity distributor. Check the network name on your bill or choose it manually.</> : <>Enter all 10 characters, or the 11 character version printed on your bill, to identify the likely distributor.</>}</div>}
       </StepCard>
       <ComparisonStepActions step={1} total={4} onContinue={continueFromProperty} />
       </>}
@@ -855,7 +872,10 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
               <li><b>Request interval data.</b><span>Use the matching official link and ask for up to 12 months in NEM12 CSV format.</span></li>
               <li><b>Upload the downloaded CSV here.</b><span>You do not need to open or edit it first.</span></li>
             </ol>
-            <div className="native-guide-selector"><Field label="Choose your electricity distributor" hint={nmiDistributor ? "Identified from the NMI entered above." : "If you are unsure, check the network or faults number printed on your bill."}><select value={guidanceDistributor} disabled={Boolean(nmiDistributor)} onChange={(event) => setMeterGuideDistributor(event.target.value)}><option value="">Choose distributor</option>{Object.keys(DISTRIBUTOR_INFO).map((name) => <option key={name}>{name}</option>)}</select></Field></div>
+            <div className="native-guide-selector">
+              <Field label="Enter your NMI to identify the distributor" hint="Use the 10 character NMI, or the 11 character version on your bill."><input type="text" value={nmi} maxLength={11} autoComplete="off" onChange={(event) => { setNmi(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11)); setDistributor(""); setMeterGuideDistributor(""); }} placeholder="e.g. 6407123456" /></Field>
+              <Field label="Choose your electricity distributor" hint={nmiDistributor ? "Preselected from the NMI allocation range. You can correct it using your bill." : "Check the network or faults number printed on your bill if no match appears."}><select value={guidanceDistributor} onChange={(event) => { setMeterGuideDistributor(event.target.value); setDistributor(event.target.value); }}><option value="">Choose distributor</option>{Object.keys(DISTRIBUTOR_INFO).map((name) => <option key={name}>{name}</option>)}</select></Field>
+            </div>
             {distributorInfo && <div className="native-distributor-card"><b>{guidanceDistributor}</b><span>{distributorInfo.state} | AEMO region {distributorInfo.region}</span><p>{distributorInfo.meterDataInstructions}</p><div className="native-guidance-links">{distributorInfo.meterDataUrl && <a href={distributorInfo.meterDataUrl} target="_blank" rel="noreferrer">Open official meter-data page</a>}<a href={distributorInfo.website} target="_blank" rel="noreferrer">Open distributor website</a></div></div>}
             <h3 className="native-network-links-title">Official links for every supported distributor</h3>
             <div className="native-network-links">{Object.entries(DISTRIBUTOR_INFO).map(([name, info]) => <a href={info.meterDataUrl || info.website} target="_blank" rel="noreferrer" key={name}><b>{name}</b><span>{info.state} | {info.meterDataUrl ? "Meter-data help" : "Distributor help"}</span></a>)}</div>
@@ -918,7 +938,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
           <label className={`native-assumption-card${assumeConditional ? " selected" : ""}`}><input type="checkbox" checked={assumeConditional} onChange={(event) => setAssumeConditional(event.target.checked)} /><span><b>Include conditional discounts</b><small>Only select this if you expect to meet conditions such as paying on time or using direct debit. Otherwise we leave these discounts out.</small></span></label>
         </div>
         {!usingMeter && hasControlledLoad && <div className="native-controlled-usage"><Field label="Controlled-load usage per year" hint="Enter only the separately listed controlled-load kWh from your bill. It must be less than your total grid usage."><input type="number" min="1" value={controlledKwh} onChange={(event) => setControlledKwh(event.target.value)} placeholder="e.g. 1200" /></Field></div>}
-        {distributors.length > 1 && !nmiDistributor && <div className="native-location-evidence"><Field label="Network distributor" hint="This postcode crosses network boundaries. Choose the distributor printed on your electricity bill before comparing again."><select value={distributor} onChange={(event) => setDistributor(event.target.value)}><option value="">Choose distributor</option>{distributors.map((name) => <option key={name}>{name}</option>)}</select></Field></div>}
+        {distributors.length > 1 && <div className="native-location-evidence"><Field label="Network distributor" hint={nmiDistributor ? "The NMI range provided a likely match. Use the network name on your bill to correct it if needed." : "This postcode crosses network boundaries. Choose the distributor printed on your electricity bill before comparing again."}><select value={distributor || nmiDistributor || ""} onChange={(event) => setDistributor(event.target.value)}><option value="">Choose distributor</option>{distributors.map((name) => <option key={name}>{name}</option>)}</select></Field></div>}
       </StepCard>
       <div className={chromeStyles.reviewSummary}><span>Ready to compare</span><strong>{postcode} | {Math.round(annualUsageNumber).toLocaleString()} kWh/year | {setupMode === "none" ? "No solar" : setupMode === "solar" ? "Solar" : "Solar and battery"}</strong><small>You can go back without losing any answer or uploaded meter data.</small></div>
       <ComparisonStepActions step={3} total={4} onBack={() => moveToStep(2)} />
@@ -986,41 +1006,8 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       <section className="comparison-complete-next" aria-labelledby="electricity-next-title"><div><span>One useful next step</span><h2 id="electricity-next-title">Check whether a mains gas plan is also costing more than it should</h2><p>If the property has mains gas, use the same guided process. LPG bottles and bulk tanks are not included.</p></div><Link className="btn" href="/gas-compare">Compare gas plans</Link><Link className="comparison-secondary-link" href="/plan" prefetch={false}>Return to my home energy plan</Link></section>
     </section>}
     {auditPlan && <NativeAuditDialog plan={auditPlan} bundle={bundle} onClose={closeAudit} />}
-    {enquiryScenario && <NativeUpgradeDialog scenario={enquiryScenario} postcode={postcode} onClose={() => setEnquiryScenario(null)} />}
+    {enquiryScenario && <QuickUpgradeEnquiryDialog initialPostcode={postcode} initialServices={enquiryServicesForScenario(enquiryScenario)} onClose={() => setEnquiryScenario(null)} />}
   </>;
-}
-
-function NativeUpgradeDialog({ scenario, postcode, onClose }: { scenario: ScenarioResult; postcode: string; onClose: () => void }) {
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const actionRef = useRef<HTMLAnchorElement | null>(null);
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    actionRef.current?.focus();
-    return () => { document.body.style.overflow = previousOverflow; };
-  }, []);
-
-  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "Escape") { event.preventDefault(); onClose(); return; }
-    if (event.key !== "Tab" || !dialogRef.current) return;
-    const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>('button, a[href], [tabindex]:not([tabindex="-1"])')].filter((element) => !element.hasAttribute("disabled"));
-    if (!focusable.length) return;
-    const first = focusable[0]; const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-  }
-
-  const category = scenario.label === "Add a battery" ? "battery" : scenario.label === "Solar only" ? "solar" : "solar,battery";
-  const params = new URLSearchParams({ goal: "add-solar-storage", pace: "staged", category });
-  if (/^\d{4}$/.test(postcode)) params.set("postcode", postcode);
-  return <div className="audit-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }} onKeyDown={handleKeyDown}>
-    <div className="audit-dialog native-enquiry-dialog" role="dialog" aria-modal="true" aria-labelledby="native-enquiry-title" ref={dialogRef}>
-      <div className="audit-heading"><div><span>Private account project</span><h2 id="native-enquiry-title">Save {scenario.label.toLowerCase()} without sharing contact details</h2><p>{scenario.description} | estimated {fmtMoney(scenario.annualSaving)}/year bill saving | {fmtMoney(scenario.installedCost)} scenario cost</p></div></div>
-      <p>Create a free project with this upgrade preselected. Your comparison remains in this browser, and no NMI, meter file, interval data or customer contact details are sent to trades.</p>
-      <div className="customer-guidance-note"><strong>Review before any installer sees it</strong><p>The account project shows the exact anonymised scope first. Installer responses stay structured inside the platform.</p></div>
-      <div className="native-dialog-actions"><a ref={actionRef} className="btn" href={`/account/projects/new?${params.toString()}`}>Save as a free project</a><button type="button" className="btn ghost" onClick={onClose}>Keep comparing</button></div>
-    </div>
-  </div>;
 }
 
 function NativePlanCard({ plan, rank, onAudit }: { plan: NativePlanResult; rank: number; onAudit: (button: HTMLButtonElement) => void }) {

@@ -8,20 +8,42 @@ export interface DistributorInfo {
   meterDataInstructions: string;
 }
 
-const NMI_ALLOCATIONS: Array<{ patterns: RegExp[]; distributor: string }> = [
-  { patterns: [/^NGGG/i, /^7001\d{6}$/], distributor: "Evoenergy" },
-  { patterns: [/^NAAA/i, /^NBBB/i, /^NDDD/i, /^NFFF/i, /^4001\d{6}$/, /^4508\d{6}$/, /^4204\d{6}$/, /^4407\d{6}$/], distributor: "Essential Energy" },
-  { patterns: [/^NCCC/i, /^410[234]\d{6}$/], distributor: "Ausgrid" },
-  { patterns: [/^NEEE/i, /^431\d{7}$/], distributor: "Endeavour Energy" },
-  { patterns: [/^QAAA/i, /^QCCC/i, /^QDDD/i, /^QEEE/i, /^QFFF/i, /^QGGG/i, /^30\d{8}$/], distributor: "Ergon Energy" },
-  { patterns: [/^QB\d{2}/i, /^31\d{8}$/], distributor: "Energex" },
-  { patterns: [/^SAAA/i, /^SASMPL\d{4}$/i, /^200[12]\d{6}$/], distributor: "SA Power Networks" },
-  { patterns: [/^T000000/i, /^8000\d{6}$/, /^8590[23]\d{5}$/], distributor: "TasNetworks" },
-  { patterns: [/^VAAA/i, /^610[23]\d{6}$/], distributor: "CitiPower" },
-  { patterns: [/^VBBB/i, /^630[56]\d{6}$/], distributor: "AusNet Services" },
-  { patterns: [/^VCCC/i, /^620[34]\d{6}$/], distributor: "Powercor" },
-  { patterns: [/^VDDD/i, /^6001\d{6}$/], distributor: "Jemena" },
-  { patterns: [/^VEEE/i, /^640[78]\d{6}$/], distributor: "United Energy" },
+type NmiAllocation = { matches: (core: string) => boolean; distributor: string };
+
+const LEGACY_NMI_CHARACTER = "[A-HJ-NP-Z0-9]";
+const LEGACY_NMI_FIRST_SUFFIX_CHARACTER = "[A-HJ-NP-VX-Z0-9]";
+
+function legacyAllocation(prefix: string, core: string, minimumSuffix = "000000") {
+  if (!core.startsWith(prefix)) return false;
+  const suffix = core.slice(prefix.length);
+  if (!new RegExp(`^${LEGACY_NMI_FIRST_SUFFIX_CHARACTER}${LEGACY_NMI_CHARACTER}{5}$`).test(suffix)) return false;
+  return suffix >= minimumSuffix;
+}
+
+function energexLegacyAllocation(core: string) {
+  return new RegExp(`^QB\\d{2}${LEGACY_NMI_FIRST_SUFFIX_CHARACTER}${LEGACY_NMI_CHARACTER}{5}$`).test(core);
+}
+
+function tasNetworksLegacyAllocation(core: string) {
+  if (!/^T\d{9}$/.test(core)) return false;
+  const allocationNumber = Number(core.slice(1));
+  return allocationNumber >= 1 && allocationNumber <= 5_001;
+}
+
+const NMI_ALLOCATIONS: NmiAllocation[] = [
+  { matches: (core) => legacyAllocation("NGGG", core) || /^7001\d{6}$/.test(core), distributor: "Evoenergy" },
+  { matches: (core) => ["NAAA", "NBBB", "NDDD", "NFFF"].some((prefix) => legacyAllocation(prefix, core)) || /^(?:4001|4508|4204|4407)\d{6}$/.test(core), distributor: "Essential Energy" },
+  { matches: (core) => legacyAllocation("NCCC", core) || /^410[234]\d{6}$/.test(core), distributor: "Ausgrid" },
+  { matches: (core) => legacyAllocation("NEEE", core) || /^431\d{7}$/.test(core), distributor: "Endeavour Energy" },
+  { matches: (core) => ["QAAA", "QCCC", "QDDD", "QEEE", "QFFF", "QGGG"].some((prefix) => legacyAllocation(prefix, core)) || /^30\d{8}$/.test(core), distributor: "Ergon Energy" },
+  { matches: (core) => energexLegacyAllocation(core) || /^31\d{8}$/.test(core), distributor: "Energex" },
+  { matches: (core) => legacyAllocation("SAAA", core) || /^200[12]\d{6}$/.test(core), distributor: "SA Power Networks" },
+  { matches: (core) => tasNetworksLegacyAllocation(core) || /^8000\d{6}$/.test(core) || /^8590[23]\d{5}$/.test(core), distributor: "TasNetworks" },
+  { matches: (core) => legacyAllocation("VAAA", core) || /^610[23]\d{6}$/.test(core), distributor: "CitiPower" },
+  { matches: (core) => legacyAllocation("VBBB", core) || /^630[56]\d{6}$/.test(core), distributor: "AusNet Services" },
+  { matches: (core) => legacyAllocation("VCCC", core) || /^620[34]\d{6}$/.test(core), distributor: "Powercor" },
+  { matches: (core) => legacyAllocation("VDDD", core) || /^6001\d{6}$/.test(core), distributor: "Jemena" },
+  { matches: (core) => legacyAllocation("VEEE", core, "000001") || /^640[78]\d{6}$/.test(core), distributor: "United Energy" },
 ];
 
 export const DISTRIBUTOR_INFO: Record<string, DistributorInfo> = {
@@ -44,12 +66,28 @@ export function cleanNmi(value: string): string {
   return String(value || "").trim().toUpperCase().replace(/\s+/g, "");
 }
 
+export function nmiCheckDigit(value: string): string | null {
+  const core = cleanNmi(value);
+  if (!/^[A-HJ-NP-Z0-9]{10}$/.test(core)) return null;
+  const total = [...core].reverse().reduce((sum, character, index) => {
+    const weighted = character.charCodeAt(0) * (index % 2 === 0 ? 2 : 1);
+    return sum + [...String(weighted)].reduce((digitSum, digit) => digitSum + Number(digit), 0);
+  }, 0);
+  return String((10 - (total % 10)) % 10);
+}
+
+export function hasValidNmiCheckDigit(value: string): boolean {
+  const nmi = cleanNmi(value);
+  return /^\d$/.test(nmi.slice(10)) && nmiCheckDigit(nmi.slice(0, 10)) === nmi.slice(10);
+}
+
 export function distributorFromNmi(value: string): string | null {
   const nmi = cleanNmi(value);
   if (nmi.length < 10 || nmi.length > 11) return null;
+  if (nmi.length === 11 && !hasValidNmiCheckDigit(nmi)) return null;
   const core = nmi.slice(0, 10);
   for (const allocation of NMI_ALLOCATIONS) {
-    if (allocation.patterns.some((pattern) => pattern.test(core))) return allocation.distributor;
+    if (allocation.matches(core)) return allocation.distributor;
   }
   return null;
 }

@@ -95,6 +95,10 @@ test("native meter help provides plain-language steps and official distributor l
   assert.match(component, /Object\.entries\(DISTRIBUTOR_INFO\)/);
   assert.match(component, /Open official meter-data page/);
   assert.match(component, /The downloaded file is read locally/);
+  assert.match(component, /Enter your NMI to identify the distributor/);
+  assert.match(component, /Likely electricity distributor/);
+  assert.match(styles, /counter-increment: meter-step/);
+  assert.match(styles, /content: counter\(meter-step\)/);
   assert.doesNotMatch(component, /id="meter-data-help" open/);
 });
 
@@ -117,6 +121,12 @@ test("upgrade scenarios distinguish editable quotes from model assumptions", () 
   assert.match(component, /Indicative scenario, not an installation recommendation/);
   assert.match(component, /SunSPOT calculator/);
   assert.match(component, /className="native-direct-trade-link"/);
+  assert.match(component, /QuickUpgradeEnquiryDialog/);
+  assert.match(component, /initialServices=\{enquiryServicesForScenario\(enquiryScenario\)\}/);
+  assert.match(component, /if \(scenario\.label === "Solar only"\) return \["solar"\]/);
+  assert.match(component, /if \(scenario\.label === "Solar \+ battery"\) return \["solar", "battery"\]/);
+  assert.doesNotMatch(component, /NativeUpgradeDialog/);
+  assert.doesNotMatch(component, /\/account\/projects\/new/);
   assert.match(styles, /\.native-direct-trade-link \{[^}]*border: 1px solid #159b69;[^}]*display: flex;[^}]*width: 100%;/);
 });
 

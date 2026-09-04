@@ -25,6 +25,10 @@ test("quick request uses a short two-step service and contact flow", () => {
   assert.match(dialog, /Something else or not sure/);
   assert.match(dialog, /\/api\/address-localities\?postcode=/);
   assert.match(dialog, /fetch\("\/api\/leads"/);
+  assert.match(dialog, /initialServices\?: string\[\]/);
+  assert.match(dialog, /normalizeEnergyServiceIds\(initialServices\)/);
+  assert.match(dialog, /initialPostcode\?: string/);
+  assert.match(dialog, /\^\\d\{4\}\$\/\.test\(initialPostcode\)/);
 });
 
 test("a provider-selected title-case suburb adopts the postcode directory casing", () => {
