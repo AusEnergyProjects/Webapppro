@@ -135,9 +135,6 @@ export async function POST(request: Request) {
         status: 502,
         headers: {
           "Cache-Control": "no-store",
-          "X-Address-Provider-Status": String(providerError?.providerStatus || 0),
-          "X-Address-Provider-Code": providerError?.providerCode || "UNKNOWN",
-          "X-Address-Provider-Reason": providerError?.providerReason || "UNKNOWN",
         },
       },
     );
