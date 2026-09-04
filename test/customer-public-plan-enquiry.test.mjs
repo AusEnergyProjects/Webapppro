@@ -24,6 +24,10 @@ const enquiryForm = fs.readFileSync(
   new URL("../src/components/PublicPlanEnquiryForm.tsx", import.meta.url),
   "utf8",
 );
+const addressLookup = fs.readFileSync(
+  new URL("../src/components/AustralianAddressLookup.tsx", import.meta.url),
+  "utf8",
+);
 const enquiryStyles = fs.readFileSync(
   new URL("../src/components/PublicPlanEnquiryForm.module.css", import.meta.url),
   "utf8",
@@ -105,10 +109,18 @@ test("the enquiry captures the private address and supports one, several or all 
   assert.match(enquiryForm, /readOnly/);
   assert.match(enquiryForm, /showLocalityStates \? ` \(\$\{locality\.state\}\)`/);
   assert.match(enquiryForm, /Unit number/);
-  assert.match(enquiryForm, /Street address/);
+  assert.match(enquiryForm, /<AustralianAddressLookup/);
+  assert.match(enquiryForm, /Street address, private unless you share it below/);
   assert.match(enquiryForm, /autoComplete="address-line2" maxLength=\{40\}/);
-  assert.match(enquiryForm, /autoComplete="address-line1" maxLength=\{140\}/);
-  assert.ok(enquiryForm.indexOf("autoComplete=\"address-line1\"") < enquiryForm.indexOf("autoComplete=\"address-line2\""));
+  assert.match(addressLookup, /autoComplete="address-line1"/);
+  assert.match(addressLookup, /maxLength = 140/);
+  assert.match(enquiryForm, /setCustomerStreetAddress\(selection\.addressLine1\)/);
+  assert.match(enquiryForm, /selectedAddressLocality\.current = \{[\s\S]*suburb: selection\.suburb,[\s\S]*state: selectedState/);
+  assert.match(enquiryForm, /locality\.suburb\.toLocaleLowerCase\("en-AU"\) === pendingLocality\.suburb\.toLocaleLowerCase\("en-AU"\)/);
+  assert.match(enquiryForm, /setCustomerSuburb\(canonicalLocality\.suburb\)/);
+  assert.match(enquiryForm, /setCustomerState\(canonicalLocality\.state\)/);
+  assert.match(enquiryForm, /setPostcode\(selection\.postcode\)/);
+  assert.match(enquiryForm, /setCustomerUnitNumber\(selection\.addressLine2\)/);
   assert.match(enquiryForm, /customerUnitNumber,/);
   assert.match(enquiryForm, /customerStreetAddress,/);
   assert.match(enquiryForm, /customerSuburb,/);

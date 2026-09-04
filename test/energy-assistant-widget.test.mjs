@@ -55,8 +55,7 @@ test("the energy guide is deferred at the root and excluded from print or PDF ou
   assert.match(lazyWidget, /lazy\(loadEnergyAssistant\)/);
   assert.match(lazyWidget, /return import\("\.\/EnergyAssistantWidget"\)/);
   assert.match(lazyWidget, /if \(hiddenRoute\(pathname\)\) return null/);
-  assert.match(lazyWidget, /pathname === "\/plan\/print"/);
-  assert.match(lazyWidget, /pathname\.includes\("\/pdf\/"\)/);
+  assert.match(lazyWidget, /\/\(\?:print\|pdf\)\(\?:\\\/\|\$\)/);
   assert.match(styles, /@media print[\s\S]*\.root[\s\S]*display:\s*none/);
   assert.match(lazyStyles, /@media print[\s\S]*\.root[\s\S]*display:\s*none/);
 });
@@ -914,6 +913,9 @@ test("optional help is available after intake and routes one consented destinati
   assert.match(widget, /createEnergyAssistantSubmissionKey\(\)/);
   assert.match(widget, /publicPlanQuoteQuestionsForSnapshot\(lead\.services, leadPlanSnapshot\)/);
   assert.match(widget, /\/api\/address-localities\?postcode=/);
+  assert.match(widget, /locality\.suburb\.toLocaleLowerCase\("en-AU"\) === pendingLocality\.suburb\.toLocaleLowerCase\("en-AU"\)/);
+  assert.match(widget, /suburb: canonicalLocality\.suburb,[\s\S]*state: canonicalLocality\.state/);
+  assert.match(widget, /unitNumber: selection\.addressLine2/);
   assert.match(widget, /Only the details you enter here go to Australian Energy Assessments/);
   assert.match(widget, /Only the fields you select on the next screen are shared with approved matched trades/);
   assert.match(widget, /ENERGY_ASSISTANT_MATCHING_PRIVACY_EXPLANATION/);

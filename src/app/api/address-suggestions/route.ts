@@ -1,35 +1,37 @@
 import { getD1 } from "../../../../db";
-import { adminJson, sameOrigin } from "@/lib/admin-server";
+import { adminJson, cleanAdminText } from "@/lib/admin-server";
 import {
+  acceptedAddressSuggestionOrigin,
   AddressSuggestionProviderError,
   AddressSuggestionSelectionError,
   fetchAustralianAddressSuggestions,
   readAddressSuggestionAction,
   resolveAustralianAddressSuggestion,
 } from "@/lib/address-suggestions-server";
-import { integrationEnvironment } from "@/lib/trade-integrations-server";
 import { createSharedLeadRateLimiter } from "@/lib/lead-rate-limit.mjs";
-import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
-import {
-  issueTradeAddressSelectionProof,
-  TradeAddressVerificationError,
-} from "@/lib/trade-address-verification";
 
 export const runtime = "edge";
 
 const WINDOW_MS = 60_000;
-const WINDOW_LIMIT = 80;
-const tradeAddressRateLimiterOptions = {
+const WINDOW_LIMIT = 40;
+const addressRateLimiterOptions = {
   env: process.env,
   getDatabase: getD1,
   limit: WINDOW_LIMIT,
   windowMs: WINDOW_MS,
 };
-const tradeAddressRateLimiter = createSharedLeadRateLimiter(
-  tradeAddressRateLimiterOptions,
-);
+const addressRateLimiter = createSharedLeadRateLimiter(addressRateLimiterOptions);
 
-function resolvedSelection(selection: NonNullable<Awaited<ReturnType<
+function requestKey(request: Request) {
+  return cleanAdminText(
+    request.headers.get("cf-connecting-ip")
+      || request.headers.get("x-forwarded-for")?.split(",")[0]
+      || "unknown",
+    80,
+  );
+}
+
+function publicSelection(selection: NonNullable<Awaited<ReturnType<
   typeof resolveAustralianAddressSuggestion
 >>["selection"]>) {
   return {
@@ -47,27 +49,11 @@ function resolvedSelection(selection: NonNullable<Awaited<ReturnType<
 }
 
 export async function POST(request: Request) {
-  if (!sameOrigin(request)) {
+  if (!acceptedAddressSuggestionOrigin(request)) {
     return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   }
-  let access: Awaited<ReturnType<typeof requireInstallerTeamAccess>>;
-  try {
-    access = await requireInstallerTeamAccess(request);
-  } catch (error) {
-    const code = error instanceof Error ? error.message : "";
-    return adminJson(
-      {
-        ok: false,
-        error: code === "AUTH_REQUIRED"
-          ? "Sign in to search addresses."
-          : "Address search is not available to this account.",
-      },
-      code === "AUTH_REQUIRED" ? 401 : 403,
-    );
-  }
-
-  const rateLimit = await tradeAddressRateLimiter.check(
-    `trade-address-suggestion:${access.ownerUid}:${access.actorUid}`,
+  const rateLimit = await addressRateLimiter.check(
+    `address-suggestion:${requestKey(request)}`,
   );
   if (rateLimit.unavailable) {
     return Response.json(
@@ -90,21 +76,8 @@ export async function POST(request: Request) {
       },
     );
   }
-
-  const signingSecret = String(
-    integrationEnvironment().CRM_INTEGRATION_ENCRYPTION_KEY || "",
-  ).trim();
   try {
     const action = await readAddressSuggestionAction(request);
-    if (!signingSecret) {
-      return adminJson({
-        ok: true,
-        configured: false, suggestions: [],
-        predictions: [],
-        selection: null,
-      });
-    }
-
     if (action.action === "predict") {
       const result = await fetchAustralianAddressSuggestions(action.query, {
         sessionToken: action.sessionToken,
@@ -122,25 +95,10 @@ export async function POST(request: Request) {
     }
 
     const result = await resolveAustralianAddressSuggestion(action);
-    if (!result.configured || !result.selection) {
-      return adminJson({
-        ok: true,
-        configured: false,
-        suggestions: [],
-        selection: null,
-      });
-    }
-    const selection = resolvedSelection(result.selection);
     return adminJson({
       ok: true,
-      configured: true,
-      selection: {
-        ...selection,
-        selectionProof: await issueTradeAddressSelectionProof(result.selection, {
-          ownerUid: access.ownerUid,
-          secret: signingSecret,
-        }),
-      },
+      configured: result.configured,
+      selection: result.selection ? publicSelection(result.selection) : null,
     });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
@@ -159,21 +117,6 @@ export async function POST(request: Request) {
         422,
       );
     }
-    if (
-      error instanceof TradeAddressVerificationError
-      && error.code === "ADDRESS_PROOF_KEY_INVALID"
-    ) {
-      return adminJson(
-        {
-          ok: false,
-          configured: false,
-          suggestions: [],
-          selection: null,
-          error: "Address verification is not configured. Enter the address manually.",
-        },
-        503,
-      );
-    }
     const message = error instanceof AddressSuggestionProviderError
       ? error.message
       : "Address suggestions are temporarily unavailable.";
@@ -183,7 +126,6 @@ export async function POST(request: Request) {
         configured: true,
         predictions: [],
         suggestions: [],
-        selection: null,
         error: `${message} Enter the address manually.`,
       },
       502,

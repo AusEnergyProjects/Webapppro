@@ -114,6 +114,9 @@ test("unified inbox keeps protected marketplace records reference-only and requi
   assert.match(enquiryRoute, /else if \(!requestedServiceSiteSupplied\)/);
   assert.match(enquiryInbox, /serviceSiteId: decision === "use_existing" \? existingServiceSiteId : ""/);
   assert.match(enquiryInbox, /createNewSite: !result\.serviceSiteId/);
+  assert.match(enquiryInbox, /addressLine2: selection\.addressLine2/);
+  assert.match(enquiryInbox, /name="addressLine2" value=\{newAddress\.addressLine2\}/);
+  assert.match(enquiryInbox, /addressLine2: "", suburb: "", addressState: "", postcode: ""/);
   assert.match(enquiryInbox, /Duplicate review/);
   assert.match(enquiryInbox, /Privacy boundary active/);
 });

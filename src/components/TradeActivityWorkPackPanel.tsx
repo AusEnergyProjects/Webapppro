@@ -37,6 +37,10 @@ import type {
   CreditexWorkPackMutationResult,
   CreditexWorkPackSectionPatch,
 } from "@/lib/creditex-activity-work-pack-server";
+import {
+  AustralianAddressLookup,
+  type AustralianAddressSuggestion,
+} from "./AustralianAddressLookup";
 import { TradeWorkPackSignaturePad } from "./TradeWorkPackSignaturePad";
 import styles from "./TradeActivityWorkPackPanel.module.css";
 
@@ -1574,12 +1578,23 @@ function CustomerCorrection({
   const [draft, setDraft] = useState(initial);
   const field = (key: keyof CreditexActivityWorkPackCustomerProjection, value: string) =>
     setDraft((current) => ({ ...current, [key]: value }));
+  const selectAddress = (selection: AustralianAddressSuggestion) => {
+    setDraft((current) => ({
+      ...current,
+      addressLine1: selection.addressLine1,
+      addressLine2: selection.addressLine2,
+      suburb: selection.suburb,
+      state: selection.addressState,
+      postcode: selection.postcode,
+    }));
+  };
   return <form className={styles.customerForm} onSubmit={(event) => { event.preventDefault(); void onSave(draft); }}>
+    <p className={`${styles.warning} ${styles.wide}`}>Changing any site address field returns the address to manual review and removes its previous provider verification.</p>
     <label><span>First name</span><input value={draft.firstName} onChange={(event) => field("firstName", event.target.value)} /></label>
     <label><span>Last name</span><input value={draft.lastName} onChange={(event) => field("lastName", event.target.value)} /></label>
     <label><span>Phone</span><input type="tel" value={draft.phone} onChange={(event) => field("phone", event.target.value)} /></label>
     <label><span>Email</span><input type="email" value={draft.email} onChange={(event) => field("email", event.target.value)} /></label>
-    <label className={styles.wide}><span>Address</span><input value={draft.addressLine1} onChange={(event) => field("addressLine1", event.target.value)} /></label>
+    <AustralianAddressLookup className={styles.wide} label="Address" value={draft.addressLine1} onChange={(value) => field("addressLine1", value)} onSelect={selectAddress} />
     <label className={styles.wide}><span>Address line 2</span><input value={draft.addressLine2} onChange={(event) => field("addressLine2", event.target.value)} /></label>
     <label><span>Suburb</span><input value={draft.suburb} onChange={(event) => field("suburb", event.target.value)} /></label>
     <label><span>State</span><input value={draft.state} maxLength={3} onChange={(event) => field("state", event.target.value.toUpperCase())} /></label>

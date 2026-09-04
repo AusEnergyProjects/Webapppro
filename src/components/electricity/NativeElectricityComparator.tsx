@@ -2,9 +2,23 @@
 
 /* Retailer logos come from arbitrary CDR-hosted URLs. */
 /* eslint-disable @next/next/no-img-element */
-import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { DragEvent, FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ComparisonJourney, Field, StepCard } from "@/components/ComparatorChrome";
+import {
+  Field,
+  StepCard,
+  comparisonScrollBehavior,
+} from "@/components/ComparatorChrome";
+import chromeStyles from "@/components/ComparatorChrome.module.css";
+import {
+  ComparisonJourney,
+  ComparisonStepActions,
+  ComparisonWorkingState,
+} from "@/components/ComparisonProgress";
+import {
+  AustralianAddressLookup,
+  type AustralianAddressSuggestion,
+} from "@/components/AustralianAddressLookup";
 import { Nem12UsageChart } from "@/components/electricity/Nem12UsageChart";
 import {
   BATTERY_ROUND_TRIP_EFFICIENCY,
@@ -118,9 +132,10 @@ const SETUP_OPTIONS: ChoiceOption<SetupMode>[] = [
 ];
 
 const ELECTRICITY_JOURNEY_STEPS = [
-  { label: "Property", description: "Enter the postcode and, if available, the NMI from the bill." },
-  { label: "Usage", description: "Use a meter file for the best match, or enter the usage from a bill." },
-  { label: "Results", description: "Compare like for like, then confirm the selected plan with the retailer." },
+  { label: "Your home", description: "Find the property and confirm the customer type." },
+  { label: "Your usage", description: "Choose smart-meter data or enter the usage from a bill." },
+  { label: "Your setup", description: "Confirm solar, battery and other plan conditions." },
+  { label: "Results", description: "Compare like for like, then confirm the plan with the retailer." },
 ] as const;
 
 function ChoiceCards<T extends string>({ name, legend, hint, value, options, disabled = false, onChange }: {
@@ -200,6 +215,9 @@ function cheapestScenarioPlan(candidates: NativePlanInput[], inputs: Parameters<
 }
 
 export function NativeElectricityComparator({ preview = false }: { preview?: boolean }) {
+  const [activeStep, setActiveStep] = useState(1);
+  const [addressQuery, setAddressQuery] = useState("");
+  const [usageEvidence, setUsageEvidence] = useState<"meter" | "bill" | "">("");
   const [postcode, setPostcode] = useState("");
   const [nmi, setNmi] = useState("");
   const [customerType, setCustomerType] = useState<ElectricityCustomerType>("RESIDENTIAL");
@@ -207,9 +225,9 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   const [manualUsageMode, setManualUsageMode] = useState<ElectricityUsageMode>("bill");
   const [billStart, setBillStart] = useState("");
   const [billEnd, setBillEnd] = useState("");
-  const [manualUsageOpen, setManualUsageOpen] = useState(false);
   const [profileKind, setProfileKind] = useState("evening");
   const [meter, setMeter] = useState<Nem12Success | null>(null);
+  const [meterRevision, setMeterRevision] = useState(0);
   const [registerRoles, setRegisterRoles] = useState<Record<string, RegisterRole | undefined>>({});
   const [meterStatus, setMeterStatus] = useState("");
   const [dragActive, setDragActive] = useState(false);
@@ -242,6 +260,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   const [scenarioComboCost, setScenarioComboCost] = useState(String(defaultSolarNetCost(4) + defaultBatteryNetCost(10)));
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [analysisMessage, setAnalysisMessage] = useState("");
   const [showTou, setShowTou] = useState(true);
   const [showSingle, setShowSingle] = useState(true);
   const [showDemand, setShowDemand] = useState(true);
@@ -260,24 +279,57 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   const [enquiryScenario, setEnquiryScenario] = useState<ScenarioResult | null>(null);
   const [handoffStatus, setHandoffStatus] = useState<{ title: string; message: string } | null>(null);
   const pageStartedAt = useRef(0);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const errorRef = useRef<HTMLParagraphElement | null>(null);
+  const stepHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const resultsHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const auditReturnRef = useRef<HTMLButtonElement | null>(null);
+  const comparisonInputKeyRef = useRef("");
   const nmiDistributor = useMemo(() => distributorFromNmi(nmi), [nmi]);
   const guidanceDistributor = nmiDistributor || meterGuideDistributor || distributor;
   const distributorInfo = guidanceDistributor ? DISTRIBUTOR_INFO[guidanceDistributor] : null;
-  const meterAllocation = useMemo(() => meter ? allocateNem12Registers(meter.registers, registerRoles) : null, [meter, registerRoles]);
+  const usingMeter = usageEvidence === "meter" && meter;
+  const meterAllocation = useMemo(() => usingMeter ? allocateNem12Registers(usingMeter.registers, registerRoles) : null, [registerRoles, usingMeter]);
   const usageDistributor = nmiDistributor || distributor || meterGuideDistributor;
   const manualAnnualised = useMemo(() => annualiseElectricityUsage({
     usageKwh: Number(manualUsageKwh), mode: manualUsageMode, billStart, billEnd, distributor: usageDistributor, postcode,
   }), [billEnd, billStart, manualUsageKwh, manualUsageMode, postcode, usageDistributor]);
-  const meterAnnualised = useMemo(() => meter ? meter.fullYear
-    ? annualiseElectricityUsage({ usageKwh: meter.annualImport, mode: "annual" })
-    : annualiseElectricityUsage({ usageKwh: meter.importKwh, mode: "bill", billStart: meter.startDate, billEnd: meter.endDate, distributor: usageDistributor, postcode })
-    : null, [meter, postcode, usageDistributor]);
-  const automaticMeterAnnualKwh = meter ? meterAnnualised?.ok ? meterAnnualised.annualKwh : meter.annualImport : 0;
-  const annualUsageNumber = usageOverride?.value || (meter ? automaticMeterAnnualKwh : manualAnnualised.ok ? manualAnnualised.annualKwh : 0);
+  const meterAnnualised = useMemo(() => usingMeter ? usingMeter.fullYear
+    ? annualiseElectricityUsage({ usageKwh: usingMeter.annualImport, mode: "annual" })
+    : annualiseElectricityUsage({ usageKwh: usingMeter.importKwh, mode: "bill", billStart: usingMeter.startDate, billEnd: usingMeter.endDate, distributor: usageDistributor, postcode })
+    : null, [postcode, usageDistributor, usingMeter]);
+  const automaticMeterAnnualKwh = usingMeter ? meterAnnualised?.ok ? meterAnnualised.annualKwh : usingMeter.annualImport : 0;
+  const annualUsageNumber = usingMeter ? usageOverride?.value || automaticMeterAnnualKwh : manualAnnualised.ok ? manualAnnualised.annualKwh : 0;
   const previewMeterAllocation = meterAllocation?.ok ? scaleNem12AnnualAllocation(meterAllocation, annualUsageNumber) : null;
-  const meterAnnualScale = meter?.annualImport ? annualUsageNumber / meter.annualImport : 1;
-  const demandReady = Boolean(meter && meterAllocation?.ok && meter.dateSpanDays >= 360 && meter.coverageRatio >= 0.98 && meter.actualPct >= 0.9);
+  const meterAnnualScale = usingMeter && usingMeter.annualImport ? annualUsageNumber / usingMeter.annualImport : 1;
+  const demandReady = Boolean(usingMeter && meterAllocation?.ok && usingMeter.dateSpanDays >= 360 && usingMeter.coverageRatio >= 0.98 && usingMeter.actualPct >= 0.9);
+  const comparisonInputKey = useMemo(() => JSON.stringify({
+    postcode: postcode.trim(),
+    nmi: cleanNmi(nmi),
+    customerType,
+    usageEvidence,
+    manualUsageMode,
+    manualUsageKwh: manualUsageKwh.trim(),
+    billStart: manualUsageMode === "bill" ? billStart : "",
+    billEnd: manualUsageMode === "bill" ? billEnd : "",
+    profileKind,
+    meterRevision,
+    registerRoles: Object.entries(registerRoles).sort(([left], [right]) => left.localeCompare(right)),
+    usageOverride,
+    hasControlledLoad,
+    controlledKwh: controlledKwh.trim(),
+    setupMode,
+    solarKw: solarKw.trim(),
+    batteryKwh: batteryKwh.trim(),
+    exportKwh: exportKwh.trim(),
+    hasEv,
+    assumeConditional,
+    distributor,
+    meterGuideDistributor,
+  }), [assumeConditional, batteryKwh, billEnd, billStart, controlledKwh, customerType, distributor, exportKwh, hasControlledLoad, hasEv, manualUsageKwh, manualUsageMode, meterGuideDistributor, meterRevision, nmi, postcode, profileKind, registerRoles, setupMode, solarKw, usageEvidence, usageOverride]);
+  useLayoutEffect(() => {
+    comparisonInputKeyRef.current = comparisonInputKey;
+  }, [comparisonInputKey]);
 
   useEffect(() => {
     pageStartedAt.current = Date.now();
@@ -290,7 +342,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     if (restored.annualKwh) {
       setManualUsageKwh(String(restored.annualKwh));
       setManualUsageMode("annual");
-      setManualUsageOpen(true);
+      setUsageEvidence("bill");
     }
     if (restored.profileKind) setProfileKind(restored.profileKind);
     if (restored.customerType) setCustomerType(restored.customerType);
@@ -310,6 +362,20 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     }
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
+
+  useEffect(() => {
+    if (!loading) return;
+    const timer = window.setTimeout(() => {
+      setAnalysisMessage("This is taking longer than usual. Current retailer data is still being checked.");
+    }, 12_000);
+    return () => window.clearTimeout(timer);
+  }, [loading]);
+
+  useEffect(() => {
+    if (!error) return;
+    const frame = window.requestAnimationFrame(() => errorRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [error]);
 
   const upgradeScenarios = useMemo((): ScenarioResult[] => {
     if (!pricingContext || !plans.length || setupMode === "battery") return [];
@@ -389,6 +455,8 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
 
   async function readMeterFile(file: File | undefined) {
     if (!file) return;
+    setMeterRevision((current) => current + 1);
+    setUsageEvidence("meter");
     setMeterStatus("Reading meter data locally...");
     const parsed = parseNem12(await file.text());
     if (!parsed.ok) { setMeter(null); setRegisterRoles({}); setMeterStatus(parsed.err); return; }
@@ -414,12 +482,14 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   }
 
   function removeMeterData() {
+    setMeterRevision((current) => current + 1);
     setMeter(null);
+    setUsageEvidence("bill");
     setRegisterRoles({});
     setUsageOverride(null);
     setShowUsageOverride(false);
     setOverrideError("");
-    setMeterStatus("Meter data removed. Manual assumptions are active.");
+    setMeterStatus("");
   }
 
   function openAnnualOverride() {
@@ -459,35 +529,107 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     void readMeterFile(event.dataTransfer.files?.[0]);
   }
 
-  async function compare(event: FormEvent<HTMLFormElement>) {
+  function moveToStep(step: number) {
+    setError("");
+    setActiveStep(step);
+    window.requestAnimationFrame(() => {
+      stepHeadingRef.current?.focus({ preventScroll: true });
+      formRef.current?.scrollIntoView({ behavior: comparisonScrollBehavior(), block: "start" });
+    });
+  }
+
+  function selectAddress(selection: AustralianAddressSuggestion) {
+    setAddressQuery(selection.label);
+    setPostcode(selection.postcode);
+    setDistributor("");
+    setDistributors([]);
+  }
+
+  function continueFromProperty() {
+    setError("");
+    if (!/^\d{4}$/.test(postcode)) {
+      setError("Enter a valid 4 digit postcode or choose an address from the search results.");
+      return;
+    }
+    const cleanedNmi = cleanNmi(nmi);
+    if (cleanedNmi && (cleanedNmi.length < 10 || cleanedNmi.length > 11)) {
+      setError("An NMI must contain 10 characters, plus an optional checksum character.");
+      return;
+    }
+    moveToStep(2);
+  }
+
+  function continueFromUsage() {
+    setError("");
+    if (!usageEvidence) {
+      setError("Choose smart-meter data or usage from a bill.");
+      return;
+    }
+    if (usageEvidence === "meter" && !meter) {
+      setError("Choose a NEM12 meter-data file before continuing, or use the bill option instead.");
+      return;
+    }
+    if (usingMeter && !meterAllocation?.ok) {
+      setError("Confirm whether every meter register is general usage or controlled load before continuing.");
+      return;
+    }
+    if (!usingMeter && !manualAnnualised.ok) {
+      setError(manualAnnualised.error);
+      return;
+    }
+    moveToStep(3);
+  }
+
+  function submitCurrentStep(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (loading) return;
+    if (activeStep === 1) {
+      continueFromProperty();
+      return;
+    }
+    if (activeStep === 2) {
+      continueFromUsage();
+      return;
+    }
+    if (activeStep === 3) void compare();
+  }
+
+  async function compare() {
+    const requestedInputKey = comparisonInputKey;
     setError(""); setPlans([]); setPricingContext(null); setShown(12);
     if (!/^\d{4}$/.test(postcode)) { setError("Enter a valid 4 digit postcode."); return; }
     const cleanedNmi = cleanNmi(nmi);
     if (cleanedNmi && (cleanedNmi.length < 10 || cleanedNmi.length > 11)) { setError("An NMI must contain 10 characters, plus an optional checksum character."); return; }
     const totalKwh = annualUsageNumber;
-    if (meter && !meterAllocation?.ok) { setError("Confirm whether every meter register is general usage or controlled load before comparing."); return; }
-    if (!meter && !manualAnnualised.ok) { setError(manualAnnualised.error); setManualUsageOpen(true); return; }
+    if (usingMeter && !meterAllocation?.ok) { setError("Confirm whether every meter register is general usage or controlled load before comparing."); return; }
+    if (!usingMeter && !manualAnnualised.ok) { setError(manualAnnualised.error); return; }
     const scaledAllocation = meterAllocation?.ok ? scaleNem12AnnualAllocation(meterAllocation, totalKwh) : null;
     const allocationScale = scaledAllocation?.scale || 1;
     const controlled = scaledAllocation ? scaledAllocation.annualControlledKwh : hasControlledLoad ? Number(controlledKwh) : 0;
     const general = scaledAllocation ? scaledAllocation.annualGeneralKwh : totalKwh - controlled;
     if (!(totalKwh > 0)) { setError("Add smart-meter data or enter electricity usage from a bill."); return; }
-    if (hasControlledLoad && (!(controlled > 0) || controlled >= totalKwh)) { setError("Controlled-load usage must be positive and less than total annual usage."); return; }
+    if (!usingMeter && hasControlledLoad && (!(controlled > 0) || controlled >= totalKwh)) { setError("Controlled-load usage must be positive and less than total annual usage."); return; }
     const hasSolar = setupMode !== "none";
     const hasBattery = setupMode === "battery";
     const systemSize = Math.max(0, Number(solarKw));
-    if (hasSolar && !(systemSize > 0) && !(meter && meter.annualExport > 0)) { setError("Enter the existing solar system size, or upload meter data containing solar exports."); return; }
+    if (hasSolar && !(systemSize > 0) && !(usingMeter && usingMeter.annualExport > 0)) { setError("Enter the existing solar system size, or upload meter data containing solar exports."); return; }
     if (hasBattery && !(Number(batteryKwh) > 0)) { setError("Enter the usable battery size in kWh."); return; }
-    let annualExport = hasSolar ? Math.max(0, Number(exportKwh)) : 0;
+    let annualExport = hasSolar ? usingMeter && usingMeter.annualExport > 0 ? usingMeter.annualExport : Math.max(0, Number(exportKwh)) : 0;
     if (hasSolar && !(annualExport > 0) && systemSize > 0) annualExport = Math.round(systemSize * solarYieldForPostcode(postcode) * (hasBattery ? 0.3 : 0.55));
     setLoading(true);
+    setAnalysisMessage("Finding current plans for your area");
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 25_000);
     try {
       const response = await fetch(`/api/electricity-plans?postcode=${encodeURIComponent(postcode)}&customerType=${encodeURIComponent(customerType)}`, { signal: controller.signal });
       const data = await response.json() as PlanBundle & { error?: string };
       if (!response.ok || !Array.isArray(data.plans)) throw new Error(data.error || "Could not load electricity plans.");
+      if (comparisonInputKeyRef.current !== requestedInputKey) {
+        setAnalysisMessage("");
+        setError("Your answers changed while plans were being checked. Compare again to use the latest answers.");
+        return;
+      }
+      setAnalysisMessage("Checking rates, eligibility and conditions");
       setBundle(data);
       const availableDistributors = [...new Set(data.plans.flatMap((plan) => plan.distributors || []))].sort();
       setDistributors(availableDistributors);
@@ -497,7 +639,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       }
       const selectedDistributor = nmiDistributor || distributor || (availableDistributors.length === 1 ? availableDistributors[0] : "");
       if (!selectedDistributor && availableDistributors.length > 1) {
-        setError("This postcode crosses electricity networks. Choose your distributor, then compare again.");
+        setError("This postcode crosses electricity networks. Choose your distributor below, then compare again.");
         return;
       }
       if (selectedDistributor && distributor !== selectedDistributor) setDistributor(selectedDistributor);
@@ -505,19 +647,19 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       const profile = meterAllocation?.ok ? meterAllocation.generalProfile : manualProfile(profileKind);
       const controlledProfile = meterAllocation?.ok ? meterAllocation.controlledProfile : profile;
       const exportProfile = hasSolar
-        ? meter && meter.annualExport > 0 ? meter.exportProfile : genericExportProfile(annualExport)
+        ? usingMeter && usingMeter.annualExport > 0 ? usingMeter.exportProfile : genericExportProfile(annualExport)
         : emptyProfile();
       const customerEvidence = customerType === "BUSINESS" ? " Small-business offers were requested." : " Residential offers were requested.";
-      const overrideEvidence = usageOverride ? ` The annual total was adjusted from ${Math.round(automaticMeterAnnualKwh).toLocaleString()} to ${Math.round(usageOverride.value).toLocaleString()} kWh because: ${usageOverride.reason}. The measured interval proportions were retained and scaled.` : "";
-      const seasonalEvidence = meter && !meter.fullYear && !usageOverride
-        ? ` The observed ${meter.startDate} to ${meter.endDate} total was seasonally annualised to ${Math.round(totalKwh).toLocaleString()} kWh using the bounded ${AEMO_NSLP_REFERENCE_VERSION} network reference. The measured time-of-day proportions were retained.`
-        : !meter && manualUsageMode === "bill"
+      const overrideEvidence = usingMeter && usageOverride ? ` The annual total was adjusted from ${Math.round(automaticMeterAnnualKwh).toLocaleString()} to ${Math.round(usageOverride.value).toLocaleString()} kWh because: ${usageOverride.reason}. The measured interval proportions were retained and scaled.` : "";
+      const seasonalEvidence = usingMeter && !usingMeter.fullYear && !usageOverride
+        ? ` The observed ${usingMeter.startDate} to ${usingMeter.endDate} total was seasonally annualised to ${Math.round(totalKwh).toLocaleString()} kWh using the bounded ${AEMO_NSLP_REFERENCE_VERSION} network reference. The measured time-of-day proportions were retained.`
+        : !usingMeter && manualUsageMode === "bill"
           ? ` The ${billStart} to ${billEnd} bill was seasonally annualised to ${Math.round(totalKwh).toLocaleString()} kWh using the bounded ${AEMO_NSLP_REFERENCE_VERSION} network reference.`
           : "";
-      const evidenceLabel = meter
-        ? `Measured NEM12 intervals: ${meter.spanDays} observed days, ${Math.round(meter.coverageRatio * 100)}% day coverage and ${Math.round(meter.actualPct * 100)}% actual intervals.${seasonalEvidence}${overrideEvidence}${customerEvidence}`
+      const evidenceLabel = usingMeter
+        ? `Measured NEM12 intervals: ${usingMeter.spanDays} observed days, ${Math.round(usingMeter.coverageRatio * 100)}% day coverage and ${Math.round(usingMeter.actualPct * 100)}% actual intervals.${seasonalEvidence}${overrideEvidence}${customerEvidence}`
         : `Manual assumption: ${profileAssumptionLabel(profileKind)}. This selection determines the TOU allocation.${seasonalEvidence}${customerEvidence}`;
-      const registerEvidence: NativeAuditRegister[] = meterAllocation?.ok && meter ? meter.registers.map((register) => ({
+      const registerEvidence: NativeAuditRegister[] = meterAllocation?.ok && usingMeter ? usingMeter.registers.map((register) => ({
         id: register.id,
         role: registerRoles[register.id] as "general" | "controlled",
         annualKwh: register.annualKwh * allocationScale,
@@ -525,6 +667,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       })) : [];
       const reasons: Record<string, number> = {};
       const priced: NativePlanResult[] = [];
+      setAnalysisMessage("Calculating estimates from the usage you supplied");
       candidates.forEach((plan) => {
         const estimate = estimateNativePlan(plan, {
           annualGeneralKwh: general,
@@ -538,7 +681,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
           hasSolar,
           hasBattery,
           hasEv,
-          hasIntervalMeter: Boolean(meter),
+          hasIntervalMeter: Boolean(usingMeter),
           customerType,
           annualExportKwh: annualExport,
           exportProfile,
@@ -560,8 +703,17 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       setScenarioSolarCost(String(defaultSolarNetCost(suggestedSolar)));
       setScenarioBatteryCost(String(defaultBatteryNetCost(suggestedBattery)));
       setScenarioComboCost(String(defaultSolarNetCost(suggestedSolar) + defaultBatteryNetCost(suggestedBattery)));
-      setPricingContext({ candidates, profile, controlledProfile, annualGeneralKwh: general, annualControlledKwh: controlled, annualExportKwh: annualExport, exportProfile, evidenceLabel, registerEvidence, customerType, hasIntervalMeter: Boolean(meter) });
-      if (!priced.length) setError("Plans were published, but none met the comparison engine's strict priceability rules for these inputs.");
+      setPricingContext({ candidates, profile, controlledProfile, annualGeneralKwh: general, annualControlledKwh: controlled, annualExportKwh: annualExport, exportProfile, evidenceLabel, registerEvidence, customerType, hasIntervalMeter: Boolean(usingMeter) });
+      if (!priced.length) {
+        setError("Plans were published, but none met the comparison engine's strict priceability rules for these inputs.");
+      } else {
+        setAnalysisMessage("Preparing your clearest matches");
+        setActiveStep(4);
+        window.requestAnimationFrame(() => {
+          resultsHeadingRef.current?.focus({ preventScroll: true });
+          resultsHeadingRef.current?.scrollIntoView({ behavior: comparisonScrollBehavior(), block: "start" });
+        });
+      }
     } catch (caught) {
       setError(controller.signal.aborted ? "The electricity comparison took too long. Please try again shortly." : caught instanceof Error ? caught.message : "Could not load electricity plans.");
     } finally {
@@ -579,14 +731,14 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     .sort((a, b) => a.annualCost - b.annualCost), [plans, search, showDemand, showSingle, showStanding, showTou]);
   const best = visible[0];
   const median = visible[Math.floor(visible.length / 2)];
-  const journeyStep = plans.length ? 3 : meter || manualUsageKwh ? 2 : 1;
+  const journeyStep = activeStep;
 
   function privateSafeUrl(): string {
     return buildNativeComparisonUrl(window.location.origin, {
       postcode, annualKwh: annualUsageNumber, profileKind: profileKind as "evening" | "daytime" | "even",
       customerType, setupMode, solarKw: Number(solarKw) || undefined, batteryKwh: Number(batteryKwh) || undefined,
-      exportKwh: Number(exportKwh) || undefined, hasEv, hasControlledLoad: meter ? Boolean(meterAllocation?.ok && meterAllocation.annualControlledKwh > 0) : hasControlledLoad,
-      controlledKwh: !meter ? Number(controlledKwh) || undefined : undefined, assumeConditional, usedMeter: Boolean(meter),
+      exportKwh: Number(exportKwh) || undefined, hasEv, hasControlledLoad: usingMeter ? Boolean(meterAllocation?.ok && meterAllocation.annualControlledKwh > 0) : hasControlledLoad,
+      controlledKwh: !usingMeter ? Number(controlledKwh) || undefined : undefined, assumeConditional, usedMeter: Boolean(usingMeter),
     });
   }
 
@@ -602,8 +754,8 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     return {
       engineVersion: NATIVE_ENGINE_VERSION, tariffSchemaVersion: bundle?.tariffSchemaVersion || "",
       sourceHash: bundle?.sourceHash || "", sourceFetchedAt: bundle?.fetchedAt || "",
-      annualSource: meter ? usageOverride ? "meter-adjusted" : meter.fullYear ? "meter-measured" : "meter-seasonally-adjusted" : manualUsageMode === "bill" ? "bill-seasonally-adjusted" : "manual-annual",
-      meterConfidence: meter?.confidence || "modelled", conditionalDiscountsAssumed: assumeConditional,
+      annualSource: usingMeter ? usageOverride ? "meter-adjusted" : usingMeter.fullYear ? "meter-measured" : "meter-seasonally-adjusted" : manualUsageMode === "bill" ? "bill-seasonally-adjusted" : "manual-annual",
+      meterConfidence: usingMeter ? usingMeter.confidence : "modelled", conditionalDiscountsAssumed: assumeConditional,
     };
   }
 
@@ -623,7 +775,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         navigator.clipboard.writeText(url),
         new Promise((_, reject) => window.setTimeout(() => reject(new Error("Clipboard timed out")), 1200)),
       ]);
-      setShareStatus(meter ? "Private-safe link copied. It asks for the meter file to be re-uploaded locally." : "Private-safe comparison link copied.");
+      setShareStatus(usingMeter ? "Private-safe link copied. It asks for the meter file to be re-uploaded locally." : "Private-safe comparison link copied.");
     } catch {
       setShareStatus("The private-safe link is ready below. Select it and copy it manually.");
     }
@@ -638,7 +790,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         submissionType: "comparison", clientStartedAt: pageStartedAt.current, website: leadWebsite,
         name: leadName, email: leadEmail, upgrades: false,
         postcode, annualKwh: Math.round(annualUsageNumber), solar: setupMode, hasEv,
-        hasControlledLoad: meter ? Boolean(meterAllocation?.ok && meterAllocation.annualControlledKwh > 0) : hasControlledLoad,
+        hasControlledLoad: usingMeter ? Boolean(meterAllocation?.ok && meterAllocation.annualControlledKwh > 0) : hasControlledLoad,
         top3: topPlans(), magicLink: privateSafeUrl(), provenance: provenance(), recheckMonths: 6,
         consent: { accepted: true, purpose: "Email comparison results and six monthly comparison reminders", noticeVersion: LEAD_NOTICE_VERSION, grantedAt: new Date().toISOString() },
       });
@@ -656,9 +808,18 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     {preview && <div className="native-preview"><b>Internal regression route</b><span>The live electricity comparer is available at <Link href="/compare">/compare</Link>.</span></div>}
     <ComparisonJourney title="Your electricity comparison" current={journeyStep} steps={ELECTRICITY_JOURNEY_STEPS} />
     {handoffStatus && <p className="comparison-handoff-status" role="status"><strong>{handoffStatus.title}</strong>{handoffStatus.message}</p>}
-    <form onSubmit={compare} aria-label="Electricity plan comparison">
-      <StepCard number="1" title="Where is the property?">
-        <p className="sub">Start with the postcode. The optional NMI confirms the exact electricity network and always stays in this browser.</p>
+    <form ref={formRef} onSubmit={submitCurrentStep} aria-label="Electricity plan comparison">
+      {activeStep === 1 && <>
+      <StepCard number="1" title="Where is the property?" headingRef={stepHeadingRef}>
+        <p className="sub">Search for the property to fill its postcode automatically, or enter the postcode yourself. Search text is sent only to the address-search service and is never sent to plan providers.</p>
+        <div className={chromeStyles.addressSearch}>
+          <AustralianAddressLookup
+            label="Find the property"
+            value={addressQuery}
+            onChange={setAddressQuery}
+            onSelect={selectAddress}
+          />
+        </div>
         <div className="grid c3 native-location-grid">
           <Field label="Postcode"><input type="text" value={postcode} inputMode="numeric" maxLength={4} onChange={(event) => { setPostcode(event.target.value); setDistributor(""); setDistributors([]); }} placeholder="e.g. 3000" /></Field>
           <Field label="NMI" optional="(optional)" hint="A 10 or 11 character number, usually near the top of your bill. It identifies your electricity connection."><input type="text" value={nmi} maxLength={11} autoComplete="off" onChange={(event) => { setNmi(cleanNmi(event.target.value).slice(0, 11)); setDistributor(""); }} placeholder="e.g. 6407123456" /></Field>
@@ -668,7 +829,15 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         <p className="native-nmi-help">Have your NMI but still need the usage file? <a href="#meter-data-help">Follow the meter-data guide below</a>.</p>
         {nmi && <div className={nmiDistributor ? "native-location-evidence ok" : "native-location-evidence"} aria-live="polite">{nmiDistributor ? <><b>{nmiDistributor}</b> was identified from NMI {maskNmi(nmi)}. The full NMI stays in this browser and is not included in the plan request.</> : cleanNmi(nmi).length >= 10 ? <>This NMI prefix is not in the supported National Electricity Market allocation table. We will use postcode and ask you to confirm the distributor if needed.</> : <>Enter the complete NMI to confirm the exact distributor.</>}</div>}
       </StepCard>
-      <StepCard number="2" title="How much electricity do you use?">
+      <ComparisonStepActions step={1} total={4} onContinue={continueFromProperty} />
+      </>}
+      {activeStep === 2 && <>
+      <StepCard number="2" title="How much electricity do you use?" headingRef={stepHeadingRef}>
+        <ChoiceCards name="usage-evidence" legend="What usage information do you have?" value={usageEvidence} options={[
+          { value: "meter", title: "Smart-meter data", description: "Most accurate. Upload a NEM12 file and we will price the measured time pattern." },
+          { value: "bill", title: "An electricity bill", description: "Enter the kWh and exact bill dates, or a full-year total." },
+        ]} onChange={setUsageEvidence} />
+        {usageEvidence === "meter" && <>
         <div className="native-evidence-priority"><span>Recommended</span><div><b>Use your smart-meter data</b><p>Upload up to 12 months of NEM12 data. We automatically read the NMI, annual usage, seasonal changes, solar exports and time-of-day pattern. The file stays in this browser.</p></div></div>
         <div className={`native-dropzone${dragActive ? " drag" : ""}`} onDragEnter={(event) => { event.preventDefault(); setDragActive(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragActive(false); }} onDrop={handleMeterDrop}>
           <b>Drag your NEM12 meter-data CSV here</b>
@@ -712,8 +881,8 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
           {previewMeterAllocation && <p className="native-meter-status ok"><b>{meter.fullYear ? "Measured full year" : "Seasonally adjusted partial meter data"}.</b> Confirmed allocation: {Math.round(previewMeterAllocation.annualGeneralKwh).toLocaleString()} kWh general usage{previewMeterAllocation.annualControlledKwh > 0 ? ` and ${Math.round(previewMeterAllocation.annualControlledKwh).toLocaleString()} kWh controlled load` : ""}{usageOverride ? ", proportionally scaled to the adjusted annual total for pricing" : ""}. {demandReady ? "Measured demand pricing is available." : "Demand pricing needs at least 360 days, 98% day coverage and 90% actual intervals."}</p>}
           <Nem12UsageChart data={meter} />
         </>}
-        {!meter && <details className="native-manual-usage" open={manualUsageOpen} onToggle={(event) => setManualUsageOpen(event.currentTarget.open)}>
-          <summary><span>I only have an electricity bill</span><small>Use this optional fallback when a NEM12 file is not available.</small></summary>
+        </>}
+        {usageEvidence === "bill" && <div className="native-manual-usage open">
           <div className="native-manual-usage-body">
             <div className="native-section-intro"><h3>Enter usage from your bill</h3><p>Exact bill dates let us correct for seasonal heating and cooling instead of multiplying one month or quarter across the year.</p></div>
             <ChoiceCards name="manual-usage-mode" legend="What usage figure do you have?" value={manualUsageMode} options={MANUAL_USAGE_OPTIONS} onChange={setManualUsageMode} />
@@ -730,34 +899,42 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
             {!manualAnnualised.ok && manualUsageKwh && <p className="native-manual-error">{manualAnnualised.error}</p>}
             <ChoiceCards name="usage-pattern" legend="When do you usually use the most power?" hint="This optional assumption estimates time-of-use charges when no smart-meter intervals are available." value={profileKind} options={PROFILE_OPTIONS} onChange={setProfileKind} />
           </div>
-        </details>}
+        </div>}
       </StepCard>
-      <StepCard number="3" title="What is already installed?">
+      <ComparisonStepActions step={2} total={4} onBack={() => moveToStep(1)} onContinue={continueFromUsage} />
+      </>}
+      {activeStep === 3 && <>
+      <StepCard number="3" title="What is already installed?" headingRef={stepHeadingRef}>
         <p className="sub">Confirm solar, battery and plan conditions so unsuitable offers are not treated as a match.</p>
         <ChoiceCards name="current-energy-setup" legend="Current solar and battery setup" value={setupMode} options={SETUP_OPTIONS} onChange={setSetupMode} />
         {setupMode !== "none" && <div className="grid c3 native-existing-system-fields">
           <Field label="Existing solar system size" hint="kW. If exports are not supplied, this and the postcode estimate them."><input type="number" min="0.1" step="0.1" value={solarKw} onChange={(event) => setSolarKw(event.target.value)} placeholder="e.g. 6.6" /></Field>
           {setupMode === "battery" && <Field label="Existing usable battery size" hint="kWh. Uploaded imports are not shifted again."><input type="number" min="0.1" step="0.1" value={batteryKwh} onChange={(event) => setBatteryKwh(event.target.value)} /></Field>}
-          <Field label="Annual solar export" hint={meter?.annualExport ? "Read from the active meter file." : "kWh exported to the grid. Leave blank to estimate."}><input type="number" min="0" value={exportKwh} readOnly={Boolean(meter?.annualExport)} onChange={(event) => setExportKwh(event.target.value)} placeholder="Estimate from system size" /></Field>
+          <Field label="Annual solar export" hint={usingMeter && usingMeter.annualExport > 0 ? "Read from the active meter file." : "kWh exported to the grid. Leave blank to estimate."}><input type="number" min="0" value={exportKwh} readOnly={Boolean(usingMeter && usingMeter.annualExport > 0)} onChange={(event) => setExportKwh(event.target.value)} placeholder="Estimate from system size" /></Field>
         </div>}
         <div className="native-assumption-grid">
-          {!meter && <label className={`native-assumption-card${hasControlledLoad ? " selected" : ""}`}><input type="checkbox" checked={hasControlledLoad} onChange={(event) => setHasControlledLoad(event.target.checked)} /><span><b>I have a controlled load</b><small>Usually electric hot water, slab heating or pool equipment shown separately on your bill as controlled load, dedicated circuit or off-peak usage.</small></span></label>}
+          {!usingMeter && <label className={`native-assumption-card${hasControlledLoad ? " selected" : ""}`}><input type="checkbox" checked={hasControlledLoad} onChange={(event) => setHasControlledLoad(event.target.checked)} /><span><b>I have a controlled load</b><small>Usually electric hot water, slab heating or pool equipment shown separately on your bill as controlled load, dedicated circuit or off-peak usage.</small></span></label>}
           <label className={`native-assumption-card${hasEv ? " selected" : ""}`}><input type="checkbox" checked={hasEv} onChange={(event) => setHasEv(event.target.checked)} /><span><b>I charge an electric vehicle at home</b><small>Select this so EV-specific plans can be included when you meet their equipment requirements.</small></span></label>
           <label className={`native-assumption-card${assumeConditional ? " selected" : ""}`}><input type="checkbox" checked={assumeConditional} onChange={(event) => setAssumeConditional(event.target.checked)} /><span><b>Include conditional discounts</b><small>Only select this if you expect to meet conditions such as paying on time or using direct debit. Otherwise we leave these discounts out.</small></span></label>
         </div>
-        {!meter && hasControlledLoad && <div className="native-controlled-usage"><Field label="Controlled-load usage per year" hint="Enter only the separately listed controlled-load kWh from your bill. It must be less than your total grid usage."><input type="number" min="1" value={controlledKwh} onChange={(event) => setControlledKwh(event.target.value)} placeholder="e.g. 1200" /></Field></div>}
+        {!usingMeter && hasControlledLoad && <div className="native-controlled-usage"><Field label="Controlled-load usage per year" hint="Enter only the separately listed controlled-load kWh from your bill. It must be less than your total grid usage."><input type="number" min="1" value={controlledKwh} onChange={(event) => setControlledKwh(event.target.value)} placeholder="e.g. 1200" /></Field></div>}
+        {distributors.length > 1 && !nmiDistributor && <div className="native-location-evidence"><Field label="Network distributor" hint="This postcode crosses network boundaries. Choose the distributor printed on your electricity bill before comparing again."><select value={distributor} onChange={(event) => setDistributor(event.target.value)}><option value="">Choose distributor</option>{distributors.map((name) => <option key={name}>{name}</option>)}</select></Field></div>}
       </StepCard>
-      <div className="gas-compare-action comparison-primary-action"><span>Ready when the three sections above are correct.</span><button className="btn" disabled={loading}>{loading ? "Comparing electricity plans..." : "Compare electricity plans"}</button></div>
-      {error && <p className="error">{error}</p>}
+      <div className={chromeStyles.reviewSummary}><span>Ready to compare</span><strong>{postcode} | {Math.round(annualUsageNumber).toLocaleString()} kWh/year | {setupMode === "none" ? "No solar" : setupMode === "solar" ? "Solar" : "Solar and battery"}</strong><small>You can go back without losing any answer or uploaded meter data.</small></div>
+      <ComparisonStepActions step={3} total={4} onBack={() => moveToStep(2)} />
+      <div className="gas-compare-action comparison-primary-action"><span>We will price eligible current plans against the usage information you supplied.</span><button className="btn" type="submit" disabled={loading}>{loading ? "Comparing electricity plans..." : "Compare electricity plans"}</button></div>
+      {loading && <ComparisonWorkingState title="Comparing electricity plans" message={analysisMessage} />}
+      </>}
+      {error && <p ref={errorRef} className="error" role="alert" tabIndex={-1}>{error}</p>}
     </form>
 
-    <details className="native-definitions">
+    {activeStep === 4 && <details className="native-definitions">
       <summary>Definitions used in this comparison</summary>
       <dl><div><dt>NMI</dt><dd>The identifier for an electricity connection point. It is used locally to identify the network and is never shared.</dd></div><div><dt>NEM12</dt><dd>A standard interval-meter file. This comparer reads its dated usage registers in the browser.</dd></div><div><dt>General and controlled load</dt><dd>General usage powers normal circuits. Controlled load is a separately metered circuit, commonly hot water, with its own tariff.</dd></div><div><dt>Time of use (TOU)</dt><dd>Rates that change by time and day. Meter intervals are allocated to each plan&apos;s published windows.</dd></div><div><dt>Demand tariff</dt><dd>A tariff with a charge based on measured peak power during published periods, in addition to energy charges.</dd></div><div><dt>Supply charge</dt><dd>The daily fixed charge for keeping the property connected.</dd></div><div><dt>Feed-in tariff</dt><dd>The credit paid for solar electricity exported to the grid.</dd></div><div><dt>Conditional discount</dt><dd>A discount that only applies if its conditions are met; it is excluded unless explicitly assumed.</dd></div><div><dt>Calculation audit</dt><dd>The quantities, tariff rates, evidence versions and reconciliation behind an individual result.</dd></div></dl>
-    </details>
+    </details>}
 
-    {plans.length > 0 && <section className="results" aria-live="polite" aria-labelledby="electricity-results-title">
-      <div className="comparison-results-heading"><span>Step 3 of 3</span><h2 id="electricity-results-title">Your electricity plan results</h2><p>Start with the lowest estimated annual cost, check its conditions and calculation audit, then open the retailer&apos;s current plan page before switching.</p></div>
+    {activeStep === 4 && plans.length > 0 && <section className="results" aria-live="polite" aria-labelledby="electricity-results-title">
+      <div className="comparison-results-heading"><span>Step 4 of 4</span><h2 ref={resultsHeadingRef} tabIndex={-1} id="electricity-results-title">Your electricity plan results</h2><p>Start with the lowest estimated annual cost, check its conditions and calculation audit, then open the retailer&apos;s current plan page before switching.</p><button className="btn ghost" type="button" onClick={() => moveToStep(3)}>Edit answers</button></div>
       <div className="rsummary"><div className="stat"><div className="v">{visible.length}</div><div className="l">strictly priceable native results</div></div><div className="stat"><div className="v">{best ? fmtMoney(best.annualCost) : "n/a"}</div><div className="l">best estimated annual cost</div></div><div className="stat"><div className="v">{median ? fmtMoney(median.annualCost) : "n/a"}</div><div className="l">median visible offer</div></div></div>
       {pricingContext && setupMode !== "battery" && <div className="native-scenarios">
         <h2>{setupMode === "none" ? "Native solar and battery scenarios" : "Native battery scenario"}</h2>

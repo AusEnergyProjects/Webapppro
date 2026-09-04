@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Crypto from 'expo-crypto';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
@@ -10,6 +11,7 @@ import {
 
 import { SignatureCapture } from '@/components/SignatureCapture';
 import { FieldButton } from '@/components/field-button';
+import { apiRequest } from '@/lib/api';
 import { colours, radius, spacing } from '@/lib/theme';
 import type {
   FieldActivityWorkPack,
@@ -42,6 +44,17 @@ export type ActivityWorkPackPromptContext = {
   section: FieldWorkPackSection;
   repeatInstanceKey: string;
   prompt: FieldWorkPackPrompt;
+};
+
+type AddressPrediction = { id: string; label: string; provider: string };
+type AddressSelection = {
+  id: string;
+  label: string;
+  addressLine1: string;
+  addressLine2: string;
+  suburb: string;
+  addressState: string;
+  postcode: string;
 };
 
 const AUTOSAVE_DELAY_MS = 700;
@@ -1478,6 +1491,41 @@ function CustomerContextReview({
   const [draft, setDraft] = useState<FieldWorkPackCustomerContext | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [addressPredictionSession, setAddressPredictionSession] = useState<{ token: string; query: string; predictions: AddressPrediction[] }>(() => ({ token: Crypto.randomUUID(), query: '', predictions: [] }));
+  const [addressLookupBusy, setAddressLookupBusy] = useState(false);
+  const [addressLookupMessage, setAddressLookupMessage] = useState('');
+  const suppressAddressLookup = useRef(false);
+  const addressResolveController = useRef<AbortController | null>(null);
+  useEffect(() => () => addressResolveController.current?.abort(), []);
+  useEffect(() => {
+    if (suppressAddressLookup.current) {
+      suppressAddressLookup.current = false;
+      return;
+    }
+    const query = draft?.addressLine1.trim() || '';
+    if (!editing || protectedCustomer || !context?.editable || query.length < 3) {
+      return;
+    }
+    let active = true;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      setAddressLookupBusy(true);
+      void apiRequest<{ configured?: boolean; predictions?: AddressPrediction[] }>('/api/trade-address-suggestions', {
+        method: 'POST', body: JSON.stringify({ action: 'predict', query, sessionToken: addressPredictionSession.token }), signal: controller.signal,
+      }).then((result) => {
+        if (!active) return;
+        const predictions = result.predictions || [];
+        setAddressPredictionSession((current) => current.token === addressPredictionSession.token ? ({ ...current, query, predictions }) : current);
+        setAddressLookupMessage(result.configured === false
+          ? 'Address lookup is unavailable. Enter the address manually.'
+          : predictions.length ? 'Choose a suggested address, or keep entering it manually.' : 'No matching address was found. Enter the address manually.');
+      }).catch(() => {
+        if (!active || controller.signal.aborted) return;
+        suppressAddressLookup.current = true; setAddressPredictionSession({ token: Crypto.randomUUID(), query: '', predictions: [] }); setAddressLookupMessage('Address suggestions are temporarily unavailable. Enter the address manually.');
+      }).finally(() => { if (active) setAddressLookupBusy(false); });
+    }, 280);
+    return () => { active = false; controller.abort(); clearTimeout(timeout); };
+  }, [addressPredictionSession.token, context?.editable, draft?.addressLine1, editing, protectedCustomer]);
   if (protectedCustomer || !context?.editable) {
     return <View style={styles.reviewRow}>
       <Text style={styles.promptLabel}>Customer and site details</Text>
@@ -1498,6 +1546,8 @@ function CustomerContextReview({
       ].filter(Boolean).join(', ') || 'Site address not set'}</Text>
       <FieldButton variant="secondary" onPress={() => {
         setDraft({ ...context });
+        setAddressPredictionSession({ token: Crypto.randomUUID(), query: '', predictions: [] });
+        setAddressLookupMessage('Start typing an Australian address, or enter it manually.');
         setEditing(true);
       }}>Correct customer or site details</FieldButton>
     </View>;
@@ -1506,7 +1556,7 @@ function CustomerContextReview({
   const fields: Array<{
     key: keyof FieldWorkPackCustomerContext;
     label: string;
-    keyboard?: 'email-address' | 'phone-pad';
+    keyboard?: 'email-address' | 'phone-pad' | 'number-pad';
   }> = [
     { key: 'firstName', label: 'First name' },
     { key: 'lastName', label: 'Last name' },
@@ -1516,33 +1566,79 @@ function CustomerContextReview({
     { key: 'addressLine2', label: 'Address line 2' },
     { key: 'suburb', label: 'Suburb' },
     { key: 'state', label: 'State' },
-    { key: 'postcode', label: 'Postcode' },
+    { key: 'postcode', label: 'Postcode', keyboard: 'number-pad' },
   ];
+  async function chooseAddress(prediction: AddressPrediction) {
+    const query = addressPredictionSession.query;
+    const sessionToken = addressPredictionSession.token;
+    if (query.length < 3) return;
+    addressResolveController.current?.abort();
+    const controller = new AbortController();
+    addressResolveController.current = controller;
+    setAddressPredictionSession((current) => ({ ...current, query, predictions: [] })); setAddressLookupBusy(true); setAddressLookupMessage('Loading the selected address...');
+    try {
+      const result = await apiRequest<{ configured?: boolean; selection?: AddressSelection | null }>('/api/trade-address-suggestions', {
+        method: 'POST', body: JSON.stringify({ action: 'resolve', provider: prediction.provider, providerReference: prediction.id, query, sessionToken }), signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      const selection = result.selection;
+      if (!selection) { suppressAddressLookup.current = true; setAddressPredictionSession({ token: Crypto.randomUUID(), query: '', predictions: [] }); setAddressLookupMessage('This address could not be resolved. Enter the address manually.'); return; }
+      suppressAddressLookup.current = true;
+      setDraft((current) => current ? ({
+        ...current,
+        addressLine1: selection.addressLine1,
+        addressLine2: selection.addressLine2,
+        suburb: selection.suburb,
+        state: selection.addressState.toUpperCase(),
+        postcode: selection.postcode.replace(/\D/g, '').slice(0, 4),
+      }) : current);
+      setAddressPredictionSession({ token: Crypto.randomUUID(), query: '', predictions: [] });
+      setAddressLookupMessage('Address suggestion selected. Check the details before saving.');
+    } catch {
+      if (!controller.signal.aborted) { suppressAddressLookup.current = true; setAddressPredictionSession({ token: Crypto.randomUUID(), query: '', predictions: [] }); setAddressLookupMessage('This address could not be resolved. Enter the address manually.'); }
+    } finally {
+      if (addressResolveController.current === controller) { addressResolveController.current = null; setAddressLookupBusy(false); }
+    }
+  }
   return <View style={styles.customerEditor}>
     <Text style={styles.promptLabel}>Correct customer and site details</Text>
     <Text style={styles.warning}>Saving a correction invalidates existing signatures. The required people must review and sign the corrected record again.</Text>
+    <Text style={styles.warning}>Changing any site address field returns the address to manual review and removes its previous provider verification.</Text>
     {saveError ? <Text accessibilityLiveRegion="assertive" style={styles.warning}>{saveError}</Text> : null}
     {fields.map((field) => <View key={field.key} style={styles.customerField}>
       <Text style={styles.meta}>{field.label}</Text>
       <TextInput
-        autoCapitalize={field.key === 'email' ? 'none' : 'sentences'}
+        accessibilityLabel={field.label}
+        autoCapitalize={field.key === 'email' ? 'none' : field.key === 'state' ? 'characters' : 'sentences'}
         keyboardType={field.keyboard || 'default'}
-        maxLength={field.key === 'email' ? 180 : 120}
-        onChangeText={(value) => setDraft((current) => current ? ({ ...current, [field.key]: value }) : current)}
+        maxLength={field.key === 'email' ? 180 : field.key === 'state' ? 3 : field.key === 'postcode' ? 4 : 120}
+        onChangeText={(value) => {
+          const next = field.key === 'state' ? value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 3)
+            : field.key === 'postcode' ? value.replace(/\D/g, '').slice(0, 4) : value;
+          setDraft((current) => current ? ({ ...current, [field.key]: next }) : current);
+          if (field.key === 'addressLine1') { const abandonedResolution = Boolean(addressResolveController.current); addressResolveController.current?.abort(); addressResolveController.current = null; setAddressPredictionSession((current) => ({ token: abandonedResolution || next.trim().length < 3 && String(draft.addressLine1 || '').trim().length >= 3 ? Crypto.randomUUID() : current.token, query: '', predictions: [] })); setAddressLookupBusy(false); setAddressLookupMessage('Keep typing to find an address, or enter it manually.'); }
+        }}
         style={styles.input}
         value={String(draft[field.key] || '')}
       />
+      {field.key === 'addressLine1' && addressPredictionSession.predictions.length ? <View style={styles.addressSuggestions}>{addressPredictionSession.predictions.map((prediction) => <Pressable accessibilityRole="button" accessibilityLabel={`Use address ${prediction.label}`} key={`${prediction.provider}:${prediction.id}`} onPress={() => void chooseAddress(prediction)} style={styles.addressSuggestion}><MaterialCommunityIcons name="map-marker-outline" color={colours.green} size={22} /><Text style={styles.addressSuggestionText}>{prediction.label}</Text></Pressable>)}{addressPredictionSession.predictions.some((prediction) => prediction.provider === 'google-places' || prediction.provider === 'google-geocoding') ? <Text style={styles.addressAttribution}>Google Maps</Text> : null}</View> : null}
+      {field.key === 'addressLine1' ? <Text accessibilityLiveRegion="polite" style={[styles.meta, addressLookupMessage.includes('unavailable') && styles.warning]}>{addressLookupBusy ? 'Searching Australian addresses...' : addressLookupMessage}</Text> : null}
     </View>)}
     <View style={styles.navigation}>
           <FieldButton variant="secondary" disabled={saving} style={styles.flex} onPress={() => {
+            addressResolveController.current?.abort(); addressResolveController.current = null;
+            setAddressPredictionSession({ token: Crypto.randomUUID(), query: '', predictions: [] });
             setDraft(null);
         setSaveError('');
         setEditing(false);
       }}>Cancel</FieldButton>
       <FieldButton loading={saving} style={styles.flex} onPress={() => void (async () => {
+        addressResolveController.current?.abort(); addressResolveController.current = null; suppressAddressLookup.current = true;
+        setAddressPredictionSession({ token: Crypto.randomUUID(), query: '', predictions: [] }); setAddressLookupBusy(false);
         setSaving(true);
         try {
               await onSave(draft);
+              setAddressPredictionSession({ token: Crypto.randomUUID(), query: '', predictions: [] });
               setSaveError('');
               setDraft(null);
           setEditing(false);
@@ -1638,6 +1734,10 @@ const styles = StyleSheet.create({
   reviewValue: { color: colours.green, fontSize: 19, fontWeight: '900' },
   customerEditor: { backgroundColor: colours.cream, borderRadius: radius.sm, gap: spacing.sm, padding: spacing.md },
   customerField: { gap: spacing.xs },
+  addressSuggestions: { backgroundColor: colours.surfaceRaised, borderColor: colours.line, borderRadius: radius.sm, borderWidth: 1, overflow: 'hidden' },
+  addressSuggestion: { alignItems: 'center', borderBottomColor: colours.line, borderBottomWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 52, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  addressSuggestionText: { color: colours.ink, flex: 1, fontWeight: '700', lineHeight: 20 },
+  addressAttribution: { color: colours.muted, fontSize: 12, fontWeight: '700', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, textAlign: 'right' },
   blocker: { alignItems: 'flex-start', backgroundColor: colours.redSoft, borderRadius: radius.sm, flexDirection: 'row', gap: spacing.sm, padding: spacing.md },
   blockerTitle: { color: colours.ink, fontWeight: '700' },
   ready: { alignItems: 'center', backgroundColor: colours.mint, borderRadius: radius.sm, flexDirection: 'row', gap: spacing.sm, padding: spacing.md },

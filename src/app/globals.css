@@ -3662,23 +3662,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 }
 
 /* Guided public energy comparisons and large-screen home-plan continuity. */
-.comparison-journey { background: linear-gradient(135deg, rgba(3, 25, 45, .97), rgba(6, 61, 72, .94)); border: 1px solid rgba(110, 231, 183, .3); border-radius: var(--radius-card); box-shadow: 0 18px 42px rgba(0, 5, 16, .28); color: #fff; margin: 0 0 20px; min-width: 0; padding: 18px 20px; }
-.comparison-journey-heading { align-items: end; display: flex; gap: 18px; justify-content: space-between; }
-.comparison-journey-heading span, .comparison-results-heading > span, .comparison-complete-next > div > span { color: #7ff1cf; display: block; font-size: .6rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
-.comparison-journey-heading h2 { color: #fff; font-family: var(--font-aea-body); font-size: 1rem; margin-top: 3px; }
-.comparison-journey-heading > strong { color: #c9dfe1; flex: 0 0 auto; font-size: .68rem; }
-.comparison-journey ol { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); list-style: none; margin: 15px 0 0; padding: 0; }
-.comparison-journey li { align-items: center; border: 1px solid rgba(255, 255, 255, .12); border-radius: 12px; display: grid; gap: 10px; grid-template-columns: 30px minmax(0, 1fr); min-width: 0; padding: 10px 11px; }
-.comparison-journey li > b { align-items: center; border: 1px solid rgba(201, 231, 225, .38); border-radius: 50%; color: #c9dfe1; display: flex; font-size: .64rem; height: 28px; justify-content: center; width: 28px; }
-.comparison-journey li > span { display: grid; min-width: 0; }
-.comparison-journey li strong { color: #fff; font-size: .7rem; overflow-wrap: anywhere; }
-.comparison-journey li small { color: #a9c5c9; font-size: .58rem; line-height: 1.35; margin-top: 2px; overflow-wrap: anywhere; }
-.comparison-journey li.current { background: rgba(110, 231, 183, .14); border-color: rgba(110, 231, 183, .55); }
-.comparison-journey li.current > b { background: #6ee7b7; border-color: #a7f3d0; color: #043b46; }
-.comparison-journey li.complete > b { background: #0e9f68; border-color: #43d5a2; color: #fff; }
-.comparison-journey li.upcoming { opacity: .72; }
-.comparison-journey-track { background: rgba(255, 255, 255, .12); border-radius: 999px; height: 5px; margin-top: 13px; overflow: hidden; }
-.comparison-journey-track > span { background: linear-gradient(90deg, #20cbb8, #6ee7b7); border-radius: inherit; display: block; height: 100%; transition: width .25s ease; }
+.comparison-results-heading > span, .comparison-complete-next > div > span { color: #7ff1cf; display: block; font-size: .6rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
 .comparison-handoff-status { background: #e9f8f2; border: 1px solid #9fd6c2; border-left: 5px solid #0e9f68; border-radius: 12px; color: #315f53; display: grid; font-size: .74rem; gap: 3px; line-height: 1.5; margin: 0 0 20px; min-width: 0; padding: 13px 15px; }
 .comparison-handoff-status strong { color: #075f42; font-size: .78rem; }
 .comparison-primary-action { align-items: center; background: rgba(3, 25, 45, .78); border: 1px solid rgba(110, 231, 183, .28); border-radius: 14px; display: flex; gap: 16px; justify-content: space-between; margin: -2px 0 18px; padding: 13px 14px; text-align: left; }
@@ -3700,17 +3684,13 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .comparison-complete-next p { color: #c9dfe1; font-size: .7rem; line-height: 1.5; margin: 5px 0 0; max-width: 680px; }
 .comparison-complete-next > .btn { text-align: center; text-decoration: none; white-space: nowrap; }
 .comparison-secondary-link { color: #8ee9d0; font-size: .66rem; font-weight: 850; grid-column: 1 / -1; justify-self: end; }
-.comparison-journey, .comparison-handoff-status, .comparison-refinement, .comparison-results-heading, .comparison-complete-next, .electricity-comparison-page .card, .gas-comparison-page .card, .electricity-comparison-page .results, .gas-comparison-page .results { max-width: 100%; overflow-wrap: anywhere; }
+.comparison-handoff-status, .comparison-refinement, .comparison-results-heading, .comparison-complete-next, .electricity-comparison-page .card, .gas-comparison-page .card, .electricity-comparison-page .results, .gas-comparison-page .results { max-width: 100%; overflow-wrap: anywhere; }
 
 @media (min-width: 1440px) {
   .planner-page { max-width: 94vw; }
 }
 
 @media (max-width: 720px) {
-  .comparison-journey { padding: 14px; }
-  .comparison-journey-heading { align-items: flex-start; }
-  .comparison-journey ol { grid-template-columns: 1fr; }
-  .comparison-journey li { min-height: 54px; }
   .comparison-primary-action { align-items: stretch; flex-direction: column; }
   .comparison-primary-action .btn { min-width: 0; width: 100%; }
   .comparison-refinement > div { padding: 10px; }
@@ -3720,13 +3700,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 }
 
 @media (max-width: 380px) {
-  .comparison-journey-heading > strong { font-size: .58rem; }
-  .comparison-journey li small { font-size: .55rem; }
   .comparison-results-heading, .comparison-complete-next { padding: 15px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .comparison-journey-track > span { transition: none; }
 }
 
 /* Platform typography roles: one interface family and seven deliberate roles. */
@@ -3802,7 +3776,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
     font-size: 1rem;
     line-height: 1.05;
   }
-  .aea-platform .wrap :where(.start-eyebrow, .customer-route-eyebrow, .comparison-journey-heading > span, .comparison-results-heading > span, .comparison-complete-next > div > span) {
+  .aea-platform .wrap :where(.start-eyebrow, .customer-route-eyebrow, .comparison-results-heading > span, .comparison-complete-next > div > span) {
     font-size: var(--type-label);
     letter-spacing: .08em;
     line-height: 1.3;

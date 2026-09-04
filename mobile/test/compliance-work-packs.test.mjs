@@ -62,6 +62,39 @@ test('linked current activities open a phone-first schema-driven wizard without 
   assert.doesNotMatch(wizard, /Schema \{|Response contract|governed reference|server binding/i);
 });
 
+test('editable work-pack context resolves minimal predictions without changing protected records or save semantics', () => {
+  assert.match(wizard, /import \{ apiRequest \} from '@\/lib\/api'/);
+  assert.equal(
+    [...wizard.matchAll(/apiRequest<[^>]+>\('\/api\/trade-address-suggestions'/g)].length,
+    2,
+  );
+  assert.doesNotMatch(wizard, /publicApiRequest|\/api\/address-suggestions/);
+  assert.match(wizard, /type AddressPrediction = \{ id: string; label: string; provider: string \}/);
+  assert.match(wizard, /query\.length < 3/);
+  assert.match(wizard, /\}, 280\)/);
+  assert.match(wizard, /controller\.abort\(\)/);
+  assert.match(wizard, /protectedCustomer \|\| !context\?\.editable/);
+  assert.match(wizard, /JSON\.stringify\(\{ action: 'predict', query, sessionToken: addressPredictionSession\.token \}\)/);
+  assert.match(wizard, /const sessionToken = addressPredictionSession\.token/);
+  assert.match(wizard, /JSON\.stringify\(\{ action: 'resolve', provider: prediction\.provider, providerReference: prediction\.id, query, sessionToken \}\)/);
+  assert.match(wizard, /const selection = result\.selection/);
+  assert.match(wizard, /accessibilityLabel=\{`Use address \$\{prediction\.label\}`\}/);
+  assert.match(wizard, /predictions\.some\(\(prediction\) => prediction\.provider === 'google-places' \|\| prediction\.provider === 'google-geocoding'\) \? <Text style=\{styles\.addressAttribution\}>Google Maps<\/Text> : null/);
+  assert.match(wizard, /Crypto\.randomUUID\(\)/);
+  for (const field of ['addressLine1', 'addressLine2', 'suburb', 'state', 'postcode']) {
+    assert.match(wizard, new RegExp(`${field}: selection\\.`));
+  }
+  assert.match(wizard, /await onSave\(draft\)/);
+  assert.match(wizard, /Changing any site address field returns the address to manual review and removes its previous provider verification/);
+  assert.match(
+    jobScreen,
+    /sitePatch: \{[\s\S]*addressLine1: next\.addressLine1,[\s\S]*addressLine2: next\.addressLine2,[\s\S]*suburb: next\.suburb,[\s\S]*state: next\.state,[\s\S]*postcode: next\.postcode,[\s\S]*\}/,
+  );
+  assert.match(wizard, /Address suggestion selected\. Check the details before saving\./);
+  assert.match(wizard, /Enter the address manually/);
+  assert.doesNotMatch(wizard, /address suggestion[^\n]{0,80}verified/i);
+});
+
 test('the technician opens at the first incomplete section and Continue remains the primary path', () => {
   const functions = executableBundle(wizard, ['initialFieldWorkPackPage'], `
     const fieldWorkPackSections = (pack) => pack.definition.schema.sections;

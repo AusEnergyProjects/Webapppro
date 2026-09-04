@@ -20,6 +20,11 @@ const sections = [
     body: "Depending on the service, we may hold account and business details, authorised customer contacts, service addresses, job and appointment records, quotes, invoices, accounting status, support messages, audit events and files deliberately supplied for a job. We collect only the information needed for the selected workflow.",
   },
   {
+    title: "Address search",
+    body: "When you start typing an address in a form, the partial address is sent through Australian Energy Assessments to the configured address-search provider, currently Google Maps, so matching Australian addresses can be shown. The provider processes that search text to return matches under its own terms. Australian Energy Assessments does not send address searches to website analytics or add them to its customer or job records. Choosing a result fills the street, suburb, state and postcode fields; you can enter the address manually if no suitable match appears. The selected or manually entered address is stored only if you continue and submit the form, under the sharing choices shown in that workflow.",
+    googleAddressSearch: true,
+  },
+  {
     title: "How information is used",
     body: "Information is used to provide comparisons and assessments, operate authorised trade workflows, schedule work, prepare quotes and invoices, request evidence, send service messages, reconcile provider status, prevent misuse, meet legal obligations and support account owners. We do not sell personal information or sell household leads.",
   },
@@ -72,7 +77,7 @@ export default function PrivacyPage() {
       <SiteHeader active="direct-trade-dashboard" />
       <header className="trade-information-hero">
         <div>
-          <span>Effective 3 September 2026</span>
+          <span>Effective 4 September 2026</span>
           <h1>Privacy notice</h1>
           <p>
             This notice explains what Australian Energy Assessments collects,
@@ -113,6 +118,13 @@ export default function PrivacyPage() {
                   </p>
                   <AnalyticsPrivacyControl />
                 </>
+              ) : null}
+              {section.googleAddressSearch ? (
+                <p>
+                  Address suggestions are provided under the Google Maps
+                  Platform <a href="https://maps.google.com/help/terms_maps/" target="_blank" rel="noopener noreferrer">Terms of Service</a> and
+                  Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
+                </p>
               ) : null}
             </article>
           ))}

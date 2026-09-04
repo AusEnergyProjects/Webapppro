@@ -7,15 +7,19 @@ const path = require("node:path");
 const directory = __dirname;
 const component = fs.readFileSync(path.resolve(directory, "../src/components/GasComparator.tsx"), "utf8");
 const questionnaire = fs.readFileSync(path.resolve(directory, "../src/components/GasUpgradeQuestionnaire.tsx"), "utf8");
+const progress = fs.readFileSync(path.resolve(directory, "../src/components/ComparisonProgress.tsx"), "utf8");
+const chromeStyles = fs.readFileSync(path.resolve(directory, "../src/components/ComparatorChrome.module.css"), "utf8");
 const route = fs.readFileSync(path.resolve(directory, "../src/app/api/gas-plans/route.ts"), "utf8");
 const styles = fs.readFileSync(path.resolve(directory, "../src/app/globals.css"), "utf8");
 
 test("gas comparison sends an explicit seasonal profile and excludes conditional discounts by default", () => {
-  assert.match(component, /useState<GasUsageProfile>\("heating"\)/);
+  assert.match(component, /useState<GasUsageProfile>\("steady"\)/);
   assert.match(component, /useState\(false\)/);
   assert.match(component, /usageProfile, includeConditional/);
-  assert.match(component, /onUsageProfileChange=\{setUsageProfile\}/);
-  assert.match(questionnaire, /hasGasHeating \? "heating" : "steady"/);
+  assert.match(component, /onChange=\{\(\) => \{ setGasHeating\("yes"\); setUsageProfile\("heating"\); \}\}/);
+  assert.match(component, /onUsageProfileChange=\{updateUsageProfileFromQuestionnaire\}/);
+  assert.match(questionnaire, /alignHeatingSelection\(heatingSelection, initialUsageProfile\)/);
+  assert.match(questionnaire, /onUsageProfileChange\(aligned\.some\(\(item\) => item\.startsWith\("gas-"\)\) \? "heating" : "steady"\)/);
   assert.doesNotMatch(component, /name="gas-usage-profile"/);
 });
 
@@ -66,7 +70,20 @@ test("ambiguous gas postcodes require an explicit distribution network", () => {
   assert.match(component, /needsDistributor/);
   assert.match(component, /Choose the network from your bill/);
   assert.match(component, /plan\.distributors\.includes\(distributor\)/);
-  assert.match(component, /plans\.length > 0 && !needsDistributor/);
+  assert.match(component, /hasCurrentPricing && !needsDistributor/);
+});
+
+test("edited gas inputs cannot reuse stale plan costs or bypass repricing through network selection", () => {
+  assert.match(component, /const comparisonInputKey = useMemo\(\(\) => JSON\.stringify\(\{/);
+  assert.match(component, /postcode: postcode\.trim\(\)[\s\S]*usageMj: usageMj\.trim\(\)[\s\S]*usageProfile,[\s\S]*gasHeating,[\s\S]*includeConditional/);
+  assert.match(component, /const requestedInputKey = comparisonInputKey;/);
+  assert.match(component, /comparisonInputKeyRef\.current !== requestedInputKey/);
+  assert.match(component, /setPricedInputKey\(requestedInputKey\)/);
+  assert.match(component, /const hasCurrentPricing = Boolean\(plans\.length && pricedInputKey === comparisonInputKey\)/);
+  assert.match(component, /if \(!hasCurrentPricing\) \{[\s\S]*void compare\(value\);[\s\S]*return;/);
+  assert.match(component, /preferredDistributor && nextDistributors\.includes\(preferredDistributor\)/);
+  assert.match(component, /activeStep === 4 && hasCurrentPricing && !needsDistributor/);
+  assert.match(component, /Your answers changed\. Current plans will be checked again before updated costs are shown\./);
 });
 
 test("residents can compare up to three gas offers side by side", () => {
@@ -80,10 +97,11 @@ test("residents can compare up to three gas offers side by side", () => {
 });
 
 test("gas comparison keeps loading feedback at the action and presents Direct Trade as a button", () => {
-  assert.match(component, /progresswrap gas-action-progress/);
-  assert.match(component, /Comparing gas plans\.\.\./);
+  assert.match(component, /loading && <ComparisonWorkingState title="Comparing gas plans" message=\{status\} \/>/);
+  assert.match(component, /loading \? "Comparing gas plans\.\.\." : "Compare gas plans"/);
+  assert.match(progress, /className=\{chromeStyles\.working\} role="status" aria-live="polite" aria-busy="true"/);
   assert.match(questionnaire, /className="saving-direct-trade"/);
-  assert.match(styles, /\.gas-action-progress \{[^}]*max-width: 620px;/);
+  assert.match(chromeStyles, /\.working \{[\s\S]*margin: 0 0 20px;/);
   assert.match(styles, /\.saving-direct-trade \{[^}]*border: 1px solid #6ee7b7;[^}]*display: flex;[^}]*width: 100%;/);
 });
 

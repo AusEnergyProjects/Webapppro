@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
+  AustralianAddressLookup,
+  type AustralianAddressSuggestion,
+} from "./AustralianAddressLookup";
+import {
   PUBLIC_RENTAL_ASSESSMENT_CONSENT_NOTICE_VERSION,
   PUBLIC_RENTAL_ASSESSMENT_CONSENT_PURPOSE,
   PUBLIC_RENTAL_ASSESSMENT_DEFAULT_MODULES,
@@ -54,6 +58,8 @@ export function PublicRentalAssessmentRequestForm() {
   const [localities, setLocalities] = useState<AddressLocality[]>([]);
   const [lookupState, setLookupState] = useState<LookupState>("idle");
   const [lookupError, setLookupError] = useState("");
+  const selectedAddressLocality = useRef<{ postcode: string; suburb: string; state: string } | null>(null);
+  const [localityLookupRequest, setLocalityLookupRequest] = useState(0);
   const [requestedAssessmentModules, setRequestedAssessmentModules] = useState<string[]>([...PUBLIC_RENTAL_ASSESSMENT_DEFAULT_MODULES]);
   const [notes, setNotes] = useState("");
   const [authorityConfirmed, setAuthorityConfirmed] = useState(false);
@@ -91,17 +97,31 @@ export function PublicRentalAssessmentRequestForm() {
         return [{ suburb: nextSuburb, state }];
       }) : [];
       if (!next.length) throw new Error("Enter a Victorian postcode with a listed suburb.");
+      const pendingLocality = selectedAddressLocality.current;
+      if (pendingLocality?.postcode === postcode) {
+        const canonicalLocality = next.find((entry) =>
+          entry.state === pendingLocality.state
+          && entry.suburb.toLocaleLowerCase("en-AU") === pendingLocality.suburb.toLocaleLowerCase("en-AU"));
+        if (!canonicalLocality) {
+          throw new Error("The selected address suburb is not listed for this postcode.");
+        }
+        selectedAddressLocality.current = null;
+        setSuburb(canonicalLocality.suburb);
+      }
       setLocalities(next);
       setLookupState("ready");
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
+      if (selectedAddressLocality.current?.postcode === postcode) {
+        selectedAddressLocality.current = null;
+      }
       setLocalities([]);
       setSuburb("");
       setLookupState("error");
       setLookupError(error instanceof Error ? error.message : "Suburbs could not be loaded.");
     });
     return () => controller.abort();
-  }, [postcode]);
+  }, [localityLookupRequest, postcode]);
 
   function toggleAssessmentModule(moduleKey: string) {
     setRequestedAssessmentModules((current) => current.includes(moduleKey)
@@ -111,11 +131,34 @@ export function PublicRentalAssessmentRequestForm() {
 
   function changePostcode(value: string) {
     const nextPostcode = value.replace(/\D/g, "").slice(0, 4);
+    selectedAddressLocality.current = null;
     setPostcode(nextPostcode);
     setLocalities([]);
     setSuburb("");
     setLookupError("");
     setLookupState(/^\d{4}$/.test(nextPostcode) ? "loading" : "idle");
+  }
+
+  function selectAddress(selection: AustralianAddressSuggestion) {
+    const selectedState = selection.addressState.toUpperCase();
+    if (selectedState !== "VIC") {
+      setLookupState("error");
+      setLookupError("Choose a Victorian property address.");
+      return;
+    }
+    selectedAddressLocality.current = {
+      postcode: selection.postcode,
+      suburb: selection.suburb,
+      state: selectedState,
+    };
+    setStreetAddress(selection.addressLine1);
+    setUnitNumber(selection.addressLine2);
+    setPostcode(selection.postcode);
+    setSuburb("");
+    setLocalities([]);
+    setLookupState("loading");
+    setLookupError("");
+    setLocalityLookupRequest((current) => current + 1);
   }
 
   function changeConsent(accepted: boolean) {
@@ -212,7 +255,7 @@ export function PublicRentalAssessmentRequestForm() {
       <div className={styles.sectionHeading}><span>2</span><div><h2>Which Victorian property?</h2><p>Enter the exact assessment address. Do not add tenant names, access codes or identity documents here.</p></div></div>
       <div className={styles.addressGrid}>
         <label><span>Unit</span><input value={unitNumber} onChange={(event) => setUnitNumber(event.target.value)} autoComplete="address-line2" maxLength={40} /></label>
-        <label className={styles.streetField}><span>Street address *</span><input value={streetAddress} onChange={(event) => setStreetAddress(event.target.value)} autoComplete="address-line1" maxLength={140} required /></label>
+        <AustralianAddressLookup className={styles.streetField} label="Street address *" value={streetAddress} onChange={setStreetAddress} onSelect={selectAddress} required />
         <label><span>Postcode *</span><input value={postcode} onChange={(event) => changePostcode(event.target.value)} inputMode="numeric" autoComplete="postal-code" pattern="\d{4}" maxLength={4} required /></label>
         <label className={styles.suburbField}><span>Suburb *</span><select value={suburb ? JSON.stringify([suburb, "VIC"]) : ""} onChange={(event) => { const [nextSuburb] = JSON.parse(event.target.value || "[\"\"]"); setSuburb(nextSuburb); }} disabled={lookupState !== "ready"} required><option value="">{lookupState === "loading" ? "Loading Victorian suburbs..." : "Choose the listed suburb"}</option>{localities.map((locality) => <option value={localityValue(locality)} key={localityValue(locality)}>{locality.suburb}, VIC</option>)}</select>{lookupError && <small className={styles.errorText}>{lookupError}</small>}</label>
       </div>

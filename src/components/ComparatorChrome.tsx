@@ -1,6 +1,6 @@
 /* The electricity tab uses this exact brandmark asset. Keep the gas tab on the same source. */
 /* eslint-disable @next/next/no-img-element */
-import { ReactNode } from "react";
+import { ReactNode, type Ref } from "react";
 import Link from "next/link";
 import { ResponsiveSiteNav } from "@/components/ResponsiveSiteNav";
 import { PublicSiteSearch } from "@/components/PublicSiteSearch";
@@ -92,39 +92,14 @@ export function ComparatorHero({ title, children }: { title: string; children: R
   );
 }
 
-export type ComparisonJourneyStep = {
-  label: string;
-  description: string;
-};
-
-export function ComparisonJourney({ title, current, steps }: {
-  title: string;
-  current: number;
-  steps: readonly ComparisonJourneyStep[];
-}) {
-  const safeCurrent = Math.min(Math.max(1, current), steps.length);
-  return (
-    <section className="comparison-journey" aria-label={title}>
-      <div className="comparison-journey-heading">
-        <div><span>Simple guided comparison</span><h2>{title}</h2></div>
-        <strong>Step {safeCurrent} of {steps.length}</strong>
-      </div>
-      <ol>
-        {steps.map((step, index) => {
-          const stepNumber = index + 1;
-          const state = stepNumber < safeCurrent ? "complete" : stepNumber === safeCurrent ? "current" : "upcoming";
-          return <li className={state} key={step.label} aria-current={state === "current" ? "step" : undefined}><b>{stepNumber}</b><span><strong>{step.label}</strong><small>{step.description}</small></span></li>;
-        })}
-      </ol>
-      <div className="comparison-journey-track" role="progressbar" aria-label={`${title} progress`} aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={safeCurrent}><span style={{ width: `${safeCurrent / steps.length * 100}%` }} /></div>
-    </section>
-  );
+export function comparisonScrollBehavior(): ScrollBehavior {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
 }
 
-export function StepCard({ number, title, children }: { number: string; title: string; children: ReactNode }) {
+export function StepCard({ number, title, headingRef, children }: { number: string; title: string; headingRef?: Ref<HTMLHeadingElement>; children: ReactNode }) {
   return (
     <section className="card">
-      <h2>
+      <h2 ref={headingRef} tabIndex={-1}>
         <span className="stepnum">{number}</span>
         {title}
       </h2>

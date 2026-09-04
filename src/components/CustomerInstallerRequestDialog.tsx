@@ -8,6 +8,10 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  AustralianAddressLookup,
+  type AustralianAddressSuggestion,
+} from "./AustralianAddressLookup";
 import styles from "./CustomerInstallerRequestDialog.module.css";
 
 export type CustomerInstallerRequestContact = {
@@ -192,6 +196,25 @@ function OpenCustomerInstallerRequestDialog({
       setInvalidField("");
       setError("");
     }
+  };
+
+  const selectAddress = (selection: AustralianAddressSuggestion) => {
+    if (
+      selection.postcode !== projectPostcode
+      || selection.addressState !== projectState
+    ) {
+      setInvalidField("addressLine1");
+      setError(`Choose an address in ${projectState} ${projectPostcode}, or update the project location first.`);
+      return;
+    }
+    setContact((current) => ({
+      ...current,
+      addressLine1: selection.addressLine1,
+      addressLine2: selection.addressLine2,
+      suburb: selection.suburb,
+    }));
+    setInvalidField("");
+    setError("");
   };
 
   const validate = () => {
@@ -404,31 +427,18 @@ function OpenCustomerInstallerRequestDialog({
                       }
                     />
                   </label>
-                  <label className={styles.fullWidth}>
-                    <span>Service street address</span>
-                    <input
-                      ref={addressLine1Ref}
-                      aria-describedby={
-                        invalidField === "addressLine1"
-                          ? formErrorId
-                          : undefined
-                      }
-                      aria-errormessage={
-                        invalidField === "addressLine1"
-                          ? formErrorId
-                          : undefined
-                      }
-                      aria-invalid={invalidField === "addressLine1"}
-                      autoComplete="address-line1"
-                      maxLength={120}
-                      required
-                      type="text"
-                      value={contact.addressLine1}
-                      onChange={(event) =>
-                        updateContact("addressLine1", event.target.value)
-                      }
-                    />
-                  </label>
+                  <AustralianAddressLookup
+                    className={styles.fullWidth}
+                    label="Service street address"
+                    inputRef={addressLine1Ref}
+                    describedBy={invalidField === "addressLine1" ? formErrorId : undefined}
+                    invalid={invalidField === "addressLine1"}
+                    maxLength={120}
+                    required
+                    value={contact.addressLine1}
+                    onChange={(value) => updateContact("addressLine1", value)}
+                    onSelect={selectAddress}
+                  />
                   <label className={styles.fullWidth}>
                     <span>Unit, building or address detail</span>
                     <small>Optional</small>

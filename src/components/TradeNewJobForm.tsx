@@ -3,6 +3,10 @@
 import type { User } from "firebase/auth";
 import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { SearchableLookup, type SearchableLookupOption } from "./SearchableLookup";
+import {
+  AustralianAddressLookup,
+  type AustralianAddressSuggestion,
+} from "./AustralianAddressLookup";
 import { TradeScheduleWorkspace } from "./TradeScheduleWorkspace";
 import {
   nextAppointmentSlot,
@@ -52,19 +56,6 @@ type AddressValue = {
   formattedAddress: string;
   selectionProof: string;
 };
-type AddressSuggestion = {
-  id: string;
-  label: string;
-  addressLine1: string;
-  addressLine2: string;
-  suburb: string;
-  addressState: string;
-  postcode: string;
-  provider?: string;
-  providerReference?: string;
-  formattedAddress?: string;
-  selectionProof?: string;
-};
 const serviceOptions = [
   ...ENERGY_SERVICE_OPTIONS,
   ["rental-inspection", "Rental inspection"],
@@ -110,12 +101,7 @@ function AddressFields({
   value: AddressValue;
   onChange: (value: AddressValue) => void;
 }) {
-  const id = useId();
-  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [configured, setConfigured] = useState<boolean | null>(null);
-  const [providerMessage, setProviderMessage] = useState("");
-  const suppressLookup = useRef(false);
+  const getAuthorization = useCallback(() => user.getIdToken(), [user]);
 
   function manual(next: Partial<AddressValue>) {
     onChange({
@@ -129,32 +115,7 @@ function AddressFields({
     });
   }
 
-  useEffect(() => {
-    if (suppressLookup.current) {
-      suppressLookup.current = false;
-      return;
-    }
-    if (value.addressLine1.trim().length < 3 || value.entryMode === "provider_selected") return;
-    let active = true;
-    const timer = window.setTimeout(() => {
-      void user.getIdToken().then((token) => fetch(`/api/trade-address-suggestions?query=${encodeURIComponent(value.addressLine1)}`, {
-        headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
-      })).then(async (response) => {
-        const result = await response.json() as { configured?: boolean; suggestions?: AddressSuggestion[]; error?: string };
-        if (!response.ok && !result.error) throw new Error("Address search failed");
-        if (active) {
-          setConfigured(Boolean(result.configured)); setProviderMessage(result.error || "");
-          setSuggestions(result.suggestions || []); setActiveIndex(0);
-        }
-      }).catch(() => {
-        if (active) { setProviderMessage("Address suggestions are temporarily unavailable. Enter the address manually."); setSuggestions([]); }
-      });
-    }, 300);
-    return () => { active = false; window.clearTimeout(timer); };
-  }, [user, value.addressLine1, value.entryMode]);
-
-  function choose(item: AddressSuggestion) {
-    suppressLookup.current = true;
+  function choose(item: AustralianAddressSuggestion) {
     onChange({
       addressLine1: item.addressLine1,
       addressLine2: item.addressLine2,
@@ -167,8 +128,6 @@ function AddressFields({
       formattedAddress: item.formattedAddress || item.label,
       selectionProof: item.selectionProof || "",
     });
-    setProviderMessage("");
-    setSuggestions([]);
   }
 
   return <div className="crm-address-fields wide">
@@ -177,12 +136,21 @@ function AddressFields({
     <input type="hidden" name="addressProviderReference" value={value.providerReference} />
     <input type="hidden" name="addressFormatted" value={value.formattedAddress} />
     <input type="hidden" name="addressSelectionProof" value={value.selectionProof} />
-    <label className="wide"><span>Street address</span><input name="addressLine1" required maxLength={140} autoComplete="street-address" value={value.addressLine1} placeholder="Start typing an Australian address" role="combobox" aria-autocomplete="list" aria-expanded={suggestions.length > 0} aria-controls={`${id}-addresses`} aria-activedescendant={suggestions[activeIndex] ? `${id}-address-${activeIndex}` : undefined} onChange={(event) => { const next = event.target.value; manual({ addressLine1: next }); setProviderMessage(""); if (next.trim().length < 3) setSuggestions([]); }} onKeyDown={(event) => { if (event.key === "Escape") setSuggestions([]); if (!suggestions.length) return; if (event.key === "ArrowDown") { event.preventDefault(); setActiveIndex((current) => Math.min(current + 1, suggestions.length - 1)); } if (event.key === "ArrowUp") { event.preventDefault(); setActiveIndex((current) => Math.max(current - 1, 0)); } if (event.key === "Enter") { event.preventDefault(); choose(suggestions[activeIndex]); } }} />
-      {suggestions.length > 0 && <div id={`${id}-addresses`} className="crm-address-options" role="listbox">{suggestions.map((item, index) => <button type="button" role="option" aria-selected={activeIndex === index} id={`${id}-address-${index}`} key={item.id} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(item)}>{item.label}</button>)}</div>}
-      <small className={value.entryMode === "provider_selected" ? "verified" : ""}>{value.entryMode === "provider_selected"
-        ? "Address selected from the configured provider. Editing any address field returns it to manual review."
-        : providerMessage || (configured === false ? "Address lookup is not configured. Manual addresses are saved for compliance review." : "Choose a suggestion to lock the suburb, state and postcode together.")}</small>
-    </label>
+    <AustralianAddressLookup
+      className="wide"
+      name="addressLine1"
+      required
+      value={value.addressLine1}
+      endpoint="/api/trade-address-suggestions"
+      getAuthorization={getAuthorization}
+      onChange={(addressLine1) => manual({ addressLine1 })}
+      onSelect={choose}
+    />
+    <small className={`wide${value.entryMode === "provider_selected" ? " verified" : ""}`}>
+      {value.entryMode === "provider_selected"
+        ? "Address selected from the lookup. Editing any address field returns it to manual review."
+        : "Manual addresses are saved for compliance review."}
+    </small>
     <label className="wide"><span>Unit, level or building, optional</span><input name="addressLine2" maxLength={140} value={value.addressLine2} onChange={(event) => manual({ addressLine2: event.target.value })} /></label>
     <label><span>Suburb</span><input name="suburb" required maxLength={80} autoComplete="address-level2" value={value.suburb} onChange={(event) => manual({ suburb: event.target.value })} /></label>
     <label><span>State</span><select name="addressState" required autoComplete="address-level1" value={value.addressState} onChange={(event) => manual({ addressState: event.target.value })}><option value="">Select state</option>{["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"].map((state) => <option key={state}>{state}</option>)}</select></label>

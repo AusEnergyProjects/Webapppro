@@ -4,6 +4,7 @@ import fs from "node:fs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const dialog = read("../src/components/CustomerInstallerRequestDialog.tsx");
+const addressLookup = read("../src/components/AustralianAddressLookup.tsx");
 const styles = read(
   "../src/components/CustomerInstallerRequestDialog.module.css",
 );
@@ -61,7 +62,8 @@ test("installer request dialog labels and validates all profile fields", () => {
   assert.match(dialog, /Phone number/);
   assert.match(dialog, /autoComplete="tel"/);
   assert.match(dialog, /Service street address/);
-  assert.match(dialog, /autoComplete="address-line1"/);
+  assert.match(dialog, /<AustralianAddressLookup/);
+  assert.match(addressLookup, /autoComplete="address-line1"/);
   assert.match(dialog, /Unit, building or address detail/);
   assert.match(dialog, /autoComplete="address-line2"/);
   assert.match(dialog, /Suburb/);
@@ -73,8 +75,21 @@ test("installer request dialog labels and validates all profile fields", () => {
   assert.match(dialog, /readOnly/);
   assert.match(dialog, /phonePattern\.test/);
   assert.match(dialog, /aria-invalid=\{invalidField === "phone"\}/);
-  assert.match(dialog, /aria-invalid=\{invalidField === "addressLine1"\}/);
+  assert.match(dialog, /invalid=\{invalidField === "addressLine1"\}/);
+  assert.match(addressLookup, /aria-invalid=\{invalid\}/);
   assert.match(dialog, /aria-invalid=\{invalidField === "suburb"\}/);
+  assert.match(
+    dialog,
+    /addressLine1: selection\.addressLine1,\s*addressLine2: selection\.addressLine2,\s*suburb: selection\.suburb/,
+  );
+  assert.doesNotMatch(
+    dialog,
+    /addressLine2: selection\.addressLine2 \|\| current\.addressLine2/,
+  );
+  assert.match(
+    dialog,
+    /<AustralianAddressLookup[\s\S]*?label="Service street address"[\s\S]*?maxLength=\{120\}/,
+  );
 });
 
 test("the complete safe plan and current photos need one explicit confirmation", () => {
@@ -204,7 +219,7 @@ test("installer request dialog remains compact and touch friendly", () => {
     styles,
     /grid-template-columns: minmax\(5\.5rem, 0\.65fr\) minmax\(0, 1\.35fr\)/,
   );
-  for (const field of ["phone", "addressLine1", "suburb"]) {
+  for (const field of ["phone", "suburb"]) {
     assert.match(
       dialog,
       new RegExp(
@@ -212,4 +227,7 @@ test("installer request dialog remains compact and touch friendly", () => {
       ),
     );
   }
+  assert.match(dialog, /describedBy=\{invalidField === "addressLine1" \? formErrorId : undefined\}/);
+  assert.match(addressLookup, /aria-describedby=\{describedBy\}/);
+  assert.match(addressLookup, /aria-errormessage=\{invalid \? describedBy : undefined\}/);
 });

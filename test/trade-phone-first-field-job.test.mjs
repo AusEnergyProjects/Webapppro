@@ -9,6 +9,8 @@ const calendarSync = read("../src/lib/trade-calendar-sync-server.ts");
 const fieldRoute = read("../src/app/api/trade-field-work/route.ts");
 const syncRoute = read("../src/app/api/trade-team/sync/route.ts");
 const addressRoute = read("../src/app/api/trade-address-suggestions/route.ts");
+const addressProvider = read("../src/lib/address-suggestions-server.ts");
+const addressLookup = read("../src/components/AustralianAddressLookup.tsx");
 const dedup = read("../src/lib/trade-customer-dedup-server.ts");
 const newJob = read("../src/components/TradeNewJobForm.tsx");
 const workspace = read("../src/components/InstallerCrmWorkspace.tsx");
@@ -51,12 +53,17 @@ test("new job uses structured sites, provider-neutral suggestions and manual fal
   assert.match(newJob, /Existing service site/);
   assert.match(newJob, /Add a new service site/);
   for (const field of ["addressLine1", "addressLine2", "suburb", "addressState", "postcode"]) assert.match(newJob, new RegExp(`name="${field}"`));
-  assert.match(addressRoute, /TLINK_ADDRESS_AUTOCOMPLETE_ENDPOINT/);
-  assert.match(addressRoute, /TLINK_ADDRESS_AUTOCOMPLETE_TOKEN/);
+  assert.match(addressRoute, /fetchAustralianAddressSuggestions/);
+  assert.match(addressProvider, /TLINK_ADDRESS_AUTOCOMPLETE_ENDPOINT/);
+  assert.match(addressProvider, /TLINK_ADDRESS_AUTOCOMPLETE_TOKEN/);
+  assert.match(addressProvider, /provider: google \? "google-geocoding" : hostname/);
   assert.match(addressRoute, /configured: false, suggestions: \[\]/);
-  assert.match(newJob, /Enter the address manually/);
-  assert.match(newJob, /role="combobox"/);
-  assert.match(newJob, /role="listbox"/);
+  assert.match(newJob, /<AustralianAddressLookup/);
+  assert.match(addressLookup, /role="combobox"/);
+  assert.match(addressLookup, /aria-autocomplete="list"/);
+  assert.match(addressLookup, /role="listbox"/);
+  assert.match(addressLookup, /role="option"/);
+  assert.match(addressLookup, /Enter the address manually/);
 });
 
 test("guided intake removes manual titles and carries scheduling into the same flow", () => {

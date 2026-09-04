@@ -10,6 +10,10 @@ import {
 } from "react";
 import { ENERGY_SERVICE_CATALOGUE } from "@/lib/energy-service-catalogue.mjs";
 import {
+  AustralianAddressLookup,
+  type AustralianAddressSuggestion,
+} from "./AustralianAddressLookup";
+import {
   QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_ENQUIRY_KIND,
@@ -54,6 +58,8 @@ export function QuickUpgradeEnquiryDialog({ onClose }: { onClose: () => void }) 
   const [locality, setLocality] = useState<AddressLocality | null>(null);
   const [lookupState, setLookupState] = useState<LookupState>("idle");
   const [lookupError, setLookupError] = useState("");
+  const selectedAddressLocality = useRef<{ postcode: string; suburb: string; state: string } | null>(null);
+  const [localityLookupRequest, setLocalityLookupRequest] = useState(0);
   const [streetAddress, setStreetAddress] = useState("");
   const [unitNumber, setUnitNumber] = useState("");
   const [email, setEmail] = useState("");
@@ -125,17 +131,31 @@ export function QuickUpgradeEnquiryDialog({ onClose }: { onClose: () => void }) 
         return [{ suburb, state }];
       }) : [];
       if (!next.length) throw new Error("No matching suburbs were found for this postcode.");
+      const pendingLocality = selectedAddressLocality.current;
+      if (pendingLocality?.postcode === postcode) {
+        const canonicalLocality = next.find((entry) =>
+          entry.state === pendingLocality.state
+          && entry.suburb.toLocaleLowerCase("en-AU") === pendingLocality.suburb.toLocaleLowerCase("en-AU"));
+        if (!canonicalLocality) {
+          throw new Error("The selected address suburb is not listed for this postcode.");
+        }
+        selectedAddressLocality.current = null;
+        setLocality(canonicalLocality);
+      }
       setLocalities(next);
       setLookupState("ready");
     }).catch((caught: unknown) => {
       if (controller.signal.aborted) return;
+      if (selectedAddressLocality.current?.postcode === postcode) {
+        selectedAddressLocality.current = null;
+      }
       setLocalities([]);
       setLocality(null);
       setLookupState("error");
       setLookupError(caught instanceof Error ? caught.message : "Suburbs could not be loaded.");
     });
     return () => controller.abort();
-  }, [postcode]);
+  }, [localityLookupRequest, postcode]);
 
   const dismissible = submitState.kind !== "sending";
 
@@ -185,11 +205,28 @@ export function QuickUpgradeEnquiryDialog({ onClose }: { onClose: () => void }) 
 
   function changePostcode(value: string) {
     const nextPostcode = value.replace(/\D/g, "").slice(0, 4);
+    selectedAddressLocality.current = null;
     setPostcode(nextPostcode);
     setLocalities([]);
     setLocality(null);
     setLookupError("");
     setLookupState(/^\d{4}$/.test(nextPostcode) ? "loading" : "idle");
+  }
+
+  function selectAddress(selection: AustralianAddressSuggestion) {
+    selectedAddressLocality.current = {
+      postcode: selection.postcode,
+      suburb: selection.suburb,
+      state: selection.addressState.toUpperCase(),
+    };
+    setStreetAddress(selection.addressLine1);
+    setUnitNumber(selection.addressLine2);
+    setPostcode(selection.postcode);
+    setLocalities([]);
+    setLocality(null);
+    setLookupState("loading");
+    setLookupError("");
+    setLocalityLookupRequest((current) => current + 1);
   }
 
   function changeLocality(value: string) {
@@ -347,7 +384,7 @@ export function QuickUpgradeEnquiryDialog({ onClose }: { onClose: () => void }) 
                   <label><span>Postcode *</span><input ref={postcodeRef} value={postcode} onChange={(event) => changePostcode(event.target.value)} inputMode="numeric" autoComplete="postal-code" pattern="\d{4}" maxLength={4} required /></label>
                   <label className={styles.suburb}><span>Suburb *</span><select value={locality ? localityValue(locality) : ""} onChange={(event) => changeLocality(event.target.value)} disabled={lookupState !== "ready"} required><option value="">{lookupState === "loading" ? "Loading suburbs..." : "Choose the listed suburb"}</option>{localities.map((entry) => <option value={localityValue(entry)} key={localityValue(entry)}>{entry.suburb}, {entry.state}</option>)}</select>{lookupError ? <small className={styles.fieldError}>{lookupError}</small> : null}</label>
                   <label><span>Unit</span><input value={unitNumber} onChange={(event) => setUnitNumber(event.target.value)} autoComplete="address-line2" maxLength={40} /></label>
-                  <label className={styles.street}><span>Street address *</span><input value={streetAddress} onChange={(event) => setStreetAddress(event.target.value)} autoComplete="address-line1" maxLength={140} required /></label>
+                  <AustralianAddressLookup className={styles.street} label="Street address *" value={streetAddress} onChange={setStreetAddress} onSelect={selectAddress} required />
                 </div>
 
                 <div className={styles.stepHeading}><h3>Your contact details</h3><p>Australian Energy Assessments needs these details to manage the request and help if something gets stuck. You choose which contact details matching businesses can see.</p></div>

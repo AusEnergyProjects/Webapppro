@@ -1,0 +1,91 @@
+.lookup {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  position: relative;
+}
+
+.lookup > span:first-child {
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.control {
+  display: block;
+  position: relative;
+}
+
+.control > input {
+  width: 100%;
+}
+
+.spinner {
+  animation: lookupPulse 1s ease-in-out infinite;
+  background: #20cbb8;
+  border-radius: 50%;
+  height: 9px;
+  position: absolute;
+  right: 13px;
+  top: calc(50% - 4px);
+  width: 9px;
+}
+
+.options {
+  background: #fff;
+  border: 1px solid #9bc8ba;
+  border-radius: 11px;
+  box-shadow: 0 16px 34px rgba(0, 12, 24, .28);
+  display: grid;
+  left: 0;
+  max-height: 270px;
+  overflow: auto;
+  padding: 5px;
+  position: absolute;
+  right: 0;
+  top: calc(100% - 22px);
+  z-index: 80;
+}
+
+.options button {
+  background: #fff;
+  border: 0;
+  border-radius: 8px;
+  color: #092f34;
+  cursor: pointer;
+  font: inherit;
+  font-size: .72rem;
+  padding: 11px 12px;
+  text-align: left;
+}
+
+.options button:hover,
+.options button[aria-selected="true"] {
+  background: #e9f8f2;
+  color: #064f43;
+}
+
+.attribution {
+  color: #5e5e5e;
+  font-family: Roboto, Arial, sans-serif;
+  font-size: .75rem;
+  font-weight: 400;
+  opacity: 1;
+  padding: 6px 12px 4px;
+  white-space: nowrap;
+}
+
+.help {
+  color: inherit;
+  font-size: .61rem;
+  line-height: 1.45;
+  opacity: .78;
+}
+
+@keyframes lookupPulse {
+  0%, 100% { opacity: .55; transform: scale(.86); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}

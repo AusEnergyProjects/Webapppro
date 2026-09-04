@@ -185,6 +185,9 @@ test("the public rental form defaults minimum standards on and keeps every scope
   assert.match(component, /function changeConsent\(accepted: boolean\)/);
   assert.match(component, /consentGrantedAt\.current = new Date\(\)\.toISOString\(\)/);
   assert.match(component, /onChange=\{\(event\) => changeConsent\(event\.target\.checked\)\}/);
+  assert.match(component, /entry\.suburb\.toLocaleLowerCase\("en-AU"\) === pendingLocality\.suburb\.toLocaleLowerCase\("en-AU"\)/);
+  assert.match(component, /setSuburb\(canonicalLocality\.suburb\)/);
+  assert.match(component, /setUnitNumber\(selection\.addressLine2\)/);
   assert.match(fieldWorkflow, /fresh device-reported GPS position within 100 metres is required for every assessment photo/i);
   assert.match(fieldWorkflow, /records the time, coordinates and accuracy in the issued report/i);
   assert.match(component, /not booked or scheduled/i);

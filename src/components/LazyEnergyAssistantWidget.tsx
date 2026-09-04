@@ -15,11 +15,7 @@ function loadEnergyAssistant() {
 const DeferredEnergyAssistantWidget = lazy(loadEnergyAssistant);
 
 function hiddenRoute(pathname: string) {
-  return pathname === "/plan/print"
-    || pathname.includes("/print/")
-    || pathname.endsWith("/print")
-    || pathname.includes("/pdf/")
-    || pathname.endsWith("/pdf");
+  return /\/(?:print|pdf)(?:\/|$)/.test(pathname);
 }
 
 function storeTucked(tucked: boolean) {

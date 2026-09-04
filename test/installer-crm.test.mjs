@@ -402,10 +402,11 @@ test("staff checklist controls use the hardened scoped CRM task actions", () => 
   assert.match(route, /if \(!identity\.access\.isOwner\) await assignedJob\(identity\.access, String\(task\.work_order_id\)\)/);
 });
 
-test("staff who can create jobs can use the same authenticated address suggestions", () => {
-  assert.match(newJob, /\/api\/trade-address-suggestions\?query=/);
+test("reviewed installer team members use the same authenticated address suggestions", () => {
+  assert.match(newJob, /endpoint="\/api\/trade-address-suggestions"/);
+  assert.match(newJob, /getAuthorization=\{getAuthorization\}/);
   assert.match(addressSuggestionsRoute, /requireInstallerTeamAccess\(request\)/);
-  assert.match(addressSuggestionsRoute, /if \(!canCreateJobs\(access\)\) throw new Error\("ADDRESS_ACCESS_REQUIRED"\)/);
+  assert.doesNotMatch(addressSuggestionsRoute, /canCreateJobs|ADDRESS_ACCESS_REQUIRED/);
 });
 
 test("heavy workspaces load dynamically and profile readiness does not wait for opportunities", () => {

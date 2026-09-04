@@ -23,6 +23,8 @@ test("catalogue exposes horizontal navigation and wholesaler profiles", () => {
   const manager = read("src/components/SupplierLocationManager.tsx");
   const locations = read("src/app/api/supplier-locations/route.ts");
   assert.match(manager, /Dispatch and warehouse locations/); assert.match(manager, /Location saved to your installer-facing TLink profile/);
+  assert.match(manager, /addressLine1: \[selection\.addressLine2, selection\.addressLine1\]\.filter\(Boolean\)\.join\(", "\)/);
+  assert.match(manager, /addressLine1: form\.get\("addressLine1"\)/);
   assert.match(locations, /requireVerifiedTradeAccess/); assert.match(locations, /partnerTypes: \["supplier"\]/);
   assert.match(locations, /head_office/); assert.match(locations, /warehouse/); assert.match(locations, /dispatch/); assert.match(locations, /showroom/);
 });

@@ -1096,6 +1096,24 @@ async function openAssignedRuntimeWorkPack(database) {
   return { ready, projection };
 }
 
+function markRuntimeSiteProviderSelected(sqlite) {
+  sqlite.prepare(`UPDATE trade_crm_service_sites
+      SET address_entry_mode = 'provider_selected',
+        address_provider = 'google-places',
+        address_provider_reference = 'places/runtime-site',
+        address_formatted = '1 Runtime Way, Brisbane QLD 4000, Australia',
+        address_verified_at = '2026-08-15T00:00:01.500Z'
+      WHERE id = 'site-runtime'`)
+    .run();
+}
+
+function runtimeSiteAddressRecord(sqlite) {
+  return { ...sqlite.prepare(`SELECT address_line_1, address_line_2, suburb,
+      address_state, postcode, address_entry_mode, address_provider,
+      address_provider_reference, address_formatted, address_verified_at
+    FROM trade_crm_service_sites WHERE id = 'site-runtime'`).get() };
+}
+
 async function signaturePacket(database, projection, {
   workerUid = WORKER_UID,
   memberId = MEMBER_ID,
@@ -1930,6 +1948,73 @@ test("source-backed not-applicable dependencies reject forged product, scenario 
     }),
     (error) => error?.code === "WORK_PACK_CALCULATOR_DEPENDENCY_INVALID",
   );
+});
+
+test("work-pack address corrections persist as manual pending review without stale provider provenance", async () => {
+  const { sqlite, database } = await seededRuntime();
+  const { projection } = await openAssignedRuntimeWorkPack(database);
+  markRuntimeSiteProviderSelected(sqlite);
+
+  const result = await server.updateAssignedCreditexActivityWorkPackCustomerContext(database, {
+    ...scope(),
+    caseInstanceId: projection.instance.id,
+    expectedResponseSha256: projection.instance.responseSha256,
+    customerContextBinding: projection.customerContextBinding,
+    sitePatch: {
+      addressLine1: "2 Corrected Way",
+      addressLine2: "Unit 4",
+      suburb: "Brisbane",
+      state: "QLD",
+      postcode: "4000",
+    },
+    idempotency: idempotency("customer-address-correction-runtime"),
+    now: "2026-08-15T00:00:03.000Z",
+  });
+
+  assert.equal(result.status, "applied");
+  assert.deepEqual(runtimeSiteAddressRecord(sqlite), {
+    address_line_1: "2 Corrected Way",
+    address_line_2: "Unit 4",
+    suburb: "Brisbane",
+    address_state: "QLD",
+    postcode: "4000",
+    address_entry_mode: "manual_pending_review",
+    address_provider: "",
+    address_provider_reference: "",
+    address_formatted: "",
+    address_verified_at: "",
+  });
+});
+
+test("work-pack name and contact corrections retain unchanged site provenance", async () => {
+  const { sqlite, database } = await seededRuntime();
+  const { projection } = await openAssignedRuntimeWorkPack(database);
+  markRuntimeSiteProviderSelected(sqlite);
+
+  const result = await server.updateAssignedCreditexActivityWorkPackCustomerContext(database, {
+    ...scope(),
+    caseInstanceId: projection.instance.id,
+    expectedResponseSha256: projection.instance.responseSha256,
+    customerContextBinding: projection.customerContextBinding,
+    customerPatch: { firstName: "Corrected" },
+    contactPatch: { phone: "0499999999" },
+    idempotency: idempotency("customer-contact-correction-runtime"),
+    now: "2026-08-15T00:00:03.000Z",
+  });
+
+  assert.equal(result.status, "applied");
+  assert.deepEqual(runtimeSiteAddressRecord(sqlite), {
+    address_line_1: "1 Runtime Way",
+    address_line_2: "",
+    suburb: "Brisbane",
+    address_state: "QLD",
+    postcode: "4000",
+    address_entry_mode: "provider_selected",
+    address_provider: "google-places",
+    address_provider_reference: "places/runtime-site",
+    address_formatted: "1 Runtime Way, Brisbane QLD 4000, Australia",
+    address_verified_at: "2026-08-15T00:00:01.500Z",
+  });
 });
 
 test("customer, site and contact updates roll back atomically when customer CAS loses", async () => {

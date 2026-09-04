@@ -72,6 +72,17 @@ test("repeat sections, references, dependencies and customer corrections stay in
   assert.doesNotMatch(panel, /estimate(?:d)? certificate|calculation estimate/i);
   assert.match(panel, /update_customer_context/);
   assert.match(panel, /Existing signatures were invalidated by the server/);
+  assert.match(panel, /Changing any site address field returns the address to manual review and removes its previous provider verification/);
+  assert.match(
+    panel,
+    /sitePatch: \{[\s\S]*addressLine1: next\.addressLine1,[\s\S]*addressLine2: next\.addressLine2,[\s\S]*suburb: next\.suburb,[\s\S]*state: next\.state,[\s\S]*postcode: next\.postcode,[\s\S]*\}/,
+  );
+  assert.match(panel, /import \{[\s\S]*AustralianAddressLookup,[\s\S]*type AustralianAddressSuggestion,[\s\S]*\} from "\.\/AustralianAddressLookup"/);
+  assert.match(panel, /<AustralianAddressLookup className=\{styles\.wide\} label="Address"[\s\S]*onSelect=\{selectAddress\}/);
+  assert.match(
+    panel,
+    /setDraft\(\(current\) => \(\{[\s\S]*addressLine1: selection\.addressLine1,[\s\S]*addressLine2: selection\.addressLine2,[\s\S]*suburb: selection\.suburb,[\s\S]*state: selection\.addressState,[\s\S]*postcode: selection\.postcode,[\s\S]*\}\)\)/,
+  );
 });
 
 test("browser evidence uses exact server custody before linking to the governed response", () => {

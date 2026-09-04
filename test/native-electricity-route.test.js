@@ -27,7 +27,9 @@ test("native results use the same-origin plan route and strict typed estimator",
   assert.match(component, /fetch\(`\/api\/electricity-plans\?postcode=/);
   assert.match(component, /estimateNativePlan\(plan/);
   assert.match(component, /parseNem12\(await file\.text\(\)\)/);
-  assert.match(component, /allocateNem12Registers\(meter\.registers, registerRoles\)/);
+  assert.match(component, /const usingMeter = usageEvidence === "meter" && meter;/);
+  assert.match(component, /allocateNem12Registers\(usingMeter\.registers, registerRoles\)/);
+  assert.match(component, /const annualUsageNumber = usingMeter \? usageOverride\?\.value \|\| automaticMeterAnnualKwh : manualAnnualised\.ok/);
   assert.match(component, /Confirm whether every meter register is general usage or controlled load/);
   assert.match(component, /demandReady,/);
   assert.match(component, /Supported demand plans use peaks measured in the uploaded general-usage register/);
@@ -55,9 +57,25 @@ test("native input flow preserves location, privacy and reasoned override parity
   assert.match(component, /The measured interval proportions were retained and scaled/);
 });
 
+test("edited electricity inputs cannot publish stale plan costs after an in-flight request", () => {
+  assert.match(component, /const comparisonInputKey = useMemo\(\(\) => JSON\.stringify\(\{/);
+  assert.match(component, /postcode: postcode\.trim\(\)[\s\S]*nmi: cleanNmi\(nmi\)[\s\S]*customerType,[\s\S]*usageEvidence,[\s\S]*manualUsageKwh: manualUsageKwh\.trim\(\)/);
+  assert.match(component, /meterRevision,[\s\S]*registerRoles: Object\.entries\(registerRoles\)\.sort/);
+  assert.match(component, /setupMode,[\s\S]*solarKw: solarKw\.trim\(\)[\s\S]*batteryKwh: batteryKwh\.trim\(\)[\s\S]*hasEv,[\s\S]*assumeConditional,[\s\S]*distributor/);
+  assert.match(component, /setMeterRevision\(\(current\) => current \+ 1\);[\s\S]*setUsageEvidence\("meter"\)/);
+  assert.match(component, /function removeMeterData\(\) \{[\s\S]*setMeterRevision\(\(current\) => current \+ 1\);[\s\S]*setMeter\(null\)/);
+  assert.match(component, /const requestedInputKey = comparisonInputKey;/);
+  assert.match(component, /useLayoutEffect\(\(\) => \{\s*comparisonInputKeyRef\.current = comparisonInputKey;\s*\}, \[comparisonInputKey\]\);/);
+  const responseRead = component.indexOf("const data = await response.json()");
+  const staleGuard = component.indexOf("comparisonInputKeyRef.current !== requestedInputKey");
+  const publishBundle = component.indexOf("setBundle(data)");
+  assert.ok(responseRead > 0 && staleGuard > responseRead && publishBundle > staleGuard);
+  assert.match(component, /Your answers changed while plans were being checked\. Compare again to use the latest answers\./);
+});
+
 test("native usage prioritises meter evidence and keeps the dated bill fallback optional", () => {
   assert.match(component, /Use your smart-meter data/);
-  assert.match(component, /I only have an electricity bill/);
+  assert.match(component, /title: "An electricity bill"/);
   assert.match(component, /One recent bill/);
   assert.match(component, /Annual total/);
   assert.match(component, /annualiseElectricityUsage/);

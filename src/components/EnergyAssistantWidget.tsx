@@ -54,6 +54,10 @@ import { publicPlanQuoteQuestionsForSnapshot } from "@/lib/public-plan-quote-pre
 import type { DocumentConversationMessage } from "@/lib/energy-assistant-document-client";
 import { buildEnergyAssistantAskRequestBody } from "@/lib/energy-assistant-request-budget";
 import { normalizeEnergyAssistantBrandText } from "@/lib/energy-assistant-brand";
+import {
+  AustralianAddressLookup,
+  type AustralianAddressSuggestion,
+} from "./AustralianAddressLookup";
 import styles from "./EnergyAssistantWidget.module.css";
 
 const EnergyAssistantDocumentTools = lazy(() => import("./EnergyAssistantDocumentTools"));
@@ -1036,6 +1040,8 @@ export function EnergyAssistantWidget({
   const [localities, setLocalities] = useState<AddressLocality[]>([]);
   const [localityLookupStatus, setLocalityLookupStatus] = useState<LocalityLookupStatus>("idle");
   const [localityLookupError, setLocalityLookupError] = useState("");
+  const selectedAddressLocality = useRef<{ postcode: string; suburb: string; state: string } | null>(null);
+  const [localityLookupRequest, setLocalityLookupRequest] = useState(0);
   const effectiveOpen = dedicated || (open && openPathname === pathname && !hidden);
   const needsStarterProfile = context.audience !== "trade"
     && ((messages.length === 0 && !profile.completed && !profileDeferred) || profileEditing);
@@ -1117,6 +1123,26 @@ export function EnergyAssistantWidget({
   const updateLead = (updater: (current: LeadDraft) => LeadDraft) => {
     setLead(updater);
     resetLeadAttempt();
+  };
+
+  const selectLeadAddress = (selection: AustralianAddressSuggestion) => {
+    selectedAddressLocality.current = {
+      postcode: selection.postcode,
+      suburb: selection.suburb,
+      state: selection.addressState.toUpperCase(),
+    };
+    setLocalities([]);
+    setLocalityLookupStatus("loading");
+    setLocalityLookupError("");
+    setLocalityLookupRequest((current) => current + 1);
+    updateLead((current) => ({
+      ...current,
+      streetAddress: selection.addressLine1,
+      unitNumber: selection.addressLine2,
+      suburb: "",
+      state: "",
+      postcode: selection.postcode,
+    }));
   };
 
   const openLeadForm = () => {
@@ -1387,12 +1413,30 @@ export function EnergyAssistantWidget({
           return [{ suburb, state }];
         })
         : [];
-      if (!nextLocalities.length) throw new Error("No matching suburbs were found for this postcode.");
+      if (!nextLocalities.length) throw new Error("No suburbs match this postcode.");
       if (!current) return;
+      const pendingLocality = selectedAddressLocality.current;
+      if (pendingLocality?.postcode === postcode) {
+        const canonicalLocality = nextLocalities.find((locality) =>
+          locality.state === pendingLocality.state
+          && locality.suburb.toLocaleLowerCase("en-AU") === pendingLocality.suburb.toLocaleLowerCase("en-AU"));
+        if (!canonicalLocality) {
+          throw new Error("That address does not match this postcode.");
+        }
+        selectedAddressLocality.current = null;
+        setLead((currentLead) => ({
+          ...currentLead,
+          suburb: canonicalLocality.suburb,
+          state: canonicalLocality.state,
+        }));
+      }
       setLocalities(nextLocalities);
       setLocalityLookupStatus("ready");
     }).catch((caught: unknown) => {
       if (!current || controller.signal.aborted) return;
+      if (selectedAddressLocality.current?.postcode === postcode) {
+        selectedAddressLocality.current = null;
+      }
       setLocalities([]);
       setLocalityLookupStatus("error");
       setLocalityLookupError(caught instanceof Error
@@ -1403,7 +1447,7 @@ export function EnergyAssistantWidget({
       current = false;
       controller.abort();
     };
-  }, [lead.postcode]);
+  }, [lead.postcode, localityLookupRequest]);
 
   useEffect(() => {
     if (!effectiveOpen || dedicated) return;
@@ -2330,6 +2374,7 @@ export function EnergyAssistantWidget({
                       <span>Residential postcode</span>
                       <input required pattern="[0-9]{4}" maxLength={4} autoComplete="postal-code" inputMode="numeric" value={lead.postcode} onChange={(event) => {
                         const postcode = event.target.value.replace(/\D/g, "").slice(0, 4);
+                        selectedAddressLocality.current = null;
                         setLocalities([]);
                         setLocalityLookupStatus(/^\d{4}$/.test(postcode) ? "loading" : "idle");
                         setLocalityLookupError("");
@@ -2397,7 +2442,7 @@ export function EnergyAssistantWidget({
                           <label><span>Last name</span><input required maxLength={60} autoComplete="family-name" value={lead.lastName} onChange={(event) => updateLead((current) => ({ ...current, lastName: event.target.value }))} /></label>
                           <label><span>Email</span><input required type="email" maxLength={254} autoComplete="email" inputMode="email" value={lead.email} onChange={(event) => updateLead((current) => ({ ...current, email: event.target.value }))} /></label>
                           <label><span>Phone</span><input required type="tel" maxLength={40} autoComplete="tel" inputMode="tel" value={lead.phone} onChange={(event) => updateLead((current) => ({ ...current, phone: event.target.value }))} /></label>
-                          <label><span>Street address</span><input required maxLength={140} autoComplete="address-line1" value={lead.streetAddress} onChange={(event) => updateLead((current) => ({ ...current, streetAddress: event.target.value }))} /></label>
+                          <AustralianAddressLookup label="Street address" required value={lead.streetAddress} onChange={(streetAddress) => updateLead((current) => ({ ...current, streetAddress }))} onSelect={selectLeadAddress} />
                           <label><span>Unit number <small>Optional</small></span><input maxLength={40} autoComplete="address-line2" value={lead.unitNumber} onChange={(event) => updateLead((current) => ({ ...current, unitNumber: event.target.value }))} /></label>
                         </div>
                       </>

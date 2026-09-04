@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import ts from "typescript";
 
 import {
   directAppointmentDisplayTime,
@@ -14,6 +15,21 @@ const crmRoute = read("../src/app/api/trade-crm/route.ts");
 const inviteServer = read("../src/lib/direct-appointment-invite-server.ts");
 const dedup = read("../src/lib/trade-customer-dedup-server.ts");
 
+function executableFunction(source, name) {
+  const sourceFile = ts.createSourceFile("source.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let declaration;
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === name) declaration = node;
+    if (!declaration) ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  assert.ok(declaration, `missing ${name}`);
+  const output = ts.transpileModule(declaration.getText(sourceFile), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
+  }).outputText;
+  return Function(`${output}; return ${name};`)();
+}
+
 test("field job time control covers the full day in 15-minute intervals", () => {
   assert.match(mobile, /Array\.from\(\{ length: 12 \}/);
   assert.match(mobile, /\['00', '15', '30', '45'\]/);
@@ -25,7 +41,25 @@ test("field job time control covers the full day in 15-minute intervals", () => 
   assert.match(mobile, /15-minute intervals/);
 });
 
-test("postcode resolves before the user chooses a matching suburb", () => {
+test("mobile address predictions are cancellable, accessible and resolve before filling fields", () => {
+  assert.match(mobile, /apiRequest<[^>]+>\('\/api\/trade-address-suggestions'/);
+  assert.match(mobile, /type AddressPrediction = \{ id: string; label: string; provider: string \}/);
+  assert.match(mobile, /query\.length < 3/);
+  assert.match(mobile, /\}, 280\)/);
+  assert.match(mobile, /controller\.abort\(\)/);
+  assert.match(mobile, /JSON\.stringify\(\{ action: 'predict', query, sessionToken: addressPredictionSession\.token \}\)/);
+  assert.match(mobile, /const sessionToken = addressPredictionSession\.token/);
+  assert.match(mobile, /JSON\.stringify\(\{ action: 'resolve', provider: prediction\.provider, providerReference: prediction\.id, query, sessionToken \}\)/);
+  assert.match(mobile, /const selection = result\.selection/);
+  assert.match(mobile, /accessibilityLabel=\{`Use address \$\{prediction\.label\}`\}/);
+  assert.match(mobile, /predictions\.some\(\(prediction\) => prediction\.provider === 'google-places' \|\| prediction\.provider === 'google-geocoding'\) \? <Text style=\{styles\.addressAttribution\}>Google Maps<\/Text> : null/);
+  assert.match(mobile, /Crypto\.randomUUID\(\)/);
+  assert.match(mobile, /Enter the address manually/);
+  assert.match(mobile, /Address suggestion selected\. Check the details before saving\./);
+  assert.doesNotMatch(mobile, /address suggestion[^\n]{0,80}verified/i);
+});
+
+test("suggested and manual addresses keep the rental job state and provenance boundaries", () => {
   const postcode = mobile.indexOf('label="Postcode"');
   const suburb = mobile.indexOf('label="Suburb"');
   assert.ok(postcode > 0 && postcode < suburb);
@@ -33,6 +67,31 @@ test("postcode resolves before the user chooses a matching suburb", () => {
   assert.match(mobile, /matches\.length === 1/);
   assert.match(mobile, /Choose the correct suburb for this postcode/);
   assert.match(mobile, /accessibilityRole="radio"/);
+  for (const setter of ["setAddressLine1", "setAddressLine2", "setSuburb", "setAddressState", "setPostcode"]) {
+    assert.match(mobile, new RegExp(`${setter}\\(selection\\.`));
+  }
+  assert.match(mobile, /setAddressProvenance\(\{ entryMode: 'provider_selected', provider: selection\.provider, providerReference: selection\.providerReference, formattedAddress: selection\.formattedAddress, selectionProof: selection\.selectionProof \}\)/);
+  assert.match(mobile, /addressEntryMode: addressProvenance\.entryMode, addressProvider: addressProvenance\.provider, addressProviderReference: addressProvenance\.providerReference/);
+  assert.match(mobile, /addressFormatted: addressProvenance\.formattedAddress, addressSelectionProof: addressProvenance\.selectionProof/);
+  assert.match(mobile, /function manualAddressProvenance\(\): AddressProvenance/);
+  assert.match(mobile, /function changeAddressLine2\(value: string\) \{ setAddressLine2\(value\); setAddressProvenance\(manualAddressProvenance\(\)\); \}/);
+  assert.match(mobile, /function changeSuburb\(value: string\) \{ setSuburb\(value\); setAddressProvenance\(manualAddressProvenance\(\)\); \}/);
+  assert.doesNotMatch(mobile, /addressState: 'VIC'/);
+  assert.match(mobile, /Rental inspection jobs require a Victorian service address\./);
+  assert.match(mobile, /!lockedToSavedCustomer && addressPredictionSession\.predictions\.length/);
+});
+
+test("provider-selected locality remains signed while only manual addresses are reconciled", () => {
+  const shouldReconcile = executableFunction(mobile, "shouldReconcileAddressLocality");
+  assert.equal(shouldReconcile("provider_selected", false, "3000", "VIC"), false);
+  assert.equal(shouldReconcile("manual_pending_review", false, "3000", "VIC"), true);
+  assert.equal(shouldReconcile("manual_pending_review", true, "3000", "VIC"), false);
+  assert.equal(shouldReconcile("manual_pending_review", false, "300", "VIC"), false);
+  assert.match(mobile, /if \(!shouldReconcileAddressLocality\(addressProvenance\.entryMode, Boolean\(selectedCustomer\), postcode, addressState\)\)/);
+  assert.match(mobile, /\[addressProvenance\.entryMode, addressState, postcode, selectedCustomer\]/);
+  assert.match(mobile, /localityLookupController\.current\?\.abort\(\); localityLookupController\.current = null;\s*setAddressLine1\(selection\.addressLine1\)/);
+  assert.match(mobile, /setAddressProvenance\(manualAddressProvenance\(\)\);\s*const matches =/);
+  assert.match(mobile, /setLocalities\(\[\]\); setLocalityBusy\(false\); setLocalityMessage\('Address suggestion selected\. Its suburb and postcode are preserved\.'\)/);
 });
 
 test("an exact saved-customer email can be selected instead of creating a duplicate", () => {

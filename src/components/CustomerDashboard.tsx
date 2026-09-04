@@ -41,6 +41,10 @@ import {
   customerReviewOptions as rawCustomerReviewOptions,
 } from "@/lib/customer-plan-decision-support.mjs";
 import { Field, SiteFooter, SiteHeader } from "./ComparatorChrome";
+import {
+  AustralianAddressLookup,
+  type AustralianAddressSuggestion,
+} from "./AustralianAddressLookup";
 import { FirebaseAccountPanel } from "./FirebaseAccountPanel";
 import { CustomerAssetLifecycle } from "./CustomerAssetLifecycle";
 import { CustomerTradeQuotes } from "./CustomerTradeQuotes";
@@ -777,6 +781,17 @@ function ProfileForm({
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
 
+  function selectAddress(selection: AustralianAddressSuggestion) {
+    setDraft((current) => ({
+      ...current,
+      addressLine1: selection.addressLine1,
+      addressLine2: selection.addressLine2,
+      suburb: selection.suburb,
+      postcode: selection.postcode,
+      addressState: selection.addressState,
+    }));
+  }
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -853,18 +868,14 @@ function ProfileForm({
               autoComplete="tel"
             />
           </Field>
-          <Field
-            label="Service street address"
-            optional="required before requesting trades"
-          >
-            <input
-              value={draft.addressLine1}
-              onChange={(event) =>
-                setDraft({ ...draft, addressLine1: event.target.value })
-              }
-              autoComplete="address-line1"
-            />
-          </Field>
+          <AustralianAddressLookup
+            className="f"
+            label="Service street address, required before requesting trades"
+            maxLength={120}
+            value={draft.addressLine1}
+            onChange={(addressLine1) => setDraft({ ...draft, addressLine1 })}
+            onSelect={selectAddress}
+          />
           <Field label="Address line 2" optional="optional">
             <input
               value={draft.addressLine2}

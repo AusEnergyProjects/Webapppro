@@ -23,6 +23,8 @@ const migration = read("../drizzle/0074_global_tlink_job_numbers.sql");
 const adminJobs = read("../src/app/api/admin/jobs/route.ts");
 const adminDirectory = read("../src/components/AdminJobDirectory.tsx");
 const address = read("../src/app/api/trade-address-suggestions/route.ts");
+const addressProvider = read("../src/lib/address-suggestions-server.ts");
+const addressLookup = read("../src/components/AustralianAddressLookup.tsx");
 const complianceCatalogue = read("../src/app/api/trade-compliance/route.ts");
 const complianceDomain = read("../src/lib/creditex-compliance-server.ts");
 const complianceIntake = read("../src/components/TradeComplianceIntake.tsx");
@@ -248,11 +250,18 @@ test("planned certificate work defaults to Installation without locking the appo
 });
 
 test("address search supports structured Google Australian results and manual fallback", () => {
-  assert.match(address, /googleapis\.com/);
-  assert.match(address, /components", "country:AU/);
-  assert.match(address, /administrative_area_level_1/);
+  assert.match(address, /fetchAustralianAddressSuggestions/);
+  assert.match(addressProvider, /maps\.googleapis\.com/);
+  assert.match(addressProvider, /components", "country:AU/);
+  assert.match(addressProvider, /administrative_area_level_1/);
   assert.match(address, /configured: false, suggestions: \[\]/);
-  assert.match(form, /enter the address manually/i);
+  assert.match(form, /<AustralianAddressLookup/);
+  assert.match(form, /endpoint="\/api\/trade-address-suggestions"/);
+  assert.match(form, /getAuthorization=\{getAuthorization\}/);
+  assert.match(addressLookup, /role="combobox"/);
+  assert.match(addressLookup, /role="listbox"/);
+  assert.match(addressLookup, /aria-live="polite"/);
+  assert.match(addressLookup, /enter the address manually/i);
 });
 
 test("planning starts with the job while governed compliance remains source controlled", () => {

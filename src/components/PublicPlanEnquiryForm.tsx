@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import {
+  AustralianAddressLookup,
+  type AustralianAddressSuggestion,
+} from "@/components/AustralianAddressLookup";
+import {
   useEffect,
   useRef,
   useState,
@@ -310,6 +314,8 @@ export function PublicPlanEnquiryForm({
   const [localityLookupStatus, setLocalityLookupStatus] = useState<LocalityLookupStatus>(() =>
     /^\d{4}$/.test(initialPostcode.slice(0, 4)) ? "loading" : "idle");
   const [localityLookupError, setLocalityLookupError] = useState("");
+  const selectedAddressLocality = useRef<{ postcode: string; suburb: string; state: string } | null>(null);
+  const [localityLookupRequest, setLocalityLookupRequest] = useState(0);
   const [interests, setInterests] = useState<PublicPlanUpgradeInterest[]>(() =>
     initialAllowedInterests(suggestedInterests));
   const [message, setMessage] = useState("");
@@ -392,10 +398,25 @@ export function PublicPlanEnquiryForm({
         throw new Error("No matching suburbs were found for this postcode.");
       }
       if (!current) return;
+      const pendingLocality = selectedAddressLocality.current;
+      if (pendingLocality?.postcode === postcode) {
+        const canonicalLocality = nextLocalities.find((locality) =>
+          locality.state === pendingLocality.state
+          && locality.suburb.toLocaleLowerCase("en-AU") === pendingLocality.suburb.toLocaleLowerCase("en-AU"));
+        if (!canonicalLocality) {
+          throw new Error("The selected address suburb is not listed for this postcode.");
+        }
+        selectedAddressLocality.current = null;
+        setCustomerSuburb(canonicalLocality.suburb);
+        setCustomerState(canonicalLocality.state);
+      }
       setLocalities(nextLocalities);
       setLocalityLookupStatus("ready");
     }).catch((error: unknown) => {
       if (!current || controller.signal.aborted) return;
+      if (selectedAddressLocality.current?.postcode === postcode) {
+        selectedAddressLocality.current = null;
+      }
       setLocalityLookupStatus("error");
       setLocalityLookupError(error instanceof Error
         ? error.message
@@ -406,7 +427,7 @@ export function PublicPlanEnquiryForm({
       current = false;
       controller.abort();
     };
-  }, [postcode]);
+  }, [localityLookupRequest, postcode]);
 
   useEffect(() => {
     const submissionActive = status.kind === "sending"
@@ -521,6 +542,7 @@ export function PublicPlanEnquiryForm({
   }
 
   function changePostcode(nextPostcode: string) {
+    selectedAddressLocality.current = null;
     setPostcode(nextPostcode);
     setCustomerSuburb("");
     setLocalities([]);
@@ -534,6 +556,24 @@ export function PublicPlanEnquiryForm({
       localityOptionValue(locality) === nextLocalityValue);
     setCustomerSuburb(selected?.suburb || "");
     setCustomerState(selected?.state || "");
+  }
+
+  function selectAddress(selection: AustralianAddressSuggestion) {
+    const selectedState = selection.addressState.toUpperCase();
+    selectedAddressLocality.current = {
+      postcode: selection.postcode,
+      suburb: selection.suburb,
+      state: selectedState,
+    };
+    setCustomerStreetAddress(selection.addressLine1);
+    setCustomerUnitNumber(selection.addressLine2);
+    setPostcode(selection.postcode);
+    setCustomerSuburb("");
+    setCustomerState("");
+    setLocalities([]);
+    setLocalityLookupError("");
+    setLocalityLookupStatus("loading");
+    setLocalityLookupRequest((current) => current + 1);
   }
 
   async function chooseQuotePhotos(promptId: string, selectedFiles: FileList | null) {
@@ -1249,10 +1289,16 @@ export function PublicPlanEnquiryForm({
                   value={customerState}
                 />
               </label>
-              <label className={`${styles.field} ${styles.addressStreet}`}>
-                <span className={styles.labelRow}>Street address <span className={styles.optional}>private unless you share it below</span></span>
-                <input className={styles.control} required autoComplete="address-line1" maxLength={140} value={customerStreetAddress} onChange={(event) => setCustomerStreetAddress(event.target.value)} aria-describedby="public-plan-contact-hint" />
-              </label>
+              <AustralianAddressLookup
+                className={`${styles.field} ${styles.addressStreet}`}
+                inputClassName={styles.control}
+                label="Street address, private unless you share it below"
+                required
+                value={customerStreetAddress}
+                onChange={setCustomerStreetAddress}
+                onSelect={selectAddress}
+                describedBy="public-plan-contact-hint"
+              />
               <label className={styles.field}>
                 <span className={styles.labelRow}>Unit number <span className={styles.optional}>optional</span></span>
                 <input className={styles.control} autoComplete="address-line2" maxLength={40} value={customerUnitNumber} onChange={(event) => setCustomerUnitNumber(event.target.value)} />

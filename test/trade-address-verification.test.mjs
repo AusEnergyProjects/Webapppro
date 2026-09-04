@@ -12,6 +12,8 @@ import {
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const route = read("../src/app/api/trade-address-suggestions/route.ts");
+const provider = read("../src/lib/address-suggestions-server.ts");
+const lookup = read("../src/components/AustralianAddressLookup.tsx");
 const crmRoute = read("../src/app/api/trade-crm/route.ts");
 const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0117_trade_service_address_provenance.sql");
@@ -184,16 +186,21 @@ test("service-site provenance migration defaults legacy and manual rows to pendi
     WHERE type = 'index' AND name = 'trade_crm_service_sites_address_verification_idx'`).get());
 });
 
-test("suggestion route signs safe Australian results and schema persists the exact provenance contract", () => {
-  assert.match(route, /hostname === "maps\.googleapis\.com"/);
-  assert.match(route, /url\.protocol !== "https:"/);
-  assert.match(route, /redirect: "error"/);
-  assert.match(route, /googleComponent\(components, "country", true\)\.toUpperCase\(\) !== "AU"/);
-  assert.match(route, /cleanAdminText\(item\.country, 10\)\.toUpperCase\(\) !== "AU"/);
+test("shared provider parses safe Australian results before the route signs exact provenance", () => {
+  assert.match(route, /fetchAustralianAddressSuggestions/);
+  assert.match(provider, /hostname === "maps\.googleapis\.com"/);
+  assert.match(provider, /url\.protocol !== "https:"/);
+  assert.match(provider, /redirect: "error"/);
+  assert.match(provider, /googleComponent\(components, "country", true\)\.toUpperCase\(\) !== "AU"/);
+  assert.match(provider, /cleanProviderText\(item\.country, 10\)\.toUpperCase\(\) !== "AU"/);
+  assert.match(provider, /canonicalProviderAddressSelection/);
   for (const field of ["provider", "providerReference", "formattedAddress", "selectionProof"]) {
     assert.match(route, new RegExp(`${field}:`));
   }
   assert.match(route, /CRM_INTEGRATION_ENCRYPTION_KEY/);
+  assert.match(lookup, /role="combobox"/);
+  assert.match(lookup, /role="listbox"/);
+  assert.match(lookup, /Address lookup is unavailable\. Enter the address manually\./);
   for (const field of [
     "addressEntryMode",
     "addressProvider",

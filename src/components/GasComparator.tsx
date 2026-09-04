@@ -2,9 +2,23 @@
 
 /* Retailer logos come from arbitrary CDR-hosted URLs, so native img keeps this dynamic. */
 /* eslint-disable @next/next/no-img-element */
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ComparisonJourney, Field } from "./ComparatorChrome";
+import {
+  Field,
+  StepCard,
+  comparisonScrollBehavior,
+} from "./ComparatorChrome";
+import chromeStyles from "./ComparatorChrome.module.css";
+import {
+  ComparisonJourney,
+  ComparisonStepActions,
+  ComparisonWorkingState,
+} from "./ComparisonProgress";
+import {
+  AustralianAddressLookup,
+  type AustralianAddressSuggestion,
+} from "./AustralianAddressLookup";
 import { GasUpgradeQuestionnaire } from "./GasUpgradeQuestionnaire";
 import type { GasUsageProfile } from "@/lib/gas-tariff-engine";
 import { annualiseGasUsage, type GasUsageInputMode } from "@/lib/gas-usage-input";
@@ -64,19 +78,23 @@ function fmt$(value: number) { return "$" + Math.round(value).toLocaleString(); 
 function fmtD2(value: number) { return "$" + value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
 const GAS_JOURNEY_STEPS = [
-  { label: "Gas use", description: "Enter the postcode and the most reliable usage figure you have." },
-  { label: "Compare", description: "We price current published plans on the same household assumptions." },
-  { label: "Choose", description: "Check the leading plan and confirm its current conditions before switching." },
+  { label: "Your home", description: "Find the property and confirm it has mains gas." },
+  { label: "Your usage", description: "Enter a full-year total or the usage from one bill." },
+  { label: "Your setup", description: "Confirm the gas pattern and plan conditions." },
+  { label: "Results", description: "Compare like for like, then confirm the plan with the retailer." },
 ] as const;
 
 export function GasComparator() {
+  const [activeStep, setActiveStep] = useState(1);
+  const [addressQuery, setAddressQuery] = useState("");
   const [postcode, setPostcode] = useState("");
   const [supplyType, setSupplyType] = useState<"mains" | "lpg">("mains");
   const [usageMode, setUsageMode] = useState<GasUsageInputMode>("annual");
-  const [usageMj, setUsageMj] = useState("58000");
+  const [usageMj, setUsageMj] = useState("");
   const [billStart, setBillStart] = useState("");
   const [billEnd, setBillEnd] = useState("");
-  const [usageProfile, setUsageProfile] = useState<GasUsageProfile>("heating");
+  const [usageProfile, setUsageProfile] = useState<GasUsageProfile>("steady");
+  const [gasHeating, setGasHeating] = useState<"yes" | "no" | "">("");
   const [includeConditional, setIncludeConditional] = useState(false);
   const [hasConcession, setHasConcession] = useState(false);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -86,16 +104,34 @@ export function GasComparator() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [showStanding, setShowStanding] = useState(true);
   const [search, setSearch] = useState("");
   const [shown, setShown] = useState(12);
   const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
+  const [pricedInputKey, setPricedInputKey] = useState("");
   const [handoffStatus, setHandoffStatus] = useState<{ title: string; message: string } | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const errorRef = useRef<HTMLParagraphElement | null>(null);
+  const stepHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const resultsHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const comparisonInputKeyRef = useRef("");
   const annualisedUsage = useMemo(() => annualiseGasUsage({
     usageMj: Number(usageMj), mode: usageMode, profile: usageProfile, billStart, billEnd,
   }), [billEnd, billStart, usageMj, usageMode, usageProfile]);
   const effectiveAnnualMj = annualisedUsage.ok ? Math.round(annualisedUsage.annualMj) : 0;
+  const comparisonInputKey = useMemo(() => JSON.stringify({
+    postcode: postcode.trim(),
+    supplyType,
+    usageMode,
+    usageMj: usageMj.trim(),
+    billStart: usageMode === "bill" ? billStart : "",
+    billEnd: usageMode === "bill" ? billEnd : "",
+    usageProfile,
+    gasHeating,
+    includeConditional,
+    hasConcession,
+  }), [billEnd, billStart, gasHeating, hasConcession, includeConditional, postcode, supplyType, usageMj, usageMode, usageProfile]);
+  comparisonInputKeyRef.current = comparisonInputKey;
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
@@ -114,26 +150,118 @@ export function GasComparator() {
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
-  async function compare(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    if (!loading) return;
+    const timer = window.setTimeout(() => {
+      setStatus("This is taking longer than usual. Current retailer data is still being checked.");
+    }, 12_000);
+    return () => window.clearTimeout(timer);
+  }, [loading]);
+
+  useEffect(() => {
+    if (!error) return;
+    const frame = window.requestAnimationFrame(() => errorRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [error]);
+
+  function moveToStep(step: number) {
+    setError("");
+    setActiveStep(step);
+    window.requestAnimationFrame(() => {
+      stepHeadingRef.current?.focus({ preventScroll: true });
+      formRef.current?.scrollIntoView({ behavior: comparisonScrollBehavior(), block: "start" });
+    });
+  }
+
+  function selectAddress(selection: AustralianAddressSuggestion) {
+    setAddressQuery(selection.label);
+    setPostcode(selection.postcode);
+  }
+
+  function continueFromProperty() {
+    setError("");
+    if (supplyType !== "mains") {
+      setError("This comparison covers reticulated mains gas only. LPG prices need a supplier quote.");
+      return;
+    }
+    if (!/^\d{4}$/.test(postcode)) {
+      setError("Enter a valid 4 digit postcode or choose an address from the search results.");
+      return;
+    }
+    moveToStep(2);
+  }
+
+  function continueFromUsage() {
+    setError("");
+    if (!annualisedUsage.ok) {
+      setError(annualisedUsage.error);
+      return;
+    }
+    moveToStep(3);
+  }
+
+  function submitCurrentStep(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError(""); setPlans([]); setBundle(null); setDistributors([]); setDistributor(""); setShown(12); setSelectedPlanIds([]);
+    if (loading) return;
+    if (activeStep === 1) {
+      continueFromProperty();
+      return;
+    }
+    if (activeStep === 2) {
+      continueFromUsage();
+      return;
+    }
+    if (activeStep === 3) void compare();
+  }
+
+  function showCurrentResults() {
+    setStatus("");
+    setActiveStep(4);
+    window.requestAnimationFrame(() => {
+      resultsHeadingRef.current?.focus({ preventScroll: true });
+      resultsHeadingRef.current?.scrollIntoView({ behavior: comparisonScrollBehavior(), block: "start" });
+    });
+  }
+
+  async function compare(preferredDistributor = distributor) {
+    const requestedInputKey = comparisonInputKey;
+    setError(""); setPlans([]); setBundle(null); setDistributors([]); setPricedInputKey(""); setShown(12); setSelectedPlanIds([]);
     if (supplyType !== "mains") { setError("This comparison covers reticulated mains gas only. LPG cylinder and bulk supply prices require quotes from LPG suppliers."); return; }
     if (!/^\d{4}$/.test(postcode)) { setError("Enter a valid 4 digit postcode."); return; }
     if (!annualisedUsage.ok) { setError(annualisedUsage.error); return; }
-    setLoading(true); setProgress(12); setStatus("Loading current gas offers...");
+    if (!gasHeating) { setError("Confirm whether gas is used for home heating."); return; }
+    setLoading(true); setStatus("Finding current plans for your area");
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 25_000);
     try {
       const query = new URLSearchParams({ postcode, annualMj: String(Math.round(annualisedUsage.annualMj)), usageProfile, includeConditional: String(includeConditional) });
-      setProgress(35);
       const response = await fetch("/api/gas-plans?" + query, { signal: controller.signal });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not load gas plans.");
+      if (comparisonInputKeyRef.current !== requestedInputKey) {
+        setStatus("");
+        setError("Your answers changed while plans were being checked. Compare again to use the latest answers.");
+        return;
+      }
+      setStatus("Checking rates, eligibility and conditions");
       const nextPlans: Plan[] = data.plans || [];
       const nextDistributors = [...new Set(nextPlans.flatMap((plan) => plan.distributors || []).filter(Boolean))].sort();
-      setProgress(100); setPlans(nextPlans); setBundle(data); setDistributors(nextDistributors);
-      if (nextDistributors.length === 1) setDistributor(nextDistributors[0]);
-      setStatus(!nextPlans.length ? "No priceable gas offers were found for this postcode. Check the postcode or try again shortly." : nextDistributors.length > 1 ? "Choose the gas distributor or network printed on your bill before viewing ranked offers." : "");
+      const selectedDistributor = nextDistributors.length === 1
+        ? nextDistributors[0]
+        : preferredDistributor && nextDistributors.includes(preferredDistributor) ? preferredDistributor : "";
+      setStatus("Preparing your clearest matches"); setPlans(nextPlans); setBundle(data); setDistributors(nextDistributors);
+      setDistributor(selectedDistributor);
+      if (!nextPlans.length) {
+        setPricedInputKey("");
+        setStatus("");
+        setError("No priceable gas offers were found for this postcode. Check the postcode or try again shortly.");
+      } else if (nextDistributors.length > 1 && !selectedDistributor) {
+        setPricedInputKey(requestedInputKey);
+        setStatus("Choose the gas distributor or network printed on your bill to finish the comparison.");
+      } else {
+        setPricedInputKey(requestedInputKey);
+        showCurrentResults();
+      }
     } catch (caught) {
       setError(controller.signal.aborted ? "The gas comparison took too long. Please try again shortly." : caught instanceof Error ? caught.message : "Could not load gas plans."); setStatus("");
     } finally { window.clearTimeout(timeout); setLoading(false); }
@@ -149,47 +277,86 @@ export function GasComparator() {
   const displayedPlans = visiblePlans.slice(0, shown);
   const selectedPlans = plans.filter((plan) => (!distributor || plan.distributors.includes(distributor)) && selectedPlanIds.includes(plan.id)).sort((a, b) => a.annualCost - b.annualCost);
   const needsDistributor = distributors.length > 1 && !distributor;
-  const journeyStep = plans.length && !needsDistributor ? 3 : postcode ? 2 : 1;
+  const pricingInputsChanged = Boolean(pricedInputKey && pricedInputKey !== comparisonInputKey);
+  const hasCurrentPricing = Boolean(plans.length && pricedInputKey === comparisonInputKey);
+  const journeyStep = activeStep;
+
+  const updateUsageProfileFromQuestionnaire = useCallback((profile: GasUsageProfile) => {
+    setUsageProfile(profile);
+    setGasHeating((current) => current ? profile === "heating" ? "yes" : "no" : current);
+  }, []);
 
   function toggleSelectedPlan(planId: string) {
     setSelectedPlanIds((current) => current.includes(planId) ? current.filter((id) => id !== planId) : current.length < 3 ? [...current, planId] : current);
+  }
+
+  function chooseDistributor(value: string) {
+    setDistributor(value);
+    setShown(12);
+    setSelectedPlanIds([]);
+    if (!value) return;
+    if (!hasCurrentPricing) {
+      void compare(value);
+      return;
+    }
+    showCurrentResults();
   }
 
   return (
     <>
       <ComparisonJourney title="Your gas comparison" current={journeyStep} steps={GAS_JOURNEY_STEPS} />
       {handoffStatus && <p className="comparison-handoff-status" role="status"><strong>{handoffStatus.title}</strong>{handoffStatus.message}</p>}
-      <form id="gas-comparison-form" className="card" onSubmit={compare} aria-label="Gas plan comparison">
-        <h2><span className="stepnum">1</span> Add the property and gas use</h2>
-        <p className="sub">A full year of bills is best. If you have one recent bill, enter its exact dates and we will adjust for the season.</p>
-        <fieldset className="gas-choice-group"><legend>Gas supply type</legend><div className="gas-choice-grid">
-          <label className={`native-assumption-card${supplyType === "mains" ? " selected" : ""}`}><input type="radio" name="gas-supply-type" checked={supplyType === "mains"} onChange={() => setSupplyType("mains")} /><span><b>Reticulated mains gas</b><small>A gas meter and network supply connected to the property.</small></span></label>
-          <label className={`native-assumption-card${supplyType === "lpg" ? " selected" : ""}`}><input type="radio" name="gas-supply-type" checked={supplyType === "lpg"} onChange={() => setSupplyType("lpg")} /><span><b>LPG bottles or bulk tank</b><small>Delivered LPG is not covered by retail gas plan data.</small></span></label>
-        </div></fieldset>
-        {supplyType === "lpg" ? <div className="note"><b>LPG needs a supplier quote.</b> This tool cannot rank LPG cylinder or bulk tank prices against mains gas offers because the products, delivery fees and units differ.</div> : <>
-        <fieldset className="gas-choice-group"><legend>Usage evidence</legend><div className="gas-choice-grid">
-          <label className={`native-assumption-card${usageMode === "annual" ? " selected" : ""}`}><input type="radio" name="gas-usage-mode" checked={usageMode === "annual"} onChange={() => setUsageMode("annual")} /><span><b>Full year total</b><small>Most reliable. Add the MJ from bills covering about 12 months.</small></span></label>
-          <label className={`native-assumption-card${usageMode === "bill" ? " selected" : ""}`}><input type="radio" name="gas-usage-mode" checked={usageMode === "bill"} onChange={() => setUsageMode("bill")} /><span><b>One recent bill</b><small>We annualise the MJ using the bill dates and seasonal profile.</small></span></label>
-        </div></fieldset>
-        <div className="grid c2 gas-primary-inputs">
-          <Field label="Postcode"><input type="text" value={postcode} inputMode="numeric" maxLength={4} onChange={(event) => setPostcode(event.target.value)} placeholder="e.g. 3000" /></Field>
-          <Field label={usageMode === "annual" ? "Gas use (MJ per year)" : "Gas use on this bill (MJ)"} hint={usageMode === "annual" ? "Add the total MJ from bills covering the last 12 months." : "Use the total MJ shown for this billing period."}><input type="number" min="1" value={usageMj} inputMode="numeric" onChange={(event) => setUsageMj(event.target.value)} /></Field>
-        </div>
-        {usageMode === "bill" && <div className="gas-bill-period"><Field label="Bill period starts" hint="Use the first date covered by the bill."><input type="date" value={billStart} data-date-range-group="gas-bill-period" data-date-range-role="start" onChange={(event) => setBillStart(event.target.value)} /></Field><Field label="Bill period ends" hint="Use the last date covered by the bill."><input type="date" value={billEnd} data-date-range-group="gas-bill-period" data-date-range-role="end" onChange={(event) => setBillEnd(event.target.value)} /></Field>{annualisedUsage.ok && <div className="gas-annual-equivalent"><span>Annualised usage</span><b>{Math.round(annualisedUsage.annualMj).toLocaleString()} MJ/year</b><small>Based on {annualisedUsage.billDays} bill days and the {usageProfile === "heating" ? "gas heating" : "steady year-round"} profile.</small></div>}</div>}
-        <label className={`native-assumption-card gas-discount-card${includeConditional ? " selected" : ""}`}><input type="checkbox" checked={includeConditional} onChange={(event) => setIncludeConditional(event.target.checked)} /><span><b>Include conditional discounts</b><small>Leave this off unless you expect to meet every published condition, such as paying on time or using direct debit.</small></span></label>
-        <label className={`native-assumption-card gas-discount-card${hasConcession ? " selected" : ""}`}><input type="checkbox" checked={hasConcession} onChange={(event) => setHasConcession(event.target.checked)} /><span><b>I receive an energy concession</b><small>Ranked plan costs remain before concessions because eligibility, calculation and transfer rules vary. Confirm your concession with the retailer before switching.</small></span></label>
-        {loading && <div className="progresswrap"><div className="pbar"><div className="pfill" style={{ width: `${progress}%` }} /></div><div className="pmsg">{status}</div></div>}
-        {!loading && status && <p className="note">{status}</p>}
-        {distributors.length > 1 && <div className="native-location-evidence"><Field label="Gas distributor or network" hint="Choose the network name shown on your gas bill, usually near the meter number, supply address or faults contact."><select value={distributor} onChange={(event) => { setDistributor(event.target.value); setShown(12); setSelectedPlanIds([]); setStatus(""); }}><option value="">Choose the network from your bill</option>{distributors.map((name) => <option key={name}>{name}</option>)}</select></Field></div>}
-        {error && <p className="error">{error}</p>}
+      <form ref={formRef} id="gas-comparison-form" onSubmit={submitCurrentStep} aria-label="Gas plan comparison">
+        {activeStep === 1 && <>
+          <StepCard number="1" title="Where is the property?" headingRef={stepHeadingRef}>
+            <p className="sub">Search for the property to fill its postcode automatically, or enter the postcode yourself. Search text is sent only to the address-search service and is never sent to plan providers.</p>
+            <div className={chromeStyles.addressSearch}><AustralianAddressLookup label="Find the property" value={addressQuery} onChange={setAddressQuery} onSelect={selectAddress} /></div>
+            <div className="grid c2 gas-primary-inputs"><Field label="Postcode"><input type="text" value={postcode} inputMode="numeric" maxLength={4} onChange={(event) => setPostcode(event.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="e.g. 3000" /></Field></div>
+            <fieldset className="gas-choice-group"><legend>Gas supply type</legend><div className="gas-choice-grid">
+              <label className={`native-assumption-card${supplyType === "mains" ? " selected" : ""}`}><input type="radio" name="gas-supply-type" checked={supplyType === "mains"} onChange={() => setSupplyType("mains")} /><span><b>Reticulated mains gas</b><small>A gas meter and network supply connected to the property.</small></span></label>
+              <label className={`native-assumption-card${supplyType === "lpg" ? " selected" : ""}`}><input type="radio" name="gas-supply-type" checked={supplyType === "lpg"} onChange={() => setSupplyType("lpg")} /><span><b>LPG bottles or bulk tank</b><small>Delivered LPG is not covered by retail gas plan data.</small></span></label>
+            </div></fieldset>
+            {supplyType === "lpg" && <div className="note"><b>LPG needs a supplier quote.</b> This tool cannot rank LPG cylinder or bulk tank prices against mains gas offers because the products, delivery fees and units differ.</div>}
+          </StepCard>
+          <ComparisonStepActions step={1} total={4} onContinue={continueFromProperty} />
         </>}
+
+        {activeStep === 2 && <>
+          <StepCard number="2" title="How much gas do you use?" headingRef={stepHeadingRef}>
+            <p className="sub">A full year of bills is best. If you have one recent bill, enter its exact dates and we will adjust for the season.</p>
+            <fieldset className="gas-choice-group"><legend>Usage evidence</legend><div className="gas-choice-grid">
+              <label className={`native-assumption-card${usageMode === "annual" ? " selected" : ""}`}><input type="radio" name="gas-usage-mode" checked={usageMode === "annual"} onChange={() => setUsageMode("annual")} /><span><b>Full year total</b><small>Most reliable. Add the MJ from bills covering about 12 months.</small></span></label>
+              <label className={`native-assumption-card${usageMode === "bill" ? " selected" : ""}`}><input type="radio" name="gas-usage-mode" checked={usageMode === "bill"} onChange={() => setUsageMode("bill")} /><span><b>One recent bill</b><small>We annualise the MJ using the exact bill dates.</small></span></label>
+            </div></fieldset>
+            <div className="grid c2 gas-primary-inputs"><Field label={usageMode === "annual" ? "Gas use (MJ per year)" : "Gas use on this bill (MJ)"} hint={usageMode === "annual" ? "Add the total MJ from bills covering the last 12 months." : "Use the total MJ shown for this billing period."}><input type="number" min="1" value={usageMj} inputMode="numeric" onChange={(event) => setUsageMj(event.target.value)} placeholder={usageMode === "annual" ? "e.g. 58000" : "e.g. 18000"} /></Field></div>
+            {usageMode === "bill" && <div className="gas-bill-period"><Field label="Bill period starts" hint="Use the first date covered by the bill."><input type="date" value={billStart} data-date-range-group="gas-bill-period" data-date-range-role="start" onChange={(event) => setBillStart(event.target.value)} /></Field><Field label="Bill period ends" hint="Use the last date covered by the bill."><input type="date" value={billEnd} data-date-range-group="gas-bill-period" data-date-range-role="end" onChange={(event) => setBillEnd(event.target.value)} /></Field>{annualisedUsage.ok && <div className="gas-annual-equivalent"><span>Annualised usage</span><b>{Math.round(annualisedUsage.annualMj).toLocaleString()} MJ/year</b><small>Based on {annualisedUsage.billDays} bill days. The heating pattern is confirmed next.</small></div>}</div>}
+          </StepCard>
+          <ComparisonStepActions step={2} total={4} onBack={() => moveToStep(1)} onContinue={continueFromUsage} />
+        </>}
+
+        {activeStep === 3 && <>
+          <StepCard number="3" title="How is gas used at this property?" headingRef={stepHeadingRef}>
+            <fieldset className="gas-choice-group"><legend>Is gas used for home heating?</legend><div className="gas-choice-grid">
+              <label className={`native-assumption-card${gasHeating === "yes" ? " selected" : ""}`}><input type="radio" name="gas-heating" checked={gasHeating === "yes"} onChange={() => { setGasHeating("yes"); setUsageProfile("heating"); }} /><span><b>Yes</b><small>Use the seasonal gas-heating pattern when allocating annual usage.</small></span></label>
+              <label className={`native-assumption-card${gasHeating === "no" ? " selected" : ""}`}><input type="radio" name="gas-heating" checked={gasHeating === "no"} onChange={() => { setGasHeating("no"); setUsageProfile("steady"); }} /><span><b>No or not sure</b><small>Use a steadier year-round pattern for hot water, cooking and other gas use.</small></span></label>
+            </div></fieldset>
+            <label className={`native-assumption-card gas-discount-card${includeConditional ? " selected" : ""}`}><input type="checkbox" checked={includeConditional} onChange={(event) => setIncludeConditional(event.target.checked)} /><span><b>Include conditional discounts</b><small>Leave this off unless you expect to meet every condition, such as paying on time or using direct debit.</small></span></label>
+            <label className={`native-assumption-card gas-discount-card${hasConcession ? " selected" : ""}`}><input type="checkbox" checked={hasConcession} onChange={(event) => setHasConcession(event.target.checked)} /><span><b>I receive an energy concession</b><small>Plan costs remain before concessions because eligibility and transfer rules vary.</small></span></label>
+            <details className="comparison-refinement"><summary><span>Optional refinement</span><strong>Add gas appliances and household details</strong><small>This can refine the seasonal pattern and show electrification estimates. It is not required to compare plans.</small></summary><div><GasUpgradeQuestionnaire postcode={postcode} annualMj={annualisedUsage.ok ? String(effectiveAnnualMj) : ""} initialUsageProfile={usageProfile} onUsageProfileChange={updateUsageProfileFromQuestionnaire} /></div></details>
+            {pricingInputsChanged && <p className="note" role="status">Your answers changed. Current plans will be checked again before updated costs are shown.</p>}
+            {!loading && status && !pricingInputsChanged && <p className="note" role="status">{status}</p>}
+            {distributors.length > 1 && <div className="native-location-evidence"><Field label="Gas distributor or network" hint="Choose the network name shown on your gas bill, usually near the meter number, supply address or faults contact."><select value={distributor} disabled={loading} onChange={(event) => chooseDistributor(event.target.value)}><option value="">Choose the network from your bill</option>{distributors.map((name) => <option key={name}>{name}</option>)}</select></Field></div>}
+          </StepCard>
+          <div className={chromeStyles.reviewSummary}><span>Ready to compare</span><strong>{postcode} | {effectiveAnnualMj.toLocaleString()} MJ/year | {usageProfile === "heating" ? "Gas heating pattern" : "Steady gas-use pattern"}</strong><small>You can go back without losing any answer.</small></div>
+          <ComparisonStepActions step={3} total={4} onBack={() => moveToStep(2)} />
+          {(!needsDistributor || pricingInputsChanged) && <div className="gas-compare-action comparison-primary-action"><span>We will price eligible current plans against the usage information you supplied.</span><button className="btn" type="submit" disabled={loading}>{loading ? "Comparing gas plans..." : "Compare gas plans"}</button></div>}
+          {loading && <ComparisonWorkingState title="Comparing gas plans" message={status} />}
+        </>}
+        {error && <p ref={errorRef} className="error" role="alert" tabIndex={-1}>{error}</p>}
       </form>
 
-      {supplyType === "mains" && <><div className="gas-compare-action comparison-primary-action"><span>That is enough to compare. Appliance details below are optional.</span><button className="btn" form="gas-comparison-form" type="submit" disabled={loading}>{loading ? "Comparing gas plans..." : "Compare gas plans"}</button></div>{loading && <div className="progresswrap gas-action-progress" aria-hidden="true"><div className="pbar"><div className="pfill" style={{ width: `${progress}%` }} /></div><div className="pmsg">{status}</div></div>}</>}
-      {supplyType === "mains" && <details className="comparison-refinement"><summary><span>Optional refinement</span><strong>Add gas appliances and household details</strong><small>This improves the seasonal pattern and shows separate electrification estimates. It is not required to compare plans.</small></summary><div><GasUpgradeQuestionnaire postcode={postcode} annualMj={annualisedUsage.ok ? String(effectiveAnnualMj) : ""} onUsageProfileChange={setUsageProfile} /></div></details>}
-
-      {plans.length > 0 && !needsDistributor && <section className="results" aria-live="polite" aria-labelledby="gas-results-title">
-        <div className="comparison-results-heading"><span>Step 3 of 3</span><h2 id="gas-results-title">Your gas plan results</h2><p>Start with the lowest estimated annual cost, check the conditions shown on the offer, then open the retailer&apos;s current plan page before switching.</p></div>
+      {activeStep === 4 && hasCurrentPricing && !needsDistributor && <section className="results" aria-live="polite" aria-labelledby="gas-results-title">
+        <div className="comparison-results-heading"><span>Step 4 of 4</span><h2 ref={resultsHeadingRef} tabIndex={-1} id="gas-results-title">Your gas plan results</h2><p>Start with the lowest estimated annual cost, check the conditions shown on the offer, then open the retailer&apos;s current plan page before switching.</p><button className="btn ghost" type="button" onClick={() => moveToStep(3)}>Edit answers</button></div>
         <div className="rsummary">
           <div className="stat"><div className="v">{visiblePlans.length}</div><div className="l">priceable gas offers for {distributor || postcode}</div></div>
           <div className="stat"><div className="v">{best ? fmt$(best.annualCost) : "n/a"}</div><div className="l">best estimated annual cost</div></div>

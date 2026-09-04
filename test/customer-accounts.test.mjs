@@ -69,6 +69,21 @@ test("trade-seeking profiles require private contact details that match the proj
   );
 });
 
+test("customer profile address selection replaces stale unit details within the persistence limit", () => {
+  assert.match(
+    dashboard,
+    /addressLine1: selection\.addressLine1,\s*addressLine2: selection\.addressLine2,\s*suburb: selection\.suburb/,
+  );
+  assert.doesNotMatch(
+    dashboard,
+    /addressLine2: selection\.addressLine2 \|\| current\.addressLine2/,
+  );
+  assert.match(
+    dashboard,
+    /<AustralianAddressLookup[\s\S]*?label="Service street address, required before requesting trades"[\s\S]*?maxLength=\{120\}/,
+  );
+});
+
 test("customer auth supports Google, email, verification and password recovery", () => {
   assert.match(accountPanel, /GoogleAuthProvider/);
   assert.match(accountPanel, /signInWithPopup/);

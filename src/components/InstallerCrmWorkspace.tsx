@@ -6,6 +6,10 @@ import dynamic from "next/dynamic";
 import type { User } from "firebase/auth";
 import { AccessibleMenu } from "./AccessibleMenu";
 import { SearchableLookup, type SearchableLookupOption } from "./SearchableLookup";
+import {
+  AustralianAddressLookup,
+  type AustralianAddressSuggestion,
+} from "./AustralianAddressLookup";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import { WorkspaceListControls, WorkspaceListPreferences } from "./WorkspaceListControls";
 import { type NamedWorkspaceListView, WorkspaceSavedViews } from "./WorkspaceSavedViews";
@@ -1021,8 +1025,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     const saved = await crmRequest("POST", {
       action: "create_customer", customerType: data.get("customerType"), firstName: data.get("firstName"),
       lastName: data.get("lastName"), businessName: data.get("businessName"), email: data.get("email"),
-      phone: data.get("phone"), addressLine1: data.get("addressLine1"), addressLine2: data.get("addressLine2"), suburb: data.get("suburb"),
-      addressState: data.get("addressState"), postcode: data.get("postcode"), tags: data.get("tags"),
+      phone: data.get("phone"), ...addressFormPayload(data), tags: data.get("tags"),
     }, "create-customer", "Customer added to your private CRM.");
     if (saved) { form.reset(); setCreating(""); setView("customers"); }
   }
@@ -1151,7 +1154,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
 
     {view === "customers" && creating === "customer" && <div className="crm-view crm-create-screen">
       <div className="crm-page-heading"><div><span>New direct customer</span><h3>Add a customer your business owns</h3><p>Contact details and the full service address remain private to your installer workspace.</p></div><button type="button" className="crm-back-button" onClick={() => setCreating("")}>Back to all customers</button></div>
-      <section className="crm-create-card"><div className="crm-create-guidance"><strong>Privacy check</strong><p>Do not copy a person from an Australian Energy Assessments protected lead into this list. Australian Energy Assessments jobs remain redacted automatically.</p></div><CustomerForm busy={busy} onSubmit={createCustomer} /></section>
+      <section className="crm-create-card"><div className="crm-create-guidance"><strong>Privacy check</strong><p>Do not copy a person from an Australian Energy Assessments protected lead into this list. Australian Energy Assessments jobs remain redacted automatically.</p></div><CustomerForm user={user} busy={busy} onSubmit={createCustomer} /></section>
     </div>}
 
     {view === "customers" && creating !== "customer" && selectedCustomerId && <div className="crm-view crm-customer-focus">
@@ -1228,8 +1231,96 @@ function CustomerLookupSelect({ user, initialCustomer }: { user: User; initialCu
   return <fieldset className="crm-customer-lookup"><legend>Your customer, optional</legend><input type="hidden" name="crmCustomerId" value={selectedId} /><SearchableLookup label="Find and select a customer" value={selectedId} placeholder="Name, number, phone, suburb or postcode" load={loadCustomers} onChange={setSelectedId} /><small>Australian Energy Assessments protected leads enter automatically and cannot be linked to direct contact records.</small></fieldset>;
 }
 
-function CustomerForm({ busy, onSubmit }: { busy: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
-  return <form className="crm-form" onSubmit={onSubmit}><div className="crm-form-grid"><label><span>Customer type</span><select name="customerType"><option value="residential">Residential</option><option value="business">Business</option></select></label><label><span>First name</span><input name="firstName" maxLength={80} /></label><label><span>Last name</span><input name="lastName" maxLength={80} /></label><label><span>Business name</span><input name="businessName" maxLength={140} /></label><label><span>Email</span><input type="email" name="email" maxLength={180} /></label><label><span>Phone</span><input type="tel" name="phone" maxLength={40} /></label><label className="wide"><span>Street address</span><input name="addressLine1" maxLength={140} placeholder="Street number and name" /></label><label className="wide"><span>Address line 2</span><input name="addressLine2" maxLength={140} placeholder="Unit, level or building, optional" /></label><label><span>Suburb</span><input name="suburb" maxLength={80} /></label><label><span>State</span><select name="addressState" defaultValue=""><option value="">Select state</option>{["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"].map((state) => <option key={state}>{state}</option>)}</select></label><label><span>Postcode</span><input name="postcode" inputMode="numeric" maxLength={4} pattern="[0-9]{4}" /></label><label><span>Tags</span><input name="tags" maxLength={300} placeholder="repeat customer, builder" /></label></div><p className="crm-form-note">Only add contacts who came directly to your business. Do not copy Australian Energy Assessments household details into this CRM.</p><button className="btn" disabled={busy === "create-customer"}>{busy === "create-customer" ? "Adding..." : "Add customer"}</button></form>;
+function CustomerForm({ user, busy, onSubmit }: { user: User; busy: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return <form className="crm-form" onSubmit={onSubmit}><div className="crm-form-grid"><label><span>Customer type</span><select name="customerType"><option value="residential">Residential</option><option value="business">Business</option></select></label><label><span>First name</span><input name="firstName" maxLength={80} /></label><label><span>Last name</span><input name="lastName" maxLength={80} /></label><label><span>Business name</span><input name="businessName" maxLength={140} /></label><label><span>Email</span><input type="email" name="email" maxLength={180} /></label><label><span>Phone</span><input type="tel" name="phone" maxLength={40} /></label><CrmAddressFields user={user} /><label><span>Tags</span><input name="tags" maxLength={300} placeholder="repeat customer, builder" /></label></div><p className="crm-form-note">Only add contacts who came directly to your business. Do not copy Australian Energy Assessments household details into this CRM.</p><button className="btn" disabled={busy === "create-customer"}>{busy === "create-customer" ? "Adding..." : "Add customer"}</button></form>;
+}
+
+type CrmAddressValue = {
+  addressLine1: string;
+  addressLine2: string;
+  suburb: string;
+  addressState: string;
+  postcode: string;
+};
+
+type CrmAddressProvenance = {
+  addressEntryMode: "manual_pending_review" | "provider_selected";
+  addressProvider: string;
+  addressProviderReference: string;
+  addressFormatted: string;
+  addressSelectionProof: string;
+};
+
+function addressFormPayload(data: FormData) {
+  const address = {
+    addressLine1: data.get("addressLine1"),
+    addressLine2: data.get("addressLine2"),
+    suburb: data.get("suburb"),
+    addressState: data.get("addressState"),
+    postcode: data.get("postcode"),
+  };
+  return data.has("addressEntryMode")
+    ? {
+      ...address,
+      addressEntryMode: data.get("addressEntryMode"),
+      addressProvider: data.get("addressProvider"),
+      addressProviderReference: data.get("addressProviderReference"),
+      addressFormatted: data.get("addressFormatted"),
+      addressSelectionProof: data.get("addressSelectionProof"),
+    }
+    : address;
+}
+
+function CrmAddressFields({ user, initialValue }: { user: User; initialValue?: CrmAddressValue }) {
+  const [address, setAddress] = useState<CrmAddressValue>(() => ({
+    addressLine1: initialValue?.addressLine1 || "",
+    addressLine2: initialValue?.addressLine2 || "",
+    suburb: initialValue?.suburb || "",
+    addressState: initialValue?.addressState || "",
+    postcode: initialValue?.postcode || "",
+  }));
+  const [provenance, setProvenance] = useState<CrmAddressProvenance | null>(null);
+  const getAuthorization = useCallback(() => user.getIdToken(), [user]);
+  function manual(update: Partial<CrmAddressValue>) {
+    setAddress((current) => ({ ...current, ...update }));
+    setProvenance({
+      addressEntryMode: "manual_pending_review",
+      addressProvider: "",
+      addressProviderReference: "",
+      addressFormatted: "",
+      addressSelectionProof: "",
+    });
+  }
+  function selectAddress(selection: AustralianAddressSuggestion) {
+    setAddress({
+      addressLine1: selection.addressLine1,
+      addressLine2: selection.addressLine2,
+      suburb: selection.suburb,
+      addressState: selection.addressState,
+      postcode: selection.postcode,
+    });
+    setProvenance({
+      addressEntryMode: "provider_selected",
+      addressProvider: selection.provider || "",
+      addressProviderReference: selection.providerReference || selection.id,
+      addressFormatted: selection.formattedAddress || selection.label,
+      addressSelectionProof: selection.selectionProof || "",
+    });
+  }
+  return <>
+    {provenance && <>
+      <input type="hidden" name="addressEntryMode" value={provenance.addressEntryMode} />
+      <input type="hidden" name="addressProvider" value={provenance.addressProvider} />
+      <input type="hidden" name="addressProviderReference" value={provenance.addressProviderReference} />
+      <input type="hidden" name="addressFormatted" value={provenance.addressFormatted} />
+      <input type="hidden" name="addressSelectionProof" value={provenance.addressSelectionProof} />
+    </>}
+    <AustralianAddressLookup className={registerStyles.spanTwo} name="addressLine1" value={address.addressLine1} endpoint="/api/trade-address-suggestions" getAuthorization={getAuthorization} onChange={(addressLine1) => manual({ addressLine1 })} onSelect={selectAddress} />
+    <label><span>Address line 2</span><input name="addressLine2" value={address.addressLine2} onChange={(event) => manual({ addressLine2: event.target.value })} maxLength={140} autoComplete="address-line2" /></label>
+    <label><span>Suburb</span><input name="suburb" value={address.suburb} onChange={(event) => manual({ suburb: event.target.value })} maxLength={80} autoComplete="address-level2" /></label>
+    <label><span>State</span><input name="addressState" value={address.addressState} onChange={(event) => manual({ addressState: event.target.value })} maxLength={20} autoComplete="address-level1" /></label>
+    <label><span>Postcode</span><input name="postcode" value={address.postcode} onChange={(event) => manual({ postcode: event.target.value })} maxLength={12} inputMode="numeric" autoComplete="postal-code" /></label>
+  </>;
 }
 
 function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamMembers, permissions, initialTab = "summary", onCrm, onWorkOrder, onOpenJob, onOpenPriceBook, onOpenCustomer, onOpenIntegrations, onReload }: { job: Job; customer?: Customer; sites: ServiceSite[]; user: User; busy: string; refreshing?: boolean; teamMembers: TeamMember[]; permissions?: TradeTeamPermissions; initialTab?: JobTab; onCrm: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onWorkOrder: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onOpenJob: (workOrderId: string) => void; onOpenPriceBook: () => void; onOpenCustomer: (customerId: string) => void; onOpenIntegrations: () => void; onReload: () => Promise<void> }) {
@@ -1483,9 +1574,10 @@ function CustomerDetail({ user, customer, contacts, sites, jobs, busy, readOnly 
   onSave: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>;
   onOpenJob: (id: string) => void;
 }) {
+  const [newSiteAddressRevision, setNewSiteAddressRevision] = useState(0);
   async function saveAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const data = new FormData(event.currentTarget);
-    await onSave("PATCH", { action: "update_customer", customerId: customer.id, firstName: data.get("firstName"), lastName: data.get("lastName"), businessName: data.get("businessName"), email: data.get("email"), phone: data.get("phone"), addressLine1: data.get("addressLine1"), addressLine2: data.get("addressLine2"), suburb: data.get("suburb"), addressState: data.get("addressState"), postcode: data.get("postcode"), tags: data.get("tags"), privateNotes: data.get("privateNotes") }, `customer:${customer.id}`, "Customer account saved.");
+    await onSave("PATCH", { action: "update_customer", customerId: customer.id, firstName: data.get("firstName"), lastName: data.get("lastName"), businessName: data.get("businessName"), email: data.get("email"), phone: data.get("phone"), ...addressFormPayload(data), tags: data.get("tags"), privateNotes: data.get("privateNotes") }, `customer:${customer.id}`, "Customer account saved.");
   }
   async function createContact(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
@@ -1498,8 +1590,8 @@ function CustomerDetail({ user, customer, contacts, sites, jobs, busy, readOnly 
   }
   async function createSite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
-    const saved = await onSave("POST", { action: "create_service_site", customerId: customer.id, siteLabel: data.get("siteLabel"), addressLine1: data.get("addressLine1"), addressLine2: data.get("addressLine2"), suburb: data.get("suburb"), addressState: data.get("addressState"), postcode: data.get("postcode"), accessInstructions: data.get("accessInstructions"), parkingInstructions: data.get("parkingInstructions"), hazardNotes: data.get("hazardNotes"), customerContactId: data.get("customerContactId") }, `site-new:${customer.id}`, "Service site added.");
-    if (saved) form.reset();
+    const saved = await onSave("POST", { action: "create_service_site", customerId: customer.id, siteLabel: data.get("siteLabel"), ...addressFormPayload(data), accessInstructions: data.get("accessInstructions"), parkingInstructions: data.get("parkingInstructions"), hazardNotes: data.get("hazardNotes"), customerContactId: data.get("customerContactId") }, `site-new:${customer.id}`, "Service site added.");
+    if (saved) { form.reset(); setNewSiteAddressRevision((current) => current + 1); }
   }
   async function saveSite(event: FormEvent<HTMLFormElement>, site: ServiceSite) {
     event.preventDefault(); const data = new FormData(event.currentTarget);
@@ -1513,13 +1605,7 @@ function CustomerDetail({ user, customer, contacts, sites, jobs, busy, readOnly 
       hazardNotes: data.get("hazardNotes"),
     };
     if (!site.isPrimary) {
-      Object.assign(update, {
-        addressLine1: data.get("addressLine1"),
-        addressLine2: data.get("addressLine2"),
-        suburb: data.get("suburb"),
-        addressState: data.get("addressState"),
-        postcode: data.get("postcode"),
-      });
+      Object.assign(update, addressFormPayload(data));
     }
     await onSave("PATCH", update, `site:${site.id}`, "Service site saved.");
   }
@@ -1558,11 +1644,7 @@ function CustomerDetail({ user, customer, contacts, sites, jobs, busy, readOnly 
             <label><span>Business name</span><input name="businessName" defaultValue={customer.businessName} maxLength={140} autoComplete="organization" /></label>
             <label className={registerStyles.spanTwo}><span>Email</span><input type="email" name="email" defaultValue={customer.email} maxLength={180} autoComplete="email" /></label>
             <label><span>Phone</span><input type="tel" name="phone" defaultValue={customer.phone} maxLength={40} inputMode="tel" autoComplete="tel" /></label>
-            <label className={registerStyles.spanTwo}><span>Street address</span><input name="addressLine1" defaultValue={customer.addressLine1} autoComplete="address-line1" /></label>
-            <label><span>Address line 2</span><input name="addressLine2" defaultValue={customer.addressLine2} autoComplete="address-line2" /></label>
-            <label><span>Suburb</span><input name="suburb" defaultValue={customer.suburb} autoComplete="address-level2" /></label>
-            <label><span>State</span><input name="addressState" defaultValue={customer.addressState} maxLength={20} autoComplete="address-level1" /></label>
-            <label><span>Postcode</span><input name="postcode" defaultValue={customer.postcode} maxLength={12} inputMode="numeric" autoComplete="postal-code" /></label>
+            <CrmAddressFields user={user} initialValue={customer} />
             <label className={registerStyles.wideField}><span>Tags</span><input name="tags" defaultValue={customer.tags.join(", ")} placeholder="VIP, property manager, preferred customer" /></label>
             <label className={registerStyles.wideField}><span>Private account notes</span><textarea name="privateNotes" defaultValue={customer.privateNotes} rows={4} maxLength={2000} /></label>
           </div>
@@ -1615,11 +1697,7 @@ function CustomerDetail({ user, customer, contacts, sites, jobs, busy, readOnly 
           <div className={registerStyles.entityBody}>
             <form className={registerStyles.customerForm} onSubmit={(event) => void saveSite(event, site)}><div className={registerStyles.customerFormGrid}>
               <label><span>Site name</span><input name="siteLabel" defaultValue={site.siteLabel} required maxLength={100} /></label>
-              <label className={registerStyles.spanTwo}><span>Street address</span><input name="addressLine1" defaultValue={site.addressLine1} /></label>
-              <label><span>Address line 2</span><input name="addressLine2" defaultValue={site.addressLine2} /></label>
-              <label><span>Suburb</span><input name="suburb" defaultValue={site.suburb} /></label>
-              <label><span>State</span><input name="addressState" defaultValue={site.addressState} maxLength={20} /></label>
-              <label><span>Postcode</span><input name="postcode" defaultValue={site.postcode} maxLength={12} inputMode="numeric" /></label>
+              <CrmAddressFields user={user} initialValue={site} />
               <label className={registerStyles.wideField}><span>Access instructions</span><textarea name="accessInstructions" defaultValue={site.accessInstructions} rows={2} maxLength={2000} /></label>
               <label className={registerStyles.wideField}><span>Parking instructions</span><textarea name="parkingInstructions" defaultValue={site.parkingInstructions} rows={2} maxLength={1000} /></label>
               <label className={registerStyles.wideField}><span>Hazards and controls</span><textarea name="hazardNotes" defaultValue={site.hazardNotes} rows={3} maxLength={2000} placeholder="Record site hazards only. Confirm controls before work starts." /></label>
@@ -1628,7 +1706,7 @@ function CustomerDetail({ user, customer, contacts, sites, jobs, busy, readOnly 
           </div>
         </details>)}</div> : <p className={registerStyles.emptyMessage}>No additional sites. The main address is saved in Customer details.</p>}
         {!readOnly && <details className={registerStyles.addPanel}><summary>Add service site</summary><div className={registerStyles.entityBody}><form className={registerStyles.customerForm} onSubmit={createSite}><div className={registerStyles.customerFormGrid}>
-          <label><span>Site name</span><input name="siteLabel" required maxLength={100} placeholder="Warehouse, rental, northern office" /></label><label className={registerStyles.spanTwo}><span>Service contact</span><select name="customerContactId"><option value="">Not yet</option>{contacts.map((contact) => <option key={contact.id} value={contact.id}>{[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "Customer contact"}</option>)}</select></label><label className={registerStyles.spanTwo}><span>Street address</span><input name="addressLine1" /></label><label><span>Address line 2</span><input name="addressLine2" /></label><label><span>Suburb</span><input name="suburb" /></label><label><span>State</span><input name="addressState" maxLength={20} /></label><label><span>Postcode</span><input name="postcode" maxLength={12} inputMode="numeric" /></label><label className={registerStyles.wideField}><span>Access instructions</span><textarea name="accessInstructions" rows={2} maxLength={2000} /></label><label className={registerStyles.wideField}><span>Parking instructions</span><textarea name="parkingInstructions" rows={2} maxLength={1000} /></label><label className={registerStyles.wideField}><span>Hazards and controls</span><textarea name="hazardNotes" rows={3} maxLength={2000} /></label>
+          <label><span>Site name</span><input name="siteLabel" required maxLength={100} placeholder="Warehouse, rental, northern office" /></label><label className={registerStyles.spanTwo}><span>Service contact</span><select name="customerContactId"><option value="">Not yet</option>{contacts.map((contact) => <option key={contact.id} value={contact.id}>{[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "Customer contact"}</option>)}</select></label><CrmAddressFields key={newSiteAddressRevision} user={user} /><label className={registerStyles.wideField}><span>Access instructions</span><textarea name="accessInstructions" rows={2} maxLength={2000} /></label><label className={registerStyles.wideField}><span>Parking instructions</span><textarea name="parkingInstructions" rows={2} maxLength={1000} /></label><label className={registerStyles.wideField}><span>Hazards and controls</span><textarea name="hazardNotes" rows={3} maxLength={2000} /></label>
         </div><div className={registerStyles.formActions}><button disabled={busy === `site-new:${customer.id}`}>{busy === `site-new:${customer.id}` ? "Adding..." : "Add service site"}</button></div></form></div></details>}
       </div>
     </details>

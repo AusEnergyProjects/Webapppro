@@ -27,6 +27,14 @@ test("quick request uses a short two-step service and contact flow", () => {
   assert.match(dialog, /fetch\("\/api\/leads"/);
 });
 
+test("a provider-selected title-case suburb adopts the postcode directory casing", () => {
+  assert.match(dialog, /selectedAddressLocality\.current = \{[\s\S]*suburb: selection\.suburb/);
+  assert.match(dialog, /entry\.suburb\.toLocaleLowerCase\("en-AU"\) === pendingLocality\.suburb\.toLocaleLowerCase\("en-AU"\)/);
+  assert.match(dialog, /setLocality\(canonicalLocality\)/);
+  assert.match(dialog, /setLookupState\("loading"\)/);
+  assert.match(dialog, /setUnitNumber\(selection\.addressLine2\)/);
+});
+
 test("quick request makes required and optional sharing explicit", () => {
   assert.match(dialog, /Australian Energy Assessments needs these details to manage the request/);
   assert.match(dialog, /Your selected services, full property address/);

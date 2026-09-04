@@ -8175,6 +8175,13 @@ export async function updateAssignedCreditexActivityWorkPackCustomerContext(
       key as keyof CreditexActivityWorkPackCustomerProjection
     ]
   );
+  const siteAddressChanged = (
+    nextProjection.addressLine1 !== current.projection.addressLine1
+    || nextProjection.addressLine2 !== current.projection.addressLine2
+    || nextProjection.suburb !== current.projection.suburb
+    || nextProjection.state !== current.projection.state
+    || nextProjection.postcode !== current.projection.postcode
+  );
   if (!changed) {
     return fail(
       "WORK_PACK_NO_CHANGES",
@@ -8263,6 +8270,14 @@ export async function updateAssignedCreditexActivityWorkPackCustomerContext(
       ),
     database.prepare(`UPDATE trade_crm_service_sites SET address_line_1 = ?,
         address_line_2 = ?, suburb = ?, address_state = ?, postcode = ?,
+        address_entry_mode = CASE WHEN ? = 1
+          THEN 'manual_pending_review' ELSE address_entry_mode END,
+        address_provider = CASE WHEN ? = 1 THEN '' ELSE address_provider END,
+        address_provider_reference = CASE WHEN ? = 1
+          THEN '' ELSE address_provider_reference END,
+        address_formatted = CASE WHEN ? = 1 THEN '' ELSE address_formatted END,
+        address_verified_at = CASE WHEN ? = 1
+          THEN '' ELSE address_verified_at END,
         updated_at = ?
       WHERE id = ? AND customer_id = ? AND firebase_uid = ?
         AND record_status = 'active' AND updated_at = ?`)
@@ -8272,6 +8287,11 @@ export async function updateAssignedCreditexActivityWorkPackCustomerContext(
         nextProjection.suburb,
         nextProjection.state,
         nextProjection.postcode,
+        siteAddressChanged ? 1 : 0,
+        siteAddressChanged ? 1 : 0,
+        siteAddressChanged ? 1 : 0,
+        siteAddressChanged ? 1 : 0,
+        siteAddressChanged ? 1 : 0,
         now,
         current.envelope.siteId,
         current.envelope.customerId,

@@ -74,7 +74,16 @@ test("the customer editor shows primary data once and progressively discloses ad
   assert.match(workspace, /additionalSites\.map/);
   assert.doesNotMatch(workspace, /Primary account contact/);
   assert.match(workspace, /action: "update_customer", customerId: customer\.id/);
-  assert.match(workspace, /if \(!site\.isPrimary\) \{\s*Object\.assign\(update, \{\s*addressLine1:/s);
+  assert.equal((workspace.match(/<CrmAddressFields/g) || []).length, 4);
+  assert.match(workspace, /function CrmAddressFields/);
+  assert.match(workspace, /function CustomerForm[\s\S]*?<CrmAddressFields user=\{user\}/);
+  assert.match(workspace, /action: "create_customer"[\s\S]*?\.\.\.addressFormPayload\(data\)/);
+  assert.match(workspace, /endpoint="\/api\/trade-address-suggestions"/);
+  assert.match(workspace, /addressLine2: selection\.addressLine2/);
+  assert.match(workspace, /addressEntryMode: "provider_selected"[\s\S]*addressSelectionProof: selection\.selectionProof \|\| ""/);
+  assert.match(workspace, /function manual[\s\S]*addressEntryMode: "manual_pending_review"[\s\S]*addressSelectionProof: ""/);
+  assert.match(workspace, /name="addressSelectionProof"/);
+  assert.match(workspace, /if \(!site\.isPrimary\) \{\s*Object\.assign\(update, addressFormPayload\(data\)\)/s);
   assert.match(workspace, /action: "link_site_contact"/);
   assert.match(styles, /\.customerForm input,[\s\S]*\.linkContactForm select \{/);
   assert.match(styles, /\.customerForm textarea \{[\s\S]*min-height: 74px/);
