@@ -190,7 +190,7 @@ test("shared provider parses safe Australian results before the route signs exac
   assert.match(route, /fetchAustralianAddressSuggestions/);
   assert.match(provider, /hostname === "maps\.googleapis\.com"/);
   assert.match(provider, /url\.protocol !== "https:"/);
-  assert.match(provider, /redirect: "error"/);
+  assert.match(provider, /redirect: "manual"/);
   assert.match(provider, /googleComponent\(components, "country", true\)\.toUpperCase\(\) !== "AU"/);
   assert.match(provider, /cleanProviderText\(item\.country, 10\)\.toUpperCase\(\) !== "AU"/);
   assert.match(provider, /canonicalProviderAddressSelection/);
