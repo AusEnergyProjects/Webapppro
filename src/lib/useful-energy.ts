@@ -17,6 +17,7 @@ export type UsefulEnergyExample = {
   costBasisLabel: string;
   climateBand: UsefulEnergyClimateBand | null;
   heatPumpCop: number;
+  heatPumpPerformanceLabel: string;
   sourceHref: string;
   sourceLabel: string;
   options: readonly UsefulEnergyOption[];
@@ -28,38 +29,40 @@ const ROOM_HEAT_OUTPUT_KWH = ROOM_HEATING_HOURS * ROOM_HEAT_LOAD_KW;
 const HOT_WATER_USEFUL_HEAT_KWH = 14;
 
 const PLANNING_HEAT_PUMP_COP = {
-  "room-heating": { hot: 4.7, average: 4.2, cold: 3.7 },
-  "hot-water": { hot: 4, average: 3.5, cold: 3 },
+  "room-heating": { hot: 5, average: 4.5, cold: 4 },
+  "hot-water": { hot: 4.5, average: 4, cold: 3.5 },
 } as const satisfies Record<UsefulEnergyExampleId, Record<UsefulEnergyClimateBand, number>>;
 
 export const USEFUL_ENERGY_EXAMPLES = [
   {
     id: "room-heating",
     label: "Room heating · 5 hours",
-    description: "One room, one winter evening. This five-hour example supplies an average 2 kW of heat, giving the room 10 kWh of useful warmth. It uses a reverse-cycle COP of 3.7 and gas-heater efficiency of 85%.",
+    description: "One room, one winter evening. This five-hour example supplies an average 2 kW of heat, giving the room 10 kWh of useful warmth. It models an efficient, correctly sized reverse-cycle unit with a seasonal heating factor of 4.5 and gas-heater efficiency of 85%.",
     costBasisLabel: "Illustrative five-hour cost at the 24-hour average",
     climateBand: null,
-    heatPumpCop: 3.7,
-    sourceHref: "https://www.energy.gov.au/households/energy-rating",
-    sourceLabel: "Australian Government five-hour heating example",
+    heatPumpCop: PLANNING_HEAT_PUMP_COP["room-heating"].average,
+    heatPumpPerformanceLabel: "seasonal heating factor",
+    sourceHref: "https://www.energy.gov.au/households/heating-and-cooling",
+    sourceLabel: "Australian Government reverse-cycle guidance",
     options: [
       { id: "direct-electric", label: "Direct electric heater", fuel: "electricity", inputKwh: ROOM_HEAT_OUTPUT_KWH, lowestEnergyUse: false },
-      { id: "reverse-cycle", label: "Reverse-cycle heat pump", fuel: "electricity", inputKwh: ROOM_HEAT_OUTPUT_KWH / 3.7, lowestEnergyUse: true },
+      { id: "reverse-cycle", label: "Reverse-cycle heat pump", fuel: "electricity", inputKwh: ROOM_HEAT_OUTPUT_KWH / PLANNING_HEAT_PUMP_COP["room-heating"].average, lowestEnergyUse: true },
       { id: "gas-heater", label: "Gas heater", fuel: "gas", inputKwh: ROOM_HEAT_OUTPUT_KWH / .85, lowestEnergyUse: false },
     ],
   },
   {
     id: "hot-water",
     label: "Hot water · full tank",
-    description: "One full 300 litre hot-water cycle. Each option heats the same tank to 60°C. The energy shown covers the whole heating task, not a fixed number of running hours. It uses a heat-pump COP of 3 and gas efficiency of 85%.",
+    description: "One full 300 litre hot-water cycle. Each option heats the same tank to 60°C. The energy shown covers the whole heating task, not a fixed number of running hours. It models an efficient, correctly sized heat pump with a heat-up-cycle COP of 4.0 and gas efficiency of 85%.",
     costBasisLabel: "Illustrative full-tank cost at the 24-hour average",
     climateBand: null,
-    heatPumpCop: 3,
-    sourceHref: "https://www.climatechoices.act.gov.au/policy-programs/sustainable-household-scheme/buyers-guides/singing-in-the-shower-a-guide-to-hot-water-heat-pumps",
-    sourceLabel: "ACT Government hot-water comparison",
+    heatPumpCop: PLANNING_HEAT_PUMP_COP["hot-water"].average,
+    heatPumpPerformanceLabel: "heat-up-cycle COP",
+    sourceHref: "https://www.yourhome.gov.au/energy/hot-water-systems",
+    sourceLabel: "Australian Government hot-water guidance",
     options: [
       { id: "electric-water-heater", label: "Standard electric system", fuel: "electricity", inputKwh: 14, lowestEnergyUse: false },
-      { id: "heat-pump-water-heater", label: "Heat-pump hot water", fuel: "electricity", inputKwh: 4.7, lowestEnergyUse: true },
+      { id: "heat-pump-water-heater", label: "Heat-pump hot water", fuel: "electricity", inputKwh: Number((HOT_WATER_USEFUL_HEAT_KWH / PLANNING_HEAT_PUMP_COP["hot-water"].average).toFixed(1)), lowestEnergyUse: true },
       { id: "gas-water-heater", label: "Gas hot-water system", fuel: "gas", inputKwh: 16.5, lowestEnergyUse: false },
     ],
   },
@@ -75,7 +78,7 @@ export function usefulEnergyExample(id: UsefulEnergyExampleId, climateBand: Usef
       ...base,
       climateBand,
       heatPumpCop,
-      description: `One room, one winter evening. This five-hour example supplies an average 2 kW of heat, or 10 kWh of useful warmth. Your postcode selected the ${climateLabel.toLowerCase()} Energy Rating climate band, so the planning COP is ${heatPumpCop.toFixed(1)}. Gas-heater efficiency remains 85%.`,
+      description: `One room, one winter evening. This five-hour example supplies an average 2 kW of heat, or 10 kWh of useful warmth. Your postcode selected the ${climateLabel.toLowerCase()} Energy Rating climate band, so this efficient-system example uses a seasonal heating factor of ${heatPumpCop.toFixed(1)}. Gas-heater efficiency remains 85%.`,
       options: base.options.map((option) => option.id === "reverse-cycle"
         ? { ...option, inputKwh: ROOM_HEAT_OUTPUT_KWH / heatPumpCop }
         : option),
@@ -85,7 +88,7 @@ export function usefulEnergyExample(id: UsefulEnergyExampleId, climateBand: Usef
     ...base,
     climateBand,
     heatPumpCop,
-    description: `One full 300 litre hot-water cycle. Each option heats the same tank to 60°C. Your postcode selected a ${climateLabel.toLowerCase()} temperature context, so this planning example uses a heat-pump COP of ${heatPumpCop.toFixed(1)}. Gas efficiency remains 85%.`,
+    description: `One full 300 litre hot-water cycle. Each option heats the same tank to 60°C. Your postcode selected a ${climateLabel.toLowerCase()} temperature context, so this efficient-system example uses a heat-up-cycle COP of ${heatPumpCop.toFixed(1)}. Gas efficiency remains 85%.`,
     sourceHref: "https://www.yourhome.gov.au/energy/hot-water-systems",
     sourceLabel: "Australian Government hot-water guidance",
     options: base.options.map((option) => option.id === "heat-pump-water-heater"

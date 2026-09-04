@@ -170,7 +170,9 @@ test("page discovery, consumer explanations and accessible interaction are prese
   assert.match(component,/parseEnergyRatingClimate/);
   assert.match(component,/The appliance examples below have updated/);
   assert.match(component,/Climate band/);
-  assert.match(component,/planning COP/);
+  assert.match(component,/planning \{example\.heatPumpPerformanceLabel\}/);
+  assert.match(component,/efficient, correctly sized system/);
+  assert.match(component,/Booster use, tank losses and standby energy/);
   assert.doesNotMatch(component,/not an exact climate zone or appliance result/);
   assert.doesNotMatch(location,/residentialStateFromPostcode/);
   assert.match(component,/Why can gas still look cheaper here\?/);

@@ -8,35 +8,39 @@ test("room heating compares the same useful output with official example perform
   assert.match(example.description, /five-hour example.*2 kW.*10 kWh/);
   assert.equal(example.costBasisLabel, "Illustrative five-hour cost at the 24-hour average");
   assert.equal(example.options[0].inputKwh, 10);
-  assert.equal(Number(example.options[1].inputKwh.toFixed(3)), 2.703);
+  assert.equal(example.heatPumpCop, 4.5);
+  assert.equal(example.heatPumpPerformanceLabel, "seasonal heating factor");
+  assert.equal(Number(example.options[1].inputKwh.toFixed(3)), 2.222);
   assert.equal(Number(example.options[2].inputKwh.toFixed(3)), 11.765);
   assert.deepEqual(example.options.filter(({ lowestEnergyUse }) => lowestEnergyUse).map(({ id }) => id), ["reverse-cycle"]);
-  assert.equal(purchasedEnergyReductionPercent(example.options[1].inputKwh, example.options[2].inputKwh), 77);
+  assert.equal(purchasedEnergyReductionPercent(example.options[1].inputKwh, example.options[2].inputKwh), 81);
   assert.equal(wholesaleInputCostCents(example.options[0].inputKwh, 10), 100);
-  assert.equal(Number(wholesaleInputCostCents(example.options[1].inputKwh, 10).toFixed(2)), 27.03);
+  assert.equal(Number(wholesaleInputCostCents(example.options[1].inputKwh, 10).toFixed(2)), 22.22);
   assert.equal(Number(wholesaleInputCostCents(example.options[2].inputKwh, 3.6).toFixed(2)), 42.35);
 });
 
-test("hot water retains the official 300 litre worked example inputs", () => {
+test("hot water compares one full tank using an efficient-system planning COP", () => {
   const example = usefulEnergyExample("hot-water");
   assert.equal(example.label, "Hot water · full tank");
   assert.match(example.description, /whole heating task, not a fixed number of running hours/);
-  assert.deepEqual(example.options.map(({ inputKwh }) => inputKwh), [14, 4.7, 16.5]);
+  assert.equal(example.heatPumpCop, 4);
+  assert.equal(example.heatPumpPerformanceLabel, "heat-up-cycle COP");
+  assert.deepEqual(example.options.map(({ inputKwh }) => inputKwh), [14, 3.5, 16.5]);
   assert.deepEqual(example.options.map(({ fuel }) => fuel), ["electricity", "electricity", "gas"]);
   assert.deepEqual(example.options.filter(({ lowestEnergyUse }) => lowestEnergyUse).map(({ id }) => id), ["heat-pump-water-heater"]);
-  assert.equal(purchasedEnergyReductionPercent(example.options[1].inputKwh, example.options[2].inputKwh), 72);
+  assert.equal(purchasedEnergyReductionPercent(example.options[1].inputKwh, example.options[2].inputKwh), 79);
   assert.equal(wholesaleInputCostCents(14, 10), 140);
-  assert.equal(wholesaleInputCostCents(4.7, 10), 47);
+  assert.equal(wholesaleInputCostCents(3.5, 10), 35);
   assert.equal(wholesaleInputCostCents(16.5, 3.6), 59.4);
   assert.equal(USEFUL_ENERGY_EXAMPLES.length, 2);
 });
 
 test("postcode climate bands update transparent planning inputs without changing useful output", () => {
   const hotRoom = usefulEnergyExample("room-heating", "hot");
+  const averageRoom = usefulEnergyExample("room-heating", "average");
   const coldRoom = usefulEnergyExample("room-heating", "cold");
   assert.equal(hotRoom.climateBand, "hot");
-  assert.equal(hotRoom.heatPumpCop, 4.7);
-  assert.equal(coldRoom.heatPumpCop, 3.7);
+  assert.deepEqual([hotRoom.heatPumpCop, averageRoom.heatPumpCop, coldRoom.heatPumpCop], [5, 4.5, 4]);
   assert.ok(hotRoom.options[1].inputKwh < coldRoom.options[1].inputKwh);
   assert.equal(hotRoom.options[0].inputKwh, coldRoom.options[0].inputKwh);
   assert.equal(hotRoom.options[2].inputKwh, coldRoom.options[2].inputKwh);
@@ -44,8 +48,8 @@ test("postcode climate bands update transparent planning inputs without changing
   const hotWater = usefulEnergyExample("hot-water", "hot");
   const averageWater = usefulEnergyExample("hot-water", "average");
   const coldWater = usefulEnergyExample("hot-water", "cold");
-  assert.deepEqual([hotWater.heatPumpCop, averageWater.heatPumpCop, coldWater.heatPumpCop], [4, 3.5, 3]);
-  assert.deepEqual([hotWater.options[1].inputKwh, averageWater.options[1].inputKwh, coldWater.options[1].inputKwh], [3.5, 4, 4.7]);
+  assert.deepEqual([hotWater.heatPumpCop, averageWater.heatPumpCop, coldWater.heatPumpCop], [4.5, 4, 3.5]);
+  assert.deepEqual([hotWater.options[1].inputKwh, averageWater.options[1].inputKwh, coldWater.options[1].inputKwh], [3.1, 3.5, 4]);
   assert.deepEqual(hotWater.options.filter(({ id }) => id !== "heat-pump-water-heater").map(({ inputKwh }) => inputKwh), [14, 16.5]);
 });
 
