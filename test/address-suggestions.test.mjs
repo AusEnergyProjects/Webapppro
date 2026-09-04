@@ -195,7 +195,7 @@ test("Google Places autocomplete sends the key only in a header and returns boun
     assert.equal(url.href, "https://places.googleapis.com/v1/places:autocomplete");
     assert.equal(url.searchParams.has("key"), false);
     assert.equal(init?.method, "POST");
-    assert.equal(init?.redirect, "error");
+    assert.equal(init?.redirect, "manual");
     assert.equal(headers.get("X-Goog-Api-Key"), "test-key");
     assert.equal(
       headers.get("X-Goog-FieldMask"),
@@ -243,6 +243,7 @@ test("a Google prediction is resolved through Place Details before structured fi
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
     const headers = new Headers(init?.headers);
+    assert.equal(init?.redirect, "manual");
     assert.equal(url.origin, "https://places.googleapis.com");
     assert.equal(url.pathname, "/v1/places/melbourne-place");
     assert.equal(url.searchParams.get("languageCode"), "en-AU");

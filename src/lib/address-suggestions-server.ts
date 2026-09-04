@@ -437,7 +437,7 @@ async function googlePlacesPredictions(
       "X-Goog-Api-Key": token,
       "X-Goog-FieldMask": GOOGLE_PREDICTION_FIELD_MASK,
     },
-    redirect: "error",
+    redirect: "manual",
     signal: AbortSignal.timeout(4_000),
   });
   const result = await responseJson(response) as {
@@ -472,7 +472,7 @@ async function googleLegacySelections(
       Accept: "application/json",
       "X-Goog-Api-Key": token,
     },
-    redirect: "error",
+    redirect: "manual",
     signal: AbortSignal.timeout(4_000),
   });
   const result = await responseJson(response) as {
@@ -502,7 +502,7 @@ async function neutralSelections(
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
     },
-    redirect: "error",
+    redirect: "manual",
     signal: AbortSignal.timeout(4_000),
   });
   const result = await responseJson(response) as {
@@ -595,7 +595,7 @@ export async function resolveAustralianAddressSuggestion(
           "X-Goog-Api-Key": token,
           "X-Goog-FieldMask": GOOGLE_DETAILS_FIELD_MASK,
         },
-        redirect: "error",
+        redirect: "manual",
         signal: AbortSignal.timeout(4_000),
       });
       const place = await responseJson(response) as GoogleAddressResult;
