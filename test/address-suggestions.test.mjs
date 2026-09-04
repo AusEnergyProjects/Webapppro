@@ -622,6 +622,9 @@ test("the same-origin POST routes and lookup preserve privacy, proof, throttling
   assert.doesNotMatch(publicRoute, /new Map/);
   assert.match(publicRoute, /Cache-Control": "no-store"/);
   assert.doesNotMatch(publicRoute, /selectionProof|CRM_INTEGRATION_ENCRYPTION_KEY|TLINK_ADDRESS_AUTOCOMPLETE_TOKEN/);
+  assert.match(publicRoute, /X-Address-Provider-Status/);
+  assert.match(publicRoute, /X-Address-Provider-Code/);
+  assert.match(publicRoute, /X-Address-Provider-Reason/);
   assert.ok(
     tradeRoute.indexOf("resolveAustralianAddressSuggestion(action)")
       < tradeRoute.indexOf("issueTradeAddressSelectionProof(result.selection"),

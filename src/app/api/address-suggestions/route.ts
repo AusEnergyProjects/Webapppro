@@ -117,10 +117,13 @@ export async function POST(request: Request) {
         422,
       );
     }
-    const message = error instanceof AddressSuggestionProviderError
-      ? error.message
+    const providerError = error instanceof AddressSuggestionProviderError
+      ? error
+      : null;
+    const message = providerError
+      ? providerError.message
       : "Address suggestions are temporarily unavailable.";
-    return adminJson(
+    return Response.json(
       {
         ok: false,
         configured: true,
@@ -128,7 +131,15 @@ export async function POST(request: Request) {
         suggestions: [],
         error: `${message} Enter the address manually.`,
       },
-      502,
+      {
+        status: 502,
+        headers: {
+          "Cache-Control": "no-store",
+          "X-Address-Provider-Status": String(providerError?.providerStatus || 0),
+          "X-Address-Provider-Code": providerError?.providerCode || "UNKNOWN",
+          "X-Address-Provider-Reason": providerError?.providerReason || "UNKNOWN",
+        },
+      },
     );
   }
 }
