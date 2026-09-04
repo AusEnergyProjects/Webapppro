@@ -149,7 +149,7 @@ test("page discovery, consumer explanations and accessible interaction are prese
   assert.match(component,/type="radio"/);
   assert.match(component,/Purchased energy for the same result/);
   assert.match(component,/Shorter bar means less energy bought/);
-  assert.match(component,/Cost of this heating job at the snapshot average wholesale price/);
+  assert.match(component,/Cost at the snapshot average wholesale price/);
   assert.match(component,/hours for which both electricity and gas prices were available/);
   assert.match(component,/wholesalePriceSnapshot/);
   assert.match(priceSnapshot,/MIN_RELIABLE_PRICE_INTERVALS = 276/);
@@ -162,7 +162,11 @@ test("page discovery, consumer explanations and accessible interaction are prese
   assert.match(component,/postcodeRequestId\.current \+= 1/);
   assert.match(component,/aria-busy=\{postcodeLoading\}/);
   assert.match(component,/aria-invalid=\{postcodeError \|\| undefined\}/);
-  assert.match(component,/not an exact climate zone or appliance result/);
+  assert.match(component,/parseEnergyRatingClimate/);
+  assert.match(component,/The appliance examples below have updated/);
+  assert.match(component,/Climate band/);
+  assert.match(component,/planning COP/);
+  assert.doesNotMatch(component,/not an exact climate zone or appliance result/);
   assert.doesNotMatch(location,/residentialStateFromPostcode/);
   assert.match(component,/Why can gas still look cheaper here\?/);
   assert.match(component,/daily gas supply charge/);

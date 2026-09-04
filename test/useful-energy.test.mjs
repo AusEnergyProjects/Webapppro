@@ -26,6 +26,24 @@ test("hot water retains the official 300 litre worked example inputs", () => {
   assert.equal(USEFUL_ENERGY_EXAMPLES.length, 2);
 });
 
+test("postcode climate bands update transparent planning inputs without changing useful output", () => {
+  const hotRoom = usefulEnergyExample("room-heating", "hot");
+  const coldRoom = usefulEnergyExample("room-heating", "cold");
+  assert.equal(hotRoom.climateBand, "hot");
+  assert.equal(hotRoom.heatPumpCop, 4.7);
+  assert.equal(coldRoom.heatPumpCop, 3.7);
+  assert.ok(hotRoom.options[1].inputKwh < coldRoom.options[1].inputKwh);
+  assert.equal(hotRoom.options[0].inputKwh, coldRoom.options[0].inputKwh);
+  assert.equal(hotRoom.options[2].inputKwh, coldRoom.options[2].inputKwh);
+
+  const hotWater = usefulEnergyExample("hot-water", "hot");
+  const averageWater = usefulEnergyExample("hot-water", "average");
+  const coldWater = usefulEnergyExample("hot-water", "cold");
+  assert.deepEqual([hotWater.heatPumpCop, averageWater.heatPumpCop, coldWater.heatPumpCop], [4, 3.5, 3]);
+  assert.deepEqual([hotWater.options[1].inputKwh, averageWater.options[1].inputKwh, coldWater.options[1].inputKwh], [3.5, 4, 4.7]);
+  assert.deepEqual(hotWater.options.filter(({ id }) => id !== "heat-pump-water-heater").map(({ inputKwh }) => inputKwh), [14, 16.5]);
+});
+
 test("wholesale cost preserves missing and negative market readings", () => {
   assert.equal(wholesaleInputCostCents(5, null), null);
   assert.equal(wholesaleInputCostCents(5, -2), -10);

@@ -85,6 +85,11 @@ test("the public locality route is dependency-light and returns no-store JSON", 
     ok: true,
     postcode: "3000",
     localities: addressLocalitiesForPostcode("3000").localities,
+    energyRatingClimate: {
+      band: "cold",
+      choices: ["cold"],
+      hasMultipleBands: false,
+    },
   });
 
   const sameOrigin = await addressLocalitiesGet(new Request(
@@ -93,6 +98,7 @@ test("the public locality route is dependency-light and returns no-store JSON", 
   ));
   assert.equal(sameOrigin.status, 200);
   const crossBorder = await sameOrigin.json();
+  assert.ok(crossBorder.energyRatingClimate);
   assert.deepEqual(
     [...new Set(crossBorder.localities.map(({ state }) => state))].sort(),
     ["NT", "SA", "WA"],

@@ -19,6 +19,8 @@ const RIGHT = 24;
 const TOP = 24;
 const BOTTOM = 46;
 const GAS_COLOUR = "#ffbd75";
+const ENERGY_RATING_CLIMATE_SOURCE_URL = "https://calculator.energyrating.gov.au/ClimatePopupForAC.aspx?goPageName=Home";
+const ENERGY_RATING_CLIMATE_BANDS = new Set(["hot", "average", "cold"]);
 const price = (value: number | null | undefined) => value == null ? "No reading" : value.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const regionLabel = (id: NemRegionId) => NEM_REGIONS.find((region) => region.id === id)!.label;
 const theme = (colour: string): CSSProperties => ({ "--region-colour": colour } as CSSProperties);
@@ -42,6 +44,29 @@ const gasContextStyle: CSSProperties = { background: "#0a2232", borderLeft: "3px
 const postcodeFormStyle: CSSProperties = { alignItems: "end", background: "#081f2f", border: "1px solid #284a59", borderRadius: 13, display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16, padding: "13px 15px" };
 const postcodeInputStyle: CSSProperties = { background: "#061824", border: "1px solid #3a5d6c", borderRadius: 9, color: "#eefbff", font: "inherit", fontSize: ".88rem", minHeight: 42, padding: "8px 11px", width: 130 };
 const postcodeButtonStyle: CSSProperties = { background: "#0f9d7a", border: "1px solid #5de1c0", borderRadius: 9, color: "white", cursor: "pointer", font: "inherit", fontSize: ".82rem", fontWeight: 800, minHeight: 42, padding: "8px 15px" };
+const climateResultStyle: CSSProperties = { alignItems: "center", background: "#0a3038", border: "1px solid #4fbca4", borderRadius: 11, display: "flex", flexWrap: "wrap", gap: "8px 18px", marginTop: 16, padding: "12px 14px" };
+
+type AppliedPostcodeClimate = {
+  postcode: string;
+  band: EnergyRatingClimateBand;
+  choices: readonly EnergyRatingClimateBand[];
+};
+
+type EnergyRatingClimateBand = "hot" | "average" | "cold";
+
+function energyRatingClimateBandLabel(band: EnergyRatingClimateBand): string {
+  return `${band[0].toUpperCase()}${band.slice(1)} climate`;
+}
+
+function parseEnergyRatingClimate(value: unknown): Omit<AppliedPostcodeClimate, "postcode"> | null {
+  if (!value || typeof value !== "object" || !("band" in value) || !("choices" in value)) return null;
+  if (typeof value.band !== "string" || !ENERGY_RATING_CLIMATE_BANDS.has(value.band)) return null;
+  if (!Array.isArray(value.choices)) return null;
+  const choices = [...new Set(value.choices)].filter((choice): choice is EnergyRatingClimateBand => typeof choice === "string" && ENERGY_RATING_CLIMATE_BANDS.has(choice));
+  const band = value.band as EnergyRatingClimateBand;
+  if (!choices.includes(band)) return null;
+  return { band, choices };
+}
 
 function formatWholesaleCost(value: number | null, fuel: "electricity" | "gas", unavailableLabel?: string) {
   if (value === null) return unavailableLabel ?? (fuel === "gas" ? "No comparable gas reading" : "No electricity reading");
@@ -130,9 +155,9 @@ function PriceChart({ region, gasRegion, gasDelayed, windowEnd, colour, activeIn
   </section>;
 }
 
-function UsefulEnergyExamples({ regionId, electricityPrice, gasPrice, electricityIntervalCount, matchedPriceCount, hasReliableElectricityWindow, hasReliableGasWindow }: { regionId: NemRegionId; electricityPrice: number | null; gasPrice: number | null; electricityIntervalCount: number; matchedPriceCount: number; hasReliableElectricityWindow: boolean; hasReliableGasWindow: boolean }) {
+function UsefulEnergyExamples({ regionId, postcodeClimate, electricityPrice, gasPrice, electricityIntervalCount, matchedPriceCount, hasReliableElectricityWindow, hasReliableGasWindow }: { regionId: NemRegionId; postcodeClimate: AppliedPostcodeClimate | null; electricityPrice: number | null; gasPrice: number | null; electricityIntervalCount: number; matchedPriceCount: number; hasReliableElectricityWindow: boolean; hasReliableGasWindow: boolean }) {
   const [exampleId, setExampleId] = useState<UsefulEnergyExampleId>("room-heating");
-  const example = usefulEnergyExample(exampleId);
+  const example = usefulEnergyExample(exampleId, postcodeClimate?.band ?? null);
   const lowestEnergyOption = example.options.find((option) => option.lowestEnergyUse)!;
   const gasOption = example.options.find((option) => option.fuel === "gas")!;
   const energyReduction = purchasedEnergyReductionPercent(lowestEnergyOption.inputKwh, gasOption.inputKwh);
@@ -145,6 +170,7 @@ function UsefulEnergyExamples({ regionId, electricityPrice, gasPrice, electricit
   const electricityCoverageHours = electricityIntervalCount * NEM_INTERVAL_MS / 3_600_000;
   const coverageHours = matchedPriceCount * NEM_INTERVAL_MS / 3_600_000;
   const marketHasGas = gasMarketForRegion(regionId) !== null;
+  const resultLabel = exampleId === "room-heating" ? "room heat" : "hot water";
 
   return <section className={styles.flows} style={exampleSectionStyle} aria-labelledby="useful-energy-example-title">
     <h2 id="useful-energy-example-title">What could this energy do?</h2>
@@ -161,6 +187,10 @@ function UsefulEnergyExamples({ regionId, electricityPrice, gasPrice, electricit
         })}
       </div>
     </fieldset>
+    {postcodeClimate && <div style={climateResultStyle}>
+      <strong style={{ color: "#73ebcc", flex: "1 1 180px", fontSize: ".88rem" }}>Postcode {postcodeClimate.postcode}: {energyRatingClimateBandLabel(postcodeClimate.band)}</strong>
+      <span style={{ color: "#d3e7ec", flex: "2 1 320px", fontSize: ".8rem", lineHeight: 1.55 }}>The {resultLabel} example has updated using a visible planning COP of {example.heatPumpCop.toFixed(1)}. It is an informed estimate, not a rating for an unspecified appliance.</span>
+    </div>}
     <p id={descriptionId} style={{ color: "#d3e5eb", fontSize: ".86rem", lineHeight: 1.6, margin: "16px 0 0" }}>{example.description}</p>
     <p id={caveatId} style={{ color: "#adc8d3", fontSize: ".76rem", lineHeight: 1.55, margin: "10px 0 0" }}><strong style={{ color: "#e4f8fc" }}>Wholesale input cost, not a bill estimate.</strong> Appliance cycling, standing or duct losses, fan electricity and rooftop solar are not included. A negative spot price does not mean a household is paid to use energy.</p>
     <div style={energyVisualStyle}>
@@ -183,14 +213,14 @@ function UsefulEnergyExamples({ regionId, electricityPrice, gasPrice, electricit
           </div>
           <div style={energyTrackStyle} aria-hidden="true"><span style={{ background: barColour, borderRadius: 999, display: "block", height: "100%", width: `${option.inputKwh / maximumInput * 100}%` }} /></div>
           <div style={energyRowMetaStyle}>
-            <span>{option.lowestEnergyUse ? `About ${energyReduction}% less purchased energy than gas` : "Purchased energy for the same heating result"}</span>
-            <span><strong style={{ color: "#dbeef3" }}>Cost of this heating job at the snapshot average wholesale price:</strong> {formatWholesaleCost(estimatedCost, option.fuel, unavailableCostLabel)}</span>
+            <span>{option.lowestEnergyUse ? `About ${energyReduction}% less purchased energy than gas · planning COP ${example.heatPumpCop.toFixed(1)}` : `Purchased energy for the same ${resultLabel} result`}</span>
+            <span><strong style={{ color: "#dbeef3" }}>Cost at the snapshot average wholesale price:</strong> {formatWholesaleCost(estimatedCost, option.fuel, unavailableCostLabel)}</span>
           </div>
         </div>;
       })}
     </div>
     {gasLooksCheaper && <p style={gasContextStyle}><strong style={{ color: "#ffe0b2" }}>Why can gas still look cheaper here?</strong> These figures use wholesale energy prices, not household retail tariffs. They leave out network, retailer and daily supply charges, including a separate daily gas supply charge if the home stays connected. This is not a final household running-cost comparison. Gas can look cheaper over this wholesale window even though the heat pump uses much less purchased energy for the same result.</p>}
-    <p style={{ color: "#adc8d3", fontSize: ".76rem", lineHeight: 1.55, margin: "12px 0 0" }}>Based on <a href={example.sourceHref} target="_blank" rel="noopener noreferrer" style={{ color: "#8cf2d4", textDecoration: "underline", textUnderlineOffset: 3 }}>{example.sourceLabel}</a> figures. These are illustrative ACT Government assumptions, not a climate-zone model. Real seasonal performance varies with outdoor temperature, equipment, sizing, installation and the home.</p>
+    <p style={{ color: "#adc8d3", fontSize: ".76rem", lineHeight: 1.55, margin: "12px 0 0" }}>{postcodeClimate ? <>The postcode band comes from the <a href={ENERGY_RATING_CLIMATE_SOURCE_URL} target="_blank" rel="noopener noreferrer" style={{ color: "#8cf2d4", textDecoration: "underline", textUnderlineOffset: 3 }}>Australian Government Energy Rating Calculator</a>. The planning COP sits within the broad efficiency range described by <a href={example.sourceHref} target="_blank" rel="noopener noreferrer" style={{ color: "#8cf2d4", textDecoration: "underline", textUnderlineOffset: 3 }}>{example.sourceLabel}</a>. Exact model performance, sizing, outdoor temperature, installation and the home still matter. {exampleId === "hot-water" && "Hot-water systems use a separate product and certificate framework, so the postcode band is temperature context rather than an official hot-water COP."}</> : <>Based on <a href={example.sourceHref} target="_blank" rel="noopener noreferrer" style={{ color: "#8cf2d4", textDecoration: "underline", textUnderlineOffset: 3 }}>{example.sourceLabel}</a> figures. Enter a postcode above to apply the local Energy Rating climate band and update this planning example.</>}</p>
   </section>;
 }
 
@@ -209,6 +239,7 @@ export function WholesaleElectricity() {
   const [postcodeMessage, setPostcodeMessage] = useState("");
   const [postcodeError, setPostcodeError] = useState(false);
   const [postcodeLoading, setPostcodeLoading] = useState(false);
+  const [appliedPostcodeClimate, setAppliedPostcodeClimate] = useState<AppliedPostcodeClimate | null>(null);
   const postcodeRequestId = useRef(0);
 
   useEffect(() => {
@@ -290,13 +321,19 @@ export function WholesaleElectricity() {
       const location = wholesaleLocationForStates(payload.localities.flatMap((item) => typeof item === "object" && item !== null && "state" in item && typeof item.state === "string" ? [item.state] : []));
       if (!location) throw new Error("Invalid locality response");
       if (location.kind === "outside-nem") {
+        setAppliedPostcodeClimate(null);
         setPostcodeMessage(`${new Intl.ListFormat("en-AU").format(location.stateLabels)} is outside the National Electricity Market shown on this page.`);
       } else if (location.kind === "ambiguous" || !location.regionId) {
+        setAppliedPostcodeClimate(null);
         setPostcodeMessage(`Postcode ${submittedPostcode} spans ${new Intl.ListFormat("en-AU").format(location.stateLabels)}. Choose the correct market region below.`);
       } else {
+        const climate = "energyRatingClimate" in payload ? parseEnergyRatingClimate(payload.energyRatingClimate) : null;
         setSelectedId(location.regionId);
         setActiveIndex(287);
-        setPostcodeMessage(`Showing the ${regionLabel(location.regionId)} market for postcode ${submittedPostcode}. Postcode chooses the market region, not an exact climate zone or appliance result.`);
+        setAppliedPostcodeClimate(climate ? { postcode: submittedPostcode, band: climate.band, choices: climate.choices } : null);
+        setPostcodeMessage(climate
+          ? `Showing the ${regionLabel(location.regionId)} market and ${energyRatingClimateBandLabel(climate.band).toLowerCase()} for postcode ${submittedPostcode}. The appliance examples below have updated.${climate.choices.length > 1 ? " This postcode spans more than one product-label band, so check the climate choice." : ""}`
+          : `Showing the ${regionLabel(location.regionId)} market for postcode ${submittedPostcode}. A climate band was not available, so the appliance example is unchanged.`);
       }
     } catch {
       if (requestId !== postcodeRequestId.current) return;
@@ -314,8 +351,14 @@ export function WholesaleElectricity() {
     </div>
     {!snapshot ? <div className={styles.loading} aria-live="polite"><h2>{loading ? "Fetching the latest prices" : "The live feed is temporarily unavailable"}</h2><p>{error || "The market changes every five minutes. Your chart will appear here shortly."}</p></div> : <>
       <form onSubmit={applyPostcode} style={postcodeFormStyle} aria-busy={postcodeLoading}>
-        <label style={{ color: "#d7eaf0", display: "grid", fontSize: ".78rem", fontWeight: 750, gap: 5 }}>Show prices for my area<input aria-describedby="wholesale-postcode-message" aria-invalid={postcodeError || undefined} autoComplete="postal-code" disabled={postcodeLoading} inputMode="numeric" maxLength={4} pattern="[0-9]{4}" placeholder="Postcode" style={postcodeInputStyle} value={postcode} onChange={(event) => { setPostcode(event.target.value.replace(/\D/g, "").slice(0, 4)); setPostcodeError(false); setPostcodeMessage(""); }} /></label>
+        <label style={{ color: "#d7eaf0", display: "grid", fontSize: ".78rem", fontWeight: 750, gap: 5 }}>Show prices for my area<input aria-describedby="wholesale-postcode-message" aria-invalid={postcodeError || undefined} autoComplete="postal-code" disabled={postcodeLoading} inputMode="numeric" maxLength={4} pattern="[0-9]{4}" placeholder="Postcode" style={postcodeInputStyle} value={postcode} onChange={(event) => { postcodeRequestId.current += 1; setPostcode(event.target.value.replace(/\D/g, "").slice(0, 4)); setPostcodeError(false); setPostcodeMessage(""); setPostcodeLoading(false); setAppliedPostcodeClimate(null); }} /></label>
         <button type="submit" style={postcodeButtonStyle} disabled={postcodeLoading}>{postcodeLoading ? "Checking..." : "Use postcode"}</button>
+        {appliedPostcodeClimate && appliedPostcodeClimate.choices.length > 1 && <label style={{ color: "#d7eaf0", display: "grid", fontSize: ".78rem", fontWeight: 750, gap: 5 }}>Climate band<select aria-describedby="wholesale-postcode-message" style={{ ...postcodeInputStyle, width: 150 }} value={appliedPostcodeClimate.band} onChange={(event) => {
+          const band = event.target.value as EnergyRatingClimateBand;
+          if (!appliedPostcodeClimate.choices.includes(band)) return;
+          setAppliedPostcodeClimate({ ...appliedPostcodeClimate, band });
+          setPostcodeMessage(`Using the ${energyRatingClimateBandLabel(band).toLowerCase()} for postcode ${appliedPostcodeClimate.postcode}. The appliance examples below have updated.`);
+        }}>{appliedPostcodeClimate.choices.map((band) => <option key={band} value={band}>{energyRatingClimateBandLabel(band)}</option>)}</select></label>}
         <span id="wholesale-postcode-message" role="status" style={{ color: "#b8d1db", flex: "1 1 260px", fontSize: ".78rem", lineHeight: 1.5 }}>{postcodeMessage || "Optional. Cross-border postcodes will ask you to choose the correct market region."}</span>
       </form>
       <div className={styles.regions} role="group" aria-label="Choose a NEM region">
@@ -323,7 +366,7 @@ export function WholesaleElectricity() {
           const series = snapshot.regions.find(({id}) => id === region.id)!;
           const latest = latestNemPoint(series);
           const isStale = !latest || now - latest.time > NEM_STALE_MS || delayed;
-          return <button type="button" className={styles.regionCard} style={theme(region.colour)} key={region.id} onClick={() => { postcodeRequestId.current += 1; setPostcodeLoading(false); setSelectedId(region.id); setActiveIndex(287); setPostcodeError(false); setPostcodeMessage(""); }} aria-pressed={selectedId === region.id} aria-label={`${region.name}: ${price(latest?.centsPerKwh)}${latest ? " cents per kilowatt-hour" : ""}. View chart.`}>
+          return <button type="button" className={styles.regionCard} style={theme(region.colour)} key={region.id} onClick={() => { postcodeRequestId.current += 1; setPostcodeLoading(false); setSelectedId(region.id); setActiveIndex(287); setPostcodeError(false); setPostcodeMessage(""); setAppliedPostcodeClimate(null); }} aria-pressed={selectedId === region.id} aria-label={`${region.name}: ${price(latest?.centsPerKwh)}${latest ? " cents per kilowatt-hour" : ""}. View chart.`}>
             <Sparkline region={series} /><span className={styles.regionName}>{region.label}</span><strong>{price(latest?.centsPerKwh)}{latest && <small> c/kWh</small>}</strong><span className={styles.interval}>Electricity · {latest ? `${isStale ? "Last reading · " : ""}${nemTimeLabel(latest.time)} AEST` : "No current reading"}</span>
           </button>;
         })}
@@ -338,7 +381,7 @@ export function WholesaleElectricity() {
           })}</div>
         </section>
       </div>
-      {selected && <UsefulEnergyExamples regionId={selectedId} electricityPrice={priceSnapshot.electricityPrice} gasPrice={priceSnapshot.gasPrice} electricityIntervalCount={priceSnapshot.electricityIntervalCount} matchedPriceCount={priceSnapshot.matchedIntervalCount} hasReliableElectricityWindow={priceSnapshot.hasReliableElectricityWindow} hasReliableGasWindow={priceSnapshot.hasReliableGasWindow} />}
+      {selected && <UsefulEnergyExamples regionId={selectedId} postcodeClimate={appliedPostcodeClimate} electricityPrice={priceSnapshot.electricityPrice} gasPrice={priceSnapshot.gasPrice} electricityIntervalCount={priceSnapshot.electricityIntervalCount} matchedPriceCount={priceSnapshot.matchedIntervalCount} hasReliableElectricityWindow={priceSnapshot.hasReliableElectricityWindow} hasReliableGasWindow={priceSnapshot.hasReliableGasWindow} />}
     </>}
   </div>;
 }

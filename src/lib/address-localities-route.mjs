@@ -1,4 +1,5 @@
 import { addressLocalitiesForPostcode } from "./address-localities.mjs";
+import { energyRatingClimateForPostcode } from "./energy-rating-climate.mjs";
 
 function json(body, status = 200) {
   return Response.json(body, {
@@ -31,5 +32,9 @@ export async function addressLocalitiesGet(request) {
       localities: [],
     }, 400);
   }
-  return json({ ok: true, ...result });
+  return json({
+    ok: true,
+    ...result,
+    energyRatingClimate: energyRatingClimateForPostcode(result.postcode),
+  });
 }
