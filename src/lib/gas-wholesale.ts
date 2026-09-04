@@ -42,6 +42,15 @@ export const GAS_MARKETS = [
 
 export type GasRegionId = typeof GAS_MARKETS[number]["regionId"];
 export type GasSource = typeof GAS_MARKETS[number]["source"];
+export type GasMarketReference = {
+  regionId: NemRegionId;
+  priceRegionId: GasRegionId;
+  label: string;
+  description: string;
+  cadence: string;
+  source: GasSource;
+  isReference: boolean;
+};
 export type GasPriceStatus = "verified" | "forecast";
 export type GasPoint = {
   time: number;
@@ -224,8 +233,19 @@ export function normaliseDwgmGas(csv: string, now: number): GasRegion {
   return region;
 }
 
-export function gasMarketForRegion(id: NemRegionId) {
-  return GAS_MARKETS.find((market) => market.regionId === id) ?? null;
+export function gasMarketForRegion(id: NemRegionId): GasMarketReference | null {
+  const directMarket = GAS_MARKETS.find((market) => market.regionId === id);
+  if (directMarket) return { ...directMarket, priceRegionId: directMarket.regionId, isReference: false };
+  if (id === "TAS1") return {
+    regionId: "TAS1",
+    priceRegionId: "VIC1",
+    label: "Victorian wholesale reference",
+    description: "Tasmania has no equivalent live gas-market price. This Victorian wholesale price is shown only as an upstream reference because Tasmania's pipeline supply comes from Longford, Victoria",
+    cadence: "Scheduled Victorian market price",
+    source: "dwgm",
+    isReference: true,
+  };
+  return null;
 }
 
 export function gasPointAt(points: readonly GasPoint[], time: number): GasPoint | null {

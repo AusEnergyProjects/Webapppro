@@ -184,8 +184,14 @@ test("page discovery, consumer explanations and accessible interaction are prese
   assert.match(priceSnapshot,/averageAvailablePriceCentsPerKwh/);
   assert.match(component,/aria-valuetext=/);
   assert.match(component,/fetch\("\/api\/wholesale-gas"/);
-  assert.match(component,/strokeDasharray: "8 6"/);
-  assert.match(component,/Gas comparison is not available for Tasmania/);
+  assert.match(component,/strokeDasharray: referenceLine \? "3 5" : "8 6"/);
+  assert.match(component,/selectedGasMarket\?\.priceRegionId/);
+  assert.match(component,/selectedGas \? selectedGas\.status/);
+  assert.match(component,/selectedGasDelayed/);
+  assert.match(component,/For Tasmania, this is a Victorian reference/);
+  assert.match(component,/not a Tasmanian wholesale or retail gas price/);
+  assert.doesNotMatch(component,/Gas comparison is not available for Tasmania/);
+  assert.match(page,/Tasmania uses Victoria&apos;s wholesale price as the nearest upstream reference/);
   assert.match(component,/onPointerMove=\{selectPoint\}/);
   assert.match(component,/Update delayed/);
   assert.match(component,/Gaps are left blank/);

@@ -117,12 +117,18 @@ test("DWGM rejects non-standard and mismatched schedule timestamps", () => {
   assert.equal(region.points.some(({ dollarsPerGj }) => dollarsPerGj === 1), false);
 });
 
-test("gas market mapping is explicit and Tasmania remains unavailable", () => {
+test("gas market mapping keeps physical feeds authoritative and gives Tasmania a labelled Victorian reference", () => {
   assert.equal(gasMarketForRegion("NSW1").label, "Sydney gas");
   assert.equal(gasMarketForRegion("QLD1").label, "Brisbane gas");
   assert.equal(gasMarketForRegion("VIC1").label, "Victorian gas");
   assert.equal(gasMarketForRegion("SA1").label, "Adelaide gas");
-  assert.equal(gasMarketForRegion("TAS1"), null);
+  assert.equal(gasMarketForRegion("VIC1").priceRegionId, "VIC1");
+  assert.equal(gasMarketForRegion("VIC1").isReference, false);
+  assert.equal(gasMarketForRegion("TAS1").label, "Victorian wholesale reference");
+  assert.equal(gasMarketForRegion("TAS1").priceRegionId, "VIC1");
+  assert.equal(gasMarketForRegion("TAS1").source, "dwgm");
+  assert.equal(gasMarketForRegion("TAS1").isReference, true);
+  assert.equal(GAS_MARKETS.length, 4);
 });
 
 test("gas values use step paths and applicable-price lookup rather than invented five-minute interpolation", () => {
@@ -144,6 +150,7 @@ test("independent sources become a bounded validated gas snapshot", async () => 
   const snapshot = await loadGasSnapshot({ fetchImpl: sources, now });
   assert.ok(isGasSnapshot(snapshot));
   assert.equal(snapshot.regions.length, GAS_MARKETS.length);
+  assert.equal(snapshot.regions.some(({ id }) => id === "TAS1"), false);
   assert.equal(snapshot.refreshFailed, false);
   assert.deepEqual(snapshot.failedSources, []);
   assert.ok(JSON.stringify(snapshot).length < 20_000);
@@ -159,6 +166,10 @@ test("one gas source may fail without hiding valid data from the other source", 
   assert.deepEqual(onlyVictoria.failedSources, ["sttm"]);
   assert.equal(onlyVictoria.regions.find(({ id }) => id === "VIC1").points.length, 5);
   assert.ok(onlyVictoria.regions.filter(({ id }) => id !== "VIC1").every(({ points }) => points.length === 0));
+  const onlySttm = await loadGasSnapshot({ now, fetchImpl: async (url, init) => url === GAS_DWGM_URL ? new Response("", { status: 503 }) : sources(url, init) });
+  assert.deepEqual(onlySttm.failedSources, ["dwgm"]);
+  assert.equal(onlySttm.regions.find(({ id }) => id === gasMarketForRegion("TAS1").priceRegionId).points.length, 0);
+  assert.equal(onlySttm.regions.some(({ id }) => id === "TAS1"), false);
   await assert.rejects(loadGasSnapshot({ now, fetchImpl: async () => new Response("", { status: 503 }) }), /HTTP 503/);
 
   const cache = memoryCache();
