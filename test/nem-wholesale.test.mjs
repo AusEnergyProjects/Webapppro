@@ -149,7 +149,8 @@ test("page discovery, consumer explanations and accessible interaction are prese
   assert.match(component,/type="radio"/);
   assert.match(component,/Purchased energy for the same result/);
   assert.match(component,/Shorter bar means less energy bought/);
-  assert.match(component,/Cost at the snapshot average wholesale price/);
+  assert.match(component,/example\.costBasisLabel/);
+  assert.match(component,/multiplying each one by the same runtime would make the comparison less fair/);
   assert.match(component,/verified gas prices were available/);
   assert.match(component,/published forecast/);
   assert.match(component,/replaced automatically when a verified price is published/);
@@ -177,6 +178,8 @@ test("page discovery, consumer explanations and accessible interaction are prese
   assert.match(component,/not a final household running-cost comparison/);
   assert.match(usefulEnergy,/Room heating/);
   assert.match(usefulEnergy,/Hot water/);
+  assert.match(usefulEnergy,/ROOM_HEATING_HOURS = 5/);
+  assert.match(usefulEnergy,/ROOM_HEAT_LOAD_KW = 2/);
   assert.match(component,/Wholesale input cost, not a bill estimate/);
   assert.match(priceSnapshot,/averageAvailablePriceCentsPerKwh/);
   assert.match(component,/aria-valuetext=/);

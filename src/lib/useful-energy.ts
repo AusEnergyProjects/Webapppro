@@ -14,6 +14,7 @@ export type UsefulEnergyExample = {
   id: UsefulEnergyExampleId;
   label: string;
   description: string;
+  costBasisLabel: string;
   climateBand: UsefulEnergyClimateBand | null;
   heatPumpCop: number;
   sourceHref: string;
@@ -21,8 +22,10 @@ export type UsefulEnergyExample = {
   options: readonly UsefulEnergyOption[];
 };
 
-const ROOM_HEAT_KWH = 5;
-const HOT_WATER_OUTPUT_KWH = 14;
+const ROOM_HEATING_HOURS = 5;
+const ROOM_HEAT_LOAD_KW = 2;
+const ROOM_HEAT_OUTPUT_KWH = ROOM_HEATING_HOURS * ROOM_HEAT_LOAD_KW;
+const HOT_WATER_USEFUL_HEAT_KWH = 14;
 
 const PLANNING_HEAT_PUMP_COP = {
   "room-heating": { hot: 4.7, average: 4.2, cold: 3.7 },
@@ -32,22 +35,24 @@ const PLANNING_HEAT_PUMP_COP = {
 export const USEFUL_ENERGY_EXAMPLES = [
   {
     id: "room-heating",
-    label: "Room heating",
-    description: "To deliver the same 5 kWh of room heat, each option needs a different amount of input energy. This comparison uses a reverse-cycle COP of 3.7 and gas-heater efficiency of 85%.",
+    label: "Room heating · 5 hours",
+    description: "One room, one winter evening. This five-hour example supplies an average 2 kW of heat, giving the room 10 kWh of useful warmth. It uses a reverse-cycle COP of 3.7 and gas-heater efficiency of 85%.",
+    costBasisLabel: "Illustrative five-hour cost at the 24-hour average",
     climateBand: null,
     heatPumpCop: 3.7,
-    sourceHref: "https://www.climatechoices.act.gov.au/policy-programs/sustainable-household-scheme/buyers-guides/heating-and-cooling-your-home-a-guide-to-reverse-cycle-systems",
-    sourceLabel: "ACT Government room heating comparison",
+    sourceHref: "https://www.energy.gov.au/households/energy-rating",
+    sourceLabel: "Australian Government five-hour heating example",
     options: [
-      { id: "direct-electric", label: "Direct electric heater", fuel: "electricity", inputKwh: ROOM_HEAT_KWH, lowestEnergyUse: false },
-      { id: "reverse-cycle", label: "Reverse-cycle heat pump", fuel: "electricity", inputKwh: ROOM_HEAT_KWH / 3.7, lowestEnergyUse: true },
-      { id: "gas-heater", label: "Gas heater", fuel: "gas", inputKwh: ROOM_HEAT_KWH / .85, lowestEnergyUse: false },
+      { id: "direct-electric", label: "Direct electric heater", fuel: "electricity", inputKwh: ROOM_HEAT_OUTPUT_KWH, lowestEnergyUse: false },
+      { id: "reverse-cycle", label: "Reverse-cycle heat pump", fuel: "electricity", inputKwh: ROOM_HEAT_OUTPUT_KWH / 3.7, lowestEnergyUse: true },
+      { id: "gas-heater", label: "Gas heater", fuel: "gas", inputKwh: ROOM_HEAT_OUTPUT_KWH / .85, lowestEnergyUse: false },
     ],
   },
   {
     id: "hot-water",
-    label: "Hot water",
-    description: "This worked example heats the same 300 litre tank to 60°C with each system. It uses a heat-pump COP of 3 and gas efficiency of 85%.",
+    label: "Hot water · full tank",
+    description: "One full 300 litre hot-water cycle. Each option heats the same tank to 60°C. The energy shown covers the whole heating task, not a fixed number of running hours. It uses a heat-pump COP of 3 and gas efficiency of 85%.",
+    costBasisLabel: "Illustrative full-tank cost at the 24-hour average",
     climateBand: null,
     heatPumpCop: 3,
     sourceHref: "https://www.climatechoices.act.gov.au/policy-programs/sustainable-household-scheme/buyers-guides/singing-in-the-shower-a-guide-to-hot-water-heat-pumps",
@@ -70,11 +75,9 @@ export function usefulEnergyExample(id: UsefulEnergyExampleId, climateBand: Usef
       ...base,
       climateBand,
       heatPumpCop,
-      description: `Your postcode selected the ${climateLabel.toLowerCase()} Energy Rating climate band. This planning example uses a reverse-cycle COP of ${heatPumpCop.toFixed(1)} and gas-heater efficiency of 85% to deliver the same 5 kWh of room heat.`,
-      sourceHref: "https://www.energy.gov.au/households/heating-and-cooling",
-      sourceLabel: "Australian Government heating and cooling guidance",
+      description: `One room, one winter evening. This five-hour example supplies an average 2 kW of heat, or 10 kWh of useful warmth. Your postcode selected the ${climateLabel.toLowerCase()} Energy Rating climate band, so the planning COP is ${heatPumpCop.toFixed(1)}. Gas-heater efficiency remains 85%.`,
       options: base.options.map((option) => option.id === "reverse-cycle"
-        ? { ...option, inputKwh: ROOM_HEAT_KWH / heatPumpCop }
+        ? { ...option, inputKwh: ROOM_HEAT_OUTPUT_KWH / heatPumpCop }
         : option),
     };
   }
@@ -82,11 +85,11 @@ export function usefulEnergyExample(id: UsefulEnergyExampleId, climateBand: Usef
     ...base,
     climateBand,
     heatPumpCop,
-    description: `Your postcode selected a ${climateLabel.toLowerCase()} temperature context. This planning example uses a heat-pump COP of ${heatPumpCop.toFixed(1)} and gas efficiency of 85% to heat the same 300 litre tank to 60°C.`,
+    description: `One full 300 litre hot-water cycle. Each option heats the same tank to 60°C. Your postcode selected a ${climateLabel.toLowerCase()} temperature context, so this planning example uses a heat-pump COP of ${heatPumpCop.toFixed(1)}. Gas efficiency remains 85%.`,
     sourceHref: "https://www.yourhome.gov.au/energy/hot-water-systems",
     sourceLabel: "Australian Government hot-water guidance",
     options: base.options.map((option) => option.id === "heat-pump-water-heater"
-      ? { ...option, inputKwh: Number((HOT_WATER_OUTPUT_KWH / heatPumpCop).toFixed(1)) }
+      ? { ...option, inputKwh: Number((HOT_WATER_USEFUL_HEAT_KWH / heatPumpCop).toFixed(1)) }
       : option),
   };
 }

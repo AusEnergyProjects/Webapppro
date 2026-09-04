@@ -4,18 +4,23 @@ import { USEFUL_ENERGY_EXAMPLES, averageAvailablePriceCentsPerKwh, purchasedEner
 
 test("room heating compares the same useful output with official example performance", () => {
   const example = usefulEnergyExample("room-heating");
-  assert.equal(example.options[0].inputKwh, 5);
-  assert.equal(Number(example.options[1].inputKwh.toFixed(3)), 1.351);
-  assert.equal(Number(example.options[2].inputKwh.toFixed(3)), 5.882);
+  assert.equal(example.label, "Room heating · 5 hours");
+  assert.match(example.description, /five-hour example.*2 kW.*10 kWh/);
+  assert.equal(example.costBasisLabel, "Illustrative five-hour cost at the 24-hour average");
+  assert.equal(example.options[0].inputKwh, 10);
+  assert.equal(Number(example.options[1].inputKwh.toFixed(3)), 2.703);
+  assert.equal(Number(example.options[2].inputKwh.toFixed(3)), 11.765);
   assert.deepEqual(example.options.filter(({ lowestEnergyUse }) => lowestEnergyUse).map(({ id }) => id), ["reverse-cycle"]);
   assert.equal(purchasedEnergyReductionPercent(example.options[1].inputKwh, example.options[2].inputKwh), 77);
-  assert.equal(wholesaleInputCostCents(example.options[0].inputKwh, 10), 50);
-  assert.equal(Number(wholesaleInputCostCents(example.options[1].inputKwh, 10).toFixed(2)), 13.51);
-  assert.equal(Number(wholesaleInputCostCents(example.options[2].inputKwh, 3.6).toFixed(2)), 21.18);
+  assert.equal(wholesaleInputCostCents(example.options[0].inputKwh, 10), 100);
+  assert.equal(Number(wholesaleInputCostCents(example.options[1].inputKwh, 10).toFixed(2)), 27.03);
+  assert.equal(Number(wholesaleInputCostCents(example.options[2].inputKwh, 3.6).toFixed(2)), 42.35);
 });
 
 test("hot water retains the official 300 litre worked example inputs", () => {
   const example = usefulEnergyExample("hot-water");
+  assert.equal(example.label, "Hot water · full tank");
+  assert.match(example.description, /whole heating task, not a fixed number of running hours/);
   assert.deepEqual(example.options.map(({ inputKwh }) => inputKwh), [14, 4.7, 16.5]);
   assert.deepEqual(example.options.map(({ fuel }) => fuel), ["electricity", "electricity", "gas"]);
   assert.deepEqual(example.options.filter(({ lowestEnergyUse }) => lowestEnergyUse).map(({ id }) => id), ["heat-pump-water-heater"]);
