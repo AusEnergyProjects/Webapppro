@@ -8,6 +8,8 @@ import {
   AddressSuggestionProviderError,
   AddressSuggestionSelectionError,
   fetchAustralianAddressSuggestions,
+  isAddressSuggestionProviderError,
+  isAddressSuggestionSelectionError,
   readAddressSuggestionAction,
   resolveAustralianAddressSuggestion,
 } from "../src/lib/address-suggestions-server.ts";
@@ -61,6 +63,8 @@ function compileTradeRoute({ access, accessError = "", rateLimit = { allowed: tr
     "@/lib/address-suggestions-server": {
       AddressSuggestionProviderError: ProviderError,
       AddressSuggestionSelectionError: SelectionError,
+      isAddressSuggestionProviderError: (error) => error instanceof ProviderError,
+      isAddressSuggestionSelectionError: (error) => error instanceof SelectionError,
       readAddressSuggestionAction: async (request) => request.json(),
       fetchAustralianAddressSuggestions: async () => ({
         configured: true,
@@ -547,6 +551,27 @@ test("provider transport failures expose only a bounded runtime class", async ()
     { providerCode: "FETCH_FAILED", providerReason: "TYPEERROR" },
   ]]);
   assert.doesNotMatch(JSON.stringify(warnings), /Network detail|10 Main/);
+});
+
+test("provider and selection guards survive duplicated bundle class identities", () => {
+  assert.equal(isAddressSuggestionProviderError({
+    name: "AddressSuggestionProviderError",
+    message: "Address suggestions are temporarily unavailable.",
+    providerStatus: 0,
+    providerCode: "FETCH_FAILED",
+    providerReason: "TYPEERROR",
+  }), true);
+  assert.equal(isAddressSuggestionProviderError({
+    name: "AddressSuggestionProviderError",
+    message: "Address suggestions are temporarily unavailable.",
+    providerStatus: 0,
+    providerCode: "FETCH_FAILED\nINJECTED",
+    providerReason: "TYPEERROR",
+  }), false);
+  assert.equal(isAddressSuggestionSelectionError({
+    name: "AddressSuggestionSelectionError",
+    message: "This address could not be resolved.",
+  }), true);
 });
 
 test("the public provider boundary requires an explicit matching browser origin", () => {

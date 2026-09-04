@@ -132,6 +132,33 @@ export class AddressSuggestionSelectionError extends Error {
   }
 }
 
+export function isAddressSuggestionProviderError(
+  error: unknown,
+): error is AddressSuggestionProviderError {
+  if (!error || typeof error !== "object") return false;
+  const value = error as Partial<AddressSuggestionProviderError>;
+  return value.name === "AddressSuggestionProviderError"
+    && Number.isInteger(value.providerStatus)
+    && Number(value.providerStatus) >= 0
+    && Number(value.providerStatus) <= 599
+    && typeof value.providerCode === "string"
+    && providerDiagnosticToken(value.providerCode) === value.providerCode
+    && typeof value.providerReason === "string"
+    && providerDiagnosticToken(value.providerReason) === value.providerReason
+    && typeof value.message === "string"
+    && value.message.length <= 240;
+}
+
+export function isAddressSuggestionSelectionError(
+  error: unknown,
+): error is AddressSuggestionSelectionError {
+  if (!error || typeof error !== "object") return false;
+  const value = error as Partial<AddressSuggestionSelectionError>;
+  return value.name === "AddressSuggestionSelectionError"
+    && typeof value.message === "string"
+    && value.message.length <= 240;
+}
+
 function googleSessionToken(value: unknown) {
   if (value === undefined || value === null || value === "") return "";
   const sessionToken = typeof value === "string" ? value.trim() : "";
@@ -529,7 +556,7 @@ export async function fetchAustralianAddressSuggestions(
       predictions: selections.map(predictionFromSelection),
     };
   } catch (error) {
-    if (error instanceof AddressSuggestionProviderError) throw error;
+    if (isAddressSuggestionProviderError(error)) throw error;
     throw new AddressSuggestionProviderError();
   }
 }
@@ -593,8 +620,8 @@ export async function resolveAustralianAddressSuggestion(
     return { configured: true, selection };
   } catch (error) {
     if (
-      error instanceof AddressSuggestionProviderError
-      || error instanceof AddressSuggestionSelectionError
+      isAddressSuggestionProviderError(error)
+      || isAddressSuggestionSelectionError(error)
     ) throw error;
     throw new AddressSuggestionProviderError();
   }

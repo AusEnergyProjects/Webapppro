@@ -1,9 +1,9 @@
 import { getD1 } from "../../../../db";
 import { adminJson, sameOrigin } from "@/lib/admin-server";
 import {
-  AddressSuggestionProviderError,
-  AddressSuggestionSelectionError,
   fetchAustralianAddressSuggestions,
+  isAddressSuggestionProviderError,
+  isAddressSuggestionSelectionError,
   readAddressSuggestionAction,
   resolveAustralianAddressSuggestion,
 } from "@/lib/address-suggestions-server";
@@ -153,7 +153,7 @@ export async function POST(request: Request) {
     if (error instanceof SyntaxError) {
       return adminJson({ ok: false, error: "Address search was not valid JSON." }, 400);
     }
-    if (error instanceof AddressSuggestionSelectionError) {
+    if (isAddressSuggestionSelectionError(error)) {
       return adminJson(
         { ok: false, configured: true, selection: null, error: error.message },
         422,
@@ -174,7 +174,7 @@ export async function POST(request: Request) {
         503,
       );
     }
-    const message = error instanceof AddressSuggestionProviderError
+    const message = isAddressSuggestionProviderError(error)
       ? error.message
       : "Address suggestions are temporarily unavailable.";
     return adminJson(

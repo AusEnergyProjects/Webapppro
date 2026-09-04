@@ -2,9 +2,9 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText } from "@/lib/admin-server";
 import {
   acceptedAddressSuggestionOrigin,
-  AddressSuggestionProviderError,
-  AddressSuggestionSelectionError,
   fetchAustralianAddressSuggestions,
+  isAddressSuggestionProviderError,
+  isAddressSuggestionSelectionError,
   readAddressSuggestionAction,
   resolveAustralianAddressSuggestion,
 } from "@/lib/address-suggestions-server";
@@ -111,13 +111,13 @@ export async function POST(request: Request) {
     if (error instanceof SyntaxError) {
       return adminJson({ ok: false, error: "Address search was not valid JSON." }, 400);
     }
-    if (error instanceof AddressSuggestionSelectionError) {
+    if (isAddressSuggestionSelectionError(error)) {
       return adminJson(
         { ok: false, configured: true, selection: null, error: error.message },
         422,
       );
     }
-    const providerError = error instanceof AddressSuggestionProviderError
+    const providerError = isAddressSuggestionProviderError(error)
       ? error
       : null;
     const message = providerError
