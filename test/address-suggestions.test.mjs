@@ -471,13 +471,54 @@ test("the legacy Google geocoding endpoint keeps compatibility without a credent
 test("provider failures expose one bounded manual-entry error", async () => {
   process.env.TLINK_ADDRESS_AUTOCOMPLETE_ENDPOINT = "https://places.googleapis.com/v1/places:autocomplete";
   process.env.TLINK_ADDRESS_AUTOCOMPLETE_TOKEN = "provider-token";
-  globalThis.fetch = async () => new Response("unavailable", { status: 503 });
+  globalThis.fetch = async () => Response.json({
+    error: {
+      code: 403,
+      status: "permission denied\n<script>",
+      message: "Secret provider detail must not cross the public boundary.",
+      details: [{
+        reason: "api key service blocked\r\nsecret",
+        metadata: { credential: "must-not-be-logged" },
+      }],
+    },
+  }, { status: 403 });
 
-  await assert.rejects(
-    fetchAustralianAddressSuggestions("10 Main"),
-    (error) => error instanceof AddressSuggestionProviderError
-      && error.message === "Address suggestions are temporarily unavailable.",
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args);
+
+  try {
+    await assert.rejects(
+      fetchAustralianAddressSuggestions("10 Main"),
+      (error) => error instanceof AddressSuggestionProviderError
+        && error.message === "Address suggestions are temporarily unavailable."
+        && error.providerStatus === 403
+        && error.providerCode === ""
+        && error.providerReason === "",
+    );
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.deepEqual(warnings, [[
+    "Address suggestion provider rejected a request",
+    {
+      providerStatus: 403,
+      providerCode: "UNKNOWN",
+      providerReason: "UNKNOWN",
+    },
+  ]]);
+  assert.doesNotMatch(
+    JSON.stringify(warnings),
+    /Secret provider detail|must-not-be-logged|script|secret/i,
   );
+
+  const knownProviderError = new AddressSuggestionProviderError(undefined, {
+    providerStatus: 403,
+    providerCode: "PERMISSION_DENIED",
+    providerReason: "API_KEY_SERVICE_BLOCKED",
+  });
+  assert.equal(knownProviderError.providerCode, "PERMISSION_DENIED");
+  assert.equal(knownProviderError.providerReason, "API_KEY_SERVICE_BLOCKED");
 });
 
 test("the public provider boundary requires an explicit matching browser origin", () => {

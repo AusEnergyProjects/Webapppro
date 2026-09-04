@@ -26,6 +26,11 @@ function cleanProviderText(value: unknown, maximum: number) {
   return typeof value === "string" ? value.trim().slice(0, maximum) : "";
 }
 
+function providerDiagnosticToken(value: unknown) {
+  const token = cleanProviderText(value, 80).toUpperCase();
+  return /^[A-Z][A-Z0-9_.-]{0,79}$/.test(token) ? token : "";
+}
+
 type ProviderSuggestion = {
   id?: unknown;
   label?: unknown;
@@ -86,9 +91,25 @@ export type AddressSuggestionAction =
   };
 
 export class AddressSuggestionProviderError extends Error {
-  constructor(message = "Address suggestions are temporarily unavailable.") {
+  readonly providerStatus: number;
+  readonly providerCode: string;
+  readonly providerReason: string;
+
+  constructor(
+    message = "Address suggestions are temporarily unavailable.",
+    options: {
+      providerStatus?: number;
+      providerCode?: string;
+      providerReason?: string;
+    } = {},
+  ) {
     super(message);
     this.name = "AddressSuggestionProviderError";
+    this.providerStatus = Number.isInteger(options.providerStatus)
+      ? Number(options.providerStatus)
+      : 0;
+    this.providerCode = providerDiagnosticToken(options.providerCode);
+    this.providerReason = providerDiagnosticToken(options.providerReason);
   }
 }
 
@@ -306,7 +327,40 @@ function predictionFromSelection(
 }
 
 async function responseJson(response: Response) {
-  if (!response.ok) throw new AddressSuggestionProviderError();
+  if (!response.ok) {
+    let providerCode = "";
+    let providerReason = "";
+    try {
+      const body = await response.clone().json() as {
+        error?: {
+          status?: unknown;
+          details?: Array<{ reason?: unknown }>;
+        };
+        status?: unknown;
+      };
+      providerCode = cleanProviderText(
+        body?.error?.status || body?.status,
+        80,
+      );
+      providerReason = cleanProviderText(
+        body?.error?.details?.find((detail) => detail?.reason)?.reason,
+        80,
+      );
+    } catch {
+      // Provider bodies can be HTML or empty. The HTTP status remains useful.
+    }
+    const providerError = new AddressSuggestionProviderError(undefined, {
+      providerStatus: response.status,
+      providerCode,
+      providerReason,
+    });
+    console.warn("Address suggestion provider rejected a request", {
+      providerStatus: providerError.providerStatus,
+      providerCode: providerError.providerCode || "UNKNOWN",
+      providerReason: providerError.providerReason || "UNKNOWN",
+    });
+    throw providerError;
+  }
   return response.json() as Promise<unknown>;
 }
 
