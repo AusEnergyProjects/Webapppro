@@ -42,12 +42,14 @@ export const GAS_MARKETS = [
 
 export type GasRegionId = typeof GAS_MARKETS[number]["regionId"];
 export type GasSource = typeof GAS_MARKETS[number]["source"];
+export type GasPriceStatus = "verified" | "forecast";
 export type GasPoint = {
   time: number;
   validUntil: number;
   centsPerKwh: number;
   dollarsPerGj: number;
   basis: "daily-ex-ante" | "schedule";
+  status: GasPriceStatus;
 };
 export type GasRegion = { id: GasRegionId; points: GasPoint[] };
 export type GasSnapshot = {
@@ -58,6 +60,7 @@ export type GasSnapshot = {
 };
 
 type CsvRow = Record<string, string>;
+type GasValueSlot = { verified?: number | null; forecast?: number | null };
 
 function finite(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -142,35 +145,55 @@ function isStandardDwgmSchedule(time: number, interval: number): boolean {
     && local.getUTCSeconds() === 0;
 }
 
-function pointsFromMap(values: Map<number, number | null>, basis: GasPoint["basis"]): GasPoint[] {
-  const ordered = [...values.entries()].filter((entry): entry is [number, number] => entry[1] !== null).sort((left, right) => left[0] - right[0]);
-  return ordered.map(([time, dollarsPerGj], index) => ({
+function gasPriceStatus(value: string | undefined): GasPriceStatus | null {
+  if (value === "ACTUAL") return "verified";
+  if (value === "FORECAST") return "forecast";
+  return null;
+}
+
+function recordGasValue<Key>(values: Map<Key, GasValueSlot>, key: Key, status: GasPriceStatus, price: number): void {
+  const slot = values.get(key) ?? {};
+  if (!(status in slot)) slot[status] = price;
+  else if (slot[status] !== price) slot[status] = null;
+  values.set(key, slot);
+}
+
+function resolvedGasValue(slot: GasValueSlot): { dollarsPerGj: number; status: GasPriceStatus } | null {
+  if ("verified" in slot) return slot.verified === null || slot.verified === undefined ? null : { dollarsPerGj: slot.verified, status: "verified" };
+  return slot.forecast === null || slot.forecast === undefined ? null : { dollarsPerGj: slot.forecast, status: "forecast" };
+}
+
+function pointsFromMap(values: Map<number, GasValueSlot>, basis: GasPoint["basis"]): GasPoint[] {
+  const ordered = [...values.entries()].flatMap(([time, slot]) => {
+    const resolved = resolvedGasValue(slot);
+    return resolved ? [{ time, ...resolved }] : [];
+  }).sort((left, right) => left.time - right.time);
+  return ordered.map(({ time, dollarsPerGj, status }, index) => ({
     time,
-    validUntil: basis === "daily-ex-ante" ? time + GAS_DAY_MS : Math.min(ordered[index + 1]?.[0] ?? Infinity, nextDwgmSchedule(time)),
+    validUntil: basis === "daily-ex-ante" ? time + GAS_DAY_MS : Math.min(ordered[index + 1]?.time ?? Infinity, nextDwgmSchedule(time)),
     dollarsPerGj,
     centsPerKwh: dollarsPerGjToCentsPerKwh(dollarsPerGj),
     basis,
+    status,
   }));
 }
 
-function retainActualTime(time: number, now: number): boolean {
+function retainEffectiveTime(time: number, now: number): boolean {
   return time <= now + 5 * 60 * 1000 && time >= now - GAS_HISTORY_MS;
 }
 
 export function normaliseSttmGas(csv: string, now: number): GasRegion[] {
   const rows = parseCsv(csv, ["GAS_DATE", "HUB_DESCRIPTION", "EX_ANTE_PRICE", "EX_ANTE_TJ", "EX_POST_PRICE", "EX_POST_TJ", "PERIODTYPE"]);
-  const values = new Map<GasRegionId, Map<number, number | null>>([
+  const values = new Map<GasRegionId, Map<number, GasValueSlot>>([
     ["NSW1", new Map()], ["QLD1", new Map()], ["SA1", new Map()],
   ]);
   for (const row of rows) {
-    if (row.PERIODTYPE !== "ACTUAL") continue;
+    const status = gasPriceStatus(row.PERIODTYPE);
     const id = regionForHub(row.HUB_DESCRIPTION);
     const time = gasDayStart(row.GAS_DATE);
     const price = parseNumber(row.EX_ANTE_PRICE);
-    if (!id || time === null || price === null || !retainActualTime(time, now)) continue;
-    const region = values.get(id)!;
-    if (region.has(time) && region.get(time) !== price) region.set(time, null);
-    else if (!region.has(time)) region.set(time, price);
+    if (!status || !id || time === null || price === null || !retainEffectiveTime(time, now)) continue;
+    recordGasValue(values.get(id)!, time, status, price);
   }
   const regions = [...values.entries()].map(([id, points]) => ({ id, points: pointsFromMap(points, "daily-ex-ante") }));
   if (!regions.some((region) => region.points.length)) throw new Error("No recent STTM gas prices");
@@ -179,22 +202,22 @@ export function normaliseSttmGas(csv: string, now: number): GasRegion[] {
 
 export function normaliseDwgmGas(csv: string, now: number): GasRegion {
   const rows = parseCsv(csv, ["DATETIME", "INTERVAL_NO", "TRANSMISSION_ID", "PRICE", "DEMAND", "PERIODTYPE"]);
-  const values = new Map<number, number | null>();
-  const intervalKeys = new Map<string, number | null>();
+  const values = new Map<number, GasValueSlot>();
+  const intervalKeys = new Map<string, GasValueSlot>();
   for (const row of rows) {
-    if (row.PERIODTYPE !== "ACTUAL") continue;
+    const status = gasPriceStatus(row.PERIODTYPE);
     const time = parseAestDateTime(row.DATETIME);
     const interval = parseNumber(row.INTERVAL_NO);
     const price = parseNumber(row.PRICE);
-    if (time === null || interval === null || !Number.isInteger(interval) || !isStandardDwgmSchedule(time, interval) || price === null || !retainActualTime(time, now)) continue;
+    if (!status || time === null || interval === null || !Number.isInteger(interval) || !isStandardDwgmSchedule(time, interval) || price === null || !retainEffectiveTime(time, now)) continue;
     const key = `${time}:${interval}`;
-    if (intervalKeys.has(key) && intervalKeys.get(key) !== price) intervalKeys.set(key, null);
-    else if (!intervalKeys.has(key)) intervalKeys.set(key, price);
+    recordGasValue(intervalKeys, key, status, price);
   }
-  for (const [key, price] of intervalKeys) {
+  for (const [key, slot] of intervalKeys) {
+    const resolved = resolvedGasValue(slot);
+    if (!resolved) continue;
     const time = Number(key.split(":", 1)[0]);
-    if (values.has(time) && values.get(time) !== price) values.set(time, null);
-    else if (!values.has(time)) values.set(time, price);
+    recordGasValue(values, time, resolved.status, resolved.dollarsPerGj);
   }
   const region = { id: "VIC1" as const, points: pointsFromMap(values, "schedule") };
   if (!region.points.length) throw new Error("No recent DWGM gas prices");
@@ -210,8 +233,8 @@ export function gasPointAt(points: readonly GasPoint[], time: number): GasPoint 
 }
 
 // Gas prices apply until the next published daily or scheduled market price, so the line is stepped rather than interpolated.
-export function gasChartPath(points: readonly GasPoint[], start: number, end: number, xFor: (time: number) => number, yFor: (value: number) => number): string {
-  const ordered = points.filter((point) => point.time < end && point.validUntil > start).toSorted((left, right) => left.time - right.time);
+export function gasChartPath(points: readonly GasPoint[], start: number, end: number, xFor: (time: number) => number, yFor: (value: number) => number, status?: GasPriceStatus): string {
+  const ordered = points.filter((point) => point.time < end && point.validUntil > start && (!status || point.status === status)).toSorted((left, right) => left.time - right.time);
   let path = "";
   let previousEnd: number | null = null;
   for (const point of ordered) {
@@ -237,7 +260,7 @@ export function isGasSnapshot(value: unknown): value is GasSnapshot {
     ids.add(region.id);
     let previous = -Infinity;
     for (const point of region.points) {
-      if (typeof point !== "object" || point === null || !finite(point.time) || point.time <= previous || !finite(point.validUntil) || point.validUntil <= point.time || point.validUntil - point.time > GAS_DAY_MS || point.time < snapshot.fetchedAt - GAS_HISTORY_MS || point.time > snapshot.fetchedAt + 5 * 60_000 || !finite(point.centsPerKwh) || !finite(point.dollarsPerGj) || point.basis !== expectedBasis) return false;
+      if (typeof point !== "object" || point === null || !finite(point.time) || point.time <= previous || !finite(point.validUntil) || point.validUntil <= point.time || point.validUntil - point.time > GAS_DAY_MS || point.time < snapshot.fetchedAt - GAS_HISTORY_MS || point.time > snapshot.fetchedAt + 5 * 60_000 || !finite(point.centsPerKwh) || !finite(point.dollarsPerGj) || point.basis !== expectedBasis || (point.status !== "verified" && point.status !== "forecast")) return false;
       if (Math.abs(point.centsPerKwh - dollarsPerGjToCentsPerKwh(point.dollarsPerGj)) > 1e-9) return false;
       previous = point.time;
     }

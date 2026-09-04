@@ -105,7 +105,9 @@ function PriceChart({ region, gasRegion, gasDelayed, windowEnd, colour, activeIn
   const selectedGas = gasRegion ? gasPointAt(gasRegion.points, selected.time) : null;
   const currentGas = gasRegion ? gasPointAt(gasRegion.points, windowEnd) : null;
   const path = nemChartPath(region.points, xFor, yFor);
-  const gasPath = gasRegion ? gasChartPath(gasRegion.points, start, windowEnd, xFor, yFor) : "";
+  const verifiedGasPath = gasRegion ? gasChartPath(gasRegion.points, start, windowEnd, xFor, yFor, "verified") : "";
+  const forecastGasPath = gasRegion ? gasChartPath(gasRegion.points, start, windowEnd, xFor, yFor, "forecast") : "";
+  const hasGasPath = Boolean(verifiedGasPath || forecastGasPath);
   const selectPoint = (event: PointerEvent<SVGSVGElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     const x = (event.clientX - bounds.left) / bounds.width * WIDTH;
@@ -116,12 +118,15 @@ function PriceChart({ region, gasRegion, gasDelayed, windowEnd, colour, activeIn
       <div><h2 id="wholesale-chart-title">{regionLabel(region.id)} energy prices over 24 hours</h2><p>Electricity and gas use the same c/kWh scale</p></div>
       <div style={readoutsStyle} aria-live="polite" aria-atomic="true">
         <div className={styles.readout}><span>{nemTimeLabel(selected.time, true)} AEST · Electricity</span><strong>{price(selected.centsPerKwh)}{selected.centsPerKwh !== null && <small> c/kWh</small>}</strong></div>
-        {market && <div className={styles.readout}><span>{market.label} · {market.cadence}</span><strong style={{ color: GAS_COLOUR }}>{price(selectedGas?.centsPerKwh)}{selectedGas && <small> c/kWh</small>}</strong></div>}
+        {market && <div className={styles.readout}><span>{market.label} · {selectedGas?.status === "forecast" ? "Published forecast" : "Verified price"}</span><strong style={{ color: GAS_COLOUR }}>{price(selectedGas?.centsPerKwh)}{selectedGas && <small> c/kWh</small>}</strong></div>}
       </div>
     </div>
     <div style={legendStyle} aria-label="Chart lines">
       <span style={legendItemStyle}><b style={{ color: colour }} aria-hidden="true">━━━━</b>Electricity spot price</span>
-      {market ? <span style={legendItemStyle}><b style={{ color: GAS_COLOUR }} aria-hidden="true">┅┅┅┅</b>{market.label}{gasPath ? "" : " temporarily unavailable"}</span> : <span>Gas comparison is not available for Tasmania</span>}
+      {market && verifiedGasPath && <span style={legendItemStyle}><b style={{ color: GAS_COLOUR }} aria-hidden="true">━━━━</b>{market.label} verified</span>}
+      {market && forecastGasPath && <span style={legendItemStyle}><b style={{ color: GAS_COLOUR }} aria-hidden="true">┅┅┅┅</b>{market.label} forecast</span>}
+      {market && !hasGasPath && <span>{market.label} temporarily unavailable</span>}
+      {!market && <span>Gas comparison is not available for Tasmania</span>}
     </div>
     {market && <p style={marketScopeStyle}>{market.description}. Gas is shown at its real {market.source === "sttm" ? "daily" : "scheduled"} cadence.</p>}
     {values.length ? <>
@@ -138,24 +143,26 @@ function PriceChart({ region, gasRegion, gasDelayed, windowEnd, colour, activeIn
             const time = start + fraction * NEM_DAY_MS;
             return <text key={fraction} x={xFor(time)} y={HEIGHT - 14} textAnchor={fraction === 0 ? "start" : fraction === 1 ? "end" : "middle"}>{nemTimeLabel(time)}</text>;
           })}
-          {gasPath && <path className={styles.priceLine} style={{ stroke: GAS_COLOUR, strokeDasharray: "8 6" }} d={gasPath} />}
+          {verifiedGasPath && <path className={styles.priceLine} style={{ stroke: GAS_COLOUR }} d={verifiedGasPath} />}
+          {forecastGasPath && <path className={styles.priceLine} style={{ opacity: .86, stroke: GAS_COLOUR, strokeDasharray: "8 6" }} d={forecastGasPath} />}
           <path className={styles.priceLine} d={path} />
           <line className={styles.cursor} x1={xFor(selected.time)} x2={xFor(selected.time)} y1={TOP} y2={HEIGHT - BOTTOM} />
-          {selectedGas && <circle cx={xFor(selected.time)} cy={yFor(selectedGas.centsPerKwh)} r="5" className={styles.point} style={{ fill: "#071b2a", stroke: GAS_COLOUR }} />}
+          {selectedGas && <circle cx={xFor(selected.time)} cy={yFor(selectedGas.centsPerKwh)} r="5" className={styles.point} style={{ fill: "#071b2a", stroke: GAS_COLOUR, strokeDasharray: selectedGas.status === "forecast" ? "2 2" : undefined }} />}
           {selected.centsPerKwh !== null && <circle cx={xFor(selected.time)} cy={yFor(selected.centsPerKwh)} r="5" className={styles.point} />}
         </svg>
       </div>
-      <label className={styles.timeControl}>Explore time <input type="range" min="0" max="287" step="1" value={activeIndex} onChange={(event) => onActiveIndexChange(Number(event.target.value))} aria-label="Explore wholesale energy price readings" aria-valuetext={`${nemTimeLabel(selected.time, true)} AEST, electricity ${price(selected.centsPerKwh)}${selected.centsPerKwh === null ? "" : " cents per kilowatt-hour"}${market ? `, ${market.label} ${price(selectedGas?.centsPerKwh)}${selectedGas ? " cents per kilowatt-hour" : ""}` : ""}`} /></label>
+      <label className={styles.timeControl}>Explore time <input type="range" min="0" max="287" step="1" value={activeIndex} onChange={(event) => onActiveIndexChange(Number(event.target.value))} aria-label="Explore wholesale energy price readings" aria-valuetext={`${nemTimeLabel(selected.time, true)} AEST, electricity ${price(selected.centsPerKwh)}${selected.centsPerKwh === null ? "" : " cents per kilowatt-hour"}${market ? `, ${market.label} ${price(selectedGas?.centsPerKwh)}${selectedGas ? ` cents per kilowatt-hour${selectedGas.status === "forecast" ? ", published forecast" : ", verified"}` : ""}` : ""}`} /></label>
       <div className={styles.chartFoot}><span>Hover, tap or use the time slider.</span><span>{nemTimeLabel(start, true)} to {nemTimeLabel(windowEnd, true)} AEST</span></div>
       {values.length < 288 && <p className={styles.warning}>{288 - values.length} readings are missing. Gaps are left blank.</p>}
-      {market && !gasPath && <p className={styles.warning}>The {market.label} feed is temporarily unavailable. Electricity remains current.</p>}
-      {market && gasPath && gasDelayed && <p className={styles.warning}>The gas line is the last available market reading while its feed catches up.</p>}
-      {market && gasPath && !currentGas && !gasDelayed && <p className={styles.warning}>The gas line stops when the last published price period ends. No newer gas price is available yet.</p>}
+      {market && !hasGasPath && <p className={styles.warning}>The {market.label} feed is temporarily unavailable. Electricity remains current.</p>}
+      {market && hasGasPath && gasDelayed && <p className={styles.warning}>The gas line uses the last available market update while its feed catches up.</p>}
+      {market && forecastGasPath && <p className={styles.warning}>The dashed gas segment is a published forecast. It is replaced automatically when a verified price is published.</p>}
+      {market && verifiedGasPath && !currentGas && !forecastGasPath && !gasDelayed && <p className={styles.warning}>The gas line stops when the last published price period ends. No verified price or published forecast is available yet.</p>}
     </> : <p className={styles.warning}>Readings for this region are temporarily unavailable.</p>}
   </section>;
 }
 
-function UsefulEnergyExamples({ regionId, postcodeClimate, electricityPrice, gasPrice, electricityIntervalCount, matchedPriceCount, hasReliableElectricityWindow, hasReliableGasWindow }: { regionId: NemRegionId; postcodeClimate: AppliedPostcodeClimate | null; electricityPrice: number | null; gasPrice: number | null; electricityIntervalCount: number; matchedPriceCount: number; hasReliableElectricityWindow: boolean; hasReliableGasWindow: boolean }) {
+function UsefulEnergyExamples({ regionId, postcodeClimate, electricityPrice, gasPrice, electricityIntervalCount, forecastGasIntervalCount, matchedPriceCount, verifiedGasIntervalCount, gasPriceUsesForecast, hasReliableElectricityWindow, hasReliableGasWindow }: { regionId: NemRegionId; postcodeClimate: AppliedPostcodeClimate | null; electricityPrice: number | null; gasPrice: number | null; electricityIntervalCount: number; forecastGasIntervalCount: number; matchedPriceCount: number; verifiedGasIntervalCount: number; gasPriceUsesForecast: boolean; hasReliableElectricityWindow: boolean; hasReliableGasWindow: boolean }) {
   const [exampleId, setExampleId] = useState<UsefulEnergyExampleId>("room-heating");
   const example = usefulEnergyExample(exampleId, postcodeClimate?.band ?? null);
   const lowestEnergyOption = example.options.find((option) => option.lowestEnergyUse)!;
@@ -169,12 +176,14 @@ function UsefulEnergyExamples({ regionId, postcodeClimate, electricityPrice, gas
   const caveatId = "useful-energy-example-caveat";
   const electricityCoverageHours = electricityIntervalCount * NEM_INTERVAL_MS / 3_600_000;
   const coverageHours = matchedPriceCount * NEM_INTERVAL_MS / 3_600_000;
+  const verifiedGasHours = verifiedGasIntervalCount * NEM_INTERVAL_MS / 3_600_000;
+  const forecastGasHours = forecastGasIntervalCount * NEM_INTERVAL_MS / 3_600_000;
   const marketHasGas = gasMarketForRegion(regionId) !== null;
   const resultLabel = exampleId === "room-heating" ? "room heat" : "hot water";
 
   return <section className={styles.flows} style={exampleSectionStyle} aria-labelledby="useful-energy-example-title">
     <h2 id="useful-energy-example-title">What could this energy do?</h2>
-    <p>{regionLabel(regionId)} latest 24-hour window. The energy bars compare the same heating result. {hasReliableGasWindow ? `Costs use average wholesale prices from ${coverageHours.toLocaleString("en-AU", { maximumFractionDigits: 1 })} hours for which both electricity and gas prices were available.` : !hasReliableElectricityWindow ? `Only ${electricityCoverageHours.toLocaleString("en-AU", { maximumFractionDigits: 1 })} hours of usable electricity readings are available, so no cost snapshot is shown.` : marketHasGas ? `Electricity cost uses ${electricityCoverageHours.toLocaleString("en-AU", { maximumFractionDigits: 1 })} hours of available readings. A reliable gas cost needs at least 23 hours of overlapping price coverage and is unavailable right now.` : `Electricity cost uses ${electricityCoverageHours.toLocaleString("en-AU", { maximumFractionDigits: 1 })} hours of available readings. No matching wholesale gas market is available for Tasmania.`}</p>
+    <p>{regionLabel(regionId)} latest 24-hour window. The energy bars compare the same heating result. {hasReliableGasWindow ? gasPriceUsesForecast ? `Costs use ${coverageHours.toLocaleString("en-AU", { maximumFractionDigits: 1 })} hours of overlapping wholesale prices. Gas includes ${verifiedGasHours.toLocaleString("en-AU", { maximumFractionDigits: 1 })} verified hours and ${forecastGasHours.toLocaleString("en-AU", { maximumFractionDigits: 1 })} forecast hours while the next verified price is pending.` : `Costs use average wholesale prices from ${coverageHours.toLocaleString("en-AU", { maximumFractionDigits: 1 })} hours for which both electricity and verified gas prices were available.` : !hasReliableElectricityWindow ? `Only ${electricityCoverageHours.toLocaleString("en-AU", { maximumFractionDigits: 1 })} hours of usable electricity readings are available, so no cost snapshot is shown.` : marketHasGas ? `Electricity cost uses ${electricityCoverageHours.toLocaleString("en-AU", { maximumFractionDigits: 1 })} hours of available readings. A gas cost needs at least 23 hours of overlapping verified or published forecast coverage and is unavailable right now.` : `Electricity cost uses ${electricityCoverageHours.toLocaleString("en-AU", { maximumFractionDigits: 1 })} hours of available readings. No matching wholesale gas market is available for Tasmania.`}</p>
     <fieldset style={exampleSelectorStyle} aria-describedby={`${descriptionId} ${caveatId}`}>
       <legend style={{ color: "#dff5fa", fontSize: ".82rem", fontWeight: 750 }}>Choose an example</legend>
       <div style={exampleSelectorOptionsStyle}>
@@ -192,7 +201,7 @@ function UsefulEnergyExamples({ regionId, postcodeClimate, electricityPrice, gas
       <span style={{ color: "#d3e7ec", flex: "2 1 320px", fontSize: ".8rem", lineHeight: 1.55 }}>The {resultLabel} example has updated using a visible planning COP of {example.heatPumpCop.toFixed(1)}. It is an informed estimate, not a rating for an unspecified appliance.</span>
     </div>}
     <p id={descriptionId} style={{ color: "#d3e5eb", fontSize: ".86rem", lineHeight: 1.6, margin: "16px 0 0" }}>{example.description}</p>
-    <p id={caveatId} style={{ color: "#adc8d3", fontSize: ".76rem", lineHeight: 1.55, margin: "10px 0 0" }}><strong style={{ color: "#e4f8fc" }}>Wholesale input cost, not a bill estimate.</strong> Appliance cycling, standing or duct losses, fan electricity and rooftop solar are not included. A negative spot price does not mean a household is paid to use energy.</p>
+    <p id={caveatId} style={{ color: "#adc8d3", fontSize: ".76rem", lineHeight: 1.55, margin: "10px 0 0" }}><strong style={{ color: "#e4f8fc" }}>Wholesale input cost, not a bill estimate.</strong> Appliance cycling, standing or duct losses, fan electricity and rooftop solar are not included. A negative spot price does not mean a household is paid to use energy.{gasPriceUsesForecast && " Forecast gas periods are estimates and are visibly separated from verified prices."}</p>
     <div style={energyVisualStyle}>
       <div style={energyVisualHeadingStyle}>
         <strong style={{ color: "#eaf9fc", display: "block", fontSize: ".96rem" }}>Purchased energy for the same result</strong>
@@ -214,7 +223,7 @@ function UsefulEnergyExamples({ regionId, postcodeClimate, electricityPrice, gas
           <div style={energyTrackStyle} aria-hidden="true"><span style={{ background: barColour, borderRadius: 999, display: "block", height: "100%", width: `${option.inputKwh / maximumInput * 100}%` }} /></div>
           <div style={energyRowMetaStyle}>
             <span>{option.lowestEnergyUse ? `About ${energyReduction}% less purchased energy than gas · planning COP ${example.heatPumpCop.toFixed(1)}` : `Purchased energy for the same ${resultLabel} result`}</span>
-            <span><strong style={{ color: "#dbeef3" }}>Cost at the snapshot average wholesale price:</strong> {formatWholesaleCost(estimatedCost, option.fuel, unavailableCostLabel)}</span>
+            <span><strong style={{ color: "#dbeef3" }}>{option.fuel === "gas" && gasPriceUsesForecast ? "Estimated cost at the snapshot average wholesale price:" : "Cost at the snapshot average wholesale price:"}</strong> {formatWholesaleCost(estimatedCost, option.fuel, unavailableCostLabel)}</span>
           </div>
         </div>;
       })}
@@ -381,7 +390,7 @@ export function WholesaleElectricity() {
           })}</div>
         </section>
       </div>
-      {selected && <UsefulEnergyExamples regionId={selectedId} postcodeClimate={appliedPostcodeClimate} electricityPrice={priceSnapshot.electricityPrice} gasPrice={priceSnapshot.gasPrice} electricityIntervalCount={priceSnapshot.electricityIntervalCount} matchedPriceCount={priceSnapshot.matchedIntervalCount} hasReliableElectricityWindow={priceSnapshot.hasReliableElectricityWindow} hasReliableGasWindow={priceSnapshot.hasReliableGasWindow} />}
+      {selected && <UsefulEnergyExamples regionId={selectedId} postcodeClimate={appliedPostcodeClimate} electricityPrice={priceSnapshot.electricityPrice} gasPrice={priceSnapshot.gasPrice} electricityIntervalCount={priceSnapshot.electricityIntervalCount} forecastGasIntervalCount={priceSnapshot.forecastGasIntervalCount} matchedPriceCount={priceSnapshot.matchedIntervalCount} verifiedGasIntervalCount={priceSnapshot.verifiedGasIntervalCount} gasPriceUsesForecast={priceSnapshot.gasPriceUsesForecast} hasReliableElectricityWindow={priceSnapshot.hasReliableElectricityWindow} hasReliableGasWindow={priceSnapshot.hasReliableGasWindow} />}
     </>}
   </div>;
 }

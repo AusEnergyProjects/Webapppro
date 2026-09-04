@@ -57,12 +57,13 @@ test("STTM actual daily ex-ante prices map to their nearby NEM regions without t
   assert.equal(sydney.points.at(-1).dollarsPerGj, 10);
   assert.ok(Math.abs(sydney.points.at(-1).centsPerKwh - 3.6) < 1e-9);
   assert.equal(sydney.points.at(-1).basis, "daily-ex-ante");
+  assert.equal(sydney.points.at(-1).status, "verified");
   assert.equal(regions.find(({ id }) => id === "QLD1").points.at(-1).dollarsPerGj, 11);
   assert.equal(regions.find(({ id }) => id === "SA1").points.at(-1).dollarsPerGj, 12);
   assert.ok(Math.abs(dollarsPerGjToCentsPerKwh(10) - 3.6) < 1e-9);
 });
 
-test("STTM forecasts, unknown hubs, malformed values and conflicting duplicates cannot become current prices", () => {
+test("future STTM forecasts, unknown hubs, malformed values and conflicting duplicates cannot become current prices", () => {
   const regions = normaliseSttmGas(sttm([
     "2026/09/03 00:00:00,Sydney,10.1,251,,,ACTUAL",
     "2026/09/03 00:00:00,Perth,7,20,,,ACTUAL",
@@ -74,6 +75,16 @@ test("STTM forecasts, unknown hubs, malformed values and conflicting duplicates 
   assert.throws(() => normaliseSttmGas("wrong,headers\n1,2", now), /headers/);
 });
 
+test("an effective STTM forecast fills the current gas period until a verified value is published", () => {
+  const forecastNow = Date.parse("2026-09-03T20:20:00Z");
+  const sydney = normaliseSttmGas(sttm(), forecastNow).find(({ id }) => id === "NSW1");
+  assert.equal(sydney.points.length, 3);
+  assert.equal(sydney.points.at(-1).time, Date.parse("2026-09-03T20:00:00Z"));
+  assert.equal(sydney.points.at(-1).status, "forecast");
+  assert.equal(sydney.points.at(-1).dollarsPerGj, 99);
+  assert.equal(gasPointAt(sydney.points, forecastNow), sydney.points.at(-1));
+});
+
 test("DWGM actual schedules retain native timestamps and reject forecast or duplicate contradictions", () => {
   const region = normaliseDwgmGas(dwgm(), now);
   assert.equal(region.id, "VIC1");
@@ -82,8 +93,18 @@ test("DWGM actual schedules retain native timestamps and reject forecast or dupl
   assert.equal(region.points.at(-1).validUntil, Date.parse("2026-09-03T20:00:00Z"));
   assert.equal(region.points.at(-1).centsPerKwh, 3.456);
   assert.equal(region.points.at(-1).basis, "schedule");
+  assert.equal(region.points.at(-1).status, "verified");
   const conflict = normaliseDwgmGas(dwgm(["2026/09/03 22:00:00,5,280584,10.6,561.65,ACTUAL"]), now);
   assert.equal(conflict.points.length, 4);
+});
+
+test("an effective priced DWGM forecast is retained and visibly distinguishable from verified schedules", () => {
+  const forecastNow = Date.parse("2026-09-03T20:20:00Z");
+  const region = normaliseDwgmGas(dwgm(), forecastNow);
+  assert.equal(region.points.length, 6);
+  assert.equal(region.points.at(-1).time, Date.parse("2026-09-03T20:00:00Z"));
+  assert.equal(region.points.at(-1).status, "forecast");
+  assert.equal(region.points.at(-1).dollarsPerGj, 99);
 });
 
 test("DWGM rejects non-standard and mismatched schedule timestamps", () => {
@@ -106,14 +127,16 @@ test("gas market mapping is explicit and Tasmania remains unavailable", () => {
 
 test("gas values use step paths and applicable-price lookup rather than invented five-minute interpolation", () => {
   const points = [
-    { time: 0, validUntil: 10, dollarsPerGj: 5, centsPerKwh: 2, basis: "schedule" },
-    { time: 10, validUntil: 20, dollarsPerGj: 7.5, centsPerKwh: 3, basis: "schedule" },
+    { time: 0, validUntil: 10, dollarsPerGj: 5, centsPerKwh: 2, basis: "schedule", status: "verified" },
+    { time: 10, validUntil: 20, dollarsPerGj: 7.5, centsPerKwh: 3, basis: "schedule", status: "forecast" },
   ];
   assert.equal(gasPointAt(points, 9), points[0]);
   assert.equal(gasPointAt(points, 10), points[1]);
   assert.equal(gasPointAt(points, 20), null);
   assert.equal(gasPointAt(points, -1), null);
   assert.equal(gasChartPath(points, 5, 15, (value) => value, (value) => value), "M5.00,2.00 L10.00,2.00 L10.00,3.00 L15.00,3.00");
+  assert.equal(gasChartPath(points, 5, 15, (value) => value, (value) => value, "verified"), "M5.00,2.00 L10.00,2.00");
+  assert.equal(gasChartPath(points, 5, 15, (value) => value, (value) => value, "forecast"), "M10.00,3.00 L15.00,3.00");
   assert.equal(gasChartPath(points, 20, 30, (value) => value, (value) => value), "");
 });
 
@@ -127,6 +150,7 @@ test("independent sources become a bounded validated gas snapshot", async () => 
   assert.ok(!isGasSnapshot({ ...snapshot, regions: [...snapshot.regions.slice(0, 3), snapshot.regions[0]] }));
   assert.ok(!isGasSnapshot({ ...snapshot, regions: snapshot.regions.map((region) => ({ ...region, points: region.points.map((point) => ({ ...point, centsPerKwh: point.centsPerKwh + 1 })) })) }));
   assert.ok(!isGasSnapshot({ ...snapshot, regions: snapshot.regions.map((region) => region.id === "VIC1" ? { ...region, points: region.points.map((point) => ({ ...point, basis: "daily-ex-ante" })) } : region) }));
+  assert.ok(!isGasSnapshot({ ...snapshot, regions: snapshot.regions.map((region) => region.id === "VIC1" ? { ...region, points: region.points.map((point) => ({ ...point, status: "unknown" })) } : region) }));
 });
 
 test("one gas source may fail without hiding valid data from the other source", async () => {

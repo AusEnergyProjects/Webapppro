@@ -150,10 +150,14 @@ test("page discovery, consumer explanations and accessible interaction are prese
   assert.match(component,/Purchased energy for the same result/);
   assert.match(component,/Shorter bar means less energy bought/);
   assert.match(component,/Cost at the snapshot average wholesale price/);
-  assert.match(component,/hours for which both electricity and gas prices were available/);
+  assert.match(component,/verified gas prices were available/);
+  assert.match(component,/published forecast/);
+  assert.match(component,/replaced automatically when a verified price is published/);
   assert.match(component,/wholesalePriceSnapshot/);
   assert.match(priceSnapshot,/MIN_RELIABLE_PRICE_INTERVALS = 276/);
   assert.match(priceSnapshot,/point\.time - NEM_INTERVAL_MS \/ 2/);
+  assert.match(priceSnapshot,/forecastGasIntervalCount/);
+  assert.match(priceSnapshot,/gasPriceUsesForecast/);
   assert.match(component,/Show prices for my area/);
   assert.match(component,/Use postcode/);
   assert.match(component,/api\/address-localities\?postcode=/);
