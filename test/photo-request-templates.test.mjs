@@ -59,14 +59,12 @@ test("template management is role protected, owner scoped, versioned and archive
   assert.match(templateRoute, /PHOTO_TEMPLATE_UNCHANGED/);
 });
 
-test("photo templates write only current home-fabric service categories", () => {
-  const selectable = libraryUi.match(/const serviceOptions = \[([\s\S]*?)\] as const;/)?.[1] || "";
-  for (const category of ["draught-proofing", "insulation", "glazing", "window-coverings"]) {
+test("photo templates derive current public energy services from the canonical catalogue", () => {
+  assert.match(libraryUi, /ENERGY_SERVICE_OPTIONS/);
+  for (const category of ["blower-door-testing", "thermal-imaging", "electric-cooking", "draught-proofing", "insulation", "glazing", "window-coverings"]) {
     assert.ok(PHOTO_REQUEST_SERVICE_CATEGORIES.includes(category));
-    assert.match(selectable, new RegExp(`"${category}"`));
   }
   assert.equal(PHOTO_REQUEST_SERVICE_CATEGORIES.includes("insulation-draughts"), false);
-  assert.doesNotMatch(selectable, /insulation-draughts/);
   assert.match(templateRoute, /requestedCategory === "insulation-draughts"\) return "insulation"/);
   assert.match(templateRoute, /normaliseServiceCategory\(template\.service_category\)/);
 });

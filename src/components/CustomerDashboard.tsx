@@ -2,6 +2,7 @@
 
 /* eslint-disable @next/next/no-html-link-for-pages */
 
+import dynamic from "next/dynamic";
 import {
   FormEvent,
   useCallback,
@@ -45,10 +46,7 @@ import { CustomerAssetLifecycle } from "./CustomerAssetLifecycle";
 import { CustomerTradeQuotes } from "./CustomerTradeQuotes";
 import { CustomerAppointmentRescheduling } from "./CustomerAppointmentRescheduling";
 import { HomeFeatureIntake } from "./HomeFeatureIntake";
-import {
-  CustomerProjectPhotoCapture,
-  type GuidedStoredEvidence,
-} from "./CustomerProjectPhotoCapture";
+import type { GuidedStoredEvidence } from "./CustomerProjectPhotoCapture";
 import { CustomerPlanReportPreviewDialog } from "./CustomerPlanReportPreviewDialog";
 import {
   CustomerPlanHistoryProgress,
@@ -78,6 +76,9 @@ import {
   uploadCustomerProjectEvidence,
   type CustomerEvidenceUploadProgress,
 } from "@/lib/customer-project-evidence-upload-client";
+
+const CustomerProjectPhotoCapture = dynamic(() => import("./CustomerProjectPhotoCapture")
+  .then((module) => module.CustomerProjectPhotoCapture));
 
 type DashboardView =
   | "overview"

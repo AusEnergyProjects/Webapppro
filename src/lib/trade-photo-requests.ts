@@ -1,12 +1,13 @@
+import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
+
 export const PHOTO_REQUEST_CHECKLIST_VERSION = "2026-07-18-customer-photo-self-review";
 export const PHOTO_REQUEST_MAX_REQUIREMENTS = 12;
 export const PHOTO_REQUEST_LINK_DAYS = 30;
 export const PHOTO_TEMPLATE_LIMIT = 60;
 export const PHOTO_TEMPLATE_FEEDBACK_VALUES = ["useful", "unclear", "unnecessary"] as const;
 export const PHOTO_REQUEST_SERVICE_CATEGORIES = [
-  "assessment", "solar", "battery", "heating-cooling", "hot-water",
-  "draught-proofing", "insulation", "glazing", "window-coverings",
-  "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other",
+  ...ENERGY_SERVICE_IDS,
+  "electrical", "plumbing", "mounting-hardware", "controls",
 ] as const;
 
 export type PhotoTemplateFeedbackValue = typeof PHOTO_TEMPLATE_FEEDBACK_VALUES[number];
@@ -24,6 +25,16 @@ export type PhotoRequirement = {
 const sharedPrivacyGuidance = "Use good light and keep people, documents, street numbers and unrelated belongings out of frame.";
 
 const defaults: Record<string, PhotoRequirement[]> = {
+  "blower-door-testing": [
+    { id: "test-area-overview", label: "Test area and main external door", guidance: `Show the main external door, the connected areas and the general building layout from safe standing positions. ${sharedPrivacyGuidance}`, usefulExample: "Wide views that show where the fan could be installed and which areas are connected.", avoidExample: "Blocking vents, altering appliances or photographing an identifiable street number.", required: true },
+    { id: "known-leakage-areas", label: "Known draught or leakage areas", guidance: `Show complete windows, doors, vents, hatches or other areas where leakage is suspected. ${sharedPrivacyGuidance}`, usefulExample: "A room context photo followed by a clear view of the suspected opening.", avoidExample: "A close-up with no indication where the opening is located.", required: false },
+    { id: "combustion-and-ventilation", label: "Combustion appliances and fixed ventilation", guidance: `Show any gas or wood appliance, flue, permanent vent or exhaust from an ordinary safe position. Do not operate, cover or change anything. ${sharedPrivacyGuidance}`, usefulExample: "A room view showing the appliance or fixed vent and its surroundings.", avoidExample: "Covering a vent, opening an appliance or attempting a safety test.", required: false },
+  ],
+  "thermal-imaging": [
+    { id: "inspection-area-overview", label: "Rooms and surfaces to inspect", guidance: `Use ordinary visible-light photos to show each full wall, ceiling, floor, window or room of concern. ${sharedPrivacyGuidance}`, usefulExample: "A wide, well-lit room photo that clearly identifies the surface to inspect.", avoidExample: "Submitting a phone filter or uncalibrated thermal image as a diagnosis.", required: true },
+    { id: "suspected-problem-context", label: "Suspected insulation, draught or moisture area", guidance: `Show the suspected area and enough of the surrounding building fabric to locate it. ${sharedPrivacyGuidance}`, usefulExample: "One context photo and one closer ordinary photo of the same area.", avoidExample: "A close-up with no location context or a photo containing private documents.", required: false },
+    { id: "heating-cooling-context", label: "Heating and cooling context", guidance: `Show nearby fixed heating, cooling, vents and external access that may affect test conditions. ${sharedPrivacyGuidance}`, usefulExample: "A room overview showing the surface of concern and nearby fixed equipment.", avoidExample: "Changing equipment settings solely for the photo request.", required: false },
+  ],
   solar: [
     { id: "roof-overview", label: "Roof overview", guidance: `Stand back far enough to show the roof shape, orientation and nearby shade. ${sharedPrivacyGuidance}`, usefulExample: "A clear landscape photo showing the full roof and nearby trees.", avoidExample: "Close-ups that hide the roof layout or include a visible street number.", required: true },
     { id: "meter-box", label: "Meter box", guidance: `Photograph the whole open meter enclosure only when it is safe to do so. ${sharedPrivacyGuidance}`, usefulExample: "The full meter box with labels readable from a safe distance.", avoidExample: "Personal bills, account numbers or unsafe access near live equipment.", required: true },

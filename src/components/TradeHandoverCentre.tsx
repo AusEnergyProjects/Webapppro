@@ -316,7 +316,7 @@ export function TradeHandoverCentre({
       </section>
 
       <section className="handover-documents">
-        <header><div><span>Protected evidence library</span><h4>Attach certificates, manuals and commissioning evidence</h4></div><small>Use redacted copies when a document contains unnecessary household contact or address details. Customer-visible files are released only after approval.</small></header>
+        <header><div><span>Protected evidence library</span><h4>Attach reports, certificates and completion evidence</h4></div><small>Use redacted copies when a document contains unnecessary household contact or address details. Customer-visible files are released only after approval.</small></header>
         {pack.documents.length ? <div className="handover-document-list">{pack.documents.map((document) => <article key={document.id}>
           <div><span>{documentLabels[document.category] || document.category}</span><strong>{document.fileName}</strong><small>{fileSize(document.sizeBytes)} | {document.customerVisible ? "Included in customer pack" : "Internal evidence only"}</small></div>
           <div><button type="button" disabled={busy === `download:${document.id}`} onClick={() => void downloadDocument(document)}>Download</button>{pack.canEdit && <button type="button" disabled={busy === `delete:${document.id}`} onClick={() => void deleteDocument(document)}>Remove</button>}</div>

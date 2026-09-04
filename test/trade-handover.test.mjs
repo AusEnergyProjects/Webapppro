@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
+  HANDOVER_ASSET_CATEGORIES,
+  HANDOVER_DOCUMENT_CATEGORIES,
   complianceTemplateFor,
   handoverReadiness,
 } from "../src/lib/trade-handover.mjs";
@@ -41,6 +43,18 @@ test("handover templates combine a common record with category-aware completion 
   const legacy = complianceTemplateFor("insulation-draughts");
   assert.ok(legacy.some((item) => item.key === "completion-evidence-ready"));
   for (const key of fabricKeys.values()) assert.equal(legacy.some((item) => item.key === key), false);
+
+  const diagnosticKeys = new Map([
+    ["blower-door-testing", ["blower-door-configuration-recorded", "blower-door-method-recorded", "blower-door-report-ready"]],
+    ["thermal-imaging", ["thermal-conditions-recorded", "thermal-images-ready", "thermal-report-ready"]],
+  ]);
+  for (const [category, keys] of diagnosticKeys) {
+    const items = complianceTemplateFor(category);
+    for (const key of keys) assert.ok(items.some((item) => item.key === key), `${category}:${key}`);
+    assert.equal(items.some((item) => item.key === "installed-products-recorded"), false);
+    assert.equal(items.some((item) => item.key === "warranty-path-confirmed"), false);
+    assert.ok(items.some((item) => item.key === "diagnostic-scope-confirmed"));
+  }
 });
 
 test("customer handover readiness requires a platform link, completed work, assets, resolved checks and a visible document", () => {
@@ -57,6 +71,32 @@ test("customer handover readiness requires a platform link, completed work, asse
     customerProjectId: "project-1",
   });
   assert.deepEqual(ready, { ready: true, blockers: [] });
+});
+
+test("diagnostic reports are customer documents and never installed lifecycle assets", () => {
+  const assetCategories = new Set(HANDOVER_ASSET_CATEGORIES.map(([value]) => value));
+  const documentCategories = new Set(HANDOVER_DOCUMENT_CATEGORIES.map(([value]) => value));
+  for (const category of ["blower-door-report", "thermal-imaging-report"]) {
+    assert.equal(assetCategories.has(category), false);
+    assert.equal(documentCategories.has(category), true);
+  }
+
+  const shared = {
+    assets: [],
+    complianceItems: [{ status: "complete" }],
+    workStage: "completed",
+    customerProjectId: "project-1",
+  };
+  assert.deepEqual(handoverReadiness({
+    ...shared,
+    serviceCategory: "blower-door-testing",
+    documents: [{ category: "blower-door-report", customerVisible: true }],
+  }), { ready: true, blockers: [] });
+  assert.deepEqual(handoverReadiness({
+    ...shared,
+    serviceCategory: "thermal-imaging",
+    documents: [{ category: "commissioning-report", customerVisible: true }],
+  }), { ready: false, blockers: ["Add the completed diagnostic report to the customer pack."] });
 });
 
 test("installed assets, compliance, pack reviews and protected document metadata are durable and indexed", () => {

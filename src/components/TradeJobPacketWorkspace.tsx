@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
+import { ENERGY_SERVICE_LABELS, ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
 import { calculateJobPacketSummary, type PacketPriceItem } from "@/lib/trade-job-packet";
 import { quantityToMilli } from "@/lib/trade-quote";
 import styles from "./TradeJobPacketWorkspace.module.css";
@@ -18,15 +19,13 @@ type Result = { ok?: boolean; packets?: JobPacket[]; priceBookItems?: PacketPric
 type Draft = { name: string; serviceCategory: string; jobTemplateId: string; suggestedCrewSize: string; recordStatus: string; lines: PacketLine[]; forms: PacketForm[] };
 
 const SERVICE_OPTIONS = [
-  ["assessment", "Energy assessment"], ["solar", "Rooftop solar"], ["battery", "Home batteries"],
-  ["heating-cooling", "Heating and cooling"], ["hot-water", "Hot water"],
-  ["draught-proofing", "Draught-proofing"], ["insulation", "Insulation"], ["glazing", "Glazing"],
-  ["window-coverings", "Blinds, shutters and external shading"], ["ev-charging", "EV charging"],
+  ...ENERGY_SERVICE_OPTIONS,
   ["electrical", "Electrical"], ["plumbing", "Plumbing"], ["mounting-hardware", "Mounting hardware"],
-  ["controls", "Controls"], ["other", "Other"],
+  ["controls", "Controls"],
 ] as const;
 const SERVICE_CATEGORIES = new Set<string>(SERVICE_OPTIONS.map(([value]) => value));
 const SERVICE_LABELS: Record<string, string> = {
+  ...ENERGY_SERVICE_LABELS,
   ...Object.fromEntries(SERVICE_OPTIONS),
   "insulation-draughts": "Insulation and draughts",
 };

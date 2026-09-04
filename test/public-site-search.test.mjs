@@ -26,6 +26,16 @@ test("predictive search ranks common customer wording and misspellings", () => {
     ["hot watter", "/guides/hot-water"],
     ["calandar booking", "/book-an-assessment"],
     ["watzun", "/wattzun"],
+    ["blower door", "/blower-door-thermal-imaging"],
+    ["blower doar", "/blower-door-thermal-imaging"],
+    ["air leakage test", "/blower-door-thermal-imaging"],
+    ["thermal imaging", "/blower-door-thermal-imaging"],
+    ["therml camera", "/blower-door-thermal-imaging"],
+    ["home electrification", "/guides/home-energy-upgrades"],
+    ["home electrifiction", "/guides/home-energy-upgrades"],
+    ["get off gas", "/guides/home-energy-upgrades"],
+    ["get of gas", "/guides/home-energy-upgrades"],
+    ["one stop home energy", "/guides/home-energy-upgrades"],
   ];
 
   for (const [query, expectedPath] of cases) {

@@ -1,19 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ENERGY_SERVICE_LABELS, ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
 
 type Role = "owner" | "admin" | "reviewer" | "support";
 type Field = { key: string; label: string; type: string; required: boolean; maxLength?: number; options?: string[] };
 type Template = { id: string; templateKey: string; version: number; name: string; jurisdiction: string; categories: string[]; description: string; guidance: string; fields: Field[]; sourceNotes: string; status: string; publishedAt: string; updatedAt: string };
 type Api = (path: string, init?: RequestInit) => Promise<Record<string, unknown>>;
 
-const categoryOptions = [
-  ["assessment", "Assessment"], ["solar", "Solar"], ["battery", "Battery"],
-  ["heating-cooling", "Heating and cooling"], ["hot-water", "Hot water"],
-  ["draught-proofing", "Draught-proofing"], ["insulation", "Insulation"], ["glazing", "Glazing"],
-  ["window-coverings", "Blinds, shutters and external shading"], ["ev-charging", "EV charging"], ["other", "Other"],
-] as const;
+const categoryOptions = ENERGY_SERVICE_OPTIONS;
 const categoryLabels: Record<string, string> = {
+  ...ENERGY_SERVICE_LABELS,
   ...Object.fromEntries(categoryOptions),
   "insulation-draughts": "Insulation and draughts",
 };

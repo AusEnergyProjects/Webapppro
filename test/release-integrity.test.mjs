@@ -1075,7 +1075,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(currentHandover, /Working branch: `codex\/surge-durability-release`/);
   assert.match(currentHandover, /Released application source: `4908a1467d90b2fff57b70517fad5e41e18e12b0`/);
   assert.match(currentHandover, /Original rental workflow commit: `724218fc90f7c4c741721ba443f8ba00c21ef431`/);
-  assert.match(currentHandover, /Current migration inventory: 164 migrations through `0165_surge_answer_review_queue\.sql`/);
+  assert.match(currentHandover, /Current migration inventory: 165 migrations through `0166_expand_energy_assistant_service_categories\.sql`/);
   assert.match(currentHandover, /Current Google Apps Script relay: version 16 on deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`/);
   assert.match(roadmap, /Follow-on application source `0944c9b91765535b873b30029f545bde8f744831`[\s\S]{0,900}deployed as Sites version 391 through `appgdep_6a8af0d5ca1081919f3c86b55f68a163`/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80/);
@@ -1106,7 +1106,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(currentHandover, /Current production: Sites version 499 at `https:\/\/ausenergyassessments\.com`/);
   assert.match(currentHandover, /Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_a43c371ac43c8191ad99a0f4189e7508`/);
   assert.match(currentHandover, /Current deployment: `appgdep_6a982fa069b08191b87ec51ce7beb2a3`, status `succeeded`, environment revision 36/);
-  assert.match(currentHandover, /Current migration inventory: 164 migrations through `0165_surge_answer_review_queue\.sql`/);
+  assert.match(currentHandover, /Current migration inventory: 165 migrations through `0166_expand_energy_assistant_service_categories\.sql`/);
   assert.match(handover, /32-pixel 30-minute card[\s\S]{0,80}64-pixel hour/);
   assert.match(handover, /a2af47a15e5fe7d1[\s\S]{0,120}a2af489e3eb1e7d1[\s\S]{0,80}outcome `ok`/);
   assert.match(handover, /Historical version 334 application source: `f92b2e1c90178e8fb56f1b2841b4cbbf7bb7e7cb`/);

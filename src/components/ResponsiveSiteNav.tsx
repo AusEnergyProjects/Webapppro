@@ -27,6 +27,7 @@ const NAVIGATION_CATEGORIES: readonly NavigationCategory[] = [
       ["/basix-nsw", "BASIX support"],
       ["/minimum-rental-standards", "Rental standards"],
       ["/commercial-and-industrial-assessments", "Business assessments"],
+      ["/blower-door-thermal-imaging", "Blower door & thermal imaging"],
       ["/book-an-assessment", "Book a quick call"],
     ],
   },

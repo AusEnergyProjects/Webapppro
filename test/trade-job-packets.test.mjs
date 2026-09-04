@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { calculateJobPacketSummary, normalisePacketLines, normaliseSuggestedCrewSize } from "../src/lib/trade-job-packet.ts";
+import { ENERGY_SERVICE_IDS } from "../src/lib/energy-service-catalogue.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
@@ -84,15 +85,14 @@ test("packet management reuses authoritative owner-scoped business sources", () 
   for (const duplicate of ["trade_job_packet_tasks", "trade_job_packet_capabilities", "trade_job_packet_team", "trade_job_packet_form_templates"]) assert.doesNotMatch(migration, new RegExp("CREATE TABLE `" + duplicate + "`"));
 });
 
-test("common jobs accept separate draught, insulation, glazing and window-covering work", () => {
-  const allowed = route.match(/const SERVICE_CATEGORIES = new Set\(\[([\s\S]*?)\]\);/)?.[1] || "";
-  const selectable = workspace.match(/const SERVICE_OPTIONS = \[([\s\S]*?)\] as const;/)?.[1] || "";
-  for (const category of ["draught-proofing", "insulation", "glazing", "window-coverings"]) {
-    assert.match(allowed, new RegExp(`"${category}"`));
-    assert.match(selectable, new RegExp(`"${category}"`));
+test("common jobs derive every public energy service from the canonical catalogue", () => {
+  assert.match(route, /ENERGY_SERVICE_IDS/);
+  assert.match(workspace, /ENERGY_SERVICE_OPTIONS/);
+  for (const category of ["blower-door-testing", "thermal-imaging", "electric-cooking", "draught-proofing", "insulation", "glazing", "window-coverings"]) {
+    assert.ok(ENERGY_SERVICE_IDS.includes(category), category);
   }
-  assert.doesNotMatch(allowed, /insulation-draughts/);
-  assert.doesNotMatch(selectable, /insulation-draughts/);
+  assert.equal(ENERGY_SERVICE_IDS.includes("insulation-draughts"), false);
+  assert.doesNotMatch(route, /"insulation-draughts"/);
 });
 
 test("ready packets apply once and preserve immutable quote snapshots", () => {

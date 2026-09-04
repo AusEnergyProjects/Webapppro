@@ -13,6 +13,7 @@ const preparation = [
 ];
 
 const upgradeLinks = [
+  ["Test the building", "Blower door testing, thermal imaging and clear diagnostic evidence", "/blower-door-thermal-imaging"],
   ["Insulation and draughts", "Insulation, draught sealing, windows and ventilation", "/guides/insulation-draught-proofing"],
   ["Heating and cooling", "Comfort, climate, correct sizing and noise", "/guides/heating"],
   ["Hot water", "How much you need, heat pumps, electricity plans and rebates", "/guides/hot-water"],

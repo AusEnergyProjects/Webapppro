@@ -1,14 +1,12 @@
 import { getD1 } from "../../../../../db";
 import { adminError, adminJson, cleanAdminText, requireAdminIdentity, sameOrigin, writeAdminAudit } from "@/lib/admin-server";
+import { ENERGY_SERVICE_IDS } from "@/lib/energy-service-catalogue.mjs";
 
 export const runtime = "edge";
 
 const TYPES = new Set(["checkbox", "text", "textarea", "date", "select"]);
 const JURISDICTIONS = new Set(["AU", "ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"]);
-const CATEGORIES = new Set([
-  "assessment", "solar", "battery", "heating-cooling", "hot-water",
-  "draught-proofing", "insulation", "glazing", "window-coverings", "ev-charging", "other",
-]);
+const CATEGORIES = new Set<string>(ENERGY_SERVICE_IDS);
 
 function parseJson<T>(value: unknown, fallback: T): T {
   try { return JSON.parse(String(value || "")) as T; } catch { return fallback; }

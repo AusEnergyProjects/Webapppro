@@ -22,6 +22,10 @@ const migration = fs.readFileSync(
   new URL("../drizzle/0152_energy_assistant.sql", import.meta.url),
   "utf8",
 );
+const serviceCategoryExpansionMigration = fs.readFileSync(
+  new URL("../drizzle/0166_expand_energy_assistant_service_categories.sql", import.meta.url),
+  "utf8",
+);
 const NOW = new Date("2026-08-20T02:00:00.000Z");
 const leadId = "22222222-2222-4222-8222-222222222222";
 const createdEventId = "33333333-3333-4333-8333-333333333333";
@@ -46,6 +50,7 @@ function fixture() {
   const database = new DatabaseSync(":memory:");
   database.exec("PRAGMA foreign_keys = ON");
   database.exec(migration);
+  database.exec(serviceCategoryExpansionMigration);
   database.exec(`CREATE TABLE trade_opportunities (
     id text PRIMARY KEY NOT NULL,
     source_reference text NOT NULL UNIQUE,
@@ -242,6 +247,8 @@ function shareablePayload(overrides = {}) {
 test("quote preparation exposes bounded service-specific triage questions with an explicit unknown option", () => {
   const requiredByService = {
     assessment: ["assessment-purpose", "assessment-property-scale", "assessment-information"],
+    "blower-door-testing": ["blower-door-purpose", "blower-door-scope", "blower-door-safety"],
+    "thermal-imaging": ["thermal-imaging-purpose", "thermal-imaging-area", "thermal-imaging-conditions"],
     solar: ["solar-existing-system", "solar-electricity-use", "solar-roof-site", "solar-electrical-export"],
     battery: ["battery-priority", "battery-solar-system", "battery-load-profile", "battery-installation-site", "battery-electrical-supply"],
     "heating-cooling": ["heating-existing-system", "heating-home-load", "heating-outdoor-unit-site", "heating-electrical-supply"],
@@ -834,4 +841,76 @@ test("migration stores only explicit follow-ups and immutable lead audit events"
   assert.match(migration, /`interest_confirmed` integer NOT NULL CHECK \(`interest_confirmed` = 1\)/);
   assert.match(migration, /'needs_information'/);
   assert.match(migration, /json_extract\(`quote_brief_json`, '\$\.readiness\.state'\) = 'quote_ready'/);
+});
+
+test("service-category expansion preserves leads, events, indexes and cascade integrity", (t) => {
+  const database = new DatabaseSync(":memory:");
+  t.after(() => database.close());
+  database.exec("PRAGMA foreign_keys = ON");
+  database.exec(migration);
+  database.prepare(`INSERT INTO energy_assistant_leads (
+    id, request_id, submission_key_sha256, name, email, postcode, suburb,
+    residential_state, service_categories_json, quote_brief_version,
+    quote_brief_json, interest_confirmed, source_journey,
+    service_consent_version, service_consent_purpose,
+    service_consent_granted_at, created_at, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`)
+    .run(
+      leadId,
+      "migration-request-0001",
+      "a".repeat(64),
+      "Migration Test",
+      "migration@example.com",
+      "3000",
+      "Melbourne",
+      "VIC",
+      JSON.stringify(["assessment"]),
+      ENERGY_ASSISTANT_QUOTE_BRIEF_VERSION,
+      "{}",
+      "energy-assistant-explicit-follow-up",
+      ENERGY_ASSISTANT_SERVICE_CONSENT_VERSION,
+      ENERGY_ASSISTANT_SERVICE_CONSENT_PURPOSE,
+      NOW.toISOString(),
+      NOW.toISOString(),
+      NOW.toISOString(),
+    );
+  database.prepare(`INSERT INTO energy_assistant_lead_events
+    (id, lead_id, actor_type, action, created_at)
+    VALUES (?, ?, 'system', 'created', ?)`)
+    .run(createdEventId, leadId, NOW.toISOString());
+
+  const leadBefore = database.prepare("SELECT * FROM energy_assistant_leads").get();
+  const eventBefore = database.prepare("SELECT * FROM energy_assistant_lead_events").get();
+  const leadColumnsBefore = database.prepare("PRAGMA table_info(energy_assistant_leads)").all();
+  const eventColumnsBefore = database.prepare("PRAGMA table_info(energy_assistant_lead_events)").all();
+
+  database.exec(serviceCategoryExpansionMigration);
+
+  assert.deepEqual(database.prepare("SELECT * FROM energy_assistant_leads").get(), leadBefore);
+  assert.deepEqual(database.prepare("SELECT * FROM energy_assistant_lead_events").get(), eventBefore);
+  assert.deepEqual(database.prepare("PRAGMA table_info(energy_assistant_leads)").all(), leadColumnsBefore);
+  assert.deepEqual(database.prepare("PRAGMA table_info(energy_assistant_lead_events)").all(), eventColumnsBefore);
+  assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
+  assert.equal(database.prepare("PRAGMA foreign_key_list(energy_assistant_lead_events)").get().table, "energy_assistant_leads");
+  const indexes = new Set(database.prepare(`SELECT name FROM sqlite_master
+    WHERE type = 'index' AND name LIKE 'energy_assistant_%'`).all().map((row) => row.name));
+  for (const name of [
+    "energy_assistant_leads_status_idx",
+    "energy_assistant_leads_source_request_idx",
+    "energy_assistant_leads_assignment_idx",
+    "energy_assistant_leads_opportunity_idx",
+    "energy_assistant_lead_events_lead_idx",
+  ]) assert.ok(indexes.has(name), name);
+  const fourteen = Array.from({ length: 14 }, (_, index) => `service-${index}`);
+  const fifteen = [...fourteen, "service-14"];
+  database.prepare("UPDATE energy_assistant_leads SET service_categories_json = ? WHERE id = ?")
+    .run(JSON.stringify(fourteen), leadId);
+  assert.throws(
+    () => database.prepare("UPDATE energy_assistant_leads SET service_categories_json = ? WHERE id = ?").run(JSON.stringify(fifteen), leadId),
+    /constraint/i,
+  );
+  const schemaSql = database.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'energy_assistant_leads'").get().sql;
+  assert.match(schemaSql, /json_array_length\(`service_categories_json`\) BETWEEN 1 AND 14/);
+  database.prepare("DELETE FROM energy_assistant_leads WHERE id = ?").run(leadId);
+  assert.equal(database.prepare("SELECT COUNT(*) total FROM energy_assistant_lead_events").get().total, 0);
 });

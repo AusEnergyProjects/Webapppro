@@ -50,6 +50,7 @@ const platformMetadataRoutes = [
   "direct-trade/standards",
 ];
 const guideMetadataRoutes = [
+  "blower-door-thermal-imaging",
   "guides/heat-pumps",
   "guides/ncc-nathers-basix",
   "guides/free-home-energy-assessments",
@@ -145,7 +146,9 @@ test("crawl controls exclude private surfaces and publish only verified sitemap 
   assert.match(sitemap, /"\/residential-efficiency-scorecard"/);
   assert.match(sitemap, /"\/rental-assessment\/request"/);
   assert.match(sitemap, /lastModifiedByRoute/);
-  assert.match(sitemap, /\["\/assessments", "2026-09-03"\]/);
+  assert.match(sitemap, /\["\/assessments", "2026-09-04"\]/);
+  assert.match(sitemap, /\["\/blower-door-thermal-imaging", "2026-09-04"\]/);
+  assert.match(sitemap, /\["\/guides\/home-energy-upgrades", "2026-09-04"\]/);
   assert.match(sitemap, /new URL\(route \|\| "\/", `\$\{PUBLIC_SITE\.apexUrl\}\/`\)\.toString\(\)/);
   assert.doesNotMatch(sitemap, /changeFrequency|priority:/);
   assert.match(gasAlias, /permanentRedirect\("\/gas-compare"\)/);

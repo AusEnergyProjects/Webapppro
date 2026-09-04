@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { GuideSection, GuideShell } from "@/components/GuideShell";
+import type { SiteActive } from "@/components/ComparatorChrome";
 import { JsonLd } from "@/components/JsonLd";
 import { PUBLIC_SITE } from "@/lib/public-site";
 
@@ -28,6 +29,7 @@ type AuthoritativeGuidePageProps = {
   sections: readonly AuthoritativeGuideSection[];
   sources: readonly AuthoritativeGuideSource[];
   cta: { title: string; text: string; href: string; label: string };
+  parent?: { name: string; href: `/${string}`; active: SiteActive };
 };
 
 export function AuthoritativeGuidePage({
@@ -42,6 +44,7 @@ export function AuthoritativeGuidePage({
   sections,
   sources,
   cta,
+  parent = { name: "Guides", href: "/guides", active: "guides" },
 }: AuthoritativeGuidePageProps) {
   const canonical = new URL(path, `${PUBLIC_SITE.apexUrl}/`).toString();
   const schema = {
@@ -81,25 +84,25 @@ export function AuthoritativeGuidePage({
         "@id": `${canonical}#breadcrumb`,
         itemListElement: [
           { "@type": "ListItem", position: 1, name: "Home", item: `${PUBLIC_SITE.apexUrl}/` },
-          { "@type": "ListItem", position: 2, name: "Guides", item: `${PUBLIC_SITE.apexUrl}/guides` },
+          { "@type": "ListItem", position: 2, name: parent.name, item: new URL(parent.href, `${PUBLIC_SITE.apexUrl}/`).toString() },
           { "@type": "ListItem", position: 3, name: title, item: canonical },
         ],
       },
     ],
   };
 
-  return <GuideShell label={label} title={title} introduction={introduction}>
+  return <GuideShell label={label} title={title} introduction={introduction} active={parent.active}>
     <JsonLd data={schema} />
     <div className="assessment-asat">
       <strong>Reviewed {reviewedIso}</strong>
-      <span>Written for household decisions. Official sources are linked below for rules and program details.</span>
+      <span>Written for household decisions. Sources are linked below, including official guidance for rules and program details.</span>
     </div>
     {sections.map((section) => <GuideSection eyebrow={section.eyebrow} title={section.title} key={section.title}>
       {section.paragraphs?.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
       {section.items && <ul className="guide-checklist">{section.items.map((item) => <li key={item}>{item}</li>)}</ul>}
       {section.note && <div className="guide-note"><strong>{section.note.title}</strong><p>{section.note.text}</p></div>}
     </GuideSection>)}
-    <GuideSection eyebrow="Check the source" title="Current official guidance">
+    <GuideSection eyebrow="Check the source" title="Sources and official guidance">
       <div className="guide-source-links">{sources.map((source) => <a href={source.href} target="_blank" rel="noreferrer" key={source.href}>{source.label}</a>)}</div>
     </GuideSection>
     <section className="guide-callout"><div><h2>{cta.title}</h2><p>{cta.text}</p></div><Link href={cta.href}>{cta.label}</Link></section>

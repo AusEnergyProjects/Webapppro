@@ -16,6 +16,8 @@ const insulation = read("../src/app/guides/insulation-draught-proofing/page.tsx"
 const cooking = read("../src/app/guides/cooking/page.tsx");
 const evCharging = read("../src/app/guides/ev-charging/page.tsx");
 const homeUpgrades = read("../src/app/guides/home-energy-upgrades/page.tsx");
+const diagnostics = read("../src/app/blower-door-thermal-imaging/page.tsx");
+const assessments = read("../src/app/assessments/page.tsx");
 const start = read("../src/components/GettingStarted.tsx");
 const navigation = read("../src/components/ResponsiveSiteNav.tsx");
 const rebates = read("../src/components/RebatesHub.tsx");
@@ -99,14 +101,43 @@ test("insulation guidance covers building fabric, ventilation and safety boundar
 });
 
 test("home upgrade guidance puts the scope before incentives", () => {
+  assert.match(homeUpgrades, /Home Electrification and Energy Upgrades/);
+  assert.match(homeUpgrades, /Plan appliance replacement before something fails/);
+  assert.match(homeUpgrades, /The final gas appliance/);
+  assert.match(homeUpgrades, /Australian Government electrification guidance/);
+  assert.match(homeUpgrades, /One clear sequence, with the right specialists/);
+  assert.match(homeUpgrades, /Independent evidence first/);
+  assert.match(homeUpgrades, /RACE for 2030 one-stop shop research/);
+  assert.match(homeUpgrades, /reviewedIso="2026-09-04"/);
   assert.match(homeUpgrades, /rebates and finance after the scope is clear/i);
   assert.match(homeUpgrades, /Do not assume two incentives can be combined/);
   assert.match(homeUpgrades, /Household Energy Upgrades Fund/);
-  assert.match(homeUpgrades, /href: "\/rebates"/);
+  assert.match(homeUpgrades, /href: "\/plan"/);
+});
+
+test("building diagnostics guidance is actionable, bounded and connected", () => {
+  assert.match(diagnostics, /path: "\/blower-door-thermal-imaging"/);
+  assert.match(diagnostics, /parent=\{\{ name: "Assessments", href: "\/assessments", active: "assessments" \}\}/);
+  assert.match(diagnostics, /outer shell/);
+  assert.match(diagnostics, /leakage rate for each square metre/);
+  assert.match(diagnostics, /where framing or another path carries heat around the insulation/);
+  assert.match(diagnostics, /thermogram, or thermal image/);
+  assert.match(diagnostics, /calibrated fan and pressure measurements/);
+  assert.match(diagnostics, /image does not prove the cause on its own/);
+  assert.match(diagnostics, /Conditions affect the image/);
+  assert.match(diagnostics, /combustion appliances before pressure testing/);
+  assert.match(diagnostics, /Separate diagnostics from formal ratings/);
+  assert.match(diagnostics, /Your Home ventilation and airtightness/);
+  assert.match(diagnostics, /CSIRO air infiltration research/);
+  for (const source of [overview, insulation, start, navigation, assessments]) {
+    assert.match(source, /\/blower-door-thermal-imaging/);
+  }
+  assert.match(assessments, /A diagnostic test is not automatically a formal rating/);
+  assert.match(read("../src/components/AuthoritativeGuidePage.tsx"), /Sources and official guidance/);
 });
 
 test("heating and hot water copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(`${heating}${hotWater}${insulation}`, /\u2013|\u2014/);
+  assert.doesNotMatch(`${heating}${hotWater}${insulation}${diagnostics}`, /\u2013|\u2014/);
 });
 
 test("guide copy avoids prohibited dash characters", () => {

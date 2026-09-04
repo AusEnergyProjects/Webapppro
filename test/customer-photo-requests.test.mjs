@@ -27,7 +27,7 @@ test("service defaults cover each requested upgrade and carry useful and avoid g
   for (const category of [
     "solar", "battery", "heating-cooling", "hot-water",
     "draught-proofing", "insulation", "glazing", "window-coverings",
-    "ev-charging", "assessment",
+    "ev-charging", "assessment", "blower-door-testing", "thermal-imaging",
   ]) {
     const requirements = defaultPhotoRequirements(category);
     assert.ok(requirements.length >= 3, category);
@@ -38,11 +38,19 @@ test("service defaults cover each requested upgrade and carry useful and avoid g
     ["insulation", "roof-or-ceiling-access"],
     ["glazing", "window-overview"],
     ["window-coverings", "opening-and-surrounds"],
+    ["blower-door-testing", "test-area-overview"],
+    ["thermal-imaging", "inspection-area-overview"],
   ]) {
     assert.ok(defaultPhotoRequirements(category).some((item) => item.id === requirementId), category);
   }
   assert.deepEqual(defaultPhotoRequirements("insulation-draughts"), defaultPhotoRequirements("assessment"));
   assert.match(defaultPhotoRequirements("solar")[0].guidance, /people, documents, street numbers/);
+  const diagnosticGuidance = [
+    ...defaultPhotoRequirements("blower-door-testing"),
+    ...defaultPhotoRequirements("thermal-imaging"),
+  ].map((item) => `${item.guidance} ${item.usefulExample} ${item.avoidExample}`).join(" ");
+  assert.match(diagnosticGuidance, /Do not operate, cover or change anything/);
+  assert.doesNotMatch(diagnosticGuidance, /capture a thermogram|perform (?:a )?blower door test/i);
 });
 
 test("editable requirements are bounded, complete and uniquely identified", () => {

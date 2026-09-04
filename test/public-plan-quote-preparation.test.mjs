@@ -31,6 +31,7 @@ import {
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "../src/lib/public-plan-enquiry.mjs";
+import { ENERGY_SERVICE_IDS } from "../src/lib/energy-service-catalogue.mjs";
 import {
   hasAllowedSignature,
   privateImageDimensions,
@@ -41,20 +42,7 @@ import {
   shouldDrainPublicPlanQuotePhotoCleanup,
 } from "../src/lib/public-plan-quote-photo-cleanup.ts";
 
-const SERVICES = [
-  "assessment",
-  "solar",
-  "battery",
-  "heating-cooling",
-  "hot-water",
-  "electric-cooking",
-  "draught-proofing",
-  "insulation",
-  "glazing",
-  "window-coverings",
-  "ev-charging",
-  "other",
-];
+const SERVICES = [...ENERGY_SERVICE_IDS];
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 

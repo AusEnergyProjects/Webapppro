@@ -5,6 +5,7 @@ import type { User } from "firebase/auth";
 import { TradeHandoverCentre } from "./TradeHandoverCentre";
 import { InstallerCrmWorkspace } from "./InstallerCrmWorkspace";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
+import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
 
 type PartnerType = "installer" | "supplier";
 type WorkTask = {
@@ -63,6 +64,7 @@ type HubResult = {
 };
 
 const serviceLabels: Record<string, string> = {
+  ...ENERGY_SERVICE_LABELS,
   assessment: "Energy assessment",
   solar: "Rooftop solar",
   battery: "Home batteries",

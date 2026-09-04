@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
+import { ENERGY_SERVICE_LABELS, ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
 import { defaultPhotoRequirements, type PhotoRequirement } from "@/lib/trade-photo-requests";
 import styles from "./TradePhotoTemplateLibrary.module.css";
 
@@ -29,15 +30,13 @@ type PhotoTemplate = {
 type Result = { ok?: boolean; templates?: PhotoTemplate[]; error?: string };
 
 const serviceOptions = [
-  ["assessment", "Energy assessment"], ["solar", "Rooftop solar"], ["battery", "Home batteries"],
-  ["heating-cooling", "Heating and cooling"], ["hot-water", "Hot water"],
-  ["draught-proofing", "Draught-proofing"], ["insulation", "Insulation"], ["glazing", "Glazing"],
-  ["window-coverings", "Blinds, shutters and external shading"], ["ev-charging", "EV charging"],
+  ...ENERGY_SERVICE_OPTIONS,
   ["electrical", "Electrical services"], ["plumbing", "Plumbing services"],
-  ["mounting-hardware", "Mounting and hardware"], ["controls", "Energy controls"], ["other", "Other work"],
+  ["mounting-hardware", "Mounting and hardware"], ["controls", "Energy controls"],
 ] as const;
 const serviceCategories = new Set<string>(serviceOptions.map(([value]) => value));
 const serviceLabels: Record<string, string> = {
+  ...ENERGY_SERVICE_LABELS,
   ...Object.fromEntries(serviceOptions),
   "insulation-draughts": "Insulation and draught control",
 };

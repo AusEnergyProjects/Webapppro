@@ -74,6 +74,7 @@ test("first owner setup is one-time, secret-backed and verified", () => {
 });
 
 test("administration is least privilege and protects the final owner", () => {
+  assert.match(accountWorkspace, /ENERGY_SERVICE_LABELS/);
   assert.match(adminServer, /"owner", "admin", "reviewer", "support"/);
   assert.match(
     accountsRoute,

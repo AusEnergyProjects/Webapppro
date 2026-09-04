@@ -22,7 +22,7 @@ Legacy public origin: `https://compare.ausenergyassessments.com`, permanent 308 
 
 Current Google Analytics stream: `G-3PGGJ0JX4H`
 
-Current migration inventory: 164 migrations through `0165_surge_answer_review_queue.sql`
+Current migration inventory: 165 migrations through `0166_expand_energy_assistant_service_categories.sql`
 
 Current Google Apps Script relay: version 16 on deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`; source SHA-256 `a57866eaa403c3b15c5c2ea469e9dd17dfc2dff556f89656acdc27d80e34c55a`.
 

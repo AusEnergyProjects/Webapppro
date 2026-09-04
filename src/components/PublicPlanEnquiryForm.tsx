@@ -39,6 +39,8 @@ import styles from "./PublicPlanEnquiryForm.module.css";
 
 export type PublicPlanUpgradeInterest =
   | "assessment"
+  | "blower-door-testing"
+  | "thermal-imaging"
   | "solar"
   | "battery"
   | "heating-cooling"

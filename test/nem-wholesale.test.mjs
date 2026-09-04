@@ -149,6 +149,11 @@ test("page discovery, consumer explanations and accessible interaction are prese
   assert.match(component,/type="radio"/);
   assert.match(component,/Purchased energy for the same result/);
   assert.match(component,/Shorter bar means less energy bought/);
+  assert.match(component,/Rates from my bill/);
+  assert.match(component,/Gas usage, cents per MJ/);
+  assert.match(component,/Keeping gas connected/);
+  assert.match(component,/entries stay in this page and are not sent anywhere/);
+  assert.match(component,/Daily supply charges are shown separately/);
   assert.match(component,/example\.costBasisLabel/);
   assert.match(component,/multiplying each one by the same runtime would make the comparison less fair/);
   assert.match(component,/verified gas prices were available/);
@@ -169,6 +174,9 @@ test("page discovery, consumer explanations and accessible interaction are prese
   assert.match(component,/aria-invalid=\{postcodeError \|\| undefined\}/);
   assert.match(component,/parseEnergyRatingClimate/);
   assert.match(component,/The appliance examples below have updated/);
+  assert.match(component,/pendingPostcodeRegion/);
+  assert.match(component,/then the climate result will be applied/);
+  assert.match(component,/pendingPostcodeRegion\.regionIds\.includes\(region\.id\)/);
   assert.match(component,/Climate band/);
   assert.match(component,/planning \{example\.heatPumpPerformanceLabel\}/);
   assert.match(component,/efficient, correctly sized system/);

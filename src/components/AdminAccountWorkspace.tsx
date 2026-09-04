@@ -6,6 +6,7 @@ import type { FeatureKey } from "@/lib/direct-trade-entitlements";
 import { WorkspaceListControls, type WorkspaceListPreferences } from "@/components/WorkspaceListControls";
 import { downloadWorkspaceCsv } from "@/components/WorkspaceTableTools";
 import { dateTime, readable, resetWorkspaceListView, saveWorkspaceListView, workspaceError } from "@/components/admin-workspace";
+import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
 import styles from "./AdminAccountWorkspace.module.css";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
@@ -40,6 +41,7 @@ type AdminApiResult = {
 const emptyPagination: ListPagination = { page: 1, pageSize: 25, total: 0, pageCount: 1 };
 const emptyCounts: AccountCounts = { total: 0, approvedAccess: 0, reviewRequired: 0, suspended: 0 };
 const capabilityLabels: Record<string, string> = {
+  ...ENERGY_SERVICE_LABELS,
   assessment: "Energy assessment", solar: "Rooftop solar", battery: "Home batteries", "heating-cooling": "Heating and cooling",
   "hot-water": "Hot water", "draught-proofing": "Draught-proofing", insulation: "Insulation", glazing: "Glazing",
   "window-coverings": "Blinds, shutters and external shading", "ev-charging": "EV charging", other: "Other energy upgrades",

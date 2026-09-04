@@ -1,4 +1,5 @@
 import { isPublicPlanUpgradeInterest } from "./public-plan-enquiry.mjs";
+import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
 
 export const PUBLIC_PLAN_QUOTE_PREPARATION_VERSION =
   "public-plan-desktop-quote-preparation-v1";
@@ -91,20 +92,7 @@ export function publicPlanQuotePhotoReplayDecision(existing, incoming) {
   return existing.status === "active" ? "replay" : "resume";
 }
 
-const ALL_SERVICES = Object.freeze([
-  "assessment",
-  "solar",
-  "battery",
-  "heating-cooling",
-  "hot-water",
-  "electric-cooking",
-  "draught-proofing",
-  "insulation",
-  "glazing",
-  "window-coverings",
-  "ev-charging",
-  "other",
-]);
+const ALL_SERVICES = Object.freeze([...ENERGY_SERVICE_IDS]);
 
 const ENERGY_ASSISTANT_QUESTION_DEFINITIONS = Object.freeze([
   {
@@ -130,6 +118,42 @@ const ENERGY_ASSISTANT_QUESTION_DEFINITIONS = Object.freeze([
     label: "What information can you make available to the assessor?",
     services: ["assessment"],
     options: ["Recent bills and building plans", "Recent bills only", "Building plans only", "A site visit without documents", "Not sure"],
+  },
+  {
+    id: "blower-door-purpose",
+    label: "What should the blower door test help you decide?",
+    services: ["blower-door-testing"],
+    options: ["Find whole-home air leakage", "Check new construction", "Plan draught sealing", "Compare before and after work", "Support a high-performance building target", "Not sure"],
+  },
+  {
+    id: "blower-door-scope",
+    label: "What part of the property should be pressure tested?",
+    services: ["blower-door-testing"],
+    options: ["Whole detached home", "Apartment or unit", "One defined zone or extension", "New building envelope before completion", "Several connected areas", "Not sure"],
+  },
+  {
+    id: "blower-door-safety",
+    label: "What is known about combustion appliances and intentional ventilation?",
+    services: ["blower-door-testing"],
+    options: ["No gas, wood or other combustion appliance", "Combustion appliances are present", "Permanent ventilation or flues are present", "A ventilation specialist has assessed the home", "Not sure"],
+  },
+  {
+    id: "thermal-imaging-purpose",
+    label: "What should the thermal imaging inspection investigate?",
+    services: ["thermal-imaging"],
+    options: ["Missing or disturbed insulation", "Thermal bridges", "Draughts or air leakage", "Damp or a suspected leak", "Before or after upgrade evidence", "Several problems", "Not sure"],
+  },
+  {
+    id: "thermal-imaging-area",
+    label: "How much of the property needs thermal imaging?",
+    services: ["thermal-imaging"],
+    options: ["One room or surface", "Several rooms", "Whole home", "Ceiling and roof areas", "New building envelope", "Not sure"],
+  },
+  {
+    id: "thermal-imaging-conditions",
+    label: "What access and operating conditions are available?",
+    services: ["thermal-imaging"],
+    options: ["Heating or cooling can run before the visit", "Indoor and outdoor access is available", "Only occupied-room access is available", "Weather or timing is flexible", "Strata or shared access needs approval", "Not sure"],
   },
   {
     id: "solar-existing-system",
@@ -377,6 +401,8 @@ const PUBLIC_PLAN_QUESTION_IDS = new Set([
   "timing",
   "battery-priority",
   "electric-cooking-scope",
+  "blower-door-purpose",
+  "thermal-imaging-purpose",
   "other-scope",
 ]);
 
@@ -391,6 +417,18 @@ const PHOTO_PROMPT_DEFINITIONS = Object.freeze([
     label: "Wide views of the home or areas you want assessed",
     hint: "Stand back and show the whole room, wall or outdoor area so the assessor can understand the layout.",
     services: ["assessment"],
+  },
+  {
+    id: "blower-door-context",
+    label: "Wide views of the test area and main external openings",
+    hint: "Show the main external door, the connected areas and any known draught locations from safe standing positions. Do not block vents or alter appliances.",
+    services: ["blower-door-testing"],
+  },
+  {
+    id: "thermal-imaging-context",
+    label: "Visible-light photos of the surfaces or rooms to inspect",
+    hint: "Show the whole wall, ceiling, window or room in ordinary photos. The practitioner will capture and interpret the thermograms during the inspection.",
+    services: ["thermal-imaging"],
   },
   {
     id: "roof-wide",

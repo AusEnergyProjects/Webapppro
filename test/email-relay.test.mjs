@@ -237,6 +237,13 @@ const comparison = {
   },
 };
 
+test("energy service email labels include diagnostics and electric cooking", () => {
+  const { context } = relay();
+  assert.equal(context.categoryLabel_("blower-door-testing"), "Blower door testing");
+  assert.equal(context.categoryLabel_("thermal-imaging"), "Thermal imaging inspection");
+  assert.equal(context.categoryLabel_("electric-cooking"), "Electric cooking and cooktops");
+});
+
 test("the relay recognises every versioned event and operational probes", () => {
   const { context } = relay();
   assert.equal(

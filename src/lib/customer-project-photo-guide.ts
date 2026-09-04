@@ -3,6 +3,7 @@ import {
   PHOTO_REQUEST_SERVICE_CATEGORIES,
   type PhotoRequirement,
 } from "./trade-photo-requests.ts";
+import { ENERGY_SERVICE_LABELS } from "./energy-service-catalogue.mjs";
 
 export const CUSTOMER_PROJECT_PHOTO_GUIDE_VERSION =
   "2026-07-30-guided-customer-capture-v1";
@@ -17,6 +18,7 @@ export type CustomerProjectPhotoGuideItem = PhotoRequirement & {
 };
 
 const serviceLabels: Record<string, string> = {
+  ...ENERGY_SERVICE_LABELS,
   assessment: "Whole-home assessment",
   solar: "Rooftop solar",
   battery: "Home battery",
@@ -89,6 +91,15 @@ function evidenceLink(
         requirementId === "fixed-ventilation" ? "ventilation" : "draughts",
       ],
     };
+  }
+  if (serviceCategory === "blower-door-testing") {
+    return {
+      evidenceCategory: "property-photo",
+      factKeys: requirementId === "combustion-and-ventilation" ? ["ventilation"] : ["draughts"],
+    };
+  }
+  if (serviceCategory === "thermal-imaging") {
+    return { evidenceCategory: "property-photo", factKeys: [] };
   }
   if (requirementId === "home-exterior") {
     return { evidenceCategory: "property-photo", factKeys: ["roof"] };

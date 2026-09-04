@@ -1,3 +1,5 @@
+import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
+
 const sharedFields = [
   { key: "work_date", label: "Work date", type: "date", required: true },
   { key: "technician", label: "Responsible technician", type: "text", required: true, maxLength: 100 },
@@ -12,11 +14,7 @@ const templates = [
     version: 1,
     name: "Pre-start risk and site readiness",
     jurisdiction: "AU",
-    categories: [
-      "assessment", "solar", "battery", "heating-cooling", "hot-water",
-      "draught-proofing", "insulation", "glazing", "window-coverings",
-      "ev-charging", "other",
-    ],
+    categories: [...ENERGY_SERVICE_IDS],
     description: "A practical pre-start record for site conditions, access, hazards and the agreed work area.",
     guidance: "Use this as a supporting business record. Apply the licences, permits, safety documents and formal certificates required for the actual work and location.",
     fields: [
@@ -41,6 +39,25 @@ const templates = [
       { key: "operating_test", label: "Operating test completed successfully", type: "checkbox", required: true },
       { key: "settings", label: "Final operating, export, reserve or load settings", type: "textarea", required: true, maxLength: 1200 },
       { key: "certificate_reference", label: "Certificate or formal evidence reference", type: "text", required: false, maxLength: 160 },
+    ],
+  },
+  {
+    key: "building-performance-diagnostic-support",
+    version: 1,
+    name: "Building performance diagnostic record",
+    jurisdiction: "AU",
+    categories: ["blower-door-testing", "thermal-imaging"],
+    description: "Records the operator, equipment, test conditions, method, measured results, evidence and limitations for a blower door or thermal imaging visit.",
+    guidance: "Use the method and units appropriate to the test. Thermal patterns need professional interpretation and blower door work must account for ventilation, moisture and combustion safety. This supports the job file and does not replace professional procedures, safety controls or a formal report.",
+    fields: [
+      ...sharedFields,
+      { key: "test_type", label: "Diagnostic test", type: "select", required: true, options: ["Blower door test", "Thermal imaging inspection", "Combined inspection"] },
+      { key: "equipment", label: "Equipment or camera model", type: "text", required: true, maxLength: 240 },
+      { key: "calibration_reference", label: "Calibration or equipment-check reference", type: "text", required: true, maxLength: 240 },
+      { key: "test_conditions", label: "Indoor, outdoor and building operating conditions", type: "textarea", required: true, maxLength: 1200 },
+      { key: "method_and_result", label: "Method, building configuration, measured result and units", type: "textarea", required: true, maxLength: 1200 },
+      { key: "report_reference", label: "Report or paired-image evidence reference", type: "text", required: false, maxLength: 240 },
+      { key: "limitations", label: "Limitations and recommended follow-up", type: "textarea", required: false, maxLength: 1200 },
     ],
   },
   {
@@ -96,11 +113,7 @@ const templates = [
     version: 1,
     name: "Scheduled service visit record",
     jurisdiction: "AU",
-    categories: [
-      "assessment", "solar", "battery", "heating-cooling", "hot-water",
-      "draught-proofing", "insulation", "glazing", "window-coverings",
-      "ev-charging", "other",
-    ],
+    categories: [...ENERGY_SERVICE_IDS],
     description: "A concise record for planned maintenance, observed condition, work completed and the next action.",
     guidance: "Record technical service information only. Formal testing, certificates and manufacturer procedures remain the responsibility of the service provider.",
     fields: [

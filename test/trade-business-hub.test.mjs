@@ -25,6 +25,7 @@ test("Business Hub records, tasks and activity are durable and indexed", () => {
 });
 
 test("Business Hub deliberately excludes household contact fields", () => {
+  assert.match(hub, /ENERGY_SERVICE_LABELS/);
   assert.doesNotMatch(
     operationsSchema,
     /customer_name|household_name|customer_email|customer_phone|street_address|address_line/i,

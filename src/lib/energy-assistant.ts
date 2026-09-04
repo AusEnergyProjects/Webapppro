@@ -4163,7 +4163,7 @@ export function composeEnergyAssistantAnswer(
         "Document indoor and outdoor temperatures and camera settings before treating the image quantitatively.",
         "Assess a continuous layer and junction details rather than specifying cavity batts alone.",
       ],
-      toolActions: [{ id: "open-insulation-guide", label: "Open the insulation guide", href: "/guides/insulation-draught-proofing" }],
+      toolActions: [{ id: "open-building-diagnostics", label: "Compare blower door and thermal imaging", href: "/blower-door-thermal-imaging" }],
       suggestedQuestions: ["Do the stripe spacing and wall plans align with metal studs, and is there any dampness or air leakage at the same locations?"],
     });
   }
@@ -8230,9 +8230,9 @@ export function composeEnergyAssistantAnswer(
         "For permanent sealing, ask a qualified assessor for a site-wide leakage, ventilation and combustion-safety scope.",
       ],
       toolActions: [{
-        id: "open-insulation-guide",
-        label: "Open the insulation and draught guide",
-        href: "/guides/insulation-draught-proofing",
+        id: "open-building-diagnostics",
+        label: "Compare blower door and thermal imaging",
+        href: "/blower-door-thermal-imaging",
       }],
       suggestedQuestions: ["Which leakage checks can I do without altering the property?"],
     });

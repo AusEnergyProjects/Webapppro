@@ -53,7 +53,7 @@ export const USEFUL_ENERGY_EXAMPLES = [
   {
     id: "hot-water",
     label: "Hot water · full tank",
-    description: "One full 300 litre hot-water cycle. Each option heats the same tank to 60°C. The energy shown covers the whole heating task, not a fixed number of running hours. It models an efficient, correctly sized heat pump with a heat-up-cycle COP of 4.0 and gas efficiency of 85%.",
+    description: "One full 300 litre hot-water cycle. Each option heats the same tank from an assumed 20°C inlet temperature to 60°C. The energy shown covers the whole heating task, not a fixed number of running hours. It models an efficient, correctly sized heat pump with a heat-up-cycle COP of 4.0 and gas efficiency of 85%.",
     costBasisLabel: "Illustrative full-tank cost at the 24-hour average",
     climateBand: null,
     heatPumpCop: PLANNING_HEAT_PUMP_COP["hot-water"].average,
@@ -88,7 +88,7 @@ export function usefulEnergyExample(id: UsefulEnergyExampleId, climateBand: Usef
     ...base,
     climateBand,
     heatPumpCop,
-    description: `One full 300 litre hot-water cycle. Each option heats the same tank to 60°C. Your postcode selected a ${climateLabel.toLowerCase()} temperature context, so this efficient-system example uses a heat-up-cycle COP of ${heatPumpCop.toFixed(1)}. Gas efficiency remains 85%.`,
+    description: `One full 300 litre hot-water cycle. Each option heats the same tank from an assumed 20°C inlet temperature to 60°C. Your postcode selected a ${climateLabel.toLowerCase()} temperature context, so this efficient-system example uses a heat-up-cycle COP of ${heatPumpCop.toFixed(1)}. Gas efficiency remains 85%.`,
     sourceHref: "https://www.yourhome.gov.au/energy/hot-water-systems",
     sourceLabel: "Australian Government hot-water guidance",
     options: base.options.map((option) => option.id === "heat-pump-water-heater"
@@ -102,6 +102,24 @@ export function wholesaleInputCostCents(inputKwh: number, priceCentsPerKwh: numb
   if (priceCentsPerKwh === null) return null;
   if (!Number.isFinite(priceCentsPerKwh)) throw new RangeError("Energy price must be finite or null");
   return inputKwh * priceCentsPerKwh;
+}
+
+export function parseHouseholdEnergyRate(value: string): number | null {
+  if (!value.trim()) return null;
+  const rate = Number(value);
+  return Number.isFinite(rate) && rate >= 0 ? rate : null;
+}
+
+export function gasUsageRateCentsPerKwh(centsPerMj: number | null): number | null {
+  if (centsPerMj === null) return null;
+  if (!Number.isFinite(centsPerMj) || centsPerMj < 0) throw new RangeError("Gas usage rate must be a finite, non-negative number or null");
+  return centsPerMj * 3.6;
+}
+
+export function annualSupplyChargeDollars(centsPerDay: number | null): number | null {
+  if (centsPerDay === null) return null;
+  if (!Number.isFinite(centsPerDay) || centsPerDay < 0) throw new RangeError("Daily supply rate must be a finite, non-negative number or null");
+  return centsPerDay * 365 / 100;
 }
 
 export function purchasedEnergyReductionPercent(inputKwh: number, comparisonInputKwh: number): number {

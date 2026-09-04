@@ -238,6 +238,31 @@ test("building-fabric categories have separate capabilities and quote evidence",
   );
 });
 
+test("building diagnostics require exact capabilities and their own report evidence", () => {
+  const diagnosticProject = {
+    ...project,
+    projectCategories: ["blower-door-testing", "thermal-imaging"],
+  };
+  const triage = buildDirectTradeTriage(diagnosticProject);
+  assert.deepEqual(triage.matchCriteria.capabilities, ["blower-door-testing", "thermal-imaging"]);
+  const evidenceIds = triage.quoteEvidence.map((item) => item.id);
+  assert.ok(evidenceIds.includes("blower-door-test-record"));
+  assert.ok(evidenceIds.includes("thermal-imaging-record"));
+
+  const candidates = matchDirectTradeParticipants(
+    diagnosticProject,
+    [
+      { ...participantEvidence, id: "diagnostic-fit", serviceStates: ["VIC"], capabilities: ["blower-door-testing", "thermal-imaging"] },
+      { ...participantEvidence, id: "generic-assessor", serviceStates: ["VIC"], capabilities: ["assessment", "draught-proofing"] },
+      { ...participantEvidence, id: "thermal-only", serviceStates: ["VIC"], capabilities: ["thermal-imaging"] },
+    ],
+    { now: new Date("2026-07-14T01:00:00.000Z") },
+  );
+  assert.equal(candidates.find((candidate) => candidate.participantId === "diagnostic-fit").eligibleForReview, true);
+  assert.deepEqual(candidates.find((candidate) => candidate.participantId === "generic-assessor").reasons, ["capability_mismatch"]);
+  assert.deepEqual(candidates.find((candidate) => candidate.participantId === "thermal-only").reasons, ["capability_mismatch"]);
+});
+
 test("legacy combined project and participant categories normalize to current capabilities", () => {
   const legacyProject = {
     ...project,

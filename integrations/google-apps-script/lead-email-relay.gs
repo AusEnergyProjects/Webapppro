@@ -1051,7 +1051,7 @@ function setupLabel_(value) {
 }
 
 function categoryLabel_(value) {
-  const labels = { assessment: "Independent energy assessment", "rental-inspection": "Victorian rental minimum standards assessment", solar: "Rooftop solar", battery: "Home battery", "heating-cooling": "Heating and cooling", "hot-water": "Hot water", "draught-proofing": "Draught proofing", insulation: "Insulation", glazing: "Windows and glazing", "window-coverings": "Blinds, shutters or external shading", "insulation-draughts": "Insulation and draught control", "ev-charging": "EV charging", other: "Other energy upgrade" };
+  const labels = { assessment: "Independent energy assessment", "rental-inspection": "Victorian rental minimum standards assessment", "blower-door-testing": "Blower door testing", "thermal-imaging": "Thermal imaging inspection", solar: "Rooftop solar", battery: "Home battery", "heating-cooling": "Heating and cooling", "hot-water": "Hot water", "electric-cooking": "Electric cooking and cooktops", "draught-proofing": "Draught proofing", insulation: "Insulation", glazing: "Windows and glazing", "window-coverings": "Blinds, shutters or external shading", "insulation-draughts": "Insulation and draught control", "ev-charging": "EV charging", other: "Other energy upgrade" };
   return labels[value] || value;
 }
 

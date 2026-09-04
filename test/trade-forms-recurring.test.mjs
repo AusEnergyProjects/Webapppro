@@ -36,6 +36,20 @@ test("the form library keeps each home-fabric work category first class", () => 
   assert.deepEqual(tradeFormTemplatesFor("insulation-draughts"), []);
 });
 
+test("diagnostic services receive complete test records without leaking them to unrelated work", () => {
+  for (const category of ["blower-door-testing", "thermal-imaging"]) {
+    const templates = tradeFormTemplatesFor(category);
+    assert.ok(templates.some((item) => item.key === "pre-start-risk-readiness"), category);
+    assert.ok(templates.some((item) => item.key === "service-visit-support"), category);
+    const diagnostic = templates.find((item) => item.key === "building-performance-diagnostic-support");
+    assert.ok(diagnostic, category);
+    for (const key of ["equipment", "calibration_reference", "test_conditions", "method_and_result", "report_reference", "limitations"]) {
+      assert.ok(diagnostic.fields.some((field) => field.key === key), `${category}:${key}`);
+    }
+  }
+  assert.equal(tradeFormTemplate("building-performance-diagnostic-support", 1, "solar"), null);
+});
+
 test("form answer normalisation is bounded and completion requires checked confirmations", () => {
   const template = tradeFormTemplate("service-visit-support", 1, "other");
   assert.ok(template);

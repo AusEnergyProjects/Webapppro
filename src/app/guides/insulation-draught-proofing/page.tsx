@@ -50,5 +50,6 @@ export default function InsulationGuidePage() {
 
     <section className="guide-callout"><div><h2>Check location-specific support</h2><p>Insulation and draught-proofing assistance depends on location, household eligibility, property requirements and the current program rules.</p></div><a href="/rebates">Open rebates and assistance</a></section>
     <section className="guide-callout"><div><h2>Size heating and cooling after reducing the load</h2><p>Once the building fabric is better understood, compare equipment using room needs, climate performance, installation design and realistic operating patterns.</p></div><a href="/guides/heating">Open the heating guide</a></section>
+    <section className="guide-callout"><div><h2>Need to measure leakage or inspect hidden patterns?</h2><p>Blower door testing quantifies whole-home air leakage. Thermal imaging can help locate insulation, thermal-bridge and leakage patterns when conditions are suitable.</p></div><a href="/blower-door-thermal-imaging">Compare the diagnostic tests</a></section>
   </GuideShell>;
 }

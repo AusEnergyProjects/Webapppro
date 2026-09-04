@@ -1,5 +1,6 @@
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { ENERGY_SERVICE_IDS } from "@/lib/energy-service-catalogue.mjs";
 import { normalisePacketLines, normaliseSuggestedCrewSize, type PacketPriceItem } from "@/lib/trade-job-packet";
 import { jobPacketLibrary } from "@/lib/trade-job-packet-server";
 import { publishedTradeFormTemplatesFor } from "@/lib/trade-form-templates-server";
@@ -8,9 +9,8 @@ import { requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-se
 export const runtime = "edge";
 type Row = Record<string, unknown>;
 const SERVICE_CATEGORIES = new Set([
-  "assessment", "solar", "battery", "heating-cooling", "hot-water",
-  "draught-proofing", "insulation", "glazing", "window-coverings",
-  "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other",
+  ...ENERGY_SERVICE_IDS,
+  "electrical", "plumbing", "mounting-hardware", "controls",
 ]);
 
 function errorResponse(error: unknown) {

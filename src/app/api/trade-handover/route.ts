@@ -202,6 +202,7 @@ async function handoverPayload(identity: TradeIdentity, work: WorkRecord) {
         assets,
         complianceItems,
         documents,
+        serviceCategory: String(pack.service_category || ""),
         workStage: work.stage,
         customerProjectId: pack.customer_project_id,
       }),

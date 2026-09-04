@@ -34,6 +34,18 @@ const QUOTE_EVIDENCE = {
       "Assessment method, deliverables and assessor credentials",
     ],
   ],
+  "blower-door-testing": [
+    [
+      "blower-door-test-record",
+      "Test purpose, method, building configuration, calibrated fan and manometer, result units, limitations and signed report",
+    ],
+  ],
+  "thermal-imaging": [
+    [
+      "thermal-imaging-record",
+      "Camera details, test conditions, temperature difference, paired visible and thermal images, locations, interpretation and limitations",
+    ],
+  ],
   solar: [
     [
       "solar-design",

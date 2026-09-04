@@ -53,6 +53,17 @@ test("guided photos carry safe server-owned evidence presets", () => {
   assert.match(insulation[0].guidance, /Do not enter a roof space/);
   const glazing = customerProjectPhotoGuide(["glazing"]);
   assert.ok(glazing.every((item) => item.factKeys[0] === "glazing"));
+
+  const blowerDoor = customerProjectPhotoGuide(["blower-door-testing"]);
+  assert.ok(blowerDoor.every((item) => item.serviceLabel === "Blower door testing"));
+  assert.ok(blowerDoor.every((item) => item.evidenceCategory === "property-photo"));
+  assert.match(blowerDoor[0].guidance, /main external door/);
+
+  const thermalImaging = customerProjectPhotoGuide(["thermal-imaging"]);
+  assert.ok(thermalImaging.every((item) => item.serviceLabel === "Thermal imaging inspection"));
+  assert.ok(thermalImaging.every((item) => item.evidenceCategory === "property-photo"));
+  assert.ok(thermalImaging.every((item) => item.factKeys.length === 0));
+  assert.match(thermalImaging[0].guidance, /ordinary visible-light photos/);
 });
 
 test("customer meter-box guidance keeps the enclosure closed", () => {

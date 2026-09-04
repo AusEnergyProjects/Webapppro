@@ -35,6 +35,12 @@ export const PUBLIC_SITE_SEARCH_ENTRIES: readonly PublicSiteSearchEntry[] = [
     keywords: ["energy assessor", "energy assessment", "house assessment", "rating", "assessor near me"],
   },
   {
+    path: "/blower-door-thermal-imaging",
+    title: "Blower door testing and thermal imaging",
+    description: "Measure whole-home air leakage and investigate insulation, thermal bridges, draughts and temperature patterns.",
+    keywords: ["blower door", "blowerdoor", "air leakage test", "airtightness test", "pressure test", "thermal imaging", "thermal camera", "infrared inspection", "thermography", "building diagnostics", "insulation inspection", "draught test"],
+  },
+  {
     path: "/book-an-assessment",
     title: "Book a five-minute call",
     description: "Choose a quick call time so we can confirm the right service and logistics.",
@@ -132,9 +138,9 @@ export const PUBLIC_SITE_SEARCH_ENTRIES: readonly PublicSiteSearchEntry[] = [
   },
   {
     path: "/guides/home-energy-upgrades",
-    title: "Home energy upgrades",
-    description: "Understand the main ways to improve comfort and reduce energy use.",
-    keywords: ["upgrade home", "energy efficiency", "make house warmer", "make house cooler", "reduce bills"],
+    title: "Home electrification and energy upgrades",
+    description: "Plan a practical whole-home path for comfort, efficient electric appliances and moving away from gas.",
+    keywords: ["upgrade home", "energy efficiency", "make house warmer", "make house cooler", "reduce bills", "home electrification", "electrify home", "get off gas", "get of gas", "switch from gas", "all electric home", "one stop home energy", "one stop shop", "home retrofit advice", "home upgrade roadmap"],
   },
   {
     path: "/guides/free-home-energy-assessments",
