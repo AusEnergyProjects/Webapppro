@@ -299,3 +299,17 @@ test("night mode keeps consent-released lead contact details readable", () => {
     /\.dashboard-profile-summary strong\s*\{[\s\S]*color:\s*var\(--trade-ink\);/,
   );
 });
+
+test("night mode applies before the signed-in portal shell finishes loading", () => {
+  const stateCardRule = extractBalancedBlock(
+    colourModeStyles,
+    'html[data-tlink-colour-mode="night"] .direct-trade-dashboard-page .dashboard-state-card {',
+  );
+
+  assert.match(stateCardRule, /background:\s*#102027;/);
+  assert.match(stateCardRule, /color:\s*#e9f3f0;/);
+  assert.match(
+    colourModeStyles,
+    /\.direct-trade-dashboard-page \.dashboard-state-card p\s*\{[\s\S]*color:\s*#a4b8b3;/,
+  );
+});

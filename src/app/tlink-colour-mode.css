@@ -125,6 +125,24 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell {
   background: var(--trade-page);
 }
 
+html[data-tlink-colour-mode="night"] .direct-trade-dashboard-page .dashboard-state-card {
+  background: #102027;
+  border-color: #2d464b;
+  color: #e9f3f0;
+}
+
+html[data-tlink-colour-mode="night"] .direct-trade-dashboard-page .dashboard-state-card > span {
+  color: #9bdccb;
+}
+
+html[data-tlink-colour-mode="night"] .direct-trade-dashboard-page .dashboard-state-card h1 {
+  color: #e9f3f0;
+}
+
+html[data-tlink-colour-mode="night"] .direct-trade-dashboard-page .dashboard-state-card p {
+  color: #a4b8b3;
+}
+
 html[data-tlink-colour-mode="night"] .trade-portal-shell > :not(.dashboard-hero):not(.dashboard-workspace-nav) :where(h1, h2, h3, h4, h5, h6) {
   color: var(--trade-ink);
 }
