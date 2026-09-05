@@ -286,4 +286,12 @@ test("night mode keeps consent-released lead contact details readable", () => {
     colourModeStyles,
     /\.dashboard-connected-customer-intro > p,[\s\S]*\.dashboard-connected-customer-contact-grid dt[\s\S]*color:\s*var\(--trade-muted\);/,
   );
+  assert.match(
+    colourModeStyles,
+    /\.dashboard-property-context div,[\s\S]*\.dashboard-profile-summary > div,[\s\S]*background:\s*var\(--trade-surface-raised\);/,
+  );
+  assert.match(
+    colourModeStyles,
+    /\.dashboard-profile-summary strong\s*\{[\s\S]*color:\s*var\(--trade-ink\);/,
+  );
 });

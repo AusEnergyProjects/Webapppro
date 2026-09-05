@@ -1458,6 +1458,7 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .dashboard-contact-allowance,
   .dashboard-contact-allowance.released dl div,
   .dashboard-property-context div,
+  .dashboard-profile-summary > div,
   .marketplace-list-form,
   .marketplace-view-settings > div,
   .marketplace-selected-items article,
@@ -1487,6 +1488,14 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-connected-cu
 
 html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-connected-customer-contact-grid a {
   color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-profile-summary span {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-profile-summary strong {
+  color: var(--trade-ink);
 }
 
 html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-contact-allowance.released dt {
