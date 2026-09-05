@@ -275,7 +275,6 @@ if (tlinkCss.length !== 1) {
 }
 const rootCssSource = fs.readFileSync(path.join(clientRoot, globalCss.file), "utf8");
 for (const selector of [
-  ".enquiry-workspace",
   ".customer-account-page",
   ".trade-portal-shell",
   ".tlink-site-header",
@@ -286,7 +285,6 @@ for (const selector of [
 }
 const protectedCssSource = fs.readFileSync(path.join(clientRoot, protectedCss[0]), "utf8");
 for (const selector of [
-  ".enquiry-workspace",
   ".customer-account-page",
   ".trade-portal-shell",
 ]) {

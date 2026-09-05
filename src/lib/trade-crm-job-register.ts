@@ -23,6 +23,7 @@ export const JOB_REGISTER_COLUMN_KEYS = [
   "state",
   "assignedWorker",
   "scheduleDate",
+  "createdDate",
   "operationalStatus",
   "quoteTotalExGst",
   "stc",
@@ -52,6 +53,7 @@ export type JobRegisterRecord = {
   state: string;
   assignedWorker: string;
   scheduleDate: string;
+  createdDate: string;
   operationalStatus: JobRegisterOperationalStatus;
   quoteTotalExGstCents: number | null;
   certificates: JobRegisterCertificates;
@@ -74,6 +76,7 @@ export type JobRegisterProjectionInput = {
   assigneeMemberId?: unknown;
   assignedWorker?: unknown;
   scheduleDate?: unknown;
+  createdAt?: unknown;
   workStage?: unknown;
   pipelineStage?: unknown;
   audited?: unknown;
@@ -143,6 +146,7 @@ export function projectJobRegisterRecord(input: JobRegisterProjectionInput): Job
     state: customer ? text(input.state).toUpperCase() : "",
     assignedWorker: text(input.assigneeMemberId) ? text(input.assignedWorker) || "Assigned" : "Unassigned",
     scheduleDate: text(input.scheduleDate),
+    createdDate: text(input.createdAt),
     operationalStatus: deriveJobRegisterOperationalStatus({
       workStage: input.workStage,
       pipelineStage: input.pipelineStage,

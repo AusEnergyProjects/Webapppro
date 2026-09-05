@@ -598,7 +598,8 @@ test("chosen platform businesses enter the trade queue and open the exact lead",
     tradeDashboard,
     /onOpenOpportunity=\{\(matchId\) => void openOpportunityNotification\(matchId\)\}/,
   );
-  assert.match(tradeDashboard, /setWorkspace\("leads"\)/);
+  assert.match(tradeDashboard, /setActiveWorkView\("leads"\)/);
+  assert.match(tradeDashboard, /setWorkspace\("work"\)/);
   assert.match(
     tradeDashboard,
     /document\.getElementById\([\s\S]*`opportunity-\$\{focusedOpportunityMatchId\}`/,

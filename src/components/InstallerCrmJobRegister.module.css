@@ -2,7 +2,7 @@
   align-items: end;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(260px, 1.6fr) minmax(140px, .7fr) minmax(150px, .8fr) minmax(190px, 1fr) auto;
+  grid-template-columns: minmax(240px, 1.4fr) minmax(130px, .65fr) minmax(125px, .6fr) minmax(145px, .7fr) minmax(190px, 1fr) auto;
 }
 
 .register {
@@ -532,8 +532,11 @@
   padding: 12px;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .toolbar { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 900px) {
   .customerFormGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .spanTwo,
   .wideField { grid-column: 1 / -1; }
@@ -542,6 +545,7 @@
 }
 
 @media (max-width: 560px) {
+  .toolbar { grid-template-columns: 1fr; }
   .detailGrid { grid-template-columns: 1fr; }
   .detailGrid .wideDetail { grid-column: auto; }
   .customerPanel > summary { align-items: flex-start; padding: 12px 14px; }

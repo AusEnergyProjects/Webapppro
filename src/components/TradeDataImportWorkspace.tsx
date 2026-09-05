@@ -6,6 +6,7 @@ import { IMPORT_DEFINITIONS, importTemplateCsv, mappedImportCsv, parseImportCsv 
 import { workbookToCsv } from "@/lib/xlsx-import";
 
 type ImportType = "customers" | "enquiries" | "jobs" | "products";
+type SelectableImportType = Exclude<ImportType, "enquiries">;
 type ImportBatch = {
   id: string; importType: ImportType; fileName: string; rowCount: number; readyCount: number; warningCount: number;
   duplicateCount: number; errorCount: number; importedCount: number; skippedCount: number; failedCount: number;
@@ -18,9 +19,8 @@ type ImportRow = {
 };
 type ImportResult = { ok?: boolean; partnerType?: "installer" | "supplier"; batches?: ImportBatch[]; batch?: ImportBatch; rows?: ImportRow[]; rolledBack?: number; blocked?: number; error?: string };
 
-const labels: Record<ImportType, { eyebrow: string; title: string; description: string }> = {
+const labels: Record<SelectableImportType, { eyebrow: string; title: string; description: string }> = {
   customers: { eyebrow: "Private installer contacts", title: "Customers", description: "Move customers who contacted your business directly. Never import Australian Energy Assessments protected household details." },
-  enquiries: { eyebrow: "Unified inbox", title: "Enquiries", description: "Bring direct enquiries into the same review and conversion workflow while preserving source IDs." },
   jobs: { eyebrow: "Historical business records", title: "Jobs", description: "Bring across previous and active jobs. Job IDs are assigned by Australian Energy Assessments and cannot be imported or edited." },
   products: { eyebrow: "Wholesaler catalogue", title: "Products", description: "Move catalogue items into draft review. Imported products remain invisible to installers until approved." },
 };
@@ -42,8 +42,8 @@ function rowTitle(row: ImportRow, type: ImportType) {
 }
 
 export function TradeDataImportWorkspace({ user, partnerType, onImported }: { user: User; partnerType: "installer" | "supplier"; onImported?: () => void | Promise<void> }) {
-  const availableTypes = useMemo(() => (partnerType === "supplier" ? ["products"] : ["enquiries", "customers", "jobs"]) as ImportType[], [partnerType]);
-  const [importType, setImportType] = useState<ImportType>(availableTypes[0]);
+  const availableTypes = useMemo(() => (partnerType === "supplier" ? ["products"] : ["customers", "jobs"]) as SelectableImportType[], [partnerType]);
+  const [importType, setImportType] = useState<SelectableImportType>(availableTypes[0]);
   const [batches, setBatches] = useState<ImportBatch[]>([]);
   const [activeBatch, setActiveBatch] = useState<ImportBatch | null>(null);
   const [rows, setRows] = useState<ImportRow[]>([]);

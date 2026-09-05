@@ -26,6 +26,7 @@ type ListViewDefaults = {
   sort: string;
   pageSize: number;
   jobColumnOrderVersion?: number;
+  customerColumnOrderVersion?: number;
   type: string;
   synthetic: string;
   customer?: string;
@@ -37,6 +38,8 @@ type ListViewDefaults = {
   appointmentId?: string;
   scheduledFrom?: string;
   scheduledTo?: string;
+  createdFrom?: string;
+  createdTo?: string;
   invoiceStatus?: string;
   customerReference?: string;
   firstName?: string;
@@ -78,7 +81,7 @@ function cleanNonNegativeMoneyFilter(value: unknown) {
 
 const columnsByView: Record<string, string[]> = {
   "installer-jobs": [...JOB_REGISTER_COLUMN_KEYS],
-  "installer-customers": ["customer", "firstName", "lastName", "email", "phone", "suburb", "postcode", "jobs", "latestJob", "status"],
+  "installer-customers": ["customer", "firstName", "lastName", "email", "phone", "suburb", "postcode", "jobs", "createdDate", "latestJob", "status"],
   "supplier-products": ["brand", "model", "name", "category", "price", "ordering", "stock", "lead", "warranty", "listing", "review", "kit", "action"],
   "admin-accounts": ["account", "type", "status", "updated"],
   "admin-customers": ["account", "type", "status", "updated"],
@@ -110,8 +113,8 @@ const filtersByView: Record<string, Set<string>> = {
 
 const sortsByView: Record<string, Set<string>> = {
   "supplier-products": new Set(["updated-desc", "name-asc", "name-desc", "price-asc", "price-desc", "brand-asc", "brand-desc", "model-asc", "model-desc", "category-asc", "category-desc", "stock-asc", "stock-desc", "lead-asc", "lead-desc", "warranty-asc", "warranty-desc", "listing-asc", "listing-desc", "review-asc", "review-desc"]),
-  "installer-jobs": new Set(["updated-desc", "number-asc", "number-desc", "first-name-asc", "last-name-asc", "phone-asc", "email-asc", "street-asc", "postcode-asc", "suburb-asc", "state-asc", "assignee-asc", "date-asc", "status-asc", "quote-total-asc", "quote-total-desc"]),
-  "installer-customers": new Set(["name-asc", "name-desc", "updated-desc"]),
+  "installer-jobs": new Set(["updated-desc", "created-desc", "created-asc", "number-asc", "number-desc", "first-name-asc", "last-name-asc", "phone-asc", "email-asc", "street-asc", "postcode-asc", "suburb-asc", "state-asc", "assignee-asc", "date-asc", "date-desc", "status-asc", "quote-total-asc", "quote-total-desc"]),
+  "installer-customers": new Set(["name-asc", "name-desc", "last-name-asc", "last-name-desc", "created-desc", "created-asc", "updated-desc"]),
   "purchasing-orders": new Set(["updated-desc", "number-asc", "number-desc", "value-desc"]),
   "admin-accounts": new Set(["updated-desc", "updated-asc", "name-asc", "name-desc", "type-asc", "type-desc", "status-asc", "status-desc"]),
   "admin-customers": new Set(["updated-desc", "updated-asc", "name-asc", "name-desc", "type-asc", "type-desc", "status-asc", "status-desc"]),
@@ -122,14 +125,15 @@ const sortsByView: Record<string, Set<string>> = {
 
 export function defaultListView(viewKey: string): ListViewDefaults {
   const defaults = { ...(defaultsByView[viewKey] || { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" }) };
-  if (viewKey === "installer-jobs") return { ...defaults, jobColumnOrderVersion: 3, columns: [...INSTALLER_JOB_DEFAULT_COLUMNS] };
+  if (viewKey === "installer-jobs") return { ...defaults, jobColumnOrderVersion: 4, columns: [...INSTALLER_JOB_DEFAULT_COLUMNS] };
+  if (viewKey === "installer-customers") return { ...defaults, customerColumnOrderVersion: 1, columns: [...columnsByView[viewKey]] };
   return columnsByView[viewKey] ? { ...defaults, columns: [...columnsByView[viewKey]] } : defaults;
 }
 
 export function cleanListView(
   viewKey: string,
   raw: Record<string, unknown>,
-  options: { migrateLegacyInstallerJobColumns?: boolean } = {},
+  options: { migrateLegacyInstallerJobColumns?: boolean; migrateLegacyInstallerCustomerColumns?: boolean } = {},
 ) {
   const defaults = defaultListView(viewKey);
   const filter = cleanAdminText(raw.filter, 40);
@@ -137,13 +141,17 @@ export function cleanListView(
   const pageSize = Number(raw.pageSize);
   const legacyInstallerJobColumns = viewKey === "installer-jobs"
     && options.migrateLegacyInstallerJobColumns
-    && Number(raw.jobColumnOrderVersion || 0) < 3;
+    && Number(raw.jobColumnOrderVersion || 0) < 4;
+  const legacyInstallerCustomerColumns = viewKey === "installer-customers"
+    && options.migrateLegacyInstallerCustomerColumns
+    && Number(raw.customerColumnOrderVersion || 0) < 1;
   return {
     search: cleanAdminText(raw.search, 100),
     filter: filtersByView[viewKey]?.has(filter) ? filter : defaults.filter,
     sort: sortsByView[viewKey]?.has(sort) ? sort : defaults.sort,
     pageSize: PAGE_SIZES.has(pageSize) ? pageSize : defaults.pageSize,
-    jobColumnOrderVersion: viewKey === "installer-jobs" ? 3 : undefined,
+    jobColumnOrderVersion: viewKey === "installer-jobs" ? 4 : undefined,
+    customerColumnOrderVersion: viewKey === "installer-customers" ? 1 : undefined,
     type: ["", "customer", "installer", "supplier", "admin"].includes(String(raw.type || "")) ? String(raw.type || "") : "",
     synthetic: ["", "exclude", "only"].includes(String(raw.synthetic || "")) ? String(raw.synthetic || "") : "",
     customer: cleanAdminText(raw.customer, 100),
@@ -155,6 +163,8 @@ export function cleanListView(
     appointmentId: cleanAdminText(raw.appointmentId, 100),
     scheduledFrom: cleanAdminText(raw.scheduledFrom, 10),
     scheduledTo: cleanAdminText(raw.scheduledTo, 10),
+    createdFrom: cleanAdminText(raw.createdFrom, 10),
+    createdTo: cleanAdminText(raw.createdTo, 10),
     invoiceStatus: cleanAdminText(raw.invoiceStatus, 40),
     customerReference: cleanAdminText(raw.customerReference, 100),
     firstName: cleanAdminText(raw.firstName, 100),
@@ -190,7 +200,16 @@ export function cleanListView(
         const rawColumns = Array.isArray(raw.columns) ? raw.columns : [];
         const isLegacyExactOrder = rawColumns.length === DATAFORCE_JOB_CSV_HEADERS.length
           && rawColumns.every((column, index) => column === DATAFORCE_JOB_CSV_HEADERS[index]);
-        if ((legacyInstallerJobColumns && isLegacyExactOrder) || !columns.length) return [...INSTALLER_JOB_DEFAULT_COLUMNS];
+        if ((legacyInstallerJobColumns && (isLegacyExactOrder || !columns.includes("createdDate"))) || !columns.length) {
+          const migrated = columns.length ? [...columns] : [...INSTALLER_JOB_DEFAULT_COLUMNS];
+          if (!migrated.includes("createdDate")) migrated.splice(Math.max(0, migrated.indexOf("scheduleDate") + 1), 0, "createdDate");
+          return migrated;
+        }
+      }
+      if (viewKey === "installer-customers" && legacyInstallerCustomerColumns && columns.length && !columns.includes("createdDate")) {
+        const migrated = [...columns];
+        migrated.splice(Math.max(0, migrated.indexOf("jobs") + 1), 0, "createdDate");
+        return migrated;
       }
       return columns.length ? columns : [...columnsByView[viewKey]];
     })() : undefined,
@@ -204,7 +223,7 @@ export async function readListView(ownerUid: string, ownerScope: string, viewKey
   if (!row) return { preferences: defaultListView(viewKey), saved: false };
   let parsed: Record<string, unknown> = {};
   try { parsed = JSON.parse(String(row.preferences || "{}")) as Record<string, unknown>; } catch { parsed = {}; }
-  return { preferences: cleanListView(viewKey, parsed, { migrateLegacyInstallerJobColumns: true }), saved: true };
+  return { preferences: cleanListView(viewKey, parsed, { migrateLegacyInstallerJobColumns: true, migrateLegacyInstallerCustomerColumns: true }), saved: true };
 }
 
 export async function saveListView(ownerUid: string, ownerScope: string, viewKey: string, raw: Record<string, unknown>) {
@@ -244,7 +263,10 @@ function parseNamedListView(viewKey: string, row: Record<string, unknown>): Name
   return {
     id: String(row.id || ""),
     name,
-    preferences: cleanListView(viewKey, (parsed.preferences || {}) as Record<string, unknown>),
+    preferences: cleanListView(viewKey, (parsed.preferences || {}) as Record<string, unknown>, {
+      migrateLegacyInstallerJobColumns: true,
+      migrateLegacyInstallerCustomerColumns: true,
+    }),
     updatedAt: String(row.updated_at || ""),
   };
 }

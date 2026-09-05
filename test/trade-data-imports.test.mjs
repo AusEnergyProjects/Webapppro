@@ -10,7 +10,7 @@ const enquiryMigration = read("../drizzle/0048_unified_enquiry_inbox.sql");
 const route = read("../src/app/api/trade-imports/route.ts");
 const enquiryRoute = read("../src/app/api/trade-enquiries/route.ts");
 const importer = read("../src/components/TradeDataImportWorkspace.tsx");
-const enquiryInbox = read("../src/components/TradeEnquiryInbox.tsx");
+const enquiryInboxPath = new URL("../src/components/TradeEnquiryInbox.tsx", import.meta.url);
 const workbookReader = read("../src/lib/xlsx-import.ts");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
@@ -101,7 +101,7 @@ test("column mapping creates canonical previews without mutating records", () =>
   assert.equal(result.rows[0].values.email, "trade@example.com");
 });
 
-test("unified inbox keeps protected marketplace records reference-only and requires explicit duplicate conversion", () => {
+test("legacy protected enquiry records stay reference-only and require explicit duplicate conversion", () => {
   assert.match(enquiryMigration, /protected_source.*duplicate_decision/s);
   assert.match(enquiryMigration, /JOIN `trade_opportunities`/);
   assert.doesNotMatch(enquiryMigration, /o\.postcode/);
@@ -112,22 +112,30 @@ test("unified inbox keeps protected marketplace records reference-only and requi
   assert.match(enquiryRoute, /requestedServiceSiteId = cleanAdminText\(body\.serviceSiteId/);
   assert.match(enquiryRoute, /WHERE id = \? AND customer_id = \? AND firebase_uid = \? AND record_status = 'active'/);
   assert.match(enquiryRoute, /else if \(!requestedServiceSiteSupplied\)/);
-  assert.match(enquiryInbox, /serviceSiteId: decision === "use_existing" \? existingServiceSiteId : ""/);
-  assert.match(enquiryInbox, /createNewSite: !result\.serviceSiteId/);
-  assert.match(enquiryInbox, /addressLine2: selection\.addressLine2/);
-  assert.match(enquiryInbox, /name="addressLine2" value=\{newAddress\.addressLine2\}/);
-  assert.match(enquiryInbox, /addressLine2: "", suburb: "", addressState: "", postcode: ""/);
-  assert.match(enquiryInbox, /Duplicate review/);
-  assert.match(enquiryInbox, /Privacy boundary active/);
 });
 
-test("CSV and Excel imports share mapping, preview, issue export and rollback", () => {
+test("installer import UI offers customers and jobs only", () => {
+  assert.match(importer, /partnerType === "supplier" \? \["products"\] : \["customers", "jobs"\]/);
+  assert.match(importer, /availableTypes\.map\(\(type\) => <button/);
+  assert.doesNotMatch(importer, /title: "Enquiries"|eyebrow: "Unified inbox"/);
+  assert.doesNotMatch(crm, /TradeEnquiryInbox/);
+  assert.equal(fs.existsSync(enquiryInboxPath), false);
+});
+
+test("direct enquiry preview, commit and creation are retired with HTTP 410", () => {
+  assert.match(route, /if \(code === "DIRECT_ENQUIRY_IMPORT_RETIRED"\) return adminJson\([\s\S]*?}, 410\);/);
+  assert.match(route, /if \(action === "preview"\) \{[\s\S]*?if \(importType === "enquiries"\) throw new Error\("DIRECT_ENQUIRY_IMPORT_RETIRED"\);[\s\S]*?validateImportCsv/);
+  assert.match(route, /const batch = await ownedBatch\(identity\.uid, batchId\);[\s\S]*?const importType = String\(batch\.import_type\) as ImportType;[\s\S]*?if \(importType === "enquiries"\) throw new Error\("DIRECT_ENQUIRY_IMPORT_RETIRED"\);[\s\S]*?assertImportAccess/);
+  assert.match(enquiryRoute, /if \(action === "create"\) \{[\s\S]*?Add trade-sourced work as a customer or job\.[\s\S]*?}, 410\);/);
+});
+
+test("active CSV and Excel imports share mapping and legacy batches keep rollback audit support", () => {
   assert.match(importer, /workbookToCsv/);
   assert.match(importer, /mappedImportCsv/);
   assert.match(importer, /Export issues/);
   assert.match(workbookReader, /unzipSync/);
-  assert.match(route, /target_entity_type = 'crm_enquiry'/);
   assert.match(route, /type === "crm_enquiry"/);
+  assert.match(route, /UPDATE trade_crm_enquiries SET record_status = 'archived'/);
 });
 
 test("guided imports store durable previews, row decisions, results and rollback metadata", () => {
@@ -169,5 +177,5 @@ test("low pilot scores create proactive admin follow-up", () => {
 });
 
 test("new migration and UI copy avoid prohibited dash characters", () => {
-  assert.doesNotMatch(migration + enquiryMigration + route + enquiryRoute + importer + enquiryInbox + pilotRoute + pilotUi, /[\u2013\u2014]/);
+  assert.doesNotMatch(migration + enquiryMigration + route + enquiryRoute + importer + pilotRoute + pilotUi, /[\u2013\u2014]/);
 });

@@ -279,13 +279,13 @@ async function existingWorkflow(
       ON q.id = ? AND q.work_order_id = w.id AND q.firebase_uid = w.firebase_uid
       AND q.crm_customer_id = customer.id AND q.service_site_id = site.id
     JOIN trade_crm_quote_versions v
-      ON v.id = ? AND v.quote_id = q.id AND v.firebase_uid = q.firebase_uid
+      ON v.quote_id = q.id AND v.firebase_uid = q.firebase_uid
       AND v.version_number = q.current_version_number
     WHERE w.id = ? AND w.firebase_uid = ? AND w.source_type = 'public_lead'
       AND w.source_reference = ?
     LIMIT 1`)
     .bind(ids.jobDetailId, ids.customerId, ids.serviceSiteId, ids.contactId,
-      ids.siteContactId, ids.quoteId, ids.quoteVersionId, ids.workOrderId,
+      ids.siteContactId, ids.quoteId, ids.workOrderId,
       installerUid, matchId)
     .first<Row>();
 }
@@ -316,6 +316,9 @@ export async function startPublicLeadQuoteWorkflow(
   if (!ids) throw new Error("PUBLIC_LEAD_QUOTE_WORKFLOW_INVALID");
   const existing = await existingWorkflow(db, installerUid, matchId, ids);
   if (existing) return workflowResponse(existing, true);
+  if (expectedMatchStatus === "connected") {
+    throw new Error("PUBLIC_LEAD_QUOTE_WORKFLOW_UNAVAILABLE");
+  }
   const row = await db.prepare(`SELECT m.id match_id, m.matched_categories,
       o.id opportunity_id, o.title, o.summary, o.priority, o.source_reference,
       o.postcode opportunity_postcode, o.state,
@@ -487,6 +490,36 @@ export async function startPublicLeadQuoteWorkflow(
     .bind(photo.objectKey, stagedPhotos.attemptId));
   try {
     await db.batch([
+    db.prepare(`SELECT CASE WHEN EXISTS (
+        SELECT 1
+        FROM trade_opportunity_matches guarded_match
+        JOIN trade_opportunities guarded_opportunity
+          ON guarded_opportunity.id = guarded_match.opportunity_id
+        JOIN public_trade_lead_contact_releases guarded_release
+          ON guarded_release.id = ?
+          AND guarded_release.opportunity_id = guarded_opportunity.id
+          AND guarded_release.source_reference = guarded_opportunity.source_reference
+          AND guarded_release.status = 'active'
+          AND guarded_release.withdrawn_at = ''
+          AND datetime(guarded_release.granted_at) IS NOT NULL
+          AND ${publicPlanContactReleaseAccessSql("guarded_release")}
+          AND guarded_release.id = (
+            SELECT current_release.id
+            FROM public_trade_lead_contact_releases current_release
+            WHERE current_release.opportunity_id = guarded_opportunity.id
+              AND current_release.source_reference = guarded_opportunity.source_reference
+            ORDER BY datetime(current_release.updated_at) DESC,
+              datetime(current_release.granted_at) DESC,
+              current_release.id DESC
+            LIMIT 1
+          )
+        WHERE guarded_match.id = ? AND guarded_match.firebase_uid = ?
+          AND guarded_match.status = ? AND guarded_match.opportunity_id = ?
+          AND guarded_opportunity.status = 'open'
+          AND guarded_opportunity.expires_at > ?
+      ) THEN 1 ELSE json_extract('PUBLIC_LEAD_QUOTE_STATE_CHANGED', '$') END workflow_guard`)
+      .bind(row.public_contact_release_id, matchId, installerUid,
+        expectedMatchStatus, row.opportunity_id, now),
     db.prepare(`UPDATE trade_opportunity_matches
       SET status = 'interested', partner_note = '', updated_at = ?
       WHERE id = ? AND firebase_uid = ? AND status = ? AND opportunity_id = ?

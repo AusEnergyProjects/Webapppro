@@ -1,9 +1,9 @@
 /* Protected customer, trade and operations workspaces. Loaded only by protected route layouts. */
 
-/* Unified installer enquiry inbox */
-.enquiry-workspace{display:grid;gap:1rem}.enquiry-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:1.2rem;border-radius:18px;background:linear-gradient(135deg,#112c2a,#174b45);color:#fff}.enquiry-hero span,.enquiry-detail>header span,.enquiry-history>div>span,.enquiry-duplicates header span{font-size:.72rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.enquiry-hero h2{margin:.2rem 0;font-size:clamp(1.5rem,3vw,2.3rem)}.enquiry-hero p{margin:0;max-width:48rem;color:#d9eeea}.enquiry-hero button,.enquiry-history button{border:0;border-radius:999px;padding:.75rem 1rem;font-weight:800;background:#d8f35b;color:#17312d}.enquiry-create{padding:1rem;border:1px solid #d6e2df;border-radius:16px;background:#fff}.enquiry-filters{display:grid;grid-template-columns:minmax(16rem,1fr) repeat(2,minmax(10rem,14rem));gap:.65rem}.enquiry-filters input,.enquiry-filters select,.enquiry-stage select,.enquiry-history select,.enquiry-history textarea,.trade-import-mapping select{width:100%;border:1px solid #cddbd8;border-radius:10px;padding:.7rem;background:#fff}.enquiry-layout{display:grid;grid-template-columns:minmax(17rem,28rem) minmax(0,1fr);gap:1rem;align-items:start}.enquiry-list{display:grid;gap:.55rem;max-height:72rem;overflow:auto}.enquiry-list>button{display:grid;gap:.3rem;text-align:left;border:1px solid #d7e2df;border-radius:14px;padding:.85rem;background:#fff;color:inherit}.enquiry-list>button.active{border-color:#1d6c61;box-shadow:0 0 0 2px #cbe7e2}.enquiry-list span,.enquiry-list small{font-size:.75rem;color:#56706b}.enquiry-list p{margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.enquiry-detail{display:grid;gap:1rem;border:1px solid #d7e2df;border-radius:18px;padding:1rem;background:#fff}.enquiry-detail>header{display:flex;justify-content:space-between;gap:1rem}.enquiry-detail>header h3{margin:.25rem 0}.enquiry-detail>header p{margin:0;color:#516460}.enquiry-detail>header>strong{height:max-content;border-radius:999px;padding:.45rem .7rem;background:#e6f2ef;color:#18584f}.enquiry-protected,.enquiry-contact,.enquiry-converted{display:grid;gap:.3rem;border-radius:12px;padding:.85rem;background:#f2f7f5}.enquiry-protected{border:1px solid #e6c775;background:#fff8df}.enquiry-protected p,.enquiry-contact p{margin:0}.enquiry-stage{display:flex;align-items:end;justify-content:space-between;gap:1rem}.enquiry-stage label{display:grid;gap:.35rem;min-width:13rem}.enquiry-duplicates,.enquiry-history{display:grid;gap:.8rem;border-top:1px solid #dce6e3;padding-top:1rem}.enquiry-duplicates h4,.enquiry-history h4{margin:.15rem 0}.enquiry-duplicate-list{display:grid;gap:.5rem}.enquiry-duplicate-list label,.enquiry-new-choice{display:flex;gap:.65rem;border:1px solid #d8e2df;border-radius:12px;padding:.75rem}.enquiry-duplicate-list span,.enquiry-new-choice span{display:grid;gap:.2rem}.enquiry-history form{display:grid;grid-template-columns:10rem 10rem 1fr auto;gap:.5rem;align-items:start}.enquiry-history form textarea{min-height:5.5rem}.enquiry-history ol{display:grid;gap:.5rem;margin:0;padding:0;list-style:none}.enquiry-history li{border-radius:10px;padding:.7rem;background:#f5f8f7}.enquiry-history li p{margin:.3rem 0}.enquiry-events p{display:grid;gap:.2rem}.trade-import-mapping{display:grid;gap:1rem;border:1px solid #d5e1de;border-radius:16px;padding:1rem;background:#f7faf9}.trade-import-mapping header p{margin:.25rem 0 0}.trade-import-mapping>div{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.65rem}.trade-import-mapping label{display:grid;gap:.3rem}.trade-import-review>header>div:last-child{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end}
-@media(max-width:900px){.enquiry-layout{grid-template-columns:1fr}.enquiry-list{max-height:25rem}.enquiry-filters{grid-template-columns:1fr}.enquiry-history form{grid-template-columns:1fr}.trade-import-mapping>div{grid-template-columns:1fr 1fr}}
-@media(max-width:560px){.enquiry-hero,.enquiry-detail>header,.enquiry-stage{display:grid}.trade-import-mapping>div{grid-template-columns:1fr}}
+/* Guided data import mapping. */
+.trade-import-mapping{display:grid;gap:1rem;border:1px solid #d5e1de;border-radius:16px;padding:1rem;background:#f7faf9}.trade-import-mapping header p{margin:.25rem 0 0}.trade-import-mapping>div{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.65rem}.trade-import-mapping label{display:grid;gap:.3rem}.trade-import-mapping select{width:100%;border:1px solid #cddbd8;border-radius:10px;padding:.7rem;background:#fff}.trade-import-review>header>div:last-child{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:900px){.trade-import-mapping>div{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.trade-import-mapping>div{grid-template-columns:1fr}}
 
 @media (max-width: 760px) {
   .purchasing-hero { display: grid; padding: 19px; }
@@ -143,9 +143,8 @@
 .crm-form input, .crm-form select, .crm-form textarea, .crm-job-toolbar input, .crm-job-toolbar select, .crm-customer-toolbar select, .crm-inline-form input, .crm-inline-form select, .crm-inline-form textarea { background: #fff; border: 1px solid #c8d7d2; border-radius: 8px; color: var(--color-aea-ink); font: inherit; font-size: .65rem; min-height: 39px; padding: 8px 10px; resize: vertical; width: 100%; }
 .crm-form label small { color: var(--color-aea-muted); display: block; font-size: .52rem; line-height: 1.4; margin-top: 4px; }
 .crm-form-note { background: #edf7f3; border-radius: 8px; color: #2e6455; font-size: .57rem; line-height: 1.45; margin: 0 0 12px; padding: 9px 11px; }
-.crm-job-toolbar { align-items: end; display: flex; gap: 16px; justify-content: space-between; margin-bottom: 13px; }
-.crm-job-toolbar label { flex: 1 1 280px; max-width: 420px; }
-.crm-job-toolbar label.crm-index-sort { flex: 0 1 190px; }
+.crm-job-toolbar { margin-bottom: 13px; }
+.crm-job-toolbar label { max-width: none; min-width: 0; }
 .crm-job-toolbar > div { background: #eef4f2; border-radius: 10px; display: flex; flex-wrap: wrap; gap: 3px; padding: 4px; }
 .crm-job-toolbar button { background: transparent; border: 0; border-radius: 7px; color: #5e716b; cursor: pointer; font-size: .56rem; font-weight: 850; padding: 7px 9px; }
 .crm-job-toolbar button.active { background: #fff; box-shadow: 0 1px 4px rgba(20,50,43,.12); color: #176348; }
@@ -335,7 +334,7 @@
 .purchasing-list-filters input, .purchasing-list-filters select, .supplier-catalogue-filters select, .crm-customer-toolbar input { background: #fff; border: 1px solid #a9c9bd; border-radius: 10px; color: var(--color-aea-text); min-height: 42px; padding: 8px 10px; width: 100%; }
 .supplier-catalogue-filters { grid-template-columns: minmax(260px, 1fr) 170px 180px; }
 .supplier-catalogue-filters .supplier-search { margin-bottom: 0; }
-.crm-customer-toolbar { align-items: end; display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) minmax(170px, 230px); margin-top: 10px; }
+.crm-customer-toolbar { align-items: end; display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) minmax(150px, .45fr) minmax(170px, 230px); margin-top: 10px; }
 .purchasing-layout { align-items: start; display: grid; gap: 14px; grid-template-columns: minmax(230px, .32fr) minmax(0, 1fr); }
 .purchasing-order-list { background: #f5f9f7; border: 1px solid var(--color-aea-line); border-radius: 13px; display: grid; max-height: 760px; overflow: auto; padding: 5px; }
 .purchasing-order-list > button { background: transparent; border: 1px solid transparent; border-radius: 9px; cursor: pointer; display: grid; gap: 4px; padding: 11px; text-align: left; }
@@ -669,9 +668,6 @@
   .crm-form-grid label.wide { grid-column: auto; }
   .crm-customer-lookup { grid-template-columns: 1fr; }
   .crm-customer-lookup > small { grid-column: auto; }
-  .crm-job-toolbar { align-items: stretch; flex-direction: column; }
-  .crm-job-toolbar label { max-width: none; }
-  .crm-job-toolbar label.crm-index-sort { max-width: none; }
   .crm-customer-toolbar { grid-template-columns: 1fr; }
   .crm-bulk-actions { align-items: stretch; flex-direction: column; }
   .crm-bulk-actions > strong { margin-right: 0; }
@@ -3314,6 +3310,10 @@
   .crm-granular-filters > div { grid-template-columns: 1fr 1fr; }
   .crm-record-columns { display: grid; }
   .crm-job-list.crm-record-table > article, .crm-customer-list.crm-record-table > article { flex: none; }
+}
+
+@media (max-width: 560px) {
+  .crm-granular-filters > div { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 780px) {

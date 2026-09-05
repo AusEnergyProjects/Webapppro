@@ -30,7 +30,8 @@ const customerDocumentsMigration = read("../drizzle/0121_trade_customer_document
 const schema = read("../db/schema.ts");
 const settingsUi = read("../src/components/TradeBusinessSettingsWorkspace.tsx");
 const enquiryRoute = read("../src/app/api/trade-enquiries/route.ts");
-const enquiryInbox = read("../src/components/TradeEnquiryInbox.tsx");
+const dashboard = read("../src/components/DirectTradeDashboard.tsx");
+const workspace = read("../src/components/InstallerCrmWorkspace.tsx");
 const crmRoute = read("../src/app/api/trade-crm/route.ts");
 const newJobUi = read("../src/components/TradeNewJobForm.tsx");
 const globalStyles = [
@@ -194,10 +195,30 @@ test("approved installers can save canonical lead services for future exact matc
   assert.match(settingsUi, /Licences and[\s\S]*do not automatically add services/);
   assert.match(settingsUi, /ENERGY_SERVICE_CATALOGUE\.map/);
   assert.match(settingsUi, /capabilities,/);
-  assert.match(enquiryRoute, /\.\.\.ENERGY_SERVICE_IDS/);
-  assert.match(enquiryInbox, /\.\.\.ENERGY_SERVICE_OPTIONS/);
+  assert.match(dashboard, /\.\.\.ENERGY_SERVICE_LABELS/);
+  assert.match(dashboard, /fetch\("\/api\/trade-opportunities"/);
   assert.match(crmRoute, /\.\.\.ENERGY_SERVICE_IDS/);
   assert.match(newJobUi, /\.\.\.ENERGY_SERVICE_OPTIONS/);
+});
+
+test("trade-sourced work starts as a Customer or Job while Leads stays on the protected opportunity flow", () => {
+  assert.match(
+    enquiryRoute,
+    /if \(action === "create"\) \{[\s\S]*Add trade-sourced work as a customer or job[\s\S]*\}, 410\);/,
+  );
+  assert.match(
+    workspace,
+    /return \["today", "leads", "jobs", "schedule", "customers"/,
+  );
+  assert.match(workspace, /<AccessibleMenu className="crm-quick-create" label="New">/);
+  assert.match(workspace, /setView\("jobs"\); setCreating\("job"\)/);
+  assert.match(workspace, /setView\("customers"\); setCreating\("customer"\)/);
+  assert.doesNotMatch(workspace, /TradeEnquiryInbox/);
+  assert.match(dashboard, /workspace === "work" && activeWorkView === "leads"/);
+  assert.match(dashboard, /<span>Australian Energy Assessments and TLink supplied leads<\/span>/);
+  assert.match(dashboard, /className="dashboard-lead-list" aria-label="Available leads"/);
+  assert.match(dashboard, /className="dashboard-opportunity-list dashboard-lead-preview"/);
+  assert.match(dashboard, /void respondToOpportunity\(opportunity\.matchId, "interested"\)/);
 });
 
 test("business branding and quote defaults use one curated contract", () => {

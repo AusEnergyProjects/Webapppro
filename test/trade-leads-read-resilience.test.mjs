@@ -493,6 +493,9 @@ test("customer-project status mutation rechecks matching consent at mutation tim
       id TEXT PRIMARY KEY, project_id TEXT, firebase_uid TEXT, purpose TEXT, withdrawn_at TEXT
     );
     CREATE TABLE public_trade_lead_contact_releases (opportunity_id TEXT);
+    CREATE TABLE customer_project_quotes (
+      opportunity_match_id TEXT, installer_uid TEXT, customer_decision TEXT
+    );
     INSERT INTO trade_opportunities VALUES
       ('opportunity-1', 'open', '2026-08-13T00:00:00.000Z', 'customer-project:project-1');
     INSERT INTO trade_opportunity_matches VALUES
@@ -513,10 +516,15 @@ test("customer-project status mutation rechecks matching consent at mutation tim
     "project-1",
     "customer-1",
     "opportunity-1",
+    "match-1",
+    "installer-1",
   ];
   assert.equal(database.prepare(projectUpdate).run(...values).changes, 0);
   database.prepare("UPDATE customer_consent_receipts SET withdrawn_at = '' WHERE id = 'consent-1'").run();
   assert.equal(database.prepare(projectUpdate).run(...values).changes, 1);
+  database.prepare("UPDATE trade_opportunity_matches SET status = 'offered' WHERE id = 'match-1'").run();
+  database.prepare("INSERT INTO customer_project_quotes VALUES ('match-1', 'installer-1', 'accepted')").run();
+  assert.equal(database.prepare(projectUpdate).run(...values).changes, 0);
   database.close();
 });
 

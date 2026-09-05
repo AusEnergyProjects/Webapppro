@@ -12,7 +12,7 @@ const leadList = dashboard.slice(
   dashboard.indexOf("No leads match these filters"),
 );
 
-test("authorised customer identity is the first expanded lead section", () => {
+test("authorised customer identity is the first selected lead preview section", () => {
   assert.match(
     leadList,
     /const releasedCustomerContact = opportunity\.customerContact;/,
@@ -45,9 +45,14 @@ test("authorised customer identity is the first expanded lead section", () => {
     leadList,
     /hidden=\{!isExpanded\}[\s\S]*\{isExpanded && \(/,
   );
+  assert.match(leadList, /aria-controls=\{`opportunity-\$\{opportunity\.matchId\}`\}/);
   assert.match(
     leadList,
-    /releasedCustomerContact\s*\?\s*`\$\{customerIdentityId\} \$\{detailId\}`\s*:\s*detailId/,
+    /id=\{`opportunity-\$\{opportunity\.matchId\}`\}[\s\S]*hidden=\{!isExpanded\}/,
+  );
+  assert.match(
+    leadList,
+    /id=\{detailId\}[\s\S]*aria-labelledby=\{previewHeadingId\}[\s\S]*hidden=\{!isExpanded\}/,
   );
   assert.match(
     leadList,
@@ -57,7 +62,10 @@ test("authorised customer identity is the first expanded lead section", () => {
     leadList,
     /const customerDisplayName = releasedCustomerName[\s\S]*\|\| opportunity\.title[\s\S]*\|\| "Customer enquiry"/,
   );
-  assert.match(leadList, /<h3>\{customerDisplayName\}<\/h3>/);
+  assert.match(
+    leadList,
+    /<h3 id=\{previewHeadingId\}>\{customerDisplayName\}<\/h3>/,
+  );
   assert.match(
     leadList,
     /aria-label=\{`Contact details for \$\{customerDisplayName\}`\}/,
@@ -89,7 +97,7 @@ test("released contact details have one authoritative block", () => {
   );
 });
 
-test("collapsed details stay hidden and connected leads retain the contact boundary", () => {
+test("unselected previews stay hidden and connected leads retain the contact boundary", () => {
   assert.match(
     leadList,
     /const releasedCustomerName =\s*releasedCustomerContact\?\.name\.trim\(\) \|\| ""/,
@@ -105,5 +113,13 @@ test("collapsed details stay hidden and connected leads retain the contact bound
   assert.match(
     leadList,
     /opportunity\.matchStatus === "connected" && !releasedCustomerContact/,
+  );
+  assert.match(
+    leadList,
+    /const isExpanded = selectedLeadOpportunity\?\.matchId === opportunity\.matchId;[\s\S]*hidden=\{!isExpanded\}/,
+  );
+  assert.match(
+    dashboard,
+    /opportunity\.customerContact[\s\S]*The customer-selected contact and service address above are released to this business\.[\s\S]*Customer identity, contact details, street and unit address/,
   );
 });

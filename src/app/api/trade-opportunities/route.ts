@@ -139,6 +139,7 @@ async function publicLeadQuoteWorkflowOutcome(
   installerUid: string,
   matchId: string,
   now: string,
+  expectedMatchStatus = "interested",
 ) {
   return {
     quoteWorkflow: await startPublicLeadQuoteWorkflow(
@@ -146,6 +147,7 @@ async function publicLeadQuoteWorkflowOutcome(
         installerUid,
         matchId,
         now,
+        expectedMatchStatus,
     ),
     warning: "",
   };
@@ -953,6 +955,31 @@ export async function PATCH(request: Request) {
     });
     try {
       const mutationResults = await db.batch([
+        db.prepare(`SELECT CASE WHEN EXISTS (
+            SELECT 1
+            FROM trade_opportunity_matches guarded_match
+            JOIN trade_opportunities guarded_opportunity
+              ON guarded_opportunity.id = guarded_match.opportunity_id
+            JOIN customer_projects guarded_project
+              ON guarded_project.id = ?
+              AND guarded_project.opportunity_id = guarded_opportunity.id
+              AND guarded_project.firebase_uid = ?
+              AND guarded_opportunity.source_reference = 'customer-project:' || guarded_project.id
+            WHERE guarded_match.id = ? AND guarded_match.firebase_uid = ?
+              AND guarded_match.opportunity_id = ?
+              AND guarded_match.status IN ('interested', 'connected')
+              AND guarded_opportunity.status = 'open'
+              AND guarded_opportunity.expires_at > ?
+              AND EXISTS (
+                SELECT 1 FROM customer_consent_receipts guarded_consent
+                WHERE guarded_consent.project_id = guarded_project.id
+                  AND guarded_consent.firebase_uid = guarded_project.firebase_uid
+                  AND guarded_consent.purpose = 'anonymized_installer_matching'
+                  AND guarded_consent.withdrawn_at = ''
+              )
+          ) THEN 1 ELSE json_extract('PLATFORM_QUOTE_STATE_CHANGED', '$') END quote_guard`)
+          .bind(match.project_id, match.customer_uid, matchId, user.uid,
+            match.opportunity_id, now),
         db.prepare(`INSERT INTO customer_project_quotes
           (id, project_id, opportunity_id, opportunity_match_id, installer_uid,
            submission_request_id, submission_revision, product_list_id, inclusions,
@@ -1010,11 +1037,11 @@ export async function PATCH(request: Request) {
         }),
         ...activity.statements,
       ]);
-      if (Number(mutationResults[0]?.meta.changes || 0) !== 1) {
+      if (Number(mutationResults[1]?.meta.changes || 0) !== 1) {
         throw new Error("QUOTE_REVISION_CHANGED");
       }
     } catch {
-      const [recordedReplay, latestQuote] = await Promise.all([
+      const [recordedReplay, latestQuote, latestMatch] = await Promise.all([
         db.prepare(`SELECT submission_revision, quote_snapshot
           FROM customer_project_quote_submissions
           WHERE installer_uid = ? AND opportunity_match_id = ? AND submission_request_id = ?
@@ -1022,6 +1049,12 @@ export async function PATCH(request: Request) {
           .bind(user.uid, matchId, submissionRequestId)
           .first<Record<string, unknown>>(),
         authoritativePlatformQuote(db, matchId, user.uid),
+        db.prepare(`SELECT m.status, o.status opportunity_status, o.expires_at
+          FROM trade_opportunity_matches m
+          JOIN trade_opportunities o ON o.id = m.opportunity_id
+          WHERE m.id = ? AND m.firebase_uid = ? LIMIT 1`)
+          .bind(matchId, user.uid)
+          .first<Record<string, unknown>>(),
       ]);
       if (recordedReplay) {
         return json({
@@ -1043,6 +1076,17 @@ export async function PATCH(request: Request) {
           code: "QUOTE_REVISION_CHANGED",
           error: "This quote changed in another tab. The latest saved version is shown.",
           quote: latestQuote,
+        }, 409);
+      }
+      if (
+        !["interested", "connected"].includes(String(latestMatch?.status || ""))
+        || latestMatch?.opportunity_status !== "open"
+        || String(latestMatch?.expires_at || "") <= now
+      ) {
+        return json({
+          ok: false,
+          code: "LEAD_STATE_CHANGED",
+          error: "This lead changed while the quote was being submitted. Refresh Leads before trying again.",
         }, 409);
       }
       return json({ ok: false, error: "The quote option could not be submitted." }, 500);
@@ -1072,7 +1116,7 @@ export async function PATCH(request: Request) {
     });
     return json({ ok: true });
   }
-  if (!PARTNER_STATUSES.has(status))
+  if (action !== "open_public_quote" && !PARTNER_STATUSES.has(status))
     return json(
       { ok: false, error: "Choose a valid opportunity response." },
       400,
@@ -1081,8 +1125,12 @@ export async function PATCH(request: Request) {
     FROM trade_opportunity_matches m
     JOIN trade_opportunities o ON o.id = m.opportunity_id
     WHERE m.id = ? AND m.firebase_uid = ?
-      AND o.status = 'open' AND o.expires_at > ?`)
-    .bind(matchId, user.uid, now).first<Record<string, unknown>>();
+      AND (
+        (? = 'open_public_quote' AND o.status IN ('open', 'paused'))
+        OR (? != 'open_public_quote' AND o.status = 'open')
+      )
+      AND o.expires_at > ?`)
+    .bind(matchId, user.uid, action, action, now).first<Record<string, unknown>>();
   if (!current) return json({ ok: false, error: "The opportunity could not be updated." }, 404);
   const currentPublicContact = await db.prepare(`SELECT
       public_contact.id public_contact_release_id,
@@ -1151,6 +1199,30 @@ export async function PATCH(request: Request) {
     interested: new Set(["declined"]),
   };
   const currentStatus = String(current.status || "");
+  if (action === "open_public_quote") {
+    if (!currentPublicContact || !["interested", "connected"].includes(currentStatus)) {
+      return json({ ok: false, error: "The editable quote is not available for this lead." }, 409);
+    }
+    try {
+      return json({
+        ok: true,
+        ...await publicLeadQuoteWorkflowOutcome(db, user.uid, matchId, now, currentStatus),
+      });
+    } catch (error) {
+      console.error("Public lead quote reopen failed", {
+        code: error instanceof Error ? error.message : "PUBLIC_LEAD_QUOTE_WORKFLOW_FAILED",
+        matchId,
+        installerUid: user.uid,
+      });
+      return json({ ok: false, error: "The editable quote could not be reopened. Try again." }, 409);
+    }
+  }
+  if (status === "declined" && currentPublicContact && currentStatus === "interested") {
+    return json({
+      ok: false,
+      error: "This lead is already stored as a customer and job. Manage it from Work instead.",
+    }, 409);
+  }
   if (status === "interested" && currentPublicContact) {
     if (currentStatus !== status && !transitions[currentStatus]?.has(status)) {
       return json({ ok: false, error: "This opportunity response cannot be reversed." }, 409);
@@ -1200,8 +1272,8 @@ export async function PATCH(request: Request) {
     return json({ ok: true });
   }
   if (!transitions[currentStatus]?.has(status)) return json({ ok: false, error: "This opportunity response cannot be reversed." }, 409);
-  const result = currentPublicContact
-    ? await db.prepare(`UPDATE trade_opportunity_matches
+  const updateStatement = currentPublicContact
+    ? db.prepare(`UPDATE trade_opportunity_matches
         SET status = ?, partner_note = '', updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND status = ? AND opportunity_id = ?
           AND EXISTS (
@@ -1238,9 +1310,8 @@ export async function PATCH(request: Request) {
         currentPublicContact.public_contact_disclosed_fields,
         currentPublicContact.public_contact_updated_at,
       )
-      .run()
     : currentProjectConsent
-      ? await db.prepare(`UPDATE trade_opportunity_matches
+      ? db.prepare(`UPDATE trade_opportunity_matches
           SET status = ?, partner_note = '', updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND status = ? AND opportunity_id = ?
             AND EXISTS (
@@ -1262,6 +1333,12 @@ export async function PATCH(request: Request) {
             AND NOT EXISTS (
               SELECT 1 FROM public_trade_lead_contact_releases any_public_contact
               WHERE any_public_contact.opportunity_id = ?
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM customer_project_quotes accepted_quote
+              WHERE accepted_quote.opportunity_match_id = ?
+                AND accepted_quote.installer_uid = ?
+                AND accepted_quote.customer_decision = 'accepted'
             )`)
         .bind(
           status,
@@ -1276,9 +1353,10 @@ export async function PATCH(request: Request) {
           currentProjectConsent.customer_project_id,
           currentProjectConsent.customer_uid,
           current.opportunity_id,
+          matchId,
+          user.uid,
         )
-        .run()
-      : await db.prepare(`UPDATE trade_opportunity_matches
+      : db.prepare(`UPDATE trade_opportunity_matches
         SET status = ?, partner_note = '', updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND status = ? AND opportunity_id = ?
           AND EXISTS (
@@ -1301,8 +1379,22 @@ export async function PATCH(request: Request) {
         current.opportunity_id,
         now,
         current.opportunity_id,
-      )
-      .run();
+      );
+  const [result] = status === "declined" && currentProjectConsent
+    ? await db.batch([
+        updateStatement,
+        db.prepare(`UPDATE customer_project_quotes
+          SET status = 'withdrawn', customer_decision = 'reviewing', updated_at = ?
+          WHERE opportunity_match_id = ? AND installer_uid = ?
+            AND status IN ('draft', 'submitted') AND customer_decision != 'accepted'
+            AND EXISTS (
+              SELECT 1 FROM trade_opportunity_matches declined_match
+              WHERE declined_match.id = ? AND declined_match.firebase_uid = ?
+                AND declined_match.status = 'declined'
+            )`)
+          .bind(now, matchId, user.uid, matchId, user.uid),
+      ])
+    : [await updateStatement.run()];
   if (!result.meta.changes) {
     const raced = await db.prepare(`SELECT status FROM trade_opportunity_matches
       WHERE id = ? AND firebase_uid = ? AND opportunity_id = ? LIMIT 1`)

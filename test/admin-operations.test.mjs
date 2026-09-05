@@ -182,7 +182,16 @@ test("opportunities remain privacy-safe and partner responses stay owner scoped"
   assert.match(dashboard, /Platform coordination active/);
   assert.match(dashboard, /no active contact release is available/);
   assert.match(dashboard, /<InstallerPlatformQuote/);
-  assert.match(dashboard, /I'm interested/);
+  assert.match(dashboard, /Save for review/);
+  assert.match(dashboard, /: "Quote"/);
+  assert.match(
+    dashboard,
+    /Remove this lead from your business\? This does not remove it for other matched trades\./,
+  );
+  assert.match(
+    dashboard,
+    /void respondToOpportunity\(opportunity\.matchId, "declined"\)/,
+  );
 });
 
 test("operations UI covers accounts, evidence, projects, access and audit", () => {

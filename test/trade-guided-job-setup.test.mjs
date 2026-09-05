@@ -13,7 +13,8 @@ const styles = [
   read("../src/app/protected-workspaces.css"),
 ].join("\n");
 const workspace = read("../src/components/InstallerCrmWorkspace.tsx");
-const enquiryInbox = read("../src/components/TradeEnquiryInbox.tsx");
+const dashboard = read("../src/components/DirectTradeDashboard.tsx");
+const enquiryRoute = read("../src/app/api/trade-enquiries/route.ts");
 const crm = read("../src/app/api/trade-crm/route.ts");
 const numbers = read("../src/lib/trade-job-number-server.ts");
 const workOrders = read("../src/app/api/trade-work-orders/route.ts");
@@ -57,12 +58,18 @@ test("admin and installer expose and search the same job ID", () => {
   assert.match(adminJobs, /installer_business/);
 });
 
-test("guided setup attaches duplicates and creates one appointment plus planned compliance intent", () => {
+test("guided setup starts trade-owned work as a customer or job and creates one appointment plus planned compliance intent", () => {
   assert.match(form, /find_customer_duplicates/);
   assert.match(form, /Use this customer/);
-  assert.match(enquiryInbox, /Create job from enquiry/);
-  assert.match(enquiryInbox, /sourceEnquiryId: detail\.id/);
-  assert.match(workspace, /setNewJobSeed\(seed\)[\s\S]*setCreating\("job"\)/);
+  assert.match(workspace, /<AccessibleMenu className="crm-quick-create" label="New">/);
+  assert.match(workspace, />Job<\/button>/);
+  assert.match(workspace, />Customer<\/button>/);
+  assert.match(workspace, /<span>New direct customer<\/span>/);
+  assert.doesNotMatch(workspace, /TradeEnquiryInbox/);
+  assert.match(
+    enquiryRoute,
+    /if \(action === "create"\) \{[\s\S]*Add trade-sourced work as a customer or job[\s\S]*\}, 410\);/,
+  );
   assert.match(form, /const ordinarySteps = \["Work", "Customer", "Program", "Appointment", "Review"\]/);
   assert.match(form, /const rentalInspectionSteps = \["Work", "Customer", "Inspection", "Appointment", "Review"\]/);
   assert.match(form, /const steps = serviceCategory === "rental-inspection" \? rentalInspectionSteps : ordinarySteps/);
@@ -142,9 +149,11 @@ test("guided appointment controls align search actions and expand only while sch
   assert.match(styles, /\.crm-new-job-schedule-layout > \.job-calendar \{ order: 1; \}/);
 });
 
-test("enquiry handoff keeps the selected service site and safely supports customers without one", () => {
-  assert.match(enquiryInbox, /serviceSiteId: decision === "use_existing" \? existingServiceSiteId : ""/);
-  assert.match(enquiryInbox, /createNewSite: !result\.serviceSiteId/);
+test("a customer can start a direct job while existing and new service sites remain safe", () => {
+  assert.match(
+    workspace,
+    /setNewJobSeed\(\{ customerId: customer\.id \}\);[\s\S]*setView\("jobs"\);[\s\S]*setCreating\("job"\);/,
+  );
   assert.match(form, /createNewSite\?: boolean/);
   assert.match(form, /useState\(Boolean\(initial\?\.createNewSite\)\)/);
   assert.match(form, /sites\.some\(\(site\) => site\.id === serviceSiteId\)/);
@@ -195,21 +204,17 @@ test("guided jobs collect a bounded deduplicated list of controlled activities",
   assert.match(form, /plannedActivityDetails\.map/);
 });
 
-test("enquiry selection ignores stale detail responses and refreshes only the current record", () => {
-  assert.match(enquiryInbox, /const detailRequestSequence = useRef\(0\)/);
-  assert.match(enquiryInbox, /const selectedIdRef = useRef\(""\)/);
-  assert.match(
-    enquiryInbox,
-    /requestId !== detailRequestSequence\.current \|\| selectedIdRef\.current !== id/,
-  );
-  assert.match(
-    enquiryInbox,
-    /const currentSelectedId = selectedIdRef\.current;[\s\S]*loadDetail\(currentSelectedId\)/,
-  );
-  assert.match(
-    enquiryInbox,
-    /return \(\) => \{[\s\S]*detailRequestSequence\.current \+= 1;[\s\S]*cancelAnimationFrame/,
-  );
+test("protected Leads uses the canonical opportunity feed and identity-safe selected preview", () => {
+  assert.match(dashboard, /fetch\("\/api\/trade-opportunities"/);
+  assert.match(dashboard, /`\/api\/trade-opportunities\?matchId=\$\{encodeURIComponent\(matchId\)\}`/);
+  assert.match(dashboard, /protectedIdentityContinuationIsCurrent/);
+  assert.match(dashboard, /protectedOpportunityRequestControllers\.current\.add\(controller\)/);
+  assert.match(dashboard, /const selectedLeadOpportunity = visibleLeadOpportunities\.find/);
+  assert.match(dashboard, /className="dashboard-lead-workspace"/);
+  assert.match(dashboard, /className="dashboard-lead-list" aria-label="Available leads"/);
+  assert.match(dashboard, /hidden=\{!isExpanded\}/);
+  assert.match(dashboard, /void respondToOpportunity\(opportunity\.matchId, "interested"\)/);
+  assert.doesNotMatch(dashboard, /TradeEnquiryInbox/);
 });
 
 test("guided setup clears incompatible plans and recovers when customer sites cannot load", () => {

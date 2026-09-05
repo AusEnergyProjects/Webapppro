@@ -174,11 +174,12 @@ const JOB_REGISTER_QUOTE_TOTAL_SQL = `(
   LIMIT 1
 )`;
 const JOB_REGISTER_QUOTE_SORT_SQL = `COALESCE(${JOB_REGISTER_QUOTE_TOTAL_SQL}, 0)`;
+const JOB_EFFECTIVE_SCHEDULE_SQL = "COALESCE(NULLIF(selected_appointment.starts_at, ''), NULLIF(w.scheduled_start, ''), '')";
 const JOB_REGISTER_STATUS_RANK_SQL = `CASE
   WHEN w.stage = 'cancelled' OR d.pipeline_stage = 'lost' THEN 6
   WHEN ${JOB_REGISTER_AUDITED_SQL} THEN 4
   WHEN w.stage = 'completed' OR d.pipeline_stage IN ('complete', 'invoiced', 'paid') THEN 3
-  WHEN trim(w.assignee_member_id) <> '' OR trim(w.scheduled_start) <> '' THEN 2
+  WHEN trim(w.assignee_member_id) <> '' OR trim(${JOB_EFFECTIVE_SCHEDULE_SQL}) <> '' THEN 2
   ELSE 1 END`;
 const JOB_SORTS: Record<string, CrmSort> = {
   "number-asc": crmSort([crmTerm("w.work_number COLLATE NOCASE", "asc", "work_number")], "w.id"),
@@ -195,7 +196,10 @@ const JOB_SORTS: Record<string, CrmSort> = {
   "status-asc": crmSort([crmTerm(JOB_REGISTER_STATUS_RANK_SQL, "asc", "register_status_rank", true)], "w.id"),
   "quote-total-asc": crmSort([crmTerm(`${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL`, "asc", "quote_total_empty", true), crmTerm(JOB_REGISTER_QUOTE_SORT_SQL, "asc", "quote_total_sort_cents", true)], "w.id"),
   "quote-total-desc": crmSort([crmTerm(`${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL`, "asc", "quote_total_empty", true), crmTerm(JOB_REGISTER_QUOTE_SORT_SQL, "desc", "quote_total_sort_cents", true)], "w.id"),
-  "date-asc": crmSort([crmTerm("w.scheduled_start = ''", "asc", "schedule_empty", true), crmTerm("w.scheduled_start", "asc", "scheduled_start"), crmTerm("w.updated_at", "desc", "updated_at")], "w.id"),
+  "date-asc": crmSort([crmTerm(`${JOB_EFFECTIVE_SCHEDULE_SQL} = ''`, "asc", "schedule_empty", true), crmTerm(JOB_EFFECTIVE_SCHEDULE_SQL, "asc", "effective_scheduled_start"), crmTerm("w.updated_at", "desc", "updated_at")], "w.id"),
+  "date-desc": crmSort([crmTerm(`${JOB_EFFECTIVE_SCHEDULE_SQL} = ''`, "asc", "schedule_empty", true), crmTerm(JOB_EFFECTIVE_SCHEDULE_SQL, "desc", "effective_scheduled_start"), crmTerm("w.updated_at", "desc", "updated_at")], "w.id"),
+  "created-desc": crmSort([crmTerm("w.created_at", "desc", "created_at")], "w.id"),
+  "created-asc": crmSort([crmTerm("w.created_at", "asc", "created_at")], "w.id"),
   "updated-desc": crmSort([crmTerm("w.updated_at", "desc", "updated_at")], "w.id"),
 };
 const CUSTOMER_SORTS: Record<string, CrmSort> = {
@@ -211,6 +215,10 @@ const CUSTOMER_SORTS: Record<string, CrmSort> = {
     crmTerm("c.last_name COLLATE NOCASE", "desc", "last_name"),
     crmTerm("c.business_name COLLATE NOCASE", "desc", "business_name"),
   ], "c.id"),
+  "last-name-asc": crmSort([crmTerm("c.last_name COLLATE NOCASE", "asc", "last_name"), crmTerm("c.first_name COLLATE NOCASE", "asc", "first_name")], "c.id"),
+  "last-name-desc": crmSort([crmTerm("c.last_name COLLATE NOCASE", "desc", "last_name"), crmTerm("c.first_name COLLATE NOCASE", "desc", "first_name")], "c.id"),
+  "created-desc": crmSort([crmTerm("c.created_at", "desc", "created_at")], "c.id"),
+  "created-asc": crmSort([crmTerm("c.created_at", "asc", "created_at")], "c.id"),
   "updated-desc": crmSort([crmTerm("c.updated_at", "desc", "updated_at")], "c.id"),
 };
 const SCHEDULE_SORT = crmSort([crmTerm("a.starts_at", "asc", "starts_at"), crmTerm("a.created_at", "asc", "created_at")], "a.id");
@@ -552,7 +560,8 @@ function indexedJob(row: Record<string, unknown>, access: Pick<TeamAccess, "canV
     state: row.site_address_state,
     assigneeMemberId: row.assignee_member_id,
     assignedWorker: row.assignee_label,
-    scheduleDate: row.appointment_starts_at || row.scheduled_start,
+    scheduleDate: row.effective_scheduled_start || row.appointment_starts_at || row.scheduled_start,
+    createdAt: row.created_at,
     workStage: row.stage,
     pipelineStage: row.pipeline_stage,
     audited: row.register_audited,
@@ -712,7 +721,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
           ${protectedJobCustomerText("ss.suburb")} || ' ' || ${protectedJobCustomerText("ss.address_state")} || ' ' || ${protectedJobCustomerText("ss.postcode")} || ' '`;
       conditions.push(`LOWER(
         COALESCE(w.work_number, '') || ' ' || ${searchableJobTitleSql}
-        COALESCE(w.assignee_label, '') || ' ' || COALESCE(w.stage, '') || ' ' || COALESCE(w.scheduled_start, '') || ' ' ||
+        COALESCE(w.assignee_label, '') || ' ' || COALESCE(w.stage, '') || ' ' || ${JOB_EFFECTIVE_SCHEDULE_SQL} || ' ' ||
         ${searchableCustomerSql}
         COALESCE((SELECT GROUP_CONCAT(
             json_extract(ci.intent_snapshot, '$.activity.title'),
@@ -772,16 +781,18 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
       conditions.push(`${JOB_REGISTER_CUSTOMER_CONTEXT_SQL} AND LOWER(COALESCE(ss.address_line_1, '') || ' ' || COALESCE(ss.address_line_2, '')) LIKE ?`);
       bindings.push(`%${street}%`);
     }
+    const scheduledFromUtc = dateValue(url.searchParams.get("scheduledFromUtc"));
+    const scheduledToUtc = dateValue(url.searchParams.get("scheduledToUtc"));
     const scheduledFrom = cleanAdminText(url.searchParams.get("scheduledFrom"), 10);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(scheduledFrom)) {
-      conditions.push("substr(w.scheduled_start, 1, 10) >= ?");
-      bindings.push(scheduledFrom);
-    }
     const scheduledTo = cleanAdminText(url.searchParams.get("scheduledTo"), 10);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(scheduledTo)) {
-      conditions.push("substr(w.scheduled_start, 1, 10) <= ?");
-      bindings.push(scheduledTo);
-    }
+    if (scheduledFromUtc) { conditions.push(`${JOB_EFFECTIVE_SCHEDULE_SQL} >= ?`); bindings.push(scheduledFromUtc); }
+    else if (/^\d{4}-\d{2}-\d{2}$/.test(scheduledFrom)) { conditions.push(`substr(${JOB_EFFECTIVE_SCHEDULE_SQL}, 1, 10) >= ?`); bindings.push(scheduledFrom); }
+    if (scheduledToUtc) { conditions.push(`${JOB_EFFECTIVE_SCHEDULE_SQL} < ?`); bindings.push(scheduledToUtc); }
+    else if (/^\d{4}-\d{2}-\d{2}$/.test(scheduledTo)) { conditions.push(`substr(${JOB_EFFECTIVE_SCHEDULE_SQL}, 1, 10) <= ?`); bindings.push(scheduledTo); }
+    const createdFromUtc = dateValue(url.searchParams.get("createdFromUtc"));
+    const createdToUtc = dateValue(url.searchParams.get("createdToUtc"));
+    if (createdFromUtc) { conditions.push("w.created_at >= ?"); bindings.push(createdFromUtc); }
+    if (createdToUtc) { conditions.push("w.created_at < ?"); bindings.push(createdToUtc); }
     const invoiceStatus = cleanAdminText(url.searchParams.get("invoiceStatus"), 30);
     if (INVOICE_STATUSES.has(invoiceStatus)) {
       if (!identity.access.canViewInvoices) throw new Error("INVOICE_VIEW_REQUIRED");
@@ -825,7 +836,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
       const cancelled = "(w.stage = 'cancelled' OR d.pipeline_stage = 'lost')";
       const completed = "(w.stage = 'completed' OR d.pipeline_stage IN ('complete', 'invoiced', 'paid'))";
       const terminal = `(${cancelled} OR ${completed})`;
-      const assigned = "(trim(w.assignee_member_id) <> '' OR trim(w.scheduled_start) <> '')";
+      const assigned = `(trim(w.assignee_member_id) <> '' OR trim(${JOB_EFFECTIVE_SCHEDULE_SQL}) <> '')`;
       if (operationalStatus === "certified") conditions.push("0 = 1");
       else if (operationalStatus === "cancelled") conditions.push(cancelled);
       else if (operationalStatus === "audited") conditions.push(`NOT ${cancelled} AND ${JOB_REGISTER_AUDITED_SQL}`);
@@ -869,7 +880,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     if (cursor) { const after = keysetAfter(selectedSort.terms, cursor); rowConditions.push(`(${after.sql})`); rowBindings.push(...after.bindings); }
     const rowWhere = rowConditions.join(" AND ");
     const [countRow, rows] = await Promise.all([
-      includeTotal ? db.prepare(`SELECT COUNT(*) total ${joins} WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
+      includeTotal ? db.prepare(`SELECT COUNT(*) total ${rowJoins} WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
       db.prepare(`SELECT w.*, d.crm_customer_id, d.service_site_id, d.customer_source, d.pipeline_stage, d.building_type,
         d.description, d.customer_reference,
         d.next_action, d.tags job_tags, d.estimated_value_cents, d.quoted_value_cents, d.invoiced_value_cents,
@@ -889,6 +900,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
           ELSE '' END customer_name,
         selected_appointment.id appointment_id,
         selected_appointment.starts_at appointment_starts_at,
+        ${JOB_EFFECTIVE_SCHEDULE_SQL} effective_scheduled_start,
         (SELECT json_extract(ci.intent_snapshot, '$.activity.title')
           FROM trade_work_order_compliance_intents ci
           WHERE ci.work_order_id = w.id AND ci.installer_uid = w.firebase_uid
@@ -901,7 +913,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         ${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL quote_total_empty,
         ${JOB_REGISTER_QUOTE_SORT_SQL} quote_total_sort_cents,
         trim(w.assignee_member_id) = '' assignment_empty,
-        w.scheduled_start = '' schedule_empty
+        ${JOB_EFFECTIVE_SCHEDULE_SQL} = '' schedule_empty
         ${rowJoins} WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
         .bind(...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
     ]);
@@ -959,6 +971,10 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
       WHERE fd.crm_customer_id = c.id AND fd.firebase_uid = c.firebase_uid AND fw.record_status = 'active' AND fd.pipeline_stage = ?)`);
     bindings.push(pipeline);
   }
+  const createdFromUtc = dateValue(url.searchParams.get("createdFromUtc"));
+  const createdToUtc = dateValue(url.searchParams.get("createdToUtc"));
+  if (createdFromUtc) { conditions.push("c.created_at >= ?"); bindings.push(createdFromUtc); }
+  if (createdToUtc) { conditions.push("c.created_at < ?"); bindings.push(createdToUtc); }
   const where = conditions.join(" AND ");
   const sort = CUSTOMER_SORTS[sortValue] ? sortValue : "name-asc";
   const selectedSort = CUSTOMER_SORTS[sort];

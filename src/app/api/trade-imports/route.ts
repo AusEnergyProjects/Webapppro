@@ -41,7 +41,8 @@ function errorResponse(error: unknown) {
   if (code === "FULL_ACCESS_REQUIRED" || code === "ABN_REVIEW_REQUIRED" || code === "EMAIL_VERIFICATION_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using guided data migration." }, 403);
   if (code === "ROLE_REQUIRED" || code === "TRADE_ROLE_REQUIRED") return adminJson({ ok: false, error: "Guided data migration is available to installer and wholesaler accounts." }, 403);
   if (code === "IMPORT_TYPE_ROLE") return adminJson({ ok: false, error: "Choose a data type available to this business account." }, 403);
-  if (code === "IMPORT_TYPE_INVALID") return adminJson({ ok: false, error: "Choose enquiries, customers, historical jobs or wholesaler products." }, 400);
+  if (code === "IMPORT_TYPE_INVALID") return adminJson({ ok: false, error: "Choose customers, historical jobs or wholesaler products." }, 400);
+  if (code === "DIRECT_ENQUIRY_IMPORT_RETIRED") return adminJson({ ok: false, error: "Import trade-sourced work as customers or jobs. Leads are reserved for Australian Energy Assessments supplied opportunities." }, 410);
   if (code === "IMPORT_EMPTY") return adminJson({ ok: false, error: "The CSV needs a header row and at least one data row." }, 400);
   if (code === "IMPORT_TOO_LARGE") return adminJson({ ok: false, error: `Import up to ${IMPORT_MAX_ROWS} rows in one batch.` }, 400);
   if (code === "CSV_QUOTE_UNCLOSED") return adminJson({ ok: false, error: "A quoted CSV field is not closed. Check the file and try again." }, 400);
@@ -184,6 +185,7 @@ export async function POST(request: Request) {
     if (action === "preview") {
       const importType = cleanAdminText(body.importType, 30) as ImportType;
       if (!IMPORT_TYPES.has(importType)) throw new Error("IMPORT_TYPE_INVALID");
+      if (importType === "enquiries") throw new Error("DIRECT_ENQUIRY_IMPORT_RETIRED");
       assertImportAccess(identity, importType);
       const source = typeof body.csvText === "string" ? body.csvText : "";
       if (new TextEncoder().encode(source).length > 2_000_000) return adminJson({ ok: false, error: "Choose a CSV smaller than 2 MB." }, 413);
@@ -213,6 +215,7 @@ export async function POST(request: Request) {
     const batch = await ownedBatch(identity.uid, batchId);
     if (batch.status !== "preview") throw new Error("BATCH_NOT_PREVIEW");
     const importType = String(batch.import_type) as ImportType;
+    if (importType === "enquiries") throw new Error("DIRECT_ENQUIRY_IMPORT_RETIRED");
     assertImportAccess(identity, importType);
     const rows = (await db.prepare(`SELECT * FROM trade_data_import_rows WHERE batch_id = ? AND firebase_uid = ?
       ORDER BY row_number`).bind(batchId, identity.uid).all<Record<string, unknown>>()).results;
@@ -252,25 +255,6 @@ export async function POST(request: Request) {
             VALUES (?, ?, ?, ?, 'Primary service contact', 1, 'active', ?, ?)`)
             .bind(crypto.randomUUID(), identity.uid, siteId, contactId, now, now));
           statements.push(db.prepare(`UPDATE trade_data_import_rows SET result_status = 'imported', target_entity_type = 'crm_customer',
-            target_entity_id = ?, updated_at = ? WHERE id = ? AND batch_id = ?`).bind(id, now, row.id, batchId));
-        }
-      } else if (importType === "enquiries") {
-        for (const row of selected) {
-          const values = JSON.parse(String(row.normalized_data)) as Record<string, unknown>;
-          const id = crypto.randomUUID();
-          statements.push(db.prepare(`INSERT INTO trade_crm_enquiries
-            (id, firebase_uid, source_type, source_reference, external_record_id, status, customer_type, first_name, last_name,
-             business_name, business_number, email, phone, address_line_1, address_line_2, suburb, address_state, postcode,
-             service_category, description, urgency, preferred_date, protected_source, duplicate_decision, record_status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'unchecked', 'active', ?, ?)`)
-            .bind(id, identity.uid, values.source, `${batchId}:${row.row_number}`, values.externalRecordId, values.customerType,
-              values.firstName, values.lastName, values.businessName, values.businessNumber, values.email, values.phone,
-              values.addressLine1, values.addressLine2, values.suburb, values.addressState, values.postcode, values.serviceCategory,
-              values.description, values.urgency, values.preferredDate, now, now));
-          statements.push(db.prepare(`INSERT INTO trade_crm_enquiry_events
-            (id, enquiry_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, 'data_imported', ?, ?)`)
-            .bind(crypto.randomUUID(), id, identity.uid, `Imported from ${String(batch.file_name)} with source attribution preserved.`, now));
-          statements.push(db.prepare(`UPDATE trade_data_import_rows SET result_status = 'imported', target_entity_type = 'crm_enquiry',
             target_entity_id = ?, updated_at = ? WHERE id = ? AND batch_id = ?`).bind(id, now, row.id, batchId));
         }
       } else if (importType === "jobs") {

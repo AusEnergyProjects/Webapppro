@@ -495,6 +495,18 @@ h3, h4 { font-family: var(--font-aea-heading); font-size: var(--type-card-title)
 .dashboard-access-locked p { color: var(--color-aea-muted); font-size: .7rem; line-height: 1.58; margin: 8px 0 15px; max-width: 720px; }
 .dashboard-access-locked-panel { margin-bottom: 16px; }
 .dashboard-opportunity-list { display: grid; gap: 11px; }
+.dashboard-lead-workspace { align-items: start; display: grid; gap: 14px; grid-template-columns: minmax(255px, 340px) minmax(0, 1fr); }
+.dashboard-lead-list { align-content: start; background: #f3f9f6; border: 1px solid var(--color-aea-line); border-radius: 13px; display: grid; gap: 8px; max-height: min(74vh, 820px); overflow-y: auto; padding: 9px; }
+.dashboard-lead-list > button { background: #fff; border: 1px solid #c9ded6; border-radius: 11px; color: var(--color-aea-text); cursor: pointer; display: grid; gap: 5px; min-width: 0; padding: 12px; text-align: left; }
+.dashboard-lead-list > button:hover { border-color: #6eb99d; }
+.dashboard-lead-list > button.active { background: #e7f8f1; border-color: #15956e; box-shadow: 0 0 0 2px rgba(18, 166, 106, .11); }
+.dashboard-lead-list > button:focus-visible { outline: 3px solid rgba(18, 166, 106, .3); outline-offset: 2px; }
+.dashboard-lead-list > button > span { color: var(--color-aea-green-dark); font-size: .55rem; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
+.dashboard-lead-list > button > strong { color: var(--color-aea-ink); font-size: .76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-lead-list > button > p { color: var(--color-aea-muted); display: -webkit-box; font-size: .62rem; line-height: 1.45; margin: 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.dashboard-lead-list > button > small { color: var(--color-aea-muted); font-size: .55rem; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-lead-preview { min-width: 0; }
+.dashboard-lead-preview > .dashboard-opportunity-card[hidden] { display: none; }
 .dashboard-lead-filters { align-items: end; background: #f3f9f6; border: 1px solid var(--color-aea-line); border-radius: 13px; display: grid; gap: 9px; grid-template-columns: minmax(180px, 1.2fr) repeat(3, minmax(130px, .7fr)) minmax(105px, auto); margin-bottom: 13px; padding: 12px; }
 .dashboard-lead-filters label { color: var(--color-aea-ink); display: grid; font-size: .59rem; font-weight: 850; gap: 5px; }
 .dashboard-lead-filters input, .dashboard-lead-filters select { background: #fff; border: 1px solid #a9c9bd; border-radius: 9px; color: var(--color-aea-text); min-height: 40px; padding: 8px 9px; width: 100%; }
@@ -521,9 +533,10 @@ h3, h4 { font-family: var(--font-aea-heading); font-size: var(--type-card-title)
 .dashboard-opportunity-card-controls > button { background: #fff; border: 1px solid #91b7aa; border-radius: 8px; color: #087557; cursor: pointer; font-size: .6rem; font-weight: 850; min-height: 32px; padding: 6px 9px; }
 .dashboard-opportunity-card-controls > button:hover { background: #eaf8f2; border-color: #15956e; }
 .dashboard-opportunity-card-controls > button:focus-visible { outline: 3px solid rgba(18, 166, 106, .28); outline-offset: 2px; }
+.dashboard-opportunity-card-controls > .dashboard-lead-dismiss { align-items: center; border-color: #d5a59d; color: #9b3528; display: inline-flex; justify-content: center; min-width: 34px; padding: 6px; }
+.dashboard-opportunity-card-controls > .dashboard-lead-dismiss:hover { background: #fff0ed; border-color: #b85a49; }
+.dashboard-lead-dismiss svg { fill: none; height: 17px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; width: 17px; }
 .dashboard-opportunity-card > p { color: var(--color-aea-muted); font-size: .69rem; line-height: 1.58; margin: 10px 0; }
-.dashboard-opportunity-card.collapsed { padding: 13px 15px; }
-.dashboard-opportunity-card.expanded .dashboard-opportunity-compact-summary { display: none; }
 .dashboard-connected-customer-identity { align-items: start; background: linear-gradient(135deg, #e6f8f1, #f4fbff); border: 1px solid #9fd6c5; border-radius: 13px; display: grid; gap: 13px; grid-template-columns: minmax(190px, .62fr) minmax(0, 1.38fr); margin-top: 13px; padding: 14px; }
 .dashboard-connected-customer-intro span { color: #08794c; display: block; font-size: .56rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
 .dashboard-connected-customer-intro h4 { color: var(--color-aea-ink); font-size: 1rem; margin-top: 4px; }
@@ -606,6 +619,8 @@ h3, h4 { font-family: var(--font-aea-heading); font-size: var(--type-card-title)
 .dashboard-opportunity-actions button { background: #fff; border: 1px solid #9bbdb1; border-radius: 9px; color: var(--color-aea-green-dark); cursor: pointer; font-size: .64rem; font-weight: 850; min-height: 36px; padding: 7px 11px; }
 .dashboard-opportunity-actions button.primary { background: var(--action-primary); border: 0; color: #fff; }
 .dashboard-opportunity-actions button:disabled { cursor: default; opacity: .62; }
+.dashboard-lead-preview-actions { border-top: 1px solid var(--color-aea-line); justify-content: flex-end; margin-top: 17px; padding-top: 14px; }
+.dashboard-lead-preview-actions button.primary { min-width: 112px; }
 .dashboard-lead-handoff-backdrop { align-items: center; backdrop-filter: blur(7px); background: radial-gradient(circle at 50% 24%, rgba(19, 177, 139, .2), transparent 38%), rgba(1, 14, 25, .82); display: flex; inset: 0; justify-content: center; padding: 20px; position: fixed; z-index: 12000; }
 .dashboard-lead-handoff-dialog { background: linear-gradient(155deg, #ffffff 0%, #f3fbf8 74%, #ecf8f5 100%); border: 1px solid rgba(143, 207, 188, .86); border-radius: 24px; box-shadow: 0 32px 100px rgba(0, 10, 22, .52), 0 0 0 1px rgba(255, 255, 255, .38) inset; display: grid; gap: 17px; max-height: calc(100dvh - 32px); max-width: 620px; overflow: auto; padding: clamp(24px, 4vw, 38px); position: relative; width: 100%; }
 .dashboard-lead-handoff-dialog::before { background: linear-gradient(90deg, #18d4b3, #0b9473 52%, #62e8ce); content: ""; height: 5px; inset: 0 0 auto; position: absolute; }
@@ -679,7 +694,6 @@ h3, h4 { font-family: var(--font-aea-heading); font-size: var(--type-card-title)
 .dashboard-opportunity-conversion input { border: 1px solid #9bbdb1; border-radius: 9px; min-height: 38px; padding: 7px 9px; width: 100%; }
 .dashboard-opportunity-conversion button { background: var(--action-primary); border: 0; border-radius: 9px; color: #fff; cursor: pointer; font-size: .62rem; font-weight: 850; min-height: 38px; padding: 8px 11px; }
 .dashboard-opportunity-conversion button:disabled { cursor: default; opacity: .62; }
-.dashboard-opportunity-closed { color: var(--color-aea-muted); display: block; font-size: .62rem; margin-top: 11px; }
 .dashboard-profile-summary { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 14px; }
 .dashboard-profile-summary > div { background: #f8fbfc; border: 1px solid var(--color-aea-line); border-radius: 12px; padding: 14px; }
 .dashboard-profile-summary span { color: var(--color-aea-green-dark); display: block; font-size: .62rem; font-weight: 900; text-transform: uppercase; }
@@ -1927,6 +1941,8 @@ footer a { color: #6ee7b7; font-weight: 700; }
 .admin-customer-quotes small { color: var(--color-aea-muted); font-size: .51rem; grid-column: 1 / -1; }
 
 @media (max-width: 1100px) {
+  .dashboard-lead-workspace { grid-template-columns: 1fr; }
+  .dashboard-lead-list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 360px; }
   .dashboard-lead-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-opportunity-compact-summary dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-connected-customer-identity { grid-template-columns: 1fr; }
@@ -1979,6 +1995,7 @@ footer a { color: #6ee7b7; font-weight: 700; }
   .admin-admin-list article { grid-template-columns: 1fr 1fr; }
   .admin-admin-list article > div { grid-column: 1 / -1; }
   .dashboard-lead-filters, .admin-ecosystem-results { grid-template-columns: 1fr; }
+  .dashboard-lead-list { grid-template-columns: 1fr; max-height: 310px; }
   .dashboard-lead-filters > div { justify-items: start; }
   .dashboard-opportunity-card header { align-items: stretch; flex-direction: column; }
   .dashboard-opportunity-card-controls { justify-content: space-between; width: 100%; }

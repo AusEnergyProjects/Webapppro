@@ -183,10 +183,10 @@ test("the job register uses separate operational columns without changing the Da
   assert.match(crm, /!JOB_REGISTER_COLUMN_KEY_SET\.has\(key\)/);
   assert.match(crm, /new Set\(columns\)\.size !== columns\.length/);
   assert.match(crm, /return \[\.\.\.columns\] as JobRegisterColumnKey\[\]/);
-  assert.match(crm, /setJobColumns\(safeJobRegisterColumns\(preferences\.jobColumnOrderVersion === 3 \? preferences\.columns : undefined\)\)/);
+  assert.match(crm, /setJobColumns\(safeJobRegisterColumns\(preferences\.jobColumnOrderVersion === 4 \? preferences\.columns : undefined\)\)/);
   assert.match(crm, /setJobColumns\(safeJobRegisterColumns\(preferences\.columns\)\)/);
   assert.doesNotMatch(crm, /setJobColumns\(preferences\.columns\?\./);
-  for (const label of ["Job ID", "First name", "Last name", "Contact number", "Email", "Street address", "Postcode", "Suburb", "State", "Assigned worker", "Schedule date", "Quote total ex GST", "STC", "VEEC", "ESC", "Other certs"]) {
+  for (const label of ["Job ID", "First name", "Last name", "Contact number", "Email", "Street address", "Postcode", "Suburb", "State", "Assigned worker", "Schedule date", "Created date", "Quote total ex GST", "STC", "VEEC", "ESC", "Other certs"]) {
     assert.match(crm, new RegExp(`label: "${label}"`));
   }
   const headerBlock = dataforceCsv.match(/DATAFORCE_JOB_CSV_HEADERS = Object\.freeze\(\[([\s\S]*?)\] as const\)/);
@@ -251,13 +251,16 @@ test("job and customer directories expose granular server filters and single-lin
   assert.match(crm, /crm-record-data-row/);
   assert.match(crm, /jobColumns\.map/);
   assert.match(crm, /customerColumns\.map/);
-  for (const column of ["Customer", "First name", "Last name", "Email", "Phone", "Suburb", "Postcode", "Jobs", "Latest job", "Status"]) {
+  for (const column of ["Customer", "First name", "Last name", "Email", "Phone", "Suburb", "Postcode", "Jobs", "Created date", "Latest job", "Status"]) {
     assert.match(crm, new RegExp(`label: "${column}"`));
   }
+  assert.match(crm, /<span>Last name<\/span><input value=\{jobLastName\}/);
+  assert.match(crm, /<span>Last name<\/span><input value=\{customerLastName\}/);
+  assert.match(crm, /<option value="created-desc">Created newest first<\/option>/);
 });
 
 test("job filters preserve existing saved fields and add authoritative register filters", () => {
-  for (const field of ["appointmentId", "scheduledFrom", "scheduledTo", "invoiceStatus", "customerReference"]) {
+  for (const field of ["appointmentId", "scheduledFrom", "scheduledTo", "createdFrom", "createdTo", "invoiceStatus", "customerReference"]) {
     assert.match(crm, new RegExp(`${field}:`));
     assert.match(crm, new RegExp(`preferences\\.${field}`));
     assert.match(listViews, new RegExp(`raw\\.${field}`));
@@ -266,6 +269,11 @@ test("job filters preserve existing saved fields and add authoritative register 
     assert.match(crm, new RegExp(`${field}`));
   }
   assert.match(crm, /data-date-range-group="installer-job-scheduled"/);
+  assert.match(crm, /data-date-range-group="installer-job-created"/);
+  assert.match(crm, /data-date-range-group="installer-customer-created"/);
+  assert.match(crm, /params\.set\("scheduledFromUtc", localDateBoundary\(jobScheduledFrom\)\)/);
+  assert.match(crm, /params\.set\("scheduledToUtc", localDateBoundary\(jobScheduledTo, true\)\)/);
+  assert.match(crm, /params\.set\("createdFromUtc", localDateBoundary\(customerCreatedFrom\)\)/);
   assert.match(crm, /data-date-range-role="start"/);
   assert.match(crm, /data-date-range-role="end"/);
   for (const field of ["firstName", "lastName", "street", "state", "operationalStatus", "quoteTotalMin", "quoteTotalMax"]) {
@@ -282,6 +290,11 @@ test("job and customer indexes use explicit open and direct contact actions", ()
   assert.match(crm, /className="crm-index-email-link" href=\{`mailto:\$\{customer\.email\}`\}/);
   assert.match(crm, /className="crm-record-data-row crm-index-row"/);
   assert.doesNotMatch(crm, /<button[^>]*className="crm-row-open crm-record-data-row"/);
+  assert.match(crm, /onContextMenu=\{\(event\) => openCustomerActions\(event, customer\.id\)\}/);
+  assert.match(crm, /button:not\(\.crm-index-open-button\)/);
+  assert.match(crm, /event\.key === "F10" && event\.shiftKey/);
+  assert.match(crm, /<button autoFocus role="menuitem" type="button" onClick=\{openCustomer\}>View details<\/button>/);
+  assert.match(crm, />New job for customer<\/button>/);
 });
 
 test("the customer index aggregates owned job facts once without crossing the privacy boundary", () => {
@@ -316,7 +329,11 @@ test("job and customer directories open focused records without automatic or inl
 });
 
 test("owner and staff CRM destinations follow the primary navigation and saved access", () => {
-  assert.match(crm, /if \(!staffPermissions\) return \["today", "enquiries", "jobs", "schedule", "customers", "pricebook", "assets", "templates", "reports", "import", "integrations"\]/);
+  assert.match(crm, /if \(!staffPermissions\) return \["today", "leads", "jobs", "schedule", "customers", "pricebook", "assets", "templates", "reports", "import", "integrations"\]/);
+  assert.doesNotMatch(crm, /TradeEnquiryInbox|"enquiries" as View/);
+  assert.match(crm, /navigationTarget\?\.kind === "crm-view"[\s\S]*allowedViews\.some\(\(item\) => item === navigationTarget\.id\)[\s\S]*appliedNavigationTargetNonce\.current !== navigationTarget\.nonce[\s\S]*view !== navigationTarget\.id[\s\S]*\) return;[\s\S]*onViewChange\?\.\(view\)/);
+  assert.match(crm, /appliedNavigationTargetNonce\.current = navigationTarget\.nonce;[\s\S]*setView\(navigationTarget\.id\)/);
+  assert.match(dashboard, /setCommandTarget\(\(current\) => current\?\.kind === "crm-view" && current\.id !== nextView \? null : current\)/);
   assert.match(crm, /if \(staffPermissions\.canViewCustomers && staffPermissions\.canSearchCustomers\) views\.push\("customers"\)/);
   assert.match(crm, /if \(staffPermissions\.canViewPriceBook\) views\.push\("pricebook"\)/);
   assert.match(crm, /if \(staffPermissions\.canRunReports\) views\.push\("reports"\)/);
@@ -457,7 +474,7 @@ test("My day exposes owner scoped local workload and direct action charts", () =
   assert.match(hub, /onOpenInvoices=\{props\.onOpenInvoices\}/);
   assert.match(crm, /const \[scheduleWeekStart, setScheduleWeekStart\] = useState\(""\)/);
   assert.match(crm, /initialWeekStart=\{scheduleWeekStart\}/);
-  assert.match(dashboard, /onWorkViewChange=\{setActiveWorkView\}/);
+  assert.match(dashboard, /onWorkViewChange=\{\(nextView\) => \{\s*setCommandTarget\(\(current\) => current\?\.kind === "crm-view" && current\.id !== nextView \? null : current\);\s*setActiveWorkView\(nextView\);\s*setWorkspace\("work"\);\s*\}\}/);
   assert.match(dashboard, /onOpenInvoices=\{\(\) => setWorkspace\("invoices"\)\}/);
 });
 

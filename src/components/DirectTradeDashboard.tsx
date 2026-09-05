@@ -219,13 +219,12 @@ const publicLeadHandoffStages = [
     detail: "The quote will open automatically as soon as the handoff is confirmed.",
   },
 ] as const;
-type DashboardWorkspace = "work" | "team" | "invoices" | "follow-ups" | "leads" | "products" | "calculator" | "orders" | "import" | "account";
+type DashboardWorkspace = "work" | "team" | "invoices" | "follow-ups" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
   "team",
   "invoices",
   "follow-ups",
-  "leads",
   "products",
   "calculator",
   "orders",
@@ -235,10 +234,16 @@ const dashboardWorkspaces = new Set<DashboardWorkspace>([
 
 function dashboardWorkspaceFromSearch(search: string): DashboardWorkspace {
   const requested = new URLSearchParams(search).get("workspace");
-  if (requested === "schedule") return "work";
+  if (requested === "schedule" || requested === "leads") return "work";
   return dashboardWorkspaces.has(requested as DashboardWorkspace)
     ? requested as DashboardWorkspace
     : "work";
+}
+
+function dashboardWorkViewFromSearch(search: string) {
+  const requested = new URLSearchParams(search).get("workspace");
+  if (requested === "schedule" || requested === "leads") return requested;
+  return "today";
 }
 
 const workOrderIdPattern = /^[A-Za-z0-9:_-]{1,180}$/;
@@ -256,6 +261,9 @@ function dashboardCommandTargetFromSearch(search: string): TLinkCommandTarget | 
   const parameters = new URLSearchParams(search);
   if (parameters.get("workspace") === "schedule") {
     return { workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() };
+  }
+  if (parameters.get("workspace") === "leads") {
+    return { workspace: "work", kind: "crm-view", id: "leads", query: "", nonce: Date.now() };
   }
   const teamMemberId = parameters.get("teamMemberId") || "";
   if (parameters.get("workspace") === "team" && teamMemberId) {
@@ -574,9 +582,9 @@ function EnquiryPack({
       </div>
 
       <small className="dashboard-enquiry-privacy">
-        Suburb, postcode and state are shown for service-area planning.
-        Customer identity, contact details, street and unit address, private
-        notes, room details and evidence filenames remain withheld.
+        {opportunity.customerContact
+          ? "The customer-selected contact and service address above are released to this business. Private notes, room details and evidence filenames remain withheld."
+          : "Suburb, postcode and state are shown for service-area planning. Customer identity, contact details, street and unit address, private notes, room details and evidence filenames remain withheld."}
       </small>
     </section>
   );
@@ -765,18 +773,16 @@ export function DirectTradeDashboard() {
   const [leadServiceFilter, setLeadServiceFilter] = useState("");
   const [leadStateFilter, setLeadStateFilter] = useState("");
   const [focusedOpportunityMatchId, setFocusedOpportunityMatchId] = useState("");
-  const [expandedOpportunityMatchIds, setExpandedOpportunityMatchIds] =
-    useState<Set<string>>(() => new Set());
+  const [selectedOpportunityMatchId, setSelectedOpportunityMatchId] = useState(() =>
+    typeof window === "undefined" ? "" : opportunityMatchFromSearch(window.location.search));
+  const [opportunityRouteRequestNonce, setOpportunityRouteRequestNonce] = useState(0);
   const [workspace, setWorkspace] = useState<DashboardWorkspace>(() =>
     typeof window === "undefined"
       ? "work"
       : dashboardWorkspaceFromSearch(window.location.search)
   );
   const [activeWorkView, setActiveWorkView] = useState(() =>
-    typeof window !== "undefined"
-      && new URLSearchParams(window.location.search).get("workspace") === "schedule"
-      ? "schedule"
-      : "today"
+    typeof window === "undefined" ? "today" : dashboardWorkViewFromSearch(window.location.search)
   );
   const [commandTarget, setCommandTarget] = useState<TLinkCommandTarget | null>(() =>
     typeof window === "undefined" ? null : dashboardCommandTargetFromSearch(window.location.search)
@@ -799,6 +805,16 @@ export function DirectTradeDashboard() {
   const publicLeadHandoffRequestMatchId = useRef("");
   const workspaceRouteInitialised = useRef(false);
   const workspacePopstateSync = useRef(false);
+  const pendingOpportunityMatchId = useRef(
+    typeof window === "undefined"
+      ? ""
+      : opportunityMatchFromSearch(window.location.search),
+  );
+  const exactOpportunityMatchId = useRef(
+    typeof window === "undefined"
+      ? ""
+      : opportunityMatchFromSearch(window.location.search),
+  );
 
   useEffect(() => {
     const applyColourMode = (nextMode: TLinkColourMode) => {
@@ -841,8 +857,17 @@ export function DirectTradeDashboard() {
     const onPopstate = () => {
       workspacePopstateSync.current = true;
       const nextWorkspace = dashboardWorkspaceFromSearch(window.location.search);
+      const nextWorkView = dashboardWorkViewFromSearch(window.location.search);
+      const nextMatchId = nextWorkspace === "work" && nextWorkView === "leads"
+        ? opportunityMatchFromSearch(window.location.search)
+        : "";
       setWorkspace(nextWorkspace);
-      setActiveWorkView(new URLSearchParams(window.location.search).get("workspace") === "schedule" ? "schedule" : "today");
+      setActiveWorkView(nextWorkView);
+      setSelectedOpportunityMatchId(nextMatchId);
+      setFocusedOpportunityMatchId(nextMatchId);
+      pendingOpportunityMatchId.current = nextMatchId;
+      exactOpportunityMatchId.current = nextMatchId;
+      if (nextMatchId) setOpportunityRouteRequestNonce((value) => value + 1);
       const nextTarget = dashboardCommandTargetFromSearch(window.location.search);
       setCommandTarget((current) => nextTarget || (current?.kind === "job" && nextWorkspace === "work"
         ? { workspace: "work", kind: "crm-view", id: "jobs", query: "", nonce: Date.now() }
@@ -859,12 +884,20 @@ export function DirectTradeDashboard() {
       return;
     }
     const nextUrl = new URL(window.location.href);
-    const routeWorkspace = workspace === "work" && activeWorkView === "schedule"
-      ? "schedule"
+    const routeWorkspace = workspace === "work" && (activeWorkView === "schedule" || activeWorkView === "leads")
+      ? activeWorkView
       : workspace;
     let changed = nextUrl.searchParams.get("workspace") !== routeWorkspace;
     nextUrl.searchParams.set("workspace", routeWorkspace);
-    if (workspace !== "leads") {
+    if (workspace === "work" && activeWorkView === "leads") {
+      if (selectedOpportunityMatchId && nextUrl.searchParams.get("matchId") !== selectedOpportunityMatchId) {
+        nextUrl.searchParams.set("matchId", selectedOpportunityMatchId);
+        changed = true;
+      } else if (!selectedOpportunityMatchId && nextUrl.searchParams.has("matchId")) {
+        nextUrl.searchParams.delete("matchId");
+        changed = true;
+      }
+    } else {
       if (nextUrl.searchParams.has("matchId")) { nextUrl.searchParams.delete("matchId"); changed = true; }
       if (nextUrl.hash === "#opportunity-inbox") { nextUrl.hash = ""; changed = true; }
     }
@@ -883,18 +916,13 @@ export function DirectTradeDashboard() {
     }
     workspaceRouteInitialised.current = true;
     workspacePopstateSync.current = false;
-  }, [activeWorkView, commandTarget, workspace]);
+  }, [activeWorkView, commandTarget, selectedOpportunityMatchId, workspace]);
   const photoLightboxOpener = useRef<HTMLElement | null>(null);
   const protectedOpportunityRequestControllers = useRef(
     new Set<AbortController>(),
   );
   const protectedIdentityUid = useRef<string | null>(null);
   const protectedIdentityRevision = useRef(0);
-  const initialOpportunityMatchId = useRef(
-    typeof window === "undefined"
-      ? ""
-      : opportunityMatchFromSearch(window.location.search),
-  );
 
   const revokeEvidenceObjectUrl = useCallback((url: string) => {
     if (!evidenceObjectUrls.current.delete(url)) return;
@@ -1042,7 +1070,8 @@ export function DirectTradeDashboard() {
   }, []);
 
   const scrubProtectedOpportunityNavigation = useCallback(() => {
-    initialOpportunityMatchId.current = "";
+    pendingOpportunityMatchId.current = "";
+    exactOpportunityMatchId.current = "";
     const nextUrl = new URL(window.location.href);
     let changed = false;
     if (nextUrl.searchParams.has("matchId")) {
@@ -1092,7 +1121,7 @@ export function DirectTradeDashboard() {
     setEvidencePhotoBusy("");
     setEvidencePhotoErrors({});
     setPhotoLightbox(null);
-    setExpandedOpportunityMatchIds(new Set());
+    setSelectedOpportunityMatchId("");
     setFocusedOpportunityMatchId("");
   }, [abortProtectedOpportunityRequests, revokeAllEvidenceObjectUrls]);
 
@@ -1212,7 +1241,16 @@ export function DirectTradeDashboard() {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Leads could not be loaded.");
       if (active && identityIsCurrent()) {
-        setOpportunities(result.opportunities || []);
+        const loadedOpportunities = result.opportunities || [];
+        setOpportunities((current) => {
+          const requestedMatchId = exactOpportunityMatchId.current;
+          const exactOpportunity = requestedMatchId
+            ? current.find((item) => item.matchId === requestedMatchId)
+            : null;
+          return exactOpportunity && !loadedOpportunities.some((item: DashboardOpportunity) => item.matchId === requestedMatchId)
+            ? [exactOpportunity, ...loadedOpportunities]
+            : loadedOpportunities;
+        });
         setOpportunityLoadError("");
       }
     }).catch((loadError) => {
@@ -1248,6 +1286,21 @@ export function DirectTradeDashboard() {
       .filter((item) => !leadServiceFilter || (item.matchedCategories.length ? item.matchedCategories : item.serviceCategories).includes(leadServiceFilter))
       .filter((item) => !term || `${item.title} ${item.summary} ${item.projectType} ${item.suburb} ${item.postcode} ${item.state} ${item.distanceBand}`.toLowerCase().includes(term));
   }, [leadSearch, leadServiceFilter, leadStateFilter, leadStatusFilter, opportunities]);
+  const selectedLeadOpportunity = visibleLeadOpportunities.find((item) => item.matchId === selectedOpportunityMatchId)
+    || visibleLeadOpportunities[0]
+    || null;
+
+  useEffect(() => {
+    if (workspace !== "work" || activeWorkView !== "leads") return;
+    const exactMatchIsLoading = Boolean(
+      selectedOpportunityMatchId
+      && exactOpportunityMatchId.current === selectedOpportunityMatchId
+      && !opportunities.some((item) => item.matchId === selectedOpportunityMatchId),
+    );
+    if (exactMatchIsLoading) return;
+    const visibleMatchId = selectedLeadOpportunity?.matchId || "";
+    if (visibleMatchId !== selectedOpportunityMatchId) setSelectedOpportunityMatchId(visibleMatchId);
+  }, [activeWorkView, opportunities, selectedLeadOpportunity, selectedOpportunityMatchId, workspace]);
 
   const openOpportunityNotification = useCallback(async (matchId: string) => {
     const activeUser = user;
@@ -1269,13 +1322,11 @@ export function DirectTradeDashboard() {
     setLeadServiceFilter("");
     setLeadStateFilter("");
     setFocusedOpportunityMatchId(matchId);
-    setExpandedOpportunityMatchIds((current) => {
-      if (current.has(matchId)) return current;
-      const next = new Set(current);
-      next.add(matchId);
-      return next;
-    });
-    setWorkspace("leads");
+    setSelectedOpportunityMatchId(matchId);
+    exactOpportunityMatchId.current = matchId;
+    setActiveWorkView("leads");
+    setCommandTarget({ workspace: "work", kind: "crm-view", id: "leads", query: "", nonce: Date.now() });
+    setWorkspace("work");
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.set("workspace", "leads");
     nextUrl.searchParams.set("matchId", matchId);
@@ -1314,6 +1365,9 @@ export function DirectTradeDashboard() {
       setOpportunityNavigationStatus("");
     } catch (openError) {
       if (!requestIsCurrent()) return;
+      if (exactOpportunityMatchId.current === matchId) exactOpportunityMatchId.current = "";
+      setFocusedOpportunityMatchId((current) => current === matchId ? "" : current);
+      setSelectedOpportunityMatchId((current) => current === matchId ? "" : current);
       setOpportunityNavigationStatus(
         openError instanceof Error
           ? openError.message
@@ -1325,23 +1379,15 @@ export function DirectTradeDashboard() {
   }, [user]);
 
   useEffect(() => {
-    if (!user || !initialOpportunityMatchId.current) return;
-    const matchId = initialOpportunityMatchId.current;
-    initialOpportunityMatchId.current = "";
+    if (!user || !pendingOpportunityMatchId.current) return;
+    const matchId = pendingOpportunityMatchId.current;
+    pendingOpportunityMatchId.current = "";
     void openOpportunityNotification(matchId);
-  }, [openOpportunityNotification, user]);
+  }, [openOpportunityNotification, opportunityRouteRequestNonce, user]);
 
   useEffect(() => {
-    if (workspace !== "leads" || !focusedOpportunityMatchId) return;
+    if (workspace !== "work" || activeWorkView !== "leads" || !focusedOpportunityMatchId) return;
     if (!opportunities.some((item) => item.matchId === focusedOpportunityMatchId)) return;
-    if (!expandedOpportunityMatchIds.has(focusedOpportunityMatchId)) {
-      setExpandedOpportunityMatchIds((current) => {
-        const next = new Set(current);
-        next.add(focusedOpportunityMatchId);
-        return next;
-      });
-      return;
-    }
     const frame = window.requestAnimationFrame(() => {
       const target = document.getElementById(
         `opportunity-${focusedOpportunityMatchId}`,
@@ -1358,23 +1404,11 @@ export function DirectTradeDashboard() {
       window.clearTimeout(timeout);
     };
   }, [
-    expandedOpportunityMatchIds,
+    activeWorkView,
     focusedOpportunityMatchId,
     opportunities,
     workspace,
   ]);
-
-  const toggleOpportunityExpanded = useCallback((matchId: string) => {
-    setExpandedOpportunityMatchIds((current) => {
-      const next = new Set(current);
-      if (next.has(matchId)) {
-        next.delete(matchId);
-      } else {
-        next.add(matchId);
-      }
-      return next;
-    });
-  }, []);
 
   async function respondToOpportunity(
     matchId: string,
@@ -1464,17 +1498,21 @@ export function DirectTradeDashboard() {
           "The handoff was saved, but the editable quote was not returned. Retry to reopen the same job safely.",
         );
       }
-      setOpportunities((current) =>
-        current.map((item) =>
-          item.matchId === matchId
-            ? {
-                ...item,
-                matchStatus: status,
-                updatedAt: new Date().toISOString(),
-              }
-            : item,
-        ),
-      );
+      setOpportunities((current) => status === "declined"
+        ? current.filter((item) => item.matchId !== matchId)
+        : current.map((item) =>
+            item.matchId === matchId
+              ? {
+                  ...item,
+                  matchStatus: status,
+                  updatedAt: new Date().toISOString(),
+                }
+              : item,
+          ));
+      if (status === "declined") {
+        setSelectedOpportunityMatchId((current) => current === matchId ? "" : current);
+        setFocusedOpportunityMatchId((current) => current === matchId ? "" : current);
+      }
       if (status === "interested" && quoteTarget) {
         const workNumber = typeof quoteWorkflow?.workNumber === "string"
           ? quoteWorkflow.workNumber
@@ -1512,7 +1550,7 @@ export function DirectTradeDashboard() {
             ? result.warning
             : "Interest recorded. You can now prepare a structured platform response when the project supports it."
           : status === "declined"
-            ? "Opportunity declined. This will help improve future matching."
+            ? "Lead removed from this business. Other matched trades are unaffected."
             : "Opportunity marked as reviewed.",
       );
     } catch (responseError) {
@@ -1542,6 +1580,66 @@ export function DirectTradeDashboard() {
       }
       if (requestIsCurrent()) setOpportunityBusy("");
     }
+  }
+
+  async function openPublicLeadQuote(opportunity: DashboardOpportunity) {
+    const activeUser = user;
+    if (!activeUser || opportunity.platformOnly || protectedIdentityUid.current !== activeUser.uid) return;
+    const identityUid = activeUser.uid;
+    const identityRevision = protectedIdentityRevision.current;
+    const controller = new AbortController();
+    protectedOpportunityRequestControllers.current.add(controller);
+    const requestIsCurrent = () => protectedIdentityContinuationIsCurrent(
+      identityUid,
+      identityRevision,
+      protectedIdentityUid.current || "",
+      protectedIdentityRevision.current,
+    ) && !controller.signal.aborted;
+    setOpportunityBusy(opportunity.matchId);
+    setOpportunityStatus("Reopening the editable quote...");
+    try {
+      const token = await activeUser.getIdToken();
+      if (!requestIsCurrent()) return;
+      const response = await fetch("/api/trade-opportunities", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ action: "open_public_quote", matchId: opportunity.matchId }),
+        signal: controller.signal,
+      });
+      if (!requestIsCurrent()) return;
+      const result = await response.json().catch(() => ({}));
+      if (!requestIsCurrent()) return;
+      const quoteTarget = publicLeadQuoteNavigationTarget(result.quoteWorkflow);
+      if (!response.ok || !result.ok || !quoteTarget) {
+        throw new Error(result.error || "The editable quote could not be reopened.");
+      }
+      setCommandTarget({ ...quoteTarget, nonce: Date.now() });
+      setWorkspace("work");
+      setOpportunityStatus("The editable quote is open.");
+    } catch (openError) {
+      if (requestIsCurrent()) {
+        setOpportunityStatus(openError instanceof Error
+          ? openError.message
+          : "The editable quote could not be reopened.");
+      }
+    } finally {
+      protectedOpportunityRequestControllers.current.delete(controller);
+      if (requestIsCurrent()) setOpportunityBusy("");
+    }
+  }
+
+  function dismissOpportunity(opportunity: DashboardOpportunity) {
+    if (!(["offered", "viewed"].includes(opportunity.matchStatus)
+      || (opportunity.platformOnly && opportunity.matchStatus === "interested"))) return;
+    const confirmed = window.confirm(
+      opportunity.platformOnly && opportunity.matchStatus === "interested"
+        ? "Remove this lead from your business and withdraw its unaccepted quote? This does not remove it for other matched trades."
+        : "Remove this lead from your business? This does not remove it for other matched trades.",
+    );
+    if (confirmed) void respondToOpportunity(opportunity.matchId, "declined");
   }
 
   async function convertOpportunity(matchId: string) {
@@ -2235,7 +2333,7 @@ export function DirectTradeDashboard() {
                 className="dashboard-workspace-nav"
                 aria-label="TLink installer account"
               >
-                <button type="button" aria-current={workspace === "work" && activeWorkView !== "schedule" ? "page" : undefined} className={workspace === "work" && activeWorkView !== "schedule" ? "active" : ""} onClick={() => {
+                <button type="button" aria-current={workspace === "work" && activeWorkView !== "schedule" && activeWorkView !== "leads" ? "page" : undefined} className={workspace === "work" && activeWorkView !== "schedule" && activeWorkView !== "leads" ? "active" : ""} onClick={() => {
                   setCommandTarget({ workspace: "work", kind: "crm-view", id: "today", query: "", nonce: Date.now() });
                   setActiveWorkView("today");
                   setWorkspace("work");
@@ -2254,11 +2352,15 @@ export function DirectTradeDashboard() {
                 }}><b aria-hidden="true">03</b><span>Schedule</span><small>Capacity and dispatch</small></button>
                 <button type="button" aria-current={workspace === "invoices" ? "page" : undefined} className={workspace === "invoices" ? "active" : ""} onClick={() => setWorkspace("invoices")}><b aria-hidden="true">04</b><span>Invoices</span><small>Prepare drafts and get paid</small></button>
                 <button type="button" aria-current={workspace === "follow-ups" ? "page" : undefined} className={workspace === "follow-ups" ? "active" : ""} onClick={() => setWorkspace("follow-ups")}><b aria-hidden="true">05</b><span>Follow-ups</span><small>Consent-aware service preparation</small></button>
-                <button type="button" aria-current={workspace === "leads" ? "page" : undefined} className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><b aria-hidden="true">06</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>Australian Energy Assessments protected opportunities</small></button>
+                <button type="button" aria-current={workspace === "work" && activeWorkView === "leads" ? "page" : undefined} className={workspace === "work" && activeWorkView === "leads" ? "active" : ""} onClick={() => {
+                  setCommandTarget({ workspace: "work", kind: "crm-view", id: "leads", query: "", nonce: Date.now() });
+                  setActiveWorkView("leads");
+                  setWorkspace("work");
+                }}><b aria-hidden="true">06</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>Australian Energy Assessments protected opportunities</small></button>
                 <button type="button" aria-current={workspace === "products" ? "page" : undefined} className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><b aria-hidden="true">07</b><span>Products</span><small>Approved trade catalogue</small></button>
                 <button type="button" aria-current={workspace === "calculator" ? "page" : undefined} className={workspace === "calculator" ? "active" : ""} onClick={() => setWorkspace("calculator")}><b aria-hidden="true">08</b><span>Calculator</span><small>Rebates for quotes and invoices</small></button>
                 <button type="button" aria-current={workspace === "account" ? "page" : undefined} className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">09</b><span>Business</span><small>Settings and verification</small></button>
-                <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>Australian Energy Assessments leads remain protected. Customer contact details only belong here when the customer contacted your business directly.</p></div>
+                <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>Australian Energy Assessments and TLink leads show only consent-released details. Trade-sourced contacts belong in Customers or Jobs.</p></div>
               </nav>
 
               {workspace === "work" && <TradeBusinessHub
@@ -2278,7 +2380,11 @@ export function DirectTradeDashboard() {
                   setActiveWorkView("schedule");
                   setWorkspace("work");
                 }}
-                onWorkViewChange={setActiveWorkView}
+                onWorkViewChange={(nextView) => {
+                  setCommandTarget((current) => current?.kind === "crm-view" && current.id !== nextView ? null : current);
+                  setActiveWorkView(nextView);
+                  setWorkspace("work");
+                }}
                 onOpenInvoices={() => setWorkspace("invoices")}
                 onCloseJobNavigation={() => setCommandTarget((current) => current?.kind === "job"
                   ? { workspace: "work", kind: "crm-view", id: "jobs", query: "", nonce: Date.now() }
@@ -2329,16 +2435,16 @@ export function DirectTradeDashboard() {
                 />
               )}
 
-              {workspace === "leads" && <>
+              {workspace === "work" && activeWorkView === "leads" && <>
                 <section
                   id="opportunity-inbox"
                   className="dashboard-panel dashboard-opportunities"
                   aria-labelledby="dashboard-opportunities-title"
                 >
                   <div className="dashboard-panel-heading">
-                    <span>Opportunity inbox</span>
+                    <span>Australian Energy Assessments and TLink supplied leads</span>
                     <h2 id="dashboard-opportunities-title">
-                      Privacy-safe scopes matched to this business
+                      Protected leads matched to this business
                     </h2>
                     <p>
                       Public enquiries show each business only the details the household agreed to share. Quick upgrade requests include the postcode, selected services, any written message and full property address. Email, name and phone appear only when selected. Customer account project contact and street details stay protected until the customer chooses this business.
@@ -2384,7 +2490,7 @@ export function DirectTradeDashboard() {
                           <span>Status</span>
                           <select value={leadStatusFilter} onChange={(event) => setLeadStatusFilter(event.target.value)}>
                             <option value="">All statuses</option>
-                            {["offered", "viewed", "interested", "declined", "connected", "closed"].map((value) => <option key={value} value={value}>{value === "offered" ? "New" : value.replaceAll("_", " ")}</option>)}
+                            {["offered", "viewed", "interested", "connected"].map((value) => <option key={value} value={value}>{value === "offered" ? "New" : value.replaceAll("_", " ")}</option>)}
                           </select>
                         </label>
                         <label>
@@ -2414,11 +2520,31 @@ export function DirectTradeDashboard() {
                           )}
                         </div>
                       </div>
-                      {visibleLeadOpportunities.length ? <div className="dashboard-opportunity-list">
+                      {visibleLeadOpportunities.length ? <div className="dashboard-lead-workspace">
+                      <nav className="dashboard-lead-list" aria-label="Available leads">
+                        {visibleLeadOpportunities.map((opportunity) => {
+                          const selected = selectedLeadOpportunity?.matchId === opportunity.matchId;
+                          const customerName = opportunity.customerContact?.name.trim()
+                            || opportunity.title
+                            || "Customer enquiry";
+                          return <button
+                            key={opportunity.matchId}
+                            type="button"
+                            className={selected ? "active" : ""}
+                            aria-current={selected ? "true" : undefined}
+                            aria-controls={`opportunity-${opportunity.matchId}`}
+                            onClick={() => setSelectedOpportunityMatchId(opportunity.matchId)}
+                          >
+                            <span>{opportunity.platformOnly ? "Australian Energy Assessments protected lead" : "Australian Energy Assessments supplied lead"} | {opportunity.matchStatus === "offered" ? "New" : opportunity.matchStatus.replaceAll("_", " ")}</span>
+                            <strong>{customerName}</strong>
+                            <p>{opportunity.enquiryPack?.summary || opportunity.summary}</p>
+                            <small>{opportunityBroadLocation(opportunity)} | {opportunity.timing.replaceAll("_", " ")}</small>
+                          </button>;
+                        })}
+                      </nav>
+                      <div className="dashboard-opportunity-list dashboard-lead-preview" aria-live="polite">
                       {visibleLeadOpportunities.map((opportunity) => {
-                        const isExpanded = expandedOpportunityMatchIds.has(
-                          opportunity.matchId,
-                        );
+                        const isExpanded = selectedLeadOpportunity?.matchId === opportunity.matchId;
                         const releasedCustomerContact = opportunity.customerContact;
                         const releasedCustomerName =
                           releasedCustomerContact?.name.trim() || "";
@@ -2426,7 +2552,7 @@ export function DirectTradeDashboard() {
                           || opportunity.title
                           || "Customer enquiry";
                         const detailId = `opportunity-details-${opportunity.matchId}`;
-                        const toggleId = `opportunity-toggle-${opportunity.matchId}`;
+                        const previewHeadingId = `opportunity-heading-${opportunity.matchId}`;
                         const customerIdentityId =
                           `opportunity-customer-contact-${opportunity.matchId}`;
                         const customerIdentityHeadingId =
@@ -2441,14 +2567,15 @@ export function DirectTradeDashboard() {
                           key={opportunity.matchId}
                           id={`opportunity-${opportunity.matchId}`}
                           tabIndex={-1}
-                          className={`dashboard-opportunity-card status-${opportunity.matchStatus}${isExpanded ? " expanded" : " collapsed"}${focusedOpportunityMatchId === opportunity.matchId ? " notification-target" : ""}`}
+                          hidden={!isExpanded}
+                          className={`dashboard-opportunity-card status-${opportunity.matchStatus} expanded${focusedOpportunityMatchId === opportunity.matchId ? " notification-target" : ""}`}
                         >
                           <header>
                             <div className="dashboard-opportunity-heading">
                               <span>
                                 {opportunityBroadLocation(opportunity)} | {opportunity.distanceBand}
                               </span>
-                              <h3>{customerDisplayName}</h3>
+                              <h3 id={previewHeadingId}>{customerDisplayName}</h3>
                               {releasedCustomerName && (
                                 <span className="dashboard-connected-customer-scope">
                                   {opportunity.title}
@@ -2461,21 +2588,17 @@ export function DirectTradeDashboard() {
                                   ? "New"
                                   : opportunity.matchStatus.replaceAll("_", " ")}
                               </strong>
-                              <button
-                                id={toggleId}
+                              {(["offered", "viewed"].includes(opportunity.matchStatus)
+                                || (opportunity.platformOnly && opportunity.matchStatus === "interested")) && <button
                                 type="button"
-                                aria-expanded={isExpanded}
-                                aria-controls={
-                                  releasedCustomerContact
-                                    ? `${customerIdentityId} ${detailId}`
-                                    : detailId
-                                }
-                                onClick={() =>
-                                  toggleOpportunityExpanded(opportunity.matchId)
-                                }
+                                className="dashboard-lead-dismiss"
+                                aria-label={`Remove ${customerDisplayName} from this business's leads`}
+                                title="Remove from this business only"
+                                disabled={opportunityBusy === opportunity.matchId}
+                                onClick={() => dismissOpportunity(opportunity)}
                               >
-                                {isExpanded ? "Collapse lead" : "Expand lead"}
-                              </button>
+                                <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" /></svg>
+                              </button>}
                             </div>
                           </header>
                           {releasedCustomerContact && (
@@ -2576,7 +2699,7 @@ export function DirectTradeDashboard() {
                           <div
                             id={detailId}
                             className="dashboard-opportunity-details"
-                            aria-labelledby={toggleId}
+                            aria-labelledby={previewHeadingId}
                             hidden={!isExpanded}
                           >
                             {isExpanded && (
@@ -2638,7 +2761,7 @@ export function DirectTradeDashboard() {
                               </span>
                             ))}
                           </div>
-                          {opportunity.matchStatus === "connected" && !releasedCustomerContact ? (
+                          {opportunity.matchStatus === "connected" && !releasedCustomerContact && (
                             <div className="dashboard-contact-allowance">
                               <div>
                                 <strong>Platform coordination active</strong>
@@ -2647,74 +2770,62 @@ export function DirectTradeDashboard() {
                                 </span>
                               </div>
                             </div>
-                          ) : opportunity.matchStatus === "connected" ? null : (
-                            <div className="dashboard-opportunity-actions">
-                              <button
-                                type="button"
-                                className="primary"
-                                disabled={
-                                  opportunityBusy === opportunity.matchId ||
-                                  (opportunity.platformOnly && opportunity.matchStatus === "interested")
-                                }
-                                onClick={() =>
-                                  void respondToOpportunity(
-                                    opportunity.matchId,
-                                    "interested",
-                                  )
-                                }
-                              >
-                                {opportunity.matchStatus === "interested"
-                                  ? opportunity.platformOnly ? "Interest recorded" : "Continue quote"
-                                  : opportunity.platformOnly ? "I'm interested" : "Create job and quote"}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={
-                                  opportunityBusy === opportunity.matchId ||
-                                  opportunity.matchStatus === "declined"
-                                }
-                                onClick={() =>
-                                  void respondToOpportunity(
-                                    opportunity.matchId,
-                                    "declined",
-                                  )
-                                }
-                              >
-                                {opportunity.matchStatus === "declined"
-                                  ? "Declined"
-                                  : "Not suitable"}
-                              </button>
-                              {opportunity.matchStatus === "offered" && (
-                                <button
-                                  type="button"
-                                  disabled={
-                                    opportunityBusy === opportunity.matchId
-                                  }
-                                  onClick={() =>
-                                    void respondToOpportunity(
-                                      opportunity.matchId,
-                                      "viewed",
-                                    )
-                                  }
-                                >
-                                  Save for review
-                                </button>
-                              )}
-                            </div>
                           )}
-                          {opportunity.platformOnly && ["interested", "connected"].includes(opportunity.matchStatus) && <InstallerPlatformQuote matchId={opportunity.matchId} initialQuote={opportunity.quote} onStatus={setOpportunityStatus} />}
+                          {opportunity.platformOnly && ["interested", "connected"].includes(opportunity.matchStatus) && <div id={`lead-quote-${opportunity.matchId}`}><InstallerPlatformQuote matchId={opportunity.matchId} initialQuote={opportunity.quote} onStatus={setOpportunityStatus} /></div>}
                           {opportunity.platformOnly && opportunity.quote?.customerDecision === "accepted" && <>
                             <InstallerArrivalWindows matchId={opportunity.matchId} initialProposal={opportunity.arrivalProposal} onStatus={setOpportunityStatus} />
                             <section className="dashboard-opportunity-conversion" aria-label="Customer contact workflow action"><div><strong>Create the CRM job when you are ready to arrange the work</strong><span>If the customer selected an arrival window, use it when creating the appointment in Work. The proposal itself does not create an appointment.</span></div><button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId)}>Create job</button></section>
                           </>}
                           {opportunity.platformOnly && opportunity.matchStatus === "connected" && !releasedCustomerContact && opportunity.quote?.customerDecision !== "accepted" && <div className="dashboard-contact-allowance"><div><strong>Waiting for the customer to choose a business</strong><span>Contact details remain protected until the customer chooses to get in touch with this business.</span></div></div>}
+                          {(opportunity.matchStatus !== "connected" || !opportunity.platformOnly) && <div className="dashboard-opportunity-actions dashboard-lead-preview-actions">
+                            {opportunity.matchStatus === "offered" && <button
+                              type="button"
+                              disabled={opportunityBusy === opportunity.matchId}
+                              onClick={() => void respondToOpportunity(opportunity.matchId, "viewed")}
+                            >
+                              Save for review
+                            </button>}
+                            <button
+                              type="button"
+                              className="primary"
+                              disabled={opportunityBusy === opportunity.matchId}
+                              onClick={() => {
+                                if (!opportunity.platformOnly && ["interested", "connected"].includes(opportunity.matchStatus)) {
+                                  void openPublicLeadQuote(opportunity);
+                                  return;
+                                }
+                                if (opportunity.platformOnly && opportunity.matchStatus === "interested") {
+                                  const quotePanel = document.getElementById(`lead-quote-${opportunity.matchId}`);
+                                  quotePanel?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                  quotePanel?.querySelector<HTMLElement>("input, textarea, select, button")?.focus({ preventScroll: true });
+                                  return;
+                                }
+                                void respondToOpportunity(opportunity.matchId, "interested");
+                              }}
+                            >
+                              {opportunity.platformOnly && opportunity.matchStatus === "interested"
+                                ? "Edit quote"
+                                : !opportunity.platformOnly && ["interested", "connected"].includes(opportunity.matchStatus)
+                                  ? "Continue quote"
+                                  : "Quote"}
+                            </button>
+                          </div>}
+                          {opportunity.platformOnly && opportunity.matchStatus === "connected" && <div className="dashboard-opportunity-actions dashboard-lead-preview-actions"><button
+                            type="button"
+                            className="primary"
+                            onClick={() => {
+                              const quotePanel = document.getElementById(`lead-quote-${opportunity.matchId}`);
+                              quotePanel?.scrollIntoView({ behavior: "smooth", block: "start" });
+                              quotePanel?.querySelector<HTMLElement>("input, textarea, select, button")?.focus({ preventScroll: true });
+                            }}
+                          >{opportunity.quote?.customerDecision === "accepted" ? "View quote" : "Edit quote"}</button></div>}
                               </>
                             )}
                           </div>
                         </article>
                         );
                       })}
-                    </div> : <div className="dashboard-empty-state"><strong>No leads match these filters</strong><p>Clear one or more filters to return to the full opportunity inbox.</p></div>}
+                    </div></div> : <div className="dashboard-empty-state"><strong>No leads match these filters</strong><p>Clear one or more filters to return to the full opportunity inbox.</p></div>}
                     </>
                   ) : opportunityLoadError ? (
                     <div className="dashboard-empty-state" role="alert">

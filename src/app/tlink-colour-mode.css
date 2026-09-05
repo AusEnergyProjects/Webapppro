@@ -857,60 +857,10 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   color: var(--trade-accent-readable);
 }
 
-/* Installer enquiry inbox. */
-html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .enquiry-create,
-  .enquiry-list > button,
-  .enquiry-detail
-) {
-  background: var(--trade-surface);
-  border-color: var(--trade-line);
-  color: var(--trade-ink);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .enquiry-contact,
-  .enquiry-converted,
-  .enquiry-history li,
-  .trade-import-mapping
-) {
+/* Guided data import mapping. */
+html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-import-mapping {
   background: var(--trade-surface-soft);
   border-color: var(--trade-line);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .enquiry-list span,
-  .enquiry-list small,
-  .enquiry-detail > header p
-) {
-  color: var(--trade-muted);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .enquiry-detail > header > strong {
-  background: var(--trade-accent-soft);
-  color: var(--trade-accent-soft-ink);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .enquiry-protected {
-  background: #352b16;
-  border-color: #735f2d;
-  color: #f4d58d;
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .enquiry-duplicates,
-  .enquiry-history,
-  .enquiry-duplicate-list label,
-  .enquiry-new-choice
-) {
-  border-color: var(--trade-line);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .enquiry-duplicate-list label,
-  .enquiry-new-choice
-) {
-  background: var(--trade-surface-raised);
 }
 
 /* Detailed CRM filters, wizards and job controls. */
@@ -1402,6 +1352,7 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-timeline li::bef
 /* Leads and marketplace retain status/accent hue on night-safe surfaces. */
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .dashboard-lead-filters,
+  .dashboard-lead-list,
   .dashboard-opportunity-card,
   .dashboard-connected-customer-identity,
   .dashboard-enquiry-pack,
@@ -1412,6 +1363,30 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
 ) {
   background: var(--trade-surface-soft);
   border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-lead-list > button {
+  background: var(--trade-surface-raised);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-lead-list > button.active {
+  background: var(--trade-accent-soft);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-lead-list > button > span {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-opportunity-card-controls > .dashboard-lead-dismiss {
+  background: #2b1d1b;
+  border-color: #75483f;
+  color: #ffb2a3;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-opportunity-card-controls > .dashboard-lead-dismiss:hover {
+  background: #3b2421;
+  border-color: #ad6759;
 }
 
 html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-opportunity-card.status-offered {
@@ -1478,6 +1453,11 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .dashboard-opportunity-compact-summary dl > div,
   .dashboard-enquiry-pack-grid > div,
   .dashboard-enquiry-evidence,
+  .dashboard-enquiry-documents article,
+  .dashboard-opportunity-conversion,
+  .dashboard-contact-allowance,
+  .dashboard-contact-allowance.released dl div,
+  .dashboard-property-context div,
   .marketplace-list-form,
   .marketplace-view-settings > div,
   .marketplace-selected-items article,
@@ -1488,6 +1468,14 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
 ) {
   background: var(--trade-surface-raised);
   border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-contact-allowance.released dt {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-contact-allowance.released dd {
+  color: var(--trade-ink);
 }
 
 html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-opportunity-compact-summary dd {
@@ -1526,6 +1514,7 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
 
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .dashboard-opportunity-card-controls > button,
+  .dashboard-opportunity-actions button:not(.primary),
   .dashboard-enquiry-evidence button,
   .marketplace-table-navigation button,
   .marketplace-view-actions button:last-child

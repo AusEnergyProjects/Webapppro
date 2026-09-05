@@ -346,6 +346,12 @@ test("deterministic workflow writes replay once and an incomplete transaction ro
   };
   assert.throws(failAtomically, /CHECK constraint failed/);
   assert.equal(broken.prepare("SELECT COUNT(*) count FROM customers").get().count, 0);
+  assert.match(server, /const existing = await existingWorkflow\(db, installerUid, matchId, ids\);[\s\S]*if \(existing\) return workflowResponse\(existing, true\);[\s\S]*if \(expectedMatchStatus === "connected"\)[\s\S]*PUBLIC_LEAD_QUOTE_WORKFLOW_UNAVAILABLE/);
+  assert.match(opportunityRoute, /\? = 'open_public_quote' AND o\.status IN \('open', 'paused'\)[\s\S]*\? != 'open_public_quote' AND o\.status = 'open'[\s\S]*o\.expires_at > \?/);
+  assert.match(server, /JOIN trade_crm_quote_versions v[\s\S]*v\.quote_id = q\.id[\s\S]*v\.version_number = q\.current_version_number/);
+  assert.doesNotMatch(server, /JOIN trade_crm_quote_versions v\s*ON v\.id = \?/);
+  assert.match(server, /PUBLIC_LEAD_QUOTE_STATE_CHANGED[\s\S]*UPDATE trade_opportunity_matches[\s\S]*INSERT OR IGNORE INTO trade_crm_customers/);
+  assert.match(server, /guarded_release\.status = 'active'[\s\S]*public_trade_lead_contact_releases current_release[\s\S]*guarded_opportunity\.expires_at > \?/);
   database.close();
   broken.close();
 });
@@ -569,8 +575,18 @@ test("Interested opens the existing editable quote tool and the brief stays priv
     quoteId: `public-lead-quote-${matchId}`,
   })?.jobTab, "quote");
   assert.match(dashboard, /kind: "job"/);
-  assert.match(dashboard, /opportunity\.platformOnly \? "Interest recorded" : "Continue quote"/);
-  assert.match(dashboard, /opportunity\.platformOnly \? "I'm interested" : "Create job and quote"/);
+  assert.match(
+    dashboard,
+    /void respondToOpportunity\(opportunity\.matchId, "interested"\)/,
+  );
+  assert.match(
+    dashboard,
+    /opportunity\.platformOnly && opportunity\.matchStatus === "interested"[\s\S]*\? "Edit quote"[\s\S]*\? "Continue quote"[\s\S]*: "Quote"/,
+  );
+  assert.match(
+    dashboard,
+    /document\.getElementById\(`lead-quote-\$\{opportunity\.matchId\}`\)[\s\S]*scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)[\s\S]*querySelector<HTMLElement>\("input, textarea, select, button"\)\?\.focus/,
+  );
   assert.doesNotMatch(dashboard, /Open customer quote|Your customer quote is ready/);
   assert.doesNotMatch(dashboard, /Account readiness|dashboard-readiness|dashboard-main-grid/);
   const directJob = quoteRoute.slice(quoteRoute.indexOf("async function directJob"), quoteRoute.indexOf("async function currentPublicLeadJob"));

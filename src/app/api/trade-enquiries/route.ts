@@ -10,21 +10,11 @@ import { findDirectCustomerDuplicates } from "@/lib/trade-customer-dedup-server"
 import {
   publicPlanContactReleaseAccessSql,
 } from "@/lib/public-plan-enquiry.mjs";
-import { ENERGY_SERVICE_IDS } from "@/lib/energy-service-catalogue.mjs";
 import { projectPublicMarketplaceEnquiry } from "@/lib/public-marketplace-enquiry-projection.mjs";
 
 export const runtime = "edge";
 
 const ENQUIRY_STATUSES = new Set(["new", "contacted", "site_visit", "quote_required", "quoted", "booked", "won", "lost"]);
-const CUSTOMER_TYPES = new Set(["residential", "business"]);
-const STATES = new Set(["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"]);
-const SERVICE_CATEGORIES = new Set([
-  ...ENERGY_SERVICE_IDS,
-  "electrical",
-  "plumbing",
-  "mounting-hardware",
-  "controls",
-]);
 const publicMarketplaceReadJoins = (enquiryAlias: string) => `
   LEFT JOIN trade_opportunity_matches current_public_match
     ON current_public_match.id = ${enquiryAlias}.opportunity_match_id
@@ -113,8 +103,8 @@ function errorResponse(error: unknown) {
   const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the business profile first." }, 404);
-  if (code === "INSTALLER_ONLY" || code === "TRADE_ROLE_REQUIRED") return adminJson({ ok: false, error: "The enquiry inbox is available to installer accounts only." }, 403);
-  if (code === "ACCOUNT_INACTIVE" || code === "FULL_ACCESS_REQUIRED" || code === "ABN_REVIEW_REQUIRED" || code === "EMAIL_VERIFICATION_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using the enquiry inbox." }, 403);
+  if (code === "INSTALLER_ONLY" || code === "TRADE_ROLE_REQUIRED") return adminJson({ ok: false, error: "Protected lead records are available to installer accounts only." }, 403);
+  if (code === "ACCOUNT_INACTIVE" || code === "FULL_ACCESS_REQUIRED" || code === "ABN_REVIEW_REQUIRED" || code === "EMAIL_VERIFICATION_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using protected lead records." }, 403);
   if (code === "ENQUIRY_NOT_FOUND") return adminJson({ ok: false, error: "Enquiry not found." }, 404);
   if (code === "PROTECTED_CUSTOMER_BOUNDARY") return adminJson({ ok: false, error: "Protected marketplace details cannot be copied into private customer records. Continue in the marketplace workflow." }, 409);
   return adminJson({ ok: false, error: "The private enquiry request could not be completed." }, 500);
@@ -141,22 +131,6 @@ async function ownedEnquiry(uid: string, id: string) {
   const projected = projectPublicMarketplaceEnquiry(row);
   if (!projected) throw new Error("ENQUIRY_NOT_FOUND");
   return projected;
-}
-
-function enquiryValues(body: Record<string, unknown>) {
-  const customerType = cleanAdminText(body.customerType, 20).toLowerCase() || "residential";
-  const addressState = cleanAdminText(body.addressState, 10).toUpperCase();
-  const serviceCategory = cleanAdminText(body.serviceCategory, 60).toLowerCase() || "other";
-  if (!CUSTOMER_TYPES.has(customerType) || (addressState && !STATES.has(addressState)) || !SERVICE_CATEGORIES.has(serviceCategory)) throw new Error("INVALID_ENQUIRY");
-  return {
-    customerType, firstName: cleanAdminText(body.firstName, 80), lastName: cleanAdminText(body.lastName, 80),
-    businessName: cleanAdminText(body.businessName, 140), businessNumber: cleanAdminText(body.businessNumber, 30),
-    email: cleanAdminText(body.email, 180).toLowerCase(), phone: cleanAdminText(body.phone, 40),
-    addressLine1: cleanAdminText(body.addressLine1, 140), addressLine2: cleanAdminText(body.addressLine2, 140),
-    suburb: cleanAdminText(body.suburb, 80), addressState, postcode: cleanAdminText(body.postcode, 12),
-    serviceCategory, description: cleanAdminText(body.description, 3000), urgency: cleanAdminText(body.urgency, 20) || "standard",
-    preferredDate: cleanAdminText(body.preferredDate, 10), externalRecordId: cleanAdminText(body.externalRecordId, 120),
-  };
 }
 
 export async function GET(request: Request) {
@@ -205,19 +179,10 @@ export async function POST(request: Request) {
     const db = getD1();
     const now = new Date().toISOString();
     if (action === "create") {
-      const values = enquiryValues(body);
-      if (!values.businessName && !values.firstName && !values.lastName) return adminJson({ ok: false, error: "Add a person or business name." }, 400);
-      const id = crypto.randomUUID();
-      await db.batch([
-        db.prepare(`INSERT INTO trade_crm_enquiries
-          (id, firebase_uid, source_type, source_reference, external_record_id, status, customer_type, first_name, last_name,
-           business_name, business_number, email, phone, address_line_1, address_line_2, suburb, address_state, postcode,
-           service_category, service_categories, description, urgency, preferred_date, protected_source, duplicate_decision, record_status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'unchecked', 'active', ?, ?)`)
-          .bind(id, uid, cleanAdminText(body.sourceType, 40) || "direct", id, values.externalRecordId, values.customerType, values.firstName, values.lastName, values.businessName, values.businessNumber, values.email, values.phone, values.addressLine1, values.addressLine2, values.suburb, values.addressState, values.postcode, values.serviceCategory, JSON.stringify([values.serviceCategory]), values.description, values.urgency, values.preferredDate, now, now),
-        db.prepare("INSERT INTO trade_crm_enquiry_events (id, enquiry_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, 'created', 'Direct enquiry recorded.', ?)").bind(crypto.randomUUID(), id, uid, now),
-      ]);
-      return adminJson({ ok: true, id }, 201);
+      return adminJson({
+        ok: false,
+        error: "Add trade-sourced work as a customer or job. Leads are reserved for Australian Energy Assessments supplied opportunities.",
+      }, 410);
     }
     const enquiryId = cleanAdminText(body.enquiryId, 180);
     const enquiry = await ownedEnquiry(uid, enquiryId);

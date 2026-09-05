@@ -8,6 +8,7 @@ export type WorkspaceListPreferences = {
   sort: string;
   pageSize: number;
   jobColumnOrderVersion?: number;
+  customerColumnOrderVersion?: number;
   type?: string;
   synthetic?: string;
   customer?: string;
@@ -19,6 +20,8 @@ export type WorkspaceListPreferences = {
   appointmentId?: string;
   scheduledFrom?: string;
   scheduledTo?: string;
+  createdFrom?: string;
+  createdTo?: string;
   invoiceStatus?: string;
   customerReference?: string;
   firstName?: string;

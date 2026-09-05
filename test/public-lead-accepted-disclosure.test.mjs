@@ -59,7 +59,7 @@ class TestD1Statement {
   }
 }
 
-function testD1(database, { compoundSelectLimit = Infinity } = {}) {
+function testD1(database, { compoundSelectLimit = Infinity, beforeBatch = null } = {}) {
   const assertWithinProductionLimits = (sql) => {
     const compoundSelectTerms = 1 + (String(sql).match(/\bUNION(?:\s+ALL)?\s+SELECT\b/gi) || []).length;
     if (compoundSelectTerms > compoundSelectLimit) {
@@ -72,6 +72,7 @@ function testD1(database, { compoundSelectLimit = Infinity } = {}) {
       return new TestD1Statement(database, sql);
     },
     async batch(statements) {
+      beforeBatch?.(statements);
       database.exec("BEGIN IMMEDIATE");
       try {
         const results = statements.map((statement) => statement.runSync());
@@ -474,6 +475,85 @@ test("Interested persists only disclosed customer context and survives later mar
   assert.match(crmRoute, /const protectedCustomer = String\(row\.customer_source \|\| ""\) === "platform_private"/);
   assert.doesNotMatch(quoteSql, /trade_opportunit|public_trade_lead_contact_releases/);
   assert.doesNotMatch(quoteDocumentServer, /public_trade_lead_contact_releases|trade_opportunity_matches/);
+  database.close();
+});
+
+test("connected public lead reopens the current quote version without duplicating or downgrading CRM records", async () => {
+  const { database, db, matchId, now } = workflowFixture();
+  const ids = publicLeadQuoteWorkflowIds(matchId);
+  await workflowServer.startPublicLeadQuoteWorkflow(db, "trade-a", matchId, now);
+
+  const versionTwoId = "public-lead-quote-version-v2";
+  database.prepare(`INSERT INTO trade_crm_quote_versions
+    (id, quote_id, firebase_uid, version_number, status, acceptance_email,
+     subtotal_cents, tax_cents, total_cents, terms, customer_message, valid_until,
+     consent_statement, issued_at, created_at, updated_at)
+    SELECT ?, quote_id, firebase_uid, 2, status, acceptance_email,
+      subtotal_cents, tax_cents, total_cents, terms, customer_message, valid_until,
+      consent_statement, issued_at, created_at, updated_at
+    FROM trade_crm_quote_versions WHERE id = ?`)
+    .run(versionTwoId, ids.quoteVersionId);
+  database.prepare("UPDATE trade_crm_quotes SET current_version_number = 2 WHERE id = ?")
+    .run(ids.quoteId);
+  database.prepare("UPDATE trade_opportunity_matches SET status = 'connected' WHERE id = ?")
+    .run(matchId);
+
+  const countsBefore = {
+    customers: database.prepare("SELECT COUNT(*) count FROM trade_crm_customers").get().count,
+    workOrders: database.prepare("SELECT COUNT(*) count FROM trade_work_orders").get().count,
+    quotes: database.prepare("SELECT COUNT(*) count FROM trade_crm_quotes").get().count,
+  };
+  const replay = await workflowServer.startPublicLeadQuoteWorkflow(
+    db,
+    "trade-a",
+    matchId,
+    "2026-08-12T02:00:00.000Z",
+    "connected",
+  );
+
+  assert.equal(replay.replayed, true);
+  assert.equal(replay.quoteVersionId, versionTwoId);
+  assert.deepEqual({
+    customers: database.prepare("SELECT COUNT(*) count FROM trade_crm_customers").get().count,
+    workOrders: database.prepare("SELECT COUNT(*) count FROM trade_work_orders").get().count,
+    quotes: database.prepare("SELECT COUNT(*) count FROM trade_crm_quotes").get().count,
+  }, countsBefore);
+  assert.equal(database.prepare("SELECT status FROM trade_opportunity_matches WHERE id = ?")
+    .get(matchId).status, "connected");
+  database.close();
+});
+
+test("a concurrent business-only bin wins before public lead CRM creation without leaving records", async () => {
+  const { database, matchId, now } = workflowFixture();
+  let raced = false;
+  const db = testD1(database, {
+    beforeBatch(statements) {
+      if (
+        raced
+        || !statements.some((statement) => statement.sql.includes("PUBLIC_LEAD_QUOTE_STATE_CHANGED"))
+      ) return;
+      database.prepare("UPDATE trade_opportunity_matches SET status = 'declined' WHERE id = ?")
+        .run(matchId);
+      raced = true;
+    },
+  });
+
+  await assert.rejects(
+    workflowServer.startPublicLeadQuoteWorkflow(db, "trade-a", matchId, now),
+    /malformed JSON|PUBLIC_LEAD_QUOTE_STATE_CHANGED/,
+  );
+  assert.equal(raced, true);
+  assert.equal(database.prepare("SELECT status FROM trade_opportunity_matches WHERE id = ?")
+    .get(matchId).status, "declined");
+  for (const table of [
+    "trade_crm_customers",
+    "trade_work_orders",
+    "trade_crm_job_details",
+    "trade_crm_quotes",
+    "trade_crm_quote_versions",
+  ]) {
+    assert.equal(database.prepare(`SELECT COUNT(*) count FROM ${table}`).get().count, 0, table);
+  }
   database.close();
 });
 

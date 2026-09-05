@@ -279,11 +279,14 @@ test("lead card opens the complete plan and represents every returned shared fil
   );
   const packPosition = leadCard.indexOf("<EnquiryPack");
   const actionPosition = leadCard.indexOf(
-    'className="dashboard-opportunity-actions"',
+    'className="dashboard-opportunity-actions dashboard-lead-preview-actions"',
   );
 
   assert.ok(packPosition > -1);
   assert.ok(actionPosition > packPosition);
+  assert.match(dashboard, /className="dashboard-lead-list" aria-label="Available leads"/);
+  assert.match(leadCard, /const isExpanded = selectedLeadOpportunity\?\.matchId === opportunity\.matchId/);
+  assert.match(leadCard, /hidden=\{!isExpanded\}/);
   assert.match(dashboard, /Open complete plan/);
   assert.match(dashboard, /Download complete plan PDF/);
   assert.match(dashboard, /trade-opportunity-plan\?matchId=/);
@@ -487,7 +490,7 @@ test("opportunity deep links are scrubbed only when leaving an authenticated UID
     "  useEffect(() => {",
   );
 
-  assert.match(navigationScrub, /initialOpportunityMatchId\.current = "";/);
+  assert.match(navigationScrub, /pendingOpportunityMatchId\.current = "";/);
   assert.match(navigationScrub, /searchParams\.delete\("matchId"\)/);
   assert.match(
     navigationScrub,
@@ -498,7 +501,7 @@ test("opportunity deep links are scrubbed only when leaving an authenticated UID
     /nextUrl\.hash === "#opportunity-inbox"[\s\S]*nextUrl\.hash = ""/,
   );
   assert.match(navigationScrub, /window\.history\.replaceState\(/);
-  assert.doesNotMatch(protectedClear, /initialOpportunityMatchId\.current/);
+  assert.doesNotMatch(protectedClear, /pendingOpportunityMatchId\.current/);
   assert.match(
     authTransition,
     /const previousUid = protectedIdentityUid\.current;[\s\S]*shouldClearOpportunityDeepLink\([\s\S]*previousUid \|\| "",[\s\S]*nextUid \|\| ""[\s\S]*scrubProtectedOpportunityNavigation\(\);[\s\S]*protectedIdentityUid\.current = nextUid;/,
