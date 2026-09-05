@@ -269,3 +269,21 @@ test("night mode covers detailed job, task, and commercial handoff surfaces", ()
   assert.match(depositRule, /background:\s*#[0-3][0-9a-f]{5};/i);
   assert.match(depositRule, /color:\s*var\(--trade-ink\);/);
 });
+
+test("night mode keeps consent-released lead contact details readable", () => {
+  const contactDetailRule = extractBalancedBlock(
+    colourModeStyles,
+    'html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-connected-customer-contact-grid dd {',
+  );
+  const contactLinkRule = extractBalancedBlock(
+    colourModeStyles,
+    'html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-connected-customer-contact-grid a {',
+  );
+
+  assert.match(contactDetailRule, /color:\s*var\(--trade-ink\);/);
+  assert.match(contactLinkRule, /color:\s*var\(--trade-accent-readable\);/);
+  assert.match(
+    colourModeStyles,
+    /\.dashboard-connected-customer-intro > p,[\s\S]*\.dashboard-connected-customer-contact-grid dt[\s\S]*color:\s*var\(--trade-muted\);/,
+  );
+});

@@ -1470,6 +1470,25 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   border-color: var(--trade-line);
 }
 
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-connected-customer-intro > span {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .dashboard-connected-customer-intro > p,
+  .dashboard-connected-customer-contact-grid dt
+) {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-connected-customer-contact-grid dd {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-connected-customer-contact-grid a {
+  color: var(--trade-accent-readable);
+}
+
 html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-contact-allowance.released dt {
   color: var(--trade-muted);
 }
