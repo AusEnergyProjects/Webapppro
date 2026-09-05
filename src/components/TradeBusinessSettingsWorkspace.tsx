@@ -144,8 +144,8 @@ const summaryGridStyle: CSSProperties = {
 };
 
 const summaryCardStyle: CSSProperties = {
-  background: "#f6faf8",
-  border: "1px solid #d7e5df",
+  background: "var(--trade-surface-soft)",
+  border: "1px solid var(--trade-line)",
   borderRadius: 12,
   display: "grid",
   gap: 5,
@@ -160,7 +160,7 @@ const fieldGridStyle: CSSProperties = {
 };
 
 const fieldStyle: CSSProperties = {
-  color: "#173f34",
+  color: "var(--trade-ink)",
   display: "grid",
   fontSize: ".72rem",
   fontWeight: 800,
@@ -168,10 +168,10 @@ const fieldStyle: CSSProperties = {
 };
 
 const controlStyle: CSSProperties = {
-  background: "#ffffff",
-  border: "1.5px solid #bcd3ca",
+  background: "var(--trade-field)",
+  border: "1.5px solid var(--trade-line)",
   borderRadius: 10,
-  color: "#163c32",
+  color: "var(--trade-field-ink)",
   minHeight: 44,
   padding: "10px 12px",
   width: "100%",
@@ -1223,7 +1223,7 @@ export function TradeBusinessSettingsWorkspace({
               <article style={summaryCardStyle}>
                 <span
                   style={{
-                    color: "var(--trade-accent)",
+                    color: "var(--trade-accent-readable)",
                     fontSize: ".62rem",
                     fontWeight: 900,
                     textTransform: "uppercase",
@@ -1232,14 +1232,14 @@ export function TradeBusinessSettingsWorkspace({
                   Account type
                 </span>
                 <strong>{accountTypeLabel(profile.partnerType)}</strong>
-                <small style={{ color: "#63776f", lineHeight: 1.4 }}>
+                <small style={{ color: "var(--trade-muted)", lineHeight: 1.4 }}>
                   Fixed when the business account is created
                 </small>
               </article>
               <article style={summaryCardStyle}>
                 <span
                   style={{
-                    color: "var(--trade-accent)",
+                    color: "var(--trade-accent-readable)",
                     fontSize: ".62rem",
                     fontWeight: 900,
                     textTransform: "uppercase",
@@ -1248,7 +1248,7 @@ export function TradeBusinessSettingsWorkspace({
                   Verification
                 </span>
                 <strong>{verificationLabel(profile.verificationStatus)}</strong>
-                <small style={{ color: "#63776f", lineHeight: 1.4 }}>
+                <small style={{ color: "var(--trade-muted)", lineHeight: 1.4 }}>
                   {profile.accountStatus === "active"
                     ? "Account access is active"
                     : `Account status: ${profile.accountStatus.replaceAll("_", " ")}`}
@@ -1257,7 +1257,7 @@ export function TradeBusinessSettingsWorkspace({
               <article style={summaryCardStyle}>
                 <span
                   style={{
-                    color: "var(--trade-accent)",
+                    color: "var(--trade-accent-readable)",
                     fontSize: ".62rem",
                     fontWeight: 900,
                     textTransform: "uppercase",
@@ -1266,14 +1266,14 @@ export function TradeBusinessSettingsWorkspace({
                   Account contact
                 </span>
                 <strong>{profile.contactName || profile.businessName}</strong>
-                <small style={{ color: "#63776f", lineHeight: 1.4 }}>
+                <small style={{ color: "var(--trade-muted)", lineHeight: 1.4 }}>
                   {profile.phone || "Contact number not set"}
                 </small>
               </article>
             </div>
             <div style={summaryCardStyle}>
               <strong>{profile.businessName}</strong>
-              <span style={{ color: "#4f665e", fontSize: ".72rem" }}>
+              <span style={{ color: "var(--trade-muted)", fontSize: ".72rem" }}>
                 {[profile.addressLine1, profile.suburb, profile.addressState, profile.postcode]
                   .filter(Boolean)
                   .join(", ")}
@@ -1284,7 +1284,7 @@ export function TradeBusinessSettingsWorkspace({
                   target="_blank"
                   rel="noreferrer"
                   style={{
-                    color: "var(--trade-accent)",
+                    color: "var(--trade-accent-readable)",
                     fontSize: ".84rem",
                     fontWeight: 800,
                   }}
@@ -1327,10 +1327,10 @@ export function TradeBusinessSettingsWorkspace({
             </header>
             <div style={summaryCardStyle}>
               <strong>Team management has its own workspace</strong>
-              <span style={{ color: "#4f665e", fontSize: ".84rem", lineHeight: 1.5 }}>
+              <span style={{ color: "var(--trade-muted)", fontSize: ".84rem", lineHeight: 1.5 }}>
                 Add people, assign access and manage private licence and compliance files from Team.
               </span>
-              <a href="/direct-trade/dashboard?workspace=team" style={{ color: "var(--trade-accent)", fontSize: ".86rem", fontWeight: 850 }}>
+              <a href="/direct-trade/dashboard?workspace=team" style={{ color: "var(--trade-accent-readable)", fontSize: ".86rem", fontWeight: 850 }}>
                 Open Team
               </a>
             </div>
@@ -1371,7 +1371,7 @@ export function TradeBusinessSettingsWorkspace({
                     }
                     style={controlStyle}
                   />
-                  <small style={{ color: "#667b74", lineHeight: 1.4 }}>
+                  <small style={{ color: "var(--trade-muted)", lineHeight: 1.4 }}>
                     PNG or JPEG, up to 3 MB.{" "}
                     {profile.hasLogo ? "A logo is saved." : "No logo saved yet."}
                   </small>
@@ -1387,7 +1387,7 @@ export function TradeBusinessSettingsWorkspace({
                     }
                     style={controlStyle}
                   />
-                  <small style={{ color: "#667b74", lineHeight: 1.4 }}>
+                  <small style={{ color: "var(--trade-muted)", lineHeight: 1.4 }}>
                     PNG or JPEG, up to 3 MB.{" "}
                     {profile.hasBanner
                       ? "A banner is saved."
@@ -1717,7 +1717,7 @@ export function TradeBusinessSettingsWorkspace({
             {profile.partnerType === "installer" && (
               <fieldset
                 style={{
-                  border: "1px solid #d2e2dc",
+                  border: "1px solid var(--trade-line)",
                   borderRadius: 12,
                   padding: 14,
                 }}
@@ -1725,7 +1725,7 @@ export function TradeBusinessSettingsWorkspace({
                 <legend style={{ padding: "0 5px" }}>Lead services</legend>
                 <p
                   style={{
-                    color: "#61766f",
+                    color: "var(--trade-muted)",
                     fontSize: ".82rem",
                     lineHeight: 1.55,
                     margin: "0 0 12px",
@@ -1757,7 +1757,7 @@ export function TradeBusinessSettingsWorkspace({
                 </div>
                 <p
                   style={{
-                    color: "#365d52",
+                    color: "var(--trade-accent-readable)",
                     fontSize: ".82rem",
                     fontWeight: 800,
                     margin: "12px 0 0",
@@ -1768,12 +1768,12 @@ export function TradeBusinessSettingsWorkspace({
               </fieldset>
             )}
             <div>
-              <strong style={{ color: "#173f34", fontSize: ".82rem" }}>
+              <strong style={{ color: "var(--trade-ink)", fontSize: ".82rem" }}>
                 Serviceability
               </strong>
               <p
                 style={{
-                  color: "#61766f",
+                  color: "var(--trade-muted)",
                   fontSize: ".84rem",
                   lineHeight: 1.55,
                   margin: "5px 0 0",
@@ -1787,8 +1787,8 @@ export function TradeBusinessSettingsWorkspace({
               <fieldset
                 key={area.id || `service-area-${index}`}
                 style={{
-                  background: "#f6faf8",
-                  border: "1px solid #d2e2dc",
+                  background: "var(--trade-surface-soft)",
+                  border: "1px solid var(--trade-line)",
                   borderRadius: 12,
                   padding: 14,
                 }}
@@ -1840,7 +1840,7 @@ export function TradeBusinessSettingsWorkspace({
                     style={{
                       background: "transparent",
                       border: 0,
-                      color: "#9b3535",
+                      color: "color-mix(in srgb, #d86b5c 64%, var(--trade-ink))",
                       cursor: "pointer",
                       fontSize: ".68rem",
                       fontWeight: 850,
@@ -1906,7 +1906,7 @@ export function TradeBusinessSettingsWorkspace({
                 }
                 style={controlStyle}
               />
-              <small style={{ color: "#667b74", lineHeight: 1.45 }}>
+              <small style={{ color: "var(--trade-muted)", lineHeight: 1.45 }}>
                 Available fields: {"{business_name}"}, {"{quote_number}"} and{" "}
                 {"{customer_name}"}.
               </small>
@@ -1932,7 +1932,7 @@ export function TradeBusinessSettingsWorkspace({
                 placeholder="Scope assumptions, exclusions, payment and completion terms"
                 style={controlStyle}
               />
-              <small style={{ color: "#667b74", lineHeight: 1.45 }}>
+              <small style={{ color: "var(--trade-muted)", lineHeight: 1.45 }}>
                 These defaults can be edited on each quote before it is issued.
               </small>
             </label>
@@ -2124,10 +2124,10 @@ export function TradeBusinessSettingsWorkspace({
           <div style={{ display: "grid", gap: 14 }}>
             <div
               style={{
-                background: "#fff7f1",
-                border: "1px solid #edc9af",
+                background: "color-mix(in srgb, #8e2c2c 18%, var(--trade-surface))",
+                border: "1px solid color-mix(in srgb, #d86b5c 52%, var(--trade-line))",
                 borderRadius: 12,
-                color: "#5e3521",
+                color: "color-mix(in srgb, #e98576 42%, var(--trade-ink))",
                 display: "grid",
                 gap: 7,
                 padding: 16,
@@ -2196,8 +2196,8 @@ export function TradeBusinessSettingsWorkspace({
             tabIndex={-1}
             onKeyDown={handleCloseDialogKeyDown}
             style={{
-              background: "#ffffff",
-              border: "1px solid #d5e3dd",
+              background: "var(--trade-surface)",
+              border: "1px solid var(--trade-line)",
               borderRadius: 16,
               boxShadow: "0 28px 70px rgba(0, 15, 24, .3)",
               display: "grid",
@@ -2210,7 +2210,7 @@ export function TradeBusinessSettingsWorkspace({
             <div>
               <span
                 style={{
-                  color: "#9b3535",
+                  color: "color-mix(in srgb, #d86b5c 64%, var(--trade-ink))",
                   fontSize: ".64rem",
                   fontWeight: 900,
                   textTransform: "uppercase",
@@ -2224,7 +2224,7 @@ export function TradeBusinessSettingsWorkspace({
               <p
                 id="close-trade-account-description"
                 style={{
-                  color: "#5e716a",
+                  color: "var(--trade-muted)",
                   fontSize: ".72rem",
                   lineHeight: 1.55,
                   margin: "7px 0 0",

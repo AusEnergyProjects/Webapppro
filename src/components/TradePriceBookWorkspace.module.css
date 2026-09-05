@@ -78,3 +78,73 @@
   .list article .price { display: block; }
   .history article { align-items: start; flex-direction: column; gap: 5px; }
 }
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .workspace {
+  --color-aea-ink: var(--trade-ink, #062c32);
+  --color-aea-text: var(--trade-field-ink, #15241f);
+  --color-aea-muted: var(--trade-muted, #5d7068);
+  --color-aea-line: var(--trade-line, #d7e5df);
+  --color-aea-green: var(--trade-accent-readable, #12a66a);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .hero > button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .actions > button:first-child {
+  background: var(--trade-accent, #12a66a);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .librarySwitch,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .toolbar > div,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .metrics article,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .presets,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .archived,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .empty,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .loading {
+  background: var(--trade-surface-soft, #f5faf8);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .librarySwitch button.libraryActive,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .toolbar > div button.active,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .editor,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .list article > button {
+  background: var(--trade-surface-raised, #fff);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .toolbar input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .coreFields input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .coreFields select,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .advanced input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .advanced select,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .advanced textarea,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .firstRun button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .presets button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .secondary {
+  background: var(--trade-field, #fff);
+  border-color: var(--trade-line, #a7d7c7);
+  color: var(--trade-field-ink, #15241f);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .firstRun button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .presets button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .secondary {
+  color: var(--trade-accent-readable, #12a66a);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .list article > button:hover {
+  background: var(--trade-surface-soft, #f8fcfa);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .firstRun {
+  background: linear-gradient(135deg, var(--trade-accent-soft, #edfaf5), var(--trade-surface-soft, #f8fbfa));
+  border-color: var(--trade-line, #bfe4d6);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .message {
+  background: var(--trade-accent-soft, #e8f5f0);
+  color: var(--trade-accent-soft-ink, #12664f);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .danger {
+  background: #3a201d;
+  border-color: #75423a;
+  color: #ffb8ad;
+}

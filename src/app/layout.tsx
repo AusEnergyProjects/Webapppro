@@ -52,7 +52,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en-AU">
+    <html lang="en-AU" suppressHydrationWarning>
       <body className="aea-platform">
         <JsonLd data={publicOrganizationSchema} />
         <a className="skip-link" href="#site-content">Skip to main content</a>

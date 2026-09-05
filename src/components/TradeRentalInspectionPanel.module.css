@@ -326,3 +326,132 @@
   .shareRow { grid-template-columns: 1fr; }
   .reportActions { align-items: flex-start; flex-direction: column; }
 }
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .workspace {
+  --rental-ink: var(--trade-ink, #142c35);
+  --rental-muted: var(--trade-muted, #5b6f77);
+  --rental-line: var(--trade-line, #d9e4e3);
+  --rental-soft: var(--trade-surface-soft, #f4f8f7);
+  --rental-teal: var(--trade-accent, #087c70);
+  --rental-teal-dark: var(--trade-accent-readable, #075e57);
+  --rental-warm: #352b16;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .loading,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .sectionHeader,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .evidenceArea {
+  background: var(--trade-surface-soft, #f4f8f7);
+  border-color: var(--trade-line, #d9e4e3);
+  color: var(--trade-ink, #142c35);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .loading span {
+  color: var(--trade-muted, #5b6f77);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .moduleNav button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .moduleDetails,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .sectionNav button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .itemCard,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .evidenceArea li,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .completionCard,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .issueCard {
+  background: var(--trade-surface, #fff);
+  border-color: var(--trade-line, #d9e4e3);
+  color: var(--trade-ink, #142c35);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .sectionOverview {
+  background: linear-gradient(180deg, var(--trade-surface-soft, #f7fbfa), var(--trade-surface, #fff));
+  border-color: var(--trade-line, #d9e4e3);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .metadataForm input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .metadataForm select,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .metadataForm textarea,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .itemForm input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .itemForm select,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .itemForm textarea,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .uploadForm input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .evidenceArea button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .uploadForm button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .secondaryButton,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .sectionActions button:not(.primaryButton),
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .shareRow input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .shareRow button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .shareRow a,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .reportActions a,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .reportActions button {
+  background: var(--trade-field, #fff);
+  border-color: var(--trade-line, #aebfbd);
+  color: var(--trade-field-ink, #142c35);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .reportActions a {
+  background: var(--trade-accent, #087c70);
+  border-color: var(--trade-accent, #087c70);
+  color: #fff !important;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .primaryButton:hover {
+  background: var(--trade-accent, #075e57);
+  color: #fff;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .moduleNav button.activeModule,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .outcomes label.selectedOutcome,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .addInstance,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .completionCard > header > strong,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .issueCard > header > strong {
+  background: var(--trade-accent-soft, #eaf7f4);
+  border-color: var(--trade-accent, #087c70);
+  color: var(--trade-accent-soft-ink, #075e57);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .sectionNav button > span:first-child {
+  background: var(--trade-surface-raised, #e7efee);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .boundary,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .findingFields {
+  background: #352b16;
+  border-color: #735f2d;
+  color: #f4d58d;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .boundary span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .findingFields > header strong,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .completionCard ul {
+  color: #f4d58d;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .safetyStop {
+  background: #3a201d;
+  border-color: #a95448;
+  color: #ffd2cb;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .safetyStop > strong,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .reportActions button {
+  color: #ffb8ad;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .guidance {
+  background: #172b36;
+  border-left-color: #55b8d5;
+  color: #cbeaf4;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .internalField {
+  background: #29233a;
+  border-color: #554c70;
+  color: #e0d7f6;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .internalField > span {
+  color: #c7b8e9;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .issueCard {
+  background: linear-gradient(145deg, var(--trade-surface, #fff), var(--trade-surface-soft, #f2faf8));
+}

@@ -137,3 +137,81 @@
 @media (max-width: 420px) {
   .feedback > div label { grid-template-columns: 1fr; }
 }
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .panel {
+  --color-aea-ink: var(--trade-ink, #062c32);
+  --color-aea-text: var(--trade-field-ink, #15241f);
+  --color-aea-muted: var(--trade-muted, #5d7068);
+  --color-aea-line: var(--trade-line, #d7e5df);
+  --color-aea-green: var(--trade-accent-readable, #12a66a);
+  --action-primary: var(--trade-accent, #12a66a);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .templatePicker,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .source,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .feedback,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .requirements article,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .linkCard,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .delivery,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .channels > article.held {
+  background: var(--trade-surface-soft, #f3f8f6);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .templatePicker select,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .feedback select,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .requirements article input:not([type="checkbox"]),
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .requirements article textarea,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .requirementReview select,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .share input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .history > article {
+  background: var(--trade-field, #fff);
+  border-color: var(--trade-line, #c8dad4);
+  color: var(--trade-field-ink, #062c32);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .boundary,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .proofReady,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .consent,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .channels > article.ready,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .status {
+  background: var(--trade-accent-soft, #e9f7f1);
+  border-color: var(--trade-line, #b9dfd1);
+  color: var(--trade-accent-soft-ink, #155e4c);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .boundary strong,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .boundary span {
+  color: var(--trade-accent-soft-ink, #087c61);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .requirementReview button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .retakeFollowups button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .editorActions .secondary,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .feedback > button {
+  background: var(--trade-accent-soft, #e8f3ef);
+  color: var(--trade-accent-soft-ink, #0a745c);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .proofReview,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .requirementReview .retakeButton,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .deliveryNotice,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .retakeFollowups > article {
+  background: #352b16;
+  border-color: #735f2d;
+  color: #f4d58d;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .deliveryNotice strong,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .deliveryNotice span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .requirementReview .retakeButton {
+  color: #f4d58d;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .linkCard .danger {
+  background: #3a201d;
+  color: #ffb8ad;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .requirements article > footer button {
+  color: #ffb8ad;
+}

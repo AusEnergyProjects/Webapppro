@@ -1405,3 +1405,159 @@
     flex-direction: column;
   }
 }
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .shell {
+  --pack-green: var(--trade-accent, #087f5b);
+  --pack-green-dark: var(--trade-accent-readable, #064e3b);
+  --pack-green-soft: var(--trade-accent-soft, #eaf8f2);
+  --pack-ink: var(--trade-ink, #18312b);
+  --pack-muted: var(--trade-muted, #637971);
+  --pack-line: var(--trade-line, #c8ddd5);
+  --pack-mint: var(--trade-accent-soft, #e8f7f1);
+  --pack-mint-strong: var(--trade-line, #9fd8c3);
+  --crm-deep: var(--trade-accent-readable, #064e3b);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .pack,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .dependencies,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .page,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .review,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .identity dl > div,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .productResults > div,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .choiceList label,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .capture,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .confirm,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .references article,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .signatureBox {
+  background: var(--trade-surface, #fff);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .packToggle,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .identity,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .calculatorReview,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .prompt,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .outputs > div {
+  background: var(--trade-surface-soft, #f3f8f6);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .identity,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .identity dl > div,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .dependencies > div,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .calculatorReview,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .productResults > div,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .steps button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .prompt,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .confirm,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .references article,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .choiceList label,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .capture,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .outputs,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .dependencies > div,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerReview,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .repeat,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .capturedSignatures article,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .retained,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .previewDialog > header,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .previewDialog > footer,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .signatureBox {
+  border-color: var(--trade-line, #d0e2db);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .dependencyControl select,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .dependencyControl input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .productResults > div > label input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerForm input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .prompt input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .prompt select,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .prompt textarea {
+  background: var(--trade-field, #fff);
+  border-color: var(--trade-line, #aacbc0);
+  color: var(--trade-field-ink, #18312b);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .references article button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .repeat button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .navigation button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerReview > header button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerForm button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .error button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .previewDialog button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .previewDialog a,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .signatureBox > header button {
+  background: var(--trade-field, #fff);
+  border-color: var(--trade-line, #9fc8b8);
+  color: var(--trade-accent-readable, #174f3e);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .repeat button[data-selected="true"] {
+  background: var(--trade-accent, #087f5b);
+  color: #fff;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .signatureBox > header strong,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .signatureBox > footer strong {
+  color: var(--trade-ink, #103f34);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .signatureBox > header span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .signatureBox > footer span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .signatureBox > p {
+  color: var(--trade-muted, #627a72);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .productResults > div[data-selected="true"],
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .promptMeta span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .declaration,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .retained,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .status,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .empty {
+  background: var(--trade-accent-soft, #edf8f3);
+  color: var(--trade-accent-soft-ink, #064e3b);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .steps button {
+  border-bottom-color: var(--trade-line, #dceae5);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .steps button > span {
+  background: var(--trade-surface-raised, #e7f0ed);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .promptMeta b {
+  color: #ffb8ad;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .previewDialog {
+  background: var(--trade-surface-raised, #fff);
+  color: var(--trade-ink, #18312b);
+}
+
+/* The preview viewport and signature surface stay light so documents and ink are unchanged. */
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .previewDialog > div {
+  background: #e9f1ee;
+  color-scheme: light;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .signatureSurface {
+  background: #f7faf9;
+  color-scheme: light;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .dependencies > div > span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .warning,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .review > ul {
+  background: #352b16;
+  color: #f4d58d;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .dependencies > div[data-ready="true"] > span {
+  background: var(--trade-accent-soft, #eaf8f2);
+  color: var(--trade-accent-soft-ink, #064e3b);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .inlineError,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .conflict,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .error {
+  background: #3a201d;
+  color: #ffb8ad;
+}

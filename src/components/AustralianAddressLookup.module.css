@@ -89,3 +89,28 @@
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation: none; }
 }
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .lookup {
+  --color-aea-ink: var(--trade-ink, #092f34);
+  --color-aea-muted: var(--trade-muted, #5e5e5e);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .options,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .options button {
+  background: var(--trade-surface-raised, #fff);
+  color: var(--trade-ink, #092f34);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .options {
+  border-color: var(--trade-line, #9bc8ba);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .options button:hover,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .options button[aria-selected="true"] {
+  background: var(--trade-accent-soft, #e9f8f2);
+  color: var(--trade-accent-soft-ink, #064f43);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .attribution {
+  color: var(--trade-muted, #5e5e5e);
+}

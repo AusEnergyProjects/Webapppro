@@ -555,3 +555,187 @@
   .customerJobs button { grid-template-columns: 1fr; gap: 4px; }
   .customerJobs small { grid-column: auto; }
 }
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .register,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .detailSection,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerPanel,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .entityDetails,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .addPanel {
+  border-color: var(--trade-line, #c9ddd8);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .actionTrigger,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerPanel > summary,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .addPanel,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerJobs button {
+  background: var(--trade-surface, #fff);
+  color: var(--trade-ink, #123f37);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .actionTrigger,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .detailHeading button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .linkContactForm select,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerJobs button {
+  border-color: var(--trade-line, #abcac1);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .actionTrigger {
+  background: var(--trade-accent-soft, #eef6f3);
+  color: var(--trade-accent-soft-ink, #073f38);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .actionTrigger:hover,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .actionTrigger:focus-visible {
+  background: var(--trade-accent, #087f68);
+  color: #fff;
+}
+
+:global(html[data-tlink-colour-mode="night"]) .actionMenu {
+  --trade-surface-raised: #1c333a;
+  --trade-line: #2d464b;
+  --trade-ink: #e9f3f0;
+  --trade-accent-soft: #1b3a3c;
+  --trade-accent-soft-ink: #d5eeea;
+  background: var(--trade-surface-raised, #fff);
+  border-color: var(--trade-line, #bad1cb);
+  color-scheme: dark;
+}
+
+:global(html[data-tlink-colour-mode="night"]) .actionMenu button {
+  color: var(--trade-ink, #163d38);
+}
+
+:global(html[data-tlink-colour-mode="night"]) .actionMenu button:hover,
+:global(html[data-tlink-colour-mode="night"]) .actionMenu button:focus-visible {
+  background: var(--trade-accent-soft, #e8f5f1);
+  color: var(--trade-accent-soft-ink, #163d38);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .detailSection,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .panelBody,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .assetPanel {
+  background: var(--trade-surface-soft, #f8fbfa);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .entityDetails {
+  background: var(--trade-surface, #fff);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .detailHeading,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerPanel[open] > summary,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .addPanel[open] > summary,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerPanel > summary:hover,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerPanel > summary:focus-visible,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .entityDetails > summary:hover,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .entityDetails > summary:focus-visible,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .entityDetails[open] > summary,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .addPanel > summary:hover,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .addPanel > summary:focus-visible,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerJobs button:hover,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerJobs button:focus-visible {
+  background: var(--trade-surface-raised, #eaf4f1);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .detailHeading,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerPanel,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .panelBody,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .entityBody,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .serviceContacts,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .assetPanel {
+  border-color: var(--trade-line, #d9e6e2);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .detailHeading button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .detailGrid > div,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerForm input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerForm select,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerForm textarea,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .linkContactForm input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .linkContactForm select {
+  background: var(--trade-field, #fff);
+  border-color: var(--trade-line, #abcac1);
+  color: var(--trade-field-ink, #123f37);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .detailGrid {
+  background: var(--trade-line, #dce8e4);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .protectedCustomer,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .serviceContacts li {
+  background: var(--trade-surface-soft, #f4f8f7);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerForm input:disabled,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerForm select:disabled,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerForm textarea:disabled {
+  background: var(--trade-surface-soft, #f1f5f4);
+  color: var(--trade-muted, #536963);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .detailHeading > div > span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .detailGrid dt,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .contextNote,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerPanel > summary small,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .entityDetails > summary small,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerFormGrid label > span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .linkContactForm label > span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .recordDates,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .entityDetails > summary em,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .emptyMessage,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .serviceContacts li small,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .serviceContacts p,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerJobs span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerJobs small {
+  color: var(--trade-muted, #60756f);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .detailGrid dd,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerPanel > summary,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .entityDetails > summary strong,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .serviceContacts > strong,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .serviceContacts li span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerJobs button {
+  color: var(--trade-ink, #123f37);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .detailHeading button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .detailGrid a,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .addPanel > summary {
+  color: var(--trade-accent-readable, #0a604c);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .customerPanel > summary b {
+  background: var(--trade-accent-soft, #e4f3ee);
+  color: var(--trade-accent-soft-ink, #176348);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .quoting {
+  background: #3a2f12;
+  color: #ffe29a;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .assigned {
+  background: #102f3c;
+  color: #8bdcff;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .complete {
+  background: #123526;
+  color: #8ee0af;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .audited {
+  background: #282346;
+  color: #c9bcff;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .certified {
+  background: #10382e;
+  color: #8cebd1;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .cancelled {
+  background: #2a3035;
+  color: #c7d0d5;
+}

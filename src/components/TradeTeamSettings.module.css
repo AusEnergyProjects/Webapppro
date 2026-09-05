@@ -925,3 +925,169 @@
     min-height: 260px;
   }
 }
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .workspace {
+  --color-aea-ink: var(--trade-ink, #123d35);
+  --color-aea-text: var(--trade-field-ink, #153d35);
+  --color-aea-muted: var(--trade-muted, #60766f);
+  --color-aea-line: var(--trade-line, #d6e5df);
+  --color-aea-green: var(--trade-accent-readable, #08795f);
+  --action-primary: var(--trade-accent, #08795f);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .primary {
+  background: var(--trade-accent, #08795f);
+  border-color: var(--trade-accent, #08795f);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .secondary,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .memberCard button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .fileRow button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .memberMenuButton,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .filters input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .filters select,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .invitePanel input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .form input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .form select,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .uploadForm input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .uploadForm select {
+  background: var(--trade-field, #fff);
+  border-color: var(--trade-line, #bdd2ca);
+  color: var(--trade-field-ink, #153d35);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .colourChoice {
+  background: var(--trade-field, #fff) !important;
+  border-color: var(--trade-line, #bdd2ca);
+  color: var(--trade-field-ink, #153d35);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .secondary,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .memberCard button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .fileRow button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .memberMenuButton {
+  color: var(--trade-accent-readable, #17483d);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .invitePanel,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .listHeader span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .chips span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .status {
+  background: var(--trade-accent-soft, #e7f4ee);
+  border-color: var(--trade-line, #bcded1);
+  color: var(--trade-accent-soft-ink, #17644f);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .deviceRow,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .memberCard,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .memberTable th,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .iconButton,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .colourPicker,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .permissionGroup,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .filesSidebar {
+  background: var(--trade-surface-soft, #f8fbfa);
+  border-color: var(--trade-line, #d6e5df);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .contextMenu,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .dialog,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .filesDialog,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .fileRow {
+  background: var(--trade-surface-raised, #fff);
+  border-color: var(--trade-line, #cfe0da);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .contextMenu button:hover,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .contextMenu button:focus-visible {
+  background: var(--trade-accent-soft, #edf6f2);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .devices,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .tableShell,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .memberTable th,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .memberTable td,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .uploadForm,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .fileRow {
+  border-color: var(--trade-line, #d6e5df);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .heading h4,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .dialogHeader h4,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .filters label,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .invitePanel strong,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .devices strong,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .listHeader strong,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .memberTable,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .memberTable th,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .memberTable strong,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .memberTable a,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .memberHeader strong,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .contextMenu button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .colourPicker legend,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .colourChoice strong,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .form label,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .uploadForm label,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .permissionGroup legend,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .fileRow strong {
+  color: var(--trade-ink, #173f36);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .heading p,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .empty,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .hint,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .memberCard small,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .memberCard span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .fileRow small,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .filesHeader p,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .pagination span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .invitePanel p,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .deviceRow div > span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .deviceRow div > small,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .memberTable small,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .check small {
+  color: var(--trade-muted, #60766f);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .dialogHeader span,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .iconButton {
+  color: var(--trade-accent-readable, #08795f);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .colourChoice:has(input:checked),
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .fileRow.selected {
+  border-color: var(--trade-accent, #08795f);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .current {
+  background: #153629;
+  color: #91e0b6;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .expiring {
+  background: #352b16;
+  color: #f4d58d;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .expired,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .error,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .danger {
+  background: #3a201d;
+  border-color: #75423a;
+  color: #ffb8ad;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .none {
+  background: var(--trade-surface-soft, #edf1ef);
+  color: var(--trade-muted, #536860);
+}
+
+/* The member document viewport remains light; iframe/PDF contents are isolated from portal theming. */
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .preview {
+  background: #f7faf9;
+  border-color: #d8e5e1;
+  color-scheme: light;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .previewMessage {
+  color: #60766f;
+}

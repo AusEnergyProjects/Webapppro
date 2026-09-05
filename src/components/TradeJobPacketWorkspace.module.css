@@ -47,3 +47,82 @@
 .message { background: #e8f5f0; color: #12664f; }
 @media (max-width: 900px) { .core { grid-template-columns: 1fr 1fr; }.list article > button { grid-template-columns: 1fr 1fr; }.list article em { justify-self: start; } }
 @media (max-width: 600px) { .hero, .editor > header { align-items: stretch; flex-direction: column; }.hero button, .editor > header > button { width: 100%; }.core, .optional > div, .forms { grid-template-columns: 1fr; }.line { align-items: stretch; grid-template-columns: 1fr; }.summary { grid-template-columns: 1fr 1fr; }.capabilities, .forms { grid-column: auto; }.list article > button { align-items: start; grid-template-columns: 1fr; } }
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .workspace {
+  --color-aea-ink: var(--trade-ink, #062c32);
+  --color-aea-text: var(--trade-field-ink, #15241f);
+  --color-aea-muted: var(--trade-muted, #5d7068);
+  --color-aea-line: var(--trade-line, #d7e5df);
+  --color-aea-green: var(--trade-accent-readable, #12a66a);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .firstRun {
+  background: linear-gradient(135deg, var(--trade-accent-soft, #edfaf5), #302a1b);
+  border-color: var(--trade-line, #bfe4d6);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .editor > header > button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .items button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .line button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .core input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .core select,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .line input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .line select,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .optional input,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .optional select,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .list article > button {
+  background: var(--trade-field, #fff);
+  border-color: var(--trade-line, #a7d7c7);
+  color: var(--trade-field-ink, #15241f);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .editor > header > button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .items button {
+  color: var(--trade-accent-readable, #12a66a);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .items,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .forms,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .loading {
+  background: var(--trade-surface-soft, #f6faf8);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .forms label {
+  background: var(--trade-surface-raised, #f7faf9);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .capabilities,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .message {
+  background: var(--trade-accent-soft, #e8f5f0);
+  color: var(--trade-accent-soft-ink, #12664f);
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .warning,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .attention {
+  background: #352b16;
+  color: #f4d58d;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .danger {
+  background: #3a201d;
+  border-color: #75423a;
+  color: #ffb8ad;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .ready {
+  background: #153629;
+  color: #91e0b6;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .hero button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .firstRun button,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .actions > button:first-child {
+  background: var(--trade-accent, #12a66a);
+  color: #fff;
+}
+
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .line > button {
+  background: var(--trade-field, #fff);
+  border-color: #75423a;
+  color: #ffb8ad;
+}

@@ -36,6 +36,12 @@ import {
   type TradeBusinessSettingsProfile,
 } from "./TradeBusinessSettingsWorkspace";
 import { resetTradeDashboardStateOnUidChange } from "./trade-rebate-calculator-state";
+import {
+  readTLinkColourMode,
+  TLINK_COLOUR_MODE_STORAGE_KEY,
+  type TLinkColourMode,
+  writeTLinkColourMode,
+} from "@/lib/tlink-colour-mode";
 
 const SupplierCatalogueWorkspace = dynamic(() => import("./SupplierCatalogueWorkspace").then((module) => module.SupplierCatalogueWorkspace));
 const InstallerProductMarketplace = dynamic(() => import("./InstallerProductMarketplace").then((module) => module.InstallerProductMarketplace));
@@ -783,6 +789,7 @@ export function DirectTradeDashboard() {
   const [installerPlanErrors, setInstallerPlanErrors] = useState<Record<string, string>>({});
   const [installerPlanPreview, setInstallerPlanPreview] = useState<CustomerPlanReportView | null>(null);
   const [photoLightbox, setPhotoLightbox] = useState<ProtectedPhotoLightbox | null>(null);
+  const [colourMode, setColourMode] = useState<TLinkColourMode>("day");
   const evidenceObjectUrls = useRef(new Set<string>());
   const photoLightboxDialog = useRef<HTMLDivElement | null>(null);
   const photoLightboxCloseButton = useRef<HTMLButtonElement | null>(null);
@@ -792,6 +799,43 @@ export function DirectTradeDashboard() {
   const publicLeadHandoffRequestMatchId = useRef("");
   const workspaceRouteInitialised = useRef(false);
   const workspacePopstateSync = useRef(false);
+
+  useEffect(() => {
+    const applyColourMode = (nextMode: TLinkColourMode) => {
+      setColourMode(nextMode);
+      document.documentElement.dataset.tlinkColourMode = nextMode;
+    };
+    const syncStoredColourMode = () => {
+      try {
+        applyColourMode(readTLinkColourMode(window.localStorage));
+      } catch {
+        applyColourMode("day");
+      }
+    };
+    const syncColourModeAcrossTabs = (event: StorageEvent) => {
+      if (event.key === TLINK_COLOUR_MODE_STORAGE_KEY || event.key === null) {
+        syncStoredColourMode();
+      }
+    };
+
+    syncStoredColourMode();
+    window.addEventListener("storage", syncColourModeAcrossTabs);
+    return () => {
+      window.removeEventListener("storage", syncColourModeAcrossTabs);
+      delete document.documentElement.dataset.tlinkColourMode;
+    };
+  }, []);
+
+  const toggleColourMode = () => {
+    const nextMode = colourMode === "night" ? "day" : "night";
+    setColourMode(nextMode);
+    document.documentElement.dataset.tlinkColourMode = nextMode;
+    try {
+      writeTLinkColourMode(window.localStorage, nextMode);
+    } catch {
+      // The visual preference still works for this tab when storage is unavailable.
+    }
+  };
 
   useEffect(() => {
     const onPopstate = () => {
@@ -2066,6 +2110,7 @@ export function DirectTradeDashboard() {
         <div
           className={`trade-portal-shell ${isSupplier ? "is-supplier" : "is-installer"}`}
           data-trade-theme={profile.brandThemeKey || DEFAULT_TRADE_BRAND_THEME}
+          data-trade-colour-mode={colourMode}
         >
           <header
             className="dashboard-hero"
@@ -2094,6 +2139,27 @@ export function DirectTradeDashboard() {
               setCommandTarget(target);
               setWorkspace(target.workspace);
             }} onOpenOpportunity={(matchId) => void openOpportunityNotification(matchId)} />}
+            <button
+              type="button"
+              className="tlink-colour-mode-toggle"
+              data-mode={colourMode}
+              aria-label="Night mode"
+              aria-pressed={colourMode === "night"}
+              title={colourMode === "night" ? "Switch to day mode" : "Switch to night mode"}
+              onClick={toggleColourMode}
+            >
+              <span className="tlink-colour-mode-sun" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <circle cx="12" cy="12" r="3.25" />
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42" />
+                </svg>
+              </span>
+              <span className="tlink-colour-mode-moon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M20.4 15.1A8.7 8.7 0 0 1 8.9 3.6 8.8 8.8 0 1 0 20.4 15.1Z" />
+                </svg>
+              </span>
+            </button>
             <div className="dashboard-account-actions">
               {!isSupplier && <a className="tlink-get-app" href="/direct-trade/field-app"><Image src="/tlink-icon-192.png" alt="" width={25} height={25} /><span>Get the app</span></a>}
               <span className="trade-portal-role">{isSupplier ? "Wholesaler" : "Installer"}</span>

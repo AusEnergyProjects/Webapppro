@@ -1,0 +1,2209 @@
+/* TLink day/night appearance. Business-theme colour tokens remain authoritative. */
+.tlink-colour-mode-toggle {
+  align-items: center;
+  align-self: center;
+  background: color-mix(in srgb, var(--trade-header-control) 78%, transparent);
+  border: 1px solid var(--trade-header-control-border);
+  border-radius: 999px;
+  color: #d4e2e1;
+  cursor: pointer;
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(2, 32px);
+  height: 44px;
+  justify-content: center;
+  margin: 0;
+  padding: 4px;
+  min-height: 44px;
+  width: 76px;
+}
+
+.tlink-colour-mode-toggle:hover {
+  background: var(--trade-header-control-hover);
+  border-color: #ffffff99;
+}
+
+.tlink-colour-mode-toggle:focus-visible {
+  outline: 3px solid #7cf0d0;
+  outline-offset: 3px;
+}
+
+.tlink-colour-mode-toggle > span {
+  align-items: center;
+  border-radius: 50%;
+  display: flex;
+  height: 32px;
+  justify-content: center;
+  opacity: .66;
+  transition: background-color .16s ease, color .16s ease, opacity .16s ease;
+  width: 32px;
+}
+
+.tlink-colour-mode-toggle svg {
+  fill: none;
+  height: 18px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 18px;
+}
+
+.tlink-colour-mode-toggle .tlink-colour-mode-moon svg {
+  fill: currentColor;
+  stroke: none;
+}
+
+.tlink-colour-mode-toggle[data-mode="day"] .tlink-colour-mode-sun {
+  background: #fff2b8;
+  color: #815400;
+  opacity: 1;
+}
+
+.tlink-colour-mode-toggle[data-mode="night"] .tlink-colour-mode-moon {
+  background: #e4ebff;
+  color: #25345f;
+  opacity: 1;
+}
+
+/* Preserve each saved business theme's exact day document tint for preview resets. */
+.trade-portal-shell {
+  --trade-accent-readable: var(--trade-accent);
+  --trade-day-accent-soft: #e8f5f0;
+  --trade-day-accent-soft-ink: #075743;
+}
+
+.trade-portal-shell[data-trade-theme="ocean_mint"] { --trade-day-accent-soft: #e6f5f2; --trade-day-accent-soft-ink: #07564e; }
+.trade-portal-shell[data-trade-theme="cobalt_aqua"] { --trade-day-accent-soft: #eaf0fa; --trade-day-accent-soft-ink: #183f73; }
+.trade-portal-shell[data-trade-theme="violet_sunset"] { --trade-day-accent-soft: #f4ebf5; --trade-day-accent-soft-ink: #582b62; }
+.trade-portal-shell[data-trade-theme="amber_ink"] { --trade-day-accent-soft: #f8efe0; --trade-day-accent-soft-ink: #654008; }
+.trade-portal-shell[data-trade-theme="charcoal_silver"] { --trade-day-accent-soft: #eef0f3; --trade-day-accent-soft-ink: #343b46; }
+.trade-portal-shell[data-trade-theme="rose_plum"] { --trade-day-accent-soft: #f7ebf0; --trade-day-accent-soft-ink: #682a4b; }
+.trade-portal-shell[data-trade-theme="forest_jade"] { --trade-day-accent-soft: #e8f4ef; --trade-day-accent-soft-ink: #104a3a; }
+.trade-portal-shell[data-trade-theme="bronze_olive"] { --trade-day-accent-soft: #f4f1e3; --trade-day-accent-soft-ink: #504108; }
+.trade-portal-shell[data-trade-theme="midnight_rose"] { --trade-day-accent-soft: #f4eaf0; --trade-day-accent-soft-ink: #5b293e; }
+.trade-portal-shell[data-trade-theme="teal_indigo"] { --trade-day-accent-soft: #e6f3f2; --trade-day-accent-soft-ink: #0e4f4e; }
+.trade-portal-shell[data-trade-theme="graphite_copper"] { --trade-day-accent-soft: #f5ece8; --trade-day-accent-soft-ink: #60301f; }
+.trade-portal-shell[data-trade-theme="indigo_orchid"] { --trade-day-accent-soft: #f0ebf5; --trade-day-accent-soft-ink: #4f305e; }
+.trade-portal-shell[data-trade-theme="burgundy_slate"] { --trade-day-accent-soft: #f4ebef; --trade-day-accent-soft-ink: #512c3f; }
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell {
+  --trade-ink: #e9f3f0;
+  --trade-muted: #a4b8b3;
+  --trade-line: #2d464b;
+  --trade-page: #081319;
+  --trade-surface: #102027;
+  --trade-surface-soft: #162a31;
+  --trade-surface-raised: #1c333a;
+  --trade-field: #0b1a20;
+  --trade-field-ink: #eef7f4;
+  --trade-field-placeholder: #8fa59f;
+  --trade-accent-readable: color-mix(in srgb, var(--trade-accent) 42%, #f6fffc);
+  --trade-accent-soft: color-mix(in srgb, var(--trade-accent) 22%, #162a31);
+  --trade-accent-soft-ink: color-mix(in srgb, var(--trade-accent) 38%, #f6fffc);
+  --color-aea-card: var(--trade-surface);
+  --color-aea-ink: var(--trade-ink);
+  --color-aea-ink-soft: #c6d8d3;
+  --color-aea-line: var(--trade-line);
+  --color-aea-line-strong: #426066;
+  --color-aea-text: #d9e6e2;
+  --color-aea-muted: var(--trade-muted);
+  --surface-soft: var(--trade-surface-soft);
+  --surface-tint: var(--trade-accent-soft);
+  --border-subtle: var(--trade-line);
+  --tlink-table-head: #172d34;
+  --tlink-table-line: #294248;
+  --tlink-table-hover: #1b3439;
+  --shadow-card: 0 8px 22px rgba(0, 0, 0, .2);
+  --shadow-panel: 0 16px 42px rgba(0, 0, 0, .24);
+  color: var(--trade-ink);
+  color-scheme: dark;
+}
+
+html[data-tlink-colour-mode="night"] .direct-trade-dashboard-page:has(.trade-portal-shell),
+html[data-tlink-colour-mode="night"] .trade-portal-shell {
+  background: var(--trade-page);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell > :not(.dashboard-hero):not(.dashboard-workspace-nav) :where(h1, h2, h3, h4, h5, h6) {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell > :not(.dashboard-hero):not(.dashboard-workspace-nav) a:not(.btn) {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-hero span,
+  .crm-page-heading span,
+  .crm-card > header span,
+  .crm-section-heading span,
+  .dashboard-panel-heading > span,
+  .dashboard-access-summary span,
+  .dashboard-status-grid article > span,
+  .supplier-status-grid article > span,
+  .business-settings-section-heading > span,
+  .crm-job-card-header > div:first-child > span,
+  .crm-customer-detail > header span,
+  .crm-template-create > header span,
+  .crm-template-library > header span,
+  .invoice-heading span,
+  .invoice-metrics span,
+  .follow-up-heading span,
+  .follow-up-list article > header span,
+  .follow-up-asset span,
+  .follow-up-draft > span,
+  .schedule-heading > div:first-child > span,
+  .schedule-unassigned header span,
+  .marketplace-product-grid header span,
+  .dashboard-opportunity-card header span,
+  .dashboard-enquiry-pack-heading span,
+  .dashboard-enquiry-pack-grid span,
+  .dashboard-enquiry-evidence-heading span
+) {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .trade-portal-intro > span,
+  .crm-metrics span,
+  .crm-dashboard-chart > header span,
+  .crm-wizard-panel > header > span,
+  .crm-field-job-heading > span,
+  .crm-today-checklist > header span,
+  .crm-job-readiness > header span,
+  .crm-job-readiness.empty > span,
+  .crm-completion-gate header span,
+  .schedule-today-strip > header span
+) {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-nav button {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-nav button.active {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-privacy-line strong {
+  color: inherit;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .invoice-metrics strong,
+  .invoice-list article > div > strong,
+  .follow-up-metrics strong,
+  .follow-up-asset strong,
+  .follow-up-draft strong,
+  .schedule-capacity article > strong,
+  .schedule-board > section > header strong,
+  .schedule-reschedule-queue > header h3,
+  .schedule-reschedule-queue article > header strong,
+  .schedule-unassigned article strong,
+  .marketplace-product-grid summary,
+  .marketplace-advanced-filters summary,
+  .marketplace-view-settings summary
+) {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  input:not([type]),
+  input[type="text"],
+  input[type="search"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="password"],
+  input[type="number"],
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  select,
+  textarea
+) {
+  background: var(--trade-field);
+  border-color: #426066;
+  color: var(--trade-field-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(input, textarea)::placeholder {
+  color: var(--trade-field-placeholder);
+  opacity: 1;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell option {
+  background: var(--trade-field);
+  color: var(--trade-field-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(input, select, textarea):focus-visible {
+  border-color: var(--trade-accent-readable);
+  outline: 3px solid color-mix(in srgb, var(--trade-accent) 42%, transparent);
+  outline-offset: 1px;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(input, select, textarea):disabled {
+  background: #132229;
+  color: #829791;
+}
+
+/* Search, notifications and dialogs belong to the portal chrome, not documents. */
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .tlink-notification-popover,
+  .tlink-command-dialog,
+  .crm-preview-dialog,
+  .crm-invoice-preview-dialog.schedule-appointment-dialog,
+  .crm-invoice-preview-dialog:has(.crm-retake-review-dialog)
+) {
+  background: var(--trade-surface);
+  border-color: #426066;
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .tlink-notification-popover,
+  .tlink-command-dialog,
+  .crm-preview-dialog,
+  .crm-invoice-preview-dialog.schedule-appointment-dialog,
+  .crm-invoice-preview-dialog:has(.crm-retake-review-dialog)
+) > :is(header, footer) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .tlink-notification-popover,
+  .tlink-command-dialog,
+  .crm-preview-dialog,
+  .crm-invoice-preview-dialog.schedule-appointment-dialog,
+  .crm-invoice-preview-dialog:has(.crm-retake-review-dialog)
+) :is(strong, b) {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .tlink-notification-popover,
+  .tlink-command-dialog,
+  .crm-preview-dialog,
+  .crm-invoice-preview-dialog.schedule-appointment-dialog,
+  .crm-invoice-preview-dialog:has(.crm-retake-review-dialog)
+) :is(small, p, dt) {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .tlink-notification-list > button,
+  .tlink-command-input,
+  .tlink-command-actions button,
+  .tlink-command-results > button,
+  .crm-preview-dialog > header button,
+  .crm-invoice-preview-dialog > header button,
+  .crm-preview-dialog > footer a,
+  .crm-invoice-preview-dialog > footer > button:first-child
+) {
+  background: var(--trade-field);
+  border-color: var(--trade-line);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .tlink-notification-list > button:hover,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .tlink-notification-list > button.unread,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .tlink-command-results > button.active {
+  background: var(--trade-accent-soft);
+  border-color: color-mix(in srgb, var(--trade-accent) 50%, var(--trade-line));
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.tlink-command-filters button, .tlink-command-input kbd, .tlink-command-dialog > footer kbd) {
+  background: var(--trade-surface-raised);
+  border-color: var(--trade-line);
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .tlink-command-filters button.active {
+  background: var(--trade-accent-soft);
+  border-color: color-mix(in srgb, var(--trade-accent) 50%, var(--trade-line));
+  color: var(--trade-accent-soft-ink);
+}
+
+/* Core workday and CRM surfaces. */
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .dashboard-panel,
+  .dashboard-access-overview,
+  .installer-crm,
+  .crm-hero,
+  .crm-nav,
+  .crm-card,
+  .crm-customer-detail,
+  .crm-job-card,
+  .crm-schedule-board,
+  .crm-dashboard-chart,
+  .crm-create-card,
+  .crm-create-popover > form,
+  .crm-record-table,
+  .crm-integration-grid article
+) {
+  background: var(--trade-surface);
+  border-color: var(--trade-line);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-metrics article {
+  background: var(--trade-surface);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-card > header,
+  .crm-job-card-header,
+  .crm-customer-detail > header,
+  .crm-dashboard-chart > header,
+  .crm-create-panel,
+  .crm-template-picker,
+  .crm-template-library article,
+  .crm-today-action,
+  .crm-today-actions,
+  .crm-loading,
+  .crm-system-id-note,
+  .crm-readonly-id,
+  .crm-form-note,
+  .crm-job-toolbar > div,
+  .crm-filter-notice,
+  .crm-job-list,
+  .crm-customer-list,
+  .crm-pipeline-board > section,
+  .crm-bulk-actions,
+  .crm-property-address,
+  .crm-property-placeholder,
+  .crm-accounting-create,
+  .crm-accounting-document,
+  .crm-invoice-actions,
+  .crm-payment-create,
+  .crm-commercial-handoff,
+  .crm-commercial-summary article,
+  .crm-commercial-scope li,
+  .crm-integration-grid details,
+  .crm-google-service,
+  .crm-inline-status,
+  .crm-dispatch-view
+) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-create-guidance {
+  background: var(--trade-accent-soft);
+  border-color: var(--trade-accent);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-create-guidance strong {
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-create-guidance p,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-agenda time {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-pipeline-board > section > div > button,
+  .crm-pipeline-board > section > header strong,
+  .crm-task-list li
+) {
+  background: var(--trade-surface-raised);
+  border-color: var(--trade-line);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-pipeline-board > section > div > button:hover {
+  border-color: var(--trade-accent);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-field-summary article,
+  .crm-field-card,
+  .crm-field-records li,
+  .crm-customer-jobs > button
+) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-field-privacy.owned,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-photo-proof-readiness.ready {
+  background: #143329;
+  border-color: #376d5c;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-field-privacy.protected,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-photo-proof-readiness.pending {
+  background: #352b16;
+  border-color: #735f2d;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-photo-proof-readiness li {
+  background: var(--trade-surface-raised);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-photo-proof-actions button,
+  .crm-field-card button
+) {
+  background: var(--trade-field);
+  border-color: #426066;
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-photo-proof-actions button.approve {
+  background: var(--trade-accent);
+  border-color: var(--trade-accent);
+  color: #ffffff;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-field-privacy strong,
+  .crm-field-summary strong,
+  .crm-photo-proof-readiness h4,
+  .crm-photo-proof-readiness li span,
+  .crm-field-card h4,
+  .crm-field-records strong
+) {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-field-privacy span,
+  .crm-field-summary span,
+  .crm-photo-proof-readiness header > strong,
+  .crm-photo-proof-readiness li strong,
+  .crm-photo-proof-readiness li small,
+  .crm-field-card header p,
+  .crm-field-form label > span,
+  .crm-field-records span,
+  .crm-field-records p
+) {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-photo-proof-readiness header span,
+  .crm-field-card > header span
+) {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-job-tabs {
+  background: var(--trade-surface-soft);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-job-card-header > div:last-child strong {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-job-card-header .crm-request-info-button {
+  background: #08795f;
+  color: #ffffff;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.crm-job-tabs button, .crm-job-more > button) {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.crm-job-tabs button.active, .crm-job-more > button.active) {
+  background: var(--trade-surface-raised);
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-job-more > div {
+  background: var(--trade-surface-raised);
+  border-color: var(--trade-line);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .34);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-job-more > div button {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-job-more > div button:is(:hover, :focus-visible) {
+  background: var(--trade-accent-soft);
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-pipeline-board > section > header button,
+  .crm-pipeline-board button span,
+  .crm-commercial-handoff > header span,
+  .crm-commercial-handoff.empty > span,
+  .crm-commercial-handoff > header > strong,
+  .crm-commercial-scope summary,
+  .crm-deposit-choice span,
+  .crm-commercial-timeline > summary,
+  .crm-commercial-timeline header span
+) {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-pipeline-board button em,
+  .crm-task-list li.done span
+) {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-commercial-scope,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-commercial-timeline {
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-deposit-choice {
+  background: #2a281a;
+  border-color: #796b39;
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-deposit-choice :is(input, select) {
+  background: var(--trade-field);
+  border-color: #796b39;
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.crm-privacy-line, .dashboard-settings-status, .business-hub-boundary) {
+  background: var(--trade-accent-soft);
+  border-color: var(--trade-line);
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-quick-create > div,
+  .crm-quick-create button,
+  .crm-template-library article button,
+  .crm-today-actions button:not(.primary),
+  .crm-job-toolbar button.active,
+  .crm-job-list > article.active,
+  .crm-customer-list > article.active,
+  .crm-bulk-actions button.secondary,
+  .crm-integration-grid article.connected > button,
+  .crm-commercial-scope li
+) {
+  background: var(--trade-surface-raised);
+  border-color: #426066;
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-chart-bar,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-chart-bar::-webkit-meter-bar {
+  background: #263f44;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-dashboard-chart > header small {
+  background: var(--trade-accent-soft);
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-chart-row:hover {
+  background: var(--trade-surface-raised);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-chart-label strong {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-chart-label small {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-chart-value {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-inline-form,
+  .crm-finance-summary article,
+  .crm-schedule-board > header,
+  .crm-entity-card,
+  .crm-payment-create
+) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-job-appointments li,
+  .crm-notes-list li,
+  .crm-schedule-board li,
+  .crm-add-entity,
+  .crm-payment-panel,
+  .crm-payment-panel li
+) {
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-inline-form > button,
+  .crm-job-appointments button,
+  .crm-notes-list button,
+  .crm-schedule-board li > button:last-child,
+  .crm-payment-panel li a
+) {
+  background: var(--trade-field);
+  border-color: #426066;
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-schedule-board time {
+  background: var(--trade-accent-soft);
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-job-appointments span,
+  .crm-schedule-board li > div > span,
+  .crm-schedule-board li > button:nth-last-child(2)
+) {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-customer-boundary.protected,
+  .crm-customer-boundary.owned
+) {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-customer-boundary.protected {
+  background: #142c3b;
+  border-color: #5698bd;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-customer-boundary.owned,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-notes-list li.issue.resolved,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-payment-panel li.payment-paid {
+  background: #143329;
+  border-color: #376d5c;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-customer-boundary p,
+  .crm-job-appointments p,
+  .crm-notes-list p
+) {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-payment-panel li.payment-paid strong {
+  color: #9ce3c7;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-notes-list li.issue.open,
+  .crm-payment-panel li.payment-failed,
+  .crm-payment-panel li.payment-review_required
+) {
+  background: #3a201d;
+  border-color: #75423a;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-payment-panel li.payment-failed strong,
+  .crm-payment-panel li.payment-review_required strong
+) {
+  color: #ffb8ad;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-property-locked {
+  background: #142c3b;
+  border-color: #5698bd;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-property-locked :is(span, h4) {
+  color: #b9d7ff;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-property-locked p {
+  color: #a9c3d4;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-connected-account {
+  background: #143329;
+  color: #bcead8;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-connected-account strong {
+  color: #dff8ee;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-connected-account :is(span, small) {
+  color: #a4cdbd;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-sync-state {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-sync-state:is(.offline, .attention) {
+  color: #f4d58d;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.crm-status, .crm-payment-boundary) {
+  background: #352b16;
+  border-color: #735f2d;
+  color: #f4d58d;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-payment-boundary strong {
+  color: #b9d7ff;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-pipeline-report span,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-report-list dt {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-report-list div {
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.crm-record-table, .tlink-data-table, .purchasing-order-list) {
+  --tlink-table-head: #172d34;
+  --tlink-table-line: #294248;
+  --tlink-table-hover: #1b3439;
+  scrollbar-color: #52767a #102027;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.crm-record-table, .tlink-data-table, .purchasing-order-list) :is(article, [role="row"], [role="columnheader"]) {
+  border-color: var(--tlink-table-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-record-table .crm-row-open:focus-visible {
+  background: var(--trade-accent-soft);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-record-columns {
+  background: var(--tlink-table-head);
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-record-table > article {
+  background: var(--trade-surface);
+  border-color: var(--tlink-table-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-record-table > article.active {
+  background: var(--trade-surface-raised);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-record-table .crm-row-open b {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-record-table .crm-row-open em {
+  background: var(--trade-accent-soft);
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .workspace-list-controls,
+  .workspace-column-list,
+  .workspace-saved-views form
+) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .workspace-list-range strong,
+  .workspace-column-list label
+) {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .workspace-list-range span,
+  .workspace-list-pages span,
+  .workspace-list-controls label span,
+  .crm-job-toolbar button:not(.active)
+) {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .workspace-column-list > div {
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-index-open-button,
+  .crm-index-phone-link,
+  .crm-index-email-link
+) {
+  color: var(--trade-accent-readable) !important;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .workspace-list-controls button,
+  .workspace-column-manager > summary,
+  .workspace-csv-export,
+  .workspace-saved-views summary,
+  .workspace-saved-views button,
+  .crm-back-button,
+  .crm-customer-call-action,
+  .crm-customer-email-action
+) {
+  background: var(--trade-field);
+  border-color: #426066;
+  color: var(--trade-accent-readable);
+}
+
+/* Installer enquiry inbox. */
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .enquiry-create,
+  .enquiry-list > button,
+  .enquiry-detail
+) {
+  background: var(--trade-surface);
+  border-color: var(--trade-line);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .enquiry-contact,
+  .enquiry-converted,
+  .enquiry-history li,
+  .trade-import-mapping
+) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .enquiry-list span,
+  .enquiry-list small,
+  .enquiry-detail > header p
+) {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .enquiry-detail > header > strong {
+  background: var(--trade-accent-soft);
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .enquiry-protected {
+  background: #352b16;
+  border-color: #735f2d;
+  color: #f4d58d;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .enquiry-duplicates,
+  .enquiry-history,
+  .enquiry-duplicate-list label,
+  .enquiry-new-choice
+) {
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .enquiry-duplicate-list label,
+  .enquiry-new-choice
+) {
+  background: var(--trade-surface-raised);
+}
+
+/* Detailed CRM filters, wizards and job controls. */
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-granular-filters,
+  .crm-new-job .crm-customer-lookup,
+  .crm-new-job .crm-service-site,
+  .crm-assignee-search,
+  .crm-duplicate-match,
+  .crm-title-preview,
+  .crm-compliance-choice,
+  .crm-activity-builder,
+  .crm-job-compliance,
+  .crm-quick-invoice-panel,
+  .crm-field-job-header,
+  .crm-today-checklist,
+  .crm-field-secondary,
+  .crm-job-readiness,
+  .schedule-today-strip
+) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .searchable-lookup > div[role="listbox"],
+  .crm-address-options,
+  .crm-duplicate-match > div,
+  .crm-audit-review > section,
+  .crm-review-activity-card,
+  .crm-job-compliance article,
+  .crm-evidence-choice > label,
+  .crm-today-checklist li button,
+  .crm-readiness-summary article,
+  .crm-readiness-checks article,
+  .crm-phase-progress article,
+  .crm-actual-actions details > div,
+  .crm-completion-gate,
+  .schedule-today-list button
+) {
+  background: var(--trade-surface-raised);
+  border-color: var(--trade-line);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .searchable-lookup > div[role="listbox"] button:hover,
+  .searchable-lookup > div[role="listbox"] button[aria-selected="true"],
+  .crm-address-options button:hover,
+  .crm-address-options button[aria-selected="true"]
+) {
+  background: var(--trade-accent-soft);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .searchable-lookup > div[role="listbox"] button,
+  .crm-address-options button
+) {
+  background: var(--trade-surface-raised);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-granular-filters summary,
+  .crm-new-job fieldset legend,
+  .crm-text-action,
+  .crm-inline-heading button,
+  .crm-field-contact-actions a,
+  .crm-field-next-paths button,
+  .crm-field-secondary > summary,
+  .crm-actual-actions details > summary,
+  .crm-readiness-checks button,
+  .crm-readiness-requirement b
+) {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-wizard-steps li,
+  .crm-wizard-panel > header p,
+  .crm-title-preview span,
+  .crm-compliance-choice small,
+  .crm-compliance-intake-preview dt,
+  .crm-audit-review dt,
+  .crm-field-job-heading p,
+  .crm-field-job-heading small,
+  .crm-today-checklist li small,
+  .crm-readiness-summary span,
+  .crm-readiness-checks span,
+  .crm-readiness-deposit > span,
+  .crm-readiness-requirement small,
+  .crm-phase-progress small,
+  .schedule-today-list button span,
+  .schedule-today-list p
+) {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-wizard-steps li {
+  border-bottom-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-wizard-steps li span {
+  background: var(--trade-surface-raised);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-wizard-steps li.active {
+  border-bottom-color: var(--trade-accent);
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-wizard-steps li:is(.active, .complete) span,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-today-checklist li button > span,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-completion-ready {
+  background: var(--trade-accent-soft);
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-wizard-actions > button:not(.btn),
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-assignee-search button,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-field-contact-actions a,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-field-next-paths button,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-granular-filters button {
+  background: var(--trade-field);
+  border-color: #426066;
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-compliance-choice,
+  .crm-planned-activity-card,
+  .crm-activity-builder,
+  .crm-audit-review > section,
+  .crm-review-activity-card,
+  .crm-job-compliance
+) {
+  border-color: #365675;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-compliance-notice,
+  .crm-planned-activity-card dl > div,
+  .crm-review-activity-card dl > div,
+  .crm-compliance-intake-preview dl div,
+  .crm-audit-review > section > header,
+  .crm-job-compliance article dl > div
+) {
+  background: #172b40;
+  border-color: #365675;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-compliance-choice legend,
+  .crm-compliance-notice strong,
+  .crm-compliance-notice a,
+  .crm-audit-review > section > header span,
+  .crm-audit-review > section > header button,
+  .crm-review-activity-card > strong,
+  .crm-review-activity-card a,
+  .crm-job-compliance > header h4,
+  .crm-job-compliance > header span,
+  .crm-job-compliance article span,
+  .crm-job-compliance article dd,
+  .crm-job-compliance article a
+) {
+  color: #b9d7ff;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-job-compliance > header > strong {
+  background: #183452;
+  border-color: #365675;
+  color: #b9d7ff;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-job-compliance article dt {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-audit-review dl > div {
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-compliance-intake-preview dd,
+  .crm-audit-review dd,
+  .crm-job-compliance article strong,
+  .crm-readiness-summary strong,
+  .crm-readiness-checks strong,
+  .crm-readiness-requirement strong,
+  .crm-phase-progress strong,
+  .crm-phase-progress span,
+  .crm-completion-gate header strong
+) {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-readiness-summary small,
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.schedule-filter-panel, .schedule-capacity) summary {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-readiness-checks i,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-completion-ready :is(strong, span) {
+  background: var(--trade-accent-soft);
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.crm-wizard-message, .crm-finish-blockers) {
+  background: #352b16;
+  border-color: #735f2d;
+  color: #f4d58d;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-finish-blockers :is(strong, button) {
+  color: #f4d58d;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-readiness-summary .variance.attention small,
+  .crm-readiness-summary .variance.over_budget small,
+  .crm-readiness-checks .attention i,
+  .crm-completion-gate > div span.attention
+) {
+  background: #352b16;
+  color: #f4d58d;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-completion-gate > div span {
+  background: var(--trade-surface-soft);
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-today-strip {
+  background: linear-gradient(135deg, var(--trade-accent-soft), var(--trade-surface-soft));
+  border-color: color-mix(in srgb, var(--trade-accent) 48%, var(--trade-line));
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-today-strip > header :is(strong, b),
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-day-track.today > header :is(strong, span) {
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-day-track.today > header {
+  background: var(--trade-accent-soft);
+}
+
+/* Schedule navigation darkens; coloured appointment blocks keep their status colours. */
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .schedule-capacity,
+  .schedule-board > section,
+  .schedule-reschedule-queue,
+  .schedule-reschedule-queue > article,
+  .schedule-reschedule-queue > div > article,
+  .schedule-availability,
+  .schedule-calendar-links,
+  .schedule-selection,
+  .job-calendar-person-filter,
+  .schedule-filter-panel
+) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .schedule-capacity article,
+  .schedule-board article,
+  .schedule-request-notes p,
+  .schedule-reschedule-queue li,
+  .schedule-calendar-links article,
+  .schedule-appointment-details > div,
+  .schedule-today-list button
+) {
+  background: var(--trade-surface-raised);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .schedule-week-nav button,
+  .schedule-board article button,
+  .schedule-unassigned article > button,
+  .schedule-hours-grid button,
+  .schedule-unavailable-form button,
+  .schedule-unavailable-list button,
+  .schedule-reschedule-queue button,
+  .schedule-calendar-links button,
+  .schedule-selection button,
+  .schedule-pending-actions button
+):not(.primary) {
+  background: var(--trade-field);
+  border-color: #426066;
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-timetable {
+  background: var(--trade-surface);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.schedule-time-heading, .schedule-day-track > header) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-day-grid {
+  background: repeating-linear-gradient(to bottom, transparent 0, transparent 15px, #21363b 16px), repeating-linear-gradient(to bottom, transparent 0, transparent 63px, #345056 64px);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-day-track.past .schedule-day-grid {
+  background-color: #0d1a20;
+}
+
+/* Invoice navigation is themed; invoice and quote documents are reset below. */
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.invoice-metrics article, .invoice-toolbar > div) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .invoice-toolbar button {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .invoice-toolbar button.active {
+  background: var(--trade-surface-raised);
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .invoice-list {
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .invoice-list > article {
+  background: var(--trade-surface);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .invoice-list > article:hover,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .invoice-list > article:focus {
+  background: var(--trade-surface-raised);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .invoice-list article > div > span {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-quick-invoice-handoff,
+  .crm-invoice-credit-list article,
+  .crm-invoice-history article
+) {
+  background: var(--trade-surface-raised);
+  border-color: var(--trade-line);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-invoice-credit-list,
+  .crm-invoice-correction,
+  .crm-invoice-credit,
+  .crm-invoice-history,
+  .crm-quick-invoice-lines,
+  .crm-quick-invoice-lines > div + div
+) {
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .crm-quick-invoice-handoff > summary,
+  .crm-invoice-credit-list > strong,
+  .crm-invoice-correction > summary,
+  .crm-invoice-credit > summary,
+  .crm-invoice-history > summary
+) {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .follow-up-metrics article,
+  .follow-up-asset,
+  .follow-up-deliveries article
+) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .follow-up-list > article {
+  background: var(--trade-surface);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .follow-up-list > article.due-overdue {
+  border-left-color: #e07b61;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .follow-up-list > article.due-due_soon {
+  border-left-color: #d8b34c;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .follow-up-list article > header > div:last-child strong,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .follow-up-draft {
+  background: var(--trade-accent-soft);
+  border-color: color-mix(in srgb, var(--trade-accent) 44%, var(--trade-line));
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.follow-up-heading button, .follow-up-list footer button:not(.primary)) {
+  background: var(--trade-field);
+  border-color: #426066;
+  color: var(--trade-accent-readable);
+}
+
+/* Installed-asset navigation is dark; customer-facing document output is unaffected. */
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .asset-review,
+  .asset-list > article,
+  .asset-timeline
+) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-review article {
+  background: var(--trade-surface-raised);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .asset-hero span,
+  .asset-review header span,
+  .asset-timeline header span,
+  .asset-list article > header span,
+  .asset-timeline li > span
+) {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .asset-hero h2,
+  .asset-review h3,
+  .asset-timeline h3,
+  .asset-list article > header h3,
+  .asset-list dd,
+  .asset-timeline li > strong
+) {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .asset-hero p,
+  .asset-review header p,
+  .asset-timeline header p,
+  .asset-review article span,
+  .asset-review article small,
+  .asset-list article > header p,
+  .asset-list dt,
+  .asset-list footer label span,
+  .asset-timeline li > p,
+  .asset-timeline li > small
+) {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-workspace.compact,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-list footer,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-timeline li {
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-list article > header em {
+  background: var(--trade-accent-soft);
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-list article > header em.expired {
+  background: #3a201d;
+  color: #ffb8ad;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-list article > header em.due_90,
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.asset-notice, .asset-review) {
+  background: #342f18;
+  border-color: #796b39;
+  color: #f4d982;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-timeline li::before {
+  border-color: var(--trade-surface-soft);
+}
+
+/* Leads and marketplace retain status/accent hue on night-safe surfaces. */
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .dashboard-lead-filters,
+  .dashboard-opportunity-card,
+  .dashboard-connected-customer-identity,
+  .dashboard-enquiry-pack,
+  .dashboard-enquiry-thumbnails article,
+  .marketplace-finder,
+  .marketplace-table-navigation,
+  .marketplace-selection-builder
+) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-opportunity-card.status-offered {
+  background: color-mix(in srgb, var(--trade-accent) 12%, var(--trade-surface));
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-opportunity-card.status-interested {
+  background: color-mix(in srgb, #1787a6 16%, var(--trade-surface));
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .installer-platform-quote {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .installer-quote-field-group,
+  .installer-platform-quote fieldset
+) {
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .installer-platform-quote fieldset label,
+  .installer-quote-actions button,
+  .installer-quote-summary button,
+  .installer-quote-summary dl div
+) {
+  background: var(--trade-surface-raised);
+  border-color: #426066;
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .installer-platform-quote fieldset label.selected {
+  background: var(--trade-accent-soft);
+  border-color: var(--trade-accent);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .installer-platform-quote > header p,
+  .installer-quote-group-heading p,
+  .installer-quote-loading,
+  .installer-quote-summary dt
+) {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .installer-quote-group-heading h5,
+  .installer-platform-quote legend,
+  .installer-quote-summary dd
+) {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .installer-platform-quote > header > strong {
+  background: var(--trade-accent-soft);
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .dashboard-connected-customer-contact-grid > div,
+  .dashboard-opportunity-compact-summary dl > div,
+  .dashboard-enquiry-pack-grid > div,
+  .dashboard-enquiry-evidence,
+  .marketplace-list-form,
+  .marketplace-view-settings > div,
+  .marketplace-selected-items article,
+  .marketplace-price,
+  .marketplace-enquiry-status,
+  .marketplace-product-grid > article,
+  .marketplace-product-grid > article .is-pinned-column
+) {
+  background: var(--trade-surface-raised);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-opportunity-compact-summary dd {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .dashboard-opportunity-compact-summary > p,
+  .dashboard-opportunity-compact-summary dt
+) {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .marketplace-view-settings legend,
+  .marketplace-list-toolbar h3
+) {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .marketplace-view-settings fieldset label,
+  .marketplace-view-settings > div > small,
+  .marketplace-enquiry-submit > small
+) {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .marketplace-list-toolbar span,
+  .marketplace-selected-items article > div:first-child span,
+  .marketplace-result-summary button
+) {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .dashboard-opportunity-card-controls > button,
+  .dashboard-enquiry-evidence button,
+  .marketplace-table-navigation button,
+  .marketplace-view-actions button:last-child
+) {
+  background: var(--trade-field);
+  border-color: #426066;
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .dashboard-opportunity-card-controls > strong,
+  .dashboard-opportunity-tags span,
+  .dashboard-enquiry-pack-heading > strong
+) {
+  background: var(--trade-accent-soft);
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.marketplace-product-grid, .supplier-product-list) {
+  background: var(--trade-surface);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.marketplace-product-columns, .supplier-product-columns) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .marketplace-column-filter > summary {
+  background: var(--trade-field);
+  border-color: var(--trade-line);
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .marketplace-column-filter-menu {
+  background: var(--trade-surface-raised);
+  border-color: var(--trade-line);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .4);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .marketplace-column-filter-menu input[type="search"],
+html[data-tlink-colour-mode="night"] .trade-portal-shell .wholesaler-profile-catalogue input {
+  background: var(--trade-field);
+  border-color: var(--trade-line);
+  color: var(--trade-field-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .marketplace-column-filter-list > div {
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .marketplace-column-filter-menu > button {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .purchasing-ready-list > article,
+  .purchasing-ready-list details,
+  .purchasing-toolbar > div,
+  .workspace-list-controls,
+  .workspace-column-manager > div,
+  .purchasing-order-list,
+  .purchasing-order-card,
+  .purchasing-order-card > header,
+  .purchasing-order-card > nav,
+  .purchasing-order-summary article,
+  .purchasing-details div,
+  .purchasing-claim-create,
+  .purchasing-claims > article,
+  .supplier-dependency-search,
+  .admin-performance-summary,
+  .admin-performance-slo,
+  .admin-performance-plans article,
+  .supplier-location-cards article,
+  .supplier-location-form
+) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .purchasing-order-list > button.active,
+  .purchasing-toolbar button.active,
+  .purchasing-order-card > nav button.active,
+  .workspace-list-controls button,
+  .workspace-column-manager > summary,
+  .workspace-csv-export,
+  .workspace-column-list button,
+  .supplier-location-form > div:last-of-type button:last-child
+) {
+  background: var(--trade-surface-raised);
+  border-color: #426066;
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .purchasing-ready-list summary,
+  .purchasing-claim-create summary,
+  .purchasing-order-card > header span,
+  .purchasing-order-list b,
+  .workspace-column-list label,
+  .supplier-location-manager > header span,
+  .supplier-location-cards article > span,
+  .supplier-location-cards article button,
+  .admin-performance-summary span
+) {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .purchasing-ready-list label span,
+  .purchasing-update-form label span,
+  .purchasing-claim-create label span,
+  .purchasing-claims label span,
+  .purchasing-toolbar button,
+  .workspace-list-range span,
+  .workspace-list-pages span,
+  .workspace-list-controls label span,
+  .workspace-column-manager p,
+  .purchasing-order-list em,
+  .purchasing-note,
+  .purchasing-status-callout,
+  .admin-performance-slo span,
+  .admin-performance-plans code
+) {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .purchasing-items article,
+  .workspace-column-list > div,
+  .purchasing-order-list > button + button,
+  .admin-performance-table > div,
+  .admin-performance-plans,
+  .supplier-product-list > article
+) {
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.purchasing-note, .purchasing-status-callout) {
+  background: var(--trade-accent-soft);
+  border-color: var(--trade-accent);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.purchasing-note strong, .purchasing-status-callout strong) {
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .supplier-product-list > article > b,
+  .admin-performance-table > div:first-child
+) {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .wholesaler-profile-drawer {
+  background: var(--trade-surface);
+  box-shadow: -18px 0 50px rgba(0, 0, 0, .45);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .wholesaler-profile-drawer > header,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .wholesaler-profile-drawer section,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .wholesaler-profile-catalogue article {
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .wholesaler-profile-stats div,
+  .wholesaler-location-list article
+) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .wholesaler-profile-drawer header h2,
+  .wholesaler-profile-stats strong,
+  .wholesaler-profile-drawer dd,
+  .wholesaler-location-list article strong,
+  .wholesaler-profile-catalogue article strong
+) {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .wholesaler-profile-drawer header p,
+  .wholesaler-profile-stats span,
+  .wholesaler-profile-drawer dt,
+  .wholesaler-location-list article p,
+  .wholesaler-location-list article small,
+  .wholesaler-location-list article a,
+  .wholesaler-location-list article em,
+  .wholesaler-profile-catalogue article span,
+  .wholesaler-profile-catalogue article small,
+  .wholesaler-profile-catalogue article a
+) {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .wholesaler-profile-drawer header span,
+  .wholesaler-profile-drawer section > h3,
+  .wholesaler-location-list article > span
+) {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .wholesaler-profile-drawer header button {
+  background: var(--trade-field);
+  border-color: var(--trade-line);
+  color: var(--trade-accent-readable);
+}
+
+/* Import guidance and review states use night-safe neutral and semantic surfaces. */
+html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-import-workspace {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-import-hero {
+  background: linear-gradient(135deg, var(--trade-surface-soft), var(--trade-accent-soft));
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .trade-import-hero > div > span,
+  .trade-import-choose > span,
+  .trade-import-type-grid button span,
+  .trade-import-review header span,
+  .trade-import-history header span,
+  .trade-import-dropzone > span,
+  .trade-import-row em
+) {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .trade-import-hero p,
+  .trade-import-type-grid button small,
+  .trade-import-template-card p,
+  .trade-import-dropzone small,
+  .trade-import-review p,
+  .trade-import-summary span,
+  .trade-import-row span,
+  .trade-import-row small,
+  .trade-import-actions span,
+  .trade-import-history button span,
+  .trade-import-history button small
+) {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-import-hero aside {
+  background: var(--trade-surface-raised);
+  border: 1px solid var(--trade-line);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-import-steps li > span {
+  background: var(--trade-surface-raised);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-import-steps li.active {
+  background: var(--trade-accent-soft);
+  border-color: var(--trade-accent);
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-import-steps li.active > span,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-import-filters button.active {
+  background: #0b806f;
+  border-color: #0b806f;
+  color: #fff;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .trade-import-type-grid button,
+  .trade-import-template-card button,
+  .trade-import-template-card a,
+  .trade-import-filters button,
+  .trade-import-row > button,
+  .trade-import-rollback
+) {
+  background: var(--trade-field);
+  border-color: #426066;
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-import-type-grid button.active,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-import-row > button.include {
+  background: var(--trade-accent-soft);
+  border-color: var(--trade-accent);
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-import-summary .ready {
+  background: #123526;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .trade-import-summary .warning,
+  .trade-import-row.warning
+) {
+  background: #342f18;
+  border-color: #796b39;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .trade-import-summary .duplicate,
+  .trade-import-row.duplicate
+) {
+  background: #282346;
+  border-color: #655a91;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .trade-import-summary .error,
+  .trade-import-row.error
+) {
+  background: #3a201d;
+  border-color: #75423a;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-import-actions {
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-import-rollback {
+  border-color: #75423a;
+  color: #ffb8ad;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-import-close {
+  color: var(--trade-accent-readable);
+}
+
+/* Business hub and handover remain operational portal surfaces in night mode. */
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .business-hub-create,
+  .business-hub-toolbar > div,
+  .business-work-card,
+  .business-work-schedule,
+  .business-work-tasks li,
+  .business-hub-empty,
+  .business-hub-activity li,
+  .trade-handover-centre,
+  .handover-workspace,
+  .handover-statusbar > div,
+  .handover-asset-list > article,
+  .handover-asset-list dl div,
+  .handover-add-record,
+  .handover-compliance article,
+  .handover-document-list article,
+  .handover-document-form,
+  .trade-lifecycle-metrics > div,
+  .lifecycle-plan,
+  .lifecycle-event-list article,
+  .trade-lifecycle-toggle,
+  .crm-form-library,
+  .crm-form-library article,
+  .crm-job-form > summary,
+  .crm-job-form label:has(input[type="checkbox"])
+) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .business-hub-toolbar button.selected,
+  .business-work-badges span,
+  .business-work-tasks button,
+  .business-work-assignee button,
+  .business-work-card > footer button,
+  .trade-handover-centre > summary b,
+  .handover-asset-list button,
+  .handover-document-list button,
+  .lifecycle-plan button,
+  .trade-lifecycle-assets > article > header > strong,
+  .trade-lifecycle-automation button,
+  .crm-form-library button,
+  .crm-job-form-actions button:not(.complete)
+) {
+  background: var(--trade-surface-raised);
+  border-color: #426066;
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .business-work-card > header > div:first-child > span,
+  .business-hub-activity summary,
+  .handover-locked > span,
+  .handover-start span,
+  .handover-assets header span,
+  .handover-compliance header span,
+  .handover-documents header span,
+  .handover-readiness span,
+  .handover-asset-list article > div > span,
+  .handover-document-list article > div > span,
+  .handover-add-record > summary,
+  .trade-lifecycle-workspace > header span,
+  .trade-lifecycle-assets > article > header span,
+  .lifecycle-plan-summary span,
+  .lifecycle-plan summary,
+  .crm-job-forms > header span,
+  .crm-form-library article span
+) {
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .business-hub-access.is-member,
+  .handover-customer-link.linked,
+  .handover-readiness.ready,
+  .trade-lifecycle-automation
+) {
+  background: #143329;
+  border-color: #376d5c;
+  color: #bcead8;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .business-hub-access.is-free,
+  .business-hub-metrics article.attention,
+  .handover-locked,
+  .handover-start,
+  .handover-customer-link.internal,
+  .handover-review-note,
+  .handover-readiness.blocked,
+  .trade-safety-notices,
+  .crm-job-form > div > p
+) {
+  background: #352b16;
+  border-color: #735f2d;
+  color: #f4d58d;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-safety-notices > article {
+  background: #3a2e17;
+  border-color: #735f2d;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .handover-review-note strong,
+  .handover-review-note p,
+  .handover-readiness.blocked ul,
+  .trade-safety-notices > h5,
+  .trade-safety-notices article span,
+  .trade-safety-notices article a
+) {
+  color: #f4d58d;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .business-hub-create[open] > summary,
+  .business-work-tasks,
+  .business-work-card > footer,
+  .business-hub-activity,
+  .trade-handover-centre[open] > summary,
+  .handover-assets,
+  .handover-compliance,
+  .handover-documents,
+  .handover-readiness,
+  .trade-lifecycle-workspace,
+  .lifecycle-plan details,
+  .trade-lifecycle-assets > article,
+  .crm-job-form
+) {
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .handover-inline-status {
+  background: var(--trade-accent-soft);
+  border-color: var(--trade-line);
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-job-form > summary b {
+  background: #352b16;
+  color: #f4d58d;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-job-form.status-complete > summary b {
+  background: #143329;
+  color: #9ce3c7;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .handover-corrections {
+  background: color-mix(in srgb, #6f4795 18%, var(--trade-surface));
+  border-color: #6d5481;
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .handover-correction-list article,
+  .handover-correction-list dl div
+) {
+  background: var(--trade-surface-raised);
+  border-color: #6d5481;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .handover-corrections > header span,
+  .handover-corrections form label,
+  .handover-correction-list article b
+) {
+  color: #d6b8ee;
+}
+
+/* Business settings and supplier operational surfaces. */
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .business-settings-jump-nav,
+  .business-settings-section,
+  .supplier-command-nav,
+  .supplier-product-library,
+  .supplier-product-editor,
+  .purchasing-hero,
+  .purchasing-flow-strip,
+  .purchasing-layout,
+  .trade-import-choose,
+  .trade-import-review,
+  .trade-import-history
+) {
+  background: var(--trade-surface);
+  border-color: var(--trade-line);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .business-settings-jump-nav a,
+  .dashboard-account-links a,
+  .business-settings-crop-editor,
+  .dashboard-choice-grid label,
+  .dashboard-notification-list label,
+  .business-hub-metrics article,
+  .supplier-overview-actions button,
+  .purchasing-boundary,
+  .trade-import-steps li,
+  .trade-import-template-card,
+  .trade-import-dropzone,
+  .trade-import-summary article,
+  .trade-import-row,
+  .trade-import-history button
+) {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-account-links strong {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-account-links span {
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .dashboard-choice-grid label.selected {
+  background: var(--trade-accent-soft);
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.supplier-command-nav button:hover, .supplier-overview-actions button:hover) {
+  background: var(--trade-surface-raised);
+}
+
+/* These canvases represent customer-facing documents and intentionally stay in day mode. */
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
+  .business-settings-document-preview,
+  .crm-invoice-preview,
+  .trade-quote-document-sheet,
+  .crm-invoice-preview-dialog:not(.schedule-appointment-dialog):not(:has(.crm-retake-review-dialog))
+) {
+  --trade-ink: #0c3738;
+  --trade-muted: #667c76;
+  --trade-line: #d5e4df;
+  --trade-surface: #ffffff;
+  --trade-surface-soft: #f5f9f7;
+  --trade-surface-raised: #ffffff;
+  --trade-field: #ffffff;
+  --trade-field-ink: #163c32;
+  --trade-field-placeholder: #6e827c;
+  --trade-accent-readable: var(--trade-accent);
+  --trade-accent-soft: var(--trade-day-accent-soft);
+  --trade-accent-soft-ink: var(--trade-day-accent-soft-ink);
+  --color-aea-card: #ffffff;
+  --color-aea-ink: #062c32;
+  --color-aea-ink-soft: #0c4b4a;
+  --color-aea-line: #d7e5df;
+  --color-aea-line-strong: #a9c9bd;
+  --color-aea-text: #15241f;
+  --color-aea-muted: #5d7068;
+  --color-aea-green: var(--trade-accent);
+  --color-aea-green-dark: var(--trade-accent-hover);
+  background: #ffffff;
+  border-color: #cadbd4;
+  color: #0c3738;
+  color-scheme: light;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .business-settings-document-preview :is(.business-settings-document-terms, .business-settings-document-payment, .business-settings-document-banner) {
+  background: #f5f9f7;
+  border-color: #d5e4df;
+  color: #0c3738;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .business-settings-document-preview .heading {
+  background: var(--trade-day-accent-soft);
+  color: var(--trade-day-accent-soft-ink);
+}
+
+/* Date picker is portalled to document.body. */
+html[data-tlink-colour-mode="night"] .site-date-popover {
+  --color-aea-ink: #e9f3f0;
+  background: #102027;
+  border-color: #426066;
+  color: #e9f3f0;
+  color-scheme: dark;
+}
+
+html[data-tlink-colour-mode="night"] .site-date-popover :is(.site-date-popover-heading button, .site-date-range-readout, .site-date-time, .site-date-clear) {
+  background: #162a31;
+  border-color: #2d464b;
+  color: #cbdad6;
+}
+
+html[data-tlink-colour-mode="night"] .site-date-popover .site-date-grid button {
+  color: #d9e6e2;
+}
+
+html[data-tlink-colour-mode="night"] .site-date-popover .site-date-grid button.outside {
+  color: #78908a;
+}
+
+html[data-tlink-colour-mode="night"] .site-date-popover .site-date-grid button:disabled {
+  color: #657a75;
+}
+
+html[data-tlink-colour-mode="night"] .site-date-popover .site-date-grid button:hover,
+html[data-tlink-colour-mode="night"] .site-date-popover .site-date-grid button.in-range {
+  background: #1b3a3c;
+}
+
+html[data-tlink-colour-mode="night"] .site-date-popover .site-date-grid button.selected {
+  background: #0b806f;
+  color: #ffffff;
+}
+
+html[data-tlink-colour-mode="night"] .site-date-popover select {
+  background: #0b1a20;
+  border-color: #426066;
+  color: #eef7f4;
+}
+
+@media (max-width: 780px) {
+  .trade-portal-shell .tlink-colour-mode-toggle {
+    position: absolute;
+    right: 70px;
+    top: 16px;
+    z-index: 36;
+  }
+
+  .trade-portal-shell.is-supplier .tlink-colour-mode-toggle {
+    right: 16px;
+  }
+}
+
+@media (max-width: 520px) {
+  .trade-portal-shell .tlink-colour-mode-toggle {
+    min-height: 44px;
+    padding: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tlink-colour-mode-toggle > span {
+    transition: none;
+  }
+}
