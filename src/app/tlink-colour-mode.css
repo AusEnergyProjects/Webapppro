@@ -1354,6 +1354,7 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .dashboard-lead-filters,
   .dashboard-lead-list,
   .dashboard-opportunity-card,
+  .dashboard-empty-state,
   .dashboard-connected-customer-identity,
   .dashboard-enquiry-pack,
   .dashboard-enquiry-thumbnails article,
