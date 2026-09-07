@@ -34,4 +34,3 @@ export function cleanTradeFormTemplateInput(body: Record<string, unknown>) {
   if (new Set(fields.map((field) => field.key)).size !== fields.length) throw new Error("DUPLICATE_FIELDS");
   return { templateKey, version, name, jurisdiction, categories, description, guidance, sourceNotes, fields };
 }
-
