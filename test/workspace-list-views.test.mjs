@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { defaultCustomerCreatedRange } from "../src/lib/customer-register-range.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
@@ -90,7 +91,7 @@ test("installer indexes apply named views, movable columns and matching visible 
   assert.match(shared, /"installer-jobs": \[\.\.\.JOB_REGISTER_COLUMN_KEYS\]/);
   assert.match(shared, /INSTALLER_JOB_DEFAULT_COLUMNS = \[\.\.\.JOB_REGISTER_COLUMN_KEYS\]/);
   assert.match(shared, /if \(viewKey === "installer-jobs"\) return \{ \.\.\.defaults, jobColumnOrderVersion: 4, columns: \[\.\.\.INSTALLER_JOB_DEFAULT_COLUMNS\] \}/);
-  assert.match(shared, /if \(viewKey === "installer-customers"\) return \{ \.\.\.defaults, customerColumnOrderVersion: 1, columns: \[\.\.\.columnsByView\[viewKey\]\] \}/);
+  assert.match(shared, /if \(viewKey === "installer-customers"\) \{[\s\S]*customerFilterVersion: CUSTOMER_REGISTER_FILTER_VERSION,[\s\S]*createdFrom: range\.from,[\s\S]*createdTo: range\.to/);
   assert.match(shared, /migrateLegacyInstallerJobColumns\?: boolean/);
   assert.match(shared, /migrateLegacyInstallerCustomerColumns\?: boolean/);
   assert.match(shared, /Number\(raw\.jobColumnOrderVersion \|\| 0\) < 4/);
@@ -99,7 +100,7 @@ test("installer indexes apply named views, movable columns and matching visible 
   assert.match(shared, /legacyInstallerJobColumns && \(isLegacyExactOrder \|\| !columns\.includes\("createdDate"\)\)/);
   assert.match(shared, /migrated\.splice\(Math\.max\(0, migrated\.indexOf\("scheduleDate"\) \+ 1\), 0, "createdDate"\)/);
   assert.match(shared, /legacyInstallerCustomerColumns && columns\.length && !columns\.includes\("createdDate"\)/);
-  assert.match(shared, /cleanListView\(viewKey, parsed, \{ migrateLegacyInstallerJobColumns: true, migrateLegacyInstallerCustomerColumns: true \}\)/);
+  assert.match(shared, /cleanListView\(viewKey, parsed, \{[\s\S]*migrateLegacyInstallerJobColumns: true,[\s\S]*migrateLegacyInstallerCustomerColumns: true,[\s\S]*migrateLegacyInstallerCustomerFilters: true/);
   assert.match(shared, /preferences: cleanListView\(viewKey, \(parsed\.preferences \|\| \{\}\) as Record<string, unknown>, \{[\s\S]*migrateLegacyInstallerJobColumns: true,[\s\S]*migrateLegacyInstallerCustomerColumns: true/);
   assert.match(shared, /const preferences = cleanListView\(viewKey, \(raw\.preferences \|\| \{\}\) as Record<string, unknown>\)/);
   assert.match(shared, /return columns\.length \? columns : \[\.\.\.columnsByView\[viewKey\]\]/);
@@ -115,22 +116,53 @@ test("installer job rows preserve the selected register column grid", () => {
   const jobResults = crmUi.slice(jobResultsStart, crmUi.indexOf("</section>", jobResultsStart));
   assert.match(
     jobResults,
-    /<article key=\{job\.id\} tabIndex=\{0\} className=\{`\$\{registerStyles\.row\} crm-row-open crm-record-data-row crm-index-row`\} style=\{jobGridStyle\}/,
+    /<article key=\{job\.id\} tabIndex=\{0\} role="row" className=\{`\$\{registerStyles\.row\} crm-row-open crm-record-data-row crm-index-row`\} style=\{jobGridStyle\}/,
   );
-  assert.match(jobResults, /\}>\{jobColumns\.map\(\(key\) => <span className="crm-index-cell" key=\{key\}>\{jobIndexCell\(job, key,/);
+  assert.match(jobResults, /\}>\{jobColumns\.map\(\(key\) => <span className="crm-index-cell" role="cell" key=\{key\}>\{jobIndexCell\(job, key,/);
   assert.doesNotMatch(
     jobResults,
     /<article key=\{job\.id\} className="crm-row-open"[^>]*><div className="crm-record-data-row crm-index-row"/,
   );
   assert.doesNotMatch(jobResults, /type="checkbox"|crm-row-select/);
-  assert.match(jobResults, /jobColumns\.map\(\(key\) => <span key=\{key\}>\{jobIndexColumns\.find/);
+  assert.match(jobResults, /jobColumns\.map\(\(key\) => \{ const column = jobIndexColumns\.find/);
+  assert.match(jobResults, /<SortableIndexHeading key=\{key\} column=\{column\} current=\{jobSort\}/);
   assert.match(crmUi, /if \(key === "contactNumber"\) return record\.contactNumber \? <a[\s\S]*href=\{phoneHref\(record\.contactNumber\)\}/);
 });
 
+test("installer customer rows and headings share one stable register grid", () => {
+  const customerResultsStart = crmUi.indexOf('aria-label="Customer results"');
+  assert.notEqual(customerResultsStart, -1);
+  const customerResults = crmUi.slice(customerResultsStart, crmUi.indexOf("</section></div>", customerResultsStart));
+  assert.match(customerResults, /className="crm-record-columns crm-dynamic-columns" style=\{customerRecordStyle\}/);
+  assert.match(customerResults, /className=\{`\$\{registerStyles\.row\} crm-record-data-row crm-index-row`\}/);
+  assert.match(customerResults, /customerColumns\.map\(\(key\) => <span className="crm-index-cell" role="cell"/);
+  assert.doesNotMatch(customerResults, /crm-row-open/);
+});
+
+test("customer register defaults to a leap-safe rolling twelve-month window", () => {
+  assert.deepEqual(defaultCustomerCreatedRange(new Date("2026-09-07T02:00:00.000Z")), {
+    from: "2025-09-07",
+    to: "2026-09-07",
+  });
+  assert.deepEqual(defaultCustomerCreatedRange(new Date("2024-02-29T02:00:00.000Z")), {
+    from: "2023-02-28",
+    to: "2024-02-29",
+  });
+  const customerToolbarStart = crmUi.indexOf('className="crm-customer-toolbar crm-customer-register-toolbar"');
+  const createdFrom = crmUi.indexOf("<span>Created from</span>", customerToolbarStart);
+  const search = crmUi.indexOf("<span>Find a customer</span>", customerToolbarStart);
+  assert.ok(customerToolbarStart >= 0 && createdFrom > customerToolbarStart && search > createdFrom);
+  assert.match(crmUi, /if \(view !== "customers" \|\| creating === "customer" \|\| !customerPreferencesReady\) return/);
+});
+
 test("installer saved views retain bounded populated job and created-date filters", () => {
-  for (const field of ["appointmentId", "scheduledFrom", "scheduledTo", "createdFrom", "createdTo", "invoiceStatus", "customerReference", "firstName", "lastName", "street", "state"]) {
+  for (const field of ["appointmentId", "scheduledFrom", "scheduledTo", "invoiceStatus", "customerReference", "firstName", "lastName", "street", "state"]) {
     assert.match(shared, new RegExp(`${field}\\?: string`));
     assert.match(shared, new RegExp(`${field}: cleanAdminText\\(raw\\.${field},`));
+    assert.match(crmUi, new RegExp(`${field}:`));
+  }
+  for (const field of ["createdFrom", "createdTo"]) {
+    assert.match(shared, new RegExp(`${field}\\?: string`));
     assert.match(crmUi, new RegExp(`${field}:`));
   }
   for (const field of ["jobId", "email", "phone", "suburb", "postcode"]) {
@@ -143,8 +175,11 @@ test("installer saved views retain bounded populated job and created-date filter
   assert.match(shared, /JOB_REGISTER_OPERATIONAL_STATUSES/);
   assert.match(shared, /quoteTotalMin: cleanNonNegativeMoneyFilter\(raw\.quoteTotalMin\)/);
   assert.match(shared, /quoteTotalMax: cleanNonNegativeMoneyFilter\(raw\.quoteTotalMax\)/);
-  assert.match(shared, /"installer-jobs": new Set\(\["updated-desc", "created-desc", "created-asc"/);
-  assert.match(shared, /"installer-customers": new Set\(\["name-asc", "name-desc", "last-name-asc", "last-name-desc", "created-desc", "created-asc"/);
+  assert.match(shared, /"installer-jobs": new Set\(INSTALLER_JOB_REGISTER_SORT_VALUES\)/);
+  assert.match(shared, /"installer-customers": new Set\(INSTALLER_CUSTOMER_REGISTER_SORT_VALUES\)/);
+  assert.match(shared, /applyDefaultCustomerCreatedRange = legacyInstallerCustomerFilters && !createdFrom && !createdTo/);
+  assert.match(shared, /createdFrom: applyDefaultCustomerCreatedRange \? defaults\.createdFrom : createdFrom/);
+  assert.match(shared, /createdTo: applyDefaultCustomerCreatedRange \? defaults\.createdTo : createdTo/);
 });
 
 test("high volume catalogue, order and account indexes use server paging", () => {

@@ -8,7 +8,7 @@ import {
   jobSyncChangeStatements,
   nextJobRevision,
 } from "@/lib/trade-team-sync-server";
-import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
+import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter } from "@/lib/keyset-pagination";
 import { performanceJson, routeTimer } from "@/lib/route-performance";
 import { ftsPrefixQuery } from "@/lib/fts-search";
 import { appointmentEndsAt, assertAppointmentSlot, assertFutureAppointment, australiaLocalDateTime } from "@/lib/trade-schedule";
@@ -61,6 +61,19 @@ import {
   ENERGY_SERVICE_LABELS,
 } from "@/lib/energy-service-catalogue.mjs";
 import { canRescheduleWithinScope } from "@/lib/trade-team-permission-policy.mjs";
+import type {
+  InstallerCustomerRegisterSort,
+  InstallerJobRegisterSort,
+} from "@/lib/trade-crm-register-sorts";
+import {
+  crmSort,
+  crmTerm,
+  CUSTOMER_DISPLAY_NAME_SQL,
+  CUSTOMER_JOB_DERIVED_SORTS,
+  CUSTOMER_PIPELINE_STATUS_LABEL_SQL,
+  CUSTOMER_REGISTER_SORTS,
+  type CrmSort,
+} from "@/lib/trade-crm-register-sort-sql";
 import {
   assertTradeJobReadyForScheduling,
   assertTradeScheduleAvailable,
@@ -121,13 +134,6 @@ const APPOINTMENT_LABELS: Record<string, string> = {
   phone_call: "Phone call", site_visit: "Site visit", quote_review: "Quote review",
   installation: "Installation", service: "Service visit", admin: "Office task",
 };
-type CrmSortTerm = { expression: string; direction: KeysetDirection; rowKey: string; numeric?: boolean };
-type CrmSort = { orderBy: string; terms: CrmSortTerm[] };
-const crmTerm = (expression: string, direction: KeysetDirection, rowKey: string, numeric = false): CrmSortTerm => ({ expression, direction, rowKey, numeric });
-const crmSort = (terms: CrmSortTerm[], idExpression: string): CrmSort => {
-  const stable = [...terms, crmTerm(idExpression, terms.at(-1)?.direction || "asc", "id")];
-  return { orderBy: stable.map((item) => `${item.expression} ${item.direction.toUpperCase()}`).join(", "), terms: stable };
-};
 const JOB_REGISTER_AUDITED_SQL = `EXISTS (
   SELECT 1 FROM compliance_cases register_case
   WHERE register_case.work_order_id = w.id
@@ -175,6 +181,11 @@ const JOB_REGISTER_QUOTE_TOTAL_SQL = `(
 )`;
 const JOB_REGISTER_QUOTE_SORT_SQL = `COALESCE(${JOB_REGISTER_QUOTE_TOTAL_SQL}, 0)`;
 const JOB_EFFECTIVE_SCHEDULE_SQL = "COALESCE(NULLIF(selected_appointment.starts_at, ''), NULLIF(w.scheduled_start, ''), '')";
+const JOB_REGISTER_ACTIVITY_SQL = `(SELECT json_extract(ci.intent_snapshot, '$.activity.title')
+  FROM trade_work_order_compliance_intents ci
+  WHERE ci.work_order_id = w.id AND ci.installer_uid = w.firebase_uid
+    AND ci.status IN ('planned', 'case_linked')
+  ORDER BY ci.revision DESC, ci.created_at DESC LIMIT 1)`;
 const JOB_REGISTER_STATUS_RANK_SQL = `CASE
   WHEN w.stage = 'cancelled' OR d.pipeline_stage = 'lost' THEN 6
   WHEN ${JOB_REGISTER_AUDITED_SQL} THEN 4
@@ -185,42 +196,43 @@ const JOB_SORTS: Record<string, CrmSort> = {
   "number-asc": crmSort([crmTerm("w.work_number COLLATE NOCASE", "asc", "work_number")], "w.id"),
   "number-desc": crmSort([crmTerm("w.work_number COLLATE NOCASE", "desc", "work_number")], "w.id"),
   "first-name-asc": crmSort([crmTerm(`${protectedJobCustomerText("c.first_name")} COLLATE NOCASE`, "asc", "first_name"), crmTerm(`${protectedJobCustomerText("c.last_name")} COLLATE NOCASE`, "asc", "last_name")], "w.id"),
+  "first-name-desc": crmSort([crmTerm(`${protectedJobCustomerText("c.first_name")} COLLATE NOCASE`, "desc", "first_name"), crmTerm(`${protectedJobCustomerText("c.last_name")} COLLATE NOCASE`, "desc", "last_name")], "w.id"),
   "last-name-asc": crmSort([crmTerm(`${protectedJobCustomerText("c.last_name")} COLLATE NOCASE`, "asc", "last_name"), crmTerm(`${protectedJobCustomerText("c.first_name")} COLLATE NOCASE`, "asc", "first_name")], "w.id"),
+  "last-name-desc": crmSort([crmTerm(`${protectedJobCustomerText("c.last_name")} COLLATE NOCASE`, "desc", "last_name"), crmTerm(`${protectedJobCustomerText("c.first_name")} COLLATE NOCASE`, "desc", "first_name")], "w.id"),
   "phone-asc": crmSort([crmTerm(`${protectedJobCustomerText("c.phone")} COLLATE NOCASE`, "asc", "customer_phone")], "w.id"),
+  "phone-desc": crmSort([crmTerm(`${protectedJobCustomerText("c.phone")} COLLATE NOCASE`, "desc", "customer_phone")], "w.id"),
   "email-asc": crmSort([crmTerm(`${protectedJobCustomerText("c.email")} COLLATE NOCASE`, "asc", "customer_email")], "w.id"),
+  "email-desc": crmSort([crmTerm(`${protectedJobCustomerText("c.email")} COLLATE NOCASE`, "desc", "customer_email")], "w.id"),
   "street-asc": crmSort([crmTerm(`${protectedJobCustomerText("ss.address_line_1")} COLLATE NOCASE`, "asc", "site_address_line_1")], "w.id"),
+  "street-desc": crmSort([crmTerm(`${protectedJobCustomerText("ss.address_line_1")} COLLATE NOCASE`, "desc", "site_address_line_1")], "w.id"),
   "postcode-asc": crmSort([crmTerm(`${protectedJobCustomerText("ss.postcode")} COLLATE NOCASE`, "asc", "site_postcode")], "w.id"),
+  "postcode-desc": crmSort([crmTerm(`${protectedJobCustomerText("ss.postcode")} COLLATE NOCASE`, "desc", "site_postcode")], "w.id"),
   "suburb-asc": crmSort([crmTerm(`${protectedJobCustomerText("ss.suburb")} COLLATE NOCASE`, "asc", "site_suburb")], "w.id"),
+  "suburb-desc": crmSort([crmTerm(`${protectedJobCustomerText("ss.suburb")} COLLATE NOCASE`, "desc", "site_suburb")], "w.id"),
   "state-asc": crmSort([crmTerm(`${protectedJobCustomerText("ss.address_state")} COLLATE NOCASE`, "asc", "site_address_state")], "w.id"),
-  "assignee-asc": crmSort([crmTerm("trim(w.assignee_member_id) = ''", "asc", "assignment_empty", true), crmTerm("w.assignee_label COLLATE NOCASE", "asc", "assignee_label")], "w.id"),
+  "state-desc": crmSort([crmTerm(`${protectedJobCustomerText("ss.address_state")} COLLATE NOCASE`, "desc", "site_address_state")], "w.id"),
+  "assignee-asc": crmSort([crmTerm("(trim(w.assignee_member_id) = '')", "asc", "assignment_empty", true), crmTerm("w.assignee_label COLLATE NOCASE", "asc", "assignee_label")], "w.id"),
+  "assignee-desc": crmSort([crmTerm("(trim(w.assignee_member_id) = '')", "asc", "assignment_empty", true), crmTerm("w.assignee_label COLLATE NOCASE", "desc", "assignee_label")], "w.id"),
   "status-asc": crmSort([crmTerm(JOB_REGISTER_STATUS_RANK_SQL, "asc", "register_status_rank", true)], "w.id"),
-  "quote-total-asc": crmSort([crmTerm(`${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL`, "asc", "quote_total_empty", true), crmTerm(JOB_REGISTER_QUOTE_SORT_SQL, "asc", "quote_total_sort_cents", true)], "w.id"),
-  "quote-total-desc": crmSort([crmTerm(`${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL`, "asc", "quote_total_empty", true), crmTerm(JOB_REGISTER_QUOTE_SORT_SQL, "desc", "quote_total_sort_cents", true)], "w.id"),
-  "date-asc": crmSort([crmTerm(`${JOB_EFFECTIVE_SCHEDULE_SQL} = ''`, "asc", "schedule_empty", true), crmTerm(JOB_EFFECTIVE_SCHEDULE_SQL, "asc", "effective_scheduled_start"), crmTerm("w.updated_at", "desc", "updated_at")], "w.id"),
-  "date-desc": crmSort([crmTerm(`${JOB_EFFECTIVE_SCHEDULE_SQL} = ''`, "asc", "schedule_empty", true), crmTerm(JOB_EFFECTIVE_SCHEDULE_SQL, "desc", "effective_scheduled_start"), crmTerm("w.updated_at", "desc", "updated_at")], "w.id"),
+  "status-desc": crmSort([crmTerm(JOB_REGISTER_STATUS_RANK_SQL, "desc", "register_status_rank", true)], "w.id"),
+  "quote-total-asc": crmSort([crmTerm(`(${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL)`, "asc", "quote_total_empty", true), crmTerm(JOB_REGISTER_QUOTE_SORT_SQL, "asc", "quote_total_sort_cents", true)], "w.id"),
+  "quote-total-desc": crmSort([crmTerm(`(${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL)`, "asc", "quote_total_empty", true), crmTerm(JOB_REGISTER_QUOTE_SORT_SQL, "desc", "quote_total_sort_cents", true)], "w.id"),
+  "s-a": crmSort([crmTerm("0", "asc", "stc_certificate_count", true)], "w.id"),
+  "s-d": crmSort([crmTerm("0", "desc", "stc_certificate_count", true)], "w.id"),
+  "v-a": crmSort([crmTerm("0", "asc", "veec_certificate_count", true)], "w.id"),
+  "v-d": crmSort([crmTerm("0", "desc", "veec_certificate_count", true)], "w.id"),
+  "e-a": crmSort([crmTerm("0", "asc", "esc_certificate_count", true)], "w.id"),
+  "e-d": crmSort([crmTerm("0", "desc", "esc_certificate_count", true)], "w.id"),
+  "o-a": crmSort([crmTerm("0", "asc", "other_certificate_count", true)], "w.id"),
+  "o-d": crmSort([crmTerm("0", "desc", "other_certificate_count", true)], "w.id"),
+  "date-asc": crmSort([crmTerm(`(${JOB_EFFECTIVE_SCHEDULE_SQL} = '')`, "asc", "schedule_empty", true), crmTerm(JOB_EFFECTIVE_SCHEDULE_SQL, "asc", "effective_scheduled_start"), crmTerm("w.updated_at", "desc", "updated_at")], "w.id"),
+  "date-desc": crmSort([crmTerm(`(${JOB_EFFECTIVE_SCHEDULE_SQL} = '')`, "asc", "schedule_empty", true), crmTerm(JOB_EFFECTIVE_SCHEDULE_SQL, "desc", "effective_scheduled_start"), crmTerm("w.updated_at", "desc", "updated_at")], "w.id"),
   "created-desc": crmSort([crmTerm("w.created_at", "desc", "created_at")], "w.id"),
   "created-asc": crmSort([crmTerm("w.created_at", "asc", "created_at")], "w.id"),
+  "service-asc": crmSort([crmTerm(`${JOB_REGISTER_ACTIVITY_SQL} COLLATE NOCASE`, "asc", "governed_work_type")], "w.id"),
+  "service-desc": crmSort([crmTerm(`${JOB_REGISTER_ACTIVITY_SQL} COLLATE NOCASE`, "desc", "governed_work_type")], "w.id"),
   "updated-desc": crmSort([crmTerm("w.updated_at", "desc", "updated_at")], "w.id"),
-};
-const CUSTOMER_SORTS: Record<string, CrmSort> = {
-  "name-asc": crmSort([
-    crmTerm("CASE WHEN trim(c.first_name) = '' AND trim(c.last_name) = '' THEN 1 ELSE 0 END", "asc", "person_name_missing", true),
-    crmTerm("c.first_name COLLATE NOCASE", "asc", "first_name"),
-    crmTerm("c.last_name COLLATE NOCASE", "asc", "last_name"),
-    crmTerm("c.business_name COLLATE NOCASE", "asc", "business_name"),
-  ], "c.id"),
-  "name-desc": crmSort([
-    crmTerm("CASE WHEN trim(c.first_name) = '' AND trim(c.last_name) = '' THEN 1 ELSE 0 END", "asc", "person_name_missing", true),
-    crmTerm("c.first_name COLLATE NOCASE", "desc", "first_name"),
-    crmTerm("c.last_name COLLATE NOCASE", "desc", "last_name"),
-    crmTerm("c.business_name COLLATE NOCASE", "desc", "business_name"),
-  ], "c.id"),
-  "last-name-asc": crmSort([crmTerm("c.last_name COLLATE NOCASE", "asc", "last_name"), crmTerm("c.first_name COLLATE NOCASE", "asc", "first_name")], "c.id"),
-  "last-name-desc": crmSort([crmTerm("c.last_name COLLATE NOCASE", "desc", "last_name"), crmTerm("c.first_name COLLATE NOCASE", "desc", "first_name")], "c.id"),
-  "created-desc": crmSort([crmTerm("c.created_at", "desc", "created_at")], "c.id"),
-  "created-asc": crmSort([crmTerm("c.created_at", "asc", "created_at")], "c.id"),
-  "updated-desc": crmSort([crmTerm("c.updated_at", "desc", "updated_at")], "c.id"),
-};
+} satisfies Record<InstallerJobRegisterSort, CrmSort>;
 const SCHEDULE_SORT = crmSort([crmTerm("a.starts_at", "asc", "starts_at"), crmTerm("a.created_at", "asc", "created_at")], "a.id");
 
 type CrmIdentity = {
@@ -405,6 +417,7 @@ function errorResponse(error: unknown) {
   if (code === "APPOINTMENT_NOT_FOUND") return adminJson({ ok: false, error: "Appointment not found." }, 404);
   if (code === "NOTE_NOT_FOUND") return adminJson({ ok: false, error: "Note or issue not found." }, 404);
   if (code === "INVALID_DATE") return adminJson({ ok: false, error: "Choose a valid date and time." }, 400);
+  if (code === "INVALID_DATE_RANGE") return adminJson({ ok: false, error: "Choose a Created from date that is on or before the Created to date." }, 400);
   if (["INVALID_STATE", "INVALID_JOB_STATUS", "INVALID_QUOTE_TOTAL"].includes(code)) return adminJson({ ok: false, error: "Check the job register filters and try again." }, 400);
   if (code === "PAST_APPOINTMENT") return adminJson({ ok: false, error: "Choose a future appointment time." }, 400);
   if (code === "APPOINTMENT_CONFLICT") return adminJson({ ok: false, error: "That team member already has an overlapping appointment." }, 409);
@@ -565,7 +578,12 @@ function indexedJob(row: Record<string, unknown>, access: Pick<TeamAccess, "canV
     workStage: row.stage,
     pipelineStage: row.pipeline_stage,
     audited: row.register_audited,
-    certificates: { stc: 0, veec: 0, esc: 0, other: 0 },
+    certificates: {
+      stc: row.stc_certificate_count,
+      veec: row.veec_certificate_count,
+      esc: row.esc_certificate_count,
+      other: row.other_certificate_count,
+    },
     service: String(row.governed_work_type || SERVICE_LABELS[String(row.service_category)] || row.service_category || ""),
     quoteStatus: access.canViewQuotes ? row.quote_status : "restricted",
     quoteTotalExGstCents: access.canViewQuotes ? row.quote_total_ex_gst_cents : null,
@@ -870,7 +888,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
       LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
       LEFT JOIN trade_crm_service_sites ss ON ss.id = d.service_site_id AND ss.firebase_uid = w.firebase_uid AND ss.record_status = 'active'`;
     const rowJoins = `${joins} ${TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL}`;
-    const sort = JOB_SORTS[sortValue] ? sortValue : "updated-desc";
+    const sort = Object.hasOwn(JOB_SORTS, sortValue) ? sortValue : "updated-desc";
     if (sort.startsWith("quote-total-") && !identity.access.canViewQuotes) throw new Error("QUOTE_VIEW_REQUIRED");
     const selectedSort = JOB_SORTS[sort];
     let cursor;
@@ -901,17 +919,14 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         selected_appointment.id appointment_id,
         selected_appointment.starts_at appointment_starts_at,
         ${JOB_EFFECTIVE_SCHEDULE_SQL} effective_scheduled_start,
-        (SELECT json_extract(ci.intent_snapshot, '$.activity.title')
-          FROM trade_work_order_compliance_intents ci
-          WHERE ci.work_order_id = w.id AND ci.installer_uid = w.firebase_uid
-            AND ci.status IN ('planned', 'case_linked')
-          ORDER BY ci.revision DESC, ci.created_at DESC LIMIT 1) governed_work_type,
+        ${JOB_REGISTER_ACTIVITY_SQL} governed_work_type,
         (SELECT status FROM trade_handover_packs hp WHERE hp.work_order_id = w.id AND hp.firebase_uid = w.firebase_uid ORDER BY hp.updated_at DESC LIMIT 1) handover_status,
         ${JOB_REGISTER_AUDITED_SQL} register_audited,
         ${JOB_REGISTER_STATUS_RANK_SQL} register_status_rank,
         ${JOB_REGISTER_QUOTE_TOTAL_SQL} quote_total_ex_gst_cents,
         ${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL quote_total_empty,
         ${JOB_REGISTER_QUOTE_SORT_SQL} quote_total_sort_cents,
+        0 stc_certificate_count, 0 veec_certificate_count, 0 esc_certificate_count, 0 other_certificate_count,
         trim(w.assignee_member_id) = '' assignment_empty,
         ${JOB_EFFECTIVE_SCHEDULE_SQL} = '' schedule_empty
         ${rowJoins} WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
@@ -973,23 +988,38 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
   }
   const createdFromUtc = dateValue(url.searchParams.get("createdFromUtc"));
   const createdToUtc = dateValue(url.searchParams.get("createdToUtc"));
+  if (createdFromUtc && createdToUtc && Date.parse(createdFromUtc) >= Date.parse(createdToUtc)) throw new Error("INVALID_DATE_RANGE");
   if (createdFromUtc) { conditions.push("c.created_at >= ?"); bindings.push(createdFromUtc); }
   if (createdToUtc) { conditions.push("c.created_at < ?"); bindings.push(createdToUtc); }
   const where = conditions.join(" AND ");
-  const sort = CUSTOMER_SORTS[sortValue] ? sortValue : "name-asc";
-  const selectedSort = CUSTOMER_SORTS[sort];
+  const sort = Object.hasOwn(CUSTOMER_REGISTER_SORTS, sortValue) ? sortValue : "name-asc";
+  const selectedSort = CUSTOMER_REGISTER_SORTS[sort];
   let cursor;
   try { cursor = decodeKeysetCursor(cursorInput, `customers:${sort}`, selectedSort.terms.length); } catch { throw new Error("INVALID_CURSOR"); }
   if (page > 1 && !cursor) throw new Error("INVALID_CURSOR");
-  const rowConditions = [...conditions]; const rowBindings = [...bindings];
-  if (cursor) { const after = keysetAfter(selectedSort.terms, cursor); rowConditions.push(`(${after.sql})`); rowBindings.push(...after.bindings); }
-  const rowWhere = rowConditions.join(" AND ");
+  const cursorFilter = cursor ? keysetAfter(selectedSort.terms, cursor) : null;
+  const cursorWhere = cursorFilter ? cursorFilter.sql : "1 = 1";
+  const sortNeedsJobSummary = CUSTOMER_JOB_DERIVED_SORTS.has(sort as InstallerCustomerRegisterSort);
+  const candidateWindowSql = sortNeedsJobSummary
+    ? ""
+    : `WHERE ${cursorWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`;
+  const resultWindowSql = sortNeedsJobSummary
+    ? `WHERE ${cursorWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`
+    : `ORDER BY ${selectedSort.orderBy}`;
+  const rowBindings = sortNeedsJobSummary
+    ? [...bindings, identity.uid, ...(cursorFilter?.bindings || []), pageSize + 1]
+    : [...bindings, ...(cursorFilter?.bindings || []), pageSize + 1, identity.uid];
   const [countRow, rows] = await Promise.all([
     includeTotal ? db.prepare(`SELECT COUNT(*) total FROM trade_crm_customers c WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
-    db.prepare(`WITH owned_jobs AS (
+    db.prepare(`WITH matching_customers AS (
+      SELECT c.* FROM trade_crm_customers c WHERE ${where}
+    ), candidate_customers AS (
+      SELECT c.* FROM matching_customers c ${candidateWindowSql}
+    ), owned_jobs AS (
       SELECT d.crm_customer_id, w.service_category, w.work_number, d.pipeline_stage, w.stage, w.created_at, w.updated_at,
         ROW_NUMBER() OVER (PARTITION BY d.crm_customer_id ORDER BY w.updated_at DESC, w.id DESC) latest_rank
       FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id AND w.firebase_uid = d.firebase_uid
+      JOIN candidate_customers matched ON matched.id = d.crm_customer_id AND matched.firebase_uid = d.firebase_uid
       WHERE d.firebase_uid = ? AND w.record_status = 'active'
     ), customer_job_summary AS (
       SELECT crm_customer_id, COUNT(*) job_count,
@@ -1000,15 +1030,20 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         MAX(CASE WHEN latest_rank = 1 THEN updated_at ELSE '' END) latest_job_at
       FROM owned_jobs GROUP BY crm_customer_id
     )
-      SELECT c.*, CASE WHEN c.business_name <> '' THEN c.business_name ELSE c.last_name || ' ' || c.first_name END sort_name,
+      SELECT c.*, ${CUSTOMER_DISPLAY_NAME_SQL} customer_display_name_sort,
         COALESCE(js.job_count, 0) job_count, COALESCE(js.active_job_count, 0) active_job_count,
         COALESCE(js.activities, '') activities, COALESCE(js.latest_job_number, '') latest_job_number,
         COALESCE(js.latest_pipeline_stage, '') latest_pipeline_stage,
         COALESCE(js.latest_job_at, '') latest_job_at,
-        CASE WHEN trim(c.first_name) = '' AND trim(c.last_name) = '' THEN 1 ELSE 0 END person_name_missing
-      FROM trade_crm_customers c LEFT JOIN customer_job_summary js ON js.crm_customer_id = c.id
-      WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
-      .bind(identity.uid, ...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
+        trim(c.first_name) = '' first_name_empty, trim(c.last_name) = '' last_name_empty,
+        trim(c.email) = '' email_empty, trim(c.phone) = '' phone_empty,
+        trim(c.suburb) = '' suburb_empty, trim(c.postcode) = '' postcode_empty,
+        COALESCE(js.latest_job_at, '') = '' latest_job_empty,
+        COALESCE(js.latest_pipeline_stage, '') = '' customer_status_empty,
+        ${CUSTOMER_PIPELINE_STATUS_LABEL_SQL} customer_status_sort
+      FROM candidate_customers c LEFT JOIN customer_job_summary js ON js.crm_customer_id = c.id
+      ${resultWindowSql}`)
+      .bind(...rowBindings).all<Record<string, unknown>>(),
   ]);
   const total = countRow ? Number(countRow.total || 0) : undefined;
   const hasNext = rows.results.length > pageSize; const pageRows = rows.results.slice(0, pageSize);

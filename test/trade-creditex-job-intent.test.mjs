@@ -175,9 +175,9 @@ function applyMigrationChain(database, names) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 165);
+  assert.equal(completeMigrationChain.length, 166);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0166_/);
+  assert.match(completeMigrationChain.at(-1), /^0167_/);
   assert.ok(
     completeMigrationChain.includes("0160_trade_rental_inspections.sql"),
     "the complete migration chain must include the rental inspection schema",
@@ -185,6 +185,10 @@ function applyCompleteMigrationChain(database) {
   assert.ok(
     completeMigrationChain.includes("0161_trade_field_access_and_rental_scope.sql"),
     "the complete migration chain must include the field access and selectable rental scope schema",
+  );
+  assert.ok(
+    completeMigrationChain.includes("0167_trade_customer_created_index.sql"),
+    "the complete migration chain must include the bounded customer register index",
   );
   applyMigrationChain(database, completeMigrationChain);
 }

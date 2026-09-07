@@ -2,6 +2,11 @@ import { getD1 } from "../../db";
 import { cleanAdminText } from "@/lib/admin-server";
 import { DATAFORCE_JOB_CSV_HEADERS } from "@/lib/creditex-dataforce-job-csv";
 import { JOB_REGISTER_COLUMN_KEYS, JOB_REGISTER_OPERATIONAL_STATUSES } from "@/lib/trade-crm-job-register";
+import { CUSTOMER_REGISTER_FILTER_VERSION, defaultCustomerCreatedRange } from "@/lib/customer-register-range";
+import {
+  INSTALLER_CUSTOMER_REGISTER_SORT_VALUES,
+  INSTALLER_JOB_REGISTER_SORT_VALUES,
+} from "@/lib/trade-crm-register-sorts";
 
 export const PAGE_SIZES = new Set([25, 50, 100]);
 
@@ -27,6 +32,7 @@ type ListViewDefaults = {
   pageSize: number;
   jobColumnOrderVersion?: number;
   customerColumnOrderVersion?: number;
+  customerFilterVersion?: number;
   type: string;
   synthetic: string;
   customer?: string;
@@ -113,8 +119,8 @@ const filtersByView: Record<string, Set<string>> = {
 
 const sortsByView: Record<string, Set<string>> = {
   "supplier-products": new Set(["updated-desc", "name-asc", "name-desc", "price-asc", "price-desc", "brand-asc", "brand-desc", "model-asc", "model-desc", "category-asc", "category-desc", "stock-asc", "stock-desc", "lead-asc", "lead-desc", "warranty-asc", "warranty-desc", "listing-asc", "listing-desc", "review-asc", "review-desc"]),
-  "installer-jobs": new Set(["updated-desc", "created-desc", "created-asc", "number-asc", "number-desc", "first-name-asc", "last-name-asc", "phone-asc", "email-asc", "street-asc", "postcode-asc", "suburb-asc", "state-asc", "assignee-asc", "date-asc", "date-desc", "status-asc", "quote-total-asc", "quote-total-desc"]),
-  "installer-customers": new Set(["name-asc", "name-desc", "last-name-asc", "last-name-desc", "created-desc", "created-asc", "updated-desc"]),
+  "installer-jobs": new Set(INSTALLER_JOB_REGISTER_SORT_VALUES),
+  "installer-customers": new Set(INSTALLER_CUSTOMER_REGISTER_SORT_VALUES),
   "purchasing-orders": new Set(["updated-desc", "number-asc", "number-desc", "value-desc"]),
   "admin-accounts": new Set(["updated-desc", "updated-asc", "name-asc", "name-desc", "type-asc", "type-desc", "status-asc", "status-desc"]),
   "admin-customers": new Set(["updated-desc", "updated-asc", "name-asc", "name-desc", "type-asc", "type-desc", "status-asc", "status-desc"]),
@@ -126,14 +132,28 @@ const sortsByView: Record<string, Set<string>> = {
 export function defaultListView(viewKey: string): ListViewDefaults {
   const defaults = { ...(defaultsByView[viewKey] || { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" }) };
   if (viewKey === "installer-jobs") return { ...defaults, jobColumnOrderVersion: 4, columns: [...INSTALLER_JOB_DEFAULT_COLUMNS] };
-  if (viewKey === "installer-customers") return { ...defaults, customerColumnOrderVersion: 1, columns: [...columnsByView[viewKey]] };
+  if (viewKey === "installer-customers") {
+    const range = defaultCustomerCreatedRange();
+    return {
+      ...defaults,
+      customerColumnOrderVersion: 1,
+      customerFilterVersion: CUSTOMER_REGISTER_FILTER_VERSION,
+      createdFrom: range.from,
+      createdTo: range.to,
+      columns: [...columnsByView[viewKey]],
+    };
+  }
   return columnsByView[viewKey] ? { ...defaults, columns: [...columnsByView[viewKey]] } : defaults;
 }
 
 export function cleanListView(
   viewKey: string,
   raw: Record<string, unknown>,
-  options: { migrateLegacyInstallerJobColumns?: boolean; migrateLegacyInstallerCustomerColumns?: boolean } = {},
+  options: {
+    migrateLegacyInstallerJobColumns?: boolean;
+    migrateLegacyInstallerCustomerColumns?: boolean;
+    migrateLegacyInstallerCustomerFilters?: boolean;
+  } = {},
 ) {
   const defaults = defaultListView(viewKey);
   const filter = cleanAdminText(raw.filter, 40);
@@ -145,6 +165,12 @@ export function cleanListView(
   const legacyInstallerCustomerColumns = viewKey === "installer-customers"
     && options.migrateLegacyInstallerCustomerColumns
     && Number(raw.customerColumnOrderVersion || 0) < 1;
+  const legacyInstallerCustomerFilters = viewKey === "installer-customers"
+    && options.migrateLegacyInstallerCustomerFilters
+    && Number(raw.customerFilterVersion || 0) < CUSTOMER_REGISTER_FILTER_VERSION;
+  const createdFrom = cleanAdminText(raw.createdFrom, 10);
+  const createdTo = cleanAdminText(raw.createdTo, 10);
+  const applyDefaultCustomerCreatedRange = legacyInstallerCustomerFilters && !createdFrom && !createdTo;
   return {
     search: cleanAdminText(raw.search, 100),
     filter: filtersByView[viewKey]?.has(filter) ? filter : defaults.filter,
@@ -152,6 +178,7 @@ export function cleanListView(
     pageSize: PAGE_SIZES.has(pageSize) ? pageSize : defaults.pageSize,
     jobColumnOrderVersion: viewKey === "installer-jobs" ? 4 : undefined,
     customerColumnOrderVersion: viewKey === "installer-customers" ? 1 : undefined,
+    customerFilterVersion: viewKey === "installer-customers" ? CUSTOMER_REGISTER_FILTER_VERSION : undefined,
     type: ["", "customer", "installer", "supplier", "admin"].includes(String(raw.type || "")) ? String(raw.type || "") : "",
     synthetic: ["", "exclude", "only"].includes(String(raw.synthetic || "")) ? String(raw.synthetic || "") : "",
     customer: cleanAdminText(raw.customer, 100),
@@ -163,8 +190,8 @@ export function cleanListView(
     appointmentId: cleanAdminText(raw.appointmentId, 100),
     scheduledFrom: cleanAdminText(raw.scheduledFrom, 10),
     scheduledTo: cleanAdminText(raw.scheduledTo, 10),
-    createdFrom: cleanAdminText(raw.createdFrom, 10),
-    createdTo: cleanAdminText(raw.createdTo, 10),
+    createdFrom: applyDefaultCustomerCreatedRange ? defaults.createdFrom : createdFrom,
+    createdTo: applyDefaultCustomerCreatedRange ? defaults.createdTo : createdTo,
     invoiceStatus: cleanAdminText(raw.invoiceStatus, 40),
     customerReference: cleanAdminText(raw.customerReference, 100),
     firstName: cleanAdminText(raw.firstName, 100),
@@ -223,7 +250,11 @@ export async function readListView(ownerUid: string, ownerScope: string, viewKey
   if (!row) return { preferences: defaultListView(viewKey), saved: false };
   let parsed: Record<string, unknown> = {};
   try { parsed = JSON.parse(String(row.preferences || "{}")) as Record<string, unknown>; } catch { parsed = {}; }
-  return { preferences: cleanListView(viewKey, parsed, { migrateLegacyInstallerJobColumns: true, migrateLegacyInstallerCustomerColumns: true }), saved: true };
+  return { preferences: cleanListView(viewKey, parsed, {
+    migrateLegacyInstallerJobColumns: true,
+    migrateLegacyInstallerCustomerColumns: true,
+    migrateLegacyInstallerCustomerFilters: true,
+  }), saved: true };
 }
 
 export async function saveListView(ownerUid: string, ownerScope: string, viewKey: string, raw: Record<string, unknown>) {
@@ -266,6 +297,7 @@ function parseNamedListView(viewKey: string, row: Record<string, unknown>): Name
     preferences: cleanListView(viewKey, (parsed.preferences || {}) as Record<string, unknown>, {
       migrateLegacyInstallerJobColumns: true,
       migrateLegacyInstallerCustomerColumns: true,
+      migrateLegacyInstallerCustomerFilters: true,
     }),
     updatedAt: String(row.updated_at || ""),
   };

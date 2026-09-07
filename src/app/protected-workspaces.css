@@ -318,7 +318,7 @@
 .workspace-column-list span { display: flex; gap: 4px; }
 .workspace-column-list button { background: #f3f8f6; border: 1px solid #cfe2da; border-radius: 6px; color: #17664e; cursor: pointer; font-size: .52rem; font-weight: 800; padding: 5px 6px; }
 .workspace-column-list button:disabled, .workspace-csv-export:disabled { cursor: not-allowed; opacity: .42; }
-.workspace-sort-header { align-items: center; background: transparent; border: 0; color: inherit; cursor: pointer; display: inline-flex; font: inherit; font-weight: inherit; gap: 4px; padding: 0; text-align: left; text-transform: inherit; }
+.workspace-sort-header { align-items: center; background: transparent; border: 0; color: inherit; cursor: pointer; display: inline-flex; font: inherit; font-weight: inherit; gap: 4px; min-height: 32px; padding: 0; text-align: left; text-transform: inherit; width: 100%; }
 .workspace-sort-header::after { content: "↕"; font-size: .54rem; opacity: .55; }
 .workspace-sort-column[aria-sort="ascending"] .workspace-sort-header::after { content: "↑"; opacity: 1; }
 .workspace-sort-column[aria-sort="descending"] .workspace-sort-header::after { content: "↓"; opacity: 1; }
@@ -335,6 +335,7 @@
 .supplier-catalogue-filters { grid-template-columns: minmax(260px, 1fr) 170px 180px; }
 .supplier-catalogue-filters .supplier-search { margin-bottom: 0; }
 .crm-customer-toolbar { align-items: end; display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) minmax(150px, .45fr) minmax(170px, 230px); margin-top: 10px; }
+.crm-customer-register-toolbar { grid-template-columns: minmax(135px, .45fr) minmax(135px, .45fr) minmax(260px, 1.2fr) minmax(150px, .55fr) auto; }
 .purchasing-layout { align-items: start; display: grid; gap: 14px; grid-template-columns: minmax(230px, .32fr) minmax(0, 1fr); }
 .purchasing-order-list { background: #f5f9f7; border: 1px solid var(--color-aea-line); border-radius: 13px; display: grid; max-height: 760px; overflow: auto; padding: 5px; }
 .purchasing-order-list > button { background: transparent; border: 1px solid transparent; border-radius: 9px; cursor: pointer; display: grid; gap: 4px; padding: 11px; text-align: left; }
@@ -3287,15 +3288,11 @@
 .crm-jobs-layout > *, .crm-customers-layout > * { min-width: 0; }
 .crm-record-table, .trade-portal-shell .crm-record-table { background: #fff; display: block; max-height: none; overflow-x: auto; padding: 0; }
 .crm-record-columns { align-items: center; background: #edf6f2; border-bottom: 1px solid var(--color-aea-line); color: #467065; display: grid; font-size: .58rem; font-weight: 950; letter-spacing: .04em; min-width: 1380px; padding: 10px; text-transform: uppercase; }
-.crm-job-columns, .crm-job-list.crm-record-table > article { gap: 10px; grid-template-columns: 30px 105px 150px 140px minmax(190px, 1fr) 125px 125px 115px 105px 95px; min-width: 1380px; }
-.crm-customer-columns, .crm-customer-list.crm-record-table > article { gap: 10px; grid-template-columns: 30px 105px 165px minmax(180px, 1fr) 120px 75px 110px 65px 175px 105px 125px; min-width: 1500px; }
 .crm-job-list.crm-record-table > article, .crm-customer-list.crm-record-table > article { align-items: center; border: 0; border-bottom: 1px solid #e4ece9; border-radius: 0; display: grid; padding: 0 10px; }
 .crm-job-list.crm-record-table > article:last-child, .crm-customer-list.crm-record-table > article:last-child { border-bottom: 0; }
 .crm-record-table > article.active { background: #f3fbf7; box-shadow: inset 3px 0 #14ae7d; }
 .crm-record-table .crm-row-select { align-items: center; align-self: stretch; display: flex; grid-column: 1; justify-content: center; margin: 0; padding: 0; }
 .crm-record-table .crm-row-open { align-items: center; grid-column: 2 / -1; min-width: 0; padding: 10px 0; }
-.crm-record-table .crm-job-row { display: grid; gap: 10px; grid-template-columns: 105px 150px 140px minmax(190px, 1fr) 125px 125px 115px 105px 95px; }
-.crm-record-table .crm-customer-row { display: grid; gap: 10px; grid-template-columns: 105px 165px minmax(180px, 1fr) 120px 75px 110px 65px 175px 105px 125px; }
 .crm-record-table .crm-row-open > * { color: var(--color-aea-muted); display: block; font-size: .63rem; font-style: normal; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crm-record-table .crm-row-open b { color: var(--color-aea-green-dark); }
 .crm-record-table .crm-row-open strong { color: var(--color-aea-ink); font-size: .65rem; }
@@ -3303,7 +3300,12 @@
 .crm-customer-toolbar > label:first-child { max-width: none; }
 
 @media (max-width: 1100px) {
+  .crm-customer-register-toolbar { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
   .crm-granular-filters > div { grid-template-columns: repeat(3, minmax(135px, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .crm-customer-register-toolbar { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 650px) {
@@ -3757,26 +3759,6 @@
 .trade-portal-shell .crm-nav button { flex: 0 0 auto; }
 .crm-customer-focus { margin: 0 auto; max-width: 1320px; }
 .crm-dispatch-view { background: #f8fbfa; }
-.crm-job-columns, .crm-job-list.crm-record-table > article {
-  gap: 10px;
-  grid-template-columns: 30px 180px 140px 135px 135px 120px 115px 115px 90px 115px;
-  min-width: 1280px;
-}
-.crm-record-table .crm-job-row {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: 180px 140px 135px 135px 120px 115px 115px 90px 115px;
-}
-.crm-customer-columns, .crm-customer-list.crm-record-table > article {
-  gap: 10px;
-  grid-template-columns: 30px 180px 105px 105px 200px 120px 125px 75px 60px 115px 120px;
-  min-width: 1360px;
-}
-.crm-record-table .crm-customer-row {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: 180px 105px 105px 200px 120px 125px 75px 60px 115px 120px;
-}
 .crm-record-table .crm-row-open:focus-visible { background: #eef8f4; outline: 3px solid #42a886; outline-offset: -3px; }
 
 /* Saved directory views reuse the authoritative owner-scoped list settings. */

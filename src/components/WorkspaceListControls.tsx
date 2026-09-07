@@ -9,6 +9,7 @@ export type WorkspaceListPreferences = {
   pageSize: number;
   jobColumnOrderVersion?: number;
   customerColumnOrderVersion?: number;
+  customerFilterVersion?: number;
   type?: string;
   synthetic?: string;
   customer?: string;

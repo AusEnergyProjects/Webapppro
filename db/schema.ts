@@ -1808,6 +1808,7 @@ export const tradeCrmCustomers = sqliteTable("trade_crm_customers", {
 }, (table) => [
   uniqueIndex("trade_crm_customers_owner_number_idx").on(table.firebaseUid, table.customerNumber),
   index("trade_crm_customers_owner_status_idx").on(table.firebaseUid, table.recordStatus, table.updatedAt),
+  index("trade_crm_customers_owner_created_idx").on(table.firebaseUid, table.recordStatus, table.createdAt, table.id),
   index("trade_crm_customers_owner_name_idx").on(table.firebaseUid, table.lastName, table.businessName),
 ]);
 

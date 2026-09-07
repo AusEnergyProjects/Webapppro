@@ -381,6 +381,7 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
   const adminJson = (body, status = 200) => Response.json(body, { status });
   const syncHelpers = loadTypescriptModule("../src/lib/trade-team-sync-server.ts", {});
   const jobRegisterHelpers = loadTypescriptModule("../src/lib/trade-crm-job-register.ts", {});
+  const registerSortHelpers = loadTypescriptModule("../src/lib/trade-crm-register-sort-sql.ts", {});
   const scheduleServerHelpers = loadTypescriptModule("../src/lib/trade-schedule-server.ts", {
     "../../db": { getD1: () => d1 },
   });
@@ -401,6 +402,7 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
     },
     "@/lib/trade-team-sync-server": syncHelpers,
     "@/lib/trade-crm-job-register": jobRegisterHelpers,
+    "@/lib/trade-crm-register-sort-sql": registerSortHelpers,
     "@/lib/trade-calendar-sync-server": {
       syncCreatedAppointmentToConnectedCalendars: syncAppointment,
     },

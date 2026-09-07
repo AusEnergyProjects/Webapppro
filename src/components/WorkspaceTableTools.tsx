@@ -15,7 +15,7 @@ function safeCsvValue(value: CsvValue) {
 
 export function downloadWorkspaceCsv(
   filename: string,
-  columns: WorkspaceTableColumn[],
+  columns: readonly WorkspaceTableColumn[],
   rows: Array<Record<string, CsvValue>>,
 ) {
   const lines = [
@@ -44,8 +44,8 @@ export function WorkspaceTableTools({
   exportBusyLabel,
   noun = "rows",
 }: {
-  columns: WorkspaceTableColumn[];
-  visibleKeys: string[];
+  columns: readonly WorkspaceTableColumn[];
+  visibleKeys: readonly string[];
   onVisibleKeys: (keys: string[]) => void;
   onExport: () => void;
   exportDisabled?: boolean;

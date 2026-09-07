@@ -3,11 +3,17 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL } from "../src/lib/trade-crm-job-index-sql.ts";
+import {
+  INSTALLER_CUSTOMER_REGISTER_SORT_VALUES,
+  INSTALLER_JOB_REGISTER_SORT_VALUES,
+} from "../src/lib/trade-crm-register-sorts.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0019_melodic_unus.sql");
+const customerCreatedIndexMigration = read("../drizzle/0167_trade_customer_created_index.sql");
 const route = read("../src/app/api/trade-crm/route.ts");
+const customerSortSql = read("../src/lib/trade-crm-register-sort-sql.ts");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const newJob = read("../src/components/TradeNewJobForm.tsx");
 const hub = read("../src/components/TradeBusinessHub.tsx");
@@ -24,6 +30,7 @@ test("installer CRM customers, job details, appointments and notes are durable a
   assert.match(schema, /sqliteTable\("trade_crm_appointments"/);
   assert.match(schema, /sqliteTable\("trade_crm_job_notes"/);
   assert.match(schema, /trade_crm_customers_owner_status_idx/);
+  assert.match(schema, /trade_crm_customers_owner_created_idx/);
   assert.match(schema, /trade_crm_job_details_owner_pipeline_idx/);
   assert.match(schema, /trade_crm_appointments_owner_start_idx/);
   assert.match(schema, /trade_crm_job_notes_work_order_idx/);
@@ -33,8 +40,12 @@ test("the CRM migration applies cleanly to SQLite", () => {
   const db = new DatabaseSync(":memory:");
   const statements = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
   for (const statement of statements) db.exec(statement);
+  db.exec(customerCreatedIndexMigration);
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map((row) => row.name);
   assert.deepEqual(tables, ["trade_crm_appointments", "trade_crm_customers", "trade_crm_job_details", "trade_crm_job_notes"]);
+  const customerIndexes = db.prepare("PRAGMA index_list(trade_crm_customers)").all().map((row) => row.name);
+  assert.ok(customerIndexes.includes("trade_crm_customers_owner_created_idx"));
+  db.close();
 });
 
 test("CRM access is same-origin, verified-team gated and owner scoped", () => {
@@ -105,14 +116,15 @@ test("large installer job and customer directories use server paging, sorting an
   assert.doesNotMatch(route, /LIMIT \? OFFSET \?/);
   assert.match(route, /SELECT COUNT\(\*\) total/);
   assert.match(route, /"number-asc"/);
-  assert.match(route, /"name-desc"/);
+  assert.match(customerSortSql, /"name-desc"/);
+  assert.match(route, /Object\.hasOwn\(JOB_SORTS, sortValue\)/);
+  assert.match(route, /Object\.hasOwn\(CUSTOMER_REGISTER_SORTS, sortValue\)/);
   assert.doesNotMatch(route, /schedule_empty,\s*\$\{joins\}/, "the job index SELECT must not leave a trailing comma before FROM");
   assert.match(crm, /mode: "index", resource: "jobs"/);
   assert.match(crm, /mode: "index", resource: "customers"/);
   assert.match(crm, /mode=detail&resource=job/);
   assert.match(crm, /mode=detail&resource=customer/);
-  assert.match(crm, /Recently updated/);
-  assert.match(crm, /Name A to Z/);
+  assert.match(crm, /SortableIndexHeading/);
 });
 
 test("the installer job index selects the scheduled appointment with D1-compatible SQL", () => {
@@ -256,7 +268,22 @@ test("job and customer directories expose granular server filters and single-lin
   }
   assert.match(crm, /<span>Last name<\/span><input value=\{jobLastName\}/);
   assert.match(crm, /<span>Last name<\/span><input value=\{customerLastName\}/);
-  assert.match(crm, /<option value="created-desc">Created newest first<\/option>/);
+  assert.match(crm, /changeCustomerRegisterSort/);
+  assert.match(crm, /aria-sort=\{direction === "asc" \? "ascending" : direction === "desc" \? "descending" : "none"\}/);
+  const customerColumnsBlock = crm.match(/const customerIndexColumns = \[([\s\S]*?)\n\] as const satisfies readonly SortableIndexColumn/);
+  assert.ok(customerColumnsBlock);
+  for (const line of customerColumnsBlock[1].split("\n").filter((line) => line.includes("{ key:"))) {
+    assert.match(line, /sort: \["[^"]+", "[^"]+"\]/);
+  }
+  const jobColumnsBlock = crm.match(/const jobIndexColumns = \[([\s\S]*?)\n\] as const satisfies readonly JobIndexColumn\[\]/);
+  assert.ok(jobColumnsBlock);
+  const jobColumnLines = jobColumnsBlock[1].split("\n").filter((line) => line.includes("{ key:"));
+  assert.equal(jobColumnLines.filter((line) => line.includes("sort: null")).length, 1);
+  assert.match(jobColumnLines.find((line) => line.includes('key: "actions"')), /sort: null/);
+  for (const line of jobColumnLines.filter((line) => !line.includes('key: "actions"'))) {
+    assert.match(line, /sort: \["[^"]+", "[^"]+"\]/);
+  }
+  assert.match(crm, /export type JobIndexColumnCoverage = AssertNever<Exclude<JobRegisterColumnKey, typeof jobIndexColumns\[number\]\["key"\]>>/);
 });
 
 test("job filters preserve existing saved fields and add authoritative register filters", () => {
@@ -288,7 +315,12 @@ test("job and customer indexes use explicit open and direct contact actions", ()
   assert.match(crm, /className="crm-index-phone-link" href=\{phoneHref/);
   assert.match(crm, /return compact \? `tel:\$\{compact\}` : ""/);
   assert.match(crm, /className="crm-index-email-link" href=\{`mailto:\$\{customer\.email\}`\}/);
-  assert.match(crm, /className="crm-record-data-row crm-index-row"/);
+  const customerResultsStart = crm.indexOf('aria-label="Customer results"');
+  assert.notEqual(customerResultsStart, -1);
+  const customerResults = crm.slice(customerResultsStart, crm.indexOf("</section></div>", customerResultsStart));
+  assert.match(customerResults, /className=\{`\$\{registerStyles\.row\} crm-record-data-row crm-index-row`\}/);
+  assert.match(customerResults, /style=\{customerRecordStyle\}/);
+  assert.doesNotMatch(customerResults, /crm-row-open/);
   assert.doesNotMatch(crm, /<button[^>]*className="crm-row-open crm-record-data-row"/);
   assert.match(crm, /onContextMenu=\{\(event\) => openCustomerActions\(event, customer\.id\)\}/);
   assert.match(crm, /button:not\(\.crm-index-open-button\)/);
@@ -298,12 +330,29 @@ test("job and customer indexes use explicit open and direct contact actions", ()
 });
 
 test("the customer index aggregates owned job facts once without crossing the privacy boundary", () => {
-  assert.match(route, /WITH owned_jobs AS \(/);
+  assert.match(route, /WITH matching_customers AS \(/);
+  assert.match(route, /SELECT c\.\* FROM trade_crm_customers c WHERE \$\{where\}/);
+  assert.match(route, /owned_jobs AS \(/);
   assert.match(route, /ROW_NUMBER\(\) OVER \(PARTITION BY d\.crm_customer_id ORDER BY w\.updated_at DESC, w\.id DESC\) latest_rank/);
   assert.match(route, /customer_job_summary AS \(/);
   assert.match(route, /LEFT JOIN customer_job_summary js ON js\.crm_customer_id = c\.id/);
+  assert.match(route, /candidate_customers AS \(/);
+  assert.match(route, /JOIN candidate_customers matched ON matched\.id = d\.crm_customer_id AND matched\.firebase_uid = d\.firebase_uid/);
   assert.match(route, /WHERE d\.firebase_uid = \? AND w\.record_status = 'active'/);
-  assert.match(route, /\.bind\(identity\.uid, \.\.\.rowBindings, pageSize \+ 1\)/);
+  assert.match(route, /const sortNeedsJobSummary = CUSTOMER_JOB_DERIVED_SORTS\.has/);
+  assert.match(route, /sortNeedsJobSummary[\s\S]*\[\.\.\.bindings, identity\.uid, \.\.\.\(cursorFilter\?\.bindings \|\| \[\]\), pageSize \+ 1\][\s\S]*\[\.\.\.bindings, \.\.\.\(cursorFilter\?\.bindings \|\| \[\]\), pageSize \+ 1, identity\.uid\]/);
+  assert.match(route, /\.bind\(\.\.\.rowBindings\)/);
+});
+
+test("every trusted register sort has a server mapping and saved-view allowlist", () => {
+  for (const value of INSTALLER_JOB_REGISTER_SORT_VALUES) assert.match(route, new RegExp(`"${value}"\\s*:`));
+  for (const value of INSTALLER_CUSTOMER_REGISTER_SORT_VALUES) assert.match(customerSortSql, new RegExp(`"${value}"\\s*:`));
+  assert.match(route, /satisfies Record<InstallerJobRegisterSort, CrmSort>/);
+  assert.match(customerSortSql, /satisfies Record<InstallerCustomerRegisterSort, CrmSort>/);
+  assert.match(customerSortSql, /CUSTOMER_PIPELINE_STATUS_LABEL_SQL/);
+  assert.match(customerSortSql, /customer_status_sort/);
+  assert.match(listViews, /"installer-jobs": new Set\(INSTALLER_JOB_REGISTER_SORT_VALUES\)/);
+  assert.match(listViews, /"installer-customers": new Set\(INSTALLER_CUSTOMER_REGISTER_SORT_VALUES\)/);
 });
 
 test("job and customer directories open focused records without automatic or inline detail", () => {
