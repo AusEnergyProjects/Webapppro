@@ -206,7 +206,7 @@ function presentInspection(row: Row) {
     jurisdiction: String(row.jurisdiction),
     status: String(row.status),
     templateKey: String(row.template_key),
-    assessmentScope: String(row.template_key) === "vic-rental-energy-readiness-2027" ? "energy_readiness_2027" : "current_minimum_standards",
+    assessmentScope: String(row.assessment_scope || "current_minimum_standards"),
     templateVersion: integer(row.template_version),
     rulesEffectiveFrom: String(row.rules_effective_from),
     selectedModules: parsedArray(row.selected_modules_snapshot || row.module_selection_snapshot).map(String),
@@ -543,18 +543,18 @@ async function setAssessmentScope(context: InspectionContext, body: Row) {
       .bind(JSON.stringify(template), template.title, template.templateVersion, template.credentialGate,
         JSON.stringify(answers), nextRevision, now, moduleId, context.inspection.id, context.access.ownerUid, expectedRevision),
     additional: [getD1().prepare(`UPDATE trade_rental_inspections
-      SET template_key = ?, template_version = ?, rules_effective_from = ?, submitted_at = '',
+      SET template_key = ?, template_version = ?, rules_effective_from = ?, assessment_scope = ?, submitted_at = '',
         status = CASE WHEN status = 'submitted' THEN 'in_progress' ELSE status END
       WHERE id = ? AND firebase_uid = ? AND revision = ? AND status IN ('draft', 'scheduled', 'in_progress', 'submitted')
         AND EXISTS (SELECT 1 FROM trade_rental_inspection_modules module WHERE module.id = ?
           AND module.inspection_id = trade_rental_inspections.id AND module.firebase_uid = trade_rental_inspections.firebase_uid
           AND module.revision = ? AND module.updated_at = ?)`)
-      .bind(snapshot.key, snapshot.version, snapshot.effectiveFrom, context.inspection.id, context.access.ownerUid,
+      .bind(snapshot.key, snapshot.version, snapshot.effectiveFrom, scope, context.inspection.id, context.access.ownerUid,
         integer(context.inspection.revision), moduleId, nextRevision, now)],
-    successPredicate: `template_key = ? AND EXISTS (SELECT 1 FROM trade_rental_inspection_modules module
+    successPredicate: `template_key = ? AND assessment_scope = ? AND EXISTS (SELECT 1 FROM trade_rental_inspection_modules module
       WHERE module.id = ? AND module.inspection_id = trade_rental_inspections.id
         AND module.firebase_uid = trade_rental_inspections.firebase_uid AND module.revision = ? AND module.updated_at = ?)`,
-    successBindings: [snapshot.key, moduleId, nextRevision, now],
+    successBindings: [snapshot.key, scope, moduleId, nextRevision, now],
     eventType: "assessment_scope_changed",
     summary: `Assessment scope changed to ${template.title}. Previous observations remain in the job history.`,
     metadata: { moduleId, scope, previousTemplate: parsedObject(assessmentModule.template_snapshot),

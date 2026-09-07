@@ -338,14 +338,14 @@ test("save_schedule_changes rolls back every requested move when one appointment
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointment_revisions").get().count, 0);
 });
 
-test("save_schedule_changes rejects pairwise final overlap for one worker but permits cross-worker overlap", async () => {
+test("save_schedule_changes permits final overlaps for the same or different workers", async () => {
   const first = fixture();
   const sameWorker = await scheduleRoute(first.d1).PATCH(batchRequest([
     { ...swappedChanges[0], startsAt: "2099-01-05T10:30" },
     { ...swappedChanges[1], startsAt: "2099-01-05T10:30" },
   ]));
-  assert.equal(sameWorker.status, 409);
-  assert.match((await sameWorker.json()).error, /overlapping appointment/i);
+  assert.equal(sameWorker.status, 200);
+  assert.equal(first.database.prepare("SELECT COUNT(DISTINCT starts_at) count FROM trade_crm_appointments").get().count, 1);
 
   const second = fixture();
   const differentWorkers = await scheduleRoute(second.d1).PATCH(batchRequest([

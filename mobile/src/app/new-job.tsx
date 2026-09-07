@@ -1,6 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Crypto from 'expo-crypto';
-import { router } from 'expo-router';
+import { router, useNavigation } from 'expo-router';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Modal, PanResponder, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -48,6 +49,7 @@ function displayDuration(minutes: number) { if (minutes < 60) return `${minutes}
 function manualAddressProvenance(): AddressProvenance { return { entryMode: 'manual_pending_review', provider: '', providerReference: '', formattedAddress: '', selectionProof: '' }; }
 function shouldReconcileAddressLocality(entryMode: AddressProvenance['entryMode'], hasSelectedCustomer: boolean, postcode: string, addressState: string) { return entryMode === 'manual_pending_review' && !hasSelectedCustomer && /^\d{4}$/.test(postcode) && Boolean(addressState); }
 function retainChosenAssignee(current: string, assignees: FieldJobOptions['assignees']) { return assignees.some((item) => item.id === current) ? current : ''; }
+function previousSetupStep(step: number) { return step > 0 ? step - 1 : null; }
 function validPlannedActivities(activities: PlannedFieldActivity[], options: FieldJobOptions) {
   return activities.every((selected) => options.activities.some((activity) => activity.id === selected.activityTemplateId
     && options.programs.some((program) => program.id === selected.programTemplateId && program.code === activity.programCode)));
@@ -55,6 +57,8 @@ function validPlannedActivities(activities: PlannedFieldActivity[], options: Fie
 
 export default function NewJobScreen() {
   const { syncNow } = useApp();
+  const navigation = useNavigation();
+  const allowExit = useRef(false);
   const [step, setStep] = useState(0);
   const dates = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(index)), []);
   const [selectedDate, setSelectedDate] = useState(() => dateKey(addDays(1)));
@@ -87,6 +91,24 @@ export default function NewJobScreen() {
   const [customerCandidates, setCustomerCandidates] = useState<CustomerCandidate[]>([]); const [selectedCustomer, setSelectedCustomer] = useState<CustomerCandidate | null>(null);
   const [customerLookupBusy, setCustomerLookupBusy] = useState(false); const [emailCalendarInvite, setEmailCalendarInvite] = useState(false);
   const [notes, setNotes] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+
+  usePreventRemove(true, ({ data }) => {
+    if (allowExit.current) {
+      navigation.dispatch(data.action);
+      return;
+    }
+    if (busy) {
+      Alert.alert('Creating job', 'Wait for the booking to finish saving.');
+      return;
+    }
+    const previous = previousSetupStep(step);
+    if (previous !== null) {
+      setError('');
+      setStep(previous);
+      return;
+    }
+    showCancelPrompt(() => navigation.dispatch(data.action));
+  });
 
   const activitiesJson = JSON.stringify(plannedActivities);
   const rentalModulesJson = JSON.stringify(serviceCategory === 'rental-inspection' ? selectedModules : []);
@@ -256,6 +278,16 @@ export default function NewJobScreen() {
     if (message) return setError(message);
     setError(''); setStep((current) => current + 1);
   }
+  function showCancelPrompt(onCancel: () => void) {
+    Alert.alert('Cancel job setup?', 'Your booking details will be cleared if you cancel.', [
+      { text: 'Continue booking', style: 'cancel' },
+      { text: 'Cancel setup', style: 'destructive', onPress: () => { allowExit.current = true; onCancel(); } },
+    ]);
+  }
+  function cancelSetup() {
+    if (busy) return Alert.alert('Creating job', 'Wait for the booking to finish saving.');
+    showCancelPrompt(() => navigation.goBack());
+  }
   async function createJob() {
     setError('');
     const customerMessage = customerError();
@@ -284,7 +316,7 @@ export default function NewJobScreen() {
       });
       await syncNow();
       const inviteMessage = result.calendarInvite?.requested ? `\n\n${result.calendarInvite.message}` : '';
-      Alert.alert('Job added', `${result.workNumber || 'The new job'} is saved in the selected worker's schedule.${inviteMessage}`, [{ text: 'Open schedule', onPress: () => router.replace('/(tabs)/work') }]);
+      Alert.alert('Job added', `${result.workNumber || 'The new job'} is saved in the selected worker's schedule.${inviteMessage}`, [{ text: 'Open schedule', onPress: () => { allowExit.current = true; router.replace('/(tabs)/work'); } }]);
     } catch (caught) {
       const matches = caught instanceof ApiError && Array.isArray(caught.payload.duplicateCandidates) ? caught.payload.duplicateCandidates as CustomerCandidate[] : [];
       if (matches.length) { setCustomerCandidates(matches); setStep(0); setError('This customer is already saved. Choose the correct saved customer and property below.'); }
@@ -346,8 +378,8 @@ export default function NewJobScreen() {
     </View> : null}
     {error ? <Text accessibilityLiveRegion="polite" style={styles.error}>{error}</Text> : null}
     {step < 2 ? <FieldButton onPress={nextStep}>Next</FieldButton> : <FieldButton loading={busy} disabled={optionsLoading || Boolean(optionsError) || !jobOptions || !assigneeMemberId} onPress={() => void createJob()}>Create scheduled job</FieldButton>}
-    {step > 0 ? <FieldButton variant="secondary" disabled={busy} onPress={() => { setError(''); setStep((current) => current - 1); }}>Previous</FieldButton> : null}
-    <FieldButton variant="quiet" disabled={busy} onPress={() => router.back()}>Cancel</FieldButton>
+    {step > 0 ? <FieldButton variant="secondary" disabled={busy} onPress={() => { setError(''); setStep((current) => previousSetupStep(current) ?? current); }}>Previous</FieldButton> : null}
+    <FieldButton variant="quiet" disabled={busy} onPress={cancelSetup}>Cancel</FieldButton>
     <Modal animationType="fade" transparent visible={timePickerOpen} onRequestClose={() => setTimePickerOpen(false)}><View style={styles.modalBackdrop}><View accessibilityViewIsModal style={styles.timeModal}>
       <View style={styles.modalHeader}><View><Text style={styles.eyebrow}>START TIME</Text><Text style={styles.modalTitle}>{displayTime(time)}</Text></View><Pressable accessibilityLabel="Close time picker" onPress={() => setTimePickerOpen(false)} style={styles.modalClose}><MaterialCommunityIcons name="close" color={colours.ink} size={25} /></Pressable></View>
       <Text style={styles.pickerLabel}>Hour</Text><View style={styles.hourGrid}>{Array.from({ length: 12 }, (_, index) => index + 1).map((hour) => <Pressable key={hour} onPress={() => setTime(timeValue(hour, timeSelection.minute, timeSelection.period))} style={[styles.hourChoice, timeSelection.hour === hour && styles.pickerChoiceSelected]}><Text style={[styles.pickerChoiceText, timeSelection.hour === hour && styles.pickerChoiceTextSelected]}>{hour}</Text></Pressable>)}</View>

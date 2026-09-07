@@ -556,7 +556,6 @@ const energyReadinessSections = Object.freeze([
 
 export const VIC_RENTAL_ENERGY_READINESS_TEMPLATE = Object.freeze({
   ...VIC_RENTAL_ASSESSMENT_TEMPLATE,
-  key: "vic-rental-energy-readiness-2027",
   assessmentScope: "energy_readiness_2027",
   effectiveFrom: "2027-03-01",
   title: "2027 Victorian rental energy readiness assessment",

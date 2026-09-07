@@ -419,7 +419,6 @@ function errorResponse(error: unknown) {
   if (code === "INVALID_DATE_RANGE") return adminJson({ ok: false, error: "Choose a Created from date that is on or before the Created to date." }, 400);
   if (["INVALID_STATE", "INVALID_JOB_STATUS", "INVALID_QUOTE_TOTAL"].includes(code)) return adminJson({ ok: false, error: "Check the job register filters and try again." }, 400);
   if (code === "PAST_APPOINTMENT") return adminJson({ ok: false, error: "Choose a future appointment time." }, 400);
-  if (code === "APPOINTMENT_CONFLICT") return adminJson({ ok: false, error: "That team member already has an overlapping appointment." }, 409);
   if (code === "UNAVAILABLE_CONFLICT") return adminJson({ ok: false, error: "That team member is unavailable during the selected time." }, 409);
   if (code === "INVALID_APPOINTMENT_SLOT") return adminJson({ ok: false, error: "Choose an appointment time on a 15-minute interval." }, 400);
   if (code === "INVALID_QUICK_INVOICE") return adminJson({ ok: false, error: "Add at least one valid invoice line and check the GST choice." }, 400);
@@ -2191,16 +2190,15 @@ export async function POST(request: Request) {
             startsAt: scheduledStart,
             endsAt: scheduledEnd,
             changedAt: now,
-            excludeAppointmentId: appointmentId,
           }),
         ] : []),
         ...(rentalTemplate ? [
           db.prepare(`INSERT INTO trade_rental_inspections
             (id, work_order_id, firebase_uid, service_site_id, inspection_number, jurisdiction, status,
-             template_key, template_version, rules_effective_from, module_selection_snapshot, selected_modules_snapshot, property_snapshot,
+             template_key, template_version, rules_effective_from, assessment_scope, module_selection_snapshot, selected_modules_snapshot, property_snapshot,
              assessor_uid, assessor_member_id, assessor_snapshot, revision, creation_request_id, issued_report_id,
              submitted_at, issued_at, superseded_at, created_by_uid, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 'VIC', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, '', '', '', '', ?, ?, ?)`)
+            VALUES (?, ?, ?, ?, ?, 'VIC', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, '', '', '', '', ?, ?, ?)`)
             .bind(
               rentalInspectionId,
               workOrderId,
@@ -2211,6 +2209,7 @@ export async function POST(request: Request) {
               rentalTemplate.key,
               rentalTemplate.version,
               rentalTemplate.effectiveFrom,
+              rentalTemplate.assessmentScope,
               JSON.stringify(rentalCompatibilityModuleKeys),
               JSON.stringify(rentalModuleKeys),
               rentalPropertySnapshot,
@@ -2556,7 +2555,6 @@ export async function POST(request: Request) {
           startsAt,
           endsAt,
           changedAt: now,
-          excludeAppointmentId: appointmentId,
         }),
         db.prepare(`INSERT INTO trade_work_order_events
           (id, work_order_id, firebase_uid, event_type, summary, created_at)

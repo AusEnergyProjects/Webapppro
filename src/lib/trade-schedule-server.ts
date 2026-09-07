@@ -61,35 +61,16 @@ export async function assertTradeScheduleAvailable({
   memberId,
   startsAt,
   endsAt,
-  excludeAppointmentId = "",
-  excludeAppointmentIds,
 }: {
   ownerUid: string;
   memberId: string;
   startsAt: string;
   endsAt: string;
-  excludeAppointmentId?: string;
-  excludeAppointmentIds?: string[];
 }) {
   const db = getD1();
-  const excludedIds = Array.from(new Set(
-    (excludeAppointmentIds?.length ? excludeAppointmentIds : [excludeAppointmentId])
-      .map((value) => String(value || "").trim())
-      .filter(Boolean),
-  ));
-  const exclusionSql = excludedIds.length
-    ? `AND id NOT IN (${excludedIds.map(() => "?").join(", ")})`
-    : "";
-  const [overlap, unavailable] = await Promise.all([
-    db.prepare(`SELECT id FROM trade_crm_appointments WHERE firebase_uid = ? AND assignee_member_id = ?
-      AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress') ${exclusionSql} AND starts_at < ?
-      AND COALESCE(NULLIF(ends_at, ''), starts_at) > ? LIMIT 1`)
-      .bind(ownerUid, memberId, ...excludedIds, endsAt, startsAt).first(),
-    db.prepare(`SELECT id FROM trade_team_unavailability WHERE owner_uid = ? AND team_member_id = ?
+  const unavailable = await db.prepare(`SELECT id FROM trade_team_unavailability WHERE owner_uid = ? AND team_member_id = ?
       AND starts_at < ? AND ends_at > ? LIMIT 1`)
-      .bind(ownerUid, memberId, endsAt, startsAt).first(),
-  ]);
-  if (overlap) throw new Error("APPOINTMENT_CONFLICT");
+    .bind(ownerUid, memberId, endsAt, startsAt).first();
   if (unavailable) throw new Error("UNAVAILABLE_CONFLICT");
 }
 
@@ -101,40 +82,22 @@ export function tradeScheduleAvailabilityGuardStatement(
     startsAt,
     endsAt,
     changedAt,
-    excludeAppointmentId = "",
-    excludeAppointmentIds,
   }: {
     ownerUid: string;
     memberId: string;
     startsAt: string;
     endsAt: string;
     changedAt: string;
-    excludeAppointmentId?: string;
-    excludeAppointmentIds?: string[];
   },
 ) {
-  const excludedIds = Array.from(new Set(
-    (excludeAppointmentIds?.length ? excludeAppointmentIds : [excludeAppointmentId])
-      .map((value) => String(value || "").trim())
-      .filter(Boolean),
-  ));
-  const exclusionSql = excludedIds.length
-    ? `AND id NOT IN (${excludedIds.map(() => "?").join(", ")})`
-    : "";
   return db.prepare(`INSERT INTO trade_crm_write_guards
     (id, firebase_uid, operation_id, step_number, verified, created_at)
     VALUES (?, ?, ?, 1, CASE WHEN NOT EXISTS (
-      SELECT 1 FROM trade_crm_appointments
-      WHERE firebase_uid = ? AND assignee_member_id = ?
-        AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress') ${exclusionSql}
-        AND starts_at < ? AND COALESCE(NULLIF(ends_at, ''), starts_at) > ?
-    ) AND NOT EXISTS (
       SELECT 1 FROM trade_team_unavailability
       WHERE owner_uid = ? AND team_member_id = ? AND starts_at < ? AND ends_at > ?
     ) THEN 1 ELSE 0 END, ?)`)
     .bind(
       crypto.randomUUID(), ownerUid, `schedule-availability:${crypto.randomUUID()}`,
-      ownerUid, memberId, ...excludedIds, endsAt, startsAt,
       ownerUid, memberId, endsAt, startsAt, changedAt,
     );
 }

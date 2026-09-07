@@ -416,7 +416,7 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
     };
   });
   const minimumAnswers = parsedObject(source.modules.find((module) => module.module_key === "minimum_standards")?.answers);
-  const readiness = source.inspection.template_key === "vic-rental-energy-readiness-2027";
+  const readiness = source.inspection.assessment_scope === "energy_readiness_2027";
   const safetyChecksOnly = !source.modules.some((assessmentModule) => assessmentModule.module_key === "minimum_standards");
   const sources: Row[] = [];
   for (const assessmentModule of source.modules) {

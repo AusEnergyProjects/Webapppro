@@ -61,7 +61,6 @@ function errorResponse(error: unknown) {
     || code.includes("NOT NULL constraint failed: trade_crm_appointment_revisions.starts_at")) {
     return adminJson({ ok: false, error: "This appointment request changed after you opened it. Refresh the week before deciding again." }, 409);
   }
-  if (code === "APPOINTMENT_CONFLICT") return adminJson({ ok: false, error: "That team member already has an overlapping appointment." }, 409);
   if (code === "UNAVAILABLE_CONFLICT") return adminJson({ ok: false, error: "That team member is unavailable during the selected time." }, 409);
   if (code === "PAST_APPOINTMENT") return adminJson({ ok: false, error: "Choose a future appointment time." }, 400);
   if (code === "INVALID_APPOINTMENT_SLOT") return adminJson({ ok: false, error: "Choose an appointment time on a 15-minute interval." }, 400);
@@ -351,7 +350,7 @@ export async function PATCH(request: Request) {
         assertMemberCapability(member, String(current.service_category || ""), access.ownerUid);
         const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = appointmentEndsAt(startsAt, body.durationMinutes);
         assertFutureAppointment(startsAt, localNow);
-        await assertTradeScheduleAvailable({ ownerUid: access.ownerUid, memberId, startsAt, endsAt, excludeAppointmentId: String(current.appointment_id) });
+        await assertTradeScheduleAvailable({ ownerUid: access.ownerUid, memberId, startsAt, endsAt });
         if (decision === "alternative_proposed") {
           await db.batch([
             db.prepare(`UPDATE trade_crm_appointment_reschedule_requests SET status = 'alternative_proposed',
@@ -454,7 +453,6 @@ export async function PATCH(request: Request) {
               startsAt,
               endsAt,
               changedAt: now,
-              excludeAppointmentId: String(current.appointment_id),
             }),
             db.prepare(`UPDATE customer_project_arrival_proposals SET preparation_acknowledged_at = '', updated_at = ?
               WHERE crm_appointment_id = ? AND preparation_acknowledged_at <> ''`).bind(now, current.appointment_id),
@@ -550,22 +548,12 @@ export async function PATCH(request: Request) {
           jobRevision: nextJobRevision(current.job_revision),
         });
       }
-      for (let leftIndex = 0; leftIndex < prepared.length; leftIndex += 1) {
-        for (let rightIndex = leftIndex + 1; rightIndex < prepared.length; rightIndex += 1) {
-          const left = prepared[leftIndex];
-          const right = prepared[rightIndex];
-          if (left.memberId === right.memberId && left.startsAt < right.endsAt && left.endsAt > right.startsAt) {
-            throw new Error("APPOINTMENT_CONFLICT");
-          }
-        }
-      }
       for (const item of prepared) {
         await assertTradeScheduleAvailable({
           ownerUid: access.ownerUid,
           memberId: item.memberId,
           startsAt: item.startsAt,
           endsAt: item.endsAt,
-          excludeAppointmentIds: appointmentIds,
         });
       }
       const batchReference = crypto.randomUUID();
@@ -674,7 +662,6 @@ export async function PATCH(request: Request) {
             startsAt: item.startsAt,
             endsAt: item.endsAt,
             changedAt: now,
-            excludeAppointmentId: item.appointmentId,
           }),
           db.prepare(`UPDATE customer_project_arrival_proposals SET preparation_acknowledged_at = '', updated_at = ?
             WHERE crm_appointment_id = ? AND preparation_acknowledged_at <> ''`).bind(now, item.appointmentId),
@@ -722,7 +709,7 @@ export async function PATCH(request: Request) {
       assertCurrentScheduleAssignment(access, String(current.assignee_member_id || ""));
       assertAssignmentChange(access, String(current.assignee_member_id || ""), memberId);
       assertMemberCapability(member, String(current.service_category || ""), access.ownerUid);
-      await assertTradeScheduleAvailable({ ownerUid: access.ownerUid, memberId, startsAt, endsAt, excludeAppointmentId: appointmentId });
+      await assertTradeScheduleAvailable({ ownerUid: access.ownerUid, memberId, startsAt, endsAt });
       const revision = Number(current.revision) + 1; const jobRevision = nextJobRevision(current.job_revision);
       const complianceIntentStatements = await plannedComplianceIntentReplanStatements(db, {
         actorUid: access.actorUid,
@@ -779,7 +766,6 @@ export async function PATCH(request: Request) {
           startsAt,
           endsAt,
           changedAt: now,
-          excludeAppointmentId: appointmentId,
         }),
         db.prepare(`UPDATE customer_project_arrival_proposals SET preparation_acknowledged_at = '', updated_at = ?
           WHERE crm_appointment_id = ? AND preparation_acknowledged_at <> ''`).bind(now, appointmentId),
@@ -863,7 +849,6 @@ export async function PATCH(request: Request) {
           startsAt,
           endsAt,
           changedAt: now,
-          excludeAppointmentId: appointmentId,
         }),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
           VALUES (?, ?, ?, 'schedule_created', ?, ?)`).bind(crypto.randomUUID(), workOrderId, access.ownerUid, `${job.work_number} scheduled with ${member.display_name} for ${startsAt}.`, now),

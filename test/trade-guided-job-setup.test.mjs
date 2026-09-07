@@ -88,7 +88,7 @@ test("guided setup starts trade-owned work as a customer or job and creates one 
   assert.match(form, /technician receives the same job, activity and evidence context used by the assigned compliance team/);
 });
 
-test("guided appointment setup keeps the authorised week visible and fails closed on conflicts", () => {
+test("guided appointment setup keeps the authorised week visible and permits deliberate double booking", () => {
   assert.match(form, /import \{ TradeScheduleWorkspace \} from "\.\/TradeScheduleWorkspace"/);
   assert.match(form, /<TradeScheduleWorkspace[\s\S]*variant="job"[\s\S]*proposalStatusId=\{appointmentScheduleStatusId\}/);
   assert.match(form, /onProposalValidation=\{handleAppointmentProposalValidation\}/);
@@ -97,10 +97,10 @@ test("guided appointment setup keeps the authorised week visible and fails close
   assert.match(form, /if \(nextStep === 5 && !appointmentCalendarReady\)/);
   assert.match(form, /if \(!appointmentCalendarReady\) \{[\s\S]*setStep\(4\)/);
   assert.match(form, /disabled=\{!appointmentCalendarReady\}[\s\S]*\{appointmentActionLabel\(\)\}/);
-  assert.match(form, /Different workers may overlap; the selected worker may not/);
+  assert.match(form, /Appointments may overlap when the work requires it/);
   assert.match(schedule, /fetch\(`\/api\/trade-schedule\?rangeStart=\$\{rangeStart\}&rangeWeeks=\$\{SCHEDULE_BUFFER_WEEKS\}`/);
   assert.match(schedule, /schedulePermissions\?\.scheduleScope === "own" \? "Your calendar" : "Team calendar"/);
-  assert.match(crm, /APPOINTMENT_CONFLICT/);
+  assert.doesNotMatch(crm, /APPOINTMENT_CONFLICT/);
 });
 
 test("guided job creation rechecks the selected worker before and inside its atomic batch", () => {
@@ -121,7 +121,7 @@ test("guided job creation rechecks the selected worker before and inside its ato
   assert.ok(memberGuard > appointmentInsert && memberGuard < commit, "member capability must be guarded inside the batch");
   assert.ok(eligibilityGuard > appointmentInsert && eligibilityGuard < commit, "job eligibility must be guarded inside the batch");
   assert.ok(availabilityGuard > appointmentInsert && availabilityGuard < commit, "availability must be guarded inside the batch");
-  assert.match(guidedCreate.slice(availabilityGuard, commit), /excludeAppointmentId: appointmentId/);
+  assert.doesNotMatch(guidedCreate.slice(availabilityGuard, commit), /excludeAppointmentId/);
 });
 
 test("guided activity forms auto-open only after the job and intent commit", () => {

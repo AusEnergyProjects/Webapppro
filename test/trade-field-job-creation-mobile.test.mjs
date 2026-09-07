@@ -41,6 +41,19 @@ test("field job time control covers the full day in 15-minute intervals", () => 
   assert.match(mobile, /15-minute intervals/);
 });
 
+test("native back gestures move through setup before asking to cancel", () => {
+  const previousStep = executableFunction(mobile, "previousSetupStep");
+  assert.equal(previousStep(2), 1);
+  assert.equal(previousStep(1), 0);
+  assert.equal(previousStep(0), null);
+  assert.match(mobile, /usePreventRemove\(true/);
+  assert.match(mobile, /setStep\(previous\)/);
+  assert.match(mobile, /Cancel job setup\?/);
+  assert.match(mobile, /Continue booking/);
+  assert.match(mobile, /Cancel setup/);
+  assert.match(mobile, /allowExit\.current = true/);
+});
+
 test("mobile address predictions are cancellable, accessible and resolve before filling fields", () => {
   assert.match(mobile, /apiRequest<[^>]+>\('\/api\/trade-address-suggestions'/);
   assert.match(mobile, /type AddressPrediction = \{ id: string; label: string; provider: string \}/);

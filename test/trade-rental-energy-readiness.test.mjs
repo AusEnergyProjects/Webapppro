@@ -7,11 +7,13 @@ import * as templates from "../src/lib/trade-rental-assessment.mjs";
 import * as credentials from "../src/lib/trade-rental-credentials.ts";
 import * as evidence from "../src/lib/trade-rental-evidence.mjs";
 
+const scopeMigration = fs.readFileSync(new URL("../drizzle/0171_trade_rental_assessment_scope.sql", import.meta.url), "utf8");
+
 test("readiness selects six future energy areas while retaining the complete current assessment", () => {
   const snapshot = templates.rentalAssessmentTemplateSnapshot(["minimum_standards"]);
   const assessmentModule = snapshot.modules.minimum_standards;
   assert.equal(snapshot.assessmentScope, "energy_readiness_2027");
-  assert.equal(snapshot.key, "vic-rental-energy-readiness-2027");
+  assert.equal(snapshot.key, "vic-rental-minimum-standards");
   assert.deepEqual(assessmentModule.sections.map((section) => section.key), ["heating", "cooling", "hot_water", "showers", "ceiling_insulation", "draughtproofing"]);
   assert.equal(assessmentModule.sections.flatMap((section) => section.checks).length, 8);
   assert.equal(assessmentModule.credentialGate, "assigned_assessor");
@@ -28,6 +30,23 @@ test("readiness selects six future energy areas while retaining the complete cur
   assert.match(assessmentModule.reportBoundary, /not a declaration of non-compliance today/);
   assert.equal(templates.rentalAssessmentTemplateSnapshot(["minimum_standards"], "current_minimum_standards").modules.minimum_standards.sections.length, 15);
   assert.throws(() => templates.rentalAssessmentTemplateSnapshot(["minimum_standards"], "invented"), /SCOPE_INVALID/);
+});
+
+test("rental scope has a dedicated persisted field while retaining the database-approved template identity", () => {
+  const database = new DatabaseSync(":memory:");
+  try {
+    database.exec(`CREATE TABLE trade_rental_inspections (
+      template_key TEXT NOT NULL CHECK (template_key = 'vic-rental-minimum-standards')
+    )`);
+    for (const statement of scopeMigration.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) database.exec(statement);
+    const snapshot = templates.rentalAssessmentTemplateSnapshot(["minimum_standards"], "energy_readiness_2027");
+    database.prepare("INSERT INTO trade_rental_inspections (template_key, assessment_scope) VALUES (?, ?)")
+      .run(snapshot.key, snapshot.assessmentScope);
+    assert.deepEqual({ ...database.prepare("SELECT template_key, assessment_scope FROM trade_rental_inspections").get() }, {
+      template_key: "vic-rental-minimum-standards",
+      assessment_scope: "energy_readiness_2027",
+    });
+  } finally { database.close(); }
 });
 
 test("readiness still requires actual observations, evidence, findings and final declarations", () => {
@@ -55,9 +74,9 @@ function databaseFixture() {
     CREATE TABLE trade_work_orders (id TEXT, firebase_uid TEXT, revision INTEGER, stage TEXT, record_status TEXT, updated_at TEXT, assignee_member_id TEXT);
     INSERT INTO trade_work_orders VALUES ('job','owner',1,'scheduled','active','before','worker');
     CREATE TABLE trade_rental_inspections (id TEXT,work_order_id TEXT,firebase_uid TEXT,inspection_number TEXT,jurisdiction TEXT,status TEXT,
-      template_key TEXT,template_version INTEGER,rules_effective_from TEXT,selected_modules_snapshot TEXT,module_selection_snapshot TEXT,
+      template_key TEXT,template_version INTEGER,rules_effective_from TEXT,assessment_scope TEXT,selected_modules_snapshot TEXT,module_selection_snapshot TEXT,
       property_snapshot TEXT,assessor_snapshot TEXT,assessor_member_id TEXT,revision INTEGER,submitted_at TEXT,issued_at TEXT,issued_report_id TEXT,created_at TEXT,updated_at TEXT);
-    INSERT INTO trade_rental_inspections VALUES ('inspection','job','owner','RMS-TEST','VIC','scheduled','vic-rental-minimum-standards',1,'2026-06-30',
+    INSERT INTO trade_rental_inspections VALUES ('inspection','job','owner','RMS-TEST','VIC','scheduled','vic-rental-minimum-standards',1,'2026-06-30','current_minimum_standards',
       '["minimum_standards"]','["minimum_standards"]','{}','{}','worker',1,'','','','before','before');
     CREATE TABLE trade_rental_inspection_modules (id TEXT,inspection_id TEXT,firebase_uid TEXT,module_key TEXT,selected_required INTEGER,status TEXT,
       template_version INTEGER,template_name TEXT,required_capability TEXT,template_snapshot TEXT,answers TEXT,credential_snapshot TEXT,revision INTEGER,
@@ -138,6 +157,7 @@ test("scope API switches unissued tests with CAS, retains old observations and r
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
     const payload = await response.json();
     assert.equal(payload.inspection.assessmentScope, "energy_readiness_2027");
+    assert.equal(fixture.sql.prepare("SELECT assessment_scope FROM trade_rental_inspections").get().assessment_scope, "energy_readiness_2027");
     assert.equal(payload.modules[0].template.sections.length, 6);
     assert.equal(payload.modules[0].answers.assessorName, "Alex Installer");
     assert.equal(payload.modules[0].answers.assessorDeclaration, false);

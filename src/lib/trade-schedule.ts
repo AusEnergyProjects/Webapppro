@@ -10,7 +10,7 @@ export type ScheduleLaneItem = { id: string; startsAt: string; endsAt: string };
 export type ScheduleLane = { lane: number; laneCount: number };
 export type ScheduleConflictItem = ScheduleLaneItem & { assigneeMemberId?: unknown };
 export type ScheduleDisplayWindow = { startMinute: number; endMinute: number };
-export type ScheduleProposalStatus = "incomplete" | "loading" | "load_error" | "not_visible" | "assignee_unavailable" | "conflict" | "unavailable" | "clear";
+export type ScheduleProposalStatus = "incomplete" | "loading" | "load_error" | "not_visible" | "assignee_unavailable" | "unavailable" | "clear";
 export type ScheduleProposalValidation = { key: string; status: ScheduleProposalStatus; conflict: boolean };
 export type ScheduleChangeDraft = {
   appointmentId: string;
@@ -30,7 +30,6 @@ export type ScheduleProposalValidationInput = {
   loadFailed?: boolean;
   failedWeekStart?: string;
   assigneeActive?: boolean;
-  appointments?: Array<{ assigneeMemberId: string; startsAt: string; endsAt: string }>;
   unavailability?: Array<{ teamMemberId: string; startsAt: string; endsAt: string }>;
 };
 export type ScheduleWeekSwipeInput = {
@@ -272,30 +271,8 @@ export function scheduleAppointmentLanes(items: ScheduleLaneItem[]) {
 }
 
 export function scheduleConflictIds(items: ScheduleConflictItem[]) {
-  const conflicts = new Set<string>();
-  const byAssignee = new Map<string, ScheduleConflictItem[]>();
-  for (const item of items) {
-    const assignee = String(item.assigneeMemberId || "");
-    if (!assignee) continue;
-    const current = byAssignee.get(assignee) || [];
-    current.push(item); byAssignee.set(assignee, current);
-  }
-  for (const assignedItems of byAssignee.values()) {
-    const ordered = [...assignedItems].sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.endsAt.localeCompare(b.endsAt) || a.id.localeCompare(b.id));
-    let cluster: ScheduleConflictItem[] = [];
-    let clusterEnd = "";
-    const closeCluster = () => {
-      if (cluster.length > 1) for (const item of cluster) conflicts.add(item.id);
-      cluster = []; clusterEnd = "";
-    };
-    for (const item of ordered) {
-      const end = item.endsAt || item.startsAt;
-      if (cluster.length && item.startsAt >= clusterEnd) closeCluster();
-      cluster.push(item); if (end > clusterEnd) clusterEnd = end;
-    }
-    closeCluster();
-  }
-  return conflicts;
+  void items;
+  return new Set<string>();
 }
 
 export function scheduleDisplayWindow(items: ScheduleLaneItem[], defaultStartMinute = 7 * 60, defaultEndMinute = 19 * 60): ScheduleDisplayWindow {
@@ -368,7 +345,6 @@ export function scheduleProposalValidation({
   loadFailed = false,
   failedWeekStart = "",
   assigneeActive = true,
-  appointments = [],
   unavailability = [],
 }: ScheduleProposalValidationInput): ScheduleProposalValidation {
   const durationMinutes = startsAt && endsAt
@@ -392,9 +368,6 @@ export function scheduleProposalValidation({
   }
   if (!targetLoaded) return { key, status: "not_visible", conflict: false };
 
-  const overlapsAppointment = appointments.some((item) => item.assigneeMemberId === assigneeMemberId
-    && rangesOverlap(item.startsAt, item.endsAt || item.startsAt, startsAt, endsAt));
-  if (overlapsAppointment) return { key, status: "conflict", conflict: true };
   const overlapsUnavailability = unavailability.some((item) => item.teamMemberId === assigneeMemberId
     && rangesOverlap(item.startsAt, item.endsAt, startsAt, endsAt));
   if (overlapsUnavailability) return { key, status: "unavailable", conflict: true };

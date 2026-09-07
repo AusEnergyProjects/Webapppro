@@ -296,7 +296,7 @@ test("AEA lead scheduling requires an accepted current quote while direct jobs r
   assert.equal(Number(acceptedGuard.changes), 0, "an accepted current quote keeps the atomic guard non-mutating");
 });
 
-test("schedule availability still permits different workers to overlap", async () => {
+test("schedule availability permits overlapping appointments for every worker", async () => {
   const db = new DatabaseSync(":memory:");
   db.exec(`
     CREATE TABLE trade_crm_appointments (
@@ -315,10 +315,7 @@ test("schedule availability still permits different workers to overlap", async (
   const window = { ownerUid: "owner-1", startsAt: "2099-01-05T10:15", endsAt: "2099-01-05T10:45" };
 
   await assert.doesNotReject(() => server.assertTradeScheduleAvailable({ ...window, memberId: "member-b" }));
-  await assert.rejects(
-    () => server.assertTradeScheduleAvailable({ ...window, memberId: "member-a" }),
-    /APPOINTMENT_CONFLICT/,
-  );
+  await assert.doesNotReject(() => server.assertTradeScheduleAvailable({ ...window, memberId: "member-a" }));
 });
 
 test("only a verified active customer linked to the authoritative CRM email can create or view requests", () => {
@@ -359,9 +356,8 @@ test("dispatch decisions are owner scoped, revision protected and recheck confli
   for (const decision of ["accepted", "rejected", "alternative_proposed"]) assert.match(dispatchRoute, new RegExp(decision));
   for (const boundary of ["canRescheduleWithinScope", "canAssignJob", "r.firebase_uid = ?", "expectedRequestRevision", "expectedAppointmentRevision", "REVISION_CONFLICT", "assertTradeScheduleAvailable"]) assert.match(dispatchRoute, new RegExp(boundary));
   assert.equal((dispatchRoute.match(/await assertTradeScheduleAvailable/g) || []).length, 4);
-  assert.match(scheduleServer, /status IN \('scheduled', 'en_route', 'arrived', 'in_progress'\)/);
   assert.match(scheduleServer, /trade_team_unavailability/);
-  assert.match(scheduleServer, /throw new Error\("APPOINTMENT_CONFLICT"\)/);
+  assert.doesNotMatch(scheduleServer, /trade_crm_appointments|APPOINTMENT_CONFLICT/);
   assert.match(scheduleServer, /throw new Error\("UNAVAILABLE_CONFLICT"\)/);
   assert.doesNotMatch(dispatchRoute, /access\.role|canDispatch\(access\)/);
   assert.match(dispatchRoute, /INSERT OR IGNORE INTO trade_crm_appointment_revisions/);
@@ -400,10 +396,7 @@ test("every schedule mutation path prechecks and atomically guards authoritative
   assert.match(dispatchRoute, /AND \$\{tradeJobScheduleEligibilitySql\("w", "d"\)\}[\s\S]*?AND w\.stage NOT IN/);
 });
 
-for (const [conflictCode, errorPattern] of [
-  ["APPOINTMENT_CONFLICT", /overlapping appointment/i],
-  ["UNAVAILABLE_CONFLICT", /unavailable/i],
-]) {
+for (const [conflictCode, errorPattern] of [["UNAVAILABLE_CONFLICT", /unavailable/i]]) {
   test(`schedule_job rejects ${conflictCode} before preparing or batching mutations`, async () => {
     const { route, mutationCounts } = conflictDispatchRoute(conflictCode);
 

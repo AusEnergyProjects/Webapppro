@@ -646,7 +646,7 @@ test("create_appointment atomically rejects a team member deactivated after the 
   assert.equal(database.prepare("SELECT revision FROM trade_work_orders WHERE id = 'job-1'").get().revision, 3);
 });
 
-test("create_appointment rejects an overlapping appointment before insert or batch", async () => {
+test("create_appointment permits the same worker to hold an overlapping appointment", async () => {
   const { database, d1 } = fixture();
   database.prepare(`INSERT INTO trade_crm_appointments VALUES
     ('appointment-existing', 'job-1', 'owner-1', 'site_visit', 'Existing visit',
@@ -655,10 +655,9 @@ test("create_appointment rejects an overlapping appointment before insert or bat
   const { POST } = crmRoute(d1, access());
 
   const response = await POST(appointmentRequest("member-a"));
-  assert.equal(response.status, 409);
-  assert.match((await response.json()).error, /overlapping appointment/i);
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 1);
-  assert.equal(d1.batchCalls, 0);
+  assert.equal(response.status, 201);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 2);
+  assert.equal(d1.batchCalls, 1);
 });
 
 test("create_appointment allows different workers to be booked at the same time", async () => {
@@ -689,7 +688,7 @@ test("create_appointment rejects team unavailability before insert or batch", as
   assert.equal(d1.batchCalls, 0);
 });
 
-test("create_appointment atomically rejects an overlap introduced after the availability pre-check", async () => {
+test("create_appointment permits an overlap introduced while the booking is saved", async () => {
   const { database, d1 } = fixture();
   d1.setBeforeBatch(() => {
     database.prepare(`INSERT INTO trade_crm_appointments VALUES
@@ -700,10 +699,8 @@ test("create_appointment atomically rejects an overlap introduced after the avai
   const { POST } = crmRoute(d1, access());
 
   const response = await POST(appointmentRequest("member-a"));
-  assert.equal(response.status, 409);
-  assert.match((await response.json()).error, /schedule|changed|refresh/i);
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 1);
-  assert.equal(database.prepare("SELECT id FROM trade_crm_appointments").get().id, "appointment-racing");
+  assert.equal(response.status, 201);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 2);
 });
 
 test("create_appointment atomically rejects unavailability introduced after the pre-check", async () => {

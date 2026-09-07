@@ -64,13 +64,13 @@ test("overlapping appointments receive separate visible lanes", () => {
   assert.deepEqual(layout.get("d"), { lane: 0, laneCount: 1 });
 });
 
-test("the rolling schedule derives conflicts and a compact visible workday", () => {
+test("the rolling schedule allows overlaps and derives a compact visible workday", () => {
   assert.deepEqual([...scheduleConflictIds([
     { id: "a", assigneeMemberId: "one", startsAt: "2026-07-20T09:00", endsAt: "2026-07-20T10:30" },
     { id: "b", assigneeMemberId: "one", startsAt: "2026-07-20T09:15", endsAt: "2026-07-20T10:00" },
     { id: "c", assigneeMemberId: "one", startsAt: "2026-07-20T11:00", endsAt: "2026-07-20T12:00" },
     { id: "d", assigneeMemberId: "two", startsAt: "2026-07-20T09:15", endsAt: "2026-07-20T10:00" },
-  ])].sort(), ["a", "b"]);
+  ])], []);
   assert.deepEqual(scheduleDisplayWindow([]), { startMinute: 420, endMinute: 1140 });
   assert.deepEqual(scheduleDisplayWindow([
     { id: "early", startsAt: "2026-07-20T05:30", endsAt: "2026-07-20T06:30" },
@@ -110,9 +110,10 @@ test("schedule SQL compiles against the production team and CRM migrations", () 
 test("authorised schedule scopes receive server-enforced conflict and revision checks", () => {
   for (const boundary of ["requireInstallerTeamAccess", "sameOrigin", "canViewSchedule", "canRescheduleWithinScope", "canAssignJob", "activeMember", "owner_uid = ?", "firebase_uid = ?"]) assert.match(route, new RegExp(boundary));
   assert.doesNotMatch(route, /access\.role|canDispatch\(access\)/);
-  for (const conflict of ["REVISION_CONFLICT", "APPOINTMENT_CONFLICT", "UNAVAILABLE_CONFLICT", "PAST_APPOINTMENT"]) assert.match(`${route}\n${scheduleServer}`, new RegExp(conflict));
+  for (const conflict of ["REVISION_CONFLICT", "UNAVAILABLE_CONFLICT", "PAST_APPOINTMENT"]) assert.match(`${route}\n${scheduleServer}`, new RegExp(conflict));
+  assert.doesNotMatch(`${route}\n${scheduleServer}`, /APPOINTMENT_CONFLICT/);
   assert.doesNotMatch(`${route}\n${scheduleServer}`, /throw new Error\("WORKING_HOURS_CONFLICT"\)/);
-  assert.match(scheduleServer, /status IN \('scheduled', 'en_route', 'arrived', 'in_progress'\) \$\{exclusionSql\}/);
+  assert.doesNotMatch(scheduleServer, /FROM trade_crm_appointments/);
   assert.match(route, /assertTradeScheduleAvailable\(\{ ownerUid: access\.ownerUid, memberId, startsAt, endsAt/);
   assert.match(route, /ON CONFLICT\(owner_uid, team_member_id, weekday\) DO UPDATE/);
   assert.match(route, /schedule_updated/); assert.match(route, /schedule_created/); assert.match(route, /jobSyncChangeStatements/);
@@ -130,8 +131,7 @@ test("several staged moves are validated and committed as one guarded schedule b
   assert.match(batch, /assertAssignmentChange\(access/);
   assert.match(batch, /assertMemberCapability\(member/);
   assert.match(batch, /assertTradeJobReadyForScheduling\(access\.ownerUid/);
-  assert.match(batch, /left\.memberId === right\.memberId && left\.startsAt < right\.endsAt && left\.endsAt > right\.startsAt/);
-  assert.match(batch, /excludeAppointmentIds: appointmentIds/);
+  assert.doesNotMatch(batch, /APPOINTMENT_CONFLICT|left\.memberId === right\.memberId/);
   assert.match(batch, /status = 'scheduled' AND revision = \? AND assignee_member_id = \?/);
   assert.match(batch, /previousTradeScheduleMutationGuardStatement/);
   assert.match(batch, /tradeJobScheduleEligibilityGuardStatement/);
@@ -142,8 +142,7 @@ test("several staged moves are validated and committed as one guarded schedule b
   assert.equal((batch.match(/await db\.batch\(/g) || []).length, 1);
   assert.match(batch, /notifications\.push\(\{/);
   assert.match(batch, /syncAppointmentIds\.push\(item\.appointmentId\)/);
-  assert.match(scheduleServer, /excludeAppointmentIds\?\.length/);
-  assert.match(scheduleServer, /excludedIds\.map\(\(\) => "\?"\)\.join\(", "\)/);
+  assert.doesNotMatch(scheduleServer, /excludeAppointmentIds|excludeAppointmentId/);
 });
 
 test("schedule payloads preserve customer privacy boundaries", () => {
@@ -186,7 +185,8 @@ test("appointments expose compact quote state without bypassing the existing quo
 });
 
 test("the installer dashboard exposes stable one-week scheduling with adjacent drag buffering", () => {
-  for (const copy of ["One clear week at a time", "Go to week", "Previous week", "Next week", "Today", "Swipe to change week", "Hold for previous week", "Hold for next week", "Add to schedule", "Conflicts only", "Set working hours and time off", "minuteFromPointer", "moveAppointmentToDate", "outsideWorkingHours", "memberLabel", "ownerMemberId", "schedule_appointment", "schedule_job", "save_schedule_changes", "Save schedule changes", "Discard"]) assert.match(ui, new RegExp(copy));
+  for (const copy of ["One clear week at a time", "Go to week", "Previous week", "Next week", "Today", "Swipe to change week", "Hold for previous week", "Hold for next week", "Add to schedule", "Set working hours and time off", "minuteFromPointer", "moveAppointmentToDate", "outsideWorkingHours", "memberLabel", "ownerMemberId", "schedule_appointment", "schedule_job", "save_schedule_changes", "Save schedule changes", "Discard"]) assert.match(ui, new RegExp(copy));
+  assert.doesNotMatch(ui, /Conflicts only|Overlaps selected time|same-worker overlap/);
   assert.match(ui, /const calendarCanReschedule = canRescheduleJobs/);
   assert.match(ui, /draggable=\{calendarCanReschedule && !busy && !loading\}/);
   assert.match(ui, /const SCHEDULE_BUFFER_WEEKS = 3/);
@@ -245,7 +245,7 @@ test("job-focused scheduling keeps the permission-aware week and hides unrelated
   assert.match(ui, /const jobCalendar = variant === "job"/);
   assert.match(ui, /scheduleScope === "own" \? "Your calendar" : "Team calendar"/);
   assert.match(ui, /Check the week before you book/);
-  assert.match(ui, /proposalConflictIds/);
+  assert.doesNotMatch(ui, /proposalConflictIds/);
   assert.match(ui, /const proposalValidation = useMemo\(\(\) => scheduleProposalValidation/);
   assert.match(ui, /const proposalHasConflict = proposalValidation\.conflict/);
   assert.match(ui, /schedulePermissions\?\.scheduleScope === "own"/);

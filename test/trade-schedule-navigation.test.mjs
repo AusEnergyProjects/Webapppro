@@ -46,7 +46,7 @@ test("week navigation has no fixed far-future horizon", () => {
   assert.equal(week, origin);
 });
 
-test("a job proposal can only be submitted when its visible loaded week is conflict free", () => {
+test("a job proposal can be submitted with overlapping work but not explicit unavailability", () => {
   const base = {
     startsAt: "2026-07-22T10:00",
     endsAt: "2026-07-22T11:00",
@@ -65,7 +65,7 @@ test("a job proposal can only be submitted when its visible loaded week is confl
   assert.equal(scheduleProposalValidation({ ...base, visibleMemberId: "member-2" }).status, "not_visible");
   assert.equal(scheduleProposalValidation({ ...base, assigneeActive: false }).status, "assignee_unavailable");
   assert.deepEqual(scheduleProposalValidation({ ...base, appointments: [{ assigneeMemberId: "member-1", startsAt: "2026-07-22T10:30", endsAt: "2026-07-22T11:30" }] }), {
-    key: scheduleProposalKey(base.startsAt, 60, base.assigneeMemberId), status: "conflict", conflict: true,
+    key: scheduleProposalKey(base.startsAt, 60, base.assigneeMemberId), status: "clear", conflict: false,
   });
   assert.equal(scheduleProposalValidation({ ...base, appointments: [{ assigneeMemberId: "member-2", startsAt: "2026-07-22T10:30", endsAt: "2026-07-22T11:30" }] }).status, "clear");
   assert.equal(scheduleProposalValidation({ ...base, unavailability: [{ teamMemberId: "member-1", startsAt: "2026-07-22T09:00", endsAt: "2026-07-22T12:00" }] }).status, "unavailable");
@@ -108,7 +108,7 @@ test("several appointment moves project locally without mutating authoritative s
   assert.deepEqual([...scheduleChangeConflictIds(appointments, changes)], []);
 
   const sameWorkerOverlap = [{ appointmentId: "b", memberId: "worker-1", startsAt: "2026-07-20T09:30", durationMinutes: 60 }];
-  assert.deepEqual([...scheduleChangeConflictIds(appointments, sameWorkerOverlap)].sort(), ["a", "b"]);
+  assert.deepEqual([...scheduleChangeConflictIds(appointments, sameWorkerOverlap)], []);
   const differentWorkerOverlap = [{ appointmentId: "c", memberId: "worker-2", startsAt: "2026-07-20T10:00", durationMinutes: 60 }];
   assert.deepEqual([...scheduleChangeConflictIds(appointments, differentWorkerOverlap)], []);
 });

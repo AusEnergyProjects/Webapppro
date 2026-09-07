@@ -276,8 +276,7 @@ export function TradeNewJobForm({
     if (appointmentScheduleValidation.status === "not_visible") return "Show the selected worker and week in the calendar before continuing.";
     if (appointmentScheduleValidation.status === "assignee_unavailable") return "Choose an active team member before continuing.";
     if (appointmentScheduleValidation.status === "unavailable") return "That team member is unavailable at the selected time. Choose another time.";
-    if (appointmentScheduleValidation.status === "conflict") return "That team member already has work at the selected time. Choose another time.";
-    return "The selected week must be loaded and conflict-free before continuing.";
+    return "The selected week must be loaded before continuing.";
   }
 
   function appointmentActionLabel() {
@@ -841,7 +840,7 @@ export function TradeNewJobForm({
         />}
         <div className="crm-job-schedule-controls">
           <section className="crm-job-schedule-panel">
-            <div className="crm-section-heading"><div><span>First appointment</span><h4>Assign and schedule</h4><p>Double-click an open calendar time, or enter the time below. Different workers may overlap; the selected worker may not.</p></div></div>
+            <div className="crm-section-heading"><div><span>First appointment</span><h4>Assign and schedule</h4><p>Double-click any suitable calendar time, or enter it below. Appointments may overlap when the work requires it.</p></div></div>
             <div className="crm-job-booking-form">
               <fieldset aria-describedby={appointmentScheduleStatusId}>
                 {canChooseTeamAssignee ? <>

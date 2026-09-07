@@ -1034,6 +1034,7 @@ async function accessibleJobs(access: TeamAccess) {
           templateKey: String(rental.template_key),
           templateVersion: Number(rental.template_version || 1),
           rulesEffectiveFrom: String(rental.rules_effective_from),
+          assessmentScope: String(rental.assessment_scope || "current_minimum_standards"),
           selectedModules,
           assessorMemberId: String(rental.assessor_member_id || ""),
           revision: Number(rental.revision || 1),
