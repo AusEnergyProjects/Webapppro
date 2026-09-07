@@ -1371,7 +1371,7 @@ export default function JobScreen() {
         <Text style={styles.cardTitle}>Complete job</Text>
         {job.openIssues ? <Text style={styles.warningText}>{job.openIssues} open issue(s) need attention before completion.</Text> : null}
         <FieldButton disabled={!canCompleteJob || Boolean(busy) || !sync.online || sync.running || Boolean(sync.queuedActions || sync.queuedUploads || sync.conflicts) || job.tasks.some((task) => task.status !== 'done') || fieldForms.some((form) => form.status !== 'complete') || Boolean(job.rentalInspection && job.rentalInspection.status !== 'issued') || complianceIntents.some((intent) => !(job.activityWorkPacks || []).some((pack) => pack.instance.complianceIntentId === intent.id && pack.instance.status === 'completed' && pack.finalRecord)) || Boolean(job.openIssues)} loading={busy === 'field:finish'} onPress={() => void advanceFieldJob()}>{job.stage === 'completed' ? 'Job complete' : 'Complete job'}</FieldButton>
-        <Text style={styles.meta}>Available when required work is complete and safely synced. The server checks the latest records before completing this job.</Text>
+        <Text style={styles.meta}>{complianceIntents.length ? 'Complete the required work, forms, evidence and signatures, then sync. Creditex handles compliance review and certificate creation separately.' : 'Available when required work is complete and safely synced. The server checks the latest records before completing this job.'}</Text>
       </View> : null}
 
       <View style={styles.syncLine}><MaterialCommunityIcons name={sync.online ? sync.conflicts ? 'cloud-alert-outline' : 'cloud-check-outline' : 'cloud-off-outline'} size={20} color={colours.green} /><Text style={styles.body}>{syncLabel}</Text></View>

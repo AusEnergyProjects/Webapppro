@@ -21,7 +21,7 @@ AEA admin and authorised Creditex accounts control the shared master library. Cr
 
 Trades may add business-specific questions. Extensions cannot remove or weaken mandatory compliance questions, evidence, declarations, signature requirements or product checks. Capture optional marketing consent separately from statutory consent and assignment.
 
-Form completeness, regulatory eligibility, compliance review, certificate submission and regulator acceptance are distinct states. Saving a template or completing a questionnaire does not issue a certificate. No automated legal approval, invented accreditation, guessed product eligibility or fabricated review records.
+The tradie's responsibility ends with completing and submitting the required work, forms, evidence and signatures to Creditex. Creditex handles compliance review and certificate creation with the relevant program administrator. Certificate submission, creation and regulator acceptance must not be technician tasks or conditions for completing field work. Required field records and any rules that apply before work remain completion controls. Saving a template or completing a questionnaire does not issue a certificate. No automated legal approval, invented accreditation, guessed product eligibility or fabricated review records.
 
 ## Regulatory currency
 

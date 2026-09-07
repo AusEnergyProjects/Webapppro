@@ -46,7 +46,7 @@ export function JobWorkSelection({ options, serviceCategory, onServiceChange, ac
         onActivitiesChange([...activities, { programTemplateId: program.id, activityTemplateId: activityId }]); setProgramId(''); setActivityId('');
       }}>Add this form</FieldButton> : null}
     </> : null}
-    {activities.length ? <Text style={styles.help}>Each activity gets its own form and evidence record. Creditex&apos;s current requirements control when it is ready for field work.</Text> : null}
+    {activities.length ? <Text style={styles.help}>Complete each activity&apos;s forms, evidence and signatures. Creditex handles certificate creation with the program administrator.</Text> : null}
   </View>;
 }
 const styles = StyleSheet.create({

@@ -1410,7 +1410,7 @@ function ReviewPage({
     <Text style={styles.sectionEyebrow}>REVIEW</Text>
     <Text style={styles.pageTitle}>{pack.instance.status === 'completed' ? 'Completed record' : 'Check before finishing'}</Text>
     <Text style={styles.description}>{pack.instance.status === 'completed'
-      ? 'Keep the exact signed activity PDF with the job and open it whenever you need the completed form.'
+      ? 'Your completed form and signed PDF are saved with this job. Creditex handles compliance review and certificate creation with the program administrator.'
       : 'Confirm the customer, activity, products, calculations, files and declarations are correct.'}</Text>
     <ExecutionContextReview pack={pack} />
     <CustomerContextReview
