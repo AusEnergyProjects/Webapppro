@@ -3,7 +3,7 @@ import test from "node:test";
 
 import {
   CREDITEX_NSW_BLOCKED_ACTIVITIES,
-  CREDITEX_NSW_PROGRAM_DEFINITIONS,
+  CREDITEX_NSW_JULY_PROGRAM_DEFINITIONS as CREDITEX_NSW_PROGRAM_DEFINITIONS,
   creditexNswActivityDefinition,
 } from "../src/lib/creditex-nsw-program-catalogue.ts";
 import {
@@ -12,7 +12,7 @@ import {
 } from "../src/lib/creditex-nsw-program-estimator.ts";
 
 function activity(programCode, activityCode) {
-  const definition = creditexNswActivityDefinition(programCode, activityCode);
+  const definition = creditexNswActivityDefinition(programCode, activityCode, "2026-07-01");
   assert.ok(definition, `missing ${programCode}/${activityCode}`);
   return definition;
 }

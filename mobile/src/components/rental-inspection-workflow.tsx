@@ -65,6 +65,7 @@ type WorkflowProps = {
   summary: FieldRentalInspectionSummary;
   online: boolean;
   onChanged: () => Promise<void>;
+  onReturnToJob?: () => void;
 };
 
 type UploadResponse = {
@@ -302,7 +303,7 @@ function ItemEditor({
   </View>;
 }
 
-export function RentalInspectionWorkflow({ workOrderId, summary, online, onChanged }: WorkflowProps) {
+export function RentalInspectionWorkflow({ workOrderId, summary, online, onChanged, onReturnToJob }: WorkflowProps) {
   const [data, setData] = useState<RentalAssessmentResult>({ modules: [], items: [], evidence: [], findings: [], completion: {} });
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState('');
@@ -573,13 +574,14 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     ]);
   }
 
-  if (!online) return <View style={styles.offlineCard}><MaterialCommunityIcons name="cloud-off-outline" size={28} color={colours.green} /><View style={styles.flex}><Text style={styles.cardTitle}>Rental assessment</Text><Text style={styles.body}>{summary.progress.completeModules} of {summary.progress.moduleTotal} modules complete. Reconnect to open the full frozen form and save verified answers.</Text></View></View>;
-  if (loading && !activeModule) return <View style={styles.offlineCard}><MaterialCommunityIcons name="progress-clock" size={28} color={colours.green} /><Text style={styles.body}>Opening the frozen rental assessment...</Text></View>;
-  if (!activeModule) return <View style={styles.offlineCard}><MaterialCommunityIcons name="alert-circle-outline" size={28} color={colours.red} /><View style={styles.flex}><Text style={styles.cardTitle}>Rental assessment unavailable</Text><Text style={styles.body}>{error || 'Pull down to sync this job and try again.'}</Text><FieldButton variant="secondary" onPress={() => void load()}>Try again</FieldButton></View></View>;
+  if (!online) return <View style={styles.workflow}>{onReturnToJob ? <FieldButton variant="secondary" onPress={onReturnToJob}>Job</FieldButton> : null}<View style={styles.offlineCard}><MaterialCommunityIcons name="cloud-off-outline" size={28} color={colours.green} /><View style={styles.flex}><Text style={styles.cardTitle}>Rental assessment</Text><Text style={styles.body}>{summary.progress.completeModules} of {summary.progress.moduleTotal} modules complete. Reconnect to open the full frozen form and save verified answers.</Text></View></View></View>;
+  if (loading && !activeModule) return <View style={styles.workflow}>{onReturnToJob ? <FieldButton variant="secondary" onPress={onReturnToJob}>Job</FieldButton> : null}<View style={styles.offlineCard}><MaterialCommunityIcons name="progress-clock" size={28} color={colours.green} /><Text style={styles.body}>Opening the frozen rental assessment...</Text></View></View>;
+  if (!activeModule) return <View style={styles.workflow}>{onReturnToJob ? <FieldButton variant="secondary" onPress={onReturnToJob}>Job</FieldButton> : null}<View style={styles.offlineCard}><MaterialCommunityIcons name="alert-circle-outline" size={28} color={colours.red} /><View style={styles.flex}><Text style={styles.cardTitle}>Rental assessment unavailable</Text><Text style={styles.body}>{error || 'Pull down to sync this job and try again.'}</Text><FieldButton variant="secondary" onPress={() => void load()}>Try again</FieldButton></View></View></View>;
 
   const allModulesComplete = data.modules?.every((candidate) => candidate.status === 'complete') === true;
   const moduleCompletion = data.completion?.[activeModule.id];
   return <View style={styles.workflow}>
+    {onReturnToJob && !section ? <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => Alert.alert('Return to job', 'Saved answers are retained. Save any edited assessment details before leaving.', [{ text: 'Stay here', style: 'cancel' }, { text: 'Return to job', onPress: onReturnToJob }])}>Job</FieldButton> : null}
     <View style={styles.hero}>
       <View style={styles.flex}><Text style={styles.label}>VICTORIAN RENTAL ASSESSMENT</Text><Text style={styles.heroTitle}>{data.inspection?.inspectionNumber || summary.inspectionNumber}</Text><Text style={styles.body}>Rules effective {formatDate(data.inspection?.rulesEffectiveFrom || summary.rulesEffectiveFrom)} | Frozen form version {summary.templateVersion}</Text></View>
       <View style={styles.statusPill}><Text style={styles.statusText}>{readable(data.inspection?.status || summary.status)}</Text></View>

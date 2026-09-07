@@ -51,8 +51,9 @@ async function formPayload(ownerUid: string, workOrderId: string) {
     FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? ORDER BY created_at`)
     .bind(workOrderId, ownerUid).all<Record<string, unknown>>();
   return {
+    serviceCategory: String(work.service_category),
     protectedJob: work.source_type === "opportunity" || work.customer_source === "platform_private",
-    templates: (await publishedTradeFormTemplatesFor(String(work.service_category))).map((template) => ({
+    templates: (await publishedTradeFormTemplatesFor(String(work.service_category), undefined, ownerUid)).map((template) => ({
       key: template.key, version: template.version, name: template.name, jurisdiction: template.jurisdiction,
       description: template.description, guidance: template.guidance, fieldCount: template.fields.length,
     })),
@@ -101,7 +102,7 @@ export async function POST(request: Request) {
     if (!work) throw new Error("JOB_NOT_FOUND");
     if (Number(work.revision) !== Number(job.revision)) throw new Error("ONLINE_MUTATION_CONFLICT");
     if (["completed", "cancelled"].includes(String(work.stage))) throw new Error("TERMINAL_JOB_LOCKED");
-    const template = await publishedTradeFormTemplate(templateKey, templateVersion, String(work?.service_category || "other"));
+    const template = await publishedTradeFormTemplate(templateKey, templateVersion, String(work?.service_category || "other"), undefined, access.ownerUid);
     if (!template) return adminJson({ ok: false, error: "Choose a form available for this work type." }, 400);
     const existing = await getD1().prepare(`SELECT id FROM trade_job_forms
       WHERE work_order_id = ? AND firebase_uid = ? AND template_key = ? AND template_version = ?`)

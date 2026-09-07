@@ -1,4 +1,4 @@
-export const GOVERNMENT_CATALOGUE_REVIEWED_ON = "2026-08-08";
+export const GOVERNMENT_CATALOGUE_REVIEWED_ON = "2026-09-07";
 export const GOVERNMENT_CATALOGUE_REVIEW_DUE = "2026-09-08";
 
 export const COMPLIANCE_OUTCOME_CLASSES = [
@@ -734,9 +734,9 @@ const NSW_PDRS_ACTIVITIES = [
   activity("NSW-PDRS", "SYS2", "Pool pump peak reduction", "other"),
   activity("NSW-PDRS", "BESS1", "New behind-the-meter battery", "battery"),
   activity("NSW-PDRS", "BESS2", "Battery demand-response or VPP onboarding", "battery"),
-  activity("NSW-PDRS", "BESS3", "Apartment battery", "battery", { catalogueState: "future" }),
-  activity("NSW-PDRS", "BESS4", "Small-business battery", "battery", { catalogueState: "future" }),
-  activity("NSW-PDRS", "BESS5", "Commercial or industrial battery", "battery", { catalogueState: "future" }),
+  activity("NSW-PDRS", "BESS3", "Apartment battery", "battery"),
+  activity("NSW-PDRS", "BESS4", "Small-business battery", "battery"),
+  activity("NSW-PDRS", "BESS5", "Commercial or industrial battery", "battery"),
   activity("NSW-PDRS", "V2G1", "Vehicle-to-grid activity", "ev-charging", { catalogueState: "future" }),
   activity("NSW-PDRS", "WH1", "Heat-pump water-heater peak reduction", "hot-water", { catalogueState: "closed" }),
 ];

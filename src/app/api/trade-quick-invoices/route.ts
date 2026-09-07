@@ -50,6 +50,7 @@ function invoiceError(error: unknown) {
   if (code === "QUICK_INVOICE_SENDING") return adminJson({ ok: false, error: "This invoice is already being sent. Reload it before trying again." }, 409);
   if (code === "QUICK_INVOICE_ISSUE_CONFLICT") return adminJson({ ok: false, error: "The email provider accepted this invoice, but its draft changed before issue completed. It was not marked issued. Contact support before retrying." }, 409);
   if (code === "QUICK_INVOICE_CHANGED") return adminJson({ ok: false, error: "This invoice changed in another session. Reload it before saving." }, 409);
+  if (code === "QUICK_INVOICE_RECIPIENT_CHANGED") return adminJson({ ok: false, error: "The customer's email changed. Reload the invoice and review the recipient before sending." }, 409);
   if (code === "QUICK_INVOICE_ISSUED") return adminJson({ ok: false, error: "An issued invoice cannot be overwritten. Create a credit instead." }, 409);
   if (code === "QUICK_INVOICE_EXTERNAL_ACTIVITY") return adminJson({ ok: false, error: "This invoice already has accounting activity, so its original totals are locked." }, 409);
   if (code === "QUICK_INVOICE_DOCUMENT_INVALID") return adminJson({ ok: false, error: "This invoice document could not be verified. It has not been sent." }, 409);
@@ -402,8 +403,11 @@ export async function POST(request: Request) {
     if (!current) throw new Error("QUICK_INVOICE_NOT_FOUND");
     await assignedJob(access, String(current.work_order_id));
     if (action === "retry_delivery") {
+      if (body.expectedRevision !== undefined && Number(body.expectedRevision) !== Number(current.revision || 1)) throw new Error("QUICK_INVOICE_CHANGED");
       if (body.consentConfirmed !== true) return adminJson({ ok: false, error: "Confirm the customer asked to receive this invoice." }, 400);
-      await sendQuickInvoiceDelivery({ invoiceId, ownerUid: access.ownerUid, actorUid: access.actorUid, origin: new URL(request.url).origin });
+      await sendQuickInvoiceDelivery({ invoiceId, ownerUid: access.ownerUid, actorUid: access.actorUid, origin: new URL(request.url).origin,
+        expectedRevision: body.expectedRevision === undefined ? Number(current.revision || 1) : Number(body.expectedRevision),
+        expectedRecipient: body.expectedRecipient === undefined ? undefined : cleanAdminText(body.expectedRecipient, 254) });
     } else if (action === "correct_draft") {
       if (
         current.status === "draft" &&

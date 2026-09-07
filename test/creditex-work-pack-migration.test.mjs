@@ -24,6 +24,7 @@ const migrationPath = path.join(
   "0142_creditex_activity_work_packs.sql",
 );
 const migrationSql = fs.readFileSync(migrationPath, "utf8");
+const masterSaveMigration = fs.readFileSync(path.join(root, "drizzle/0169_creditex_master_author_save.sql"), "utf8");
 const workPackMigrationGuards = CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS
   .filter((definition) => definition.name.startsWith("compliance_work_pack_"));
 const workPackGuardSql = workPackMigrationGuards
@@ -215,6 +216,7 @@ function governanceDatabase(organisationCode = "CREDITEX-AU") {
     );
   `);
   database.exec(migrationSql);
+  database.exec(masterSaveMigration);
   for (const definition of workPackMigrationGuards) {
     database.exec(definition.sql);
   }
@@ -461,6 +463,7 @@ test("generic engine implementation contains no special-case historic activity l
 test("0142 parses and freezes every governed work-pack row shape", () => {
   const database = new DatabaseSync(":memory:");
   database.exec(migrationSql);
+  database.exec(masterSaveMigration);
   assert.deepEqual(columns(database, "compliance_activity_work_pack_versions"), [
     "id", "organisation_id", "activity_version_id", "activity_template_id",
     "manual_policy_binding_id", "manual_policy_binding_version",
@@ -643,35 +646,17 @@ test("CREDITEX-AU owner and admin can author, edit, abandon and replace a draft"
   );
 });
 
-test("independent admin review publishes while self-review and support fail closed", () => {
+test("author save activates a master while support cannot change it", () => {
   const database = governanceDatabase();
   insertVersion(database);
   insertSource(database);
-  assert.throws(
-    () => reviewSource(database, "admin-author"),
-    /COMPLIANCE_WORK_PACK_SOURCE_INDEPENDENT_REVIEW_REQUIRED/,
-  );
-  assert.throws(
-    () => reviewSource(database, "admin-support"),
-    /COMPLIANCE_WORK_PACK_SOURCE_INDEPENDENT_REVIEW_REQUIRED/,
-  );
-  reviewSource(database, "admin-reviewer");
-  assert.throws(
-    () => publishVersion(database, "admin-author"),
-    /COMPLIANCE_WORK_PACK_INDEPENDENT_REVIEWER_REQUIRED/,
-  );
-  assert.throws(
-    () => publishVersion(database, "admin-support"),
-    /COMPLIANCE_WORK_PACK_INDEPENDENT_REVIEWER_REQUIRED/,
-  );
-  publishVersion(database, "admin-reviewer");
-  assert.deepEqual({ ...database.prepare(`
-    SELECT publish_state, reviewed_by_uid
-    FROM compliance_activity_work_pack_versions
-    WHERE id = 'work-pack-version-1'
-  `).get() }, {
-    publish_state: "published",
-    reviewed_by_uid: "admin-reviewer",
+  assert.throws(() => reviewSource(database, "admin-support"), /COMPLIANCE_WORK_PACK_SOURCE_AUTHOR_REQUIRED/);
+  reviewSource(database, "admin-author");
+  assert.throws(() => publishVersion(database, "admin-support"), /COMPLIANCE_WORK_PACK_AUTHOR_REQUIRED/);
+  publishVersion(database, "admin-author");
+  assert.deepEqual({ ...database.prepare(`SELECT publish_state, reviewed_by_uid
+    FROM compliance_activity_work_pack_versions WHERE id = 'work-pack-version-1'`).get() }, {
+    publish_state: "published", reviewed_by_uid: "admin-author",
   });
 });
 

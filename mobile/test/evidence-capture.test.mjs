@@ -193,7 +193,7 @@ test('manual compliance jobs cannot show or queue unsupported time entries', () 
   );
   assert.match(
     jobScreen,
-    /\{!creditexManual \? <View style=\{styles\.card\}>[\s\S]*TIME ENTRY[\s\S]*<\/View> : null\}/,
+    /\{!creditexManual && activeFormId === 'time' \? <View style=\{styles\.card\}>[\s\S]*TIME ENTRY[\s\S]*<\/View> : null\}/,
   );
 });
 

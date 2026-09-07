@@ -11,7 +11,7 @@ import {
 
 export const CREDITEX_CALCULATION_COVERAGE_CONTRACT =
   "creditex-calculation-coverage/v1";
-export const CREDITEX_CALCULATION_COVERAGE_REVIEWED_ON = "2026-08-09";
+export const CREDITEX_CALCULATION_COVERAGE_REVIEWED_ON = "2026-09-07";
 
 function compareText(left: string, right: string) {
   return left < right ? -1 : left > right ? 1 : 0;

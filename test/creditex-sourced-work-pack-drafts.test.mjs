@@ -359,7 +359,7 @@ test("all 57 current VEU and exact-form NSW candidates map every exact source to
     .filter((candidate) =>
       candidate.sourceCatalogue === "NSW_CERTIFICATE"
         && candidate.draftCreationState === "not_available"
-    ).length, 22);
+    ).length, 25);
 });
 
 test("server persists one immutable-provenance draft, replays its request and enforces schema CAS", async () => {
@@ -517,10 +517,11 @@ test("candidate-origin drafts cannot enter publication or activation", async () 
       d1,
       {
         ...ACTOR,
-        actorUid: "admin-reviewer",
+        actorUid: ACTOR.actorUid,
       },
       {
         id: created.savedVersionId,
+        expectedCurrentVersionId: "",
         expectedSchemaSha256: created.schemaSha256,
         comment: "Independent review cannot publish a candidate-origin draft.",
       },

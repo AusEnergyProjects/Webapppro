@@ -19,6 +19,7 @@ import {
 } from "@/lib/creditex-official-product-registry";
 import { CreditexOfficialSourceBatchAcquisition } from "./CreditexOfficialSourceBatchAcquisition";
 import { CreditexWorkPackDocumentOutputEditor } from "./CreditexWorkPackDocumentOutputEditor";
+import { CreditexStatutorySourceLibrary } from "./CreditexStatutorySourceLibrary";
 import styles from "./CreditexActivityWorkPackGovernance.module.css";
 
 type Api = (
@@ -202,6 +203,7 @@ type WorkPackDraft = {
 };
 
 type GovernanceAction = {
+  expectedCurrentVersionId?: string;
   action:
     | "review_source_binding"
     | "withdraw_source_binding"
@@ -1262,8 +1264,14 @@ export function CreditexActivityWorkPackGovernance({
     setError("");
     setStatus("Validating and saving the governed draft...");
     try {
+      const base = snapshot.versions.find((version) => version.id === (draft.id || selectedVersionId));
+      const hasSources = base && snapshot.sourceBindings.some((binding) => binding.workPackVersionId === base.id && ["pending_review", "approved"].includes(binding.state));
+      const current = activityVersions.filter((version) => ["published", "withdrawn"].includes(version.state)).sort((left, right) => right.version - left.version)[0];
       const body = JSON.stringify({
-        action: draft.id ? "update_draft" : "create_draft",
+        action: hasSources ? "save_master" : draft.id ? "update_draft" : "create_draft",
+        baseVersionId: hasSources ? base.id : undefined,
+        expectedBaseSchemaSha256: hasSources ? base.schemaSha256 : undefined,
+        expectedCurrentVersionId: current?.id || "",
         id: draft.id || undefined,
         expectedSchemaSha256: draft.expectedSchemaSha256 || undefined,
         activityVersionId: draft.activityVersionId,
@@ -1274,7 +1282,7 @@ export function CreditexActivityWorkPackGovernance({
         effectiveTo: draft.schema.effectiveTo,
       });
       const result = await api(endpoint, {
-        method: draft.id ? "PUT" : "POST",
+        method: hasSources ? "POST" : draft.id ? "PUT" : "POST",
         body,
       });
       const next = parseSnapshot(result);
@@ -1282,7 +1290,7 @@ export function CreditexActivityWorkPackGovernance({
       const savedId = text(result.savedVersionId);
       if (savedId) setSelectedVersionId(savedId);
       setDraft(null);
-      setStatus("Draft saved. Trade accounts still cannot see or alter it.");
+      setStatus(hasSources ? "Master saved and available for new jobs. Existing jobs keep their captured version." : "Form prepared. Add the verified source mappings, then save it as an available master.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "The governed draft could not be saved.");
       setStatus("");
@@ -1292,7 +1300,9 @@ export function CreditexActivityWorkPackGovernance({
   }
 
   function openGovernanceAction(action: GovernanceAction) {
-    setGovernanceAction(action);
+    setGovernanceAction(action.action === "publish_version" ? { ...action,
+      expectedCurrentVersionId: activityVersions.filter((version) => ["published", "withdrawn"].includes(version.state)).sort((a, b) => b.version - a.version)[0]?.id || "",
+    } : action);
     setGovernanceComment("");
     setError("");
   }
@@ -1316,6 +1326,7 @@ export function CreditexActivityWorkPackGovernance({
           expectedSchemaSha256: governanceAction.expectedSchemaSha256 || undefined,
           decision: governanceAction.decision,
           comment: governanceComment.trim(),
+          expectedCurrentVersionId: governanceAction.expectedCurrentVersionId,
         }),
       });
       setSnapshot(parseSnapshot(result));
@@ -1445,6 +1456,7 @@ export function CreditexActivityWorkPackGovernance({
         canImport={canCaptureSource && snapshot.access.canAuthor}
         onImported={load}
       />
+      <CreditexStatutorySourceLibrary api={api} endpoint={endpoint} />
 
       {pendingCalculatorReviews.length ? (
         <section className={`${styles.builderSection} ${styles.calculationReviewQueue}`} aria-labelledby="work-pack-calculation-review-title">
@@ -1568,7 +1580,7 @@ export function CreditexActivityWorkPackGovernance({
                       <button type="button" onClick={() => { setSelectedVersionId(version.id); setPreviewOpen(true); }}>Preview</button>
                       {snapshot.access.canAuthor && version.state === "draft" && <button type="button" onClick={() => editVersion(version)}>Edit draft</button>}
                       {snapshot.access.canAuthor && <button type="button" onClick={() => editVersion(version, true)}>Clone</button>}
-                      {snapshot.access.canPublish && version.state === "draft" && version.originKind === "manual" && <button type="button" disabled={busy} onClick={() => openGovernanceAction({ action: "publish_version", id: version.id, expectedSchemaSha256: version.schemaSha256, title: `Publish version ${version.version}` })}>Review and publish</button>}
+                      {snapshot.access.canPublish && version.state === "draft" && version.originKind === "manual" && <button type="button" disabled={busy} onClick={() => openGovernanceAction({ action: "publish_version", id: version.id, expectedSchemaSha256: version.schemaSha256, title: `Publish version ${version.version}` })}>Save and make available</button>}
                       {snapshot.access.canWithdraw && version.state === "published" && <button type="button" disabled={busy} onClick={() => openGovernanceAction({ action: "withdraw_version", id: version.id, expectedSchemaSha256: "", title: `Withdraw version ${version.version}` })}>Withdraw</button>}
                       {snapshot.access.canAuthor && version.state === "draft" && <button type="button" disabled={busy} onClick={() => openGovernanceAction({ action: "abandon_draft", id: version.id, expectedSchemaSha256: version.schemaSha256, title: `Abandon version ${version.version} draft` })}>Abandon</button>}
                     </div>
@@ -1581,7 +1593,7 @@ export function CreditexActivityWorkPackGovernance({
                   <header>
                     <div>
                       <h4 id="work-pack-source-register-title">Exact source documents and citations</h4>
-                      <p>Each citation is independently reviewed against the exact saved workflow hash. Editing the workflow requires fresh source review.</p>
+                      <p>The editor confirms each exact form-to-source mapping. The underlying official source documents retain their separate verification history.</p>
                     </div>
                     <strong>{selectedBindings.filter((binding) => binding.state === "approved").length} approved</strong>
                   </header>
@@ -1759,7 +1771,7 @@ export function CreditexActivityWorkPackGovernance({
                           </button>
                         ) : null}
                         {artifact?.sourceUrl ? <a href={artifact.sourceUrl} target="_blank" rel="noreferrer">Current government source</a> : null}
-                        {snapshot.access.canReview && binding.state === "pending_review" ? <>
+                    {snapshot.access.canAuthor && binding.state === "pending_review" ? <>
                           <button type="button" disabled={busy} onClick={() => openGovernanceAction({ action: "review_source_binding", id: binding.id, expectedSchemaSha256: binding.schemaSha256, decision: "approved", title: "Approve source citation" })}>Approve</button>
                           <button type="button" disabled={busy} onClick={() => openGovernanceAction({ action: "review_source_binding", id: binding.id, expectedSchemaSha256: binding.schemaSha256, decision: "rejected", title: "Reject source citation" })}>Reject</button>
                         </> : null}
@@ -1937,7 +1949,7 @@ export function CreditexActivityWorkPackGovernance({
 
                   <footer className={styles.builderActions}>
                     <button type="button" onClick={() => setDraft(null)}>Cancel</button>
-                    <button type="submit" disabled={busy}>Save governed draft</button>
+                    <button type="submit" disabled={busy}>{snapshot.sourceBindings.some((binding) => binding.workPackVersionId === (draft.id || selectedVersionId) && ["pending_review", "approved"].includes(binding.state)) ? "Save and make available" : "Prepare source mappings"}</button>
                   </footer>
                 </form>
               )}

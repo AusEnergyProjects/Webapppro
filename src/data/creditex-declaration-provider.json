@@ -1,0 +1,64 @@
+{
+  "legalName": "CREDITEX PTY LTD",
+  "abn": "76105513040",
+  "phone": "02 9091 0860",
+  "email": "info@creditex.com.au",
+  "consumerPhone": "1300 137 772",
+  "verifiedOn": "2026-09-07",
+  "identitySource": "https://abr.business.gov.au/ABN/View/76105513040",
+  "contactSource": "https://trading.creditex.com.au/",
+  "consumerContactSource": "https://creditex.com.au/",
+  "accreditations": [
+    {
+      "scheme": "VEU", "number": "A001107", "observedStatus": "Current",
+      "effectiveFrom": null, "accreditedTo": "2026-12-02",
+      "activities": ["1C(18)", "1D(18)", "28", "34 Non J6(18)", "3C", "3D", "43", "44", "45", "47", "6(23)"],
+      "source": "https://veu.esc.vic.gov.au/vpr/s/public-registry"
+    },
+    {
+      "scheme": "NSW-ESS", "number": "ACC0000107", "observedStatus": "Active",
+      "effectiveFrom": "2023-04-27", "accreditedTo": null,
+      "activities": ["D16", "D17", "D19", "F4", "F16", "F17"],
+      "source": "https://tessa.energysustainabilityschemes.nsw.gov.au/ipart?id=acp_and_accreditations"
+    },
+    {
+      "scheme": "NSW-PDRS", "number": "ACC0000108", "observedStatus": "Active",
+      "effectiveFrom": "2023-04-27", "accreditedTo": null,
+      "activities": ["HVAC1", "HVAC2", "WH1"],
+      "source": "https://tessa.energysustainabilityschemes.nsw.gov.au/ipart?id=acp_and_accreditations"
+    },
+    {
+      "scheme": "NSW-PDRS", "number": "ACC0076224", "observedStatus": "Active",
+      "effectiveFrom": "2024-10-28", "accreditedTo": null, "activities": ["BESS1"],
+      "source": "https://tessa.energysustainabilityschemes.nsw.gov.au/ipart?id=acp_and_accreditations"
+    },
+    {
+      "scheme": "NSW-PDRS", "number": "ACC0076225", "observedStatus": "Active",
+      "effectiveFrom": "2024-10-28", "accreditedTo": null, "activities": ["BESS2"],
+      "source": "https://tessa.energysustainabilityschemes.nsw.gov.au/ipart?id=acp_and_accreditations"
+    },
+    {
+      "scheme": "NSW-PDRS", "number": "ACC0295809", "observedStatus": "Active",
+      "effectiveFrom": "2026-08-31", "accreditedTo": null, "activities": ["BESS3"],
+      "source": "https://tessa.energysustainabilityschemes.nsw.gov.au/ipart?id=acp_and_accreditations"
+    },
+    {
+      "scheme": "NSW-PDRS", "number": "ACC0295810", "observedStatus": "Active",
+      "effectiveFrom": "2026-08-31", "accreditedTo": null, "activities": ["BESS4"],
+      "source": "https://tessa.energysustainabilityschemes.nsw.gov.au/ipart?id=acp_and_accreditations"
+    },
+    {
+      "scheme": "NSW-PDRS", "number": "ACC0295811", "observedStatus": "Active",
+      "effectiveFrom": "2026-08-31", "accreditedTo": null, "activities": ["BESS5"],
+      "source": "https://tessa.energysustainabilityschemes.nsw.gov.au/ipart?id=acp_and_accreditations"
+    }
+  ],
+  "federal": {
+    "registeredPersonNumber": "25749",
+    "registeredPersonSource": "https://www.rec-registry.gov.au/rec-registry/app/accounts/search-registered-person",
+    "websiteStcNumber": "47056",
+    "websiteStcSource": "https://trading.creditex.com.au/",
+    "agentNumberConfirmed": false,
+    "note": "The public registered-person result does not expose registered-agent account class. Reconcile these differently attributed identifiers against Creditex's current CER agent account before populating a registered-agent number."
+  }
+}

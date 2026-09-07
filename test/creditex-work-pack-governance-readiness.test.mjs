@@ -934,16 +934,15 @@ test("governance readiness: stale source SHA or review object identity is not re
   });
 });
 
-test("governance readiness: same-person or note-less independent reviews are not ready", async (t) => {
-  await t.test("same work-pack author and reviewer", async () => {
+test("governance readiness: editor activation retains exact source verification", async (t) => {
+  await t.test("the author can activate the exact master", async () => {
     const database = governanceDatabase();
     await seedGovernedActivity(database);
     database.exec(`UPDATE compliance_activity_work_pack_versions
       SET reviewed_by_uid = authored_by_uid`);
-    assertBlocked(
-      await governance(database),
-      "work_pack_independent_review_required",
-    );
+    const row = selectedCoverage(await governance(database));
+    assert.equal(row.ready, true);
+    assert.deepEqual(row.blockers, []);
   });
   await t.test("source binding missing review note", async () => {
     const database = governanceDatabase();

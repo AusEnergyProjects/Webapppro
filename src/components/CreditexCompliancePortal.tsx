@@ -1,5 +1,7 @@
 "use client";
 
+import dynamic from "next/dynamic";
+
 import Image from "next/image";
 import {
   GoogleAuthProvider,
@@ -30,7 +32,7 @@ import {
 import { requestWithCreditexTokenRecovery } from "@/lib/creditex-auth-token";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { CreditexEvidencePolicyGovernance } from "./CreditexEvidencePolicyGovernance";
-import { CreditexActivityWorkPackGovernance } from "./CreditexActivityWorkPackGovernance";
+const CreditexActivityWorkPackGovernance = dynamic(() => import("./CreditexActivityWorkPackGovernance").then((module) => module.CreditexActivityWorkPackGovernance), { loading: () => <p role="status">Loading master forms...</p> });
 import { CreditexOutputActions } from "./CreditexOutputActions";
 import { CreditexOfficialSourceWorkbench } from "./CreditexOfficialSourceWorkbench";
 import { CreditexOperationsWorkspace } from "./CreditexOperationsWorkspace";

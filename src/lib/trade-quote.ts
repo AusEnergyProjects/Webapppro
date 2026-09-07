@@ -463,3 +463,15 @@ export function normaliseTradeQuoteLineGroup(rawLines: unknown, cleanDescription
 export function normaliseTradeQuoteLines(rawLines: unknown, cleanDescription: (value: unknown) => string) {
   return normaliseTradeQuoteLineGroup(rawLines, cleanDescription);
 }
+/** Display the base work plus one default option from each required choice group. */
+export function defaultTradeQuoteTotal(baseTotalCents: number, choices: readonly {
+  kind: string; groupKey: string; recommended: boolean; totalCents: number;
+}[]) {
+  const selected = new Map<string, typeof choices[number]>();
+  for (const choice of choices) {
+    if (choice.kind === "addon") continue;
+    const key = `${choice.kind}:${choice.groupKey}`;
+    if (!selected.has(key) || choice.recommended) selected.set(key, choice);
+  }
+  return baseTotalCents + [...selected.values()].reduce((sum, choice) => sum + choice.totalCents, 0);
+}

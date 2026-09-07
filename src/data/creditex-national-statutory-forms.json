@@ -1,0 +1,4451 @@
+{
+  "schemaVersion": "1.0.0",
+  "researchDate": "2026-09-07",
+  "sources": [
+    {
+      "id": "ess_rule",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Energy-Savings-Scheme-(Amendment-No.-2)-Rule-2026.PDF",
+      "title": "ESS Rule Amendment2",
+      "effectiveFrom": "2026-09-07",
+      "verifiedOn": "2026-09-07",
+      "bytes": 2179162,
+      "sha256": "13fb2ef7523311c7a39f0e865ba4c33ba6cd0eb7b3490da69e0b2a4d5edd7fcc",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Energy-Savings-Scheme-(Amendment-No.-2)-Rule-2026.PDF"
+    },
+    {
+      "id": "pdrs_rule",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Peak-Demand-Reduction-Scheme-(Amendment-No.-3)-Rule-2026.PDF",
+      "title": "PDRS Rule Amendment3",
+      "effectiveFrom": "2026-09-07",
+      "verifiedOn": "2026-09-07",
+      "bytes": 976139,
+      "sha256": "0f3333fbe0e4ce8798a9a9df5ed01a4a147b56410f1507a817256d5b77411d16",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Peak-Demand-Reduction-Scheme-(Amendment-No.-3)-Rule-2026.PDF"
+    },
+    {
+      "id": "pdrs_july",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Peak-Demand-Reduction-Scheme-Rule-of-2022-1-July-2026.PDF",
+      "title": "PDRS Rule Amendment2",
+      "effectiveFrom": "2026-07-01",
+      "verifiedOn": "2026-09-07",
+      "bytes": 710172,
+      "sha256": "0af5ccd5c431853c1b339d0887512ab0daf25335b129295b47a9cbca0da86c77",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Peak-Demand-Reduction-Scheme-Rule-of-2022-1-July-2026.PDF"
+    },
+    {
+      "id": "heer_guide",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/HEER-Method-Guide-V4.9.PDF",
+      "title": "HEER Guide4.9",
+      "verifiedOn": "2026-09-07",
+      "bytes": 699993,
+      "sha256": "fda27c88b0f2d1b29353a9f1660ce0b0c5d52d576f55f4ba822c86f795fb6f23",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/HEER-Method-Guide-V4.9.PDF",
+      "documentVersionDate": null,
+      "publishedDate": "2026-09-03",
+      "applicableCurrentRuleFrom": "2026-09-07"
+    },
+    {
+      "id": "pdrs_guide",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/PDRS-Method-Guide-V3.1.PDF",
+      "title": "PDRS Guide3.1",
+      "verifiedOn": "2026-09-07",
+      "bytes": 1272264,
+      "sha256": "ba53251979ca0ea468ffc2b21193b90f4861ffe95562a2a283641edd3cf39c01",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/PDRS-Method-Guide-V3.1.PDF",
+      "documentVersionDate": null,
+      "publishedDate": "2026-09-03",
+      "applicableCurrentRuleFrom": "2026-09-07"
+    },
+    {
+      "id": "nsw_nomination",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/ess_documents//Template-Nomination-form-ACPs-V1.1.DOCX",
+      "title": "ESS/PDRS Nomination1.1 except BESS2",
+      "verifiedOn": "2026-09-07",
+      "bytes": 485004,
+      "sha256": "f28033e2f501c3a7573dbf585c260aac64f927fa6a404d65e5d2c54159f957bb",
+      "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/ess_documents//Template-Nomination-form-ACPs-V1.1.DOCX",
+      "documentVersionDate": "2024-07-23"
+    },
+    {
+      "id": "bess2_nomination",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/HADR-Guide-BESS2-Nomination-Specification-ACPs-V2.1.PDF",
+      "title": "BESS2 Nomination2.1",
+      "verifiedOn": "2026-09-07",
+      "bytes": 134198,
+      "sha256": "3afbeaf05e441206fd86fb3684b9a6122e3e04d4c8f52148512356b32465e10d",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/HADR-Guide-BESS2-Nomination-Specification-ACPs-V2.1.PDF",
+      "documentVersionDate": "2026-07-01"
+    },
+    {
+      "id": "heer_assessor",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Template-Site-Assessor-Declaration-V2.2-June-2026.DOCX",
+      "title": "Site Assessor Declaration2.2",
+      "verifiedOn": "2026-09-07",
+      "bytes": 60262,
+      "sha256": "5e3cc0061d158f8868f4a7997f8a5ee7aaa9ad38abeda85890d8e74a81535307",
+      "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Template-Site-Assessor-Declaration-V2.2-June-2026.DOCX",
+      "documentVersionDate": "2026-07-01"
+    },
+    {
+      "id": "heer_post",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Template-Post-Implementation-Declaration-V2.2-June-2026.DOCX",
+      "title": "Post Implementation Declaration2.2",
+      "verifiedOn": "2026-09-07",
+      "bytes": 59980,
+      "sha256": "902a2f4d41ad2416fd3bd28a75535a3c6363b689015afea476c0f6023b028a23",
+      "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Template-Post-Implementation-Declaration-V2.2-June-2026.DOCX",
+      "documentVersionDate": "2026-07-01"
+    },
+    {
+      "id": "bess1_declaration",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/ess_documents//SASC-Template-Battery-Declaration-ACPs-V1.1.DOCX",
+      "title": "BESS1 Battery Declaration1.1",
+      "verifiedOn": "2026-09-07",
+      "bytes": 306425,
+      "sha256": "e41464b187aed3c5f084656bbf7088cb3d5dad053bcbe0b8f494fb3ac4888cae",
+      "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/ess_documents//SASC-Template-Battery-Declaration-ACPs-V1.1.DOCX",
+      "documentVersionDate": null
+    },
+    {
+      "id": "heer_facts",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/HEER-fact-sheet-V3.2-August-2026.PDF",
+      "title": "HEER Factsheet3.2",
+      "verifiedOn": "2026-09-07",
+      "bytes": 235786,
+      "sha256": "fe1b52986dcbedefb745ee3a74e87caf4bd959355f4421ca73bb6e4f6f6083a5",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/HEER-fact-sheet-V3.2-August-2026.PDF",
+      "documentVersionDate": "2026-08-07"
+    },
+    {
+      "id": "heer_hw_facts",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/HEER-heat-pump-water-heaters-fact-sheet-V2.2-August-2026.PDF",
+      "title": "Heat Pump Factsheet2.2",
+      "verifiedOn": "2026-09-07",
+      "bytes": 190249,
+      "sha256": "cd29f84433c154dc32ba974f6d92690ab1dbf965f04d45f98d909219dce9e3ac",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/HEER-heat-pump-water-heaters-fact-sheet-V2.2-August-2026.PDF",
+      "documentVersionDate": "2026-08-07"
+    },
+    {
+      "id": "bess1_facts",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/BESS1-fact-sheet-V2.1-August-2026.PDF",
+      "title": "BESS1 Factsheet2.1",
+      "verifiedOn": "2026-09-07",
+      "bytes": 475730,
+      "sha256": "776070e23cfb43a46bc6b57121f7272fd56a960b813ba122da807060062c2a8d",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/BESS1-fact-sheet-V2.1-August-2026.PDF",
+      "documentVersionDate": "2026-08-07"
+    },
+    {
+      "id": "bess2_facts",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/HADR-BESS2-fact-sheet-V2.2-August-2026.PDF",
+      "title": "BESS2 Factsheet2.2",
+      "verifiedOn": "2026-09-07",
+      "bytes": 586843,
+      "sha256": "dd330d49e5b5fe2454d524db9a452f11b83f83311a5e952068eeb50c4edb16ac",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/HADR-BESS2-fact-sheet-V2.2-August-2026.PDF",
+      "documentVersionDate": "2026-08-07"
+    },
+    {
+      "id": "bess3_facts",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/BESS3-Fact-Sheet-Apartments-%281%29.PDF",
+      "title": "BESS3 Apartment Factsheet",
+      "verifiedOn": "2026-09-07",
+      "bytes": 484025,
+      "sha256": "aa86174a3c03ee2786fa8f74ad70ee0e6176ce05f3f14aebd0e0d0ea43704eca",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/BESS3-Fact-Sheet-Apartments-%281%29.PDF",
+      "documentVersionDate": null
+    },
+    {
+      "id": "bess4_facts",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/BESS4-Fact-Sheet-Businesses-August-2026-%281%29.PDF",
+      "title": "BESS4 Business Factsheet",
+      "verifiedOn": "2026-09-07",
+      "bytes": 296291,
+      "sha256": "ad2437be51e09833e6db023f628549f3b123d283f8215b69ee8592026a09c5d6",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/BESS4-Fact-Sheet-Businesses-August-2026-%281%29.PDF",
+      "documentVersionDate": null
+    },
+    {
+      "id": "ess_records",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/ess_documents/Record-Keeping-Guide-V3.0.PDF",
+      "title": "ESS Record Keeping3.0",
+      "verifiedOn": "2026-09-07",
+      "bytes": 150123,
+      "sha256": "80c91df45f0fcd070be1bc2b6eadcea4189c59712b285d57ba0e67b861042c32",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/ess_documents/Record-Keeping-Guide-V3.0.PDF",
+      "documentVersionDate": null
+    },
+    {
+      "id": "sres_pv_assignment",
+      "url": "https://cer.gov.au/document/sample-stc-assignment-form-and-compulsory-written-statements",
+      "title": "PV Assignment and compulsory statements2.0",
+      "verifiedOn": "2026-09-07",
+      "bytes": 53844,
+      "sha256": "3610a4f12bd154d4920fc7580541bdd94caf2830bcea70d7524b711866669c53",
+      "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "resolvedUrl": "https://cer.gov.au/document/sample-stc-assignment-form-and-compulsory-written-statements",
+      "documentVersionDate": "2024-02-14"
+    },
+    {
+      "id": "sres_battery_assignment",
+      "url": "https://cer.gov.au/document/sample-small-scale-technology-certificate-assignment-form-solar-battery-systems",
+      "title": "Battery Assignment1.0",
+      "verifiedOn": "2026-09-07",
+      "bytes": 306874,
+      "sha256": "fd5ab46c38473a683c902d0e20aedce7ad665edf66b4a93c629f72a61e47f449",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://cer.gov.au/document/sample-small-scale-technology-certificate-assignment-form-solar-battery-systems",
+      "documentVersionDate": "2025-06-25"
+    },
+    {
+      "id": "sres_swh_info",
+      "url": "https://cer.gov.au/document/swh-collecting-mandatory-information-to-create-stcs",
+      "title": "SWH/ASHP mandatory information1.1",
+      "verifiedOn": "2026-09-07",
+      "bytes": 317358,
+      "sha256": "1bc518550535613d4429e575ed141a597efc48a94e416a51da1a48d5f6c081fa",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://cer.gov.au/document/swh-collecting-mandatory-information-to-create-stcs",
+      "documentVersionDate": "2024-01-25"
+    },
+    {
+      "id": "sres_sgu_info",
+      "url": "https://cer.gov.au/document/sgu-collecting-mandatory-information-to-create-stcs",
+      "title": "SGU mandatory information February2022",
+      "verifiedOn": "2026-09-07",
+      "bytes": 453292,
+      "sha256": "61e075852f1907d450b9eed1f204d7f61c85addf3cfbb7a7c1432642e62bc904",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://cer.gov.au/document/sgu-collecting-mandatory-information-to-create-stcs",
+      "documentVersionDate": null
+    },
+    {
+      "id": "sres_battery_photos",
+      "url": "https://cer.gov.au/document/solar-battery-photo-guide",
+      "title": "Battery photo guide",
+      "verifiedOn": "2026-09-07",
+      "bytes": 741069,
+      "sha256": "daf9a0354e5539dcf751a1c06fbec8c0630b4f432f6daf67c815552956bcdd63",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://cer.gov.au/document/solar-battery-photo-guide",
+      "documentVersionDate": null
+    },
+    {
+      "id": "sres_battery_retailer",
+      "url": "https://cer.gov.au/document/sample-retailer-written-statement-solar-batteries",
+      "title": "Battery retailer statement",
+      "verifiedOn": "2026-09-07",
+      "bytes": 151954,
+      "sha256": "d6445fd8e2a1eacbe2bd5c93aa3b6e5e52dd6699064f7ad97907009a4d9dafd7",
+      "contentType": "application/pdf",
+      "resolvedUrl": "https://cer.gov.au/document/sample-retailer-written-statement-solar-batteries",
+      "documentVersionDate": null
+    },
+    {
+      "id": "pdrs_changes",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/pdrs-rule-and-changes",
+      "title": "Current and historical PDRS changes",
+      "verifiedOn": "2026-09-07",
+      "bytes": 131614,
+      "sha256": "84cb7f25c0b90bff95f1e51fdd650ff7807df58d0bc0566a40c16bc6631fea39",
+      "contentType": "text/html; charset=UTF-8",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/pdrs-rule-and-changes",
+      "documentVersionDate": null
+    },
+    {
+      "id": "nomination_wording",
+      "url": "https://www.energysustainabilityschemes.nsw.gov.au/pdrs/nomination-capacity-holder",
+      "title": "Nomination wording controls",
+      "verifiedOn": "2026-09-07",
+      "bytes": 111030,
+      "sha256": "271640aa4e4af56c77ea3a9b196568cad7e37557259caa5ad83df254de27f3bd",
+      "contentType": "text/html; charset=UTF-8",
+      "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/pdrs/nomination-capacity-holder",
+      "documentVersionDate": null
+    },
+    {
+      "id": "sres_create",
+      "url": "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/create-small-scale-technology-certificates",
+      "title": "STC creation",
+      "verifiedOn": "2026-09-07",
+      "bytes": 174759,
+      "sha256": "b2542eadac6625dc01d20b62f055f4d6af01f334584b8e59da279f40456ac9be",
+      "contentType": "text/html; charset=UTF-8",
+      "resolvedUrl": "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/create-small-scale-technology-certificates",
+      "documentVersionDate": null
+    },
+    {
+      "id": "sres_calc",
+      "url": "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/calculate-small-scale-technology-certificate-entitlements",
+      "title": "STC entitlements",
+      "verifiedOn": "2026-09-07",
+      "bytes": 159758,
+      "sha256": "a1f6125b884ce1d500c7a05bcf046daf819b0d3e004037cf67e90a4ee461d826",
+      "contentType": "text/html; charset=UTF-8",
+      "resolvedUrl": "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/calculate-small-scale-technology-certificate-entitlements",
+      "documentVersionDate": null
+    },
+    {
+      "id": "sres_pv_install",
+      "url": "https://cer.gov.au/schemes/renewable-energy-target/renewable-energy-target-participants-and-industry/rooftop-solar-installers-and-designers",
+      "title": "PV installers/designers",
+      "verifiedOn": "2026-09-07",
+      "bytes": 160559,
+      "sha256": "6986fbe7c2fa63f47c0dd708a9f8b32b1fcba4c0272465064369e74dab15c708",
+      "contentType": "text/html; charset=UTF-8",
+      "resolvedUrl": "https://cer.gov.au/schemes/renewable-energy-target/renewable-energy-target-participants-and-industry/rooftop-solar-installers-and-designers",
+      "documentVersionDate": null
+    },
+    {
+      "id": "sres_battery_install",
+      "url": "https://cer.gov.au/schemes/renewable-energy-target/renewable-energy-target-participants-and-industry/solar-battery-installers-and-designers",
+      "title": "Battery installers/designers",
+      "verifiedOn": "2026-09-07",
+      "bytes": 158415,
+      "sha256": "4a99e870b8a9b8634c5a1dc77bad2205071c507da67e0d5fbc6c2f63bf1c722c",
+      "contentType": "text/html; charset=UTF-8",
+      "resolvedUrl": "https://cer.gov.au/schemes/renewable-energy-target/renewable-energy-target-participants-and-industry/solar-battery-installers-and-designers",
+      "documentVersionDate": null
+    },
+    {
+      "id": "sres_retailer",
+      "url": "https://cer.gov.au/schemes/renewable-energy-target/renewable-energy-target-participants-and-industry/rooftop-solar-and-solar-battery-retailers",
+      "title": "PV/battery retailers",
+      "verifiedOn": "2026-09-07",
+      "bytes": 158167,
+      "sha256": "0b5ddcf02e740ca7cb384feaddefc9713de0b7fd4d08eb729da5245bb4738eb9",
+      "contentType": "text/html; charset=UTF-8",
+      "resolvedUrl": "https://cer.gov.au/schemes/renewable-energy-target/renewable-energy-target-participants-and-industry/rooftop-solar-and-solar-battery-retailers",
+      "documentVersionDate": null
+    },
+    {
+      "id": "sres_battery_eligibility",
+      "url": "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-batteries",
+      "title": "Battery eligibility",
+      "verifiedOn": "2026-09-07",
+      "bytes": 194689,
+      "sha256": "a186091bbdabd32741bdddde0103d25c0442c63b27689bbcbaeb9191eb357f5f",
+      "contentType": "text/html; charset=UTF-8",
+      "resolvedUrl": "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-batteries",
+      "documentVersionDate": null
+    },
+    {
+      "id": "sres_systems",
+      "url": "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems",
+      "title": "SRES system eligibility",
+      "verifiedOn": "2026-09-07",
+      "bytes": 178232,
+      "sha256": "18d3789e84d78bd84b44016d6ef507884c4c7a85cb39be30d20de826465b101c",
+      "contentType": "text/html; charset=UTF-8",
+      "resolvedUrl": "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems",
+      "documentVersionDate": null
+    },
+    {
+      "id": "sres_hotwater",
+      "url": "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-water-heaters-and-air-source-heat-pumps",
+      "title": "SWH/ASHP eligibility",
+      "verifiedOn": "2026-09-07",
+      "bytes": 156329,
+      "sha256": "32f6635768f0f8fe782259b0a34e4cf4c450d7e138bd5310f902cd7a9e9dc9cf",
+      "contentType": "text/html; charset=UTF-8",
+      "resolvedUrl": "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-water-heaters-and-air-source-heat-pumps",
+      "documentVersionDate": null
+    }
+  ],
+  "sharedGroups": {
+    "identity": {
+      "id": "identity",
+      "title": "Customer and property",
+      "sourceRefs": [
+        "sres_pv_assignment",
+        "sres_swh_info",
+        "nsw_nomination"
+      ],
+      "fields": [
+        {
+          "id": "customer",
+          "prompt": "Confirm customer name and contact details.",
+          "type": "customer_lookup",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "fullName",
+            "email",
+            "mobile",
+            "postalAddress"
+          ]
+        },
+        {
+          "id": "owner",
+          "prompt": "Who legally owns this system?",
+          "type": "party",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "individualOrCompany",
+            "legalName",
+            "ABNOrACN",
+            "representative",
+            "position",
+            "authorityEvidence"
+          ]
+        },
+        {
+          "id": "purchaser",
+          "prompt": "Who is paying for the upgrade?",
+          "type": "party",
+          "required": true,
+          "when": "always"
+        },
+        {
+          "id": "address",
+          "prompt": "Confirm installation address.",
+          "type": "address",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "unit",
+            "street",
+            "suburb",
+            "state",
+            "postcode",
+            "additionalLocation"
+          ]
+        },
+        {
+          "id": "building_class",
+          "prompt": "What type of building is this?",
+          "type": "select",
+          "required": true,
+          "when": "always",
+          "options": [
+            "Class1",
+            "Class2",
+            "Class3",
+            "other residential",
+            "non-residential",
+            "government owned and managed",
+            "unknown"
+          ]
+        },
+        {
+          "id": "nmi",
+          "prompt": "Confirm NMI from electricity bill or meter record.",
+          "type": "text",
+          "required": true,
+          "when": "NSW certificate or grid-connected SRES battery"
+        },
+        {
+          "id": "account_holder",
+          "prompt": "Confirm electricity account holder.",
+          "type": "party",
+          "required": true,
+          "when": "BESS2 or differs from owner"
+        }
+      ]
+    },
+    "nsw_nomination": {
+      "id": "nsw_nomination",
+      "title": "Nominate Creditex",
+      "sourceRefs": [
+        "nsw_nomination",
+        "nomination_wording",
+        "pdrs_rule"
+      ],
+      "fields": [
+        {
+          "id": "nominated_schemes",
+          "prompt": "Which rights are being nominated?",
+          "type": "multiselect",
+          "required": true,
+          "when": "always",
+          "options": [
+            "ESS",
+            "PDRS"
+          ]
+        },
+        {
+          "id": "activity_scope",
+          "prompt": "Describe exactly what will be installed and removed.",
+          "type": "equipment_scope",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "activityCode",
+            "equipmentType",
+            "quantity",
+            "newOrReplacement",
+            "oldEquipmentDescription"
+          ]
+        },
+        {
+          "id": "creditex_acp",
+          "prompt": "Confirm the Creditex ACP profile for these activities.",
+          "type": "provider_snapshot",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "legalEntity",
+            "ABN",
+            "accreditationNumber",
+            "activityScope",
+            "contact",
+            "complaintsProcess"
+          ]
+        },
+        {
+          "id": "previous_nomination",
+          "prompt": "Have these rights already been nominated?",
+          "type": "yes_no",
+          "required": true,
+          "when": "always"
+        },
+        {
+          "id": "previous_resolution",
+          "prompt": "Record previous nominee and valid revocation/replacement.",
+          "type": "record",
+          "required": true,
+          "when": "previous_nomination == yes"
+        },
+        {
+          "id": "nomination_delivery",
+          "prompt": "Record provision of completed nomination and ACP contacts.",
+          "type": "delivery_receipt",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "recipient",
+            "documentHash",
+            "sentAt",
+            "channel",
+            "deliveryStatus"
+          ]
+        }
+      ]
+    },
+    "nsw_site": {
+      "id": "nsw_site",
+      "title": "Site eligibility",
+      "sourceRefs": [
+        "ess_rule",
+        "pdrs_rule",
+        "heer_guide",
+        "pdrs_guide"
+      ],
+      "fields": [
+        {
+          "id": "site_use",
+          "prompt": "How is the site used?",
+          "type": "select",
+          "required": true,
+          "when": "always",
+          "options": [
+            "residential",
+            "small business",
+            "large business",
+            "government owned and managed",
+            "apartment common property",
+            "data centre"
+          ]
+        },
+        {
+          "id": "business",
+          "prompt": "Confirm business and industry.",
+          "type": "business_lookup",
+          "required": true,
+          "when": "business site",
+          "capture": [
+            "ABN",
+            "businessName",
+            "businessClassification"
+          ]
+        },
+        {
+          "id": "annual_mwh",
+          "prompt": "Confirm annual site electricity use from bills.",
+          "type": "decimal",
+          "required": true,
+          "when": "small/large business eligibility",
+          "unit": "MWh"
+        },
+        {
+          "id": "site_proof",
+          "prompt": "Attach evidence supporting building/site eligibility.",
+          "type": "evidence",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "electricityBill",
+            "propertyTitleOrStrataRecord",
+            "businessRecord"
+          ]
+        }
+      ]
+    },
+    "nsw_payment": {
+      "id": "nsw_payment",
+      "title": "Customer payment",
+      "sourceRefs": [
+        "ess_rule",
+        "pdrs_rule",
+        "heer_guide",
+        "pdrs_guide"
+      ],
+      "fields": [
+        {
+          "id": "invoice",
+          "prompt": "Select itemised tax invoice.",
+          "type": "document_reference",
+          "required": true,
+          "when": "always"
+        },
+        {
+          "id": "net_payment",
+          "prompt": "Confirm amount actually paid, excluding GST and deducting reimbursements/inducements.",
+          "type": "money",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "paidAmount",
+            "paidAt",
+            "reimbursements",
+            "nonCashInducements",
+            "netAmount"
+          ]
+        },
+        {
+          "id": "payment_proof",
+          "prompt": "Attach payment matched to invoice.",
+          "type": "evidence",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "receipt",
+            "salesLedger",
+            "financeSettlementIfApplicable"
+          ]
+        },
+        {
+          "id": "payment_exemption",
+          "prompt": "Select an applicable approved exception.",
+          "type": "select",
+          "required": true,
+          "when": "always",
+          "options": [
+            "none",
+            "approved low-income energy program",
+            "approved exempt energy program"
+          ]
+        },
+        {
+          "id": "exemption_proof",
+          "prompt": "Confirm program approval covers this site and implementation date.",
+          "type": "approval_reference",
+          "required": true,
+          "when": "payment_exemption != none"
+        }
+      ]
+    },
+    "completion": {
+      "id": "completion",
+      "title": "Work and personnel",
+      "sourceRefs": [
+        "sres_pv_assignment",
+        "sres_swh_info",
+        "pdrs_rule",
+        "heer_post"
+      ],
+      "fields": [
+        {
+          "id": "implementation_date",
+          "prompt": "When was this activity completed?",
+          "type": "date",
+          "required": true,
+          "when": "always",
+          "help": "Actual installation completion. BESS2 uses operational onboarding date instead."
+        },
+        {
+          "id": "installers",
+          "prompt": "Who performed each licensed part of the work?",
+          "type": "personnel_repeat",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "name",
+            "business",
+            "ABN",
+            "role",
+            "licenceNumber",
+            "class",
+            "jurisdiction",
+            "expiry",
+            "contact",
+            "accreditation"
+          ]
+        },
+        {
+          "id": "commissioning",
+          "prompt": "Record commissioning tests and any rectification.",
+          "type": "test_record",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "performedBy",
+            "completedAt",
+            "testValues",
+            "equipmentIds",
+            "defects",
+            "rectificationEvidence"
+          ]
+        },
+        {
+          "id": "compliance_certificate",
+          "prompt": "Attach original compliance certificate.",
+          "type": "evidence",
+          "required": true,
+          "when": "always",
+          "help": "Preserve original NSW eCert CCEW without alteration."
+        },
+        {
+          "id": "customer_documents",
+          "prompt": "Record documents supplied to the customer.",
+          "type": "delivery_receipt",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "documentIds",
+            "versions",
+            "recipient",
+            "sentAt",
+            "channel",
+            "deliveryStatus"
+          ]
+        }
+      ]
+    },
+    "heer_assessment": {
+      "id": "heer_assessment",
+      "title": "Before work",
+      "sourceRefs": [
+        "heer_assessor",
+        "heer_guide"
+      ],
+      "fields": [
+        {
+          "id": "assessor",
+          "prompt": "Who assessed the site?",
+          "type": "personnel_reference",
+          "required": true,
+          "when": "always"
+        },
+        {
+          "id": "assessed_at",
+          "prompt": "When was the site assessed?",
+          "type": "date",
+          "required": true,
+          "when": "always"
+        },
+        {
+          "id": "before_photos",
+          "prompt": "Capture existing equipment and installation location.",
+          "type": "evidence",
+          "required": true,
+          "when": "always"
+        },
+        {
+          "id": "suitability",
+          "prompt": "Is the proposed equipment suitable for the site and required service?",
+          "type": "yes_no",
+          "required": true,
+          "when": "always"
+        },
+        {
+          "id": "factsheet_receipt",
+          "prompt": "Record applicable factsheet provision before agreement/nomination and installation.",
+          "type": "delivery_receipt",
+          "required": true,
+          "when": "always"
+        }
+      ]
+    },
+    "ac_product": {
+      "id": "ac_product",
+      "title": "Air-conditioning equipment",
+      "sourceRefs": [
+        "ess_rule",
+        "pdrs_rule",
+        "heer_guide",
+        "pdrs_guide"
+      ],
+      "fields": [
+        {
+          "id": "ac_units",
+          "prompt": "Scan/select each air conditioner.",
+          "type": "equipment_repeat",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "brand",
+            "outdoorModel",
+            "outdoorSerial",
+            "indoorModels",
+            "indoorSerials",
+            "indoorCount",
+            "GEMSRegistration",
+            "GEMSClass",
+            "ratedCoolingCapacity",
+            "ratedHeatingCapacity",
+            "location"
+          ]
+        },
+        {
+          "id": "gems",
+          "prompt": "Select product registration and required technical ratings.",
+          "type": "registry_snapshot",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "statusOnInstallationDate",
+            "TCSPFMixed",
+            "AEER",
+            "HSPFMixed",
+            "HSPFCold",
+            "ACOP",
+            "ratedPower",
+            "sourceHash"
+          ]
+        },
+        {
+          "id": "multi_combination",
+          "prompt": "Select manufacturer-approved indoor/outdoor combination.",
+          "type": "technical_document",
+          "required": true,
+          "when": "multi-split",
+          "capture": [
+            "sameManufacturerBrand",
+            "approvedCombination",
+            "outdoorUnitRating"
+          ]
+        },
+        {
+          "id": "ac_design",
+          "prompt": "Record applicable design or commissioning evidence.",
+          "type": "select_and_evidence",
+          "required": true,
+          "when": "always",
+          "options": [
+            "AS/NZS5141 installer declaration",
+            "heat-load assessment",
+            "commissioning measurements"
+          ]
+        }
+      ]
+    },
+    "disposal": {
+      "id": "disposal",
+      "title": "Old equipment and refrigerant",
+      "sourceRefs": [
+        "heer_guide",
+        "pdrs_guide"
+      ],
+      "fields": [
+        {
+          "id": "removed",
+          "prompt": "Has replaced equipment been removed and made unsuitable for reuse?",
+          "type": "yes_no",
+          "required": true,
+          "when": "replacement"
+        },
+        {
+          "id": "disposal",
+          "prompt": "Record recycler/disposal operator and receipt.",
+          "type": "evidence",
+          "required": true,
+          "when": "replacement",
+          "capture": [
+            "business",
+            "contact",
+            "collectionDate",
+            "equipmentIdentity"
+          ]
+        },
+        {
+          "id": "refrigerant",
+          "prompt": "Was refrigerant recovered on site?",
+          "type": "yes_no",
+          "required": true,
+          "when": "old equipment contains refrigerant"
+        },
+        {
+          "id": "refrigerant_chain",
+          "prompt": "Capture recovery and disposal chain.",
+          "type": "evidence",
+          "required": true,
+          "when": "old equipment contains refrigerant",
+          "capture": [
+            "timeStampedDegassingPhoto",
+            "geotaggedCylinderId",
+            "recoveryDate",
+            "cylinderToJobLink",
+            "licensedHandler",
+            "refrigerantReceipt"
+          ]
+        }
+      ]
+    },
+    "nsw_battery": {
+      "id": "nsw_battery",
+      "title": "Battery and inverter",
+      "sourceRefs": [
+        "pdrs_rule",
+        "pdrs_guide"
+      ],
+      "fields": [
+        {
+          "id": "batteries",
+          "prompt": "Scan every battery/module.",
+          "type": "equipment_repeat",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "brand",
+            "model",
+            "serial",
+            "quantity",
+            "nominalKWh",
+            "location"
+          ]
+        },
+        {
+          "id": "battery_listing",
+          "prompt": "Select approved product entry on implementation date.",
+          "type": "registry_snapshot",
+          "required": true,
+          "when": "BESS1/2/3/4",
+          "capture": [
+            "eachModel",
+            "CECListingDate",
+            "nominalKWh",
+            "sourceHash"
+          ]
+        },
+        {
+          "id": "usable_kwh",
+          "prompt": "Confirm calculated usable capacity.",
+          "type": "computed_decimal",
+          "required": true,
+          "when": "always",
+          "formula": "0.9 * sum(nominalKWh)",
+          "unit": "kWh"
+        },
+        {
+          "id": "battery_inverter",
+          "prompt": "Record battery inverter.",
+          "type": "equipment_repeat",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "brand",
+            "model",
+            "serial",
+            "newOrExisting",
+            "ratedOutputKW",
+            "manufacturerSpec"
+          ]
+        },
+        {
+          "id": "dra_capable",
+          "prompt": "Confirm internet and demand-response control capability.",
+          "type": "technical_evidence",
+          "required": true,
+          "when": "always"
+        },
+        {
+          "id": "existing_pv",
+          "prompt": "Record existing PV and inverter capacities.",
+          "type": "equipment_summary",
+          "required": true,
+          "when": "BESS1/3/4/5; not required for current BESS2",
+          "capture": [
+            "panelKW",
+            "inverterKW",
+            "completionDate"
+          ]
+        },
+        {
+          "id": "new_pv",
+          "prompt": "Record any new PV and inverter capacities.",
+          "type": "equipment_summary",
+          "required": true,
+          "when": "BESS1/3/4/5; not required for current BESS2",
+          "capture": [
+            "panelKW",
+            "inverterKW",
+            "completionDate",
+            "CCEW"
+          ]
+        },
+        {
+          "id": "total_pv",
+          "prompt": "Confirm total PV and inverter capacities.",
+          "type": "computed_summary",
+          "required": true,
+          "when": "BESS1/3/4/5; not required for current BESS2"
+        }
+      ]
+    },
+    "nsw_battery_safety": {
+      "id": "nsw_battery_safety",
+      "title": "Battery siting and safety",
+      "sourceRefs": [
+        "pdrs_rule",
+        "pdrs_guide"
+      ],
+      "fields": [
+        {
+          "id": "battery_location",
+          "prompt": "Is battery indoors or outdoors?",
+          "type": "select",
+          "required": true,
+          "when": "always",
+          "options": [
+            "indoors",
+            "outdoors"
+          ]
+        },
+        {
+          "id": "site_risk",
+          "prompt": "Attach AS/NZS5139 assessment and mitigations.",
+          "type": "evidence",
+          "required": true,
+          "when": "always",
+          "capture": [
+            "annotatedPlan",
+            "clearances",
+            "openingsExitsVents",
+            "habitableRooms",
+            "barriers",
+            "mitigations",
+            "labels"
+          ]
+        },
+        {
+          "id": "approvals",
+          "prompt": "Attach required planning/network approvals.",
+          "type": "evidence",
+          "required": true,
+          "when": "BESS3/4/5"
+        },
+        {
+          "id": "behind_meter",
+          "prompt": "Show battery behind relevant meter.",
+          "type": "evidence",
+          "required": true,
+          "when": "always"
+        },
+        {
+          "id": "smoke_alarm",
+          "prompt": "Show and confirm working AS3786 smoke alarm nearby.",
+          "type": "evidence_and_attestation",
+          "required": true,
+          "when": "BESS1 indoors OR BESS4 indoors in Class3"
+        },
+        {
+          "id": "battery_warranty",
+          "prompt": "Attach battery and new-inverter warranties.",
+          "type": "document_reference",
+          "required": true,
+          "when": "BESS1/3/4",
+          "capture": [
+            "minimum10Years",
+            "minimum70PercentCapacityAt10Years",
+            "newInverterCoverage"
+          ]
+        }
+      ]
+    }
+  },
+  "sharedSignatures": {
+    "nsw_nomination": {
+      "signerRole": "original rights holder or authorised representative",
+      "purpose": "Nominate Creditex scheme-specific ACP for stated ESS/PDRS activity rights; confirm authority and previous nomination status.",
+      "sourceRefs": [
+        "nsw_nomination",
+        "nomination_wording"
+      ],
+      "contentPolicy": "Exact mandatory nomination wording, with Creditex configured legal entity/ABN/accreditation/contact fields. Branding/layout may change; wording needs IPART approval to change. BESS2 excluded.",
+      "timing": "Nomination valid at implementation; provide copy within7days as specified by template."
+    },
+    "heer_assessor": {
+      "signerRole": "site assessor",
+      "purpose": "Confirm pre-work conditions, eligibility and suitability.",
+      "sourceRefs": [
+        "heer_assessor",
+        "heer_guide"
+      ]
+    },
+    "heer_installer": {
+      "signerRole": "each responsible licensed installer",
+      "purpose": "Confirm installed product, licences, disposal, documents and applicable post-work declarations.",
+      "sourceRefs": [
+        "heer_post",
+        "heer_guide"
+      ],
+      "repetition": "D17/D19: both licensed installers co-sign if two performed the work."
+    },
+    "heer_purchaser": {
+      "signerRole": "purchaser or authorised representative",
+      "purpose": "Co-sign post-work declaration and receipt of required consumer information.",
+      "sourceRefs": [
+        "heer_post",
+        "heer_guide"
+      ]
+    },
+    "sres_owner": {
+      "signerRole": "legal system owner or authorised company representative",
+      "purpose": "Assign specified system STC rights to Creditex configured registered agent; record quantity, period, incentive and no duplicate assignment/creation.",
+      "sourceRefs": [
+        "sres_pv_assignment",
+        "sres_battery_assignment",
+        "sres_swh_info"
+      ],
+      "contentPolicy": "Current scheme-specific compulsory statement. Witness slots in sample are not alone proof of universal witness requirement; apply witnessing required for selected execution method and statutory declarations."
+    },
+    "sres_designer": {
+      "signerRole": "accredited designer",
+      "purpose": "Certify design and accreditation for exact system.",
+      "sourceRefs": [
+        "sres_pv_assignment",
+        "sres_battery_assignment"
+      ]
+    },
+    "sres_installer": {
+      "signerRole": "accredited responsible installer",
+      "purpose": "Certify on-site supervision, licence, installation, tested complete system, approved products and customer documents.",
+      "sourceRefs": [
+        "sres_pv_assignment",
+        "sres_battery_assignment"
+      ]
+    },
+    "sres_retailer": {
+      "signerRole": "authorised actual retailer representative",
+      "purpose": "Certify contracted system, installer engagement, eligibility, grid duties, performance and required written disclosures.",
+      "sourceRefs": [
+        "sres_retailer",
+        "sres_battery_retailer"
+      ],
+      "when": "retailer involved",
+      "identity": "Do not label Creditex retailer unless Creditex actually performed that role. Creditex is assignment recipient via configured scheme profile."
+    }
+  },
+  "sharedEvidence": {
+    "photo_integrity": {
+      "purpose": "Original unaltered evidence with real time/location/person/stage and equipment association.",
+      "sourceRefs": [
+        "pdrs_guide",
+        "sres_battery_photos"
+      ],
+      "metadata": [
+        "originalHash",
+        "capturedAt",
+        "receivedAt",
+        "latitude",
+        "longitude",
+        "accuracyIfAvailable",
+        "captureStage",
+        "photographer",
+        "equipmentOrQuestionId"
+      ],
+      "policy": "Keep labelled report derivatives separately; no fabricated GPS, address coordinate substituted for capture GPS or retroactive stage photo."
+    },
+    "ac_before": {
+      "purpose": "Geotagged existing equipment/location and label before removal; show identifiable empty location for new equipment.",
+      "sourceRefs": [
+        "heer_guide",
+        "pdrs_guide"
+      ]
+    },
+    "ac_after": {
+      "purpose": "Geotagged installed indoor/outdoor context and readable product labels matched to invoice/GEMS.",
+      "sourceRefs": [
+        "heer_guide",
+        "pdrs_guide"
+      ]
+    },
+    "sres_three_stages": {
+      "purpose": "Accredited installer on site at setup, mid-installation and commissioning, tied to actual time/site/person.",
+      "sourceRefs": [
+        "sres_pv_install",
+        "sres_battery_install"
+      ]
+    },
+    "pdrs_two_stages": {
+      "purpose": "SAA installer on site at setup and commissioning for BESS1/3/4.",
+      "sourceRefs": [
+        "pdrs_guide"
+      ],
+      "policy": "Combined SRES battery work additionally requires mid-installation evidence."
+    },
+    "nsw_ccew": {
+      "purpose": "Original unaltered eCert CCEW with actual date, site, electrician and scope.",
+      "sourceRefs": [
+        "heer_guide",
+        "pdrs_guide"
+      ]
+    },
+    "facts_delivery": {
+      "purpose": "Versioned applicable factsheet delivered at required pre-contract stage.",
+      "sourceRefs": [
+        "heer_guide",
+        "pdrs_guide"
+      ],
+      "policy": "Generated/queued email alone is not successful delivery evidence."
+    }
+  },
+  "activities": [
+    {
+      "id": "sres_pv",
+      "scheme": "SRES",
+      "activityCode": "PV",
+      "title": "Solar PV installation",
+      "sourceRefs": [
+        "sres_pv_assignment",
+        "sres_pv_install",
+        "sres_systems",
+        "sres_calc"
+      ],
+      "currentMappingFrom": "2026-09-07",
+      "sharedGroupRefs": [
+        "identity",
+        "completion"
+      ],
+      "groups": [
+        {
+          "id": "pv_system",
+          "title": "Solar system",
+          "sourceRefs": [
+            "sres_pv_assignment"
+          ],
+          "fields": [
+            {
+              "id": "system_type",
+              "prompt": "Is this a new system, extension or replacement?",
+              "type": "select",
+              "required": true,
+              "when": "always",
+              "options": [
+                "new",
+                "extension",
+                "replacement"
+              ]
+            },
+            {
+              "id": "pv_kw",
+              "prompt": "Confirm total installed PV capacity.",
+              "type": "decimal",
+              "required": true,
+              "when": "always",
+              "unit": "kW"
+            },
+            {
+              "id": "annual_mwh",
+              "prompt": "Confirm annual electricity output.",
+              "type": "decimal",
+              "required": true,
+              "when": "always",
+              "unit": "MWh"
+            },
+            {
+              "id": "grid_type",
+              "prompt": "Grid-connected or off-grid?",
+              "type": "select",
+              "required": true,
+              "when": "always",
+              "options": [
+                "grid",
+                "off-grid"
+              ]
+            },
+            {
+              "id": "mounting",
+              "prompt": "Confirm property and mounting.",
+              "type": "record",
+              "required": true,
+              "when": "always",
+              "capture": [
+                "propertyType",
+                "singleOrMultiStorey",
+                "roofOrGroundMount",
+                "completeUnit"
+              ]
+            },
+            {
+              "id": "modules",
+              "prompt": "Scan each PV module.",
+              "type": "equipment_repeat",
+              "required": true,
+              "when": "always",
+              "capture": [
+                "brand",
+                "model",
+                "count",
+                "serials"
+              ]
+            },
+            {
+              "id": "inverters",
+              "prompt": "Scan each inverter.",
+              "type": "equipment_repeat",
+              "required": true,
+              "when": "always",
+              "capture": [
+                "brand",
+                "model",
+                "series",
+                "count",
+                "serials"
+              ]
+            },
+            {
+              "id": "product_list",
+              "prompt": "Confirm module/inverter approval on installation date.",
+              "type": "registry_snapshot",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "design",
+              "prompt": "Attach system design and approved variations.",
+              "type": "evidence",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "saa",
+              "prompt": "Confirm SAA designer/installer category and electrical licence.",
+              "type": "credential_snapshot",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "retailer_disclosures",
+              "prompt": "Record written customer disclosures and retailer statement.",
+              "type": "document_reference",
+              "required": true,
+              "when": "always"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "sharedEvidenceRef": "sres_three_stages"
+        },
+        {
+          "id": "serials",
+          "purpose": "Readable module/inverter serials matched to assignment and design.",
+          "sourceRefs": [
+            "sres_pv_assignment",
+            "sres_sgu_info"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "compliance",
+          "purpose": "Electrical certificate and jurisdiction-specific evidence, including WA Notice of Completion where required.",
+          "sourceRefs": [
+            "sres_pv_install"
+          ],
+          "when": "always"
+        }
+      ],
+      "signatures": [
+        {
+          "sharedSignatureRef": "sres_owner"
+        },
+        {
+          "sharedSignatureRef": "sres_designer"
+        },
+        {
+          "sharedSignatureRef": "sres_installer"
+        },
+        {
+          "sharedSignatureRef": "sres_retailer"
+        }
+      ],
+      "gates": [
+        {
+          "id": "creation_window",
+          "passCondition": "Create within12months of installation, with all relevant signed records already held.",
+          "sourceRefs": [
+            "sres_create"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "rights",
+          "passCondition": "Owner has the rights; no duplicate assignment or creation for same system/period. Creditex scheme-specific registered-agent identity and status verified.",
+          "sourceRefs": [
+            "sres_create"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "capacity",
+          "passCondition": "PV<=100kW and applicable annual-output limit verified.",
+          "sourceRefs": [
+            "sres_systems"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "attendance",
+          "passCondition": "Correct SAA/licences, actual setup/mid/commissioning attendance; no more than2 combined PV/battery systems per installer per day.",
+          "sourceRefs": [
+            "sres_pv_install",
+            "sres_battery_install"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "deeming",
+          "passCondition": "For2026 use5-year deeming and current postcode/product calculation.",
+          "sourceRefs": [
+            "sres_calc"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        }
+      ],
+      "gaps": [
+        {
+          "id": "exact_250mwh",
+          "scope": "annual output exactly250MWh",
+          "resolution": "Source overview/SGU wording differs at boundary. Check applicable regulation before claiming this edge eligible.",
+          "sourceRefs": [
+            "sres_systems",
+            "sres_sgu_info"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sres_bess",
+      "scheme": "SRES",
+      "activityCode": "BESS",
+      "title": "Solar battery installation",
+      "sourceRefs": [
+        "sres_battery_assignment",
+        "sres_battery_eligibility",
+        "sres_battery_install",
+        "sres_battery_photos",
+        "sres_calc"
+      ],
+      "currentMappingFrom": "2026-09-07",
+      "sharedGroupRefs": [
+        "identity",
+        "completion"
+      ],
+      "groups": [
+        {
+          "id": "battery_eligibility",
+          "title": "Check battery",
+          "sourceRefs": [
+            "sres_battery_eligibility"
+          ],
+          "fields": [
+            {
+              "id": "prior_stcs",
+              "prompt": "Has this premise/meter previously received battery STCs?",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "new_expansion",
+              "prompt": "New system or expansion?",
+              "type": "select",
+              "required": true,
+              "when": "always",
+              "options": [
+                "new",
+                "expansion"
+              ]
+            },
+            {
+              "id": "existing_battery",
+              "prompt": "Record existing capacity and claim history.",
+              "type": "record",
+              "required": true,
+              "when": "new_expansion == expansion"
+            },
+            {
+              "id": "batteries",
+              "prompt": "Scan every battery/module.",
+              "type": "equipment_repeat",
+              "required": true,
+              "when": "always",
+              "capture": [
+                "brand",
+                "model",
+                "series",
+                "quantity",
+                "serial",
+                "nominalKWh",
+                "usableKWh"
+              ]
+            },
+            {
+              "id": "total_nominal",
+              "prompt": "Confirm total nominal capacity including existing batteries.",
+              "type": "computed_decimal",
+              "required": true,
+              "when": "always",
+              "unit": "kWh"
+            },
+            {
+              "id": "new_nominal",
+              "prompt": "Confirm newly installed nominal capacity.",
+              "type": "computed_decimal",
+              "required": true,
+              "when": "always",
+              "unit": "kWh"
+            },
+            {
+              "id": "new_usable",
+              "prompt": "Confirm newly installed usable capacity.",
+              "type": "computed_decimal",
+              "required": true,
+              "when": "always",
+              "unit": "kWh"
+            },
+            {
+              "id": "cec_config",
+              "prompt": "Confirm complete configuration approval on installation date.",
+              "type": "registry_snapshot",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "solar_pv",
+              "prompt": "Confirm connected new/existing PV.",
+              "type": "record",
+              "required": true,
+              "when": "always",
+              "capture": [
+                "PVCapacityKW",
+                "inverterModel",
+                "newOrExisting"
+              ]
+            },
+            {
+              "id": "grid_connected",
+              "prompt": "Is battery grid-connected?",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "lived_in_dwelling",
+              "prompt": "Does off-grid system supply a lived-in dwelling?",
+              "type": "yes_no",
+              "required": true,
+              "when": "grid_connected == no"
+            },
+            {
+              "id": "distance_km",
+              "prompt": "Record distance from main grid.",
+              "type": "decimal",
+              "required": true,
+              "when": "grid_connected == no",
+              "unit": "km"
+            },
+            {
+              "id": "vpp_capable",
+              "prompt": "Confirm VPP capability.",
+              "type": "technical_evidence",
+              "required": true,
+              "when": "grid_connected == yes OR distance_km <=1"
+            },
+            {
+              "id": "connection_cost",
+              "prompt": "Attach authorised connection-cost estimate when relying on greater-than-$30,000 exception.",
+              "type": "evidence",
+              "required": true,
+              "when": "off-grid VPP exception claimed"
+            }
+          ]
+        },
+        {
+          "id": "battery_install",
+          "title": "Install and commission",
+          "sourceRefs": [
+            "sres_battery_assignment",
+            "sres_battery_install",
+            "sres_retailer"
+          ],
+          "fields": [
+            {
+              "id": "battery_accreditation",
+              "prompt": "Confirm battery-endorsed SAA designer/installer.",
+              "type": "credential_snapshot",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "new_inverter",
+              "prompt": "Record newly installed inverter and serials.",
+              "type": "equipment_repeat",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "defaults_changed",
+              "prompt": "Have manufacturer settings changed?",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "setting_changes",
+              "prompt": "Record changed settings and effect in retailer statement.",
+              "type": "record",
+              "required": true,
+              "when": "defaults_changed == yes"
+            },
+            {
+              "id": "disclosures",
+              "prompt": "Record sizing, loads, VPP capability, extra costs and warranty disclosures.",
+              "type": "document_reference",
+              "required": true,
+              "when": "always"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "sharedEvidenceRef": "sres_three_stages"
+        },
+        {
+          "id": "completion_photo",
+          "purpose": "Final completed system matching electrical certificate; separate PV and battery evidence sets for combined work.",
+          "sourceRefs": [
+            "sres_battery_photos"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "labels",
+          "purpose": "Battery/module and new inverter serials, meter-box exterior, switchboard/inside cover and shutdown labels, battery front/sides required from1March2026.",
+          "sourceRefs": [
+            "sres_battery_photos"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "design_certificate",
+          "purpose": "Electrical certificate, system design, accreditation and approved complete configuration.",
+          "sourceRefs": [
+            "sres_battery_install"
+          ],
+          "when": "always"
+        }
+      ],
+      "signatures": [
+        {
+          "sharedSignatureRef": "sres_owner"
+        },
+        {
+          "sharedSignatureRef": "sres_designer"
+        },
+        {
+          "sharedSignatureRef": "sres_installer"
+        },
+        {
+          "sharedSignatureRef": "sres_retailer"
+        }
+      ],
+      "gates": [
+        {
+          "id": "creation_window",
+          "passCondition": "Create within12months of installation, with all relevant signed records already held.",
+          "sourceRefs": [
+            "sres_create"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "rights",
+          "passCondition": "Owner has the rights; no duplicate assignment or creation for same system/period. Creditex scheme-specific registered-agent identity and status verified.",
+          "sourceRefs": [
+            "sres_create"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "capacity",
+          "passCondition": "5<=total nominal<=100kWh; eligible new battery/expansion capacity; claim support first50kWh usable only.",
+          "sourceRefs": [
+            "sres_battery_eligibility"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "pv",
+          "passCondition": "Eligible connected PV<=100kW.",
+          "sourceRefs": [
+            "sres_battery_eligibility"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "expansion",
+          "passCondition": "No prior battery STCs; expansion >=5kWh new nominal; approved final combination.",
+          "sourceRefs": [
+            "sres_battery_eligibility"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "rate",
+          "passCondition": "May-December2026 factor6.8; usable tiers0-14 at100%, >14-28 at60%, >28-50 at15%; floor final STCs.",
+          "sourceRefs": [
+            "sres_calc"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "attendance",
+          "passCondition": "Battery-endorsed SAA/licences, actual3-stage presence and max2 combined PV/battery systems per installer/day.",
+          "sourceRefs": [
+            "sres_battery_install"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "offgrid",
+          "passCondition": "Lived-in dwelling; VPP capable when within1km unless permitted written connection-cost exception applies.",
+          "sourceRefs": [
+            "sres_battery_eligibility"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        }
+      ],
+      "gaps": [
+        {
+          "id": "exact_1km",
+          "scope": "exactly1km, not VPP capable",
+          "resolution": "Page says within1km and separately less/greater than1km; check legal boundary before approving this exception.",
+          "sourceRefs": [
+            "sres_battery_eligibility"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sres_swh",
+      "scheme": "SRES",
+      "activityCode": "SWH",
+      "title": "Solar water heater",
+      "sourceRefs": [
+        "sres_swh_info",
+        "sres_hotwater",
+        "sres_calc"
+      ],
+      "currentMappingFrom": "2026-09-07",
+      "sharedGroupRefs": [
+        "identity",
+        "completion"
+      ],
+      "groups": [
+        {
+          "id": "hotwater",
+          "title": "Water heater",
+          "sourceRefs": [
+            "sres_swh_info",
+            "sres_hotwater"
+          ],
+          "fields": [
+            {
+              "id": "replacement",
+              "prompt": "What does this system replace?",
+              "type": "select",
+              "required": true,
+              "when": "always",
+              "options": [
+                "new building",
+                "electric",
+                "gas",
+                "solar",
+                "first heater in existing building",
+                "other"
+              ]
+            },
+            {
+              "id": "heater",
+              "prompt": "Scan installed water heater.",
+              "type": "equipment_repeat",
+              "required": true,
+              "when": "always",
+              "capture": [
+                "brand",
+                "registeredModel",
+                "tankSerial",
+                "tankLitres",
+                "collectorCountIfSWH",
+                "location"
+              ]
+            },
+            {
+              "id": "separate_units",
+              "prompt": "Identify each separate system at this address.",
+              "type": "record",
+              "required": true,
+              "when": "multiple heaters"
+            },
+            {
+              "id": "operational_date",
+              "prompt": "When was it fully installed and delivering hot water?",
+              "type": "date",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "register",
+              "prompt": "Select CER registered model, zone and installation-year entitlement.",
+              "type": "registry_snapshot",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "installer_licences",
+              "prompt": "Confirm applicable plumbing/electrical/refrigerant licences.",
+              "type": "credential_snapshot",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "assignment",
+              "prompt": "Confirm Creditex registered-agent profile, certificate quantity and incentive.",
+              "type": "record",
+              "required": true,
+              "when": "always"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "install_evidence",
+          "purpose": "Compliance certificate and invoice or dated installed-unit photo supporting exact product/site/date.",
+          "sourceRefs": [
+            "sres_swh_info"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "statdec",
+          "purpose": "Owner/system-size statutory declarations for SWH over700litres, with legally valid witnessing.",
+          "sourceRefs": [
+            "sres_swh_info",
+            "sres_hotwater"
+          ],
+          "when": "SWH tankLitres >700"
+        }
+      ],
+      "signatures": [
+        {
+          "sharedSignatureRef": "sres_owner"
+        },
+        {
+          "id": "installer",
+          "signerRole": "licensed installer",
+          "purpose": "Installer authentication on the required original compliance/completion evidence. Do not infer a separate universal new STC installer declaration where source requires the compliance certificate.",
+          "sourceRefs": [
+            "sres_swh_info"
+          ]
+        },
+        {
+          "id": "large_swh_statdec",
+          "signerRole": "required declarant and authorised witness",
+          "purpose": "Execute required large-SWH statutory declarations.",
+          "when": "SWH tankLitres >700",
+          "sourceRefs": [
+            "sres_swh_info"
+          ]
+        }
+      ],
+      "gates": [
+        {
+          "id": "creation_window",
+          "passCondition": "Create within12months of installation, with all relevant signed records already held.",
+          "sourceRefs": [
+            "sres_create"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "rights",
+          "passCondition": "Owner has the rights; no duplicate assignment or creation for same system/period. Creditex scheme-specific registered-agent identity and status verified.",
+          "sourceRefs": [
+            "sres_create"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "registered",
+          "passCondition": "Exact model registered for relevant date/zone and installation complete. ASHP within eligible tank-size limit.",
+          "sourceRefs": [
+            "sres_hotwater",
+            "sres_swh_info"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "multiplier",
+          "passCondition": "2026 ten-year register entitlement multiplied by0.5; round down final STCs.",
+          "sourceRefs": [
+            "sres_calc"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "sres_ashp",
+      "scheme": "SRES",
+      "activityCode": "ASHP",
+      "title": "Air-source heat pump water heater",
+      "sourceRefs": [
+        "sres_swh_info",
+        "sres_hotwater",
+        "sres_calc"
+      ],
+      "currentMappingFrom": "2026-09-07",
+      "sharedGroupRefs": [
+        "identity",
+        "completion"
+      ],
+      "groups": [
+        {
+          "id": "hotwater",
+          "title": "Water heater",
+          "sourceRefs": [
+            "sres_swh_info",
+            "sres_hotwater"
+          ],
+          "fields": [
+            {
+              "id": "replacement",
+              "prompt": "What does this system replace?",
+              "type": "select",
+              "required": true,
+              "when": "always",
+              "options": [
+                "new building",
+                "electric",
+                "gas",
+                "solar",
+                "first heater in existing building",
+                "other"
+              ]
+            },
+            {
+              "id": "heater",
+              "prompt": "Scan installed water heater.",
+              "type": "equipment_repeat",
+              "required": true,
+              "when": "always",
+              "capture": [
+                "brand",
+                "registeredModel",
+                "tankSerial",
+                "tankLitres",
+                "collectorCountIfSWH",
+                "location"
+              ]
+            },
+            {
+              "id": "separate_units",
+              "prompt": "Identify each separate system at this address.",
+              "type": "record",
+              "required": true,
+              "when": "multiple heaters"
+            },
+            {
+              "id": "operational_date",
+              "prompt": "When was it fully installed and delivering hot water?",
+              "type": "date",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "register",
+              "prompt": "Select CER registered model, zone and installation-year entitlement.",
+              "type": "registry_snapshot",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "installer_licences",
+              "prompt": "Confirm applicable plumbing/electrical/refrigerant licences.",
+              "type": "credential_snapshot",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "assignment",
+              "prompt": "Confirm Creditex registered-agent profile, certificate quantity and incentive.",
+              "type": "record",
+              "required": true,
+              "when": "always"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "install_evidence",
+          "purpose": "Compliance certificate and invoice or dated installed-unit photo supporting exact product/site/date.",
+          "sourceRefs": [
+            "sres_swh_info"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "statdec",
+          "purpose": "Owner/system-size statutory declarations for SWH over700litres, with legally valid witnessing.",
+          "sourceRefs": [
+            "sres_swh_info",
+            "sres_hotwater"
+          ],
+          "when": "SWH tankLitres >700"
+        }
+      ],
+      "signatures": [
+        {
+          "sharedSignatureRef": "sres_owner"
+        },
+        {
+          "id": "installer",
+          "signerRole": "licensed installer",
+          "purpose": "Installer authentication on the required original compliance/completion evidence. Do not infer a separate universal new STC installer declaration where source requires the compliance certificate.",
+          "sourceRefs": [
+            "sres_swh_info"
+          ]
+        },
+        {
+          "id": "large_swh_statdec",
+          "signerRole": "required declarant and authorised witness",
+          "purpose": "Execute required large-SWH statutory declarations.",
+          "when": "SWH tankLitres >700",
+          "sourceRefs": [
+            "sres_swh_info"
+          ]
+        }
+      ],
+      "gates": [
+        {
+          "id": "creation_window",
+          "passCondition": "Create within12months of installation, with all relevant signed records already held.",
+          "sourceRefs": [
+            "sres_create"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "rights",
+          "passCondition": "Owner has the rights; no duplicate assignment or creation for same system/period. Creditex scheme-specific registered-agent identity and status verified.",
+          "sourceRefs": [
+            "sres_create"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "registered",
+          "passCondition": "Exact model registered for relevant date/zone and installation complete. ASHP within eligible tank-size limit.",
+          "sourceRefs": [
+            "sres_hotwater",
+            "sres_swh_info"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "multiplier",
+          "passCondition": "2026 ten-year register entitlement multiplied by0.5; round down final STCs.",
+          "sourceRefs": [
+            "sres_calc"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        }
+      ],
+      "gaps": [
+        {
+          "id": "exact_425litres",
+          "scope": "ASHP tank exactly425litres",
+          "resolution": "Overview says up-to425; hot-water page says less-than425. Verify applicable legislation or accepted registered model before this boundary is approved.",
+          "sourceRefs": [
+            "sres_systems",
+            "sres_hotwater"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ess_d16",
+      "scheme": "NSW-ESS",
+      "activityCode": "D16",
+      "title": "Install or replace residential/small-business air conditioner",
+      "sourceRefs": [
+        "ess_rule",
+        "heer_guide",
+        "heer_assessor",
+        "heer_post"
+      ],
+      "currentMappingFrom": "2026-09-07",
+      "sharedGroupRefs": [
+        "identity",
+        "nsw_site",
+        "nsw_nomination",
+        "nsw_payment",
+        "completion",
+        "heer_assessment",
+        "ac_product",
+        "disposal"
+      ],
+      "groups": [
+        {
+          "id": "d16_scope",
+          "title": "Air-conditioning scope",
+          "sourceRefs": [
+            "ess_rule",
+            "heer_guide"
+          ],
+          "fields": [
+            {
+              "id": "new_replace",
+              "prompt": "New installation or replacement?",
+              "type": "select",
+              "required": true,
+              "when": "always",
+              "options": [
+                "new",
+                "replacement"
+              ]
+            },
+            {
+              "id": "old_ac",
+              "prompt": "Record old system type and details.",
+              "type": "equipment_repeat",
+              "required": true,
+              "when": "new_replace == replacement"
+            },
+            {
+              "id": "climate",
+              "prompt": "Confirm Rule climate zone for postcode.",
+              "type": "computed_select",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "spaces",
+              "prompt": "Which spaces will this system serve?",
+              "type": "record",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "factsheet",
+              "prompt": "Confirm HEER factsheet V3.2 supplied before agreement.",
+              "type": "delivery_receipt",
+              "required": true,
+              "when": "always"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "sharedEvidenceRef": "ac_before"
+        },
+        {
+          "sharedEvidenceRef": "ac_after"
+        },
+        {
+          "sharedEvidenceRef": "nsw_ccew"
+        },
+        {
+          "id": "facts",
+          "purpose": "HEER V3.2 and delivery record.",
+          "sourceRefs": [
+            "heer_facts",
+            "heer_guide"
+          ],
+          "when": "always"
+        }
+      ],
+      "signatures": [
+        {
+          "sharedSignatureRef": "nsw_nomination"
+        },
+        {
+          "sharedSignatureRef": "heer_assessor"
+        },
+        {
+          "sharedSignatureRef": "heer_installer"
+        },
+        {
+          "sharedSignatureRef": "heer_purchaser"
+        }
+      ],
+      "gates": [
+        {
+          "id": "product",
+          "passCondition": "Eligible air-to-air GEMS classes5-12 or18-21 with required ScheduleD efficiency ratings and approved combinations.",
+          "sourceRefs": [
+            "ess_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "payment",
+          "passCondition": "Net ex GST >=$500 classes5/8/9/10; >=$1000 classes6/7/11/12/18/19. Classes20/21: round EquationD16.2 cooling capacity DOWN to whole kW first; >=$1000 if rounded capacity<=15, >=$2000 if >15 and <20, >=$3000 if>=20. Sum relevant installed items. Valid low-income/EEP exception only.",
+          "sourceRefs": [
+            "ess_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "cap",
+          "passCondition": "Multi-split ESC count<=90 cold climate, <=70 average/hot.",
+          "sourceRefs": [
+            "ess_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "declarations",
+          "passCondition": "Assessor, applicable installers and purchaser signed; applicable factsheet delivered; original evidence/payment complete.",
+          "sourceRefs": [
+            "heer_guide",
+            "heer_assessor",
+            "heer_post"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "ess_d17",
+      "scheme": "NSW-ESS",
+      "activityCode": "D17",
+      "title": "Replace electric resistance storage or instantaneous water heater with heat pump",
+      "sourceRefs": [
+        "ess_rule",
+        "heer_guide",
+        "heer_post"
+      ],
+      "currentMappingFrom": "2026-09-07",
+      "sharedGroupRefs": [
+        "identity",
+        "nsw_site",
+        "nsw_nomination",
+        "nsw_payment",
+        "completion",
+        "heer_assessment",
+        "disposal"
+      ],
+      "groups": [
+        {
+          "id": "hotwater",
+          "title": "Water heater replacement",
+          "sourceRefs": [
+            "ess_rule",
+            "heer_guide"
+          ],
+          "fields": [
+            {
+              "id": "old_heater",
+              "prompt": "Record existing electric resistance storage or instantaneous water heater.",
+              "type": "equipment",
+              "required": true,
+              "when": "always",
+              "capture": [
+                "type",
+                "brand",
+                "model",
+                "serial",
+                "storageLitres",
+                "location",
+                "operationalStatus"
+              ]
+            },
+            {
+              "id": "one_for_one",
+              "prompt": "Is this exactly one old system replaced by one heat pump?",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "new_heatpump",
+              "prompt": "Scan installed heat pump.",
+              "type": "equipment",
+              "required": true,
+              "when": "always",
+              "capture": [
+                "brand",
+                "model",
+                "serial",
+                "tankLitres",
+                "splitOrIntegrated"
+              ]
+            },
+            {
+              "id": "ipart_product",
+              "prompt": "Select current IPART-accepted product.",
+              "type": "registry_snapshot",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "manual",
+              "prompt": "Attach manual and confirm applicable installation/location requirements.",
+              "type": "technical_document",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "split_siting",
+              "prompt": "Show AS/NZS5149.3 siting compliance.",
+              "type": "evidence",
+              "required": true,
+              "when": "split components connected by refrigerant"
+            },
+            {
+              "id": "warranty",
+              "prompt": "Attach unit/tank warranties and Australian defect-warranty contact.",
+              "type": "document_reference",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "licensed_roles",
+              "prompt": "Identify installers for plumbing, electrical, gas and refrigerant work.",
+              "type": "personnel_repeat",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "factsheet",
+              "prompt": "Confirm heat-pump factsheet V2.2 supplied before agreement/nomination/install.",
+              "type": "delivery_receipt",
+              "required": true,
+              "when": "always"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "old_photos",
+          "purpose": "Geotagged old heater in situ and readable label/type before removal.",
+          "sourceRefs": [
+            "heer_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "new_photos",
+          "purpose": "Geotagged new heat pump in situ, readable identity, invoice and current IPART acceptance.",
+          "sourceRefs": [
+            "heer_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "disposal",
+          "purpose": "Old-unit disposal and applicable gas/refrigerant decommissioning.",
+          "sourceRefs": [
+            "heer_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "sharedEvidenceRef": "nsw_ccew"
+        },
+        {
+          "id": "facts",
+          "purpose": "Heat-pump factsheet V2.2 and delivery record.",
+          "sourceRefs": [
+            "heer_hw_facts",
+            "heer_guide"
+          ],
+          "when": "always"
+        }
+      ],
+      "signatures": [
+        {
+          "sharedSignatureRef": "nsw_nomination"
+        },
+        {
+          "sharedSignatureRef": "heer_assessor"
+        },
+        {
+          "sharedSignatureRef": "heer_installer"
+        },
+        {
+          "sharedSignatureRef": "heer_purchaser"
+        }
+      ],
+      "gates": [
+        {
+          "id": "replacement",
+          "passCondition": "Old system matches activity; one-for-one replacement with accepted ASHP. Old unit need not be operational.",
+          "sourceRefs": [
+            "ess_rule",
+            "heer_guide"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "warranty",
+          "passCondition": "For tank<=700L and implementation>=2025-12-01, unit/tank warranties each>=5years; Australian warranty contact as required.",
+          "sourceRefs": [
+            "heer_guide"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "payment",
+          "passCondition": "Net payment>=200 dollars ex GST per water-heater system; manifolded water heaters count as one. Valid low-income/EEP exception only.",
+          "sourceRefs": [
+            "ess_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "signatures",
+          "passCondition": "Assessor and post-work declaration complete; both licensed installers sign when two perform work; purchaser co-signs.",
+          "sourceRefs": [
+            "heer_assessor",
+            "heer_post",
+            "heer_guide"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "ess_d19",
+      "scheme": "NSW-ESS",
+      "activityCode": "D19",
+      "title": "Replace gas storage or instantaneous water heater with heat pump",
+      "sourceRefs": [
+        "ess_rule",
+        "heer_guide",
+        "heer_post"
+      ],
+      "currentMappingFrom": "2026-09-07",
+      "sharedGroupRefs": [
+        "identity",
+        "nsw_site",
+        "nsw_nomination",
+        "nsw_payment",
+        "completion",
+        "heer_assessment",
+        "disposal"
+      ],
+      "groups": [
+        {
+          "id": "hotwater",
+          "title": "Water heater replacement",
+          "sourceRefs": [
+            "ess_rule",
+            "heer_guide"
+          ],
+          "fields": [
+            {
+              "id": "old_heater",
+              "prompt": "Record existing gas storage or instantaneous water heater.",
+              "type": "equipment",
+              "required": true,
+              "when": "always",
+              "capture": [
+                "type",
+                "brand",
+                "model",
+                "serial",
+                "storageLitres",
+                "location",
+                "operationalStatus"
+              ]
+            },
+            {
+              "id": "one_for_one",
+              "prompt": "Is this exactly one old system replaced by one heat pump?",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "new_heatpump",
+              "prompt": "Scan installed heat pump.",
+              "type": "equipment",
+              "required": true,
+              "when": "always",
+              "capture": [
+                "brand",
+                "model",
+                "serial",
+                "tankLitres",
+                "splitOrIntegrated"
+              ]
+            },
+            {
+              "id": "ipart_product",
+              "prompt": "Select current IPART-accepted product.",
+              "type": "registry_snapshot",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "manual",
+              "prompt": "Attach manual and confirm applicable installation/location requirements.",
+              "type": "technical_document",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "split_siting",
+              "prompt": "Show AS/NZS5149.3 siting compliance.",
+              "type": "evidence",
+              "required": true,
+              "when": "split components connected by refrigerant"
+            },
+            {
+              "id": "warranty",
+              "prompt": "Attach unit/tank warranties and Australian defect-warranty contact.",
+              "type": "document_reference",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "licensed_roles",
+              "prompt": "Identify installers for plumbing, electrical, gas and refrigerant work.",
+              "type": "personnel_repeat",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "factsheet",
+              "prompt": "Confirm heat-pump factsheet V2.2 supplied before agreement/nomination/install.",
+              "type": "delivery_receipt",
+              "required": true,
+              "when": "always"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "old_photos",
+          "purpose": "Geotagged old heater in situ and readable label/type before removal.",
+          "sourceRefs": [
+            "heer_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "new_photos",
+          "purpose": "Geotagged new heat pump in situ, readable identity, invoice and current IPART acceptance.",
+          "sourceRefs": [
+            "heer_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "disposal",
+          "purpose": "Old-unit disposal and applicable gas/refrigerant decommissioning.",
+          "sourceRefs": [
+            "heer_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "sharedEvidenceRef": "nsw_ccew"
+        },
+        {
+          "id": "facts",
+          "purpose": "Heat-pump factsheet V2.2 and delivery record.",
+          "sourceRefs": [
+            "heer_hw_facts",
+            "heer_guide"
+          ],
+          "when": "always"
+        }
+      ],
+      "signatures": [
+        {
+          "sharedSignatureRef": "nsw_nomination"
+        },
+        {
+          "sharedSignatureRef": "heer_assessor"
+        },
+        {
+          "sharedSignatureRef": "heer_installer"
+        },
+        {
+          "sharedSignatureRef": "heer_purchaser"
+        }
+      ],
+      "gates": [
+        {
+          "id": "replacement",
+          "passCondition": "Old system matches activity; one-for-one replacement with accepted ASHP. Old unit need not be operational.",
+          "sourceRefs": [
+            "ess_rule",
+            "heer_guide"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "warranty",
+          "passCondition": "For tank<=700L and implementation>=2025-12-01, unit/tank warranties each>=5years; Australian warranty contact as required.",
+          "sourceRefs": [
+            "heer_guide"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "payment",
+          "passCondition": "Net payment>=200 dollars ex GST per water-heater system; manifolded water heaters count as one. Valid low-income/EEP exception only.",
+          "sourceRefs": [
+            "ess_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "signatures",
+          "passCondition": "Assessor and post-work declaration complete; both licensed installers sign when two perform work; purchaser co-signs.",
+          "sourceRefs": [
+            "heer_assessor",
+            "heer_post",
+            "heer_guide"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "pdrs_hvac1",
+      "scheme": "NSW-PDRS",
+      "activityCode": "HVAC1",
+      "title": "Air conditioning peak reduction HVAC1",
+      "sourceRefs": [
+        "pdrs_rule",
+        "pdrs_guide"
+      ],
+      "currentMappingFrom": "2026-09-07",
+      "sharedGroupRefs": [
+        "identity",
+        "nsw_site",
+        "nsw_nomination",
+        "completion",
+        "ac_product",
+        "disposal"
+      ],
+      "groups": [
+        {
+          "id": "hvac_scope",
+          "title": "Site and work scope",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "fields": [
+            {
+              "id": "new_replace",
+              "prompt": "New air conditioning or replacement?",
+              "type": "select",
+              "required": true,
+              "when": "always",
+              "options": [
+                "new",
+                "replacement"
+              ]
+            },
+            {
+              "id": "old_ac",
+              "prompt": "Capture replaced equipment.",
+              "type": "equipment_repeat",
+              "required": true,
+              "when": "new_replace == replacement"
+            },
+            {
+              "id": "class2_exception",
+              "prompt": "Replacement of centralised or common-area equipment in Class2 building?",
+              "type": "yes_no",
+              "required": true,
+              "when": "HVAC2 residential/small-business exception"
+            },
+            {
+              "id": "gpo_assessment",
+              "prompt": "Attach required existing-circuit capacity assessment.",
+              "type": "evidence",
+              "required": true,
+              "when": "equipment connects through existing GPO"
+            },
+            {
+              "id": "calculation",
+              "prompt": "Confirm Rule version, ratings, network loss factor and cap.",
+              "type": "calculator_snapshot",
+              "required": true,
+              "when": "always"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "sharedEvidenceRef": "ac_before"
+        },
+        {
+          "sharedEvidenceRef": "ac_after"
+        },
+        {
+          "sharedEvidenceRef": "nsw_ccew"
+        },
+        {
+          "id": "design",
+          "purpose": "AS/NZS5141 declaration or heat-load/commissioning evidence where required.",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "when": "always"
+        }
+      ],
+      "signatures": [
+        {
+          "sharedSignatureRef": "nsw_nomination"
+        },
+        {
+          "id": "installer",
+          "signerRole": "responsible installer",
+          "purpose": "Confirm activity-specific product/design/licensing/removal and installation.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ]
+        }
+      ],
+      "gates": [
+        {
+          "id": "product",
+          "passCondition": "Exact GEMS class/rating and manufacturer combination satisfy ScheduleB activity thresholds.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "evidence",
+          "passCondition": "Actual date, original CCEW, required before/after evidence, refrigerant/disposal chain and installer declaration complete.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "site",
+          "passCondition": "Residential building or small-business site. Eligible classes5-12 or18-21.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "cap",
+          "passCondition": "Multi-split implementation<=500PRCs.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "pdrs_hvac2",
+      "scheme": "NSW-PDRS",
+      "activityCode": "HVAC2",
+      "title": "Air conditioning peak reduction HVAC2",
+      "sourceRefs": [
+        "pdrs_rule",
+        "pdrs_guide"
+      ],
+      "currentMappingFrom": "2026-09-07",
+      "sharedGroupRefs": [
+        "identity",
+        "nsw_site",
+        "nsw_nomination",
+        "completion",
+        "ac_product",
+        "disposal"
+      ],
+      "groups": [
+        {
+          "id": "hvac_scope",
+          "title": "Site and work scope",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "fields": [
+            {
+              "id": "new_replace",
+              "prompt": "New air conditioning or replacement?",
+              "type": "select",
+              "required": true,
+              "when": "always",
+              "options": [
+                "new",
+                "replacement"
+              ]
+            },
+            {
+              "id": "old_ac",
+              "prompt": "Capture replaced equipment.",
+              "type": "equipment_repeat",
+              "required": true,
+              "when": "new_replace == replacement"
+            },
+            {
+              "id": "class2_exception",
+              "prompt": "Replacement of centralised or common-area equipment in Class2 building?",
+              "type": "yes_no",
+              "required": true,
+              "when": "HVAC2 residential/small-business exception"
+            },
+            {
+              "id": "gpo_assessment",
+              "prompt": "Attach required existing-circuit capacity assessment.",
+              "type": "evidence",
+              "required": true,
+              "when": "equipment connects through existing GPO"
+            },
+            {
+              "id": "calculation",
+              "prompt": "Confirm Rule version, ratings, network loss factor and cap.",
+              "type": "calculator_snapshot",
+              "required": true,
+              "when": "always"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "sharedEvidenceRef": "ac_before"
+        },
+        {
+          "sharedEvidenceRef": "ac_after"
+        },
+        {
+          "sharedEvidenceRef": "nsw_ccew"
+        },
+        {
+          "id": "design",
+          "purpose": "AS/NZS5141 declaration or heat-load/commissioning evidence where required.",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "when": "always"
+        }
+      ],
+      "signatures": [
+        {
+          "sharedSignatureRef": "nsw_nomination"
+        },
+        {
+          "id": "installer",
+          "signerRole": "responsible installer",
+          "purpose": "Confirm activity-specific product/design/licensing/removal and installation.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ]
+        }
+      ],
+      "gates": [
+        {
+          "id": "product",
+          "passCondition": "Exact GEMS class/rating and manufacturer combination satisfy ScheduleB activity thresholds.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "evidence",
+          "passCondition": "Actual date, original CCEW, required before/after evidence, refrigerant/disposal chain and installer declaration complete.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "site",
+          "passCondition": "Large-business site OR eligible replacement centralised/common-area Class2 exception.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "capacity",
+          "passCondition": "For GEMS20/21/27 only, rated cooling capacity>=30kW. Eligible classes5-12/24/25 follow their own thresholds without universal30kW floor.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "pdrs_bess1",
+      "scheme": "NSW-PDRS",
+      "activityCode": "BESS1",
+      "title": "Battery installation BESS1",
+      "sourceRefs": [
+        "pdrs_rule",
+        "pdrs_guide",
+        "bess1_declaration"
+      ],
+      "currentMappingFrom": "2026-09-07",
+      "sharedGroupRefs": [
+        "identity",
+        "nsw_site",
+        "nsw_nomination",
+        "completion",
+        "nsw_battery",
+        "nsw_battery_safety",
+        "nsw_payment"
+      ],
+      "groups": [
+        {
+          "id": "site_claim",
+          "title": "Site and previous incentives",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide",
+            "bess1_declaration"
+          ],
+          "fields": [
+            {
+              "id": "previous_battery",
+              "prompt": "Has the relevant battery activity previously occurred at this site?",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "previous_details",
+              "prompt": "Record prior installations/claims and scope.",
+              "type": "record",
+              "required": true,
+              "when": "previous_battery == yes"
+            },
+            {
+              "id": "customer_prior_claim",
+              "prompt": "Record purchaser/owners-corporation declaration on prior installation/claims.",
+              "type": "declaration_reference",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "installer_prior_claim",
+              "prompt": "Record independent installer declaration on prior installation/claims.",
+              "type": "declaration_reference",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "factsheet",
+              "prompt": "Record applicable battery factsheet supplied with quote.",
+              "type": "delivery_receipt",
+              "required": true,
+              "when": "BESS1/3/4"
+            },
+            {
+              "id": "pv_90days",
+              "prompt": "Was new PV installed within90days of this battery?",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "pv_evidence",
+              "prompt": "Attach solar completion date, capacity and invoice evidence.",
+              "type": "evidence",
+              "required": true,
+              "when": "pv_90days == yes"
+            }
+          ]
+        },
+        {
+          "id": "bess1_scope",
+          "title": "Approved BESS1 delivery pathway",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide",
+            "bess1_declaration"
+          ],
+          "fields": [
+            {
+              "id": "delivery_path",
+              "prompt": "Select eligible delivery pathway.",
+              "type": "select",
+              "required": true,
+              "when": "always",
+              "options": [
+                "government owned and managed site",
+                "approved exempt energy program",
+                "both"
+              ]
+            },
+            {
+              "id": "pathway_evidence",
+              "prompt": "Attach government ownership/management or EEP approval covering site/date.",
+              "type": "evidence",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "no_existing_battery",
+              "prompt": "Confirm no existing battery at same NMI before installation.",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "solar_same_nmi",
+              "prompt": "Confirm PV behind same NMI.",
+              "type": "evidence",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "warranty_use",
+              "prompt": "Confirm warranty normal-use conditions.",
+              "type": "record",
+              "required": true,
+              "when": "always",
+              "capture": [
+                "temperatureLowC",
+                "temperatureHighC",
+                "warrantedMWhPerUsableKWh"
+              ]
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "sharedEvidenceRef": "nsw_ccew"
+        },
+        {
+          "id": "battery_serials",
+          "purpose": "Geotagged battery/module and inverter context/serials matched to records.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "meter",
+          "purpose": "Meter/NMI and wiring or commissioning evidence of behind-meter installation.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "sharedEvidenceRef": "pdrs_two_stages"
+        },
+        {
+          "id": "facts",
+          "purpose": "BESS1 factsheet V2.1 supplied with quote.",
+          "sourceRefs": [
+            "bess1_facts",
+            "pdrs_guide"
+          ],
+          "when": "always"
+        }
+      ],
+      "signatures": [
+        {
+          "sharedSignatureRef": "nsw_nomination"
+        },
+        {
+          "id": "purchaser",
+          "signerRole": "purchaser or authorised owners-corporation representative",
+          "purpose": "Confirm applicable prior-claim/site eligibility and receipt of Creditex ACP and complaints contacts.",
+          "sourceRefs": [
+            "pdrs_guide",
+            "bess1_declaration"
+          ],
+          "policy": "Installer must not act as the customer for this independent declaration."
+        },
+        {
+          "id": "installer",
+          "signerRole": "responsible installer",
+          "purpose": "Confirm independent prior-installation/claim checks, actual installation, licences, safety, commissioning and activity-specific declarations.",
+          "sourceRefs": [
+            "pdrs_guide",
+            "bess1_declaration"
+          ]
+        }
+      ],
+      "gates": [
+        {
+          "id": "version",
+          "passCondition": "This current form uses implementation date>=2026-09-07; September1-6 selects July Rule snapshot.",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_july",
+            "pdrs_changes"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "meter",
+          "passCondition": "Eligible NSW network site, correct NMI and required behind-meter connection.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "approved",
+          "passCondition": "Each battery approved on actual date and installer has required SAA battery accreditation/licence.",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "warranty",
+          "passCondition": "Each battery and newly installed inverter has>=10years warranty and>=70% usable capacity retained at10years; prior installed inverters excluded.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "pathway",
+          "passCondition": ">=2026-07-01 only government-owned/managed site or approved EEP. No existing battery at same NMI; PV behind same NMI.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "capacity",
+          "passCondition": "2<usable kWh<28.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "warranty_use",
+          "passCondition": "Normal-use warranty covers at least-10 to50C and>=2.8MWh per usable kWh.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "payment",
+          "passCondition": "Net payment>=200 dollars ex GST per EUE unless valid low-income/EEP exemption.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "pdrs_bess3",
+      "scheme": "NSW-PDRS",
+      "activityCode": "BESS3",
+      "title": "Battery installation BESS3",
+      "sourceRefs": [
+        "pdrs_rule",
+        "pdrs_guide"
+      ],
+      "currentMappingFrom": "2026-09-07",
+      "sharedGroupRefs": [
+        "identity",
+        "nsw_site",
+        "nsw_nomination",
+        "completion",
+        "nsw_battery",
+        "nsw_battery_safety",
+        "nsw_payment"
+      ],
+      "groups": [
+        {
+          "id": "site_claim",
+          "title": "Site and previous incentives",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "fields": [
+            {
+              "id": "previous_battery",
+              "prompt": "Has the relevant battery activity previously occurred at this site?",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "previous_details",
+              "prompt": "Record prior installations/claims and scope.",
+              "type": "record",
+              "required": true,
+              "when": "previous_battery == yes"
+            },
+            {
+              "id": "customer_prior_claim",
+              "prompt": "Record purchaser/owners-corporation declaration on prior installation/claims.",
+              "type": "declaration_reference",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "installer_prior_claim",
+              "prompt": "Record independent installer declaration on prior installation/claims.",
+              "type": "declaration_reference",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "factsheet",
+              "prompt": "Record applicable battery factsheet supplied with quote.",
+              "type": "delivery_receipt",
+              "required": true,
+              "when": "BESS1/3/4"
+            },
+            {
+              "id": "pv_90days",
+              "prompt": "Was new PV installed within90days of this battery?",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "pv_evidence",
+              "prompt": "Attach solar completion date, capacity and invoice evidence.",
+              "type": "evidence",
+              "required": true,
+              "when": "pv_90days == yes"
+            }
+          ]
+        },
+        {
+          "id": "apartment",
+          "title": "Apartment battery",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "fields": [
+            {
+              "id": "dwellings",
+              "prompt": "Number of individual dwellings in Class2 building?",
+              "type": "integer",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "strata",
+              "prompt": "Attach strata/title/building evidence and purchaser authority.",
+              "type": "evidence",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "supply",
+              "prompt": "Does battery supply common-property loads or support multiple dwellings?",
+              "type": "select",
+              "required": true,
+              "when": "always",
+              "options": [
+                "common property",
+                "multiple dwellings",
+                "both",
+                "neither"
+              ]
+            },
+            {
+              "id": "supply_proof",
+              "prompt": "Attach board/wiring photos or commissioning report proving capability.",
+              "type": "evidence",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "pv_nsw_funding",
+              "prompt": "Did new PV receive NSW Government funding?",
+              "type": "yes_no",
+              "required": true,
+              "when": "pv_90days == yes"
+            },
+            {
+              "id": "pv_funding_evidence",
+              "prompt": "Attach full-payment invoices/contracts and funding evidence.",
+              "type": "evidence",
+              "required": true,
+              "when": "pv_90days == yes"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "sharedEvidenceRef": "nsw_ccew"
+        },
+        {
+          "id": "battery_serials",
+          "purpose": "Geotagged battery/module and inverter context/serials matched to records.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "meter",
+          "purpose": "Meter/NMI and wiring or commissioning evidence of behind-meter installation.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "sharedEvidenceRef": "pdrs_two_stages"
+        },
+        {
+          "id": "facts",
+          "purpose": "Apartment battery factsheet supplied with quote.",
+          "sourceRefs": [
+            "bess3_facts",
+            "pdrs_guide"
+          ],
+          "when": "always"
+        }
+      ],
+      "signatures": [
+        {
+          "sharedSignatureRef": "nsw_nomination"
+        },
+        {
+          "id": "purchaser",
+          "signerRole": "purchaser or authorised owners-corporation representative",
+          "purpose": "Confirm applicable prior-claim/site eligibility and receipt of Creditex ACP and complaints contacts.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "policy": "Installer must not act as the customer for this independent declaration."
+        },
+        {
+          "id": "installer",
+          "signerRole": "responsible installer",
+          "purpose": "Confirm independent prior-installation/claim checks, actual installation, licences, safety, commissioning and activity-specific declarations.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ]
+        }
+      ],
+      "gates": [
+        {
+          "id": "version",
+          "passCondition": "This current form uses implementation date>=2026-09-07; September1-6 selects July Rule snapshot.",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_july",
+            "pdrs_changes"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "meter",
+          "passCondition": "Eligible NSW network site, correct NMI and required behind-meter connection.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "approved",
+          "passCondition": "Each battery approved on actual date and installer has required SAA battery accreditation/licence.",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "warranty",
+          "passCondition": "Each battery and newly installed inverter has>=10years warranty and>=70% usable capacity retained at10years; prior installed inverters excluded.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "site",
+          "passCondition": "Class2>=4dwellings; no prior BESS3; outdoors; common-property/multi-dwelling capability; all required planning/network approvals.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "capacity",
+          "passCondition": "20<usable kWh<=200 and usable kWh<=6*inverter output kW.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "claim_cap",
+          "passCondition": "Claim capacity=min(usable kWh,5*dwellings,4*inverter output kW).",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "solar_rate",
+          "passCondition": "Higher formula only when newPV within90days and no NSW Government funding of thatPV; otherwise standard formula.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "payment",
+          "passCondition": "Net payment>=1000 dollars ex GST per implementation unless valid low-income/EEP exemption.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "pdrs_bess4",
+      "scheme": "NSW-PDRS",
+      "activityCode": "BESS4",
+      "title": "Battery installation BESS4",
+      "sourceRefs": [
+        "pdrs_rule",
+        "pdrs_guide"
+      ],
+      "currentMappingFrom": "2026-09-07",
+      "sharedGroupRefs": [
+        "identity",
+        "nsw_site",
+        "nsw_nomination",
+        "completion",
+        "nsw_battery",
+        "nsw_battery_safety",
+        "nsw_payment"
+      ],
+      "groups": [
+        {
+          "id": "site_claim",
+          "title": "Site and previous incentives",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "fields": [
+            {
+              "id": "previous_battery",
+              "prompt": "Has the relevant battery activity previously occurred at this site?",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "previous_details",
+              "prompt": "Record prior installations/claims and scope.",
+              "type": "record",
+              "required": true,
+              "when": "previous_battery == yes"
+            },
+            {
+              "id": "customer_prior_claim",
+              "prompt": "Record purchaser/owners-corporation declaration on prior installation/claims.",
+              "type": "declaration_reference",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "installer_prior_claim",
+              "prompt": "Record independent installer declaration on prior installation/claims.",
+              "type": "declaration_reference",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "factsheet",
+              "prompt": "Record applicable battery factsheet supplied with quote.",
+              "type": "delivery_receipt",
+              "required": true,
+              "when": "BESS1/3/4"
+            },
+            {
+              "id": "pv_90days",
+              "prompt": "Was new PV installed within90days of this battery?",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "pv_evidence",
+              "prompt": "Attach solar completion date, capacity and invoice evidence.",
+              "type": "evidence",
+              "required": true,
+              "when": "pv_90days == yes"
+            }
+          ]
+        },
+        {
+          "id": "business",
+          "title": "Business eligibility",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "fields": [
+            {
+              "id": "nonresidential",
+              "prompt": "Confirm battery is not in or at residential building/data centre.",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "no_previous_bess4_5",
+              "prompt": "Confirm neither BESS4 nor BESS5 previously occurred at site.",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "business_evidence",
+              "prompt": "Attach business/site-use evidence.",
+              "type": "evidence",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "pv_ratio",
+              "prompt": "Confirm newPV capacity for solar-linked rate.",
+              "type": "computed_decimal",
+              "required": true,
+              "when": "pv_90days == yes",
+              "unit": "kW"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "sharedEvidenceRef": "nsw_ccew"
+        },
+        {
+          "id": "battery_serials",
+          "purpose": "Geotagged battery/module and inverter context/serials matched to records.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "meter",
+          "purpose": "Meter/NMI and wiring or commissioning evidence of behind-meter installation.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "sharedEvidenceRef": "pdrs_two_stages"
+        },
+        {
+          "id": "facts",
+          "purpose": "Business battery factsheet supplied with quote.",
+          "sourceRefs": [
+            "bess4_facts",
+            "pdrs_guide"
+          ],
+          "when": "always"
+        }
+      ],
+      "signatures": [
+        {
+          "sharedSignatureRef": "nsw_nomination"
+        },
+        {
+          "id": "purchaser",
+          "signerRole": "purchaser or authorised owners-corporation representative",
+          "purpose": "Confirm applicable prior-claim/site eligibility and receipt of Creditex ACP and complaints contacts.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "policy": "Installer must not act as the customer for this independent declaration."
+        },
+        {
+          "id": "installer",
+          "signerRole": "responsible installer",
+          "purpose": "Confirm independent prior-installation/claim checks, actual installation, licences, safety, commissioning and activity-specific declarations.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ]
+        }
+      ],
+      "gates": [
+        {
+          "id": "version",
+          "passCondition": "This current form uses implementation date>=2026-09-07; September1-6 selects July Rule snapshot.",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_july",
+            "pdrs_changes"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "meter",
+          "passCondition": "Eligible NSW network site, correct NMI and required behind-meter connection.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "approved",
+          "passCondition": "Each battery approved on actual date and installer has required SAA battery accreditation/licence.",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "warranty",
+          "passCondition": "Each battery and newly installed inverter has>=10years warranty and>=70% usable capacity retained at10years; prior installed inverters excluded.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "site",
+          "passCondition": "Not residential/data centre; no previous BESS4/BESS5; all planning/network approvals.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "ratios",
+          "passCondition": "Usable kWh<=6*inverter output kW. Solar-linked formula only with newPV within90days and PV kW>=usable kWh/4.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "capacity",
+          "passCondition": "20<usable kWh<=200; claim capacity=min(usable kWh,4*inverter output kW).",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "payment",
+          "passCondition": "Net payment>=5000 dollars ex GST per implementation. Current clause8.1.13 has no low-income/EEP exception equivalent to8.1.9.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "pdrs_bess5",
+      "scheme": "NSW-PDRS",
+      "activityCode": "BESS5",
+      "title": "Battery installation BESS5",
+      "sourceRefs": [
+        "pdrs_rule",
+        "pdrs_guide"
+      ],
+      "currentMappingFrom": "2026-09-07",
+      "sharedGroupRefs": [
+        "identity",
+        "nsw_site",
+        "nsw_nomination",
+        "completion",
+        "nsw_battery"
+      ],
+      "groups": [
+        {
+          "id": "site_claim",
+          "title": "Site and previous incentives",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "fields": [
+            {
+              "id": "previous_battery",
+              "prompt": "Has the relevant battery activity previously occurred at this site?",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "previous_details",
+              "prompt": "Record prior installations/claims and scope.",
+              "type": "record",
+              "required": true,
+              "when": "previous_battery == yes"
+            },
+            {
+              "id": "customer_prior_claim",
+              "prompt": "Record purchaser/owners-corporation declaration on prior installation/claims.",
+              "type": "declaration_reference",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "installer_prior_claim",
+              "prompt": "Record independent installer declaration on prior installation/claims.",
+              "type": "declaration_reference",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "factsheet",
+              "prompt": "Record applicable battery factsheet supplied with quote.",
+              "type": "delivery_receipt",
+              "required": true,
+              "when": "BESS1/3/4"
+            },
+            {
+              "id": "pv_90days",
+              "prompt": "Was new PV installed within90days of this battery?",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "pv_evidence",
+              "prompt": "Attach solar completion date, capacity and invoice evidence.",
+              "type": "evidence",
+              "required": true,
+              "when": "pv_90days == yes"
+            }
+          ]
+        },
+        {
+          "id": "bess5_technical",
+          "title": "Commercial battery technical evidence",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "fields": [
+            {
+              "id": "capacity_source",
+              "prompt": "Attach nominal-capacity specification, nameplate, design or signed specified contract.",
+              "type": "evidence",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "ul9540a",
+              "prompt": "Attach unit/module-level UL9540A pass certificates for each battery.",
+              "type": "evidence",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "traceability",
+              "prompt": "Record serials/system/container identifiers sufficient for recall and matching.",
+              "type": "equipment_repeat",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "approvals",
+              "prompt": "Attach all required planning/network approvals.",
+              "type": "evidence",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "licensed_compliance",
+              "prompt": "Attach licence and site-specific standards/compliance evidence.",
+              "type": "evidence",
+              "required": true,
+              "when": "always"
+            }
+          ]
+        },
+        {
+          "id": "business",
+          "title": "Business eligibility",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "fields": [
+            {
+              "id": "nonresidential",
+              "prompt": "Confirm battery is not in or at residential building/data centre.",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "no_previous_bess4_5",
+              "prompt": "Confirm neither BESS4 nor BESS5 previously occurred at site.",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "business_evidence",
+              "prompt": "Attach business/site-use evidence.",
+              "type": "evidence",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "pv_ratio",
+              "prompt": "Confirm newPV capacity for solar-linked rate.",
+              "type": "computed_decimal",
+              "required": true,
+              "when": "pv_90days == yes",
+              "unit": "kW"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "sharedEvidenceRef": "nsw_ccew"
+        },
+        {
+          "id": "battery_serials",
+          "purpose": "Geotagged battery/module and inverter context/serials matched to records.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "meter",
+          "purpose": "Meter/NMI and wiring or commissioning evidence of behind-meter installation.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "capacity",
+          "purpose": "Documented nominal capacity and calculated90% usable.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "ul9540a",
+          "purpose": "Unit/module-level pass evidence matched to exact battery.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "dra",
+          "purpose": "Internet/DRA capability specification or operational portal/command evidence.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "when": "always"
+        }
+      ],
+      "signatures": [
+        {
+          "sharedSignatureRef": "nsw_nomination"
+        },
+        {
+          "id": "purchaser",
+          "signerRole": "purchaser or authorised owners-corporation representative",
+          "purpose": "Confirm applicable prior-claim/site eligibility and receipt of Creditex ACP and complaints contacts.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "policy": "Installer must not act as the customer for this independent declaration."
+        },
+        {
+          "id": "installer",
+          "signerRole": "responsible installer",
+          "purpose": "Confirm independent prior-installation/claim checks, actual installation, licences, safety, commissioning and activity-specific declarations.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ]
+        }
+      ],
+      "gates": [
+        {
+          "id": "version",
+          "passCondition": "This current form uses implementation date>=2026-09-07; September1-6 selects July Rule snapshot.",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_july",
+            "pdrs_changes"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "meter",
+          "passCondition": "Eligible NSW network site, correct NMI and required behind-meter connection.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "site",
+          "passCondition": "Not residential/data centre; no previous BESS4/BESS5; all planning/network approvals.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "ratios",
+          "passCondition": "Usable kWh<=6*inverter output kW. Solar-linked formula only with newPV within90days and PV kW>=usable kWh/4.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "capacity",
+          "passCondition": "200<usable kWh<=30000; claim capacity=min(usable kWh,10000,4*inverter output kW).",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "technical",
+          "passCondition": "Documented capacity, UL9540A unit/module pass, internet/DRA capability, licensed installation and all approvals.",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        }
+      ],
+      "gaps": [],
+      "specificLimits": [
+        "Current guide supplies nominal-capacity recording and UL9540A unit/module method; not a missing-method blocker.",
+        "No specific BESS5 consumer factsheet mandate identified in current guide8.6.3; do not invent a provider document dependency.",
+        "Do not inherit SAA listing, 10-year warranty or AS/NZS5139 checklist wholesale from BESS1/3/4 where BESS5 instead requires suitably licensed work under applicable standards/legislation. Actual project obligations still apply."
+      ]
+    },
+    {
+      "id": "pdrs_bess2",
+      "scheme": "NSW-PDRS",
+      "activityCode": "BESS2",
+      "title": "Onboard existing battery with demand response aggregator",
+      "sourceRefs": [
+        "pdrs_rule",
+        "pdrs_guide",
+        "bess2_nomination",
+        "bess2_facts"
+      ],
+      "currentMappingFrom": "2026-09-07",
+      "sharedGroupRefs": [
+        "identity",
+        "nsw_site",
+        "nsw_battery"
+      ],
+      "groups": [
+        {
+          "id": "bess2_eligibility",
+          "title": "Customer and battery",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "fields": [
+            {
+              "id": "site_eligible",
+              "prompt": "Confirm Class1 residential or small-business site.",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "existing_battery",
+              "prompt": "Capture existing battery at this NMI.",
+              "type": "evidence",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "previous_bess2",
+              "prompt": "Has BESS2 already occurred at this NMI?",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "registered_life_support",
+              "prompt": "Is registered life-support equipment used at site?",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "life_support_present",
+              "prompt": "Is any life-support equipment listed in mandatory nomination used at site?",
+              "type": "yes_no",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "warranty_remaining",
+              "prompt": "Confirm remaining warranty and participation does not diminish it.",
+              "type": "warranty_evidence",
+              "required": true,
+              "when": "always",
+              "capture": [
+                "endDate",
+                "remainingYears",
+                "participationPermitted"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "bess2_contract",
+          "title": "Demand-response contract",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide",
+            "bess2_nomination"
+          ],
+          "fields": [
+            {
+              "id": "dra",
+              "prompt": "Select demand response aggregator.",
+              "type": "party",
+              "required": true,
+              "when": "always",
+              "capture": [
+                "legalName",
+                "ABN",
+                "contact",
+                "marketParticipantOrNetworkProvider",
+                "AEMORegistrationOrPrincipalAgreement"
+              ]
+            },
+            {
+              "id": "contract",
+              "prompt": "Attach signed demand-response contract.",
+              "type": "document_reference",
+              "required": true,
+              "when": "always",
+              "capture": [
+                "electricityAccountHolder",
+                "sameNMI",
+                "startDate",
+                "minimum12Months",
+                "termsVersion"
+              ]
+            },
+            {
+              "id": "onboarded_at",
+              "prompt": "When did battery become operationally connected and controllable?",
+              "type": "date",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "control_evidence",
+              "prompt": "Capture successful onboarding/control.",
+              "type": "evidence",
+              "required": true,
+              "when": "always",
+              "capture": [
+                "portalStatus",
+                "commandOrPingResponse",
+                "dispatchResponse",
+                "systemId",
+                "NMI",
+                "timestamp"
+              ]
+            },
+            {
+              "id": "factsheet",
+              "prompt": "Record BESS2 factsheet V2.2 supplied with quote before contract.",
+              "type": "delivery_receipt",
+              "required": true,
+              "when": "always"
+            }
+          ]
+        },
+        {
+          "id": "bess2_nomination",
+          "title": "Nominate Creditex for BESS2",
+          "sourceRefs": [
+            "bess2_nomination",
+            "pdrs_rule"
+          ],
+          "fields": [
+            {
+              "id": "creditex_acp",
+              "prompt": "Confirm Creditex scheme-specific legal entity, ABN, ACP accreditation and customer-care contacts.",
+              "type": "provider_snapshot",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "nomination",
+              "prompt": "Display complete mandatory BESS2 nomination on one unbroken page before signing.",
+              "type": "fixed_declaration",
+              "required": true,
+              "when": "always",
+              "help": "Prominence at least equal to key terms. Never replace with generic ESS/PDRS nomination."
+            },
+            {
+              "id": "signer",
+              "prompt": "Confirm electricity account holder or authorised representative.",
+              "type": "party",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "signed_at",
+              "prompt": "Capture actual signature time.",
+              "type": "signature_timestamp",
+              "required": true,
+              "when": "always"
+            },
+            {
+              "id": "nomination_copy",
+              "prompt": "Record completed nomination and contacts supplied within7days.",
+              "type": "delivery_receipt",
+              "required": true,
+              "when": "always"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "dra_status",
+          "purpose": "Current AEMO qualifying DRA status or qualifying principal agreement and registration.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "operational",
+          "purpose": "Successful control/onboarding; signed contract alone insufficient.",
+          "sourceRefs": [
+            "pdrs_guide"
+          ],
+          "when": "always"
+        },
+        {
+          "id": "facts",
+          "purpose": "Current BESS2 factsheet delivered before contract.",
+          "sourceRefs": [
+            "bess2_facts",
+            "pdrs_guide"
+          ],
+          "when": "always"
+        }
+      ],
+      "signatures": [
+        {
+          "id": "nomination",
+          "signerRole": "electricity account holder or authorised representative",
+          "purpose": "Nominate Creditex ACP with current exact BESS2 confirmations.",
+          "sourceRefs": [
+            "bess2_nomination"
+          ],
+          "contentPolicy": "Exact text/single-page display. Wet/electronic/typed name permitted with actual affirmative signing intent; preserve signed record."
+        },
+        {
+          "id": "contract",
+          "signerRole": "electricity account holder",
+          "purpose": "Agree to at least12months DRA control for same NMI.",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ]
+        }
+      ],
+      "gates": [
+        {
+          "id": "site",
+          "passCondition": "Class1 or small business; existing battery; no previous BESS2 at NMI; no Registered Life Support Equipment.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "capacity",
+          "passCondition": "2<usable kWh<=50; claim limited to28kWh.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "warranty",
+          "passCondition": "Each EUE>=6warranty years remaining; DRA participation cannot void/diminish warranty.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "nomination_date",
+          "passCondition": "Nomination within90days of actual onboarding; Creditex ACP most recent valid capacity holder at creation.",
+          "sourceRefs": [
+            "pdrs_rule"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        },
+        {
+          "id": "operational",
+          "passCondition": "Same NMI/account holder on>=12month DRA contract and operational control demonstrated.",
+          "sourceRefs": [
+            "pdrs_rule",
+            "pdrs_guide"
+          ],
+          "failure": "blocks certificate readiness; keep draft with precise missing condition"
+        }
+      ],
+      "gaps": [
+        {
+          "id": "unregistered_life_support",
+          "scope": "Unregistered life-support equipment present",
+          "sourceRefs": [
+            "pdrs_rule",
+            "bess2_nomination"
+          ],
+          "resolution": "Rule excludes Registered Life Support Equipment; fixed V2.1 nomination excludes life-support equipment more broadly. Do not rewrite fixed text or falsely sign. Resolve this specific branch with authoritative updated specification; other complete jobs unaffected."
+        }
+      ]
+    }
+  ],
+  "dateRules": [
+    {
+      "id": "nsw_current",
+      "fromDate": "2026-09-07",
+      "action": "Use September ESS/PDRS Rules. Current HEER4.9/PDRS3.1 guides publishedSeptember3. Keep publication date separate from Rule effective date.",
+      "sourceRefs": [
+        "ess_rule",
+        "pdrs_rule",
+        "heer_guide",
+        "pdrs_guide"
+      ]
+    },
+    {
+      "id": "bess3_5_transition",
+      "fromDate": "2026-09-01",
+      "toDate": "2026-09-06",
+      "action": "BESS3/4/5 commenced under July Rule clause1.1. IPART states July Rule applies throughSeptember6. Current clauses8.1.7/13/18 require date>=September7. Preserve July snapshot for six-day historical period; do not apply new per-implementation payment or other current changes retroactively.",
+      "sourceRefs": [
+        "pdrs_july",
+        "pdrs_rule",
+        "pdrs_changes"
+      ]
+    },
+    {
+      "id": "hvac2_election",
+      "fromDate": "2026-07-01",
+      "toDate": "2026-09-06",
+      "action": "Current clause11.13 permits July OR September HVAC2 calculation. Record explicitly selected version and all associated evidence/inputs.",
+      "sourceRefs": [
+        "pdrs_rule"
+      ]
+    },
+    {
+      "id": "battery_factor",
+      "fromDate": "2026-05-01",
+      "toDate": "2026-12-31",
+      "action": "SRES battery factor6.8; taper100/60/15percent at14/28/50kWh. Next factor5.7 fromJanuary2027. Bind signature quantity to actual installation date.",
+      "sourceRefs": [
+        "sres_calc"
+      ]
+    },
+    {
+      "id": "deeming",
+      "fromDate": "2026-01-01",
+      "toDate": "2026-12-31",
+      "action": "Five-year non-battery deeming. Water-heater10-year register quantity multiplier0.5; floor final entitlement.",
+      "sourceRefs": [
+        "sres_calc"
+      ]
+    }
+  ],
+  "remainingGaps": [
+    {
+      "id": "live_lists",
+      "scope": "each job/product/installer/provider",
+      "requirement": "Preserve actual-date product, licence, installer and Creditex registration/ACP activity approval evidence. A checkbox is not an eligibility lookup.",
+      "releaseImpact": "Missing job facts block claim readiness; not master authoring."
+    },
+    {
+      "id": "historic_forms",
+      "scope": "implementation before2026-09-07",
+      "requirement": "Map historical Rules/guides and explicit elections. This artifact is the current questionnaire; do not silently substitute its conditions for historic ones.",
+      "releaseImpact": "Historical claim readiness requires version mapping."
+    },
+    {
+      "id": "technical_standards",
+      "scope": "AS/NZS5141/5139/5149.3 and licensed electrical/plumbing work",
+      "requirement": "This map identifies regulator evidence requirements, not every clause of licensed standards. Actual design/commissioning must satisfy applicable standards and site conditions.",
+      "releaseImpact": "Generic yes/no attestation does not itself prove every technical clause."
+    },
+    {
+      "id": "fixed_text_rendering",
+      "scope": "mandatory nominations and compulsory statements",
+      "requirement": "Render exact mandatory wording from pinned official template/specification with Creditex legal profile. Signature-purpose summaries are not substitutes for legal text.",
+      "releaseImpact": "Blocks compliant signed output if only summaries implemented."
+    },
+    {
+      "id": "wider_catalogue",
+      "scope": "SRES wind/hydro, other NSW activities, ACT/SA and specialist programs",
+      "requirement": "Outside this follow-up14-pathway map; prior national-requirements.md identifies wider scope. Do not mark compliant by inheritance.",
+      "releaseImpact": "No all-program compliance assertion."
+    },
+    {
+      "id": "provider_scope",
+      "scope": "Creditex scheme-specific profile",
+      "requirement": "Actual legal entity/ABN and current scheme/activity accreditation must be configured. Creditex brand/login alone does not establish approval for every scheme.",
+      "releaseImpact": "Actual claim gate. No proprietary-template dependency or blanket human-publication gate."
+    }
+  ],
+  "sourcePrecedence": [
+    "enacted Rule and transitional provisions",
+    "current administrator mandatory specifications and approved lists",
+    "current method-guide evidence requirements",
+    "factsheets and summaries",
+    "commercial examples"
+  ],
+  "sourceConflicts": [
+    {
+      "id": "pdrs_guide_caps",
+      "sourceRefs": [
+        "pdrs_guide",
+        "pdrs_rule"
+      ],
+      "issue": "Appendix headings/footnotes retain some <200/<28 and per-battery wording. Current Rule says BESS3/4<=200; BESS2<=50; BESS3/4 payments per implementation.",
+      "handling": "Use current enacted Rule and retain precise source override."
+    },
+    {
+      "id": "summary_warranty",
+      "sourceRefs": [
+        "pdrs_changes",
+        "pdrs_rule"
+      ],
+      "issue": "Summary says BESS2 warranty removed; current ScheduleD still requires>=6years and no void/diminution. BESS1 still covers new inverters and exempts previously installed inverters.",
+      "handling": "Use exact Rule requirements."
+    },
+    {
+      "id": "old_bess5_summary",
+      "sourceRefs": [
+        "pdrs_changes",
+        "pdrs_guide"
+      ],
+      "issue": "Historic July summary says BESS5 recording method awaits consultation; current guide provides capacity sources and unit/module UL9540A pass method.",
+      "handling": "Remove missing-recording-method blanket blocker; job-specific technical evidence still required."
+    }
+  ],
+  "retention": [
+    {
+      "scheme": "SRES",
+      "requirement": "Retain supporting records at least5years after certificate creation. Signed records complete before creation; create within12months of installation.",
+      "sourceRefs": [
+        "sres_create"
+      ]
+    },
+    {
+      "scheme": "NSW-ESS",
+      "requirement": "At least6years, with named responsibilities and retrievable indexed document/version register.",
+      "sourceRefs": [
+        "ess_records"
+      ]
+    },
+    {
+      "scheme": "NSW-PDRS",
+      "requirement": "At least6years after record made; all evidence ready when monthly reports submitted; requested photos within7days.",
+      "sourceRefs": [
+        "pdrs_guide"
+      ]
+    }
+  ]
+}

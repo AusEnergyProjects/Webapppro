@@ -9,7 +9,7 @@ import {
   validateCreditexNswGovernedWorkPackContent,
 } from "../src/data/creditex-nsw-governed-work-pack-content.ts";
 import {
-  CREDITEX_NSW_PROGRAM_DEFINITIONS,
+  CREDITEX_NSW_JULY_PROGRAM_DEFINITIONS as CREDITEX_NSW_PROGRAM_DEFINITIONS,
 } from "../src/lib/creditex-nsw-program-catalogue.ts";
 
 const manifestUrl = new URL(

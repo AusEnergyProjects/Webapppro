@@ -1,5 +1,7 @@
 "use client";
 
+import dynamic from "next/dynamic";
+
 /* eslint-disable @next/next/no-img-element */
 
 import "./AdminOperationsPortal.css";
@@ -24,7 +26,7 @@ import { AdminHandoverReview } from "@/components/AdminHandoverReview";
 import { AdminAssetSafety } from "@/components/AdminAssetSafety";
 import { AdminAssetGovernance } from "@/components/AdminAssetGovernance";
 import { AdminFormTemplates } from "@/components/AdminFormTemplates";
-import { CreditexActivityWorkPackGovernance } from "@/components/CreditexActivityWorkPackGovernance";
+const CreditexActivityWorkPackGovernance = dynamic(() => import("./CreditexActivityWorkPackGovernance").then((module) => module.CreditexActivityWorkPackGovernance), { loading: () => <p role="status">Loading master forms...</p> });
 import { CreditexOutputActions } from "@/components/CreditexOutputActions";
 import { AdminUsabilityPilot } from "@/components/AdminUsabilityPilot";
 import { AdminPerformancePanel } from "@/components/AdminPerformancePanel";

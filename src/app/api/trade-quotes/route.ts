@@ -5,7 +5,7 @@ import {
   publicLeadIssueAccessGuard,
   publicLeadQuoteAccessFingerprint,
 } from "@/lib/public-lead-quote-workflow.mjs";
-import { normaliseTradeQuoteLineGroup } from "@/lib/trade-quote";
+import { defaultTradeQuoteTotal, normaliseTradeQuoteLineGroup } from "@/lib/trade-quote";
 import { normaliseQuoteChoices } from "@/lib/trade-quote-options";
 import { lowersAuthoritativeTotal, quoteInputAppliesDiscount, quoteInputDiscountMagnitude } from "@/lib/trade-discount-permissions";
 import { priceBookItemsForQuote, resolvePriceBookQuoteLines } from "@/lib/trade-price-book-server";
@@ -409,13 +409,9 @@ async function resolveLineGroup(ownerUid: string, rawLines: unknown, allowEmpty 
 }
 
 function choiceDefaultTotal(base: ResolvedGroup, choices: Array<{ input: ReturnType<typeof normaliseQuoteChoices>[number]; resolved: ResolvedGroup }>) {
-  const selected = new Map<string, typeof choices[number]>();
-  for (const choice of choices.filter((item) => item.input.kind !== "addon")) {
-    const key = `${choice.input.kind}:${choice.input.groupKey}`;
-    const current = selected.get(key);
-    if (!current || choice.input.recommended) selected.set(key, choice);
-  }
-  return base.calculated.totalCents + [...selected.values()].reduce((sum, item) => sum + item.resolved.calculated.totalCents, 0);
+  return defaultTradeQuoteTotal(base.calculated.totalCents, choices.map(({ input, resolved }) => ({
+    kind: input.kind, groupKey: input.groupKey, recommended: input.recommended, totalCents: resolved.calculated.totalCents,
+  })));
 }
 
 function appendItems(db: D1Database, statements: D1PreparedStatement[], ownerUid: string,
@@ -580,6 +576,9 @@ export async function POST(request: Request) {
       const validUntil = cleanAdminText(body.validUntil, 10); if (validUntil && !DATE_PATTERN.test(validUntil)) return adminJson({ ok: false, error: "Choose a valid quote expiry date." }, 400);
       const terms = cleanAdminText(body.terms, 4000); const customerMessage = cleanAdminText(body.customerMessage, 1200);
       const quoteId = String(quote?.id || crypto.randomUUID()); let versionNumber = Number(quote?.current_version_number || 1); let versionId = ""; const statements: D1PreparedStatement[] = [];
+      if (!quote && body.expectedVersionId !== undefined && body.expectedVersionId !== "") {
+        return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This quote changed. Reload before saving." }, 409);
+      }
       let draftClaimIndex = -1;
       if (!quote) {
         const quoteNumber = `Q-${String(job.work_number).replace(/^JOB-/, "")}`;
@@ -601,6 +600,11 @@ export async function POST(request: Request) {
           : null;
         if (pendingDraft?.status === "issuing") throw new Error("QUOTE_ISSUE_IN_PROGRESS");
         const editableVersion = current.status === "draft" ? current : pendingDraft;
+        const loadedVersion = editableVersion || current;
+        if (body.expectedVersionId !== undefined && (body.expectedVersionId !== loadedVersion.id
+          || body.expectedUpdatedAt !== loadedVersion.updated_at)) {
+          return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This quote changed in another session. Reload before saving your edits." }, 409);
+        }
         if (editableVersion) {
           versionId = String(editableVersion.id);
           versionNumber = Number(editableVersion.version_number);
@@ -743,6 +747,10 @@ export async function POST(request: Request) {
         WHERE version.id = ? AND version.quote_id = ? AND version.firebase_uid = ? LIMIT 1`)
         .bind(requestedVersionId, quote.id, access.ownerUid).first<Row>();
       if (!requestedVersion) throw new Error("QUOTE_NOT_FOUND");
+      if (requestedVersion.status === "draft" && body.expectedUpdatedAt !== undefined
+        && cleanAdminText(body.expectedUpdatedAt, 40) !== requestedVersion.updated_at) {
+        return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This quote changed after your preview. Reload and review it before sending." }, 409);
+      }
       if (requestedVersion.status === "issued") {
         const delivery = await latestTradeQuoteDeliveryStatus(
           db,
@@ -790,6 +798,9 @@ export async function POST(request: Request) {
         WHERE id = ? AND quote_id = ? AND firebase_uid = ? AND status = 'draft'`)
         .bind(requestedVersionId, quote.id, access.ownerUid).first<Row>();
       if (!version) throw new Error("IMMUTABLE_VERSION");
+      if (body.expectedUpdatedAt !== undefined && body.expectedUpdatedAt !== version.updated_at) {
+        return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This quote changed after your preview. Reload and review it before sending." }, 409);
+      }
       const customerEmail = job.public_lead_enquiry
         ? acceptedPublicEmail(job).trim().toLowerCase()
         : String(version.acceptance_email || "").trim().toLowerCase();
@@ -815,7 +826,7 @@ export async function POST(request: Request) {
         WHERE id = ? AND firebase_uid = ? AND status = 'draft'
           AND updated_at = ?`)
         .bind(issueClaimToken, issueTimestamp, now, version.id, access.ownerUid,
-          version.updated_at)
+          body.expectedUpdatedAt === undefined ? version.updated_at : body.expectedUpdatedAt)
         .run();
       if (Number(issueClaim.meta.changes || 0) !== 1) {
         throw new Error("QUOTE_ISSUE_IN_PROGRESS");

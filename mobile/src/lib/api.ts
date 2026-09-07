@@ -57,13 +57,15 @@ function bytesToHex(bytes: Uint8Array) {
 }
 
 async function fetchJson(url: string, init: RequestInit) {
-  if (init.signal) return fetch(url, init);
   const controller = new AbortController();
+  const abort = () => controller.abort();
+  init.signal?.addEventListener('abort', abort, { once: true });
+  if (init.signal?.aborted) controller.abort();
   const timeout = setTimeout(() => controller.abort(), JSON_REQUEST_TIMEOUT_MS);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } catch (error) {
-    if (controller.signal.aborted) {
+    if (controller.signal.aborted && !init.signal?.aborted) {
       throw new ApiError(
         'TLink could not reach the secure service. Check reception and try again.',
         408,
@@ -73,6 +75,7 @@ async function fetchJson(url: string, init: RequestInit) {
     throw error;
   } finally {
     clearTimeout(timeout);
+    init.signal?.removeEventListener('abort', abort);
   }
 }
 

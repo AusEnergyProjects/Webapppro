@@ -78,7 +78,7 @@ test("the field calendar, self-intake, update control and TLink app entry remain
   assert.match(calendar, /MY SCHEDULE/);
   assert.match(calendar, /router\.push\('\/new-job'\)/);
   assert.match(newJob, /rentalInspectionModulesJson/);
-  assert.match(newJob, /assigneeMemberId: user\?\.memberId/);
+  assert.match(newJob, /priority: \'standard\', assigneeMemberId/);
   assert.match(signIn, /accessibilityLabel="Open TLink settings"/);
   assert.match(signIn, /Check for update/);
   assert.match(signIn, /Open secure install page/);

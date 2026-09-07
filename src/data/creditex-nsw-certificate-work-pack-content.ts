@@ -8,7 +8,7 @@ import {
   type GovernmentActivityCalculationMethod,
 } from "../lib/australian-certificate-calculation-catalogue.ts";
 import {
-  CREDITEX_NSW_PROGRAM_DEFINITIONS,
+  CREDITEX_NSW_JULY_PROGRAM_DEFINITIONS as CREDITEX_NSW_PROGRAM_DEFINITIONS,
   type CreditexNswActivityDefinition,
   type CreditexNswInputDefinition,
 } from "../lib/creditex-nsw-program-catalogue.ts";
@@ -963,7 +963,7 @@ function createCandidate(
       outputUnit,
       localCatalogueState: method.state,
       localCataloguePathway: method.pathway,
-      localCatalogueFormulaKeySignal: method.formulaKey,
+      localCatalogueFormulaKeySignal: definitions.map((definition) => definition.formulaKey).join("+") || method.formulaKey,
       formulaSignals: formulaSignals(programCode, definitions),
       exactOfficialGoldenVectorState: "missing",
       independentReviewState: "missing",
@@ -1012,13 +1012,14 @@ function createCandidate(
   };
 }
 
+// Retained 15 August source snapshot. September successors have their own source library.
 export const CREDITEX_NSW_CERTIFICATE_WORK_PACK_CONTENT_CANDIDATES =
   CREDITEX_NSW_CERTIFICATE_PROGRAM_CODES.flatMap((programCode) =>
     governmentActivityTemplates(programCode)
       .filter(
         (template) =>
-          template.catalogueState === "current" ||
-          template.catalogueState === "limited",
+          (template.catalogueState === "current" || template.catalogueState === "limited")
+          && !(template.programCode === "NSW-PDRS" && ["BESS3", "BESS4", "BESS5"].includes(template.registryActivityCode)),
       )
       .map(createCandidate),
   ) as readonly CreditexNswCertificateWorkPackContentCandidate[];
@@ -1053,8 +1054,8 @@ export function validateCreditexNswCertificateWorkPackContent(
     (programCode) =>
       governmentActivityTemplates(programCode).filter(
         (template) =>
-          template.catalogueState === "current" ||
-          template.catalogueState === "limited",
+          (template.catalogueState === "current" || template.catalogueState === "limited")
+          && !(template.programCode === "NSW-PDRS" && ["BESS3", "BESS4", "BESS5"].includes(template.registryActivityCode)),
       ),
   );
   const expectedIds = expectedTemplates.map((template) => template.templateId);

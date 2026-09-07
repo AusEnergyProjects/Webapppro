@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   consolidateTradeQuotePercentDiscountLines,
+  defaultTradeQuoteTotal,
   normaliseTradeQuoteLineGroup,
   moveTradeQuoteLine,
   overallTradeQuoteDiscountKind,
@@ -17,6 +18,18 @@ import {
 } from "../src/lib/trade-quote.ts";
 
 const clean = (value) => String(value || "").trim().slice(0, 500);
+
+test("field quote totals include required default options and exclude unselected add-ons", () => {
+  const alternatives = [
+    { kind: "option", groupKey: "heater", recommended: false, totalCents: 99000 },
+    { kind: "option", groupKey: "heater", recommended: true, totalCents: 110000 },
+    { kind: "option", groupKey: "controls", recommended: false, totalCents: 22000 },
+    { kind: "addon", groupKey: "extra", recommended: true, totalCents: 55000 },
+  ];
+  assert.equal(defaultTradeQuoteTotal(0, alternatives), 132000);
+  assert.equal(defaultTradeQuoteTotal(33000, alternatives), 165000);
+  assert.equal(defaultTradeQuoteTotal(33000, []), 33000);
+});
 const ui = fs.readFileSync(new URL("../src/components/TradeQuotePanel.tsx", import.meta.url), "utf8");
 const css = fs.readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
 const pdf = fs.readFileSync(new URL("../src/lib/trade-quote-pdf.mjs", import.meta.url), "utf8");

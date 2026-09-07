@@ -59,7 +59,7 @@ async function prepared(ownerUid: string, body: Row) {
       .bind(jobTemplateId, ownerUid, serviceCategory).first<Row>();
     if (!template) throw new Error("INVALID_JOB_PACKET");
   }
-  const publishedForms = await publishedTradeFormTemplatesFor(serviceCategory); const formMap = new Map(publishedForms.map((form) => [`${form.key}:${form.version}`, form]));
+  const publishedForms = await publishedTradeFormTemplatesFor(serviceCategory, undefined, ownerUid); const formMap = new Map(publishedForms.map((form) => [`${form.key}:${form.version}`, form]));
   const rawForms = Array.isArray(body.forms) ? body.forms : []; if (rawForms.length > 20) throw new Error("INVALID_JOB_PACKET_FORMS");
   const formKeys = new Set<string>(); const forms = rawForms.map((raw) => {
     if (!raw || typeof raw !== "object") throw new Error("INVALID_JOB_PACKET_FORMS"); const row = raw as Row;
@@ -79,7 +79,7 @@ export async function GET(request: Request) {
       jobPacketLibrary(access.ownerUid), priceItems(access.ownerUid),
       getD1().prepare(`SELECT id, name, service_category, task_titles FROM trade_crm_job_templates
         WHERE firebase_uid = ? AND record_status = 'active' ORDER BY name COLLATE NOCASE LIMIT 60`).bind(access.ownerUid).all<Row>(),
-      publishedTradeFormTemplatesFor(serviceCategory),
+      publishedTradeFormTemplatesFor(serviceCategory, undefined, access.ownerUid),
     ]);
     return adminJson({ ok: true, packets, priceBookItems: items,
       jobTemplates: templates.results.map((row) => ({ id: String(row.id), name: String(row.name), serviceCategory: String(row.service_category), taskCount: (() => { try { const value = JSON.parse(String(row.task_titles || "[]")); return Array.isArray(value) ? value.length : 0; } catch { return 0; } })() })),

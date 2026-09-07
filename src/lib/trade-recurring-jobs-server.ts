@@ -71,7 +71,7 @@ export async function generateDueServiceJobs(db: D1Database, options: GenerateOp
       const protectedJob = row.original_source_type === "opportunity" || row.customer_source === "platform_private";
       const customerSource = protectedJob ? "platform_private" : String(row.customer_source || "internal");
       const customerId = protectedJob ? "" : String(row.crm_customer_id || "");
-      const serviceForm = (await publishedTradeFormTemplatesFor(String(row.service_category || "other"), db))
+      const serviceForm = (await publishedTradeFormTemplatesFor(String(row.service_category || "other"), db, String(row.firebase_uid)))
         .filter((template) => template.key === "service-visit-support")
         .sort((left, right) => right.version - left.version)[0];
       await db.batch([

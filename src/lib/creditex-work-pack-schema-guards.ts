@@ -589,12 +589,32 @@ const SRES_D1_EXPRESSION_DEPTH_GUARD_SQL = new Map<string, string>([
   ),
 ]);
 
+// Master publication and its schema-to-source mapping are authorised editor actions.
+// The retained official source artifact still requires its independent verification.
+const MASTER_AUTHOR_SAVE_GUARDS = new Set([
+  "compliance_work_pack_version_publish_guard", "compliance_work_pack_source_review_guard",
+]);
+function authorSaveGuard(definition: { name: string; sql: string }) {
+  if (!MASTER_AUTHOR_SAVE_GUARDS.has(definition.name)) return definition;
+  const sql = definition.sql
+    .replace(/  SELECT CASE WHEN NEW\.`reviewed_by_uid` = NEW\.`authored_by_uid`\n    THEN RAISE\(ABORT, 'COMPLIANCE_WORK_PACK_INDEPENDENT_REVIEWER_REQUIRED'\) END;\n/, "")
+    .replace(/      AND NEW\.`reviewed_by_uid` <> (?:NEW\.`created_by_uid`|version\.`authored_by_uid`)\n/g, "")
+    .replace(/reviewer\.`role` IN \('admin', 'reviewer'\)/g, "reviewer.`role` IN ('admin', 'case_manager', 'reviewer')")
+    .replace(/administrator\.`role` IN \('owner', 'admin', 'reviewer'\)/g, "administrator.`role` IN ('owner', 'admin')")
+    .replace(/ *AND trim\(reviewer\.`governance_identity_verified_by_uid`\) <> ''\n *AND reviewer\.`governance_identity_verified_by_uid` <>\n *reviewer\.`firebase_uid`\n/g, "")
+    .replace(/  SELECT CASE WHEN EXISTS \(\n    SELECT 1\n    FROM `compliance_activity_work_pack_versions` existing[\s\S]*?'COMPLIANCE_WORK_PACK_EFFECTIVE_RANGE_OVERLAP'\) END;\n/, "")
+    .replaceAll("COMPLIANCE_WORK_PACK_INDEPENDENT_REVIEWER_REQUIRED", "COMPLIANCE_WORK_PACK_AUTHOR_REQUIRED")
+    .replaceAll("COMPLIANCE_WORK_PACK_SOURCE_INDEPENDENT_REVIEW_REQUIRED", "COMPLIANCE_WORK_PACK_SOURCE_AUTHOR_REQUIRED");
+  if (sql === definition.sql) throw new Error(`MASTER_AUTHOR_SAVE_GUARD_UNCHANGED:${definition.name}`);
+  return { name: definition.name, sql };
+}
+
 // Keep the exact superseded SQL so an already-initialised database can move
 // from the original, D1-incompatible trigger bodies to the flattened guards. Only
 // an exact known predecessor is replaceable; every other mismatch still fails
 // closed as possible schema drift or tampering.
 export const CREDITEX_WORK_PACK_SCHEMA_GUARD_REPLACEMENT_DEFINITIONS =
-  [...SRES_D1_EXPRESSION_DEPTH_GUARD_SQL.keys()].map((name) => {
+  [...SRES_D1_EXPRESSION_DEPTH_GUARD_SQL.keys(), ...MASTER_AUTHOR_SAVE_GUARDS].map((name) => {
     const previous = CREDITEX_WORK_PACK_SCHEMA_GUARD_BASE_DEFINITIONS.find(
       (definition) => definition.name === name,
     );
@@ -613,10 +633,11 @@ const CREDITEX_WORK_PACK_SCHEMA_GUARD_REPLACEMENT_SQL = new Map(
 export const CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS =
   CREDITEX_WORK_PACK_SCHEMA_GUARD_BASE_DEFINITIONS.flatMap((definition) =>
     SRES_D1_EXPRESSION_DEPTH_GUARD_DEFINITIONS.get(definition.name)
-      ?? [definition],
+      ?? [authorSaveGuard(definition)],
   );
 
 export const CREDITEX_WORK_PACK_REQUIRED_SCHEMA_TABLES = [
+  "compliance_master_save_schema",
   "compliance_activity_work_pack_versions",
   "compliance_activity_work_pack_source_bindings",
   "compliance_activity_work_pack_instances",

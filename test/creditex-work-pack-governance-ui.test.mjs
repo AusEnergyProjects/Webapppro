@@ -81,9 +81,9 @@ test("the builder exposes the complete generic activity workflow vocabulary", ()
   assert.match(css, /\.previewIdentityBoundary/);
 });
 
-test("draft editing and independent governance use exact hash CAS actions", () => {
+test("master saving and source or calculation governance use exact hash CAS actions", () => {
   assert.match(builder, /expectedSchemaSha256/);
-  assert.match(builder, /action: draft\.id \? "update_draft" : "create_draft"/);
+  assert.match(builder, /action: hasSources \? "save_master" : draft\.id \? "update_draft" : "create_draft"/);
   assert.match(builder, /action: "create_sourced_draft"/);
   assert.match(builder, /forms-sourced-draft:\$\{crypto\.randomUUID\(\)\}/);
   assert.match(builder, /originKind === "source_candidate"/);

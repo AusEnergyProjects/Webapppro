@@ -5,7 +5,7 @@ import {
   type CreditexNswCertificateProgramCode,
 } from "./creditex-nsw-certificate-work-pack-content.ts";
 import {
-  CREDITEX_NSW_PROGRAM_DEFINITIONS,
+  CREDITEX_NSW_JULY_PROGRAM_DEFINITIONS as CREDITEX_NSW_PROGRAM_DEFINITIONS,
   type CreditexNswActivityDefinition,
 } from "../lib/creditex-nsw-program-catalogue.ts";
 

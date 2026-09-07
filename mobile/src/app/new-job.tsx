@@ -5,6 +5,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Modal, PanResponder, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { FieldButton } from '@/components/field-button';
+import { FieldSelect } from '@/components/field-select';
+import { FieldDatePicker } from '@/components/field-date-picker';
+import { JobWorkSelection, type FieldJobOptions, type PlannedFieldActivity } from '@/components/job-work-selection';
 import { Screen } from '@/components/screen';
 import { ApiError, apiRequest } from '@/lib/api';
 import { colours, radius, spacing } from '@/lib/theme';
@@ -53,6 +56,14 @@ export default function NewJobScreen() {
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [duration, setDuration] = useState(90);
   const [selectedModules, setSelectedModules] = useState<string[]>(['minimum_standards']);
+  const [serviceCategory, setServiceCategory] = useState('rental-inspection');
+  const [plannedActivities, setPlannedActivities] = useState<PlannedFieldActivity[]>([]);
+  const [jobOptions, setJobOptions] = useState<FieldJobOptions | null>(null);
+  const [optionsError, setOptionsError] = useState('');
+  const [loadedOptionsKey, setLoadedOptionsKey] = useState('');
+  const [optionsAttempt, setOptionsAttempt] = useState(0);
+  const [assigneeMemberId, setAssigneeMemberId] = useState(user?.memberId || '');
+  const [assigneeSearch, setAssigneeSearch] = useState('');
   const [firstName, setFirstName] = useState(''); const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState(''); const [phone, setPhone] = useState('');
   const [addressLine1, setAddressLine1] = useState(''); const [addressLine2, setAddressLine2] = useState('');
@@ -70,7 +81,27 @@ export default function NewJobScreen() {
   const [customerLookupBusy, setCustomerLookupBusy] = useState(false); const [emailCalendarInvite, setEmailCalendarInvite] = useState(false);
   const [notes, setNotes] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
 
+  const optionsKey = JSON.stringify([addressState, serviceCategory, assigneeSearch, assigneeMemberId, optionsAttempt]);
+  const optionsLoading = loadedOptionsKey !== optionsKey;
   useEffect(() => () => { addressResolveController.current?.abort(); localityLookupController.current?.abort(); }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setOptionsError('');
+      const query = new URLSearchParams({ state: addressState, serviceCategory, search: assigneeSearch, selectedMemberId: assigneeMemberId });
+      void apiRequest<FieldJobOptions>(`/api/field/job-options?${query}`, { signal: controller.signal })
+        .then((result) => {
+          if (controller.signal.aborted) return;
+          setJobOptions(result);
+          setAssigneeMemberId((current) => result.assignees.some((item) => item.id === current) ? current
+            : result.assignees.some((item) => item.id === result.memberId) ? result.memberId : '');
+        })
+        .catch((caught) => { if (!controller.signal.aborted) { setJobOptions(null); setOptionsError(caught instanceof Error ? caught.message : 'Work options could not be loaded.'); } })
+        .finally(() => { if (!controller.signal.aborted) setLoadedOptionsKey(optionsKey); });
+    }, 200);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [addressState, serviceCategory, assigneeSearch, assigneeMemberId, optionsAttempt, optionsKey]);
 
   useEffect(() => {
     if (suppressAddressLookup.current) {
@@ -199,11 +230,14 @@ export default function NewJobScreen() {
 
   async function createJob() {
     setError('');
-    if (!selectedModules.length) return setError('Choose at least one assessment or safety-check workflow.');
+    if (!jobOptions || optionsLoading) return setError('Wait for current work and team options to load.');
+    if (serviceCategory === 'rental-inspection' && !selectedModules.length) return setError('Choose at least one assessment or safety-check workflow.');
+    if (!assigneeMemberId) return setError('Choose an available worker for this work type.');
+    if (plannedActivities.some((selected) => !jobOptions.activities.some((item) => item.id === selected.activityTemplateId))) return setError('Remove any activity that is no longer available for this property.');
     if (!selectedCustomer && (!firstName.trim() || !lastName.trim() || !email.trim() || phone.replace(/\D/g, '').length < 8)) return setError('Add the customer name, email and valid mobile number.');
     if (selectedCustomer && !selectedCustomer.serviceSiteId) return setError('This saved customer needs a property address before a field job can be added.');
     if (!addressLine1.trim() || !suburb.trim() || !addressState || !/^\d{4}$/.test(postcode)) return setError('Add the street, suburb, state and four-digit postcode.');
-    if (addressState !== 'VIC') return setError('Rental inspection jobs require a Victorian service address.');
+    if (serviceCategory === 'rental-inspection' && addressState !== 'VIC') return setError('Rental inspection jobs require a Victorian service address.');
     if (localities.length > 1 && !localities.some((item) => item.suburb === suburb)) return setError('Choose the correct suburb for this postcode.');
     addressResolveController.current?.abort(); addressResolveController.current = null; suppressAddressLookup.current = true;
     setAddressPredictionSession({ token: Crypto.randomUUID(), query: '', predictions: [] }); setAddressLookupBusy(false);
@@ -213,18 +247,20 @@ export default function NewJobScreen() {
         method: 'POST', body: JSON.stringify({
           action: 'create_scheduled_job', customerMode: selectedCustomer ? 'existing' : 'new', crmCustomerId: selectedCustomer?.customerId || '',
           serviceSiteMode: selectedCustomer ? 'existing' : 'new', serviceSiteId: selectedCustomer?.serviceSiteId || '', customerType: selectedCustomer?.customerType || 'residential',
-          firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim().toLowerCase(), phone: phone.trim(), siteLabel: 'Rental property',
+          firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim().toLowerCase(), phone: phone.trim(), siteLabel: 'Service property',
           addressLine1: addressLine1.trim(), addressLine2: addressLine2.trim(), suburb: suburb.trim(), addressState, postcode,
           addressEntryMode: addressProvenance.entryMode, addressProvider: addressProvenance.provider, addressProviderReference: addressProvenance.providerReference,
           addressFormatted: addressProvenance.formattedAddress, addressSelectionProof: addressProvenance.selectionProof,
-          serviceCategory: 'rental-inspection', buildingType: 'house_townhouse', priority: 'standard', assigneeMemberId: user?.memberId,
+          serviceCategory, buildingType: 'house_townhouse', priority: 'standard', assigneeMemberId,
+          complianceIntentMode: plannedActivities.length ? 'planned' : 'none',
+          complianceActivitiesJson: JSON.stringify(plannedActivities),
           startsAt: `${selectedDate}T${time}`, durationMinutes: duration, appointmentType: 'site_visit', appointmentNotes: notes.trim(), description: notes.trim(),
-          rentalInspectionModulesJson: JSON.stringify(selectedModules), emailCalendarInvite,
+          rentalInspectionModulesJson: serviceCategory === 'rental-inspection' ? JSON.stringify(selectedModules) : '[]', emailCalendarInvite,
         }),
       });
       await syncNow();
       const inviteMessage = result.calendarInvite?.requested ? `\n\n${result.calendarInvite.message}` : '';
-      Alert.alert('Job added', `${result.workNumber || 'The new job'} is now in your schedule.${inviteMessage}`, [{ text: 'Open schedule', onPress: () => router.replace('/(tabs)/work') }]);
+      Alert.alert('Job added', `${result.workNumber || 'The new job'} is saved in the selected worker's schedule.${inviteMessage}`, [{ text: 'Open schedule', onPress: () => router.replace('/(tabs)/work') }]);
     } catch (caught) {
       const matches = caught instanceof ApiError && Array.isArray(caught.payload.duplicateCandidates) ? caught.payload.duplicateCandidates as CustomerCandidate[] : [];
       if (matches.length) { setCustomerCandidates(matches); setError('This customer is already saved. Choose the correct saved customer and property below.'); }
@@ -234,11 +270,8 @@ export default function NewJobScreen() {
 
   const timeSelection = timeParts(time); const lockedToSavedCustomer = Boolean(selectedCustomer);
   return <Screen>
-    <View style={styles.hero}><Text style={styles.eyebrow}>QUICK JOB</Text><Text style={styles.heading}>Add it without the paperwork maze</Text><Text style={styles.intro}>The job is assigned to you. The chosen workflows open from the saved job.</Text></View>
-    <View style={styles.card}><Text style={styles.cardTitle}>1. Choose the work</Text><Text style={styles.help}>Minimum standards starts selected, but every option can be switched on or off.</Text>
-      {modules.map((module) => { const selected = selectedModules.includes(module.key); return <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: selected }} key={module.key} onPress={() => toggleModule(module.key)} style={[styles.choice, selected && styles.choiceSelected]}><MaterialCommunityIcons name={module.icon} size={24} color={selected ? colours.green : colours.muted} /><Text style={styles.choiceText}>{module.label}</Text><MaterialCommunityIcons name={selected ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={25} color={selected ? colours.green : colours.muted} /></Pressable>; })}
-    </View>
-    <View style={styles.card}><Text style={styles.cardTitle}>2. Customer and property</Text>
+    <View style={styles.hero}><Text style={styles.eyebrow}>QUICK JOB</Text><Text style={styles.heading}>New job</Text><Text style={styles.intro}>Customer, work and appointment in one place.</Text></View>
+    <View style={styles.card}><Text style={styles.cardTitle}>1. Customer and property</Text>
       {selectedCustomer ? <View style={styles.selectedCustomer}><View style={styles.selectedCustomerCopy}><Text style={styles.selectedCustomerLabel}>SAVED CUSTOMER</Text><Text style={styles.selectedCustomerName}>{selectedCustomer.displayName}</Text><Text style={styles.help}>{selectedCustomer.customerNumber} | {selectedCustomer.siteLabel || 'Saved property'}</Text></View><Pressable accessibilityRole="button" onPress={clearSelectedCustomer} style={styles.changeButton}><Text style={styles.changeButtonText}>Change</Text></Pressable></View> : null}
       <View style={styles.row}><Field editable={!lockedToSavedCustomer} label="First name" value={firstName} onChangeText={setFirstName} /><Field editable={!lockedToSavedCustomer} label="Last name" value={lastName} onChangeText={setLastName} /></View>
       <Field editable={!lockedToSavedCustomer} label="Email" value={email} onChangeText={changeEmail} keyboardType="email-address" autoCapitalize="none" />
@@ -257,14 +290,29 @@ export default function NewJobScreen() {
       {localities.length > 1 && !lockedToSavedCustomer ? <View style={styles.suburbChoices}>{localities.map((item) => <Pressable accessibilityRole="radio" accessibilityState={{ selected: suburb === item.suburb }} key={item.suburb} onPress={() => changeSuburb(item.suburb)} style={[styles.suburbChoice, suburb === item.suburb && styles.suburbChoiceSelected]}><Text style={[styles.suburbChoiceText, suburb === item.suburb && styles.suburbChoiceTextSelected]}>{item.suburb}</Text></Pressable>)}</View> : null}
       <Field editable={!lockedToSavedCustomer && /^\d{4}$/.test(postcode) && !localityBusy && localities.length === 0} label="Suburb" value={suburb} onChangeText={changeSuburb} />
     </View>
+    <View style={styles.card}><Text style={styles.cardTitle}>2. Choose the work</Text>
+      {optionsLoading ? <Text style={styles.help}>Loading current work and team options...</Text> : null}
+      {optionsError ? <><Text style={styles.error}>{optionsError}</Text><FieldButton variant="secondary" onPress={() => setOptionsAttempt((value) => value + 1)}>Retry work options</FieldButton></> : null}
+      {jobOptions ? <JobWorkSelection options={jobOptions} serviceCategory={serviceCategory} onServiceChange={setServiceCategory} activities={plannedActivities} onActivitiesChange={setPlannedActivities} /> : null}
+      {serviceCategory === 'rental-inspection' ? <>
+        <Text style={styles.help}>Choose the inspections needed for this property.</Text>
+      {modules.map((module) => { const selected = selectedModules.includes(module.key); return <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: selected }} key={module.key} onPress={() => toggleModule(module.key)} style={[styles.choice, selected && styles.choiceSelected]}><MaterialCommunityIcons name={module.icon} size={24} color={selected ? colours.green : colours.muted} /><Text style={styles.choiceText}>{module.label}</Text><MaterialCommunityIcons name={selected ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={25} color={selected ? colours.green : colours.muted} /></Pressable>; })}
+      </> : null}
+    </View>
     <View style={styles.card}><Text style={styles.cardTitle}>3. Appointment</Text>
+      {jobOptions?.permissions.canAssignJobs ? <>
+        <Field label="Find a worker" value={assigneeSearch} onChangeText={setAssigneeSearch} />
+        <FieldSelect label="Assign to" value={assigneeMemberId} disabled={optionsLoading} options={jobOptions.assignees.map((item) => ({ value: item.id, label: item.displayName }))} onChange={setAssigneeMemberId} />
+        {jobOptions.moreAssignees ? <Text style={styles.help}>Search by name to find more workers.</Text> : null}
+      </> : <Text style={styles.help}>Assigned to {jobOptions?.assignees.find((item) => item.id === assigneeMemberId)?.displayName || 'your account'}.</Text>}
       <View style={styles.dateStrip}>{dates.map((date) => { const key = dateKey(date); const selected = key === selectedDate; return <Pressable accessibilityRole="radio" accessibilityState={{ selected }} key={key} onPress={() => setSelectedDate(key)} style={[styles.date, selected && styles.dateSelected]}><Text style={[styles.dateDay, selected && styles.selectedText]}>{date.toLocaleDateString('en-AU', { weekday: 'short' })}</Text><Text style={[styles.dateNumber, selected && styles.selectedText]}>{date.getDate()}</Text></Pressable>; })}</View>
+      <FieldDatePicker label="Appointment date" value={selectedDate} minimum={dateKey(new Date())} onChange={setSelectedDate} disabled={busy} />
       <Text style={styles.label}>Start time</Text><Pressable accessibilityRole="button" accessibilityLabel={`Start time ${displayTime(time)}`} onPress={() => setTimePickerOpen(true)} style={styles.timeField}><MaterialCommunityIcons name="clock-outline" size={24} color={colours.green} /><View style={styles.timeFieldCopy}><Text style={styles.timeValue}>{displayTime(time)}</Text><Text style={styles.help}>Choose any 15-minute time across the full day</Text></View><MaterialCommunityIcons name="chevron-down" size={24} color={colours.muted} /></Pressable>
       <Text style={styles.label}>Time allowed</Text><DurationSlider value={duration} onChange={setDuration} />
       <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: emailCalendarInvite }} onPress={() => setEmailCalendarInvite((current) => !current)} style={[styles.inviteChoice, emailCalendarInvite && styles.inviteChoiceSelected]}><MaterialCommunityIcons name={emailCalendarInvite ? 'checkbox-marked' : 'checkbox-blank-outline'} size={26} color={emailCalendarInvite ? colours.green : colours.muted} /><View style={styles.inviteCopy}><Text style={styles.inviteTitle}>Email the customer a calendar invite</Text><Text style={styles.help}>Sends a branded TLink email and calendar file after the job is saved.</Text></View></Pressable>
       <Text style={styles.label}>Access or visit notes, optional</Text><TextInput multiline numberOfLines={3} style={[styles.input, styles.notes]} value={notes} onChangeText={setNotes} placeholder="Keys, parking, tenant contact or hazards" placeholderTextColor={colours.muted} selectionColor={colours.green} />
     </View>
-    {error ? <Text accessibilityLiveRegion="polite" style={styles.error}>{error}</Text> : null}<FieldButton loading={busy} onPress={() => void createJob()}>Add job to my schedule</FieldButton><FieldButton variant="quiet" disabled={busy} onPress={() => router.back()}>Cancel</FieldButton>
+    {error ? <Text accessibilityLiveRegion="polite" style={styles.error}>{error}</Text> : null}<FieldButton loading={busy} disabled={optionsLoading || !jobOptions || !assigneeMemberId} onPress={() => void createJob()}>Create scheduled job</FieldButton><FieldButton variant="quiet" disabled={busy} onPress={() => router.back()}>Cancel</FieldButton>
     <Modal animationType="fade" transparent visible={timePickerOpen} onRequestClose={() => setTimePickerOpen(false)}><View style={styles.modalBackdrop}><View accessibilityViewIsModal style={styles.timeModal}>
       <View style={styles.modalHeader}><View><Text style={styles.eyebrow}>START TIME</Text><Text style={styles.modalTitle}>{displayTime(time)}</Text></View><Pressable accessibilityLabel="Close time picker" onPress={() => setTimePickerOpen(false)} style={styles.modalClose}><MaterialCommunityIcons name="close" color={colours.ink} size={25} /></Pressable></View>
       <Text style={styles.pickerLabel}>Hour</Text><View style={styles.hourGrid}>{Array.from({ length: 12 }, (_, index) => index + 1).map((hour) => <Pressable key={hour} onPress={() => setTime(timeValue(hour, timeSelection.minute, timeSelection.period))} style={[styles.hourChoice, timeSelection.hour === hour && styles.pickerChoiceSelected]}><Text style={[styles.pickerChoiceText, timeSelection.hour === hour && styles.pickerChoiceTextSelected]}>{hour}</Text></Pressable>)}</View>

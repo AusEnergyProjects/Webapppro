@@ -27,20 +27,20 @@ const expected = GOVERNMENT_ACTIVITY_TEMPLATES.filter(
     template.catalogueState === "current" || template.catalogueState === "limited",
 );
 
-test("aggregates the exact 192 current or limited activities once", () => {
-  assert.equal(CREDITEX_CURRENT_WORK_PACK_CONTENT_CANDIDATES.length, 192);
-  assert.equal(CREDITEX_CURRENT_WORK_PACK_CONTENT_BY_TEMPLATE_ID.size, 192);
+test("aggregates the exact 195 current or limited activities once", () => {
+  assert.equal(CREDITEX_CURRENT_WORK_PACK_CONTENT_CANDIDATES.length, 195);
+  assert.equal(CREDITEX_CURRENT_WORK_PACK_CONTENT_BY_TEMPLATE_ID.size, 195);
   assert.deepEqual(
     CREDITEX_CURRENT_WORK_PACK_CONTENT_CANDIDATES.map((item) => item.templateId),
     expected.map((template) => template.templateId),
   );
   assert.equal(
     new Set(CREDITEX_CURRENT_WORK_PACK_CONTENT_CANDIDATES.map((item) => item.templateId)).size,
-    192,
+    195,
   );
   assert.deepEqual(CREDITEX_CURRENT_WORK_PACK_CONTENT_VALIDATION.sourceCatalogueCounts, {
     VEU: 31,
-    NSW_CERTIFICATE: 48,
+    NSW_CERTIFICATE: 51,
     SRES: 6,
     NON_CERTIFICATE: 107,
   });
@@ -48,7 +48,7 @@ test("aggregates the exact 192 current or limited activities once", () => {
     guidedCapturePublishable: 31,
     sourceBackedReviewCandidate: 26,
     sourceOnlyNotPublishable: 22,
-    candidateOnly: 113,
+    candidateOnly: 116,
     activationReady: 0,
   });
 });
@@ -105,7 +105,7 @@ test("surfaces the 26 NSW source-backed form review candidates separately from 2
   const nsw = CREDITEX_CURRENT_WORK_PACK_CONTENT_CANDIDATES.filter(
     (item) => item.sourceCatalogue === "NSW_CERTIFICATE",
   );
-  assert.equal(nsw.length, 48);
+  assert.equal(nsw.length, 51);
   assert.equal(
     nsw.filter((item) =>
       item.guidedCaptureState === "source_backed_review_candidate"
@@ -309,7 +309,7 @@ test("fails aggregate validation closed for missing rows, false activation and r
     CREDITEX_CURRENT_WORK_PACK_CONTENT_CANDIDATES.slice(1),
   );
   assert.equal(missing.valid, false);
-  assert.ok(missing.errors.some((error) => error.includes("Expected 192")));
+  assert.ok(missing.errors.some((error) => error.includes("Expected 195")));
 
   const activated = CREDITEX_CURRENT_WORK_PACK_CONTENT_CANDIDATES.map((item, index) =>
     index === 0 ? { ...item, activationReady: true } : item

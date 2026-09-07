@@ -1,6 +1,7 @@
 import { getD1 } from "../../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
+import { fieldTransitionExpectedStatus } from "@/lib/trade-field-completion-policy";
 import { nextJobRevision } from "@/lib/trade-team-sync-server";
 import { mobileAppPolicy, mobileErrorResponse, MOBILE_CLIENT_ID_PATTERN, MOBILE_CONTRACT_VERSION,
   requireRegisteredMobileDevice } from "@/lib/trade-mobile-server";
@@ -2098,7 +2099,8 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
       AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed') ORDER BY CASE status WHEN 'in_progress' THEN 0 WHEN 'arrived' THEN 1 WHEN 'en_route' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, starts_at DESC LIMIT 1`)
       .bind(workOrderId, access.ownerUid).first<Record<string, unknown>>();
     if (!appointment) return { clientActionId, status: "rejected", code: "APPOINTMENT_REQUIRED", error: "Schedule this job before starting field work." };
-    if (appointment.status !== transition.from) return { clientActionId, status: "rejected", code: "OUT_OF_ORDER", error: `This action is out of order. The appointment is ${String(appointment.status).replaceAll("_", " ")}.` };
+    const expectedAppointmentStatus = fieldTransitionExpectedStatus(transitionName, String(appointment.status), transition.from);
+    if (appointment.status !== expectedAppointmentStatus) return { clientActionId, status: "rejected", code: "OUT_OF_ORDER", error: `This action is out of order. The appointment is ${String(appointment.status).replaceAll("_", " ")}.` };
     const finishState = transitionName === "finish"
       ? await fieldFinishState(access.ownerUid, workOrderId)
       : {
@@ -2255,7 +2257,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
           now,
           appointment.id,
           access.ownerUid,
-          transition.from,
+          expectedAppointmentStatus,
           workOrderId,
           access.ownerUid,
           baseRevision,

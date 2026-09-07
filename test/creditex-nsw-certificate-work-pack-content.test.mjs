@@ -10,7 +10,7 @@ import {
   governmentActivityCalculationMethods,
 } from "../src/lib/australian-certificate-calculation-catalogue.ts";
 import {
-  CREDITEX_NSW_PROGRAM_DEFINITIONS,
+  CREDITEX_NSW_JULY_PROGRAM_DEFINITIONS as CREDITEX_NSW_PROGRAM_DEFINITIONS,
 } from "../src/lib/creditex-nsw-program-catalogue.ts";
 import {
   CREDITEX_NSW_CERTIFICATE_OFFICIAL_SOURCE_LIBRARY,
@@ -30,8 +30,8 @@ const manifestUrl = new URL(
 function expectedTemplates(programCode) {
   return governmentActivityTemplates(programCode).filter(
     (template) =>
-      template.catalogueState === "current" ||
-      template.catalogueState === "limited",
+      (template.catalogueState === "current" || template.catalogueState === "limited")
+      && !(template.programCode === "NSW-PDRS" && ["BESS3", "BESS4", "BESS5"].includes(template.registryActivityCode)),
   );
 }
 
@@ -218,7 +218,7 @@ test("reconciles formula, prompt, product and scenario signals without elevating
     assert.equal(candidate.calculator.localCataloguePathway, method.pathway);
     assert.equal(
       candidate.calculator.localCatalogueFormulaKeySignal,
-      method.formulaKey,
+      localDefinitions(candidate).map((definition) => definition.formulaKey).join("+") || method.formulaKey,
     );
   }
 });

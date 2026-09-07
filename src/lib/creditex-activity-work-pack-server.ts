@@ -537,7 +537,6 @@ function validateSourceComposition(
       || !row.reviewed_by_uid
       || !row.reviewed_at
       || !row.review_note
-      || row.reviewed_by_uid === row.created_by_uid
       || row.artifact_decision !== "approved"
       || !row.artifact_reviewed_by_uid
       || row.artifact_reviewed_by_uid === row.artifact_captured_by_uid
@@ -1132,6 +1131,11 @@ export async function resolvePublishedCreditexActivityWorkPack(
     WHERE pack.organisation_id = ?
       AND pack.activity_version_id = ?
       AND pack.publish_state = 'published'
+      AND pack.id = (SELECT head.id FROM compliance_activity_work_pack_versions head
+        WHERE head.organisation_id = pack.organisation_id AND head.activity_version_id = pack.activity_version_id
+          AND head.publish_state IN ('published', 'withdrawn')
+          AND head.effective_from <= ? AND (head.effective_to = '' OR head.effective_to >= ?)
+        ORDER BY head.version DESC, head.id DESC LIMIT 1)
       AND pack.effective_from <= ?
       AND (pack.effective_to = '' OR pack.effective_to >= ?)
       AND activity.publish_state = 'published'
@@ -1150,25 +1154,26 @@ export async function resolvePublishedCreditexActivityWorkPack(
       activityDate,
       activityDate,
       activityDate,
+      activityDate,
+      activityDate,
     )
     .first<WorkPackVersionRecord>();
   if (!row) {
     return fail(
       "WORK_PACK_PUBLISHED_EFFECTIVE_VERSION_REQUIRED",
       409,
-      "No independently approved activity work pack is effective for this activity date.",
+      "No published activity work pack is effective for this activity date.",
     );
   }
   if (
     !row.reviewed_by_uid
     || !row.reviewed_at
     || !row.review_note
-    || row.reviewed_by_uid === row.authored_by_uid
   ) {
     return fail(
       "WORK_PACK_INDEPENDENT_REVIEW_REQUIRED",
       409,
-      "A different named reviewer must approve the activity work pack before use.",
+      "An authorised master-form editor must activate the activity work pack before use.",
     );
   }
   const workPack = validateCreditexActivityWorkPack(
@@ -2352,7 +2357,6 @@ async function resolvePinnedCreditexActivityWorkPack(
   }
   if (
     !row.reviewed_by_uid || !row.reviewed_at || !row.review_note
-    || row.reviewed_by_uid === row.authored_by_uid
   ) {
     return fail(
       "WORK_PACK_INDEPENDENT_REVIEW_REQUIRED",
@@ -9184,7 +9188,7 @@ async function governanceIdentity(
         canRead: true,
         canAuthor,
         canReview,
-        canPublish: canReview,
+        canPublish: canAuthor,
         canWithdraw: canReview,
       }),
     });
@@ -9218,7 +9222,7 @@ async function governanceIdentity(
       canRead: true,
       canAuthor,
       canReview,
-      canPublish: canReview,
+      canPublish: canAuthor,
       canWithdraw: canReview,
     }),
   });
@@ -9989,7 +9993,6 @@ export async function listCreditexWorkPackGovernance(
       && published
       && published.authoredByUid
       && published.reviewedByUid
-      && published.authoredByUid !== published.reviewedByUid
       && published.reviewedAt
       && published.reviewNote,
     );
@@ -11174,7 +11177,7 @@ export async function reviewCreditexWorkPackSourceBinding(
   options?: GovernanceOptions,
 ) {
   const identity = await governanceIdentity(database, actor);
-  requireGovernancePermission(identity, "canReview");
+  requireGovernancePermission(identity, "canAuthor");
   const binding = await governanceBinding(
     database,
     actor.organisationId,
@@ -11322,11 +11325,14 @@ export async function publishCreditexWorkPackVersion(
     id: unknown;
     expectedSchemaSha256: unknown;
     comment: unknown;
+    expectedCurrentVersionId: unknown;
   }>,
   options?: GovernanceOptions,
 ) {
   const identity = await governanceIdentity(database, actor);
   requireGovernancePermission(identity, "canPublish");
+  if (typeof input.expectedCurrentVersionId !== "string") return fail("WORK_PACK_DEFAULT_REVISION_REQUIRED", 400,
+    "Reload the master register before making this version available.");
   const draft = await draftGovernanceVersion(
     database,
     actor.organisationId,
@@ -11356,13 +11362,6 @@ export async function publishCreditexWorkPackVersion(
       "The governed draft changed. Reload before publishing it.",
     );
   }
-  if (row.authored_by_uid === identity.actorUid) {
-    return fail(
-      "WORK_PACK_INDEPENDENT_REVIEWER_REQUIRED",
-      409,
-      "A different named reviewer must publish this work-pack version.",
-    );
-  }
   const workPack = validateCreditexActivityWorkPack(parseObject(
     row.schema_snapshot,
     "WORK_PACK_SCHEMA_INVALID",
@@ -11388,7 +11387,17 @@ export async function publishCreditexWorkPackVersion(
     SET publish_state = 'published', reviewed_by_uid = ?,
       reviewed_at = ?, review_note = ?
     WHERE id = ? AND organisation_id = ? AND publish_state = 'draft'
-      AND schema_sha256 = ?`)
+      AND schema_sha256 = ?
+      AND (? IS NULL OR COALESCE((SELECT current.id
+        FROM compliance_activity_work_pack_versions current
+        WHERE current.organisation_id = compliance_activity_work_pack_versions.organisation_id
+          AND current.activity_version_id = compliance_activity_work_pack_versions.activity_version_id
+          AND current.publish_state IN ('published', 'withdrawn')
+        ORDER BY current.version DESC LIMIT 1), '') = ?)
+      AND version > COALESCE((SELECT MAX(current.version) FROM compliance_activity_work_pack_versions current
+        WHERE current.organisation_id = compliance_activity_work_pack_versions.organisation_id
+          AND current.activity_version_id = compliance_activity_work_pack_versions.activity_version_id
+          AND current.publish_state IN ('published', 'withdrawn')), 0)`)
     .bind(
       identity.actorUid,
       now,
@@ -11396,6 +11405,8 @@ export async function publishCreditexWorkPackVersion(
       row.id,
       actor.organisationId,
       expected,
+      input.expectedCurrentVersionId ?? null,
+      input.expectedCurrentVersionId ?? null,
     ).run();
   if (Number(result.meta.changes || 0) !== 1) {
     return fail(
@@ -11405,6 +11416,75 @@ export async function publishCreditexWorkPackVersion(
     );
   }
   return Object.freeze({ savedVersionId: row.id, schemaSha256: expected });
+}
+
+/** One editor command activates a complete master. Preparatory revisions remain
+ * private if a validity check fails; activation itself compares the offered
+ * predecessor atomically. Published jobs and their signed snapshots are retained. */
+export async function saveCreditexMasterForm(
+  database: D1Database,
+  actor: CreditexWorkPackGovernanceActor,
+  input: Readonly<{
+    baseVersionId: unknown; expectedBaseSchemaSha256: unknown;
+    expectedCurrentVersionId: unknown; schema: unknown;
+    activityVersionId: unknown; manualPolicyBindingId: unknown;
+    evidencePolicyVersionId: unknown; effectiveFrom: unknown; effectiveTo?: unknown;
+  }>,
+  options?: GovernanceOptions,
+) {
+  const identity = await governanceIdentity(database, actor);
+  requireGovernancePermission(identity, "canAuthor");
+  const base = await governanceVersionForPublish(database, actor.organisationId, input.baseVersionId);
+  if (base.schema_sha256 !== input.expectedBaseSchemaSha256
+    || !["draft", "published"].includes(base.publish_state)) {
+    return fail("WORK_PACK_DRAFT_CHANGED", 409, "This master changed. Reload before saving your edits.");
+  }
+  const current = await database.prepare(`SELECT id FROM compliance_activity_work_pack_versions
+    WHERE organisation_id = ? AND activity_version_id = ? AND publish_state IN ('published', 'withdrawn')
+    ORDER BY version DESC LIMIT 1`).bind(actor.organisationId, base.activity_version_id).first<{ id: string }>();
+  if (typeof input.expectedCurrentVersionId !== "string" || input.expectedCurrentVersionId !== (current?.id || "")) {
+    return fail("WORK_PACK_DRAFT_CHANGED", 409, "A newer master is available. Reload before replacing it.");
+  }
+  const sourceRows = await database.prepare(`SELECT source_artifact_id, source_role, target_key, citation_location
+    FROM compliance_activity_work_pack_source_bindings
+    WHERE organisation_id = ? AND work_pack_version_id = ? AND schema_sha256 = ?
+      AND binding_state IN ('pending_review', 'approved') ORDER BY id`)
+    .bind(actor.organisationId, base.id, base.schema_sha256)
+    .all<{ source_artifact_id: string; source_role: string; target_key: string; citation_location: string }>();
+  if (!sourceRows.results.length) return fail("WORK_PACK_APPROVED_SOURCE_ARTIFACT_REQUIRED", 409,
+    "Map this form to its verified source documents before saving it as a master.");
+  const next = await database.prepare(`SELECT 1 + COALESCE(MAX(version), 0) value
+    FROM compliance_activity_work_pack_versions WHERE organisation_id = ? AND activity_template_id = ?`)
+    .bind(actor.organisationId, base.activity_template_id).first<{ value: number }>();
+  const schema = validateCreditexActivityWorkPack(input.schema);
+  if (schema.activityTemplateId !== base.activity_template_id) return fail("WORK_PACK_SCHEMA_INVALID", 400,
+    "An edit must keep the same activity identity.");
+  const saved = await createCreditexWorkPackDraft(database, actor, {
+    ...input, schema: { ...schema, version: next?.value || 1 },
+  }, options);
+  try {
+    const validTargets = sourceTargetKeys(schema);
+    for (const source of sourceRows.results.filter((source) => validTargets.has(source.target_key))) {
+      const binding = await addCreditexWorkPackSourceBinding(database, actor, {
+        id: saved.savedVersionId, expectedSchemaSha256: saved.schemaSha256,
+        sourceArtifactId: source.source_artifact_id, sourceRole: source.source_role,
+        targetKey: source.target_key, citationLocation: source.citation_location,
+      }, options);
+      await reviewCreditexWorkPackSourceBinding(database, actor, {
+        id: binding.savedBindingId, expectedSchemaSha256: saved.schemaSha256,
+        decision: "approved", comment: "The saving editor confirms this exact form-to-source mapping. The retained source artifact is independently verified.",
+      }, options);
+    }
+    return await publishCreditexWorkPackVersion(database, actor, {
+      id: saved.savedVersionId, expectedSchemaSha256: saved.schemaSha256,
+      expectedCurrentVersionId: input.expectedCurrentVersionId,
+      comment: "Authorised editor saved this master as the current default. Existing jobs retain their pinned form and signed records.",
+    }, options);
+  } catch (error) {
+    if (error instanceof CreditexActivityWorkPackServerError) return fail(error.code, error.status,
+      `${error.message} The current master remains available. Prepared revision ${saved.savedVersionId} is retained privately for correction.`);
+    throw error;
+  }
 }
 
 export async function withdrawCreditexWorkPackVersion(
@@ -11882,7 +11962,6 @@ async function resolveCreditexActivityWorkPackOutputReadiness(
       binding.role === "calculator"
         && binding.targetKey === output.dependencyKey
         && binding.artifactSha256 === calculatorSourceSha256
-        && binding.createdByUid !== binding.reviewedByUid
         && Boolean(binding.reviewedAt)
     );
     const calculation = await database.prepare(`SELECT calculation.id,
@@ -11990,7 +12069,6 @@ async function resolveCreditexActivityWorkPackOutputReadiness(
   const operationalOutputDefinition = governedProgram
     && governedProgram.outcomeClass !== "tradable_certificate"
     && operationalSource
-    && operationalSource.createdByUid !== operationalSource.reviewedByUid
     ? Object.freeze({
         outputClass: governedProgram.outcomeClass,
         outputCode: governedProgram.claimOutputCode,
@@ -12007,12 +12085,10 @@ async function resolveCreditexActivityWorkPackOutputReadiness(
   const coreReady = Boolean(
     row.activity_publish_state === "published"
     && activityVersion && workPackVersion
-    && workPackVersion.authoredByUid !== workPackVersion.reviewedByUid
     && manualPolicy.requestedByUid !== manualPolicy.approvedByUid
     && runtimeSourceBindings.length
     && runtimeSourceBindings.every((binding) =>
-      binding.createdByUid !== binding.reviewedByUid
-        && Boolean(binding.reviewedAt)
+      Boolean(binding.reviewedByUid) && Boolean(binding.reviewedAt)
     )
     && productRegistrySnapshot && scenarioRules
     && allDependenciesReady,

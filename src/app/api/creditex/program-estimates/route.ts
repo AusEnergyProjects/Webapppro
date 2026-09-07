@@ -1040,7 +1040,7 @@ export async function POST(request: Request) {
 
     if (programCode === "NSW-PDRS-2026" || programCode === "NSW-ESS-2026") {
       const estimatePurpose = requestEstimatePurpose(raw);
-      const activity = creditexNswActivityDefinition(programCode, activityCode);
+      const activity = creditexNswActivityDefinition(programCode, activityCode, typeof raw.effectiveDate === "string" ? raw.effectiveDate : "");
       if (!activity) {
         throw new CreditexNswEstimateError(
           "NSW_ACTIVITY_NOT_SUPPORTED",

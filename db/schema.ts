@@ -2635,8 +2635,14 @@ export const tradeJobForms = sqliteTable("trade_job_forms", {
   index("trade_job_forms_work_idx").on(table.workOrderId, table.updatedAt),
 ]);
 
+export const complianceMasterSaveSchema = sqliteTable("compliance_master_save_schema", {
+  id: integer("id").primaryKey(),
+  version: integer("version").notNull(),
+});
+
 export const tradeFormTemplates = sqliteTable("trade_form_templates", {
   id: text("id").primaryKey(),
+  scopeOwnerUid: text("scope_owner_uid").notNull().default(""),
   templateKey: text("template_key").notNull(),
   version: integer("version").notNull(),
   name: text("name").notNull(),
@@ -2655,6 +2661,7 @@ export const tradeFormTemplates = sqliteTable("trade_form_templates", {
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   uniqueIndex("trade_form_templates_key_version_idx").on(table.templateKey, table.version),
+  index("trade_form_templates_scope_idx").on(table.scopeOwnerUid, table.templateKey, table.version),
   index("trade_form_templates_status_idx").on(table.status, table.updatedAt),
 ]);
 

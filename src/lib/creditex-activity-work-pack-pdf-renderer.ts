@@ -128,22 +128,15 @@ function fittedText(
     const lines = placement.overflow === "wrap"
       ? wrapLine(font, value, size, width)
       : [value];
-    const visible = lines.slice(0, placement.maximumLines);
+    const visible = lines;
     const lineHeight = size * 1.2;
     const fitsWidth = visible.every((line) => font.widthOfTextAtSize(line, size) <= width);
     const fitsHeight = visible.length * lineHeight <= height;
-    if ((fitsWidth || placement.overflow === "clip") && fitsHeight) {
+    if (fitsWidth && fitsHeight && lines.length <= placement.maximumLines) {
       return { lines: visible, size, lineHeight };
     }
     if (placement.overflow === "clip") break;
     size -= 0.5;
-  }
-  if (placement.overflow === "clip") {
-    return {
-      lines: [value],
-      size: placement.minimumFontSize,
-      lineHeight: placement.minimumFontSize * 1.2,
-    };
   }
   return renderFailure(
     "WORK_PACK_PDF_TEXT_OVERFLOW",

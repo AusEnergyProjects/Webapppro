@@ -164,6 +164,7 @@ export function ActivityWorkPackWizard({
   onSelectOfficialProducts,
   onSelectScenario,
   onRunCalculator,
+  onReturnToJob,
 }: {
   pack: FieldActivityWorkPack;
   conflict?: string;
@@ -198,6 +199,7 @@ export function ActivityWorkPackWizard({
   ) => Promise<void>;
   onSelectScenario: (dependencyKey: string, scenarioCode: string) => Promise<void>;
   onRunCalculator: (dependencyKey: string) => Promise<void>;
+  onReturnToJob?: () => void;
 }) {
   // Keep the finished record visible on first open. The completed PDF is the
   // technician's useful hand-off, not an implementation detail to hide.
@@ -631,17 +633,22 @@ export function ActivityWorkPackWizard({
       />}
 
       <View style={styles.navigation}>
+        {onReturnToJob ? <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => void run(async () => {
+          if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+          await flushDirty();
+          onReturnToJob();
+        })}>Job</FieldButton> : null}
         <FieldButton
           variant="secondary"
           disabled={pageIndex === 0 || Boolean(busy)}
           style={styles.flex}
           onPress={() => void run(() => movePage(-1))}
-        >Back</FieldButton>
+        >Previous</FieldButton>
         {!reviewPage ? <FieldButton
           disabled={Boolean(busy)}
           style={styles.flex}
           onPress={() => void run(() => movePage(1))}
-        >Continue</FieldButton> : pack.instance.status === 'completed' ? <FieldButton
+        >Next</FieldButton> : pack.instance.status === 'completed' ? <FieldButton
           disabled={!pack.finalRecord || !onOpenFinalRecord || Boolean(busy)}
           loading={busy === `work-pack-final-record:${pack.instance.id}`}
           style={styles.flex}

@@ -2,11 +2,12 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
+import { TradeBusinessFormEditor } from "./TradeBusinessFormEditor";
 
 type Field = { key: string; label: string; type: string; required: boolean; maxLength?: number; options?: string[] };
 type Template = { key: string; version: number; name: string; jurisdiction: string; description: string; guidance: string; fieldCount: number };
 type FormRecord = { id: string; templateKey: string; templateVersion: number; templateName: string; jurisdiction: string; template: { guidance: string; fields: Field[] }; answers: Record<string, string | boolean>; status: string; revision: number; ready: boolean; missing: string[]; completedAt: string };
-type Result = { ok?: boolean; protectedJob?: boolean; templates?: Template[]; forms?: FormRecord[]; error?: string };
+type Result = { ok?: boolean; protectedJob?: boolean; serviceCategory?: string; templates?: Template[]; forms?: FormRecord[]; error?: string };
 
 export function TradeJobFormsPanel({ user, workOrderId, readOnly = false }: { user: User; workOrderId: string; readOnly?: boolean }) {
   const [result, setResult] = useState<Result>({ templates: [], forms: [] });
@@ -61,6 +62,7 @@ export function TradeJobFormsPanel({ user, workOrderId, readOnly = false }: { us
       const added = existingKeys.has(`${template.key}:${template.version}`);
       return <article key={`${template.key}:${template.version}`}><div><span>{template.jurisdiction} | Version {template.version}</span><strong>{template.name}</strong><p>{template.description}</p><small>{template.fieldCount} fields</small></div><button type="button" disabled={added || busy === `start:${template.key}`} onClick={() => void start(template)}>{added ? "Added" : "Add to job"}</button></article>;
     })}</div></section>}
+    {!readOnly && result.serviceCategory ? <TradeBusinessFormEditor user={user} serviceCategory={result.serviceCategory} onSaved={() => request()} /> : null}
     <section className="crm-active-forms"><header><strong>Job forms</strong><span>{(result.forms || []).filter((form) => form.status === "complete").length}/{(result.forms || []).length} complete</span></header>
       {(result.forms || []).length ? (result.forms || []).map((form) => <JobForm key={form.id} form={form} disabled={readOnly || busy === `save:${form.id}`} readOnly={readOnly} onSave={save} />) : <div className="crm-empty"><strong>No forms added yet</strong><span>{readOnly ? "There are no field forms to review." : "Choose one supporting form above. The shortest useful form is usually the best place to start."}</span></div>}
     </section>

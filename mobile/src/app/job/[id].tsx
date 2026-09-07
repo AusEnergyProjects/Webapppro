@@ -6,7 +6,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import * as Linking from 'expo-linking';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useNavigation } from 'expo-router';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -15,6 +16,8 @@ import {
   type ActivityWorkPackPromptContext,
 } from '@/components/ActivityWorkPackWizard';
 import { FieldButton } from '@/components/field-button';
+import { FieldCommercialWorkspace } from '@/components/field-commercial-workspace';
+import { FieldFormLibrary } from '@/components/field-form-library';
 import { RentalInspectionWorkflow } from '@/components/rental-inspection-workflow';
 import { Screen } from '@/components/screen';
 import { firebaseAuth } from '@/lib/auth';
@@ -79,12 +82,7 @@ import {
 } from '@/lib/work-packs';
 import { useApp } from '@/providers/app-provider';
 
-const fieldActions: Record<string, { transition: 'start_travel' | 'arrive' | 'start_work' | 'finish'; label: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = {
-  scheduled: { transition: 'start_travel', label: 'Start travel', icon: 'car-arrow-right' },
-  en_route: { transition: 'arrive', label: 'Arrive', icon: 'map-marker-check-outline' },
-  arrived: { transition: 'start_work', label: 'Start work', icon: 'play-circle-outline' },
-  in_progress: { transition: 'finish', label: 'Finish', icon: 'check-circle-outline' },
-};
+const completableAppointmentStatuses = new Set(['scheduled', 'en_route', 'arrived', 'in_progress']);
 
 const PENDING_PHOTO_SETTING = 'pending_evidence_photo_v1';
 const MAX_EVIDENCE_BYTES = 50 * 1024 * 1024;
@@ -266,6 +264,7 @@ export default function JobScreen() {
   const [duration, setDuration] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState('');
+  const [activeFormId, setActiveFormId] = useState<string | null>(null);
   const recoveringPhoto = useRef(false);
   const launchingCamera = useRef(false);
 
@@ -429,7 +428,8 @@ export default function JobScreen() {
   }, [load, sync.conflicts, sync.queuedActions, sync.queuedUploads, sync.running]);
 
   async function advanceFieldJob() {
-    if (!job) return; const action = fieldActions[job.appointmentStatus]; if (!action) return;
+    if (!job || !completableAppointmentStatuses.has(job.appointmentStatus)) return;
+    const action = { transition: 'finish' as const };
     const governedEvidenceIncomplete = complianceCasesForJob(job).some(
       (complianceCase) => complianceCase.requirements.some(
         (requirement) => requirement.submittedCount < requirement.minimumCount,
@@ -493,9 +493,11 @@ export default function JobScreen() {
     const missing = form.template.fields.filter((field) => field.required && (field.type === 'checkbox' ? answers[field.key] !== true : !String(answers[field.key] || '').trim())).map((field) => field.label);
     if (complete && missing.length) return Alert.alert('Finish the required fields', missing.join('\n'));
     setBusy(`form:${form.id}`);
-    await saveAction({ type: 'save_job_form', workOrderId: job.id, formId: form.id, baseRevision: form.revision, answers, complete });
-    await load(); setBusy('');
-    Alert.alert(complete ? 'Form completed' : 'Draft saved', sync.online ? 'The field record is syncing now.' : 'The field record is secure on this device and will sync when reception returns.');
+    try {
+      await saveAction({ type: 'save_job_form', workOrderId: job.id, formId: form.id, baseRevision: form.revision, answers, complete });
+      await load();
+      Alert.alert(complete ? 'Completion saved for sync' : 'Draft saved', sync.online ? 'The field record is syncing now.' : 'The field record is secure on this device and will sync when reception returns.');
+    } finally { setBusy(''); }
   }
 
   async function capturePhoto(selection?: GovernedEvidenceSelection) {
@@ -1238,23 +1240,8 @@ export default function JobScreen() {
   const completed = job.tasks.filter((task) => task.status === 'done').length;
   const fieldForms = job.forms || [];
   const complianceIntents = job.complianceIntents || [];
-  const linkedComplianceIntents = complianceIntents.filter((intent) =>
-    intent.linkedCaseReady
-      && intent.complianceCaseId
-      && (job.activityWorkPacks || []).some(
-        (pack) => pack.instance.complianceIntentId === intent.id,
-      )).length;
   const complianceCases = complianceCasesForJob(job);
-  const complianceRequirements = complianceCases.flatMap(
-    (complianceCase) => complianceCase.requirements,
-  );
-  const acceptedComplianceRequirements = complianceRequirements.filter(
-    (requirement) => requirement.acceptedCount >= requirement.minimumCount,
-  ).length;
-  const submittedComplianceRequirements = complianceRequirements.filter(
-    (requirement) => requirement.submittedCount >= requirement.minimumCount,
-  ).length;
-  const fieldAction = fieldActions[job.appointmentStatus];
+  const canCompleteJob = completableAppointmentStatuses.has(job.appointmentStatus) && !['completed', 'cancelled'].includes(job.stage);
   const syncLabel = !sync.online ? 'Offline' : sync.conflicts ? 'Action required' : sync.running || sync.queuedActions || sync.queuedUploads ? 'Syncing' : 'Saved';
   const creditexManual = job.fieldLane === 'creditex_manual';
   const syntheticManual = job.recordMode === 'synthetic_test' && creditexManual;
@@ -1272,25 +1259,38 @@ export default function JobScreen() {
         <View style={styles.flex}><Text style={styles.cardTitle}>{syntheticManual ? 'Manual compliance workflow test' : job.protectedJob ? 'Australian Energy Assessments protected job' : 'Direct customer job'}</Text><Text style={styles.body}>{syntheticManual ? 'Use only the supplied test alias and synthetic postcode. This lane cannot create certificates, registry submissions, trades or settlements.' : job.protectedJob ? 'Customer name, phone, email and street address stay protected. Use the Australian Energy Assessments platform for communication.' : job.serviceAddress || `${job.siteArea || 'Service area'} | Address is not stored offline yet.`}</Text></View>
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.label}>NEXT ACTION</Text>
-        {fieldAction ? <Pressable accessibilityRole="button" accessibilityLabel={fieldAction.label} disabled={busy !== ''} onPress={() => void advanceFieldJob()} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}><MaterialCommunityIcons name={fieldAction.icon} size={28} color={colours.white} /><Text style={styles.primaryActionText}>{busy === `field:${fieldAction.transition}` ? 'Saving...' : fieldAction.label}</Text></Pressable> : <Text style={styles.body}>{job.appointmentStatus === 'completed' && job.stage === 'completed' ? 'Field work is complete. Invoice and handover are ready in TLink.' : job.appointmentStatus === 'completed' ? 'This appointment was completed outside the field workflow. Ask dispatch to reopen or reschedule it.' : 'Schedule this job before starting travel.'}</Text>}
+      {!activeFormId ? <View style={styles.card}>
+        <Text style={styles.cardTitle}>Visit</Text>
         {!job.protectedJob && (job.customerPhone || job.serviceAddress) ? <View style={styles.row}>{job.customerPhone ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`tel:${job.customerPhone.replace(/[^+\d]/g, '')}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Call</Text></Pressable> : null}{job.serviceAddress ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.serviceAddress)}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Get directions</Text></Pressable> : null}</View> : null}
-      </View>
+        {job.description ? <Text style={styles.body}>{job.description}</Text> : null}
+      </View> : null}
 
-      {complianceIntents.length ? <View style={styles.card}>
-        <View style={styles.cardHeading}>
-          <View><Text style={styles.label}>COMPLIANCE WORK PACKS</Text><Text style={styles.cardTitle}>Selected activities</Text></View>
-          <Text style={styles.progress}>{linkedComplianceIntents}/{complianceIntents.length}</Text>
-        </View>
-        <Text style={styles.body}>Every selected activity needs its exact governed case before regulated field work can be finished. Generic forms and general uploads do not replace the linked pack.</Text>
-        {complianceIntents.map((intent, index) => {
+      {!activeFormId ? <View style={styles.card}>
+        <Text style={styles.cardTitle}>Forms to complete</Text>
+        {complianceIntents.map((intent) => {
+          const pack = (job.activityWorkPacks || []).find((item) => item.instance.complianceIntentId === intent.id);
+          const done = pack?.instance.status === 'completed' && Boolean(pack.finalRecord);
+          return <Pressable key={intent.id} accessibilityRole="button" onPress={() => setActiveFormId(intent.id)} style={styles.formRow}>
+            <MaterialCommunityIcons name={done ? 'check-circle-outline' : 'alert-circle-outline'} size={27} color={done ? colours.green : colours.amber} />
+            <View style={styles.flex}><Text style={styles.taskTitle}>{intent.programCode} {intent.activityCode} | {intent.activityTitle}</Text><Text style={styles.meta}>{pack?.instance.id || intent.id} | {done ? 'Complete' : pack ? 'Continue form' : 'Requirements need attention'}</Text></View>
+            <MaterialCommunityIcons name="chevron-right" size={24} color={colours.green} />
+          </Pressable>;
+        })}
+        {job.rentalInspection ? <Pressable accessibilityRole="button" onPress={() => setActiveFormId('rental')} style={styles.formRow}><MaterialCommunityIcons name={job.rentalInspection.status === 'issued' ? 'check-circle-outline' : 'home-search-outline'} size={27} color={colours.green} /><View style={styles.flex}><Text style={styles.taskTitle}>Rental inspections and safety checks</Text><Text style={styles.meta}>{job.rentalInspection.progress.completeModules}/{job.rentalInspection.progress.moduleTotal} complete</Text></View><MaterialCommunityIcons name="chevron-right" size={24} color={colours.green} /></Pressable> : null}
+        {fieldForms.map((form) => <Pressable key={form.id} accessibilityRole="button" onPress={() => setActiveFormId(form.id)} style={styles.formRow}><MaterialCommunityIcons name={form.status === 'complete' ? 'check-circle-outline' : 'alert-circle-outline'} size={27} color={form.status === 'complete' ? colours.green : colours.amber} /><View style={styles.flex}><Text style={styles.taskTitle}>{form.name}</Text><Text style={styles.meta}>{form.id} | {form.status === 'complete' ? 'Complete' : `${form.missing.length} required`}</Text></View><MaterialCommunityIcons name="chevron-right" size={24} color={colours.green} /></Pressable>)}
+        {!complianceIntents.length && !fieldForms.length && !job.rentalInspection ? <Text style={styles.body}>No forms are attached to this job.</Text> : null}
+        {!creditexManual && !['completed', 'cancelled'].includes(job.stage) ? <FieldButton variant="secondary" onPress={() => setActiveFormId('form-library')}>Add form or business questions</FieldButton> : null}
+      </View> : null}
+
+      {complianceIntents.some((intent) => intent.id === activeFormId) ? <View style={styles.card}>
+        {complianceIntents.filter((intent) => intent.id === activeFormId).map((intent, index) => {
           const pack = (job.activityWorkPacks || []).find(
             (item) => item.instance.complianceIntentId === intent.id,
           );
           return pack ? <ActivityWorkPackWizard
-            key={`${pack.instance.id}:${pack.instance.responseSha256}`}
+            key={pack.instance.id}
             pack={pack}
+            onReturnToJob={() => setActiveFormId(null)}
             conflict={workPackProblems[pack.instance.id]}
             pendingActions={pendingWorkPackActions[pack.instance.id] || []}
             busy={busy}
@@ -1312,36 +1312,29 @@ export default function JobScreen() {
             onSelectScenario={(dependencyKey, scenarioCode) =>
               selectWorkPackScenario(pack, dependencyKey, scenarioCode)}
             onRunCalculator={(dependencyKey) => runWorkPackCalculator(pack, dependencyKey)}
-          /> : <UnlinkedComplianceWorkPack
+          /> : <><FieldButton variant="secondary" onPress={() => setActiveFormId(null)}>Job</FieldButton><UnlinkedComplianceWorkPack
             key={intent.id}
             intent={intent}
             index={index}
             total={complianceIntents.length}
-          />;
+          /></>;
         })}
       </View> : null}
 
-      <View style={styles.card}>
-        <View style={styles.cardHeading}><View><Text style={styles.label}>TODAY</Text><Text style={styles.cardTitle}>What must happen</Text></View></View>
-        <View style={styles.todayItem}><MaterialCommunityIcons name={job.description ? 'check-circle-outline' : 'alert-circle-outline'} size={25} color={job.description ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Scope and instructions</Text><Text style={styles.meta}>{job.description || 'Open Notes in TLink before starting.'}</Text></View></View>
-        <View style={styles.todayItem}><MaterialCommunityIcons name={completed === job.tasks.length ? 'check-circle-outline' : 'clipboard-check-outline'} size={25} color={completed === job.tasks.length ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Assigned tasks</Text><Text style={styles.meta}>{completed}/{job.tasks.length} complete</Text></View></View>
+      {!activeFormId && job.tasks.length ? <View style={styles.card}>
+        <Text style={styles.cardTitle}>Additional tasks {completed}/{job.tasks.length}</Text>
         {job.tasks.length ? job.tasks.map((task) => <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: task.status === 'done' }} key={task.id} disabled={busy !== ''} onPress={() => void toggleTask(task.id)} style={({ pressed }) => [styles.task, pressed && styles.pressed]}><MaterialCommunityIcons name={task.status === 'done' ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={28} color={task.status === 'done' ? colours.green : colours.muted} /><View style={styles.flex}><Text style={[styles.taskTitle, task.status === 'done' && styles.taskDone]}>{task.title}</Text>{task.dueAt ? <Text style={styles.meta}>Due {new Date(task.dueAt).toLocaleDateString('en-AU')}</Text> : null}</View></Pressable>) : <Text style={styles.body}>No checklist has been added by the office.</Text>}
-        <View style={styles.todayItem}><MaterialCommunityIcons name={fieldForms.every((form) => form.status === 'complete') ? 'check-circle-outline' : 'file-document-edit-outline'} size={25} color={fieldForms.every((form) => form.status === 'complete') ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Required forms</Text><Text style={styles.meta}>{fieldForms.filter((form) => form.status === 'complete').length}/{fieldForms.length} complete</Text></View></View>
-        {complianceCases.length ? <View style={styles.todayItem}><MaterialCommunityIcons name={submittedComplianceRequirements === complianceRequirements.length ? 'check-circle-outline' : 'certificate-outline'} size={25} color={submittedComplianceRequirements === complianceRequirements.length ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Government program evidence</Text><Text style={styles.meta}>{submittedComplianceRequirements}/{complianceRequirements.length} requirements submitted, {acceptedComplianceRequirements} accepted, across {complianceCases.length} activit{complianceCases.length === 1 ? 'y' : 'ies'}</Text></View></View> : null}
-        {job.rentalInspection ? <View style={styles.todayItem}><MaterialCommunityIcons name={job.rentalInspection.status === 'issued' ? 'check-decagram-outline' : 'home-search-outline'} size={25} color={job.rentalInspection.status === 'issued' ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Rental assessment report</Text><Text style={styles.meta}>{job.rentalInspection.status === 'issued' ? `Issued ${new Date(job.rentalInspection.issuedAt).toLocaleDateString('en-AU')}` : `${job.rentalInspection.progress.completeModules}/${job.rentalInspection.progress.moduleTotal} modules complete`}</Text></View></View> : null}
-        <View style={styles.todayItem}><MaterialCommunityIcons name={job.media.length ? 'check-circle-outline' : 'camera-outline'} size={25} color={job.media.length ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Required photo proof</Text><Text style={styles.meta}>{job.media.length} field file{job.media.length === 1 ? '' : 's'} synced</Text></View></View>
-        <View style={styles.todayItem}><MaterialCommunityIcons name={!job.openIssues ? 'check-circle-outline' : 'alert-circle-outline'} size={25} color={!job.openIssues ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Open issues or blockers</Text><Text style={styles.meta}>{job.openIssues ? `${job.openIssues} need attention in TLink Notes` : 'None open'}</Text></View></View>
-      </View>
+      </View> : null}
 
-      {job.rentalInspection ? <RentalInspectionWorkflow workOrderId={job.id} summary={job.rentalInspection} online={sync.online} onChanged={async () => { await syncNow(); await load(); }} /> : null}
+      {job.rentalInspection && activeFormId === 'rental' ? <RentalInspectionWorkflow workOrderId={job.id} summary={job.rentalInspection} online={sync.online} onReturnToJob={() => setActiveFormId(null)} onChanged={async () => { await syncNow(); await load(); }} /> : null}
 
-      <View style={styles.card}>
-        <View style={styles.cardHeading}><View><Text style={styles.label}>FIELD FORMS</Text><Text style={styles.cardTitle}>Technical records</Text></View><Text style={styles.progress}>{fieldForms.filter((form) => form.status === 'complete').length}/{fieldForms.length}</Text></View>
-        <Text style={styles.body}>Complete these short technical records with or without reception. Drafts stay encrypted on this device until sync succeeds.</Text>
-        {fieldForms.length ? fieldForms.map((form) => <JobFieldForm key={`${form.id}:${form.updatedAt}`} form={form} busy={busy === `form:${form.id}`} onSave={saveForm} />) : <Text style={styles.body}>No field forms have been assigned to this job.</Text>}
-      </View>
+      {fieldForms.filter((form) => form.id === activeFormId).map((form) => <View style={styles.card} key={form.id}><JobFieldForm form={form} busy={busy === `form:${form.id}`} onSave={saveForm} onReturnToJob={() => setActiveFormId(null)} /></View>)}
+      {!creditexManual && activeFormId === 'form-library' ? <FieldFormLibrary workOrderId={job.id} serviceCategory={job.serviceCategory} online={sync.online} onBack={() => setActiveFormId(null)} onChanged={async () => { await syncNow(); await load(); }} /> : null}
 
-      <View style={styles.card}>
+      {!activeFormId ? <View style={styles.row}><FieldButton variant="secondary" style={styles.flex} onPress={() => setActiveFormId('files')}>Job files</FieldButton>{!creditexManual ? <FieldButton variant="secondary" style={styles.flex} onPress={() => setActiveFormId('time')}>Record time</FieldButton> : null}</View> : null}
+
+      {activeFormId === 'files' ? <View style={styles.card}>
+        <FieldButton variant="secondary" onPress={() => setActiveFormId(null)}>Job</FieldButton>
         <Text style={styles.label}>FIELD EVIDENCE</Text><Text style={styles.cardTitle}>Photos and documents</Text>
         <Text style={styles.body}>The app preserves the exact file returned by the camera picker without further editing or recompression, requests available EXIF, adds independent time and location observations, and hashes the exact queued bytes with SHA-256. Files save encrypted on this device first and resume automatically after a connection drops.</Text>
         {syntheticManual ? <Text style={styles.warningText}>Manual program testing only. A physical-device report and server-verified retained bytes are required before a prompt counts as complete. Compliance review is still separate.</Text> : null}
@@ -1362,13 +1355,23 @@ export default function JobScreen() {
         <View style={styles.row}><FieldButton variant="secondary" loading={busy === 'photo:general'} style={styles.flex} onPress={() => void capturePhoto()}>Take photo</FieldButton><FieldButton variant="secondary" loading={busy === 'document:general'} style={styles.flex} onPress={() => void chooseDocument()}>Add document</FieldButton></View></> : null}
         {complianceCases.length ? <Text style={styles.meta}>General job files remain separate and are not submitted against a governed requirement.</Text> : null}
         <Text style={styles.meta}>{job.media.length} field file{job.media.length === 1 ? '' : 's'} already synced</Text>
-      </View>
+      </View> : null}
 
-      {!creditexManual ? <View style={styles.card}>
+      {!creditexManual && activeFormId === 'time' ? <View style={styles.card}>
+        <FieldButton variant="secondary" onPress={() => setActiveFormId(null)}>Job</FieldButton>
         <Text style={styles.label}>TIME ENTRY</Text><Text style={styles.cardTitle}>Record today&apos;s work</Text>
         <Text style={styles.inputLabel}>Minutes worked</Text><TextInput style={styles.input} value={duration} onChangeText={setDuration} keyboardType="number-pad" placeholder="For example, 90" />
         <Text style={styles.inputLabel}>Work note, optional</Text><TextInput style={[styles.input, styles.notes]} multiline value={notes} onChangeText={setNotes} placeholder={job.protectedJob ? 'Describe the work only. Do not add customer contact details.' : 'Briefly describe completed work'} maxLength={500} />
         <FieldButton loading={busy === 'time'} disabled={!duration} onPress={() => void addTime()}>Save time entry</FieldButton>
+      </View> : null}
+
+      {!creditexManual ? <FieldCommercialWorkspace workOrderId={job.id} selected={activeFormId} onSelect={setActiveFormId} online={sync.online} protectedJob={job.protectedJob} /> : null}
+
+      {!activeFormId && !creditexManual ? <View style={styles.card}>
+        <Text style={styles.cardTitle}>Complete job</Text>
+        {job.openIssues ? <Text style={styles.warningText}>{job.openIssues} open issue(s) need attention before completion.</Text> : null}
+        <FieldButton disabled={!canCompleteJob || Boolean(busy) || !sync.online || sync.running || Boolean(sync.queuedActions || sync.queuedUploads || sync.conflicts) || job.tasks.some((task) => task.status !== 'done') || fieldForms.some((form) => form.status !== 'complete') || Boolean(job.rentalInspection && job.rentalInspection.status !== 'issued') || complianceIntents.some((intent) => !(job.activityWorkPacks || []).some((pack) => pack.instance.complianceIntentId === intent.id && pack.instance.status === 'completed' && pack.finalRecord)) || Boolean(job.openIssues)} loading={busy === 'field:finish'} onPress={() => void advanceFieldJob()}>{job.stage === 'completed' ? 'Job complete' : 'Complete job'}</FieldButton>
+        <Text style={styles.meta}>Available when required work is complete and safely synced. The server checks the latest records before completing this job.</Text>
       </View> : null}
 
       <View style={styles.syncLine}><MaterialCommunityIcons name={sync.online ? sync.conflicts ? 'cloud-alert-outline' : 'cloud-check-outline' : 'cloud-off-outline'} size={20} color={colours.green} /><Text style={styles.body}>{syncLabel}</Text></View>
@@ -1509,11 +1512,25 @@ function ComplianceCaseEvidence({
   </View>;
 }
 
-function JobFieldForm({ form, busy, onSave }: { form: FieldForm; busy: boolean; onSave: (form: FieldForm, answers: Record<string, string | boolean>, complete: boolean) => Promise<void> }) {
+function JobFieldForm({ form, busy, onSave, onReturnToJob }: { form: FieldForm; busy: boolean; onReturnToJob: () => void; onSave: (form: FieldForm, answers: Record<string, string | boolean>, complete: boolean) => Promise<void> }) {
   const [answers, setAnswers] = useState<Record<string, string | boolean>>(form.answers || {});
-  const [open, setOpen] = useState(form.status !== 'complete');
+  const [open, setOpen] = useState(true);
+  const navigation = useNavigation();
+  const dirty = form.status !== 'complete' && JSON.stringify(answers) !== JSON.stringify(form.answers || {});
+  usePreventRemove(dirty || busy, ({ data }) => {
+    if (busy) return Alert.alert('Saving form', 'Wait for the form to finish saving before leaving.');
+    Alert.alert('Unsaved answers', 'Save your answers before leaving, or discard the unsaved changes.', [
+      { text: 'Keep editing', style: 'cancel' },
+      { text: 'Discard changes', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
+    ]);
+  });
+  async function save(complete: boolean) {
+    try { await onSave(form, answers, complete); }
+    catch (error) { Alert.alert('Form not saved', error instanceof Error ? error.message : 'Try saving again.'); }
+  }
   function change(key: string, value: string | boolean) { setAnswers((current) => ({ ...current, [key]: value })); }
   return <View style={styles.formBlock}>
+    <FieldButton variant="secondary" disabled={busy} onPress={() => void (async () => { if (form.status !== 'complete') await onSave(form, answers, false); onReturnToJob(); })().catch((error) => Alert.alert('Form not saved', error instanceof Error ? error.message : 'Try again before leaving this form.'))}>Save and return to job</FieldButton>
     <Pressable onPress={() => setOpen((value) => !value)} style={styles.formRow} accessibilityRole="button" accessibilityState={{ expanded: open }}>
       <MaterialCommunityIcons name={form.status === 'complete' ? 'check-decagram-outline' : 'clipboard-text-outline'} size={25} color={form.status === 'complete' ? colours.green : colours.muted} />
       <View style={styles.flex}><Text style={styles.taskTitle}>{form.name}</Text><Text style={styles.meta}>{form.jurisdiction} | Version {form.templateVersion} | {form.status === 'complete' ? 'Complete and locked' : form.ready ? 'Ready to complete' : `${form.missing.length} required`}</Text></View>
@@ -1521,11 +1538,11 @@ function JobFieldForm({ form, busy, onSave }: { form: FieldForm; busy: boolean; 
     </Pressable>
     {open && <View style={styles.formBody}><Text style={styles.body}>{form.template.guidance}</Text>{form.template.fields.map((field) => <View key={field.key} style={styles.formField}>
       <Text style={styles.inputLabel}>{field.label}{field.required ? ' *' : ''}</Text>
-      {field.type === 'checkbox' ? <Pressable disabled={form.status === 'complete'} accessibilityRole="checkbox" accessibilityState={{ checked: answers[field.key] === true }} onPress={() => change(field.key, answers[field.key] !== true)} style={[styles.checkbox, answers[field.key] === true && styles.checkboxSelected]}><MaterialCommunityIcons name={answers[field.key] === true ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={25} color={colours.green} /><Text style={styles.body}>{answers[field.key] === true ? 'Confirmed' : 'Tap to confirm'}</Text></Pressable>
-        : field.type === 'select' ? <View style={styles.optionList}>{(field.options || []).map((option) => <Pressable key={option} disabled={form.status === 'complete'} onPress={() => change(field.key, option)} style={[styles.option, answers[field.key] === option && styles.optionSelected]}><Text style={styles.optionText}>{option}</Text></Pressable>)}</View>
+      {field.type === 'checkbox' ? <Pressable disabled={busy || form.status === 'complete'} accessibilityRole="checkbox" accessibilityState={{ checked: answers[field.key] === true }} onPress={() => change(field.key, answers[field.key] !== true)} style={[styles.checkbox, answers[field.key] === true && styles.checkboxSelected]}><MaterialCommunityIcons name={answers[field.key] === true ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={25} color={colours.green} /><Text style={styles.body}>{answers[field.key] === true ? 'Confirmed' : 'Tap to confirm'}</Text></Pressable>
+        : field.type === 'select' ? <View style={styles.optionList}>{(field.options || []).map((option) => <Pressable key={option} disabled={busy || form.status === 'complete'} onPress={() => change(field.key, option)} style={[styles.option, answers[field.key] === option && styles.optionSelected]}><Text style={styles.optionText}>{option}</Text></Pressable>)}</View>
         : field.type === 'signature' ? <View style={styles.signatureBlocked}><MaterialCommunityIcons name="alert-circle-outline" size={20} color={colours.amber} /><Text style={styles.body}>Signature capture is not available in this tested TLink build. This required item remains blocked and cannot be marked complete.</Text></View>
-        : <TextInput editable={form.status !== 'complete'} style={[styles.input, field.type === 'textarea' && styles.notes]} multiline={field.type === 'textarea'} keyboardType={field.type === 'number' ? 'decimal-pad' : 'default'} value={String(answers[field.key] || '')} onChangeText={(value) => change(field.key, value)} maxLength={field.maxLength || 240} placeholder={field.type === 'date' ? 'YYYY-MM-DD' : field.type === 'number' ? 'Enter a number' : 'Enter technical job information'} />}
-    </View>)}{form.status !== 'complete' && <View style={styles.formActions}><FieldButton variant="secondary" loading={busy} style={styles.flex} onPress={() => void onSave(form, answers, false)}>Save draft</FieldButton><FieldButton loading={busy} style={styles.flex} onPress={() => void onSave(form, answers, true)}>Complete</FieldButton></View>}</View>}
+        : <TextInput editable={!busy && form.status !== 'complete'} style={[styles.input, field.type === 'textarea' && styles.notes]} multiline={field.type === 'textarea'} keyboardType={field.type === 'number' ? 'decimal-pad' : 'default'} value={String(answers[field.key] || '')} onChangeText={(value) => change(field.key, value)} maxLength={field.maxLength || 240} placeholder={field.type === 'date' ? 'YYYY-MM-DD' : field.type === 'number' ? 'Enter a number' : 'Enter technical job information'} />}
+    </View>)}{form.status !== 'complete' && <View style={styles.formActions}><FieldButton variant="secondary" loading={busy} style={styles.flex} disabled={busy} onPress={() => void save(false)}>Save draft</FieldButton><FieldButton loading={busy} style={styles.flex} disabled={busy} onPress={() => void save(true)}>Complete</FieldButton></View>}</View>}
   </View>;
 }
 

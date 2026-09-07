@@ -17,10 +17,10 @@ import {
   GOVERNMENT_PROGRAM_TEMPLATES,
 } from "../src/lib/australian-government-program-catalogue.ts";
 
-const AS_AT_DATE = "2026-08-15";
+const AS_AT_DATE = "2026-09-07";
 const EFFECTIVE_FROM = "2026-01-01";
 const EFFECTIVE_TO = "2099-12-31";
-const TIMESTAMP = "2026-08-15T00:00:00.000Z";
+const TIMESTAMP = "2026-09-07T00:00:00.000Z";
 const programByCode = new Map(GOVERNMENT_PROGRAM_TEMPLATES.map((program) => [
   program.programCode,
   program,
@@ -225,7 +225,7 @@ function readyPayload() {
   };
 }
 
-test("activation gate accepts exactly 192 fully evidenced current or limited activities", () => {
+test("activation gate accepts exactly 195 fully evidenced current or limited activities", () => {
   const payload = readyPayload();
   assert.equal(
     CREDITEX_WORK_PACK_COVERAGE.length,
@@ -233,7 +233,7 @@ test("activation gate accepts exactly 192 fully evidenced current or limited act
   );
   assert.equal(
     payload.coverage.filter((row) => row.certificateActionEnabled).length,
-    85,
+    88,
   );
   assert.equal(
     payload.coverage.filter((row) => row.outputActionReady).length,
@@ -243,7 +243,7 @@ test("activation gate accepts exactly 192 fully evidenced current or limited act
     validateCreditexCertificateActivationPayload(payload, {
       asAtDate: AS_AT_DATE,
     }),
-    { activityCount: 192, asAtDate: AS_AT_DATE },
+    { activityCount: 195, asAtDate: AS_AT_DATE },
   );
 });
 
@@ -254,11 +254,11 @@ test("activation gate fails when one catalogue activity is missing", () => {
     () => validateCreditexCertificateActivationPayload(payload, {
       asAtDate: AS_AT_DATE,
     }),
-    new RegExp(`exactly 192 rows.*missing activity ${missing.activityTemplateId}`, "s"),
+    new RegExp(`exactly 195 rows.*missing activity ${missing.activityTemplateId}`, "s"),
   );
 });
 
-test("activation gate fails on a duplicate activity even when row count stays 192", () => {
+test("activation gate fails on a duplicate activity even when row count stays 195", () => {
   const payload = readyPayload();
   const duplicateId = payload.coverage[0].activityTemplateId;
   payload.coverage[payload.coverage.length - 1] = structuredClone(

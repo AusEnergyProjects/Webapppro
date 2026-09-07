@@ -4,6 +4,7 @@ import {
   requireManualFieldMember,
 } from "@/lib/creditex-manual-field-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
+import { tradeFieldPermissions } from "@/lib/trade-field-permissions";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -37,12 +38,14 @@ export async function GET(request: Request) {
   let fieldUsername = "";
   let tradeError: unknown;
   let manualError: unknown;
+  let permissions: ReturnType<typeof tradeFieldPermissions> | null = null;
   try {
     const trade = await requireInstallerTeamAccess(request);
     modes.push("trade_team");
     displayName = trade.displayName;
     businessName = trade.businessName;
     fieldUsername = trade.fieldUsername || "";
+    permissions = tradeFieldPermissions(trade);
   } catch (error) {
     tradeError = error;
   }
@@ -68,6 +71,7 @@ export async function GET(request: Request) {
       displayName,
       businessName,
       fieldUsername,
+      permissions,
       ...(modes.includes("creditex_manual")
         ? { recordMode: "synthetic_test" }
         : {}),

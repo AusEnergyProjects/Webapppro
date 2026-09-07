@@ -33,7 +33,7 @@ test("coverage accounts deterministically for all programs and activities", () =
   assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.activities, 216);
   assert.equal(
     CREDITEX_CALCULATION_COVERAGE_SUMMARY.coverageSha256,
-    "sha256:35e5ff0ff2bacff2504305a30be71c8b38ebe285f33d729bb842c364df124347",
+    "sha256:30d21e7a71d84f658ee928e2dbb1be10e38bde2f7c651de867c0a0acf7c94408",
   );
 });
 
@@ -90,9 +90,9 @@ test("coverage never enables certificate action for any activity", () => {
     CREDITEX_CALCULATION_COVERAGE_SUMMARY.stateCounts,
     [
       { state: "activity_closed", count: 9 },
-      { state: "activity_not_commenced", count: 8 },
+      { state: "activity_not_commenced", count: 5 },
       { state: "estimate_available", count: 50 },
-      { state: "governed_formula_required", count: 88 },
+      { state: "governed_formula_required", count: 91 },
       { state: "not_applicable", count: 27 },
       { state: "official_registry_required", count: 26 },
       { state: "partial_estimate_available", count: 6 },

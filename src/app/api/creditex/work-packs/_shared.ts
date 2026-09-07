@@ -12,6 +12,7 @@ import {
   publishCreditexWorkPackVersion,
   reviewCreditexActivityWorkPackCalculation,
   reviewCreditexWorkPackSourceBinding,
+  saveCreditexMasterForm,
   updateCreditexWorkPackDraft,
   withdrawCreditexWorkPackSourceBinding,
   withdrawCreditexWorkPackVersion,
@@ -56,6 +57,11 @@ export async function handleCreditexWorkPackGovernanceRequest(
   actor: CreditexWorkPackGovernanceActor,
 ) {
   if (request.method === "GET") {
+    if (new URL(request.url).searchParams.get("view") === "statutory_sources") {
+      await listCreditexWorkPackGovernance(database, actor);
+      const { creditexStatutorySourceLibrary, creditexDeclarationProvider } = await import("@/lib/creditex-statutory-form-library");
+      return workPackGovernanceJson({ ok: true, forms: creditexStatutorySourceLibrary(), provider: creditexDeclarationProvider });
+    }
     return workPackGovernanceJson({
       ok: true,
       ...await listCreditexWorkPackGovernance(database, actor),
@@ -67,7 +73,14 @@ export async function handleCreditexWorkPackGovernanceRequest(
   ));
   const action = String(body.action || "");
   let saved: Readonly<Record<string, unknown>>;
-  if (request.method === "POST" && action === "create_draft") {
+  if (request.method === "POST" && action === "save_master") {
+    saved = await saveCreditexMasterForm(database, actor, {
+      baseVersionId: body.baseVersionId, expectedBaseSchemaSha256: body.expectedBaseSchemaSha256,
+      expectedCurrentVersionId: body.expectedCurrentVersionId, schema: body.schema,
+      activityVersionId: body.activityVersionId, manualPolicyBindingId: body.manualPolicyBindingId,
+      evidencePolicyVersionId: body.evidencePolicyVersionId, effectiveFrom: body.effectiveFrom, effectiveTo: body.effectiveTo,
+    });
+  } else if (request.method === "POST" && action === "create_draft") {
     saved = await createCreditexWorkPackDraft(database, actor, {
       activityVersionId: body.activityVersionId,
       manualPolicyBindingId: body.manualPolicyBindingId,
@@ -121,6 +134,7 @@ export async function handleCreditexWorkPackGovernanceRequest(
       id: body.id,
       expectedSchemaSha256: body.expectedSchemaSha256,
       comment: body.comment,
+      expectedCurrentVersionId: body.expectedCurrentVersionId,
     });
   } else if (request.method === "PATCH" && action === "withdraw_version") {
     saved = await withdrawCreditexWorkPackVersion(database, actor, {

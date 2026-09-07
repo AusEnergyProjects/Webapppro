@@ -16,7 +16,7 @@ import {
 } from "../src/lib/australian-government-program-catalogue.ts";
 
 test("every controlled government activity has exactly one fail-closed calculation method", () => {
-  assert.equal(CERTIFICATE_CALCULATION_CATALOGUE_REVIEWED_ON, "2026-08-09");
+  assert.equal(CERTIFICATE_CALCULATION_CATALOGUE_REVIEWED_ON, "2026-09-07");
   assert.equal(
     GOVERNMENT_ACTIVITY_CALCULATION_METHODS.length,
     GOVERNMENT_ACTIVITY_TEMPLATES.length,

@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
+import { fieldTransitionExpectedStatus } from "@/lib/trade-field-completion-policy";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
 import { normalisePhotoRequirements } from "@/lib/trade-photo-requests";
@@ -366,7 +367,8 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
     ORDER BY CASE status WHEN 'in_progress' THEN 0 WHEN 'arrived' THEN 1 WHEN 'en_route' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, starts_at DESC LIMIT 1`)
     .bind(workOrderId, access.ownerUid).first<Record<string, unknown>>();
   if (!appointment) return adminJson({ ok: false, error: "Schedule this job before starting field work." }, 409);
-  if (appointment.status !== transition.from) return adminJson({ ok: false, error: `This action is out of order. The appointment is ${String(appointment.status).replaceAll("_", " ")}.` }, 409);
+  const expectedAppointmentStatus = fieldTransitionExpectedStatus(action, String(appointment.status), transition.from);
+  if (appointment.status !== expectedAppointmentStatus) return adminJson({ ok: false, error: `This action is out of order. The appointment is ${String(appointment.status).replaceAll("_", " ")}.` }, 409);
   let photoFinish: { ready: boolean; guard: PhotoFinishGuard } = {
     ready: true,
     guard: { kind: "none" },
@@ -500,11 +502,11 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
        WHERE EXISTS (SELECT 1 FROM trade_crm_appointments WHERE id = ? AND firebase_uid = ? AND status = ?)
          AND ${finishGuard}`)
       .bind(receiptId, access.ownerUid, access.actorUid, access.memberId || "", clientActionId, `${workOrderId}:${action}`, actionType,
-        workOrderId, Number(job.revision), revision, now, now, appointment.id, access.ownerUid, transition.from,
+        workOrderId, Number(job.revision), revision, now, now, appointment.id, access.ownerUid, expectedAppointmentStatus,
         ...finishGuardValues),
     db.prepare(`UPDATE trade_crm_appointments SET status = ?, ${timestampColumn} = ?, last_transition_by_uid = ?, revision = revision + 1, updated_at = ?
       WHERE id = ? AND firebase_uid = ? AND status = ? AND EXISTS (SELECT 1 FROM trade_offline_actions WHERE id = ?)`)
-      .bind(transition.to, now, access.actorUid, now, appointment.id, access.ownerUid, transition.from, receiptId),
+      .bind(transition.to, now, access.actorUid, now, appointment.id, access.ownerUid, expectedAppointmentStatus, receiptId),
     db.prepare(`UPDATE trade_work_orders SET stage = CASE WHEN ? = 'start_work' THEN 'in_progress' WHEN ? = 'finish' THEN 'completed' ELSE stage END,
       revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND EXISTS (SELECT 1 FROM trade_offline_actions WHERE id = ?)`)
       .bind(action, action, revision, now, workOrderId, access.ownerUid, receiptId),

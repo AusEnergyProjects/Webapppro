@@ -13,13 +13,14 @@ import {
 } from "./creditex-local-program-catalogue.ts";
 import {
   CREDITEX_NSW_PROGRAM_DEFINITIONS,
+  CREDITEX_NSW_SEPTEMBER_RULE_URLS,
 } from "./creditex-nsw-program-catalogue.ts";
 import {
   CREDITEX_VEU_ACTIVITY_DEFINITIONS,
 } from "./creditex-veu-calculator-catalogue.ts";
 import { officialProductKindsForLocalActivity } from "./creditex-official-product-registry.ts";
 
-export const CERTIFICATE_CALCULATION_CATALOGUE_REVIEWED_ON = "2026-08-09";
+export const CERTIFICATE_CALCULATION_CATALOGUE_REVIEWED_ON = "2026-09-07";
 
 export const CERTIFICATE_CALCULATION_STATES = [
   "estimate_available",
@@ -154,7 +155,7 @@ readonly GovernmentCalculationSourceWindow[] = [
     sourceKey: "nsw-ess-rule-2026-07-01",
     version: "Energy Savings Scheme Rule of 2009, 1 July 2026",
     effectiveFrom: "2026-07-01",
-    effectiveTo: "",
+    effectiveTo: "2026-09-06",
     scope:
       "Current ESS methods and activity definitions; product acceptance, suspensions and method guides remain separately effective-dated",
     officialSourceUrl:
@@ -166,13 +167,22 @@ readonly GovernmentCalculationSourceWindow[] = [
     sourceKey: "nsw-pdrs-rule-2026-07-01",
     version: "Peak Demand Reduction Scheme Rule of 2022, 1 July 2026",
     effectiveFrom: "2026-07-01",
-    effectiveTo: "",
+    effectiveTo: "2026-09-06",
     scope:
       "Current PDRS methods; BESS3, BESS4 and BESS5 commence on 1 September 2026",
     officialSourceUrl:
       "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Peak-Demand-Reduction-Scheme-Rule-of-2022-1-July-2026.PDF",
     independentApprovalRequired: true,
   },
+  ...CREDITEX_NSW_PROGRAM_DEFINITIONS.map((program) => ({
+    programCode: program.programCode === "NSW-ESS-2026" ? "NSW-ESS" : "NSW-PDRS",
+    sourceKey: `${program.programCode === "NSW-ESS-2026" ? "nsw-ess" : "nsw-pdrs"}-rule-2026-09-07`,
+    version: program.sourceVersion,
+    effectiveFrom: "2026-09-07", effectiveTo: "",
+    scope: "September 2026 amended methods and activity requirements; product and accreditation checks remain separately required",
+    officialSourceUrl: CREDITEX_NSW_SEPTEMBER_RULE_URLS[program.programCode],
+    independentApprovalRequired: true,
+  })),
   ...CREDITEX_LOCAL_PROGRAM_DEFINITIONS.map((program) => ({
     programCode: program.programCode,
     sourceKey: `${program.programCode.toLowerCase()}-${program.effectiveFrom}`,
@@ -357,22 +367,14 @@ function nswFormulaKey(programCode: string, registryActivityCode: string) {
 
 function sourceWindow(
   program: GovernmentProgramTemplate,
-  activity: GovernmentActivityTemplate,
 ) {
   const windows = SOURCE_WINDOW_BY_PROGRAM.get(program.programCode) || [];
   if (program.programCode === "VEU") {
     return windows.find((window) => window.sourceKey.endsWith("v25"));
   }
-  if (
-    program.programCode === "NSW-PDRS"
-    && ["BESS3", "BESS4", "BESS5"].includes(activity.registryActivityCode)
-  ) {
-    const current = windows[0];
-    return current
-      ? { ...current, effectiveFrom: "2026-09-01" }
-      : undefined;
-  }
-  return windows[0];
+  return windows.filter((window) => window.effectiveFrom <= CERTIFICATE_CALCULATION_CATALOGUE_REVIEWED_ON
+    && (!window.effectiveTo || window.effectiveTo >= CERTIFICATE_CALCULATION_CATALOGUE_REVIEWED_ON))
+    .sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom))[0];
 }
 
 function nonCertificateMethod(
@@ -517,7 +519,7 @@ function methodForActivity(
     return nonCertificateMethod(program, activity);
   }
 
-  const window = sourceWindow(program, activity);
+  const window = sourceWindow(program);
   const sourceFields = {
     officialSourceUrl: window?.officialSourceUrl || program.officialSourceUrl,
     officialSourceTitle: program.officialSourceTitle,
@@ -642,7 +644,7 @@ function methodForActivity(
         officialReconciliationRequired: true,
         certificateActionEnabled: false,
         operatorMessage: executable
-          ? "The 1 July 2026 Rule formula and supported official product feed are connected for an estimate. ACP eligibility and implementation evidence still require reconciliation."
+          ? "The 7 September 2026 Rule formula and supported official product feed are connected for an estimate. ACP eligibility and implementation evidence still require reconciliation."
           : "The governed formula is implemented and tested. Calculation stays source-controlled until the current TESSA accepted-product evidence can be ingested and date-locked.",
       };
     }
@@ -698,8 +700,8 @@ function methodForActivity(
         officialReconciliationRequired: true,
         certificateActionEnabled: false,
         operatorMessage: executable
-          ? "The 1 July 2026 Rule formula and supported official product feed are connected for an estimate. ACP, network, response and implementation evidence still require reconciliation."
-          : "The governed battery formula is implemented and tested. BESS1 to BESS4 require an exact installation-date selection from the CEC Approved Batteries list plus every applicable PDRS Rule requirement. BESS3 and BESS4 also require an exact governed Battery Inverter Output field. BESS5 remains blocked until the Scheme Administrator publishes its recording method.",
+          ? "The 7 September 2026 Rule formula and supported official product feed are connected for an estimate. ACP, network, response and implementation evidence still require reconciliation."
+          : "The governed battery formula is implemented and tested. BESS1 to BESS4 require an exact installation-date selection from the CEC Approved Batteries list plus every applicable PDRS Rule requirement. BESS3 and BESS4 also require an exact governed Battery Inverter Output field. BESS5 requires the published recording method, including nominal-capacity and UL 9540A evidence, to be verified for the exact installation.",
       };
     }
     return {

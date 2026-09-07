@@ -1,4 +1,9 @@
-export const CREDITEX_NSW_PROGRAM_CATALOGUE_REVIEWED_ON = "2026-08-11";
+export const CREDITEX_NSW_PROGRAM_CATALOGUE_REVIEWED_ON = "2026-09-07";
+export const CREDITEX_NSW_SEPTEMBER_RULE_DATE = "2026-09-07";
+export const CREDITEX_NSW_SEPTEMBER_RULE_URLS = {
+  "NSW-ESS-2026": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Energy-Savings-Scheme-(Amendment-No.-2)-Rule-2026.PDF",
+  "NSW-PDRS-2026": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Peak-Demand-Reduction-Scheme-(Amendment-No.-3)-Rule-2026.PDF",
+} as const;
 
 export type CreditexNswInputOption = {
   value: string;
@@ -1089,7 +1094,7 @@ const ESS_ACTIVITIES: readonly CreditexNswActivityDefinition[] = [
   }),
 ];
 
-export const CREDITEX_NSW_PROGRAM_DEFINITIONS: readonly CreditexNswProgramDefinition[] = [
+export const CREDITEX_NSW_JULY_PROGRAM_DEFINITIONS: readonly CreditexNswProgramDefinition[] = [
   {
     programCode: "NSW-PDRS-2026",
     name: "NSW Peak Demand Reduction Scheme",
@@ -1115,6 +1120,45 @@ export const CREDITEX_NSW_PROGRAM_DEFINITIONS: readonly CreditexNswProgramDefini
     operatorMessage: "Estimate only. The arithmetic is source-pinned to the 1 July 2026 Rule and one implementation/item. Current product acceptance, bans, ACP accreditation, payment and evidence must be reconciled before any certificate action.",
   },
 ] as const;
+
+function septemberProgram(program: CreditexNswProgramDefinition): CreditexNswProgramDefinition {
+  const officialSourceUrl = CREDITEX_NSW_SEPTEMBER_RULE_URLS[program.programCode];
+  const officialSourceTitle = `${program.name} Rule effective 7 September 2026`;
+  return {
+    ...program,
+    effectiveFrom: CREDITEX_NSW_SEPTEMBER_RULE_DATE,
+    officialSourceUrl, officialSourceTitle,
+    sourceVersion: `${officialSourceTitle}; implementation pin reviewed 7 September 2026`,
+    operatorMessage: "Estimate only. The dated Rule, exact model, accreditation, payment and evidence must be verified before certificate creation.",
+    activities: program.activities.map((activity) => ({
+      ...activity,
+      effectiveFrom: CREDITEX_NSW_SEPTEMBER_RULE_DATE,
+      formulaKey: activity.formulaKey.replace(/2026-(07|09)\//, "2026-09-07/"),
+      supportedScenario: ["HVAC2-SINGLE", "F4-SINGLE"].includes(activity.activityCode)
+        ? "One eligible non-multi GEMS product for a commercial implementation, with the applicable registered efficiency and capacity data"
+        : activity.supportedScenario,
+      sourceReferences: activity.sourceReferences.map((source) =>
+        [ESS_RULE_URL, PDRS_RULE_URL].includes(source.url)
+          ? { ...source, url: officialSourceUrl, title: `${source.title}, September 2026 Rule`, pages: "See cited clauses in the September 2026 Rule" }
+          : source),
+      inputDefinitions: activity.inputDefinitions.map((definition) => {
+        if (["HVAC2-MULTI", "F4-MULTI"].includes(activity.activityCode) && definition.key === "product_class") {
+          return { ...definition, defaultValue: "20", options: definition.options?.filter((option) => ["20", "21", "27"].includes(option.value)) };
+        }
+        if (["BESS4", "BESS5"].includes(activity.officialActivityCode) && definition.key === "new_solar_capacity_kw") {
+          return { ...definition, minimum: "0", help: "For the solar-linked rate, new PV must be at least one quarter of usable battery capacity. Enter 0 if no new PV is installed and use the standard rate." };
+        }
+        if (["BESS3", "BESS4"].includes(activity.officialActivityCode) && definition.key === "net_payment_ex_gst_aud") {
+          return { ...definition, label: "Purchaser net payment per implementation", help: "Enter the actual non-reimbursed payment for this implementation, excluding GST." };
+        }
+        return definition;
+      }),
+    })),
+  };
+}
+
+export const CREDITEX_NSW_PROGRAM_DEFINITIONS: readonly CreditexNswProgramDefinition[] =
+  CREDITEX_NSW_JULY_PROGRAM_DEFINITIONS.map(septemberProgram);
 
 export const CREDITEX_NSW_BLOCKED_ACTIVITIES: readonly CreditexNswBlockedActivity[] = [
   {
@@ -1175,13 +1219,19 @@ export const CREDITEX_NSW_BLOCKED_ACTIVITIES: readonly CreditexNswBlockedActivit
   },
 ] as const;
 
-export function creditexNswProgramDefinition(programCode: string) {
-  return CREDITEX_NSW_PROGRAM_DEFINITIONS.find((program) => program.programCode === programCode);
+export function creditexNswProgramDefinition(programCode: string, effectiveDate = CREDITEX_NSW_PROGRAM_CATALOGUE_REVIEWED_ON) {
+  const definitions = effectiveDate < CREDITEX_NSW_SEPTEMBER_RULE_DATE
+    ? CREDITEX_NSW_JULY_PROGRAM_DEFINITIONS : CREDITEX_NSW_PROGRAM_DEFINITIONS;
+  const program = definitions.find((item) => item.programCode === programCode);
+  return program && effectiveDate < CREDITEX_NSW_SEPTEMBER_RULE_DATE
+    ? { ...program, effectiveTo: "2026-09-06", activities: program.activities.map((activity) => ({ ...activity, effectiveTo: "2026-09-06" })) }
+    : program;
 }
 
 export function creditexNswActivityDefinition(
   programCode: string,
   activityCode: string,
+  effectiveDate = CREDITEX_NSW_PROGRAM_CATALOGUE_REVIEWED_ON,
 ) {
-  return creditexNswProgramDefinition(programCode)?.activities.find((activity) => activity.activityCode === activityCode);
+  return creditexNswProgramDefinition(programCode, effectiveDate)?.activities.find((activity) => activity.activityCode === activityCode);
 }

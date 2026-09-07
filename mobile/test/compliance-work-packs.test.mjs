@@ -41,11 +41,11 @@ test('linked current activities open a phone-first schema-driven wizard without 
   assert.match(types, /customerContextBinding: FieldWorkPackCustomerContextBinding/);
   assert.match(types, /contextSha256: string/);
   assert.match(jobScreen, /<ActivityWorkPackWizard/);
-  assert.match(jobScreen, /complianceIntents\.map\(\(intent, index\)/);
+  assert.match(jobScreen, /complianceIntents\.filter\(\(intent\) => intent\.id === activeFormId\)\.map\(\(intent, index\)/);
   assert.match(jobScreen, /item\.instance\.complianceIntentId === intent\.id/);
   assert.match(wizard, /const AUTOSAVE_DELAY_MS = 700/);
-  assert.match(wizard, />Back<\/FieldButton>/);
-  assert.match(wizard, />Continue<\/FieldButton>/);
+  assert.match(wizard, />Previous<\/FieldButton>/);
+  assert.match(wizard, />Next<\/FieldButton>/);
   assert.match(wizard, /Your next step/);
   assert.match(wizard, /Answers save automatically/);
   assert.match(jobScreen, /listPendingWorkPackActions/);
@@ -95,7 +95,7 @@ test('editable work-pack context resolves minimal predictions without changing p
   assert.doesNotMatch(wizard, /address suggestion[^\n]{0,80}verified/i);
 });
 
-test('the technician opens at the first incomplete section and Continue remains the primary path', () => {
+test('the technician opens at the first incomplete section and Next remains the primary path', () => {
   const functions = executableBundle(wizard, ['initialFieldWorkPackPage'], `
     const fieldWorkPackSections = (pack) => pack.definition.schema.sections;
     const fieldActivityWorkPackCompletion = ({ response }) => response.__completion;
@@ -126,7 +126,7 @@ test('the technician opens at the first incomplete section and Continue remains 
   assert.equal(functions.initialFieldWorkPackPage(pack), 1);
   pack.response.__completion.ready = true;
   assert.equal(functions.initialFieldWorkPackPage(pack), 2);
-  assert.match(wizard, />Continue<\/FieldButton>/);
+  assert.match(wizard, />Next<\/FieldButton>/);
 });
 
 test('the phone flow keeps TLink branding, one section at a time and large primary controls', () => {
@@ -275,7 +275,7 @@ test('only unlinked intents show setup required and trade actions expose no defi
   assert.match(jobScreen, /CREDITEX RELEASE BLOCK/);
   assert.match(jobScreen, /Syncing alone will not clear this block/);
   assert.match(jobScreen, /return pack \? <ActivityWorkPackWizard/);
-  assert.match(jobScreen, /: <UnlinkedComplianceWorkPack/);
+  assert.match(jobScreen, /: <>[\s\S]*?<UnlinkedComplianceWorkPack/);
   assert.match(types, /'work_pack_commit' \| 'work_pack_prepare_signing'/);
   assert.match(types, /\| 'work_pack_capture_signatures'/);
   assert.match(types, /\| 'work_pack_update_customer_context'/);

@@ -202,7 +202,7 @@ class TestD1Database {
 function applyMigrations(sqlite) {
   const migrations = fs.readdirSync(path.join(ROOT, "drizzle"))
     .filter((name) => /^\d{4}_.+\.sql$/.test(name)
-      && name <= "0146_creditex_sres_certificate_activation_evidence.sql")
+      && name <= "0169_creditex_master_author_save.sql")
     .filter((name) => name !== "0044_flimsy_omega_flight.sql")
     .sort();
   for (const migration of migrations) {

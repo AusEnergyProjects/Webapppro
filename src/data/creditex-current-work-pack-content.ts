@@ -1,6 +1,7 @@
 import {
   GOVERNMENT_ACTIVITY_TEMPLATES,
 } from "../lib/australian-government-program-catalogue.ts";
+import { CREDITEX_SEPTEMBER_BATTERY_WORK_PACK_CONTENT } from "./creditex-september-battery-work-pack-content.ts";
 import {
   CREDITEX_NON_CERTIFICATE_WORK_PACK_CONTENT_CANDIDATES,
   type CreditexNonCertificateReferenceDocument,
@@ -675,6 +676,7 @@ const CURRENT_OR_LIMITED_TEMPLATES = GOVERNMENT_ACTIVITY_TEMPLATES.filter(
 const NORMALISED = [
   ...CREDITEX_VEU_PUBLISHABLE_WORK_PACK_CONTENT.map(veu),
   ...CREDITEX_NSW_GOVERNED_WORK_PACK_CONTENT.map(nsw),
+  ...CREDITEX_SEPTEMBER_BATTERY_WORK_PACK_CONTENT,
   ...CREDITEX_SRES_WORK_PACK_CONTENT_CANDIDATES.map(sres),
   ...CREDITEX_NON_CERTIFICATE_WORK_PACK_CONTENT_CANDIDATES.map(nonCertificate),
 ];
@@ -697,7 +699,7 @@ export function validateCreditexCurrentWorkPackContent(
   const errors: string[] = [];
   const expectedIds = CURRENT_OR_LIMITED_TEMPLATES.map((template) => template.templateId);
   const actualIds = candidates.map((candidate) => candidate.templateId);
-  if (candidates.length !== 192) errors.push(`Expected 192 candidates, received ${candidates.length}.`);
+  if (candidates.length !== 195) errors.push(`Expected 195 candidates, received ${candidates.length}.`);
   if (new Set(actualIds).size !== actualIds.length) errors.push("Candidate template IDs must be unique.");
   if (expectedIds.some((id, index) => actualIds[index] !== id)) errors.push("Candidates must exactly match the ordered current and limited catalogue.");
   for (const candidate of candidates) {

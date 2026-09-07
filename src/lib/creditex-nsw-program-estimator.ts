@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   creditexNswActivityDefinition,
   creditexNswProgramDefinition,
+  CREDITEX_NSW_SEPTEMBER_RULE_DATE,
   type CreditexNswActivityDefinition,
   type CreditexNswInputDefinition,
   type CreditexNswProgramDefinition,
@@ -11,7 +12,8 @@ import {
 export const CREDITEX_NSW_ESTIMATE_SCHEMA =
   "creditex-nsw-program-estimate/v1" as const;
 export const CREDITEX_NSW_ESTIMATOR_VERSION =
-  "creditex-nsw-program-estimator/exact-rational-2026-07-v1" as const;
+  "creditex-nsw-program-estimator/exact-rational-2026-09-07-v1" as const;
+const JULY_ESTIMATOR_VERSION = "creditex-nsw-program-estimator/exact-rational-2026-07-v1" as const;
 
 export type CreditexNswEstimateErrorCode =
   | "NSW_ESTIMATE_INVALID"
@@ -64,7 +66,7 @@ export type CreditexNswEstimateTraceEntry = {
 
 export type CreditexNswProgramEstimate = {
   schemaVersion: typeof CREDITEX_NSW_ESTIMATE_SCHEMA;
-  estimatorVersion: typeof CREDITEX_NSW_ESTIMATOR_VERSION;
+  estimatorVersion: typeof CREDITEX_NSW_ESTIMATOR_VERSION | typeof JULY_ESTIMATOR_VERSION;
   programCode: string;
   jurisdiction: "NSW";
   activityCode: string;
@@ -339,7 +341,7 @@ function validateRequest(value: unknown): ValidatedRequest {
   const programCode = stringValue(value.programCode, "programCode", 64);
   const activityCode = stringValue(value.activityCode, "activityCode", 64);
   const effectiveDate = canonicalDate(value.effectiveDate);
-  const program = creditexNswProgramDefinition(programCode);
+  const program = creditexNswProgramDefinition(programCode, effectiveDate);
   if (!program) {
     fail(
       "NSW_PROGRAM_NOT_SUPPORTED",
@@ -347,7 +349,7 @@ function validateRequest(value: unknown): ValidatedRequest {
       404,
     );
   }
-  const activity = creditexNswActivityDefinition(programCode, activityCode);
+  const activity = creditexNswActivityDefinition(programCode, activityCode, effectiveDate);
   if (!activity) {
     fail(
       "NSW_ACTIVITY_NOT_SUPPORTED",
@@ -593,8 +595,15 @@ function baselineFor(request: ValidatedRequest) {
   };
 }
 
+function minimumEfficiencyGroup(request: ValidatedRequest) {
+  const productClass = Number(input(request, "product_class"));
+  // Minimum-rating tables group classes 5/6 differently from the baseline table.
+  if (request.effectiveDate >= CREDITEX_NSW_SEPTEMBER_RULE_DATE && [5, 6].includes(productClass)) return 3;
+  return airconGroup(productClass);
+}
+
 function checkCoolingEligibility(request: ValidatedRequest, commercial: boolean) {
-  const group = airconGroup(Number(input(request, "product_class")));
+  const group = minimumEfficiencyGroup(request);
   const row = (commercial ? COMMERCIAL_THRESHOLDS : RESIDENTIAL_THRESHOLDS)[group];
   if (!row) fail("NSW_INPUT_INVALID", "The product class threshold row is unavailable.");
   const threshold = constant(
@@ -618,7 +627,7 @@ function checkHeatingEligibility(
   commercial: boolean,
   climate: AirconClimateZone,
 ) {
-  const group = airconGroup(Number(input(request, "product_class")));
+  const group = minimumEfficiencyGroup(request);
   const row = (commercial ? COMMERCIAL_THRESHOLDS : RESIDENTIAL_THRESHOLDS)[group];
   if (!row) fail("NSW_INPUT_INVALID", "The product class threshold row is unavailable.");
   const threshold = constant(
@@ -709,7 +718,7 @@ function calculatePdrsHvac(request: ValidatedRequest) {
   const hvac2 = request.activity.officialActivityCode === "HVAC2";
   checkCoolingEligibility(request, hvac2);
   const product = pdrsCoolingCapacityAndInput(request);
-  if (hvac2 && compare(product.capacity, whole(30)) < 0) {
+  if (hvac2 && (request.effectiveDate < CREDITEX_NSW_SEPTEMBER_RULE_DATE || request.activity.activityCode.endsWith("-MULTI")) && compare(product.capacity, whole(30)) < 0) {
     fail("NSW_INPUT_INVALID", "HVAC2 calculated cooling capacity must be at least 30 kW.", 409);
   }
   const baseline = baselineFor(request).cooling;
@@ -876,7 +885,7 @@ function calculateBess4(request: ValidatedRequest) {
   const inverter = inputRational(request, "battery_inverter_output_kw");
   requireRange(usable, whole(20), whole(200), false, true, "BESS4 usable battery capacity must be greater than 20 kWh and no more than 200 kWh.");
   checkBatteryCapacityToInverter(usable, inverter);
-  if (compare(inputRational(request, "new_solar_capacity_kw"), divide(usable, whole(4))) < 0) {
+  if ((request.effectiveDate < CREDITEX_NSW_SEPTEMBER_RULE_DATE || input(request, "new_solar_within_90_days") === "yes") && compare(inputRational(request, "new_solar_capacity_kw"), divide(usable, whole(4))) < 0) {
     fail("NSW_INPUT_INVALID", "BESS4 new solar capacity must be at least one quarter of usable battery capacity.", 409);
   }
   const capacity = minimum(usable, multiply(inverter, whole(4)));
@@ -911,7 +920,7 @@ function calculateBess5(request: ValidatedRequest) {
   const inverter = inputRational(request, "battery_inverter_output_kw");
   requireRange(usable, whole(200), whole(30000), false, true, "BESS5 usable battery capacity must be greater than 200 kWh and no more than 30,000 kWh.");
   checkBatteryCapacityToInverter(usable, inverter);
-  if (compare(inputRational(request, "new_solar_capacity_kw"), divide(usable, whole(4))) < 0) {
+  if ((request.effectiveDate < CREDITEX_NSW_SEPTEMBER_RULE_DATE || input(request, "new_solar_within_90_days") === "yes") && compare(inputRational(request, "new_solar_capacity_kw"), divide(usable, whole(4))) < 0) {
     fail("NSW_INPUT_INVALID", "BESS5 new solar capacity must be at least one quarter of usable battery capacity.", 409);
   }
   const capacity = minimum(usable, whole(10000), multiply(inverter, whole(4)));
@@ -1079,13 +1088,19 @@ function calculateEssAircon(request: ValidatedRequest) {
   checkCoolingEligibility(request, commercial);
   checkHeatingEligibility(request, commercial, climate);
   const capacities = essCoolingAndHeatingCapacity(request);
-  if (commercial && compare(capacities.cooling, whole(30)) < 0) {
+  if (commercial && (request.effectiveDate < CREDITEX_NSW_SEPTEMBER_RULE_DATE || multi) && compare(capacities.cooling, whole(30)) < 0) {
     fail("NSW_INPUT_INVALID", "F4 calculated cooling capacity must be at least 30 kW.", 409);
   }
   const ductedOrMulti = multi || input(request, "installation_configuration") === "ducted";
+  const productClass = Number(input(request, "product_class"));
+  const septemberPayment = commercial
+    ? whole([20, 21, 27].includes(productClass) ? 3000 : 1000)
+    : [20, 21].includes(productClass)
+      ? requiredD16Payment(capacities.cooling, true)
+      : whole([5, 8, 9, 10].includes(productClass) ? 500 : 1000);
   checkPayment(
     request,
-    commercial
+    request.effectiveDate >= CREDITEX_NSW_SEPTEMBER_RULE_DATE ? septemberPayment : commercial
       ? (ductedOrMulti ? whole(3000) : whole(1000))
       : requiredD16Payment(capacities.cooling, ductedOrMulti),
   );
@@ -1227,7 +1242,7 @@ export function estimateCreditexNswProgram(
     : [];
   const receiptBase = {
     schemaVersion: CREDITEX_NSW_ESTIMATE_SCHEMA,
-    estimatorVersion: CREDITEX_NSW_ESTIMATOR_VERSION,
+    estimatorVersion: request.effectiveDate < CREDITEX_NSW_SEPTEMBER_RULE_DATE ? JULY_ESTIMATOR_VERSION : CREDITEX_NSW_ESTIMATOR_VERSION,
     programCode: request.program.programCode,
     activityCode: request.activity.activityCode,
     officialActivityCode: request.activity.officialActivityCode,
@@ -1241,7 +1256,7 @@ export function estimateCreditexNswProgram(
   };
   return {
     schemaVersion: CREDITEX_NSW_ESTIMATE_SCHEMA,
-    estimatorVersion: CREDITEX_NSW_ESTIMATOR_VERSION,
+    estimatorVersion: receiptBase.estimatorVersion,
     programCode: request.program.programCode,
     jurisdiction: "NSW",
     activityCode: request.activity.activityCode,

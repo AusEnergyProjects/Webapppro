@@ -201,7 +201,7 @@ const permissionGroups: Array<{ label: string; items: Array<{ key: BooleanPermis
     { key: "canManageTeam", label: "Manage team members", detail: "Add people and update member contact details or status." },
     { key: "canEditTeamPermissions", label: "Edit access permissions", detail: "Sensitive: change what another team member can see or do. This never allows changing their own access." },
     { key: "canViewFieldEvidence", label: "View field documents", detail: "Open job evidence and field documents." },
-    { key: "canManageFieldEvidence", label: "Add field documents", detail: "Upload, update and remove job evidence." },
+    { key: "canManageFieldEvidence", label: "Manage field forms and evidence", detail: "Business forms also require Edit job details and All team jobs. Creditex masters stay protected." },
     { key: "canRunReports", label: "Run whole-business reports", detail: "Sensitive: open reporting across the whole business." },
   ] },
 ];

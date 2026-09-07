@@ -922,7 +922,7 @@ test("jurisdiction programme synthesis explains outcomes and asks only missing e
   );
   assert.equal(answer.toolActions[0].href, "/rebates");
   assert.ok(answer.citations.length > 0 && answer.citations.length <= 4);
-  assert.ok(answer.citations.every((citation) => citation.lastChecked === "2026-08-08"));
+  assert.ok(answer.citations.every((citation) => citation.lastChecked === "2026-09-07"));
   assert.ok(answer.citations.every((citation) => citation.reviewDue === "2026-09-08"));
   assert.ok(answer.citations.every((citation) => citation.stale === false));
 });

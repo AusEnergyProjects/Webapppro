@@ -175,9 +175,9 @@ function applyMigrationChain(database, names) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 166);
+  assert.equal(completeMigrationChain.length, 168);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0167_/);
+  assert.match(completeMigrationChain.at(-1), /^0169_/);
   assert.ok(
     completeMigrationChain.includes("0160_trade_rental_inspections.sql"),
     "the complete migration chain must include the rental inspection schema",
@@ -567,7 +567,7 @@ test("planned intent snapshot is deterministic and remains setup-required", () =
 
   const expected = {
     contract: "tlink-creditex-job-intent-v1",
-    catalogueReviewedOn: "2026-08-08",
+    catalogueReviewedOn: "2026-09-07",
     plannedStart: PLANNED_START,
     siteJurisdiction: "VIC",
     program: {

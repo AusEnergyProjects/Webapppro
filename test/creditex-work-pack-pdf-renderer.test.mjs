@@ -8,6 +8,22 @@ import { createServer } from "vite";
 
 const HASH = `sha256:${"a".repeat(64)}`;
 
+test("long declarations reject overflow instead of silently dropping wrapped lines", async () => {
+  const vite = await createServer({ appType: "custom", configFile: false, logLevel: "silent" });
+  try {
+    const renderer = await vite.ssrLoadModule("/src/lib/creditex-activity-work-pack-pdf-renderer.ts");
+    const templateBytes = await templatePdf();
+    for (const overflow of ["wrap", "clip"]) {
+      await assert.rejects(() => renderer.renderCreditexActivityWorkPackPdf({
+        templateBytes,
+        output: { outputKey: "form", title: "Creditex declaration", sourceBindingTargetKey: "source", rendererVersion: "1.0.0", required: true,
+          placements: [placement({ sourcePath: "/declarations/terms", width: 0.08, height: 0.02, maximumLines: 1, fontSize: 10, minimumFontSize: 9, overflow })] },
+        context: { prefill: {}, response: {}, declarations: { terms: "Every declaration clause must remain readable and complete. ".repeat(50) } }, signatures: [],
+      }), (error) => error.code === "WORK_PACK_PDF_TEXT_OVERFLOW");
+    }
+  } finally { await vite.close(); }
+});
+
 async function templatePdf() {
   const document = await PDFDocument.create();
   document.setTitle("Governed activity form template");

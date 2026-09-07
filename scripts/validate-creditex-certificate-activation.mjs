@@ -12,7 +12,7 @@ export const CREDITEX_CERTIFICATE_ACTIVATION_ENDPOINT =
   "/api/creditex/work-packs";
 export const CREDITEX_CERTIFICATE_ACTIVATION_TOKEN_ENV =
   "CREDITEX_CERTIFICATE_ACTIVATION_BEARER_TOKEN";
-export const CREDITEX_CERTIFICATE_ACTIVATION_ACTIVITY_COUNT = 192;
+export const CREDITEX_CERTIFICATE_ACTIVATION_ACTIVITY_COUNT = 195;
 
 const SHA256_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const POSITIVE_DECIMAL_PATTERN =
@@ -51,7 +51,7 @@ if (
   || expectedById.size !== CREDITEX_CERTIFICATE_ACTIVATION_ACTIVITY_COUNT
 ) {
   throw new Error(
-    "Certificate activation gate configuration is invalid: the release catalogue must contain exactly 192 unique current or limited activity IDs.",
+    "Certificate activation gate configuration is invalid: the release catalogue must contain exactly 195 unique current or limited activity IDs.",
   );
 }
 

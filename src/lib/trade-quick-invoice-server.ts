@@ -737,10 +737,15 @@ export async function sendQuickInvoiceDelivery(input: {
   ownerUid: string;
   actorUid: string;
   origin: string;
+  expectedRevision?: number;
+  expectedRecipient?: string;
 }) {
   const db = getD1();
   const row = await invoiceDocumentRow(input.ownerUid, input.invoiceId);
   if (!row) throw new Error("QUICK_INVOICE_NOT_FOUND");
+  if (input.expectedRevision !== undefined && input.expectedRevision !== Number(row.revision || 1)) {
+    throw new Error("QUICK_INVOICE_CHANGED");
+  }
   if (isFinalisedProviderAcceptedInvoice(row)) {
     return {
       ok: true,
@@ -779,11 +784,14 @@ export async function sendQuickInvoiceDelivery(input: {
   }
   const recipient = validEmail(row.customer_email);
   if (!recipient) throw new Error("QUICK_INVOICE_RECIPIENT_INVALID");
+  if (input.expectedRecipient !== undefined && validEmail(input.expectedRecipient) !== recipient) {
+    throw new Error("QUICK_INVOICE_RECIPIENT_CHANGED");
+  }
   if (!serviceReminderProviderConfiguration().email.configured) {
     throw new Error("waiting_for_channel");
   }
   const now = new Date().toISOString();
-  const expectedRevision = Math.max(1, Number(row.revision || 1));
+  const expectedRevision = input.expectedRevision ?? Math.max(1, Number(row.revision || 1));
   const staleSendingBefore = new Date(
     Date.parse(now) - 10 * 60 * 1_000,
   ).toISOString();
@@ -802,7 +810,7 @@ export async function sendQuickInvoiceDelivery(input: {
       input.ownerUid,
       input.invoiceId,
     );
-    if (current && isFinalisedProviderAcceptedInvoice(current)) {
+    if (current && Number(current.revision || 1) === expectedRevision && isFinalisedProviderAcceptedInvoice(current)) {
       return {
         ok: true,
         duplicate: true,
@@ -852,6 +860,9 @@ export async function sendQuickInvoiceDelivery(input: {
         expectedRevision,
       },
     );
+    if (validEmail(snapshot.customer.email) !== recipient) {
+      throw new Error("QUICK_INVOICE_RECIPIENT_CHANGED");
+    }
     const pdf = await renderTradeQuickInvoicePdf(snapshot, {
       origin: input.origin,
     });

@@ -143,7 +143,7 @@ test("field workflow enforces ordered, audited and idempotent transitions", () =
   assert.match(fieldRoute, /trade_offline_actions/);
   assert.match(fieldRoute, /clientActionId/);
   assert.match(fieldRoute, /duplicate: true/);
-  assert.match(fieldRoute, /appointment\.status !== transition\.from/);
+  assert.match(fieldRoute, /appointment\.status !== expectedAppointmentStatus/);
   assert.match(fieldRoute, /const fieldCompleted = appointmentStatus === "completed" && job\?\.stage === "completed"/);
   assert.match(fieldRoute, /last_transition_by_uid/);
   assert.match(fieldRoute, /field_state_changed/);

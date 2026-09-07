@@ -1,3 +1,4 @@
+import * as fieldCompletionPolicy from "../src/lib/trade-field-completion-policy.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs";
@@ -14,6 +15,7 @@ function compile(source, fileName, mocks) {
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+    if (specifier === "@/lib/trade-field-completion-policy") return fieldCompletionPolicy;
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
   new Function("require", "module", "exports", output)(require, moduleRecord, moduleRecord.exports);
