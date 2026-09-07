@@ -309,11 +309,12 @@ test("job setup and field workspace attach one frozen rental workflow with guard
   assert.match(assessmentPanel, /GPS took too long\. Move to an open area/);
   assert.match(assessmentPanel, /Save section and continue/);
   assert.match(assessmentPanel, /for \(const draft of drafts\)/);
-  assert.match(mobilePanel, /Save section and continue/);
-  assert.match(mobilePanel, /for \(const draft of drafts\)/);
-  assert.match(mobilePanel, /next\.delete\(draft\.dirtyKey\)/);
-  assert.match(mobilePanel, /if \(!draft\.item\.id\)/);
-  assert.match(mobilePanel, /savedCount > 0/);
+  assert.match(mobilePanel, /Take photo/);
+  assert.match(mobilePanel, /rentalAdjacentQuestion/);
+  assert.match(mobilePanel, /for \(const photo of draft\.photos\)/);
+  assert.match(mobilePanel, /delete next\.drafts\[key\]/);
+  assert.match(mobilePanel, /if \(!saved\) throw new Error/);
+  assert.match(mobilePanel, /expectedItemRevision: item\.revision/);
   assert.match(fieldRoute, /rentalEvidencePhotoCapture\(evidenceEnvelope, \{ receivedAtUtc: now \}\)/);
   assert.match(assessmentPanel, /Internal assessment note/);
   assert.match(assessmentPanel, /Quote-ready scope/);

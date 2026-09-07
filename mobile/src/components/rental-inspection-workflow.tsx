@@ -1,732 +1,448 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Crypto from 'expo-crypto';
-import { File } from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Alert,
-  Linking,
-  Pressable,
-  Share,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Image, Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { usePreventRemove } from 'expo-router/react-navigation';
+import { useNavigation } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FieldButton } from '@/components/field-button';
+import { FieldSelect } from '@/components/field-select';
+import { FieldDatePicker } from '@/components/field-date-picker';
 import { apiRequest } from '@/lib/api';
+import { getSetting, setSetting } from '@/lib/database';
 import { captureSessionId, observeLocation, observedTime } from '@/lib/evidence';
-import {
-  RENTAL_ADVERSE_OUTCOMES,
-  RENTAL_OUTCOMES,
-  RENTAL_TRADES,
-  newRentalItem,
-  type RentalAssessmentCheck,
-  type RentalAssessmentFinding,
-  type RentalAssessmentEvidence,
-  type RentalAssessmentItem,
-  type RentalAssessmentModule,
-  type RentalAssessmentResult,
-  type RentalAssessmentSection,
-  type RentalMetadataField,
-} from '@/lib/rental-inspection';
+import { RENTAL_ADVERSE_OUTCOMES, RENTAL_OUTCOMES, RENTAL_READINESS_OUTCOMES, RENTAL_TRADES, newRentalItem,
+  rentalObservationsComplete, rentalAdjacentQuestion, deliverRentalPhoto,
+  type RentalAssessmentItem, type RentalAssessmentResult,
+  type RentalAssessmentModule, type RentalAssessmentSection } from '@/lib/rental-inspection';
 import { colours, radius, spacing } from '@/lib/theme';
 import type { FieldRentalInspectionSummary } from '@/lib/types';
 
-const MAX_EVIDENCE_BYTES = 8 * 1024 * 1024;
-const MAX_REPORT_EVIDENCE_BYTES = 32 * 1024 * 1024;
-const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
-
-function readable(value: string) {
-  return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+type Props = { workOrderId: string; summary: FieldRentalInspectionSummary; online: boolean; onChanged: () => Promise<void>; onReturnToJob?: () => void };
+type Photo = { uri: string; width: number; height: number; capture: ReturnType<typeof observedTime>; location: Awaited<ReturnType<typeof observeLocation>> | null; mediaId?: string };
+type Draft = { outcome: string; locationLabel: string; publicNotes: string; internalNotes: string;
+  findingTitle: string; findingDescription: string; tradeCategory: string; scopeSummary: string;
+  severity: string; immediateAction: string; notified: boolean; response: Record<string, unknown>; photos: Photo[] };
+type Cursor = { sectionKey: string; checkIndex: number; instanceKey: string };
+type Page = 'categories' | 'answer' | 'details' | 'finding' | 'action' | 'safety' | 'metadata' | 'review';
+type Cache = { drafts: Record<string, Draft>; answers: Record<string, Record<string, unknown>> };
+const emptyCache: Cache = { drafts: {}, answers: {} };
+const ENDPOINT = '/api/trade-rental-inspections';
+const readable = (s: string) => s.replaceAll('_', ' ');
+const draftPrefix = (module: RentalAssessmentModule) => [module.id, module.template.assessmentScope || 'legacy', module.template.templateVersion || 1].join(':') + ':';
+const itemKey = (module: RentalAssessmentModule, cursor: Cursor) => draftPrefix(module) + [cursor.sectionKey, cursor.checkIndex, cursor.instanceKey].join(':');
+function initialDraft(item: RentalAssessmentItem, data: RentalAssessmentResult): Draft {
+  const finding = data.findings?.find((f) => f.itemId === item.id);
+  return { outcome: item.outcome, locationLabel: item.locationLabel, publicNotes: item.publicNotes, internalNotes: item.internalNotes,
+    findingTitle: finding?.title || '', findingDescription: finding?.description || '', tradeCategory: finding?.tradeCategory || '',
+    scopeSummary: finding?.scopeSummary || '', severity: finding?.severity || 'required',
+    immediateAction: String(finding?.details.immediateAction || ''), notified: finding?.details.responsiblePeopleNotified === true,
+    response: item.response, photos: [] };
 }
-
-function formatDate(value: string) {
-  if (!value) return 'Not recorded';
-  const dateOnly = value.length === 10;
-  const date = new Date(dateOnly ? `${value}T00:00:00Z` : value);
-  return Number.isFinite(date.getTime())
-    ? date.toLocaleString('en-AU', dateOnly
-      ? { dateStyle: 'medium', timeZone: 'UTC' }
-      : { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Australia/Melbourne' })
-    : value;
-}
-
-function formatBytes(value: number) {
-  return value >= 1024 * 1024
-    ? `${(value / 1024 / 1024).toFixed(1)} MB`
-    : `${Math.max(1, Math.round(value / 1024))} KB`;
-}
-
-type WorkflowProps = {
-  workOrderId: string;
-  summary: FieldRentalInspectionSummary;
-  online: boolean;
-  onChanged: () => Promise<void>;
-  onReturnToJob?: () => void;
-};
-
-type UploadResponse = {
-  ok?: boolean;
-  media?: Array<{ id: string; fileName: string }>;
-  error?: string;
-};
-
-type RentalItemDraft = { item: RentalAssessmentItem; body: Record<string, unknown> };
-type RentalItemDraftProvider = () => RentalItemDraft;
-
-function MetadataEditor({
-  module,
-  readOnly,
-  busy,
-  onSave,
-}: {
-  module: RentalAssessmentModule;
-  readOnly: boolean;
-  busy: boolean;
-  onSave: (answers: Record<string, unknown>) => Promise<void>;
+function RentalTextField({ label, value, onChange, editable, multiline = false }: {
+  label: string; value: string; onChange: (value: string) => void; editable: boolean; multiline?: boolean;
 }) {
-  const fields = module.template.metadataFields || [];
-  const [answers, setAnswers] = useState<Record<string, unknown>>({ ...module.answers });
-  if (!fields.length) return null;
-  function setValue(field: RentalMetadataField, value: unknown) {
-    setAnswers((current) => ({ ...current, [field.key]: value }));
-  }
-  return <View style={styles.detailsCard}>
-    <Text style={styles.label}>ASSESSMENT DETAILS</Text>
-    <Text style={styles.cardTitle}>Issuer details and declaration</Text>
-    {fields.map((field) => <View style={styles.field} key={field.key}>
-      <Text style={styles.inputLabel}>{field.label}{field.required ? ' *' : ''}</Text>
-      {field.type === 'checkbox'
-        ? <Pressable disabled={readOnly} accessibilityRole="checkbox" accessibilityState={{ checked: answers[field.key] === true }} onPress={() => setValue(field, answers[field.key] !== true)} style={[styles.choice, answers[field.key] === true && styles.choiceSelected]}>
-          <MaterialCommunityIcons name={answers[field.key] === true ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={24} color={colours.green} />
-          <Text style={styles.choiceText}>{answers[field.key] === true ? 'Confirmed' : 'Tap to confirm'}</Text>
-        </Pressable>
-        : field.type === 'select'
-          ? <View style={styles.choiceList}>{field.options.map((option) => <Pressable disabled={readOnly} key={option.value} onPress={() => setValue(field, option.value)} style={[styles.option, answers[field.key] === option.value && styles.optionSelected]}><Text style={styles.optionText}>{option.label}</Text></Pressable>)}</View>
-          : <TextInput editable={!readOnly} style={[styles.input, field.type === 'textarea' && styles.textarea]} multiline={field.type === 'textarea'} value={String(answers[field.key] || '')} onChangeText={(value) => setValue(field, value)} placeholder={field.placeholder || (field.type === 'date' ? 'YYYY-MM-DD' : 'Enter details')} maxLength={field.type === 'textarea' ? 4000 : 500} />}
-      {field.help ? <Text style={styles.help}>{field.help}</Text> : null}
-    </View>)}
-    {!readOnly ? <FieldButton loading={busy} onPress={() => void onSave(answers)}>Save assessment details</FieldButton> : null}
-  </View>;
+  return <View style={styles.field}><Text style={styles.label}>{label}</Text><TextInput editable={editable}
+    style={[styles.input, multiline && styles.notes]} value={value} onChangeText={onChange} multiline={multiline} maxLength={multiline ? 4000 : 500} /></View>;
 }
-
-function ItemEditor({
-  module,
-  section,
-  check,
-  item,
-  finding,
-  evidence,
-  readOnly,
-  busy,
-  onSave,
-  onPhoto,
-  onDirtyChange,
-  onRegisterDraft,
-}: {
-  module: RentalAssessmentModule;
-  section: RentalAssessmentSection;
-  check: RentalAssessmentCheck;
-  item: RentalAssessmentItem;
-  finding?: RentalAssessmentFinding;
-  evidence: RentalAssessmentEvidence[];
-  readOnly: boolean;
-  busy: boolean;
-  onSave: (body: Record<string, unknown>) => Promise<void>;
-  onPhoto: (item: RentalAssessmentItem, check: RentalAssessmentCheck) => Promise<void>;
-  onDirtyChange: (itemKey: string, dirty: boolean) => void;
-  onRegisterDraft: (itemKey: string, provider: RentalItemDraftProvider | null) => void;
-}) {
-  const [outcome, setOutcome] = useState(item.outcome || '');
-  const [locationLabel, setLocationLabel] = useState(item.locationLabel || '');
-  const [publicNotes, setPublicNotes] = useState(item.publicNotes || '');
-  const [internalNotes, setInternalNotes] = useState(item.internalNotes || '');
-  const [technicalOpen, setTechnicalOpen] = useState(false);
-  const [response, setResponse] = useState<Record<string, unknown>>({ ...item.response });
-  const [findingTitle, setFindingTitle] = useState(finding?.title || '');
-  const [findingDescription, setFindingDescription] = useState(finding?.description || '');
-  const [severity, setSeverity] = useState(finding?.severity || 'required');
-  const [tradeCategory, setTradeCategory] = useState(finding?.tradeCategory || '');
-  const [scopeSummary, setScopeSummary] = useState(finding?.scopeSummary || '');
-  const [recommendedAction, setRecommendedAction] = useState(finding?.recommendedAction || '');
-  const [immediateAction, setImmediateAction] = useState(String(finding?.details.immediateAction || ''));
-  const [notified, setNotified] = useState(finding?.details.responsiblePeopleNotified === true);
-  const adverse = RENTAL_ADVERSE_OUTCOMES.has(outcome);
-  const repeated = check.repeatBy !== 'property';
-  const dirtyKey = item.id || `${module.id}:${section.key}:${check.key}:${item.instanceKey}`;
-  const dirty = outcome !== (item.outcome || '')
-    || locationLabel !== (item.locationLabel || '')
-    || publicNotes !== (item.publicNotes || '')
-    || internalNotes !== (item.internalNotes || '')
-    || JSON.stringify(response) !== JSON.stringify(item.response || {})
-    || findingTitle !== (finding?.title || '')
-    || findingDescription !== (finding?.description || '')
-    || severity !== (finding?.severity || 'required')
-    || tradeCategory !== (finding?.tradeCategory || '')
-    || scopeSummary !== (finding?.scopeSummary || '')
-    || recommendedAction !== (finding?.recommendedAction || '')
-    || immediateAction !== String(finding?.details.immediateAction || '')
-    || notified !== (finding?.details.responsiblePeopleNotified === true);
-
-  useEffect(() => {
-    onDirtyChange(dirtyKey, dirty);
-    return () => onDirtyChange(dirtyKey, false);
-  }, [dirty, dirtyKey, onDirtyChange]);
-
-  function draft(): RentalItemDraft {
-    if (!outcome) throw new Error('Choose the assessment result before saving.');
-    if (repeated && !locationLabel.trim()) throw new Error('Add the exact room, door, window or item location before saving.');
-    if (outcome === 'not_applicable' && !publicNotes.trim()) throw new Error('Add the public reason this standard does not apply at this property.');
-    if (adverse && (!findingTitle.trim() || !findingDescription.trim() || !tradeCategory || !scopeSummary.trim())) {
-      throw new Error('Add a finding title, description, responsible trade and quote-ready scope.');
-    }
-    if (severity === 'immediate_safety_risk' && (!immediateAction.trim() || !notified)) {
-      throw new Error('Record what was made safe and confirm the responsible people were notified.');
-    }
-    return { item, body: {
-      action: 'save_item',
-      moduleId: module.id,
-      expectedModuleRevision: module.revision,
-      expectedItemRevision: item.revision,
-      sectionKey: section.key,
-      checkKey: check.key,
-      instanceKey: item.instanceKey,
-      locationLabel: locationLabel.trim(),
-      outcome,
-      response,
-      publicNotes: publicNotes.trim(),
-      internalNotes: internalNotes.trim(),
-      sortOrder: item.sortOrder,
-      finding: adverse ? {
-        title: findingTitle.trim(),
-        description: findingDescription.trim(),
-        status: outcome === 'does_not_meet' ? 'non_compliant' : 'not_tested',
-        severity,
-        tradeCategory,
-        recommendedAction: recommendedAction.trim(),
-        scopeSummary: scopeSummary.trim(),
-        quantityMilli: finding?.quantityMilli || 1000,
-        unitLabel: finding?.unitLabel || 'each',
-        internalNotes: finding?.internalNotes || '',
-        details: {
-          immediateAction: immediateAction.trim(),
-          responsiblePeopleNotified: notified,
-        },
-      } : undefined,
-    } };
-  }
-
-  useEffect(() => {
-    const provider = () => draft();
-    onRegisterDraft(dirtyKey, provider);
-    return () => onRegisterDraft(dirtyKey, null);
-  });
-
-  async function save() {
-    try {
-      await onSave(draft().body);
-    } catch (saveError) {
-      Alert.alert('Finish this answer', saveError instanceof Error ? saveError.message : 'The answer is not ready to save.');
-    }
-  }
-
-  function technicalField(key: string, label: string, placeholder = '') {
-    return <View style={styles.field} key={key}><Text style={styles.inputLabel}>{label}</Text><TextInput editable={!readOnly} style={styles.input} value={String(response[key] || '')} onChangeText={(value) => setResponse((current) => ({ ...current, [key]: value }))} placeholder={placeholder} maxLength={500} /></View>;
-  }
-
-  return <View style={[styles.itemCard, outcome ? styles.itemAnswered : null]}>
-    <View style={styles.itemHeading}>
-      <View style={styles.flex}><Text style={styles.itemSequence}>{repeated ? 'REPEATABLE CHECK' : 'PROPERTY CHECK'}</Text><Text style={styles.itemTitle}>{check.prompt}</Text></View>
-      <Text style={styles.saved}>{item.id ? `Saved v${item.revision}` : 'Not saved'}</Text>
-    </View>
-    {repeated ? <View style={styles.field}><Text style={styles.inputLabel}>Exact location *</Text><TextInput editable={!readOnly} style={styles.input} value={locationLabel} onChangeText={setLocationLabel} placeholder="For example, Bedroom 2 north window" maxLength={300} /></View> : null}
-    <Text style={styles.inputLabel}>Result *</Text>
-    <View style={styles.choiceList}>{RENTAL_OUTCOMES.map((option) => <Pressable disabled={readOnly} key={option.value} onPress={() => setOutcome(option.value)} style={[styles.option, outcome === option.value && styles.optionSelected]}><MaterialCommunityIcons name={outcome === option.value ? 'radiobox-marked' : 'radiobox-blank'} size={20} color={colours.green} /><Text style={styles.optionText}>{option.label}</Text></Pressable>)}</View>
-    <View style={styles.guidance}>
-      <MaterialCommunityIcons name="camera-outline" size={23} color={colours.green} />
-      <View style={styles.flex}><Text style={styles.guidanceTitle}>What to photograph</Text><Text style={styles.body}>{check.photoGuidance}</Text>{check.help ? <Text style={styles.help}>{check.help}</Text> : null}</View>
-    </View>
-    <View style={styles.field}><Text style={styles.inputLabel}>Report detail{outcome === 'not_applicable' ? ' *' : ''}</Text><TextInput editable={!readOnly} style={[styles.input, styles.textarea]} multiline value={publicNotes} onChangeText={setPublicNotes} placeholder={outcome === 'not_applicable' ? 'Explain why this standard does not apply at this property.' : 'Describe what was observed, tested or measured. This appears in the final report.'} maxLength={4000} /><Text style={styles.help}>Visible to the agent, rental provider and trades using the issued report.</Text></View>
-
-    <Pressable onPress={() => setTechnicalOpen((value) => !value)} style={styles.disclosure}><Text style={styles.disclosureText}>Measurements, equipment and credentials</Text><MaterialCommunityIcons name={technicalOpen ? 'chevron-up' : 'chevron-down'} size={22} color={colours.green} /></Pressable>
-    {technicalOpen ? <View style={styles.technicalFields}>
-      {technicalField('make', 'Make')}
-      {technicalField('model', 'Model')}
-      {technicalField('serialNumber', 'Serial number')}
-      {technicalField('measurement', 'Measurement')}
-      {technicalField('measurementUnit', 'Measurement unit', 'mm, ohm, seconds')}
-      {technicalField('testMethod', 'Test method')}
-      {technicalField('testInstrument', 'Test instrument')}
-      {technicalField('testResult', 'Test result')}
-      {technicalField('credentialType', 'Specialist credential type')}
-      {technicalField('credentialNumber', 'Specialist credential number')}
-      <Pressable disabled={readOnly} onPress={() => setResponse((current) => ({ ...current, credentialVerified: current.credentialVerified !== true }))} style={[styles.choice, response.credentialVerified === true && styles.choiceSelected]}><MaterialCommunityIcons name={response.credentialVerified === true ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={24} color={colours.green} /><Text style={styles.choiceText}>Specialist credential checked</Text></Pressable>
-    </View> : null}
-
-    {adverse ? <View style={styles.findingCard}>
-      <Text style={styles.label}>FINDING AND WORK SCOPE</Text>
-      <Text style={styles.findingNotice}>Required before this module can be completed</Text>
-      <View style={styles.field}><Text style={styles.inputLabel}>Finding title *</Text><TextInput editable={!readOnly} style={styles.input} value={findingTitle} onChangeText={setFindingTitle} placeholder="Short description a trade can scan" maxLength={240} /></View>
-      <View style={styles.field}><Text style={styles.inputLabel}>What is wrong or still unverified *</Text><TextInput editable={!readOnly} style={[styles.input, styles.textarea]} multiline value={findingDescription} onChangeText={setFindingDescription} maxLength={8000} /></View>
-      <Text style={styles.inputLabel}>Severity *</Text>
-      <View style={styles.compactChoices}>{['required', 'urgent', 'immediate_safety_risk', 'recommended', 'information'].map((value) => <Pressable disabled={readOnly} key={value} onPress={() => setSeverity(value)} style={[styles.compactOption, severity === value && styles.optionSelected]}><Text style={styles.optionText}>{readable(value)}</Text></Pressable>)}</View>
-      <Text style={styles.inputLabel}>Responsible trade *</Text>
-      <View style={styles.compactChoices}>{RENTAL_TRADES.map((trade) => <Pressable disabled={readOnly} key={trade} onPress={() => setTradeCategory(trade)} style={[styles.compactOption, tradeCategory === trade && styles.optionSelected]}><Text style={styles.optionText}>{trade}</Text></Pressable>)}</View>
-      <View style={styles.field}><Text style={styles.inputLabel}>Recommended action</Text><TextInput editable={!readOnly} style={[styles.input, styles.textareaSmall]} multiline value={recommendedAction} onChangeText={setRecommendedAction} maxLength={4000} /></View>
-      <View style={styles.field}><Text style={styles.inputLabel}>Quote-ready scope *</Text><TextInput editable={!readOnly} style={[styles.input, styles.textarea]} multiline value={scopeSummary} onChangeText={setScopeSummary} placeholder="Describe the work, location, quantity and expected result so the responsible trade can quote it." maxLength={8000} /></View>
-      {severity === 'immediate_safety_risk' ? <View style={styles.safetyStop}>
-        <Text style={styles.safetyTitle}>Stop and make the situation safe</Text>
-        <Text style={styles.body}>Do not leave this as a quote item only. Record the immediate action and who was told.</Text>
-        <TextInput editable={!readOnly} style={[styles.input, styles.textarea]} multiline value={immediateAction} onChangeText={setImmediateAction} placeholder="Make-safe or isolation action" maxLength={2000} />
-        <Pressable disabled={readOnly} onPress={() => setNotified((value) => !value)} style={[styles.choice, notified && styles.choiceSelected]}><MaterialCommunityIcons name={notified ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={24} color={colours.red} /><Text style={styles.choiceText}>Responsible people were notified</Text></Pressable>
-      </View> : null}
-    </View> : null}
-
-    <View style={[styles.field, styles.internalField]}><Text style={styles.inputLabel}>Internal assessment note</Text><TextInput editable={!readOnly} style={[styles.input, styles.textareaSmall]} multiline value={internalNotes} onChangeText={setInternalNotes} placeholder="Private coordination, costing or follow-up notes" maxLength={4000} /><Text style={styles.help}>Private to your business. Never included in the public report or PDF.</Text></View>
-    {!readOnly ? <FieldButton loading={busy} disabled={!outcome} onPress={() => void save()}>{item.id ? 'Save changes' : 'Save this answer'}</FieldButton> : null}
-    <View style={styles.evidenceRow}>
-      <View style={styles.flex}><Text style={styles.inputLabel}>Evidence</Text><Text style={styles.help}>{evidence.length} of {item.requiredEvidenceCount || check.requiredEvidenceCount} required files linked</Text></View>
-      {!readOnly && item.id ? <FieldButton variant="secondary" loading={busy} onPress={() => void onPhoto(item, check)}>Take photo</FieldButton> : null}
-    </View>
-    {evidence.map((entry) => <View style={styles.evidenceMeta} key={entry.id}>
-      <Text style={styles.evidenceName}>{entry.fileName}</Text>
-      <Text style={styles.help}>{entry.capture ? `${entry.capture.source === 'in_app_camera' ? 'Captured' : 'Added'} ${formatDate(entry.capture.capturedAtUtc)}` : 'Capture metadata unavailable'}</Text>
-      {entry.capture?.locationCaptured && entry.capture.latitude !== null && entry.capture.longitude !== null && entry.capture.accuracyMetres !== null
-        ? <Text style={styles.help}>Device-reported GPS {entry.capture.latitude.toFixed(6)}, {entry.capture.longitude.toFixed(6)} | accuracy {Math.round(entry.capture.accuracyMetres)} m</Text>
-        : null}
-    </View>)}
-    {!item.id ? <Text style={styles.help}>Save the answer first, then add its photo.</Text> : null}
-    {item.id && !readOnly ? <Text style={styles.help}>Each photo records a fresh device-reported GPS position, capture time and accuracy for the issued report.</Text> : null}
-  </View>;
-}
-
-export function RentalInspectionWorkflow({ workOrderId, summary, online, onChanged, onReturnToJob }: WorkflowProps) {
-  const [data, setData] = useState<RentalAssessmentResult>({ modules: [], items: [], evidence: [], findings: [], completion: {} });
-  const [loading, setLoading] = useState(false);
+export function RentalInspectionWorkflow({ workOrderId, summary, online, onChanged, onReturnToJob }: Props) {
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+  const [data, setData] = useState<RentalAssessmentResult>({});
+  const [moduleId, setModuleId] = useState('');
+  const [cursor, setCursor] = useState<Cursor>({ sectionKey: '', checkIndex: 0, instanceKey: 'property' });
+  const [page, setPage] = useState<Page>('categories');
+  const [metadataIndex, setMetadataIndex] = useState(0);
+  const [detailIndex, setDetailIndex] = useState(0);
+  const [cache, setCache] = useState<Cache>(emptyCache);
+  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
-  const [activeModuleId, setActiveModuleId] = useState('');
-  const [activeSectionKey, setActiveSectionKey] = useState('');
-  const [localItems, setLocalItems] = useState<Record<string, RentalAssessmentItem[]>>({});
-  const [dirtyItems, setDirtyItems] = useState<Set<string>>(() => new Set());
-  const itemDraftProviders = useRef(new Map<string, RentalItemDraftProvider>());
-
-  const load = useCallback(async () => {
-    if (!online) return;
-    setLoading(true);
-    setError('');
-    try {
-      const result = await apiRequest<RentalAssessmentResult>(`/api/trade-rental-inspections?workOrderId=${encodeURIComponent(workOrderId)}`);
-      if (!result.ok) throw new Error(result.error || 'The rental assessment could not be loaded.');
-      setData(result);
-      setActiveModuleId((current) => current && result.modules?.some((module) => module.id === current) ? current : result.modules?.[0]?.id || '');
-      return result;
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'The rental assessment could not be loaded.');
-    } finally {
-      setLoading(false);
-    }
-  }, [online, workOrderId]);
-
+  const [guidanceOpen, setGuidanceOpen] = useState(false);
+  const scroll = useRef<ScrollView>(null);
+  const cacheRef = useRef(cache);
+  const cacheKey = 'rental-wizard:' + workOrderId;
+  const pendingWrite = useRef(Promise.resolve());
+  const loadedCacheKey = useRef('');
+  useEffect(() => { cacheRef.current = cache; }, [cache]);
+  const persist = useCallback((value = cacheRef.current) => {
+    pendingWrite.current = pendingWrite.current.catch(() => undefined).then(() => setSetting(cacheKey, JSON.stringify(value)));
+    return pendingWrite.current;
+  }, [cacheKey]);
   useEffect(() => {
-    const timer = setTimeout(() => { void load(); }, 0);
-    return () => clearTimeout(timer);
-  }, [load]);
-  const activeModule = data.modules?.find((candidate) => candidate.id === activeModuleId) || data.modules?.[0];
-  const sections = useMemo(() => activeModule?.template.sections || [], [activeModule]);
-  const section = sections.find((candidate) => candidate.key === activeSectionKey);
-  const latestReport = data.reports?.find((report) => report.status === 'issued');
-  const canEdit = online && data.permissions?.canEdit === true && activeModule?.status !== 'complete';
-
-  async function mutate(body: Record<string, unknown>, key: string, success: string) {
-    if (!online) return Alert.alert('Reconnect to save', 'Assessment answers and final issue are verified online. Your existing synced job details remain available offline.');
-    setBusy(key);
-    try {
-      const result = await apiRequest<RentalAssessmentResult>('/api/trade-rental-inspections', {
-        method: 'POST',
-        body: JSON.stringify({ workOrderId, ...body }),
-      });
-      if (!result.ok) throw new Error(result.error || 'The assessment could not be saved.');
-      setData(result);
-      setError('');
-      await onChanged();
-      Alert.alert('Saved', success);
-      return result;
-    } catch (mutationError) {
-      const message = mutationError instanceof Error ? mutationError.message : 'The assessment could not be saved.';
-      setError(message);
-      Alert.alert('Action required', message);
-      return undefined;
-    } finally {
-      setBusy('');
-    }
-  }
-
-  async function saveItem(item: RentalAssessmentItem, body: Record<string, unknown>) {
-    const result = await mutate(body, `item:${item.instanceKey}`, 'Assessment answer saved.');
-    if (result && !item.id) {
-      const key = `${item.moduleId}:${item.sectionKey}:${item.checkKey}`;
-      setLocalItems((current) => ({ ...current, [key]: (current[key] || []).filter((candidate) => candidate.instanceKey !== item.instanceKey) }));
-    }
-  }
-
-  const markItemDirty = useCallback((itemKey: string, dirty: boolean) => {
-    setDirtyItems((current) => {
-      const next = new Set(current);
-      if (dirty) next.add(itemKey);
-      else next.delete(itemKey);
-      return next;
-    });
-  }, []);
-
-  const registerItemDraft = useCallback((itemKey: string, provider: RentalItemDraftProvider | null) => {
-    if (provider) itemDraftProviders.current.set(itemKey, provider);
-    else itemDraftProviders.current.delete(itemKey);
-  }, []);
-
-  function showSectionOverview() {
-    const leave = () => {
-      setDirtyItems(new Set());
-      setActiveSectionKey('');
-    };
-    if (!dirtyItems.size) return leave();
-    Alert.alert(
-      'Leave this section?',
-      'Changes still open on this screen have not been saved.',
-      [
-        { text: 'Keep editing', style: 'cancel' },
-        { text: 'Leave without saving', style: 'destructive', onPress: leave },
-      ],
-    );
-  }
-
-  async function saveSectionAndContinue() {
-    if (!section) return;
-    setBusy('section-continue');
-    let savedCount = 0;
-    try {
-      let current = data;
-      const drafts = [...dirtyItems].map((itemKey) => {
-        const provider = itemDraftProviders.current.get(itemKey);
-        if (!provider) throw new Error('One changed answer could not be prepared. Reopen the section and try again.');
-        return { dirtyKey: itemKey, ...provider() };
-      });
-      for (const draft of drafts) {
-        const currentModule = current.modules?.find((candidate) => candidate.id === draft.item.moduleId);
-        if (!currentModule) throw new Error('The assessment module changed. Reload the job and try again.');
-        const currentItem = current.items?.find((candidate) => draft.item.id
-          ? candidate.id === draft.item.id
-          : candidate.moduleId === draft.item.moduleId
-            && candidate.sectionKey === draft.item.sectionKey
-            && candidate.checkKey === draft.item.checkKey
-            && candidate.instanceKey === draft.item.instanceKey);
-        const result = await apiRequest<RentalAssessmentResult>('/api/trade-rental-inspections', {
-          method: 'POST',
-          body: JSON.stringify({
-            workOrderId,
-            ...draft.body,
-            expectedModuleRevision: currentModule.revision,
-            expectedItemRevision: currentItem?.revision || 0,
-          }),
-        });
-        if (!result.ok) throw new Error(result.error || 'The section could not be saved.');
-        current = result;
-        savedCount += 1;
-        setData(result);
-        setDirtyItems((existing) => {
-          const next = new Set(existing);
-          next.delete(draft.dirtyKey);
-          return next;
-        });
-        itemDraftProviders.current.delete(draft.dirtyKey);
-        if (!draft.item.id) {
-          setLocalItems((existing) => Object.fromEntries(Object.entries(existing)
-            .map(([key, entries]) => [key, entries.filter((entry) => entry.instanceKey !== draft.item.instanceKey)])));
-        }
-      }
-      if (!drafts.length) {
-        const refreshed = await load();
-        if (!refreshed) return;
-        current = refreshed;
-      } else {
-        await onChanged();
-      }
-      const currentIndex = sections.findIndex((candidate) => candidate.key === section.key);
-      const nextSection = sections[currentIndex + 1];
-      setActiveSectionKey(nextSection?.key || '');
-      Alert.alert('Progress saved', nextSection ? `Opening ${nextSection.title}.` : 'All sections are available from the main assessment screen.');
-    } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : 'The section could not be saved.';
-      if (savedCount > 0) await onChanged().catch(() => undefined);
-      const recoveryMessage = savedCount > 0
-        ? `${savedCount} answer${savedCount === 1 ? ' was' : 's were'} saved before this stopped. ${message}`
-        : message;
-      setError(recoveryMessage);
-      Alert.alert('Finish this section', recoveryMessage);
-    } finally {
-      setBusy('');
-    }
-  }
-
-  async function takePhoto(item: RentalAssessmentItem, check: RentalAssessmentCheck) {
-    if (!activeModule || !online) return Alert.alert('Reconnect to add evidence', 'This photo must be uploaded and linked to the exact assessment answer before it can count.');
-    setBusy(`photo:${item.id}`);
-    try {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) throw new Error('Allow camera access in device settings to add an assessment photo.');
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
-        allowsEditing: false,
-        quality: 0.45,
-        exif: false,
-        cameraType: ImagePicker.CameraType.back,
-      });
-      if (result.canceled || !result.assets[0]) return;
-      const photoObservedTime = observedTime();
-      const locationObservation = await observeLocation(true);
-      if (locationObservation.location.state !== 'captured') {
-        throw new Error('A current GPS location is required for rental-assessment photos. Enable precise location and try again.');
-      }
-      if (locationObservation.location.mocked === true) {
-        throw new Error('Mocked device locations cannot be used for rental-assessment evidence. Turn off location simulation and try again.');
-      }
-      if (locationObservation.location.accuracyMetres === null
-        || !Number.isFinite(locationObservation.location.accuracyMetres)
-        || locationObservation.location.accuracyMetres < 0
-        || locationObservation.location.accuracyMetres > 100) {
-        throw new Error('The GPS position is not accurate enough. Move to a clearer location and try again (100 m maximum).');
-      }
-      const asset = result.assets[0];
-      const contentType = asset.mimeType || 'image/jpeg';
-      if (!ALLOWED_IMAGE_TYPES.has(contentType)) throw new Error('Use a JPEG, PNG or WebP photo.');
-      const imageContext = ImageManipulator.manipulate(asset.uri);
-      if (asset.width > 1600) imageContext.resize({ width: 1600, height: null });
-      const renderedImage = await imageContext.renderAsync();
-      const prepared = await renderedImage.saveAsync({ compress: 0.62, format: SaveFormat.JPEG });
-      const preparedFile = new File(prepared.uri);
-      if (!preparedFile.exists || preparedFile.size < 1) throw new Error('The privacy-safe photo copy could not be prepared.');
-      if (preparedFile.size > MAX_EVIDENCE_BYTES) throw new Error('The prepared photo is larger than the 8 MB per-file limit. Retake it at a lower camera resolution.');
-      const usedBytes = data.evidenceBudget?.usedBytes || 0;
-      const packageLimit = data.evidenceBudget?.maxBytes || MAX_REPORT_EVIDENCE_BYTES;
-      if (usedBytes + preparedFile.size > packageLimit) {
-        throw new Error('This assessment has reached its 32 MB issued-report evidence limit. Remove another file or retake this photo at a lower resolution.');
-      }
-      const form = new FormData();
-      form.append('workOrderId', workOrderId);
-      form.append('category', 'progress');
-      form.append('caption', check.prompt.slice(0, 300));
-      form.append('evidenceEnvelope', JSON.stringify({
-        schemaVersion: 1,
-        kind: 'tlink-rental-inspection-photo',
-        captureSessionId: captureSessionId(),
-        source: 'in_app_camera',
-        capture: photoObservedTime,
-        locationPermission: locationObservation.permission,
-        location: locationObservation.location,
-        processing: {
-          privacySafeDerivative: true,
-          exifCopied: false,
-          outputFormat: 'image/jpeg',
-          widthPixels: prepared.width,
-          heightPixels: prepared.height,
-          maximumWidthPixels: 1600,
-        },
-      }));
-      form.append('file', { uri: prepared.uri, name: `rental-photo-${Date.now()}.jpg`, type: 'image/jpeg' } as unknown as Blob);
-      const upload = await apiRequest<UploadResponse>('/api/trade-field-work', { method: 'POST', body: form });
-      const jobMediaId = upload.media?.[0]?.id;
-      if (!jobMediaId) throw new Error(upload.error || 'The assessment photo could not be uploaded.');
-      let linked: RentalAssessmentResult;
+    let live = true;
+    void (async () => {
       try {
-        linked = await apiRequest<RentalAssessmentResult>('/api/trade-rental-inspections', {
-          method: 'POST',
-          body: JSON.stringify({ workOrderId, action: 'link_evidence', itemId: item.id,
-            jobMediaId, purpose: check.prompt, expectedModuleRevision: activeModule.revision }),
-        });
-      } catch (linkError) {
-        await apiRequest(`/api/trade-field-work?id=${encodeURIComponent(jobMediaId)}`, { method: 'DELETE' }).catch(() => undefined);
-        throw linkError;
-      }
-      setData(linked);
-      await onChanged();
-      Alert.alert('Photo linked', `A privacy-safe copy is attached with its device-reported time and GPS location (${Math.round(locationObservation.location.accuracyMetres || 0)} m accuracy).`);
-    } catch (photoError) {
-      Alert.alert('Photo not linked', photoError instanceof Error ? photoError.message : 'The assessment photo could not be saved.');
-    } finally {
-      setBusy('');
+        if (loadedCacheKey.current !== cacheKey) {
+          const stored = await getSetting(cacheKey);
+          if (stored) {
+            const local: Cache = JSON.parse(stored);
+            if (local && local.drafts && local.answers && typeof local.drafts === 'object' && !Array.isArray(local.drafts)
+              && typeof local.answers === 'object' && !Array.isArray(local.answers) && live) { setCache(local); cacheRef.current = local; }
+          }
+          if (live) loadedCacheKey.current = cacheKey;
+        }
+        if (!online) return;
+        const result = await apiRequest<RentalAssessmentResult>(ENDPOINT + '?workOrderId=' + encodeURIComponent(workOrderId));
+        if (live) { setData(result); setModuleId((selected) => result.modules?.some((entry) => entry.id === selected) ? selected : result.modules?.[0]?.id || ''); }
+      } catch (e) { if (live) setError(e instanceof Error ? e.message : 'Could not open the assessment.'); }
+      finally { if (live) setLoaded(true); }
+    })();
+    return () => { live = false; };
+  }, [workOrderId, cacheKey, online]);
+  useEffect(() => {
+    if (!loaded) return;
+    const timer = setTimeout(() => { void persist().catch(() => setError('The draft could not be saved on this phone. Keep this screen open and retry.')); }, 200);
+    return () => clearTimeout(timer);
+  }, [cache, loaded, persist]);
+  useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [page, cursor, metadataIndex, detailIndex]);
+  const hasDraft = Object.keys(cache.drafts).length > 0 || Object.keys(cache.answers).length > 0;
+  usePreventRemove(Boolean(busy) || hasDraft, ({ data: navigationEvent }) => {
+    if (busy) return Alert.alert('Saving', 'Wait for this action to finish before leaving.');
+    void persist().then(() => navigation.dispatch(navigationEvent.action))
+      .catch(() => setError('The draft could not be saved on this phone. Keep the assessment open and retry.'));
+  });
+  const active = data.modules?.find((m) => m.id === moduleId) || data.modules?.[0];
+  const sections = active?.template.sections || [];
+  const section = sections.find((s) => s.key === cursor.sectionKey);
+  const check = section?.checks[cursor.checkIndex];
+  const storedItem = data.items?.find((i) => i.moduleId === active?.id && i.sectionKey === cursor.sectionKey && i.checkKey === check?.key && i.instanceKey === cursor.instanceKey);
+  const item = active && section && check ? storedItem || newRentalItem(active, section, check, cursor.instanceKey) : undefined;
+  const key = active ? itemKey(active, cursor) : '';
+  const draft = item ? cache.drafts[key] || initialDraft(item, data) : undefined;
+  const responseFields = draft && ['meets', 'does_not_meet'].includes(draft.outcome) ? check?.responseFields || [] : [];
+  const detailField = responseFields[detailIndex];
+  const editable = online && data.permissions?.canEdit === true && active?.status !== 'complete';
+  const activeHasDraft = active ? Object.keys(cache.drafts).some((entry) => entry.startsWith(draftPrefix(active))) : false;
+  const observationsReady = active ? rentalObservationsComplete(data, active.id) && !activeHasDraft : false;
+  const metadata = active?.template.metadataFields.filter((f) => f.phase !== 'profile' && f.source !== 'team_profile'
+    && (f.phase !== 'final' || observationsReady)) || [];
+  const answers = active ? cache.answers[active.id] || active.answers : {};
+  const field = metadata[metadataIndex];
+  const report = data.reports?.find((r) => r.status === 'issued');
+  const allComplete = data.modules?.every((m) => m.status === 'complete') === true;
+  const evidence = item ? data.evidence?.filter((e) => e.itemId === item.id && e.status === 'active') || [] : [];
+  function change(values: Partial<Draft>) {
+    if (!draft) return;
+    const next = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts, [key]: { ...(cacheRef.current.drafts[key] || draft), ...values } } };
+    cacheRef.current = next; setCache(next);
+  }
+  async function request(body: Record<string, unknown>) {
+    if (!online) throw new Error('Reconnect to save this assessment. Your draft stays on this phone.');
+    const result = await apiRequest<RentalAssessmentResult>(ENDPOINT, { method: 'POST', body: JSON.stringify({ workOrderId, ...body }) });
+    if (!result.ok) throw new Error(result.error || 'The assessment could not be saved.');
+    setData(result);
+    if (active && ['save_item', 'link_evidence', 'unlink_evidence', 'reopen_module', 'set_assessment_scope'].includes(String(body.action)) && cacheRef.current.answers[active.id]) {
+      const pendingAnswers = { ...cacheRef.current.answers[active.id], coverageConfirmed: false, assessorDeclaration: false, credentialConfirmed: false };
+      const nextCache = { ...cacheRef.current, answers: { ...cacheRef.current.answers, [active.id]: pendingAnswers } };
+      setCache(nextCache); cacheRef.current = nextCache; await persist(nextCache);
     }
+    return result;
   }
-
-  async function issueReport() {
-    const result = await mutate({ action: 'issue_report' }, 'issue', 'The immutable report and 60-day link are ready.');
-    const shareUrl = result?.issuedReport?.shareUrl;
-    if (shareUrl) await Share.share({ title: result.issuedReport?.reportNumber || 'Rental assessment', message: shareUrl, url: shareUrl });
+  async function perform(name: string, action: () => Promise<void>) {
+    if (busy) return;
+    setBusy(name); setError('');
+    try { await action(); } catch (e) {
+      setError(e instanceof Error ? e.message : 'Please try again.');
+      if (online) {
+        try { const latest = await apiRequest<RentalAssessmentResult>(ENDPOINT + '?workOrderId=' + encodeURIComponent(workOrderId)); if (latest.ok) setData(latest); }
+        catch { /* The local draft remains available while the connection is unavailable. */ }
+      }
+    }
+    finally { setBusy(''); }
   }
-
-  function stopSharing() {
-    if (!latestReport?.link?.id) return;
-    Alert.alert('Stop public access?', 'Anyone using this link will immediately lose access. The issued report stays in TLink.', [
-      { text: 'Keep sharing', style: 'cancel' },
-      { text: 'Stop sharing', style: 'destructive', onPress: () => { void mutate({ action: 'revoke_report_link', linkId: latestReport.link?.id }, 'revoke', 'Public report access was stopped.'); } },
-    ]);
+  async function leave() {
+    await perform('leave', async () => { await persist(); onReturnToJob?.(); });
   }
-
-  if (!online) return <View style={styles.workflow}>{onReturnToJob ? <FieldButton variant="secondary" onPress={onReturnToJob}>Job</FieldButton> : null}<View style={styles.offlineCard}><MaterialCommunityIcons name="cloud-off-outline" size={28} color={colours.green} /><View style={styles.flex}><Text style={styles.cardTitle}>Rental assessment</Text><Text style={styles.body}>{summary.progress.completeModules} of {summary.progress.moduleTotal} modules complete. Reconnect to open the full frozen form and save verified answers.</Text></View></View></View>;
-  if (loading && !activeModule) return <View style={styles.workflow}>{onReturnToJob ? <FieldButton variant="secondary" onPress={onReturnToJob}>Job</FieldButton> : null}<View style={styles.offlineCard}><MaterialCommunityIcons name="progress-clock" size={28} color={colours.green} /><Text style={styles.body}>Opening the frozen rental assessment...</Text></View></View>;
-  if (!activeModule) return <View style={styles.workflow}>{onReturnToJob ? <FieldButton variant="secondary" onPress={onReturnToJob}>Job</FieldButton> : null}<View style={styles.offlineCard}><MaterialCommunityIcons name="alert-circle-outline" size={28} color={colours.red} /><View style={styles.flex}><Text style={styles.cardTitle}>Rental assessment unavailable</Text><Text style={styles.body}>{error || 'Pull down to sync this job and try again.'}</Text><FieldButton variant="secondary" onPress={() => void load()}>Try again</FieldButton></View></View></View>;
-
-  const allModulesComplete = data.modules?.every((candidate) => candidate.status === 'complete') === true;
-  const moduleCompletion = data.completion?.[activeModule.id];
-  return <View style={styles.workflow}>
-    {onReturnToJob && !section ? <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => Alert.alert('Return to job', 'Saved answers are retained. Save any edited assessment details before leaving.', [{ text: 'Stay here', style: 'cancel' }, { text: 'Return to job', onPress: onReturnToJob }])}>Job</FieldButton> : null}
-    <View style={styles.hero}>
-      <View style={styles.flex}><Text style={styles.label}>VICTORIAN RENTAL ASSESSMENT</Text><Text style={styles.heroTitle}>{data.inspection?.inspectionNumber || summary.inspectionNumber}</Text><Text style={styles.body}>Rules effective {formatDate(data.inspection?.rulesEffectiveFrom || summary.rulesEffectiveFrom)} | Frozen form version {summary.templateVersion}</Text></View>
-      <View style={styles.statusPill}><Text style={styles.statusText}>{readable(data.inspection?.status || summary.status)}</Text></View>
-    </View>
-
-    {!section ? <>
-      <View style={styles.moduleList}>{data.modules?.map((candidate) => <Pressable key={candidate.id} onPress={() => { setActiveModuleId(candidate.id); setActiveSectionKey(''); setDirtyItems(new Set()); }} style={[styles.moduleButton, candidate.id === activeModule.id && styles.moduleButtonActive]}><Text style={styles.moduleTag}>{candidate.required ? 'INCLUDED' : 'OPTIONAL'}</Text><Text style={styles.moduleTitle}>{candidate.title}</Text><Text style={styles.help}>{candidate.status === 'complete' ? 'Complete and locked' : `${data.completion?.[candidate.id]?.blockers.length || 0} items to finish`}</Text></Pressable>)}</View>
-
-      <View style={styles.boundary}><Text style={styles.cardTitle}>{activeModule.template.title}</Text><Text style={styles.body}>{activeModule.template.reportBoundary}</Text><Text style={styles.help}>Required issuer capability: {readable(activeModule.requiredCapability)}</Text></View>
-      <MetadataEditor key={`${activeModule.id}:${activeModule.revision}`} module={activeModule} readOnly={!canEdit} busy={busy === `metadata:${activeModule.id}`} onSave={(answers) => mutate({ action: 'save_module_answers', moduleId: activeModule.id, expectedRevision: activeModule.revision, answers }, `metadata:${activeModule.id}`, 'Assessment details saved.').then(() => undefined)} />
-
-      <View style={styles.sectionOverview}>
-        <Text style={styles.label}>ASSESSMENT WORKFLOW</Text>
-        <Text style={styles.cardTitle}>Choose a section</Text>
-        <Text style={styles.body}>Each section opens on its own screen. Back always returns here, and saved answers stay attached to this job.</Text>
-        <View style={styles.sectionList}>{sections.map((candidate, index) => {
-          const assessed = candidate.checks.filter((check) => data.items?.some((item) => item.moduleId === activeModule.id && item.sectionKey === candidate.key && item.checkKey === check.key && item.outcome)).length;
-          const complete = assessed === candidate.checks.length;
-          return <Pressable key={candidate.key} onPress={() => { setDirtyItems(new Set()); setActiveSectionKey(candidate.key); }} style={styles.sectionButton}>
-            <Text style={styles.sectionNumber}>{index + 1}</Text>
-            <View style={styles.flex}><Text style={styles.sectionTitle}>{candidate.title}</Text><Text style={styles.help}>{assessed} of {candidate.checks.length} checks saved</Text></View>
-            <MaterialCommunityIcons name={complete ? 'check-circle' : 'chevron-right'} size={25} color={colours.green} />
-          </Pressable>;
-        })}</View>
-      </View>
-
-      <View style={styles.completionCard}>
-        <View style={styles.hero}><View style={styles.flex}><Text style={styles.label}>SERVER-CHECKED COMPLETION</Text><Text style={styles.cardTitle}>{activeModule.title}</Text></View><Text style={styles.progress}>{activeModule.status === 'complete' ? 'Complete' : moduleCompletion?.complete ? 'Ready' : 'Not ready'}</Text></View>
-        {moduleCompletion?.blockers.length ? <View>{moduleCompletion.blockers.slice(0, 8).map((blocker) => <Text style={styles.blocker} key={blocker.key}>• {blocker.label}</Text>)}</View> : <Text style={styles.body}>All required answers, evidence, findings, work scopes and declarations pass the current rules.</Text>}
-        {data.permissions?.canEdit ? <FieldButton variant={activeModule.status === 'complete' ? 'secondary' : 'primary'} loading={busy === `module:${activeModule.id}`} disabled={activeModule.status !== 'complete' && !moduleCompletion?.complete} onPress={() => void mutate({ action: activeModule.status === 'complete' ? 'reopen_module' : 'complete_module', moduleId: activeModule.id, expectedRevision: activeModule.revision }, `module:${activeModule.id}`, activeModule.status === 'complete' ? 'Module reopened for correction.' : 'Module completed and locked.')}>{activeModule.status === 'complete' ? 'Reopen module' : 'Complete and lock module'}</FieldButton> : null}
-      </View>
-
-      <View style={styles.issueCard}>
-        <Text style={styles.label}>FINAL ASSESSOR ISSUE</Text><Text style={styles.cardTitle}>{latestReport?.reportNumber || 'Issue the complete rental report'}</Text>
-        {latestReport?.link?.status === 'active' && latestReport.link.shareUrl ? <>
-          <Text style={styles.body}>No account is required. Anyone with the link can view the full issued report until {formatDate(latestReport.link.expiresAt)}.</Text>
-          <FieldButton onPress={() => void Share.share({ title: latestReport.reportNumber, message: latestReport.link?.shareUrl || '', url: latestReport.link?.shareUrl || '' })}>Share secure report link</FieldButton>
-          <FieldButton variant="secondary" onPress={() => void Linking.openURL(latestReport.link?.shareUrl || '')}>Open report</FieldButton>
-          {data.permissions?.canRevokeLink ? <FieldButton variant="secondary" loading={busy === 'revoke'} onPress={stopSharing}>Stop sharing</FieldButton> : null}
-        </> : <>
-          <Text style={styles.body}>{latestReport
-            ? latestReport.link?.status === 'active'
-              ? 'The issued report is available, but only the owner or assigned assessor can reveal its secure sharing link.'
-              : `The issued report is retained, but its public link is ${latestReport.link?.status || 'not active'}.`
-            : allModulesComplete
-              ? 'The assigned assessor can now create the immutable PDF and no-account 60-day link.'
-              : 'Complete and lock every selected module before issuing.'}</Text>
-          {!latestReport && data.permissions?.canIssue ? <FieldButton loading={busy === 'issue'} disabled={!allModulesComplete} onPress={() => void issueReport()}>Issue report and create 60-day link</FieldButton> : null}
-        </>}
-        <Text style={styles.body}>Evidence package: {formatBytes(data.evidenceBudget?.usedBytes || 0)} of {formatBytes(data.evidenceBudget?.maxBytes || MAX_REPORT_EVIDENCE_BYTES)}.</Text>
-      </View>
-    </> : <>
-      <Pressable accessibilityRole="button" onPress={showSectionOverview} style={styles.backButton}><MaterialCommunityIcons name="arrow-left" size={20} color={colours.green} /><Text style={styles.backButtonText}>Back to all sections</Text></Pressable>
-      <View style={styles.sectionHeaderCard}>
-        <Text style={styles.label}>SECTION {sections.findIndex((candidate) => candidate.key === section.key) + 1} OF {sections.length}</Text>
-        <Text style={styles.heroTitle}>{section.title}</Text>
-        <Text style={styles.body}>{section.summary}</Text>
-      </View>
-      <View style={styles.sectionContent}>
-        {section.checks.map((check, checkIndex) => {
-          const key = `${activeModule.id}:${section.key}:${check.key}`;
-          const stored = data.items?.filter((item) => item.moduleId === activeModule.id && item.sectionKey === section.key && item.checkKey === check.key) || [];
-          const working = [...(stored.length ? stored : [newRentalItem(activeModule, section, check)]), ...(localItems[key] || [])];
-          return <View key={check.key} style={styles.checkGroup}>{working.map((item, itemIndex) => <ItemEditor key={`${item.id || item.instanceKey}:${item.revision}`} module={activeModule} section={section} check={check} item={{ ...item, sortOrder: (sections.findIndex((candidate) => candidate.key === section.key) + 1) * 100 + checkIndex * 10 + itemIndex }} finding={data.findings?.find((candidate) => candidate.itemId === item.id)} evidence={(data.evidence || []).filter((entry) => entry.itemId === item.id && entry.status === 'active')} readOnly={!canEdit} busy={busy === `item:${item.instanceKey}` || busy === `photo:${item.id}`} onSave={(body) => saveItem(item, body)} onPhoto={takePhoto} onDirtyChange={markItemDirty} onRegisterDraft={registerItemDraft} />)}
-            {check.repeatBy !== 'property' && canEdit ? <FieldButton variant="secondary" onPress={() => setLocalItems((current) => ({ ...current, [key]: [...(current[key] || []), newRentalItem(activeModule, section, check, Crypto.randomUUID())] }))}>Add another {readable(check.repeatBy).toLowerCase()}</FieldButton> : null}
-          </View>;
-        })}
-      </View>
-      <View style={styles.sectionActions}>
-        <FieldButton variant="secondary" onPress={showSectionOverview}>Back to all sections</FieldButton>
-        <FieldButton loading={busy === 'section-continue'} onPress={() => void saveSectionAndContinue()}>{sections.findIndex((candidate) => candidate.key === section.key) < sections.length - 1 ? 'Save section and continue' : 'Save section and return'}</FieldButton>
-        <Text style={styles.help}>This saves every changed answer on the screen before moving forward. The smaller Save button remains available when you want to save one answer immediately.</Text>
-      </View>
-    </>}
-    {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
+  function openCheck(s: RentalAssessmentSection, index = 0, instanceKey?: string) {
+    const target = s.checks[index];
+    const prior = data.items?.find((i) => i.moduleId === active?.id && i.sectionKey === s.key && i.checkKey === target.key);
+    setCursor({ sectionKey: s.key, checkIndex: index, instanceKey: instanceKey || prior?.instanceKey || (target.repeatBy === 'property' ? 'property' : 'first') });
+    setGuidanceOpen(false);
+    setPage('answer');
+  }
+  function repeatInstances(s: RentalAssessmentSection, index: number) {
+    if (!active) return [];
+    const prefix = draftPrefix(active) + [s.key, index].join(':') + ':';
+    const saved = (data.items || []).filter((entry) => entry.moduleId === active.id && entry.sectionKey === s.key && entry.checkKey === s.checks[index].key)
+      .map((entry) => ({ value: entry.instanceKey, label: entry.locationLabel || 'Recorded item' }));
+    for (const [draftKey, local] of Object.entries(cache.drafts)) {
+      if (!draftKey.startsWith(prefix)) continue;
+      const value = draftKey.slice(prefix.length);
+      if (!saved.some((entry) => entry.value === value)) saved.push({ value, label: local.locationLabel || 'Unsaved item' });
+    }
+    return saved;
+  }
+  function advanceQuestion() {
+    if (!section || !check) return;
+    if (check.repeatBy !== 'property') {
+      const entries = repeatInstances(section, cursor.checkIndex);
+      const index = entries.findIndex((entry) => entry.value === cursor.instanceKey);
+      if (index >= 0 && entries[index + 1]) return openCheck(section, cursor.checkIndex, entries[index + 1].value);
+    }
+    const target = rentalAdjacentQuestion(sections, section.key, cursor.checkIndex, 1);
+    if (target) openCheck(target.section, target.checkIndex);
+    else { setMetadataIndex(0); setPage(editable && metadata.length ? 'metadata' : 'review'); }
+  }
+  function changeAnswer(fieldKey: string, value: unknown) {
+    if (!active) return;
+    const nextCache = { ...cacheRef.current, answers: { ...cacheRef.current.answers, [active.id]: { ...answers, [fieldKey]: value } } };
+    cacheRef.current = nextCache; setCache(nextCache);
+  }
+  async function capture() {
+    if (!editable || !draft) return;
+    await perform('camera', async () => {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Camera access needed', 'Allow TLink to use the camera in Settings.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Open settings', onPress: () => void Linking.openSettings() }]);
+        return;
+      }
+      const captured = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 1, exif: true, cameraType: ImagePicker.CameraType.back });
+      if (captured.canceled || !captured.assets[0]) return;
+      const asset = captured.assets[0];
+      const suffix = asset.mimeType === 'image/heic' ? '.heic' : asset.mimeType === 'image/png' ? '.png' : '.jpg';
+      const retained = new File(Paths.document, 'rental-photo-' + Crypto.randomUUID() + suffix);
+      new File(asset.uri).copy(retained);
+      // Retain the captured bytes before asking for location; a failed GPS fix must not lose the photo.
+      const photo: Photo = { uri: retained.uri, width: asset.width, height: asset.height, capture: observedTime(), location: null };
+      const currentDraft = cacheRef.current.drafts[key] || draft;
+      const next = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts, [key]: { ...currentDraft, photos: [...currentDraft.photos, photo] } } };
+      setCache(next); cacheRef.current = next; await persist(next);
+      const location = await observeLocation(true);
+      await updatePhoto(photo.uri, { location });
+      if (location.location.state !== 'captured') setError('Photo saved on this phone. Enable location, then retry its GPS before continuing.');
+    });
+  }
+  async function updatePhoto(uri: string, values: Partial<Photo>) {
+    const currentDraft = cacheRef.current.drafts[key];
+    if (!currentDraft) throw new Error('The photo draft is no longer available.');
+    const next = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts, [key]: { ...currentDraft,
+      photos: currentDraft.photos.map((photo) => photo.uri === uri ? { ...photo, ...values } : photo) } } };
+    setCache(next); cacheRef.current = next; await persist(next);
+  }
+  async function removePhoto(uri: string) {
+    await perform('remove', async () => {
+      const currentDraft = cacheRef.current.drafts[key];
+      if (!currentDraft) return;
+      const next = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts, [key]: { ...currentDraft,
+        photos: currentDraft.photos.filter((photo) => photo.uri !== uri) } } };
+      setCache(next); cacheRef.current = next; await persist(next);
+    });
+  }
+  async function refreshPhotoGps(index: number) {
+    if (!draft) return;
+    await perform('gps', async () => {
+      const photo = draft.photos[index];
+      if (!photo || Date.now() - Date.parse(photo.capture.captureObservedAtUtc) > 120000) throw new Error('This photo is too old for a fresh capture-location match. Remove it, then take a new photo with location enabled.');
+      const location = await observeLocation(true);
+      if (location.location.state !== 'captured') throw new Error('Location is still unavailable. Enable precise location in Settings.');
+      // A later observation must not be represented as the location at capture.
+      if (Math.abs(Date.parse(location.location.observedAtUtc) - Date.parse(photo.capture.captureObservedAtUtc)) > 120000) throw new Error('The GPS fix was too late for this photo. Remove it and take a new photo.');
+      await updatePhoto(photo.uri, { location });
+    });
+  }
+  async function uploadPhoto(photo: Photo, saved: RentalAssessmentItem, current: RentalAssessmentResult) {
+    return deliverRentalPhoto({ mediaId: photo.mediaId,
+      remember: (mediaId) => updatePhoto(photo.uri, { mediaId }),
+      link: (mediaId) => current.evidence?.some((entry) => entry.itemId === saved.id && entry.jobMediaId === mediaId && entry.status === 'active')
+        ? Promise.resolve(current) : request({ action: 'link_evidence', itemId: saved.id, jobMediaId: mediaId, purpose: check?.prompt,
+          expectedModuleRevision: current.modules?.find((m) => m.id === active?.id)?.revision }),
+      upload: async () => {
+    const observation = photo.location;
+    const location = observation?.location;
+    if (!location || location.state !== 'captured' || location.mocked === true || location.accuracyMetres === null || location.accuracyMetres > 100
+      || Math.abs(Date.parse(location.observedAtUtc) - Date.parse(photo.capture.captureObservedAtUtc)) > 120000) throw new Error('Photo saved locally. A capture-time location within 100 m accuracy is required; retry GPS or remove and retake it.');
+    const image = ImageManipulator.manipulate(photo.uri);
+    if (photo.width > 1600) image.resize({ width: 1600, height: null });
+    const rendered = await image.renderAsync();
+    const prepared = await rendered.saveAsync({ compress: 0.62, format: SaveFormat.JPEG });
+    const file = new File(prepared.uri);
+    if (file.size > 8 * 1024 * 1024 || file.size + (current.evidenceBudget?.usedBytes || 0) > (current.evidenceBudget?.maxBytes || 32 * 1024 * 1024)) throw new Error('The report photo limit has been reached. This photo remains on the phone.');
+    const form = new FormData();
+    form.append('workOrderId', workOrderId); form.append('category', 'progress'); form.append('caption', check?.prompt.slice(0, 300) || '');
+    form.append('evidenceEnvelope', JSON.stringify({ schemaVersion: 1, kind: 'tlink-rental-inspection-photo', captureSessionId: captureSessionId(), source: 'in_app_camera',
+      capture: photo.capture, locationPermission: observation.permission, location,
+      processing: { privacySafeDerivative: true, exifCopied: false, outputFormat: 'image/jpeg', widthPixels: prepared.width, heightPixels: prepared.height, maximumWidthPixels: 1600 } }));
+    form.append('file', { uri: prepared.uri, name: 'rental-photo-' + Crypto.randomUUID() + '.jpg', type: 'image/jpeg' } as unknown as Blob);
+    const uploaded = await apiRequest<{ media?: { id: string }[] }>('/api/trade-field-work', { method: 'POST', body: form });
+    return uploaded.media?.[0]?.id || '';
+      },
+    });
+  }
+  async function saveAnswer() {
+    if (!active || !item || !draft || !section || !check) return;
+    if (!draft.outcome) throw new Error('Choose an answer.');
+    if (check.repeatBy !== 'property' && !draft.locationLabel.trim()) throw new Error('Add the room or item location.');
+    if (draft.outcome === 'not_applicable' && !draft.publicNotes.trim()) throw new Error('Explain why this check does not apply.');
+    const adverse = RENTAL_ADVERSE_OUTCOMES.has(draft.outcome);
+    if (adverse && (!draft.findingDescription.trim() || !draft.tradeCategory || !draft.scopeSummary.trim())) throw new Error('Complete the finding and recommended work.');
+    if (adverse && draft.severity === 'immediate_safety_risk' && (!draft.immediateAction.trim() || !draft.notified)) throw new Error('Record the make-safe action and notification.');
+    let current = await request({ action: 'save_item', moduleId: active.id, expectedModuleRevision: active.revision,
+      expectedItemRevision: item.revision, sectionKey: section.key, checkKey: check.key, instanceKey: item.instanceKey,
+      locationLabel: draft.locationLabel.trim(), outcome: draft.outcome, response: draft.response, publicNotes: draft.publicNotes.trim(), internalNotes: draft.internalNotes.trim(), sortOrder: item.sortOrder,
+      finding: adverse ? { title: draft.findingTitle.trim() || section.title + ': ' + readable(draft.outcome), description: draft.findingDescription.trim(),
+        tradeCategory: draft.tradeCategory, scopeSummary: draft.scopeSummary.trim(), severity: draft.severity, recommendedAction: draft.scopeSummary.trim(),
+        details: { immediateAction: draft.immediateAction.trim(), responsiblePeopleNotified: draft.notified } } : undefined });
+    const saved = current.items?.find((i) => i.moduleId === active.id && i.sectionKey === section.key && i.checkKey === check.key && i.instanceKey === item.instanceKey);
+    if (!saved) throw new Error('The saved answer was not returned.');
+    let remaining = [...draft.photos];
+    for (const photo of draft.photos) {
+      current = await uploadPhoto(photo, saved, current);
+      remaining = remaining.slice(1);
+      const partial = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts, [key]: { ...draft, photos: remaining } } };
+      setCache(partial); cacheRef.current = partial; await persist(partial);
+    }
+    const photos = current.evidence?.filter((e) => e.itemId === saved.id && e.status === 'active').length || 0;
+    if (photos < check.requiredEvidenceCount) throw new Error('Answer saved. Add the required photo before moving on.');
+    const next = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts } }; delete next.drafts[key];
+    setCache(next); cacheRef.current = next; await persist(next); await onChanged();
+    advanceQuestion();
+  }
+  async function next() {
+    if (!draft || !check) return;
+    if (!draft.outcome) { if (!editable) return advanceQuestion(); return setError('Choose an answer.'); }
+    if (page === 'answer' && responseFields.length) { setDetailIndex(0); setPage('details'); return; }
+    if (page === 'details') {
+      if (editable && detailField?.required && !String(draft.response[detailField.key] || '').trim()) return setError('Record this result before continuing.');
+      if (detailIndex + 1 < responseFields.length) { setDetailIndex(detailIndex + 1); return; }
+    }
+    if ((page === 'answer' || page === 'details') && RENTAL_ADVERSE_OUTCOMES.has(draft.outcome)) { setPage('finding'); return; }
+    if (page === 'finding') { if (editable && !draft.findingDescription.trim()) return setError('Describe the finding.'); setPage('action'); return; }
+    if (page === 'action' && draft.severity === 'immediate_safety_risk') { setPage('safety'); return; }
+    if (editable) await perform('save', saveAnswer); else advanceQuestion();
+  }
+  async function saveMetadata() {
+    if (!active) return;
+    if (field?.required && (field.type === 'checkbox' ? answers[field.key] !== true : !String(answers[field.key] || '').trim())) return setError('Complete this answer before continuing.');
+    await perform('metadata', async () => {
+      await request({ action: 'save_module_answers', moduleId: active.id, expectedRevision: active.revision, answers });
+      const nextCache = { ...cacheRef.current, answers: { ...cacheRef.current.answers } }; delete nextCache.answers[active.id];
+      setCache(nextCache); cacheRef.current = nextCache; await persist(nextCache);
+      if (metadataIndex + 1 < metadata.length) setMetadataIndex(metadataIndex + 1); else setPage('review');
+    });
+  }
+  function previous() {
+    setError('');
+    if (page === 'safety') return setPage('action');
+    if (page === 'action') return setPage('finding');
+    if (page === 'finding') { if (responseFields.length) { setDetailIndex(responseFields.length - 1); return setPage('details'); } return setPage('answer'); }
+    if (page === 'details') { if (detailIndex > 0) return setDetailIndex(detailIndex - 1); return setPage('answer'); }
+    if (page === 'metadata' && metadataIndex > 0) return setMetadataIndex(metadataIndex - 1);
+    if (page === 'answer' && section) {
+      const entries = repeatInstances(section, cursor.checkIndex);
+      const index = entries.findIndex((entry) => entry.value === cursor.instanceKey);
+      if (index > 0) return openCheck(section, cursor.checkIndex, entries[index - 1].value);
+      const prior = rentalAdjacentQuestion(sections, section.key, cursor.checkIndex, -1);
+      if (prior) return openCheck(prior.section, prior.checkIndex);
+    }
+    setPage('categories');
+  }
+  return <View style={styles.shell}>
+    <View style={styles.header}><Pressable disabled={Boolean(busy)} onPress={() => void leave()} style={styles.job}><MaterialCommunityIcons name="arrow-left" size={22} color={colours.green} /><Text style={styles.link}>Job</Text></Pressable><Text style={styles.reference}>{data.inspection?.inspectionNumber || summary.inspectionNumber}</Text><Text style={styles.status}>{busy ? 'Saving...' : hasDraft ? 'Draft on phone' : 'Saved'}</Text></View>
+    <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      {!loaded ? <Text style={styles.body}>Opening assessment...</Text> : !online ? <Text style={styles.body}>Reconnect to load the assessment. Your draft is saved on this phone.</Text> : !active ? <Text style={styles.body}>{error || 'This assessment is not available.'}</Text> : <>
+      {page === 'categories' ? <>
+        <Text style={styles.title}>{active.title}</Text>
+        {data.modules && data.modules.length > 1 ? <FieldSelect label="Assessment" value={active.id} disabled={Boolean(busy)} options={data.modules.map((m) => ({ value: m.id, label: m.title }))} onChange={setModuleId} /> : null}
+        {active.key === 'minimum_standards' && active.status !== 'complete' ? <FieldSelect label="Assessment scope" value={active.template.assessmentScope || 'current_minimum_standards'} disabled={!editable || Boolean(busy)} options={[{ value: 'energy_readiness_2027', label: '2027 energy readiness' }, { value: 'current_minimum_standards', label: 'Full current minimum standards' }]} onChange={(scope) => {
+          Alert.alert('Change assessment scope?', 'Saved observations remain in the job history. This changes the checklist for this unissued assessment.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Use this scope', onPress: () => void perform('scope', async () => {
+            await request({ action: 'set_assessment_scope', moduleId: active.id, scope, expectedInspectionRevision: data.inspection?.revision, expectedModuleRevision: active.revision }); setPage('categories');
+          }) }]);
+        }} /> : null}
+        <Text style={styles.body}>Choose a category. Answer, take the photo, then tap Next.</Text>
+        {sections.map((s) => { const count = s.checks.filter((c, checkIndex) => {
+          const entries = data.items?.filter((i) => i.moduleId === active.id && i.sectionKey === s.key && i.checkKey === c.key) || [];
+          const pending = Object.keys(cache.drafts).some((draftKey) => draftKey.startsWith(draftPrefix(active) + [s.key, checkIndex].join(':') + ':'));
+          return !pending && entries.length > 0 && entries.every((entry) => entry.outcome && (data.evidence?.filter((e) => e.itemId === entry.id && e.status === 'active').length || 0) >= c.requiredEvidenceCount);
+        }).length;
+          return <Pressable key={s.key} disabled={Boolean(busy)} onPress={() => openCheck(s)} style={styles.category}><MaterialCommunityIcons name={count === s.checks.length ? 'check-circle-outline' : 'camera-outline'} size={23} color={colours.green} /><View style={styles.flex}><Text style={styles.categoryTitle}>{s.title}</Text><Text style={styles.small}>{count}/{s.checks.length} checked</Text></View><MaterialCommunityIcons name="chevron-right" size={24} color={colours.green} /></Pressable>; })}
+        <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => { setMetadataIndex(0); setPage(active.status === 'complete' || !metadata.length ? 'review' : 'metadata'); }}>Review and finish</FieldButton>
+        {!observationsReady && active.status !== 'complete' ? <Text style={styles.small}>The final declaration appears after all answers and required photos are saved.</Text> : null}
+      </> : page === 'metadata' && field ? <>
+        <Text style={styles.small}>{field.phase === 'final' ? 'Final declaration' : 'Property details'} · {metadataIndex + 1} of {metadata.length}</Text>
+        <Text style={styles.title}>{field.label}</Text>
+        {field.help ? <Text style={styles.body}>{field.help}</Text> : null}
+        {field.type === 'checkbox' ? <FieldButton variant={answers[field.key] === true ? 'primary' : 'secondary'} disabled={!editable || Boolean(busy)} onPress={() => changeAnswer(field.key, answers[field.key] !== true)}>{answers[field.key] === true ? 'Confirmed' : 'I confirm'}</FieldButton>
+          : field.type === 'select' ? field.options.map((option) => <Pressable key={option.value} disabled={!editable || Boolean(busy)} onPress={() => changeAnswer(field.key, option.value)} style={[styles.category, answers[field.key] === option.value && styles.selected]}><Text style={styles.categoryTitle}>{option.label}</Text></Pressable>)
+          : field.type === 'date' ? <FieldDatePicker label="Date" value={String(answers[field.key] || '')} disabled={!editable || Boolean(busy)} onChange={(value) => changeAnswer(field.key, value)} />
+          : <TextInput editable={editable && !busy} style={[styles.input, field.type === 'textarea' && styles.notes]} placeholder={field.required ? 'Enter details' : 'Optional'} value={String(answers[field.key] || '')} onChangeText={(v) => changeAnswer(field.key, v)} multiline={field.type === 'textarea'} maxLength={4000} />}
+      </> : page === 'review' ? <>
+        <Text style={styles.title}>{report ? 'Assessment report' : 'Review and finish'}</Text>
+        {(active.template.metadataFields || []).filter((f) => f.source === 'team_profile').map((f) => <Text key={f.key} style={styles.body}>{f.label}: {String(active.answers[f.key] || 'Not recorded in Team profile')}</Text>)}
+        {!allComplete ? <>
+          {(data.completion?.[active.id]?.blockers || []).map((b) => <Text key={b.key} style={styles.error}>{b.label}</Text>)}
+          <FieldButton disabled={active.status === 'complete' || !data.completion?.[active.id]?.complete || activeHasDraft || Boolean(cache.answers[active.id]) || Boolean(busy)} loading={busy === 'complete'} onPress={() => void perform('complete', async () => { if (active.status === 'complete') return; await request({ action: 'complete_module', moduleId: active.id, expectedRevision: active.revision }); await onChanged(); })}>{active.status === 'complete' ? 'Module complete' : 'Complete assessment'}</FieldButton>
+        </> : null}
+        {!report && data.permissions?.canIssue ? <FieldButton disabled={!allComplete || Boolean(busy)} loading={busy === 'issue'} onPress={() => void perform('issue', async () => { await request({ action: 'issue_report' }); await onChanged(); })}>Create report</FieldButton> : null}
+        {report ? <><Text style={styles.body}>{report.reportNumber}</Text>{report.link?.shareUrl ? <><FieldButton onPress={() => void Share.share({ message: report.link?.shareUrl || '', url: report.link?.shareUrl })}>Share report</FieldButton><FieldButton variant="secondary" onPress={() => void Linking.openURL(report.link?.shareUrl || '')}>Open report</FieldButton></> : <Text style={styles.body}>The report is retained in this job. Ask the owner to manage its sharing link.</Text>}</> : null}
+      </> : draft && item && section && check ? <>
+        <Text style={styles.small}>{section.title} · {cursor.checkIndex + 1} of {section.checks.length}</Text>
+        <Text style={styles.title}>{check.prompt}</Text>
+        {page === 'answer' ? <>
+          {check.repeatBy !== 'property' ? <>
+            {repeatInstances(section, cursor.checkIndex).length > 0 ? <FieldSelect label="Recorded items" value={cursor.instanceKey} disabled={Boolean(busy)} options={repeatInstances(section, cursor.checkIndex)} onChange={(instance) => openCheck(section, cursor.checkIndex, instance)} /> : null}
+            <RentalTextField label="Room or item location" value={draft.locationLabel} editable={editable && !busy} onChange={(v) => change({ locationLabel: v })} />
+          </> : null}
+          <View style={styles.options}>{(active.template.assessmentScope === 'energy_readiness_2027' ? RENTAL_READINESS_OUTCOMES : RENTAL_OUTCOMES).map((option) => <Pressable key={option.value} disabled={!editable || Boolean(busy)} onPress={() => change({ outcome: option.value })} style={[styles.option, draft.outcome === option.value && styles.selected]}><Text style={styles.categoryTitle}>{option.label}</Text></Pressable>)}</View>
+          {draft.outcome === 'not_applicable' ? <RentalTextField label="Why does this not apply?" value={draft.publicNotes} editable={editable && !busy} onChange={(v) => change({ publicNotes: v })} multiline /> : null}
+          <View style={styles.photo}><Text style={styles.body}>{check.photoGuidance}</Text><FieldButton variant="secondary" disabled={!editable || Boolean(busy)} loading={busy === 'camera'} onPress={() => void capture()}>Take photo</FieldButton><Text style={styles.small}>{evidence.length} linked · {draft.photos.length} on this phone · {check.requiredEvidenceCount} required</Text>
+          {draft.photos.map((p, index) => <View key={p.uri} style={styles.pendingPhoto}>
+            <Image source={{ uri: p.uri }} style={styles.thumbnail} alt={`Pending photo ${index + 1}`} accessibilityLabel={`Pending photo ${index + 1}`} />
+            <Text style={styles.small}>Photo {index + 1} saved {new Date(p.capture.captureObservedAtUtc).toLocaleTimeString()} · {p.mediaId ? 'Uploaded, ready to link' : p.location?.location.state === 'captured' ? 'GPS ' + Math.round(p.location.location.accuracyMetres || 0) + ' m' : 'GPS needed'}</Text>
+            {!p.mediaId && (p.location?.location.state !== 'captured' || p.location.location.accuracyMetres === null || p.location.location.accuracyMetres > 100 || p.location.location.mocked) ? <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => void refreshPhotoGps(index)}>Retry GPS</FieldButton> : null}
+            <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => void removePhoto(p.uri)}>Remove pending photo</FieldButton>
+          </View>)}</View>
+          <Pressable onPress={() => setGuidanceOpen(!guidanceOpen)}><Text style={styles.link}>{guidanceOpen ? 'Hide guidance' : 'Standard and guidance'}</Text></Pressable>
+          {guidanceOpen ? <><Text style={styles.body}>{check.help}</Text>{check.effectiveFrom ? <Text style={styles.small}>Applies from {check.effectiveFrom}. {check.trigger}</Text> : null}{check.sourceUrl ? <Pressable onPress={() => void Linking.openURL(check.sourceUrl || '')}><Text style={styles.link}>Official source</Text></Pressable> : null}<RentalTextField label="Optional report note" value={draft.publicNotes} editable={editable && !busy} onChange={(v) => change({ publicNotes: v })} multiline /></> : null}
+          {check.repeatBy !== 'property' ? <FieldButton variant="quiet" disabled={!editable || Boolean(busy)} onPress={() => void perform('draft', async () => {
+            await persist();
+            const nextCursor = { sectionKey: section.key, checkIndex: cursor.checkIndex, instanceKey: Crypto.randomUUID() };
+            const nextKey = itemKey(active, nextCursor);
+            const nextCache = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts,
+              [nextKey]: initialDraft(newRentalItem(active, section, check, nextCursor.instanceKey), data) } };
+            setCache(nextCache); cacheRef.current = nextCache; await persist(nextCache);
+            openCheck(section, cursor.checkIndex, nextCursor.instanceKey);
+          })}>Add another {readable(check.repeatBy)}</FieldButton> : null}
+          {check.repeatBy !== 'property' && !item.id && cache.drafts[key] ? <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => Alert.alert('Discard unsaved item?', 'This removes this item from the draft. Saved job records are retained.', [{ text: 'Keep item', style: 'cancel' }, { text: 'Discard item', style: 'destructive', onPress: () => void perform('discard', async () => {
+            const nextCache = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts } }; delete nextCache.drafts[key];
+            setCache(nextCache); cacheRef.current = nextCache; await persist(nextCache); setPage('categories');
+          }) }])}>Discard unsaved item</FieldButton> : null}
+        </> : page === 'details' && detailField ? <>
+          <Text style={styles.small}>Test details · {detailIndex + 1} of {responseFields.length}</Text>
+          <RentalTextField label={detailField.label} value={String(draft.response[detailField.key] || '')} editable={editable && !busy} onChange={(value) => change({ response: { ...draft.response, [detailField.key]: value } })} multiline />
+        </> : page === 'finding' ? <>
+          <RentalTextField label="What needs attention?" value={draft.findingDescription} editable={editable && !busy} onChange={(v) => change({ findingDescription: v })} multiline />
+          <FieldSelect label="Priority" value={draft.severity} disabled={!editable || Boolean(busy)} options={['required', 'urgent', 'immediate_safety_risk', 'recommended', 'information'].map((value) => ({ value, label: readable(value) }))} onChange={(v) => change({ severity: v })} />
+        </> : page === 'action' ? <>
+          <FieldSelect label="Who should do the work?" value={draft.tradeCategory} disabled={!editable || Boolean(busy)} options={RENTAL_TRADES.map((v) => ({ value: v, label: v }))} onChange={(v) => change({ tradeCategory: v })} />
+          <RentalTextField label="What work is needed?" value={draft.scopeSummary} editable={editable && !busy} onChange={(v) => change({ scopeSummary: v })} multiline />
+        </> : page === 'safety' ? <>
+          <RentalTextField label="What was done to make it safe?" value={draft.immediateAction} editable={editable && !busy} onChange={(v) => change({ immediateAction: v })} multiline />
+          <FieldButton variant={draft.notified ? 'primary' : 'secondary'} disabled={!editable || Boolean(busy)} onPress={() => change({ notified: !draft.notified })}>{draft.notified ? 'Notification confirmed' : 'Confirm responsible people were notified'}</FieldButton>
+        </> : null}
+      </> : null}
+      </>}
+      {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+    </ScrollView>
+    {page !== 'categories' ? <View style={[styles.footer, { paddingBottom: Math.max(12, insets.bottom) }]}><FieldButton variant="secondary" style={styles.flex} disabled={Boolean(busy)} onPress={previous}>Previous</FieldButton>
+      {page === 'metadata' ? <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'metadata'} onPress={() => { if (editable) void saveMetadata(); else if (metadataIndex + 1 < metadata.length) setMetadataIndex(metadataIndex + 1); else setPage('review'); }}>Next</FieldButton> : page === 'review' ? <FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => setPage('categories')}>Categories</FieldButton> : <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'save'} onPress={() => void next()}>Next</FieldButton>}
+    </View> : null}
   </View>;
 }
-
 const styles = StyleSheet.create({
-  workflow: { gap: spacing.md },
-  flex: { flex: 1 },
-  hero: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' },
-  heroTitle: { color: colours.ink, fontSize: 22, fontWeight: '800', lineHeight: 28 },
-  label: { color: colours.green, fontSize: 11, fontWeight: '900', letterSpacing: 1 },
-  body: { color: colours.muted, lineHeight: 21 },
-  help: { color: colours.muted, fontSize: 12, lineHeight: 17 },
-  cardTitle: { color: colours.ink, fontSize: 18, fontWeight: '800', lineHeight: 24 },
-  statusPill: { backgroundColor: colours.mint, borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 7 },
-  statusText: { color: colours.ink, fontSize: 11, fontWeight: '800' },
-  moduleList: { gap: spacing.sm },
-  moduleButton: { backgroundColor: colours.surface, borderColor: colours.line, borderRadius: radius.md, borderWidth: 1, gap: 3, padding: spacing.md },
-  moduleButtonActive: { backgroundColor: colours.mint, borderColor: colours.green },
-  moduleTag: { color: colours.green, fontSize: 10, fontWeight: '900', letterSpacing: .7 },
-  moduleTitle: { color: colours.ink, fontSize: 16, fontWeight: '800' },
-  boundary: { backgroundColor: colours.mint, borderColor: colours.mintStrong, borderRadius: radius.md, borderWidth: 1, gap: spacing.xs, padding: spacing.md },
-  detailsCard: { backgroundColor: colours.surface, borderColor: colours.line, borderRadius: radius.lg, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
-  field: { gap: 6 },
-  inputLabel: { color: colours.ink, fontWeight: '700' },
-  input: { backgroundColor: '#fbfdfc', borderColor: colours.line, borderRadius: radius.sm, borderWidth: 1, color: colours.ink, fontSize: 16, minHeight: 50, paddingHorizontal: spacing.md },
-  textarea: { minHeight: 100, paddingTop: spacing.md, textAlignVertical: 'top' },
-  textareaSmall: { minHeight: 76, paddingTop: spacing.md, textAlignVertical: 'top' },
-  choice: { alignItems: 'center', borderColor: colours.line, borderRadius: radius.sm, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 48, paddingHorizontal: spacing.sm },
-  choiceSelected: { backgroundColor: colours.mint, borderColor: colours.green },
-  choiceText: { color: colours.ink, flex: 1, fontWeight: '700' },
-  choiceList: { gap: 7 },
-  option: { alignItems: 'center', borderColor: colours.line, borderRadius: radius.sm, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 47, paddingHorizontal: spacing.md },
-  optionSelected: { backgroundColor: colours.mint, borderColor: colours.green },
-  optionText: { color: colours.ink, fontSize: 13, fontWeight: '700' },
-  sectionOverview: { backgroundColor: '#f7fbfa', borderColor: colours.line, borderRadius: radius.lg, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
-  sectionList: { gap: 7 },
-  sectionButton: { alignItems: 'center', backgroundColor: colours.surface, borderColor: colours.line, borderRadius: radius.md, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 68, padding: spacing.sm },
-  sectionButtonActive: { backgroundColor: colours.mint, borderColor: colours.green },
-  sectionNumber: { backgroundColor: colours.mint, borderRadius: 999, color: colours.green, fontSize: 12, fontWeight: '900', minWidth: 34, overflow: 'hidden', paddingHorizontal: 10, paddingVertical: 8, textAlign: 'center' },
-  sectionTitle: { color: colours.ink, fontSize: 15, fontWeight: '800' },
-  backButton: { alignItems: 'center', alignSelf: 'flex-start', flexDirection: 'row', gap: 7, minHeight: 44, paddingVertical: 5 },
-  backButtonText: { color: colours.green, fontSize: 15, fontWeight: '800' },
-  sectionHeaderCard: { backgroundColor: colours.mint, borderColor: colours.mintStrong, borderRadius: radius.lg, borderWidth: 1, gap: spacing.xs, padding: spacing.md },
-  sectionContent: { gap: spacing.md },
-  sectionActions: { backgroundColor: colours.surface, borderColor: colours.line, borderRadius: radius.lg, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
-  checkGroup: { gap: spacing.sm },
-  itemCard: { backgroundColor: colours.surface, borderColor: colours.line, borderRadius: radius.lg, borderWidth: 1, gap: spacing.md, padding: spacing.md },
-  itemAnswered: { borderColor: colours.mintStrong },
-  itemHeading: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm },
-  itemSequence: { color: colours.green, fontSize: 10, fontWeight: '900', letterSpacing: .7 },
-  itemTitle: { color: colours.ink, fontSize: 17, fontWeight: '800', lineHeight: 23 },
-  saved: { color: colours.muted, fontSize: 11, fontWeight: '700' },
-  guidance: { backgroundColor: colours.mint, borderRadius: radius.sm, flexDirection: 'row', gap: spacing.sm, padding: spacing.md },
-  guidanceTitle: { color: colours.ink, fontWeight: '800' },
-  disclosure: { alignItems: 'center', borderBottomColor: colours.line, borderBottomWidth: 1, borderTopColor: colours.line, borderTopWidth: 1, flexDirection: 'row', justifyContent: 'space-between', minHeight: 50 },
-  disclosureText: { color: colours.ink, flex: 1, fontWeight: '800' },
-  technicalFields: { gap: spacing.sm },
-  findingCard: { backgroundColor: '#fff8e7', borderColor: colours.amber, borderRadius: radius.md, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
-  findingNotice: { color: colours.ink, fontSize: 12, fontWeight: '800' },
-  compactChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  compactOption: { borderColor: colours.line, borderRadius: 999, borderWidth: 1, minHeight: 40, justifyContent: 'center', paddingHorizontal: spacing.sm },
-  safetyStop: { backgroundColor: '#fff0ed', borderColor: colours.red, borderRadius: radius.sm, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
-  safetyTitle: { color: colours.red, fontSize: 17, fontWeight: '900' },
-  internalField: { backgroundColor: '#f4f5f5', borderRadius: radius.sm, padding: spacing.sm },
-  evidenceRow: { alignItems: 'center', borderTopColor: colours.line, borderTopWidth: 1, flexDirection: 'row', gap: spacing.sm, paddingTop: spacing.sm },
-  evidenceMeta: { backgroundColor: colours.cream, borderRadius: radius.sm, gap: 2, padding: spacing.sm },
-  evidenceName: { color: colours.ink, fontSize: 13, fontWeight: '800' },
-  completionCard: { backgroundColor: colours.surface, borderColor: colours.line, borderRadius: radius.lg, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
-  progress: { color: colours.green, fontSize: 15, fontWeight: '900' },
-  blocker: { color: colours.red, lineHeight: 20 },
-  issueCard: { backgroundColor: colours.mint, borderColor: colours.mintStrong, borderRadius: radius.lg, borderWidth: 1, gap: spacing.sm, padding: spacing.lg },
-  offlineCard: { alignItems: 'flex-start', backgroundColor: colours.mint, borderColor: colours.mintStrong, borderRadius: radius.lg, borderWidth: 1, flexDirection: 'row', gap: spacing.md, padding: spacing.md },
-  error: { backgroundColor: '#fff0ed', borderRadius: radius.sm, color: colours.red, fontWeight: '700', lineHeight: 20, padding: spacing.md },
+  shell: { flex: 1, backgroundColor: colours.cream }, header: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderBottomWidth: 1, borderColor: colours.line },
+  job: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 }, reference: { flex: 1, color: colours.muted, fontSize: 12 }, status: { color: colours.muted, fontSize: 11 },
+  scroll: { flex: 1 }, content: { padding: spacing.md, gap: 14, paddingBottom: 24 }, flex: { flex: 1 }, title: { color: colours.ink, fontSize: 21, fontWeight: '700', lineHeight: 28 },
+  body: { color: colours.muted, fontSize: 14, lineHeight: 20 }, small: { color: colours.muted, fontSize: 12, lineHeight: 18 }, label: { color: colours.ink, fontWeight: '600' },
+  field: { gap: 8 }, input: { color: colours.ink, backgroundColor: colours.surface, borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm, padding: 12, minHeight: 48 },
+  notes: { minHeight: 110, textAlignVertical: 'top' }, category: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm, padding: 14, backgroundColor: colours.surface },
+  categoryTitle: { color: colours.ink, fontSize: 15, fontWeight: '600' }, options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  option: { minWidth: '46%', flexGrow: 1, flexBasis: '46%', minHeight: 54, justifyContent: 'center', padding: 12, borderRadius: radius.sm, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.surface },
+  selected: { borderColor: colours.green, backgroundColor: colours.mintStrong }, link: { color: colours.green, fontSize: 15, fontWeight: '600', paddingVertical: 8 },
+  photo: { gap: 8, backgroundColor: colours.surface, padding: 12, borderRadius: radius.sm }, footer: { flexDirection: 'row', gap: 12, padding: 12, paddingBottom: 20, borderTopWidth: 1, borderColor: colours.line, backgroundColor: colours.forest },
+  pendingPhoto: { gap: 4, borderTopWidth: 1, borderColor: colours.line, paddingTop: 10 }, thumbnail: { width: 120, height: 90, resizeMode: 'cover', borderRadius: radius.sm },
+  error: { color: colours.red, fontSize: 14, lineHeight: 20 },
 });

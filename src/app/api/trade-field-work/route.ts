@@ -3,6 +3,7 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { fieldTransitionExpectedStatus } from "@/lib/trade-field-completion-policy";
+import { submittedActivityFieldCaseSql, UNFINISHED_ACTIVITY_FIELD_INTENTS_SQL } from "@/lib/trade-activity-forms-completion";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
 import { normalisePhotoRequirements } from "@/lib/trade-photo-requests";
@@ -33,6 +34,7 @@ const UNSATISFIED_COMPLIANCE_REQUIREMENTS_SQL = `SELECT 1
   WHERE compliance_case.work_order_id = ?
     AND compliance_case.installer_uid = ?
     AND compliance_case.status NOT IN ('rejected', 'closed')
+    AND NOT EXISTS (${submittedActivityFieldCaseSql("compliance_case")})
     AND requirement.minimum_count > 0
     AND (
       SELECT COUNT(DISTINCT evidence.original_sha256)
@@ -286,7 +288,7 @@ async function payload(access: TeamAccess, workOrderId: string) {
       AND fa.status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed')
       ORDER BY CASE fa.status WHEN 'in_progress' THEN 0 WHEN 'arrived' THEN 1 WHEN 'en_route' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, fa.starts_at DESC LIMIT 1)
     WHERE w.id = ? AND w.firebase_uid = ? AND w.record_status = 'active'`).bind(workOrderId, firebaseUid).first<Record<string, unknown>>();
-  const [taskCount, formCount, issueCount, planCount, unsyncedCount, complianceCount, rentalReportCount] = await Promise.all([
+  const [taskCount, formCount, issueCount, planCount, unsyncedCount, complianceCount, rentalReportCount, activityCount] = await Promise.all([
     db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'done'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'complete'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? AND note_type = 'issue' AND issue_status = 'open'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
@@ -298,6 +300,7 @@ async function payload(access: TeamAccess, workOrderId: string) {
     db.prepare(`SELECT COUNT(*) count FROM trade_rental_inspections
       WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'issued'`)
       .bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) count FROM (${UNFINISHED_ACTIVITY_FIELD_INTENTS_SQL})`).bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
   ]);
   const customerContext = job?.source_type !== "opportunity"
     && (job?.customer_source === "trade_owned" || job?.customer_source === "public_lead_released");
@@ -312,6 +315,7 @@ async function payload(access: TeamAccess, workOrderId: string) {
     ...(counts.unsynced ? [{ key: "sync", label: "Unsynchronised field changes need attention", target: "sync" }] : []),
     ...(counts.compliance ? [{ key: "compliance", label: `${counts.compliance} governed evidence requirement${counts.compliance === 1 ? " is" : "s are"} awaiting submitted evidence`, target: "evidence" }] : []),
     ...(counts.rentalReports ? [{ key: "rental-report", label: "The rental assessment report must be issued before this job can finish", target: "rental-assessment" }] : []),
+    ...(Number(activityCount?.count || 0) ? [{ key: "activities", label: "Complete the activity forms and provide the signed field records to Creditex", target: "forms" }] : []),
   ];
   const appointmentStatus = String(job?.appointment_status || "");
   const fieldCompleted = appointmentStatus === "completed" && job?.stage === "completed";
@@ -432,6 +436,7 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
           AND blocker.status <> 'issued'
       )
       AND NOT EXISTS (${UNSATISFIED_COMPLIANCE_REQUIREMENTS_SQL})
+      AND NOT EXISTS (${UNFINISHED_ACTIVITY_FIELD_INTENTS_SQL})
       AND (
         (
           ? = 'none'
@@ -476,6 +481,8 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
     access.ownerUid,
     access.ownerUid,
     workOrderId,
+    workOrderId,
+    access.ownerUid,
     workOrderId,
     access.ownerUid,
     workOrderId,

@@ -13,6 +13,7 @@ import {
   canonicalRentalJson,
   publicRentalReportValue,
   rentalAssessmentCompletion,
+  rentalAssessmentCheck,
   rentalReportExpiresAt,
 } from "@/lib/trade-rental-assessment.mjs";
 import {
@@ -219,13 +220,19 @@ async function reportSource(access: TeamAccess, workOrderId: string) {
   if (!moduleRows.results.length || moduleRows.results.some((module) => module.status !== "complete")) {
     throw new Error("RENTAL_MODULES_INCOMPLETE");
   }
-  if (evidenceRows.results.some((evidence) => String(evidence.content_type || "").startsWith("image/")
+  const activeItems = itemRows.results.filter((item) => {
+    const assessmentModule = moduleRows.results.find((candidate) => candidate.id === item.module_id);
+    return Boolean(rentalAssessmentCheck(parsedObject(assessmentModule?.template_snapshot), String(item.section_key), String(item.check_key)));
+  });
+  const activeItemIds = new Set(activeItems.map((item) => String(item.id)));
+  const activeEvidence = evidenceRows.results.filter((evidence) => activeItemIds.has(String(evidence.item_id)));
+  if (activeEvidence.some((evidence) => String(evidence.content_type || "").startsWith("image/")
     && !rentalEvidencePhotoCapture(evidence.evidence_envelope))) {
     throw new Error("RENTAL_EVIDENCE_METADATA_REQUIRED");
   }
-  const evidenceCounts = Object.fromEntries(evidenceRows.results.map((evidence) => String(evidence.item_id))
-    .map((itemId) => [itemId, evidenceRows.results.filter((evidence) => String(evidence.item_id) === itemId).length]));
-  const presentedFindings = findingRows.results.map(findingPresentation);
+  const evidenceCounts = Object.fromEntries(activeEvidence.map((evidence) => String(evidence.item_id))
+    .map((itemId) => [itemId, activeEvidence.filter((evidence) => String(evidence.item_id) === itemId).length]));
+  const presentedFindings = findingRows.results.filter((finding) => activeItemIds.has(String(finding.item_id))).map(findingPresentation);
   for (const assessmentModule of moduleRows.results) {
     const moduleItems = itemRows.results.filter((item) => item.module_id === assessmentModule.id);
     const completion = rentalAssessmentCompletion({
@@ -259,9 +266,9 @@ async function reportSource(access: TeamAccess, workOrderId: string) {
     job,
     inspection,
     modules: moduleRows.results,
-    items: itemRows.results,
+    items: activeItems,
     findings: presentedFindings,
-    evidence: evidenceRows.results,
+    evidence: activeEvidence,
     business,
     assessor,
   };
@@ -382,6 +389,7 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
       required: module.selected_required === null || module.selected_required === undefined ? true : Boolean(module.selected_required),
       status: String(module.status),
       reportBoundary: String(template.reportBoundary || ""),
+      assessmentScope: String(template.assessmentScope || "current_minimum_standards"),
       credentialGate: String(template.credentialGate || module.required_capability || ""),
       credential: parsedObject(module.credential_snapshot),
       answers: parsedObject(module.answers),
@@ -397,6 +405,9 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
             const assessmentCheck = checks.map(parsedObject).find((check) => check.key === item.check_key);
             return {
               ...itemPresentation(item, String(assessmentCheck?.prompt || item.check_key)),
+              effectiveFrom: String(assessmentCheck?.effectiveFrom || ""),
+              trigger: String(assessmentCheck?.trigger || ""),
+              sourceUrl: String(assessmentCheck?.sourceUrl || ""),
               id: String(itemPublicIds.get(String(item.id))),
             };
           }),
@@ -405,6 +416,15 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
     };
   });
   const minimumAnswers = parsedObject(source.modules.find((module) => module.module_key === "minimum_standards")?.answers);
+  const readiness = source.inspection.template_key === "vic-rental-energy-readiness-2027";
+  const safetyChecksOnly = !source.modules.some((assessmentModule) => assessmentModule.module_key === "minimum_standards");
+  const sources: Row[] = [];
+  for (const assessmentModule of source.modules) {
+    for (const rawSource of parsedArray(parsedObject(assessmentModule.template_snapshot).sources)) {
+      const ruleSource = parsedObject(rawSource);
+      if (!sources.some((entry) => entry.url === ruleSource.url && entry.version === ruleSource.version)) sources.push(ruleSource);
+    }
+  }
   const businessName = String(source.business.document_business_name || source.business.business_name || "TLink trade business");
   const findings = source.findings.map((finding) => {
     const { id, moduleId, itemId, ...publicFinding } = finding;
@@ -442,6 +462,9 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
     },
     property: propertyProjection(propertySnapshot),
     inspection: {
+      title: readiness ? "2027 Victorian rental energy readiness assessment" : safetyChecksOnly ? "Victorian rental safety-check report" : "Victorian rental minimum standards assessment",
+      assessmentScope: readiness ? "energy_readiness_2027" : "current_minimum_standards",
+      reportBoundary: readiness ? "Energy readiness assessment for phased future requirements. Planning findings do not establish non-compliance with current rental law. Refer to each recorded standard's date and trigger." : "Assessment of the selected current rental minimum standards and safety-check modules.",
       number: String(source.inspection.inspection_number),
       jurisdiction: "VIC",
       templateKey: String(source.inspection.template_key),
@@ -450,7 +473,7 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
       assessmentDate: String(minimumAnswers.inspectionDate || ""),
     },
     issuer: {
-      name: String(source.assessor.display_name || ""),
+      name: [String(source.assessor.first_name || ""), String(source.assessor.last_name || "")].filter(Boolean).join(" ") || String(source.assessor.display_name || ""),
       role: String(source.assessor.role || "assessor"),
       email: String(source.assessor.email || ""),
       phone: String(source.assessor.phone || ""),
@@ -462,7 +485,7 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
     modules,
     findings,
     evidence,
-    sources: parsedArray(parsedObject(source.modules[0]?.template_snapshot).sources || []),
+    sources,
   });
   return { snapshot, assets, preparedObjects };
 }

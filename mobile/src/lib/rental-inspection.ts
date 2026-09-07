@@ -3,6 +3,8 @@ export type RentalMetadataField = {
   label: string;
   type: 'text' | 'textarea' | 'date' | 'select' | 'checkbox';
   required: boolean;
+  phase?: 'setup' | 'profile' | 'final';
+  source?: 'team_profile' | 'assessment';
   help: string;
   placeholder: string;
   options: Array<{ value: string; label: string }>;
@@ -14,10 +16,14 @@ export type RentalAssessmentCheck = {
   required: boolean;
   requiredEvidenceCount: number;
   responseType: string;
+  responseFields?: Array<{ key: string; label: string; required: boolean }>;
   repeatBy: string;
   photoGuidance: string;
   help: string;
   credentialGate: string;
+  effectiveFrom?: string;
+  trigger?: string;
+  sourceUrl?: string;
 };
 
 export type RentalAssessmentSection = {
@@ -41,6 +47,8 @@ export type RentalAssessmentModule = {
     reportBoundary: string;
     metadataFields: RentalMetadataField[];
     sections: RentalAssessmentSection[];
+    assessmentScope?: 'energy_readiness_2027' | 'current_minimum_standards';
+    templateVersion?: number;
   };
   answers: Record<string, unknown>;
   revision: number;
@@ -163,6 +171,41 @@ export const RENTAL_OUTCOMES = [
   { value: 'not_applicable', label: 'Not applicable' },
   { value: 'exemption_evidence_pending', label: 'Exemption evidence pending' },
 ] as const;
+
+export const RENTAL_READINESS_OUTCOMES = RENTAL_OUTCOMES.map((option) => ({
+  ...option,
+  label: option.value === 'meets' ? 'Yes, ready' : option.value === 'does_not_meet' ? 'Upgrade planning needed' : option.label,
+}));
+
+export function rentalObservationsComplete(result: RentalAssessmentResult, moduleId: string) {
+  const completion = result.completion?.[moduleId];
+  return Boolean(completion && completion.blockers.every((blocker) => blocker.key.startsWith('metadata:')));
+}
+
+export function rentalAdjacentQuestion(sections: RentalAssessmentSection[], sectionKey: string, checkIndex: number, direction: 1 | -1) {
+  const sectionIndex = sections.findIndex((section) => section.key === sectionKey);
+  if (sectionIndex < 0) return null;
+  const nextIndex = checkIndex + direction;
+  if (nextIndex >= 0 && nextIndex < sections[sectionIndex].checks.length) return { section: sections[sectionIndex], checkIndex: nextIndex };
+  const nextSection = sections[sectionIndex + direction];
+  return nextSection ? { section: nextSection, checkIndex: direction === 1 ? 0 : nextSection.checks.length - 1 } : null;
+}
+
+// Remember a successful upload before linking it, so a failed link can retry the same job file.
+export async function deliverRentalPhoto<T>(input: {
+  mediaId?: string;
+  upload: () => Promise<string>;
+  remember: (mediaId: string) => Promise<void>;
+  link: (mediaId: string) => Promise<T>;
+}) {
+  let mediaId = input.mediaId;
+  if (!mediaId) {
+    mediaId = await input.upload();
+    if (!mediaId) throw new Error('The photo upload did not return a file reference.');
+    await input.remember(mediaId);
+  }
+  return input.link(mediaId);
+}
 
 export const RENTAL_ADVERSE_OUTCOMES = new Set([
   'does_not_meet',

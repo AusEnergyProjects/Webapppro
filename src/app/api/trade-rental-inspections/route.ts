@@ -16,9 +16,12 @@ import {
   rentalAssessmentCheck,
   rentalAssessmentCompletion,
   rentalAssessmentItemKey,
+  rentalAssessmentTemplateSnapshot,
+  normalizeRentalAssessmentScope,
+  RENTAL_ASSESSMENT_SCOPES,
 } from "@/lib/trade-rental-assessment.mjs";
 import { rentalEvidenceCapture, rentalEvidencePhotoCapture } from "@/lib/trade-rental-evidence.mjs";
-import { currentRentalModuleCredentialSnapshot } from "@/lib/trade-rental-credentials";
+import { currentRentalModuleCredentialSnapshot, rentalModuleProfileAnswers } from "@/lib/trade-rental-credentials";
 import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
 import {
   BoundedJsonRequestError,
@@ -155,6 +158,7 @@ function inspectionError(error: unknown) {
   if (code === "REPORT_PERMISSION_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow issued reports." }, 403);
   if (code === "RENTAL_INSPECTION_LOCKED") return adminJson({ ok: false, error: "This issued assessment is locked and remains in the report history. Start a replacement assessment job if a correction is required." }, 409);
   if (code === "RENTAL_MODULE_NOT_FOUND" || code === "RENTAL_ITEM_NOT_FOUND") return adminJson({ ok: false, error: "The assessment item could not be found." }, 404);
+  if (code === "RENTAL_ASSESSMENT_SCOPE_INVALID") return adminJson({ ok: false, error: "Choose a valid rental assessment scope." }, 400);
   if (code === "RENTAL_MEDIA_MISMATCH") return adminJson({ ok: false, error: "That evidence file does not belong to this job." }, 409);
   if (code === "RENTAL_EVIDENCE_METADATA_REQUIRED") return adminJson({ ok: false, error: "Assessment photos must include a valid TLink capture time and GPS location. Retake the photo in the field app or add it from a location-enabled browser." }, 409);
   if (code === "RENTAL_FINDING_REQUIRED") return adminJson({ ok: false, error: "An adverse result needs a clear finding title, description, responsible trade and quote-ready scope before it can be saved." }, 400);
@@ -202,6 +206,7 @@ function presentInspection(row: Row) {
     jurisdiction: String(row.jurisdiction),
     status: String(row.status),
     templateKey: String(row.template_key),
+    assessmentScope: String(row.template_key) === "vic-rental-energy-readiness-2027" ? "energy_readiness_2027" : "current_minimum_standards",
     templateVersion: integer(row.template_version),
     rulesEffectiveFrom: String(row.rules_effective_from),
     selectedModules: parsedArray(row.selected_modules_snapshot || row.module_selection_snapshot).map(String),
@@ -335,17 +340,29 @@ async function assessmentPayload(context: InspectionContext, origin = "") {
         && (context.access.isOwner || context.access.memberId === String(context.inspection.assessor_member_id || "")),
     }),
   ]);
-  const modules = moduleRows.results.map(presentModule);
-  const items = itemRows.results.map(presentItem);
-  const findings = findingRows.results.map(presentFinding);
-  const evidence = evidenceRows.results.map(presentEvidence);
+  const modules = await Promise.all(moduleRows.results.map(async (row) => {
+    const assessmentModule = presentModule(row);
+    if (TERMINAL_INSPECTION_STATUSES.has(String(context.inspection.status)) || assessmentModule.status === "complete") return assessmentModule;
+    const profileAnswers = await rentalModuleProfileAnswers({ db, ownerUid: context.access.ownerUid,
+      assessorMemberId: String(context.inspection.assessor_member_id || ""), moduleKey: assessmentModule.key,
+      requiredCapability: assessmentModule.requiredCapability, checkedAt: new Date().toISOString() });
+    return { ...assessmentModule, answers: { inspectionDate: new Date().toLocaleDateString("en-CA", { timeZone: "Australia/Melbourne" }),
+      ...assessmentModule.answers, ...profileAnswers } };
+  }));
+  const items = itemRows.results.map(presentItem).filter((item) => {
+    const template = modules.find((module) => module.id === item.moduleId)?.template;
+    return Boolean(rentalAssessmentCheck(template, item.sectionKey, item.checkKey));
+  });
+  const activeItemIds = new Set(items.map((item) => item.id));
+  const findings = findingRows.results.map(presentFinding).filter((finding) => activeItemIds.has(finding.itemId));
+  const evidence = evidenceRows.results.map(presentEvidence).filter((entry) => activeItemIds.has(entry.itemId));
   const evidenceCounts = Object.fromEntries(items.map((item) => [
     item.id,
     evidence.filter((entry) => entry.itemId === item.id && entry.status === "active").length,
   ]));
-  const usedEvidenceBytes = evidence
+  const usedEvidenceBytes = evidenceRows.results
     .filter((entry) => entry.status === "active")
-    .reduce((total, entry) => total + entry.sizeBytes, 0);
+    .reduce((total, entry) => total + integer(entry.size_bytes), 0);
   const completion = Object.fromEntries(modules.map((module) => [module.id, rentalAssessmentCompletion({
     moduleTemplate: module.template,
     answers: module.answers,
@@ -355,6 +372,7 @@ async function assessmentPayload(context: InspectionContext, origin = "") {
   })]));
   return {
     inspection: presentInspection(context.inspection),
+    assessmentScopes: RENTAL_ASSESSMENT_SCOPES,
     modules,
     items,
     findings,
@@ -473,8 +491,11 @@ async function saveModuleAnswers(context: InspectionContext, body: Row) {
   const expectedRevision = integer(body.expectedRevision);
   if (expectedRevision !== integer(assessmentModule.revision)) throw new Error("RENTAL_MUTATION_CONFLICT");
   const template = parsedObject(assessmentModule.template_snapshot);
-  const answers = normaliseModuleAnswers(template, body.answers);
   const now = new Date().toISOString();
+  const profileAnswers = await rentalModuleProfileAnswers({ db: getD1(), ownerUid: context.access.ownerUid,
+    assessorMemberId: String(context.inspection.assessor_member_id || ""), moduleKey: String(assessmentModule.module_key),
+    requiredCapability: String(assessmentModule.required_capability), checkedAt: now });
+  const answers = normaliseModuleAnswers(template, { ...parsedObject(body.answers), ...profileAnswers });
   const nextRevision = expectedRevision + 1;
   return await guardedMutation({
     context,
@@ -495,7 +516,54 @@ async function saveModuleAnswers(context: InspectionContext, body: Row) {
   });
 }
 
-function findingInput(body: Row, outcome: string, itemKey: string, locationLabel: string) {
+async function setAssessmentScope(context: InspectionContext, body: Row) {
+  assertEditable(context);
+  if (integer(body.expectedInspectionRevision) !== integer(context.inspection.revision)) throw new Error("RENTAL_MUTATION_CONFLICT");
+  const moduleId = cleanAdminText(body.moduleId, 180);
+  const assessmentModule = await moduleRow(context, moduleId);
+  if (assessmentModule.module_key !== "minimum_standards") throw new Error("RENTAL_ASSESSMENT_SCOPE_INVALID");
+  const scope = normalizeRentalAssessmentScope(body.scope);
+  if (!scope) throw new Error("RENTAL_ASSESSMENT_SCOPE_INVALID");
+  const expectedRevision = integer(body.expectedModuleRevision);
+  if (expectedRevision !== integer(assessmentModule.revision)) throw new Error("RENTAL_MUTATION_CONFLICT");
+  const snapshot = rentalAssessmentTemplateSnapshot(["minimum_standards"], scope);
+  const template = snapshot.modules.minimum_standards;
+  const answers = normaliseModuleAnswers(template, parsedObject(assessmentModule.answers));
+  answers.coverageConfirmed = false;
+  answers.assessorDeclaration = false;
+  const now = new Date().toISOString();
+  const nextRevision = expectedRevision + 1;
+  return guardedMutation({
+    context,
+    primary: getD1().prepare(`UPDATE trade_rental_inspection_modules
+      SET template_snapshot = ?, template_name = ?, template_version = ?, required_capability = ?,
+        answers = ?, credential_snapshot = '{}', status = 'draft', revision = ?, completed_by_uid = '', completed_at = '', updated_at = ?
+      WHERE id = ? AND inspection_id = ? AND firebase_uid = ? AND revision = ?
+        AND status IN ('not_started', 'draft', 'complete')`)
+      .bind(JSON.stringify(template), template.title, template.templateVersion, template.credentialGate,
+        JSON.stringify(answers), nextRevision, now, moduleId, context.inspection.id, context.access.ownerUid, expectedRevision),
+    additional: [getD1().prepare(`UPDATE trade_rental_inspections
+      SET template_key = ?, template_version = ?, rules_effective_from = ?, submitted_at = '',
+        status = CASE WHEN status = 'submitted' THEN 'in_progress' ELSE status END
+      WHERE id = ? AND firebase_uid = ? AND revision = ? AND status IN ('draft', 'scheduled', 'in_progress', 'submitted')
+        AND EXISTS (SELECT 1 FROM trade_rental_inspection_modules module WHERE module.id = ?
+          AND module.inspection_id = trade_rental_inspections.id AND module.firebase_uid = trade_rental_inspections.firebase_uid
+          AND module.revision = ? AND module.updated_at = ?)`)
+      .bind(snapshot.key, snapshot.version, snapshot.effectiveFrom, context.inspection.id, context.access.ownerUid,
+        integer(context.inspection.revision), moduleId, nextRevision, now)],
+    successPredicate: `template_key = ? AND EXISTS (SELECT 1 FROM trade_rental_inspection_modules module
+      WHERE module.id = ? AND module.inspection_id = trade_rental_inspections.id
+        AND module.firebase_uid = trade_rental_inspections.firebase_uid AND module.revision = ? AND module.updated_at = ?)`,
+    successBindings: [snapshot.key, moduleId, nextRevision, now],
+    eventType: "assessment_scope_changed",
+    summary: `Assessment scope changed to ${template.title}. Previous observations remain in the job history.`,
+    metadata: { moduleId, scope, previousTemplate: parsedObject(assessmentModule.template_snapshot),
+      previousAnswers: parsedObject(assessmentModule.answers), previousCredential: parsedObject(assessmentModule.credential_snapshot),
+      previousStatus: assessmentModule.status, previousCompletedAt: assessmentModule.completed_at },
+  });
+}
+
+function findingInput(body: Row, outcome: string, itemKey: string, locationLabel: string, readiness = false) {
   const source = parsedObject(body.finding);
   const title = cleanAdminText(source.title, 240);
   const description = cleanAdminText(source.description, 8000);
@@ -517,7 +585,7 @@ function findingInput(body: Row, outcome: string, itemKey: string, locationLabel
     description,
     standardReference: cleanAdminText(source.standardReference, 500),
     status: severity === "immediate_safety_risk" ? "safety_issue"
-      : outcome === "does_not_meet" ? "non_compliant" : "not_tested",
+      : outcome === "does_not_meet" ? (readiness ? "recommendation" : "non_compliant") : "not_tested",
     severity,
     tradeCategory,
     locationLabel,
@@ -553,6 +621,18 @@ async function saveItem(context: InspectionContext, body: Row) {
   const outcome = cleanAdminText(body.outcome, 60);
   if (!OUTCOMES.has(outcome)) return adminJson({ ok: false, error: "Choose an assessment result." }, 400);
   const response = responseObject(body.response);
+  if (outcome === "meets" && assessmentCheck.credentialGate && assessmentCheck.credentialGate !== template.credentialGate) {
+    const gate = String(assessmentCheck.credentialGate);
+    const specialistModuleKey = gate === "licensed_electrician" ? "electrical_safety_check" : gate === "licensed_gasfitter" ? "gas_safety_check" : "smoke_alarm_check";
+    const profile = await rentalModuleProfileAnswers({ db: getD1(), ownerUid: context.access.ownerUid,
+      assessorMemberId: String(context.inspection.assessor_member_id || ""), moduleKey: specialistModuleKey,
+      requiredCapability: gate, checkedAt: new Date().toISOString() });
+    const credentialNumber = String(profile.licenceNumber || profile.qualificationNumber || "");
+    if (!credentialNumber) throw new Error("RENTAL_MODULE_CREDENTIAL_REQUIRED");
+    response.credentialVerified = true;
+    response.credentialNumber = credentialNumber;
+    response.credentialType = gate;
+  }
   const publicNotes = cleanAdminText(body.publicNotes, 4000);
   const internalNotes = cleanAdminText(body.internalNotes, 4000);
   if (outcome === "not_applicable" && !publicNotes) {
@@ -589,7 +669,7 @@ async function saveItem(context: InspectionContext, body: Row) {
         internalNotes, requiredEvidenceCount, sortOrder, context.access.actorUid, now, now, now);
   const additional: D1PreparedStatement[] = [
     getD1().prepare(`UPDATE trade_rental_inspection_modules
-      SET status = 'draft', credential_snapshot = '{}', revision = ?, completed_by_uid = '', completed_at = '', updated_at = ?
+      SET status = 'draft', credential_snapshot = '{}', answers = json_remove(answers, '$.coverageConfirmed', '$.assessorDeclaration', '$.credentialConfirmed'), revision = ?, completed_by_uid = '', completed_at = '', updated_at = ?
       WHERE id = ? AND inspection_id = ? AND firebase_uid = ? AND revision = ?
         AND status IN ('not_started', 'draft')
         AND EXISTS (SELECT 1 FROM trade_rental_inspection_items item
@@ -603,7 +683,7 @@ async function saveItem(context: InspectionContext, body: Row) {
   const existingFinding = await getD1().prepare(`SELECT id, revision FROM trade_rental_findings
     WHERE inspection_id = ? AND finding_key = ? AND firebase_uid = ?`)
     .bind(context.inspection.id, `finding:${itemKey}`, context.access.ownerUid).first<Row>();
-  const finding = adverse ? findingInput(body, outcome, itemKey, locationLabel) : null;
+  const finding = adverse ? findingInput(body, outcome, itemKey, locationLabel, template.assessmentScope === "energy_readiness_2027") : null;
   if (finding) {
     const findingId = existingFinding ? String(existingFinding.id) : crypto.randomUUID();
     const findingRevision = integer(existingFinding?.revision) + 1;
@@ -713,7 +793,7 @@ async function linkEvidence(context: InspectionContext, body: Row) {
     context,
     primary,
     additional: [getD1().prepare(`UPDATE trade_rental_inspection_modules
-      SET status = 'draft', credential_snapshot = '{}', revision = ?, completed_by_uid = '', completed_at = '', updated_at = ?
+      SET status = 'draft', credential_snapshot = '{}', answers = json_remove(answers, '$.coverageConfirmed', '$.assessorDeclaration', '$.credentialConfirmed'), revision = ?, completed_by_uid = '', completed_at = '', updated_at = ?
       WHERE id = ? AND inspection_id = ? AND firebase_uid = ? AND revision = ?
         AND status IN ('not_started', 'draft')
         AND EXISTS (SELECT 1 FROM trade_rental_evidence_links evidence
@@ -759,7 +839,7 @@ async function unlinkEvidence(context: InspectionContext, body: Row) {
       WHERE id = ? AND inspection_id = ? AND firebase_uid = ? AND status = 'active'`)
       .bind(now, evidenceId, context.inspection.id, context.access.ownerUid),
     additional: [getD1().prepare(`UPDATE trade_rental_inspection_modules
-      SET status = 'draft', credential_snapshot = '{}', revision = ?, completed_by_uid = '', completed_at = '', updated_at = ?
+      SET status = 'draft', credential_snapshot = '{}', answers = json_remove(answers, '$.coverageConfirmed', '$.assessorDeclaration', '$.credentialConfirmed'), revision = ?, completed_by_uid = '', completed_at = '', updated_at = ?
       WHERE id = ? AND inspection_id = ? AND firebase_uid = ? AND revision = ?
         AND status IN ('not_started', 'draft')
         AND EXISTS (SELECT 1 FROM trade_rental_evidence_links linked
@@ -877,7 +957,7 @@ async function reopenModule(context: InspectionContext, body: Row) {
   return await guardedMutation({
     context,
     primary: getD1().prepare(`UPDATE trade_rental_inspection_modules
-      SET status = 'draft', credential_snapshot = '{}', revision = ?, completed_by_uid = '', completed_at = '', updated_at = ?
+      SET status = 'draft', credential_snapshot = '{}', answers = json_remove(answers, '$.coverageConfirmed', '$.assessorDeclaration', '$.credentialConfirmed'), revision = ?, completed_by_uid = '', completed_at = '', updated_at = ?
       WHERE id = ? AND inspection_id = ? AND firebase_uid = ? AND revision = ? AND status = 'complete'`)
       .bind(nextRevision, now, moduleId, context.inspection.id, context.access.ownerUid, expectedRevision),
     successPredicate: `EXISTS (SELECT 1 FROM trade_rental_inspection_modules module
@@ -940,7 +1020,8 @@ export async function POST(request: Request) {
       return adminJson({ ok: true, issuedReport, ...(await assessmentPayload(context, new URL(request.url).origin)) });
     }
     let result: InspectionContext | Response;
-    if (action === "save_module_answers") result = await saveModuleAnswers(context, body);
+    if (action === "set_assessment_scope") result = await setAssessmentScope(context, body);
+    else if (action === "save_module_answers") result = await saveModuleAnswers(context, body);
     else if (action === "save_item") result = await saveItem(context, body);
     else if (action === "link_evidence") result = await linkEvidence(context, body);
     else if (action === "unlink_evidence") result = await unlinkEvidence(context, body);

@@ -28,7 +28,7 @@ function safe(value) {
 }
 
 function label(value) {
-  return safe(value).replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
+  return safe(value).replace(/([a-z0-9])([A-Z])/g, "$1 $2").replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function dateTime(value) {
@@ -97,7 +97,7 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   const pdf = await PDFDocument.create();
   pdf.setTitle(`Rental assessment ${safe(snapshot.report.number)}`);
   pdf.setAuthor(safe(snapshot.business?.name || "TLink trade business"));
-  pdf.setSubject("Victorian rental minimum standards assessment");
+  pdf.setSubject(snapshot.inspection?.title || "Victorian rental minimum standards assessment");
   pdf.setProducer("TLink");
   pdf.setCreationDate(new Date(snapshot.report.issuedAt));
   pdf.setModificationDate(new Date(snapshot.report.issuedAt));
@@ -259,7 +259,8 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   addPage();
   kicker(snapshot.business?.name || "TLink trade business");
   y -= 14;
-  text("Victorian rental minimum standards assessment", { bold: true, size: 25, lineHeight: 30, width: 450, after: 8 });
+  text(snapshot.inspection?.title || "Victorian rental minimum standards assessment", { bold: true, size: 25, lineHeight: 30, width: 450, after: 8 });
+  if (snapshot.inspection?.reportBoundary) text(snapshot.inspection.reportBoundary, { size: 9, lineHeight: 12, color: palette.muted, after: 8 });
   text(snapshot.property.address, { bold: true, size: 13, lineHeight: 17, color: palette.primary, after: 13 });
   page.drawRectangle({ x: MARGIN, y: y - 96, width: CONTENT_WIDTH, height: 96, color: palette.soft });
   const boxTop = y - 18;
@@ -269,7 +270,7 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   page.drawText(safe(dateTime(snapshot.report.issuedAt)), { x: MARGIN + 190, y: boxTop - 18, font: bold, size: 9.5, color: palette.ink });
   page.drawText("ASSESSOR", { x: MARGIN + 365, y: boxTop, font: bold, size: 7.4, color: palette.muted });
   page.drawText(safe(snapshot.issuer?.name || "Recorded issuer"), { x: MARGIN + 365, y: boxTop - 18, font: bold, size: 9.5, color: palette.ink, maxWidth: 130 });
-  page.drawText("RULES EFFECTIVE", { x: MARGIN + 16, y: boxTop - 50, font: bold, size: 7.4, color: palette.muted });
+  page.drawText(snapshot.inspection?.assessmentScope === "energy_readiness_2027" ? "FIRST PHASE STARTS" : "RULES EFFECTIVE", { x: MARGIN + 16, y: boxTop - 50, font: bold, size: 7.4, color: palette.muted });
   page.drawText(safe(dateOnly(snapshot.inspection?.rulesEffectiveFrom)), { x: MARGIN + 16, y: boxTop - 68, font: regular, size: 9, color: palette.ink });
   page.drawText("MODULES", { x: MARGIN + 190, y: boxTop - 50, font: bold, size: 7.4, color: palette.muted });
   page.drawText(String(snapshot.modules?.length || 0), { x: MARGIN + 190, y: boxTop - 68, font: regular, size: 9, color: palette.ink });
@@ -278,7 +279,7 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   y -= 116;
 
   heading("Report boundary", "What this report covers");
-  text("The default module assesses the current Victorian rental minimum standards. Separate electrical, gas and smoke alarm records appear only when selected, completed and authenticated in their own modules. This report records observed conditions, tests, limitations, evidence and work scopes as issued by the named assessor.", { size: 9.5, lineHeight: 14, after: 8 });
+  text(snapshot.inspection?.reportBoundary || "The default module assesses the current Victorian rental minimum standards. Separate electrical, gas and smoke alarm records appear only when selected, completed and authenticated in their own modules. This report records observed conditions, tests, limitations, evidence and work scopes as issued by the named assessor.", { size: 9.5, lineHeight: 14, after: 8 });
   keyValue("Inspection number", snapshot.inspection?.number);
   keyValue("Assessment date", dateOnly(snapshot.inspection?.assessmentDate || snapshot.report.issuedAt));
   keyValue("Building type", snapshot.property?.buildingType);
@@ -294,7 +295,8 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
 
   const reportFindings = (snapshot.findings || []).filter((finding) => finding.status !== "compliant");
   const resolvedFindings = (snapshot.findings || []).filter((finding) => finding.status === "compliant");
-  addPage();
+  if (reportFindings.length || resolvedFindings.length) addPage();
+  else ensure(110);
   heading("Quote-ready register", "Findings and required trade scopes", "This register is designed so each trade can identify the exact location, priority, quantity and requested action without reading every checklist answer first.");
   if (!reportFindings.length) {
     badge("No outstanding findings recorded");
@@ -344,16 +346,17 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     badge(`Completed | ${assessmentModule.completedAt ? dateTime(assessmentModule.completedAt) : "Recorded"}`);
     if (assessmentModule.credential && Object.keys(assessmentModule.credential).length) {
       keyValue("Assessor", assessmentModule.credential.assessorName || snapshot.issuer?.name);
-      keyValue("Credential", [assessmentModule.credential.credentialName || assessmentModule.credential.credentialType, assessmentModule.credential.credentialNumber].filter(Boolean).join(" | ") || "Assessor declaration recorded");
+      if (assessmentModule.credential.credentialName || assessmentModule.credential.credentialType || assessmentModule.credential.credentialNumber) keyValue("Credential", [assessmentModule.credential.credentialName || assessmentModule.credential.credentialType, assessmentModule.credential.credentialNumber].filter(Boolean).join(" | "));
       keyValue("Issuer / jurisdiction", [assessmentModule.credential.issuer, assessmentModule.credential.jurisdiction].filter(Boolean).join(" | "));
-      keyValue("Credential valid until", assessmentModule.credential.expiresAt ? dateOnly(assessmentModule.credential.expiresAt) : "Not applicable");
-      keyValue("Verification", assessmentModule.credential.verificationBasis === "manager_attested_document" ? "Manager-attested credential document" : "Assessor declaration");
+      if (assessmentModule.credential.expiresAt) keyValue("Credential valid until", dateOnly(assessmentModule.credential.expiresAt));
+      keyValue("Verification", assessmentModule.credential.verificationBasis === "manager_attested_document" ? "Manager-attested credential document" : assessmentModule.credential.verificationBasis === "assigned_team_profile" ? "Assigned TLink team member and final assessment declaration" : "Assessor declaration");
       keyValue("Supporting record", assessmentModule.credential.supportingFileTitle);
     }
     for (const [key, value] of objectEntries(assessmentModule.answers)) {
       keyValue(label(key), typeof value === "boolean" ? (value ? "Yes" : "No") : value);
     }
     for (const section of assessmentModule.sections || []) {
+      ensure(160);
       rule(11);
       text(section.title, { bold: true, size: 14, lineHeight: 18, color: palette.primary, after: 3 });
       if (section.summary) text(section.summary, { size: 8.7, lineHeight: 12, color: palette.muted, after: 7 });
@@ -361,8 +364,12 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
         ensure(72);
         const tone = item.outcome === "meets" || item.outcome === "not_applicable" ? "primary"
           : item.outcome === "does_not_meet" ? "danger" : "warning";
-        badge(`${outcomeLabel(item.outcome)}${item.locationLabel ? ` | ${item.locationLabel}` : ""}`, tone);
+        const resultLabel = assessmentModule.assessmentScope === "energy_readiness_2027"
+          ? (item.outcome === "meets" ? "Ready for the recorded requirement" : item.outcome === "does_not_meet" ? "Upgrade planning required" : outcomeLabel(item.outcome))
+          : outcomeLabel(item.outcome);
+        badge(`${resultLabel}${item.locationLabel ? ` | ${item.locationLabel}` : ""}`, tone);
         text(item.prompt, { bold: true, size: 9.7, lineHeight: 13, after: 3 });
+        if (item.trigger) keyValue("Applies when", item.trigger);
         if (item.locationLabel) keyValue("Location", item.locationLabel);
         if (item.publicNotes) keyValue("Report detail", item.publicNotes);
         for (const [key, value] of objectEntries(item.response)) {

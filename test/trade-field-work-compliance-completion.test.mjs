@@ -1,3 +1,4 @@
+import * as activityCompletion from "../src/lib/trade-activity-forms-completion.ts";
 import * as fieldCompletionPolicy from "../src/lib/trade-field-completion-policy.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -131,6 +132,7 @@ function loadRoute(db) {
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
     if (specifier === "@/lib/trade-field-completion-policy") return fieldCompletionPolicy;
+    if (specifier === "@/lib/trade-activity-forms-completion") return activityCompletion;
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
   new Function("require", "module", "exports", output)(
@@ -143,6 +145,7 @@ function loadRoute(db) {
 
 function fixture() {
   const database = new DatabaseSync(":memory:");
+  database.exec(fs.readFileSync(new URL("../drizzle/0170_trade_activity_forms.sql", import.meta.url), "utf8"));
   database.exec(`
     CREATE TABLE trade_work_orders (
       id text PRIMARY KEY NOT NULL,
@@ -372,6 +375,7 @@ function fixture() {
       organisation_id text NOT NULL,
       work_order_id text NOT NULL,
       installer_uid text NOT NULL,
+      compliance_intent_id text NOT NULL DEFAULT '',
       evidence_policy_version_id text NOT NULL,
       status text NOT NULL
     );
@@ -428,6 +432,41 @@ function fixture() {
        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
        '', 'accepted');
   `);
+  database.exec(`
+CREATE TABLE trade_work_order_compliance_intents (
+      id text PRIMARY KEY NOT NULL,
+      work_order_id text NOT NULL,
+      intent_key text NOT NULL,
+      installer_uid text NOT NULL,
+      compliance_organisation_id text NOT NULL,
+      program_template_id text NOT NULL,
+      activity_template_id text NOT NULL,
+      program_code text NOT NULL,
+      registry_activity_code text NOT NULL,
+      planned_start text NOT NULL,
+      status text NOT NULL,
+      intent_snapshot text NOT NULL,
+      compliance_case_id text NOT NULL,
+      created_at text NOT NULL
+    );
+CREATE TABLE compliance_activity_work_pack_instances (
+      id text PRIMARY KEY NOT NULL,
+      organisation_id text NOT NULL,
+      compliance_case_id text NOT NULL,
+      work_order_id text NOT NULL,
+      compliance_intent_id text NOT NULL,
+      instance_key text NOT NULL,
+      work_pack_version_id text NOT NULL,
+      revision integer NOT NULL,
+      status text NOT NULL
+    );
+CREATE TABLE compliance_activity_work_pack_final_records (
+      id text PRIMARY KEY NOT NULL,
+      organisation_id text NOT NULL,
+      instance_key text NOT NULL,
+      case_instance_id text NOT NULL,
+      work_pack_version_id text NOT NULL
+    );`);
   const db = testD1(database);
   return { database, db, route: loadRoute(db) };
 }

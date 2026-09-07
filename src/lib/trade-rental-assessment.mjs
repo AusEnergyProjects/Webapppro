@@ -1,7 +1,7 @@
 export const RENTAL_INSPECTION_SERVICE_CATEGORY = "rental-inspection";
 
 export const RENTAL_ASSESSMENT_TEMPLATE_KEY = "vic-rental-minimum-standards";
-export const RENTAL_ASSESSMENT_TEMPLATE_VERSION = 1;
+export const RENTAL_ASSESSMENT_TEMPLATE_VERSION = 2;
 export const RENTAL_ASSESSMENT_TEMPLATE_EFFECTIVE_FROM = "2026-06-30";
 export const RENTAL_REPORT_LINK_DAYS = 60;
 
@@ -43,7 +43,7 @@ export const RENTAL_ASSESSMENT_MODULES = Object.freeze([
     shortLabel: "Minimum standards",
     optional: true,
     selectedByDefault: true,
-    credentialGate: "qualified_assessor",
+    credentialGate: "assigned_assessor",
     reportBoundary: "This is the default assessment. It does not by itself certify the separate electrical, gas or smoke alarm safety checks.",
   }),
   Object.freeze({
@@ -109,10 +109,21 @@ function check(key, prompt, options = {}) {
     required: options.required !== false,
     requiredEvidenceCount: Number.isInteger(options.requiredEvidenceCount) ? options.requiredEvidenceCount : 1,
     responseType: options.responseType || "outcome",
+    responseFields: options.responseType === "test_result" ? [
+      { key: "testMethod", label: "Test method and conditions", required: true },
+      { key: "testInstrument", label: "Test instrument and identifier", required: true },
+      { key: "testResult", label: "Measured results, units and acceptance limit", required: true },
+    ] : options.responseType === "action_record" ? [
+      { key: "actionTaken", label: "Action taken or reason no action was required", required: true },
+      { key: "certificateNumber", label: "Related certificate or service record reference, if applicable", required: false },
+    ] : [],
     repeatBy: options.repeatBy || "property",
     photoGuidance: options.photoGuidance || "Take one clear overview and one close photo of anything that affects the answer.",
     help: options.help || "Record only what you observed or tested. Use Specialist verification required when the answer needs a licensed or suitably qualified person.",
-    credentialGate: options.credentialGate || "qualified_assessor",
+    credentialGate: options.credentialGate || "assigned_assessor",
+    effectiveFrom: options.effectiveFrom || "",
+    trigger: options.trigger || "",
+    sourceUrl: options.sourceUrl || "",
   });
 }
 
@@ -125,10 +136,13 @@ function field(key, label, type, options = {}) {
     help: options.help || "",
     placeholder: options.placeholder || "",
     options: Object.freeze(options.options || []),
+    phase: options.phase || (type === "checkbox" ? "final" : ["assessorName", "electricianName", "gasfitterName", "workerName", "licenceNumber", "qualificationType", "qualificationNumber"].includes(key) ? "profile" : "setup"),
+    source: options.source || (["assessorName", "electricianName", "gasfitterName", "workerName", "licenceNumber", "qualificationType", "qualificationNumber"].includes(key) ? "team_profile" : "assessment"),
   });
 }
 
 const minimumStandardsMetadata = Object.freeze([
+  field("assessorName", "Assessor", "text", { source: "team_profile", phase: "profile" }),
   field("inspectionDate", "Assessment date", "date", { required: true }),
   field("agreementStartDate", "Rental agreement start date, if known", "date", {
     help: "This helps identify which effective-dated rule applies. Leave blank when it has not been confirmed.",
@@ -155,9 +169,6 @@ const minimumStandardsMetadata = Object.freeze([
     help: "List every locked, unsafe, concealed or otherwise inaccessible area. Enter None when the whole property was accessible.",
   }),
   field("weatherConditions", "Weather or site conditions that affected observations", "text"),
-  field("qualificationType", "Assessor qualification or authority", "text", { required: true }),
-  field("qualificationNumber", "Qualification, registration or licence number", "text", { required: true }),
-  field("credentialConfirmed", "I confirm my qualification details are current and accurate", "checkbox", { required: true }),
   field("coverageConfirmed", "I have added every relevant room, door, window, fixture and area to the repeatable checks", "checkbox", { required: true }),
   field("assessorDeclaration", "I confirm this assessment is complete and accurate to the best of my knowledge", "checkbox", { required: true }),
 ]);
@@ -446,20 +457,122 @@ export const VIC_RENTAL_ASSESSMENT_TEMPLATE = Object.freeze({
   version: RENTAL_ASSESSMENT_TEMPLATE_VERSION,
   jurisdiction: "VIC",
   effectiveFrom: RENTAL_ASSESSMENT_TEMPLATE_EFFECTIVE_FROM,
-  reviewedOn: "2026-08-24",
+  reviewedOn: "2026-09-07",
+  assessmentScope: "current_minimum_standards",
   title: "Victorian rental minimum standards assessment",
   sources: currentSources,
   modules: Object.freeze({
     minimum_standards: Object.freeze({
       key: "minimum_standards",
       title: "Rental minimum standards assessment",
-      credentialGate: "qualified_assessor",
+      credentialGate: "assigned_assessor",
       reportBoundary: "This assessment records the current Victorian rental minimum standards. It does not by itself issue the separate electrical, gas or smoke alarm safety-check records.",
       metadataFields: minimumStandardsMetadata,
       sections: minimumStandardsSections,
     }),
     ...optionalModuleTemplates,
   }),
+});
+
+export const RENTAL_ASSESSMENT_SCOPES = Object.freeze([
+  { key: "energy_readiness_2027", label: "2027 rental energy readiness", description: "Heating, cooling, hot water, showers, ceiling insulation and draughtproofing." },
+  { key: "current_minimum_standards", label: "Full rental minimum standards", description: "All 15 current minimum-standard categories." },
+]);
+
+export function normalizeRentalAssessmentScope(value) {
+  if (value === undefined || value === null || value === "") return "energy_readiness_2027";
+  return RENTAL_ASSESSMENT_SCOPES.some((scope) => scope.key === value) ? value : "";
+}
+
+const energySourceBase = "https://www.consumer.vic.gov.au/resources-and-tools/legislation/public-consultations-and-reviews/new-minimum-energy-efficiency-standards";
+const energySources = Object.freeze([
+  { title: "Consumer Affairs Victoria: 2027 energy efficiency standards", url: energySourceBase, version: "reviewed-2026-09-07", effectiveFrom: "2027-03-01" },
+  ...["heating-standard", "cooling-standard", "hot-water-standard", "ceiling-insulation", "draughtproofing-standard"].map((topic) => ({
+    title: `Consumer Affairs Victoria: ${topic.replaceAll("-", " ")}`,
+    url: `${energySourceBase}/minimum-energy-efficiency-standards-${topic}`,
+    version: "reviewed-2026-09-07", effectiveFrom: topic === "draughtproofing-standard" ? "2027-07-01" : "2027-03-01",
+  })),
+]);
+
+function energyCheck(key, prompt, help, options = {}) {
+  return check(key, prompt, {
+    effectiveFrom: "2027-03-01",
+    help,
+    sourceUrl: energySourceBase,
+    ...options,
+  });
+}
+
+const energyReadinessSections = Object.freeze([
+  {
+    key: "heating", title: "Heating", summary: "Check the main living area heater and its rating.", checks: [
+      energyCheck("heating_2027_readiness", "Does the fixed heater already meet the 2027 replacement standard?",
+        "Check heating operation and the local-climate GEMS rating: non-ducted electric heating needs at least 2 stars; ducted electric heating needs HSPF 3.2. A working heater meeting today's rules can stay. The change starts when it fails beyond repair from 1 March 2027. Record LPG, wood, hydronic or other exception evidence separately.",
+        { trigger: "Irreparable failure from 1 March 2027", sourceUrl: energySources[1].url, photoGuidance: "Capture the fixed heater in the living area, data plate and rating. Note its type, model and whether it works." }),
+    ],
+  },
+  {
+    key: "cooling", title: "Cooling", summary: "Check fixed cooling in the main living area.", checks: [
+      energyCheck("cooling_2027_readiness", "Does the main living area already have qualifying fixed cooling?",
+        "Check operation and the local-climate GEMS rating: non-ducted cooling needs at least 3 stars; ducted cooling needs TCSPF 3.8. From 1 March 2027 a new or converted periodic agreement triggers installation where no fixed cooler exists; replacement is triggered by irreparable failure. All rentals need qualifying cooling from 1 July 2030, subject to applicable exceptions. A ducted evaporative replacement may be permitted.",
+        { trigger: "New agreement, periodic conversion or irreparable failure from 1 March 2027; all rentals from 1 July 2030", sourceUrl: energySources[2].url, photoGuidance: "Capture the cooler and outlet in the main living area, data plate and rating. If absent, photograph the living area." }),
+    ],
+  },
+  {
+    key: "hot_water", title: "Hot water", summary: "Identify the system and check hot water is available.", checks: [
+      energyCheck("hot_water_2027_readiness", "Does the hot water system already meet the 2027 replacement standard?",
+        "Record operation and system type. Qualifying replacements are heat pumps or electric-boosted solar meeting the Plumbing Code energy-saving or STC threshold. This applies after irreparable failure from 1 March 2027; functioning systems can stay. LPG replacements and other exemptions need their actual supporting basis. Lack of hot water needs action now.",
+        { trigger: "Irreparable failure from 1 March 2027", sourceUrl: energySources[3].url, photoGuidance: "Capture the complete system and data plate. Record make, model and whether hot water runs." }),
+    ],
+  },
+  {
+    key: "showers", title: "Shower heads", summary: "Check each shower head.", checks: [
+      energyCheck("shower_2027_readiness", "Does this shower head have a verified 4-star WELS rating?",
+        "From 1 March 2027 this applies on a new agreement or conversion to periodic. If the plumbing prevents a 4-star head being installed or working properly, record the supporting evidence and the required 3-star alternative. An unverified model needs verification, not a guessed rating.",
+        { repeatBy: "shower", trigger: "New agreement or periodic conversion from 1 March 2027", photoGuidance: "Capture the shower head and its model or WELS evidence. Add one entry per shower." }),
+    ],
+  },
+  {
+    key: "ceiling_insulation", title: "Ceiling insulation", summary: "Look for ceiling areas with no insulation.", checks: [
+      energyCheck("ceiling_2027_readiness", "Is insulation present throughout this accessible ceiling area?",
+        "From 1 March 2027 new or converted periodic agreements trigger R5.0 installation only in areas with no insulation. Existing insulation need not be upgraded merely because its rating is lower. A qualified installer and an electrical safety checklist with issues addressed by an electrician within 30 days before installation are required. Do not enter an unsafe roof space; record inaccessible areas for follow-up.",
+        { repeatBy: "ceiling_area", trigger: "New agreement or periodic conversion from 1 March 2027 where insulation is absent", sourceUrl: energySources[4].url, photoGuidance: "Capture accessible ceiling coverage and any bare areas from a safe position. Photograph an inaccessible access point and record the limitation." }),
+    ],
+  },
+  {
+    key: "draughtproofing", title: "Draughtproofing", summary: "Check external openings and any gas-safety restriction before sealing.", checks: [
+      energyCheck("doors_2027_readiness", "Are all external doors sealed around their full perimeter?",
+        "From 1 July 2027 a new or converted periodic agreement triggers sealing. Doors must still operate normally. Record each gap requiring work in the finding.",
+        { effectiveFrom: "2027-07-01", trigger: "New agreement or periodic conversion from 1 July 2027", sourceUrl: energySources[5].url, photoGuidance: "Capture the door seals and any gaps, with enough context to identify each affected door." }),
+      energyCheck("windows_2027_readiness", "Are all external windows sealed around their full perimeter?",
+        "The same July 2027 agreement trigger applies. Seals must restrict airflow without preventing normal opening or closing.",
+        { effectiveFrom: "2027-07-01", trigger: "New agreement or periodic conversion from 1 July 2027", sourceUrl: energySources[5].url, photoGuidance: "Capture window seals and any gaps. Identify affected windows in the finding." }),
+      energyCheck("vents_2027_readiness", "Are unsealed wall vents addressed without a gas-safety restriction?",
+        "Do not seal where an unflued or open-flued gas appliance or gas cooktop without a rangehood creates a restriction. Properties with gas need a licensed plumber's gas safety check before draughtproofing; it must be under six months old at completion. Record restrictions or unverified gas safety for specialist follow-up. Otherwise vents require durable, non-shrinking sealing under the July 2027 agreement trigger.",
+        { effectiveFrom: "2027-07-01", trigger: "New agreement or periodic conversion from 1 July 2027; gas safety clearance before work", sourceUrl: energySources[5].url, photoGuidance: "Capture the vents and any relevant gas appliances or gas safety record. Record a reason if no vents or gas appliances are present." }),
+    ],
+  },
+]);
+
+export const VIC_RENTAL_ENERGY_READINESS_TEMPLATE = Object.freeze({
+  ...VIC_RENTAL_ASSESSMENT_TEMPLATE,
+  key: "vic-rental-energy-readiness-2027",
+  assessmentScope: "energy_readiness_2027",
+  effectiveFrom: "2027-03-01",
+  title: "2027 Victorian rental energy readiness assessment",
+  sources: energySources,
+  modules: {
+    ...optionalModuleTemplates,
+    minimum_standards: {
+      key: "minimum_standards",
+      assessmentScope: "energy_readiness_2027",
+      title: "2027 rental energy readiness",
+      credentialGate: "assigned_assessor",
+      reportBoundary: "Readiness assessment for the energy standards phased in from March and July 2027, including the July 2030 cooling deadline. Recorded gaps are planning findings, not a declaration of non-compliance today. This scope does not cover all current rental minimum standards or issue electrical, gas or smoke alarm safety-check records.",
+      metadataFields: minimumStandardsMetadata.filter((entry) => !["occupancyAtAssessment", "weatherConditions"].includes(entry.key)).map((entry) => entry.key === "coverageConfirmed" ? { ...entry, label: "I have recorded all relevant systems, showers, ceiling areas and external openings, including access limits" } : entry),
+      sections: energyReadinessSections,
+    },
+  },
 });
 
 function parseMaybeJson(value) {
@@ -479,18 +592,23 @@ export function normalizeRentalAssessmentModules(value) {
   return RENTAL_ASSESSMENT_MODULE_KEYS.filter((key) => source.includes(key));
 }
 
-export function rentalAssessmentTemplateSnapshot(value) {
+export function rentalAssessmentTemplateSnapshot(value, assessmentScope) {
   const moduleKeys = normalizeRentalAssessmentModules(value);
+  const requestedScope = normalizeRentalAssessmentScope(assessmentScope);
+  if (!requestedScope) throw new Error("RENTAL_ASSESSMENT_SCOPE_INVALID");
+  const scope = moduleKeys.includes("minimum_standards") ? requestedScope : "current_minimum_standards";
+  const template = scope === "energy_readiness_2027" ? VIC_RENTAL_ENERGY_READINESS_TEMPLATE : VIC_RENTAL_ASSESSMENT_TEMPLATE;
   return structuredClone({
-    ...VIC_RENTAL_ASSESSMENT_TEMPLATE,
+    ...template,
     selectedModules: moduleKeys,
     modules: Object.fromEntries(moduleKeys.map((key) => [key, {
-      ...VIC_RENTAL_ASSESSMENT_TEMPLATE.modules[key],
-      templateKey: VIC_RENTAL_ASSESSMENT_TEMPLATE.key,
-      templateVersion: VIC_RENTAL_ASSESSMENT_TEMPLATE.version,
-      effectiveFrom: VIC_RENTAL_ASSESSMENT_TEMPLATE.effectiveFrom,
-      reviewedOn: VIC_RENTAL_ASSESSMENT_TEMPLATE.reviewedOn,
-      sources: VIC_RENTAL_ASSESSMENT_TEMPLATE.sources,
+      ...template.modules[key],
+      assessmentScope: key === "minimum_standards" ? scope : "statutory_safety_check",
+      templateKey: template.key,
+      templateVersion: template.version,
+      effectiveFrom: key === "minimum_standards" ? template.effectiveFrom : RENTAL_ASSESSMENT_TEMPLATE_EFFECTIVE_FROM,
+      reviewedOn: template.reviewedOn,
+      sources: key === "minimum_standards" ? template.sources : currentSources,
     }])),
   });
 }
@@ -569,6 +687,11 @@ export function rentalAssessmentCompletion(input) {
           blockers.push({ key: `evidence:${item.itemKey}`, label: `${itemLabel} needs ${requiredEvidenceCount - suppliedEvidenceCount} more evidence file${requiredEvidenceCount - suppliedEvidenceCount === 1 ? "" : "s"}.` });
         }
         const response = parsedObject(item.responseJson);
+        for (const responseField of assessmentCheck.responseFields || []) {
+          if (responseField.required && ["meets", "does_not_meet"].includes(outcome) && !String(response[responseField.key] || "").trim()) {
+            blockers.push({ key: `response:${item.itemKey}:${responseField.key}`, label: `${itemLabel}: ${responseField.label} is required.` });
+          }
+        }
         if (outcome === "meets" && assessmentCheck.credentialGate && assessmentCheck.credentialGate !== moduleTemplate.credentialGate
           && (response.credentialVerified !== true || !String(response.credentialNumber || "").trim())) {
           blockers.push({ key: `credential:${item.itemKey}`, label: `${itemLabel} needs the specialist credential and verification used for this result.` });

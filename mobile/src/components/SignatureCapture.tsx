@@ -100,6 +100,7 @@ export function SignatureCapture({
   value,
   disabled = false,
   displayOnly = false,
+  showDeclaration = true,
   onChange,
 }: {
   signerRole: FieldWorkPackSignerRole;
@@ -107,6 +108,7 @@ export function SignatureCapture({
   value: FieldWorkPackSignatureDraft;
   disabled?: boolean;
   displayOnly?: boolean;
+  showDeclaration?: boolean;
   onChange: (value: FieldWorkPackSignatureDraft) => void;
 }) {
   const [size, setSize] = useState({ width: 1, height: PAD_HEIGHT });
@@ -130,11 +132,12 @@ export function SignatureCapture({
       );
       if (
         current.strokes.length >= MAX_SIGNATURE_STROKES
-        || currentPointCount >= MAX_SIGNATURE_POINTS
+        || currentPointCount > MAX_SIGNATURE_POINTS - 2
       ) return current;
       const nextStroke: FieldWorkPackSignatureStroke = {
         strokeKey: `stroke-${firstPoint.capturedAtMs}-${current.strokes.length + 1}`,
-        points: [firstPoint],
+        // A tap is a visible dot. Retain it as a zero-length segment rather than an invalid one-point stroke.
+        points: [firstPoint, { ...firstPoint }],
       };
       return {
         ...current,
@@ -197,10 +200,10 @@ export function SignatureCapture({
         <Text style={styles.meta}>Signing as {signerRole.capacity}</Text>
       </View>
     </View>
-    <View style={styles.declaration} accessibilityRole="text">
+    {showDeclaration ? <View style={styles.declaration} accessibilityRole="text">
       <Text style={styles.declarationLabel}>Declaration being signed</Text>
       <Text style={styles.declarationText}>{declaration}</Text>
-    </View>
+    </View> : null}
     <View style={styles.boundIdentity} accessibilityRole="summary">
       <Text style={styles.boundIdentityLabel}>Signer fixed from this job</Text>
       <Text style={styles.boundIdentityName}>{liveValue.signerName || 'Signer identity unavailable'}</Text>
@@ -266,7 +269,7 @@ const styles = StyleSheet.create({
   boundIdentityLabel: { color: colours.green, fontSize: 11, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
   boundIdentityName: { color: colours.ink, fontSize: 17, fontWeight: '800' },
   pad: { backgroundColor: colours.white, borderColor: colours.green, borderRadius: radius.sm, borderWidth: 2, height: PAD_HEIGHT, overflow: 'hidden', position: 'relative' },
-  segment: { backgroundColor: colours.ink, borderRadius: 2, height: 3, position: 'absolute' },
+  segment: { backgroundColor: colours.forest, borderRadius: 2, height: 3, position: 'absolute' },
   placeholder: { alignItems: 'center', bottom: 0, justifyContent: 'center', left: 0, position: 'absolute', right: 0, top: 0 },
   placeholderText: { color: colours.muted, fontSize: 16, fontWeight: '700', marginTop: spacing.xs },
   footer: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },

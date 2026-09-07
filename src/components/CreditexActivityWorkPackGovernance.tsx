@@ -20,6 +20,7 @@ import {
 import { CreditexOfficialSourceBatchAcquisition } from "./CreditexOfficialSourceBatchAcquisition";
 import { CreditexWorkPackDocumentOutputEditor } from "./CreditexWorkPackDocumentOutputEditor";
 import { CreditexStatutorySourceLibrary } from "./CreditexStatutorySourceLibrary";
+import { CreditexFieldFormMasters } from "./CreditexFieldFormMasters";
 import styles from "./CreditexActivityWorkPackGovernance.module.css";
 
 type Api = (
@@ -1450,6 +1451,7 @@ export function CreditexActivityWorkPackGovernance({
 
       {(status || error) && <div className={error ? styles.error : styles.status} role={error ? "alert" : "status"}>{error || status}</div>}
 
+      <CreditexFieldFormMasters api={api} actorMode={endpoint.startsWith('/api/admin/') ? 'admin' : 'creditex'} canAuthor={snapshot.access.canAuthor} />
       <CreditexOfficialSourceBatchAcquisition
         api={api}
         endpoint={sourceBatchEndpoint}

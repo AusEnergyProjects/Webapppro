@@ -15,11 +15,14 @@ import {
   ActivityWorkPackWizard,
   type ActivityWorkPackPromptContext,
 } from '@/components/ActivityWorkPackWizard';
+import { ActivityFieldFormWizard, type ActivityFieldSummary } from '@/components/ActivityFieldFormWizard';
+import { FieldDatePicker } from '@/components/field-date-picker';
 import { FieldButton } from '@/components/field-button';
 import { FieldCommercialWorkspace } from '@/components/field-commercial-workspace';
 import { FieldFormLibrary } from '@/components/field-form-library';
 import { RentalInspectionWorkflow } from '@/components/rental-inspection-workflow';
 import { Screen } from '@/components/screen';
+import { activityIntentComplete } from '@/lib/activity-field-completion';
 import { firebaseAuth } from '@/lib/auth';
 import {
   apiRequest,
@@ -265,6 +268,8 @@ export default function JobScreen() {
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState('');
   const [activeFormId, setActiveFormId] = useState<string | null>(null);
+  const [activityRecords, setActivityRecords] = useState<ActivityFieldSummary[]>([]);
+  const [activityLoadError, setActivityLoadError] = useState('');
   const recoveringPhoto = useRef(false);
   const launchingCamera = useRef(false);
 
@@ -278,6 +283,12 @@ export default function JobScreen() {
     setJob(nextJob);
     setWorkPackProblems(problems);
     setPendingWorkPackActions(pendingActions);
+    if (nextJob?.complianceIntents?.length && nextJob.fieldLane !== 'creditex_manual') {
+      try {
+        const response = await apiRequest<{ records: ActivityFieldSummary[] }>("/api/trade-activity-forms?workOrderId=" + encodeURIComponent(workOrderId));
+        setActivityRecords(response.records); setActivityLoadError('');
+      } catch { setActivityLoadError('Connect to refresh activity form progress. Saved drafts remain available.'); }
+    } else { setActivityRecords([]); setActivityLoadError(''); }
   }, [findJob, id]);
 
   const processPendingPhoto = useCallback(async (pending: PendingWorkPackPhotoCapture) => {
@@ -431,20 +442,15 @@ export default function JobScreen() {
     if (!job || !completableAppointmentStatuses.has(job.appointmentStatus)) return;
     const action = { transition: 'finish' as const };
     const governedEvidenceIncomplete = complianceCasesForJob(job).some(
-      (complianceCase) => complianceCase.requirements.some(
+      (complianceCase) => !(job.complianceIntents || []).some((intent) => intent.complianceCaseId === complianceCase.caseId && activityRecords.some((record) => record.intentId === intent.id && record.status === 'submitted_for_creditex_review')) && complianceCase.requirements.some(
         (requirement) => requirement.submittedCount < requirement.minimumCount,
       ),
     );
     const complianceWorkPackMissing = (job.complianceIntents || []).some(
-      (intent) => intent.status === 'planned'
-        || !intent.linkedCaseReady
-        || !intent.complianceCaseId
-        || !(job.activityWorkPacks || []).some(
-          (pack) => pack.instance.complianceIntentId === intent.id,
-        ),
+      (intent) => !activityIntentComplete(intent.id, activityRecords, job.activityWorkPacks || []),
     );
     const complianceWorkPackIncomplete = (job.activityWorkPacks || []).some(
-      (pack) => pack.instance.status !== 'completed' || !pack.finalRecord,
+      (pack) => !activityRecords.some((record) => record.intentId === pack.instance.complianceIntentId && record.status === 'submitted_for_creditex_review') && (pack.instance.status !== 'completed' || !pack.finalRecord),
     );
     const localBlockers = [
       job.tasks.some((item) => item.status !== 'done') ? 'assigned tasks' : '',
@@ -1245,6 +1251,10 @@ export default function JobScreen() {
   const syncLabel = !sync.online ? 'Offline' : sync.conflicts ? 'Action required' : sync.running || sync.queuedActions || sync.queuedUploads ? 'Syncing' : 'Saved';
   const creditexManual = job.fieldLane === 'creditex_manual';
   const syntheticManual = job.recordMode === 'synthetic_test' && creditexManual;
+  if (!creditexManual && complianceIntents.some((intent) => intent.id === activeFormId)) return <Screen scroll={false} style={{ padding: 0 }}><ActivityFieldFormWizard key={activeFormId} workOrderId={job.id} intentId={activeFormId!} online={sync.online} onReturnToJob={() => setActiveFormId(null)} onChanged={async () => { await syncNow(); await load(); }} /></Screen>;
+  const selectedBusinessForm = fieldForms.find((form) => form.id === activeFormId);
+  if (selectedBusinessForm) return <Screen><JobFieldForm key={selectedBusinessForm.id} form={selectedBusinessForm} busy={busy === 'form:' + selectedBusinessForm.id} onSave={saveForm} onReturnToJob={() => setActiveFormId(null)} /></Screen>;
+  if (job.rentalInspection && activeFormId === 'rental') return <Screen scroll={false} style={{ padding: 0 }}><RentalInspectionWorkflow workOrderId={job.id} summary={job.rentalInspection} online={sync.online} onReturnToJob={() => setActiveFormId(null)} onChanged={async () => { await syncNow(); await load(); }} /></Screen>;
   return (
     <Screen>
       <View style={styles.hero}>
@@ -1267,12 +1277,14 @@ export default function JobScreen() {
 
       {!activeFormId ? <View style={styles.card}>
         <Text style={styles.cardTitle}>Forms to complete</Text>
+        {activityLoadError ? <Text style={styles.meta}>{activityLoadError}</Text> : null}
         {complianceIntents.map((intent) => {
           const pack = (job.activityWorkPacks || []).find((item) => item.instance.complianceIntentId === intent.id);
-          const done = pack?.instance.status === 'completed' && Boolean(pack.finalRecord);
+          const activityRecord = activityRecords.find((record) => record.intentId === intent.id);
+          const done = activityRecord?.status === 'submitted_for_creditex_review' || (pack?.instance.status === 'completed' && Boolean(pack.finalRecord));
           return <Pressable key={intent.id} accessibilityRole="button" onPress={() => setActiveFormId(intent.id)} style={styles.formRow}>
             <MaterialCommunityIcons name={done ? 'check-circle-outline' : 'alert-circle-outline'} size={27} color={done ? colours.green : colours.amber} />
-            <View style={styles.flex}><Text style={styles.taskTitle}>{intent.programCode} {intent.activityCode} | {intent.activityTitle}</Text><Text style={styles.meta}>{pack?.instance.id || intent.id} | {done ? 'Complete' : pack ? 'Continue form' : 'Requirements need attention'}</Text></View>
+            <View style={styles.flex}><Text style={styles.taskTitle}>{intent.programCode} {intent.activityCode} | {intent.activityTitle}</Text><Text style={styles.meta}>{activityRecord?.recordNumber || pack?.instance.id || intent.id} | {done ? 'Complete' : activityRecord?.id || pack ? 'Continue form' : 'Start form'}</Text></View>
             <MaterialCommunityIcons name="chevron-right" size={24} color={colours.green} />
           </Pressable>;
         })}
@@ -1326,9 +1338,7 @@ export default function JobScreen() {
         {job.tasks.length ? job.tasks.map((task) => <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: task.status === 'done' }} key={task.id} disabled={busy !== ''} onPress={() => void toggleTask(task.id)} style={({ pressed }) => [styles.task, pressed && styles.pressed]}><MaterialCommunityIcons name={task.status === 'done' ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={28} color={task.status === 'done' ? colours.green : colours.muted} /><View style={styles.flex}><Text style={[styles.taskTitle, task.status === 'done' && styles.taskDone]}>{task.title}</Text>{task.dueAt ? <Text style={styles.meta}>Due {new Date(task.dueAt).toLocaleDateString('en-AU')}</Text> : null}</View></Pressable>) : <Text style={styles.body}>No checklist has been added by the office.</Text>}
       </View> : null}
 
-      {job.rentalInspection && activeFormId === 'rental' ? <RentalInspectionWorkflow workOrderId={job.id} summary={job.rentalInspection} online={sync.online} onReturnToJob={() => setActiveFormId(null)} onChanged={async () => { await syncNow(); await load(); }} /> : null}
 
-      {fieldForms.filter((form) => form.id === activeFormId).map((form) => <View style={styles.card} key={form.id}><JobFieldForm form={form} busy={busy === `form:${form.id}`} onSave={saveForm} onReturnToJob={() => setActiveFormId(null)} /></View>)}
       {!creditexManual && activeFormId === 'form-library' ? <FieldFormLibrary workOrderId={job.id} serviceCategory={job.serviceCategory} online={sync.online} onBack={() => setActiveFormId(null)} onChanged={async () => { await syncNow(); await load(); }} /> : null}
 
       {!activeFormId ? <View style={styles.row}><FieldButton variant="secondary" style={styles.flex} onPress={() => setActiveFormId('files')}>Job files</FieldButton>{!creditexManual ? <FieldButton variant="secondary" style={styles.flex} onPress={() => setActiveFormId('time')}>Record time</FieldButton> : null}</View> : null}
@@ -1370,7 +1380,7 @@ export default function JobScreen() {
       {!activeFormId && !creditexManual ? <View style={styles.card}>
         <Text style={styles.cardTitle}>Complete job</Text>
         {job.openIssues ? <Text style={styles.warningText}>{job.openIssues} open issue(s) need attention before completion.</Text> : null}
-        <FieldButton disabled={!canCompleteJob || Boolean(busy) || !sync.online || sync.running || Boolean(sync.queuedActions || sync.queuedUploads || sync.conflicts) || job.tasks.some((task) => task.status !== 'done') || fieldForms.some((form) => form.status !== 'complete') || Boolean(job.rentalInspection && job.rentalInspection.status !== 'issued') || complianceIntents.some((intent) => !(job.activityWorkPacks || []).some((pack) => pack.instance.complianceIntentId === intent.id && pack.instance.status === 'completed' && pack.finalRecord)) || Boolean(job.openIssues)} loading={busy === 'field:finish'} onPress={() => void advanceFieldJob()}>{job.stage === 'completed' ? 'Job complete' : 'Complete job'}</FieldButton>
+        <FieldButton disabled={!canCompleteJob || Boolean(busy) || !sync.online || sync.running || Boolean(sync.queuedActions || sync.queuedUploads || sync.conflicts) || job.tasks.some((task) => task.status !== 'done') || fieldForms.some((form) => form.status !== 'complete') || Boolean(job.rentalInspection && job.rentalInspection.status !== 'issued') || complianceIntents.some((intent) => !activityIntentComplete(intent.id, activityRecords, job.activityWorkPacks || [])) || Boolean(job.openIssues)} loading={busy === 'field:finish'} onPress={() => void advanceFieldJob()}>{job.stage === 'completed' ? 'Job complete' : 'Complete job'}</FieldButton>
         <Text style={styles.meta}>{complianceIntents.length ? 'Complete the required work, forms, evidence and signatures, then sync. Creditex handles compliance review and certificate creation separately.' : 'Available when required work is complete and safely synced. The server checks the latest records before completing this job.'}</Text>
       </View> : null}
 
@@ -1514,7 +1524,7 @@ function ComplianceCaseEvidence({
 
 function JobFieldForm({ form, busy, onSave, onReturnToJob }: { form: FieldForm; busy: boolean; onReturnToJob: () => void; onSave: (form: FieldForm, answers: Record<string, string | boolean>, complete: boolean) => Promise<void> }) {
   const [answers, setAnswers] = useState<Record<string, string | boolean>>(form.answers || {});
-  const [open, setOpen] = useState(true);
+  const [questionIndex, setQuestionIndex] = useState(0);
   const navigation = useNavigation();
   const dirty = form.status !== 'complete' && JSON.stringify(answers) !== JSON.stringify(form.answers || {});
   usePreventRemove(dirty || busy, ({ data }) => {
@@ -1524,25 +1534,27 @@ function JobFieldForm({ form, busy, onSave, onReturnToJob }: { form: FieldForm; 
       { text: 'Discard changes', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
     ]);
   });
-  async function save(complete: boolean) {
-    try { await onSave(form, answers, complete); }
-    catch (error) { Alert.alert('Form not saved', error instanceof Error ? error.message : 'Try saving again.'); }
-  }
   function change(key: string, value: string | boolean) { setAnswers((current) => ({ ...current, [key]: value })); }
   return <View style={styles.formBlock}>
     <FieldButton variant="secondary" disabled={busy} onPress={() => void (async () => { if (form.status !== 'complete') await onSave(form, answers, false); onReturnToJob(); })().catch((error) => Alert.alert('Form not saved', error instanceof Error ? error.message : 'Try again before leaving this form.'))}>Save and return to job</FieldButton>
-    <Pressable onPress={() => setOpen((value) => !value)} style={styles.formRow} accessibilityRole="button" accessibilityState={{ expanded: open }}>
+    <View style={styles.formRow}>
       <MaterialCommunityIcons name={form.status === 'complete' ? 'check-decagram-outline' : 'clipboard-text-outline'} size={25} color={form.status === 'complete' ? colours.green : colours.muted} />
       <View style={styles.flex}><Text style={styles.taskTitle}>{form.name}</Text><Text style={styles.meta}>{form.jurisdiction} | Version {form.templateVersion} | {form.status === 'complete' ? 'Complete and locked' : form.ready ? 'Ready to complete' : `${form.missing.length} required`}</Text></View>
-      <MaterialCommunityIcons name={open ? 'chevron-up' : 'chevron-down'} size={22} color={colours.muted} />
-    </Pressable>
-    {open && <View style={styles.formBody}><Text style={styles.body}>{form.template.guidance}</Text>{form.template.fields.map((field) => <View key={field.key} style={styles.formField}>
+    </View>
+    <View style={styles.formBody}><Text style={styles.meta}>Question {questionIndex + 1} of {form.template.fields.length}</Text>{questionIndex === 0 && form.template.guidance ? <Text style={styles.body}>{form.template.guidance}</Text> : null}{form.template.fields.slice(questionIndex, questionIndex + 1).map((field) => <View key={field.key} style={styles.formField}>
       <Text style={styles.inputLabel}>{field.label}{field.required ? ' *' : ''}</Text>
       {field.type === 'checkbox' ? <Pressable disabled={busy || form.status === 'complete'} accessibilityRole="checkbox" accessibilityState={{ checked: answers[field.key] === true }} onPress={() => change(field.key, answers[field.key] !== true)} style={[styles.checkbox, answers[field.key] === true && styles.checkboxSelected]}><MaterialCommunityIcons name={answers[field.key] === true ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={25} color={colours.green} /><Text style={styles.body}>{answers[field.key] === true ? 'Confirmed' : 'Tap to confirm'}</Text></Pressable>
         : field.type === 'select' ? <View style={styles.optionList}>{(field.options || []).map((option) => <Pressable key={option} disabled={busy || form.status === 'complete'} onPress={() => change(field.key, option)} style={[styles.option, answers[field.key] === option && styles.optionSelected]}><Text style={styles.optionText}>{option}</Text></Pressable>)}</View>
         : field.type === 'signature' ? <View style={styles.signatureBlocked}><MaterialCommunityIcons name="alert-circle-outline" size={20} color={colours.amber} /><Text style={styles.body}>Signature capture is not available in this tested TLink build. This required item remains blocked and cannot be marked complete.</Text></View>
-        : <TextInput editable={!busy && form.status !== 'complete'} style={[styles.input, field.type === 'textarea' && styles.notes]} multiline={field.type === 'textarea'} keyboardType={field.type === 'number' ? 'decimal-pad' : 'default'} value={String(answers[field.key] || '')} onChangeText={(value) => change(field.key, value)} maxLength={field.maxLength || 240} placeholder={field.type === 'date' ? 'YYYY-MM-DD' : field.type === 'number' ? 'Enter a number' : 'Enter technical job information'} />}
-    </View>)}{form.status !== 'complete' && <View style={styles.formActions}><FieldButton variant="secondary" loading={busy} style={styles.flex} disabled={busy} onPress={() => void save(false)}>Save draft</FieldButton><FieldButton loading={busy} style={styles.flex} disabled={busy} onPress={() => void save(true)}>Complete</FieldButton></View>}</View>}
+        : field.type === 'date' ? <FieldDatePicker label={field.label} value={String(answers[field.key] || '')} disabled={busy || form.status === 'complete'} onChange={(value) => change(field.key, value)} /> : <TextInput editable={!busy && form.status !== 'complete'} style={[styles.input, field.type === 'textarea' && styles.notes]} multiline={field.type === 'textarea'} keyboardType={field.type === 'number' ? 'decimal-pad' : 'default'} value={String(answers[field.key] || '')} onChangeText={(value) => change(field.key, value)} maxLength={field.maxLength || 240} placeholder={field.type === 'number' ? 'Enter a number' : 'Enter technical job information'} />}
+    </View>)}<View style={styles.formActions}><FieldButton variant="secondary" style={styles.flex} disabled={busy || questionIndex === 0} onPress={() => setQuestionIndex((value) => value - 1)}>Previous</FieldButton><FieldButton loading={busy} style={styles.flex} disabled={busy || (form.status === 'complete' && questionIndex === form.template.fields.length - 1)} onPress={() => void (async () => {
+      const field = form.template.fields[questionIndex];
+      if (form.status !== 'complete') {
+        if (field?.required && (answers[field.key] === undefined || answers[field.key] === '' || (field.type === 'checkbox' && answers[field.key] !== true))) return Alert.alert('Answer required', 'Complete this question before continuing.');
+        await onSave(form, answers, questionIndex === form.template.fields.length - 1);
+      }
+      setQuestionIndex((value) => Math.min(form.template.fields.length - 1, value + 1));
+    })().catch((error) => Alert.alert('Form not saved', error instanceof Error ? error.message : 'Try again.'))}>{questionIndex === form.template.fields.length - 1 ? form.status === 'complete' ? 'Complete' : 'Complete form' : 'Next'}</FieldButton></View></View>
   </View>;
 }
 
@@ -1577,7 +1589,7 @@ const styles = StyleSheet.create({
   taskDone: { color: colours.muted, textDecorationLine: 'line-through' },
   formRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderTopWidth: 1, borderTopColor: colours.line, paddingVertical: spacing.sm },
   formBlock: { borderTopWidth: 1, borderTopColor: colours.line },
-  formBody: { backgroundColor: '#fbfdfc', borderRadius: radius.sm, gap: spacing.sm, padding: spacing.md },
+  formBody: { backgroundColor: colours.surface, borderRadius: radius.sm, gap: spacing.sm, padding: spacing.md },
   formField: { gap: 6 },
   checkbox: { alignItems: 'center', borderColor: colours.line, borderRadius: radius.sm, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 48, paddingHorizontal: spacing.sm },
   checkboxSelected: { backgroundColor: colours.mint, borderColor: colours.green },
@@ -1604,7 +1616,7 @@ const styles = StyleSheet.create({
   warningText: { color: colours.red, fontSize: 12, fontWeight: '700', lineHeight: 17 },
   row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   inputLabel: { color: colours.ink, fontWeight: '700', marginTop: spacing.xs },
-  input: { minHeight: 50, borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm, paddingHorizontal: spacing.md, fontSize: 16, color: colours.ink, backgroundColor: '#fbfdfc' },
+  input: { minHeight: 50, borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm, paddingHorizontal: spacing.md, fontSize: 16, color: colours.ink, backgroundColor: colours.surfaceRaised },
   notes: { minHeight: 90, textAlignVertical: 'top', paddingTop: spacing.md },
   syncLine: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.sm, padding: spacing.md },
   empty: { alignItems: 'center', padding: spacing.xl, gap: spacing.sm },

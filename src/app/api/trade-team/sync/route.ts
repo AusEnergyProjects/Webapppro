@@ -2,6 +2,7 @@ import { getD1 } from "../../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { fieldTransitionExpectedStatus } from "@/lib/trade-field-completion-policy";
+import { submittedActivityFieldCaseSql, submittedActivityFieldRecordSql } from "@/lib/trade-activity-forms-completion";
 import { nextJobRevision } from "@/lib/trade-team-sync-server";
 import { mobileAppPolicy, mobileErrorResponse, MOBILE_CLIENT_ID_PATTERN, MOBILE_CONTRACT_VERSION,
   requireRegisteredMobileDevice } from "@/lib/trade-mobile-server";
@@ -1606,6 +1607,7 @@ const UNSATISFIED_GOVERNED_EVIDENCE_SQL = `SELECT 1
   WHERE governed_case.work_order_id = ?
     AND governed_case.installer_uid = ?
     AND governed_case.status NOT IN ('rejected', 'closed')
+    AND NOT EXISTS (${submittedActivityFieldCaseSql("governed_case")})
     AND (
       SELECT COUNT(DISTINCT governed_evidence.original_sha256)
       FROM compliance_case_evidence governed_evidence
@@ -1632,6 +1634,7 @@ const UNLINKED_ACTIVE_COMPLIANCE_INTENT_SQL = `SELECT 1
   WHERE planned_intent.work_order_id = ?
     AND planned_intent.installer_uid = ?
     AND planned_intent.status IN ('planned', 'case_linked')
+    AND NOT EXISTS (${submittedActivityFieldRecordSql("planned_intent")})
     AND NOT EXISTS (
       SELECT 1
       FROM compliance_cases linked_case
@@ -1660,6 +1663,7 @@ const INCOMPLETE_ACTIVE_COMPLIANCE_WORK_PACK_SQL = `SELECT 1
   WHERE active_intent.work_order_id = ?
     AND active_intent.installer_uid = ?
     AND active_intent.status IN ('planned', 'case_linked')
+    AND NOT EXISTS (${submittedActivityFieldRecordSql("active_intent")})
     AND NOT EXISTS (
       SELECT 1
       FROM compliance_activity_work_pack_instances current_pack

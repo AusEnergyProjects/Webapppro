@@ -78,6 +78,24 @@ function reportSnapshot() {
   };
 }
 
+test("readiness PDF names the future scope and avoids presenting a planning gap as today's non-compliance", async () => {
+  const snapshot = reportSnapshot();
+  snapshot.inspection = { ...snapshot.inspection, title: "2027 Victorian rental energy readiness assessment",
+    assessmentScope: "energy_readiness_2027", rulesEffectiveFrom: "2027-03-01",
+    reportBoundary: "Energy readiness assessment for phased future requirements. Planning findings do not establish non-compliance with current rental law." };
+  snapshot.modules[0].assessmentScope = "energy_readiness_2027";
+  snapshot.modules[0].title = "2027 rental energy readiness";
+  snapshot.modules[0].sections[0].items[0].trigger = "New agreement or periodic conversion from 1 March 2027";
+  const pdf = await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot));
+  assert.equal(pdf.getSubject(), snapshot.inspection.title);
+  const content = decodedPageContent(pdf);
+  assert.match(content, /2027 Victorian rental energy/);
+  assert.match(content, /FIRST PHASE STARTS/);
+  assert.match(content, /Upgrade planning required/);
+  assert.match(content, /Planning findings do not establish/);
+  assert.match(content, /New agreement or periodic conversion from 1 March 2027/);
+});
+
 test("rental assessment PDF is readable, branded and excludes internal notes recursively", async () => {
   const snapshot = reportSnapshot();
   snapshot.evidence = [{

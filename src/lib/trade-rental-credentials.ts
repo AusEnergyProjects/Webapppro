@@ -16,7 +16,7 @@ export type RentalCredentialSnapshot = {
   supportingFileTitle: string;
   supportingFileSha256: string;
   supportingFileRecordedAt: string;
-  verificationBasis: "assessor_declaration" | "manager_attested_document";
+  verificationBasis: "assessor_declaration" | "manager_attested_document" | "assigned_team_profile";
   recordedAt: string;
   confirmedAt: string;
 };
@@ -26,6 +26,46 @@ const OPTIONAL_GATES = new Set([
   "licensed_gasfitter",
   "suitably_qualified_smoke_alarm_worker",
 ]);
+
+const ASSIGNMENT_GATES: Readonly<Record<string, string>> = {
+  electrical_safety_check: "licensed_electrician",
+  gas_safety_check: "licensed_gasfitter",
+  smoke_alarm_check: "suitably_qualified_smoke_alarm_worker",
+};
+
+export function rentalAssignmentRequiredGates(moduleKeys: readonly string[]): string[] {
+  return [...new Set(moduleKeys.map((key) => ASSIGNMENT_GATES[key]).filter((gate): gate is string => Boolean(gate)))];
+}
+
+/** Bind the required-gates JSON, credential check date, and file check date, in that order. */
+export function rentalAssignmentCredentialSql(memberIdSql: string, ownerUidSql: string): string {
+  const identifier = /^[A-Za-z_][A-Za-z_0-9]*(?:\.[A-Za-z_][A-Za-z_0-9]*)?$/;
+  if (!identifier.test(memberIdSql) || !identifier.test(ownerUidSql)) {
+    throw new Error("RENTAL_ASSIGNMENT_SQL_IDENTIFIER_INVALID");
+  }
+  return `NOT EXISTS (
+    SELECT 1 FROM json_each(?) rental_required_gate
+    WHERE NOT EXISTS (
+      SELECT 1 FROM trade_team_member_credentials rental_credential
+      JOIN trade_team_member_files rental_file ON rental_file.id = rental_credential.file_id
+        AND rental_file.owner_uid = rental_credential.owner_uid
+        AND rental_file.team_member_id = rental_credential.team_member_id
+      WHERE rental_credential.owner_uid = ${ownerUidSql}
+        AND rental_credential.team_member_id = ${memberIdSql}
+        AND rental_credential.rental_gate = rental_required_gate.value
+        AND rental_credential.status = 'active'
+        AND trim(rental_credential.credential_number) <> ''
+        AND rental_credential.jurisdiction IN ('VIC', 'NATIONAL')
+        AND ((rental_credential.rental_gate IN ('licensed_electrician', 'licensed_gasfitter')
+          AND rental_credential.credential_type IN ('licence', 'registration'))
+          OR (rental_credential.rental_gate = 'suitably_qualified_smoke_alarm_worker'
+          AND rental_credential.credential_type IN ('licence', 'registration', 'training')))
+        AND rental_credential.expires_at <> '' AND date(rental_credential.expires_at) >= date(?)
+        AND rental_file.status = 'active' AND rental_file.expires_at <> ''
+        AND date(rental_file.expires_at) >= date(?)
+    )
+  )`;
+}
 
 function parsedObject(value: unknown): Row {
   if (value && typeof value === "object" && !Array.isArray(value)) return value as Row;
@@ -80,6 +120,42 @@ function baseSnapshot(input: {
   };
 }
 
+export async function rentalModuleProfileAnswers(input: {
+  db: D1Database;
+  ownerUid: string;
+  assessorMemberId: string;
+  moduleKey: string;
+  requiredCapability: string;
+  checkedAt: string;
+}): Promise<Row> {
+  const member = await input.db.prepare(`SELECT id, display_name, first_name, last_name
+    FROM trade_team_members WHERE id = ? AND owner_uid = ? AND status = 'active' LIMIT 1`)
+    .bind(input.assessorMemberId, input.ownerUid).first<Row>();
+  if (!member) return {};
+  const name = [text(member.first_name), text(member.last_name)].filter(Boolean).join(" ") || text(member.display_name);
+  if (input.moduleKey === "minimum_standards") return { assessorName: name };
+  const credential = await input.db.prepare(`SELECT credential.name, credential.credential_type, credential.credential_number
+    FROM trade_team_member_credentials credential
+    JOIN trade_team_member_files file ON file.id = credential.file_id
+      AND file.owner_uid = credential.owner_uid AND file.team_member_id = credential.team_member_id
+    WHERE credential.owner_uid = ? AND credential.team_member_id = ?
+      AND credential.rental_gate = ? AND credential.status = 'active'
+      AND trim(credential.credential_number) <> ''
+      AND ((credential.rental_gate IN ('licensed_electrician', 'licensed_gasfitter') AND credential.credential_type IN ('licence', 'registration'))
+        OR (credential.rental_gate = 'suitably_qualified_smoke_alarm_worker' AND credential.credential_type IN ('licence', 'registration', 'training')))
+      AND credential.jurisdiction IN ('VIC', 'NATIONAL')
+      AND credential.expires_at <> '' AND date(credential.expires_at) >= date(?)
+      AND file.status = 'active' AND file.expires_at <> '' AND date(file.expires_at) >= date(?)
+    ORDER BY credential.updated_at DESC, credential.id DESC LIMIT 1`)
+    .bind(input.ownerUid, input.assessorMemberId, input.requiredCapability,
+      input.checkedAt.slice(0, 10), input.checkedAt.slice(0, 10)).first<Row>();
+  const identityKey = input.moduleKey === "electrical_safety_check" ? "electricianName"
+    : input.moduleKey === "gas_safety_check" ? "gasfitterName" : "workerName";
+  const numberKey = input.moduleKey === "smoke_alarm_check" ? "qualificationNumber" : "licenceNumber";
+  return { [identityKey]: name, [numberKey]: text(credential?.credential_number),
+    ...(input.moduleKey === "smoke_alarm_check" ? { qualificationType: text(credential?.name || credential?.credential_type) } : {}) };
+}
+
 export async function currentRentalModuleCredentialSnapshot(input: {
   db: D1Database;
   ownerUid: string;
@@ -90,7 +166,9 @@ export async function currentRentalModuleCredentialSnapshot(input: {
   confirmedAt: string;
 }): Promise<RentalCredentialSnapshot> {
   const answers = parsedObject(input.answers);
-  if (!asserted(answers.credentialConfirmed) || !asserted(answers.assessorDeclaration)) {
+  const observationalAssessment = input.moduleKey === "minimum_standards"
+    && input.requiredCapability === "assigned_assessor";
+  if ((!observationalAssessment && !asserted(answers.credentialConfirmed)) || !asserted(answers.assessorDeclaration)) {
     throw new Error("RENTAL_MODULE_CREDENTIAL_REQUIRED");
   }
   const member = await input.db.prepare(`SELECT id, display_name, first_name, last_name
@@ -107,6 +185,15 @@ export async function currentRentalModuleCredentialSnapshot(input: {
     assessorName,
     confirmedAt: input.confirmedAt,
   });
+
+  if (observationalAssessment) {
+    return {
+      ...shared,
+      credentialType: "", credentialName: "", credentialNumber: "", issuer: "", jurisdiction: "VIC", expiresAt: "",
+      supportingFileName: "", supportingFileTitle: "", supportingFileSha256: "", supportingFileRecordedAt: "",
+      verificationBasis: "assigned_team_profile", recordedAt: input.confirmedAt,
+    };
+  }
 
   if (input.moduleKey === "minimum_standards" && input.requiredCapability === "qualified_assessor") {
     const type = text(answers.qualificationType);

@@ -448,14 +448,16 @@ test("all installer Schedule entry paths use the one permanent CRM dispatch work
 test("job summary renders every planned compliance activity without exposing raw governance copy", () => {
   assert.match(crm, /complianceIntents: ComplianceIntent\[\]/);
   assert.match(crm, /const complianceIntents = job\.complianceIntents\?\.length \? job\.complianceIntents : job\.complianceIntent \? \[job\.complianceIntent\] : \[\]/);
-  assert.match(crm, /complianceIntents\.map\(\(intent\) => <section className="crm-job-compliance" key=\{intent\.id\}>/);
+  assert.match(crm, /complianceIntents\.length > 0 && canViewFieldEvidence && <TradeActivityFieldRecords/);
+  const fieldRecords = fs.readFileSync(new URL("../src/components/TradeActivityFieldRecords.tsx", import.meta.url), "utf8");
+  assert.match(fieldRecords, /records\.map\(\(item\) => <article key=\{item\.intentId\}>/);
   assert.match(crm, /const canOpenDirectCustomerCompliance = !permissions\s+&& canManageFieldEvidence\s+&& job\.sourceType === "internal"\s+&& job\.customerSource === "trade_owned"/);
-  assert.match(crm, /\{canOpenDirectCustomerCompliance && unlinkedComplianceIntents\.map\(\(intent\) => <TradeComplianceIntake key=\{intent\.id\}/);
+  assert.match(crm, /canOpenDirectCustomerCompliance && unlinkedComplianceIntents\.length > 0 && <details[\s\S]*?Optional compliance case setup[\s\S]*?unlinkedComplianceIntents\.map/);
   assert.match(crm, /\{canOpenDirectCustomerCompliance && customer && complianceIntents\.length === 0 && complianceCases\.length === 0 && <TradeComplianceIntake/);
   assert.doesNotMatch(crm, /!isProtected && customer && complianceIntents\.length === 0 && complianceCases\.length === 0 && <TradeComplianceIntake/);
   assert.match(crm, /initialIntent=\{intent\}/);
   assert.doesNotMatch(crm, /\{(?:job\.complianceIntent|intent)\.governanceMessage\}/);
-  assert.match(crm, /Confirm the governed activity, product, scenario and evidence requirements before work starts/);
+  assert.match(fieldRecords, /Creditex receives the completed record for review and handles certificate creation/);
 });
 
 test("staff checklist controls use the hardened scoped CRM task actions", () => {

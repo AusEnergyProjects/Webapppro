@@ -1,3 +1,4 @@
+import * as activityCompletion from "../src/lib/trade-activity-forms-completion.ts";
 import * as fieldCompletionPolicy from "../src/lib/trade-field-completion-policy.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -89,6 +90,7 @@ function loadRoute(mocks) {
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
     if (specifier === "@/lib/trade-field-completion-policy") return fieldCompletionPolicy;
+    if (specifier === "@/lib/trade-activity-forms-completion") return activityCompletion;
     if (specifier === "@/lib/bounded-json-request") {
       return boundedJsonRequest;
     }
@@ -104,6 +106,7 @@ function loadRoute(mocks) {
 
 function syncDatabase(stage = "in_progress", revision = 5) {
   const database = new DatabaseSync(":memory:");
+  database.exec(fs.readFileSync(new URL("../drizzle/0170_trade_activity_forms.sql", import.meta.url), "utf8"));
   database.exec(`
     CREATE TABLE trade_work_orders (
       id text PRIMARY KEY NOT NULL,

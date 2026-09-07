@@ -52,6 +52,8 @@ type ReportItem = {
   outcome: string;
   response: Record<string, unknown>;
   publicNotes: string;
+  trigger?: string;
+  effectiveFrom?: string;
 };
 
 type ReportModule = {
@@ -60,6 +62,7 @@ type ReportModule = {
   title: string;
   required: boolean;
   reportBoundary: string;
+  assessmentScope?: string;
   answers: Record<string, unknown>;
   credential: {
     gate?: string;
@@ -83,7 +86,7 @@ type RentalReport = {
   report: { number: string; revision: number; issuedAt: string };
   business: { name: string; abn: string; contactName: string; email: string; phone: string; address: string };
   property: { address: string; customerName: string; customerEmail: string; customerPhone: string; buildingType: string };
-  inspection: { number: string; rulesEffectiveFrom: string; assessmentDate: string; templateVersion: number };
+  inspection: { number: string; rulesEffectiveFrom: string; assessmentDate: string; templateVersion: number; title?: string; assessmentScope?: string; reportBoundary?: string };
   issuer: { name: string; role: string; email: string; phone: string; qualificationType: string; qualificationNumber: string; declaration: string };
   modules: ReportModule[];
   findings: Finding[];
@@ -112,7 +115,7 @@ const severityLabels: Record<string, string> = {
 };
 
 function displayLabel(value: string) {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return value.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function dateLabel(value: string, includeTime = false) {
@@ -134,10 +137,12 @@ function visibleEntries(value: Record<string, unknown>) {
   return Object.entries(value || {}).filter(([, entry]) => entry !== "" && entry !== null && entry !== undefined);
 }
 
-function ResultPill({ outcome }: { outcome: string }) {
+function ResultPill({ outcome, readiness = false }: { outcome: string; readiness?: boolean }) {
   const tone = outcome === "meets" || outcome === "not_applicable" ? styles.good
     : outcome === "does_not_meet" ? styles.bad : styles.caution;
-  return <span className={`${styles.resultPill} ${tone}`}>{outcomeLabels[outcome] || displayLabel(outcome)}</span>;
+  const label = readiness && outcome === "meets" ? "Ready for the recorded requirement"
+    : readiness && outcome === "does_not_meet" ? "Upgrade planning required" : outcomeLabels[outcome] || displayLabel(outcome);
+  return <span className={`${styles.resultPill} ${tone}`}>{label}</span>;
 }
 
 function EvidenceGallery({ entries }: { entries: Evidence[] }) {
@@ -209,9 +214,10 @@ export function RentalReportViewer({ token }: { token: string }) {
 
     <section className={styles.hero}>
       <div>
-        <span>Issued Victorian rental assessment</span>
+        <span>{report.inspection.title || "Issued Victorian rental assessment"}</span>
         <h1>{report.property.address}</h1>
         <p>{report.report.number} | revision {report.report.revision}</p>
+        {report.inspection.reportBoundary && <p>{report.inspection.reportBoundary}</p>}
       </div>
       <aside>
         <span>Issued by</span>
@@ -221,7 +227,7 @@ export function RentalReportViewer({ token }: { token: string }) {
       <dl>
         <div><dt>Assessment date</dt><dd>{dateLabel(report.inspection.assessmentDate)}</dd></div>
         <div><dt>Issued</dt><dd>{dateLabel(report.report.issuedAt, true)}</dd></div>
-        <div><dt>Rule version</dt><dd>Effective {dateLabel(report.inspection.rulesEffectiveFrom)}</dd></div>
+        <div><dt>{report.inspection.assessmentScope === "energy_readiness_2027" ? "First phase starts" : "Rules effective"}</dt><dd>{dateLabel(report.inspection.rulesEffectiveFrom)}</dd></div>
         <div><dt>Link available until</dt><dd>{dateLabel(report.access.expiresAt, true)}</dd></div>
       </dl>
     </section>
@@ -281,24 +287,25 @@ export function RentalReportViewer({ token }: { token: string }) {
     </section>
 
     <section className={styles.contentSection} id="assessment">
-      <header><span>Complete issued record</span><h2>Assessment modules</h2><p>The minimum-standards module is included by default. Separate safety-check modules appear only when selected for this job.</p></header>
+      <header><span>Complete issued record</span><h2>Assessment modules</h2><p>{report.inspection.assessmentScope === "energy_readiness_2027" ? "The energy readiness scope covers six areas of the phased 2027 changes. Separate safety checks appear only when selected and completed." : "The selected assessment and safety-check modules appear below."}</p></header>
       {report.modules.map((module, moduleIndex) => <details className={styles.module} open={moduleIndex === 0} key={module.id}>
         <summary><div><span>{module.required ? "Included" : "Optional"}</span><strong>{module.title}</strong><small>{module.reportBoundary}</small></div><em>Completed {dateLabel(module.completedAt)}</em></summary>
         <div className={styles.moduleBody}>
           <dl className={styles.metadata}>
             <div><dt>Assessor</dt><dd>{module.credential.assessorName || report.issuer.name}</dd></div>
-            <div><dt>Credential</dt><dd>{[module.credential.credentialName || module.credential.credentialType, module.credential.credentialNumber].filter(Boolean).join(" | ") || "Assessor declaration recorded"}</dd></div>
+            {(module.credential.credentialName || module.credential.credentialType || module.credential.credentialNumber) && <div><dt>Credential</dt><dd>{[module.credential.credentialName || module.credential.credentialType, module.credential.credentialNumber].filter(Boolean).join(" | ")}</dd></div>}
             {module.credential.issuer && <div><dt>Issuer / jurisdiction</dt><dd>{[module.credential.issuer, module.credential.jurisdiction].filter(Boolean).join(" | ")}</dd></div>}
             {module.credential.expiresAt && <div><dt>Credential valid until</dt><dd>{dateLabel(module.credential.expiresAt)}</dd></div>}
-            <div><dt>Verification</dt><dd>{module.credential.verificationBasis === "manager_attested_document" ? "Manager-attested credential document" : "Assessor declaration"}</dd></div>
+            <div><dt>Verification</dt><dd>{module.credential.verificationBasis === "manager_attested_document" ? "Manager-attested credential document" : module.credential.verificationBasis === "assigned_team_profile" ? "Assigned TLink team member and final assessment declaration" : "Assessor declaration"}</dd></div>
             {module.credential.supportingFileTitle && <div><dt>Supporting record</dt><dd>{module.credential.supportingFileTitle}</dd></div>}
           </dl>
           <dl className={styles.metadata}>{visibleEntries(module.answers).map(([key, value]) => <div key={key}><dt>{displayLabel(key)}</dt><dd>{typeof value === "boolean" ? value ? "Yes" : "No" : String(value)}</dd></div>)}</dl>
           {module.sections.map((section) => <section className={styles.assessmentSection} key={section.key}>
             <header><h3>{section.title}</h3><p>{section.summary}</p></header>
             <div>{section.items.map((item) => <article className={styles.answer} key={item.id}>
-              <div><ResultPill outcome={item.outcome} />{item.locationLabel && <strong>{item.locationLabel}</strong>}</div>
+              <div><ResultPill outcome={item.outcome} readiness={module.assessmentScope === "energy_readiness_2027"} />{item.locationLabel && <strong>{item.locationLabel}</strong>}</div>
               <h4>{item.prompt}</h4>
+              {item.trigger && <p>Applies when: {item.trigger}</p>}
               {item.publicNotes && <p>{item.publicNotes}</p>}
               {visibleEntries(item.response).length > 0 && <dl>{visibleEntries(item.response).map(([key, value]) => <div key={key}><dt>{displayLabel(key)}</dt><dd>{typeof value === "boolean" ? value ? "Yes" : "No" : String(value)}</dd></div>)}</dl>}
               <EvidenceGallery entries={report.evidence.filter((entry) => entry.itemId === item.id)} />
@@ -315,7 +322,7 @@ export function RentalReportViewer({ token }: { token: string }) {
 
     <section className={styles.issuerGrid} id="issuer">
       <article><span>Property and requester</span><h2>{report.property.customerName || "Property contact"}</h2><dl><div><dt>Property</dt><dd>{report.property.address}</dd></div><div><dt>Building type</dt><dd>{report.property.buildingType || "Not recorded"}</dd></div><div><dt>Contact</dt><dd>{[report.property.customerEmail, report.property.customerPhone].filter(Boolean).join(" | ") || "Not recorded"}</dd></div></dl></article>
-      <article><span>Assessor and issuer</span><h2>{report.issuer.name}</h2><dl><div><dt>Role</dt><dd>{displayLabel(report.issuer.role)}</dd></div><div><dt>Qualification</dt><dd>{report.issuer.qualificationType}</dd></div><div><dt>Qualification number</dt><dd>{report.issuer.qualificationNumber}</dd></div><div><dt>Contact</dt><dd>{[report.issuer.email, report.issuer.phone].filter(Boolean).join(" | ")}</dd></div></dl><p>{report.issuer.declaration}</p></article>
+      <article><span>Assessor and issuer</span><h2>{report.issuer.name}</h2><dl><div><dt>Role</dt><dd>{displayLabel(report.issuer.role)}</dd></div>{report.issuer.qualificationType && <div><dt>Qualification</dt><dd>{report.issuer.qualificationType}</dd></div>}{report.issuer.qualificationNumber && <div><dt>Qualification number</dt><dd>{report.issuer.qualificationNumber}</dd></div>}<div><dt>Contact</dt><dd>{[report.issuer.email, report.issuer.phone].filter(Boolean).join(" | ")}</dd></div></dl><p>{report.issuer.declaration}</p></article>
       <article><span>Issuing business</span><h2>{report.business.name}</h2><dl><div><dt>ABN</dt><dd>{report.business.abn}</dd></div><div><dt>Contact name</dt><dd>{report.business.contactName || "Not recorded"}</dd></div><div><dt>Contact</dt><dd>{[report.business.email, report.business.phone].filter(Boolean).join(" | ")}</dd></div><div><dt>Address</dt><dd>{report.business.address}</dd></div></dl></article>
     </section>
 

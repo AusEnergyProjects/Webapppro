@@ -83,15 +83,14 @@ import {
   tradeScheduleAvailabilityGuardStatement,
 } from "@/lib/trade-schedule-server";
 import {
-  RENTAL_ASSESSMENT_TEMPLATE_EFFECTIVE_FROM,
-  RENTAL_ASSESSMENT_TEMPLATE_KEY,
-  RENTAL_ASSESSMENT_TEMPLATE_VERSION,
   RENTAL_INSPECTION_SERVICE_CATEGORY,
   normalizeRentalAssessmentModules,
+  normalizeRentalAssessmentScope,
   rentalInspectionServiceAddressAccepted,
   rentalAssessmentTemplateSnapshot,
 } from "@/lib/trade-rental-assessment.mjs";
 import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
+import { rentalAssignmentRequiredGates, rentalAssignmentCredentialSql } from "@/lib/trade-rental-credentials";
 import {
   isRentalInspectionAssignmentConflict,
   rentalInspectionAssignmentStatements,
@@ -1455,11 +1454,15 @@ function tradeCrmScheduleMemberGuardStatement(
     memberId,
     serviceCategory,
     changedAt,
+    rentalGates = [],
+    credentialDate = changedAt.slice(0, 10),
   }: {
     ownerUid: string;
     memberId: string;
     serviceCategory: string;
     changedAt: string;
+    rentalGates?: string[];
+    credentialDate?: string;
   },
 ) {
   return db.prepare(`INSERT INTO trade_crm_write_guards
@@ -1470,6 +1473,7 @@ function tradeCrmScheduleMemberGuardStatement(
         AND (selected_member.member_uid = ? OR ? = '' OR EXISTS (
           SELECT 1 FROM json_each(selected_member.capabilities) WHERE value = ?
         ))
+        AND ${rentalAssignmentCredentialSql("selected_member.id", "selected_member.owner_uid")}
     ) THEN 1 ELSE 0 END, ?)`)
     .bind(
       crypto.randomUUID(),
@@ -1480,6 +1484,9 @@ function tradeCrmScheduleMemberGuardStatement(
       ownerUid,
       serviceCategory,
       serviceCategory,
+      JSON.stringify(rentalGates),
+      credentialDate,
+      credentialDate,
       changedAt,
     );
 }
@@ -1560,11 +1567,14 @@ export async function POST(request: Request) {
 
     const createActions = new Set(["create_template", "create_job", "create_scheduled_job"]);
     if (createActions.has(action) && !canCreateJobs(identity.access)) throw new Error("JOB_CREATE_REQUIRED");
+    if (action === "create_scheduled_job" && !cleanAdminText(body.assigneeMemberId, 180)) {
+      return adminJson({ ok: false, code: "ASSIGNEE_REQUIRED", error: "Choose who will do this job before scheduling." }, 400);
+    }
     const manageActions = new Set(["create_note", "add_task"]);
     if (manageActions.has(action) && !canManageJobs(identity.access)) throw new Error("JOB_MANAGEMENT_REQUIRED");
     const selfScheduledCreate = action === "create_scheduled_job"
       && identity.access.jobScope === "own"
-      && ["", identity.memberId].includes(cleanAdminText(body.assigneeMemberId, 180));
+      && identity.memberId === cleanAdminText(body.assigneeMemberId, 180);
     if (["create_scheduled_job", "create_appointment"].includes(action)
       && !identity.access.isOwner && !identity.access.canRescheduleJobs
       && !selfScheduledCreate) throw new Error("JOB_RESCHEDULE_REQUIRED");
@@ -2005,7 +2015,8 @@ export async function POST(request: Request) {
       const workOrderId = crypto.randomUUID();
       const workNumber = await nextTlinkJobNumber(db, now);
       const requestedAssigneeMemberId = cleanAdminText(body.assigneeMemberId, 180);
-      const assigneeMemberId = requestedAssigneeMemberId || (guided ? identity.memberId : "");
+      const assigneeMemberId = requestedAssigneeMemberId;
+      const requiredServiceCategories = [...new Set([serviceCategory, ...complianceIntents.map((intent) => intent.activity.serviceCategory)])];
       let assignee = "";
       let assigneeUid = "";
       if (assigneeMemberId) {
@@ -2018,6 +2029,11 @@ export async function POST(request: Request) {
         }
         const member = await assertMemberCapability(db, identity, assigneeMemberId, serviceCategory);
         if (!member) return adminJson({ ok: false, error: "Choose an available team member." }, 400);
+        for (const activityCategory of requiredServiceCategories.filter((category) => category !== serviceCategory)) {
+          if (!await assertMemberCapability(db, identity, assigneeMemberId, activityCategory)) {
+            return adminJson({ ok: false, error: "Choose an active worker with every selected work capability." }, 400);
+          }
+        }
         assignee = String(member.display_name || "");
         assigneeUid = String(member.member_uid || "");
       }
@@ -2080,9 +2096,20 @@ export async function POST(request: Request) {
       if (serviceCategory === RENTAL_INSPECTION_SERVICE_CATEGORY && !rentalModuleKeys.length) {
         return adminJson({ ok: false, error: "Choose at least one rental assessment or safety-check module." }, 400);
       }
+      const rentalAssessmentScope = normalizeRentalAssessmentScope(body.rentalAssessmentScope);
+      if (rentalModuleKeys.length && !rentalAssessmentScope) return adminJson({ ok: false, error: "Choose a valid rental assessment scope." }, 400);
       const rentalTemplate = rentalModuleKeys.length
-        ? rentalAssessmentTemplateSnapshot(rentalModuleKeys)
+        ? rentalAssessmentTemplateSnapshot(rentalModuleKeys, rentalAssessmentScope)
         : null;
+      const rentalGates = rentalAssignmentRequiredGates(rentalModuleKeys);
+      const credentialDate = scheduledStart.slice(0, 10) || now.slice(0, 10);
+      if (rentalGates.length && assigneeMemberId) {
+        const eligible = await db.prepare(`SELECT member.id FROM trade_team_members member
+          WHERE member.id = ? AND member.owner_uid = ? AND member.status = 'active'
+            AND ${rentalAssignmentCredentialSql("member.id", "member.owner_uid")}`)
+          .bind(assigneeMemberId, identity.uid, JSON.stringify(rentalGates), credentialDate, credentialDate).first();
+        if (!eligible) return adminJson({ ok: false, code: "RENTAL_WORKER_CREDENTIAL_REQUIRED", error: "Choose a worker whose Team profile has current credentials and supporting documents for every selected safety check on this appointment date." }, 400);
+      }
       const rentalCompatibilityModuleKeys = rentalTemplate
         ? ["minimum_standards", ...rentalModuleKeys.filter((moduleKey) => moduleKey !== "minimum_standards")]
         : [];
@@ -2145,12 +2172,14 @@ export async function POST(request: Request) {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, 1, ?, ?)`)
             .bind(appointmentId, workOrderId, identity.uid, appointmentType, appointmentTitle, scheduledStart, scheduledEnd,
               assigneeMemberId, assignee, cleanAdminText(body.appointmentNotes, 1000), now, now),
-          tradeCrmScheduleMemberGuardStatement(db, {
+          ...requiredServiceCategories.map((requiredCategory) => tradeCrmScheduleMemberGuardStatement(db, {
             ownerUid: identity.uid,
             memberId: assigneeMemberId,
-            serviceCategory,
+            serviceCategory: requiredCategory,
             changedAt: now,
-          }),
+            rentalGates,
+            credentialDate,
+          })),
           tradeJobScheduleEligibilityGuardStatement(db, {
             ownerUid: identity.uid,
             workOrderId,
@@ -2179,9 +2208,9 @@ export async function POST(request: Request) {
               serviceSiteId,
               rentalInspectionNumber,
               guided ? "scheduled" : "draft",
-              RENTAL_ASSESSMENT_TEMPLATE_KEY,
-              RENTAL_ASSESSMENT_TEMPLATE_VERSION,
-              RENTAL_ASSESSMENT_TEMPLATE_EFFECTIVE_FROM,
+              rentalTemplate.key,
+              rentalTemplate.version,
+              rentalTemplate.effectiveFrom,
               JSON.stringify(rentalCompatibilityModuleKeys),
               JSON.stringify(rentalModuleKeys),
               rentalPropertySnapshot,
@@ -2206,7 +2235,7 @@ export async function POST(request: Request) {
                 moduleKey,
                 moduleKey === "minimum_standards" ? 1 : 0,
                 1,
-                RENTAL_ASSESSMENT_TEMPLATE_VERSION,
+                moduleTemplate.templateVersion,
                 String(moduleTemplate.title || moduleKey),
                 String(moduleTemplate.credentialGate || "qualified_assessor"),
                 JSON.stringify(moduleTemplate),

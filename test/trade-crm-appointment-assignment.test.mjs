@@ -173,6 +173,25 @@ function fixture() {
       capabilities text NOT NULL,
       status text NOT NULL
     );
+    CREATE TABLE trade_team_member_credentials (
+      id text PRIMARY KEY NOT NULL,
+      owner_uid text NOT NULL,
+      team_member_id text NOT NULL,
+      file_id text NOT NULL,
+      rental_gate text NOT NULL,
+      status text NOT NULL,
+      credential_number text NOT NULL,
+      jurisdiction text NOT NULL,
+      credential_type text NOT NULL,
+      expires_at text NOT NULL
+    );
+    CREATE TABLE trade_team_member_files (
+      id text PRIMARY KEY NOT NULL,
+      owner_uid text NOT NULL,
+      team_member_id text NOT NULL,
+      status text NOT NULL,
+      expires_at text NOT NULL
+    );
     CREATE TABLE trade_crm_appointments (
       id text PRIMARY KEY NOT NULL,
       work_order_id text NOT NULL,
@@ -385,6 +404,7 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
   const scheduleServerHelpers = loadTypescriptModule("../src/lib/trade-schedule-server.ts", {
     "../../db": { getD1: () => d1 },
   });
+  const rentalCredentialHelpers = loadTypescriptModule("../src/lib/trade-rental-credentials.ts", {});
   return loadTypescriptModule("../src/app/api/trade-crm/route.ts", {
     "../../../../db": { getD1: () => d1 },
     "@/lib/admin-server": {
@@ -430,6 +450,7 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
       isRentalInspectionAssignmentConflict: () => false,
       rentalInspectionAssignmentStatements: () => [],
     },
+    "@/lib/trade-rental-credentials": rentalCredentialHelpers,
     "@/lib/trade-address-verification": {
       TradeAddressVerificationError: DomainError,
     },
