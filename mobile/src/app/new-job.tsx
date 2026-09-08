@@ -8,7 +8,14 @@ import { Alert, Modal, PanResponder, Pressable, StyleSheet, Text, TextInput, Vie
 import { FieldButton } from '@/components/field-button';
 import { FieldSelect } from '@/components/field-select';
 import { FieldDatePicker } from '@/components/field-date-picker';
-import { JobWorkSelection, type FieldJobOptions, type PlannedFieldActivity } from '@/components/job-work-selection';
+import {
+  fieldActivitiesForBuildingType,
+  fieldActivityPremisesVariantId,
+  fieldActivityRequiresPremisesVariant,
+  JobWorkSelection,
+  type FieldJobOptions,
+  type PlannedFieldActivity,
+} from '@/components/job-work-selection';
 import { Screen } from '@/components/screen';
 import { ApiError, apiRequest } from '@/lib/api';
 import { colours, radius, spacing } from '@/lib/theme';
@@ -39,6 +46,12 @@ type CustomerCandidate = {
   addressState: string; postcode: string; reasons: string[];
 };
 type CalendarInviteResult = { requested: boolean; status: 'not_requested' | 'accepted' | 'failed' | 'unavailable'; message: string };
+type CustomerDocumentResult = {
+  requested: boolean;
+  status: 'not_required' | 'provider_accepted' | 'failed' | 'unavailable';
+  canRetry: boolean;
+  message: string;
+};
 
 function addDays(days: number) { const date = new Date(); date.setDate(date.getDate() + days); return date; }
 function dateKey(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
@@ -55,6 +68,14 @@ function validPlannedActivities(activities: PlannedFieldActivity[], options: Fie
     && options.programs.some((program) => program.id === selected.programTemplateId && program.code === activity.programCode)));
 }
 
+function premisesVariantsReady(activities: PlannedFieldActivity[], buildingType: string) {
+  return activities.every((activity) => {
+    if (!fieldActivityRequiresPremisesVariant(activity.activityTemplateId)) return true;
+    const expected = fieldActivityPremisesVariantId(activity.activityTemplateId, buildingType);
+    return Boolean(expected && activity.variantId === expected);
+  });
+}
+
 export default function NewJobScreen() {
   const { syncNow } = useApp();
   const navigation = useNavigation();
@@ -68,6 +89,7 @@ export default function NewJobScreen() {
   const [selectedModules, setSelectedModules] = useState<string[]>(['minimum_standards']);
   const [rentalAssessmentScope, setRentalAssessmentScope] = useState('energy_readiness_2027');
   const [serviceCategory, setServiceCategory] = useState('rental-inspection');
+  const [buildingType, setBuildingType] = useState('not_sure');
   const [plannedActivities, setPlannedActivities] = useState<PlannedFieldActivity[]>([]);
   const [jobOptions, setJobOptions] = useState<FieldJobOptions | null>(null);
   const [optionsError, setOptionsError] = useState('');
@@ -204,6 +226,10 @@ export default function NewJobScreen() {
   }, [email, selectedCustomer]);
 
   function toggleModule(key: string) { setSelectedModules((current) => current.includes(key) ? current.filter((value) => value !== key) : [...current, key]); }
+  function changeBuildingType(value: string) {
+    setBuildingType(value);
+    setPlannedActivities((current) => fieldActivitiesForBuildingType(current, value));
+  }
   function chooseCustomer(candidate: CustomerCandidate) {
     if (!candidate.serviceSiteId) return;
     setSelectedCustomer(candidate); setCustomerCandidates([]); setFirstName(candidate.firstName); setLastName(candidate.lastName);
@@ -271,6 +297,7 @@ export default function NewJobScreen() {
     if (serviceCategory === 'rental-inspection' && !selectedModules.length) return 'Choose at least one assessment or safety-check workflow.';
     if (serviceCategory === 'rental-inspection' && addressState !== 'VIC') return 'Rental inspection jobs require a Victorian service address.';
     if (!validPlannedActivities(plannedActivities, jobOptions)) return 'Remove any activity that is no longer available for this property.';
+    if (!premisesVariantsReady(plannedActivities, buildingType)) return 'Choose residential or business premises for the selected activity form.';
     return '';
   }
   function nextStep() {
@@ -299,7 +326,7 @@ export default function NewJobScreen() {
     setAddressPredictionSession({ token: Crypto.randomUUID(), query: '', predictions: [] }); setAddressLookupBusy(false);
     setBusy(true);
     try {
-      const result = await apiRequest<{ ok: boolean; id: string; workNumber?: string; calendarInvite?: CalendarInviteResult }>('/api/trade-crm', {
+      const result = await apiRequest<{ ok: boolean; id: string; workNumber?: string; calendarInvite?: CalendarInviteResult; customerDocuments?: CustomerDocumentResult }>('/api/trade-crm', {
         method: 'POST', body: JSON.stringify({
           action: 'create_scheduled_job', customerMode: selectedCustomer ? 'existing' : 'new', crmCustomerId: selectedCustomer?.customerId || '',
           serviceSiteMode: selectedCustomer ? 'existing' : 'new', serviceSiteId: selectedCustomer?.serviceSiteId || '', customerType: selectedCustomer?.customerType || 'residential',
@@ -307,7 +334,7 @@ export default function NewJobScreen() {
           addressLine1: addressLine1.trim(), addressLine2: addressLine2.trim(), suburb: suburb.trim(), addressState, postcode,
           addressEntryMode: addressProvenance.entryMode, addressProvider: addressProvenance.provider, addressProviderReference: addressProvenance.providerReference,
           addressFormatted: addressProvenance.formattedAddress, addressSelectionProof: addressProvenance.selectionProof,
-          serviceCategory, buildingType: 'house_townhouse', priority: 'standard', assigneeMemberId,
+          serviceCategory, buildingType, priority: 'standard', assigneeMemberId,
           complianceIntentMode: plannedActivities.length ? 'planned' : 'none',
           complianceActivitiesJson: JSON.stringify(plannedActivities),
           startsAt: `${selectedDate}T${time}`, durationMinutes: duration, appointmentType: 'site_visit', appointmentNotes: notes.trim(), description: notes.trim(),
@@ -316,7 +343,15 @@ export default function NewJobScreen() {
       });
       await syncNow();
       const inviteMessage = result.calendarInvite?.requested ? `\n\n${result.calendarInvite.message}` : '';
-      Alert.alert('Job added', `${result.workNumber || 'The new job'} is saved in the selected worker's schedule.${inviteMessage}`, [{ text: 'Open schedule', onPress: () => { allowExit.current = true; router.replace('/(tabs)/work'); } }]);
+      const documentMessage = result.customerDocuments?.requested ? `\n\n${result.customerDocuments.message}` : '';
+      const documentsNeedAttention = result.customerDocuments?.requested && result.customerDocuments.status !== 'provider_accepted';
+      const documentsRecipientNeedsUpdate = documentsNeedAttention && result.customerDocuments?.canRetry === false;
+      Alert.alert(documentsRecipientNeedsUpdate ? 'Job added, customer email needs attention' : documentsNeedAttention ? 'Job added, documents need attention' : 'Job added',
+        `${result.workNumber || 'The new job'} is saved in the selected worker's schedule.${documentMessage}${inviteMessage}`,
+        [{ text: documentsNeedAttention ? 'Open job' : 'Open schedule', onPress: () => {
+          allowExit.current = true;
+          router.replace(documentsNeedAttention ? `/job/${result.id}` : '/(tabs)/work');
+        } }]);
     } catch (caught) {
       const matches = caught instanceof ApiError && Array.isArray(caught.payload.duplicateCandidates) ? caught.payload.duplicateCandidates as CustomerCandidate[] : [];
       if (matches.length) { setCustomerCandidates(matches); setStep(0); setError('This customer is already saved. Choose the correct saved customer and property below.'); }
@@ -349,7 +384,7 @@ export default function NewJobScreen() {
     {step === 1 ? <View style={styles.card}>
       {optionsLoading ? <Text style={styles.help}>Loading current work and team options...</Text> : null}
       {optionsError ? <><Text style={styles.error}>{optionsError}</Text><FieldButton variant="secondary" onPress={() => setOptionsAttempt((value) => value + 1)}>Retry work options</FieldButton></> : null}
-      {jobOptions ? <JobWorkSelection options={jobOptions} serviceCategory={serviceCategory} onServiceChange={setServiceCategory} activities={plannedActivities} onActivitiesChange={setPlannedActivities} /> : null}
+      {jobOptions ? <JobWorkSelection options={jobOptions} serviceCategory={serviceCategory} onServiceChange={setServiceCategory} buildingType={buildingType} onBuildingTypeChange={changeBuildingType} activities={plannedActivities} onActivitiesChange={setPlannedActivities} /> : null}
       {serviceCategory === 'rental-inspection' ? <>
         {selectedModules.includes('minimum_standards') ? <FieldSelect label="Rental assessment scope" value={rentalAssessmentScope} options={[
           { value: 'energy_readiness_2027', label: '2027 rental energy readiness' },

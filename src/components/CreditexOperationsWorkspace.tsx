@@ -1674,7 +1674,7 @@ function AdvancedFilters({
     >
       <div className={styles.advancedFilterHeader}>
         <div>
-          <span className={styles.kicker}>Dataforce-parity search</span>
+          <span className={styles.kicker}>Legacy-parity search</span>
           <h4 id="creditex-advanced-filter-title">Advanced case filters</h4>
           <p>
             Search the organisation-wide compliance workspace. Customer and
@@ -2042,7 +2042,7 @@ function AdvancedFilters({
               facet={workspace.facets.additionalColumns}
             />
             <UnavailableFilter
-              label="Other Dataforce filters"
+              label="Other legacy filters"
               facet={workspace.facets.otherFilters}
             />
           </div>
@@ -4204,7 +4204,7 @@ export function CreditexOperationsWorkspace({
               </div>
               <DisabledPanel
                 title="Private participant import"
-                reason="Dataforce, Runabout and private registry imports need an approved integration contract and field mapping."
+                reason="Legacy and private registry imports need an approved integration contract and field mapping."
                 action="Import participant file"
               />
             </section>

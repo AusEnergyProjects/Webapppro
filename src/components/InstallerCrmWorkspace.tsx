@@ -17,6 +17,7 @@ import { downloadWorkspaceCsv, type WorkspaceTableColumn, WorkspaceTableTools } 
 import { appointmentDurationMinutes, durationLabel, nextAppointmentSlot, scheduleProposalKey, type ScheduleProposalValidation } from "@/lib/trade-schedule";
 import type { TradeNewJobInitial } from "./TradeNewJobForm";
 import type { TradeTeamPermissions } from "./TradeTeamSettings";
+import type { CustomerDocumentDelivery, CustomerDocumentSendResult } from "./TradeCustomerDocumentDeliveryPanel";
 import {
   DATAFORCE_JOB_CSV_HEADERS,
   exportDataforceJobCsv,
@@ -52,6 +53,7 @@ const TradeJobReadinessPanel = dynamic(() => import("./TradeJobReadinessPanel").
 const TradeNewJobForm = dynamic(() => import("./TradeNewJobForm").then((module) => module.TradeNewJobForm));
 const TradeQuickInvoicePanel = dynamic(() => import("./TradeQuickInvoicePanel").then((module) => module.TradeQuickInvoicePanel));
 const TradeScheduleWorkspace = dynamic(() => import("./TradeScheduleWorkspace").then((module) => module.TradeScheduleWorkspace));
+const TradeCustomerDocumentDeliveryPanel = dynamic(() => import("./TradeCustomerDocumentDeliveryPanel").then((module) => module.TradeCustomerDocumentDeliveryPanel));
 
 type Customer = {
   id: string; customerNumber: string; customerType: string; displayName: string; firstName: string;
@@ -83,6 +85,7 @@ type ComplianceCase = {
 };
 type ComplianceIntent = {
   id: string; status: string; programTemplateId: string; activityTemplateId: string;
+  activityVariantId: string; bookingDocumentCount: number;
   programCode: string; programName: string; activityKey: string; registryActivityCode: string;
   activityTitle: string; serviceCategory: string; siteJurisdiction: string; plannedStart: string;
   catalogueReviewedOn: string; governanceState: string; governanceMessage: string;
@@ -102,7 +105,7 @@ type Job = {
   description: string; customerReference: string; nextAction: string; tags: string[]; estimatedValueCents: number;
   quotedValueCents: number; invoicedValueCents: number; paidValueCents: number; quoteStatus: string; scheduleReady: boolean;
   invoiceStatus: string; paymentDueAt: string; handoverStatus: string; tasks: Task[];
-  appointments: Appointment[]; notes: Note[]; complianceCases: ComplianceCase[]; complianceIntents: ComplianceIntent[]; complianceIntent: ComplianceIntent | null; customerDisplayName?: string; createdAt: string; updatedAt: string;
+  appointments: Appointment[]; notes: Note[]; complianceCases: ComplianceCase[]; complianceIntents: ComplianceIntent[]; complianceIntent: ComplianceIntent | null; customerDocuments?: CustomerDocumentDelivery | null; customerDisplayName?: string; createdAt: string; updatedAt: string;
   dataforceRecord: DataforceJobCsvRecord;
   jobRegister: JobRegisterRecord;
 };
@@ -113,7 +116,8 @@ type CreateJobResult = {
   complianceIntentPlanned?: boolean; complianceIntentCount?: number; workPackReady?: boolean;
   workPackBlockers?: Array<{ code: string; message: string }>;
   rentalInspectionAttached?: boolean; rentalInspectionModuleCount?: number;
-  calendarSynced?: number; calendarFailed?: number; duplicateCandidates?: DuplicateCandidate[]; error?: string;
+  calendarSynced?: number; calendarFailed?: number; customerDocuments?: CustomerDocumentSendResult;
+  duplicateCandidates?: DuplicateCandidate[]; error?: string;
 };
 type IndexPagination = { page: number; pageSize: number; total: number; pageCount: number; hasNext?: boolean; nextCursor?: string };
 type CrmIndexResult = { ok?: boolean; items?: Job[] | Customer[]; pagination?: IndexPagination; error?: string };
@@ -605,7 +609,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   const downloadAllFilteredJobs = useCallback(async () => {
     if (jobExporting) return;
     setJobExporting(true);
-    setStatus("Preparing the complete filtered Dataforce job export...");
+    setStatus("Preparing the complete filtered Creditex job register export...");
     try {
       const token = await user.getIdToken();
       const records: DataforceJobCsvRecord[] = [];
@@ -644,7 +648,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
           seenJobIds.add(item.id);
           const record = item.dataforceRecord;
           if (!record || DATAFORCE_JOB_CSV_HEADERS.some((header) => typeof record[header] !== "string")) {
-            throw new Error("A filtered job did not match the Dataforce column contract. No CSV was created.");
+            throw new Error("A filtered job did not match the approved Creditex register columns. No CSV was created.");
           }
           records.push(record);
           if (records.length > DATAFORCE_JOB_EXPORT_MAX_ROWS) {
@@ -669,12 +673,12 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       const csvUrl = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
       const download = document.createElement("a");
       download.href = csvUrl;
-      download.download = "tlink-dataforce-compatible-jobs.csv";
+      download.download = "tlink-creditex-job-register.csv";
       document.body.appendChild(download);
       download.click();
       download.remove();
       URL.revokeObjectURL(csvUrl);
-      setStatus(`${records.length} filtered ${records.length === 1 ? "job" : "jobs"} downloaded in the exact Dataforce column order.`);
+      setStatus(`${records.length} filtered ${records.length === 1 ? "job" : "jobs"} downloaded in the approved Creditex register order.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "The complete filtered job export could not be created.");
     } finally {
@@ -1231,6 +1235,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
             : "",
         calendarSynced ? `${calendarSynced} connected calendar ${calendarSynced === 1 ? "item" : "items"} updated.` : "",
         calendarFailed ? `Calendar sync needs another try. ${calendarFailed} ${calendarFailed === 1 ? "update was" : "updates were"} not completed.` : "",
+        result.customerDocuments?.requested ? result.customerDocuments.message : "",
       ].filter(Boolean).join(" ");
       setStatus(creationResults);
       form.reset(); setNewJobSeed(null); setCreating(""); setView("jobs");
@@ -1570,6 +1575,8 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
   const customerContextLabel = isReleasedLead ? "Customer-authorised lead" : customer ? "Your customer record" : "Internal job";
   const complianceCases = job.complianceCases || [];
   const complianceIntents = job.complianceIntents?.length ? job.complianceIntents : job.complianceIntent ? [job.complianceIntent] : [];
+  const requiresBookingDocuments = Boolean(job.customerDocuments)
+    || complianceIntents.some((intent) => intent.bookingDocumentCount > 0);
   const unlinkedComplianceIntents = complianceIntents.filter((intent) => !intent.complianceCaseId);
   const openIssues = job.notes.filter((note) => note.noteType === "issue" && note.issueStatus === "open").length;
   const canManageJobs = !permissions || permissions.canManageJobs;
@@ -1730,6 +1737,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
             <p className={registerStyles.contextNote}>{isReleasedLead ? "This customer-authorised lead contains only the contact and property details disclosed to your business." : hasCustomerContext ? "This customer contacted your business directly." : "The customer is linked, but contact and address details have not been added."}</p>
           </> : <p className={registerStyles.contextNote}>No customer is linked to this internal job.</p>}
         </section>
+      {requiresBookingDocuments && <TradeCustomerDocumentDeliveryPanel delivery={job.customerDocuments} jobId={job.id} onReload={onReload} user={user} />}
       {complianceIntents.length > 0 && canViewFieldEvidence && <TradeActivityFieldRecords key={user.uid + job.id} user={user} workOrderId={job.id} canShare={canManageFieldEvidence} refreshKey={job.revision} />}
       <form className="crm-form" onSubmit={saveSummary}><fieldset disabled={!canManageJobs} style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}>
         <div className="crm-form-grid">{canSearchCustomerRecords && !isProtected && !isReleasedLead && <CustomerLookupSelect user={user} initialCustomer={customer} />}{!isProtected && !isReleasedLead && customer && <label><span>Authoritative service site</span><select name="serviceSiteId" defaultValue={job.serviceSiteId}><option value="">Choose later</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.siteLabel} | {[site.suburb, site.addressState, site.postcode].filter(Boolean).join(" ") || "Address not added"}</option>)}</select></label>}<label><span>Sales stage</span><select name="pipelineStage" defaultValue={job.pipelineStage}>{Object.entries(pipelineLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Work stage</span><select name="stage" defaultValue={job.stage}>{Object.entries(workStageLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Building type</span><select name="buildingType" defaultValue={job.buildingType || "not_sure"}>{[["house_townhouse", "House or townhouse"], ["apartment_unit", "Apartment or unit"], ["commercial_office", "Commercial or office"], ["retail_hospitality", "Retail or hospitality"], ["industrial_warehouse", "Industrial or warehouse"], ["institutional_community_health", "Institutional, community or health"], ["other", "Other"], ["not_sure", "Not sure"]].map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Priority</span><select name="priority" defaultValue={job.priority}><option value="low">Low</option><option value="standard">Standard</option><option value="high">High</option><option value="urgent">Urgent</option></select></label></div>

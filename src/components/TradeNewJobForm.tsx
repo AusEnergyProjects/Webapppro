@@ -20,6 +20,10 @@ import {
 } from "@/lib/australian-government-program-catalogue";
 import { GOVERNMENT_ACTIVITY_CALCULATION_METHODS } from "@/lib/australian-certificate-calculation-catalogue";
 import { ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
+import {
+  activityPremisesVariantId,
+  activityRequiresPremisesVariant,
+} from "@/lib/trade-compliance-intent";
 
 type Template = { id: string; name: string; title: string; serviceCategory: string; priority: string; description: string; taskTitles: string[] };
 type Customer = { id: string; customerNumber: string; displayName: string; email: string; phone: string; suburb: string; postcode: string };
@@ -42,6 +46,7 @@ type DuplicateCandidate = { customerId: string; customerNumber: string; displayN
 type PlannedComplianceActivity = {
   programTemplateId: string;
   activityTemplateId: string;
+  variantId?: string;
 };
 type RentalInspectionModule = "minimum_standards" | "electrical_safety_check" | "gas_safety_check" | "smoke_alarm_check";
 type AddressValue = {
@@ -342,6 +347,22 @@ export function TradeNewJobForm({
     setHighestStep((current) => Math.min(current, step));
   }
 
+  function changeBuildingType(value: string) {
+    setBuildingType(value);
+    setPlannedActivities((current) => current.map((selection) => {
+      const variantId = activityPremisesVariantId(
+        selection.activityTemplateId,
+        value,
+      );
+      return {
+        programTemplateId: selection.programTemplateId,
+        activityTemplateId: selection.activityTemplateId,
+        ...(variantId ? { variantId } : {}),
+      };
+    }));
+    setHighestStep((current) => Math.min(current, 3));
+  }
+
   function chooseClaimOutput(value: string) {
     setHighestStep((current) => Math.min(current, 3));
     setDraftProgramTemplateId("");
@@ -570,6 +591,14 @@ export function TradeNewJobForm({
     }];
   });
   const complianceMode = plannedActivities.length > 0 ? "planned" : "none";
+  const plannedPremisesVariantsReady = plannedActivities.every((selection) => {
+    if (!activityRequiresPremisesVariant(selection.activityTemplateId)) return true;
+    const expected = activityPremisesVariantId(
+      selection.activityTemplateId,
+      buildingType,
+    );
+    return Boolean(expected && selection.variantId === expected);
+  });
   const legacyComplianceActivity = plannedActivities[0];
   const complianceActivitiesJson = JSON.stringify(plannedActivities);
   const rentalInspectionModulesJson = JSON.stringify(selectedRentalInspectionModules);
@@ -608,9 +637,23 @@ export function TradeNewJobForm({
       setMessage("That exact government program and activity is already added.");
       return;
     }
+    const variantId = activityPremisesVariantId(
+      draftActivity.templateId,
+      buildingType,
+    );
+    if (
+      activityRequiresPremisesVariant(draftActivity.templateId)
+      && !variantId
+    ) {
+      setMessage(
+        "Choose a residential or business building type in Work before adding this activity.",
+      );
+      return;
+    }
     setPlannedActivities((current) => [...current, {
       programTemplateId: draftProgram.templateId,
       activityTemplateId: draftActivity.templateId,
+      ...(variantId ? { variantId } : {}),
     }]);
     if (plannedActivities.length === 0) {
       setAppointmentType((current) => {
@@ -648,6 +691,10 @@ export function TradeNewJobForm({
         }
         if (plannedActivityDetails.length !== plannedActivities.length) {
           setMessage("One or more planned activities are no longer available. Remove them and choose current activities.");
+          return;
+        }
+        if (!plannedPremisesVariantsReady) {
+          setMessage("Choose a residential or business building type for the selected activity form.");
           return;
         }
         setMinimumStart(nextAppointmentSlot());
@@ -693,6 +740,12 @@ export function TradeNewJobForm({
       setStep(3);
       return;
     }
+    if (!plannedPremisesVariantsReady) {
+      event.preventDefault();
+      setMessage("Choose a residential or business building type for the selected activity form.");
+      setStep(1);
+      return;
+    }
     onSubmit(event);
   }}>
     <input type="hidden" name="customerMode" value={customerMode} /><input type="hidden" name="crmCustomerId" value={customerId} />
@@ -720,7 +773,7 @@ export function TradeNewJobForm({
 
     <section data-step="1" hidden={step !== 1} className="crm-wizard-panel"><header><span>1 of 5</span><h3 tabIndex={-1}>Choose the work</h3><p>Start with the service. TLink will attach the matching field workflow to the saved job.</p></header>
       {selectableTemplates.length > 0 && <label className="crm-template-picker"><span>Start from a template, optional</span><select name="templateId" value={templateId} onChange={(event) => { const id = event.target.value; const selected = selectableTemplates.find((item) => item.id === id); setTemplateId(id); if (selected) { changeServiceCategory(selected.serviceCategory); setPriority(selected.priority); } }}><option value="">Blank job</option>{selectableTemplates.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><small>{template ? `${template.taskTitles.length} checklist items will be added automatically.` : "Templates keep common scopes and checklists consistent."}</small></label>}
-      <div className="crm-form-grid"><label><span>Work type</span><select name="serviceCategory" value={serviceCategory} onChange={(event) => changeServiceCategory(event.target.value)}>{serviceOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Building type</span><select name="buildingType" value={buildingType} onChange={(event) => setBuildingType(event.target.value)}>{buildingTypes.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Priority</span><select name="priority" value={priority} onChange={(event) => setPriority(event.target.value)}><option value="standard">Standard</option><option value="low">Low</option><option value="high">High</option><option value="urgent">Urgent</option></select></label></div>
+      <div className="crm-form-grid"><label><span>Work type</span><select name="serviceCategory" value={serviceCategory} onChange={(event) => changeServiceCategory(event.target.value)}>{serviceOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Building type</span><select name="buildingType" value={buildingType} onChange={(event) => changeBuildingType(event.target.value)}>{buildingTypes.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Priority</span><select name="priority" value={priority} onChange={(event) => setPriority(event.target.value)}><option value="standard">Standard</option><option value="low">Low</option><option value="high">High</option><option value="urgent">Urgent</option></select></label></div>
       {serviceCategory === "rental-inspection" && <div className="crm-compliance-notice"><strong>Rental minimum standards included</strong><p>The Victorian minimum standards workflow is attached automatically. Separate electrical, gas and smoke alarm checks can be added in the Inspection step.</p></div>}
       {template?.description && <input type="hidden" name="description" value={template.description} />}
       <div className="crm-wizard-actions"><button type="button" className="btn" onClick={() => next(2)}>Add customer</button></div>
@@ -779,6 +832,7 @@ export function TradeNewJobForm({
           <p>{activity.title}</p>
           <dl>
             <div><dt>Output</dt><dd>{program.claimOutputCode} | {program.claimOutputLabel}</dd></div>
+            {selection.variantId && <div><dt>Premises form</dt><dd>{selection.variantId.endsWith("_business") ? "Business premises" : "Residential premises"}</dd></div>}
             <div><dt>Product</dt><dd>{activity.productCategory || "Creditex product rule mapping required"}</dd></div>
             <div><dt>Evidence</dt><dd>Published governed policy required</dd></div>
             <div><dt>Calculation</dt><dd>{calculation ? `${calculation.unit} | Exact result is generated after the required product, scenario and installation data are verified` : "Creditex calculation rule not released"}</dd></div>
@@ -889,6 +943,7 @@ export function TradeNewJobForm({
               <dl>
                 <div><dt>Program</dt><dd>{program.name}</dd></div>
                 <div><dt>Activity</dt><dd>{activity.title}</dd></div>
+                {selection.variantId && <div><dt>Premises form</dt><dd>{selection.variantId.endsWith("_business") ? "Business premises" : "Residential premises"}</dd></div>}
                 <div><dt>Certificate output</dt><dd>{program.claimOutputCode} | {program.claimOutputLabel}</dd></div>
                 <div><dt>Specification</dt><dd>{activity.specificationPart || "No separate specification part"}</dd></div>
                 <div><dt>Scenario</dt><dd>{activity.scenarioCode ? `${activity.scenarioCode} | ${activity.scenario}` : activity.scenario || "Creditex scenario rule mapping required"}</dd></div>

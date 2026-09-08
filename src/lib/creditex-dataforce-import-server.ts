@@ -345,7 +345,7 @@ export async function stageCreditexDataforceImport(
     throw new CreditexDataforceImportError(
       "DATAFORCE_IMPORT_TOO_LARGE",
       413,
-      "The Dataforce CSV exceeds the staging limit.",
+      "The legacy job CSV exceeds the staging limit.",
       safeValidation(emptySummary(), [sizeValidationIssue()]),
     );
   }
@@ -358,7 +358,7 @@ export async function stageCreditexDataforceImport(
     throw new CreditexDataforceImportError(
       "DATAFORCE_IMPORT_TOO_MANY_ROWS",
       413,
-      "The Dataforce CSV contains too many rows for one staging batch.",
+      "The legacy job CSV contains too many rows for one staging batch.",
       safeValidation(
         validation.summary,
         [...validation.issues, rowLimitValidationIssue()],
@@ -370,7 +370,7 @@ export async function stageCreditexDataforceImport(
     throw new CreditexDataforceImportError(
       "DATAFORCE_IMPORT_VALIDATION_FAILED",
       400,
-      "The Dataforce CSV does not match the required 23-column contract.",
+      "The legacy job CSV does not match the required 23-column contract.",
       safeValidation(
         validation.summary,
         validation.issues,
@@ -482,7 +482,7 @@ export async function stageCreditexDataforceImport(
     throw new CreditexDataforceImportError(
       "DATAFORCE_IMPORT_WRITE_FAILED",
       500,
-      "The Dataforce CSV could not be staged.",
+      "The legacy job CSV could not be staged.",
     );
   }
   return {

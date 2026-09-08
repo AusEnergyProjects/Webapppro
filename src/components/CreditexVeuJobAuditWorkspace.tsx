@@ -1024,7 +1024,7 @@ function AppointmentSummary({
             {readable(appointment.status)}
           </Field>
           <Field label="Completion sub-status" unavailable>
-            Dataforce equivalence is not mapped
+            Legacy source equivalence is not mapped
           </Field>
         </FieldGrid>
       </SectionCard>

@@ -103,25 +103,21 @@ test("guided appointment setup keeps the authorised week visible and permits del
   assert.doesNotMatch(crm, /APPOINTMENT_CONFLICT/);
 });
 
-test("guided job creation rechecks the selected worker before and inside its atomic batch", () => {
+test("guided job creation rechecks the selected worker inside its atomic batch while allowing overlaps", () => {
   const guidedCreate = crm.slice(
     crm.indexOf('if (action === "create_job" || action === "create_scheduled_job")'),
     crm.indexOf('const workOrderId = cleanAdminText(body.workOrderId', crm.indexOf('if (action === "create_job" || action === "create_scheduled_job")')),
   );
-  const precheck = guidedCreate.indexOf("await assertTradeScheduleAvailable({");
   const batch = guidedCreate.indexOf("const batchStatements: D1PreparedStatement[] = [");
   const appointmentInsert = guidedCreate.indexOf("INSERT INTO trade_crm_appointments", batch);
   const memberGuard = guidedCreate.indexOf("tradeCrmScheduleMemberGuardStatement", appointmentInsert);
   const eligibilityGuard = guidedCreate.indexOf("tradeJobScheduleEligibilityGuardStatement", appointmentInsert);
-  const availabilityGuard = guidedCreate.indexOf("tradeScheduleAvailabilityGuardStatement", appointmentInsert);
   const commit = guidedCreate.indexOf("await db.batch(batchStatements)");
 
-  assert.ok(precheck > 0 && precheck < batch, "availability must be checked before preparing writes");
   assert.ok(appointmentInsert > batch, "the first appointment must be part of the creation batch");
   assert.ok(memberGuard > appointmentInsert && memberGuard < commit, "member capability must be guarded inside the batch");
   assert.ok(eligibilityGuard > appointmentInsert && eligibilityGuard < commit, "job eligibility must be guarded inside the batch");
-  assert.ok(availabilityGuard > appointmentInsert && availabilityGuard < commit, "availability must be guarded inside the batch");
-  assert.doesNotMatch(guidedCreate.slice(availabilityGuard, commit), /excludeAppointmentId/);
+  assert.doesNotMatch(guidedCreate, /assertTradeScheduleAvailable|tradeScheduleAvailabilityGuardStatement|APPOINTMENT_CONFLICT/);
 });
 
 test("guided activity forms auto-open only after the job and intent commit", () => {
@@ -192,6 +188,10 @@ test("guided jobs collect a bounded deduplicated list of controlled activities",
   assert.match(form, /No government activity added/);
   assert.match(form, /name="complianceActivitiesJson" value=\{complianceActivitiesJson\}/);
   assert.match(form, /const complianceActivitiesJson = JSON\.stringify\(plannedActivities\)/);
+  assert.match(form, /activityPremisesVariantId/);
+  assert.match(form, /const plannedPremisesVariantsReady = plannedActivities\.every/);
+  assert.match(form, /variantId \? \{ variantId \} : \{\}/);
+  assert.match(form, /Choose a residential or business building type/);
   assert.match(form, /legacyComplianceActivity\?\.programTemplateId/);
   assert.match(form, /legacyComplianceActivity\?\.activityTemplateId/);
   for (const label of ["Program", "Activity", "Certificate output", "Product category", "Approved product", "Evidence form", "Calculation"]) {

@@ -732,16 +732,16 @@ test("every existing work-order date mutation path shares the atomic replanning 
   const rentalAssignment = crmAppointment.indexOf("rentalInspectionAssignmentStatements", appointmentInsert);
   const memberGuard = crmAppointment.indexOf("tradeCrmScheduleMemberGuardStatement", rentalAssignment);
   const eligibilityGuard = crmAppointment.indexOf("tradeJobScheduleEligibilityGuardStatement", memberGuard);
-  const availabilityGuard = crmAppointment.indexOf("tradeScheduleAvailabilityGuardStatement", eligibilityGuard);
-  const mutationBatch = crmAppointment.indexOf("await guardedOnlineJobMutationBatch(db, statements", availabilityGuard);
+  const mutationBatch = crmAppointment.indexOf("await guardedOnlineJobMutationBatch(db, statements", eligibilityGuard);
   const calendarSync = crmAppointment.indexOf("await syncCreatedAppointmentToConnectedCalendars", mutationBatch);
   const response = crmAppointment.indexOf("revision: jobRevision", calendarSync);
   assert.ok(complianceStatements >= 0 && complianceStatements < crmJobUpdate
     && crmJobUpdate < mutationGuard && mutationGuard < appointmentInsert
     && appointmentInsert < rentalAssignment && rentalAssignment < memberGuard
-    && memberGuard < eligibilityGuard && eligibilityGuard < availabilityGuard
-    && availabilityGuard < mutationBatch && mutationBatch < calendarSync && calendarSync < response,
+    && memberGuard < eligibilityGuard && eligibilityGuard < mutationBatch
+    && mutationBatch < calendarSync && calendarSync < response,
   "installation compliance replan, appointment, rental sync and guards must commit before calendar sync and response");
+  assert.doesNotMatch(crmAppointment, /assertTradeScheduleAvailable|tradeScheduleAvailabilityGuardStatement/);
   assert.equal(
     workOrdersRoute.match(
       /plannedComplianceIntentReplanStatements\(/g,

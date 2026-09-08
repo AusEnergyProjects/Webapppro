@@ -122,7 +122,7 @@ test("results can be edited and a cross-network electricity choice stays on the 
   }
   const electricitySetup = electricity.slice(electricity.indexOf('activeStep === 3'), electricity.indexOf('activeStep === 4'));
   assert.match(electricitySetup, /This postcode crosses network boundaries/);
-  assert.match(electricitySetup, /<select value=\{distributor\}/);
+  assert.match(electricitySetup, /<select value=\{distributor \|\| nmiDistributor \|\| ""\}/);
 });
 
 test("gas appliance refinement follows the parent heating answer in both directions", () => {

@@ -175,7 +175,7 @@ test("operations filters are activity-agnostic, bounded, and cover the authorita
   }
 });
 
-test("Dataforce-equivalent filters use authoritative case links and declare unsupported relationships", () => {
+test("legacy-equivalent filters use authoritative case links and declare unsupported relationships", () => {
   for (const sqlBoundary of [
     /work\.work_type/,
     /activity\.service_category/,
@@ -202,7 +202,7 @@ test("Dataforce-equivalent filters use authoritative case links and declare unsu
     /no separate outcome field/,
     /no authoritative audit-completed flag/,
     /No additional authoritative appointment filter fields are stored/,
-    /no authoritative Dataforce-equivalent product-type field/,
+    /no authoritative legacy-equivalent product-type field/,
     /generic catch-all filter cannot be mapped safely/,
   ]) assert.match(server, unavailableReason);
   assert.match(server, /returnedInDefaultList: false/);

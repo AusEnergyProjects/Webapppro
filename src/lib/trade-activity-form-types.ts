@@ -1,12 +1,16 @@
 export type ActivityAnswer = string | number | boolean;
 export type ActivityAnswers = Record<string, ActivityAnswer>;
 export type ActivityPhase = "before" | "after";
-export type ActivityCondition = { all?: ActivityCondition[]; any?: ActivityCondition[]; fieldKey?: string; equals?: ActivityAnswer; notEquals?: ActivityAnswer };
+export type ActivityCondition = { all?: ActivityCondition[]; any?: ActivityCondition[]; fieldKey?: string; equals?: ActivityAnswer; notEquals?: ActivityAnswer; lessThanOrEqual?: number };
 export type ActivityField = {
   key: string; section: string; label: string;
   type: "text" | "number" | "date" | "select" | "boolean" | "photo" | "document";
   required: boolean; options: string[]; help: string; phase: ActivityPhase;
   condition?: ActivityCondition; repeatGroup?: string; autofill?: string;
+  presentation?: "question" | "prefilled" | "derived";
+  optionLabels?: Record<string, string>;
+  sourceRequirementId?: string;
+  evidenceFor?: string[];
   requiredValue?: ActivityAnswer; requireLocation?: boolean;
   referenceDocuments?: { title: string; url: string }[];
 };

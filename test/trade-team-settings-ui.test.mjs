@@ -15,6 +15,7 @@ const newJob = read("../src/components/TradeNewJobForm.tsx");
 const schedule = read("../src/components/TradeScheduleWorkspace.tsx");
 const quote = read("../src/components/TradeQuotePanel.tsx");
 const invoice = read("../src/components/TradeQuickInvoicePanel.tsx");
+const memberFilesRoute = read("../src/app/api/trade-team/member-files/route.ts");
 
 test("Team is a routed first-class workspace and Business links to it", () => {
   assert.match(dashboard, /DashboardWorkspace = "work" \| "team"/);
@@ -40,6 +41,10 @@ test("owner team management keeps access plain, specific and permission-based", 
   assert.match(settings, /Field access/);
   assert.match(settings, /Quick access preset/);
   assert.match(settings, /You cannot edit your own access permissions/);
+  assert.match(settings, /Your personal name is used for technician sign-off when a job is assigned to you/);
+  assert.match(settings, /TLink will not use the business name as the signer/);
+  assert.match(settings, /firstName: String\(data\.get\("firstName"\)/);
+  assert.match(settings, /lastName: String\(data\.get\("lastName"\)/);
   for (const permission of ["canAssignJobs", "canRescheduleJobs", "canApplyDiscounts", "canEditTeamPermissions"]) {
     assert.match(settings, new RegExp(permission));
   }
@@ -99,7 +104,13 @@ test("member files support context, touch and protected inline preview", () => {
   assert.match(settings, /name="rentalGate"/);
   assert.match(settings, /licensed_electrician/);
   assert.match(settings, /licensed_gasfitter/);
+  assert.match(settings, /<option value="licensed_plumber">Licensed plumber licence<\/option>/);
+  assert.match(settings, /<option value="registered_plumber">Registered plumber registration<\/option>/);
+  assert.match(settings, /<option value="refrigerant_handler">Refrigerant handling licence<\/option>/);
   assert.match(settings, /suitably_qualified_smoke_alarm_worker/);
+  assert.match(settings, /sres_installer_accreditation/);
+  assert.match(settings, /sres_designer_accreditation/);
+  assert.match(settings, /Solar Accreditation Australia/);
   assert.match(settings, /Title<input name="title" required maxLength=\{180\}/);
   assert.match(settings, /credentialType/);
   assert.match(settings, /credentialName/);
@@ -110,8 +121,18 @@ test("member files support context, touch and protected inline preview", () => {
   assert.match(settings, /Supporting document or photo<input name="file" type="file" required/);
   assert.match(settings, /notified 30 days before a saved expiry/);
   assert.match(settings, /Maximum 12 MB/);
-  assert.match(settings, /blocks optional module sign-off after this credential or supporting file expires/);
+  assert.match(settings, /reuses the saved credential details in field forms and prevents sign-off after the credential or supporting file expires/);
   assert.match(settings, /fetch\("\/api\/trade-team\/member-files"/);
+  assert.match(memberFilesRoute, /"sres_installer_accreditation"/);
+  assert.match(memberFilesRoute, /"sres_designer_accreditation"/);
+  for (const role of ["licensed_plumber", "registered_plumber", "refrigerant_handler"]) {
+    assert.match(memberFilesRoute, new RegExp(`\\["${role}", "(?:licence|registration)"\\]`));
+  }
+  assert.match(memberFilesRoute, /EXACT_TRADE_CREDENTIAL_TYPES\.get\(rentalGate\)/);
+  assert.match(memberFilesRoute, /credentialType !== "accreditation" \|\| credentialJurisdiction !== "NATIONAL"/);
+  assert.match(settings, /!isSresCredential && <option value="VIC">Victoria<\/option>/);
+  assert.match(settings, /uploadRentalGate === "registered_plumber" \? "registration"/);
+  assert.match(settings, /uploadRentalGate === "licensed_plumber" \|\| uploadRentalGate === "refrigerant_handler" \? "licence"/);
 });
 
 test("member profiles use a dense contact roster, schedule colour and validated phone input", () => {

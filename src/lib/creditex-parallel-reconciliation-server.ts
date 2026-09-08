@@ -392,13 +392,13 @@ function prepareRequestedRows(rows: unknown) {
       row.legacyImportRowId,
       220,
       "PARALLEL_DATAFORCE_ROW_INVALID",
-      `Comparison row ${index + 1} needs a staged Dataforce row.`,
+      `Comparison row ${index + 1} needs a staged legacy row.`,
     );
     if (seenReferences.has(legacyImportRowId)) {
       fail(
         "PARALLEL_DATAFORCE_ROW_DUPLICATE",
         400,
-        `Comparison row ${index + 1} repeats a staged Dataforce row.`,
+        `Comparison row ${index + 1} repeats a staged legacy row.`,
       );
     }
     seenReferences.add(legacyImportRowId);
@@ -418,7 +418,7 @@ function dataforceCertificateQuantity(
     fail(
       "PARALLEL_DATAFORCE_ROW_INVALID",
       409,
-      `Staged Dataforce row ${legacyImportRowId} is not a valid job record.`,
+      `Staged legacy row ${legacyImportRowId} is not a valid job record.`,
     );
   }
   const raw = (value as Record<string, unknown>)["Certificates (VEECs)"];
@@ -427,7 +427,7 @@ function dataforceCertificateQuantity(
     fail(
       "PARALLEL_DATAFORCE_CERTIFICATE_QUANTITY_INVALID",
       409,
-      `Staged Dataforce row ${legacyImportRowId} needs an exact non-negative VEEC quantity.`,
+      `Staged legacy row ${legacyImportRowId} needs an exact non-negative VEEC quantity.`,
     );
   }
   const quantity = Number(text);
@@ -435,7 +435,7 @@ function dataforceCertificateQuantity(
     fail(
       "PARALLEL_DATAFORCE_CERTIFICATE_QUANTITY_INVALID",
       409,
-      `Staged Dataforce row ${legacyImportRowId} has an unsupported VEEC quantity.`,
+      `Staged legacy row ${legacyImportRowId} has an unsupported VEEC quantity.`,
     );
   }
   return quantity;
@@ -481,7 +481,7 @@ async function dataforceReferences(
     fail(
       "PARALLEL_DATAFORCE_REFERENCE_UNAVAILABLE",
       409,
-      "Every comparison row must bind to an immutable staged Dataforce row in this Creditex organisation.",
+      "Every comparison row must bind to an immutable staged legacy row in this Creditex organisation.",
     );
   }
   const records = new Map(result.results.map((record) => (
@@ -494,7 +494,7 @@ async function dataforceReferences(
       fail(
         "PARALLEL_DATAFORCE_REFERENCE_UNAVAILABLE",
         409,
-        "A staged Dataforce row became unavailable during reconciliation.",
+        "A staged legacy row became unavailable during reconciliation.",
       );
     }
     const exactRowSha256 = await sha256Hex(record.legacy_data_json);
@@ -502,12 +502,12 @@ async function dataforceReferences(
       fail(
         "PARALLEL_DATAFORCE_ROW_HASH_MISMATCH",
         409,
-        `Staged Dataforce row ${requested.legacyImportRowId} failed its custody hash check.`,
+        `Staged legacy row ${requested.legacyImportRowId} failed its custody hash check.`,
       );
     }
     const rowSnapshot = parseStoredJson(
       record.legacy_data_json,
-      "Dataforce import row",
+      "Legacy import row",
     );
     const certificateQuantity = dataforceCertificateQuantity(
       rowSnapshot,
@@ -523,7 +523,7 @@ async function dataforceReferences(
       fail(
         "PARALLEL_DATAFORCE_ROW_IDENTITY_INVALID",
         409,
-        `Staged Dataforce row ${requested.legacyImportRowId} does not retain its exact imported App Id and Job Id identity.`,
+        `Staged legacy row ${requested.legacyImportRowId} does not retain its exact imported App Id and Job Id identity.`,
       );
     }
     const referenceJson = canonicalJson({
@@ -1006,7 +1006,7 @@ function authoritativeDataforceIdentity(
     fail(
       "PARALLEL_DATAFORCE_IDENTITY_UNAVAILABLE",
       409,
-      "The staged Dataforce row and TLink work order must both retain an explicit Dataforce Job Id mapping.",
+      "The staged legacy row and TLink work order must both retain an explicit source job ID mapping.",
     );
   }
   if (
@@ -1016,7 +1016,7 @@ function authoritativeDataforceIdentity(
     fail(
       "PARALLEL_DATAFORCE_IDENTITY_MISMATCH",
       409,
-      `Staged Dataforce row ${requested.legacyImportRowId} does not belong to the verified calculation's TLink work order.`,
+      `Staged legacy row ${requested.legacyImportRowId} does not belong to the verified calculation's TLink work order.`,
     );
   }
   const dataforceAppId = exactIdentity(requested.dataforceAppId);
@@ -1034,7 +1034,7 @@ function authoritativeDataforceIdentity(
     fail(
       "PARALLEL_DATAFORCE_IDENTITY_MISMATCH",
       409,
-      `Staged Dataforce row ${requested.legacyImportRowId} does not belong to an appointment on the verified calculation's TLink work order.`,
+      `Staged legacy row ${requested.legacyImportRowId} does not belong to an appointment on the verified calculation's TLink work order.`,
     );
   }
   return "app_id_and_job_id" as const;

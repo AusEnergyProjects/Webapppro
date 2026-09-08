@@ -472,6 +472,10 @@ function syncDatabase(stage = "in_progress", revision = 5) {
       updated_at text NOT NULL
     );
   `);
+  database.exec(fs.readFileSync(
+    new URL("../drizzle/0173_trade_activity_customer_document_delivery.sql", import.meta.url),
+    "utf8",
+  ));
   database.prepare(`INSERT INTO trade_work_orders
     (id, firebase_uid, partner_type, record_status, stage, revision, updated_at)
     VALUES ('job-1', 'owner-1', 'installer', 'active', ?, ?, 'initial')`)
@@ -546,6 +550,9 @@ function routeHarness(database, { assigned = true, workPacks = [] } = {}) {
     "@/lib/trade-form-library.mjs": {
       normalizeTradeFormAnswers: () => ({}),
       tradeFormCompletion: () => ({ ready: true, missing: [] }),
+    },
+    "@/lib/trade-activity-forms-library": {
+      activityConsumerDocuments: () => [],
     },
     "@/lib/asset-lifecycle.mjs": {
       addMonthsToIsoDate: (value) => value,

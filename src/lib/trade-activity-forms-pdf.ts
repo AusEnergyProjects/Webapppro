@@ -19,6 +19,9 @@ export const CREDITEX_VEU_RIGHTS_SECTIONS = [
 export async function renderCreditexConsumerRightsPdf(fonts: { regular: Uint8Array; bold: Uint8Array }) {
   const provider = creditexProvider;
   const pdf = await PDFDocument.create(); pdf.registerFontkit(fontkit);
+  const documentVersionDate = new Date("2026-09-07T00:00:00.000Z");
+  pdf.setCreationDate(documentVersionDate);
+  pdf.setModificationDate(documentVersionDate);
   const regular = await pdf.embedFont(fonts.regular, { subset: true }); const bold = await pdf.embedFont(fonts.bold, { subset: true });
   const page = pdf.addPage([595.28, 841.89]); const ink = rgb(0.035, 0.1, 0.15); let y = 779;
   const write = (text: string, size = 11, font = regular) => {

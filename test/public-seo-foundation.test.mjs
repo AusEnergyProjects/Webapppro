@@ -79,7 +79,7 @@ test("JSON-LD is server rendered and escapes markup-sensitive characters", () =>
   assert.match(jsonLd, /JSON\.stringify\(data\)\.replace\(\/<\/g, "\\\\u003c"\)/);
   assert.match(jsonLd, /type="application\/ld\+json"/);
   assert.match(layout, /<JsonLd data=\{publicOrganizationSchema\} \/>/);
-  assert.match(layout, /<html lang="en-AU">/);
+  assert.match(layout, /<html lang="en-AU" suppressHydrationWarning>/);
   assert.match(layout, /"max-image-preview": "large"/);
   assert.match(layout, /url: PUBLIC_SITE\.logo/);
   assert.doesNotMatch(layout, /tlink-icon-192\.png/);

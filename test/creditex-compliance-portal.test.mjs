@@ -736,7 +736,7 @@ test("operations UI requires deliberate case selection and discloses bounded que
   assert.match(operations, /limited to the selected case/);
 });
 
-test("operations UI is activity-agnostic with program tabs and Dataforce-parity filters", () => {
+test("operations UI is activity-agnostic with program tabs and legacy-parity filters", () => {
   for (const contract of [
     /className=\{styles\.programTabs\}/,
     /aria-label="Compliance program workspaces"/,
@@ -745,7 +745,7 @@ test("operations UI is activity-agnostic with program tabs and Dataforce-parity 
     /className=\{styles\.activityTabRow\}/,
     /chooseActivity\(activity\.activityVersionId\)/,
     /activity\.activityVersionId/,
-    /Dataforce-parity search/,
+    /Legacy-parity search/,
     /Status filters/,
     /Work &amp; personnel/,
     /Client &amp; agent/,
@@ -1016,7 +1016,7 @@ test("governance keeps program workspaces separate with scoped pagination and de
   assert.doesNotMatch(`${portal}\n${evidenceGovernance}`, /6\(23\)/);
   assert.doesNotMatch(
     `${portal}\n${evidenceGovernance}`,
-    /Dataforce-parity|automatically eligible|certificate quantity/i,
+    /Legacy-parity|automatically eligible|certificate quantity/i,
   );
 });
 

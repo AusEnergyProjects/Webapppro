@@ -15,6 +15,9 @@ export function fieldConditionMet(condition: ActivityCondition | undefined, answ
   const sameGroup = group && form?.fields.some((field) => field.key === condition.fieldKey && field.repeatGroup === group);
   const value = answers[sameGroup ? activityRepeatKey(condition.fieldKey, index) : condition.fieldKey];
   if (value === undefined || value === '') return false;
+  if (condition.lessThanOrEqual !== undefined) {
+    return typeof value === 'number' && Number.isFinite(value) && value <= condition.lessThanOrEqual;
+  }
   return condition.notEquals !== undefined ? String(value).toLowerCase() !== String(condition.notEquals).toLowerCase()
     : String(value).toLowerCase() === String(condition.equals).toLowerCase();
 }
@@ -24,11 +27,11 @@ export function expandedActivityFields(form: ActivityForm, answers: ActivityAnsw
   const groups = new Set<string>();
   for (const phase of ['before', 'after'] as const) for (const field of form.fields.filter((item) => item.phase === phase)) {
     if (field.repeatGroup) {
-      const groupId = `${phase}:${field.repeatGroup}`;
+      const groupId = `${phase}:${field.section}:${field.repeatGroup}`;
       if (groups.has(groupId)) continue;
       groups.add(groupId);
       for (let index = 0; index < activityRepeatCount(form, answers, field.repeatGroup); index++) {
-        for (const member of form.fields.filter((item) => item.phase === phase && item.repeatGroup === field.repeatGroup)) {
+        for (const member of form.fields.filter((item) => item.phase === phase && item.section === field.section && item.repeatGroup === field.repeatGroup)) {
           if (fieldConditionMet(member.condition, answers, form, member.repeatGroup, index)) result.push({ ...member, key: activityRepeatKey(member.key, index), baseKey: member.key, repeatIndex: index });
         }
       }
@@ -56,7 +59,7 @@ export function activityDeclarationPages(text: string) {
 }
 export function activityWizardSteps(form: ActivityForm, answers: ActivityAnswers): ActivityWizardStep[] {
   const steps: ActivityWizardStep[] = [];
-  const fields = expandedActivityFields(form, answers);
+  const fields = expandedActivityFields(form, answers).filter((field) => field.presentation !== 'derived');
   for (const phase of ['before', 'after'] as const) {
     steps.push(...fields.filter((field) => field.phase === phase).map((field): ActivityWizardStep => ({ key: field.key, kind: 'field', field })));
     for (const declaration of form.declarations.filter((item) => item.phase === phase && fieldConditionMet(item.condition, answers))) {

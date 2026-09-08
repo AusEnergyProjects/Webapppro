@@ -24,6 +24,7 @@ import {
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const acceptedDisclosureMigration = read("../drizzle/0132_public_lead_accepted_disclosure.sql");
 const acceptedJobFilesMigration = read("../drizzle/0133_public_lead_job_files.sql");
+const customerDocumentDeliveryMigration = read("../drizzle/0173_trade_activity_customer_document_delivery.sql");
 const quoteRoute = read("../src/app/api/trade-quotes/route.ts");
 const quickInvoiceRoute = read("../src/app/api/trade-quick-invoices/route.ts");
 const scheduleRoute = read("../src/app/api/trade-schedule/route.ts");
@@ -259,6 +260,7 @@ function workflowFixture() {
   `);
   applyMigration(database, acceptedDisclosureMigration);
   applyMigration(database, acceptedJobFilesMigration);
+  applyMigration(database, customerDocumentDeliveryMigration);
   const now = "2026-08-12T01:00:00.000Z";
   const matchId = "39c16039-4acd-4664-a2e5-3d8ad0dd7dd6";
   const reference = "AEA-20260812-0011223344556677";

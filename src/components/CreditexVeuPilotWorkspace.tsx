@@ -473,12 +473,12 @@ const DATAFORCE_JOB_COLUMN_CONFIG = {
   "SubStatus": {
     key: "legacySubStatus",
     sortKey: "subStatus",
-    description: "Dataforce SubStatus semantics are not yet mapped.",
+    description: "Legacy SubStatus semantics are not yet mapped.",
   },
   "Type": {
     key: "legacyType",
     sortKey: "type",
-    description: "Dataforce Type semantics are not yet mapped.",
+    description: "Legacy Type semantics are not yet mapped.",
   },
   "Work Type": { key: "workType", sortKey: "workType" },
   "Scheduled Datetime": {
@@ -488,7 +488,7 @@ const DATAFORCE_JOB_COLUMN_CONFIG = {
   "Balance": {
     key: "legacyBalance",
     sortKey: "balance",
-    description: "Dataforce Balance semantics require a field dictionary.",
+    description: "Legacy Balance semantics require a field dictionary.",
   },
   "Certificates (VEECs)": {
     key: "certificates",
@@ -1431,7 +1431,7 @@ function AdvancedRegisterFilters({
       <section className={styles.quickFilters}>
         <div className={styles.quickFilterHeading}>
           <strong>Quick filters</strong>
-          <small>Search every populated Dataforce-compatible field.</small>
+          <small>Search every populated legacy-compatible field.</small>
         </div>
         <label className={styles.quickFilterWide}>
           Search jobs
@@ -2161,13 +2161,13 @@ export function CreditexVeuPilotWorkspace({
       link.remove();
       URL.revokeObjectURL(url);
       setNotice(
-        `Downloaded ${rows.length} matching jobs in the exact 23-column Dataforce layout.`,
+        `Downloaded ${rows.length} matching jobs in the exact 23-column legacy layout.`,
       );
     } catch (downloadError) {
       setError(
         downloadError instanceof Error
           ? downloadError.message
-          : "The Dataforce-compatible CSV could not be downloaded.",
+          : "The legacy-compatible CSV could not be downloaded.",
       );
     } finally {
       setBusy("");
@@ -2186,7 +2186,7 @@ export function CreditexVeuPilotWorkspace({
     setDataforceImport(EMPTY_DATAFORCE_IMPORT);
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      setError("Choose a Dataforce CSV no larger than 5 MB.");
+      setError("Choose a legacy job CSV no larger than 5 MB.");
       return;
     }
     try {
@@ -2199,7 +2199,7 @@ export function CreditexVeuPilotWorkspace({
       });
     } catch {
       setError(
-        "The selected file could not be read as a Dataforce job CSV.",
+        "The selected file could not be read as a legacy job CSV.",
       );
     }
   }
@@ -2234,14 +2234,14 @@ export function CreditexVeuPilotWorkspace({
       closeDataforceImport();
       setNotice(
         batch?.reused
-          ? `This ${rowCount}-row Dataforce export was already staged. No duplicate jobs were created.`
-          : `Staged ${rowCount} Dataforce rows for mapping review. No regulated jobs, cases or certificates were created.`,
+          ? `This ${rowCount}-row legacy export was already staged. No duplicate jobs were created.`
+          : `Staged ${rowCount} legacy rows for mapping review. No regulated jobs, cases or certificates were created.`,
       );
     } catch (importError) {
       setError(
         importError instanceof Error
           ? importError.message
-          : "The Dataforce CSV could not be staged.",
+          : "The legacy job CSV could not be staged.",
       );
     } finally {
       setBusy("");
@@ -2829,7 +2829,7 @@ export function CreditexVeuPilotWorkspace({
               <table className={styles.jobTable}>
                 <caption>
                   Creditex synthetic compliance job register in the exact
-                  23-column Dataforce layout. Every returned job is one row.
+                  23-column legacy layout. Every returned job is one row.
                 </caption>
                 <thead>
                   <tr>
@@ -2972,7 +2972,7 @@ export function CreditexVeuPilotWorkspace({
             <footer className={styles.registerFooter}>
               <span>
                 Records {register.rows.length} |{" "}
-                {PILOT_JOB_COLUMNS.length} Dataforce columns |{" "}
+                {PILOT_JOB_COLUMNS.length} legacy columns |{" "}
                 {PILOT_VISIBLE_SORTABLE_COLUMN_COUNT} sortable
               </span>
               {(role === "admin" || role === "case_manager") && (
@@ -3052,24 +3052,24 @@ export function CreditexVeuPilotWorkspace({
                 <div>
                   <span>CONTROLLED LEGACY INTAKE</span>
                   <h3 id="dataforce-import-title">
-                    Stage a Dataforce job export
+                    Stage a legacy job export
                   </h3>
                 </div>
                 <button
                   type="button"
-                  aria-label="Close Dataforce import"
+                  aria-label="Close legacy import"
                   onClick={closeDataforceImport}
                 >
                   Close
                 </button>
               </header>
               <p>
-                Select the unedited job CSV downloaded from Dataforce. TLink
-                checks the exact 23-column layout before retaining it for
+                Select the unedited legacy job CSV. TLink checks the exact
+                23-column layout before retaining it for
                 mapping review.
               </p>
               <label className={styles.importFile}>
-                Dataforce CSV
+                Legacy job CSV
                 <input
                   ref={dataforceFileRef}
                   type="file"
@@ -3092,8 +3092,8 @@ export function CreditexVeuPilotWorkspace({
                 >
                   <strong>
                     {dataforceImport.validation.valid
-                      ? `${dataforceImport.validation.summary.acceptedRows} rows match the Dataforce contract`
-                      : "This file does not match the Dataforce contract"}
+                      ? `${dataforceImport.validation.summary.acceptedRows} rows match the legacy import contract`
+                      : "This file does not match the legacy import contract"}
                   </strong>
                   <span>
                     {dataforceImport.validation.summary.rejectedRows} rejected
@@ -3134,7 +3134,7 @@ export function CreditexVeuPilotWorkspace({
                 <span>
                   Importing does not create a customer, job, compliance case,
                   certificate, registry submission or trade. Unmapped
-                  Dataforce values remain quarantined until Creditex approves
+                  Legacy values remain quarantined until Creditex approves
                   the field dictionary.
                 </span>
               </div>
@@ -3682,7 +3682,7 @@ export function CreditexVeuPilotWorkspace({
               The pilot produces a deterministic 300-item manifest and
               validates its structure against its own source cohort. It records
               zero regulator acceptances because no regulator request is sent,
-              and no staged Dataforce or Runabout row can create a customer,
+              and no staged legacy row can create a customer,
               job, regulated case, certificate, submission, trade or
               settlement.
             </p>
@@ -3853,11 +3853,11 @@ export function CreditexVeuPilotWorkspace({
           )}
           <div className={styles.cutoverGrid}>
             <article>
-              <span>DATAFORCE</span>
+              <span>LEGACY JOB DATA</span>
               <h4>Exact staged-row binding available</h4>
               <p>
                 Dry runs can derive certificate quantity from an exact,
-                hash-checked staged Dataforce row. An independently approved
+                hash-checked staged legacy row. An independently approved
                 mapping is required and the result remains non-evidentiary.
               </p>
             </article>

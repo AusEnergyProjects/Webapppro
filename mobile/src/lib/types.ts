@@ -90,6 +90,8 @@ export type FieldComplianceIntent = {
   programCode: string;
   programName: string;
   activityTemplateId: string;
+  variantId?: string;
+  bookingDocumentCount?: number;
   activityCode: string;
   activityTitle: string;
   plannedStart: string;
@@ -701,6 +703,22 @@ export type FieldRentalInspectionSummary = {
   };
 };
 
+export type FieldCustomerDocumentDelivery = {
+  deliveryId: string;
+  appointmentId: string;
+  status: string;
+  providerStatus: string;
+  canRetry: boolean;
+  documentIds: string[];
+  acceptedAt: string;
+  sentAt: string;
+  deliveredAt: string;
+  failedAt: string;
+  lastError: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type FieldJob = {
   id: string;
   workNumber: string;
@@ -743,6 +761,7 @@ export type FieldJob = {
   activityWorkPacks?: FieldActivityWorkPack[];
   complianceCases?: FieldJobCompliance[];
   compliance?: FieldJobCompliance;
+  customerDocuments?: FieldCustomerDocumentDelivery;
   rentalInspection?: FieldRentalInspectionSummary;
 };
 

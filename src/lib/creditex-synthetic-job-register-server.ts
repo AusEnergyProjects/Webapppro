@@ -435,7 +435,7 @@ export function parseCreditexSyntheticRegisterFilters(
     throw new CreditexSyntheticRegisterError(
       "CREDITEX_SYNTHETIC_REGISTER_SORT_INVALID",
       400,
-      "Choose a supported Dataforce register column.",
+      "Choose a supported legacy register column.",
     );
   }
 

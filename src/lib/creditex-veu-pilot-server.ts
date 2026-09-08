@@ -695,7 +695,7 @@ function pilotPriorities(run: PilotRunRow | null) {
       status: run?.connector_status || "dry_run_only",
       complete: run?.connector_status === "authorised",
       boundary:
-        "The synthetic manifest is deterministic and locally validated. It records zero regulator acceptances. Live registry submission and Dataforce or Runabout cutover remain blocked pending authority, schemas and representative exports.",
+        "The synthetic manifest is deterministic and locally validated. It records zero regulator acceptances. Live registry submission and legacy cutover remain blocked pending authority, schemas and representative exports.",
     },
   ];
 }

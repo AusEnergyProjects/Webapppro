@@ -35,6 +35,8 @@ const intentHelperSource = stripTypeScriptTypes(
   { mode: "strip" },
 );
 const {
+  activityPremisesVariantId,
+  activityRequiresPremisesVariant,
   CREDITEX_PARTNER_ORGANISATION_CODE,
   resolveTradeComplianceIntent,
   resolveTradeComplianceIntents,
@@ -175,9 +177,9 @@ function applyMigrationChain(database, names) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 170);
+  assert.equal(completeMigrationChain.length, 172);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0171_/);
+  assert.match(completeMigrationChain.at(-1), /^0173_/);
   assert.ok(
     completeMigrationChain.includes("0160_trade_rental_inspections.sql"),
     "the complete migration chain must include the rental inspection schema",
@@ -525,6 +527,78 @@ test("one installer job accepts a bounded ordered set of exact program and activ
     }),
     "COMPLIANCE_ACTIVITIES_INVALID",
   );
+});
+
+test("VEU activities 1, 3 and 6 bind the residential or business premises form at booking", () => {
+  for (const activityCode of ["1", "3", "6"]) {
+    const template = activity("VEU", activityCode);
+    assert.equal(activityRequiresPremisesVariant(template.templateId), true);
+    assert.equal(
+      activityPremisesVariantId(template.templateId, "house_townhouse"),
+      `veu_${activityCode}_residential`,
+    );
+    assert.equal(
+      activityPremisesVariantId(template.templateId, "commercial_office"),
+      `veu_${activityCode}_business`,
+    );
+    const resolved = resolveTradeComplianceIntents({
+      mode: "planned",
+      activities: [{
+        programTemplateId: program("VEU").templateId,
+        activityTemplateId: template.templateId,
+        variantId: `veu_${activityCode}_business`,
+      }],
+      buildingType: "commercial_office",
+      siteJurisdiction: "VIC",
+      plannedStart: PLANNED_START,
+    });
+    assert.equal(resolved[0].snapshot.activity.variantId, `veu_${activityCode}_business`);
+  }
+});
+
+test("premises-specific activities fail closed for unknown or conflicting booking variants", () => {
+  const selection = {
+    programTemplateId: program("VEU").templateId,
+    activityTemplateId: activity("VEU", "6").templateId,
+  };
+  assertIntentError(
+    () => resolveTradeComplianceIntents({
+      mode: "planned",
+      activities: [selection],
+      buildingType: "not_sure",
+      siteJurisdiction: "VIC",
+      plannedStart: PLANNED_START,
+    }),
+    "ACTIVITY_PREMISES_TYPE_REQUIRED",
+  );
+  assertIntentError(
+    () => resolveTradeComplianceIntents({
+      mode: "planned",
+      activities: [{ ...selection, variantId: "veu_6_business" }],
+      buildingType: "apartment_unit",
+      siteJurisdiction: "VIC",
+      plannedStart: PLANNED_START,
+    }),
+    "ACTIVITY_PREMISES_VARIANT_INVALID",
+  );
+  const legacy = resolveTradeComplianceIntents({
+    mode: "planned",
+    activities: [selection],
+    siteJurisdiction: "VIC",
+    plannedStart: PLANNED_START,
+  });
+  assert.equal(legacy[0].snapshot.activity.variantId, undefined);
+  const ordinaryVariantlessActivity = resolveTradeComplianceIntents({
+    mode: "planned",
+    activities: [{
+      programTemplateId: program("SRES").templateId,
+      activityTemplateId: activity("SRES", "PV").templateId,
+    }],
+    buildingType: "not_sure",
+    siteJurisdiction: "VIC",
+    plannedStart: PLANNED_START,
+  });
+  assert.equal(ordinaryVariantlessActivity[0].snapshot.activity.variantId, undefined);
 });
 
 test("future, closed and specialist catalogue activities fail closed", () => {

@@ -1438,13 +1438,13 @@ export function CreditexActivityWorkPackGovernance({
         <div>
           <span>Governed activity workflows</span>
           <h2>Compliance forms</h2>
-          <p>Build, review and attach reusable activity-specific technician workflows. Published versions are immutable and jobs keep the version they received. Each job instance receives its server-resolved provider, installer business and assigned technician identities separately.</p>
+          <p>Build, review and attach reusable activity-specific technician workflows. Signed and submitted job records keep their exact published version. Unsigned drafts receive the latest saved master when opened. Each job instance receives its server-resolved provider, installer business and assigned technician identities separately.</p>
         </div>
         <dl>
           <div><dt>Current catalogue</dt><dd>{snapshot.coverage.length}</dd></div>
           <div><dt>Authorable versions</dt><dd>{snapshot.activities.length}</dd></div>
-          <div><dt>Published-ready</dt><dd>{snapshot.coverage.filter((item) => item.ready).length}</dd></div>
-          <div><dt>Coverage gaps</dt><dd>{snapshot.coverage.filter((item) => !item.ready).length}</dd></div>
+          <div><dt>Governance packages complete</dt><dd>{snapshot.coverage.filter((item) => item.ready).length}</dd></div>
+          <div><dt>Governance setup remaining</dt><dd>{snapshot.coverage.filter((item) => !item.ready).length}</dd></div>
           <div><dt>Calculations to review</dt><dd>{pendingCalculatorReviews.length}</dd></div>
         </dl>
       </header>

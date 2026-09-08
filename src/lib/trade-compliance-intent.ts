@@ -36,6 +36,7 @@ export type TradeComplianceIntentSnapshot = {
   };
   activity: {
     templateId: string;
+    variantId?: string;
     activityKey: string;
     registryActivityCode: string;
     title: string;
@@ -61,6 +62,7 @@ export type ResolvedTradeComplianceIntent = {
 export type TradeComplianceActivitySelection = {
   programTemplateId: string;
   activityTemplateId: string;
+  variantId?: string;
 };
 
 export class TradeComplianceIntentError extends Error {
@@ -83,8 +85,43 @@ const SITE_JURISDICTIONS = new Set([
   "WA",
 ]);
 
+const PREMISES_VARIANT_ACTIVITY_TEMPLATE_IDS = new Set([
+  "veu-1",
+  "veu-3",
+  "veu-6",
+]);
+const RESIDENTIAL_BUILDING_TYPES = new Set([
+  "house_townhouse",
+  "apartment_unit",
+]);
+const BUSINESS_BUILDING_TYPES = new Set([
+  "commercial_office",
+  "retail_hospitality",
+  "industrial_warehouse",
+  "institutional_community_health",
+]);
+
 function required(value: unknown) {
   return String(value || "").trim();
+}
+
+export function activityRequiresPremisesVariant(activityTemplateId: unknown) {
+  return PREMISES_VARIANT_ACTIVITY_TEMPLATE_IDS.has(required(activityTemplateId));
+}
+
+export function activityPremisesVariantId(
+  activityTemplateId: unknown,
+  buildingType: unknown,
+) {
+  const templateId = required(activityTemplateId);
+  if (!activityRequiresPremisesVariant(templateId)) return "";
+  const type = required(buildingType);
+  const premises = RESIDENTIAL_BUILDING_TYPES.has(type)
+    ? "residential"
+    : BUSINESS_BUILDING_TYPES.has(type)
+      ? "business"
+      : "";
+  return premises ? `${templateId.replaceAll("-", "_")}_${premises}` : "";
 }
 
 function assertPlanningState(
@@ -114,6 +151,8 @@ export function resolveTradeComplianceIntent(input: {
   mode: unknown;
   programTemplateId?: unknown;
   activityTemplateId?: unknown;
+  variantId?: unknown;
+  buildingType?: unknown;
   siteJurisdiction?: unknown;
   plannedStart?: unknown;
 }): ResolvedTradeComplianceIntent | null {
@@ -166,6 +205,48 @@ export function resolveTradeComplianceIntent(input: {
     );
   }
 
+  const requestedVariantId = required(input.variantId);
+  const variantRequired = activityRequiresPremisesVariant(activity.templateId);
+  const derivedVariantId = activityPremisesVariantId(
+    activity.templateId,
+    input.buildingType,
+  );
+  let variantId = "";
+  if (variantRequired) {
+    const allowedVariantIds = new Set([
+      `${activity.templateId.replaceAll("-", "_")}_residential`,
+      `${activity.templateId.replaceAll("-", "_")}_business`,
+    ]);
+    if (requestedVariantId && !allowedVariantIds.has(requestedVariantId)) {
+      throw new TradeComplianceIntentError(
+        "ACTIVITY_PREMISES_VARIANT_INVALID",
+        "Choose whether this activity is for residential or business premises.",
+      );
+    }
+    if (input.buildingType !== undefined && !derivedVariantId) {
+      throw new TradeComplianceIntentError(
+        "ACTIVITY_PREMISES_TYPE_REQUIRED",
+        "Choose residential or business premises before adding this activity.",
+      );
+    }
+    if (
+      requestedVariantId
+      && derivedVariantId
+      && requestedVariantId !== derivedVariantId
+    ) {
+      throw new TradeComplianceIntentError(
+        "ACTIVITY_PREMISES_VARIANT_INVALID",
+        "The activity form does not match the job premises type.",
+      );
+    }
+    variantId = requestedVariantId || derivedVariantId;
+  } else if (requestedVariantId) {
+    throw new TradeComplianceIntentError(
+      "ACTIVITY_PREMISES_VARIANT_INVALID",
+      "That activity does not have a residential or business premises form.",
+    );
+  }
+
   const plannedStart = required(input.plannedStart);
   const snapshot: TradeComplianceIntentSnapshot = {
     contract: TRADE_COMPLIANCE_INTENT_CONTRACT,
@@ -188,6 +269,7 @@ export function resolveTradeComplianceIntent(input: {
     },
     activity: {
       templateId: activity.templateId,
+      ...(variantId ? { variantId } : {}),
       activityKey: activity.activityKey,
       registryActivityCode: activity.registryActivityCode,
       title: activity.title,
@@ -263,7 +345,9 @@ function activitySelections(value: unknown): TradeComplianceActivitySelection[] 
     const selection = item as Record<string, unknown>;
     if (
       Object.keys(selection).some((key) =>
-        key !== "programTemplateId" && key !== "activityTemplateId"
+        key !== "programTemplateId"
+        && key !== "activityTemplateId"
+        && key !== "variantId"
       )
     ) {
       throw new TradeComplianceIntentError(
@@ -277,18 +361,26 @@ function activitySelections(value: unknown): TradeComplianceActivitySelection[] 
     const activityTemplateId = typeof selection.activityTemplateId === "string"
       ? selection.activityTemplateId.trim()
       : "";
+    const variantId = typeof selection.variantId === "string"
+      ? selection.variantId.trim()
+      : "";
     if (
       !programTemplateId
       || !activityTemplateId
       || programTemplateId.length > MAX_ACTIVITY_SELECTION_ID_LENGTH
       || activityTemplateId.length > MAX_ACTIVITY_SELECTION_ID_LENGTH
+      || variantId.length > MAX_ACTIVITY_SELECTION_ID_LENGTH
     ) {
       throw new TradeComplianceIntentError(
         "COMPLIANCE_ACTIVITIES_INVALID",
         "Each government activity must identify one controlled program and activity.",
       );
     }
-    return { programTemplateId, activityTemplateId };
+    return {
+      programTemplateId,
+      activityTemplateId,
+      ...(variantId ? { variantId } : {}),
+    };
   });
 }
 
@@ -297,6 +389,8 @@ export function resolveTradeComplianceIntents(input: {
   activities?: unknown;
   programTemplateId?: unknown;
   activityTemplateId?: unknown;
+  variantId?: unknown;
+  buildingType?: unknown;
   siteJurisdiction?: unknown;
   plannedStart?: unknown;
 }): ResolvedTradeComplianceIntent[] {
@@ -306,6 +400,8 @@ export function resolveTradeComplianceIntents(input: {
       mode: input.mode,
       programTemplateId: input.programTemplateId,
       activityTemplateId: input.activityTemplateId,
+      variantId: input.variantId,
+      buildingType: input.buildingType,
       siteJurisdiction: input.siteJurisdiction,
       plannedStart: input.plannedStart,
     });
@@ -326,6 +422,7 @@ export function resolveTradeComplianceIntents(input: {
     const resolved = resolveTradeComplianceIntent({
       mode: "planned",
       ...selection,
+      buildingType: input.buildingType,
       siteJurisdiction: input.siteJurisdiction,
       plannedStart: input.plannedStart,
     });

@@ -3,6 +3,7 @@ import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { fieldTransitionExpectedStatus } from "@/lib/trade-field-completion-policy";
 import { submittedActivityFieldCaseSql, submittedActivityFieldRecordSql } from "@/lib/trade-activity-forms-completion";
+import { activityConsumerDocuments } from "@/lib/trade-activity-forms-library";
 import { nextJobRevision } from "@/lib/trade-team-sync-server";
 import { mobileAppPolicy, mobileErrorResponse, MOBILE_CLIENT_ID_PATTERN, MOBILE_CONTRACT_VERSION,
   requireRegisteredMobileDevice } from "@/lib/trade-mobile-server";
@@ -672,7 +673,13 @@ async function accessibleJobs(access: TeamAccess) {
         ss.site_label, ss.address_line_1, ss.address_line_2, ss.suburb, ss.address_state, ss.postcode,
         a.id appointment_id, a.status appointment_status, a.starts_at appointment_starts_at, a.ends_at appointment_ends_at,
         a.travel_started_at, a.arrived_at, a.work_started_at, a.completed_at,
-        (SELECT COUNT(*) FROM trade_crm_job_notes n WHERE n.work_order_id = w.id AND n.firebase_uid = w.firebase_uid AND n.note_type = 'issue' AND n.issue_status = 'open') open_issues
+        (SELECT COUNT(*) FROM trade_crm_job_notes n WHERE n.work_order_id = w.id AND n.firebase_uid = w.firebase_uid AND n.note_type = 'issue' AND n.issue_status = 'open') open_issues,
+        delivery.id customer_document_delivery_id, delivery.appointment_id customer_document_appointment_id,
+        delivery.status customer_document_status, delivery.provider_status customer_document_provider_status,
+        delivery.document_ids customer_document_ids, delivery.accepted_at customer_document_accepted_at,
+        delivery.sent_at customer_document_sent_at, delivery.delivered_at customer_document_delivered_at,
+        delivery.failed_at customer_document_failed_at, delivery.last_error customer_document_last_error,
+        delivery.created_at customer_document_created_at, delivery.updated_at customer_document_updated_at
       FROM trade_work_orders w
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
@@ -680,6 +687,10 @@ async function accessibleJobs(access: TeamAccess) {
       LEFT JOIN trade_crm_appointments a ON a.id = (SELECT fa.id FROM trade_crm_appointments fa WHERE fa.work_order_id = w.id AND fa.firebase_uid = w.firebase_uid
         AND fa.status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed')
         ORDER BY CASE fa.status WHEN 'in_progress' THEN 0 WHEN 'arrived' THEN 1 WHEN 'en_route' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, fa.starts_at DESC LIMIT 1)
+      LEFT JOIN trade_activity_customer_document_deliveries delivery ON delivery.id = (
+        SELECT latest_delivery.id FROM trade_activity_customer_document_deliveries latest_delivery
+        WHERE latest_delivery.work_order_id = w.id AND latest_delivery.firebase_uid = w.firebase_uid
+        ORDER BY latest_delivery.created_at DESC, latest_delivery.delivery_generation DESC LIMIT 1)
       WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
         AND (? <> 'own' OR w.assignee_member_id = ?)
       ORDER BY w.scheduled_start = '', w.scheduled_start, w.updated_at DESC
@@ -932,6 +943,28 @@ async function accessibleJobs(access: TeamAccess) {
       openIssues: Number(row.open_issues || 0),
       revision: Number(row.revision || 1),
       updatedAt: row.updated_at,
+      ...(() => {
+        const deliveryId = String(row.customer_document_delivery_id || "");
+        if (!deliveryId) return {};
+        const status = String(row.customer_document_status || "");
+        const providerStatus = String(row.customer_document_provider_status || "");
+        return { customerDocuments: {
+          deliveryId,
+          appointmentId: String(row.customer_document_appointment_id || ""),
+          status,
+          providerStatus,
+          canRetry: ["queued", "sending", "failed", "bounced"].includes(status)
+            && providerStatus !== "reconciliation_required",
+          documentIds: jsonStringArray(row.customer_document_ids).slice(0, 24),
+          acceptedAt: String(row.customer_document_accepted_at || ""),
+          sentAt: String(row.customer_document_sent_at || ""),
+          deliveredAt: String(row.customer_document_delivered_at || ""),
+          failedAt: String(row.customer_document_failed_at || ""),
+          lastError: String(row.customer_document_last_error || ""),
+          createdAt: String(row.customer_document_created_at || ""),
+          updatedAt: String(row.customer_document_updated_at || ""),
+        } };
+      })(),
       offlinePolicy: {
         containsPersonalData: Boolean(serviceAddress || (customerContext && row.customer_phone)),
         maxAgeSeconds: serviceAddress || (customerContext && row.customer_phone) ? 86_400 : 604_800,
@@ -987,6 +1020,17 @@ async function accessibleJobs(access: TeamAccess) {
             programCode: String(intent.program_code || ""),
             programName: String(program.name || ""),
             activityTemplateId: String(intent.activity_template_id || ""),
+            variantId: String(activity.variantId || ""),
+            bookingDocumentCount: (() => {
+              try {
+                return activityConsumerDocuments(
+                  String(intent.activity_template_id || ""),
+                  String(activity.variantId || ""),
+                ).length;
+              } catch {
+                return 0;
+              }
+            })(),
             activityCode: String(
               intent.registry_activity_code
               || activity.activityKey

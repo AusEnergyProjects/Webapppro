@@ -108,3 +108,11 @@ test('route-level API errors never purge local work without confirmed field-acce
   assert.ok(confirmedCheck > revalidation);
   assert.ok(purge > confirmedCheck);
 });
+
+test('multipart evidence uses the Expo fetch transport that accepts Expo File parts on Android and iOS', () => {
+  assert.match(api, /import \{ fetch as expoFetch \} from 'expo\/fetch'/);
+  assert.match(api, /const multipart = init\.body instanceof FormData/);
+  assert.match(api, /multipart \? expoFetch\(url, request\) : fetch\(url, request\)/);
+  assert.match(api, /const MULTIPART_REQUEST_TIMEOUT_MS = 120_000/);
+  assert.match(api, /multipart \? MULTIPART_REQUEST_TIMEOUT_MS : JSON_REQUEST_TIMEOUT_MS/);
+});

@@ -10,6 +10,15 @@ const mappedStatus: Record<string, string> = {
   "email.failed": "failed", "email.suppressed": "opted_out", "email.complained": "opted_out",
 };
 
+const scheduledDocumentStatus: Record<string, string> = {
+  "email.sent": "sent",
+  "email.delivered": "delivered",
+  "email.bounced": "bounced",
+  "email.failed": "failed",
+  "email.suppressed": "suppressed",
+  "email.complained": "complained",
+};
+
 export async function POST(request: Request) {
   const rawBody = await request.text(); const eventId = request.headers.get("svix-id") || "";
   const secret = String(process.env.RESEND_WEBHOOK_SECRET || "");
@@ -45,14 +54,20 @@ export async function POST(request: Request) {
       FROM customer_project_activity_deliveries
       WHERE provider = 'resend' AND provider_message_id = ?`)
       .bind(providerMessageId).first<Record<string, unknown>>();
-  const publicPlanDelivery = serviceDelivery || appointmentDelivery || photoDelivery || quoteDelivery
+  const scheduledDocumentDelivery = serviceDelivery || appointmentDelivery || photoDelivery || quoteDelivery
     || quickInvoiceDelivery || opportunityDelivery || activityDelivery ? null
+    : await db.prepare(`SELECT id, work_order_id, firebase_uid, status, recipient_email_sha256
+      FROM trade_activity_customer_document_deliveries
+      WHERE provider = 'resend' AND provider_message_id = ?`)
+      .bind(providerMessageId).first<Record<string, unknown>>();
+  const publicPlanDelivery = serviceDelivery || appointmentDelivery || photoDelivery || quoteDelivery
+    || quickInvoiceDelivery || opportunityDelivery || activityDelivery || scheduledDocumentDelivery ? null
     : await db.prepare(`SELECT id, status, recipient_email_hash
       FROM public_plan_customer_email_deliveries
       WHERE provider = 'resend' AND provider_message_id = ?`)
       .bind(providerMessageId).first<Record<string, unknown>>();
   const delivery = serviceDelivery || appointmentDelivery || photoDelivery || quoteDelivery
-    || quickInvoiceDelivery || opportunityDelivery || activityDelivery || publicPlanDelivery;
+    || quickInvoiceDelivery || opportunityDelivery || activityDelivery || scheduledDocumentDelivery || publicPlanDelivery;
   if (!delivery) {
     return Response.json(
       {
@@ -66,11 +81,14 @@ export async function POST(request: Request) {
       },
     );
   }
-  const providerEventKey = `resend:${eventId}`;
+  const providerEventKey = eventId
+    ? `resend:${eventId}`
+    : `resend:${providerMessageId}:${eventType}:${String(event.created_at || "")}`;
   const replayTable = serviceDelivery ? "service_reminder_delivery_events" : appointmentDelivery ? "appointment_notification_delivery_events"
     : photoDelivery ? "trade_crm_photo_request_delivery_events"
       : opportunityDelivery ? "trade_opportunity_notification_delivery_events"
         : activityDelivery ? "customer_project_activity_delivery_events"
+          : scheduledDocumentDelivery ? "trade_activity_customer_document_delivery_events"
           : publicPlanDelivery ? "public_plan_customer_email_delivery_events" : "";
   const quickInvoiceEventId = `quick-invoice-provider:${providerEventKey}`;
   const replay = quickInvoiceDelivery
@@ -99,7 +117,82 @@ export async function POST(request: Request) {
   const opportunityStatus = eventType === "email.complained" ? "complained"
     : eventType === "email.failed" ? "provider_failed" : status;
   const publicPlanStatus = eventType === "email.suppressed" ? "suppressed" : opportunityStatus;
-  const statements = publicPlanDelivery ? [
+  const bookingDocumentStatus = scheduledDocumentStatus[eventType] || "";
+  const bookingDocumentTerminal = ["failed", "bounced", "complained", "suppressed"].includes(bookingDocumentStatus);
+  const providerOccurredAt = Number.isFinite(Date.parse(String(event.created_at || "")))
+    ? new Date(String(event.created_at)).toISOString()
+    : now;
+  const statements = scheduledDocumentDelivery ? [
+    db.prepare(`INSERT OR IGNORE INTO trade_activity_customer_document_delivery_events
+      (id, delivery_id, provider_event_key, event_type, provider_status, summary, occurred_at, created_at)
+      VALUES (?, ?, ?, ?, ?, 'Authenticated Resend customer document delivery event received.', ?, ?)`)
+      .bind(crypto.randomUUID(), delivery.id, providerEventKey, eventType, eventType, providerOccurredAt, now),
+    db.prepare(`UPDATE trade_activity_customer_document_deliveries
+      SET status = CASE
+          WHEN status IN ('failed','bounced','complained','suppressed') THEN status
+          WHEN ? IN ('failed','bounced','complained','suppressed') THEN ?
+          WHEN status = 'delivered' THEN status
+          WHEN ? = 'delivered' THEN 'delivered'
+          WHEN status = 'sent' THEN status
+          WHEN ? = 'sent' THEN 'sent'
+          ELSE status
+        END,
+        provider_status = CASE
+          WHEN status IN ('failed','bounced','complained','suppressed') THEN provider_status
+          ELSE ?
+        END,
+        sent_at = CASE WHEN status NOT IN ('failed','bounced','complained','suppressed') AND ? = 'sent' AND sent_at = '' THEN ? ELSE sent_at END,
+        delivered_at = CASE WHEN status NOT IN ('failed','bounced','complained','suppressed') AND ? = 'delivered' AND delivered_at = '' THEN ? ELSE delivered_at END,
+        failed_at = CASE WHEN ? = 1 AND failed_at = '' THEN ? ELSE failed_at END,
+        last_error = CASE
+          WHEN status IN ('failed','bounced','complained','suppressed') THEN last_error
+          WHEN ? = 1 THEN ?
+          WHEN ? = 'delivered' THEN ''
+          ELSE last_error
+        END,
+        updated_at = ?
+      WHERE id = ? AND provider = 'resend' AND provider_message_id = ?`)
+      .bind(
+        bookingDocumentStatus,
+        bookingDocumentStatus,
+        bookingDocumentStatus,
+        bookingDocumentStatus,
+        eventType,
+        bookingDocumentStatus,
+        now,
+        bookingDocumentStatus,
+        now,
+        bookingDocumentTerminal ? 1 : 0,
+        now,
+        bookingDocumentTerminal ? 1 : 0,
+        `Customer document delivery invalidated by ${eventType}.`,
+        bookingDocumentStatus,
+        now,
+        delivery.id,
+        providerMessageId,
+      ),
+    db.prepare(`INSERT OR IGNORE INTO trade_work_order_events
+      (id, work_order_id, firebase_uid, event_type, summary, created_at)
+      SELECT ?, work_order_id, firebase_uid,
+        CASE WHEN ? = 1 THEN 'customer_documents_delivery_invalidated'
+          WHEN ? = 'delivered' THEN 'customer_documents_delivered'
+          ELSE 'customer_documents_provider_event' END,
+        CASE WHEN ? = 1
+          THEN 'Required customer document delivery failed after provider acceptance. A successful resend is required before customer declaration or signing.'
+          WHEN ? = 'delivered' THEN 'The email provider confirmed delivery of the required customer document pack.'
+          ELSE 'The email provider accepted the customer document delivery update.' END,
+        ?
+      FROM trade_activity_customer_document_deliveries WHERE id = ?`)
+      .bind(
+        `activity-doc-provider:${providerEventKey}`,
+        bookingDocumentTerminal ? 1 : 0,
+        bookingDocumentStatus,
+        bookingDocumentTerminal ? 1 : 0,
+        bookingDocumentStatus,
+        now,
+        delivery.id,
+      ),
+  ] : publicPlanDelivery ? [
     db.prepare(`INSERT OR IGNORE INTO public_plan_customer_email_delivery_events
       (id, delivery_id, provider_event_key, event_type, provider_status, summary, occurred_at, created_at)
       VALUES (?, ?, ?, ?, ?, 'Authenticated Resend customer plan delivery event received.', ?, ?)`)
@@ -437,6 +530,29 @@ export async function POST(request: Request) {
         WHERE recipient_email_hash = ? AND id != ?
           AND status IN ('pending', 'failed', 'provider_failed', 'waiting_for_channel')`)
         .bind(eventType, now, activityDelivery.recipient_email_hash, activityDelivery.id),
+    );
+  }
+  if (scheduledDocumentDelivery
+    && ["email.complained", "email.suppressed"].includes(eventType)
+    && String(scheduledDocumentDelivery.recipient_email_sha256 || "")) {
+    statements.push(
+      db.prepare(`UPDATE trade_activity_customer_document_deliveries
+        SET status = ?, provider_status = ?,
+          failed_at = CASE WHEN failed_at = '' THEN ? ELSE failed_at END,
+          last_error = ?, updated_at = ?
+        WHERE id = ? AND provider = 'resend' AND provider_message_id = ?
+          AND status IN ('failed','bounced')`)
+        .bind(bookingDocumentStatus, eventType, now,
+          `Customer document delivery invalidated by ${eventType}.`, now,
+          scheduledDocumentDelivery.id, providerMessageId),
+      db.prepare(`UPDATE trade_activity_customer_document_deliveries
+        SET status = 'suppressed', provider_status = ?,
+          failed_at = CASE WHEN failed_at = '' THEN ? ELSE failed_at END,
+          last_error = 'Provider suppression applies to this customer email address.', updated_at = ?
+        WHERE firebase_uid = ? AND recipient_email_sha256 = ? AND id != ?
+          AND status IN ('queued','sending','provider_accepted','sent','delivered')`)
+        .bind(eventType, now, now, scheduledDocumentDelivery.firebase_uid,
+          scheduledDocumentDelivery.recipient_email_sha256, scheduledDocumentDelivery.id),
     );
   }
   if (publicPlanDelivery

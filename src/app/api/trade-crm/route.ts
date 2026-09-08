@@ -24,6 +24,14 @@ import {
 import { syncCreatedAppointmentToConnectedCalendars } from "@/lib/trade-calendar-sync-server";
 import { sendDirectAppointmentCalendarInvite } from "@/lib/direct-appointment-invite-server";
 import {
+  currentScheduledActivityCustomerDocumentDelivery,
+  selectedScheduledActivityCustomerDocumentAppointment,
+  sendScheduledActivityCustomerDocuments,
+  type ScheduledActivityCustomerDocumentActivity,
+  type ScheduledActivityCustomerDocumentReceipt,
+} from "@/lib/scheduled-activity-customer-documents-server";
+import { activityConsumerDocuments } from "@/lib/trade-activity-forms-library";
+import {
   autoOpenReadyPlannedComplianceWorkPacks,
   ComplianceDomainError,
   type PlannedComplianceWorkPackBlocker,
@@ -76,11 +84,9 @@ import {
 } from "@/lib/trade-crm-register-sort-sql";
 import {
   assertTradeJobReadyForScheduling,
-  assertTradeScheduleAvailable,
   isTradeJobScheduleEligibilityConflict,
   tradeJobScheduleEligibilityGuardStatement,
   tradeJobScheduleEligibilitySql,
-  tradeScheduleAvailabilityGuardStatement,
 } from "@/lib/trade-schedule-server";
 import {
   RENTAL_INSPECTION_SERVICE_CATEGORY,
@@ -511,6 +517,22 @@ function storedObject(value: unknown) {
   } catch { return {}; }
 }
 
+function scheduledCustomerDocumentActivities(
+  rows: readonly Record<string, unknown>[],
+): ScheduledActivityCustomerDocumentActivity[] {
+  return rows
+    .filter((row) => ["planned", "case_linked"].includes(String(row.status || "")))
+    .map((row) => {
+      const snapshot = storedObject(row.intent_snapshot);
+      const activity = storedObject(snapshot.activity);
+      return {
+        activityTemplateId: cleanAdminText(row.activity_template_id, 180),
+        variantId: cleanAdminText(activity.variantId, 180),
+      };
+    })
+    .filter((activity) => Boolean(activity.activityTemplateId));
+}
+
 function pagination(url: URL) {
   const requestedPage = Number(url.searchParams.get("page"));
   const requestedPageSize = Number(url.searchParams.get("pageSize"));
@@ -645,11 +667,21 @@ function indexedComplianceIntent(row: Record<string, unknown> | null) {
   const program = storedObject(snapshot.program);
   const activity = storedObject(snapshot.activity);
   const governance = storedObject(snapshot.governance);
+  const activityTemplateId = String(row.activity_template_id);
+  const activityVariantId = String(activity.variantId || "");
+  let bookingDocumentCount = 0;
+  try {
+    bookingDocumentCount = activityConsumerDocuments(activityTemplateId, activityVariantId).length;
+  } catch {
+    bookingDocumentCount = 0;
+  }
   return {
     id: String(row.id),
     status: String(row.status),
     programTemplateId: String(row.program_template_id),
-    activityTemplateId: String(row.activity_template_id),
+    activityTemplateId,
+    activityVariantId,
+    bookingDocumentCount,
     programCode: String(row.program_code),
     programName: String(program.name || ""),
     activityKey: String(activity.activityKey || ""),
@@ -1157,6 +1189,21 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
   const job = indexedJob(row, identity.access);
   const projectedComplianceIntents =
     complianceIntents.results.map(indexedComplianceIntent).filter(Boolean);
+  const scheduledDocumentActivities = scheduledCustomerDocumentActivities(complianceIntents.results);
+  const scheduledDocumentAppointmentId = await selectedScheduledActivityCustomerDocumentAppointment({
+    ownerUid: identity.uid,
+    workOrderId: id,
+    visibleAssigneeMemberId: identity.access.isOwner || identity.access.scheduleScope === "team"
+      ? ""
+      : identity.memberId,
+  });
+  const customerDocuments = await currentScheduledActivityCustomerDocumentDelivery({
+    ownerUid: identity.uid,
+    workOrderId: id,
+    appointmentId: scheduledDocumentAppointmentId,
+    recipientEmail: String(customer?.email || ""),
+    activities: scheduledDocumentActivities,
+  });
   return { customer: customer ? indexedCustomer(customer) : null,
     sites: sites.results.map((site: Record<string, unknown>) => indexedServiceSite(site, siteContacts.results)), job: { ...job,
     tasks: tasks.results.map((item: Record<string, unknown>) => ({ id: item.id, title: item.title, dueAt: item.due_at, status: item.status, completedAt: item.completed_at })),
@@ -1170,6 +1217,21 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
     complianceCases: complianceCases.results.map(indexedComplianceCase),
     complianceIntents: projectedComplianceIntents,
     complianceIntent: projectedComplianceIntents[0] || null,
+    customerDocuments: customerDocuments ? {
+      deliveryId: String(customerDocuments.id),
+      appointmentId: String(customerDocuments.appointment_id),
+      status: String(customerDocuments.status),
+      providerStatus: String(customerDocuments.provider_status || ""),
+      canRetry: ["queued", "sending", "failed", "bounced"].includes(String(customerDocuments.status || ""))
+        && String(customerDocuments.provider_status || "") !== "reconciliation_required",
+      documentIds: storedList(customerDocuments.document_ids, 24),
+      acceptedAt: String(customerDocuments.accepted_at || ""),
+      sentAt: String(customerDocuments.sent_at || ""),
+      deliveredAt: String(customerDocuments.delivered_at || ""),
+      failedAt: String(customerDocuments.failed_at || ""),
+      lastError: String(customerDocuments.last_error || ""),
+      updatedAt: String(customerDocuments.updated_at || ""),
+    } : null,
   } };
 }
 
@@ -1570,6 +1632,7 @@ export async function POST(request: Request) {
       return adminJson({ ok: false, code: "ASSIGNEE_REQUIRED", error: "Choose who will do this job before scheduling." }, 400);
     }
     const manageActions = new Set(["create_note", "add_task"]);
+    const assignedJobActions = new Set(["resend_activity_customer_documents"]);
     if (manageActions.has(action) && !canManageJobs(identity.access)) throw new Error("JOB_MANAGEMENT_REQUIRED");
     const selfScheduledCreate = action === "create_scheduled_job"
       && identity.access.jobScope === "own"
@@ -1578,7 +1641,7 @@ export async function POST(request: Request) {
       && !identity.access.isOwner && !identity.access.canRescheduleJobs
       && !selfScheduledCreate) throw new Error("JOB_RESCHEDULE_REQUIRED");
     const actionJobId = cleanAdminText(body.workOrderId, 180);
-    if (!identity.access.isOwner && actionJobId && manageActions.has(action)) {
+    if (!identity.access.isOwner && actionJobId && (manageActions.has(action) || assignedJobActions.has(action))) {
       await assignedJob(identity.access, actionJobId);
     }
     const customerActions = new Set(["create_customer", "create_customer_contact", "create_service_site", "link_site_contact"]);
@@ -1981,6 +2044,8 @@ export async function POST(request: Request) {
           postcode: canonicalSite.postcode,
         };
       }
+      const requestedBuildingType = cleanAdminText(body.buildingType, 40);
+      const buildingType = BUILDING_TYPES.has(requestedBuildingType) ? requestedBuildingType : "not_sure";
       const complianceIntents = resolveTradeComplianceIntents({
         mode: body.complianceIntentMode,
         activities: body.complianceActivitiesJson,
@@ -1988,6 +2053,7 @@ export async function POST(request: Request) {
         activityTemplateId: body.activityTemplateId,
         siteJurisdiction: serviceSite?.address_state,
         plannedStart: cleanAdminText(body.startsAt || body.scheduledStart, 40),
+        buildingType,
       });
       const templateId = cleanAdminText(body.templateId, 180);
       const template = templateId ? await db.prepare(`SELECT * FROM trade_crm_job_templates
@@ -2006,8 +2072,6 @@ export async function POST(request: Request) {
       if (!title) return adminJson({ ok: false, error: "Attach a customer before creating the job." }, 400);
       const requestedPriority = cleanAdminText(body.priority, 20) || cleanAdminText(template?.priority, 20);
       const priority = PRIORITIES.has(requestedPriority) ? requestedPriority : "standard";
-      const requestedBuildingType = cleanAdminText(body.buildingType, 40);
-      const buildingType = BUILDING_TYPES.has(requestedBuildingType) ? requestedBuildingType : "not_sure";
       let scheduledStart = dateValue(body.scheduledStart, true);
       let scheduledEnd = dateValue(body.scheduledEnd, true);
       if (scheduledStart && scheduledEnd && scheduledEnd < scheduledStart) return adminJson({ ok: false, error: "The planned finish cannot be before the planned start." }, 400);
@@ -2050,12 +2114,6 @@ export async function POST(request: Request) {
         catch { return adminJson({ ok: false, error: "Choose a duration from 15 minutes to 8 hours in 15-minute steps." }, 400); }
         appointmentId = crypto.randomUUID();
         appointmentTitle = `${displayName} ${SERVICE_LABELS[serviceCategory]}`.trim();
-        await assertTradeScheduleAvailable({
-          ownerUid: identity.uid,
-          memberId: assigneeMemberId,
-          startsAt: scheduledStart,
-          endsAt: scheduledEnd,
-        });
       }
       const templateTasks = template ? cleanTemplateTasks(storedList(template.task_titles, 24)) : [];
       let serviceArea = cleanAdminText(body.siteArea, 80);
@@ -2184,13 +2242,6 @@ export async function POST(request: Request) {
             workOrderId,
             changedAt: now,
           }),
-          tradeScheduleAvailabilityGuardStatement(db, {
-            ownerUid: identity.uid,
-            memberId: assigneeMemberId,
-            startsAt: scheduledStart,
-            endsAt: scheduledEnd,
-            changedAt: now,
-          }),
         ] : []),
         ...(rentalTemplate ? [
           db.prepare(`INSERT INTO trade_rental_inspections
@@ -2299,6 +2350,39 @@ export async function POST(request: Request) {
         ...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision: 1, changedAt: now }),
       ];
       await db.batch(batchStatements);
+      let customerDocuments: ScheduledActivityCustomerDocumentReceipt = {
+        requested: false,
+        status: "not_required",
+        canRetry: false,
+        message: "No booking-time customer documents apply to the selected work.",
+        acceptedAt: "",
+        documentIds: [],
+        documentSha256Set: [],
+      };
+      if (guided && preparedComplianceIntents.length) {
+        try {
+          customerDocuments = await sendScheduledActivityCustomerDocuments({
+            appointmentId,
+            workOrderId,
+            ownerUid: identity.uid,
+            origin: new URL(request.url).origin,
+            activities: preparedComplianceIntents.map((item) => ({
+              activityTemplateId: item.intent.activity.templateId,
+              variantId: item.intent.snapshot.activity.variantId,
+            })),
+          });
+        } catch {
+          customerDocuments = {
+            requested: true,
+            status: "failed",
+            canRetry: true,
+            message: "The job was saved, but the required customer documents were not accepted for email delivery.",
+            acceptedAt: "",
+            documentIds: [],
+            documentSha256Set: [],
+          };
+        }
+      }
       let complianceWorkPacks: readonly PlannedComplianceWorkPackReadiness[] = [];
       let workPackBlockers: readonly PlannedComplianceWorkPackBlocker[] = [];
       if (guided && preparedComplianceIntents.length) {
@@ -2370,11 +2454,38 @@ export async function POST(request: Request) {
         workPackBlockers,
         rentalInspectionAttached: Boolean(rentalTemplate),
         rentalInspectionModuleCount: rentalModuleKeys.length,
-        calendarSynced, calendarFailed, calendarInvite }, 201);
+        calendarSynced, calendarFailed, calendarInvite, customerDocuments }, 201);
     }
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);
     const job = await ownedJob(db, identity, workOrderId);
+    if (action === "resend_activity_customer_documents") {
+      const [appointment, activityRows] = await Promise.all([
+        selectedScheduledActivityCustomerDocumentAppointment({
+          ownerUid: identity.uid,
+          workOrderId,
+          visibleAssigneeMemberId: identity.access.isOwner || identity.access.scheduleScope === "team"
+            ? ""
+            : identity.memberId,
+        }),
+        db.prepare(`SELECT activity_template_id, intent_snapshot, status FROM trade_work_order_compliance_intents
+          WHERE work_order_id = ? AND installer_uid = ? AND status IN ('planned', 'case_linked')
+          ORDER BY created_at ASC, id ASC`)
+          .bind(workOrderId, identity.uid).all<Record<string, unknown>>(),
+      ]);
+      if (!appointment) {
+        return adminJson({ ok: false, error: "This job does not have a scheduled appointment for customer documents." }, 409);
+      }
+      const activities = scheduledCustomerDocumentActivities(activityRows.results);
+      const customerDocuments = await sendScheduledActivityCustomerDocuments({
+        appointmentId: appointment,
+        workOrderId,
+        ownerUid: identity.uid,
+        origin: new URL(request.url).origin,
+        activities,
+      });
+      return adminJson({ ok: true, customerDocuments });
+    }
     if (action === "add_task") {
       const title = cleanAdminText(body.title, 180);
       const dueAt = dateValue(body.dueAt, true);
@@ -2455,7 +2566,6 @@ export async function POST(request: Request) {
       const displayName = customerDisplayName(job);
       const appointmentTitle = `${displayName} ${SERVICE_LABELS[String(job.service_category)] || APPOINTMENT_LABELS[appointmentType]}`.trim();
       const appointmentId = crypto.randomUUID();
-      await assertTradeScheduleAvailable({ ownerUid: identity.uid, memberId: assigneeMemberId, startsAt, endsAt });
       const jobRevision = nextJobRevision(job.revision);
       const installation = appointmentType === "installation";
       const complianceIntentStatements = installation
@@ -2547,13 +2657,6 @@ export async function POST(request: Request) {
         tradeJobScheduleEligibilityGuardStatement(db, {
           ownerUid: identity.uid,
           workOrderId,
-          changedAt: now,
-        }),
-        tradeScheduleAvailabilityGuardStatement(db, {
-          ownerUid: identity.uid,
-          memberId: assigneeMemberId,
-          startsAt,
-          endsAt,
           changedAt: now,
         }),
         db.prepare(`INSERT INTO trade_work_order_events

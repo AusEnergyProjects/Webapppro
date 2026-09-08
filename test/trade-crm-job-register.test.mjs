@@ -305,7 +305,7 @@ test("job workspace exposes authorised customer context, preserves the private b
   assert.match(ui, /This customer-authorised lead contains only the contact and property details disclosed to your business/);
 });
 
-test("the combined Schedule tab assigns and books in one focused calendar action", () => {
+test("the Schedule tab requires an assignee and commits before optional calendar delivery", () => {
   const [teamRoute, route, ui, styles, globalStyles] = [
     read("../src/app/api/trade-team/route.ts"),
     read("../src/app/api/trade-crm/route.ts"),
@@ -342,26 +342,26 @@ test("the combined Schedule tab assigns and books in one focused calendar action
   assert.match(ui, /setAppointmentDuration\(next\.durationMinutes\)/);
   assert.match(createAppointment, /expectedRevision !== Number\(job\.revision\)/);
   assert.match(createAppointment, /const requestedAssigneeMemberId = cleanAdminText\(body\.assigneeMemberId/);
+  assert.match(createAppointment, /if \(!requestedAssigneeMemberId\)[\s\S]*Choose the team member who will attend/);
   assert.match(createAppointment, /assignmentChanged && !canAssignJob\(identity\.access/);
   assert.match(createAppointment, /assertMemberCapability\(db, identity, assigneeMemberId/);
   assert.match(createAppointment, /revision = \? AND stage = \? AND stage NOT IN \('completed', 'cancelled'\) AND assignee_member_id = \?/);
   assert.match(createAppointment, /rentalInspectionAssignmentStatements/);
   assert.match(createAppointment, /tradeJobScheduleEligibilityGuardStatement/);
-  assert.match(createAppointment, /tradeScheduleAvailabilityGuardStatement/);
+  assert.doesNotMatch(createAppointment, /assertTradeScheduleAvailable|tradeScheduleAvailabilityGuardStatement/);
   assert.match(createAppointment, /await guardedOnlineJobMutationBatch\(db, statements/);
   const jobUpdate = createAppointment.indexOf("UPDATE trade_work_orders");
   const appointmentInsert = createAppointment.indexOf("INSERT INTO trade_crm_appointments", jobUpdate);
   const rentalAssignment = createAppointment.indexOf("rentalInspectionAssignmentStatements", appointmentInsert);
   const memberGuard = createAppointment.indexOf("tradeCrmScheduleMemberGuardStatement", rentalAssignment);
   const eligibilityGuard = createAppointment.indexOf("tradeJobScheduleEligibilityGuardStatement", memberGuard);
-  const availabilityGuard = createAppointment.indexOf("tradeScheduleAvailabilityGuardStatement", eligibilityGuard);
-  const mutationBatch = createAppointment.indexOf("await guardedOnlineJobMutationBatch(db, statements", availabilityGuard);
+  const mutationBatch = createAppointment.indexOf("await guardedOnlineJobMutationBatch(db, statements", eligibilityGuard);
   const calendarSync = createAppointment.indexOf("await syncCreatedAppointmentToConnectedCalendars", mutationBatch);
   const response = createAppointment.indexOf("revision: jobRevision", calendarSync);
   assert.ok(jobUpdate >= 0 && jobUpdate < appointmentInsert
     && appointmentInsert < rentalAssignment && rentalAssignment < memberGuard
-    && memberGuard < eligibilityGuard && eligibilityGuard < availabilityGuard
-    && availabilityGuard < mutationBatch && mutationBatch < calendarSync && calendarSync < response,
+    && memberGuard < eligibilityGuard && eligibilityGuard < mutationBatch
+    && mutationBatch < calendarSync && calendarSync < response,
   "job update, appointment, rental sync and guards must commit before calendar sync and response");
   assert.match(ui, /assignmentDirty \? "Assign and add appointment" : "Add appointment"/);
   assert.match(scheduleSection, /setBookingDraftOpen\(true\); \}\}>Add another appointment<\/button>/);

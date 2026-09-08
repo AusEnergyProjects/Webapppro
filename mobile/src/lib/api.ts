@@ -1,5 +1,6 @@
 import type { User } from 'firebase/auth';
 import { CryptoDigestAlgorithm, digest } from 'expo-crypto';
+import { fetch as expoFetch } from 'expo/fetch';
 
 import { API_BASE_URL, APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
 import { getDeviceId } from '@/lib/device';
@@ -7,6 +8,7 @@ import { firebaseAuth } from '@/lib/auth';
 import { getFieldSessionToken } from '@/lib/field-session';
 
 const JSON_REQUEST_TIMEOUT_MS = 20_000;
+const MULTIPART_REQUEST_TIMEOUT_MS = 120_000;
 
 export class ApiError extends Error {
   constructor(
@@ -58,12 +60,14 @@ function bytesToHex(bytes: Uint8Array) {
 
 async function fetchJson(url: string, init: RequestInit) {
   const controller = new AbortController();
+  const multipart = init.body instanceof FormData;
   const abort = () => controller.abort();
   init.signal?.addEventListener('abort', abort, { once: true });
   if (init.signal?.aborted) controller.abort();
-  const timeout = setTimeout(() => controller.abort(), JSON_REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), multipart ? MULTIPART_REQUEST_TIMEOUT_MS : JSON_REQUEST_TIMEOUT_MS);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    const request = { ...init, signal: controller.signal };
+    return await (multipart ? expoFetch(url, request) : fetch(url, request));
   } catch (error) {
     if (controller.signal.aborted && !init.signal?.aborted) {
       throw new ApiError(

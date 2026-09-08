@@ -195,9 +195,9 @@ function testD1(database) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 170);
+  assert.equal(completeMigrationChain.length, 172);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0171_/);
+  assert.match(completeMigrationChain.at(-1), /^0173_/);
   assert.ok(
     completeMigrationChain.includes("0160_trade_rental_inspections.sql"),
     "the complete migration chain must include the rental inspection schema",
@@ -209,6 +209,14 @@ function applyCompleteMigrationChain(database) {
   assert.ok(
     completeMigrationChain.includes("0167_trade_customer_created_index.sql"),
     "the complete migration chain must include the bounded customer register index",
+  );
+  assert.ok(
+    completeMigrationChain.includes("0172_trade_team_sres_credentials.sql"),
+    "the complete migration chain must include specialist trade credentials",
+  );
+  assert.ok(
+    completeMigrationChain.includes("0173_trade_activity_customer_document_delivery.sql"),
+    "the complete migration chain must include activity customer-document delivery",
   );
   let emulatedFtsTables = 0;
   for (const name of completeMigrationChain) {
@@ -2600,7 +2608,7 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.match(workspace, /data-column=\{column\.key\}/);
   assert.match(
     workspace,
-    /\{PILOT_JOB_COLUMNS\.length\} Dataforce columns/,
+    /\{PILOT_JOB_COLUMNS\.length\} legacy columns/,
   );
   assert.match(
     workspaceStyles,
@@ -2882,7 +2890,7 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   );
   assert.match(
     workspace,
-    /zero regulator acceptances because no regulator request is sent,\s*and no staged Dataforce or Runabout row can create a customer,\s*job, regulated case, certificate, submission, trade or\s*settlement/,
+    /zero regulator acceptances because no regulator request is sent,\s*and no staged legacy row can create a customer,\s*job, regulated case, certificate, submission, trade or\s*settlement/,
   );
 
   assert.match(

@@ -37,7 +37,7 @@ function requiredBody(value: unknown): Body {
     throw new CreditexDataforceImportError(
       "DATAFORCE_IMPORT_REQUEST_INVALID",
       400,
-      "Enter a valid Dataforce import request.",
+      "Enter a valid legacy import request.",
     );
   }
   return value as Body;
@@ -82,7 +82,7 @@ function errorResponse(error: unknown) {
   return json({
     ok: false,
     code: "DATAFORCE_IMPORT_UNAVAILABLE",
-    error: "Dataforce staging is temporarily unavailable. Try again.",
+    error: "Legacy import staging is temporarily unavailable. Try again.",
   }, 500);
 }
 
@@ -137,7 +137,7 @@ export async function POST(request: Request) {
       throw new CreditexDataforceImportError(
         "DATAFORCE_IMPORT_REQUEST_TOO_LARGE",
         413,
-        "The Dataforce import request is too large.",
+        "The legacy import request is too large.",
       );
     }
     const database = getD1();
@@ -147,7 +147,7 @@ export async function POST(request: Request) {
       throw new CreditexDataforceImportError(
         "DATAFORCE_IMPORT_ACTION_INVALID",
         400,
-        "Choose the supported Dataforce staging action.",
+        "Choose the supported legacy staging action.",
       );
     }
     const result = await stageCreditexDataforceImport(database, member, {

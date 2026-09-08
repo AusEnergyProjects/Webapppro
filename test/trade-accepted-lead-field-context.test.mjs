@@ -117,6 +117,7 @@ function syncRoute(accessRecord, jobs) {
       mobileAppPolicy: () => ({ maxPersonalDataAgeSeconds: 86_400 }), mobileErrorResponse: () => null,
       requireRegisteredMobileDevice: async () => ({ deviceId: "device-1", deviceName: "Field phone", platform: "ios" }) },
     "@/lib/trade-form-library.mjs": { normalizeTradeFormAnswers: (value) => value, tradeFormCompletion: () => ({ ready: true, missing: [] }) },
+    "@/lib/trade-activity-forms-library": { activityConsumerDocuments: () => [] },
     "@/lib/asset-lifecycle.mjs": { addMonthsToIsoDate: (value) => value },
     "@/lib/photo-request-review": { photoRequestEvidenceKey: () => "evidence" },
     "@/lib/trade-photo-requests": { normalisePhotoRequirements: (value) => value },

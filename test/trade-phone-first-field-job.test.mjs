@@ -116,16 +116,15 @@ test("job workspace appointment creation commits assignment and booking before c
   const rentalAssignment = createAppointment.indexOf("rentalInspectionAssignmentStatements", appointmentInsert);
   const memberGuard = createAppointment.indexOf("tradeCrmScheduleMemberGuardStatement", rentalAssignment);
   const eligibilityGuard = createAppointment.indexOf("tradeJobScheduleEligibilityGuardStatement", memberGuard);
-  const availabilityGuard = createAppointment.indexOf("tradeScheduleAvailabilityGuardStatement", eligibilityGuard);
-  const batch = createAppointment.indexOf("await guardedOnlineJobMutationBatch(db, statements", availabilityGuard);
+  const batch = createAppointment.indexOf("await guardedOnlineJobMutationBatch(db, statements", eligibilityGuard);
   const calendarDelivery = createAppointment.indexOf("await syncCreatedAppointmentToConnectedCalendars", batch);
   const response = createAppointment.indexOf("revision: jobRevision", calendarDelivery);
   assert.ok(jobUpdate >= 0 && jobUpdate < mutationGuard && mutationGuard < appointmentInsert
     && appointmentInsert < rentalAssignment && rentalAssignment < memberGuard
-    && memberGuard < eligibilityGuard && eligibilityGuard < availabilityGuard
-    && availabilityGuard < batch
+    && memberGuard < eligibilityGuard && eligibilityGuard < batch
     && batch < calendarDelivery && calendarDelivery < response,
   "assignment, appointment, rental sync and guards must commit atomically before calendar delivery and response");
+  assert.doesNotMatch(createAppointment, /assertTradeScheduleAvailable|tradeScheduleAvailabilityGuardStatement/);
   assert.match(createAppointment, /previousAudienceMemberId: currentAssigneeMemberId/);
   assert.match(createAppointment, /return adminJson\(\{ ok: true, id: appointmentId, revision: jobRevision, calendarSync \}, 201\)/);
 });

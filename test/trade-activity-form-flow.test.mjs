@@ -16,6 +16,23 @@ test('same-item conditional questions never borrow the first equipment answer', 
   assert.deepEqual(expandedActivityFields(form, answers).map((item) => item.key), ['consent', 'installed', 'serial', 'photo', 'installed[1]']);
   assert.equal(fieldConditionMet({ all: [{ fieldKey: 'installed', equals: true }, { any: [{ fieldKey: 'consent', equals: true }, { fieldKey: 'consent', equals: false }] }] }, { ...answers, consent: false }, form, 'units', 1), false);
 });
+test('numeric upper-bound conditions use typed numbers and include the exact boundary', () => {
+  const condition = { fieldKey: 'distance', lessThanOrEqual: 1 };
+  assert.equal(fieldConditionMet(condition, { distance: 0.75 }), true);
+  assert.equal(fieldConditionMet(condition, { distance: 1 }), true);
+  assert.equal(fieldConditionMet(condition, { distance: 1.01 }), false);
+  assert.equal(fieldConditionMet(condition, { distance: '0.75' }), false);
+});
+test('repeat instances keep the same identity while each section remains one run', () => {
+  const split = { ...form, fields: [
+    field('installed', 'boolean', { repeatGroup: 'units', section: 'Equipment' }),
+    field('serial', 'text', { repeatGroup: 'units', section: 'Equipment', condition: { fieldKey: 'installed', equals: true } }),
+    field('price', 'number', { repeatGroup: 'units', section: 'Payment' }),
+  ] };
+  const answers = { '$repeat.units': 2, installed: true, 'installed[1]': true };
+  assert.deepEqual(expandedActivityFields(split, answers).map((item) => item.key),
+    ['installed', 'serial', 'installed[1]', 'serial[1]', 'price', 'price[1]']);
+});
 test('question wizard puts before signatures before work and final signature after work', () => {
   const steps = activityWizardSteps(form, { installed: true });
   assert.deepEqual(steps.map((item) => item.key), ['consent', 'customer:read:0', 'customer', 'installed', 'serial', 'photo', 'technician:read:0', 'technician', 'review']);

@@ -2283,7 +2283,7 @@ export async function loadCreditexOperationsDashboard(
         },
         productType: {
           available: false,
-          reason: "TLink has governed activity product categories and equipment search, but no authoritative Dataforce-equivalent product-type field.",
+          reason: "TLink has governed activity product categories and equipment search, but no authoritative legacy-equivalent product-type field.",
         },
         tags: {
           available: true,

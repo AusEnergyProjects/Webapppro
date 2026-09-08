@@ -15,6 +15,10 @@ export const TLINK_SCHEMA_GUARD_DEFINITIONS: readonly TlinkSchemaGuardDefinition
   { name: "trade_crm_job_media_accepted_lead_delete_guard", sql: "CREATE TRIGGER IF NOT EXISTS `trade_crm_job_media_accepted_lead_delete_guard` BEFORE DELETE ON `trade_crm_job_media` FOR EACH ROW WHEN OLD.source = 'accepted_public_lead' BEGIN SELECT RAISE(ABORT, 'accepted public lead job file is retained with job history'); END;" },
   { name: "trade_crm_job_details_accepted_job_file_manifest_guard", sql: "CREATE TRIGGER IF NOT EXISTS `trade_crm_job_details_accepted_job_file_manifest_guard` BEFORE INSERT ON `trade_crm_job_details` FOR EACH ROW WHEN NEW.customer_source = 'public_lead_released' BEGIN SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM trade_work_orders work JOIN trade_opportunity_matches accepted_match ON accepted_match.id = work.source_reference AND accepted_match.firebase_uid = work.firebase_uid AND accepted_match.status = 'interested' AND accepted_match.updated_at = NEW.created_at WHERE work.id = NEW.work_order_id AND work.firebase_uid = NEW.firebase_uid AND work.source_type = 'public_lead' AND work.record_status = 'active') OR json_type(NEW.accepted_disclosure_snapshot, '$.photos') IS NOT 'array' OR json_array_length(NEW.accepted_disclosure_snapshot, '$.photos') <> (SELECT COUNT(*) FROM trade_crm_job_media media WHERE media.firebase_uid = NEW.firebase_uid AND media.work_order_id = NEW.work_order_id AND media.source = 'accepted_public_lead' AND media.accepted_disclosure_sha256 = NEW.accepted_disclosure_sha256) OR (SELECT COUNT(DISTINCT json_extract(manifest.value, '$.id')) FROM json_each(NEW.accepted_disclosure_snapshot, '$.photos') manifest) <> json_array_length(NEW.accepted_disclosure_snapshot, '$.photos') OR EXISTS (SELECT 1 FROM json_each(NEW.accepted_disclosure_snapshot, '$.photos') manifest WHERE NOT EXISTS (SELECT 1 FROM trade_crm_job_media media WHERE media.id = json_extract(manifest.value, '$.id') AND media.firebase_uid = NEW.firebase_uid AND media.work_order_id = NEW.work_order_id AND media.source = 'accepted_public_lead' AND media.accepted_disclosure_sha256 = NEW.accepted_disclosure_sha256 AND media.accepted_lead_source_photo_id = json_extract(manifest.value, '$.sourcePhotoId') AND media.accepted_lead_prompt_id = json_extract(manifest.value, '$.promptId') AND media.caption = json_extract(manifest.value, '$.label') AND media.content_type = json_extract(manifest.value, '$.contentType') AND media.size_bytes = json_extract(manifest.value, '$.sizeBytes') AND media.original_sha256 = json_extract(manifest.value, '$.sha256') AND json_extract(media.evidence_envelope, '$.privacyStatus') = json_extract(manifest.value, '$.privacyStatus'))) THEN RAISE(ABORT, 'accepted public lead job file manifest is incomplete') END; END;" },
   { name: "trade_crm_job_media_events_insert_guard", sql: "CREATE TRIGGER IF NOT EXISTS `trade_crm_job_media_events_insert_guard` BEFORE INSERT ON `trade_crm_job_media_events` FOR EACH ROW BEGIN SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM trade_crm_job_media media WHERE media.id = NEW.job_media_id AND media.firebase_uid = NEW.firebase_uid AND media.work_order_id = NEW.work_order_id) OR NOT EXISTS (SELECT 1 FROM trade_team_members member WHERE member.id = NEW.actor_member_id AND member.owner_uid = NEW.firebase_uid AND member.member_uid = NEW.actor_uid AND member.status = 'active') THEN RAISE(ABORT, 'job file event scope is invalid') END; END;" },
+  { name: "trade_activity_customer_document_delivery_insert_guard", sql: "CREATE TRIGGER IF NOT EXISTS `trade_activity_customer_document_delivery_insert_guard` BEFORE INSERT ON `trade_activity_customer_document_deliveries` FOR EACH ROW BEGIN SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM trade_crm_appointments appointment WHERE appointment.id = NEW.appointment_id AND appointment.work_order_id = NEW.work_order_id AND appointment.firebase_uid = NEW.firebase_uid) OR (NEW.retry_of_delivery_id = '' AND NEW.delivery_generation <> 1) OR (NEW.retry_of_delivery_id <> '' AND NOT EXISTS (SELECT 1 FROM trade_activity_customer_document_deliveries prior WHERE prior.id = NEW.retry_of_delivery_id AND prior.work_order_id = NEW.work_order_id AND prior.appointment_id = NEW.appointment_id AND prior.firebase_uid = NEW.firebase_uid AND prior.recipient_email_sha256 = NEW.recipient_email_sha256 AND prior.pack_sha256 = NEW.pack_sha256 AND prior.delivery_generation + 1 = NEW.delivery_generation AND prior.status IN ('failed','bounced','complained','suppressed'))) THEN RAISE(ABORT, 'customer document delivery binding is invalid') END; END;" },
+  { name: "trade_activity_customer_document_delivery_update_guard", sql: "CREATE TRIGGER IF NOT EXISTS `trade_activity_customer_document_delivery_update_guard` BEFORE UPDATE ON `trade_activity_customer_document_deliveries` FOR EACH ROW BEGIN SELECT CASE WHEN NEW.work_order_id IS NOT OLD.work_order_id OR NEW.appointment_id IS NOT OLD.appointment_id OR NEW.firebase_uid IS NOT OLD.firebase_uid OR NEW.recipient_email_sha256 IS NOT OLD.recipient_email_sha256 OR NEW.activity_bindings IS NOT OLD.activity_bindings OR NEW.document_ids IS NOT OLD.document_ids OR NEW.document_sha256_set IS NOT OLD.document_sha256_set OR NEW.pack_sha256 IS NOT OLD.pack_sha256 OR NEW.delivery_generation IS NOT OLD.delivery_generation OR NEW.retry_of_delivery_id IS NOT OLD.retry_of_delivery_id OR NEW.provider IS NOT OLD.provider OR NEW.idempotency_key IS NOT OLD.idempotency_key OR NEW.created_at IS NOT OLD.created_at OR (OLD.provider_message_id <> '' AND NEW.provider_message_id IS NOT OLD.provider_message_id) OR (OLD.accepted_at <> '' AND NEW.accepted_at IS NOT OLD.accepted_at) OR (OLD.sent_at <> '' AND NEW.sent_at IS NOT OLD.sent_at) OR (OLD.delivered_at <> '' AND NEW.delivered_at IS NOT OLD.delivered_at) OR (OLD.failed_at <> '' AND NEW.failed_at IS NOT OLD.failed_at) OR (OLD.status IN ('failed','bounced','complained','suppressed') AND NEW.status IS NOT OLD.status) OR (OLD.status = 'delivered' AND NEW.status IN ('queued','sending','provider_accepted','sent')) OR (OLD.status = 'sent' AND NEW.status IN ('queued','sending','provider_accepted')) OR (OLD.status = 'provider_accepted' AND NEW.status IN ('queued','sending')) OR (OLD.status = 'sending' AND NEW.status = 'queued') THEN RAISE(ABORT, 'customer document delivery history is immutable and monotonic') END; END;" },
+  { name: "trade_activity_customer_document_delivery_event_no_update", sql: "CREATE TRIGGER IF NOT EXISTS `trade_activity_customer_document_delivery_event_no_update` BEFORE UPDATE ON `trade_activity_customer_document_delivery_events` FOR EACH ROW BEGIN SELECT RAISE(ABORT, 'Customer document delivery events are immutable.'); END;" },
+  { name: "trade_activity_customer_document_delivery_event_no_delete", sql: "CREATE TRIGGER IF NOT EXISTS `trade_activity_customer_document_delivery_event_no_delete` BEFORE DELETE ON `trade_activity_customer_document_delivery_events` FOR EACH ROW BEGIN SELECT RAISE(ABORT, 'Customer document delivery event history must be retained.'); END;" },
 ];
 
 const readinessByDatabase = new WeakMap<object, Promise<void>>();
@@ -45,7 +49,15 @@ const REQUIRED_COLUMNS = {
   trade_crm_job_media_events: [
     "job_media_id", "firebase_uid", "work_order_id", "actor_uid", "actor_member_id",
   ],
+  trade_team_member_files: [
+    "id", "owner_uid", "team_member_id", "status", "expires_at",
+  ],
+  trade_team_member_credentials: [
+    "id", "owner_uid", "team_member_id", "credential_type", "rental_gate",
+    "credential_number", "jurisdiction", "expires_at", "status", "file_id", "updated_at",
+  ],
   trade_work_orders: ["id", "firebase_uid", "source_reference", "source_type", "record_status"],
+  trade_crm_appointments: ["id", "work_order_id", "firebase_uid"],
   trade_opportunity_matches: [
     "id", "opportunity_id", "firebase_uid", "status", "matched_categories", "updated_at",
   ],
@@ -60,6 +72,17 @@ const REQUIRED_COLUMNS = {
   ],
   public_trade_lead_contact_releases: [
     "id", "opportunity_id", "source_reference", "status", "withdrawn_at", "granted_at",
+  ],
+  trade_activity_customer_document_deliveries: [
+    "id", "work_order_id", "appointment_id", "firebase_uid", "recipient_email_sha256",
+    "activity_bindings", "document_ids", "document_sha256_set", "pack_sha256",
+    "delivery_generation", "retry_of_delivery_id", "provider", "provider_message_id",
+    "provider_status", "idempotency_key", "status", "accepted_at", "sent_at",
+    "delivered_at", "failed_at", "last_error", "created_at", "updated_at",
+  ],
+  trade_activity_customer_document_delivery_events: [
+    "id", "delivery_id", "provider_event_key", "event_type", "provider_status",
+    "summary", "occurred_at", "created_at",
   ],
 } as const;
 

@@ -20,6 +20,22 @@ export type ReminderProviderMessage = {
   attachments?: Array<{ filename: string; content: string; contentType: string }>;
 };
 
+export type ReminderProviderFailureOutcome = "definite_failure" | "indeterminate";
+
+export class ReminderProviderDeliveryError extends Error {
+  readonly outcome: ReminderProviderFailureOutcome;
+
+  constructor(outcome: ReminderProviderFailureOutcome, message: string) {
+    super(message);
+    this.name = "ReminderProviderDeliveryError";
+    this.outcome = outcome;
+  }
+}
+
+export function reminderProviderFailureOutcome(error: unknown): ReminderProviderFailureOutcome {
+  return error instanceof ReminderProviderDeliveryError ? error.outcome : "definite_failure";
+}
+
 const textEncoder = new TextEncoder();
 
 function runtimeValues(runtime: Runtime = process.env) {
@@ -89,31 +105,51 @@ export async function sendServiceReminderProviderMessage(
   const values = runtimeValues(runtime);
   if (input.channel === "email") {
     const replyTo = providerReplyTo(input.replyTo || values.RESEND_REPLY_TO);
-    const response = await fetchImpl("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${values.RESEND_API_KEY || ""}`,
-        "Content-Type": "application/json",
-        "Idempotency-Key": input.idempotencyKey,
-      },
-      body: JSON.stringify({
-        from: values.RESEND_FROM_EMAIL,
-        to: [input.recipient],
-        subject: input.subject,
-        text: input.body,
-        html: input.html || undefined,
-        reply_to: replyTo,
-        attachments: input.attachments?.map((attachment) => ({
-          filename: attachment.filename,
-          content: attachment.content,
-          content_type: attachment.contentType,
-        })),
-        tags: [{ name: "message_type", value: String(input.messageType || "service_reminder").replace(/[^a-z0-9_]/gi, "_").slice(0, 40) }],
-      }),
-      cache: "no-store",
-    });
-    const result = await response.json().catch(() => ({})) as Record<string, unknown>;
-    if (!response.ok || !result.id) throw new Error(`Resend rejected the message with HTTP ${response.status}.`);
+    let response: Response;
+    try {
+      response = await fetchImpl("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${values.RESEND_API_KEY || ""}`,
+          "Content-Type": "application/json",
+          "Idempotency-Key": input.idempotencyKey,
+        },
+        body: JSON.stringify({
+          from: values.RESEND_FROM_EMAIL,
+          to: [input.recipient],
+          subject: input.subject,
+          text: input.body,
+          html: input.html || undefined,
+          reply_to: replyTo,
+          attachments: input.attachments?.map((attachment) => ({
+            filename: attachment.filename,
+            content: attachment.content,
+            content_type: attachment.contentType,
+          })),
+          tags: [{ name: "message_type", value: String(input.messageType || "service_reminder").replace(/[^a-z0-9_]/gi, "_").slice(0, 40) }],
+        }),
+        cache: "no-store",
+      });
+    } catch {
+      throw new ReminderProviderDeliveryError("indeterminate", "Resend delivery outcome could not be confirmed.");
+    }
+    let result: Record<string, unknown> = {};
+    try {
+      result = await response.json() as Record<string, unknown>;
+    } catch {
+      if (response.ok) {
+        throw new ReminderProviderDeliveryError("indeterminate", "Resend accepted the request but returned an unreadable response.");
+      }
+    }
+    if (!response.ok) {
+      if (response.status === 408 || response.status === 409 || response.status >= 500) {
+        throw new ReminderProviderDeliveryError("indeterminate", `Resend delivery outcome could not be confirmed after HTTP ${response.status}.`);
+      }
+      throw new ReminderProviderDeliveryError("definite_failure", `Resend rejected the message with HTTP ${response.status}.`);
+    }
+    if (!result.id) {
+      throw new ReminderProviderDeliveryError("indeterminate", "Resend accepted the request without a delivery identifier.");
+    }
     return { provider: "resend", providerMessageId: String(result.id), providerStatus: "sent" };
   }
 

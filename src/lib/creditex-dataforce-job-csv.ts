@@ -106,19 +106,19 @@ export const DATAFORCE_CREDITEX_FIELD_MAPPINGS = Object.freeze([
     header: "App Id",
     creditexPath: "appointment.id",
     mode: "direct",
-    note: "External Dataforce appointment/application identifier.",
+    note: "External legacy appointment or application identifier.",
   },
   {
     header: "Job Id",
     creditexPath: "jobNumber",
     mode: "direct",
-    note: "External Dataforce job identifier and import duplicate key.",
+    note: "External legacy job identifier and import duplicate key.",
   },
   {
     header: "Status",
     creditexPath: null,
     mode: "unmapped",
-    note: "Dataforce lifecycle values are not equivalent to a Creditex review state.",
+    note: "Legacy lifecycle values are not equivalent to a Creditex review state.",
   },
   {
     header: "SubStatus",
@@ -130,7 +130,7 @@ export const DATAFORCE_CREDITEX_FIELD_MAPPINGS = Object.freeze([
     header: "Type",
     creditexPath: null,
     mode: "unmapped",
-    note: "Requires an approved Dataforce type mapping.",
+    note: "Requires an approved legacy type mapping.",
   },
   {
     header: "Work Type",
@@ -142,7 +142,7 @@ export const DATAFORCE_CREDITEX_FIELD_MAPPINGS = Object.freeze([
     header: "Scheduled Datetime",
     creditexPath: "appointment.startsAt",
     mode: "derived",
-    note: "The Dataforce local display value must be normalised before persistence.",
+    note: "The legacy local display value must be normalised before persistence.",
   },
   {
     header: "Balance",
@@ -160,13 +160,13 @@ export const DATAFORCE_CREDITEX_FIELD_MAPPINGS = Object.freeze([
     header: "Submission",
     creditexPath: null,
     mode: "unmapped",
-    note: "Dataforce submission values require an approved connector-state mapping.",
+    note: "Legacy submission values require an approved connector-state mapping.",
   },
   {
     header: "Invoiced",
     creditexPath: "crm.invoiceStatus",
     mode: "derived",
-    note: "The Dataforce display value and Creditex invoice-state taxonomy differ.",
+    note: "The legacy display value and Creditex invoice-state taxonomy differ.",
   },
   {
     header: "Field Worker",
@@ -258,7 +258,7 @@ export class DataforceJobCsvExportError extends Error {
   readonly issues: readonly DataforceJobCsvIssue[];
 
   constructor(issues: readonly DataforceJobCsvIssue[]) {
-    super("The Dataforce job CSV export did not satisfy its contract.");
+    super("The legacy job CSV export did not satisfy its contract.");
     this.name = "DataforceJobCsvExportError";
     this.issues = issues;
   }
@@ -516,7 +516,7 @@ export function validateDataforceJobCsv(
   if (parsed.headers.length === 0) {
     report({
       code: "CSV_EMPTY",
-      message: "CSV must contain the Dataforce job header row.",
+      message: "CSV must contain the legacy job header row.",
       rowNumber: 1,
     });
   } else if (parsed.headers.length !== DATAFORCE_JOB_CSV_HEADERS.length) {
@@ -547,7 +547,7 @@ export function validateDataforceJobCsv(
   if (parsed.rows.length === 0) {
     report({
       code: "CSV_NO_DATA_ROWS",
-      message: "CSV must contain at least one Dataforce job row.",
+      message: "CSV must contain at least one legacy job row.",
     });
   }
 
@@ -569,7 +569,7 @@ export function validateDataforceJobCsv(
       rejectedRows.add(parsedRow.rowNumber);
       report({
         code: "CSV_BLANK_ROW",
-        message: "Blank rows are not permitted inside a Dataforce job CSV.",
+        message: "Blank rows are not permitted inside a legacy job CSV.",
         rowNumber: parsedRow.rowNumber,
       });
       continue;
@@ -578,7 +578,7 @@ export function validateDataforceJobCsv(
       rejectedRows.add(parsedRow.rowNumber);
       report({
         code: "CSV_ROW_COLUMN_COUNT",
-        message: "Dataforce job rows must contain exactly 23 columns.",
+        message: "Legacy job rows must contain exactly 23 columns.",
         rowNumber: parsedRow.rowNumber,
       });
       continue;
@@ -595,7 +595,7 @@ export function validateDataforceJobCsv(
       rejectedRows.add(parsedRow.rowNumber);
       report({
         code: "JOB_ID_REQUIRED",
-        message: "Job Id is required for every Dataforce job row.",
+        message: "Job Id is required for every legacy job row.",
         rowNumber: parsedRow.rowNumber,
         columnNumber: 2,
         header: "Job Id",
@@ -674,7 +674,7 @@ function exportValidationIssues(
   if (records.length === 0) {
     issues.push({
       code: "CSV_NO_DATA_ROWS",
-      message: "At least one Dataforce job row is required for export.",
+      message: "At least one legacy job row is required for export.",
     });
   }
   if (records.length > DATAFORCE_JOB_CSV_LIMITS.maximumRows) {
@@ -716,7 +716,7 @@ function exportValidationIssues(
     if (!jobId) {
       appendIssue(issues, {
         code: "JOB_ID_REQUIRED",
-        message: "Job Id is required for every Dataforce job row.",
+        message: "Job Id is required for every legacy job row.",
         rowNumber,
         columnNumber: 2,
         header: "Job Id",

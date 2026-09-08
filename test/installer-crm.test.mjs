@@ -179,7 +179,7 @@ test("installer jobs export every filtered page through the owner scoped Datafor
   assert.match(crm, /records\.length !== expectedTotal/);
   assert.match(crm, /DATAFORCE_JOB_CSV_HEADERS\.some\(\(header\) => typeof record\[header\] !== "string"\)/);
   assert.match(crm, /exportDataforceJobCsv\(records\)/);
-  assert.match(crm, /tlink-dataforce-compatible-jobs\.csv/);
+  assert.match(crm, /tlink-creditex-job-register\.csv/);
   assert.match(crm, /exportLabel="Download all filtered jobs CSV"/);
   assert.match(crm, /exportBusyLabel="Downloading all filtered jobs CSV\.\.\."/);
   assert.doesNotMatch(crm, /indexedJobs\.map\(\(job\) => job\.dataforceRecord\)/);
@@ -464,7 +464,8 @@ test("staff checklist controls use the hardened scoped CRM task actions", () => 
   assert.doesNotMatch(crm, /\/api\/trade-work-orders/);
   assert.match(crm, /onWorkOrder=\{crmRequest\}/);
   assert.match(route, /const manageActions = new Set\(\["create_note", "add_task"\]\)/);
-  assert.match(route, /if \(!identity\.access\.isOwner && actionJobId && manageActions\.has\(action\)\) \{\s*await assignedJob\(identity\.access, actionJobId\)/);
+  assert.match(route, /const assignedJobActions = new Set\(\["resend_activity_customer_documents"\]\)/);
+  assert.match(route, /if \(!identity\.access\.isOwner && actionJobId && \(manageActions\.has\(action\) \|\| assignedJobActions\.has\(action\)\)\) \{\s*await assignedJob\(identity\.access, actionJobId\)/);
   assert.match(route, /if \(action === "add_task"\)/);
   assert.match(route, /if \(action === "update_task"\)/);
   assert.match(route, /if \(!identity\.access\.isOwner\) await assignedJob\(identity\.access, String\(task\.work_order_id\)\)/);
@@ -531,7 +532,7 @@ test("My day exposes owner scoped local workload and direct action charts", () =
 
 test("CRM writes no longer return the full customer and job workspace", () => {
   assert.equal((route.match(/crmPayload\(identity\)/g) || []).length, 0);
-  assert.match(route, /return adminJson\(\{ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,\s*appointmentId, complianceIntentPlanned: complianceIntents\.length > 0,\s*complianceIntentCount: complianceIntents\.length,\s*complianceWorkPacks,\s*workPackReady,\s*workPackBlockers,\s*rentalInspectionAttached: Boolean\(rentalTemplate\),\s*rentalInspectionModuleCount: rentalModuleKeys\.length,\s*calendarSynced, calendarFailed, calendarInvite \}, 201\)/);
+  assert.match(route, /return adminJson\(\{ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,\s*appointmentId, complianceIntentPlanned: complianceIntents\.length > 0,\s*complianceIntentCount: complianceIntents\.length,\s*complianceWorkPacks,\s*workPackReady,\s*workPackBlockers,\s*rentalInspectionAttached: Boolean\(rentalTemplate\),\s*rentalInspectionModuleCount: rentalModuleKeys\.length,\s*calendarSynced, calendarFailed, calendarInvite, customerDocuments \}, 201\)/);
   assert.match(crm, /type CreateJobResult = \{[\s\S]*complianceIntentPlanned\?: boolean; complianceIntentCount\?: number; workPackReady\?: boolean;[\s\S]*workPackBlockers\?: Array<\{ code: string; message: string \}>;[\s\S]*rentalInspectionAttached\?: boolean; rentalInspectionModuleCount\?: number;[\s\S]*calendarSynced\?: number; calendarFailed\?: number;/);
   assert.match(newJob, /The assigned compliance team can review the customer, site, activity and schedule/);
   assert.match(newJob, /regulated case opens only when the exact published rule, product, evidence policy and calculation pathway are ready/);

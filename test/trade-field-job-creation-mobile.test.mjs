@@ -11,7 +11,11 @@ import {
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const mobile = read("../mobile/src/app/new-job.tsx");
 const mobileApi = read("../mobile/src/lib/api.ts");
+const mobileWorkSelection = read("../mobile/src/components/job-work-selection.tsx");
+const mobileJob = read("../mobile/src/app/job/[id].tsx");
+const mobileTypes = read("../mobile/src/lib/types.ts");
 const crmRoute = read("../src/app/api/trade-crm/route.ts");
+const syncRoute = read("../src/app/api/trade-team/sync/route.ts");
 const inviteServer = read("../src/lib/direct-appointment-invite-server.ts");
 const dedup = read("../src/lib/trade-customer-dedup-server.ts");
 
@@ -116,6 +120,19 @@ test("an exact saved-customer email can be selected instead of creating a duplic
   assert.match(crmRoute, /action === "find_field_customer_by_email"/);
   assert.match(crmRoute, /directCustomerHasEmail/);
   assert.match(dedup, /lower\(c\.email\) = \? OR lower\(cc\.email\) = \?/);
+});
+
+test("mobile bookings bind premises-specific activity variants through sync and form opening", () => {
+  assert.match(mobileWorkSelection, /label="Premises type"/);
+  assert.match(mobileWorkSelection, /const premisesVariantActivityIds = new Set\(\['veu-1', 'veu-3', 'veu-6'\]\)/);
+  assert.match(mobileWorkSelection, /variantId\?: string/);
+  assert.match(mobileWorkSelection, /fieldActivitiesForBuildingType/);
+  assert.match(mobile, /const \[buildingType, setBuildingType\] = useState\('not_sure'\)/);
+  assert.match(mobile, /serviceCategory, buildingType, priority/);
+  assert.doesNotMatch(mobile, /buildingType: 'house_townhouse'/);
+  assert.match(syncRoute, /variantId: String\(activity\.variantId \|\| ""\)/);
+  assert.match(mobileTypes, /activityTemplateId: string;\s+variantId\?: string;/);
+  assert.match(mobileJob, /variantId=\{complianceIntents\.find/);
 });
 
 test("optional TLink invite is requested only after the job and appointment commit", () => {

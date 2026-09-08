@@ -4,7 +4,7 @@ import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { requireComplianceAccess } from "@/lib/compliance-access-server";
 import { resolveActiveCreditexOfficialSourceOrganisation } from "@/lib/creditex-official-source-custody-server";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
-import { activityFieldCatalogue, defaultActivityFieldForm } from "@/lib/trade-activity-forms-library";
+import { activityFieldCatalogue, applyDefaultActivityFormPolicy, defaultActivityFieldForm } from "@/lib/trade-activity-forms-library";
 import { activityCanonical, activityHash, normaliseActivityAnswers, type ActivityForm } from "@/lib/trade-activity-forms";
 import {
   activityPresentation, changeActivityVariant, listActivityRecords, loadActivityRecord, openActivityRecord, readActivityConsumerDocument, readActivityEvidence, readActivityPdf,
@@ -24,6 +24,7 @@ const errorMessages: Record<string, [number, string]> = {
   ACTIVITY_INTENT_NOT_ACTIVE: [409, "This activity is no longer part of the job."],
   ACTIVITY_REVISION_CONFLICT: [409, "This form changed. Reload it before saving."],
   ACTIVITY_ALREADY_SUBMITTED: [409, "This completed record has already been provided to Creditex."],
+  ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED: [409, "Resend the required customer documents and wait for the email provider to accept them before customer agreement."],
   ACTIVITY_SIGNED_SCOPE_LOCKED: [409, "These details have been signed. Signed details must stay unchanged. After-work fields remain available after before-work signing."],
   ACTIVITY_SIGNING_NOT_READY: [409, "Complete the required fields and evidence for this stage before signing."],
   ACTIVITY_SIGNATURE_REQUIRED: [400, "Enter the signer's name, draw their signature and confirm the displayed declaration."],
@@ -77,6 +78,11 @@ function validateMaster(raw: unknown, expected: ActivityForm): ActivityForm {
       || typeof field.label !== "string" || !field.label.trim() || field.label.length > 1000 || typeof field.section !== "string" || field.section.length > 200
       || !["text", "number", "date", "select", "boolean", "photo", "document"].includes(field.type)
       || typeof field.required !== "boolean" || !["before", "after"].includes(field.phase) || typeof field.help !== "string" || field.help.length > 10_000
+      || (field.presentation !== undefined && !["question", "prefilled", "derived"].includes(field.presentation))
+      || (field.autofill !== undefined && (typeof field.autofill !== "string" || !/^[a-zA-Z0-9._:\[\]-]{1,240}$/.test(field.autofill)))
+      || (field.sourceRequirementId !== undefined && (typeof field.sourceRequirementId !== "string" || !/^[a-zA-Z0-9._:-]{1,240}$/.test(field.sourceRequirementId)))
+      || (field.evidenceFor !== undefined && (!Array.isArray(field.evidenceFor) || field.evidenceFor.length > 24
+        || field.evidenceFor.some((key) => typeof key !== "string" || !/^[a-zA-Z0-9._:\[\]-]{1,180}$/.test(key))))
       || (field.requireLocation !== undefined && (typeof field.requireLocation !== "boolean" || (field.requireLocation && field.type !== "photo")))
       || (field.repeatGroup !== undefined && (typeof field.repeatGroup !== "string" || !/^[a-zA-Z0-9._:\[\]-]{1,100}$/.test(field.repeatGroup)))
       || (field.requiredValue !== undefined && !["string", "number", "boolean"].includes(typeof field.requiredValue))
@@ -84,6 +90,8 @@ function validateMaster(raw: unknown, expected: ActivityForm): ActivityForm {
         || field.referenceDocuments.some((document) => !document || typeof document.title !== "string" || !document.title.trim() || document.title.length > 300
           || typeof document.url !== "string" || document.url.length > 2048 || !(/^https:\/\/[^\s]+$/.test(document.url) || document.url === "/api/trade-activity-forms?consumerDocument=veu-rights-v1"))))
       || !Array.isArray(field.options) || field.options.length > 100 || field.options.some((option) => typeof option !== "string" || option.length > 1000)
+      || (field.optionLabels !== undefined && (!field.optionLabels || typeof field.optionLabels !== "object" || Array.isArray(field.optionLabels)
+        || Object.entries(field.optionLabels).some(([key, label]) => !field.options.includes(key) || typeof label !== "string" || !label.trim() || label.length > 1000)))
       || (field.type === "select" && field.options.length < 2)) throw new Error("INVALID_ACTIVITY_MASTER");
     keys.add(field.key);
   }
@@ -95,8 +103,12 @@ function validateMaster(raw: unknown, expected: ActivityForm): ActivityForm {
       const items = c.all ?? c.any;
       return Object.keys(c).length === 1 && Array.isArray(items) && items.length <= 20 && items.every((item) => conditionValid(item, depth + 1));
     }
-    return typeof c.fieldKey === "string" && keys.has(c.fieldKey) && Object.keys(c).length === 2
-      && [c.equals, c.notEquals].some((item) => ["string", "number", "boolean"].includes(typeof item) && (typeof item !== "number" || Number.isFinite(item)));
+    if (typeof c.fieldKey !== "string" || !keys.has(c.fieldKey) || Object.keys(c).length !== 2) return false;
+    const operators = ["equals", "notEquals", "lessThanOrEqual"].filter((key) => Object.prototype.hasOwnProperty.call(c, key));
+    if (operators.length !== 1) return false;
+    const item = c[operators[0]];
+    return operators[0] === "lessThanOrEqual" ? typeof item === "number" && Number.isFinite(item)
+      : ["string", "number", "boolean"].includes(typeof item) && (typeof item !== "number" || Number.isFinite(item));
   };
   if (form.fields.some((field) => !conditionValid(field.condition))) throw new Error("INVALID_ACTIVITY_MASTER");
   const declarationKeys = new Set<string>();
@@ -109,6 +121,8 @@ function validateMaster(raw: unknown, expected: ActivityForm): ActivityForm {
   const fieldMap = new Map(form.fields.map((field) => [field.key, field]));
   const references = (condition: typeof form.fields[number]["condition"]): string[] => condition
     ? condition.fieldKey ? [condition.fieldKey] : [...(condition.all || []), ...(condition.any || [])].flatMap(references) : [];
+  const conditionLeaves = (condition: typeof form.fields[number]["condition"]): NonNullable<typeof condition>[] => condition
+    ? condition.fieldKey ? [condition] : [...(condition.all || []), ...(condition.any || [])].flatMap(conditionLeaves) : [];
   const dependencies = new Map(form.fields.map((field) => [field.key, references(field.condition)]));
   const visiting = new Set<string>(); const visited = new Set<string>();
   const checkDependency = (key: string) => {
@@ -119,6 +133,8 @@ function validateMaster(raw: unknown, expected: ActivityForm): ActivityForm {
     for (const dependency of dependencies.get(key) || []) {
       const input = fieldMap.get(dependency)!;
       if (["photo", "document"].includes(input.type) || (field.phase === "before" && input.phase === "after")) throw new Error("INVALID_ACTIVITY_MASTER");
+      if (conditionLeaves(field.condition).some((condition) => condition.fieldKey === dependency
+        && condition.lessThanOrEqual !== undefined && input.type !== "number")) throw new Error("INVALID_ACTIVITY_MASTER");
       checkDependency(dependency);
     }
     visiting.delete(key); visited.add(key);
@@ -170,7 +186,7 @@ export async function GET(request: Request) {
       const builtIn = defaultActivityFieldForm(templateId, query.get("variantId") || "");
       const saved = await getD1().prepare("SELECT form_json, version FROM trade_activity_field_masters WHERE organisation_id = ? AND activity_template_id = ? AND variant_id = ? ORDER BY version DESC LIMIT 1")
         .bind(actor.organisationId, templateId, builtIn.variantId).first<{ form_json: string; version: number }>();
-      return adminJson({ ok: true, form: saved ? JSON.parse(saved.form_json) : builtIn, expectedVersion: saved?.version || 0 });
+      return adminJson({ ok: true, form: applyDefaultActivityFormPolicy(saved ? JSON.parse(saved.form_json) : builtIn, builtIn), expectedVersion: saved?.version || 0 });
     }
     const access = await requireInstallerTeamAccess(request); const id = query.get("recordId") || "";
     if (id) {
@@ -222,7 +238,8 @@ export async function POST(request: Request) {
         .bind(actor.organisationId, builtIn.activityTemplateId, builtIn.variantId).first<{ version: number | null }>();
       const expectedVersion = Number(current?.version || 0);
       if (body.expectedVersion !== expectedVersion) throw new Error("ACTIVITY_REVISION_CONFLICT");
-      const form = { ...validateMaster(body.form, builtIn), version: Math.max(builtIn.version, expectedVersion) + 1 };
+      const governedForm = validateMaster(applyDefaultActivityFormPolicy(validateMaster(body.form, builtIn), builtIn), builtIn);
+      const form = { ...governedForm, version: Math.max(builtIn.version, expectedVersion) + 1 };
       const result = await getD1().prepare(`INSERT INTO trade_activity_field_masters (id, organisation_id, activity_template_id, variant_id, version, form_json, form_sha256, published_by_uid, published_at)
         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE COALESCE((SELECT MAX(version) FROM trade_activity_field_masters WHERE organisation_id = ? AND activity_template_id = ? AND variant_id = ?), 0) = ?`)
         .bind(crypto.randomUUID(), actor.organisationId, form.activityTemplateId, form.variantId, form.version, activityCanonical(form), activityHash(form), actor.uid, new Date().toISOString(),

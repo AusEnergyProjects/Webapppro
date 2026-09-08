@@ -55,12 +55,30 @@ type MemberFileRow = {
   credential_status?: string;
 };
 
-const RENTAL_CREDENTIAL_GATES = new Set([
+const MEMBER_CREDENTIAL_USES = new Set([
   "licensed_electrician",
   "licensed_gasfitter",
+  "licensed_plumber",
+  "registered_plumber",
+  "refrigerant_handler",
   "suitably_qualified_smoke_alarm_worker",
+  "sres_installer_accreditation",
+  "sres_designer_accreditation",
 ]);
-const CREDENTIAL_TYPES = new Set(["licence", "registration", "training"]);
+const SRES_CREDENTIAL_USES = new Set(["sres_installer_accreditation", "sres_designer_accreditation"]);
+const TRADE_LICENCE_CREDENTIAL_USES = new Set([
+  "licensed_electrician",
+  "licensed_gasfitter",
+  "licensed_plumber",
+  "registered_plumber",
+  "refrigerant_handler",
+]);
+const EXACT_TRADE_CREDENTIAL_TYPES = new Map([
+  ["licensed_plumber", "licence"],
+  ["registered_plumber", "registration"],
+  ["refrigerant_handler", "licence"],
+]);
+const CREDENTIAL_TYPES = new Set(["licence", "registration", "training", "accreditation"]);
 
 function memberFileBucket() {
   const bucket = (env as unknown as { EVIDENCE?: MemberFileBucket }).EVIDENCE;
@@ -256,8 +274,8 @@ export async function POST(request: Request) {
     }
     if (action !== "upload") return adminJson({ ok: false, error: "Unsupported team member file action." }, 400);
     const rentalGate = cleanAdminText(form.get("rentalGate"), 80);
-    if (rentalGate && !RENTAL_CREDENTIAL_GATES.has(rentalGate)) {
-      return adminJson({ ok: false, error: "Choose a valid rental-assessment credential type." }, 400);
+    if (rentalGate && !MEMBER_CREDENTIAL_USES.has(rentalGate)) {
+      return adminJson({ ok: false, error: "Choose a valid credential use." }, 400);
     }
     const credentialType = cleanAdminText(form.get("credentialType"), 30);
     const credentialName = cleanAdminText(form.get("credentialName"), 180);
@@ -268,11 +286,15 @@ export async function POST(request: Request) {
       || !credentialIssuer || !["VIC", "NATIONAL"].includes(credentialJurisdiction))) {
       return adminJson({ ok: false, error: "Add the credential name, number, issuer, type and VIC or national jurisdiction." }, 400);
     }
-    if (rentalGate === "licensed_electrician" && !["licence", "registration"].includes(credentialType)) {
-      return adminJson({ ok: false, error: "An electrical safety-check credential must be a licence or registration." }, 400);
+    if (TRADE_LICENCE_CREDENTIAL_USES.has(rentalGate) && !["licence", "registration"].includes(credentialType)) {
+      return adminJson({ ok: false, error: "A trade credential must be saved as a licence or registration." }, 400);
     }
-    if (rentalGate === "licensed_gasfitter" && !["licence", "registration"].includes(credentialType)) {
-      return adminJson({ ok: false, error: "A gas safety-check credential must be a licence or registration." }, 400);
+    const exactCredentialType = EXACT_TRADE_CREDENTIAL_TYPES.get(rentalGate);
+    if (exactCredentialType && credentialType !== exactCredentialType) {
+      return adminJson({ ok: false, error: `This credential use must be saved as a ${exactCredentialType}.` }, 400);
+    }
+    if (SRES_CREDENTIAL_USES.has(rentalGate) && (credentialType !== "accreditation" || credentialJurisdiction !== "NATIONAL")) {
+      return adminJson({ ok: false, error: "An SRES installer or designer credential must be saved as a national accreditation." }, 400);
     }
     const category = rentalGate === "suitably_qualified_smoke_alarm_worker" ? "training"
       : rentalGate ? "licence" : "other";

@@ -58,8 +58,32 @@ function schemaDatabase() {
       job_media_id text, firebase_uid text, work_order_id text,
       actor_uid text, actor_member_id text
     );
+    CREATE TABLE trade_team_member_files (
+      id text, owner_uid text, team_member_id text, status text, expires_at text
+    );
+    CREATE TABLE trade_team_member_credentials (
+      id text, owner_uid text, team_member_id text, credential_type text,
+      rental_gate text, credential_number text, jurisdiction text, expires_at text,
+      status text, file_id text, updated_at text
+    );
     CREATE TABLE trade_work_orders (
       id text, firebase_uid text, source_reference text, source_type text, record_status text
+    );
+    CREATE TABLE trade_crm_appointments (
+      id text, work_order_id text, firebase_uid text
+    );
+    CREATE TABLE trade_activity_customer_document_deliveries (
+      id text PRIMARY KEY, work_order_id text, appointment_id text, firebase_uid text,
+      recipient_email_sha256 text, activity_bindings text, document_ids text,
+      document_sha256_set text, pack_sha256 text, delivery_generation integer,
+      retry_of_delivery_id text, provider text, provider_message_id text,
+      provider_status text, idempotency_key text, status text, accepted_at text,
+      sent_at text, delivered_at text, failed_at text, last_error text,
+      created_at text, updated_at text
+    );
+    CREATE TABLE trade_activity_customer_document_delivery_events (
+      id text PRIMARY KEY, delivery_id text, provider_event_key text, event_type text,
+      provider_status text, summary text, occurred_at text, created_at text
     );
     CREATE TABLE trade_opportunity_matches (
       id text, opportunity_id text, firebase_uid text, status text,
@@ -212,13 +236,46 @@ function insertAcceptedLeadJobDetails(database, snapshot, acceptedDisclosureAt =
 }
 
 test("Sites-safe TLink migrations contain no trigger bodies", () => {
-  for (const name of ["0131_trade_team_permissions_and_member_files.sql", "0132_public_lead_accepted_disclosure.sql", "0133_public_lead_job_files.sql"]) {
+  for (const name of ["0131_trade_team_permissions_and_member_files.sql", "0132_public_lead_accepted_disclosure.sql", "0133_public_lead_job_files.sql", "0172_trade_team_sres_credentials.sql", "0173_trade_activity_customer_document_delivery.sql"]) {
     const source = fs.readFileSync(new URL(`../drizzle/${name}`, import.meta.url), "utf8");
     assert.doesNotMatch(source, /CREATE\s+TRIGGER/i, name);
     for (const statement of source.split(";").map((item) => item.trim()).filter(Boolean)) {
       assert.doesNotMatch(statement, /\bBEGIN\b/i, `${name} is individually parseable by Sites`);
     }
   }
+});
+
+test("specialist credential roles have exact database type constraints", () => {
+  const migration = fs.readFileSync(new URL("../drizzle/0172_trade_team_sres_credentials.sql", import.meta.url), "utf8");
+  const schema = fs.readFileSync(new URL("../db/schema.ts", import.meta.url), "utf8");
+  for (const source of [migration, schema]) {
+    for (const role of ["licensed_plumber", "registered_plumber", "refrigerant_handler"]) assert.match(source, new RegExp(`'${role}'`));
+    assert.match(source, /licensed_plumber' OR .*credentialType|licensed_plumber' OR `credential_type` = 'licence'/);
+    assert.match(source, /registered_plumber' OR .*credentialType|registered_plumber' OR `credential_type` = 'registration'/);
+    assert.match(source, /refrigerant_handler' OR .*credentialType|refrigerant_handler' OR `credential_type` = 'licence'/);
+  }
+  const createCredentials = migration.split("--> statement-breakpoint")
+    .map((statement) => statement.trim()).find((statement) => statement.startsWith("CREATE TABLE `__new_trade_team_member_credentials`"));
+  assert.ok(createCredentials);
+  const database = new DatabaseSync(":memory:");
+  database.exec("CREATE TABLE trade_team_members (id text PRIMARY KEY)");
+  database.prepare("INSERT INTO trade_team_members (id) VALUES (?)").run("worker");
+  database.exec(createCredentials);
+  const insert = database.prepare(`INSERT INTO __new_trade_team_member_credentials
+    (id, owner_uid, team_member_id, credential_type, name, credential_number, issuer, jurisdiction,
+     expires_at, status, file_id, created_at, updated_at, rental_gate)
+    VALUES (?, 'owner', 'worker', ?, 'Opaque credential', 'NUMBER', 'Issuer', 'VIC',
+      '2099-01-01', 'active', ?, '2026-09-08T00:00:00.000Z', '2026-09-08T00:00:00.000Z', ?)`);
+  for (const [role, type] of [
+    ["licensed_plumber", "licence"],
+    ["registered_plumber", "registration"],
+    ["refrigerant_handler", "licence"],
+  ]) {
+    insert.run(`valid-${role}`, type, `file-valid-${role}`, role);
+    assert.throws(() => insert.run(`invalid-${role}`, type === "licence" ? "registration" : "licence", `file-invalid-${role}`, role),
+      /CHECK constraint failed/);
+  }
+  database.close();
 });
 
 test("runtime installer creates and verifies every TLink integrity guard", async () => {
@@ -229,7 +286,7 @@ test("runtime installer creates and verifies every TLink integrity guard", async
   const installed = database.prepare("SELECT name FROM sqlite_schema WHERE type = 'trigger' ORDER BY name").all();
   assert.deepEqual(installed.map((row) => row.name), TLINK_SCHEMA_GUARD_DEFINITIONS.map((item) => item.name).sort());
   database.close();
-  assert.equal(TLINK_SCHEMA_GUARD_DEFINITIONS.length, 9);
+  assert.equal(TLINK_SCHEMA_GUARD_DEFINITIONS.length, 13);
 });
 
 test("runtime installer accepts equivalent persisted SQLite trigger formatting", () => {
@@ -376,6 +433,62 @@ test("accepted disclosure, job media and manifest guards reject malformed or inc
   database.close();
 });
 
+test("customer document delivery guards enforce scope, retry lineage, monotonic status and immutable events", async () => {
+  const database = schemaDatabase();
+  await ensureTlinkSchemaGuards(testD1(database));
+  database.prepare("INSERT INTO trade_work_orders (id, firebase_uid, source_reference, source_type, record_status) VALUES ('work-1', 'owner-1', '', 'internal', 'active')").run();
+  database.prepare("INSERT INTO trade_crm_appointments (id, work_order_id, firebase_uid) VALUES ('appointment-1', 'work-1', 'owner-1')").run();
+  const insert = database.prepare(`INSERT INTO trade_activity_customer_document_deliveries
+    (id, work_order_id, appointment_id, firebase_uid, recipient_email_sha256,
+     activity_bindings, document_ids, document_sha256_set, pack_sha256,
+     delivery_generation, retry_of_delivery_id, provider, provider_message_id,
+     provider_status, idempotency_key, status, accepted_at, sent_at,
+     delivered_at, failed_at, last_error, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'resend', '', '', ?, 'queued', '', '', '', '', '', ?, ?)`);
+  const hash = "a".repeat(64);
+  const packHash = "b".repeat(64);
+  const now = "2026-09-08T00:00:00.000Z";
+  assert.throws(
+    () => insert.run("delivery-bad", "work-1", "missing", "owner-1", hash, "[]", "[]", "[]", packHash, 1, "", "key-bad", now, now),
+    /customer document delivery binding is invalid/,
+  );
+  insert.run("delivery-1", "work-1", "appointment-1", "owner-1", hash, "[]", "[]", "[]", packHash, 1, "", "key-1", now, now);
+  assert.throws(
+    () => insert.run("delivery-2", "work-1", "appointment-1", "owner-1", hash, "[]", "[]", "[]", packHash, 2, "missing", "key-2", now, now),
+    /customer document delivery binding is invalid/,
+  );
+
+  database.prepare("UPDATE trade_activity_customer_document_deliveries SET status = 'sending', updated_at = ? WHERE id = 'delivery-1'").run("2026-09-08T00:01:00.000Z");
+  database.prepare("UPDATE trade_activity_customer_document_deliveries SET status = 'provider_accepted', provider_message_id = 'resend-1', accepted_at = ?, sent_at = ?, updated_at = ? WHERE id = 'delivery-1'")
+    .run("2026-09-08T00:02:00.000Z", "2026-09-08T00:02:00.000Z", "2026-09-08T00:02:00.000Z");
+  database.prepare("UPDATE trade_activity_customer_document_deliveries SET status = 'delivered', delivered_at = ?, updated_at = ? WHERE id = 'delivery-1'")
+    .run("2026-09-08T00:03:00.000Z", "2026-09-08T00:03:00.000Z");
+  database.prepare("UPDATE trade_activity_customer_document_deliveries SET status = 'bounced', failed_at = ?, last_error = 'email.bounced', updated_at = ? WHERE id = 'delivery-1'")
+    .run("2026-09-08T00:04:00.000Z", "2026-09-08T00:04:00.000Z");
+  assert.throws(
+    () => database.prepare("UPDATE trade_activity_customer_document_deliveries SET status = 'delivered' WHERE id = 'delivery-1'").run(),
+    /customer document delivery history is immutable and monotonic/,
+  );
+  assert.throws(
+    () => database.prepare("UPDATE trade_activity_customer_document_deliveries SET pack_sha256 = ? WHERE id = 'delivery-1'").run("c".repeat(64)),
+    /customer document delivery history is immutable and monotonic/,
+  );
+
+  database.prepare(`INSERT INTO trade_activity_customer_document_delivery_events
+    (id, delivery_id, provider_event_key, event_type, provider_status, summary, occurred_at, created_at)
+    VALUES ('event-1', 'delivery-1', 'resend:event-1', 'email.bounced', 'email.bounced', 'Bounce recorded.', ?, ?)`)
+    .run("2026-09-08T00:04:00.000Z", "2026-09-08T00:04:00.000Z");
+  assert.throws(
+    () => database.prepare("UPDATE trade_activity_customer_document_delivery_events SET summary = 'changed' WHERE id = 'event-1'").run(),
+    /Customer document delivery events are immutable/,
+  );
+  assert.throws(
+    () => database.prepare("DELETE FROM trade_activity_customer_document_delivery_events WHERE id = 'event-1'").run(),
+    /Customer document delivery event history must be retained/,
+  );
+  database.close();
+});
+
 test("runtime installer fails closed for missing migrations and mismatched guards", async () => {
   const missing = new DatabaseSync(":memory:");
   await assert.rejects(ensureTlinkSchemaGuards(testD1(missing)), /TLINK_SCHEMA_MIGRATIONS_REQUIRED/);
@@ -388,6 +501,16 @@ test("runtime installer fails closed for missing migrations and mismatched guard
     /TLINK_SCHEMA_GUARD_MISMATCH:trade_team_members_permissions_insert_guard/,
   );
   mismatched.close();
+});
+
+test("runtime installer requires the specialist credential role schema", async () => {
+  const missingCredentials = schemaDatabase();
+  missingCredentials.exec("DROP TABLE trade_team_member_credentials");
+  await assert.rejects(
+    ensureTlinkSchemaGuards(testD1(missingCredentials)),
+    /TLINK_SCHEMA_MIGRATIONS_REQUIRED:table:trade_team_member_credentials/,
+  );
+  missingCredentials.close();
 });
 
 test("team access, Interested handoff, health and minute cron install guards before guarded work", () => {

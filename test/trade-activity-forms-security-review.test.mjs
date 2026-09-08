@@ -7,6 +7,7 @@ import ts from "typescript";
 import { PDFDict, PDFDocument, PDFName } from "pdf-lib";
 import * as core from "../src/lib/trade-activity-forms.ts";
 import * as flow from "../src/lib/trade-activity-form-flow.ts";
+import * as receipt from "../src/lib/scheduled-activity-customer-document-receipt.ts";
 import { renderActivityFieldPdf, validateActivityEvidenceBytes } from "../src/lib/trade-activity-forms-pdf.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -36,17 +37,23 @@ const form = () => ({ id: "form-a", title: "Test activity", version: 1, activity
   ], sources: [], reviewNotes: [] });
 const strokes = [{ points: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.8 }, { x: 0.9, y: 0.2 }] }];
 
-function fixture(fieldForm = form()) {
+function fixture(fieldForm = form(), options = {}) {
   const database = new DatabaseSync(":memory:");
   database.exec(`PRAGMA foreign_keys = ON;
     CREATE TABLE trade_work_orders (id TEXT PRIMARY KEY, firebase_uid TEXT, partner_type TEXT, record_status TEXT, source_type TEXT, source_reference TEXT,
       assignee_member_id TEXT, assignee_label TEXT, stage TEXT, service_category TEXT, revision INTEGER);
     CREATE TABLE trade_crm_job_details (work_order_id TEXT, firebase_uid TEXT, customer_source TEXT, crm_customer_id TEXT, service_site_id TEXT);
-    CREATE TABLE trade_crm_customers (id TEXT, firebase_uid TEXT, first_name TEXT, last_name TEXT, email TEXT, phone TEXT);
+    CREATE TABLE trade_crm_customers (id TEXT, firebase_uid TEXT, first_name TEXT, last_name TEXT, email TEXT, phone TEXT, business_name TEXT, business_number TEXT);
     CREATE TABLE trade_crm_service_sites (id TEXT, firebase_uid TEXT, address_line_1 TEXT, address_line_2 TEXT, suburb TEXT, address_state TEXT, postcode TEXT);
+    CREATE TABLE trade_accounts (firebase_uid TEXT, address_line_1 TEXT, suburb TEXT, address_state TEXT, postcode TEXT, document_phone TEXT, phone TEXT,
+      document_email TEXT, email TEXT);
+    CREATE TABLE trade_work_order_events (id TEXT, work_order_id TEXT, firebase_uid TEXT, event_type TEXT, summary TEXT, created_at TEXT);
+    CREATE TABLE trade_activity_customer_document_deliveries (id TEXT, work_order_id TEXT, appointment_id TEXT, firebase_uid TEXT,
+      recipient_email_sha256 TEXT, activity_bindings TEXT, document_ids TEXT, document_sha256_set TEXT, pack_sha256 TEXT,
+      provider TEXT, provider_message_id TEXT, status TEXT, accepted_at TEXT);
     CREATE TABLE trade_team_members (id TEXT, owner_uid TEXT, status TEXT, display_name TEXT, first_name TEXT, last_name TEXT);
     CREATE TABLE trade_team_member_credentials (id TEXT, owner_uid TEXT, team_member_id TEXT, file_id TEXT, credential_number TEXT, name TEXT,
-      rental_gate TEXT, credential_type TEXT, expires_at TEXT, status TEXT, updated_at TEXT);
+      rental_gate TEXT, credential_type TEXT, jurisdiction TEXT, expires_at TEXT, status TEXT, updated_at TEXT);
     CREATE TABLE trade_team_member_files (id TEXT, owner_uid TEXT, team_member_id TEXT, status TEXT, expires_at TEXT);
     CREATE TABLE trade_work_order_compliance_intents (id TEXT PRIMARY KEY, work_order_id TEXT, installer_uid TEXT, compliance_organisation_id TEXT,
       activity_template_id TEXT, status TEXT, program_code TEXT, intent_snapshot TEXT, created_at TEXT);
@@ -55,12 +62,13 @@ function fixture(fieldForm = form()) {
       ('job-b','owner-b','installer','active','direct','','worker-b','Worker B','scheduled','hot-water',1);
     INSERT INTO trade_work_order_compliance_intents VALUES
       ('intent-a','job-a','owner-a','creditex-a','activity-a','planned','TEST','{}','2026-09-07'),
-      ('intent-b','job-b','owner-b','creditex-b','activity-a','planned','TEST','{}','2026-09-07');`);
+      ('intent-b','job-b','owner-b','creditex-b','activity-a','planned','TEST','{}','2026-09-07');
+    INSERT INTO trade_team_members VALUES ('worker-a','owner-a','active','Worker A','Worker','A');`);
   database.exec(read("../drizzle/0170_trade_activity_forms.sql"));
   const d1 = { prepare(sql) { return { bind(...values) { return {
     async first() { return database.prepare(sql).get(...values) || null; },
     async all() { return { results: database.prepare(sql).all(...values) }; },
-    async run() { const result = database.prepare(sql).run(...values); return { success: true, meta: { changes: Number(result.changes) } }; },
+    async run() { await options.beforeRun?.({ sql, values, database }); const result = database.prepare(sql).run(...values); return { success: true, meta: { changes: Number(result.changes) } }; },
   }; } }; } };
   const objects = new Map();
   const bucket = {
@@ -72,9 +80,21 @@ function fixture(fieldForm = form()) {
   const server = loadModule(serverSource, {
     "cloudflare:workers": { env: { EVIDENCE: bucket } },
     "../../db": { getD1: () => d1 }, "./trade-team-server": { assignedJob },
-    "./trade-activity-forms-library.ts": { defaultActivityFieldForm: () => structuredClone(fieldForm), activityPrefill: () => ({}) },
+    "./trade-activity-forms-library.ts": {
+      defaultActivityFieldForm: options.defaultFormFactory || (() => structuredClone(options.defaultForm || fieldForm)), activityPrefill: options.activityPrefill || (() => ({})),
+      activityConsumerDocuments: () => options.consumerDocuments || [],
+      applyDefaultActivityFormPolicy: options.applyPolicy || ((value) => value),
+      ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS: {
+        deliveryId: "delivery.id",
+        providerAccepted: "delivery.provider", method: "delivery.method", acceptedAt: "delivery.accepted",
+        recipient: "delivery.recipient", appointmentId: "delivery.appointment",
+        documentIds: "delivery.ids", documentSha256Set: "delivery.hashes",
+        packSha256: "delivery.pack",
+      },
+    },
     "./trade-activity-forms.ts": core,
     "./trade-activity-form-flow.ts": flow,
+    "./scheduled-activity-customer-document-receipt.ts": receipt,
     "./trade-activity-forms-pdf.ts": { validateActivityEvidenceBytes, renderActivityFieldPdf: async () => new TextEncoder().encode("%PDF-test-final-custody") },
     "./customer-plan-pdf-fonts": { loadCustomerPlanPdfFonts: async () => ({ regular: new Uint8Array(), bold: new Uint8Array() }) },
   });
@@ -83,10 +103,52 @@ function fixture(fieldForm = form()) {
   return { database, server, access, objects };
 }
 
+function acceptedCustomerDocumentDelivery(database, {
+  id = "delivery-a", providerMessageId = "email-a", recipient = "pat@example.com", appointmentId = "appointment-a",
+  documentIds = ["factsheet"], documentSha256Set = ["a".repeat(64)], acceptedAt = "2026-09-08T01:02:03.000Z",
+  activityBindings = [{ activityTemplateId: "activity-a", variantId: "" }], packSha256 = "b".repeat(64),
+} = {}) {
+  database.prepare(`INSERT INTO trade_activity_customer_document_deliveries
+    (id, work_order_id, appointment_id, firebase_uid, recipient_email_sha256, activity_bindings, document_ids, document_sha256_set,
+     pack_sha256, provider, provider_message_id, status, accepted_at)
+    VALUES (?, 'job-a', ?, 'owner-a', ?, ?, ?, ?, ?, 'resend', ?, 'provider_accepted', ?)`)
+    .run(id, appointmentId, createHash("sha256").update(recipient).digest("hex"), JSON.stringify(activityBindings),
+      JSON.stringify(documentIds), JSON.stringify(documentSha256Set), packSha256, providerMessageId, acceptedAt);
+  return receipt.scheduledActivityCustomerDocumentReceiptSummary({ deliveryId: id, providerMessageId, acceptedAt, recipient,
+    appointmentId, documentIds, documentSha256Set });
+}
+
 test("file and PDF custody digests are the SHA-256 of original bytes", () => {
   const bytes = new Uint8Array([0, 255, 65, 13, 10, 99]);
   assert.equal(core.activityHash(bytes), createHash("sha256").update(bytes).digest("hex"));
   assert.notEqual(core.activityHash(bytes), core.activityHash({ 0: 0, 1: 255, 2: 65, 3: 13, 4: 10, 5: 99 }));
+});
+
+test("server progress counts required field work and signatures without system-filled fields", () => {
+  const fieldForm = form();
+  fieldForm.fields.push({ ...field("delivery.provider", "before", "boolean"), presentation: "derived" });
+  const { database, server } = fixture(fieldForm);
+  try {
+    const record = { id: "record-a", recordNumber: "TAF-A", intentId: "intent-a", workOrderId: "job-a", ownerUid: "owner-a",
+      organisationId: "creditex-a", revision: 1, status: "draft", form: fieldForm, formSha256: core.activityHash(fieldForm), answers: {},
+      evidence: [], signatures: [], signerDefaults: { customer: "", technician: "Worker A" }, createdAt: "2026-09-08T00:00:00.000Z",
+      updatedAt: "2026-09-08T00:00:00.000Z", submittedAt: "", reportUrl: "" };
+    assert.deepEqual(server.activityPresentation(record).progress, { complete: 0, total: 4 });
+  } finally { database.close(); }
+});
+
+test("a required system-filled value cannot be blank when its declaration is signed or the form is submitted", async () => {
+  const fieldForm = form();
+  fieldForm.fields.push({ ...field("system_customer_email", "before"), presentation: "derived", autofill: "job.customer.email" });
+  const { database, server, access } = fixture(fieldForm);
+  try {
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Unit" });
+    assert.ok(core.activityMissing(record, "before", false).some((item) => item.key === "system_customer_email"));
+    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes }), /ACTIVITY_SIGNING_NOT_READY/);
+    await assert.rejects(server.submitActivityRecord(access, record.id, record.revision), /ACTIVITY_FORM_INCOMPLETE/);
+  } finally { database.close(); }
 });
 
 test("actual Creditex organisation membership can author while another organisation is rejected", async () => {
@@ -112,6 +174,493 @@ test("records cannot be opened or read across business or assigned-worker bounda
   } finally { database.close(); }
 });
 
+test("the booked contact pre-fills customer signing while an authorised alternate signer remains explicit", async () => {
+  const { database, server, access } = fixture();
+  try {
+    database.prepare("INSERT INTO trade_crm_customers VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("customer-a", "owner-a", "Pat", "Customer", "pat@example.com", "0400000000", "Pat Customer Pty Ltd", "11122233344");
+    database.prepare("INSERT INTO trade_crm_job_details VALUES (?, ?, ?, ?, ?)")
+      .run("job-a", "owner-a", "installer_crm", "customer-a", "");
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    assert.equal(record.signerDefaults.customer, "Pat Customer");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Unit" });
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Alex Authorised Delegate", acknowledged: true, strokes });
+    assert.equal(record.signatures[0].signerName, "Alex Authorised Delegate");
+  } finally { database.close(); }
+});
+
+test("a business name never invents the booked contact's signer identity", async () => {
+  const { database, server, access } = fixture();
+  try {
+    database.prepare("INSERT INTO trade_crm_customers VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("customer-a", "owner-a", "", "", "office@example.com", "0400000000", "Customer Company Pty Ltd", "11122233344");
+    database.prepare("INSERT INTO trade_crm_job_details VALUES (?, ?, ?, ?, ?)")
+      .run("job-a", "owner-a", "installer_crm", "customer-a", "");
+    const record = await server.openActivityRecord(access, "job-a", "intent-a");
+    assert.equal(record.signerDefaults.customer, "");
+  } finally { database.close(); }
+});
+
+test("reassigning an unsigned draft refreshes assigned technician identity and signer defaults", async () => {
+  const fieldForm = form();
+  fieldForm.fields.push({ ...field("installer.full_name", "after"), presentation: "derived", autofill: "job.assignee.fullName" });
+  const { database, server, access } = fixture(fieldForm, {
+    activityPrefill: (formValue, context) => Object.fromEntries(formValue.fields
+      .filter((item) => item.autofill === "job.assignee.fullName")
+      .map((item) => [item.key, context.technician])),
+  });
+  try {
+    database.prepare("INSERT INTO trade_team_members VALUES (?, ?, ?, ?, ?, ?)").run("worker-c", "owner-a", "active", "Worker C", "Worker", "C");
+    const opened = await server.openActivityRecord(access, "job-a", "intent-a");
+    assert.equal(opened.answers["installer.full_name"], "Worker A");
+    database.prepare("UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ? WHERE id = ?").run("worker-c", "Worker C", "job-a");
+    const reassignedAccess = { ...access, actorUid: "field-member:worker-c", memberId: "worker-c", displayName: "Worker C" };
+    const refreshed = await server.loadActivityRecord(reassignedAccess, opened.id);
+    assert.equal(refreshed.answers["installer.full_name"], "Worker C");
+    assert.equal(refreshed.signerDefaults.technician, "Worker C");
+    await assert.rejects(server.loadActivityRecord(access, opened.id), /JOB_NOT_ASSIGNED/);
+  } finally { database.close(); }
+});
+
+test("trade profile email prefills required system-owned business email fields", async () => {
+  const fieldForm = form();
+  fieldForm.fields.push({ ...field("installer.email", "after"), presentation: "derived", autofill: "job.trade.email" });
+  const { database, server, access } = fixture(fieldForm, {
+    activityPrefill: (formValue, context) => Object.fromEntries(formValue.fields
+      .filter((item) => item.autofill === "job.trade.email")
+      .map((item) => [item.key, context.businessEmail || ""])),
+  });
+  try {
+    database.prepare(`INSERT INTO trade_accounts
+      (firebase_uid, address_line_1, suburb, address_state, postcode, document_phone, phone, document_email, email)
+      VALUES (?, '', '', '', '', '', '', ?, ?)`).run("owner-a", "documents@example.com", "login@example.com");
+    const opened = await server.openActivityRecord(access, "job-a", "intent-a");
+    assert.equal(opened.answers["installer.email"], "documents@example.com");
+  } finally { database.close(); }
+});
+
+test("saved SRES team accreditations prefill installer, designer and connection details", async () => {
+  const fieldForm = form();
+  fieldForm.fields.push(
+    { ...field("installer.accreditation_number", "after"), presentation: "prefilled", autofill: "job.credential.installer" },
+    { ...field("designer.accreditation_number", "after"), presentation: "prefilled", autofill: "job.credential.designer" },
+    { ...field("installer.accreditation_type", "after"), presentation: "prefilled", autofill: "job.credentialType.installer" },
+    { ...field("installation.connection_type", "after"), presentation: "derived", autofill: "job.credentialType.connection" },
+  );
+  const { database, server, access } = fixture(fieldForm, {
+    activityPrefill: (formValue, context) => Object.fromEntries(formValue.fields.map((item) => [item.key, ({
+      "job.credential.installer": context.credentialNumbers?.installer,
+      "job.credential.designer": context.credentialNumbers?.designer,
+      "job.credentialType.installer": context.credentialTypes?.installer,
+      "job.credentialType.connection": context.credentialTypes?.connection,
+    })[item.autofill] || ""])),
+  });
+  try {
+    for (const [id, gate, name, number] of [
+      ["installer", "sres_installer_accreditation", "SAA Grid connected installer accreditation", "SAA-I-1"],
+      ["designer", "sres_designer_accreditation", "SAA Grid connected designer accreditation", "SAA-D-1"],
+    ]) {
+      database.prepare("INSERT INTO trade_team_member_files VALUES (?, ?, ?, 'active', ?)").run(`file-${id}`, "owner-a", "worker-a", "2027-09-08");
+      database.prepare("INSERT INTO trade_team_member_credentials VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'NATIONAL', ?, 'active', ?)")
+        .run(`credential-${id}`, "owner-a", "worker-a", `file-${id}`, number, name, gate, "accreditation", "2027-09-08", "2026-09-08T00:00:00.000Z");
+    }
+    const opened = await server.openActivityRecord(access, "job-a", "intent-a");
+    assert.equal(opened.answers["installer.accreditation_number"], "SAA-I-1");
+    assert.equal(opened.answers["designer.accreditation_number"], "SAA-D-1");
+    assert.equal(opened.answers["installer.accreditation_type"], "SAA Grid connected installer accreditation");
+    assert.equal(opened.answers["installation.connection_type"], "Grid connected");
+    const editableAnswers = Object.fromEntries(Object.entries(opened.answers)
+      .filter(([key]) => fieldForm.fields.find((fieldValue) => fieldValue.key === key)?.type === "text"));
+    const saved = await server.saveActivityAnswers(access, opened.id, opened.revision, {
+      ...editableAnswers, "installer.accreditation_number": "SAA-OTHER-INSTALLER",
+    });
+    const reloaded = await server.loadActivityRecord(access, saved.id);
+    assert.equal(reloaded.answers["installer.accreditation_number"], "SAA-OTHER-INSTALLER", "An explicit role holder remains editable");
+    assert.equal(reloaded.answers["installation.connection_type"], "Grid connected", "A derived job fact still refreshes from the profile");
+  } finally { database.close(); }
+});
+
+test("explicit specialist credential roles prefill exact crew identifiers without credential-name inference", async () => {
+  const fieldForm = form();
+  fieldForm.fields.push(
+    { ...field("workers.licensed_plumber.licence_or_registration", "after"), presentation: "derived", autofill: "job.credential.licensed_plumber" },
+    { ...field("workers.registered_plumber.licence_or_registration", "after"), presentation: "derived", autofill: "job.credential.registered_plumber" },
+    { ...field("workers.refrigerant_handler.licence_or_registration", "after"), presentation: "derived", autofill: "job.credential.refrigerant_handler" },
+  );
+  const { database, server, access } = fixture(fieldForm, {
+    activityPrefill: (formValue, context) => Object.fromEntries(formValue.fields.map((item) => [item.key, ({
+      "job.credential.licensed_plumber": context.credentialNumbers?.licensed_plumber,
+      "job.credential.registered_plumber": context.credentialNumbers?.registered_plumber,
+      "job.credential.refrigerant_handler": context.credentialNumbers?.refrigerant_handler,
+    })[item.autofill] || ""])),
+  });
+  try {
+    const credentials = [
+      ["licensed-valid", "licensed_plumber", "licence", "Opaque credential A", "PLUMB-L1", "2026-09-08T00:00:00.000Z"],
+      ["licensed-valid-z", "licensed_plumber", "licence", "Opaque credential Z", "PLUMB-L2", "2026-09-08T00:00:00.000Z"],
+      ["licensed-wrong-type", "licensed_plumber", "registration", "Opaque credential B", "WRONG-L-TYPE", "2026-09-08T02:00:00.000Z"],
+      ["registered-valid", "registered_plumber", "registration", "Opaque credential C", "PLUMB-R1", "2026-09-08T00:00:00.000Z"],
+      ["registered-wrong-type", "registered_plumber", "licence", "Opaque credential D", "WRONG-R-TYPE", "2026-09-08T02:00:00.000Z"],
+      ["refrigerant-valid", "refrigerant_handler", "licence", "Opaque credential E", "REF-1", "2026-09-08T00:00:00.000Z"],
+      ["refrigerant-wrong-type", "refrigerant_handler", "registration", "Opaque credential F", "WRONG-REF-TYPE", "2026-09-08T02:00:00.000Z"],
+      ["misleading-name", "licensed_electrician", "licence", "Plumber gasfitter ARCtick refrigerant licence", "WRONG-NAME-MATCH", "2026-09-08T03:00:00.000Z"],
+    ];
+    for (const [id, gate, type, name, number, updatedAt] of credentials) {
+      database.prepare("INSERT INTO trade_team_member_files VALUES (?, ?, ?, 'active', ?)").run(`file-${id}`, "owner-a", "worker-a", "2027-09-08");
+      database.prepare("INSERT INTO trade_team_member_credentials VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'VIC', ?, 'active', ?)")
+        .run(`credential-${id}`, "owner-a", "worker-a", `file-${id}`, number, name, gate, type, "2027-09-08", updatedAt);
+    }
+
+    const opened = await server.openActivityRecord(access, "job-a", "intent-a");
+    assert.equal(opened.answers["workers.licensed_plumber.licence_or_registration"], "PLUMB-L2",
+      "Equal update times resolve by stable credential ID order");
+    assert.equal(opened.answers["workers.registered_plumber.licence_or_registration"], "PLUMB-R1");
+    assert.equal(opened.answers["workers.refrigerant_handler.licence_or_registration"], "REF-1");
+  } finally { database.close(); }
+});
+
+test("wrong credential classes cannot populate SRES or electrical licence fields", async () => {
+  const fieldForm = form();
+  fieldForm.fields.push(
+    { ...field("installer.accreditation_number", "after"), presentation: "derived", autofill: "job.credential.installer" },
+    { ...field("designer.accreditation_number", "after"), presentation: "derived", autofill: "job.credential.designer" },
+    { ...field("electrician.licence_number", "after"), presentation: "derived", autofill: "job.credential.electrician" },
+  );
+  const { database, server, access } = fixture(fieldForm, {
+    activityPrefill: (formValue, context) => Object.fromEntries(formValue.fields.map((item) => [item.key, ({
+      "job.credential.installer": context.credentialNumbers?.installer,
+      "job.credential.designer": context.credentialNumbers?.designer,
+      "job.credential.electrician": context.credentialNumbers?.electrician,
+    })[item.autofill] || ""])),
+  });
+  try {
+    for (const [id, gate, type, jurisdiction, number] of [
+      ["installer-wrong-type", "sres_installer_accreditation", "licence", "NATIONAL", "NOT-SRES-I"],
+      ["installer-wrong-jurisdiction", "sres_installer_accreditation", "accreditation", "VIC", "NOT-SRES-J"],
+      ["designer-wrong-gate", "licensed_electrician", "accreditation", "VIC", "NOT-SRES-D"],
+      ["electrician-wrong-type", "licensed_electrician", "training", "VIC", "NOT-ELEC"],
+    ]) {
+      database.prepare("INSERT INTO trade_team_member_files VALUES (?, ?, ?, 'active', ?)").run(`file-${id}`, "owner-a", "worker-a", "2027-09-08");
+      database.prepare("INSERT INTO trade_team_member_credentials VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)")
+        .run(`credential-${id}`, "owner-a", "worker-a", `file-${id}`, number, id, gate, type, jurisdiction, "2027-09-08", "2026-09-08T00:00:00.000Z");
+    }
+    const opened = await server.openActivityRecord(access, "job-a", "intent-a");
+    for (const key of ["installer.accreditation_number", "designer.accreditation_number", "electrician.licence_number"]) {
+      assert.equal(opened.answers[key], "", key);
+      assert.ok(core.activityMissing(opened).some((item) => item.key === key), key);
+    }
+  } finally { database.close(); }
+});
+
+test("an activity opens with its booked variant and rejects a conflicting client variant", async () => {
+  const selected = [];
+  const fieldForm = form();
+  const { database, server, access } = fixture(fieldForm, {
+    defaultFormFactory: (_templateId, variantId) => { selected.push(variantId); return { ...structuredClone(fieldForm), variantId }; },
+  });
+  try {
+    database.prepare("UPDATE trade_work_order_compliance_intents SET intent_snapshot = ? WHERE id = ?")
+      .run(JSON.stringify({ activity: { variantId: "activity_business" } }), "intent-a");
+    const opened = await server.openActivityRecord(access, "job-a", "intent-a");
+    assert.equal(opened.form.variantId, "activity_business");
+    assert.deepEqual(selected, ["activity_business"]);
+    await assert.rejects(
+      server.changeActivityVariant(access, opened.id, opened.revision, "activity_residential"),
+      /ACTIVITY_FORM_VARIANT_MISMATCH/,
+    );
+  } finally { database.close(); }
+
+  const second = fixture(fieldForm, { defaultFormFactory: (_templateId, variantId) => ({ ...structuredClone(fieldForm), variantId }) });
+  try {
+    second.database.prepare("UPDATE trade_work_order_compliance_intents SET intent_snapshot = ? WHERE id = ?")
+      .run(JSON.stringify({ activity: { variantId: "activity_business" } }), "intent-a");
+    await assert.rejects(second.server.openActivityRecord(second.access, "job-a", "intent-a", "activity_residential"), /ACTIVITY_FORM_VARIANT_MISMATCH/);
+  } finally { second.database.close(); }
+});
+
+test("a corrupted stored master cannot open a field record", async () => {
+  const { database, server, access } = fixture();
+  try {
+    const fieldForm = form(); fieldForm.version = 2;
+    database.prepare(`INSERT INTO trade_activity_field_masters
+      (id, organisation_id, activity_template_id, variant_id, version, form_json, form_sha256, published_by_uid, published_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run("master", "creditex-a", "activity-a", "", 2,
+        core.activityCanonical(fieldForm), "b".repeat(64), "creditex", "2026-09-08T00:00:00.000Z");
+    await assert.rejects(server.openActivityRecord(access, "job-a", "intent-a"), /ACTIVITY_MASTER_INTEGRITY_FAILED/);
+  } finally { database.close(); }
+});
+
+test("provider-accepted booking document receipts hydrate records and cannot be overwritten by the field client", async () => {
+  const derived = (key, type = "text") => ({ ...field(key, "before", type, false), presentation: "derived" });
+  const fieldForm = form();
+  fieldForm.fields.push(
+    derived("delivery.id"),
+    derived("delivery.provider", "boolean"),
+    derived("delivery.method"),
+    derived("delivery.accepted"),
+    derived("delivery.recipient"),
+    derived("delivery.appointment"),
+    derived("delivery.ids"),
+    derived("delivery.hashes"),
+    derived("delivery.pack"),
+  );
+  const { database, server, access } = fixture(fieldForm, { consumerDocuments: [{ key: "factsheet" }] });
+  try {
+    const hash = "a".repeat(64);
+    database.prepare("INSERT INTO trade_crm_customers VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run("customer-a", "owner-a", "Pat", "Customer", "pat@example.com", "0400000000", "", "");
+    database.prepare("INSERT INTO trade_crm_job_details VALUES (?, ?, ?, ?, ?)").run("job-a", "owner-a", "direct", "customer-a", "");
+    database.prepare("INSERT INTO trade_work_order_events VALUES (?, ?, ?, ?, ?, ?)").run("event", "job-a", "owner-a", "customer_documents_provider_accepted",
+      acceptedCustomerDocumentDelivery(database, { documentSha256Set: [hash] }), "2026-09-08T01:02:03.000Z");
+    const opened = await server.openActivityRecord(access, "job-a", "intent-a");
+    assert.equal(opened.answers["delivery.provider"], true);
+    assert.equal(opened.answers["delivery.method"], "email");
+    assert.equal(opened.answers["delivery.recipient"], "pat@example.com");
+    const saved = await server.saveActivityAnswers(access, opened.id, opened.revision, {
+      ...opened.answers, before_name: "Pat", "delivery.provider": false, "delivery.method": "paper",
+    });
+    assert.equal(saved.answers["delivery.provider"], true);
+    assert.equal(saved.answers["delivery.method"], "email");
+    assert.equal(saved.answers.before_name, "Pat");
+    const signed = await server.signActivityDeclaration(access, saved.id, { expectedRevision: saved.revision,
+      declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes });
+    const reloaded = await server.loadActivityRecord(access, signed.id);
+    assert.equal(reloaded.answers["delivery.accepted"], "2026-09-08T01:02:03.000Z");
+    assert.deepEqual(core.activityMissing(reloaded, "before"), []);
+  } finally { database.close(); }
+});
+
+test("a changed customer email clears a persisted booking-document receipt before signing", async () => {
+  const derived = (key, type = "text") => ({ ...field(key, "before", type, false), presentation: "derived" });
+  const fieldForm = form();
+  fieldForm.fields.push(
+    derived("delivery.id"), derived("delivery.provider", "boolean"), derived("delivery.method"), derived("delivery.accepted"),
+    derived("delivery.recipient"), derived("delivery.appointment"), derived("delivery.ids"), derived("delivery.hashes"), derived("delivery.pack"),
+  );
+  const { database, server, access } = fixture(fieldForm, { consumerDocuments: [{ key: "factsheet" }] });
+  try {
+    database.prepare("INSERT INTO trade_crm_customers VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run("customer-a", "owner-a", "Pat", "Customer", "pat@example.com", "0400000000", "", "");
+    database.prepare("INSERT INTO trade_crm_job_details VALUES (?, ?, ?, ?, ?)").run("job-a", "owner-a", "direct", "customer-a", "");
+    database.prepare("INSERT INTO trade_work_order_events VALUES (?, ?, ?, ?, ?, ?)").run("event", "job-a", "owner-a", "customer_documents_provider_accepted",
+      acceptedCustomerDocumentDelivery(database), "2026-09-08T01:02:03.000Z");
+    const opened = await server.openActivityRecord(access, "job-a", "intent-a");
+    const saved = await server.saveActivityAnswers(access, opened.id, opened.revision, { ...opened.answers, before_name: "Pat" });
+    assert.equal(saved.answers["delivery.provider"], true);
+    database.prepare("UPDATE trade_crm_customers SET email = ? WHERE id = ? AND firebase_uid = ?").run("new-address@example.com", "customer-a", "owner-a");
+    const refreshed = await server.loadActivityRecord(access, saved.id);
+    assert.equal(refreshed.answers["delivery.provider"], undefined);
+    assert.equal(refreshed.answers["delivery.recipient"], undefined);
+    await assert.rejects(server.signActivityDeclaration(access, saved.id, { expectedRevision: saved.revision,
+      declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes }), /ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED/);
+  } finally { database.close(); }
+});
+
+test("a customer-document delivery bound to a different activity or variant cannot hydrate or permit signing", async () => {
+  const derived = (key, type = "text") => ({ ...field(key, "before", type, false), presentation: "derived" });
+  const fieldForm = { ...form(), variantId: "variant-a" };
+  fieldForm.fields.push(
+    derived("delivery.id"), derived("delivery.provider", "boolean"), derived("delivery.method"), derived("delivery.accepted"),
+    derived("delivery.recipient"), derived("delivery.appointment"), derived("delivery.ids"), derived("delivery.hashes"), derived("delivery.pack"),
+  );
+  const { database, server, access } = fixture(fieldForm, { consumerDocuments: [{ key: "factsheet" }] });
+  try {
+    database.prepare("INSERT INTO trade_crm_customers VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("customer-a", "owner-a", "Pat", "Customer", "pat@example.com", "0400000000", "", "");
+    database.prepare("INSERT INTO trade_crm_job_details VALUES (?, ?, ?, ?, ?)")
+      .run("job-a", "owner-a", "direct", "customer-a", "");
+    database.prepare("INSERT INTO trade_work_order_events VALUES (?, ?, ?, ?, ?, ?)")
+      .run("event-wrong-binding", "job-a", "owner-a", "customer_documents_provider_accepted",
+        acceptedCustomerDocumentDelivery(database, {
+          activityBindings: [
+            { activityTemplateId: "activity-a", variantId: "variant-b" },
+            { activityTemplateId: "activity-b", variantId: "variant-a" },
+          ],
+        }), "2026-09-08T01:02:03.000Z");
+
+    let record = await server.openActivityRecord(access, "job-a", "intent-a", "variant-a");
+    assert.equal(record.answers["delivery.id"], undefined);
+    assert.equal(record.answers["delivery.provider"], undefined);
+    assert.equal(record.answers["delivery.pack"], undefined);
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Pat" });
+    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes }),
+    /ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED/);
+    const stored = JSON.parse(database.prepare("SELECT payload FROM trade_activity_field_records WHERE id = ?").get(record.id).payload);
+    assert.deepEqual(stored.signatures, []);
+  } finally { database.close(); }
+});
+
+test("a terminal provider event invalidates an unsigned customer-document receipt until resend", async () => {
+  const derived = (key, type = "text") => ({ ...field(key, "before", type, false), presentation: "derived" });
+  const fieldForm = form();
+  fieldForm.fields.push(
+    derived("delivery.id"), derived("delivery.provider", "boolean"), derived("delivery.method"), derived("delivery.accepted"),
+    derived("delivery.recipient"), derived("delivery.appointment"), derived("delivery.ids"), derived("delivery.hashes"), derived("delivery.pack"),
+  );
+  const { database, server, access } = fixture(fieldForm, { consumerDocuments: [{ key: "factsheet" }] });
+  try {
+    database.prepare("INSERT INTO trade_crm_customers VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run("customer-a", "owner-a", "Pat", "Customer", "pat@example.com", "0400000000", "", "");
+    database.prepare("INSERT INTO trade_crm_job_details VALUES (?, ?, ?, ?, ?)").run("job-a", "owner-a", "direct", "customer-a", "");
+    database.prepare("INSERT INTO trade_work_order_events VALUES (?, ?, ?, ?, ?, ?)").run("event", "job-a", "owner-a", "customer_documents_provider_accepted",
+      acceptedCustomerDocumentDelivery(database), "2026-09-08T01:02:03.000Z");
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { ...record.answers, before_name: "Pat" });
+    assert.equal(record.answers["delivery.provider"], true);
+    database.prepare("UPDATE trade_activity_customer_document_deliveries SET status = 'bounced' WHERE id = ?").run("delivery-a");
+    const refreshed = await server.loadActivityRecord(access, record.id);
+    assert.equal(refreshed.answers["delivery.provider"], undefined);
+    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Pat", acknowledged: true, strokes }), /ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED/);
+  } finally { database.close(); }
+});
+
+test("customer signing atomically rejects a delivery that bounces at the field-record write boundary", async () => {
+  let armBounce = false;
+  let bounced = false;
+  const derived = (key, type = "text") => ({ ...field(key, "before", type, false), presentation: "derived" });
+  const fieldForm = form();
+  fieldForm.fields.push(
+    derived("delivery.id"), derived("delivery.provider", "boolean"), derived("delivery.method"), derived("delivery.accepted"),
+    derived("delivery.recipient"), derived("delivery.appointment"), derived("delivery.ids"), derived("delivery.hashes"), derived("delivery.pack"),
+  );
+  const { database, server, access } = fixture(fieldForm, {
+    consumerDocuments: [{ key: "factsheet" }],
+    beforeRun: ({ sql, database: db }) => {
+      if (armBounce && !bounced && /UPDATE trade_activity_field_records SET revision/.test(sql)) {
+        bounced = true;
+        db.prepare("UPDATE trade_activity_customer_document_deliveries SET status = 'bounced' WHERE id = ?").run("delivery-a");
+      }
+    },
+  });
+  try {
+    database.prepare("INSERT INTO trade_crm_customers VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("customer-a", "owner-a", "Pat", "Customer", "pat@example.com", "0400000000", "", "");
+    database.prepare("INSERT INTO trade_crm_job_details VALUES (?, ?, ?, ?, ?)")
+      .run("job-a", "owner-a", "direct", "customer-a", "");
+    database.prepare("INSERT INTO trade_work_order_events VALUES (?, ?, ?, ?, ?, ?)")
+      .run("event", "job-a", "owner-a", "customer_documents_provider_accepted",
+        acceptedCustomerDocumentDelivery(database), "2026-09-08T01:02:03.000Z");
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { ...record.answers, before_name: "Pat" });
+    assert.equal(record.answers["delivery.provider"], true);
+
+    armBounce = true;
+    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes }),
+    /ACTIVITY_REVISION_CONFLICT/);
+    assert.equal(bounced, true);
+    const stored = JSON.parse(database.prepare("SELECT payload FROM trade_activity_field_records WHERE id = ?").get(record.id).payload);
+    assert.deepEqual(stored.signatures, []);
+    assert.equal(stored.revision, record.revision);
+    const refreshed = await server.loadActivityRecord(access, record.id);
+    assert.equal(refreshed.answers["delivery.provider"], undefined);
+  } finally { database.close(); }
+});
+
+test("a bounced signed customer-document receipt requires a fresh receipt and customer signature while retaining audit signatures", async () => {
+  const derived = (key, type = "text") => ({ ...field(key, "before", type, false), presentation: "derived" });
+  const fieldForm = form();
+  fieldForm.fields.push(
+    derived("delivery.id"), derived("delivery.provider", "boolean"), derived("delivery.method"), derived("delivery.accepted"),
+    derived("delivery.recipient"), derived("delivery.appointment"), derived("delivery.ids"), derived("delivery.hashes"), derived("delivery.pack"),
+  );
+  const { database, server, access } = fixture(fieldForm, { consumerDocuments: [{ key: "factsheet" }] });
+  try {
+    database.prepare("INSERT INTO trade_crm_customers VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("customer-a", "owner-a", "Pat", "Customer", "pat@example.com", "0400000000", "", "");
+    database.prepare("INSERT INTO trade_crm_job_details VALUES (?, ?, ?, ?, ?)")
+      .run("job-a", "owner-a", "direct", "customer-a", "");
+    database.prepare("INSERT INTO trade_work_order_events VALUES (?, ?, ?, ?, ?, ?)")
+      .run("event-initial", "job-a", "owner-a", "customer_documents_provider_accepted",
+        acceptedCustomerDocumentDelivery(database), "2026-09-08T01:02:03.000Z");
+
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    assert.equal(record.answers["delivery.provider"], true);
+    record = await server.saveActivityAnswers(access, record.id, record.revision, {
+      ...record.answers, before_name: "Pat", after_model: "Installed unit",
+    });
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes });
+    const originalCustomerSignature = structuredClone(record.signatures[0]);
+    assert.deepEqual(core.activityMissing(record, "before"), []);
+
+    database.prepare("UPDATE trade_activity_customer_document_deliveries SET status = 'bounced' WHERE id = ?").run("delivery-a");
+    record = await server.loadActivityRecord(access, record.id);
+    assert.equal(record.answers["delivery.provider"], undefined);
+    assert.equal(record.answers["delivery.accepted"], undefined);
+    assert.deepEqual(record.signatures, [originalCustomerSignature], "The invalidated signature remains in the audit history");
+    assert.ok(core.activityMissing(record, "before").some((item) => item.key === "before_customer" && item.kind === "signature"));
+
+    const resendAcceptedAt = "2026-09-08T02:02:03.000Z";
+    database.prepare("INSERT INTO trade_work_order_events VALUES (?, ?, ?, ?, ?, ?)")
+      .run("event-resend", "job-a", "owner-a", "customer_documents_provider_accepted",
+        acceptedCustomerDocumentDelivery(database, {
+          id: "delivery-b", providerMessageId: "email-b", acceptedAt: resendAcceptedAt,
+        }), resendAcceptedAt);
+    record = await server.loadActivityRecord(access, record.id);
+    assert.equal(record.answers["delivery.provider"], true);
+    assert.equal(record.answers["delivery.accepted"], resendAcceptedAt);
+    assert.deepEqual(record.signatures, [originalCustomerSignature]);
+    assert.ok(core.activityMissing(record, "before").some((item) => item.key === "before_customer" && item.kind === "signature"),
+      "The old signature does not attest to the replacement receipt");
+
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes });
+    const customerSignatures = record.signatures.filter((item) => item.declarationKey === "before_customer");
+    assert.equal(customerSignatures.length, 2);
+    assert.deepEqual(customerSignatures[0], originalCustomerSignature);
+    assert.notEqual(customerSignatures[1].scopeSha256, originalCustomerSignature.scopeSha256);
+    assert.deepEqual(core.activityMissing(record, "before"), []);
+
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes });
+    assert.equal(record.signatures.filter((item) => item.declarationKey === "after_technician").length, 1);
+    assert.deepEqual(core.activityMissing(record), []);
+  } finally { database.close(); }
+});
+
+test("receipt hydration skips an invalid same-time candidate and finds the latest valid accepted delivery", async () => {
+  const derived = (key, type = "text") => ({ ...field(key, "before", type, false), presentation: "derived" });
+  const fieldForm = form();
+  fieldForm.fields.push(
+    derived("delivery.id"), derived("delivery.provider", "boolean"), derived("delivery.method"), derived("delivery.accepted"),
+    derived("delivery.recipient"), derived("delivery.appointment"), derived("delivery.ids"), derived("delivery.hashes"), derived("delivery.pack"),
+  );
+  const { database, server, access } = fixture(fieldForm, { consumerDocuments: [{ key: "factsheet" }] });
+  try {
+    database.prepare("INSERT INTO trade_crm_customers VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run("customer-a", "owner-a", "Pat", "Customer", "pat@example.com", "0400000000", "", "");
+    database.prepare("INSERT INTO trade_crm_job_details VALUES (?, ?, ?, ?, ?)").run("job-a", "owner-a", "direct", "customer-a", "");
+    const accepted = acceptedCustomerDocumentDelivery(database, { id: "delivery-good", providerMessageId: "email-good" });
+    const bounced = acceptedCustomerDocumentDelivery(database, { id: "delivery-bad", providerMessageId: "email-bad" });
+    database.prepare("UPDATE trade_activity_customer_document_deliveries SET status = 'bounced' WHERE id = ?").run("delivery-bad");
+    const occurredAt = "2026-09-08T01:02:03.000Z";
+    database.prepare("INSERT INTO trade_work_order_events VALUES (?, ?, ?, ?, ?, ?)").run("event-a-good", "job-a", "owner-a", "customer_documents_provider_accepted", accepted, occurredAt);
+    database.prepare("INSERT INTO trade_work_order_events VALUES (?, ?, ?, ?, ?, ?)").run("event-z-bad", "job-a", "owner-a", "customer_documents_provider_accepted", bounced, occurredAt);
+    const record = await server.openActivityRecord(access, "job-a", "intent-a");
+    assert.equal(record.answers["delivery.provider"], true);
+    assert.equal(record.answers["delivery.accepted"], "2026-09-08T01:02:03.000Z");
+  } finally { database.close(); }
+});
+
+test("required booking documents block agreement until the exact customer pack has provider acceptance", async () => {
+  const derived = (key, type = "text") => ({ ...field(key, "before", type, false), presentation: "derived" });
+  const fieldForm = form();
+  fieldForm.fields.push(
+    derived("delivery.id"), derived("delivery.provider", "boolean"), derived("delivery.method"), derived("delivery.accepted"),
+    derived("delivery.recipient"), derived("delivery.appointment"), derived("delivery.ids"), derived("delivery.hashes"), derived("delivery.pack"),
+  );
+  const { database, server, access } = fixture(fieldForm, { consumerDocuments: [{ key: "factsheet" }] });
+  try {
+    database.prepare("INSERT INTO trade_crm_customers VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run("customer-a", "owner-a", "Pat", "Customer", "pat@example.com", "0400000000", "", "");
+    database.prepare("INSERT INTO trade_crm_job_details VALUES (?, ?, ?, ?, ?)").run("job-a", "owner-a", "direct", "customer-a", "");
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Pat" });
+    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Pat", acknowledged: true, strokes }), /ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED/);
+    await assert.rejects(server.submitActivityRecord(access, record.id, record.revision), /ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED/);
+  } finally { database.close(); }
+});
+
 test("concurrent opens return one durable record and stale saves cannot replace the winning revision", async () => {
   const { database, server, access } = fixture();
   try {
@@ -128,12 +677,146 @@ test("concurrent opens return one durable record and stale saves cannot replace 
   } finally { database.close(); }
 });
 
+test("opening an existing unsigned draft applies the current shared form policy without losing valid answers", async () => {
+  const currentForm = form();
+  currentForm.fields[0].label = "Current customer name";
+  const legacyForm = form();
+  legacyForm.fields[0].label = "Legacy customer name";
+  legacyForm.fields.push(field("obsolete_duplicate", "before"));
+  const { database, server, access } = fixture(legacyForm, {
+    defaultForm: currentForm,
+    applyPolicy: (_saved, baseline) => structuredClone(baseline),
+  });
+  try {
+    const record = { id: "record-legacy", recordNumber: "TAF-LEGACY", intentId: "intent-a", workOrderId: "job-a", ownerUid: "owner-a",
+      organisationId: "creditex-a", revision: 1, status: "draft", form: legacyForm, formSha256: core.activityHash(legacyForm),
+      answers: { before_name: "Pat", obsolete_duplicate: "Repeated" }, evidence: [], signatures: [], signerDefaults: { customer: "Pat", technician: "Worker A" },
+      hasUserEdits: true, createdAt: "2026-09-07T00:00:00.000Z", updatedAt: "2026-09-07T00:00:00.000Z", submittedAt: "", reportUrl: "" };
+    database.prepare(`INSERT INTO trade_activity_field_records
+      (id, intent_id, work_order_id, owner_uid, organisation_id, activity_template_id, revision, status, payload, actor_uid, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(record.id, record.intentId, record.workOrderId, record.ownerUid,
+        record.organisationId, legacyForm.activityTemplateId, record.revision, record.status, core.activityCanonical(record), "legacy", record.createdAt, record.updatedAt);
+    const upgraded = await server.openActivityRecord(access, "job-a", "intent-a");
+    assert.equal(upgraded.revision, 2);
+    assert.equal(upgraded.form.fields.find((item) => item.key === "before_name").label, "Current customer name");
+    assert.equal(upgraded.form.fields.some((item) => item.key === "obsolete_duplicate"), false);
+    assert.equal(upgraded.answers.before_name, "Pat");
+    assert.equal(upgraded.answers.obsolete_duplicate, undefined);
+    assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_activity_field_record_versions WHERE record_id = ?").get(record.id).count, 2);
+  } finally { database.close(); }
+});
+
+test("an unsigned master upgrade drops evidence that no longer meets the field type or location policy", async () => {
+  const currentForm = form();
+  currentForm.fields = currentForm.fields.map((item) => item.key === "document"
+    ? { ...item, type: "photo", required: true, requireLocation: true }
+    : item);
+  const legacyForm = form();
+  legacyForm.fields = legacyForm.fields.map((item) => item.key === "document"
+    ? { ...item, type: "document", required: true }
+    : item);
+  const { database, server, access } = fixture(legacyForm, {
+    defaultForm: currentForm,
+    applyPolicy: (_saved, baseline) => structuredClone(baseline),
+  });
+  try {
+    const record = { id: "record-evidence-upgrade", recordNumber: "TAF-EVIDENCE", intentId: "intent-a", workOrderId: "job-a", ownerUid: "owner-a",
+      organisationId: "creditex-a", revision: 1, status: "draft", form: legacyForm, formSha256: core.activityHash(legacyForm), answers: {},
+      evidence: [{ id: "old-document", fieldKey: "document", fileName: "old.pdf", contentType: "application/pdf", size: 12,
+        sha256: "a".repeat(64), objectKey: "old", capturedAt: "", uploadedAt: "2026-09-07T00:00:00.000Z", latitude: null,
+        longitude: null, accuracy: null, metadataOrigin: "file_upload" }], signatures: [], signerDefaults: { customer: "", technician: "Worker A" },
+      hasUserEdits: true, createdAt: "2026-09-07T00:00:00.000Z", updatedAt: "2026-09-07T00:00:00.000Z", submittedAt: "", reportUrl: "" };
+    database.prepare(`INSERT INTO trade_activity_field_records
+      (id, intent_id, work_order_id, owner_uid, organisation_id, activity_template_id, revision, status, payload, actor_uid, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(record.id, record.intentId, record.workOrderId, record.ownerUid,
+        record.organisationId, legacyForm.activityTemplateId, record.revision, record.status, core.activityCanonical(record), "legacy", record.createdAt, record.updatedAt);
+    const upgraded = await server.openActivityRecord(access, "job-a", "intent-a");
+    assert.equal(upgraded.revision, 2);
+    assert.equal(upgraded.form.fields.find((item) => item.key === "document").type, "photo");
+    assert.deepEqual(upgraded.evidence, []);
+    assert.ok(core.activityMissing(upgraded).some((item) => item.key === "document" && item.kind === "evidence"));
+  } finally { database.close(); }
+});
+
 test("database payload identity guards reject missing identity keys rather than allowing SQL NULL", () => {
   const { database } = fixture();
   try {
     assert.throws(() => database.prepare(`INSERT INTO trade_activity_field_records
       (id, intent_id, work_order_id, owner_uid, organisation_id, activity_template_id, revision, status, payload, actor_uid, created_at, updated_at)
       VALUES ('malformed', 'intent-a', 'job-a', 'owner-a', 'creditex-a', 'activity-a', 1, 'draft', '{}', 'actor', 'now', 'now')`).run(), /CHECK constraint failed/);
+  } finally { database.close(); }
+});
+
+test("technician signing is restricted to the assigned active member and stores the server-bound name", async () => {
+  const { database, server, access } = fixture();
+  try {
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Installed unit" });
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
+    await assert.rejects(server.signActivityDeclaration({ ...access, isOwner: true, jobScope: "team", memberId: "manager" }, record.id, {
+      expectedRevision: record.revision, declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes,
+    }), /ACTIVITY_TECHNICIAN_SIGNER_NOT_ASSIGNED/);
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "after_technician", signerName: "Unrelated Person", acknowledged: true, strokes });
+    assert.equal(record.signatures.find((signature) => signature.declarationKey === "after_technician")?.signerName, "Worker A");
+    assert.equal(record.signatures.find((signature) => signature.declarationKey === "after_technician")?.actorUid, access.actorUid);
+  } finally { database.close(); }
+});
+
+test("a business display name cannot stand in for the assigned technician's personal name", async () => {
+  const { database, server, access } = fixture();
+  try {
+    database.prepare("UPDATE trade_team_members SET display_name = ?, first_name = '', last_name = '' WHERE id = ?")
+      .run("Test Electrical Pty Ltd", "worker-a");
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    assert.equal(record.signerDefaults.technician, "");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Installed unit" });
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
+    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "after_technician", signerName: "Test Electrical Pty Ltd", acknowledged: true, strokes }),
+    /ACTIVITY_TECHNICIAN_IDENTITY_REQUIRED/);
+  } finally { database.close(); }
+});
+
+test("technician signing atomically rejects a reassignment made at the write boundary", async () => {
+  let armReassignment = false;
+  let reassigned = false;
+  const { database, server, access } = fixture(form(), {
+    beforeRun: ({ sql, database: db }) => {
+      if (armReassignment && !reassigned && /UPDATE trade_activity_field_records SET revision/.test(sql)) {
+        reassigned = true;
+        db.prepare("UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ? WHERE id = ?")
+          .run("worker-c", "Worker C", "job-a");
+      }
+    },
+  });
+  try {
+    database.prepare("INSERT INTO trade_team_members VALUES (?, ?, ?, ?, ?, ?)").run("worker-c", "owner-a", "active", "Worker C", "Worker", "C");
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Installed unit" });
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
+    armReassignment = true;
+    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes }), /ACTIVITY_REVISION_CONFLICT/);
+    assert.equal(reassigned, true);
+    const stored = JSON.parse(database.prepare("SELECT payload FROM trade_activity_field_records WHERE id = ?").get(record.id).payload);
+    assert.equal(stored.signatures.some((signature) => signature.declarationKey === "after_technician"), false);
+  } finally { database.close(); }
+});
+
+test("an inactive assigned member cannot supply a technician declaration identity", async () => {
+  const { database, server, access } = fixture();
+  try {
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Installed unit" });
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
+    database.prepare("UPDATE trade_team_members SET status = 'inactive' WHERE id = ?").run("worker-a");
+    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes }), /ACTIVITY_TECHNICIAN_IDENTITY_REQUIRED/);
   } finally { database.close(); }
 });
 
