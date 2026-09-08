@@ -172,6 +172,22 @@ test('new-customer quick quote creates an unscheduled unassigned job once and ig
   } finally { database.close(); }
 });
 
+test('new-customer quick quote allows a separate customer with matching contact and address details', async () => {
+  const { database, post, insertCustomer } = fixture();
+  try {
+    insertCustomer('existing', 'owner-1', {
+      first_name: 'Casey', last_name: 'Client', email: 'casey@example.test', phone: '0412 345 678',
+    });
+    const result = await post(quick({
+      clientRequestId: 'duplicate-customer-0001', phone: '0412 345 678',
+      addressLine1: '12 Main St', suburb: 'Melbourne', addressState: 'VIC', postcode: '3000',
+    }));
+    assert.equal(result.status, 201, JSON.stringify(result.body));
+    assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_customers WHERE firebase_uid = 'owner-1'").get().count, 2);
+    assert.equal(database.prepare("SELECT COUNT(DISTINCT id) count FROM trade_crm_customers WHERE firebase_uid = 'owner-1' AND email = 'casey@example.test'").get().count, 2);
+  } finally { database.close(); }
+});
+
 test('existing-customer quick quote needs matching owner/site/email without customer-management permission', async () => {
   const { database, post, insertCustomer } = fixture();
   try {

@@ -36,6 +36,12 @@ test('commercial quick actions are search-first and reuse the native line editor
   assert.match(quickCommercial, /item\.customerSource !== 'platform_private' && item\.stage !== 'cancelled'/);
   assert.match(quickCommercial, /\.slice\(0, 10\)/);
   assert.match(quickCommercial, /action: 'create_quick_quote_job'/);
+  assert.match(quickCommercial, /'\/api\/trade-address-suggestions'/);
+  assert.match(quickCommercial, /action: 'predict'/);
+  assert.match(quickCommercial, /action: 'resolve'/);
+  assert.match(quickCommercial, /accessibilityLabel=\{`Use address \$\{prediction\.label\}`\}/);
+  assert.match(quickCommercial, /addressEntryMode: addressProvenance\.entryMode/);
+  assert.match(quickCommercial, />Google Maps<\/Text>/);
   assert.match(quickCommercial, /<FieldCommercialWorkspace/);
   assert.match(quickCommercial, /stage !== 'editor'/);
   assert.match(quickCommercial, /Retry work types/);

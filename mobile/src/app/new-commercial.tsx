@@ -33,6 +33,16 @@ type JobSearchResult = {
   items: JobMatch[];
   access?: { permissions?: { canManageInvoices?: boolean } };
 };
+type AddressPrediction = { id: string; label: string; provider: string };
+type AddressSelection = {
+  id: string; label: string; addressLine1: string; addressLine2: string;
+  suburb: string; addressState: string; postcode: string;
+  provider: string; providerReference: string; formattedAddress: string; selectionProof: string;
+};
+type AddressProvenance = {
+  entryMode: 'manual_pending_review' | 'provider_selected';
+  provider: string; providerReference: string; formattedAddress: string; selectionProof: string;
+};
 
 type InputProps = {
   label: string; value: string; onChangeText: (value: string) => void; placeholder?: string;
@@ -54,6 +64,9 @@ function addressLine(match: CustomerMatch) {
 
 function jobCustomerName(job: JobMatch) {
   return `${job.jobRegister.firstName} ${job.jobRegister.lastName}`.trim() || job.title || 'Customer job';
+}
+function manualAddressProvenance(): AddressProvenance {
+  return { entryMode: 'manual_pending_review', provider: '', providerReference: '', formattedAddress: '', selectionProof: '' };
 }
 function previousSetupStage(stage: Stage, selectedCustomer: CustomerMatch | null) {
   if (stage === 'work') return selectedCustomer ? 'find' : 'new-customer';
@@ -89,6 +102,12 @@ export default function NewCommercialScreen() {
   const [suburb, setSuburb] = useState('');
   const [addressState, setAddressState] = useState('');
   const [postcode, setPostcode] = useState('');
+  const [addressPredictionSession, setAddressPredictionSession] = useState<{ token: string; query: string; predictions: AddressPrediction[] }>(() => ({ token: Crypto.randomUUID(), query: '', predictions: [] }));
+  const [addressProvenance, setAddressProvenance] = useState<AddressProvenance>(manualAddressProvenance);
+  const [addressLookupBusy, setAddressLookupBusy] = useState(false);
+  const [addressLookupMessage, setAddressLookupMessage] = useState('Start typing an Australian street address, or enter it manually.');
+  const suppressAddressLookup = useRef(false);
+  const addressResolveController = useRef<AbortController | null>(null);
   const [clientRequestId, setClientRequestId] = useState(() => Crypto.randomUUID());
   const [workOrderId, setWorkOrderId] = useState('');
   const [busy, setBusy] = useState('');
@@ -116,6 +135,38 @@ export default function NewCommercialScreen() {
   }, [kind, optionsAttempt]);
 
   const serviceOptions = useMemo(() => options?.services.map((item) => ({ value: item.id, label: item.label })) || [], [options]);
+
+  useEffect(() => () => addressResolveController.current?.abort(), []);
+
+  useEffect(() => {
+    if (suppressAddressLookup.current) {
+      suppressAddressLookup.current = false;
+      return;
+    }
+    const addressQuery = addressLine1.trim();
+    if (stage !== 'new-customer' || !showProperty || addressQuery.length < 3) return;
+    let active = true;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      setAddressLookupBusy(true);
+      void apiRequest<{ configured?: boolean; predictions?: AddressPrediction[] }>('/api/trade-address-suggestions', {
+        method: 'POST', body: JSON.stringify({ action: 'predict', query: addressQuery, sessionToken: addressPredictionSession.token }), signal: controller.signal,
+      }).then((result) => {
+        if (!active) return;
+        const predictions = result.predictions || [];
+        setAddressPredictionSession((current) => current.token === addressPredictionSession.token ? ({ ...current, query: addressQuery, predictions }) : current);
+        setAddressLookupMessage(result.configured === false
+          ? 'Address lookup is unavailable. Enter the address manually.'
+          : predictions.length ? 'Choose the address below, or keep entering it manually.' : 'No matching address was found. Enter it manually.');
+      }).catch(() => {
+        if (!active || controller.signal.aborted) return;
+        suppressAddressLookup.current = true;
+        setAddressPredictionSession({ token: Crypto.randomUUID(), query: '', predictions: [] });
+        setAddressLookupMessage('Address suggestions are temporarily unavailable. Enter the address manually.');
+      }).finally(() => { if (active) setAddressLookupBusy(false); });
+    }, 280);
+    return () => { active = false; controller.abort(); clearTimeout(timeout); };
+  }, [addressLine1, addressPredictionSession.token, showProperty, stage]);
 
   async function search() {
     const term = query.trim();
@@ -148,6 +199,56 @@ export default function NewCommercialScreen() {
     setSelectedCustomer(null); setClientRequestId(Crypto.randomUUID()); setError(''); setStage('new-customer');
   }
 
+  async function chooseAddress(prediction: AddressPrediction) {
+    const addressQuery = addressPredictionSession.query;
+    const sessionToken = addressPredictionSession.token;
+    if (addressQuery.length < 3) return;
+    addressResolveController.current?.abort();
+    const controller = new AbortController();
+    addressResolveController.current = controller;
+    setAddressPredictionSession((current) => ({ ...current, predictions: [] }));
+    setAddressLookupBusy(true); setAddressLookupMessage('Loading the selected address...');
+    try {
+      const result = await apiRequest<{ configured?: boolean; selection?: AddressSelection | null }>('/api/trade-address-suggestions', {
+        method: 'POST', body: JSON.stringify({ action: 'resolve', provider: prediction.provider, providerReference: prediction.id, query: addressQuery, sessionToken }), signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      const selection = result.selection;
+      if (!selection) {
+        suppressAddressLookup.current = true;
+        setAddressPredictionSession({ token: Crypto.randomUUID(), query: '', predictions: [] });
+        setAddressLookupMessage('This address could not be loaded. Enter it manually.');
+        return;
+      }
+      suppressAddressLookup.current = true;
+      setAddressLine1(selection.addressLine1); setAddressLine2(selection.addressLine2); setSuburb(selection.suburb);
+      setAddressState(selection.addressState.toUpperCase()); setPostcode(selection.postcode.replace(/\D/g, '').slice(0, 4));
+      setAddressProvenance({ entryMode: 'provider_selected', provider: selection.provider, providerReference: selection.providerReference, formattedAddress: selection.formattedAddress, selectionProof: selection.selectionProof });
+      setAddressPredictionSession({ token: Crypto.randomUUID(), query: '', predictions: [] });
+      setAddressLookupMessage('Address selected. Check the details, then continue.');
+    } catch {
+      if (!controller.signal.aborted) {
+        suppressAddressLookup.current = true;
+        setAddressPredictionSession({ token: Crypto.randomUUID(), query: '', predictions: [] });
+        setAddressLookupMessage('This address could not be loaded. Enter it manually.');
+      }
+    } finally {
+      if (addressResolveController.current === controller) { addressResolveController.current = null; setAddressLookupBusy(false); }
+    }
+  }
+
+  function changeAddressLine1(value: string) {
+    const abandonedResolution = Boolean(addressResolveController.current);
+    addressResolveController.current?.abort(); addressResolveController.current = null;
+    setAddressLine1(value); setAddressProvenance(manualAddressProvenance());
+    setAddressPredictionSession((current) => ({ token: abandonedResolution || (value.trim().length < 3 && addressLine1.trim().length >= 3) ? Crypto.randomUUID() : current.token, query: '', predictions: [] }));
+    setAddressLookupBusy(false); setAddressLookupMessage('Keep typing to find an address, or enter it manually.');
+  }
+
+  function changeAddressDetail(setter: (value: string) => void, value: string) {
+    setter(value); setAddressProvenance(manualAddressProvenance());
+  }
+
   function continueNewCustomer() {
     if (!firstName.trim() || !lastName.trim()) return setError('Add the customer first and last name.');
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError('Add the customer email used to send the quote.');
@@ -172,7 +273,10 @@ export default function NewCommercialScreen() {
         action: 'create_quick_quote_job', clientRequestId, customerMode: 'new', serviceSiteMode: 'new',
         firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim().toLowerCase(), phone: phone.trim(),
         addressLine1: addressLine1.trim(), addressLine2: addressLine2.trim(), suburb: suburb.trim(),
-        addressState: addressState.trim().toUpperCase(), postcode: postcode.trim(), addressEntryMode: 'manual_pending_review',
+        addressState: addressState.trim().toUpperCase(), postcode: postcode.trim(),
+        addressEntryMode: addressProvenance.entryMode, addressProvider: addressProvenance.provider,
+        addressProviderReference: addressProvenance.providerReference, addressFormatted: addressProvenance.formattedAddress,
+        addressSelectionProof: addressProvenance.selectionProof,
         serviceCategory, description,
       };
       const result = await apiRequest<{ id: string }>('/api/trade-crm', { method: 'POST', body: JSON.stringify(body) });
@@ -219,10 +323,12 @@ export default function NewCommercialScreen() {
       <FieldButton variant="quiet" onPress={() => setShowProperty((current) => !current)}>{showProperty ? 'Hide optional contact and property' : 'Add optional mobile or property'}</FieldButton>
       {showProperty ? <>
         <FieldInput label="Mobile, optional" value={phone} onChangeText={setPhone} inputMode="tel" />
-        <FieldInput label="Street, optional" value={addressLine1} onChangeText={setAddressLine1} autoCapitalize="words" />
-        <FieldInput label="Unit or level, optional" value={addressLine2} onChangeText={setAddressLine2} autoCapitalize="words" />
-        <FieldInput label="Suburb, optional" value={suburb} onChangeText={setSuburb} autoCapitalize="words" />
-        <View style={styles.row}><View style={styles.flex}><FieldInput label="State" value={addressState} onChangeText={(value) => setAddressState(value.replace(/[^A-Za-z]/g, '').slice(0, 3))} autoCapitalize="characters" /></View><View style={styles.flex}><FieldInput label="Postcode" value={postcode} onChangeText={(value) => setPostcode(value.replace(/\D/g, '').slice(0, 4))} inputMode="tel" /></View></View>
+        <FieldInput label="Search street address, optional" value={addressLine1} onChangeText={changeAddressLine1} autoCapitalize="words" placeholder="Start typing the street address" />
+        {addressPredictionSession.predictions.length ? <View style={styles.addressSuggestions}>{addressPredictionSession.predictions.map((prediction) => <Pressable accessibilityRole="button" accessibilityLabel={`Use address ${prediction.label}`} key={`${prediction.provider}:${prediction.id}`} onPress={() => void chooseAddress(prediction)} style={styles.addressSuggestion}><MaterialCommunityIcons name="map-marker-outline" color={colours.green} size={22} /><Text style={styles.addressSuggestionText}>{prediction.label}</Text></Pressable>)}{addressPredictionSession.predictions.some((prediction) => prediction.provider === 'google-places' || prediction.provider === 'google-geocoding') ? <Text style={styles.addressAttribution}>Google Maps</Text> : null}</View> : null}
+        <Text accessibilityLiveRegion="polite" style={styles.addressHelp}>{addressLookupBusy ? 'Searching addresses...' : addressLookupMessage}</Text>
+        <FieldInput label="Unit or level, optional" value={addressLine2} onChangeText={(value) => changeAddressDetail(setAddressLine2, value)} autoCapitalize="words" />
+        <FieldInput label="Suburb, optional" value={suburb} onChangeText={(value) => changeAddressDetail(setSuburb, value)} autoCapitalize="words" />
+        <View style={styles.row}><View style={styles.flex}><FieldInput label="State" value={addressState} onChangeText={(value) => changeAddressDetail(setAddressState, value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 3))} autoCapitalize="characters" /></View><View style={styles.flex}><FieldInput label="Postcode" value={postcode} onChangeText={(value) => changeAddressDetail(setPostcode, value.replace(/\D/g, '').slice(0, 4))} inputMode="tel" /></View></View>
       </> : null}
       <FieldButton onPress={continueNewCustomer}>Continue to work</FieldButton>
       <FieldButton variant="secondary" onPress={() => { setError(''); setStage('find'); }}>Back</FieldButton>
@@ -258,6 +364,11 @@ const styles = StyleSheet.create({
   resultText: { color: colours.muted, lineHeight: 20, marginTop: 2 },
   summary: { padding: spacing.md, borderRadius: radius.md, backgroundColor: colours.mint },
   row: { flexDirection: 'row', gap: spacing.sm },
+  addressSuggestions: { borderWidth: 1, borderColor: colours.line, borderRadius: radius.md, overflow: 'hidden', backgroundColor: colours.surfaceRaised },
+  addressSuggestion: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colours.line },
+  addressSuggestionText: { color: colours.ink, flex: 1, lineHeight: 20 },
+  addressAttribution: { color: colours.muted, fontSize: 12, fontWeight: '700', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, textAlign: 'right' },
+  addressHelp: { color: colours.muted, fontSize: 13, lineHeight: 18, marginTop: -spacing.sm },
   error: { color: colours.red, lineHeight: 21, padding: spacing.md, borderRadius: radius.md, backgroundColor: colours.redSoft },
   note: { color: colours.muted, fontSize: 13, lineHeight: 18, textAlign: 'center' },
 });

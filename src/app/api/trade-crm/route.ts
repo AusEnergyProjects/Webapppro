@@ -1959,13 +1959,15 @@ export async function POST(request: Request) {
           && (!addressLine1 || !suburb || !ADDRESS_STATES.has(addressState) || !/^\d{4}$/.test(postcode))) {
           return adminJson({ ok: false, error: "Add the full service street, suburb, state and four-digit postcode, or leave the address blank for now." }, 400);
         }
-        const duplicateCandidates = await findDirectCustomerDuplicates(db, identity.uid, { email, phone, businessNumber, addressLine1, suburb, addressState, postcode });
-        const duplicateOverride = body.duplicateOverride === true || body.duplicateOverride === "true" || body.duplicateOverride === "on";
-        if (duplicateCandidates.length && !duplicateOverride) return adminJson({ ok: false,
-          error: identity.access.canViewCustomers && identity.access.canSearchCustomers
-            ? "A matching customer already exists. Select that customer or review the match before continuing."
-            : "A matching customer already exists. Ask an authorised office user to review it before continuing.",
-          ...(identity.access.canViewCustomers && identity.access.canSearchCustomers ? { duplicateCandidates } : {}) }, 409);
+        if (!quickQuote) {
+          const duplicateCandidates = await findDirectCustomerDuplicates(db, identity.uid, { email, phone, businessNumber, addressLine1, suburb, addressState, postcode });
+          const duplicateOverride = body.duplicateOverride === true || body.duplicateOverride === "true" || body.duplicateOverride === "on";
+          if (duplicateCandidates.length && !duplicateOverride) return adminJson({ ok: false,
+            error: identity.access.canViewCustomers && identity.access.canSearchCustomers
+              ? "A matching customer already exists. Select that customer or review the match before continuing."
+              : "A matching customer already exists. Ask an authorised office user to review it before continuing.",
+            ...(identity.access.canViewCustomers && identity.access.canSearchCustomers ? { duplicateCandidates } : {}) }, 409);
+        }
         customerId = crypto.randomUUID(); serviceSiteId = crypto.randomUUID();
         const contactId = crypto.randomUUID();
         const customerNumber = `CUS-${now.slice(2, 7).replace("-", "")}-${customerId.replaceAll("-", "").slice(0, 5).toUpperCase()}`;
