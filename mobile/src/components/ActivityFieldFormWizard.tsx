@@ -27,7 +27,8 @@ export type ActivityFieldSummary = { id: string; intentId: string; title: string
 type Presented = Omit<ActivityRecord, 'evidence'> & { evidence: Omit<ActivityRecord['evidence'][number], 'objectKey'>[]; missing: { key: string; label: string; kind: string }[]; signerDefaults: { technician: string; customer: string }; signingScopes?: { before: string; after: string }; signerSetup?: { firstName: string; lastName: string; canSave: boolean; firstNameLocked?: boolean; lastNameLocked?: boolean } };
 type CaptureMetadata = { capturedAt: string; latitude: number | null; longitude: number | null; accuracy: number | null; metadataOrigin: 'device_capture' | 'file_upload'; locationObservedAt?: string; mocked?: boolean | null };
 type PendingFile = { id: string; fieldKey: string; uri: string; name: string; contentType: string; metadata: CaptureMetadata };
-type Cache = { record: Presented; answers: ActivityAnswers; pending: PendingFile[]; stepKey: string; camera?: { fieldKey: string; metadata: CaptureMetadata } };
+type PendingSignature = { declarationKey: string; declarationText: string; phase: 'before' | 'after'; role: 'customer' | 'technician' | 'other'; signerName: string; strokes: FieldWorkPackSignatureDraft['strokes'] };
+type Cache = { record: Presented; answers: ActivityAnswers; pending: PendingFile[]; pendingSignatures?: PendingSignature[]; stepKey: string; camera?: { fieldKey: string; metadata: CaptureMetadata } };
 function signatureDraft(role: string, name: string): FieldWorkPackSignatureDraft {
   return { signerRoleKey: role, signerName: name, signerCapacity: role, identity: {}, strokes: [], capturedAt: '' };
 }
@@ -60,6 +61,23 @@ function derivedAnswerKeys(record: Presented) {
 
 function reconcileAnswers(base: ActivityAnswers, local: ActivityAnswers, fresh: Presented) {
   return mergeActivityAnswers(base, local, fresh.answers, derivedAnswerKeys(fresh));
+}
+
+function signingUserContentChanged(previous: Presented, fresh: Presented, phase: 'before' | 'after') {
+  if (previous.formSha256 !== fresh.formSha256) return true;
+  const fields = previous.form.fields.filter((field) => field.presentation !== 'derived'
+    && (phase === 'after' || field.phase === 'before'));
+  const keys = new Set(fields.map((field) => field.key));
+  const repeatGroups = new Set(fields.map((field) => field.repeatGroup).filter(Boolean));
+  const answers = (record: Presented) => Object.fromEntries(Object.entries(record.answers)
+    .filter(([key]) => keys.has(activityBaseFieldKey(key)) || (key.startsWith('$repeat.') && repeatGroups.has(key.slice('$repeat.'.length)))));
+  const evidence = (record: Presented) => record.evidence.filter((item) => keys.has(activityBaseFieldKey(item.fieldKey)))
+    .map((item) => ({ id: item.id, fieldKey: item.fieldKey, sha256: item.sha256 })).sort((a, b) => a.id.localeCompare(b.id));
+  const beforeSignatures = (record: Presented) => phase === 'after' ? record.signatures.filter((item) => item.phase === 'before')
+    .map((item) => ({ id: item.id, declarationSha256: item.declarationSha256, scopeSha256: item.scopeSha256 })).sort((a, b) => a.id.localeCompare(b.id)) : [];
+  return JSON.stringify(answers(previous)) !== JSON.stringify(answers(fresh))
+    || JSON.stringify(evidence(previous)) !== JSON.stringify(evidence(fresh))
+    || JSON.stringify(beforeSignatures(previous)) !== JSON.stringify(beforeSignatures(fresh));
 }
 
 function ProgressMeter({ label, complete, total, compact = false }: { label: string; complete: number; total: number; compact?: boolean }) {
@@ -97,9 +115,11 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   const stepIndex = Math.max(0, pages.findIndex((item) => item.key === cache?.stepKey));
   const step = pages[stepIndex];
   const editable = record?.status === 'draft';
-  const locked = step?.kind === 'fields' && record?.signatures.some((item) => item.phase === 'after' || item.phase === step.phase);
   const currentSignature = step?.kind === 'signature' && !record?.missing.some((item) => item.kind === 'signature' && item.key === step.declaration.key)
     ? [...(record?.signatures || [])].reverse().find((item) => item.declarationKey === step.declaration.key)
+    : undefined;
+  const pendingSignature = step?.kind === 'signature'
+    ? cache?.pendingSignatures?.find((item) => item.declarationKey === step.declaration.key)
     : undefined;
 
   function remember(value: Cache) {
@@ -154,8 +174,10 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
             record: fresh,
             answers,
             pending: saved?.pending || [],
+            pendingSignatures: saved?.pendingSignatures || [],
             stepKey: availableStepKey(fresh, answers, addedSelfie?.key || saved?.stepKey),
           });
+          if (online && saved?.pendingSignatures?.length) queuePageSync([], true);
         }
       } catch (caught) { if (!disposed) setError(caught instanceof Error ? caught.message : 'Could not load this form.'); }
       finally { if (!disposed) setBusy(''); }
@@ -164,6 +186,11 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     // Load once per activity. Reconnection does not replace unsaved local answers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workOrderId, intentId, variantId]);
+  useEffect(() => {
+    if (online && cacheRef.current?.pendingSignatures?.length) queuePageSync([], true);
+    // Connectivity is the retry trigger; the queue reads the current cache itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online]);
   useEffect(() => {
     scroll.current?.scrollTo({ y: 0, animated: false });
   }, [cache?.stepKey, overview]);
@@ -262,16 +289,58 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     if (!latest || JSON.stringify(latest.answers) === JSON.stringify(latest.record.answers)) return;
     await request('save', { answers: latest.answers });
   }
-  function queuePageSync(fieldKeys: readonly string[]) {
+  async function syncPendingSignatures() {
+    for (const queued of [...(cacheRef.current?.pendingSignatures || [])]) {
+      let latest = cacheRef.current;
+      if (!latest) return;
+      const record = latest.record;
+      const declaration = record.form.declarations.find((item) => item.key === queued.declarationKey);
+      if (!declaration) throw new Error('This declaration changed. Open its signature section and sign it again.');
+      if (record.signatures.some((item) => item.declarationKey === queued.declarationKey
+        && !record.missing.some((missing) => missing.kind === 'signature' && missing.key === queued.declarationKey))) {
+        await remember({ ...latest, pendingSignatures: (latest.pendingSignatures || []).filter((item) => item.declarationKey !== queued.declarationKey) });
+        continue;
+      }
+      if (boundActivityDeclaration(declaration, latest.answers) !== queued.declarationText) throw new Error('This declaration changed. Open its signature section and sign it again.');
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        latest = cacheRef.current;
+        if (!latest) return;
+        try {
+          await request('sign', { declarationKey: queued.declarationKey,
+            signerName: queued.role === 'technician' ? latest.record.signerDefaults.technician : queued.signerName,
+            strokes: queued.strokes, acknowledged: true,
+            ...(latest.record.signingScopes?.[queued.phase] ? { expectedScope: latest.record.signingScopes[queued.phase] } : {}) });
+          const accepted = cacheRef.current;
+          if (accepted) await remember({ ...accepted, pendingSignatures: (accepted.pendingSignatures || []).filter((item) => item.declarationKey !== queued.declarationKey) });
+          break;
+        } catch (caught) {
+          if (!(caught instanceof ApiError) || caught.code !== 'ACTIVITY_SIGNING_SCOPE_CHANGED' || attempt === 1) throw caught;
+          const fresh = await latestRecord(latest.record.id);
+          if (signingUserContentChanged(latest.record, fresh, queued.phase)) throw caught;
+          const current = cacheRef.current?.record.id === latest.record.id ? cacheRef.current : latest;
+          const answers = reconcileAnswers(latest.record.answers, current.answers, fresh).merged;
+          if (boundActivityDeclaration(declaration, answers) !== queued.declarationText) throw caught;
+          await remember({ ...current, record: fresh, answers, stepKey: availableStepKey(fresh, answers, current.stepKey) });
+        }
+      }
+    }
+  }
+  function queuePageSync(fieldKeys: readonly string[], flushAllPending = false) {
     const uniqueKeys = [...new Set(fieldKeys)];
     syncs.current = syncs.current.catch(() => undefined).then(async () => {
       if (!online) return;
       setSyncing(true);
       try {
         await saveAnswers();
-        for (const fieldKey of uniqueKeys) await uploadPending(fieldKey);
+        const uploadKeys = flushAllPending
+          ? [...new Set(cacheRef.current?.pending.map((item) => item.fieldKey) || [])]
+          : uniqueKeys;
+        for (const fieldKey of uploadKeys) await uploadPending(fieldKey);
+        await syncPendingSignatures();
       } catch (caught) {
-        setError(`${caught instanceof Error ? caught.message : 'TLink could not sync this page.'} Your work remains saved on this phone and will retry with the next save.`);
+        if (!(caught instanceof ApiError) || !['ACTIVITY_SIGNING_NOT_READY', 'ACTIVITY_SIGNING_SCOPE_CHANGED'].includes(caught.code)) {
+          setError(`${caught instanceof Error ? caught.message : 'TLink could not sync this page.'} Your work remains saved on this phone and will retry with the next save.`);
+        }
       } finally {
         setSyncing(false);
       }
@@ -444,34 +513,36 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       const fieldKeys = step.fields.map((field) => field.key);
       moving.current = true;
       try {
-        await move(1);
+        const transition = move(1);
         if (online) queuePageSync(fieldKeys);
+        await transition;
       } finally {
         moving.current = false;
       }
       return;
     }
+    if (step.kind === 'signature' && !currentSignature && !pendingSignature) {
+      if (!acknowledged) return setError('Confirm the declaration before signing.');
+      const latest = cacheRef.current;
+      if (!latest) return;
+      const signerName = step.declaration.role === 'technician' ? latest.record.signerDefaults.technician : signature.signerName.trim();
+      if (!signerName) return setError('Add the signer name before signing.');
+      if (!signature.strokes.length) return setError('Draw the signature before saving it.');
+      const queued: PendingSignature = { declarationKey: step.declaration.key,
+        declarationText: boundActivityDeclaration(step.declaration, latest.answers), phase: step.declaration.phase,
+        role: step.declaration.role, signerName, strokes: signature.strokes };
+      const nextPages = activityWizardPages(latest.record.form, latest.answers);
+      const index = Math.max(0, nextPages.findIndex((item) => item.key === latest.stepKey));
+      const transition = remember({ ...latest,
+        pendingSignatures: [...(latest.pendingSignatures || []).filter((item) => item.declarationKey !== queued.declarationKey), queued],
+        stepKey: nextPages[Math.min(nextPages.length - 1, index + 1)].key });
+      setError('');
+      if (online) queuePageSync([], true);
+      void transition.catch(() => setError('The signature is visible here but could not be retained on this phone. Keep this job open and try again.'));
+      return;
+    }
     await perform('next', async () => {
       if (!editable) { await move(1); return; }
-      if (step.kind === 'signature' && !currentSignature) {
-        await syncs.current;
-        if (!acknowledged) throw new Error('Confirm the declaration before signing.');
-        const displayed = cacheRef.current;
-        await saveAnswers();
-        const saved = cacheRef.current;
-        // A local answer saved here is already visible to the signer. A changed
-        // remote answer or evidence must still be reviewed before it is signed.
-        if (displayed && saved && (
-          ![...new Set([...Object.keys(displayed.answers), ...Object.keys(saved.answers)])]
-            .every((key) => displayed.answers[key] === saved.answers[key])
-          || displayed.record.formSha256 !== saved.record.formSha256
-          || JSON.stringify(displayed.record.evidence) !== JSON.stringify(saved.record.evidence)
-          || JSON.stringify(displayed.record.signatures) !== JSON.stringify(saved.record.signatures)
-        )) throw new ApiError('The details to sign have changed. Check the updated details and sign again.', 409, 'ACTIVITY_SIGNING_SCOPE_CHANGED');
-        const expectedScope = saved?.record.signingScopes?.[step.declaration.phase];
-        const signerName = step.declaration.role === 'technician' ? cache.record.signerDefaults.technician : signature.signerName;
-        await request('sign', { declarationKey: step.declaration.key, signerName, strokes: signature.strokes, acknowledged: true, ...(expectedScope ? { expectedScope } : {}) });
-      }
       await move(1);
     });
   }
@@ -487,7 +558,8 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   if (!record || !cache) return <View style={styles.body}><Text style={styles.title}>{busy ? 'Loading activity form…' : 'Activity form'}</Text>{error ? <Text style={styles.error}>{error}</Text> : null}<FieldButton variant="secondary" onPress={onReturnToJob}>Job</FieldButton></View>;
   const title = step?.kind === 'fields' ? step.section : step?.kind === 'review' ? 'Review and submit' : step?.declaration.title || record.form.title;
   const evidenceFieldKeys = new Set([...record.evidence.map((item) => item.fieldKey), ...cache.pending.map((item) => item.fieldKey)]);
-  const signatureDeclarationKeys = activityCurrentSignatureKeys(record.signatures, record.missing);
+  const signatureDeclarationKeys = new Set([...activityCurrentSignatureKeys(record.signatures, record.missing),
+    ...(cache.pendingSignatures || []).map((item) => item.declarationKey)]);
   const overallProgress = activityProgress(steps, cache.answers, evidenceFieldKeys, signatureDeclarationKeys);
   const sections = activitySectionProgress(steps, cache.answers, evidenceFieldKeys);
   const systemMissing = record.missing.filter((item) => record.form.fields
@@ -521,14 +593,13 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
 
           {field.help ? <Text style={styles.text}>{field.help}</Text> : null}
           {(field.referenceDocuments || []).map((document) => { const url = new URL(document.url, API_BASE_URL).toString(); return <View key={url} style={styles.group}><Text style={styles.text}>{document.title}</Text><View style={styles.row}><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => void perform('document', async () => { await Linking.openURL(url); })}>Open document</FieldButton><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => void perform('document', async () => { await Share.share({ message: `${document.title}\n${url}`, url }); })}>Share copy</FieldButton></View></View>; })}
-          {locked ? <Text style={styles.small}>These answers are retained with the signed declaration.</Text> : null}
-          {field?.presentation === 'derived' ? <View style={styles.derived}><Text style={styles.text}>{cache.answers[field.key] === undefined || cache.answers[field.key] === '' ? 'Recorded automatically by TLink.' : String(cache.answers[field.key])}</Text><Text style={styles.small}>This value comes from the job, business, assigned team member or signature record.</Text></View> : field.type === 'boolean' ? <View style={styles.row}>{[true, false].map((value) => <Pressable key={String(value)} accessibilityRole="radio" accessibilityState={{ selected: cache.answers[field.key] === value }} disabled={!editable || locked || Boolean(busy)} onPress={() => answer(field.key, value)} style={[styles.choice, cache.answers[field.key] === value && styles.selected]}><Text style={styles.text}>{value ? 'Yes' : 'No'}</Text></Pressable>)}</View> : field.type === 'select' ? <FieldSelect label="Choose an answer" value={String(cache.answers[field.key] ?? '')} options={field.options.map((value) => ({ value, label: activityOptionLabel(value, field?.optionLabels?.[value]) }))} onChange={(value) => answer(field.key, value)} disabled={!editable || locked || Boolean(busy)} /> : ['photo', 'document'].includes(field.type) ? <>
+          {field?.presentation === 'derived' ? <View style={styles.derived}><Text style={styles.text}>{cache.answers[field.key] === undefined || cache.answers[field.key] === '' ? 'Recorded automatically by TLink.' : String(cache.answers[field.key])}</Text><Text style={styles.small}>This value comes from the job, business, assigned team member or signature record.</Text></View> : field.type === 'boolean' ? <View style={styles.row}>{[true, false].map((value) => <Pressable key={String(value)} accessibilityRole="radio" accessibilityState={{ selected: cache.answers[field.key] === value }} disabled={!editable || Boolean(busy)} onPress={() => answer(field.key, value)} style={[styles.choice, cache.answers[field.key] === value && styles.selected]}><Text style={styles.text}>{value ? 'Yes' : 'No'}</Text></Pressable>)}</View> : field.type === 'select' ? <FieldSelect label="Choose an answer" value={String(cache.answers[field.key] ?? '')} options={field.options.map((value) => ({ value, label: activityOptionLabel(value, field?.optionLabels?.[value]) }))} onChange={(value) => answer(field.key, value)} disabled={!editable || Boolean(busy)} /> : ['photo', 'document'].includes(field.type) ? <>
             {evidenceForLabels.length ? <Text style={styles.evidenceBinding}>Evidence for: {evidenceForLabels.join(', ')}</Text> : null}
-            <FieldButton disabled={!editable || locked || Boolean(busy)} loading={busy === 'camera' || busy === 'document'} onPress={() => field.type === 'photo' ? void capture(field) : void chooseDocument(field)}>{field.type === 'photo' ? 'Take photo' : 'Choose document'}</FieldButton>
+            <FieldButton disabled={!editable || Boolean(busy)} loading={busy === 'camera' || busy === 'document'} onPress={() => field.type === 'photo' ? void capture(field) : void chooseDocument(field)}>{field.type === 'photo' ? 'Take photo' : 'Choose document'}</FieldButton>
             <Text style={styles.small}>{savedHere.length} saved · {pendingHere.length} ready to upload</Text>
             {savedHere.map((item) => <Text key={item.id} style={styles.text}>{item.fileName}{item.latitude !== null ? ` · ${item.latitude.toFixed(5)}, ${item.longitude?.toFixed(5)}` : ''}</Text>)}
             {pendingHere.map((item) => <View key={item.id} style={styles.group}>{item.contentType.startsWith('image/') ? <Image alt="Pending site evidence" accessibilityLabel="Pending site evidence" source={{ uri: item.uri }} style={styles.preview} resizeMode="contain" /> : null}<Text style={styles.small}>{item.name} · Original retained on this phone</Text><FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => Alert.alert('Remove pending file?', 'This file has not been submitted.', [{ text: 'Keep' }, { text: 'Remove', onPress: () => void perform('remove', async () => { await remember({ ...cache, pending: cache.pending.filter((file) => file.id !== item.id) }); const file = new File(item.uri); if (file.exists) file.delete(); }) }])}>Remove pending file</FieldButton></View>)}
-          </> : field.type === 'date' ? <FieldDatePicker label="Choose date" value={String(cache.answers[field.key] ?? '')} disabled={!editable || locked || Boolean(busy)} onChange={(value) => answer(field.key, value)} /> : <TextInput accessibilityLabel={field.label} value={String(cache.answers[field.key] ?? '')} editable={editable && !locked && !busy} placeholder="Enter answer" placeholderTextColor={colours.muted} keyboardType={field.type === 'number' ? 'decimal-pad' : 'default'} style={styles.input} onChangeText={(value) => answer(field.key, field.type === 'number' && value !== '' && Number.isFinite(Number(value)) ? Number(value) : value)} />}
+          </> : field.type === 'date' ? <FieldDatePicker label="Choose date" value={String(cache.answers[field.key] ?? '')} disabled={!editable || Boolean(busy)} onChange={(value) => answer(field.key, value)} /> : <TextInput accessibilityLabel={field.label} value={String(cache.answers[field.key] ?? '')} editable={editable && !busy} placeholder="Enter answer" placeholderTextColor={colours.muted} keyboardType={field.type === 'number' ? 'decimal-pad' : 'default'} style={styles.input} onChangeText={(value) => answer(field.key, field.type === 'number' && value !== '' && Number.isFinite(Number(value)) ? Number(value) : value)} />}
     </View>;
   }
   return <View style={styles.container}>
@@ -563,12 +634,12 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       </> : <>
         {currentSection ? <ProgressMeter compact label={currentSection.label} complete={currentSection.complete} total={currentSection.total} /> : null}
         <Text style={styles.small}>{step?.kind === 'fields' ? `Section ${stepIndex + 1} of ${pages.length} · ${step.fields.length} items` : step?.kind === 'signature' ? 'Signature' : 'Final review'}</Text><Text style={styles.title}>{title}</Text>
-        {step?.kind === 'fields' ? <>{step.fields.map(renderField)}{showRepeatActions && repeatField?.repeatGroup && !locked ? <View style={styles.repeatActions}>
+        {step?.kind === 'fields' ? <>{step.fields.map(renderField)}{showRepeatActions && repeatField?.repeatGroup ? <View style={styles.repeatActions}>
           <Text style={styles.progressLabel}>{repeatItemLabel.charAt(0).toUpperCase() + repeatItemLabel.slice(1)} {repeatField.repeatIndex + 1}</Text>
           <FieldButton variant="secondary" disabled={!editable || Boolean(busy) || repeatCount >= 20} onPress={() => void addRepeatItem(repeatField.repeatGroup!)}>Add another {repeatItemLabel}</FieldButton>
           {repeatCount > 1 ? <FieldButton variant="danger" disabled={!editable || Boolean(busy) || repeatItemHasSavedEvidence} onPress={() => removeRepeatItem(repeatField.repeatGroup!)}>Remove this {repeatItemLabel}</FieldButton> : null}
           {repeatItemHasSavedEvidence ? <Text style={styles.small}>This item has uploaded evidence and stays in the field record.</Text> : null}
-        </View> : null}</> : step?.kind === 'signature' ? currentSignature ? <Text style={styles.text}>Signed by {currentSignature.signerName} on {new Date(currentSignature.signedAt).toLocaleString('en-AU')}.</Text> : <>
+        </View> : null}</> : step?.kind === 'signature' ? currentSignature ? <Text style={styles.text}>Signed by {currentSignature.signerName} on {new Date(currentSignature.signedAt).toLocaleString('en-AU')}.</Text> : pendingSignature ? <Text style={styles.text}>Signature saved on this phone. TLink is syncing it automatically.</Text> : <>
           <Text style={styles.small}>The signing date and time are recorded automatically when this signature is saved.</Text>
           {technicianSignature ? <View style={styles.derived}><Text style={styles.text}>{boundSignerName || 'Assigned technician profile name missing'}</Text><Text style={styles.small}>Technician identity comes from the active team member assigned to this job.</Text></View>
             : <TextInput accessibilityLabel="Signer's full name" value={signature.signerName} placeholder="Signer's full name" placeholderTextColor={colours.muted} editable={editable && !busy} style={styles.input} onChangeText={(signerName) => setSignature({ ...signature, signerName, strokes: [], capturedAt: '' })} />}
@@ -599,11 +670,11 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
           {fieldMissing.slice(0, 8).map((item) => <FieldButton key={item.key} variant="secondary" onPress={() => { const target = activityWizardPageForStepKey(pages, item.key); if (target) void remember({ ...cache, stepKey: target.key }); }}>{item.label}</FieldButton>)}
           {fieldMissing.length > 8 ? <Text style={styles.small}>{fieldMissing.length - 8} more questions will follow.</Text> : null}
           {cache.pending.length ? <FieldButton disabled={!online || Boolean(busy)} onPress={() => void perform('upload', async () => { await syncs.current; await saveAnswers(); for (const key of new Set(cache.pending.map((item) => item.fieldKey))) await uploadPending(key); })}>Upload {cache.pending.length} pending files</FieldButton> : null}
-          {record.status === 'draft' ? <FieldButton disabled={!editable || !online || Boolean(busy) || cache.pending.length > 0} loading={busy === 'submit'} onPress={() => void perform('submit', async () => { await syncs.current; await saveAnswers(); await request('submit'); await onChanged(); })}>Submit completed form to Creditex</FieldButton> : <><FieldButton disabled={!online || Boolean(busy)} onPress={() => void share()}>Share completed report</FieldButton><FieldButton variant="secondary" onPress={() => void perform('revoke', async () => { await apiRequest(endpoint, { method: 'POST', body: JSON.stringify({ action: 'revoke_report', recordId: record.id }) }); setError('Previous report links have been revoked.'); })}>Revoke report links</FieldButton></>}
+          {record.status === 'draft' ? <FieldButton disabled={!editable || !online || Boolean(busy) || cache.pending.length > 0} loading={busy === 'submit'} onPress={() => void perform('submit', async () => { await waitForBackgroundSync(); await saveAnswers(); await syncPendingSignatures(); await request('submit'); await onChanged(); })}>Submit completed form to Creditex</FieldButton> : <><FieldButton disabled={!online || Boolean(busy)} onPress={() => void share()}>Share completed report</FieldButton><FieldButton variant="secondary" onPress={() => void perform('revoke', async () => { await apiRequest(endpoint, { method: 'POST', body: JSON.stringify({ action: 'revoke_report', recordId: record.id }) }); setError('Previous report links have been revoked.'); })}>Revoke report links</FieldButton></>}
         </>}
       </>}
     </ScrollView>
-    {!overview ? <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy) || stepIndex === 0} onPress={() => void move(-1)}>Previous</FieldButton><FieldButton style={styles.flex} disabled={Boolean(busy) || step?.kind === 'review' || (technicianSignature && !boundSignerName)} loading={busy === 'next'} onPress={() => void next()}>{step?.kind === 'signature' && !currentSignature ? 'Save signature' : 'Next'}</FieldButton></View> : null}
+    {!overview ? <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy) || stepIndex === 0} onPress={() => void move(-1)}>Previous</FieldButton><FieldButton style={styles.flex} disabled={Boolean(busy) || step?.kind === 'review' || (technicianSignature && !boundSignerName)} loading={busy === 'next'} onPress={() => void next()}>{step?.kind === 'signature' && !currentSignature && !pendingSignature ? 'Save signature' : 'Next'}</FieldButton></View> : null}
   </View>;
 }
 

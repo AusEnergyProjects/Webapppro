@@ -143,16 +143,31 @@ test("server progress counts required field work and signatures without system-f
   } finally { database.close(); }
 });
 
-test("a required system-filled value cannot be blank when its declaration is signed or the form is submitted", async () => {
+test("signing never waits on unfinished fields or evidence but submission remains fail closed", async () => {
   const fieldForm = form();
   fieldForm.fields.push({ ...field("system_customer_email", "before"), presentation: "derived", autofill: "job.customer.email" });
+  fieldForm.fields.push({ ...field("electrician.licence_number", "before"), presentation: "derived", autofill: "job.credential.electrician",
+    condition: { fieldKey: "before_name", equals: "Customer" } });
+  fieldForm.fields.find((item) => item.key === "photo").required = true;
   const { database, server, access } = fixture(fieldForm);
   try {
     let record = await server.openActivityRecord(access, "job-a", "intent-a");
-    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Unit" });
     assert.ok(core.activityMissing(record, "before", false).some((item) => item.key === "system_customer_email"));
-    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
-      declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes }), /ACTIVITY_SIGNING_NOT_READY/);
+    assert.ok(core.activityMissing(record, "before", false).some((item) => item.key === "before_name"));
+    assert.ok(core.activityMissing(record, "after", false).some((item) => item.key === "after_model"));
+    assert.ok(core.activityMissing(record, "after", false).some((item) => item.key === "photo" && item.kind === "evidence"));
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes });
+    assert.equal(record.signatures.length, 2);
+    const duplicate = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes });
+    assert.equal(duplicate.revision, record.revision);
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Unit" });
+    assert.equal(record.signatures.length, 2);
+    assert.ok(core.activityMissing(record).some((item) => item.key === "before_customer" && item.kind === "signature"));
+    assert.ok(core.activityMissing(record).some((item) => item.key === "after_technician" && item.kind === "signature"));
     await assert.rejects(server.submitActivityRecord(access, record.id, record.revision), /ACTIVITY_FORM_INCOMPLETE/);
   } finally { database.close(); }
 });
@@ -641,8 +656,9 @@ test("delivery reconciliation never invalidates an on-device customer signature"
     assert.equal(record.answers["delivery.booking_documents.accepted_at"], resendAcceptedAt);
     assert.deepEqual(record.signatures, [originalCustomerSignature]);
     assert.deepEqual(core.activityMissing(record, "before"), []);
-    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
-      declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes }), /ACTIVITY_DECLARATION_ALREADY_SIGNED/);
+    const duplicate = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes });
+    assert.equal(duplicate.revision, record.revision);
     assert.deepEqual(core.activityMissing(record, "before"), []);
 
     record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
@@ -858,16 +874,18 @@ test("an inactive assigned member cannot supply a technician declaration identit
   } finally { database.close(); }
 });
 
-test("before-work signing permits after-work capture and locks signed answers without losing audit history", async () => {
+test("signed drafts remain editable and retain invalidated signatures as audit history", async () => {
   const { database, server, access } = fixture();
   try {
     let record = await server.openActivityRecord(access, "job-a", "intent-a");
     record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer" });
     record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision, declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
     const originalSignature = structuredClone(record.signatures[0]);
-    await assert.rejects(server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Replaced" }), /ACTIVITY_SIGNED_SCOPE_LOCKED/);
-    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Installed unit" });
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Replaced" });
     assert.deepEqual(record.signatures[0], originalSignature);
+    assert.ok(core.activityMissing(record, "before").some((item) => item.key === "before_customer" && item.kind === "signature"));
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision, declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Replaced", after_model: "Installed unit" });
     record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision, declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes });
     const submitted = await server.submitActivityRecord(access, record.id, record.revision);
     assert.equal(submitted.status, "submitted_for_creditex_review");
@@ -878,7 +896,7 @@ test("before-work signing permits after-work capture and locks signed answers wi
   } finally { database.close(); }
 });
 
-test("adding an optional before-work signature cannot invalidate an existing final signature", async () => {
+test("adding an optional before-work signature keeps the old final signature as audit history and permits re-signing", async () => {
   const optionalBefore = form();
   optionalBefore.declarations[0].required = false;
   const { database, server, access } = fixture(optionalBefore);
@@ -886,8 +904,12 @@ test("adding an optional before-work signature cannot invalidate an existing fin
     let record = await server.openActivityRecord(access, "job-a", "intent-a");
     record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Unit" });
     record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision, declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes });
-    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision, declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes }), /ACTIVITY_SIGNED_SCOPE_LOCKED|ACTIVITY_SIGNING_NOT_READY/);
-    assert.deepEqual(core.activityMissing(await server.loadActivityRecord(access, record.id)), []);
+    const originalFinalSignature = structuredClone(record.signatures[0]);
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision, declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
+    assert.deepEqual(record.signatures[0], originalFinalSignature);
+    assert.ok(core.activityMissing(record).some((item) => item.key === "after_technician" && item.kind === "signature"));
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision, declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes });
+    assert.deepEqual(core.activityMissing(record), []);
   } finally { database.close(); }
 });
 
@@ -1011,7 +1033,7 @@ test("phone saves apply only changed answers to the latest record automatically"
   } finally { database.close(); }
 });
 
-test("automatic draft merge never overwrites signed answers", async () => {
+test("automatic draft merge keeps audit signatures while allowing the phone answer to advance", async () => {
   const { database, server, access } = fixture();
   try {
     let record = await server.openActivityRecord(access, "job-a", "intent-a");
@@ -1019,8 +1041,11 @@ test("automatic draft merge never overwrites signed answers", async () => {
     const base = record;
     record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
       declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
-    await assert.rejects(server.saveActivityAnswers(access, record.id, base.revision,
-      { before_name: "Changed signed customer" }, base.answers), /ACTIVITY_SIGNED_SCOPE_LOCKED/);
+    const saved = await server.saveActivityAnswers(access, record.id, base.revision,
+      { before_name: "Changed signed customer" }, base.answers);
+    assert.equal(saved.answers.before_name, "Changed signed customer");
+    assert.equal(saved.signatures.length, 1);
+    assert.ok(core.activityMissing(saved, "before").some((item) => item.key === "before_customer" && item.kind === "signature"));
   } finally { database.close(); }
 });
 

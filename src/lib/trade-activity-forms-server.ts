@@ -10,7 +10,7 @@ import {
 } from "./trade-activity-forms-library.ts";
 import {
   activityCanonical, activityConditionMet, activityDeclarationText, activityHash, activityMissing, activitySigningScope,
-  assertActivityEditable, assertActivitySignedScopeUnchanged, normaliseActivityAnswers, validateActivityStrokes,
+  assertActivityEditable, normaliseActivityAnswers, validateActivityStrokes,
   type ActivityAnswers, type ActivityEvidence, type ActivityForm, type ActivityRecord,
 } from "./trade-activity-forms.ts";
 import { activityBaseFieldKey, expandedActivityFields, mergeActivityAnswers } from "./trade-activity-form-flow.ts";
@@ -151,11 +151,17 @@ async function scheduledActivityDocumentReceiptAnswers(ownerUid: string, workOrd
 
 type ActivitySignerSetup = { firstName: string; lastName: string; canSave: boolean; firstNameLocked: boolean; lastNameLocked: boolean };
 
+function activityUserActionableMissing(record: ActivityRecord, phase?: ActivityForm["fields"][number]["phase"], includeSignatures = true) {
+  const fields = new Map(record.form.fields.map((field) => [field.key, field]));
+  return activityMissing(record, phase, includeSignatures).filter((item) => item.kind === "signature"
+    || fields.get(activityBaseFieldKey(item.key))?.presentation !== "derived");
+}
+
 export function activityPresentation(record: ActivityRecord, signerSetup?: ActivitySignerSetup) {
   const missing = activityMissing(record);
   const total = expandedActivityFields(record.form, record.answers).filter((field) => field.required && field.presentation !== "derived").length
     + record.form.declarations.filter((item) => item.required && activityConditionMet(item.condition, record.answers)).length;
-  const userMissing = missing.filter((item) => record.form.fields.find((field) => field.key === activityBaseFieldKey(item.key))?.presentation !== "derived");
+  const userMissing = activityUserActionableMissing(record);
   return { ...record, ...(signerSetup ? { signerSetup } : {}), evidence: record.evidence.map(({ objectKey, previewObjectKey, ...item }) => { void objectKey; void previewObjectKey; return item; }), missing,
     signingScopes: { before: activitySigningScope(record, "before"), after: activitySigningScope(record, "after") },
     progress: { complete: Math.max(0, total - userMissing.length), total },
@@ -498,7 +504,6 @@ export async function saveActivityAnswers(access: TeamAccess, id: string, expect
       if (previous.answers[key] !== undefined) nextAnswers[key] = previous.answers[key];
     }
     const next = { ...previous, answers: nextAnswers, hasUserEdits: previous.hasUserEdits || activityHash(previous.answers) !== activityHash(nextAnswers) };
-    assertActivitySignedScopeUnchanged(previous, next);
     try { return await saveRecord(access, previous, next); }
     catch (error) {
       if (baseAnswers === undefined || !(error instanceof Error) || error.message !== "ACTIVITY_REVISION_CONFLICT" || attempt === 2) throw error;
@@ -550,21 +555,18 @@ export async function signActivityDeclaration(access: TeamAccess, id: string, bo
     if (!signerName) throw new Error("ACTIVITY_TECHNICIAN_IDENTITY_REQUIRED");
   }
   if (body.acknowledged !== true || !signerName) throw new Error("ACTIVITY_SIGNATURE_REQUIRED");
-  const missing = activityMissing(previous, declaration.phase, false);
-  if (missing.length || (declaration.phase === "after" && activityMissing(previous, "before").length)) throw new Error("ACTIVITY_SIGNING_NOT_READY");
   const declarationText = activityDeclarationText(declaration, previous.answers);
   if (/\{\{/.test(declarationText)) throw new Error("ACTIVITY_DECLARATION_DETAILS_REQUIRED");
   const signingScope = activitySigningScope(previous, declaration.phase);
   if (previous.signatures.some((item) => item.declarationKey === declaration.key
     && item.declarationSha256 === activityHash(declarationText) && item.scopeSha256 === signingScope)) {
-    throw new Error("ACTIVITY_DECLARATION_ALREADY_SIGNED");
+    return previous;
   }
   const next = { ...previous, signatures: [...previous.signatures, {
     id: crypto.randomUUID(), declarationKey: declaration.key, signerName, role: declaration.role,
     phase: declaration.phase, declarationText, declarationSha256: activityHash(declarationText), scopeSha256: signingScope,
     signedAt: iso(), actorUid: access.actorUid, strokes: validateActivityStrokes(body.strokes),
   }] };
-  assertActivitySignedScopeUnchanged(previous, next);
   return saveRecord(access, previous, next, undefined, declaration.role === "technician" ? access.memberId : "");
 }
 
@@ -618,7 +620,6 @@ export async function uploadActivityEvidence(access: TeamAccess, id: string, exp
     contentType: file.type, size: bytes.byteLength, sha256, objectKey, uploadedAt: iso(), ...capture,
     ...(previewBytes ? { previewObjectKey, previewSha256: activityHash(previewBytes), previewSize: previewBytes.length } : {}) };
   const next = { ...previous, evidence: [...previous.evidence, item] };
-  assertActivitySignedScopeUnchanged(previous, next);
   await bucket().put(objectKey, bytes, { httpMetadata: { contentType: file.type }, customMetadata: { sha256, fieldRecordId: id, evidenceId } });
   try {
     if (previewBytes) await bucket().put(previewObjectKey, previewBytes, { httpMetadata: { contentType: "image/jpeg" }, customMetadata: { sha256: activityHash(previewBytes), originalSha256: sha256, fieldRecordId: id, evidenceId } });
