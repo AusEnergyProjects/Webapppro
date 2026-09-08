@@ -8,6 +8,7 @@ import { PDFDict, PDFDocument, PDFName } from "pdf-lib";
 import * as core from "../src/lib/trade-activity-forms.ts";
 import * as flow from "../src/lib/trade-activity-form-flow.ts";
 import * as receipt from "../src/lib/scheduled-activity-customer-document-receipt.ts";
+import { activityFieldWorkerForm } from "../src/lib/trade-activity-forms-library.ts";
 import { canEditCreditexFieldMasters } from "../src/lib/creditex-field-master-access.ts";
 import { renderActivityFieldPdf, validateActivityEvidenceBytes } from "../src/lib/trade-activity-forms-pdf.ts";
 
@@ -89,6 +90,7 @@ function fixture(fieldForm = form(), options = {}) {
     "./trade-activity-forms-library.ts": {
       defaultActivityFieldForm: options.defaultFormFactory || (() => structuredClone(options.defaultForm || fieldForm)), activityPrefill: options.activityPrefill || (() => ({})),
       activityConsumerDocuments: () => options.consumerDocuments || [],
+      activityFieldWorkerForm: options.activityFieldWorkerForm || activityFieldWorkerForm,
       applyDefaultActivityFormPolicy: options.applyPolicy || ((value) => value),
       ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS: {
         deliveryId: "delivery.booking_documents.delivery_id",
@@ -146,9 +148,10 @@ test("server progress counts required field work and signatures without system-f
 test("submission blocks technician work but leaves derived profile and office gaps for office review", async () => {
   const fieldForm = form();
   fieldForm.fields.push({ ...field("system_customer_email", "before"), presentation: "derived", autofill: "job.customer.email" });
-  fieldForm.fields.push({ ...field("electrician.licence_number", "before"), presentation: "derived", autofill: "job.credential.electrician",
-    condition: { fieldKey: "before_name", equals: "Customer" } });
-  fieldForm.fields.push({ ...field("benefit_payment.certificate_benefit_amount", "after", "number"), presentation: "derived" });
+  fieldForm.fields.push({ ...field("workers.electrician.name", "before"), condition: { fieldKey: "before_name", equals: "Customer" } });
+  fieldForm.fields.push({ ...field("electrician.licence_number", "before"), condition: { fieldKey: "before_name", equals: "Customer" } });
+  fieldForm.fields.push({ ...field("benefit_payment.certificate_benefit_amount", "after", "number") });
+  fieldForm.fields.push({ ...field("certificates.bpc_number", "after") });
   fieldForm.fields.find((item) => item.key === "photo").required = true;
   const { database, server, access } = fixture(fieldForm);
   try {
@@ -175,18 +178,31 @@ test("submission blocks technician work but leaves derived profile and office ga
     record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
       declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes });
 
-    const officeMissingKeys = server.activityPresentation(record).missing.map((item) => item.key);
+    const storedFormSha256 = core.activityHash(record.form);
+    const storedSignatures = structuredClone(record.signatures);
+    const presentation = server.activityPresentation(record);
+    const officeMissingKeys = presentation.missing.map((item) => item.key);
     assert.ok(officeMissingKeys.includes("system_customer_email"));
+    assert.ok(officeMissingKeys.includes("workers.electrician.name"));
     assert.ok(officeMissingKeys.includes("electrician.licence_number"));
     assert.ok(officeMissingKeys.includes("benefit_payment.certificate_benefit_amount"));
+    assert.ok(officeMissingKeys.includes("certificates.bpc_number"));
     assert.ok(!officeMissingKeys.includes("before_name"));
     assert.ok(!officeMissingKeys.includes("after_model"));
     assert.ok(!officeMissingKeys.includes("photo"));
 
+    assert.equal(presentation.form.fields.find((item) => item.key === "workers.electrician.name")?.presentation, "derived");
+    assert.equal(presentation.form.fields.find((item) => item.key === "electrician.licence_number")?.presentation, "derived");
+    assert.equal(presentation.form.fields.find((item) => item.key === "benefit_payment.certificate_benefit_amount")?.presentation, "derived");
+    assert.equal(presentation.form.fields.find((item) => item.key === "certificates.bpc_number")?.presentation, "derived");
+    assert.equal(record.form.fields.find((item) => item.key === "workers.electrician.name")?.presentation, undefined);
+    assert.equal(record.form.fields.find((item) => item.key === "electrician.licence_number")?.presentation, undefined);
+    assert.equal(core.activityHash(record.form), storedFormSha256);
+    assert.deepEqual(record.signatures, storedSignatures);
     record = await server.submitActivityRecord(access, record.id, record.revision);
     assert.equal(record.status, "submitted_for_creditex_review");
     assert.deepEqual(server.activityPresentation(record).missing.map((item) => item.key).sort(), [
-      "benefit_payment.certificate_benefit_amount", "electrician.licence_number", "system_customer_email",
+      "benefit_payment.certificate_benefit_amount", "certificates.bpc_number", "electrician.licence_number", "system_customer_email", "workers.electrician.name",
     ]);
   } finally { database.close(); }
 });

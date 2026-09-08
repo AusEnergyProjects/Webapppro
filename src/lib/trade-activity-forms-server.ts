@@ -4,6 +4,7 @@ import { assignedJob, type TeamAccess } from "./trade-team-server";
 import {
   activityPrefill,
   activityConsumerDocuments,
+  activityFieldWorkerForm,
   applyDefaultActivityFormPolicy,
   defaultActivityFieldForm,
   ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS,
@@ -152,17 +153,18 @@ async function scheduledActivityDocumentReceiptAnswers(ownerUid: string, workOrd
 type ActivitySignerSetup = { firstName: string; lastName: string; canSave: boolean; firstNameLocked: boolean; lastNameLocked: boolean };
 
 function activityUserActionableMissing(record: ActivityRecord, phase?: ActivityForm["fields"][number]["phase"], includeSignatures = true) {
-  const fields = new Map(record.form.fields.map((field) => [field.key, field]));
+  const fields = new Map(activityFieldWorkerForm(record.form).fields.map((field) => [field.key, field]));
   return activityMissing(record, phase, includeSignatures).filter((item) => item.kind === "signature"
     || fields.get(activityBaseFieldKey(item.key))?.presentation !== "derived");
 }
 
 export function activityPresentation(record: ActivityRecord, signerSetup?: ActivitySignerSetup) {
+  const form = activityFieldWorkerForm(record.form);
   const missing = activityMissing(record);
-  const total = expandedActivityFields(record.form, record.answers).filter((field) => field.required && field.presentation !== "derived").length
-    + record.form.declarations.filter((item) => item.required && activityConditionMet(item.condition, record.answers)).length;
+  const total = expandedActivityFields(form, record.answers).filter((field) => field.required && field.presentation !== "derived").length
+    + form.declarations.filter((item) => item.required && activityConditionMet(item.condition, record.answers)).length;
   const userMissing = activityUserActionableMissing(record);
-  return { ...record, ...(signerSetup ? { signerSetup } : {}), evidence: record.evidence.map(({ objectKey, previewObjectKey, ...item }) => { void objectKey; void previewObjectKey; return item; }), missing,
+  return { ...record, form, ...(signerSetup ? { signerSetup } : {}), evidence: record.evidence.map(({ objectKey, previewObjectKey, ...item }) => { void objectKey; void previewObjectKey; return item; }), missing,
     signingScopes: { before: activitySigningScope(record, "before"), after: activitySigningScope(record, "after") },
     progress: { complete: Math.max(0, total - userMissing.length), total },
     reportUrl: record.status === "submitted_for_creditex_review" ? `/api/trade-activity-forms?recordId=${encodeURIComponent(record.id)}&view=pdf` : "" };

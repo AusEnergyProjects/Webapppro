@@ -450,6 +450,29 @@ function isOfficeCommercialField(field: ActivityField) {
     || /\b(?:invoice|proof of purchase|certificate benefit|consumer payment|price including gst|amount actually paid)\b/i.test(source);
 }
 
+function applySystemDerivedFieldPolicy(fields: ActivityField[], programCode: string, activityCode: string, clearUnsupported = false) {
+  for (const field of fields) {
+    const specialist = field.key.match(/^workers\.(electrician|licensed_plumber|registered_plumber|refrigerant_handler)\.(name|company_name|company_address|phone|licence_or_registration)$/);
+    if (specialist) {
+      const role = human(specialist[1]);
+      const fact = specialist[2] === "licence_or_registration" ? "licence or registration number" : human(specialist[2]);
+      field.label = `${role[0].toUpperCase()}${role.slice(1)} ${fact}`;
+      field.help = "Filled from the assigned team member and business profile.";
+    }
+    const suppliedAutofill = field.autofill || "";
+    const autofill = isSupportedAutofill(suppliedAutofill) ? suppliedAutofill
+      : inferredAutofill(field.key, programCode, activityCode);
+    if (!autofill && ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEY_SET.has(field.key)) continue;
+    if (autofill && isSupportedAutofill(autofill)) {
+      field.autofill = autofill;
+      field.presentation = "derived";
+    } else if (clearUnsupported && (field.autofill || field.presentation === "derived" || field.presentation === "prefilled")) {
+      delete field.autofill;
+      delete field.presentation;
+    }
+  }
+}
+
 function applyFieldWorkerPolicy(fields: ActivityField[], templateId: string) {
   for (const field of fields) {
     if (isOfficeCommercialField(field)) {
@@ -494,6 +517,15 @@ function applyFieldWorkerPolicy(fields: ActivityField[], templateId: string) {
     delete sameOem.autofill;
     sameOem.help = "Resolved from the approved product selection during Creditex review.";
   }
+}
+
+/** Applies the current field-worker visibility policy without changing the stored governed form. */
+export function activityFieldWorkerForm(form: ActivityForm): ActivityForm {
+  const fields = form.fields.map((field) => ({ ...field }));
+  const activityCode = CREDITEX_CURRENT_WORK_PACK_CONTENT_CANDIDATES.find((item) => item.templateId === form.activityTemplateId)?.activityCode || "";
+  applySystemDerivedFieldPolicy(fields, form.programCode, activityCode);
+  applyFieldWorkerPolicy(fields, form.activityTemplateId);
+  return { ...form, fields };
 }
 
 function derivedDeliveryFields(documents: readonly ActivityConsumerDocument[]): ActivityField[] {
@@ -926,26 +958,7 @@ export function defaultActivityFieldForm(templateId: string, variantId = ""): Ac
     text: "I confirm that this field record describes the work I completed and the observations and evidence I collected. I have recorded any limitations and outstanding matters accurately. I authorise this record to be provided to CREDITEX PTY LTD for review.",
     sourceUrl: "", sourceTextSha256: "",
   });
-  for (const field of fields) {
-    const specialist = field.key.match(/^workers\.(electrician|licensed_plumber|registered_plumber|refrigerant_handler)\.(name|company_name|company_address|phone|licence_or_registration)$/);
-    if (specialist) {
-      const role = human(specialist[1]);
-      const fact = specialist[2] === "licence_or_registration" ? "licence or registration number" : human(specialist[2]);
-      field.label = `${role[0].toUpperCase()}${role.slice(1)} ${fact}`;
-      field.help = "Filled from the assigned team member and business profile.";
-    }
-    const suppliedAutofill = field.autofill || "";
-    const autofill = isSupportedAutofill(suppliedAutofill) ? suppliedAutofill
-      : inferredAutofill(field.key, candidate.programCode, candidate.activityCode);
-    if (!autofill && ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEY_SET.has(field.key)) continue;
-    if (autofill && isSupportedAutofill(autofill)) {
-      field.autofill = autofill;
-      field.presentation = "derived";
-    } else if (field.autofill || field.presentation === "derived" || field.presentation === "prefilled") {
-      delete field.autofill;
-      delete field.presentation;
-    }
-  }
+  applySystemDerivedFieldPolicy(fields, candidate.programCode, candidate.activityCode, true);
   applyFieldWorkerPolicy(fields, templateId);
   const deduped = [...new Map(fields.filter((field) => !isSignatureTimestamp(field.key, field.autofill)).map((field) => [field.key, field])).values()];
   // References in official conditions must always have a collectable input.
