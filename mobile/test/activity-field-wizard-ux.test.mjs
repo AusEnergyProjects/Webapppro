@@ -189,8 +189,9 @@ test('the native wizard uses Expo 57 File parts and hierarchical back navigation
   assert.match(wizard, /if \(!overview\) \{\s*setOverview\(true\)/);
   assert.match(wizard, /activityOptionLabel\(value, field\?\.optionLabels\?\.\[value\]\)/);
   assert.doesNotMatch(wizard, /resend_activity_customer_documents|Resend customer documents|Customer documents need attention/);
-  assert.match(wizard, /Job or profile details need attention/);
-  assert.match(wizard, /TLink is missing system details/);
+  assert.doesNotMatch(wizard, /Job or profile details need attention/);
+  assert.doesNotMatch(wizard, /TLink is missing system details/);
+  assert.doesNotMatch(wizard, /Your work remains saved on this phone and will retry with the next save/);
   assert.match(wizard, /step\.declaration\.role === 'technician' \? latest\.record\.signerDefaults\.technician : signature\.signerName\.trim\(\)/);
   assert.match(wizard, /identitySource: technicianSignature \? 'assigned_worker'/);
   assert.match(wizard, /Technician identity comes from the active team member assigned to this job/);
@@ -205,7 +206,11 @@ test('the native wizard uses Expo 57 File parts and hierarchical back navigation
   assert.match(wizard, /disabled=\{!editable \|\| Boolean\(busy\) \|\| repeatItemHasSavedEvidence\}/);
   assert.match(wizard, /scrollResponderScrollNativeHandleToKeyboard\(event\.target, 96, true\)/);
   assert.match(wizard, /const transition = move\(1\);[\s\S]{0,100}if \(online\) queuePageSync\(fieldKeys\);[\s\S]{0,80}await transition;/);
-  assert.match(wizard, /syncs\.current = syncs\.current\.catch\(\(\) => undefined\)\.then/);
+  assert.match(wizard, /const syncWorkerRunning = useRef\(false\)/);
+  assert.match(wizard, /const pendingSyncKeys = useRef\(new Set<string>\(\)\)/);
+  assert.match(wizard, /const pendingFullUpload = useRef\(false\)/);
+  assert.match(wizard, /if \(syncWorkerRunning\.current \|\| !online\) return/);
+  assert.match(wizard, /do \{[\s\S]*\} while \(pendingFullUpload\.current \|\| pendingSyncKeys\.current\.size\)/);
   assert.match(wizard, /type PendingSignature =/);
   assert.match(wizard, /await syncPendingSignatures\(\)/);
   assert.match(wizard, /if \(online\) queuePageSync\(\[\], true\);/);
@@ -230,4 +235,16 @@ test('the native wizard uses Expo 57 File parts and hierarchical back navigation
   assert.match(wizard, />Remove this \{repeatItemLabel\}<\/FieldButton>/);
   assert.doesNotMatch(wizard, /field\.repeatGroup\.replaceAll/);
   assert.doesNotMatch(wizard, /Step \{stepIndex \+ 1\} of \{steps\.length\}/);
+});
+
+test('Activity 6 uses approved product choices and review counts only field work', () => {
+  const wizard = read('../src/components/ActivityFieldFormWizard.tsx');
+  assert.match(wizard, /new URLSearchParams\(\{ recordId, view: 'official_products' \}\)/);
+  assert.match(wizard, /record\.form\.activityTemplateId === 'veu-6'/);
+  assert.match(wizard, /FieldSelect label="Choose approved brand"[\s\S]{0,160}options=\{approvedBrands\}/);
+  assert.match(wizard, /FieldSelect label="Choose approved model"[\s\S]{0,180}options=\{approvedModels\[selectedBrand\] \|\| \[\]\}/);
+  assert.match(wizard, /delete answers\[activityRepeatKey\('installed_product\.model', field\.repeatIndex\)\]/);
+  assert.match(wizard, /approvedBrands\.some\(\(option\) => option\.value === value\)/);
+  assert.match(wizard, /\$\{fieldMissing\.length\} field item/);
+  assert.doesNotMatch(wizard, /\$\{record\.missing\.length\} required item/);
 });

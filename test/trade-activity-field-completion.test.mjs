@@ -144,6 +144,28 @@ test("all current selectable activities have specific runnable fields and no mis
   }
 });
 
+test("all implementation and installation dates come from the scheduled appointment", () => {
+  let checked = 0;
+  for (const item of activityFieldCatalogue()) {
+    const defaultForm = defaultActivityFieldForm(item.activityTemplateId);
+    const variants = [defaultForm.variantId, ...defaultForm.variantOptions.map((variant) => variant.id).filter((id) => id !== defaultForm.variantId)];
+    for (const variant of variants) {
+      const form = defaultActivityFieldForm(item.activityTemplateId, variant);
+      const scheduled = activityPrefill(form, { scheduledInstallationDate: "2026-09-09", technician: "" });
+      for (const field of form.fields.filter((candidate) => candidate.key === "implementation_date"
+        || candidate.key === "installation.date" || candidate.key.endsWith(".installation_date"))) {
+        checked++;
+        assert.equal(field.presentation, "derived", `${item.activityTemplateId}/${variant}: ${field.key}`);
+        assert.equal(field.autofill, "job.appointment.date", `${item.activityTemplateId}/${variant}: ${field.key}`);
+        assert.equal(scheduled[field.key], "2026-09-09", `${item.activityTemplateId}/${variant}: ${field.key}`);
+        assert.ok(!activityWizardSteps(form, {}).some((step) => step.kind === "field" && step.field.baseKey === field.key),
+          `${item.activityTemplateId}/${variant}: ${field.key}`);
+      }
+    }
+  }
+  assert.ok(checked > 0);
+});
+
 test("every catalogue variant orders condition inputs before the questions they control", () => {
   for (const item of activityFieldCatalogue()) {
     const defaultForm = defaultActivityFieldForm(item.activityTemplateId);
@@ -313,7 +335,7 @@ test("specialist booking factsheets are selected only for their exact activities
   assert.deepEqual(keys("nsw-ess-f17"), ["nsw-heer_hw_facts"]);
 });
 
-test("VEU Activity 6 preserves audit codes while presenting complete choices and role-specific crew questions", () => {
+test("VEU Activity 6 preserves audit codes while deriving scheduled, product and commercial facts", () => {
   const residential = defaultActivityFieldForm("veu-6", "veu_6_residential");
   const business = defaultActivityFieldForm("veu-6", "veu_6_business");
   assert.deepEqual(activityConsumerDocuments("veu-6", residential.variantId).map((item) => item.key), [
@@ -333,6 +355,42 @@ test("VEU Activity 6 preserves audit codes while presenting complete choices and
   assert.match(repair.optionLabels.some, /some required building repairs/i);
 
   assert.equal(residential.fields.find((field) => field.key === "customer_property.installation_address")?.presentation, "derived");
+  const officeCommercialKeys = [
+    "value_required_in_assignment_or_linked_invoice",
+    "benefit_payment.benefit_type",
+    "benefit_payment.other_benefit",
+    "benefit_payment.benefit_amount",
+    "benefit_payment.gross_price",
+    "benefit_payment.consumer_paid",
+    "evidence.air-conditioner-invoice",
+  ];
+  for (const form of [residential, business]) {
+    const installationDate = form.fields.find((field) => field.key === "customer_property.installation_date");
+    assert.equal(installationDate?.presentation, "derived");
+    assert.equal(installationDate?.autofill, "job.appointment.date");
+    for (const key of ["installed_product.category", "installed_product.same_oem"]) {
+      assert.equal(form.fields.find((field) => field.key === key)?.presentation, "derived", `${form.variantId}: ${key}`);
+      assert.ok(!activityWizardSteps(form, { "installed_product.isMultiSplit": true })
+        .some((step) => step.kind === "field" && step.field.baseKey === key), `${form.variantId}: ${key}`);
+    }
+    assert.equal(form.fields.find((field) => field.key === "installed_product.brand")?.label, "Approved brand");
+    assert.equal(form.fields.find((field) => field.key === "installed_product.model")?.label, "Approved model");
+    for (const [key, label] of [
+      ["installed_product.indoor_heating_kw", "Total installed heating capacity (kW)"],
+      ["installed_product.indoor_cooling_kw", "Total installed cooling capacity (kW)"],
+    ]) {
+      const field = form.fields.find((candidate) => candidate.key === key);
+      assert.equal(field?.label, label, `${form.variantId}: ${key}`);
+      assert.equal(field?.condition, undefined, `${form.variantId}: ${key}`);
+      assert.ok(activityWizardSteps(form, { "installed_product.isMultiSplit": false })
+        .some((step) => step.kind === "field" && step.field.baseKey === key), `${form.variantId}: ${key}`);
+    }
+    for (const key of officeCommercialKeys) {
+      assert.equal(form.fields.find((field) => field.key === key)?.presentation, "derived", `${form.variantId}: ${key}`);
+      assert.ok(!activityWizardSteps(form, { value_required_in_assignment_or_linked_invoice: true })
+        .some((step) => step.kind === "field" && step.field.baseKey === key), `${form.variantId}: ${key}`);
+    }
+  }
   for (const key of ["workers.electrician.name", "workers.electrician.company_address", "workers.electrician.phone",
     "workers.electrician.licence_or_registration", "workers.licensed_plumber.name", "workers.refrigerant_handler.name"]) {
     const field = residential.fields.find((candidate) => candidate.key === key);
@@ -361,9 +419,7 @@ test("VEU Activity 6 presents each scenario and equipment controller before its 
     for (const [dependentKey, dependencyKeys] of [
       ["evidence.air-conditioner-existing", ["baseline.scenario"]],
       ["baseline.retained_reason", ["baseline.scenario", "baseline.removed"]],
-      ["installed_product.indoor_heating_kw", ["installed_product.isMultiSplit"]],
       ["installed_product.ductwork_replaced", ["baseline.isDucted", "installed_product.isDucted"]],
-      ["benefit_payment.gross_price", ["value_required_in_assignment_or_linked_invoice"]],
       ["consumer_checks.certificate_delivery_informed", ["certificates.bpc_required", "certificates.coes_required"]],
     ]) {
       const dependent = form.fields.find((field) => field.key === dependentKey);
@@ -376,8 +432,6 @@ test("VEU Activity 6 presents each scenario and equipment controller before its 
         assert.ok(indexes.get(dependencyKey) < indexes.get(dependentKey), `${variant}: ${dependencyKey} must precede ${dependentKey}`);
       }
     }
-    const withoutMultiSplit = activityWizardSteps(form, { "installed_product.isMultiSplit": false });
-    assert.ok(!withoutMultiSplit.some((step) => step.kind === "field" && step.field.baseKey === "installed_product.indoor_heating_kw"));
   }
 });
 
@@ -409,7 +463,10 @@ test("VEU Activity 6 puts required photos and documents beside the facts they pr
   assert.ok([existing, installed, decommissioned].every((field) => field.type === "photo" && field.requireLocation
     && field.sourceRequirementId === "air-conditioner-photos" && field.evidenceFor.length));
   assert.ok(!form.fields.some((field) => field.key === "evidence.air-conditioner-photos"));
-  assert.equal(form.fields.find((field) => field.key === "evidence.air-conditioner-invoice").section, "Benefit and payment");
+  const invoice = form.fields.find((field) => field.key === "evidence.air-conditioner-invoice");
+  assert.equal(invoice.section, "Benefit and payment");
+  assert.equal(invoice.presentation, "derived");
+  assert.ok(!activityWizardSteps(form, {}).some((step) => step.kind === "field" && step.field.baseKey === invoice.key));
   assert.equal(form.fields.find((field) => field.key === "evidence.air-conditioner-electrical-certificate").section, "Trade certificates");
 });
 
@@ -460,6 +517,13 @@ test("saved masters cannot invent derived facts or weaken baseline receipts, evi
     type: "boolean", required: true, options: [], help: "", phase: "before" });
   stale.fields.push({ key: "custom.spoofed_job_fact", section: "Custom", label: "Spoofed", type: "text", required: true, options: [], help: "",
     phase: "before", presentation: "derived", autofill: "job.customer.fullName", sourceRequirementId: "air-conditioner-photos", evidenceFor: ["invented"] });
+  const governedKeys = ["customer_property.installation_date", "installed_product.category", "installed_product.same_oem",
+    "value_required_in_assignment_or_linked_invoice", "benefit_payment.benefit_type", "benefit_payment.other_benefit",
+    "benefit_payment.benefit_amount", "benefit_payment.gross_price", "benefit_payment.consumer_paid", "evidence.air-conditioner-invoice"];
+  for (const key of governedKeys) {
+    delete stale.fields.find((field) => field.key === key).presentation;
+    if (key === "customer_property.installation_date") delete stale.fields.find((field) => field.key === key).autofill;
+  }
   stale.declarations = stale.declarations.filter((declaration) => declaration.key !== removedDeclaration.key);
   const sourcedDeclaration = stale.declarations.find((declaration) => declaration.sourceUrl || declaration.sourceTextSha256);
   if (sourcedDeclaration) { sourcedDeclaration.title = "Weakened declaration"; sourcedDeclaration.text = "Weakened text"; sourcedDeclaration.required = false; }
@@ -472,6 +536,8 @@ test("saved masters cannot invent derived facts or weaken baseline receipts, evi
   assert.equal(spoofed.presentation, undefined); assert.equal(spoofed.autofill, undefined);
   assert.equal(spoofed.sourceRequirementId, undefined); assert.equal(spoofed.evidenceFor, undefined);
   assert.equal(upgraded.fields.find((field) => field.key === "workers.electrician.name").presentation, "derived");
+  for (const key of governedKeys) assert.equal(upgraded.fields.find((field) => field.key === key)?.presentation, "derived", key);
+  assert.equal(upgraded.fields.find((field) => field.key === "customer_property.installation_date")?.autofill, "job.appointment.date");
   assert.match(upgraded.fields.find((field) => field.key === "baseline.scenario").optionLabels.i, /Hard-wired/i);
   assert.deepEqual(upgraded.fields.find((field) => field.key === evidenceKey), baseline.fields.find((field) => field.key === evidenceKey));
   assert.ok([...receiptKeys].every((key) => upgraded.fields.some((field) => field.key === key)));
@@ -504,11 +570,12 @@ test("saved master policy preserves an equivalent baseline installer ID selfie k
   assert.deepEqual(selfieFields[0].evidenceFor, equivalent.evidenceFor);
   assert.ok(!governed.fields.some((field) => field.key === INSTALLER_ID_SELFIE_FIELD_KEY));
 });
-test("specialist crew details prefill from the assigned team and business profiles but remain editable", () => {
+test("scheduled installation and specialist crew details prefill without asking the field worker", () => {
   const form = defaultActivityFieldForm("veu-6", "veu_6_residential");
   const context = { address: "1 Test Street, Melbourne VIC 3000", customerName: "Pat Customer",
     customerEmail: "pat@example.com", customerPhone: "0400000000", businessName: "Example Electrical Pty Ltd",
     businessAddress: "2 Trade Road, Melbourne VIC 3000", businessPhone: "0390000000", technician: "Alex Electrician",
+    scheduledInstallationDate: "2026-09-09",
     credentialNumbers: { electrician: "ELEC-1", licensed_plumber: "PLUMB-L1", registered_plumber: "PLUMB-R1", refrigerant_handler: "REF-1" } };
   const expectedSources = {
     name: "job.assignee.fullName",
@@ -545,6 +612,7 @@ test("specialist crew details prefill from the assigned team and business profil
   assert.equal(answers["workers.registered_plumber.licence_or_registration"], "PLUMB-R1");
   assert.equal(answers["workers.refrigerant_handler.licence_or_registration"], "REF-1");
   assert.equal(answers["customer_property.installation_address"], "1 Test Street, Melbourne VIC 3000");
+  assert.equal(answers["customer_property.installation_date"], "2026-09-09");
 
   const missingProfileData = activityPrefill(form, { ...context, technician: "", businessAddress: "", businessPhone: "", credentialNumbers: {} });
   assert.equal(missingProfileData["workers.electrician.name"], undefined);
@@ -623,11 +691,11 @@ test("activities without a universal booking handout do not ask the tradie for a
   }
 });
 
-test("every supported customer, property, Creditex, trade, worker and credential source prefills across the catalogue", () => {
+test("every supported appointment, customer, property, Creditex, trade, worker and credential source prefills across the catalogue", () => {
   const context = { address: "1 Test Street, Melbourne VIC 3000", customerName: "Pat Customer", customerEmail: "pat@example.com",
     customerPhone: "0400000000", customerBusinessName: "Pat Customer Pty Ltd", customerBusinessNumber: "11122233344",
     businessName: "Example Electrical Pty Ltd", businessAddress: "2 Trade Road, Melbourne VIC 3000", businessPhone: "0390000000",
-    businessEmail: "trade@example.com", technician: "Alex Electrician",
+    businessEmail: "trade@example.com", technician: "Alex Electrician", scheduledInstallationDate: "2026-09-09",
     workerCredentials: [
       { name: "Electrical licence", number: "ELEC-1", type: "licence", jurisdiction: "VIC", gate: "licensed_electrician" },
       { name: "Plumbing licence", number: "PLUMB-1", type: "licence", jurisdiction: "VIC", gate: "licensed_plumber" },
@@ -636,8 +704,8 @@ test("every supported customer, property, Creditex, trade, worker and credential
     ],
     credentialNumbers: { electrician: "ELEC-1", licensed_plumber: "PLUMB-1", registered_plumber: "PLUMB-R1", refrigerant_handler: "REF-1",
       installer: "SAA-I1", designer: "SAA-D1" }, credentialTypes: { installer: "Grid-connect installer", designer: "Grid-connect designer", connection: "Grid connected" } };
-  const supported = /^(?:job\.property\.fullAddress|job\.customer\.(?:name|fullName|email|phone|companyName|abnOrAcn|identity)|job\.customer\.authorisedSignatory\.(?:signatory_name|signatory_company|signatory_email|signatory_phone)|job\.trade\.(?:name|address|phone|email|identity)|job\.assignee\.(?:fullName|businessAndTechnician|profile)|job\.credential\.(?:electrician|licensed_plumber|registered_plumber|refrigerant_handler|installer|designer)|job\.credentialType\.(?:installer|designer|connection)|creditex\.provider\.(?:legalName|abn|email|phone|contact|identity|accreditation\.[A-Z-]+\..+))$/;
-  const counts = { customer: 0, property: 0, creditex: 0, trade: 0, worker: 0, credential: 0 };
+  const supported = /^(?:job\.appointment\.date|job\.property\.fullAddress|job\.customer\.(?:name|fullName|email|phone|companyName|abnOrAcn|identity)|job\.customer\.authorisedSignatory\.(?:signatory_name|signatory_company|signatory_email|signatory_phone)|job\.trade\.(?:name|address|phone|email|identity)|job\.assignee\.(?:fullName|businessAndTechnician|profile)|job\.credential\.(?:electrician|licensed_plumber|registered_plumber|refrigerant_handler|installer|designer)|job\.credentialType\.(?:installer|designer|connection)|creditex\.provider\.(?:legalName|abn|email|phone|contact|identity|accreditation\.[A-Z-]+\..+))$/;
+  const counts = { appointment: 0, customer: 0, property: 0, creditex: 0, trade: 0, worker: 0, credential: 0 };
   for (const item of activityFieldCatalogue()) {
     const defaultForm = defaultActivityFieldForm(item.activityTemplateId);
     const variants = [defaultForm.variantId, ...defaultForm.variantOptions.map((variant) => variant.id).filter((id) => id !== defaultForm.variantId)];
@@ -646,12 +714,16 @@ test("every supported customer, property, Creditex, trade, worker and credential
       const answers = activityPrefill(form, context);
       for (const field of form.fields.filter((candidate) => ["derived", "prefilled"].includes(candidate.presentation))) {
         if (field.autofill) assert.match(field.autofill, supported, `${item.activityTemplateId}/${variant}: ${field.key}`);
-        else assert.ok(Object.values(ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS).includes(field.key), `${item.activityTemplateId}/${variant}: ${field.key}`);
+        else assert.ok(Object.values(ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS).includes(field.key)
+          || field.help === "Completed from the TLink quote, invoice or Creditex calculation outside the installer workflow."
+          || item.activityTemplateId === "veu-6" && ["installed_product.category", "installed_product.same_oem"].includes(field.key),
+        `${item.activityTemplateId}/${variant}: ${field.key}`);
       }
       for (const field of form.fields.filter((candidate) => supported.test(candidate.autofill || ""))) {
         assert.ok(["derived", "prefilled"].includes(field.presentation), `${item.activityTemplateId}/${variant}: ${field.key}`);
         if (field.required) assert.ok(answers[field.key], `${item.activityTemplateId}/${variant}: ${field.key} (${field.autofill})`);
-        if (field.autofill.startsWith("job.customer")) counts.customer++;
+        if (field.autofill.startsWith("job.appointment")) counts.appointment++;
+        else if (field.autofill.startsWith("job.customer")) counts.customer++;
         else if (field.autofill.startsWith("job.property")) counts.property++;
         else if (field.autofill.startsWith("creditex.provider")) counts.creditex++;
         else if (field.autofill.startsWith("job.trade")) counts.trade++;

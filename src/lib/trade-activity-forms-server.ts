@@ -178,7 +178,7 @@ async function activityProfileContext(
   workOrderId: string,
   form: ActivityForm,
 ) {
-  const context = await getD1().prepare(`SELECT c.first_name, c.last_name, c.email, c.phone,
+  const context = await getD1().prepare(`SELECT work.scheduled_start, c.first_name, c.last_name, c.email, c.phone,
     c.business_name customer_business_name, c.business_number customer_business_number,
     s.address_line_1, s.address_line_2, s.suburb, s.address_state, s.postcode,
     account.address_line_1 business_address_line_1, account.suburb business_suburb,
@@ -244,6 +244,8 @@ async function activityProfileContext(
     businessPhone: String(context?.business_phone || ""),
     businessEmail: String(context?.business_email || ""),
     technician: technicianName,
+    scheduledInstallationDate: /^\d{4}-\d{2}-\d{2}/.test(String(context?.scheduled_start || ""))
+      ? String(context?.scheduled_start).slice(0, 10) : "",
     workerCredentials: credentials.results.filter((item) => item.credential_number).map((item) => ({
       name: item.name, number: item.credential_number, type: item.credential_type, jurisdiction: item.jurisdiction, gate: item.rental_gate,
     })),
@@ -645,7 +647,7 @@ export async function readActivityEvidence(record: ActivityRecord, evidenceId: s
 
 export async function submitActivityRecord(access: TeamAccess, id: string, expectedRevision: unknown) {
   const previous = await loadActivityRecord(access, id, true); assertActivityEditable(previous, expectedRevision);
-  if (activityMissing(previous).length) throw new Error("ACTIVITY_FORM_INCOMPLETE");
+  if (activityUserActionableMissing(previous).length) throw new Error("ACTIVITY_FORM_INCOMPLETE");
   const assets = new Map<string, Uint8Array>();
   for (const evidence of previous.evidence) {
     if (evidence.previewObjectKey && evidence.previewSha256) {

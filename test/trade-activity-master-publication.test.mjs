@@ -54,8 +54,8 @@ test("the master editor supports safe routing, ordering and Creditex declaration
 
 function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
   const database = new DatabaseSync(":memory:");
-  database.exec(`CREATE TABLE trade_work_orders (id TEXT, firebase_uid TEXT, record_status TEXT, assignee_member_id TEXT);
-    INSERT INTO trade_work_orders VALUES ('job','owner','active','worker');
+  database.exec(`CREATE TABLE trade_work_orders (id TEXT, firebase_uid TEXT, record_status TEXT, assignee_member_id TEXT, scheduled_start TEXT);
+    INSERT INTO trade_work_orders VALUES ('job','owner','active','worker','2026-09-08T09:00:00.000Z');
     CREATE TABLE trade_work_order_compliance_intents (id TEXT PRIMARY KEY, work_order_id TEXT, installer_uid TEXT, compliance_organisation_id TEXT, activity_template_id TEXT, status TEXT, intent_snapshot TEXT);
     CREATE TABLE trade_crm_job_details (work_order_id TEXT, firebase_uid TEXT, customer_source TEXT, crm_customer_id TEXT, service_site_id TEXT);
     CREATE TABLE trade_crm_customers (id TEXT, firebase_uid TEXT, first_name TEXT, last_name TEXT, email TEXT, phone TEXT, business_name TEXT, business_number TEXT);

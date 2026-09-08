@@ -366,8 +366,13 @@ function inferredAutofill(fieldKey: string, programCode = "", activityCode = "")
     "designer.accreditation_type": "job.credentialType.designer",
     "binding.designer.accreditation_type": "job.credentialType.designer",
     "binding.installation.accreditation_connection_type": "job.credentialType.connection",
+    "installation.date": "job.appointment.date",
+    "customer_property.installation_date": "job.appointment.date",
   };
   if (exact[fieldKey]) return exact[fieldKey];
+  if (fieldKey === "implementation_date" || fieldKey === "installation_date" || /\.installation_date$/.test(fieldKey)) {
+    return "job.appointment.date";
+  }
   const specialist = fieldKey.match(/^workers\.(electrician|licensed_plumber|registered_plumber|refrigerant_handler)\.(name|company_name|company_address|phone|licence_or_registration)$/);
   if (specialist) {
     const [, role, fact] = specialist;
@@ -389,7 +394,61 @@ function inferredAutofill(fieldKey: string, programCode = "", activityCode = "")
 
 function isSupportedAutofill(source: string) {
   if (source === "job.assignee.profile") return true;
-  return /^(?:job\.property\.fullAddress|job\.customer\.(?:name|fullName|email|phone|companyName|abnOrAcn|identity)|job\.customer\.authorisedSignatory\.(?:signatory_name|signatory_company|signatory_email|signatory_phone)|job\.trade\.(?:name|address|phone|email|identity)|job\.assignee\.(?:fullName|businessAndTechnician)|job\.credential\.(?:electrician|licensed_plumber|registered_plumber|refrigerant_handler|installer|designer)|job\.credentialType\.(?:installer|designer|connection)|creditex\.provider\.(?:legalName|abn|email|phone|contact|identity|accreditation\.[A-Z-]+\..+))$/.test(source);
+  return /^(?:job\.appointment\.date|job\.property\.fullAddress|job\.customer\.(?:name|fullName|email|phone|companyName|abnOrAcn|identity)|job\.customer\.authorisedSignatory\.(?:signatory_name|signatory_company|signatory_email|signatory_phone)|job\.trade\.(?:name|address|phone|email|identity)|job\.assignee\.(?:fullName|businessAndTechnician)|job\.credential\.(?:electrician|licensed_plumber|registered_plumber|refrigerant_handler|installer|designer)|job\.credentialType\.(?:installer|designer|connection)|creditex\.provider\.(?:legalName|abn|email|phone|contact|identity|accreditation\.[A-Z-]+\..+))$/.test(source);
+}
+
+function isOfficeCommercialField(field: ActivityField) {
+  const source = `${field.key} ${field.label} ${field.sourceRequirementId || ""}`;
+  return field.key === "value_required_in_assignment_or_linked_invoice"
+    || field.key.startsWith("benefit_payment.")
+    || /(?:^|[._-])(?:invoice|payment|price|benefit|co_?payment)(?:$|[._-])/i.test(field.key)
+    || /\b(?:invoice|proof of purchase|certificate benefit|consumer payment|price including gst|amount actually paid)\b/i.test(source);
+}
+
+function applyFieldWorkerPolicy(fields: ActivityField[], templateId: string) {
+  for (const field of fields) {
+    if (isOfficeCommercialField(field)) {
+      field.presentation = "derived";
+      delete field.autofill;
+      field.help = "Completed from the TLink quote, invoice or Creditex calculation outside the installer workflow.";
+    }
+  }
+  if (templateId !== "veu-6") return;
+  const byKey = new Map(fields.map((field) => [field.key, field]));
+  const category = byKey.get("installed_product.category");
+  if (category) {
+    category.presentation = "derived";
+    delete category.autofill;
+    category.help = "Resolved from the approved product selected in TLink.";
+  }
+  const brand = byKey.get("installed_product.brand");
+  if (brand) {
+    brand.label = "Approved brand";
+    brand.help = "Choose from the current VEU approved-product register.";
+  }
+  const model = byKey.get("installed_product.model");
+  if (model) {
+    model.label = "Approved model";
+    model.help = "Choose an approved model for the selected brand.";
+  }
+  const heating = byKey.get("installed_product.indoor_heating_kw");
+  if (heating) {
+    heating.label = "Total installed heating capacity (kW)";
+    heating.help = "Enter the combined installed heating capacity.";
+    delete heating.condition;
+  }
+  const cooling = byKey.get("installed_product.indoor_cooling_kw");
+  if (cooling) {
+    cooling.label = "Total installed cooling capacity (kW)";
+    cooling.help = "Enter the combined installed cooling capacity.";
+    delete cooling.condition;
+  }
+  const sameOem = byKey.get("installed_product.same_oem");
+  if (sameOem) {
+    sameOem.presentation = "derived";
+    delete sameOem.autofill;
+    sameOem.help = "Resolved from the approved product selection during Creditex review.";
+  }
 }
 
 function derivedDeliveryFields(documents: readonly ActivityConsumerDocument[]): ActivityField[] {
@@ -842,6 +901,7 @@ export function defaultActivityFieldForm(templateId: string, variantId = ""): Ac
       delete field.presentation;
     }
   }
+  applyFieldWorkerPolicy(fields, templateId);
   const deduped = [...new Map(fields.filter((field) => !isSignatureTimestamp(field.key, field.autofill)).map((field) => [field.key, field])).values()];
   // References in official conditions must always have a collectable input.
   const dependencyFields: ActivityField[] = [];
@@ -957,6 +1017,7 @@ export type ActivityPrefillContext = {
   businessPhone?: string;
   businessEmail?: string;
   technician: string;
+  scheduledInstallationDate?: string;
   workerCredentials?: readonly { name: string; number: string; type: string; jurisdiction: string; gate: string }[];
   credentialNumbers?: Partial<Record<"electrician" | "licensed_plumber" | "registered_plumber" | "refrigerant_handler" | "installer" | "designer", string>>;
   credentialTypes?: Partial<Record<"installer" | "designer" | "connection", string>>;
@@ -974,6 +1035,7 @@ function creditexAccreditation(programCode: string, activityCode: string) {
 
 function sourcePrefill(field: ActivityField, context: ActivityPrefillContext) {
   const source = field.autofill || "";
+  if (source === "job.appointment.date") return context.scheduledInstallationDate || "";
   if (source === "job.property.fullAddress") return context.address;
   if (source === "job.customer.name" || source === "job.customer.fullName") return context.customerName;
   if (source === "job.customer.email") return context.customerEmail;
@@ -1040,5 +1102,6 @@ export function activityPrefill(form: ActivityForm, context: ActivityPrefillCont
     const derived = sourcePrefill(field, context);
     if (derived) values[field.key] = derived;
   }
-  return Object.fromEntries(Object.entries(values).filter(([key, value]) => value && form.fields.find((field) => field.key === key)?.type === "text"));
+  return Object.fromEntries(Object.entries(values).filter(([key, value]) => value
+    && ["text", "date"].includes(form.fields.find((field) => field.key === key)?.type || "")));
 }

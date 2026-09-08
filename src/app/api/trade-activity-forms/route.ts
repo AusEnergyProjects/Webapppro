@@ -193,11 +193,28 @@ export async function GET(request: Request) {
         .bind(actor.organisationId, templateId, builtIn.variantId).first<{ form_json: string; version: number }>();
       return adminJson({ ok: true, form: applyDefaultActivityFormPolicy(saved ? JSON.parse(saved.form_json) : builtIn, builtIn), expectedVersion: saved?.version || 0 });
     }
-    const access = await requireInstallerTeamAccess(request); const id = query.get("recordId") || "";
-    if (id) {
+    const access = await requireInstallerTeamAccess(request); const id = query.get("recordId") || ""; const view = query.get("view") || "";
+    if (id || view === "official_products") {
+      if (!id) throw new Error("INVALID_ACTIVITY_REQUEST");
       const record = await loadActivityRecord(access, id);
-      if (query.get("view") === "pdf") return bytesResponse(await readActivityPdf(record));
-      if (query.get("view") === "evidence") return bytesResponse(await readActivityEvidence(record, query.get("evidenceId") || ""));
+      if (view === "official_products") {
+        if (record.form.activityTemplateId !== "veu-6") throw new Error("INVALID_ACTIVITY_REQUEST");
+        const installationDate = str(record.answers["customer_property.installation_date"]);
+        if (!installationDate) throw new Error("INVALID_ACTIVITY_INSTALLATION_DATE");
+        const { searchOfficialProducts } = await import("@/lib/creditex-official-product-registry-server");
+        const result = await searchOfficialProducts(getD1(), {
+          productKind: "veu_air_conditioner", installationDate,
+          brand: query.get("brand") || undefined, model: query.get("model") || undefined,
+          veuActivityCode: "6", limit: "50",
+        }, { allowStaleAcceptedSnapshot: true });
+        return adminJson({
+          ok: true,
+          brands: result.facets.brands.map(({ value, label, count }) => ({ value, label, count })),
+          models: result.facets.models.map(({ value, label, count }) => ({ value, label, count })),
+        });
+      }
+      if (view === "pdf") return bytesResponse(await readActivityPdf(record));
+      if (view === "evidence") return bytesResponse(await readActivityEvidence(record, query.get("evidenceId") || ""));
       return adminJson({ ok: true, record: activityPresentation(record, record.signerDefaults.technician ? undefined : await activitySigningProfileSetup(access, record)) });
     }
     return adminJson({ ok: true, records: await listActivityRecords(access, query.get("workOrderId") || "") });

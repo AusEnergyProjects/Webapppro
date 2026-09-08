@@ -42,7 +42,7 @@ function fixture(fieldForm = form(), options = {}) {
   const database = new DatabaseSync(":memory:");
   database.exec(`PRAGMA foreign_keys = ON;
     CREATE TABLE trade_work_orders (id TEXT PRIMARY KEY, firebase_uid TEXT, partner_type TEXT, record_status TEXT, source_type TEXT, source_reference TEXT,
-      assignee_member_id TEXT, assignee_label TEXT, stage TEXT, service_category TEXT, revision INTEGER);
+      assignee_member_id TEXT, assignee_label TEXT, stage TEXT, service_category TEXT, scheduled_start TEXT, revision INTEGER);
     CREATE TABLE trade_crm_job_details (work_order_id TEXT, firebase_uid TEXT, customer_source TEXT, crm_customer_id TEXT, service_site_id TEXT);
     CREATE TABLE trade_crm_customers (id TEXT, firebase_uid TEXT, first_name TEXT, last_name TEXT, email TEXT, phone TEXT, business_name TEXT, business_number TEXT);
     CREATE TABLE trade_crm_service_sites (id TEXT, firebase_uid TEXT, address_line_1 TEXT, address_line_2 TEXT, suburb TEXT, address_state TEXT, postcode TEXT);
@@ -59,8 +59,8 @@ function fixture(fieldForm = form(), options = {}) {
     CREATE TABLE trade_work_order_compliance_intents (id TEXT PRIMARY KEY, work_order_id TEXT, installer_uid TEXT, compliance_organisation_id TEXT,
       activity_template_id TEXT, status TEXT, program_code TEXT, intent_snapshot TEXT, created_at TEXT);
     INSERT INTO trade_work_orders VALUES
-      ('job-a','owner-a','installer','active','direct','','worker-a','Worker A','scheduled','hot-water',1),
-      ('job-b','owner-b','installer','active','direct','','worker-b','Worker B','scheduled','hot-water',1);
+      ('job-a','owner-a','installer','active','direct','','worker-a','Worker A','scheduled','hot-water','2026-09-08T09:00:00.000Z',1),
+      ('job-b','owner-b','installer','active','direct','','worker-b','Worker B','scheduled','hot-water','2026-09-08T09:00:00.000Z',1);
     INSERT INTO trade_work_order_compliance_intents VALUES
       ('intent-a','job-a','owner-a','creditex-a','activity-a','planned','TEST','{}','2026-09-07'),
       ('intent-b','job-b','owner-b','creditex-b','activity-a','planned','TEST','{}','2026-09-07');
@@ -143,11 +143,12 @@ test("server progress counts required field work and signatures without system-f
   } finally { database.close(); }
 });
 
-test("signing never waits on unfinished fields or evidence but submission remains fail closed", async () => {
+test("submission blocks technician work but leaves derived profile and office gaps for office review", async () => {
   const fieldForm = form();
   fieldForm.fields.push({ ...field("system_customer_email", "before"), presentation: "derived", autofill: "job.customer.email" });
   fieldForm.fields.push({ ...field("electrician.licence_number", "before"), presentation: "derived", autofill: "job.credential.electrician",
     condition: { fieldKey: "before_name", equals: "Customer" } });
+  fieldForm.fields.push({ ...field("benefit_payment.certificate_benefit_amount", "after", "number"), presentation: "derived" });
   fieldForm.fields.find((item) => item.key === "photo").required = true;
   const { database, server, access } = fixture(fieldForm);
   try {
@@ -164,12 +165,120 @@ test("signing never waits on unfinished fields or evidence but submission remain
     const duplicate = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
       declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes });
     assert.equal(duplicate.revision, record.revision);
-    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Unit" });
-    assert.equal(record.signatures.length, 2);
-    assert.ok(core.activityMissing(record).some((item) => item.key === "before_customer" && item.kind === "signature"));
-    assert.ok(core.activityMissing(record).some((item) => item.key === "after_technician" && item.kind === "signature"));
     await assert.rejects(server.submitActivityRecord(access, record.id, record.revision), /ACTIVITY_FORM_INCOMPLETE/);
+
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Unit" });
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=", "base64");
+    record = await server.uploadActivityEvidence(access, record.id, record.revision, "photo", new File([png], "installed.png", { type: "image/png" }), {});
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes });
+
+    const officeMissingKeys = server.activityPresentation(record).missing.map((item) => item.key);
+    assert.ok(officeMissingKeys.includes("system_customer_email"));
+    assert.ok(officeMissingKeys.includes("electrician.licence_number"));
+    assert.ok(officeMissingKeys.includes("benefit_payment.certificate_benefit_amount"));
+    assert.ok(!officeMissingKeys.includes("before_name"));
+    assert.ok(!officeMissingKeys.includes("after_model"));
+    assert.ok(!officeMissingKeys.includes("photo"));
+
+    record = await server.submitActivityRecord(access, record.id, record.revision);
+    assert.equal(record.status, "submitted_for_creditex_review");
+    assert.deepEqual(server.activityPresentation(record).missing.map((item) => item.key).sort(), [
+      "benefit_payment.certificate_benefit_amount", "electrician.licence_number", "system_customer_email",
+    ]);
   } finally { database.close(); }
+});
+
+test("the Activity 6 product facets stay behind record-scoped installer access and use the record installation date", async () => {
+  const database = { fixture: "official-products" };
+  const access = { ownerUid: "owner-a", actorUid: "field-member:worker-a", memberId: "worker-a" };
+  const route = ({ requireAccess = async () => access, loadRecord, searchProducts }) => loadModule(
+    read("../src/app/api/trade-activity-forms/route.ts"), {
+      "../../../../db": { getD1: () => database },
+      "@/lib/admin-server": {
+        adminJson: (body, status = 200) => Response.json(body, { status }),
+        requireAdminIdentity: async () => ({ uid: "admin" }), sameOrigin: () => true,
+      },
+      "@/lib/trade-team-server": { requireInstallerTeamAccess: requireAccess },
+      "@/lib/compliance-access-server": { requireComplianceAccess: async () => ({}) },
+      "@/lib/creditex-field-master-access": { canEditCreditexFieldMasters: () => false },
+      "@/lib/creditex-official-source-custody-server": { resolveActiveCreditexOfficialSourceOrganisation: async () => "creditex" },
+      "@/lib/bounded-json-request": { BoundedJsonRequestError: class extends Error {}, readBoundedJsonRequest: async () => ({}) },
+      "@/lib/trade-activity-forms-library": {}, "@/lib/trade-activity-forms": {},
+      "@/lib/trade-activity-forms-server": { loadActivityRecord: loadRecord },
+      "@/lib/creditex-official-product-registry-server": { searchOfficialProducts: searchProducts },
+    },
+  );
+  const endpoint = "https://example.test/api/trade-activity-forms?view=official_products";
+
+  let registryCalls = 0;
+  const unauthorised = route({
+    requireAccess: async () => { throw new Error("AUTH_REQUIRED"); },
+    loadRecord: async () => { throw new Error("record load must follow authentication"); },
+    searchProducts: async () => { registryCalls += 1; },
+  });
+  let response = await unauthorised.GET(new Request(`${endpoint}&recordId=record-veu-6`));
+  assert.equal(response.status, 401);
+  assert.equal((await response.json()).code, "AUTH_REQUIRED");
+  assert.equal(registryCalls, 0);
+
+  let recordLoads = 0;
+  const noRecord = route({
+    loadRecord: async () => { recordLoads += 1; },
+    searchProducts: async () => { registryCalls += 1; },
+  });
+  response = await noRecord.GET(new Request(endpoint));
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).code, "INVALID_ACTIVITY_REQUEST");
+  assert.equal(recordLoads, 0);
+  assert.equal(registryCalls, 0);
+
+  const wrongActivity = route({
+    loadRecord: async (receivedAccess, id) => {
+      assert.equal(receivedAccess, access); assert.equal(id, "record-veu-44");
+      return { form: { activityTemplateId: "veu-44" }, answers: { "customer_property.installation_date": "2026-09-12" } };
+    },
+    searchProducts: async () => { registryCalls += 1; },
+  });
+  response = await wrongActivity.GET(new Request(`${endpoint}&recordId=record-veu-44`));
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).code, "INVALID_ACTIVITY_REQUEST");
+  assert.equal(registryCalls, 0);
+
+  const calls = [];
+  const approvedProducts = route({
+    loadRecord: async (receivedAccess, id) => {
+      assert.equal(receivedAccess, access); assert.equal(id, "record-veu-6");
+      return { form: { activityTemplateId: "veu-6" }, answers: { "customer_property.installation_date": "2026-09-12" } };
+    },
+    searchProducts: async (...args) => {
+      calls.push(args);
+      return {
+        registry: { registryCode: "must-not-leak" }, matchCount: 99, products: [{ id: "must-not-leak" }],
+        facets: {
+          brands: [{ value: "Daikin", label: "Daikin", count: 12, sourceKey: "must-not-leak" }],
+          models: [{ value: "FTXM25", label: "FTXM25", count: 2, sourceKey: "must-not-leak" }],
+          productTypes: [{ value: "Split", label: "Split", count: 2 }],
+        },
+      };
+    },
+  });
+  response = await approvedProducts.GET(new Request(`${endpoint}&recordId=record-veu-6&brand=Daikin&model=FTXM25`));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    brands: [{ value: "Daikin", label: "Daikin", count: 12 }],
+    models: [{ value: "FTXM25", label: "FTXM25", count: 2 }],
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], database);
+  assert.deepEqual(calls[0][1], {
+    productKind: "veu_air_conditioner", installationDate: "2026-09-12",
+    brand: "Daikin", model: "FTXM25", veuActivityCode: "6", limit: "50",
+  });
+  assert.deepEqual(calls[0][2], { allowStaleAcceptedSnapshot: true });
 });
 
 test("named Creditex field-master editors can author without governed-review permission while unsafe identities are rejected", async () => {

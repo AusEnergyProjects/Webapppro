@@ -29,6 +29,7 @@ type CaptureMetadata = { capturedAt: string; latitude: number | null; longitude:
 type PendingFile = { id: string; fieldKey: string; uri: string; name: string; contentType: string; metadata: CaptureMetadata };
 type PendingSignature = { declarationKey: string; declarationText: string; phase: 'before' | 'after'; role: 'customer' | 'technician' | 'other'; signerName: string; strokes: FieldWorkPackSignatureDraft['strokes'] };
 type Cache = { record: Presented; answers: ActivityAnswers; pending: PendingFile[]; pendingSignatures?: PendingSignature[]; stepKey: string; camera?: { fieldKey: string; metadata: CaptureMetadata } };
+type ApprovedProductOption = { value: string; label: string; count: number };
 function signatureDraft(role: string, name: string): FieldWorkPackSignatureDraft {
   return { signerRoleKey: role, signerName: name, signerCapacity: role, identity: {}, strokes: [], capturedAt: '' };
 }
@@ -96,6 +97,9 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   const cacheRef = useRef<Cache | null>(null);
   const writes = useRef(Promise.resolve());
   const syncs = useRef(Promise.resolve());
+  const syncWorkerRunning = useRef(false);
+  const pendingSyncKeys = useRef(new Set<string>());
+  const pendingFullUpload = useRef(false);
   const actionRunning = useRef(false);
   const moving = useRef(false);
   const [busy, setBusy] = useState('loading');
@@ -106,6 +110,10 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   const [acknowledged, setAcknowledged] = useState(false);
   const [readingDeclaration, setReadingDeclaration] = useState(false);
   const [signingName, setSigningName] = useState<{ firstName: string; lastName: string } | null>(null);
+  const [approvedBrands, setApprovedBrands] = useState<ApprovedProductOption[]>([]);
+  const [approvedModels, setApprovedModels] = useState<Record<string, ApprovedProductOption[]>>({});
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsError, setProductsError] = useState('');
   const scroll = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
   const cacheKey = `activity-form:${workOrderId}:${intentId}`;
@@ -121,6 +129,10 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   const pendingSignature = step?.kind === 'signature'
     ? cache?.pendingSignatures?.find((item) => item.declarationKey === step.declaration.key)
     : undefined;
+  const selectedActivity6Brands = record?.form.activityTemplateId === 'veu-6'
+    ? [...new Set(Object.entries(cache?.answers || {}).filter(([key, value]) => activityBaseFieldKey(key) === 'installed_product.brand' && typeof value === 'string' && value.trim()).map(([, value]) => String(value)))]
+    : [];
+  const selectedActivity6BrandsKey = selectedActivity6Brands.sort().join('\u0000');
 
   function remember(value: Cache) {
     const previous = cacheRef.current;
@@ -187,10 +199,37 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workOrderId, intentId, variantId]);
   useEffect(() => {
-    if (online && cacheRef.current?.pendingSignatures?.length) queuePageSync([], true);
+    if (online && cacheRef.current) queuePageSync([], true);
     // Connectivity is the retry trigger; the queue reads the current cache itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online]);
+  useEffect(() => {
+    const recordId = record?.id;
+    if (!online || !recordId || record.form.activityTemplateId !== 'veu-6') return;
+    let disposed = false;
+    const selectedBrands = selectedActivity6BrandsKey ? selectedActivity6BrandsKey.split('\u0000') : [];
+    void (async () => {
+      setProductsLoading(true);
+      setProductsError('');
+      try {
+        const results = await Promise.all(['', ...selectedBrands].map(async (brand) => {
+          const query = new URLSearchParams({ recordId, view: 'official_products' });
+          if (brand) query.set('brand', brand);
+          const response = await apiRequest<{ brands: ApprovedProductOption[]; models: ApprovedProductOption[] }>(`${endpoint}?${query.toString()}`);
+          return { brand, response };
+        }));
+        if (disposed) return;
+        const root = results.find((result) => !result.brand)?.response;
+        setApprovedBrands(root?.brands || []);
+        setApprovedModels(Object.fromEntries(results.filter((result) => result.brand).map((result) => [result.brand, result.response.models || []])));
+      } catch (caught) {
+        if (!disposed) setProductsError(caught instanceof Error ? caught.message : 'Approved products could not be loaded.');
+      } finally {
+        if (!disposed) setProductsLoading(false);
+      }
+    })();
+    return () => { disposed = true; };
+  }, [online, record?.id, record?.form.activityTemplateId, selectedActivity6BrandsKey]);
   useEffect(() => {
     scroll.current?.scrollTo({ y: 0, animated: false });
   }, [cache?.stepKey, overview]);
@@ -284,6 +323,13 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     if (!cacheRef.current) return;
     void remember({ ...cacheRef.current, answers: { ...cacheRef.current.answers, [key]: value } }).catch(() => setError('Could not save the draft on this phone. Keep this form open and reconnect.'));
   }
+  function answerApprovedBrand(field: ExpandedActivityField, value: string) {
+    const latest = cacheRef.current;
+    if (!latest) return;
+    const answers = { ...latest.answers, [field.key]: value };
+    delete answers[activityRepeatKey('installed_product.model', field.repeatIndex)];
+    void remember({ ...latest, answers }).catch(() => setError('Could not save the approved product on this phone. Keep this form open and try again.'));
+  }
   async function saveAnswers() {
     const latest = cacheRef.current;
     if (!latest || JSON.stringify(latest.answers) === JSON.stringify(latest.record.answers)) return;
@@ -326,25 +372,36 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     }
   }
   function queuePageSync(fieldKeys: readonly string[], flushAllPending = false) {
-    const uniqueKeys = [...new Set(fieldKeys)];
-    syncs.current = syncs.current.catch(() => undefined).then(async () => {
-      if (!online) return;
+    for (const key of fieldKeys) pendingSyncKeys.current.add(key);
+    pendingFullUpload.current ||= flushAllPending;
+    if (syncWorkerRunning.current || !online) return;
+    syncWorkerRunning.current = true;
+    syncs.current = (async () => {
       setSyncing(true);
       try {
-        await saveAnswers();
-        const uploadKeys = flushAllPending
-          ? [...new Set(cacheRef.current?.pending.map((item) => item.fieldKey) || [])]
-          : uniqueKeys;
-        for (const fieldKey of uploadKeys) await uploadPending(fieldKey);
-        await syncPendingSignatures();
-      } catch (caught) {
-        if (!(caught instanceof ApiError) || !['ACTIVITY_SIGNING_NOT_READY', 'ACTIVITY_SIGNING_SCOPE_CHANGED'].includes(caught.code)) {
-          setError(`${caught instanceof Error ? caught.message : 'TLink could not sync this page.'} Your work remains saved on this phone and will retry with the next save.`);
-        }
+        do {
+          const uploadEverything = pendingFullUpload.current;
+          const queuedKeys = [...pendingSyncKeys.current];
+          pendingFullUpload.current = false;
+          pendingSyncKeys.current.clear();
+          try {
+            await saveAnswers();
+            const uploadKeys = uploadEverything
+              ? [...new Set(cacheRef.current?.pending.map((item) => item.fieldKey) || [])]
+              : queuedKeys;
+            for (const fieldKey of uploadKeys) await uploadPending(fieldKey);
+            await syncPendingSignatures();
+          } catch {
+            for (const key of queuedKeys) pendingSyncKeys.current.add(key);
+            pendingFullUpload.current ||= uploadEverything;
+            break;
+          }
+        } while (pendingFullUpload.current || pendingSyncKeys.current.size);
       } finally {
+        syncWorkerRunning.current = false;
         setSyncing(false);
       }
-    });
+    })();
   }
   async function waitForBackgroundSync() {
     let pending = syncs.current;
@@ -504,6 +561,16 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       if (moving.current) return;
       for (const field of step.fields) {
         const value = cacheRef.current?.answers[field.key];
+        const baseKey = activityBaseFieldKey(field.key);
+        if (record?.form.activityTemplateId === 'veu-6' && baseKey === 'installed_product.brand') {
+          if (productsLoading) return setError('The approved brand list is loading. Try Next again in a moment.');
+          if (productsError || !approvedBrands.some((option) => option.value === value)) return setError(productsError || 'Choose an approved brand before continuing.');
+        }
+        if (record?.form.activityTemplateId === 'veu-6' && baseKey === 'installed_product.model') {
+          const brand = String(cacheRef.current?.answers[activityRepeatKey('installed_product.brand', field.repeatIndex)] || '');
+          if (productsLoading) return setError('The approved model list is loading. Try Next again in a moment.');
+          if (productsError || !(approvedModels[brand] || []).some((option) => option.value === value)) return setError(productsError || 'Choose an approved model before continuing.');
+        }
         if (field.required && !['photo', 'document'].includes(field.type) && (value === undefined || value === '')) return setError(`Complete ${field.label.toLowerCase()} before continuing.`);
         if (field.requiredValue !== undefined && value !== field.requiredValue) return setError(`Complete ${field.label.toLowerCase()} before continuing. Your answer is retained.`);
         const current = cacheRef.current;
@@ -562,9 +629,8 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     ...(cache.pendingSignatures || []).map((item) => item.declarationKey)]);
   const overallProgress = activityProgress(steps, cache.answers, evidenceFieldKeys, signatureDeclarationKeys);
   const sections = activitySectionProgress(steps, cache.answers, evidenceFieldKeys);
-  const systemMissing = record.missing.filter((item) => record.form.fields
-    .find((field) => field.key === activityBaseFieldKey(item.key))?.presentation === 'derived');
-  const fieldMissing = record.missing.filter((item) => !systemMissing.includes(item));
+  const fieldMissing = record.missing.filter((item) => item.kind === 'signature' || record.form.fields
+    .find((field) => field.key === activityBaseFieldKey(item.key))?.presentation !== 'derived');
   const currentSection = step?.kind === 'fields' ? sections.find((item) => item.key === `${step.phase}:${step.section}`) : undefined;
   const technicianSignature = step?.kind === 'signature' && step.declaration.role === 'technician';
   const boundSignerName = technicianSignature ? record.signerDefaults.technician : signature.signerName;
@@ -585,6 +651,10 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   const repeatItemHasSavedEvidence = record.evidence.some((item) => repeatItemKeys.includes(item.fieldKey));
   function renderField(field: ExpandedActivityField) {
     if (!record || !cache) return null;
+    const baseKey = activityBaseFieldKey(field.key);
+    const activity6Brand = record.form.activityTemplateId === 'veu-6' && baseKey === 'installed_product.brand';
+    const activity6Model = record.form.activityTemplateId === 'veu-6' && baseKey === 'installed_product.model';
+    const selectedBrand = String(cache.answers[activityRepeatKey('installed_product.brand', field.repeatIndex)] || '');
     const pendingHere = cache.pending.filter((item) => item.fieldKey === field.key);
     const savedHere = record.evidence.filter((item) => item.fieldKey === field.key);
     const evidenceForLabels = field.evidenceFor?.map((key) => record.form.fields.find((item) => item.key === key)?.label || key).filter(Boolean) || [];
@@ -593,7 +663,11 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
 
           {field.help ? <Text style={styles.text}>{field.help}</Text> : null}
           {(field.referenceDocuments || []).map((document) => { const url = new URL(document.url, API_BASE_URL).toString(); return <View key={url} style={styles.group}><Text style={styles.text}>{document.title}</Text><View style={styles.row}><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => void perform('document', async () => { await Linking.openURL(url); })}>Open document</FieldButton><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => void perform('document', async () => { await Share.share({ message: `${document.title}\n${url}`, url }); })}>Share copy</FieldButton></View></View>; })}
-          {field?.presentation === 'derived' ? <View style={styles.derived}><Text style={styles.text}>{cache.answers[field.key] === undefined || cache.answers[field.key] === '' ? 'Recorded automatically by TLink.' : String(cache.answers[field.key])}</Text><Text style={styles.small}>This value comes from the job, business, assigned team member or signature record.</Text></View> : field.type === 'boolean' ? <View style={styles.row}>{[true, false].map((value) => <Pressable key={String(value)} accessibilityRole="radio" accessibilityState={{ selected: cache.answers[field.key] === value }} disabled={!editable || Boolean(busy)} onPress={() => answer(field.key, value)} style={[styles.choice, cache.answers[field.key] === value && styles.selected]}><Text style={styles.text}>{value ? 'Yes' : 'No'}</Text></Pressable>)}</View> : field.type === 'select' ? <FieldSelect label="Choose an answer" value={String(cache.answers[field.key] ?? '')} options={field.options.map((value) => ({ value, label: activityOptionLabel(value, field?.optionLabels?.[value]) }))} onChange={(value) => answer(field.key, value)} disabled={!editable || Boolean(busy)} /> : ['photo', 'document'].includes(field.type) ? <>
+          {field?.presentation === 'derived' ? <View style={styles.derived}><Text style={styles.text}>{cache.answers[field.key] === undefined || cache.answers[field.key] === '' ? 'Recorded automatically by TLink.' : String(cache.answers[field.key])}</Text><Text style={styles.small}>This value comes from the job, business, assigned team member or signature record.</Text></View>
+            : activity6Brand ? <><FieldSelect label="Choose approved brand" value={String(cache.answers[field.key] ?? '')} options={approvedBrands} placeholder={productsLoading ? 'Loading approved brands…' : 'Choose approved brand'} onChange={(value) => answerApprovedBrand(field, value)} disabled={!editable || Boolean(busy) || productsLoading || Boolean(productsError)} />{productsError ? <Text style={styles.error}>{productsError}</Text> : null}</>
+              : activity6Model ? <><FieldSelect label="Choose approved model" value={String(cache.answers[field.key] ?? '')} options={approvedModels[selectedBrand] || []} placeholder={!selectedBrand ? 'Choose a brand first' : productsLoading ? 'Loading approved models…' : 'Choose approved model'} onChange={(value) => answer(field.key, value)} disabled={!editable || Boolean(busy) || !selectedBrand || productsLoading || Boolean(productsError)} />{productsError ? <Text style={styles.error}>{productsError}</Text> : null}</>
+                : field.type === 'boolean' ? <View style={styles.row}>{[true, false].map((value) => <Pressable key={String(value)} accessibilityRole="radio" accessibilityState={{ selected: cache.answers[field.key] === value }} disabled={!editable || Boolean(busy)} onPress={() => answer(field.key, value)} style={[styles.choice, cache.answers[field.key] === value && styles.selected]}><Text style={styles.text}>{value ? 'Yes' : 'No'}</Text></Pressable>)}</View>
+                  : field.type === 'select' ? <FieldSelect label="Choose an answer" value={String(cache.answers[field.key] ?? '')} options={field.options.map((value) => ({ value, label: activityOptionLabel(value, field?.optionLabels?.[value]) }))} onChange={(value) => answer(field.key, value)} disabled={!editable || Boolean(busy)} /> : ['photo', 'document'].includes(field.type) ? <>
             {evidenceForLabels.length ? <Text style={styles.evidenceBinding}>Evidence for: {evidenceForLabels.join(', ')}</Text> : null}
             <FieldButton disabled={!editable || Boolean(busy)} loading={busy === 'camera' || busy === 'document'} onPress={() => field.type === 'photo' ? void capture(field) : void chooseDocument(field)}>{field.type === 'photo' ? 'Take photo' : 'Choose document'}</FieldButton>
             <Text style={styles.small}>{savedHere.length} saved · {pendingHere.length} ready to upload</Text>
@@ -617,11 +691,6 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       <ProgressMeter label="Form progress" complete={overallProgress.complete} total={overallProgress.total} />
       {overview ? <>
         <Text style={styles.title}>{record.form.title}</Text><Text style={styles.text}>Complete the questions, evidence and signatures, then submit to Creditex.</Text>
-        {systemMissing.length ? <View style={styles.deliveryRecovery}>
-          <Text style={styles.progressLabel}>Job or profile details need attention</Text>
-          <Text style={styles.small}>TLink fills these automatically. Update the customer, business, assigned team member or job record in the portal, then reopen this form.</Text>
-          <Text style={styles.text}>{systemMissing.map((item) => item.label).join(', ')}</Text>
-        </View> : null}
         {(['before', 'after'] as const).map((phase) => <View key={phase} style={styles.group}><Text style={styles.section}>{phase === 'before' ? 'Before work' : 'Work and completion'}</Text>{sections.filter((section) => section.phase === phase).map((section) => <Pressable
           key={section.key}
           accessibilityRole="button"
@@ -665,8 +734,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
             </> : <Text style={styles.text}>The assigned technician needs to open this job on their own device, or have their personal name saved in Teams.</Text>}
           </View> : <SignatureCapture key={`${record.id}:${step.key}:${boundSignerName}`} signerRole={signerRole} declaration={boundActivityDeclaration(step.declaration, cache.answers)} showDeclaration={false} value={boundSignature} disabled={!editable || Boolean(busy)} onChange={setSignature} />}
         </> : <>
-          <Text style={styles.text}>{record.status === 'submitted_for_creditex_review' ? 'Submitted to Creditex. The completed record is saved with this job.' : `${record.missing.length} required item${record.missing.length === 1 ? '' : 's'} remaining.`}</Text>
-          {systemMissing.length ? <Text style={styles.error}>TLink is missing system details: {systemMissing.map((item) => item.label).join(', ')}. Update the related portal record and reopen this form.</Text> : null}
+          <Text style={styles.text}>{record.status === 'submitted_for_creditex_review' ? 'Submitted to Creditex. The completed record is saved with this job.' : `${fieldMissing.length} field item${fieldMissing.length === 1 ? '' : 's'} remaining.`}</Text>
           {fieldMissing.slice(0, 8).map((item) => <FieldButton key={item.key} variant="secondary" onPress={() => { const target = activityWizardPageForStepKey(pages, item.key); if (target) void remember({ ...cache, stepKey: target.key }); }}>{item.label}</FieldButton>)}
           {fieldMissing.length > 8 ? <Text style={styles.small}>{fieldMissing.length - 8} more questions will follow.</Text> : null}
           {cache.pending.length ? <FieldButton disabled={!online || Boolean(busy)} onPress={() => void perform('upload', async () => { await syncs.current; await saveAnswers(); for (const key of new Set(cache.pending.map((item) => item.fieldKey))) await uploadPending(key); })}>Upload {cache.pending.length} pending files</FieldButton> : null}
