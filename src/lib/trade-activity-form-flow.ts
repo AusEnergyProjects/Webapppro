@@ -97,7 +97,7 @@ export function activityWizardSteps(form: ActivityForm, answers: ActivityAnswers
   return [...steps, { key: 'review', kind: 'review' }];
 }
 
-export const ACTIVITY_WIZARD_PAGE_FIELD_LIMIT = 5;
+export const ACTIVITY_WIZARD_PAGE_FIELD_LIMIT = 8;
 export type ActivityWizardPage =
   | { key: string; kind: 'fields'; phase: ActivityField['phase']; section: string;
     fields: ExpandedActivityField[]; legacyStepKeys: string[] }

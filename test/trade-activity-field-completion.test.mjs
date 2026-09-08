@@ -144,6 +144,55 @@ test("all current selectable activities have specific runnable fields and no mis
   }
 });
 
+test("office, scheme-certificate and commercial fields never enter the installer wizard", () => {
+  const exactOfficeKeys = new Set([
+    "activity_delivery_record", "external_outcome_contract", "nomination_delivery", "nomination_copy",
+    "local_signal_eligible_cost_aud", "local_signal_eligible_cost_ex_gst_aud", "pv_funding_evidence",
+    "consumer_checks.bpc_received", "consumer_checks.coes_received", "consumer_checks.certificate_delivery_informed",
+    "retailer.legal_name", "retailer.abn", "retailer.representative_name", "retailer.representative_position",
+    "retailer.signer_name", "binding.retailer.legal_name", "binding.retailer.abn", "binding.retailer.representative_name",
+    "dra", "dra.legal_name", "dra.abn_acn", "dra.contact_phone_email", "dra.customer_support_access", "dra.same_as_creditex",
+    "binding.dra.legal_name", "binding.dra.abn", "vpp.controller.legal_name", "vpp.controller.abn",
+    "binding.vpp.controller.legal_name", "binding.vpp.controller.abn", "value_required_in_assignment_or_linked_invoice",
+  ]);
+  const customerAliases = new Map([
+    ["holder.email", "job.customer.email"], ["holder.phone", "job.customer.phone"],
+    ["owner.email", "job.customer.email"], ["owner.phone", "job.customer.phone"],
+  ]);
+  const isOfficeField = (field) => exactOfficeKeys.has(field.key)
+    || field.key === "assignment" || field.key.startsWith("assignment.")
+    || field.key === "compliance_certificate" || field.key.startsWith("certificates.")
+    || /^evidence\..+-external-outcome-receipt$/.test(field.key)
+    || field.key.startsWith("benefit_payment.")
+    || /(?:^|[._:-])(?:invoice|payment|price|benefit|co_?payment)(?:$|[._:-])/i.test(field.key)
+    || /\b(?:invoice|proof of purchase|certificate benefit|consumer payment|price including gst|amount actually paid)\b/i
+      .test(`${field.key} ${field.label} ${field.sourceRequirementId || ""}`);
+  let checked = 0;
+  let aliases = 0;
+  for (const item of activityFieldCatalogue()) {
+    const initial = defaultActivityFieldForm(item.activityTemplateId);
+    const variants = [initial.variantId, ...initial.variantOptions.map((variant) => variant.id).filter((id) => id !== initial.variantId)];
+    for (const variant of variants) {
+      const form = defaultActivityFieldForm(item.activityTemplateId, variant);
+      for (const field of form.fields) {
+        if (isOfficeField(field)) {
+          checked++;
+          assert.equal(field.presentation, "derived", `${item.activityTemplateId}/${variant}: ${field.key}`);
+          assert.ok(!activityWizardSteps(form, {}).some((step) => step.kind === "field" && step.field.baseKey === field.key),
+            `${item.activityTemplateId}/${variant}: ${field.key}`);
+        }
+        if (customerAliases.has(field.key)) {
+          aliases++;
+          assert.equal(field.presentation, "derived", `${item.activityTemplateId}/${variant}: ${field.key}`);
+          assert.equal(field.autofill, customerAliases.get(field.key), `${item.activityTemplateId}/${variant}: ${field.key}`);
+        }
+      }
+    }
+  }
+  assert.ok(checked >= 625, `expected the whole office-field catalogue, found ${checked}`);
+  assert.ok(aliases > 0);
+});
+
 test("all implementation and installation dates come from the scheduled appointment", () => {
   let checked = 0;
   for (const item of activityFieldCatalogue()) {
@@ -420,7 +469,6 @@ test("VEU Activity 6 presents each scenario and equipment controller before its 
       ["evidence.air-conditioner-existing", ["baseline.scenario"]],
       ["baseline.retained_reason", ["baseline.scenario", "baseline.removed"]],
       ["installed_product.ductwork_replaced", ["baseline.isDucted", "installed_product.isDucted"]],
-      ["consumer_checks.certificate_delivery_informed", ["certificates.bpc_required", "certificates.coes_required"]],
     ]) {
       const dependent = form.fields.find((field) => field.key === dependentKey);
       assert.ok(dependent, `${variant}: ${dependentKey}`);
@@ -431,6 +479,11 @@ test("VEU Activity 6 presents each scenario and equipment controller before its 
         assert.notEqual(indexes.get(dependencyKey), undefined, `${variant}: ${dependencyKey} must be visible in the activated wizard`);
         assert.ok(indexes.get(dependencyKey) < indexes.get(dependentKey), `${variant}: ${dependencyKey} must precede ${dependentKey}`);
       }
+    }
+    for (const key of ["certificates.bpc_required", "certificates.bpc_number", "certificates.coes_required",
+      "certificates.coes_number", "consumer_checks.certificate_delivery_informed"]) {
+      assert.equal(form.fields.find((field) => field.key === key)?.presentation, "derived", `${variant}: ${key}`);
+      assert.equal(indexes.get(key), undefined, `${variant}: ${key} stays in the office record`);
     }
   }
 });

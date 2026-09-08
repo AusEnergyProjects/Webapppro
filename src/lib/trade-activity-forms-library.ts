@@ -300,8 +300,12 @@ function inferredAutofill(fieldKey: string, programCode = "", activityCode = "")
     "holder.name": "job.customer.fullName",
     "holder.full_name": "job.customer.fullName",
     "holder.signer_name": "job.customer.fullName",
+    "holder.email": "job.customer.email",
+    "holder.phone": "job.customer.phone",
     "owner.full_name": "job.customer.fullName",
     "owner.signer_name": "job.customer.fullName",
+    "owner.email": "job.customer.email",
+    "owner.phone": "job.customer.phone",
     "binding.owner.full_name_or_legal_name": "job.customer.fullName",
     "owner.company_name": "job.customer.companyName",
     "holder.abn_acn": "job.customer.abnOrAcn",
@@ -397,11 +401,52 @@ function isSupportedAutofill(source: string) {
   return /^(?:job\.appointment\.date|job\.property\.fullAddress|job\.customer\.(?:name|fullName|email|phone|companyName|abnOrAcn|identity)|job\.customer\.authorisedSignatory\.(?:signatory_name|signatory_company|signatory_email|signatory_phone)|job\.trade\.(?:name|address|phone|email|identity)|job\.assignee\.(?:fullName|businessAndTechnician)|job\.credential\.(?:electrician|licensed_plumber|registered_plumber|refrigerant_handler|installer|designer)|job\.credentialType\.(?:installer|designer|connection)|creditex\.provider\.(?:legalName|abn|email|phone|contact|identity|accreditation\.[A-Z-]+\..+))$/.test(source);
 }
 
+const OFFICE_WORKFLOW_FIELD_KEYS = new Set([
+  "activity_delivery_record",
+  "external_outcome_contract",
+  "nomination_delivery",
+  "nomination_copy",
+  "local_signal_eligible_cost_aud",
+  "local_signal_eligible_cost_ex_gst_aud",
+  "pv_funding_evidence",
+  "consumer_checks.bpc_received",
+  "consumer_checks.coes_received",
+  "consumer_checks.certificate_delivery_informed",
+]);
+
+const OFFICE_PROVIDER_PARTY_FIELD_KEYS = new Set([
+  "retailer.legal_name",
+  "retailer.abn",
+  "retailer.representative_name",
+  "retailer.representative_position",
+  "retailer.signer_name",
+  "binding.retailer.legal_name",
+  "binding.retailer.abn",
+  "binding.retailer.representative_name",
+  "dra",
+  "dra.legal_name",
+  "dra.abn_acn",
+  "dra.contact_phone_email",
+  "dra.customer_support_access",
+  "dra.same_as_creditex",
+  "binding.dra.legal_name",
+  "binding.dra.abn",
+  "vpp.controller.legal_name",
+  "vpp.controller.abn",
+  "binding.vpp.controller.legal_name",
+  "binding.vpp.controller.abn",
+]);
+
 function isOfficeCommercialField(field: ActivityField) {
   const source = `${field.key} ${field.label} ${field.sourceRequirementId || ""}`;
-  return field.key === "value_required_in_assignment_or_linked_invoice"
+  return OFFICE_WORKFLOW_FIELD_KEYS.has(field.key)
+    || OFFICE_PROVIDER_PARTY_FIELD_KEYS.has(field.key)
+    || field.key === "assignment" || field.key.startsWith("assignment.")
+    || field.key === "compliance_certificate" || field.key.startsWith("certificates.")
+    || /^evidence\..+-external-outcome-receipt$/.test(field.key)
+    || field.key === "value_required_in_assignment_or_linked_invoice"
     || field.key.startsWith("benefit_payment.")
-    || /(?:^|[._-])(?:invoice|payment|price|benefit|co_?payment)(?:$|[._-])/i.test(field.key)
+    || /(?:^|[._:-])(?:invoice|payment|price|benefit|co_?payment)(?:$|[._:-])/i.test(field.key)
     || /\b(?:invoice|proof of purchase|certificate benefit|consumer payment|price including gst|amount actually paid)\b/i.test(source);
 }
 

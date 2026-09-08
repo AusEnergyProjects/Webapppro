@@ -45,7 +45,7 @@ test('a long declaration takes one signature step and retains its full wording f
   assert.equal(steps.filter((step) => step.kind === 'signature').length, 1);
   assert.equal(boundActivityDeclaration(source, {}), declaration);
 });
-test('wizard pages keep logical sections and repeat items together with at most five questions', () => {
+test('wizard pages keep logical sections and repeat items together with at most eight questions', () => {
   const pageForm = { ...form, fields: [
     ...Array.from({ length: 7 }, (_, index) => field(`before-${index}`, 'text', { phase: 'before', section: 'Before' })),
     field('installed', 'boolean', { repeatGroup: 'units', section: 'Equipment' }),
@@ -61,6 +61,26 @@ test('wizard pages keep logical sections and repeat items together with at most 
     [['installed', 'serial', 'photo'], ['installed[1]', 'serial[1]', 'photo[1]']]);
   assert.ok(pages.filter((page) => page.kind === 'signature').every((page) => page.legacyStepKeys.length === 1));
   assert.equal(pages.at(-1).kind, 'review');
+});
+test('six to eight related questions remain together while larger groups split safely', () => {
+  assert.equal(ACTIVITY_WIZARD_PAGE_FIELD_LIMIT, 8);
+  const relatedForm = (count) => ({ ...form, fields: Array.from({ length: count }, (_, index) =>
+    field(`product-${index}`, 'text', { section: 'Installed equipment', repeatGroup: 'installedProducts[]' })) });
+  for (const count of [6, 7, 8]) {
+    const pages = activityWizardPages(relatedForm(count), {});
+    const fieldPages = pages.filter((page) => page.kind === 'fields');
+    assert.equal(fieldPages.length, 1, `${count} related questions`);
+    assert.deepEqual(fieldPages[0].fields.map((item) => item.key), Array.from({ length: count }, (_, index) => `product-${index}`));
+    assert.deepEqual(fieldPages[0].legacyStepKeys, fieldPages[0].fields.map((item) => item.key));
+    assert.equal(pages.filter((page) => page.kind === 'signature').length, 2);
+    assert.equal(pages.at(-1).kind, 'review');
+  }
+  const ninePages = activityWizardPages(relatedForm(9), {});
+  const split = ninePages.filter((page) => page.kind === 'fields');
+  assert.deepEqual(split.map((page) => page.fields.length), [8, 1]);
+  assert.deepEqual(split.flatMap((page) => page.legacyStepKeys), Array.from({ length: 9 }, (_, index) => `product-${index}`));
+  assert.equal(activityWizardPageForStepKey(ninePages, 'product-7')?.key, 'product-0');
+  assert.equal(activityWizardPageForStepKey(ninePages, 'product-8')?.key, 'product-8');
 });
 test('former one-question and declaration-reading step keys resolve to their new page', () => {
   const pages = activityWizardPages({ ...form, fields: Array.from({ length: 6 }, (_, index) => field(`item-${index}`)) }, {});
