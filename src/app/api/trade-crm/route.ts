@@ -18,6 +18,7 @@ import {
   canAssignJob,
   canCreateJobs,
   canManageJobs,
+  canManageQuotes,
   requireInstallerTeamAccess,
   type TeamAccess,
 } from "@/lib/trade-team-server";
@@ -395,6 +396,7 @@ function errorResponse(error: unknown) {
   if (code === "JOB_CREATE_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow new jobs." }, 403);
   if (code === "JOB_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow job changes." }, 403);
   if (code === "QUOTE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow quote changes." }, 403);
+  if (code === "QUICK_QUOTE_TEAM_SCOPE_REQUIRED") return adminJson({ ok: false, error: "To create an unscheduled quote, your Team permissions need access to team jobs as well as Create jobs and Manage quotes." }, 403);
   if (code === "INVOICE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow invoice changes." }, 403);
   if (code === "JOB_ASSIGN_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow assigning jobs to other team members." }, 403);
   if (code === "JOB_ASSIGNMENT_REQUIRED") return adminJson({ ok: false, error: "Assign this job before adding an appointment." }, 409);
@@ -448,6 +450,23 @@ async function sha256Text(value: string) {
   return [...new Uint8Array(digest)]
     .map((item) => item.toString(16).padStart(2, "0"))
     .join("");
+}
+
+async function quickQuoteReplay(db: D1Database, ownerUid: string, workOrderId: string) {
+  return db.prepare(`SELECT w.id, w.work_number, d.crm_customer_id, d.service_site_id
+    FROM trade_work_orders w
+    JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
+    WHERE w.id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer'
+      AND w.source_type = 'internal' AND w.record_status = 'active' LIMIT 1`).bind(workOrderId, ownerUid)
+    .first<Record<string, unknown>>();
+}
+
+function quickQuoteReplayResponse(row: Record<string, unknown>) {
+  return adminJson({
+    ok: true, id: String(row.id || ''), workNumber: String(row.work_number || ''),
+    customerId: String(row.crm_customer_id || ''), serviceSiteId: String(row.service_site_id || ''),
+    appointmentId: '', quickQuote: true, idempotentReplay: true,
+  }, 200);
 }
 
 function addSummaryDays(date: string, days: number) {
@@ -756,6 +775,10 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
   const bindings: unknown[] = [identity.uid];
   if (resource === "jobs") {
     const conditions = ["w.firebase_uid = ?", "w.partner_type = 'installer'", "w.record_status = 'active'"];
+    if (url.searchParams.get("commercial") === "invoice") {
+      if (!identity.access.isOwner && !identity.access.canManageInvoices) throw new Error("INVOICE_MANAGEMENT_REQUIRED");
+      conditions.push("w.source_type <> 'opportunity'", "COALESCE(d.customer_source, '') <> 'platform_private'", "w.stage <> 'cancelled'");
+    }
     if (!identity.access.isOwner && identity.access.jobScope === "own") {
       conditions.push("w.assignee_member_id = ?");
       bindings.push(identity.memberId);
@@ -767,10 +790,11 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
           ${protectedJobCustomerText("c.email")} || ' ' || ${protectedJobCustomerText("c.phone")} || ' ' ||
           ${protectedJobCustomerText("ss.address_line_1")} || ' ' || ${protectedJobCustomerText("ss.address_line_2")} || ' ' ||
           ${protectedJobCustomerText("ss.suburb")} || ' ' || ${protectedJobCustomerText("ss.address_state")} || ' ' || ${protectedJobCustomerText("ss.postcode")} || ' '`;
-      conditions.push(`LOWER(
+      const normalizedPhoneSearch = /^[+\d\s().-]+$/.test(search) ? search.replace(/\D/g, "") : "";
+      conditions.push(`(LOWER(
         COALESCE(w.work_number, '') || ' ' || ${searchableJobTitleSql}
         COALESCE(w.assignee_label, '') || ' ' || COALESCE(w.stage, '') || ' ' || ${JOB_EFFECTIVE_SCHEDULE_SQL} || ' ' ||
-        ${searchableCustomerSql}
+        ${searchableCustomerSql} ||
         COALESCE((SELECT GROUP_CONCAT(
             json_extract(ci.intent_snapshot, '$.activity.title'),
             ' '
@@ -778,8 +802,8 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
           FROM trade_work_order_compliance_intents ci
           WHERE ci.work_order_id = w.id AND ci.installer_uid = w.firebase_uid
             AND ci.status IN ('planned', 'case_linked')), '')
-      ) LIKE ?`);
-      bindings.push(`%${search}%`);
+      ) LIKE ? OR (? <> '' AND replace(replace(replace(replace(${protectedJobCustomerText("c.phone")}, ' ', ''), '-', ''), '(', ''), ')', '') LIKE ?))`);
+      bindings.push(`%${search}%`, normalizedPhoneSearch, `%${normalizedPhoneSearch}%`);
     }
     const appointmentId = cleanAdminText(url.searchParams.get("appointmentId"), 180).toLowerCase();
     if (appointmentId) {
@@ -1623,7 +1647,15 @@ export async function POST(request: Request) {
     try { body = await boundedCrmRequestBody(request); }
     catch { return adminJson({ ok: false, error: "Invalid CRM request." }, 400); }
     const db = getD1();
-    const action = cleanAdminText(body.action, 40);
+    const requestedAction = cleanAdminText(body.action, 40);
+    const quickQuote = requestedAction === "create_quick_quote_job";
+    const action = quickQuote ? "create_job" : requestedAction;
+    const quickQuoteRequestId = quickQuote ? cleanAdminText(body.clientRequestId, 120) : "";
+    if (quickQuote && !/^[A-Za-z0-9_-]{16,120}$/.test(quickQuoteRequestId)) {
+      return adminJson({ ok: false, error: "Start this quote again so TLink can safely create its job." }, 400);
+    }
+    if (quickQuote && !canManageQuotes(identity.access)) throw new Error("QUOTE_MANAGEMENT_REQUIRED");
+    if (quickQuote && !identity.access.isOwner && identity.access.jobScope !== "team") throw new Error("QUICK_QUOTE_TEAM_SCOPE_REQUIRED");
     const now = new Date().toISOString();
 
     const createActions = new Set(["create_template", "create_job", "create_scheduled_job"]);
@@ -1650,6 +1682,10 @@ export async function POST(request: Request) {
       || !identity.access.canSearchCustomers)) throw new Error("CUSTOMER_SEARCH_REQUIRED");
     if (action === "find_field_customer_by_email" && !canCreateJobs(identity.access)) {
       throw new Error("JOB_CREATE_REQUIRED");
+    }
+    if (action === "find_quick_quote_customers"
+      && (!canCreateJobs(identity.access) || !canManageQuotes(identity.access))) {
+      throw new Error(!canCreateJobs(identity.access) ? "JOB_CREATE_REQUIRED" : "QUOTE_MANAGEMENT_REQUIRED");
     }
 
     if (action === "create_template") {
@@ -1681,6 +1717,41 @@ export async function POST(request: Request) {
         postcode: cleanAdminText(body.postcode, 12),
       });
       return adminJson({ ok: true, duplicateCandidates });
+    }
+
+    if (action === "find_quick_quote_customers") {
+      const search = cleanAdminText(body.search, 100).toLowerCase();
+      if (search.length < 2) return adminJson({ ok: true, matches: [] });
+      const escapedSearch = search.replace(/[\\%_]/g, (character) => `\\${character}`);
+      const phoneSearch = /^[+\d\s().-]+$/.test(search) ? search.replace(/\D/g, "") : "";
+      const rows = await db.prepare(`SELECT
+          c.id customer_id, c.customer_number, c.customer_type, c.first_name, c.last_name,
+          c.business_name, c.email, c.phone, s.id service_site_id, s.site_label,
+          s.address_line_1, s.address_line_2, s.suburb, s.address_state, s.postcode
+        FROM trade_crm_customers c
+        JOIN trade_crm_service_sites s ON s.customer_id = c.id AND s.firebase_uid = c.firebase_uid
+          AND s.record_status = 'active'
+        WHERE c.firebase_uid = ? AND c.record_status = 'active'
+          AND (LOWER(COALESCE(c.business_name, '') || ' ' || COALESCE(c.first_name, '') || ' ' ||
+            COALESCE(c.last_name, '') || ' ' || COALESCE(c.email, '') || ' ' || COALESCE(c.phone, '') || ' ' ||
+            COALESCE(s.address_line_1, '') || ' ' || COALESCE(s.address_line_2, '') || ' ' ||
+            COALESCE(s.suburb, '') || ' ' || COALESCE(s.address_state, '') || ' ' || COALESCE(s.postcode, ''))
+              LIKE ? ESCAPE '\\'
+            OR (? <> '' AND replace(replace(replace(replace(COALESCE(c.phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE ?))
+        ORDER BY c.updated_at DESC, s.is_primary DESC, c.id, s.id LIMIT 10`).bind(
+          identity.uid, `%${escapedSearch}%`, phoneSearch, `%${phoneSearch}%`,
+        ).all<Record<string, unknown>>();
+      return adminJson({ ok: true, matches: rows.results.map((row) => ({
+        customerId: String(row.customer_id || ""),
+        customerNumber: String(row.customer_number || ""),
+        customerType: String(row.customer_type || "residential"),
+        displayName: String(row.business_name || `${String(row.first_name || "")} ${String(row.last_name || "")}`.trim()),
+        firstName: String(row.first_name || ""), lastName: String(row.last_name || ""),
+        businessName: String(row.business_name || ""), email: String(row.email || ""), phone: String(row.phone || ""),
+        serviceSiteId: String(row.service_site_id || ""), siteLabel: String(row.site_label || ""),
+        addressLine1: String(row.address_line_1 || ""), addressLine2: String(row.address_line_2 || ""),
+        suburb: String(row.suburb || ""), addressState: String(row.address_state || ""), postcode: String(row.postcode || ""),
+      })) });
     }
 
     if (action === "find_field_customer_by_email") {
@@ -1811,7 +1882,14 @@ export async function POST(request: Request) {
 
     if (action === "create_job" || action === "create_scheduled_job") {
       const guided = action === "create_scheduled_job";
-      const complianceActivityVersionId = cleanAdminText(body.complianceActivityVersionId, 180);
+      const quickQuoteWorkOrderId = quickQuote
+        ? `quick-quote-${(await sha256Text(`${identity.uid}|${quickQuoteRequestId}`)).slice(0, 48)}`
+        : "";
+      if (quickQuoteWorkOrderId) {
+        const replay = await quickQuoteReplay(db, identity.uid, quickQuoteWorkOrderId);
+        if (replay) return quickQuoteReplayResponse(replay);
+      }
+      const complianceActivityVersionId = quickQuote ? "" : cleanAdminText(body.complianceActivityVersionId, 180);
       if (complianceActivityVersionId) {
         return adminJson({
           ok: false,
@@ -1828,11 +1906,10 @@ export async function POST(request: Request) {
       const customerMode = cleanAdminText(body.customerMode, 20);
       const serviceSiteMode = cleanAdminText(body.serviceSiteMode, 20);
       const createCustomer = customerMode === "new";
-      const boundedFieldCustomerAttach = guided
-        && !createCustomer
+      const boundedFieldCustomerAttach = !createCustomer
         && Boolean(customerId)
         && serviceSiteMode !== "new"
-        && identity.access.jobScope === "own";
+        && ((guided && identity.access.jobScope === "own") || quickQuote);
       if ((customerId || (!createCustomer && serviceSiteMode === "new"))
         && !identity.access.canManageCustomers
         && !boundedFieldCustomerAttach) throw new Error("CUSTOMER_MANAGEMENT_REQUIRED");
@@ -1875,8 +1952,13 @@ export async function POST(request: Request) {
         if (customerType === "business" ? !businessName : !firstName && !lastName) return adminJson({ ok: false, error: customerType === "business" ? "Add the business name." : "Add the customer name." }, 400);
         if (!email) return adminJson({ ok: false, error: "Add the customer email address." }, 400);
         if (!EMAIL_PATTERN.test(email)) return adminJson({ ok: false, error: "Check the customer email address." }, 400);
-        if (phone.replace(/\D/g, "").length < 8) return adminJson({ ok: false, error: "Add a valid customer mobile number." }, 400);
-        if (!addressLine1 || !suburb || !ADDRESS_STATES.has(addressState) || !/^\d{4}$/.test(postcode)) return adminJson({ ok: false, error: "Add the service street, suburb, state and four-digit postcode." }, 400);
+        if (phone && phone.replace(/\D/g, "").length < 8) return adminJson({ ok: false, error: "Check the customer mobile number." }, 400);
+        if (!quickQuote && phone.replace(/\D/g, "").length < 8) return adminJson({ ok: false, error: "Add a valid customer mobile number." }, 400);
+        const partialQuickQuoteAddress = quickQuote && Boolean(addressLine1 || suburb || addressState || postcode);
+        if ((!quickQuote || partialQuickQuoteAddress)
+          && (!addressLine1 || !suburb || !ADDRESS_STATES.has(addressState) || !/^\d{4}$/.test(postcode))) {
+          return adminJson({ ok: false, error: "Add the full service street, suburb, state and four-digit postcode, or leave the address blank for now." }, 400);
+        }
         const duplicateCandidates = await findDirectCustomerDuplicates(db, identity.uid, { email, phone, businessNumber, addressLine1, suburb, addressState, postcode });
         const duplicateOverride = body.duplicateOverride === true || body.duplicateOverride === "true" || body.duplicateOverride === "on";
         if (duplicateCandidates.length && !duplicateOverride) return adminJson({ ok: false,
@@ -1945,7 +2027,7 @@ export async function POST(request: Request) {
         if (serviceSiteId && !createCustomer && serviceSiteMode !== "new") await ownedServiceSite(db, identity, serviceSiteId, customerId);
       }
       if (!customerId && serviceSiteId) throw new Error("SERVICE_SITE_NOT_FOUND");
-      const sourceEnquiryId = cleanAdminText(body.sourceEnquiryId, 180);
+      const sourceEnquiryId = quickQuote ? "" : cleanAdminText(body.sourceEnquiryId, 180);
       if (sourceEnquiryId) {
         const enquiry = await db.prepare(`SELECT id, customer_id, service_site_id,
             record_status
@@ -2046,7 +2128,7 @@ export async function POST(request: Request) {
       }
       const requestedBuildingType = cleanAdminText(body.buildingType, 40);
       const buildingType = BUILDING_TYPES.has(requestedBuildingType) ? requestedBuildingType : "not_sure";
-      const complianceIntents = resolveTradeComplianceIntents({
+      const complianceIntents = quickQuote ? [] : resolveTradeComplianceIntents({
         mode: body.complianceIntentMode,
         activities: body.complianceActivitiesJson,
         programTemplateId: body.programTemplateId,
@@ -2055,14 +2137,14 @@ export async function POST(request: Request) {
         plannedStart: cleanAdminText(body.startsAt || body.scheduledStart, 40),
         buildingType,
       });
-      const templateId = cleanAdminText(body.templateId, 180);
+      const templateId = quickQuote ? "" : cleanAdminText(body.templateId, 180);
       const template = templateId ? await db.prepare(`SELECT * FROM trade_crm_job_templates
         WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`).bind(templateId, identity.uid).first<Record<string, unknown>>() : null;
       if (templateId && !template) return adminJson({ ok: false, error: "Job template not found." }, 404);
       const requestedCategory = cleanAdminText(body.serviceCategory, 60)
         || cleanAdminText(template?.service_category, 60);
       const serviceCategory = SERVICE_CATEGORIES.has(requestedCategory) ? requestedCategory : "other";
-      if (!rentalInspectionServiceAddressAccepted(serviceCategory, serviceSite?.address_state)) {
+      if (!quickQuote && !rentalInspectionServiceAddressAccepted(serviceCategory, serviceSite?.address_state)) {
         return adminJson({ ok: false, error: "Rental inspections require a Victorian service address." }, 400);
       }
       const displayName = createCustomer
@@ -2072,12 +2154,12 @@ export async function POST(request: Request) {
       if (!title) return adminJson({ ok: false, error: "Attach a customer before creating the job." }, 400);
       const requestedPriority = cleanAdminText(body.priority, 20) || cleanAdminText(template?.priority, 20);
       const priority = PRIORITIES.has(requestedPriority) ? requestedPriority : "standard";
-      let scheduledStart = dateValue(body.scheduledStart, true);
-      let scheduledEnd = dateValue(body.scheduledEnd, true);
+      let scheduledStart = quickQuote ? "" : dateValue(body.scheduledStart, true);
+      let scheduledEnd = quickQuote ? "" : dateValue(body.scheduledEnd, true);
       if (scheduledStart && scheduledEnd && scheduledEnd < scheduledStart) return adminJson({ ok: false, error: "The planned finish cannot be before the planned start." }, 400);
-      const workOrderId = crypto.randomUUID();
+      const workOrderId = quickQuoteWorkOrderId || crypto.randomUUID();
       const workNumber = await nextTlinkJobNumber(db, now);
-      const requestedAssigneeMemberId = cleanAdminText(body.assigneeMemberId, 180);
+      const requestedAssigneeMemberId = quickQuote ? "" : cleanAdminText(body.assigneeMemberId, 180);
       const assigneeMemberId = requestedAssigneeMemberId;
       const requiredServiceCategories = [...new Set([serviceCategory, ...complianceIntents.map((intent) => intent.activity.serviceCategory)])];
       let assignee = "";
@@ -2147,10 +2229,10 @@ export async function POST(request: Request) {
       );
       const recordStage = guided ? "scheduled" : "backlog";
       const pipelineStage = guided ? "scheduled" : "enquiry";
-      const rentalModuleKeys = serviceCategory === RENTAL_INSPECTION_SERVICE_CATEGORY
+      const rentalModuleKeys = !quickQuote && serviceCategory === RENTAL_INSPECTION_SERVICE_CATEGORY
         ? normalizeRentalAssessmentModules(body.rentalInspectionModulesJson)
         : [];
-      if (serviceCategory === RENTAL_INSPECTION_SERVICE_CATEGORY && !rentalModuleKeys.length) {
+      if (!quickQuote && serviceCategory === RENTAL_INSPECTION_SERVICE_CATEGORY && !rentalModuleKeys.length) {
         return adminJson({ ok: false, error: "Choose at least one rental assessment or safety-check module." }, 400);
       }
       const rentalAssessmentScope = normalizeRentalAssessmentScope(body.rentalAssessmentScope);
@@ -2198,6 +2280,7 @@ export async function POST(request: Request) {
           assessorLabel: assignee,
         },
       }) : "{}";
+      const workSourceReference = quickQuote ? `quick-quote:${quickQuoteRequestId}` : sourceEnquiryId;
       const batchStatements: D1PreparedStatement[] = [
         ...intakeStatements,
         db.prepare(`INSERT INTO trade_work_orders
@@ -2205,7 +2288,7 @@ export async function POST(request: Request) {
            service_category, site_area, stage, priority, scheduled_start, scheduled_end, assignee_member_id, assignee_label,
              record_status, created_at, updated_at)
           VALUES (?, ?, 'installer', 'job', 'internal', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
-          .bind(workOrderId, identity.uid, sourceEnquiryId, workNumber, title, serviceCategory, serviceArea,
+          .bind(workOrderId, identity.uid, workSourceReference, workNumber, title, serviceCategory, serviceArea,
             recordStage, priority, scheduledStart, scheduledEnd, assigneeMemberId, assignee, now, now),
         db.prepare(`INSERT INTO trade_crm_job_details
           (id, work_order_id, firebase_uid, crm_customer_id, service_site_id, customer_source, pipeline_stage, building_type, description,
@@ -2217,7 +2300,7 @@ export async function POST(request: Request) {
             JSON.stringify(cleanList(body.tags)), moneyValue(body.estimatedValueCents), now, now),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
           VALUES (?, ?, ?, 'work_created', ?, ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid,
-            sourceEnquiryId ? `${workNumber} created from converted enquiry ${sourceEnquiryId}.` : `${workNumber} created in installer CRM.`, now),
+            sourceEnquiryId ? `${workNumber} created from converted enquiry ${sourceEnquiryId}.` : quickQuote ? `${workNumber} created for a new quote.` : `${workNumber} created in installer CRM.`, now),
         ...templateTasks.map((taskTitle, index) => db.prepare(`INSERT INTO trade_work_order_tasks
           (id, work_order_id, firebase_uid, title, due_at, status, completed_at, revision, sort_order, created_at, updated_at)
           VALUES (?, ?, ?, ?, '', 'pending', '', 1, ?, ?, ?)`)
@@ -2349,7 +2432,15 @@ export async function POST(request: Request) {
         ]),
         ...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision: 1, changedAt: now }),
       ];
-      await db.batch(batchStatements);
+      try {
+        await db.batch(batchStatements);
+      } catch (error) {
+        if (quickQuoteWorkOrderId) {
+          const replay = await quickQuoteReplay(db, identity.uid, quickQuoteWorkOrderId);
+          if (replay) return quickQuoteReplayResponse(replay);
+        }
+        throw error;
+      }
       let customerDocuments: ScheduledActivityCustomerDocumentReceipt = {
         requested: false,
         status: "not_required",
@@ -2454,7 +2545,7 @@ export async function POST(request: Request) {
         workPackBlockers,
         rentalInspectionAttached: Boolean(rentalTemplate),
         rentalInspectionModuleCount: rentalModuleKeys.length,
-        calendarSynced, calendarFailed, calendarInvite, customerDocuments }, 201);
+        calendarSynced, calendarFailed, calendarInvite, customerDocuments, quickQuote }, 201);
     }
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);

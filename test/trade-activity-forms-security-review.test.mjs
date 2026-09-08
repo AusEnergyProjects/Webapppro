@@ -71,6 +71,11 @@ function fixture(fieldForm = form(), options = {}) {
     async all() { return { results: database.prepare(sql).all(...values) }; },
     async run() { await options.beforeRun?.({ sql, values, database }); const result = database.prepare(sql).run(...values); return { success: true, meta: { changes: Number(result.changes) } }; },
   }; } }; } };
+  d1.batch = async (statements) => {
+    database.exec("BEGIN");
+    try { const results = []; for (const statement of statements) results.push(await statement.run()); database.exec("COMMIT"); return results; }
+    catch (error) { database.exec("ROLLBACK"); throw error; }
+  };
   const objects = new Map();
   const bucket = {
     async get(key) { const bytes = objects.get(key); return bytes ? { async arrayBuffer() { return Uint8Array.from(bytes).buffer; } } : null; },
@@ -1030,4 +1035,87 @@ test("signature content binding accepts a harmless later revision but rejects ch
     await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: signed.revision,
       expectedScope: shown.signingScopes.after, declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes }), /ACTIVITY_SIGNING_SCOPE_CHANGED/);
   } finally { database.close(); }
+});
+
+function signingProfileFixture(options = {}) {
+  const context = fixture(form(), options);
+  context.database.exec(`ALTER TABLE trade_team_members ADD COLUMN member_uid TEXT DEFAULT '';
+    ALTER TABLE trade_team_members ADD COLUMN updated_at TEXT DEFAULT '';
+    ALTER TABLE trade_accounts ADD COLUMN contact_name TEXT DEFAULT '';
+    CREATE TABLE trade_team_member_events (id TEXT, owner_uid TEXT, team_member_id TEXT, actor_uid TEXT,
+      entity_type TEXT, entity_id TEXT, event_type TEXT, metadata TEXT, created_at TEXT);`);
+  return context;
+}
+
+test("an owner contact is suggested but becomes signing identity only after personal confirmation", async () => {
+  const { database, server, access } = signingProfileFixture();
+  try {
+    database.exec(`UPDATE trade_team_members SET first_name = '', last_name = '', member_uid = 'owner-a', display_name = 'Business Pty Ltd';
+      INSERT INTO trade_accounts (firebase_uid, contact_name) VALUES ('owner-a', 'Pat Owner');`);
+    const ownerAccess = { ...access, isOwner: true, actorUid: "owner-a" };
+    const record = await server.openActivityRecord(ownerAccess, "job-a", "intent-a");
+    assert.equal(record.signerDefaults.technician, "");
+    assert.deepEqual(await server.activitySigningProfileSetup(ownerAccess, record), {
+      firstName: "Pat", lastName: "Owner", firstNameLocked: false, lastNameLocked: false, canSave: true,
+    });
+    const saved = await server.saveActivitySigningProfile(ownerAccess, record.id, { firstName: "James", lastName: "Technician" });
+    assert.equal(saved.signerDefaults.technician, "James Technician");
+    assert.equal(await server.activitySigningProfileSetup(ownerAccess, saved), undefined);
+    assert.equal(saved.revision, record.revision);
+    assert.equal(database.prepare("SELECT display_name FROM trade_team_members WHERE id = 'worker-a'").get().display_name, "Business Pty Ltd");
+    assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_member_events").get().count, 1);
+    assert.equal((await server.openActivityRecord(ownerAccess, "job-a", "intent-a")).signerDefaults.technician, "James Technician");
+    await server.saveActivitySigningProfile(ownerAccess, record.id, { firstName: "Overwrite", lastName: "Attempt" });
+    assert.equal((await server.loadActivityRecord(ownerAccess, record.id)).signerDefaults.technician, "James Technician");
+    assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_member_events").get().count, 1);
+  } finally { database.close(); }
+});
+
+test("staff name setup fills missing parts only and never suggests the business contact", async () => {
+  const { database, server, access } = signingProfileFixture();
+  try {
+    database.exec(`UPDATE trade_team_members SET first_name = 'Existing', last_name = '', display_name = 'Business Pty Ltd';
+      INSERT INTO trade_accounts (firebase_uid, contact_name) VALUES ('owner-a', 'Somebody Else');`);
+    const record = await server.openActivityRecord(access, "job-a", "intent-a");
+    assert.deepEqual(await server.activitySigningProfileSetup(access, record), {
+      firstName: "Existing", lastName: "", firstNameLocked: true, lastNameLocked: false, canSave: true,
+    });
+    await assert.rejects(server.saveActivitySigningProfile(access, record.id, { firstName: "Changed", lastName: " " }), /ACTIVITY_SIGNING_PROFILE_NAME_REQUIRED/);
+    const saved = await server.saveActivitySigningProfile(access, record.id, { firstName: "Changed", lastName: "Surname" });
+    assert.equal(saved.signerDefaults.technician, "Existing Surname");
+    assert.equal(database.prepare("SELECT display_name FROM trade_team_members WHERE id = 'worker-a'").get().display_name, "Business Pty Ltd");
+  } finally { database.close(); }
+});
+
+test("signing profile setup refuses another assigned worker, inactive member and cross-business access", async () => {
+  const { database, server, access } = signingProfileFixture();
+  try {
+    database.exec("UPDATE trade_team_members SET first_name = '', last_name = ''");
+    const record = await server.openActivityRecord(access, "job-a", "intent-a");
+    const manager = { ...access, isOwner: true, memberId: "manager", jobScope: "team" };
+    assert.equal((await server.activitySigningProfileSetup(manager, record)).canSave, false);
+    await assert.rejects(server.saveActivitySigningProfile(manager, record.id, { firstName: "Wrong", lastName: "Person" }), /ACTIVITY_TECHNICIAN_SIGNER_NOT_ASSIGNED/);
+    await assert.rejects(server.saveActivitySigningProfile({ ...access, ownerUid: "owner-b" }, record.id, { firstName: "Wrong", lastName: "Person" }), /ACTIVITY_RECORD_NOT_FOUND/);
+    database.exec("UPDATE trade_team_members SET status = 'inactive'");
+    await assert.rejects(server.saveActivitySigningProfile(access, record.id, { firstName: "Wrong", lastName: "Person" }), /ACTIVITY_TECHNICIAN_SIGNER_NOT_ASSIGNED/);
+    assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_member_events").get().count, 0);
+  } finally { database.close(); }
+});
+
+test("signing profile name confirmation cannot overwrite a concurrent name change or changed assignment", async () => {
+  for (const mutation of ["UPDATE trade_team_members SET first_name = 'New', last_name = 'Name' WHERE id = 'worker-a'",
+    "UPDATE trade_work_orders SET assignee_member_id = 'worker-c' WHERE id = 'job-a'"]) {
+    let armed = false;
+    const { database, server, access } = signingProfileFixture({ beforeRun({ sql, database: db }) {
+      if (armed && /UPDATE trade_team_members SET/.test(sql)) { armed = false; db.exec(mutation); }
+    } });
+    try {
+      database.exec("UPDATE trade_team_members SET first_name = '', last_name = ''");
+      const record = await server.openActivityRecord(access, "job-a", "intent-a");
+      armed = true;
+      await assert.rejects(server.saveActivitySigningProfile(access, record.id, { firstName: "Old", lastName: "Name" }), /ACTIVITY_SIGNING_PROFILE_CHANGED/);
+      assert.notEqual(database.prepare("SELECT first_name FROM trade_team_members WHERE id = 'worker-a'").get().first_name, "Old");
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_member_events").get().count, 0);
+    } finally { database.close(); }
+  }
 });

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { activityWizardSteps, boundActivityDeclaration, expandedActivityFields, fieldConditionMet } from '../src/lib/trade-activity-form-flow.ts';
+import { ACTIVITY_WIZARD_PAGE_FIELD_LIMIT, activityWizardPageForStepKey, activityWizardPages, activityWizardSteps,
+  boundActivityDeclaration, expandedActivityFields, fieldConditionMet } from '../src/lib/trade-activity-form-flow.ts';
 import { activityMissing, normaliseActivityAnswers, activitySigningScope } from '../src/lib/trade-activity-forms.ts';
 
 const field = (key, type = 'text', extra = {}) => ({ key, type, label: key, section: 'Equipment', required: true, phase: 'after', options: [], help: '', ...extra });
@@ -43,6 +44,29 @@ test('a long declaration takes one signature step and retains its full wording f
   const steps = activityWizardSteps({ ...form, declarations: [source] }, {});
   assert.equal(steps.filter((step) => step.kind === 'signature').length, 1);
   assert.equal(boundActivityDeclaration(source, {}), declaration);
+});
+test('wizard pages keep logical sections and repeat items together with at most five questions', () => {
+  const pageForm = { ...form, fields: [
+    ...Array.from({ length: 7 }, (_, index) => field(`before-${index}`, 'text', { phase: 'before', section: 'Before' })),
+    field('installed', 'boolean', { repeatGroup: 'units', section: 'Equipment' }),
+    field('serial', 'text', { repeatGroup: 'units', section: 'Equipment', condition: { fieldKey: 'installed', equals: true } }),
+    field('photo', 'photo', { repeatGroup: 'units', section: 'Equipment', condition: { fieldKey: 'installed', equals: true } }),
+  ] };
+  const answers = { '$repeat.units': 2, installed: true, 'installed[1]': true };
+  const pages = activityWizardPages(pageForm, answers);
+  const fieldPages = pages.filter((page) => page.kind === 'fields');
+  assert.ok(fieldPages.every((page) => page.fields.length <= ACTIVITY_WIZARD_PAGE_FIELD_LIMIT));
+  assert.ok(fieldPages.every((page) => page.fields.every((item) => item.phase === page.phase && item.section === page.section)));
+  assert.deepEqual(fieldPages.filter((page) => page.section === 'Equipment').map((page) => page.fields.map((item) => item.key)),
+    [['installed', 'serial', 'photo'], ['installed[1]', 'serial[1]', 'photo[1]']]);
+  assert.ok(pages.filter((page) => page.kind === 'signature').every((page) => page.legacyStepKeys.length === 1));
+  assert.equal(pages.at(-1).kind, 'review');
+});
+test('former one-question and declaration-reading step keys resolve to their new page', () => {
+  const pages = activityWizardPages({ ...form, fields: Array.from({ length: 6 }, (_, index) => field(`item-${index}`)) }, {});
+  assert.equal(activityWizardPageForStepKey(pages, 'item-3')?.key, 'item-0');
+  assert.equal(activityWizardPageForStepKey(pages, 'technician:read:4')?.key, 'technician');
+  assert.equal(activityWizardPageForStepKey(pages, 'missing'), undefined);
 });
 test('every repeated required photo and answer blocks completion independently', () => {
   const answers = normaliseActivityAnswers(form, { '$repeat.units': 2, consent: false, installed: true, 'installed[1]': true, serial: 'A' });

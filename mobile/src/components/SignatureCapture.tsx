@@ -116,6 +116,9 @@ export function SignatureCapture({
   const captureDisabled = disabled || displayOnly;
   const onChangeRef = useRef(onChange);
   useEffect(() => {
+    setLiveValue(value);
+  }, [value]);
+  useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
   useEffect(() => {

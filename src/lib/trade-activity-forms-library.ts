@@ -59,6 +59,35 @@ export const ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS = {
 } as const;
 const ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEY_SET = new Set<string>(Object.values(ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS));
 
+export const INSTALLER_ID_SELFIE_FIELD_KEY = "evidence.tlink-installer-id-selfie";
+const installerIdSelfieField = (): ActivityField => ({
+  key: INSTALLER_ID_SELFIE_FIELD_KEY,
+  section: "Start of job",
+  label: "Take a selfie holding your installer ID",
+  type: "photo",
+  required: true,
+  options: [],
+  help: "Before work starts, take a clear selfie at the job address showing your face and installer ID. TLink records the capture time and GPS location.",
+  phase: "before",
+  requireLocation: true,
+});
+const isInstallerIdSelfieField = (field: ActivityField) => {
+  if (field.key === INSTALLER_ID_SELFIE_FIELD_KEY) return true;
+  const text = `${field.key} ${field.label} ${field.help}`;
+  return field.type === "photo" && /selfie/i.test(text) && /installer/i.test(text) && /\b(?:id|identity|badge|accreditation|licen[cs]e)\b/i.test(text);
+};
+function ensureInstallerIdSelfie(fields: readonly ActivityField[]) {
+  const existing = fields.find(isInstallerIdSelfieField);
+  const selfie = existing ? { ...existing, section: "Start of job", label: "Take a selfie holding your installer ID",
+    type: "photo" as const, required: true, options: [], phase: "before" as const, requireLocation: true,
+    help: installerIdSelfieField().help } : installerIdSelfieField();
+  delete selfie.condition;
+  delete selfie.repeatGroup;
+  delete selfie.autofill;
+  delete selfie.presentation;
+  return [selfie, ...fields.filter((field) => field !== existing && !isInstallerIdSelfieField(field))];
+}
+
 const VEU_DOCUMENTS = {
   consumer: { key: "veu-consumer-factsheet", title: "VEU consumer factsheet (PDF)",
     url: "https://www.energy.vic.gov.au/__data/assets/pdf_file/0028/585154/Victorian-Energy-Efficiency-Target-scheme-consumer-factsheet.pdf",
@@ -831,7 +860,7 @@ export function defaultActivityFieldForm(templateId: string, variantId = ""): Ac
   };
   for (const field of deduped) resolveDependencies(field.condition, field.phase);
   for (const declaration of declarations) resolveDependencies(declaration.condition, declaration.phase);
-  const completedFields = [...dependencyFields, ...deduped];
+  const completedFields = ensureInstallerIdSelfie([...dependencyFields, ...deduped]);
   normaliseActivityFormConditions(completedFields, declarations);
   return { id: `field:${templateId}:${exact?.id || "source"}`, title: candidate.title, version: 1,
     activityTemplateId: templateId, programCode: candidate.programCode,
@@ -847,15 +876,18 @@ export function applyDefaultActivityFormPolicy(form: ActivityForm, baseline: Act
     throw new Error("ACTIVITY_FORM_POLICY_MISMATCH");
   }
   const baselineFields = new Map(baseline.fields.map((field) => [field.key, field]));
+  const baselineInstallerSelfieKey = baseline.fields.find(isInstallerIdSelfieField)?.key || INSTALLER_ID_SELFIE_FIELD_KEY;
   const replacedRequirementIds = new Set(baseline.fields.map((field) => field.sourceRequirementId).filter(Boolean));
   const governedCustomerDocuments = baseline.fields.some((field) => field.key === ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.providerAccepted);
   const stripUnsupportedGenericCustomerDocuments = NO_GENERIC_CUSTOMER_DOCUMENT_GATE_TEMPLATES.has(baseline.activityTemplateId);
   const current = form.fields.filter((field) => !((governedCustomerDocuments || stripUnsupportedGenericCustomerDocuments) && isRedundantManualCustomerDocumentField(field))
     && !isSignatureTimestamp(field.key, field.autofill)
+    && (!isInstallerIdSelfieField(field) || field.key === baselineInstallerSelfieKey)
     && !(field.key === "evidence.air-conditioner-photos" && replacedRequirementIds.has("air-conditioner-photos")));
   const fields = current.map((field) => {
     const policy = baselineFields.get(field.key);
-    if (policy?.sourceRequirementId || (policy && ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEY_SET.has(policy.key))) return structuredClone(policy);
+    if (policy?.sourceRequirementId || policy?.key === baselineInstallerSelfieKey
+      || (policy && ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEY_SET.has(policy.key))) return structuredClone(policy);
     const governed: ActivityField = { ...field };
     if (policy?.presentation === "derived" || policy?.presentation === "prefilled") {
       governed.presentation = policy.presentation;
@@ -881,6 +913,7 @@ export function applyDefaultActivityFormPolicy(form: ActivityForm, baseline: Act
   });
   for (const policy of baseline.fields) {
     const controlled = policy.presentation === "derived" || policy.presentation === "prefilled"
+      || policy.key === baselineInstallerSelfieKey
       || Boolean(policy.sourceRequirementId) || policy.requiredValue !== undefined;
     if (controlled && !fields.some((field) => field.key === policy.key)) fields.push(structuredClone(policy));
   }
@@ -904,7 +937,7 @@ export function applyDefaultActivityFormPolicy(form: ActivityForm, baseline: Act
   const sources = [...baseline.sources.map((source) => structuredClone(source)),
     ...new Map(addedSources.map((source) => [source.url, source])).values()];
   normaliseActivityFormConditions(fields, declarations);
-  return JSON.parse(JSON.stringify({ ...form, fields: orderByPhaseAndSection(fields), declarations, sources })) as ActivityForm;
+  return JSON.parse(JSON.stringify({ ...form, fields: orderByPhaseAndSection(ensureInstallerIdSelfie(fields)), declarations, sources })) as ActivityForm;
 }
 
 export function activityFieldCatalogue() {

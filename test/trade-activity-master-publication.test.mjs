@@ -60,9 +60,9 @@ function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
     CREATE TABLE trade_crm_job_details (work_order_id TEXT, firebase_uid TEXT, customer_source TEXT, crm_customer_id TEXT, service_site_id TEXT);
     CREATE TABLE trade_crm_customers (id TEXT, firebase_uid TEXT, first_name TEXT, last_name TEXT, email TEXT, phone TEXT, business_name TEXT, business_number TEXT);
     CREATE TABLE trade_crm_service_sites (id TEXT, firebase_uid TEXT, address_line_1 TEXT, address_line_2 TEXT, suburb TEXT, address_state TEXT, postcode TEXT);
-    CREATE TABLE trade_accounts (firebase_uid TEXT, address_line_1 TEXT, suburb TEXT, address_state TEXT, postcode TEXT, document_phone TEXT, phone TEXT, document_email TEXT, email TEXT);
+    CREATE TABLE trade_accounts (firebase_uid TEXT, contact_name TEXT, address_line_1 TEXT, suburb TEXT, address_state TEXT, postcode TEXT, document_phone TEXT, phone TEXT, document_email TEXT, email TEXT);
     CREATE TABLE trade_work_order_events (id TEXT, work_order_id TEXT, firebase_uid TEXT, event_type TEXT, summary TEXT, created_at TEXT);
-    CREATE TABLE trade_team_members (id TEXT, owner_uid TEXT, status TEXT, display_name TEXT, first_name TEXT, last_name TEXT);
+    CREATE TABLE trade_team_members (id TEXT, owner_uid TEXT, member_uid TEXT, status TEXT, display_name TEXT, first_name TEXT, last_name TEXT);
     CREATE TABLE trade_team_member_credentials (id TEXT, owner_uid TEXT, team_member_id TEXT, file_id TEXT, credential_number TEXT, name TEXT, rental_gate TEXT, credential_type TEXT, jurisdiction TEXT, expires_at TEXT, status TEXT, updated_at TEXT);
     CREATE TABLE trade_team_member_files (id TEXT, owner_uid TEXT, team_member_id TEXT, status TEXT, expires_at TEXT);`);
   database.exec(fs.readFileSync(new URL("../drizzle/0170_trade_activity_forms.sql", import.meta.url), "utf8"));

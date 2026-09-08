@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FieldButton } from '@/components/field-button';
 import { FieldDatePicker } from '@/components/field-date-picker';
 import { FieldSelect } from '@/components/field-select';
+import { ActivityAssignmentReview } from '@/components/ActivityAssignmentReview';
 import { SignatureCapture } from '@/components/SignatureCapture';
 import { apiRequest, ApiError } from '@/lib/api';
 import { getSetting, setSetting } from '@/lib/database';
@@ -19,11 +20,11 @@ import { activityBookingDocumentDeliveryState, activityCurrentSignatureKeys, act
 import { colours, radius, spacing } from '@/lib/theme';
 import type { FieldWorkPackSignatureDraft, FieldWorkPackSignerRole } from '@/lib/types';
 import type { ActivityAnswers, ActivityRecord } from '../../../src/lib/trade-activity-form-types';
-import { activityBaseFieldKey, activityRepeatCount, boundActivityDeclaration, activityWizardSteps, type ExpandedActivityField } from '../../../src/lib/trade-activity-form-flow';
+import { activityBaseFieldKey, activityRepeatCount, boundActivityDeclaration, activityWizardSteps, activityWizardPages, activityWizardPageForStepKey, type ExpandedActivityField } from '../../../src/lib/trade-activity-form-flow';
 
 const endpoint = '/api/trade-activity-forms';
 export type ActivityFieldSummary = { id: string; intentId: string; title: string; status: 'not_started' | ActivityRecord['status']; recordNumber: string; progress: { complete: number; total: number } };
-type Presented = Omit<ActivityRecord, 'evidence'> & { evidence: Omit<ActivityRecord['evidence'][number], 'objectKey'>[]; missing: { key: string; label: string; kind: string }[]; signerDefaults: { technician: string; customer: string }; signingScopes?: { before: string; after: string } };
+type Presented = Omit<ActivityRecord, 'evidence'> & { evidence: Omit<ActivityRecord['evidence'][number], 'objectKey'>[]; missing: { key: string; label: string; kind: string }[]; signerDefaults: { technician: string; customer: string }; signingScopes?: { before: string; after: string }; signerSetup?: { firstName: string; lastName: string; canSave: boolean; firstNameLocked?: boolean; lastNameLocked?: boolean } };
 type CaptureMetadata = { capturedAt: string; latitude: number | null; longitude: number | null; accuracy: number | null; metadataOrigin: 'device_capture' | 'file_upload'; locationObservedAt?: string; mocked?: boolean | null };
 type PendingFile = { id: string; fieldKey: string; uri: string; name: string; contentType: string; metadata: CaptureMetadata };
 type Cache = { record: Presented; answers: ActivityAnswers; pending: PendingFile[]; stepKey: string; camera?: { fieldKey: string; metadata: CaptureMetadata } };
@@ -54,9 +55,8 @@ function rebaseUntouchedSignatureDraft(
 }
 
 function availableStepKey(record: Presented, answers: ActivityAnswers, requested = '') {
-  const available = activityWizardSteps(record.form, answers);
-  requested = requested.replace(/:read:\d+$/, '');
-  return available.some((item) => item.key === requested) ? requested : available[0]?.key || 'review';
+  const available = activityWizardPages(record.form, answers);
+  return activityWizardPageForStepKey(available, requested)?.key || available[0]?.key || 'review';
 }
 
 function retainedActivityFileName(originalName: string, contentType: string) {
@@ -96,22 +96,25 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   const [signature, setSignature] = useState<FieldWorkPackSignatureDraft>(signatureDraft('', ''));
   const [acknowledged, setAcknowledged] = useState(false);
   const [readingDeclaration, setReadingDeclaration] = useState(false);
+  const [signingName, setSigningName] = useState<{ firstName: string; lastName: string } | null>(null);
   const scroll = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
   const cacheKey = `activity-form:${workOrderId}:${intentId}`;
   const record = cache?.record;
   const steps = cache ? activityWizardSteps(cache.record.form, cache.answers) : [];
-  const stepIndex = Math.max(0, steps.findIndex((item) => item.key === cache?.stepKey));
-  const step = steps[stepIndex];
+  const pages = cache ? activityWizardPages(cache.record.form, cache.answers) : [];
+  const stepIndex = Math.max(0, pages.findIndex((item) => item.key === cache?.stepKey));
+  const step = pages[stepIndex];
   const editable = record?.status === 'draft';
-  const locked = step?.kind === 'field' && record?.signatures.some((item) => item.phase === 'after' || item.phase === step.field.phase);
+  const locked = step?.kind === 'fields' && record?.signatures.some((item) => item.phase === 'after' || item.phase === step.phase);
   const currentSignature = step?.kind === 'signature' && !record?.missing.some((item) => item.kind === 'signature' && item.key === step.declaration.key)
     ? [...(record?.signatures || [])].reverse().find((item) => item.declarationKey === step.declaration.key)
     : undefined;
 
   function remember(value: Cache) {
     const previous = cacheRef.current;
-    const target = activityWizardSteps(value.record.form, value.answers).find((item) => item.key === value.stepKey);
+    const target = activityWizardPageForStepKey(activityWizardPages(value.record.form, value.answers), value.stepKey);
+    value = { ...value, stepKey: target?.key || 'review' };
     if (previous?.stepKey !== value.stepKey) {
       setAcknowledged(false);
       if (target?.kind === 'signature') setSignature(signatureDraft(target.declaration.role, activitySignerDefault(value.record, target.declaration.role)));
@@ -153,12 +156,14 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
           : { merged: fresh.answers, conflicts: [] as string[] };
         {
           const answers = reconciliation.merged;
+          const addedSelfie = fresh.form.fields.find((field) => field.section === 'Start of job' && field.type === 'photo'
+            && !saved?.record.form.fields.some((previous) => previous.key === field.key));
           await remember({
             ...(saved || {}),
             record: fresh,
             answers,
             pending: saved?.pending || [],
-            stepKey: availableStepKey(fresh, answers, saved?.stepKey),
+            stepKey: availableStepKey(fresh, answers, addedSelfie?.key || saved?.stepKey),
           });
         }
       } catch (caught) { if (!disposed) setError(caught instanceof Error ? caught.message : 'Could not load this form.'); }
@@ -281,7 +286,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       if (location.state !== 'captured' || location.mocked === true || location.accuracyMetres === null || location.accuracyMetres > 100) throw new Error('Enable precise location and wait for GPS before taking this evidence photo.');
       const metadata: CaptureMetadata = { capturedAt: new Date().toISOString(), latitude: location.latitude, longitude: location.longitude, accuracy: location.accuracyMetres, metadataOrigin: 'device_capture', locationObservedAt: location.observedAtUtc, mocked: location.mocked };
       if (cacheRef.current) await remember({ ...cacheRef.current, camera: { fieldKey: field.key, metadata } });
-      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1, exif: true, allowsEditing: false, cameraType: ImagePicker.CameraType.back });
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1, exif: true, allowsEditing: false, cameraType: /selfie/i.test(field.key) ? ImagePicker.CameraType.front : ImagePicker.CameraType.back });
       if (result.canceled || !result.assets[0]) { if (cacheRef.current) await remember({ ...cacheRef.current, camera: undefined }); return; }
       const asset = result.assets[0];
       metadata.capturedAt = new Date().toISOString();
@@ -349,7 +354,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   async function move(delta: number) {
     const latest = cacheRef.current;
     if (!latest) return;
-    const currentSteps = activityWizardSteps(latest.record.form, latest.answers);
+    const currentSteps = activityWizardPages(latest.record.form, latest.answers);
     const index = Math.max(0, currentSteps.findIndex((item) => item.key === latest.stepKey));
     await remember({ ...latest, stepKey: currentSteps[Math.max(0, Math.min(currentSteps.length - 1, index + delta))].key });
   }
@@ -357,13 +362,18 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     if (!step || !cache) return;
     await perform('next', async () => {
       if (!editable) { await move(1); return; }
-      if (step.kind === 'field') {
-        const value = cacheRef.current?.answers[step.field.key];
-        if (step.field.required && !['photo', 'document'].includes(step.field.type) && (value === undefined || value === '')) throw new Error('Answer this question before continuing.');
-        if (step.field.requiredValue !== undefined && value !== step.field.requiredValue) throw new Error('Complete this requirement before continuing. Your current answer remains saved on this phone.');
-        if (online) { await saveAnswers(); await uploadPending(step.field.key); }
-        const current = cacheRef.current;
-        if (step.field.required && ['photo', 'document'].includes(step.field.type) && !current?.record.evidence.some((item) => item.fieldKey === step.field.key) && !current?.pending.some((item) => item.fieldKey === step.field.key)) throw new Error('Add the required evidence before continuing.');
+      if (step.kind === 'fields') {
+        for (const field of step.fields) {
+          const value = cacheRef.current?.answers[field.key];
+          if (field.required && !['photo', 'document'].includes(field.type) && (value === undefined || value === '')) throw new Error(`Complete ${field.label.toLowerCase()} before continuing.`);
+          if (field.requiredValue !== undefined && value !== field.requiredValue) throw new Error(`Complete ${field.label.toLowerCase()} before continuing. Your answer is retained.`);
+          const current = cacheRef.current;
+          if (field.required && ['photo', 'document'].includes(field.type) && !current?.record.evidence.some((item) => item.fieldKey === field.key) && !current?.pending.some((item) => item.fieldKey === field.key)) throw new Error(`Add ${field.label.toLowerCase()} before continuing.`);
+        }
+        if (online) {
+          await saveAnswers();
+          for (const field of step.fields) await uploadPending(field.key);
+        }
       } else if (step.kind === 'signature' && !currentSignature) {
         if (!acknowledged) throw new Error('Confirm the declaration before signing.');
         const displayed = cacheRef.current;
@@ -421,9 +431,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   }
 
   if (!record || !cache) return <View style={styles.body}><Text style={styles.title}>{busy ? 'Loading activity form…' : 'Activity form'}</Text>{error ? <Text style={styles.error}>{error}</Text> : null}<FieldButton variant="secondary" onPress={onReturnToJob}>Job</FieldButton></View>;
-  const title = step?.kind === 'field' ? step.field.label : step?.kind === 'review' ? 'Review and submit' : step?.declaration.title || record.form.title;
-  const pendingHere = step?.kind === 'field' ? cache.pending.filter((item) => item.fieldKey === step.field.key) : [];
-  const savedHere = step?.kind === 'field' ? record.evidence.filter((item) => item.fieldKey === step.field.key) : [];
+  const title = step?.kind === 'fields' ? step.section : step?.kind === 'review' ? 'Review and submit' : step?.declaration.title || record.form.title;
   const evidenceFieldKeys = new Set([...record.evidence.map((item) => item.fieldKey), ...cache.pending.map((item) => item.fieldKey)]);
   const signatureDeclarationKeys = activityCurrentSignatureKeys(record.signatures, record.missing);
   const overallProgress = activityProgress(steps, cache.answers, evidenceFieldKeys, signatureDeclarationKeys);
@@ -432,15 +440,36 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   const systemMissing = record.missing.filter((item) => record.form.fields
     .find((field) => field.key === activityBaseFieldKey(item.key))?.presentation === 'derived');
   const fieldMissing = record.missing.filter((item) => !systemMissing.includes(item));
-  const currentSection = step?.kind === 'field' ? sections.find((item) => item.key === `${step.field.phase}:${step.field.section}`) : undefined;
-  const currentField = step?.kind === 'field' ? step.field : undefined;
-  const evidenceForLabels = currentField?.evidenceFor?.map((key) => record.form.fields.find((field) => field.key === key)?.label || key).filter(Boolean) || [];
+  const currentSection = step?.kind === 'fields' ? sections.find((item) => item.key === `${step.phase}:${step.section}`) : undefined;
   const technicianSignature = step?.kind === 'signature' && step.declaration.role === 'technician';
   const boundSignerName = technicianSignature ? record.signerDefaults.technician : signature.signerName;
+  const proposedSigningName = signingName || record.signerSetup || { firstName: '', lastName: '' };
   const boundSignature = technicianSignature && signature.signerName !== boundSignerName ? { ...signature, signerName: boundSignerName } : signature;
   const signerRole: FieldWorkPackSignerRole = { roleKey: signature.signerRoleKey, label: step?.kind === 'signature' ? step.declaration.role : 'Signer', capacity: signature.signerCapacity,
     identitySource: technicianSignature ? 'assigned_worker' : step?.kind === 'signature' && step.declaration.role === 'customer' ? 'customer_context' : 'manual_verified',
     minimumSignatures: 1, maximumSignatures: 1, identityRequirements: [] };
+  function renderField(field: ExpandedActivityField) {
+    if (!record || !cache) return null;
+    const pendingHere = cache.pending.filter((item) => item.fieldKey === field.key);
+    const savedHere = record.evidence.filter((item) => item.fieldKey === field.key);
+    const evidenceForLabels = field.evidenceFor?.map((key) => record.form.fields.find((item) => item.key === key)?.label || key).filter(Boolean) || [];
+    return <View key={field.key} style={styles.fieldCard}>
+      <Text style={styles.fieldLabel}>{field.label}{field.repeatGroup ? ` · Item ${field.repeatIndex + 1}` : ''}</Text>
+
+          {field.help ? <Text style={styles.text}>{field.help}</Text> : null}
+          {(field.referenceDocuments || []).map((document) => { const url = new URL(document.url, API_BASE_URL).toString(); return <View key={url} style={styles.group}><Text style={styles.text}>{document.title}</Text><View style={styles.row}><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => void perform('document', async () => { await Linking.openURL(url); })}>Open document</FieldButton><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => void perform('document', async () => { await Share.share({ message: `${document.title}\n${url}`, url }); })}>Share copy</FieldButton></View></View>; })}
+          {locked ? <Text style={styles.small}>These answers are retained with the signed declaration.</Text> : null}
+          {field?.presentation === 'derived' ? <View style={styles.derived}><Text style={styles.text}>{cache.answers[field.key] === undefined || cache.answers[field.key] === '' ? 'Recorded automatically by TLink.' : String(cache.answers[field.key])}</Text><Text style={styles.small}>This value comes from the job, business, assigned team member or signature record.</Text></View> : field.type === 'boolean' ? <View style={styles.row}>{[true, false].map((value) => <Pressable key={String(value)} accessibilityRole="radio" accessibilityState={{ selected: cache.answers[field.key] === value }} disabled={!editable || locked || Boolean(busy)} onPress={() => answer(field.key, value)} style={[styles.choice, cache.answers[field.key] === value && styles.selected]}><Text style={styles.text}>{value ? 'Yes' : 'No'}</Text></Pressable>)}</View> : field.type === 'select' ? <FieldSelect label="Choose an answer" value={String(cache.answers[field.key] ?? '')} options={field.options.map((value) => ({ value, label: activityOptionLabel(value, field?.optionLabels?.[value]) }))} onChange={(value) => answer(field.key, value)} disabled={!editable || locked || Boolean(busy)} /> : ['photo', 'document'].includes(field.type) ? <>
+            {evidenceForLabels.length ? <Text style={styles.evidenceBinding}>Evidence for: {evidenceForLabels.join(', ')}</Text> : null}
+            <FieldButton disabled={!editable || locked || Boolean(busy)} loading={busy === 'camera' || busy === 'document'} onPress={() => field.type === 'photo' ? void capture(field) : void chooseDocument(field)}>{field.type === 'photo' ? 'Take photo' : 'Choose document'}</FieldButton>
+            <Text style={styles.small}>{savedHere.length} saved · {pendingHere.length} ready to upload</Text>
+            {savedHere.map((item) => <Text key={item.id} style={styles.text}>{item.fileName}{item.latitude !== null ? ` · ${item.latitude.toFixed(5)}, ${item.longitude?.toFixed(5)}` : ''}</Text>)}
+            {pendingHere.map((item) => <View key={item.id} style={styles.group}>{item.contentType.startsWith('image/') ? <Image alt="Pending site evidence" accessibilityLabel="Pending site evidence" source={{ uri: item.uri }} style={styles.preview} resizeMode="contain" /> : null}<Text style={styles.small}>{item.name} · Original retained on this phone</Text><FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => Alert.alert('Remove pending file?', 'This file has not been submitted.', [{ text: 'Keep' }, { text: 'Remove', onPress: () => void perform('remove', async () => { await remember({ ...cache, pending: cache.pending.filter((file) => file.id !== item.id) }); const file = new File(item.uri); if (file.exists) file.delete(); }) }])}>Remove pending file</FieldButton></View>)}
+          </> : field.type === 'date' ? <FieldDatePicker label="Choose date" value={String(cache.answers[field.key] ?? '')} disabled={!editable || locked || Boolean(busy)} onChange={(value) => answer(field.key, value)} /> : <TextInput accessibilityLabel={field.label} value={String(cache.answers[field.key] ?? '')} editable={editable && !locked && !busy} placeholder="Enter answer" placeholderTextColor={colours.muted} keyboardType={field.type === 'number' ? 'decimal-pad' : 'default'} style={styles.input} onChangeText={(value) => answer(field.key, field.type === 'number' && value !== '' && Number.isFinite(Number(value)) ? Number(value) : value)} />}
+          {field.repeatGroup && !locked ? <FieldButton variant="quiet" disabled={!editable || Boolean(busy) || activityRepeatCount(record.form, cache.answers, field.repeatGroup) >= 20} onPress={() => { const group = field.repeatGroup!; answer(`$repeat.${group}`, activityRepeatCount(record.form, cache.answers, group) + 1); }}>Add another {field.repeatGroup.replaceAll('_', ' ')}</FieldButton> : null}
+
+    </View>;
+  }
   return <View style={styles.container}>
     <View style={styles.header}><FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => { if (overview) void perform('leaving', leave); else setOverview(true); }}>{overview ? 'Job' : 'Back'}</FieldButton><View style={styles.flex}><Text numberOfLines={2} style={styles.small}>{record.form.title}</Text><Text style={styles.small}>{record.recordNumber} · {online ? 'Connected' : 'Draft on this phone'}</Text></View><FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => setOverview(!overview)}>{overview ? 'Continue' : 'Sections'}</FieldButton></View>
     <ScrollView ref={scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" scrollEnabled={true}>
@@ -473,36 +502,36 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
         <FieldButton variant="secondary" onPress={() => { void remember({ ...cache, stepKey: 'review' }); setOverview(false); }}>Review progress</FieldButton>
       </> : <>
         {currentSection ? <ProgressMeter compact label={currentSection.label} complete={currentSection.complete} total={currentSection.total} /> : null}
-        <Text style={styles.small}>{step?.kind === 'field' ? `${step.field.section}${step.field.repeatGroup ? ` · Item ${step.field.repeatIndex + 1}` : ''}` : step?.kind === 'signature' ? 'Signature' : 'Final review'}</Text><Text style={styles.title}>{title}</Text>
-        {step?.kind === 'field' ? <>
-          {step.field.help ? <Text style={styles.text}>{step.field.help}</Text> : null}
-          {(step.field.referenceDocuments || []).map((document) => { const url = new URL(document.url, API_BASE_URL).toString(); return <View key={url} style={styles.group}><Text style={styles.text}>{document.title}</Text><View style={styles.row}><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => void perform('document', async () => { await Linking.openURL(url); })}>Open document</FieldButton><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => void perform('document', async () => { await Share.share({ message: `${document.title}\n${url}`, url }); })}>Share copy</FieldButton></View></View>; })}
-          {locked ? <Text style={styles.small}>These answers are retained with the signed declaration.</Text> : null}
-          {currentField?.presentation === 'derived' ? <View style={styles.derived}><Text style={styles.text}>{cache.answers[step.field.key] === undefined || cache.answers[step.field.key] === '' ? 'Recorded automatically by TLink.' : String(cache.answers[step.field.key])}</Text><Text style={styles.small}>This value comes from the job, business, assigned team member or signature record.</Text></View> : step.field.type === 'boolean' ? <View style={styles.row}>{[true, false].map((value) => <Pressable key={String(value)} accessibilityRole="radio" accessibilityState={{ selected: cache.answers[step.field.key] === value }} disabled={!editable || locked || Boolean(busy)} onPress={() => answer(step.field.key, value)} style={[styles.choice, cache.answers[step.field.key] === value && styles.selected]}><Text style={styles.text}>{value ? 'Yes' : 'No'}</Text></Pressable>)}</View> : step.field.type === 'select' ? <FieldSelect label="Choose an answer" value={String(cache.answers[step.field.key] ?? '')} options={step.field.options.map((value) => ({ value, label: activityOptionLabel(value, currentField?.optionLabels?.[value]) }))} onChange={(value) => answer(step.field.key, value)} disabled={!editable || locked || Boolean(busy)} /> : ['photo', 'document'].includes(step.field.type) ? <>
-            {evidenceForLabels.length ? <Text style={styles.evidenceBinding}>Evidence for: {evidenceForLabels.join(', ')}</Text> : null}
-            <FieldButton disabled={!editable || locked || Boolean(busy)} loading={busy === 'camera' || busy === 'document'} onPress={() => step.field.type === 'photo' ? void capture(step.field) : void chooseDocument(step.field)}>{step.field.type === 'photo' ? 'Take photo' : 'Choose document'}</FieldButton>
-            <Text style={styles.small}>{savedHere.length} saved · {pendingHere.length} ready to upload</Text>
-            {savedHere.map((item) => <Text key={item.id} style={styles.text}>{item.fileName}{item.latitude !== null ? ` · ${item.latitude.toFixed(5)}, ${item.longitude?.toFixed(5)}` : ''}</Text>)}
-            {pendingHere.map((item) => <View key={item.id} style={styles.group}>{item.contentType.startsWith('image/') ? <Image alt="Pending site evidence" accessibilityLabel="Pending site evidence" source={{ uri: item.uri }} style={styles.preview} resizeMode="contain" /> : null}<Text style={styles.small}>{item.name} · Original retained on this phone</Text><FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => Alert.alert('Remove pending file?', 'This file has not been submitted.', [{ text: 'Keep' }, { text: 'Remove', onPress: () => void perform('remove', async () => { await remember({ ...cache, pending: cache.pending.filter((file) => file.id !== item.id) }); const file = new File(item.uri); if (file.exists) file.delete(); }) }])}>Remove pending file</FieldButton></View>)}
-          </> : step.field.type === 'date' ? <FieldDatePicker label="Choose date" value={String(cache.answers[step.field.key] ?? '')} disabled={!editable || locked || Boolean(busy)} onChange={(value) => answer(step.field.key, value)} /> : <TextInput accessibilityLabel={step.field.label} value={String(cache.answers[step.field.key] ?? '')} editable={editable && !locked && !busy} placeholder="Enter answer" placeholderTextColor={colours.muted} keyboardType={step.field.type === 'number' ? 'decimal-pad' : 'default'} style={styles.input} onChangeText={(value) => answer(step.field.key, step.field.type === 'number' && value !== '' && Number.isFinite(Number(value)) ? Number(value) : value)} />}
-          {step.field.repeatGroup && !locked ? <FieldButton variant="quiet" disabled={!editable || Boolean(busy) || activityRepeatCount(record.form, cache.answers, step.field.repeatGroup) >= 20} onPress={() => { const group = step.field.repeatGroup!; answer(`$repeat.${group}`, activityRepeatCount(record.form, cache.answers, group) + 1); }}>Add another {step.field.repeatGroup.replaceAll('_', ' ')}</FieldButton> : null}
-        </> : step?.kind === 'signature' ? currentSignature ? <Text style={styles.text}>Signed by {currentSignature.signerName} on {new Date(currentSignature.signedAt).toLocaleString('en-AU')}.</Text> : <>
+        <Text style={styles.small}>{step?.kind === 'fields' ? `Section ${stepIndex + 1} of ${pages.length} · ${step.fields.length} items` : step?.kind === 'signature' ? 'Signature' : 'Final review'}</Text><Text style={styles.title}>{title}</Text>
+        {step?.kind === 'fields' ? <>{step.fields.map(renderField)}        </> : step?.kind === 'signature' ? currentSignature ? <Text style={styles.text}>Signed by {currentSignature.signerName} on {new Date(currentSignature.signedAt).toLocaleString('en-AU')}.</Text> : <>
           <Text style={styles.small}>The signing date and time are recorded automatically when this signature is saved.</Text>
           {technicianSignature ? <View style={styles.derived}><Text style={styles.text}>{boundSignerName || 'Assigned technician profile name missing'}</Text><Text style={styles.small}>Technician identity comes from the active team member assigned to this job.</Text></View>
             : <TextInput accessibilityLabel="Signer's full name" value={signature.signerName} placeholder="Signer's full name" placeholderTextColor={colours.muted} editable={editable && !busy} style={styles.input} onChangeText={(signerName) => setSignature({ ...signature, signerName, strokes: [], capturedAt: '' })} />}
-          <FieldButton variant="secondary" onPress={() => setReadingDeclaration(true)}>Read declaration</FieldButton>
+          <FieldButton variant="secondary" onPress={() => setReadingDeclaration(true)}>Read assignment form</FieldButton>
           <Modal visible={readingDeclaration} animationType="slide" onRequestClose={() => setReadingDeclaration(false)}>
             <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-              <ScrollView contentContainerStyle={styles.body}><Text style={styles.title}>{step.declaration.title}</Text><Text style={styles.declaration}>{boundActivityDeclaration(step.declaration, cache.answers)}</Text></ScrollView>
+              <ScrollView contentContainerStyle={styles.body}><ActivityAssignmentReview record={record} answers={cache.answers} declaration={step.declaration} /></ScrollView>
               <View style={styles.footer}><FieldButton style={styles.flex} onPress={() => setReadingDeclaration(false)}>Back to signature</FieldButton></View>
             </View>
           </Modal>
           <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: acknowledged }} disabled={!editable || Boolean(busy)} onPress={() => setAcknowledged(!acknowledged)} style={styles.choice}><Text style={styles.text}>{acknowledged ? '☑' : '☐'} I have read and agree to this declaration.</Text></Pressable>
-          <SignatureCapture key={`${record.id}:${step.key}:${boundSignerName}`} signerRole={signerRole} declaration={boundActivityDeclaration(step.declaration, cache.answers)} showDeclaration={false} value={boundSignature} disabled={!editable || Boolean(busy) || (technicianSignature && !boundSignerName)} onChange={setSignature} />
+          {technicianSignature && !boundSignerName ? <View style={styles.deliveryRecovery}>
+            <Text style={styles.progressLabel}>Set up your signing name once</Text>
+            <Text style={styles.text}>Your team profile needs your personal name for signatures. It will be saved to Teams and filled automatically on future jobs.</Text>
+            {record.signerSetup?.canSave ? <>
+              <TextInput accessibilityLabel="Technician first name" placeholder="First name" placeholderTextColor={colours.muted} style={styles.input} value={proposedSigningName.firstName} editable={!busy && !record.signerSetup.firstNameLocked} onChangeText={(firstName) => setSigningName({ ...proposedSigningName, firstName })} />
+              <TextInput accessibilityLabel="Technician last name" placeholder="Last name" placeholderTextColor={colours.muted} style={styles.input} value={proposedSigningName.lastName} editable={!busy && !record.signerSetup.lastNameLocked} onChangeText={(lastName) => setSigningName({ ...proposedSigningName, lastName })} />
+              <FieldButton disabled={!online || Boolean(busy) || !proposedSigningName.firstName.trim() || !proposedSigningName.lastName.trim()} loading={busy === 'signing-profile'} onPress={() => void perform('signing-profile', async () => {
+                await saveAnswers();
+                await request('save_signing_profile', { firstName: proposedSigningName.firstName, lastName: proposedSigningName.lastName });
+                setSigningName(null);
+              })}>Confirm my name and enable signing</FieldButton>
+            </> : <Text style={styles.text}>The assigned technician needs to open this job on their own device, or have their personal name saved in Teams.</Text>}
+          </View> : <SignatureCapture key={`${record.id}:${step.key}:${boundSignerName}`} signerRole={signerRole} declaration={boundActivityDeclaration(step.declaration, cache.answers)} showDeclaration={false} value={boundSignature} disabled={!editable || Boolean(busy)} onChange={setSignature} />}
         </> : <>
           <Text style={styles.text}>{record.status === 'submitted_for_creditex_review' ? 'Submitted to Creditex. The completed record is saved with this job.' : `${record.missing.length} required item${record.missing.length === 1 ? '' : 's'} remaining.`}</Text>
           {systemMissing.length ? <Text style={styles.error}>TLink is missing system details: {systemMissing.map((item) => item.label).join(', ')}. Update the related portal record and reopen this form.</Text> : null}
-          {fieldMissing.slice(0, 8).map((item) => <FieldButton key={item.key} variant="secondary" onPress={() => { const target = steps.find((entry) => entry.key === item.key); if (target) void remember({ ...cache, stepKey: target.key }); }}>{item.label}</FieldButton>)}
+          {fieldMissing.slice(0, 8).map((item) => <FieldButton key={item.key} variant="secondary" onPress={() => { const target = activityWizardPageForStepKey(pages, item.key); if (target) void remember({ ...cache, stepKey: target.key }); }}>{item.label}</FieldButton>)}
           {fieldMissing.length > 8 ? <Text style={styles.small}>{fieldMissing.length - 8} more questions will follow.</Text> : null}
           {cache.pending.length ? <FieldButton disabled={!online || Boolean(busy)} onPress={() => void perform('upload', async () => { await saveAnswers(); for (const key of new Set(cache.pending.map((item) => item.fieldKey))) await uploadPending(key); })}>Upload {cache.pending.length} pending files</FieldButton> : null}
           {record.status === 'draft' ? <FieldButton disabled={!editable || !online || Boolean(busy) || cache.pending.length > 0} loading={busy === 'submit'} onPress={() => void perform('submit', async () => { await saveAnswers(); await request('submit'); await onChanged(); })}>Submit completed form to Creditex</FieldButton> : <><FieldButton disabled={!online || Boolean(busy)} onPress={() => void share()}>Share completed report</FieldButton><FieldButton variant="secondary" onPress={() => void perform('revoke', async () => { await apiRequest(endpoint, { method: 'POST', body: JSON.stringify({ action: 'revoke_report', recordId: record.id }) }); setError('Previous report links have been revoked.'); })}>Revoke report links</FieldButton></>}
@@ -518,6 +547,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, padding: spacing.sm, borderBottomWidth: 1, borderColor: colours.line },
   footer: { flexDirection: 'row', gap: spacing.sm, padding: spacing.md, borderTopWidth: 1, borderColor: colours.line, backgroundColor: colours.surface },
   title: { color: colours.ink, fontSize: 23, fontWeight: '800' }, text: { color: colours.ink, fontSize: 16, lineHeight: 23 }, small: { color: colours.muted, fontSize: 12, lineHeight: 18 },
+  fieldCard: { gap: spacing.sm, padding: spacing.md, borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm, backgroundColor: colours.surface },
+  fieldLabel: { color: colours.ink, fontSize: 17, lineHeight: 23, fontWeight: '700' },
   section: { color: colours.green, fontSize: 17, fontWeight: '700' }, group: { gap: spacing.sm }, row: { flexDirection: 'row', gap: spacing.sm },
   progress: { gap: spacing.xs, padding: spacing.sm, borderRadius: radius.sm, backgroundColor: colours.surface }, compactProgress: { flex: 1, gap: spacing.xs },
   progressLabels: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm }, progressLabel: { color: colours.ink, fontSize: 14, fontWeight: '700' },

@@ -196,12 +196,14 @@ async function scheduledActivityDocumentReceiptAnswers(ownerUid: string, workOrd
   return {};
 }
 
-export function activityPresentation(record: ActivityRecord) {
+type ActivitySignerSetup = { firstName: string; lastName: string; canSave: boolean; firstNameLocked: boolean; lastNameLocked: boolean };
+
+export function activityPresentation(record: ActivityRecord, signerSetup?: ActivitySignerSetup) {
   const missing = activityMissing(record);
   const total = expandedActivityFields(record.form, record.answers).filter((field) => field.required && field.presentation !== "derived").length
     + record.form.declarations.filter((item) => item.required && activityConditionMet(item.condition, record.answers)).length;
   const userMissing = missing.filter((item) => record.form.fields.find((field) => field.key === activityBaseFieldKey(item.key))?.presentation !== "derived");
-  return { ...record, evidence: record.evidence.map(({ objectKey, previewObjectKey, ...item }) => { void objectKey; void previewObjectKey; return item; }), missing,
+  return { ...record, ...(signerSetup ? { signerSetup } : {}), evidence: record.evidence.map(({ objectKey, previewObjectKey, ...item }) => { void objectKey; void previewObjectKey; return item; }), missing,
     signingScopes: { before: activitySigningScope(record, "before"), after: activitySigningScope(record, "after") },
     progress: { complete: Math.max(0, total - userMissing.length), total },
     reportUrl: record.status === "submitted_for_creditex_review" ? `/api/trade-activity-forms?recordId=${encodeURIComponent(record.id)}&view=pdf` : "" };
@@ -385,6 +387,67 @@ export async function loadActivityRecord(access: TeamAccess, id: string, mutate 
   return { ...record,
     answers: replaceCustomerDocumentReceiptAnswers({ ...refresh.answers, ...profileAnswers }, receiptAnswers),
     signerDefaults: profile.signerDefaults };
+}
+
+async function assignedSigningProfile(access: TeamAccess, record: ActivityRecord) {
+  const job = await assignedJob(access, record.workOrderId);
+  const member = await getD1().prepare(`SELECT member.first_name, member.last_name, member.member_uid,
+      account.contact_name owner_contact_name
+    FROM trade_team_members member LEFT JOIN trade_accounts account ON account.firebase_uid = member.owner_uid
+    WHERE member.id = ? AND member.owner_uid = ? AND member.status = 'active'`)
+    .bind(job.assignee_member_id, access.ownerUid).first<Row>();
+  return { job, member };
+}
+
+export async function activitySigningProfileSetup(access: TeamAccess, record: ActivityRecord): Promise<ActivitySignerSetup | undefined> {
+  if (record.status !== "draft") return undefined;
+  const { job, member } = await assignedSigningProfile(access, record);
+  if (!member) return undefined;
+  const firstName = string(member.first_name, 80); const lastName = string(member.last_name, 80);
+  if (firstName && lastName) return undefined;
+  // The account contact is only a suggestion for an owner signing as themselves.
+  // It never becomes a technician identity until the member confirms and saves it.
+  const candidate = member.member_uid === access.ownerUid ? string(member.owner_contact_name, 120).split(/\s+/).filter(Boolean) : [];
+  const candidateLastName = candidate.length > 1 ? candidate.pop()! : "";
+  return { firstName: firstName || candidate.join(" "), lastName: lastName || candidateLastName,
+    firstNameLocked: Boolean(firstName), lastNameLocked: Boolean(lastName),
+    canSave: job.assignee_member_id === access.memberId && (access.isOwner || access.canManageFieldEvidence) };
+}
+
+export async function saveActivitySigningProfile(access: TeamAccess, id: string, body: Row) {
+  const record = await loadActivityRecord(access, id, true);
+  assertActivityEditable(record, record.revision);
+  const { job, member } = await assignedSigningProfile(access, record);
+  if (!member || job.assignee_member_id !== access.memberId) throw new Error("ACTIVITY_TECHNICIAN_SIGNER_NOT_ASSIGNED");
+  const existingFirst = string(member.first_name, 80); const existingLast = string(member.last_name, 80);
+  if (existingFirst && existingLast) return record;
+  const firstName = existingFirst || string(body.firstName, 80);
+  const lastName = existingLast || string(body.lastName, 80);
+  if (!firstName || !lastName) throw new Error("ACTIVITY_SIGNING_PROFILE_NAME_REQUIRED");
+  const db = getD1(); const now = iso();
+  const result = await db.batch([
+    db.prepare(`UPDATE trade_team_members SET
+        first_name = CASE WHEN TRIM(COALESCE(first_name, '')) = '' THEN ? ELSE first_name END,
+        last_name = CASE WHEN TRIM(COALESCE(last_name, '')) = '' THEN ? ELSE last_name END,
+        updated_at = ?
+      WHERE id = ? AND owner_uid = ? AND status = 'active' AND first_name IS ? AND last_name IS ?
+        AND EXISTS (SELECT 1 FROM trade_work_orders work WHERE work.id = ? AND work.firebase_uid = ?
+          AND work.record_status = 'active' AND work.assignee_member_id = trade_team_members.id)
+        AND EXISTS (SELECT 1 FROM trade_activity_field_records record
+          JOIN trade_work_order_compliance_intents intent ON intent.id = record.intent_id
+          WHERE record.id = ? AND record.owner_uid = ? AND record.status = 'draft'
+            AND intent.status IN ('planned', 'case_linked'))`)
+      .bind(firstName, lastName, now, access.memberId, access.ownerUid, member.first_name, member.last_name,
+        record.workOrderId, access.ownerUid, id, access.ownerUid),
+    db.prepare(`INSERT INTO trade_team_member_events
+      (id, owner_uid, team_member_id, actor_uid, entity_type, entity_id, event_type, metadata, created_at)
+      SELECT ?, ?, ?, ?, 'member', ?, 'member.signing_name_confirmed', ?, ? WHERE changes() = 1`)
+      .bind(crypto.randomUUID(), access.ownerUid, access.memberId, access.actorUid, access.memberId,
+        JSON.stringify({ source: "activity_signature", recordId: id,
+          filledFirstName: !existingFirst, filledLastName: !existingLast }), now),
+  ]);
+  if (result[0]?.meta.changes !== 1) throw new Error("ACTIVITY_SIGNING_PROFILE_CHANGED");
+  return loadActivityRecord(access, id, true);
 }
 
 export async function listActivityRecords(access: TeamAccess, workOrderId: string) {

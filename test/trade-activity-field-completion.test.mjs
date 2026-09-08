@@ -4,6 +4,7 @@ import test from "node:test";
 import { UNFINISHED_ACTIVITY_FIELD_INTENTS_SQL, submittedActivityFieldCaseSql, submittedActivityFieldRecordSql } from "../src/lib/trade-activity-forms-completion.ts";
 import {
   ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS,
+  INSTALLER_ID_SELFIE_FIELD_KEY,
   activityConsumerDocuments,
   activityFieldCatalogue,
   activityPrefill,
@@ -104,6 +105,16 @@ test("all current selectable activities have specific runnable fields and no mis
     const defaultForm = defaultActivityFieldForm(item.activityTemplateId);
     for (const form of [defaultForm, ...defaultForm.variantOptions.filter((variant) => variant.id !== defaultForm.variantId).map((variant) => defaultActivityFieldForm(item.activityTemplateId, variant.id))]) {
     assert.ok(form.fields.length > 0, item.activityTemplateId); assert.equal(form.activityTemplateId, item.activityTemplateId);
+    const installerSelfies = form.fields.filter((field) => field.key === INSTALLER_ID_SELFIE_FIELD_KEY);
+    assert.equal(installerSelfies.length, 1, `${item.activityTemplateId}/${form.variantId}: one installer ID selfie`);
+    assert.deepEqual(installerSelfies[0], {
+      key: INSTALLER_ID_SELFIE_FIELD_KEY, section: "Start of job", label: "Take a selfie holding your installer ID",
+      type: "photo", required: true, options: [],
+      help: "Before work starts, take a clear selfie at the job address showing your face and installer ID. TLink records the capture time and GPS location.",
+      phase: "before", requireLocation: true,
+    });
+    assert.equal(form.fields.find((field) => field.phase === "before")?.key, INSTALLER_ID_SELFIE_FIELD_KEY);
+    assert.equal(activityWizardSteps(form, {})[0]?.key, INSTALLER_ID_SELFIE_FIELD_KEY);
     assert.equal(new Set(form.fields.map((field) => field.key)).size, form.fields.length);
     assert.ok(form.declarations.some((declaration) => declaration.role === "technician"));
     assert.ok(form.fields.every((field) => !/Attach the signed Creditex|Does this condition apply/.test(`${field.label} ${field.help}`)), item.activityTemplateId);
@@ -442,6 +453,9 @@ test("saved masters cannot invent derived facts or weaken baseline receipts, evi
   const evidenceKey = "evidence.air-conditioner-existing";
   const removedDeclaration = baseline.declarations.at(-1);
   stale.fields = stale.fields.filter((field) => !receiptKeys.has(field.key) && field.key !== evidenceKey);
+  stale.fields = stale.fields.filter((field) => field.key !== INSTALLER_ID_SELFIE_FIELD_KEY);
+  stale.fields.unshift({ key: "custom.installer_badge_selfie", section: "Custom", label: "Installer badge selfie",
+    type: "photo", required: false, options: [], help: "Installer identity", phase: "after", requireLocation: false });
   stale.fields.push({ key: "disclosures.veu_factsheet_given", section: "Customer information", label: "Has the customer received the factsheet?",
     type: "boolean", required: true, options: [], help: "", phase: "before" });
   stale.fields.push({ key: "custom.spoofed_job_fact", section: "Custom", label: "Spoofed", type: "text", required: true, options: [], help: "",
@@ -451,6 +465,8 @@ test("saved masters cannot invent derived facts or weaken baseline receipts, evi
   if (sourcedDeclaration) { sourcedDeclaration.title = "Weakened declaration"; sourcedDeclaration.text = "Weakened text"; sourcedDeclaration.required = false; }
   delete stale.fields.find((field) => field.key === "baseline.scenario").optionLabels;
   const upgraded = applyDefaultActivityFormPolicy(stale, baseline);
+  assert.equal(upgraded.fields.filter((field) => /installer.*(?:badge|id).*selfie|installer-id-selfie/i.test(field.key)).length, 1);
+  assert.deepEqual(upgraded.fields.find((field) => field.key === INSTALLER_ID_SELFIE_FIELD_KEY), baseline.fields[0]);
   assert.ok(!upgraded.fields.some((field) => field.key === "disclosures.veu_factsheet_given"));
   const spoofed = upgraded.fields.find((field) => field.key === "custom.spoofed_job_fact");
   assert.equal(spoofed.presentation, undefined); assert.equal(spoofed.autofill, undefined);
@@ -468,6 +484,26 @@ test("saved masters cannot invent derived facts or weaken baseline receipts, evi
     .filter((item) => Object.values(ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS).includes(item.key)), []);
 });
 
+test("saved master policy preserves an equivalent baseline installer ID selfie key and evidence", () => {
+  const baseline = defaultActivityFieldForm("veu-6", "veu_6_residential");
+  const canonical = baseline.fields.find((field) => field.key === INSTALLER_ID_SELFIE_FIELD_KEY);
+  const equivalent = {
+    ...canonical,
+    key: "evidence.approved-installer-id-selfie",
+    evidenceFor: ["installer.identity"],
+  };
+  baseline.fields = [equivalent, ...baseline.fields.filter((field) => field.key !== INSTALLER_ID_SELFIE_FIELD_KEY)];
+  const saved = structuredClone(baseline);
+  saved.fields.unshift({ ...canonical, required: false, requireLocation: false });
+
+  const governed = applyDefaultActivityFormPolicy(saved, baseline);
+  const selfieFields = governed.fields.filter((field) => /installer.*(?:id|identity|badge).*selfie|installer-id-selfie/i
+    .test(`${field.key} ${field.label} ${field.help}`));
+  assert.equal(selfieFields.length, 1);
+  assert.equal(selfieFields[0].key, equivalent.key);
+  assert.deepEqual(selfieFields[0].evidenceFor, equivalent.evidenceFor);
+  assert.ok(!governed.fields.some((field) => field.key === INSTALLER_ID_SELFIE_FIELD_KEY));
+});
 test("specialist crew details prefill from the assigned team and business profiles but remain editable", () => {
   const form = defaultActivityFieldForm("veu-6", "veu_6_residential");
   const context = { address: "1 Test Street, Melbourne VIC 3000", customerName: "Pat Customer",

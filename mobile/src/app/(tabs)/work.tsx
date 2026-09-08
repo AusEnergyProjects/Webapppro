@@ -37,7 +37,7 @@ function dateKey(value: Date | string) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-type QuickAction = 'menu' | 'quote' | 'invoice';
+type QuickAction = 'menu';
 
 function JobCard({ job }: { job: FieldJob }) {
   const done = job.tasks.filter((task) => task.status === 'done').length;
@@ -74,9 +74,6 @@ export default function WorkScreen() {
   const [commercialPermissions, setCommercialPermissions] = useState<FieldPermissions | null>(null);
   const [permissionBusy, setPermissionBusy] = useState(false);
   const [permissionError, setPermissionError] = useState('');
-  const commercialJobs = useMemo(() => jobs
-    .filter((job) => !job.protectedJob && job.fieldLane !== 'creditex_manual' && job.stage !== 'cancelled')
-    .sort((left, right) => (left.appointmentStartsAt || left.scheduledStart || left.updatedAt).localeCompare(right.appointmentStartsAt || right.scheduledStart || right.updatedAt)), [jobs]);
 
   function chooseToday() {
     const today = new Date();
@@ -104,15 +101,11 @@ export default function WorkScreen() {
   }
 
   function chooseCommercial(kind: 'quote' | 'invoice') {
-    const allowed = kind === 'quote' ? commercialPermissions?.canManageQuotes : commercialPermissions?.canManageInvoices;
+    const allowed = kind === 'quote' ? commercialPermissions?.canManageQuotes && commercialPermissions?.canCreateJobs : commercialPermissions?.canManageInvoices;
     if (!sync.online) return Alert.alert('Reconnect to continue', `A new ${kind} needs a live connection.`);
     if (!allowed) return Alert.alert(`New ${kind} is controlled in TLink`, `Ask your TLink administrator to switch on Manage ${kind === 'quote' ? 'quotes' : 'invoices'} for your field access.`);
-    setQuickAction(kind);
-  }
-
-  function openCommercialJob(job: FieldJob, kind: 'quote' | 'invoice') {
     setQuickAction(null);
-    router.push({ pathname: '/job/[id]', params: { id: job.id, openCommercial: kind } });
+    router.push({ pathname: '/new-commercial', params: { kind } });
   }
 
   return (
@@ -142,17 +135,14 @@ export default function WorkScreen() {
       <Modal animationType="fade" transparent visible={quickAction !== null} onRequestClose={() => setQuickAction(null)}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close new action menu" onPress={() => setQuickAction(null)} style={styles.modalBackdrop}>
           <Pressable accessibilityViewIsModal onPress={(event) => event.stopPropagation()} style={styles.actionSheet}>
-            <View style={styles.actionHeader}><View><Text style={styles.actionEyebrow}>QUICK CREATE</Text><Text style={styles.actionTitle}>{quickAction === 'menu' ? 'What do you need?' : `Choose a job for a new ${quickAction}`}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => setQuickAction(null)} style={styles.actionClose}><MaterialCommunityIcons name="close" color={colours.ink} size={25} /></Pressable></View>
-            {quickAction === 'menu' ? <>
+            <View style={styles.actionHeader}><View><Text style={styles.actionEyebrow}>QUICK CREATE</Text><Text style={styles.actionTitle}>What do you need?</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => setQuickAction(null)} style={styles.actionClose}><MaterialCommunityIcons name="close" color={colours.ink} size={25} /></Pressable></View>
+            <>
               <Pressable accessibilityRole="button" onPress={addJob} style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}><MaterialCommunityIcons name="calendar-plus" color={colours.green} size={27} /><View style={styles.actionCopy}><Text style={styles.actionLabel}>New job</Text><Text style={styles.actionDetail}>{user?.permissions.canCreateJobs ? 'Customer, work, worker and appointment' : 'Requires Create jobs in Team permissions'}</Text></View><MaterialCommunityIcons name="chevron-right" color={colours.green} size={24} /></Pressable>
-              {commercialPermissions?.canManageQuotes ? <Pressable accessibilityRole="button" disabled={permissionBusy} onPress={() => chooseCommercial('quote')} style={({ pressed }) => [styles.actionRow, pressed && styles.pressed, !commercialPermissions?.canManageQuotes && styles.actionLocked]}><MaterialCommunityIcons name="file-document-edit-outline" color={colours.green} size={27} /><View style={styles.actionCopy}><Text style={styles.actionLabel}>New quote</Text><Text style={styles.actionDetail}>{permissionBusy ? 'Checking current Team permissions...' : commercialPermissions?.canManageQuotes ? 'Choose a direct customer job' : 'Requires Manage quotes in Team permissions'}</Text></View><MaterialCommunityIcons name={commercialPermissions?.canManageQuotes ? 'chevron-right' : 'lock-outline'} color={colours.muted} size={22} /></Pressable> : null}
-              {commercialPermissions?.canManageInvoices ? <Pressable accessibilityRole="button" disabled={permissionBusy} onPress={() => chooseCommercial('invoice')} style={({ pressed }) => [styles.actionRow, pressed && styles.pressed, !commercialPermissions?.canManageInvoices && styles.actionLocked]}><MaterialCommunityIcons name="receipt-text-plus-outline" color={colours.green} size={27} /><View style={styles.actionCopy}><Text style={styles.actionLabel}>New invoice</Text><Text style={styles.actionDetail}>{permissionBusy ? 'Checking current Team permissions...' : commercialPermissions?.canManageInvoices ? 'Choose a direct customer job' : 'Requires Manage invoices in Team permissions'}</Text></View><MaterialCommunityIcons name={commercialPermissions?.canManageInvoices ? 'chevron-right' : 'lock-outline'} color={colours.muted} size={22} /></Pressable> : null}
+              {commercialPermissions?.canManageQuotes && commercialPermissions?.canCreateJobs ? <Pressable accessibilityRole="button" disabled={permissionBusy} onPress={() => chooseCommercial('quote')} style={({ pressed }) => [styles.actionRow, pressed && styles.pressed, !commercialPermissions?.canManageQuotes && styles.actionLocked]}><MaterialCommunityIcons name="file-document-edit-outline" color={colours.green} size={27} /><View style={styles.actionCopy}><Text style={styles.actionLabel}>New quote</Text><Text style={styles.actionDetail}>{permissionBusy ? 'Checking current Team permissions...' : commercialPermissions?.canManageQuotes ? 'Search a customer, add the work, then price it' : 'Requires Manage quotes in Team permissions'}</Text></View><MaterialCommunityIcons name={commercialPermissions?.canManageQuotes ? 'chevron-right' : 'lock-outline'} color={colours.muted} size={22} /></Pressable> : null}
+              {commercialPermissions?.canManageInvoices ? <Pressable accessibilityRole="button" disabled={permissionBusy} onPress={() => chooseCommercial('invoice')} style={({ pressed }) => [styles.actionRow, pressed && styles.pressed, !commercialPermissions?.canManageInvoices && styles.actionLocked]}><MaterialCommunityIcons name="receipt-text-plus-outline" color={colours.green} size={27} /><View style={styles.actionCopy}><Text style={styles.actionLabel}>New invoice</Text><Text style={styles.actionDetail}>{permissionBusy ? 'Checking current Team permissions...' : commercialPermissions?.canManageInvoices ? 'Search jobs by customer, mobile, email or address' : 'Requires Manage invoices in Team permissions'}</Text></View><MaterialCommunityIcons name={commercialPermissions?.canManageInvoices ? 'chevron-right' : 'lock-outline'} color={colours.muted} size={22} /></Pressable> : null}
               {permissionBusy ? <Text style={styles.actionDetail}>Loading actions...</Text> : null}
               {permissionError ? <Text accessibilityLiveRegion="polite" style={styles.actionError}>{permissionError}</Text> : null}
-            </> : quickAction === 'quote' || quickAction === 'invoice' ? <ScrollView style={styles.jobPicker} contentContainerStyle={styles.jobPickerContent}>
-              {commercialJobs.map((job) => <Pressable key={job.id} accessibilityRole="button" onPress={() => openCommercialJob(job, quickAction)} style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}><MaterialCommunityIcons name={quickAction === 'quote' ? 'file-document-edit-outline' : 'receipt-text-plus-outline'} color={colours.green} size={27} /><View style={styles.actionCopy}><Text style={styles.actionLabel}>{job.title || job.customerName || 'Direct customer job'}</Text><Text style={styles.actionDetail}>{job.workNumber} | {stageLabel(job.stage)}</Text></View><MaterialCommunityIcons name="chevron-right" color={colours.green} size={24} /></Pressable>)}
-              {!commercialJobs.length ? <View style={styles.actionEmpty}><Text style={styles.actionLabel}>No direct customer jobs available</Text><Text style={styles.actionDetail}>Create a job first, then add its {quickAction}.</Text></View> : null}
-            </ScrollView> : null}
+            </>
           </Pressable>
         </Pressable>
       </Modal>
@@ -218,8 +208,5 @@ const styles = StyleSheet.create({
   actionLabel: { color: colours.ink, fontSize: 17, fontWeight: '800' },
   actionDetail: { color: colours.muted, lineHeight: 19 },
   actionError: { color: colours.red, lineHeight: 20, padding: spacing.sm },
-  actionEmpty: { alignItems: 'center', gap: spacing.sm, padding: spacing.lg },
-  jobPicker: { flexGrow: 0 },
-  jobPickerContent: { gap: spacing.sm, paddingBottom: spacing.sm },
   addButton: { position: 'absolute', right: spacing.lg, bottom: spacing.lg, width: 62, height: 62, borderRadius: 22, backgroundColor: colours.green, alignItems: 'center', justifyContent: 'center', elevation: 8, shadowColor: '#001f21', shadowOpacity: 0.24, shadowRadius: 10, shadowOffset: { width: 0, height: 5 } },
 });

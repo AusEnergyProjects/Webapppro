@@ -67,10 +67,13 @@ export function boundActivityDeclaration(declaration: ActivityDeclaration, answe
 }
 
 export type ActivityWizardStep = { key: string; kind: 'field'; field: ExpandedActivityField } | { key: string; kind: 'signature'; declaration: ActivityDeclaration } | { key: 'review'; kind: 'review' };
+const visibleActivityWizardFields = (form: ActivityForm, answers: ActivityAnswers) => expandedActivityFields(form, answers)
+  .filter((field) => field.presentation !== 'derived'
+    && !/^job\.(?:assignee|trade|credential|credentialType)\./.test(field.autofill || ''));
+
 export function activityWizardSteps(form: ActivityForm, answers: ActivityAnswers): ActivityWizardStep[] {
   const steps: ActivityWizardStep[] = [];
-  const fields = expandedActivityFields(form, answers).filter((field) => field.presentation !== 'derived'
-    && !/^job\.(?:assignee|trade|credential|credentialType)\./.test(field.autofill || ''));
+  const fields = visibleActivityWizardFields(form, answers);
   for (const phase of ['before', 'after'] as const) {
     steps.push(...fields.filter((field) => field.phase === phase).map((field): ActivityWizardStep => ({ key: field.key, kind: 'field', field })));
     for (const declaration of form.declarations.filter((item) => item.phase === phase && fieldConditionMet(item.condition, answers))) {
@@ -78,4 +81,54 @@ export function activityWizardSteps(form: ActivityForm, answers: ActivityAnswers
     }
   }
   return [...steps, { key: 'review', kind: 'review' }];
+}
+
+export const ACTIVITY_WIZARD_PAGE_FIELD_LIMIT = 5;
+export type ActivityWizardPage =
+  | { key: string; kind: 'fields'; phase: ActivityField['phase']; section: string;
+    fields: ExpandedActivityField[]; legacyStepKeys: string[] }
+  | { key: string; kind: 'signature'; phase: ActivityDeclaration['phase']; declaration: ActivityDeclaration;
+    legacyStepKeys: string[] }
+  | { key: 'review'; kind: 'review'; legacyStepKeys: ['review'] };
+
+/**
+ * Groups the existing conditional/repeating field stream into short pages without
+ * changing field keys. A repeated item remains together where its field count
+ * allows, and declarations and final review always keep their own pages.
+ */
+export function activityWizardPages(form: ActivityForm, answers: ActivityAnswers): ActivityWizardPage[] {
+  const pages: ActivityWizardPage[] = [];
+  const fields = visibleActivityWizardFields(form, answers);
+  for (const phase of ['before', 'after'] as const) {
+    let pageFields: ExpandedActivityField[] = [];
+    let pageIdentity = '';
+    const flush = () => {
+      if (!pageFields.length) return;
+      pages.push({ key: pageFields[0].key, kind: 'fields', phase, section: pageFields[0].section,
+        fields: pageFields, legacyStepKeys: pageFields.map((field) => field.key) });
+      pageFields = [];
+      pageIdentity = '';
+    };
+    for (const field of fields.filter((item) => item.phase === phase)) {
+      const identity = field.repeatGroup
+        ? `${field.section}\u0000${field.repeatGroup}\u0000${field.repeatIndex}`
+        : `${field.section}\u0000single`;
+      if (pageFields.length && (pageIdentity !== identity || pageFields.length >= ACTIVITY_WIZARD_PAGE_FIELD_LIMIT)) flush();
+      if (!pageFields.length) pageIdentity = identity;
+      pageFields.push(field);
+    }
+    flush();
+    for (const declaration of form.declarations.filter((item) => item.phase === phase && fieldConditionMet(item.condition, answers))) {
+      pages.push({ key: declaration.key, kind: 'signature', phase, declaration, legacyStepKeys: [declaration.key] });
+    }
+  }
+  return [...pages, { key: 'review', kind: 'review', legacyStepKeys: ['review'] }];
+}
+
+/** Resolves both current page keys and the former one-question step keys. */
+export function activityWizardPageForStepKey(pages: readonly ActivityWizardPage[], requestedStepKey: string) {
+  const declarationKey = requestedStepKey.replace(/:read:\d+$/, '');
+  return pages.find((page) => page.key === requestedStepKey
+    || page.legacyStepKeys.some((key) => key === requestedStepKey)
+    || page.kind === 'signature' && page.key === declarationKey);
 }

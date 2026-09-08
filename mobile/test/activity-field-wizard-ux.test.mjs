@@ -197,7 +197,7 @@ test('the native wizard uses Expo 57 File parts and hierarchical back navigation
   assert.doesNotMatch(wizard, /as unknown as Blob/);
   assert.match(wizard, /usePreventRemove\(true/);
   assert.match(wizard, /if \(!overview\) \{\s*setOverview\(true\)/);
-  assert.match(wizard, /activityOptionLabel\(value, currentField\?\.optionLabels\?\.\[value\]\)/);
+  assert.match(wizard, /activityOptionLabel\(value, field\?\.optionLabels\?\.\[value\]\)/);
   assert.match(wizard, /resend_activity_customer_documents/);
   assert.match(wizard, /customerDocumentDelivery\.applicable && !customerDocumentDelivery\.accepted/);
   assert.match(wizard, /Job or profile details need attention/);

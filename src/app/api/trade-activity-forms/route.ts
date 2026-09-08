@@ -8,7 +8,7 @@ import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-j
 import { activityFieldCatalogue, applyDefaultActivityFormPolicy, defaultActivityFieldForm } from "@/lib/trade-activity-forms-library";
 import { activityCanonical, activityHash, normaliseActivityAnswers, type ActivityForm } from "@/lib/trade-activity-forms";
 import {
-  activityPresentation, changeActivityVariant, listActivityRecords, loadActivityRecord, openActivityRecord, readActivityConsumerDocument, readActivityEvidence, readActivityPdf,
+  activityPresentation, activitySigningProfileSetup, saveActivitySigningProfile, changeActivityVariant, listActivityRecords, loadActivityRecord, openActivityRecord, readActivityConsumerDocument, readActivityEvidence, readActivityPdf,
   saveActivityAnswers, shareActivityReport, sharedActivityRecord, signActivityDeclaration, submitActivityRecord, uploadActivityEvidence,
 } from "@/lib/trade-activity-forms-server";
 
@@ -28,6 +28,8 @@ const errorMessages: Record<string, [number, string]> = {
   ACTIVITY_ALREADY_SUBMITTED: [409, "This completed record has already been provided to Creditex."],
   ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED: [409, "Resend the required customer documents and wait for the email provider to accept them before customer agreement."],
   ACTIVITY_TECHNICIAN_SIGNER_NOT_ASSIGNED: [409, "The assigned technician must sign this work. Check the job's worker assignment."],
+  ACTIVITY_SIGNING_PROFILE_NAME_REQUIRED: [400, "Add your first and last name for technician signing."],
+  ACTIVITY_SIGNING_PROFILE_CHANGED: [409, "Your team profile or job assignment changed. Reopen this signature to use the current details."],
   ACTIVITY_TECHNICIAN_IDENTITY_REQUIRED: [409, "Add the assigned technician's name in Teams, then return to this job."],
   ACTIVITY_SIGNED_SCOPE_LOCKED: [409, "These details have been signed. Signed details must stay unchanged. After-work fields remain available after before-work signing."],
   ACTIVITY_SIGNING_NOT_READY: [409, "Complete the required fields and evidence for this stage before signing."],
@@ -197,7 +199,7 @@ export async function GET(request: Request) {
       const record = await loadActivityRecord(access, id);
       if (query.get("view") === "pdf") return bytesResponse(await readActivityPdf(record));
       if (query.get("view") === "evidence") return bytesResponse(await readActivityEvidence(record, query.get("evidenceId") || ""));
-      return adminJson({ ok: true, record: activityPresentation(record) });
+      return adminJson({ ok: true, record: activityPresentation(record, record.signerDefaults.technician ? undefined : await activitySigningProfileSetup(access, record)) });
     }
     return adminJson({ ok: true, records: await listActivityRecords(access, query.get("workOrderId") || "") });
   } catch (error) { return failure(error); }
@@ -221,7 +223,7 @@ export async function POST(request: Request) {
       if (!(file instanceof File)) throw new Error("INVALID_ACTIVITY_FILE");
       const preview = data.get("preview");
       const record = await uploadActivityEvidence(access, String(data.get("recordId") || ""), Number(data.get("expectedRevision")), String(data.get("fieldKey") || ""), file, JSON.parse(String(data.get("captureMetadata") || "{}")), String(data.get("clientUploadId") || ""), preview instanceof File ? preview : undefined);
-      return adminJson({ ok: true, record: activityPresentation(record) });
+      return adminJson({ ok: true, record: activityPresentation(record, record.signerDefaults.technician ? undefined : await activitySigningProfileSetup(access, record)) });
     }
     const parsed = await readBoundedJsonRequest(request, 1024 * 1024);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("INVALID_ACTIVITY_REQUEST");
@@ -254,12 +256,13 @@ export async function POST(request: Request) {
     const access = await requireInstallerTeamAccess(request); const id = str(body.recordId);
     if (action === "share_report" || action === "revoke_report") return adminJson({ ok: true, reportUrl: await shareActivityReport(access, id, new URL(request.url).origin, action === "revoke_report") });
     const record = action === "open" ? await openActivityRecord(access, str(body.workOrderId), str(body.intentId), str(body.variantId))
+      : action === "save_signing_profile" ? await saveActivitySigningProfile(access, id, body)
       : action === "save" ? await saveActivityAnswers(access, id, body.expectedRevision, body.answers, body.baseAnswers)
       : action === "change_variant" ? await changeActivityVariant(access, id, body.expectedRevision, str(body.variantId))
       : action === "sign" ? await signActivityDeclaration(access, id, body)
       : action === "submit" ? await submitActivityRecord(access, id, body.expectedRevision)
       : null;
     if (!record) throw new Error("INVALID_ACTIVITY_ACTION");
-    return adminJson({ ok: true, record: activityPresentation(record) });
+    return adminJson({ ok: true, record: activityPresentation(record, record.signerDefaults.technician ? undefined : await activitySigningProfileSetup(access, record)) });
   } catch (error) { return failure(error); }
 }

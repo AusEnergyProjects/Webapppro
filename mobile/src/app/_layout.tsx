@@ -25,6 +25,7 @@ function AppNavigation() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="job/[id]" options={{ title: 'Job details', headerBackTitle: 'Work' }} />
           <Stack.Screen name="new-job" options={{ title: 'New field job', headerBackTitle: 'Schedule' }} />
+          <Stack.Screen name="new-commercial" options={{ title: 'Quote or invoice', headerBackTitle: 'Work' }} />
         </Stack.Protected>
       </Stack>
     </>

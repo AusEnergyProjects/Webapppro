@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (file) => fs.readFileSync(path.join(here, file), 'utf8');
 const work = read('../src/app/(tabs)/work.tsx');
-const job = read('../src/app/job/[id].tsx');
+const quickCommercial = read('../src/app/new-commercial.tsx');
 const commercial = read('../src/components/field-commercial-workspace.tsx');
 const accessRoute = read('../../src/app/api/field/access/route.ts');
 const fieldPermissions = read('../../src/lib/trade-field-permissions.ts');
@@ -23,15 +23,22 @@ test('schedule plus menu offers permission-aware job, quote and invoice actions'
   assert.match(work, /user\?\.permissions\.canCreateJobs/);
   assert.match(work, /commercialPermissions\?\.canManageQuotes/);
   assert.match(work, /commercialPermissions\?\.canManageInvoices/);
-  assert.match(work, /!job\.protectedJob && job\.fieldLane !== 'creditex_manual'/);
+  assert.match(work, /pathname: '\/new-commercial'/);
+  assert.doesNotMatch(work, /commercialJobs\.map/);
 });
 
-test('commercial quick actions deep-link to the existing native job editor', () => {
-  assert.match(work, /pathname: '\/job\/\[id\]'/);
-  assert.match(work, /params: \{ id: job\.id, openCommercial: kind \}/);
-  assert.match(job, /useLocalSearchParams<\{ id: string; openCommercial\?: string \}>/);
-  assert.match(job, /openCommercial === 'quote' \|\| openCommercial === 'invoice'/);
-  assert.match(job, /<FieldCommercialWorkspace workOrderId=\{job\.id\} selected=\{activeFormId\}/);
+test('commercial quick actions are search-first and reuse the native line editor', () => {
+  assert.match(quickCommercial, /Name, mobile, email or address/);
+  assert.match(quickCommercial, /if \(term\.length < 2\)/);
+  assert.match(quickCommercial, /find_quick_quote_customers/);
+  assert.match(quickCommercial, /result\.matches\.slice\(0, 10\)/);
+  assert.match(quickCommercial, /resource=jobs&search=\$\{encodeURIComponent\(term\)\}&pageSize=25&total=0&commercial=invoice/);
+  assert.match(quickCommercial, /item\.customerSource !== 'platform_private' && item\.stage !== 'cancelled'/);
+  assert.match(quickCommercial, /\.slice\(0, 10\)/);
+  assert.match(quickCommercial, /action: 'create_quick_quote_job'/);
+  assert.match(quickCommercial, /<FieldCommercialWorkspace/);
+  assert.match(quickCommercial, /stage !== 'editor'/);
+  assert.match(quickCommercial, /Retry work types/);
   assert.match(commercial, /kind === 'quote' \? '\/api\/trade-quotes' : '\/api\/trade-quick-invoices'/);
 });
 
