@@ -184,11 +184,21 @@ test("appointments expose compact quote state without bypassing the existing quo
   assert.doesNotMatch(teamPortal, /onOpenQuote=/);
 });
 
+test("completed appointments remain visible while cancelled jobs stay hidden", () => {
+  assert.match(route, /a\.status IN \('scheduled', 'en_route', 'arrived', 'in_progress', 'completed'\)/);
+  assert.match(route, /AND w\.stage <> 'cancelled'/);
+  assert.match(route, /COALESCE\(d\.pipeline_stage, ''\) <> 'lost'/);
+  assert.match(route, /appointmentRows\.results\.filter\(\(row\) => row\.status !== "completed"\)/);
+  assert.match(ui, /item\.status === "completed" && <b>Completed<\/b>/);
+  assert.match(ui, /const canEditAppointment = calendarCanReschedule && item\.status !== "completed"/);
+  assert.match(ui, /selectedAppointment\.status !== "completed"/);
+});
+
 test("the installer dashboard exposes stable one-week scheduling with adjacent drag buffering", () => {
   for (const copy of ["One clear week at a time", "Go to week", "Previous week", "Next week", "Today", "Swipe to change week", "Hold for previous week", "Hold for next week", "Add to schedule", "Set working hours and time off", "minuteFromPointer", "moveAppointmentToDate", "outsideWorkingHours", "memberLabel", "ownerMemberId", "schedule_appointment", "schedule_job", "save_schedule_changes", "Save schedule changes", "Discard"]) assert.match(ui, new RegExp(copy));
   assert.doesNotMatch(ui, /Conflicts only|Overlaps selected time|same-worker overlap/);
   assert.match(ui, /const calendarCanReschedule = canRescheduleJobs/);
-  assert.match(ui, /draggable=\{calendarCanReschedule && !busy && !loading\}/);
+  assert.match(ui, /draggable=\{canEditAppointment && !busy && !loading\}/);
   assert.match(ui, /const SCHEDULE_BUFFER_WEEKS = 3/);
   assert.match(ui, /const days = scheduleWeekDays\(bufferedWeekStart\)/);
   assert.match(ui, /appointmentsByDate = useMemo/);

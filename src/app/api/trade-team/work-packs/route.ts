@@ -3,6 +3,7 @@ import { adminJson } from "@/lib/admin-server";
 import {
   readBoundedJsonRequest,
 } from "@/lib/bounded-json-request";
+import { getCreditexCustodyBucket } from "@/lib/creditex-custody-bucket";
 import {
   captureAssignedCreditexActivityWorkPackSignatures,
   commitAssignedCreditexActivityWorkPack,
@@ -31,6 +32,7 @@ import {
   reconcileReadyPlannedComplianceWorkPacks,
 } from "@/lib/creditex-compliance-server";
 import {
+  assignedWorkPackBytesResponse,
   assignedWorkPackError,
   assignedWorkPackOrigin,
   assignedWorkPackRequestScope,
@@ -40,6 +42,16 @@ export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 const MAXIMUM_WORK_PACK_REQUEST_BYTES = 512 * 1024;
+const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+
+type AssignedArtifactRecord = {
+  custody_locator: string;
+  original_file_name: string;
+  content_type: string;
+  size_bytes: number;
+  original_sha256: string;
+  integrity_receipt_id: string;
+};
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -60,12 +72,168 @@ function idempotency(value: unknown): CreditexWorkPackMutationIdempotency {
   };
 }
 
+function exactArtifactParameter(search: URLSearchParams, key: string) {
+  const value = String(search.get(key) || "").trim();
+  return value.length <= 240 ? value : "";
+}
+
+async function sha256(value: Uint8Array) {
+  const exact = new Uint8Array(value.byteLength);
+  exact.set(value);
+  const digest = await crypto.subtle.digest("SHA-256", exact.buffer);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function assignedArtifactResponse(
+  scope: Awaited<ReturnType<typeof assignedWorkPackRequestScope>>,
+  search: URLSearchParams,
+) {
+  if (!scope.canViewFieldEvidence) {
+    return adminJson({
+      ok: false,
+      code: "FIELD_EVIDENCE_ACCESS_REQUIRED",
+      error: "Your team permissions do not allow access to field evidence.",
+    }, 403);
+  }
+  const workOrderId = exactArtifactParameter(search, "workOrderId");
+  const caseInstanceId = exactArtifactParameter(search, "caseInstanceId");
+  const artifactId = exactArtifactParameter(search, "artifactId");
+  if (!workOrderId || !caseInstanceId || !artifactId) {
+    return adminJson({
+      ok: false,
+      code: "WORK_PACK_ARTIFACT_REQUIRED",
+      error: "Choose a governed file from this job.",
+    }, 400);
+  }
+
+  const retained = await getD1().prepare(`SELECT
+      artifact.object_key custody_locator,
+      artifact.original_file_name,
+      artifact.content_type,
+      artifact.size_bytes,
+      artifact.original_sha256,
+      artifact.integrity_receipt_id
+    FROM compliance_activity_work_pack_artifacts artifact
+    JOIN compliance_activity_work_pack_instances instance
+      ON instance.id = ?
+      AND instance.work_order_id = ?
+      AND instance.organisation_id = artifact.organisation_id
+      AND instance.instance_key = artifact.instance_key
+    JOIN compliance_cases compliance_case
+      ON compliance_case.id = instance.compliance_case_id
+      AND compliance_case.organisation_id = instance.organisation_id
+      AND compliance_case.work_order_id = instance.work_order_id
+    JOIN trade_work_orders work_order
+      ON work_order.id = instance.work_order_id
+      AND work_order.firebase_uid = compliance_case.installer_uid
+      AND work_order.firebase_uid = ?
+      AND work_order.partner_type = 'installer'
+      AND work_order.record_status = 'active'
+    WHERE artifact.id = ?
+      AND artifact.verification_state = 'matched'
+      AND (? = 'team' OR work_order.assignee_member_id = ?)
+      AND EXISTS (
+        SELECT 1 FROM compliance_activity_work_pack_instances captured
+        WHERE captured.id = artifact.case_instance_id
+          AND captured.organisation_id = artifact.organisation_id
+          AND captured.instance_key = artifact.instance_key
+          AND captured.compliance_case_id = instance.compliance_case_id
+          AND captured.work_order_id = instance.work_order_id
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM compliance_activity_work_pack_instances newer
+        WHERE newer.organisation_id = instance.organisation_id
+          AND newer.compliance_case_id = instance.compliance_case_id
+          AND newer.revision > instance.revision
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM compliance_activity_work_pack_artifacts successor
+        WHERE successor.organisation_id = artifact.organisation_id
+          AND successor.instance_key = artifact.instance_key
+          AND successor.supersedes_artifact_id = artifact.id
+      )
+    LIMIT 1`)
+    .bind(
+      caseInstanceId,
+      workOrderId,
+      scope.ownerUid,
+      artifactId,
+      scope.scope,
+      scope.actorMemberId,
+    )
+    .first<AssignedArtifactRecord>();
+  if (!retained) {
+    return adminJson({
+      ok: false,
+      code: "WORK_PACK_ARTIFACT_NOT_FOUND",
+      error: "The current governed file was not found for this assigned job.",
+    }, 404);
+  }
+
+  const expectedSha256 = String(retained.original_sha256 || "")
+    .trim().toLowerCase().replace(/^sha256:/, "");
+  const expectedSizeBytes = Number(retained.size_bytes);
+  const expectedContentType = String(retained.content_type || "").trim();
+  if (
+    !SHA256_PATTERN.test(expectedSha256)
+    || !Number.isSafeInteger(expectedSizeBytes)
+    || expectedSizeBytes < 1
+    || !expectedContentType
+  ) {
+    return adminJson({
+      ok: false,
+      code: "WORK_PACK_ARTIFACT_INTEGRITY_INVALID",
+      error: "The governed file custody record is invalid.",
+    }, 409);
+  }
+
+  const object = await getCreditexCustodyBucket().get(retained.custody_locator);
+  if (!object) {
+    return adminJson({
+      ok: false,
+      code: "WORK_PACK_ARTIFACT_UNAVAILABLE",
+      error: "The exact retained governed file is unavailable.",
+    }, 409);
+  }
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  const actualSha256 = await sha256(bytes);
+  if (
+    bytes.byteLength !== expectedSizeBytes
+    || actualSha256 !== expectedSha256
+    || (
+      object.httpMetadata?.contentType
+      && object.httpMetadata.contentType.toLowerCase()
+        !== expectedContentType.toLowerCase()
+    )
+  ) {
+    return adminJson({
+      ok: false,
+      code: "WORK_PACK_ARTIFACT_INTEGRITY_MISMATCH",
+      error: "The retained governed file no longer matches its exact custody record.",
+    }, 409);
+  }
+
+  return assignedWorkPackBytesResponse(Object.freeze({
+    bytes,
+    contentType: expectedContentType,
+    fileName: String(retained.original_file_name || "governed-file"),
+    sizeBytes: bytes.byteLength,
+    sha256: actualSha256,
+    custodyReceiptId: String(retained.integrity_receipt_id || ""),
+  }));
+}
+
 export async function GET(request: Request) {
   const rejected = assignedWorkPackOrigin(request);
   if (rejected) return rejected;
   try {
     const scope = await assignedWorkPackRequestScope(request);
     const search = new URL(request.url).searchParams;
+    if (search.get("view") === "artifact") {
+      return assignedArtifactResponse(scope, search);
+    }
     const caseInstanceId = String(search.get("caseInstanceId") || "").trim();
     const productDependencyKey = String(
       search.get("officialProductDependencyKey") || "",

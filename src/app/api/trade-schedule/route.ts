@@ -150,7 +150,8 @@ async function schedulePayload(access: TeamAccess, rangeStart: string, rangeWeek
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid AND c.record_status = 'active'
       LEFT JOIN trade_crm_service_sites s ON s.id = d.service_site_id AND s.firebase_uid = w.firebase_uid
-      WHERE a.firebase_uid = ? AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND a.starts_at < ?
+      WHERE a.firebase_uid = ? AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed')
+        AND w.stage <> 'cancelled' AND COALESCE(d.pipeline_stage, '') <> 'lost' AND a.starts_at < ?
         AND COALESCE(NULLIF(a.ends_at, ''), a.starts_at) >= ? AND (? = 0 OR a.assignee_member_id = ?)
       ORDER BY a.starts_at, a.created_at`)
       .bind(ownerUid, `${rangeEnd}T00:00`, `${rangeStart}T00:00`, ownOnly ? 1 : 0, access.memberId).all<Record<string, unknown>>(),
@@ -184,7 +185,7 @@ async function schedulePayload(access: TeamAccess, rangeStart: string, rangeWeek
       ORDER BY r.requested_at LIMIT 100`).bind(ownerUid, ownOnly ? 1 : 0, access.memberId).all<Record<string, unknown>>(),
   ]);
   const workingHours = hours.results.map((row) => ({ id: row.id, teamMemberId: row.team_member_id, weekday: Number(row.weekday), startMinute: Number(row.start_minute), endMinute: Number(row.end_minute), isAvailable: Boolean(row.is_available) }));
-  const conflictIds = scheduleConflictIds(appointmentRows.results.map((row) => ({
+  const conflictIds = scheduleConflictIds(appointmentRows.results.filter((row) => row.status !== "completed").map((row) => ({
     id: String(row.id), assigneeMemberId: row.assignee_member_id,
     startsAt: String(row.starts_at), endsAt: String(row.ends_at || row.starts_at),
   })));

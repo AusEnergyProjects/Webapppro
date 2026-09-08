@@ -177,7 +177,7 @@ test("saved appointments keep exact height and expose an independent staged resi
   assert.match(scheduleUi, /onLostPointerCapture=\{cancelAppointmentResize\}/);
   assert.match(scheduleUi, /onKeyDown=\{\(event\) => resizeAppointmentFromKeyboard\(event, item\)\}/);
   assert.match(scheduleUi, /stageScheduleChange\(appointment, appointment\.startsAt\.slice\(0, 10\), startMinute, appointment\.assigneeMemberId, durationMinutes\)/);
-  assert.match(scheduleUi, /draggable=\{calendarCanReschedule && !busy && !loading\}/);
+  assert.match(scheduleUi, /draggable=\{canEditAppointment && !busy && !loading\}/);
   assert.match(scheduleStyles, /\.schedule-proposal-resize, \.schedule-appointment-resize \{[^}]*height: 32px[^}]*touch-action: none/);
   assert.match(scheduleStyles, /\.schedule-appointment-resize::before \{[^}]*background:/);
   assert.match(scheduleUi, /const resizeWidth = `min\(32px, calc\(\$\{100 \/ lane\.laneCount\}% - 8px\)\)`/);

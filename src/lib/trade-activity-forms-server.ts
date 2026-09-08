@@ -16,6 +16,7 @@ import {
 } from "./trade-activity-forms.ts";
 import { activityBaseFieldKey, expandedActivityFields, mergeActivityAnswers } from "./trade-activity-form-flow.ts";
 import { parseScheduledActivityCustomerDocumentReceipt } from "./scheduled-activity-customer-document-receipt.ts";
+import type { TradeJobAuditOutcome, TradeJobLifecycleStatus } from "./trade-job-lifecycle.ts";
 
 type Row = Record<string, unknown>;
 type Bucket = { get(key: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer> } | null>;
@@ -172,6 +173,122 @@ export function activityPresentation(record: ActivityRecord, signerSetup?: Activ
 
 export function assertActivityFieldAccess(access: Pick<TeamAccess, "isOwner" | "canViewFieldEvidence" | "canManageFieldEvidence">, mutate = false) {
   if (!access.isOwner && !(mutate ? access.canManageFieldEvidence : access.canViewFieldEvidence)) throw new Error("ACTIVITY_ACCESS_REQUIRED");
+}
+
+type ActivityLifecycleSignals = {
+  parentStage?: unknown;
+  scheduledStart?: unknown;
+  fieldRecordStatus?: unknown;
+  hasUserProgress?: unknown;
+  completedWorkPack?: unknown;
+  activeWorkPack?: unknown;
+  auditOutcome?: unknown;
+};
+
+export function deriveActivityLifecycle(signals: ActivityLifecycleSignals): {
+  status: TradeJobLifecycleStatus;
+  auditOutcome: TradeJobAuditOutcome | null;
+} {
+  const value = (input: unknown) => String(input || "").trim().toLowerCase();
+  const candidate = value(signals.auditOutcome);
+  const auditOutcome = (["passed", "failed", "duplicate", "correction_required", "withdrawn"] as const)
+    .find((item) => item === candidate) || null;
+  if (value(signals.parentStage) === "cancelled") return { status: "cancelled", auditOutcome: null };
+  if (auditOutcome) return { status: "audited", auditOutcome };
+  if (value(signals.fieldRecordStatus) === "submitted_for_creditex_review" || Number(signals.completedWorkPack) === 1) {
+    return { status: "completed", auditOutcome: null };
+  }
+  if (Number(signals.hasUserProgress) === 1 || Number(signals.activeWorkPack) === 1) {
+    return { status: "partial", auditOutcome: null };
+  }
+  if (value(signals.parentStage) === "scheduled" || value(signals.scheduledStart)) {
+    return { status: "scheduled", auditOutcome: null };
+  }
+  return { status: "unscheduled", auditOutcome: null };
+}
+
+export function activityAuditOutcomeSql(intentAlias = "i") {
+  return `(SELECT activity_audit_event.outcome
+    FROM (
+      SELECT CASE activity_response.response_type
+          WHEN 'accepted' THEN 'passed'
+          WHEN 'rejected' THEN 'failed'
+          WHEN 'error' THEN 'failed'
+          WHEN 'duplicate' THEN 'duplicate'
+          ELSE '' END outcome,
+        activity_response.occurred_at occurred_at, 4 source_rank, activity_response.id event_id
+      FROM compliance_submission_responses activity_response
+      JOIN compliance_submission_batch_items activity_response_item
+        ON activity_response_item.id = activity_response.batch_item_id
+        AND activity_response_item.organisation_id = activity_response.organisation_id
+      JOIN compliance_cases activity_response_case
+        ON activity_response_case.id = activity_response_item.case_id
+        AND activity_response_case.organisation_id = activity_response_item.organisation_id
+      WHERE activity_response_case.work_order_id = ${intentAlias}.work_order_id
+        AND activity_response_case.installer_uid = ${intentAlias}.installer_uid
+        AND (activity_response_case.compliance_intent_id = ${intentAlias}.id
+          OR (${intentAlias}.compliance_case_id <> '' AND activity_response_case.id = ${intentAlias}.compliance_case_id))
+        AND activity_response.response_type IN ('accepted', 'rejected', 'error', 'duplicate')
+
+      UNION ALL
+
+      SELECT CASE activity_decision.outcome
+          WHEN 'approved' THEN 'passed'
+          WHEN 'rejected' THEN 'failed'
+          WHEN 'changes_required' THEN 'correction_required'
+          WHEN 'withdrawn' THEN 'withdrawn'
+          ELSE '' END outcome,
+        activity_decision.decided_at occurred_at, 3 source_rank, activity_decision.id event_id
+      FROM compliance_case_decisions activity_decision
+      JOIN compliance_cases activity_decision_case
+        ON activity_decision_case.id = activity_decision.case_id
+        AND activity_decision_case.organisation_id = activity_decision.organisation_id
+      WHERE activity_decision_case.work_order_id = ${intentAlias}.work_order_id
+        AND activity_decision_case.installer_uid = ${intentAlias}.installer_uid
+        AND (activity_decision_case.compliance_intent_id = ${intentAlias}.id
+          OR (${intentAlias}.compliance_case_id <> '' AND activity_decision_case.id = ${intentAlias}.compliance_case_id))
+        AND activity_decision.decision_type IN ('submission_outcome', 'case_closure')
+
+      UNION ALL
+
+      SELECT CASE activity_batch_item.status
+          WHEN 'accepted' THEN 'passed'
+          WHEN 'rejected' THEN 'failed'
+          WHEN 'correction_required' THEN 'correction_required'
+          WHEN 'removed' THEN 'withdrawn'
+          ELSE '' END outcome,
+        activity_batch_item.updated_at occurred_at, 2 source_rank, activity_batch_item.id event_id
+      FROM compliance_submission_batch_items activity_batch_item
+      JOIN compliance_cases activity_batch_case
+        ON activity_batch_case.id = activity_batch_item.case_id
+        AND activity_batch_case.organisation_id = activity_batch_item.organisation_id
+      WHERE activity_batch_case.work_order_id = ${intentAlias}.work_order_id
+        AND activity_batch_case.installer_uid = ${intentAlias}.installer_uid
+        AND (activity_batch_case.compliance_intent_id = ${intentAlias}.id
+          OR (${intentAlias}.compliance_case_id <> '' AND activity_batch_case.id = ${intentAlias}.compliance_case_id))
+        AND activity_batch_item.status IN ('accepted', 'rejected', 'correction_required', 'removed')
+
+      UNION ALL
+
+      SELECT CASE activity_case.status
+          WHEN 'accepted' THEN 'passed'
+          WHEN 'rejected' THEN 'failed'
+          WHEN 'changes_requested' THEN 'correction_required'
+          ELSE '' END outcome,
+        activity_case.updated_at occurred_at, 1 source_rank, activity_case.id event_id
+      FROM compliance_cases activity_case
+      WHERE activity_case.work_order_id = ${intentAlias}.work_order_id
+        AND activity_case.installer_uid = ${intentAlias}.installer_uid
+        AND (activity_case.compliance_intent_id = ${intentAlias}.id
+          OR (${intentAlias}.compliance_case_id <> '' AND activity_case.id = ${intentAlias}.compliance_case_id))
+        AND activity_case.status IN ('accepted', 'rejected', 'changes_requested')
+    ) activity_audit_event
+    WHERE activity_audit_event.outcome <> ''
+    ORDER BY datetime(activity_audit_event.occurred_at) DESC,
+      activity_audit_event.occurred_at DESC,
+      activity_audit_event.source_rank DESC,
+      activity_audit_event.event_id DESC
+    LIMIT 1)`;
 }
 
 async function activityProfileContext(
@@ -416,18 +533,69 @@ export async function saveActivitySigningProfile(access: TeamAccess, id: string,
 export async function listActivityRecords(access: TeamAccess, workOrderId: string) {
   assertActivityFieldAccess(access);
   await assignedJob(access, workOrderId);
-  const rows = await getD1().prepare(`SELECT i.id, i.activity_template_id, i.program_code, i.intent_snapshot, r.payload
-    FROM trade_work_order_compliance_intents i LEFT JOIN trade_activity_field_records r ON r.intent_id = i.id
+  const auditOutcomeSql = activityAuditOutcomeSql("i");
+  const rows = await getD1().prepare(`SELECT i.id, i.activity_template_id, i.program_code, i.intent_snapshot,
+      r.payload, r.status field_record_status, work.stage parent_stage, work.scheduled_start,
+      ${auditOutcomeSql} audit_outcome,
+      CASE WHEN r.payload IS NOT NULL AND (
+        COALESCE(json_extract(r.payload, '$.hasUserEdits'), 0) = 1
+        OR COALESCE(json_array_length(r.payload, '$.evidence'), 0) > 0
+        OR COALESCE(json_array_length(r.payload, '$.signatures'), 0) > 0
+      ) THEN 1 ELSE 0 END has_user_progress,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM compliance_activity_work_pack_instances completed_pack
+        WHERE completed_pack.work_order_id = i.work_order_id
+          AND completed_pack.organisation_id = i.compliance_organisation_id
+          AND (completed_pack.compliance_intent_id = i.id
+            OR (completed_pack.compliance_intent_id = '' AND i.compliance_case_id <> ''
+              AND completed_pack.compliance_case_id = i.compliance_case_id))
+          AND completed_pack.status = 'completed'
+          AND NOT EXISTS (
+            SELECT 1 FROM compliance_activity_work_pack_instances newer_completed_pack
+            WHERE newer_completed_pack.organisation_id = completed_pack.organisation_id
+              AND newer_completed_pack.instance_key = completed_pack.instance_key
+              AND newer_completed_pack.revision > completed_pack.revision
+          )
+      ) THEN 1 ELSE 0 END completed_work_pack,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM compliance_activity_work_pack_instances active_pack
+        WHERE active_pack.work_order_id = i.work_order_id
+          AND active_pack.organisation_id = i.compliance_organisation_id
+          AND (active_pack.compliance_intent_id = i.id
+            OR (active_pack.compliance_intent_id = '' AND i.compliance_case_id <> ''
+              AND active_pack.compliance_case_id = i.compliance_case_id))
+          AND active_pack.status IN ('in_progress', 'ready_to_sign')
+          AND NOT EXISTS (
+            SELECT 1 FROM compliance_activity_work_pack_instances newer_active_pack
+            WHERE newer_active_pack.organisation_id = active_pack.organisation_id
+              AND newer_active_pack.instance_key = active_pack.instance_key
+              AND newer_active_pack.revision > active_pack.revision
+          )
+      ) THEN 1 ELSE 0 END active_work_pack
+    FROM trade_work_order_compliance_intents i
+    JOIN trade_work_orders work ON work.id = i.work_order_id AND work.firebase_uid = i.installer_uid
+    LEFT JOIN trade_activity_field_records r ON r.intent_id = i.id
       AND r.owner_uid = i.installer_uid AND r.work_order_id = i.work_order_id
     WHERE i.work_order_id = ? AND i.installer_uid = ? AND i.status IN ('planned', 'case_linked') ORDER BY i.created_at, i.id`)
     .bind(workOrderId, access.ownerUid).all<Row>();
   return rows.results.map((row) => {
+    const lifecycle = deriveActivityLifecycle({
+      parentStage: row.parent_stage,
+      scheduledStart: row.scheduled_start,
+      fieldRecordStatus: row.field_record_status,
+      hasUserProgress: row.has_user_progress,
+      completedWorkPack: row.completed_work_pack,
+      activeWorkPack: row.active_work_pack,
+      auditOutcome: row.audit_outcome,
+    });
     if (row.payload) { const record: ActivityRecord = JSON.parse(String(row.payload)); const p = activityPresentation(record);
       return { id: record.id, intentId: record.intentId, activityTemplateId: record.form.activityTemplateId, title: record.form.title,
-        programCode: record.form.programCode, status: record.status, revision: record.revision, progress: p.progress, recordNumber: record.recordNumber }; }
+        programCode: record.form.programCode, status: record.status, lifecycleStatus: lifecycle.status, auditOutcome: lifecycle.auditOutcome,
+        revision: record.revision, progress: p.progress, recordNumber: record.recordNumber }; }
     const snapshot = JSON.parse(String(row.intent_snapshot));
     return { id: "", intentId: String(row.id), activityTemplateId: String(row.activity_template_id), title: String(snapshot.activity?.title || row.activity_template_id),
-      programCode: String(row.program_code), status: "not_started", revision: 0, progress: { complete: 0, total: 0 }, recordNumber: "" };
+      programCode: String(row.program_code), status: "not_started", lifecycleStatus: lifecycle.status, auditOutcome: lifecycle.auditOutcome,
+      revision: 0, progress: { complete: 0, total: 0 }, recordNumber: "" };
   });
 }
 

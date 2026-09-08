@@ -1,4 +1,6 @@
 export type JobStage = 'backlog' | 'ready' | 'scheduled' | 'in_progress' | 'blocked' | 'completed' | 'cancelled';
+export type JobLifecycleStatus = 'unscheduled' | 'scheduled' | 'partial' | 'completed' | 'audited' | 'cancelled';
+export type JobAuditOutcome = 'passed' | 'failed' | 'duplicate' | 'correction_required' | 'withdrawn';
 export type TaskStatus = 'pending' | 'done';
 export type FieldAccessMode = 'trade_team' | 'creditex_manual';
 
@@ -726,6 +728,8 @@ export type FieldJob = {
   serviceCategory: string;
   siteArea: string;
   stage: JobStage;
+  lifecycleStatus?: JobLifecycleStatus;
+  auditOutcome?: JobAuditOutcome | '';
   priority: string;
   scheduledStart: string;
   scheduledEnd: string;

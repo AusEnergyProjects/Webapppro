@@ -2,8 +2,24 @@
 
 import type { User } from "firebase/auth";
 import { useCallback, useEffect, useState } from "react";
+import {
+  tradeJobAuditOutcomeLabel,
+  tradeJobLifecycleLabel,
+  type TradeJobAuditOutcome,
+  type TradeJobLifecycleStatus,
+} from "@/lib/trade-job-lifecycle";
 
-type FieldRecord = { id: string; intentId: string; title: string; programCode: string; status: "not_started" | "draft" | "submitted_for_creditex_review"; recordNumber: string; progress: { complete: number; total: number } };
+type FieldRecord = { id: string; intentId: string; title: string; programCode: string; status: "not_started" | "draft" | "submitted_for_creditex_review";
+  lifecycleStatus: TradeJobLifecycleStatus; auditOutcome: TradeJobAuditOutcome | null; recordNumber: string; progress: { complete: number; total: number } };
+
+function activityProgressText(item: FieldRecord) {
+  if (item.lifecycleStatus === "cancelled") return "Cancelled";
+  if (item.lifecycleStatus === "audited") return `Audit outcome: ${tradeJobAuditOutcomeLabel(item.auditOutcome)}`;
+  if (item.lifecycleStatus === "completed") return "Completed and submitted to Creditex";
+  if (item.lifecycleStatus === "partial") return `${item.progress.complete} of ${item.progress.total} required items saved`;
+  if (item.lifecycleStatus === "scheduled") return "Scheduled and ready to start in the app";
+  return "Ready to schedule";
+}
 
 export function TradeActivityFieldRecords({ user, workOrderId, canShare, refreshKey }: { user: User; workOrderId: string; canShare: boolean; refreshKey: number }) {
   const [records, setRecords] = useState<FieldRecord[]>([]);
@@ -47,7 +63,7 @@ export function TradeActivityFieldRecords({ user, workOrderId, canShare, refresh
     <p>Complete each activity in the TLink app. Answers, photos and signatures stay with its own job record. Creditex receives the completed record for review and handles certificate creation.</p>
     {error ? <p role="alert">{error}</p> : null}
     {records.map((item) => <article key={item.intentId}>
-      <div><span>{item.recordNumber || item.programCode}</span><strong>{item.title}</strong><p>{item.status === "submitted_for_creditex_review" ? "Completed and submitted to Creditex" : item.status === "draft" ? `${item.progress.complete} of ${item.progress.total} required items saved` : "Ready to start in the app"}</p></div>
+      <div><span>{item.recordNumber || item.programCode} · {tradeJobLifecycleLabel(item.lifecycleStatus)}{item.lifecycleStatus === "audited" && item.auditOutcome ? ` · ${tradeJobAuditOutcomeLabel(item.auditOutcome)}` : ""}</span><strong>{item.title}</strong><p>{activityProgressText(item)}</p></div>
       {item.status === "submitted_for_creditex_review" ? <div>
         <button type="button" disabled={busy} onClick={() => void openReport(item)}>Prepare PDF</button>
         {report?.id === item.id ? <a href={report.url} download={report.name}>Download completed report</a> : null}

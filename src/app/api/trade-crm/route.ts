@@ -59,6 +59,12 @@ import {
   projectJobRegisterRecord,
 } from "@/lib/trade-crm-job-register";
 import {
+  tradeJobAuditOutcomeSql,
+  tradeJobHasProgressSql,
+  tradeJobLifecycleRankSql,
+  tradeJobLifecycleStatusSql,
+} from "@/lib/trade-job-lifecycle";
+import {
   canonicalAustralianAddress,
   resolveTradeAddressProvenance,
   TradeAddressVerificationError,
@@ -140,13 +146,6 @@ const APPOINTMENT_LABELS: Record<string, string> = {
   phone_call: "Phone call", site_visit: "Site visit", quote_review: "Quote review",
   installation: "Installation", service: "Service visit", admin: "Office task",
 };
-const JOB_REGISTER_AUDITED_SQL = `EXISTS (
-  SELECT 1 FROM compliance_cases register_case
-  WHERE register_case.work_order_id = w.id
-    AND register_case.installer_uid = w.firebase_uid
-    AND register_case.status = 'accepted'
-    AND register_case.evidence_status = 'verified'
-)`;
 const JOB_REGISTER_QUOTE_TOTAL_SQL = `(
   SELECT CASE
     WHEN current_acceptance.id IS NOT NULL THEN current_acceptance.selected_subtotal_cents
@@ -187,17 +186,21 @@ const JOB_REGISTER_QUOTE_TOTAL_SQL = `(
 )`;
 const JOB_REGISTER_QUOTE_SORT_SQL = `COALESCE(${JOB_REGISTER_QUOTE_TOTAL_SQL}, 0)`;
 const JOB_EFFECTIVE_SCHEDULE_SQL = "COALESCE(NULLIF(selected_appointment.starts_at, ''), NULLIF(w.scheduled_start, ''), '')";
+const JOB_REGISTER_AUDIT_OUTCOME_SQL = tradeJobAuditOutcomeSql("w");
+const JOB_REGISTER_HAS_PROGRESS_SQL = tradeJobHasProgressSql("w");
+const JOB_REGISTER_LIFECYCLE_SQL = tradeJobLifecycleStatusSql({
+  workAlias: "w",
+  detailAlias: "d",
+  scheduleSql: JOB_EFFECTIVE_SCHEDULE_SQL,
+  auditOutcomeSql: JOB_REGISTER_AUDIT_OUTCOME_SQL,
+  hasProgressSql: JOB_REGISTER_HAS_PROGRESS_SQL,
+});
 const JOB_REGISTER_ACTIVITY_SQL = `(SELECT json_extract(ci.intent_snapshot, '$.activity.title')
   FROM trade_work_order_compliance_intents ci
   WHERE ci.work_order_id = w.id AND ci.installer_uid = w.firebase_uid
     AND ci.status IN ('planned', 'case_linked')
   ORDER BY ci.revision DESC, ci.created_at DESC LIMIT 1)`;
-const JOB_REGISTER_STATUS_RANK_SQL = `CASE
-  WHEN w.stage = 'cancelled' OR d.pipeline_stage = 'lost' THEN 6
-  WHEN ${JOB_REGISTER_AUDITED_SQL} THEN 4
-  WHEN w.stage = 'completed' OR d.pipeline_stage IN ('complete', 'invoiced', 'paid') THEN 3
-  WHEN trim(w.assignee_member_id) <> '' OR trim(${JOB_EFFECTIVE_SCHEDULE_SQL}) <> '' THEN 2
-  ELSE 1 END`;
+const JOB_REGISTER_STATUS_RANK_SQL = tradeJobLifecycleRankSql(JOB_REGISTER_LIFECYCLE_SQL);
 const JOB_SORTS: Record<string, CrmSort> = {
   "number-asc": crmSort([crmTerm("w.work_number COLLATE NOCASE", "asc", "work_number")], "w.id"),
   "number-desc": crmSort([crmTerm("w.work_number COLLATE NOCASE", "desc", "work_number")], "w.id"),
@@ -616,7 +619,8 @@ function indexedJob(row: Record<string, unknown>, access: Pick<TeamAccess, "canV
     createdAt: row.created_at,
     workStage: row.stage,
     pipelineStage: row.pipeline_stage,
-    audited: row.register_audited,
+    hasProgress: row.register_has_progress,
+    auditOutcome: row.register_audit_outcome,
     certificates: {
       stc: row.stc_certificate_count,
       veec: row.veec_certificate_count,
@@ -905,16 +909,8 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     const operationalStatus = cleanAdminText(url.searchParams.get("operationalStatus"), 30).toLowerCase();
     if (operationalStatus) {
       if (!JOB_REGISTER_STATUS_SET.has(operationalStatus)) throw new Error("INVALID_JOB_STATUS");
-      const cancelled = "(w.stage = 'cancelled' OR d.pipeline_stage = 'lost')";
-      const completed = "(w.stage = 'completed' OR d.pipeline_stage IN ('complete', 'invoiced', 'paid'))";
-      const terminal = `(${cancelled} OR ${completed})`;
-      const assigned = `(trim(w.assignee_member_id) <> '' OR trim(${JOB_EFFECTIVE_SCHEDULE_SQL}) <> '')`;
-      if (operationalStatus === "certified") conditions.push("0 = 1");
-      else if (operationalStatus === "cancelled") conditions.push(cancelled);
-      else if (operationalStatus === "audited") conditions.push(`NOT ${cancelled} AND ${JOB_REGISTER_AUDITED_SQL}`);
-      else if (operationalStatus === "complete") conditions.push(`NOT ${cancelled} AND NOT ${JOB_REGISTER_AUDITED_SQL} AND ${completed}`);
-      else if (operationalStatus === "assigned") conditions.push(`NOT ${JOB_REGISTER_AUDITED_SQL} AND NOT ${terminal} AND ${assigned}`);
-      else conditions.push(`NOT ${JOB_REGISTER_AUDITED_SQL} AND NOT ${terminal} AND NOT ${assigned}`);
+      conditions.push(`(${JOB_REGISTER_LIFECYCLE_SQL}) = ?`);
+      bindings.push(operationalStatus);
     }
     const quoteTotalMin = url.searchParams.get("quoteTotalMin");
     if (quoteTotalMin !== null && quoteTotalMin !== "") {
@@ -975,7 +971,8 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         ${JOB_EFFECTIVE_SCHEDULE_SQL} effective_scheduled_start,
         ${JOB_REGISTER_ACTIVITY_SQL} governed_work_type,
         (SELECT status FROM trade_handover_packs hp WHERE hp.work_order_id = w.id AND hp.firebase_uid = w.firebase_uid ORDER BY hp.updated_at DESC LIMIT 1) handover_status,
-        ${JOB_REGISTER_AUDITED_SQL} register_audited,
+        ${JOB_REGISTER_AUDIT_OUTCOME_SQL} register_audit_outcome,
+        ${JOB_REGISTER_HAS_PROGRESS_SQL} register_has_progress,
         ${JOB_REGISTER_STATUS_RANK_SQL} register_status_rank,
         ${JOB_REGISTER_QUOTE_TOTAL_SQL} quote_total_ex_gst_cents,
         ${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL quote_total_empty,

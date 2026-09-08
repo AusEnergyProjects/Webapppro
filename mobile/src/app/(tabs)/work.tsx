@@ -18,7 +18,25 @@ function dayLabel(value: string) {
   return date.toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 }
 
-function stageLabel(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+const JOB_STAGE_LABELS: Record<string, string> = {
+  backlog: 'Unscheduled',
+  ready: 'Unscheduled',
+  scheduled: 'Scheduled',
+  in_progress: 'Partial',
+  blocked: 'Partial',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+function stageLabel(value: string) {
+  return JOB_STAGE_LABELS[value] || value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function jobStatusLabel(job: FieldJob) {
+  const status = job.lifecycleStatus || job.stage;
+  const outcome = job.auditOutcome ? stageLabel(job.auditOutcome) : '';
+  return status === 'audited' && outcome ? `Audited | ${outcome}` : stageLabel(status);
+}
 
 function addDays(value: Date, days: number) {
   const next = new Date(value);
@@ -46,7 +64,7 @@ function JobCard({ job }: { job: FieldJob }) {
     <Pressable accessibilityRole="button" onPress={() => router.push(`/job/${job.id}`)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <View style={styles.cardTop}>
         <View style={styles.number}><Text style={styles.numberText}>{job.workNumber}</Text></View>
-        <View style={[styles.stage, job.stage === 'blocked' && styles.blocked]}><Text style={styles.stageText}>{stageLabel(job.stage)}</Text></View>
+        <View style={[styles.stage, (job.stage === 'blocked' || job.auditOutcome === 'failed' || job.auditOutcome === 'correction_required') && styles.blocked]}><Text style={styles.stageText}>{jobStatusLabel(job)}</Text></View>
       </View>
       <Text style={styles.jobTitle}>{job.title || 'Field job'}</Text>
       <View style={styles.fact}><MaterialCommunityIcons name="clock-outline" color={colours.muted} size={19} /><Text style={styles.factText}>{dayLabel(job.scheduledStart)}</Text></View>

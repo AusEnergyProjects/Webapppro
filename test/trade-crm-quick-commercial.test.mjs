@@ -4,6 +4,18 @@ import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
 import * as rental from '../src/lib/trade-rental-assessment.mjs';
+import * as tradeJobLifecycle from '../src/lib/trade-job-lifecycle.ts';
+
+const tradeJobLifecycleDependency = {
+  ...tradeJobLifecycle,
+  tradeJobAuditOutcomeSql: () => 'NULL',
+  tradeJobHasProgressSql: () => '0',
+  tradeJobLifecycleStatusSql: input => tradeJobLifecycle.tradeJobLifecycleStatusSql({
+    ...input,
+    auditOutcomeSql: input.auditOutcomeSql || 'NULL',
+    hasProgressSql: input.hasProgressSql || '0',
+  }),
+};
 
 const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 function moduleAt(path, mocks = {}) {
@@ -64,13 +76,16 @@ function fixture(overrides = {}) {
     '@/lib/route-performance': { routeTimer: () => ({ database: async value => value, startedAt: 0, dbDurationMs: 0 }), performanceJson: body => Response.json(body) },
     '@/lib/keyset-pagination': moduleAt('../src/lib/keyset-pagination.ts'),
     '@/lib/trade-crm-job-index-sql': moduleAt('../src/lib/trade-crm-job-index-sql.ts'),
+    '@/lib/trade-job-lifecycle': tradeJobLifecycleDependency,
     '@/lib/creditex-dataforce-job-csv': { projectInstallerWorkOrderToDataforceRecord: input => input },
     '@/lib/trade-team-server': { requireInstallerTeamAccess: async () => access,
       canCreateJobs: current => current.isOwner || current.canCreateJobs,
       canManageQuotes: current => current.isOwner || current.canManageQuotes,
       canManageJobs: current => current.isOwner || current.canManageJobs,
       canAssignJob: deniedSideEffect, assignedJob: deniedSideEffect },
-    '@/lib/trade-crm-job-register': moduleAt('../src/lib/trade-crm-job-register.ts'),
+    '@/lib/trade-crm-job-register': moduleAt('../src/lib/trade-crm-job-register.ts', {
+      './trade-job-lifecycle.ts': tradeJobLifecycle,
+    }),
     '@/lib/trade-crm-register-sort-sql': moduleAt('../src/lib/trade-crm-register-sort-sql.ts'),
     '@/lib/trade-team-sync-server': moduleAt('../src/lib/trade-team-sync-server.ts'),
     '@/lib/trade-customer-dedup-server': moduleAt('../src/lib/trade-customer-dedup-server.ts'),

@@ -42,6 +42,10 @@ import {
   reconcileReadyPlannedComplianceWorkPacks,
 } from "@/lib/creditex-compliance-server";
 import { ensureCreditexWorkPackSchemaGuards } from "@/lib/creditex-work-pack-schema-guards";
+import {
+  tradeJobAuditOutcomeSql,
+  tradeJobLifecycleStatusSql,
+} from "@/lib/trade-job-lifecycle";
 
 export const runtime = "edge";
 
@@ -77,13 +81,29 @@ const WORK_STAGE_TRANSITIONS: Readonly<Record<string, ReadonlySet<string>>> = {
   cancelled: new Set(),
 };
 const TERMINAL_WORK_STAGES = new Set(["completed", "cancelled"]);
+function syncJobCancelledSql(workAlias: string, detailAlias: string) {
+  return `(${workAlias}.stage = 'cancelled'
+    OR COALESCE(${detailAlias}.pipeline_stage, '') = 'lost')`;
+}
+
+function syncJobTerminalSql(workAlias: string, detailAlias: string) {
+  return `(${syncJobCancelledSql(workAlias, detailAlias)}
+    OR ${workAlias}.stage = 'completed'
+    OR COALESCE(${detailAlias}.pipeline_stage, '') IN ('complete', 'invoiced', 'paid'))`;
+}
+
 const ACCESSIBLE_JOB_COHORT_SQL = `SELECT cohort.id
   FROM trade_work_orders cohort
+  LEFT JOIN trade_crm_job_details cohort_detail
+    ON cohort_detail.work_order_id = cohort.id
+    AND cohort_detail.firebase_uid = cohort.firebase_uid
   WHERE cohort.firebase_uid = ?
     AND cohort.partner_type = 'installer'
     AND cohort.record_status = 'active'
     AND (? <> 'own' OR cohort.assignee_member_id = ?)
-  ORDER BY cohort.scheduled_start = '', cohort.scheduled_start,
+    AND NOT ${syncJobCancelledSql("cohort", "cohort_detail")}
+  ORDER BY CASE WHEN ${syncJobTerminalSql("cohort", "cohort_detail")} THEN 1 ELSE 0 END,
+    cohort.scheduled_start = '', cohort.scheduled_start,
     cohort.updated_at DESC
   LIMIT ${MAX_SYNC_JOBS}`;
 
@@ -659,12 +679,119 @@ function cursorValue(value: string | null) {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : Number.NaN;
 }
 
+function tradeJobAuditChangedAtSql(workAlias = "w") {
+  return `(SELECT MAX(audit_change.changed_at)
+    FROM (
+      SELECT response.created_at changed_at
+      FROM compliance_submission_responses response
+      JOIN compliance_submission_batch_items response_item
+        ON response_item.id = response.batch_item_id
+        AND response_item.organisation_id = response.organisation_id
+      JOIN compliance_cases response_case
+        ON response_case.id = response_item.case_id
+        AND response_case.organisation_id = response_item.organisation_id
+      WHERE response_case.work_order_id = ${workAlias}.id
+        AND response_case.installer_uid = ${workAlias}.firebase_uid
+        AND response.response_type IN ('accepted', 'rejected', 'error', 'duplicate')
+
+      UNION ALL
+
+      SELECT decision.created_at changed_at
+      FROM compliance_case_decisions decision
+      JOIN compliance_cases decision_case
+        ON decision_case.id = decision.case_id
+        AND decision_case.organisation_id = decision.organisation_id
+      WHERE decision_case.work_order_id = ${workAlias}.id
+        AND decision_case.installer_uid = ${workAlias}.firebase_uid
+        AND decision.decision_type IN ('submission_outcome', 'case_closure')
+        AND decision.outcome IN ('approved', 'rejected', 'changes_required', 'withdrawn')
+
+      UNION ALL
+
+      SELECT batch_item.updated_at changed_at
+      FROM compliance_submission_batch_items batch_item
+      JOIN compliance_cases batch_case
+        ON batch_case.id = batch_item.case_id
+        AND batch_case.organisation_id = batch_item.organisation_id
+      WHERE batch_case.work_order_id = ${workAlias}.id
+        AND batch_case.installer_uid = ${workAlias}.firebase_uid
+        AND batch_item.status IN ('accepted', 'rejected', 'correction_required', 'removed')
+
+      UNION ALL
+
+      SELECT compliance_case.updated_at changed_at
+      FROM compliance_cases compliance_case
+      WHERE compliance_case.work_order_id = ${workAlias}.id
+        AND compliance_case.installer_uid = ${workAlias}.firebase_uid
+        AND compliance_case.status IN ('accepted', 'rejected', 'changes_requested')
+    ) audit_change)`;
+}
+
+async function reconcileMissingAuditLifecycleChanges(
+  access: TeamAccess,
+  changedAt: string,
+) {
+  const audience = !access.isOwner && access.jobScope === "own"
+    ? access.memberId
+    : "";
+  const auditChangedAtSql = tradeJobAuditChangedAtSql("w");
+  await getD1().prepare(`INSERT INTO trade_team_sync_changes
+      (owner_uid, audience_member_id, entity_type, entity_id, operation, revision, changed_at)
+    SELECT ?, ?, 'job', audit_job.id, 'upsert', audit_job.revision, ?
+    FROM (
+      SELECT w.id, w.revision, ${auditChangedAtSql} audit_changed_at
+      FROM trade_work_orders w
+      LEFT JOIN trade_crm_job_details d
+        ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
+      WHERE w.firebase_uid = ?
+        AND w.partner_type = 'installer'
+        AND w.record_status = 'active'
+        AND (? <> 'own' OR w.assignee_member_id = ?)
+        AND NOT ${syncJobCancelledSql("w", "d")}
+      ORDER BY CASE WHEN ${syncJobTerminalSql("w", "d")} THEN 1 ELSE 0 END,
+        w.scheduled_start = '', w.scheduled_start, w.updated_at DESC
+      LIMIT ${MAX_SYNC_JOBS}
+    ) audit_job
+    WHERE COALESCE(audit_job.audit_changed_at, '') <> ''
+      AND NOT EXISTS (
+        SELECT 1
+        FROM trade_team_sync_changes current_change
+        WHERE current_change.owner_uid = ?
+          AND current_change.audience_member_id = ?
+          AND current_change.entity_type = 'job'
+          AND current_change.entity_id = audit_job.id
+          AND datetime(current_change.changed_at) >= datetime(audit_job.audit_changed_at)
+      )
+    ORDER BY datetime(audit_job.audit_changed_at), audit_job.id
+    LIMIT ${MAX_SYNC_JOBS}`)
+    .bind(
+      access.ownerUid,
+      audience,
+      changedAt,
+      access.ownerUid,
+      access.jobScope,
+      access.memberId,
+      access.ownerUid,
+      audience,
+    )
+    .run();
+}
+
 async function accessibleJobs(access: TeamAccess) {
   const db = getD1();
+  const auditOutcomeSql = tradeJobAuditOutcomeSql("w");
+  const lifecycleStatusSql = tradeJobLifecycleStatusSql({
+    workAlias: "w",
+    detailAlias: "d",
+    scheduleSql: "COALESCE(a.starts_at, w.scheduled_start, '')",
+    auditOutcomeSql,
+  });
   const [jobRows, taskRows, mediaRows, formRows, intentRows, complianceRows, rentalRows] = await Promise.all([
     db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.site_area, w.stage, w.priority,
         w.scheduled_start, w.scheduled_end, w.assignee_member_id, w.assignee_label, w.source_type,
         w.revision, w.updated_at, d.customer_source, d.description,
+        ${lifecycleStatusSql} lifecycle_status,
+        ${auditOutcomeSql} lifecycle_audit_outcome,
         CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name,
         COALESCE((SELECT cc.phone FROM trade_crm_site_contacts sc JOIN trade_crm_customer_contacts cc
           ON cc.id = sc.customer_contact_id AND cc.firebase_uid = sc.firebase_uid
@@ -693,7 +820,9 @@ async function accessibleJobs(access: TeamAccess) {
         ORDER BY latest_delivery.created_at DESC, latest_delivery.delivery_generation DESC LIMIT 1)
       WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
         AND (? <> 'own' OR w.assignee_member_id = ?)
-      ORDER BY w.scheduled_start = '', w.scheduled_start, w.updated_at DESC
+        AND NOT ${syncJobCancelledSql("w", "d")}
+      ORDER BY CASE WHEN ${syncJobTerminalSql("w", "d")} THEN 1 ELSE 0 END,
+        w.scheduled_start = '', w.scheduled_start, w.updated_at DESC
       LIMIT ?`)
       .bind(
         access.ownerUid,
@@ -922,6 +1051,10 @@ async function accessibleJobs(access: TeamAccess) {
       serviceCategory: row.service_category,
       siteArea: row.site_area,
       stage: row.stage,
+      lifecycleStatus: row.lifecycle_status,
+      auditOutcome: row.lifecycle_status === "audited"
+        ? row.lifecycle_audit_outcome || ""
+        : "",
       priority: row.priority,
       scheduledStart: row.scheduled_start,
       scheduledEnd: row.scheduled_end,
@@ -1212,6 +1345,7 @@ export async function GET(request: Request) {
     }
 
     const audience = !access.isOwner && access.jobScope === "own" ? access.memberId : "";
+    await reconcileMissingAuditLifecycleChanges(access, serverTime);
     const rows = await getD1().prepare(`SELECT sequence, entity_type, entity_id, operation, revision, changed_at
       FROM trade_team_sync_changes WHERE owner_uid = ? AND audience_member_id = ? AND sequence > ?
       ORDER BY sequence LIMIT ?`).bind(access.ownerUid, audience, cursor, limit + 1).all<Record<string, unknown>>();

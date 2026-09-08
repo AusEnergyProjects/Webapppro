@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import { canAssignWithinScope } from "../src/lib/trade-team-permission-policy.mjs";
+import * as tradeJobLifecycle from "../src/lib/trade-job-lifecycle.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -399,7 +400,9 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
   class DomainError extends Error {}
   const adminJson = (body, status = 200) => Response.json(body, { status });
   const syncHelpers = loadTypescriptModule("../src/lib/trade-team-sync-server.ts", {});
-  const jobRegisterHelpers = loadTypescriptModule("../src/lib/trade-crm-job-register.ts", {});
+  const jobRegisterHelpers = loadTypescriptModule("../src/lib/trade-crm-job-register.ts", {
+    "./trade-job-lifecycle.ts": tradeJobLifecycle,
+  });
   const registerSortHelpers = loadTypescriptModule("../src/lib/trade-crm-register-sort-sql.ts", {});
   const scheduleServerHelpers = loadTypescriptModule("../src/lib/trade-schedule-server.ts", {
     "../../db": { getD1: () => d1 },
@@ -471,6 +474,7 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
     "@/lib/trade-team-permission-policy.mjs": {
       canRescheduleWithinScope: () => true,
     },
+    "@/lib/trade-job-lifecycle": tradeJobLifecycle,
     "@/lib/trade-schedule-server": scheduleServerHelpers,
   });
 }

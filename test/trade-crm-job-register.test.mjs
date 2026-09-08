@@ -15,15 +15,17 @@ import { calculateQuoteSelection } from "../src/lib/trade-quote-options.ts";
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
 test("controlled job lifecycle is derived from authoritative job facts", () => {
-  assert.equal(deriveJobRegisterOperationalStatus({}), "quoting");
-  assert.equal(deriveJobRegisterOperationalStatus({ assigneeMemberId: "member-1" }), "assigned");
-  assert.equal(deriveJobRegisterOperationalStatus({ scheduleDate: "2026-08-14T01:00:00Z" }), "assigned");
-  assert.equal(deriveJobRegisterOperationalStatus({ workStage: "completed" }), "complete");
+  assert.equal(deriveJobRegisterOperationalStatus({}), "unscheduled");
+  assert.equal(deriveJobRegisterOperationalStatus({ assigneeMemberId: "member-1" }), "unscheduled");
+  assert.equal(deriveJobRegisterOperationalStatus({ scheduleDate: "2026-08-14T01:00:00Z" }), "scheduled");
+  assert.equal(deriveJobRegisterOperationalStatus({ workStage: "in_progress" }), "partial");
+  assert.equal(deriveJobRegisterOperationalStatus({ hasProgress: true }), "partial");
+  assert.equal(deriveJobRegisterOperationalStatus({ workStage: "completed" }), "completed");
   assert.equal(deriveJobRegisterOperationalStatus({ workStage: "cancelled" }), "cancelled");
-  assert.equal(deriveJobRegisterOperationalStatus({ pipelineStage: "lost", audited: true }), "cancelled");
-  assert.equal(deriveJobRegisterOperationalStatus({ pipelineStage: "paid" }), "complete");
-  assert.equal(deriveJobRegisterOperationalStatus({ audited: true, workStage: "completed" }), "audited");
-  assert.equal(deriveJobRegisterOperationalStatus({ certifiedQuantity: 4, audited: true }), "certified");
+  assert.equal(deriveJobRegisterOperationalStatus({ pipelineStage: "lost", auditOutcome: "passed" }), "cancelled");
+  assert.equal(deriveJobRegisterOperationalStatus({ pipelineStage: "paid" }), "completed");
+  assert.equal(deriveJobRegisterOperationalStatus({ auditOutcome: "passed", workStage: "completed" }), "audited");
+  assert.equal(deriveJobRegisterOperationalStatus({ certifiedQuantity: 4 }), "unscheduled");
 });
 
 test("register projection keeps customer fields separate and leaves absent assignment and certificates explicit", () => {
@@ -56,7 +58,8 @@ test("register projection keeps customer fields separate and leaves absent assig
     assignedWorker: "Unassigned",
     scheduleDate: "",
     createdDate: "2026-08-12T03:04:05.000Z",
-    operationalStatus: "quoting",
+    operationalStatus: "unscheduled",
+    auditOutcome: null,
     quoteTotalExGstCents: null,
     certificates: { state: "pending", stc: 0, veec: 0, esc: 0, other: 0 },
     service: "Energy assessment",
@@ -284,6 +287,17 @@ test("job register route and UI keep tenant scope, filters, sorting and accessib
   assert.match(addAppointment, /setBookingDraftOpen\(false\)/);
   assert.doesNotMatch(ui, /activeTab === "assignment"/);
   assert.doesNotMatch(ui, /key=\{`[^\n]*selectedJobDetail\.assigneeMemberId/);
+});
+
+test("job register and detail use the canonical lifecycle labels", () => {
+  const ui = read("../src/components/InstallerCrmWorkspace.tsx");
+  assert.match(ui, /\["unscheduled", "scheduled", "partial", "completed", "audited", "cancelled"\]/);
+  assert.match(ui, /job\.jobRegister\.operationalStatus === "audited" && auditOutcomeLabel/);
+  assert.match(ui, /normaliseJobOperationalStatus\(preferences\.operationalStatus\)/);
+  assert.match(ui, /<dt>Status<\/dt><dd>\{displayedLifecycle\}<\/dd>/);
+  for (const obsolete of ["quoting", "assigned", "certified"]) {
+    assert.doesNotMatch(ui, new RegExp(`<option value="${obsolete}">`));
+  }
 });
 
 test("job workspace exposes authorised customer context, preserves the private boundary and uses the real customer editor", () => {

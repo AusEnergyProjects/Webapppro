@@ -31,7 +31,11 @@ export function assignedWorkPackScope(
 }
 
 export async function assignedWorkPackRequestScope(request: Request) {
-  return assignedWorkPackScope(await requireInstallerTeamAccess(request));
+  const access = await requireInstallerTeamAccess(request);
+  return Object.freeze({
+    ...assignedWorkPackScope(access),
+    canViewFieldEvidence: access.canViewFieldEvidence,
+  });
 }
 
 export function assignedWorkPackError(error: unknown) {

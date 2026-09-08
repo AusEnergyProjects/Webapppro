@@ -1,5 +1,6 @@
 import * as activityCompletion from "../src/lib/trade-activity-forms-completion.ts";
 import * as fieldCompletionPolicy from "../src/lib/trade-field-completion-policy.ts";
+import * as tradeJobLifecycle from "../src/lib/trade-job-lifecycle.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -13,6 +14,16 @@ class BoundedJsonRequestError extends Error {
 const boundedJsonRequest = {
   BoundedJsonRequestError,
   readBoundedJsonRequest: async (request) => request.json(),
+};
+
+const tradeJobLifecycleDependency = {
+  ...tradeJobLifecycle,
+  tradeJobHasProgressSql: () => "0",
+  tradeJobLifecycleStatusSql: (input) => tradeJobLifecycle.tradeJobLifecycleStatusSql({
+    ...input,
+    auditOutcomeSql: input.auditOutcomeSql || "NULL",
+    hasProgressSql: input.hasProgressSql || "0",
+  }),
 };
 
 const source = fs.readFileSync(
@@ -91,6 +102,7 @@ function loadRoute(mocks) {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
     if (specifier === "@/lib/trade-field-completion-policy") return fieldCompletionPolicy;
     if (specifier === "@/lib/trade-activity-forms-completion") return activityCompletion;
+    if (specifier === "@/lib/trade-job-lifecycle") return tradeJobLifecycleDependency;
     if (specifier === "@/lib/bounded-json-request") {
       return boundedJsonRequest;
     }
@@ -356,6 +368,30 @@ function syncDatabase(stage = "in_progress", revision = 5) {
       evidence_status text NOT NULL,
       revision integer NOT NULL,
       updated_at text NOT NULL
+    );
+    CREATE TABLE compliance_case_decisions (
+      id text PRIMARY KEY NOT NULL,
+      organisation_id text NOT NULL,
+      case_id text NOT NULL,
+      decision_type text NOT NULL,
+      outcome text NOT NULL,
+      decided_at text NOT NULL,
+      created_at text NOT NULL
+    );
+    CREATE TABLE compliance_submission_batch_items (
+      id text PRIMARY KEY NOT NULL,
+      organisation_id text NOT NULL,
+      case_id text NOT NULL,
+      status text NOT NULL,
+      updated_at text NOT NULL
+    );
+    CREATE TABLE compliance_submission_responses (
+      id text PRIMARY KEY NOT NULL,
+      organisation_id text NOT NULL,
+      batch_item_id text NOT NULL,
+      response_type text NOT NULL,
+      occurred_at text NOT NULL,
+      created_at text NOT NULL
     );
     CREATE TABLE compliance_activity_work_pack_instances (
       id text PRIMARY KEY NOT NULL,
@@ -892,6 +928,13 @@ async function bootstrap(route) {
   return { response, payload: await response.json() };
 }
 
+async function changesSince(route, cursor) {
+  const response = await route.GET(new Request(
+    `https://app.example/api/trade-team/sync?deviceId=device-001&platform=ios&appVersion=1.0.0&cursor=${encodeURIComponent(cursor)}`,
+  ));
+  return { response, payload: await response.json() };
+}
+
 async function postActions(route, actions) {
   const response = await route.POST(new Request(
     "https://app.example/api/trade-team/sync",
@@ -925,6 +968,171 @@ test("bootstrap fails closed before companion rows can exceed its response cap",
   assert.equal(result.response.status, 409);
   assert.equal(result.payload.code, "SYNC_RESPONSE_CARDINALITY_EXCEEDED");
   assert.match(result.payload.error, /too much active field data/);
+});
+
+test("bootstrap keeps active work ahead of retained completed history at the job cap", async () => {
+  const database = syncDatabase("in_progress", 5);
+  const insert = database.prepare(`INSERT INTO trade_work_orders
+    (id, firebase_uid, partner_type, record_status, stage, scheduled_start,
+     revision, updated_at)
+    VALUES (?, 'owner-1', 'installer', 'active', 'completed',
+      '2026-01-01T09:00:00.000Z', 1, ?)`);
+  database.exec("BEGIN");
+  for (let index = 0; index < 500; index += 1) {
+    insert.run(`completed-${String(index).padStart(3, "0")}`, `completed-${index}`);
+  }
+  database.exec("COMMIT");
+  const { route } = routeHarness(database);
+
+  const result = await bootstrap(route);
+
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.changes.length, 500);
+  assert.ok(result.payload.changes.some((change) => change.entityId === "job-1"));
+  assert.equal(
+    result.payload.changes.filter((change) => change.entity.stage === "completed").length,
+    499,
+  );
+});
+
+test("incremental sync repairs a missing audit ledger change and refreshes lifecycle once", async () => {
+  const database = syncDatabase("completed", 5);
+  const { route } = routeHarness(database);
+  const initial = await bootstrap(route);
+  assert.equal(initial.response.status, 200);
+  assert.equal(initial.payload.changes[0].entity.lifecycleStatus, "completed");
+  assert.equal(initial.payload.changes[0].entity.auditOutcome, "");
+
+  database.prepare(`INSERT INTO compliance_cases
+    (id, case_number, organisation_id, work_order_id, installer_uid,
+     activity_version_id, evidence_policy_version_id, status, evidence_status,
+     revision, updated_at)
+    VALUES ('audit-case', 'AUDIT-1', 'org-creditex', 'job-1', 'owner-1',
+      'activity-6', 'policy-6', 'draft', 'complete', 1,
+      '2026-09-08T10:00:00.000Z')`).run();
+  database.prepare(`INSERT INTO compliance_case_decisions
+    (id, organisation_id, case_id, decision_type, outcome, decided_at, created_at)
+    VALUES ('audit-decision', 'org-creditex', 'audit-case',
+      'submission_outcome', 'changes_required', '2026-09-08T10:01:00.000Z',
+      '2026-09-08T10:01:00.000Z')`).run();
+  assert.equal(
+    database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count,
+    0,
+  );
+
+  const refreshed = await changesSince(route, initial.payload.nextCursor);
+  assert.equal(refreshed.response.status, 200);
+  assert.equal(refreshed.payload.changes.length, 1);
+  assert.equal(refreshed.payload.changes[0].operation, "upsert");
+  assert.equal(refreshed.payload.changes[0].entity.lifecycleStatus, "audited");
+  assert.equal(refreshed.payload.changes[0].entity.auditOutcome, "correction_required");
+  assert.equal(
+    database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count,
+    1,
+  );
+
+  const settled = await changesSince(route, refreshed.payload.nextCursor);
+  assert.equal(settled.response.status, 200);
+  assert.deepEqual(settled.payload.changes, []);
+  assert.equal(
+    database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count,
+    1,
+  );
+});
+
+test("incremental audit refresh uses record time when the effective outcome is backdated", async () => {
+  const database = syncDatabase("completed", 5);
+  database.prepare(`INSERT INTO compliance_cases
+    (id, case_number, organisation_id, work_order_id, installer_uid,
+     activity_version_id, evidence_policy_version_id, status, evidence_status,
+     revision, updated_at)
+    VALUES ('backdated-case', 'AUDIT-2', 'org-creditex', 'job-1', 'owner-1',
+      'activity-6', 'policy-6', 'draft', 'complete', 1,
+      '2026-09-08T11:50:00.000Z')`).run();
+  database.prepare(`INSERT INTO compliance_submission_batch_items
+    (id, organisation_id, case_id, status, updated_at)
+    VALUES ('backdated-item', 'org-creditex', 'backdated-case', 'submitted',
+      '2026-09-08T11:50:00.000Z')`).run();
+  database.prepare(`INSERT INTO trade_team_sync_changes
+    (owner_uid, audience_member_id, entity_type, entity_id, operation,
+     revision, changed_at)
+    VALUES ('owner-1', 'member-1', 'job', 'job-1', 'upsert', 5,
+      '2026-09-08T12:00:00.000Z')`).run();
+  const { route } = routeHarness(database);
+  const initial = await bootstrap(route);
+  assert.equal(initial.payload.nextCursor, "v1:1");
+  assert.equal(initial.payload.changes[0].entity.lifecycleStatus, "completed");
+
+  database.prepare(`INSERT INTO compliance_submission_responses
+    (id, organisation_id, batch_item_id, response_type, occurred_at, created_at)
+    VALUES ('backdated-response', 'org-creditex', 'backdated-item', 'accepted',
+      '2026-09-08T11:55:00.000Z', '2026-09-08T12:05:00.000Z')`).run();
+
+  const refreshed = await changesSince(route, initial.payload.nextCursor);
+
+  assert.equal(refreshed.response.status, 200);
+  assert.equal(refreshed.payload.changes.length, 1);
+  assert.equal(refreshed.payload.changes[0].entity.lifecycleStatus, "audited");
+  assert.equal(refreshed.payload.changes[0].entity.auditOutcome, "passed");
+  assert.equal(
+    database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count,
+    2,
+  );
+
+  const settled = await changesSince(route, refreshed.payload.nextCursor);
+  assert.deepEqual(settled.payload.changes, []);
+  assert.equal(
+    database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count,
+    2,
+  );
+});
+
+test("incremental sync removes a newly cancelled job while completed jobs stay available", async () => {
+  const database = syncDatabase("in_progress", 5);
+  const { route } = routeHarness(database);
+  const initial = await bootstrap(route);
+  database.prepare(`UPDATE trade_work_orders
+    SET stage = 'cancelled', revision = 6,
+      updated_at = '2026-09-08T11:00:00.000Z'
+    WHERE id = 'job-1'`).run();
+  database.prepare(`INSERT INTO trade_team_sync_changes
+    (owner_uid, audience_member_id, entity_type, entity_id, operation,
+     revision, changed_at)
+    VALUES ('owner-1', 'member-1', 'job', 'job-1', 'upsert', 6,
+      '2026-09-08T11:00:00.000Z')`).run();
+
+  const cancelled = await changesSince(route, initial.payload.nextCursor);
+
+  assert.equal(cancelled.response.status, 200);
+  assert.deepEqual(cancelled.payload.changes.map((change) => ({
+    entityId: change.entityId,
+    operation: change.operation,
+    hasEntity: Object.hasOwn(change, "entity"),
+  })), [{
+    entityId: "job-1",
+    operation: "delete",
+    hasEntity: false,
+  }]);
+
+  const completedDatabase = syncDatabase("completed", 5);
+  const completed = await bootstrap(routeHarness(completedDatabase).route);
+  assert.deepEqual(
+    completed.payload.changes.map((change) => change.entity.lifecycleStatus),
+    ["completed"],
+  );
+});
+
+test("bootstrap excludes jobs cancelled through the CRM pipeline", async () => {
+  const database = syncDatabase("backlog", 1);
+  database.prepare(`INSERT INTO trade_crm_job_details
+    (id, work_order_id, firebase_uid, pipeline_stage, updated_at)
+    VALUES ('detail-1', 'job-1', 'owner-1', 'lost',
+      '2026-09-08T11:00:00.000Z')`).run();
+
+  const result = await bootstrap(routeHarness(database).route);
+
+  assert.equal(result.response.status, 200);
+  assert.deepEqual(result.payload.changes, []);
 });
 
 test("bootstrap returns every current activity intent with its validated case link and preserves own-job scope", async () => {

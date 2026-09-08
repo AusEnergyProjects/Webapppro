@@ -92,7 +92,7 @@ function fixture() {
     CREATE TABLE trade_crm_job_details (
       work_order_id text PRIMARY KEY NOT NULL, firebase_uid text NOT NULL, crm_customer_id text NOT NULL,
       service_site_id text NOT NULL, customer_source text NOT NULL, quote_status text NOT NULL,
-      quoted_value_cents integer NOT NULL
+      quoted_value_cents integer NOT NULL, pipeline_stage text NOT NULL
     );
     CREATE TABLE trade_crm_quotes (
       id text PRIMARY KEY NOT NULL, work_order_id text NOT NULL, firebase_uid text NOT NULL,
@@ -196,8 +196,8 @@ function fixture() {
       ('job-b', 'owner-1', 'installer', 'direct', 'JOB-B', 'Job B', 'hot-water', 'Melbourne', 'standard',
         'scheduled', 'active', '2099-01-05', '2099-01-05', 'member-a', 'Worker A', 3, '2026-01-01', '2026-01-01');
     INSERT INTO trade_crm_job_details VALUES
-      ('job-a', 'owner-1', 'customer-a', 'site-a', 'trade_owned', 'accepted', 10000),
-      ('job-b', 'owner-1', 'customer-b', 'site-b', 'trade_owned', 'accepted', 20000);
+      ('job-a', 'owner-1', 'customer-a', 'site-a', 'trade_owned', 'accepted', 10000, 'scheduled'),
+      ('job-b', 'owner-1', 'customer-b', 'site-b', 'trade_owned', 'accepted', 20000, 'scheduled');
     INSERT INTO trade_crm_appointments VALUES
       ('appointment-a', 'job-a', 'owner-1', 'site_visit', 'Job A visit', '2099-01-05T10:00', '2099-01-05T11:00',
         'member-a', 'Worker A', 'scheduled', 'Bring ladder', 1, '2026-01-01', '2026-01-01'),

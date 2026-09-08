@@ -268,7 +268,8 @@ export async function listJobs() {
   const db = await getDatabase();
   const rows = await db.getAllAsync<{ payload: string }>(
     `SELECT payload FROM jobs
-      WHERE stage NOT IN ('completed', 'cancelled')
+      WHERE stage <> 'cancelled'
+        AND COALESCE(json_extract(payload, '$.lifecycleStatus'), '') <> 'cancelled'
       ORDER BY scheduled_start = '', scheduled_start, work_number`,
   );
   return rows.map((row) => JSON.parse(row.payload) as FieldJob);
