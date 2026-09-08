@@ -1683,9 +1683,12 @@ export async function POST(request: Request) {
     if (action === "find_field_customer_by_email" && !canCreateJobs(identity.access)) {
       throw new Error("JOB_CREATE_REQUIRED");
     }
-    if (action === "find_quick_quote_customers"
-      && (!canCreateJobs(identity.access) || !canManageQuotes(identity.access))) {
-      throw new Error(!canCreateJobs(identity.access) ? "JOB_CREATE_REQUIRED" : "QUOTE_MANAGEMENT_REQUIRED");
+    if (action === "find_quick_quote_customers") {
+      if (!canCreateJobs(identity.access)) throw new Error("JOB_CREATE_REQUIRED");
+      if (!canManageQuotes(identity.access)) throw new Error("QUOTE_MANAGEMENT_REQUIRED");
+      if (!identity.access.isOwner && identity.access.jobScope !== "team") {
+        throw new Error("QUICK_QUOTE_TEAM_SCOPE_REQUIRED");
+      }
     }
 
     if (action === "create_template") {
@@ -1903,6 +1906,7 @@ export async function POST(request: Request) {
       let customerId = cleanAdminText(body.crmCustomerId, 180);
       let serviceSiteId = cleanAdminText(body.serviceSiteId, 180);
       let existingCustomer: Record<string, unknown> | null = null;
+      let existingServiceSite: Record<string, unknown> | null = null;
       const customerMode = cleanAdminText(body.customerMode, 20);
       const serviceSiteMode = cleanAdminText(body.serviceSiteMode, 20);
       const createCustomer = customerMode === "new";
@@ -2023,7 +2027,24 @@ export async function POST(request: Request) {
             .bind(customerId, identity.uid).first<Record<string, unknown>>();
           serviceSiteId = String(primarySite?.id || "");
         }
-        if (serviceSiteId && !createCustomer && serviceSiteMode !== "new") await ownedServiceSite(db, identity, serviceSiteId, customerId);
+        if (serviceSiteId && !createCustomer && serviceSiteMode !== "new") {
+          existingServiceSite = await ownedServiceSite(db, identity, serviceSiteId, customerId);
+        }
+        if (quickQuote && !createCustomer) {
+          const existingPhone = String(existingCustomer?.phone || "");
+          const existingStreet = String(existingServiceSite?.address_line_1 || "").trim();
+          const existingSuburb = String(existingServiceSite?.suburb || "").trim();
+          const existingState = String(existingServiceSite?.address_state || "").trim().toUpperCase();
+          const existingPostcode = String(existingServiceSite?.postcode || "").trim();
+          if (existingPhone.replace(/\D/g, "").length < 8
+            || !existingStreet || !existingSuburb || !ADDRESS_STATES.has(existingState) || !/^\d{4}$/.test(existingPostcode)) {
+            return adminJson({
+              ok: false,
+              code: "QUICK_QUOTE_CUSTOMER_DETAILS_REQUIRED",
+              error: "Add a valid mobile and full service property to this customer before creating the quote.",
+            }, 400);
+          }
+        }
       }
       if (!customerId && serviceSiteId) throw new Error("SERVICE_SITE_NOT_FOUND");
       const sourceEnquiryId = quickQuote ? "" : cleanAdminText(body.sourceEnquiryId, 180);

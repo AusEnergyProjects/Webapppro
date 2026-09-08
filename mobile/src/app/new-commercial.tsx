@@ -63,6 +63,17 @@ function addressLine(match: CustomerMatch) {
   return [match.addressLine1, match.addressLine2, match.suburb, match.addressState, match.postcode].filter(Boolean).join(', ');
 }
 
+function savedCustomerMissingQuoteDetails(match: CustomerMatch) {
+  const missing: string[] = [];
+  if (!/^\S+@\S+\.\S+$/.test(match.email.trim())) missing.push('email');
+  if (match.phone.replace(/\D/g, '').length < 8) missing.push('mobile');
+  if (!match.addressLine1.trim() || !match.suburb.trim()
+    || !AUSTRALIAN_STATES.has(match.addressState.trim().toUpperCase()) || !/^\d{4}$/.test(match.postcode.trim())) {
+    missing.push('full property');
+  }
+  return missing;
+}
+
 function jobCustomerName(job: JobMatch) {
   return `${job.jobRegister.firstName} ${job.jobRegister.lastName}`.trim() || job.title || 'Customer job';
 }
@@ -190,7 +201,8 @@ export default function NewCommercialScreen() {
   }
 
   function chooseCustomer(match: CustomerMatch) {
-    if (!match.email) return setError('Add an email to this saved customer in TLink before creating a quote.');
+    const missing = savedCustomerMissingQuoteDetails(match);
+    if (missing.length) return setError(`Add ${missing.join(', ')} to this saved customer in TLink, or use New customer to create a complete record.`);
     setSelectedCustomer(match); setClientRequestId(Crypto.randomUUID()); setServiceCategory(''); setDescription(''); setError(''); setStage('work');
   }
 

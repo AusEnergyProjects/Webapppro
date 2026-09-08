@@ -277,6 +277,14 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       }
     });
   }
+  async function waitForBackgroundSync() {
+    let pending = syncs.current;
+    await pending;
+    while (pending !== syncs.current) {
+      pending = syncs.current;
+      await pending;
+    }
+  }
   async function retainFile(fieldKey: string, uri: string, name: string, contentType: string, metadata: CaptureMetadata) {
     if (!cacheRef.current) return;
     const file = new File(uri);
@@ -398,13 +406,23 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     Alert.alert(`Remove this ${itemLabel}?`, 'This removes the accidental item and any answers or pending files attached to it.', [
       { text: 'Keep item', style: 'cancel' },
       { text: 'Remove item', style: 'destructive', onPress: () => void perform('remove', async () => {
+        await waitForBackgroundSync();
         const current = cacheRef.current;
         if (!current) return;
-        const pending = current.pending.filter((item) => fieldKeys.includes(item.fieldKey));
+        const currentCount = activityRepeatCount(current.record.form, current.answers, group);
+        if (currentCount <= 1) return;
+        const currentRemovedIndex = currentCount - 1;
+        const currentFieldKeys = current.record.form.fields.filter((field) => field.repeatGroup === group)
+          .map((field) => activityRepeatKey(field.key, currentRemovedIndex));
+        if (current.record.evidence.some((item) => currentFieldKeys.includes(item.fieldKey))) {
+          setError(`This ${itemLabel} finished uploading and stays in the field record.`);
+          return;
+        }
+        const pending = current.pending.filter((item) => currentFieldKeys.includes(item.fieldKey));
         const answers = removeLastActivityRepeat(current.record.form, current.answers, group);
         const previousPage = [...activityWizardPages(current.record.form, answers)].reverse().find((page) => page.kind === 'fields'
-          && page.fields.some((field) => field.repeatGroup === group && field.repeatIndex === removedIndex - 1));
-        await remember({ ...current, answers, pending: current.pending.filter((item) => !fieldKeys.includes(item.fieldKey)), stepKey: previousPage?.key || current.stepKey });
+          && page.fields.some((field) => field.repeatGroup === group && field.repeatIndex === currentRemovedIndex - 1));
+        await remember({ ...current, answers, pending: current.pending.filter((item) => !currentFieldKeys.includes(item.fieldKey)), stepKey: previousPage?.key || current.stepKey });
         for (const item of pending) { const file = new File(item.uri); if (file.exists) file.delete(); }
         queuePageSync([]);
       }) },
@@ -548,7 +566,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
         {step?.kind === 'fields' ? <>{step.fields.map(renderField)}{showRepeatActions && repeatField?.repeatGroup && !locked ? <View style={styles.repeatActions}>
           <Text style={styles.progressLabel}>{repeatItemLabel.charAt(0).toUpperCase() + repeatItemLabel.slice(1)} {repeatField.repeatIndex + 1}</Text>
           <FieldButton variant="secondary" disabled={!editable || Boolean(busy) || repeatCount >= 20} onPress={() => void addRepeatItem(repeatField.repeatGroup!)}>Add another {repeatItemLabel}</FieldButton>
-          {repeatCount > 1 ? <FieldButton variant="danger" disabled={!editable || Boolean(busy) || repeatItemHasSavedEvidence} onPress={() => removeRepeatItem(repeatField.repeatGroup!)}>Remove this {repeatItemLabel}</FieldButton> : null}
+          {repeatCount > 1 ? <FieldButton variant="danger" disabled={!editable || Boolean(busy) || syncing || repeatItemHasSavedEvidence} onPress={() => removeRepeatItem(repeatField.repeatGroup!)}>Remove this {repeatItemLabel}</FieldButton> : null}
           {repeatItemHasSavedEvidence ? <Text style={styles.small}>This item has uploaded evidence and stays in the field record.</Text> : null}
         </View> : null}</> : step?.kind === 'signature' ? currentSignature ? <Text style={styles.text}>Signed by {currentSignature.signerName} on {new Date(currentSignature.signedAt).toLocaleString('en-AU')}.</Text> : <>
           <Text style={styles.small}>The signing date and time are recorded automatically when this signature is saved.</Text>

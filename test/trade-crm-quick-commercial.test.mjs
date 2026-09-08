@@ -153,6 +153,16 @@ test('both quick quote actions require create-job and manage-quote permissions',
   }
 });
 
+test('own-job-only staff cannot search the business customer list', async () => {
+  const { database, post, insertCustomer } = fixture({ jobScope: 'own' });
+  try {
+    insertCustomer();
+    const result = await post({ action: 'find_quick_quote_customers', search: 'alex' });
+    assert.equal(result.status, 403, JSON.stringify(result.body));
+    assert.equal(result.body.matches, undefined);
+  } finally { database.close(); }
+});
+
 test('new-customer quick quote creates an unscheduled unassigned job once and ignores scheduling/activity payloads', async () => {
   const { database, post } = fixture();
   try {
@@ -203,6 +213,27 @@ test('existing-customer quick quote needs matching owner/site/email without cust
     assert.equal(foreign.status, 404, JSON.stringify(foreign.body));
     assert.equal(database.prepare('SELECT COUNT(*) count FROM trade_work_orders').get().count, 1);
   } finally { database.close(); }
+});
+
+test('existing-customer quick quote requires the saved mobile and full property', async () => {
+  for (const sql of [
+    "UPDATE trade_crm_customers SET phone = '' WHERE id = 'customer-1'",
+    "UPDATE trade_crm_service_sites SET address_line_1 = '' WHERE id = 'site-customer-1'",
+  ]) {
+    const { database, post, insertCustomer } = fixture();
+    try {
+      insertCustomer();
+      database.exec(sql);
+      const result = await post(quick({
+        clientRequestId: `saved-details-${sql.includes('customers') ? 'phone' : 'address'}-001`,
+        customerMode: 'existing', crmCustomerId: 'customer-1', serviceSiteId: 'site-customer-1',
+        email: 'customer-1@example.test',
+      }));
+      assert.equal(result.status, 400, JSON.stringify(result.body));
+      assert.equal(result.body.code, 'QUICK_QUOTE_CUSTOMER_DETAILS_REQUIRED');
+      assert.equal(database.prepare('SELECT COUNT(*) count FROM trade_work_orders').get().count, 0);
+    } finally { database.close(); }
+  }
 });
 
 test('quick quote requires valid email, mobile and full property details before writing', async () => {
