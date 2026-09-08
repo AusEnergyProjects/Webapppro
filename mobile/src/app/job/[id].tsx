@@ -260,7 +260,7 @@ function workPackCaption(context: ActivityWorkPackPromptContext) {
 }
 
 export default function JobScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, openCommercial } = useLocalSearchParams<{ id: string; openCommercial?: string }>();
   const {
     findJob,
     saveAction,
@@ -274,7 +274,7 @@ export default function JobScreen() {
   const [duration, setDuration] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState('');
-  const [activeFormId, setActiveFormId] = useState<string | null>(null);
+  const [activeFormId, setActiveFormId] = useState<string | null>(() => openCommercial === 'quote' || openCommercial === 'invoice' ? openCommercial : null);
   const [activityRecords, setActivityRecords] = useState<ActivityFieldSummary[]>([]);
   const [activityLoadError, setActivityLoadError] = useState('');
   const [customerDocumentStatus, setCustomerDocumentStatus] = useState('');

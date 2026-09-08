@@ -578,7 +578,7 @@ test("customer signing atomically rejects a delivery that bounces at the field-r
     armBounce = true;
     await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
       declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes }),
-    /ACTIVITY_REVISION_CONFLICT/);
+    /ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED/);
     assert.equal(bounced, true);
     const stored = JSON.parse(database.prepare("SELECT payload FROM trade_activity_field_records WHERE id = ?").get(record.id).payload);
     assert.deepEqual(stored.signatures, []);
@@ -831,7 +831,7 @@ test("technician signing atomically rejects a reassignment made at the write bou
       declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
     armReassignment = true;
     await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
-      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes }), /ACTIVITY_REVISION_CONFLICT/);
+      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes }), /JOB_NOT_ASSIGNED/);
     assert.equal(reassigned, true);
     const stored = JSON.parse(database.prepare("SELECT payload FROM trade_activity_field_records WHERE id = ?").get(record.id).payload);
     assert.equal(stored.signatures.some((signature) => signature.declarationKey === "after_technician"), false);
@@ -983,5 +983,51 @@ test("location-required capture rejects missing, mocked or stale location and re
     await assert.rejects(server.uploadActivityEvidence(access, record.id, record.revision, "document", file, capture, uploadId), /ACTIVITY_UPLOAD_ID_CONFLICT/);
     const ios = await server.uploadActivityEvidence(access, record.id, uploaded.revision, "photo", file, { ...capture, mocked: null }, crypto.randomUUID());
     assert.equal(ios.evidence.at(-1).locationMocked, null, "iOS does not report a mock flag; preserve that absence without rejecting accurate location or inventing false");
+  } finally { database.close(); }
+});
+
+
+test("phone saves apply only changed answers to the latest record automatically", async () => {
+  const { database, server, access } = fixture();
+  try {
+    let initial = await server.openActivityRecord(access, "job-a", "intent-a");
+    initial = await server.saveActivityAnswers(access, initial.id, initial.revision, { before_name: "Customer", after_model: "Old model" });
+    await server.saveActivityAnswers(access, initial.id, initial.revision, { ...initial.answers, before_name: "Office corrected customer" });
+    const saved = await server.saveActivityAnswers(access, initial.id, initial.revision,
+      { ...initial.answers, after_model: "Installed model" }, initial.answers);
+    assert.equal(saved.answers.before_name, "Office corrected customer");
+    assert.equal(saved.answers.after_model, "Installed model");
+    const latestPhone = await server.saveActivityAnswers(access, initial.id, initial.revision,
+      { ...initial.answers, after_model: "Corrected installed model" }, initial.answers);
+    assert.equal(latestPhone.answers.after_model, "Corrected installed model");
+    assert.equal(latestPhone.answers.before_name, "Office corrected customer");
+  } finally { database.close(); }
+});
+
+test("automatic draft merge never overwrites signed answers", async () => {
+  const { database, server, access } = fixture();
+  try {
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer" });
+    const base = record;
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
+    await assert.rejects(server.saveActivityAnswers(access, record.id, base.revision,
+      { before_name: "Changed signed customer" }, base.answers), /ACTIVITY_SIGNED_SCOPE_LOCKED/);
+  } finally { database.close(); }
+});
+
+test("signature content binding accepts a harmless later revision but rejects changed work", async () => {
+  const { database, server, access } = fixture();
+  try {
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Original" });
+    const shown = server.activityPresentation(record);
+    await server.saveActivityAnswers(access, record.id, record.revision, { ...record.answers, after_model: "After-work change" });
+    const signed = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      expectedScope: shown.signingScopes.before, declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
+    assert.equal(signed.signatures.length, 1);
+    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: signed.revision,
+      expectedScope: shown.signingScopes.after, declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes }), /ACTIVITY_SIGNING_SCOPE_CHANGED/);
   } finally { database.close(); }
 });

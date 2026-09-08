@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { activityDeclarationPages, activityWizardSteps, expandedActivityFields, fieldConditionMet } from '../src/lib/trade-activity-form-flow.ts';
+import { activityWizardSteps, boundActivityDeclaration, expandedActivityFields, fieldConditionMet } from '../src/lib/trade-activity-form-flow.ts';
 import { activityMissing, normaliseActivityAnswers, activitySigningScope } from '../src/lib/trade-activity-forms.ts';
 
 const field = (key, type = 'text', extra = {}) => ({ key, type, label: key, section: 'Equipment', required: true, phase: 'after', options: [], help: '', ...extra });
@@ -35,14 +35,14 @@ test('repeat instances keep the same identity while each section remains one run
 });
 test('question wizard puts before signatures before work and final signature after work', () => {
   const steps = activityWizardSteps(form, { installed: true });
-  assert.deepEqual(steps.map((item) => item.key), ['consent', 'customer:read:0', 'customer', 'installed', 'serial', 'photo', 'technician:read:0', 'technician', 'review']);
+  assert.deepEqual(steps.map((item) => item.key), ['consent', 'customer', 'installed', 'serial', 'photo', 'technician', 'review']);
 });
-test('declaration pagination retains every exact character without scrolling through a whole document', () => {
+test('a long declaration takes one signature step and retains its full wording for review', () => {
   const declaration = ('A complete declaration with meaningful spaces.\n').repeat(150);
-  const pages = activityDeclarationPages(declaration);
-  assert.equal(pages.join(''), declaration);
-  assert.ok(pages.length > 1);
-  assert.ok(pages.every((page) => page.length <= 450));
+  const source = { ...form.declarations[0], text: declaration };
+  const steps = activityWizardSteps({ ...form, declarations: [source] }, {});
+  assert.equal(steps.filter((step) => step.kind === 'signature').length, 1);
+  assert.equal(boundActivityDeclaration(source, {}), declaration);
 });
 test('every repeated required photo and answer blocks completion independently', () => {
   const answers = normaliseActivityAnswers(form, { '$repeat.units': 2, consent: false, installed: true, 'installed[1]': true, serial: 'A' });

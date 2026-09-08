@@ -1,4 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import * as Updates from 'expo-updates';
 import { useEffect, useState } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 
@@ -44,7 +45,7 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <Text style={styles.label}>APP UPDATES</Text>
         <Text style={styles.title}>Keep this phone current</Text>
-        <Text style={styles.body}>Use this after your administrator says a field change is ready. Small updates download inside the app; full Android builds open the secure install page.</Text>
+        <Text style={styles.body}>App improvements download automatically on your dashboard. An Install now button appears when they are ready. You can also check here.</Text>
         {updateMessage ? <Text accessibilityLiveRegion="polite" style={styles.updateMessage}>{updateMessage}</Text> : null}
         <FieldButton loading={checkingUpdate} onPress={() => void checkUpdate()}>Check for update</FieldButton>
       </View>
@@ -52,6 +53,8 @@ export default function SettingsScreen() {
         <Text style={styles.label}>THIS DEVICE</Text>
         <View style={styles.fact}><Text style={styles.body}>Name</Text><Text style={styles.value}>{getDeviceName()}</Text></View>
         <View style={styles.fact}><Text style={styles.body}>App version</Text><Text style={styles.value}>{APP_VERSION}</Text></View>
+        <View style={styles.fact}><Text style={styles.body}>App update</Text><Text selectable style={[styles.value, styles.reference]}>{Updates.updateId || 'Built in'}</Text></View>
+        <View style={styles.fact}><Text style={styles.body}>Update channel</Text><Text style={styles.value}>{Updates.channel || 'Development'}</Text></View>
         <View style={styles.fact}><Text style={styles.body}>Device reference</Text><Text numberOfLines={1} style={[styles.value, styles.reference]}>{deviceId.slice(-12) || 'Preparing...'}</Text></View>
       </View>
       <View style={styles.privacy}><MaterialCommunityIcons name="shield-lock-outline" size={26} color={colours.green} /><View style={styles.flex}><Text style={styles.title}>Privacy by design</Text><Text style={styles.body}>Offline records are encrypted. Signing out or remote revocation removes cached jobs, queued files and addresses from this device.</Text></View></View>

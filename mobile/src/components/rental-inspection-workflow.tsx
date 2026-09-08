@@ -266,7 +266,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     form.append('evidenceEnvelope', JSON.stringify({ schemaVersion: 1, kind: 'tlink-rental-inspection-photo', captureSessionId: captureSessionId(), source: 'in_app_camera',
       capture: photo.capture, locationPermission: observation.permission, location,
       processing: { privacySafeDerivative: true, exifCopied: false, outputFormat: 'image/jpeg', widthPixels: prepared.width, heightPixels: prepared.height, maximumWidthPixels: 1600 } }));
-    form.append('file', { uri: prepared.uri, name: 'rental-photo-' + Crypto.randomUUID() + '.jpg', type: 'image/jpeg' } as unknown as Blob);
+    form.append('file', file);
     const uploaded = await apiRequest<{ media?: { id: string }[] }>('/api/trade-field-work', { method: 'POST', body: form });
     return uploaded.media?.[0]?.id || '';
       },

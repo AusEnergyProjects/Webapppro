@@ -91,11 +91,26 @@ export async function governedReferenceDocumentBytesSha256(bytes: Uint8Array) {
   ));
 }
 
+async function responseBody(response: Response): Promise<Record<string, unknown>> {
+  try {
+    const body: unknown = await response.json();
+    if (body && typeof body === 'object' && !Array.isArray(body)) return body as Record<string, unknown>;
+  } catch { /* An upstream size limit or outage may return text instead of JSON. */ }
+  if (response.status === 413) throw new ApiError(
+    'The upload exceeds the server size limit. Your original remains on this phone.',
+    413, 'UPLOAD_TOO_LARGE',
+  );
+  throw new ApiError(
+    'The service did not return a valid result. Your work is retained. Try again when connected.',
+    response.status, 'INVALID_SERVER_RESPONSE',
+  );
+}
+
 export async function apiRequest<T>(path: string, init: RequestInit = {}, user?: User | null) {
   const headers = await authenticatedHeaders(init, user);
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
   const response = await fetchJson(`${API_BASE_URL}${path}`, { ...init, headers });
-  const body = await response.json().catch(() => ({ error: 'The server returned an unreadable response.' })) as Record<string, unknown>;
+  const body = await responseBody(response);
   if (!response.ok) {
     const error = new ApiError(
       String(body.error || 'The request could not be completed.'),
@@ -113,7 +128,7 @@ export async function publicApiRequest<T>(path: string, init: RequestInit = {}) 
   const headers = await deviceHeaders(init);
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
   const response = await fetchJson(`${API_BASE_URL}${path}`, { ...init, headers });
-  const body = await response.json().catch(() => ({ error: 'The server returned an unreadable response.' })) as Record<string, unknown>;
+  const body = await responseBody(response);
   if (!response.ok) throw new ApiError(
     String(body.error || 'The request could not be completed.'),
     response.status,

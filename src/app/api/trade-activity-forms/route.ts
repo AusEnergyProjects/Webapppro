@@ -23,9 +23,12 @@ const errorMessages: Record<string, [number, string]> = {
   ACTIVITY_RECORD_NOT_FOUND: [404, "This activity form was not found."],
   JOB_NOT_FOUND: [404, "Job not found."], JOB_NOT_ASSIGNED: [403, "This job is assigned to another worker."],
   ACTIVITY_INTENT_NOT_ACTIVE: [409, "This activity is no longer part of the job."],
-  ACTIVITY_REVISION_CONFLICT: [409, "This form changed. Reload it before saving."],
+  ACTIVITY_REVISION_CONFLICT: [409, "The latest changes are being saved. Your work is retained."],
+  ACTIVITY_SIGNING_SCOPE_CHANGED: [409, "The work details changed before signing. Check the updated details and sign again."],
   ACTIVITY_ALREADY_SUBMITTED: [409, "This completed record has already been provided to Creditex."],
   ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED: [409, "Resend the required customer documents and wait for the email provider to accept them before customer agreement."],
+  ACTIVITY_TECHNICIAN_SIGNER_NOT_ASSIGNED: [409, "The assigned technician must sign this work. Check the job's worker assignment."],
+  ACTIVITY_TECHNICIAN_IDENTITY_REQUIRED: [409, "Add the assigned technician's name in Teams, then return to this job."],
   ACTIVITY_SIGNED_SCOPE_LOCKED: [409, "These details have been signed. Signed details must stay unchanged. After-work fields remain available after before-work signing."],
   ACTIVITY_SIGNING_NOT_READY: [409, "Complete the required fields and evidence for this stage before signing."],
   ACTIVITY_SIGNATURE_REQUIRED: [400, "Enter the signer's name, draw their signature and confirm the displayed declaration."],
@@ -251,7 +254,7 @@ export async function POST(request: Request) {
     const access = await requireInstallerTeamAccess(request); const id = str(body.recordId);
     if (action === "share_report" || action === "revoke_report") return adminJson({ ok: true, reportUrl: await shareActivityReport(access, id, new URL(request.url).origin, action === "revoke_report") });
     const record = action === "open" ? await openActivityRecord(access, str(body.workOrderId), str(body.intentId), str(body.variantId))
-      : action === "save" ? await saveActivityAnswers(access, id, body.expectedRevision, body.answers)
+      : action === "save" ? await saveActivityAnswers(access, id, body.expectedRevision, body.answers, body.baseAnswers)
       : action === "change_variant" ? await changeActivityVariant(access, id, body.expectedRevision, str(body.variantId))
       : action === "sign" ? await signActivityDeclaration(access, id, body)
       : action === "submit" ? await submitActivityRecord(access, id, body.expectedRevision)

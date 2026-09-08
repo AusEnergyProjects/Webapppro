@@ -4,6 +4,7 @@ import '@/lib/notifications';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
+import { DashboardAppUpdate } from '@/components/dashboard-app-update';
 import { colours } from '@/lib/theme';
 import { AppProvider, useApp } from '@/providers/app-provider';
 
@@ -12,6 +13,7 @@ function AppNavigation() {
   return (
     <>
       <StatusBar style="light" />
+      <DashboardAppUpdate />
       <Stack screenOptions={{
         headerStyle: { backgroundColor: colours.forest },
         headerTintColor: colours.white,

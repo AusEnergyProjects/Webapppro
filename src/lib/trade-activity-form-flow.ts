@@ -1,5 +1,25 @@
 import type { ActivityAnswers, ActivityCondition, ActivityDeclaration, ActivityField, ActivityForm } from './trade-activity-form-types';
 
+// Only answers changed on this device replace the latest record. Unrelated office
+// edits and system-owned values remain current, including when a save races a sync.
+export function mergeActivityAnswers(base: ActivityAnswers, local: ActivityAnswers, remote: ActivityAnswers,
+  remoteOwnedBaseKeys: ReadonlySet<string> = new Set(), conflictWinner: 'remote' | 'local' = 'local') {
+  const merged: ActivityAnswers = { ...remote };
+  const conflicts: string[] = [];
+  const same = (left: ActivityAnswers, right: ActivityAnswers, key: string) =>
+    Object.hasOwn(left, key) === Object.hasOwn(right, key) && left[key] === right[key];
+  for (const key of new Set([...Object.keys(base), ...Object.keys(local), ...Object.keys(remote)])) {
+    if (remoteOwnedBaseKeys.has(activityBaseFieldKey(key)) || same(base, local, key)) continue;
+    if (!same(base, remote, key) && !same(local, remote, key)) {
+      conflicts.push(key);
+      if (conflictWinner === 'remote') continue;
+    }
+    if (Object.hasOwn(local, key)) merged[key] = local[key];
+    else delete merged[key];
+  }
+  return { merged, conflicts };
+}
+
 export const activityBaseFieldKey = (key: string) => key.replace(/\[([1-9]|1[0-9])\]$/, '');
 export const activityRepeatKey = (key: string, index: number) => index ? `${key}[${index}]` : key;
 export function activityRepeatCount(form: ActivityForm, answers: ActivityAnswers, group: string) {
@@ -46,25 +66,14 @@ export function boundActivityDeclaration(declaration: ActivityDeclaration, answe
   });
 }
 
-export type ActivityWizardStep = { key: string; kind: 'field'; field: ExpandedActivityField } | { key: string; kind: 'declaration'; declaration: ActivityDeclaration; text: string; page: number; pages: number } | { key: string; kind: 'signature'; declaration: ActivityDeclaration } | { key: 'review'; kind: 'review' };
-export function activityDeclarationPages(text: string) {
-  // Keep exact wording and whitespace. Page boundaries never remove or replace text.
-  const pages: string[] = [];
-  for (let start = 0; start < text.length;) {
-    let end = Math.min(start + 450, text.length);
-    if (end < text.length) { const space = text.lastIndexOf(' ', end - 1); if (space > start + 200) end = space + 1; }
-    pages.push(text.slice(start, end)); start = end;
-  }
-  return pages.length ? pages : [''];
-}
+export type ActivityWizardStep = { key: string; kind: 'field'; field: ExpandedActivityField } | { key: string; kind: 'signature'; declaration: ActivityDeclaration } | { key: 'review'; kind: 'review' };
 export function activityWizardSteps(form: ActivityForm, answers: ActivityAnswers): ActivityWizardStep[] {
   const steps: ActivityWizardStep[] = [];
-  const fields = expandedActivityFields(form, answers).filter((field) => field.presentation !== 'derived');
+  const fields = expandedActivityFields(form, answers).filter((field) => field.presentation !== 'derived'
+    && !/^job\.(?:assignee|trade|credential|credentialType)\./.test(field.autofill || ''));
   for (const phase of ['before', 'after'] as const) {
     steps.push(...fields.filter((field) => field.phase === phase).map((field): ActivityWizardStep => ({ key: field.key, kind: 'field', field })));
     for (const declaration of form.declarations.filter((item) => item.phase === phase && fieldConditionMet(item.condition, answers))) {
-      const pages = activityDeclarationPages(boundActivityDeclaration(declaration, answers));
-      pages.forEach((text, page) => steps.push({ key: `${declaration.key}:read:${page}`, kind: 'declaration', declaration, text, page, pages: pages.length }));
       steps.push({ key: declaration.key, kind: 'signature', declaration });
     }
   }

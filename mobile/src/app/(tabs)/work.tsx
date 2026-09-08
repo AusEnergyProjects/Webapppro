@@ -1,9 +1,11 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import type { FieldPermissions } from '@/components/job-work-selection';
+import { apiRequest } from '@/lib/api';
 import { colours, radius, spacing } from '@/lib/theme';
 import type { FieldJob } from '@/lib/types';
 import { useApp } from '@/providers/app-provider';
@@ -34,6 +36,8 @@ function dateKey(value: Date | string) {
   if (Number.isNaN(date.getTime())) return '';
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
+
+type QuickAction = 'menu' | 'quote' | 'invoice';
 
 function JobCard({ job }: { job: FieldJob }) {
   const done = job.tasks.filter((task) => task.status === 'done').length;
@@ -66,6 +70,13 @@ export default function WorkScreen() {
     .filter((job) => dateKey(job.appointmentStartsAt || job.scheduledStart) === selectedKey)
     .sort((left, right) => (left.appointmentStartsAt || left.scheduledStart).localeCompare(right.appointmentStartsAt || right.scheduledStart)), [jobs, selectedKey]);
   const selectedLabel = selectedDate.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' });
+  const [quickAction, setQuickAction] = useState<QuickAction | null>(null);
+  const [commercialPermissions, setCommercialPermissions] = useState<FieldPermissions | null>(null);
+  const [permissionBusy, setPermissionBusy] = useState(false);
+  const [permissionError, setPermissionError] = useState('');
+  const commercialJobs = useMemo(() => jobs
+    .filter((job) => !job.protectedJob && job.fieldLane !== 'creditex_manual' && job.stage !== 'cancelled')
+    .sort((left, right) => (left.appointmentStartsAt || left.scheduledStart || left.updatedAt).localeCompare(right.appointmentStartsAt || right.scheduledStart || right.updatedAt)), [jobs]);
 
   function chooseToday() {
     const today = new Date();
@@ -74,8 +85,34 @@ export default function WorkScreen() {
   }
 
   function addJob() {
+    setQuickAction(null);
     if (user?.permissions.canCreateJobs) router.push('/new-job');
-    else Alert.alert('New jobs are controlled in TLink', 'Ask your TLink administrator to switch on Create jobs for your field access. Your plus button will then open the simple job form.');
+    else Alert.alert('New jobs are controlled in TLink', 'Ask your TLink administrator to switch on Create jobs for your field access.');
+  }
+
+  function openQuickActions() {
+    setQuickAction('menu');
+    setPermissionBusy(true);
+    setPermissionError('');
+    void apiRequest<{ permissions: FieldPermissions | null }>('/api/field/access')
+      .then((result) => setCommercialPermissions(result.permissions))
+      .catch((error) => {
+        setCommercialPermissions(null);
+        setPermissionError(error instanceof Error ? error.message : 'Could not check your current Team permissions.');
+      })
+      .finally(() => setPermissionBusy(false));
+  }
+
+  function chooseCommercial(kind: 'quote' | 'invoice') {
+    const allowed = kind === 'quote' ? commercialPermissions?.canManageQuotes : commercialPermissions?.canManageInvoices;
+    if (!sync.online) return Alert.alert('Reconnect to continue', `A new ${kind} needs a live connection.`);
+    if (!allowed) return Alert.alert(`New ${kind} is controlled in TLink`, `Ask your TLink administrator to switch on Manage ${kind === 'quote' ? 'quotes' : 'invoices'} for your field access.`);
+    setQuickAction(kind);
+  }
+
+  function openCommercialJob(job: FieldJob, kind: 'quote' | 'invoice') {
+    setQuickAction(null);
+    router.push({ pathname: '/job/[id]', params: { id: job.id, openCommercial: kind } });
   }
 
   return (
@@ -102,7 +139,24 @@ export default function WorkScreen() {
         {selectedJobs.map((job) => <JobCard key={job.id} job={job} />)}
         {!selectedJobs.length && !sync.running ? <View style={styles.empty}><MaterialCommunityIcons name="calendar-blank-outline" size={42} color={colours.green} /><Text style={styles.emptyTitle}>No jobs on this day</Text><Text style={styles.emptyText}>Choose another date or pull down to refresh. A job appears here as soon as the office assigns it to you.</Text></View> : null}
       </ScrollView>
-      <Pressable accessibilityRole="button" accessibilityLabel="Add a new job" onPress={addJob} style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}><MaterialCommunityIcons name="plus" color={colours.white} size={32} /></Pressable>
+      <Modal animationType="fade" transparent visible={quickAction !== null} onRequestClose={() => setQuickAction(null)}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close new action menu" onPress={() => setQuickAction(null)} style={styles.modalBackdrop}>
+          <Pressable accessibilityViewIsModal onPress={(event) => event.stopPropagation()} style={styles.actionSheet}>
+            <View style={styles.actionHeader}><View><Text style={styles.actionEyebrow}>QUICK CREATE</Text><Text style={styles.actionTitle}>{quickAction === 'menu' ? 'What do you need?' : `Choose a job for a new ${quickAction}`}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => setQuickAction(null)} style={styles.actionClose}><MaterialCommunityIcons name="close" color={colours.ink} size={25} /></Pressable></View>
+            {quickAction === 'menu' ? <>
+              <Pressable accessibilityRole="button" onPress={addJob} style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}><MaterialCommunityIcons name="calendar-plus" color={colours.green} size={27} /><View style={styles.actionCopy}><Text style={styles.actionLabel}>New job</Text><Text style={styles.actionDetail}>{user?.permissions.canCreateJobs ? 'Customer, work, worker and appointment' : 'Requires Create jobs in Team permissions'}</Text></View><MaterialCommunityIcons name="chevron-right" color={colours.green} size={24} /></Pressable>
+              {commercialPermissions?.canManageQuotes ? <Pressable accessibilityRole="button" disabled={permissionBusy} onPress={() => chooseCommercial('quote')} style={({ pressed }) => [styles.actionRow, pressed && styles.pressed, !commercialPermissions?.canManageQuotes && styles.actionLocked]}><MaterialCommunityIcons name="file-document-edit-outline" color={colours.green} size={27} /><View style={styles.actionCopy}><Text style={styles.actionLabel}>New quote</Text><Text style={styles.actionDetail}>{permissionBusy ? 'Checking current Team permissions...' : commercialPermissions?.canManageQuotes ? 'Choose a direct customer job' : 'Requires Manage quotes in Team permissions'}</Text></View><MaterialCommunityIcons name={commercialPermissions?.canManageQuotes ? 'chevron-right' : 'lock-outline'} color={colours.muted} size={22} /></Pressable> : null}
+              {commercialPermissions?.canManageInvoices ? <Pressable accessibilityRole="button" disabled={permissionBusy} onPress={() => chooseCommercial('invoice')} style={({ pressed }) => [styles.actionRow, pressed && styles.pressed, !commercialPermissions?.canManageInvoices && styles.actionLocked]}><MaterialCommunityIcons name="receipt-text-plus-outline" color={colours.green} size={27} /><View style={styles.actionCopy}><Text style={styles.actionLabel}>New invoice</Text><Text style={styles.actionDetail}>{permissionBusy ? 'Checking current Team permissions...' : commercialPermissions?.canManageInvoices ? 'Choose a direct customer job' : 'Requires Manage invoices in Team permissions'}</Text></View><MaterialCommunityIcons name={commercialPermissions?.canManageInvoices ? 'chevron-right' : 'lock-outline'} color={colours.muted} size={22} /></Pressable> : null}
+              {permissionBusy ? <Text style={styles.actionDetail}>Loading actions...</Text> : null}
+              {permissionError ? <Text accessibilityLiveRegion="polite" style={styles.actionError}>{permissionError}</Text> : null}
+            </> : quickAction === 'quote' || quickAction === 'invoice' ? <ScrollView style={styles.jobPicker} contentContainerStyle={styles.jobPickerContent}>
+              {commercialJobs.map((job) => <Pressable key={job.id} accessibilityRole="button" onPress={() => openCommercialJob(job, quickAction)} style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}><MaterialCommunityIcons name={quickAction === 'quote' ? 'file-document-edit-outline' : 'receipt-text-plus-outline'} color={colours.green} size={27} /><View style={styles.actionCopy}><Text style={styles.actionLabel}>{job.title || job.customerName || 'Direct customer job'}</Text><Text style={styles.actionDetail}>{job.workNumber} | {stageLabel(job.stage)}</Text></View><MaterialCommunityIcons name="chevron-right" color={colours.green} size={24} /></Pressable>)}
+              {!commercialJobs.length ? <View style={styles.actionEmpty}><Text style={styles.actionLabel}>No direct customer jobs available</Text><Text style={styles.actionDetail}>Create a job first, then add its {quickAction}.</Text></View> : null}
+            </ScrollView> : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Pressable accessibilityRole="button" accessibilityLabel="Open new action menu" onPress={openQuickActions} style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}><MaterialCommunityIcons name="plus" color={colours.white} size={32} /></Pressable>
     </SafeAreaView>
   );
 }
@@ -152,5 +206,20 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', padding: spacing.xl, backgroundColor: colours.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colours.line, gap: spacing.sm },
   emptyTitle: { color: colours.ink, fontSize: 20, fontWeight: '800', textAlign: 'center' },
   emptyText: { color: colours.muted, lineHeight: 21, textAlign: 'center' },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0, 31, 33, 0.58)' },
+  actionSheet: { maxHeight: '78%', backgroundColor: colours.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.lg, paddingBottom: spacing.xl, gap: spacing.sm, borderWidth: 1, borderColor: colours.line },
+  actionHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm, marginBottom: spacing.xs },
+  actionEyebrow: { color: colours.green, fontSize: 12, fontWeight: '800', letterSpacing: 1.2 },
+  actionTitle: { color: colours.ink, fontSize: 22, lineHeight: 28, fontWeight: '800', marginTop: 3 },
+  actionClose: { width: 42, height: 42, borderRadius: 14, backgroundColor: colours.mint, alignItems: 'center', justifyContent: 'center' },
+  actionRow: { minHeight: 78, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.surfaceRaised },
+  actionLocked: { opacity: 0.62 },
+  actionCopy: { flex: 1, gap: 3 },
+  actionLabel: { color: colours.ink, fontSize: 17, fontWeight: '800' },
+  actionDetail: { color: colours.muted, lineHeight: 19 },
+  actionError: { color: colours.red, lineHeight: 20, padding: spacing.sm },
+  actionEmpty: { alignItems: 'center', gap: spacing.sm, padding: spacing.lg },
+  jobPicker: { flexGrow: 0 },
+  jobPickerContent: { gap: spacing.sm, paddingBottom: spacing.sm },
   addButton: { position: 'absolute', right: spacing.lg, bottom: spacing.lg, width: 62, height: 62, borderRadius: 22, backgroundColor: colours.green, alignItems: 'center', justifyContent: 'center', elevation: 8, shadowColor: '#001f21', shadowOpacity: 0.24, shadowRadius: 10, shadowOffset: { width: 0, height: 5 } },
 });

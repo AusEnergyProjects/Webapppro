@@ -1,3 +1,5 @@
+export { mergeActivityAnswers } from '../../../src/lib/trade-activity-form-flow';
+
 type ActivityAnswer = string | number | boolean;
 type ActivityAnswers = Record<string, ActivityAnswer>;
 
@@ -23,41 +25,6 @@ type BookingDocumentField = { key: string; presentation?: 'question' | 'prefille
 type ActivitySignatureIdentity = { declarationKey: string };
 type ActivityMissingIdentity = { key: string; kind: string };
 type ActivitySignerDefaults = { signerDefaults?: { technician?: string; customer?: string } };
-
-const hasOwn = (value: ActivityAnswers, key: string) => Object.prototype.hasOwnProperty.call(value, key);
-const baseAnswerKey = (key: string) => key.replace(/\[([1-9]|1[0-9])\]$/, '');
-
-function sameAnswer(left: ActivityAnswers, right: ActivityAnswers, key: string) {
-  return hasOwn(left, key) === hasOwn(right, key) && (!hasOwn(left, key) || left[key] === right[key]);
-}
-
-export function mergeActivityAnswers(
-  base: ActivityAnswers,
-  local: ActivityAnswers,
-  remote: ActivityAnswers,
-  remoteOwnedBaseKeys: ReadonlySet<string> = new Set(),
-  conflictWinner: 'remote' | 'local' = 'remote',
-) {
-  const merged: ActivityAnswers = { ...remote };
-  const conflicts: string[] = [];
-  for (const key of new Set([...Object.keys(base), ...Object.keys(local), ...Object.keys(remote)])) {
-    if (remoteOwnedBaseKeys.has(baseAnswerKey(key))) continue;
-    const localChanged = !sameAnswer(base, local, key);
-    const remoteChanged = !sameAnswer(base, remote, key);
-    if (localChanged && remoteChanged && !sameAnswer(local, remote, key)) {
-      conflicts.push(key);
-      if (conflictWinner === 'local') {
-        if (hasOwn(local, key)) merged[key] = local[key];
-        else delete merged[key];
-      }
-      continue;
-    }
-    if (!localChanged) continue;
-    if (hasOwn(local, key)) merged[key] = local[key];
-    else delete merged[key];
-  }
-  return { merged, conflicts };
-}
 
 export function activityOptionLabel(value: string, explicit?: string) {
   const supplied = explicit?.trim();

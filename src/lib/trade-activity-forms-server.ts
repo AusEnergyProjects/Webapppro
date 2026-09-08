@@ -13,7 +13,7 @@ import {
   assertActivityEditable, assertActivitySignedScopeUnchanged, normaliseActivityAnswers, validateActivityStrokes,
   type ActivityAnswers, type ActivityEvidence, type ActivityForm, type ActivityRecord,
 } from "./trade-activity-forms.ts";
-import { activityBaseFieldKey, expandedActivityFields } from "./trade-activity-form-flow.ts";
+import { activityBaseFieldKey, expandedActivityFields, mergeActivityAnswers } from "./trade-activity-form-flow.ts";
 import { parseScheduledActivityCustomerDocumentReceipt } from "./scheduled-activity-customer-document-receipt.ts";
 
 type Row = Record<string, unknown>;
@@ -202,6 +202,7 @@ export function activityPresentation(record: ActivityRecord) {
     + record.form.declarations.filter((item) => item.required && activityConditionMet(item.condition, record.answers)).length;
   const userMissing = missing.filter((item) => record.form.fields.find((field) => field.key === activityBaseFieldKey(item.key))?.presentation !== "derived");
   return { ...record, evidence: record.evidence.map(({ objectKey, previewObjectKey, ...item }) => { void objectKey; void previewObjectKey; return item; }), missing,
+    signingScopes: { before: activitySigningScope(record, "before"), after: activitySigningScope(record, "after") },
     progress: { complete: Math.max(0, total - userMissing.length), total },
     reportUrl: record.status === "submitted_for_creditex_review" ? `/api/trade-activity-forms?recordId=${encodeURIComponent(record.id)}&view=pdf` : "" };
 }
@@ -282,6 +283,9 @@ async function activityProfileContext(
     businessPhone: String(context?.business_phone || ""),
     businessEmail: String(context?.business_email || ""),
     technician: technicianName,
+    workerCredentials: credentials.results.filter((item) => item.credential_number).map((item) => ({
+      name: item.name, number: item.credential_number, type: item.credential_type, jurisdiction: item.jurisdiction, gate: item.rental_gate,
+    })),
     credentialNumbers,
     credentialTypes,
   });
@@ -465,20 +469,47 @@ async function saveRecord(access: TeamAccess, previous: ActivityRecord, next: Ac
       ...(receiptGuard ? [receiptGuard.deliveryId, receiptGuard.appointmentId, receiptGuard.recipientSha256, receiptGuard.documentIds,
         receiptGuard.documentSha256Set, receiptGuard.packSha256, receiptGuard.acceptedAt,
         receiptGuard.activityTemplateId, receiptGuard.variantId] : [])).run();
-  if (result.meta.changes !== 1) throw new Error("ACTIVITY_REVISION_CONFLICT");
+  if (result.meta.changes !== 1) {
+    // Zero writes can mean a changed assignment, withdrawn intent or bounced email,
+    // not just another editor. Reload with the same access checks to identify it.
+    const latest = await loadActivityRecord(access, previous.id, true);
+    assertActivityEditable(latest, previous.revision);
+    if (expectedAssigneeMemberId) {
+      const assignment = await assignedJob(access, previous.workOrderId);
+      if (assignment.assignee_member_id !== expectedAssigneeMemberId) throw new Error("ACTIVITY_TECHNICIAN_SIGNER_NOT_ASSIGNED");
+    }
+    if (receiptGuard) {
+      assertActivityCustomerDocumentsAccepted(latest);
+      if (activityCanonical(acceptedCustomerDocumentGuard(latest)) !== activityCanonical(receiptGuard)) {
+        throw new Error("ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED");
+      }
+    }
+    throw new Error("ACTIVITY_SAVE_FAILED");
+  }
   return next;
 }
 
-export async function saveActivityAnswers(access: TeamAccess, id: string, expectedRevision: unknown, answers: unknown) {
-  const previous = await loadActivityRecord(access, id, true); assertActivityEditable(previous, expectedRevision);
-  const nextAnswers = normaliseActivityAnswers(previous.form, answers);
-  for (const field of previous.form.fields.filter((item) => item.presentation === "derived")) {
-    delete nextAnswers[field.key];
-    if (previous.answers[field.key] !== undefined) nextAnswers[field.key] = previous.answers[field.key];
+export async function saveActivityAnswers(access: TeamAccess, id: string, expectedRevision: unknown, answers: unknown, baseAnswers?: unknown) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const previous = await loadActivityRecord(access, id, true);
+    assertActivityEditable(previous, baseAnswers === undefined ? expectedRevision : previous.revision);
+    const derived = new Set(previous.form.fields.filter((field) => field.presentation === "derived").map((field) => field.key));
+    const local = normaliseActivityAnswers(previous.form, answers);
+    const nextAnswers = baseAnswers === undefined ? local : mergeActivityAnswers(
+      normaliseActivityAnswers(previous.form, baseAnswers), local, previous.answers, derived,
+    ).merged;
+    for (const key of derived) {
+      delete nextAnswers[key];
+      if (previous.answers[key] !== undefined) nextAnswers[key] = previous.answers[key];
+    }
+    const next = { ...previous, answers: nextAnswers, hasUserEdits: previous.hasUserEdits || activityHash(previous.answers) !== activityHash(nextAnswers) };
+    assertActivitySignedScopeUnchanged(previous, next);
+    try { return await saveRecord(access, previous, next); }
+    catch (error) {
+      if (baseAnswers === undefined || !(error instanceof Error) || error.message !== "ACTIVITY_REVISION_CONFLICT" || attempt === 2) throw error;
+    }
   }
-  const next = { ...previous, answers: nextAnswers, hasUserEdits: previous.hasUserEdits || activityHash(previous.answers) !== activityHash(nextAnswers) };
-  assertActivitySignedScopeUnchanged(previous, next);
-  return saveRecord(access, previous, next);
+  throw new Error("ACTIVITY_SAVE_FAILED");
 }
 
 export async function changeActivityVariant(access: TeamAccess, id: string, expectedRevision: unknown, variantId: string) {
@@ -508,10 +539,14 @@ export async function changeActivityVariant(access: TeamAccess, id: string, expe
 }
 
 export async function signActivityDeclaration(access: TeamAccess, id: string, body: Row) {
-  const previous = await loadActivityRecord(access, id, true); assertActivityEditable(previous, body.expectedRevision);
-  assertActivityCustomerDocumentsAccepted(previous);
+  const previous = await loadActivityRecord(access, id, true);
   const declaration = previous.form.declarations.find((item) => item.key === body.declarationKey);
   if (!declaration || !activityConditionMet(declaration.condition, previous.answers)) throw new Error("ACTIVITY_DECLARATION_INVALID");
+  // A background save can advance the record without changing anything signed.
+  // Bind to the displayed content, allowing harmless revision changes automatically.
+  assertActivityEditable(previous, body.expectedScope === undefined ? body.expectedRevision : previous.revision);
+  if (body.expectedScope !== undefined && body.expectedScope !== activitySigningScope(previous, declaration.phase)) throw new Error("ACTIVITY_SIGNING_SCOPE_CHANGED");
+  assertActivityCustomerDocumentsAccepted(previous);
   const suppliedSignerName = string(body.signerName, 150);
   let signerName = suppliedSignerName;
   if (declaration.role === "technician") {

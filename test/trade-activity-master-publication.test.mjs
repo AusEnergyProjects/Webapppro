@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { canEditCreditexFieldMasters } from "../src/lib/creditex-field-master-access.ts";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
@@ -91,7 +92,9 @@ function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
     "../../../../db": { getD1: () => d1 },
     "@/lib/admin-server": { sameOrigin: () => true, adminJson: (body, status = 200) => Response.json(body, { status }),
       requireAdminIdentity: async () => ({ uid: "aea-admin" }) },
-    "@/lib/compliance-access-server": { requireComplianceAccess: async () => ({ uid: "creditex-author", organisationId: "creditex", organisationCode: "CREDITEX-AU", governanceIdentityVerified: true }) },
+    "@/lib/compliance-access-server": { requireComplianceAccess: async () => ({ uid: "creditex-author", organisationId: "creditex", organisationCode: "CREDITEX-AU", governanceIdentityVerified: true,
+      email: "test.author@creditex.example", displayName: "Test Author", role: "admin" }) },
+    "@/lib/creditex-field-master-access": { canEditCreditexFieldMasters },
     "@/lib/creditex-official-source-custody-server": { resolveActiveCreditexOfficialSourceOrganisation: async () => "creditex" },
     "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => access }, "@/lib/trade-activity-forms-server": { ...server, ...serverOverrides },
     "@/lib/bounded-json-request": bounded, "@/lib/trade-activity-forms-library": { ...library, ...libraryOverrides }, "@/lib/trade-activity-forms": core,

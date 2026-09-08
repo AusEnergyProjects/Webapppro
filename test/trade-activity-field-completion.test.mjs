@@ -325,7 +325,7 @@ test("VEU Activity 6 preserves audit codes while presenting complete choices and
   for (const key of ["workers.electrician.name", "workers.electrician.company_address", "workers.electrician.phone",
     "workers.electrician.licence_or_registration", "workers.licensed_plumber.name", "workers.refrigerant_handler.name"]) {
     const field = residential.fields.find((candidate) => candidate.key === key);
-    assert.equal(field?.presentation, "prefilled", key);
+    assert.equal(field?.presentation, "derived", key);
     assert.ok(field?.autofill, key);
     assert.match(field?.label || "", /Electrician|Licensed plumber|Refrigerant handler/i, key);
   }
@@ -455,7 +455,7 @@ test("saved masters cannot invent derived facts or weaken baseline receipts, evi
   const spoofed = upgraded.fields.find((field) => field.key === "custom.spoofed_job_fact");
   assert.equal(spoofed.presentation, undefined); assert.equal(spoofed.autofill, undefined);
   assert.equal(spoofed.sourceRequirementId, undefined); assert.equal(spoofed.evidenceFor, undefined);
-  assert.equal(upgraded.fields.find((field) => field.key === "workers.electrician.name").presentation, "prefilled");
+  assert.equal(upgraded.fields.find((field) => field.key === "workers.electrician.name").presentation, "derived");
   assert.match(upgraded.fields.find((field) => field.key === "baseline.scenario").optionLabels.i, /Hard-wired/i);
   assert.deepEqual(upgraded.fields.find((field) => field.key === evidenceKey), baseline.fields.find((field) => field.key === evidenceKey));
   assert.ok([...receiptKeys].every((key) => upgraded.fields.some((field) => field.key === key)));
@@ -490,13 +490,13 @@ test("specialist crew details prefill from the assigned team and business profil
     for (const [fact, source] of Object.entries(expectedSources)) {
       const key = `workers.${role}.${fact}`;
       const field = form.fields.find((candidate) => candidate.key === key);
-      assert.equal(field?.presentation, "prefilled", key);
+      assert.equal(field?.presentation, "derived", key);
       assert.equal(field?.autofill, source, key);
-      assert.ok(activityWizardSteps(form, applicableAnswers).some((step) => step.kind === "field" && step.field.key === key), `${key} must stay editable`);
+      assert.ok(!activityWizardSteps(form, applicableAnswers).some((step) => step.kind === "field" && step.field.key === key), `${key} comes from Teams`);
     }
     const credentialKey = `workers.${role}.licence_or_registration`;
     const credentialField = form.fields.find((candidate) => candidate.key === credentialKey);
-    assert.equal(credentialField?.presentation, "prefilled", credentialKey);
+    assert.equal(credentialField?.presentation, "derived", credentialKey);
     assert.equal(credentialField?.autofill, `job.credential.${role}`, credentialKey);
   }
   const answers = activityPrefill(form, context);
@@ -523,9 +523,9 @@ test("SRES accreditation fields use only their exact credential class and fail c
     "designer.full_name", "designer.accreditation_number", "electrician.full_name", "electrician.licence_number",
     "binding.installer.full_name", "binding.designer.full_name"]) {
     const field = form.fields.find((candidate) => candidate.key === key);
-    assert.equal(field?.presentation, "prefilled", key);
+    assert.equal(field?.presentation, "derived", key);
     assert.ok(field?.autofill, key);
-    assert.ok(activityWizardSteps(form, {}).some((step) => step.kind === "field" && step.field.key === key), key);
+    assert.ok(!activityWizardSteps(form, {}).some((step) => step.kind === "field" && step.field.key === key), key);
   }
   const wrongCredentials = activityPrefill(form, { address: "1 Test Street", customerName: "Pat Customer", customerEmail: "pat@example.com",
     customerPhone: "0400000000", businessName: "Example Electrical Pty Ltd", technician: "Alex Electrician",
@@ -544,7 +544,7 @@ test("SRES accreditation fields use only their exact credential class and fail c
   assert.equal(exactCredentials["designer.accreditation_number"], "SAA-D1");
 });
 
-test("saved SRES masters cannot turn editable role prefills back into locked derived identity", () => {
+test("saved SRES masters always source role identities from team profiles", () => {
   const baseline = defaultActivityFieldForm("sres-pv");
   const stale = structuredClone(baseline);
   const installer = stale.fields.find((field) => field.key === "installer.full_name");
@@ -552,12 +552,12 @@ test("saved SRES masters cannot turn editable role prefills back into locked der
   installer.autofill = "job.trade.name";
   stale.fields = stale.fields.filter((field) => field.key !== "designer.full_name");
   const governed = applyDefaultActivityFormPolicy(stale, baseline);
-  assert.equal(governed.fields.find((field) => field.key === "installer.full_name")?.presentation, "prefilled");
+  assert.equal(governed.fields.find((field) => field.key === "installer.full_name")?.presentation, "derived");
   assert.equal(governed.fields.find((field) => field.key === "installer.full_name")?.autofill, "job.assignee.fullName");
-  assert.equal(governed.fields.find((field) => field.key === "designer.full_name")?.presentation, "prefilled");
+  assert.equal(governed.fields.find((field) => field.key === "designer.full_name")?.presentation, "derived");
 });
 
-test("broad SRES, VEU and NSW licensed-role summaries remain required manual facts", () => {
+test("broad SRES, VEU and NSW crew summaries are sourced from current team setup", () => {
   for (const [templateId, keys] of [
     ["sres-pv", ["installers", "saa"]],
     ["veu-13", ["installer_details_company_and_licences"]],
@@ -567,8 +567,8 @@ test("broad SRES, VEU and NSW licensed-role summaries remain required manual fac
     for (const key of keys) {
       const field = form.fields.find((candidate) => candidate.key === key);
       assert.equal(field?.required, true, `${templateId}: ${key}`);
-      assert.equal(field?.presentation, undefined, `${templateId}: ${key}`);
-      assert.equal(field?.autofill, undefined, `${templateId}: ${key}`);
+      assert.equal(field?.presentation, "derived", `${templateId}: ${key}`);
+      assert.equal(field?.autofill, "job.assignee.profile", `${templateId}: ${key}`);
     }
   }
 });
@@ -592,9 +592,15 @@ test("every supported customer, property, Creditex, trade, worker and credential
     customerPhone: "0400000000", customerBusinessName: "Pat Customer Pty Ltd", customerBusinessNumber: "11122233344",
     businessName: "Example Electrical Pty Ltd", businessAddress: "2 Trade Road, Melbourne VIC 3000", businessPhone: "0390000000",
     businessEmail: "trade@example.com", technician: "Alex Electrician",
+    workerCredentials: [
+      { name: "Electrical licence", number: "ELEC-1", type: "licence", jurisdiction: "VIC", gate: "licensed_electrician" },
+      { name: "Plumbing licence", number: "PLUMB-1", type: "licence", jurisdiction: "VIC", gate: "licensed_plumber" },
+      { name: "Battery installer", number: "SAA-I1", type: "accreditation", jurisdiction: "NATIONAL", gate: "sres_installer_accreditation" },
+      { name: "Battery designer", number: "SAA-D1", type: "accreditation", jurisdiction: "NATIONAL", gate: "sres_designer_accreditation" },
+    ],
     credentialNumbers: { electrician: "ELEC-1", licensed_plumber: "PLUMB-1", registered_plumber: "PLUMB-R1", refrigerant_handler: "REF-1",
       installer: "SAA-I1", designer: "SAA-D1" }, credentialTypes: { installer: "Grid-connect installer", designer: "Grid-connect designer", connection: "Grid connected" } };
-  const supported = /^(?:job\.property\.fullAddress|job\.customer\.(?:name|fullName|email|phone|companyName|abnOrAcn|identity)|job\.customer\.authorisedSignatory\.(?:signatory_name|signatory_company|signatory_email|signatory_phone)|job\.trade\.(?:name|address|phone|email|identity)|job\.assignee\.(?:fullName|businessAndTechnician)|job\.credential\.(?:electrician|licensed_plumber|registered_plumber|refrigerant_handler|installer|designer)|job\.credentialType\.(?:installer|designer|connection)|creditex\.provider\.(?:legalName|abn|email|phone|contact|identity|accreditation\.[A-Z-]+\..+))$/;
+  const supported = /^(?:job\.property\.fullAddress|job\.customer\.(?:name|fullName|email|phone|companyName|abnOrAcn|identity)|job\.customer\.authorisedSignatory\.(?:signatory_name|signatory_company|signatory_email|signatory_phone)|job\.trade\.(?:name|address|phone|email|identity)|job\.assignee\.(?:fullName|businessAndTechnician|profile)|job\.credential\.(?:electrician|licensed_plumber|registered_plumber|refrigerant_handler|installer|designer)|job\.credentialType\.(?:installer|designer|connection)|creditex\.provider\.(?:legalName|abn|email|phone|contact|identity|accreditation\.[A-Z-]+\..+))$/;
   const counts = { customer: 0, property: 0, creditex: 0, trade: 0, worker: 0, credential: 0 };
   for (const item of activityFieldCatalogue()) {
     const defaultForm = defaultActivityFieldForm(item.activityTemplateId);
@@ -619,4 +625,23 @@ test("every supported customer, property, Creditex, trade, worker and credential
     }
   }
   assert.ok(Object.values(counts).every((count) => count > 0), JSON.stringify(counts));
+});
+
+test("profile summaries cannot substitute unrelated credentials for the required trade roles", () => {
+  const context = { address: "1 Test Street", customerName: "Pat Customer", customerEmail: "pat@example.com",
+    customerPhone: "0400000000", businessName: "Trade business", technician: "Alex Installer",
+    workerCredentials: [{ name: "First aid", number: "FA-1", type: "training", jurisdiction: "VIC", gate: "first_aid" }] };
+  for (const [template, key] of [["sres-pv", "saa"], ["sres-bess", "battery_accreditation"], ["sres-ashp", "installer_licences"], ["veu-13", "installer_details_company_and_licences"]]) {
+    const form = defaultActivityFieldForm(template);
+    assert.equal(activityPrefill(form, context)[key], undefined, key);
+    const onlyElectrician = { ...context, workerCredentials: [{ name: "Electrician", number: "EL-1", type: "licence", jurisdiction: "VIC", gate: "licensed_electrician" }] };
+    if (key !== "installer_details_company_and_licences") assert.equal(activityPrefill(form, onlyElectrician)[key], undefined, key);
+  }
+  const solarOnly = { ...context, workerCredentials: [
+    { name: "Electrician", number: "EL-1", type: "licence", jurisdiction: "VIC", gate: "licensed_electrician" },
+    { name: "PV installer", number: "SAA-I1", type: "accreditation", jurisdiction: "NATIONAL", gate: "sres_installer_accreditation" },
+    { name: "PV designer", number: "SAA-D1", type: "accreditation", jurisdiction: "NATIONAL", gate: "sres_designer_accreditation" },
+  ] };
+  assert.ok(activityPrefill(defaultActivityFieldForm("sres-pv"), solarOnly).saa);
+  assert.equal(activityPrefill(defaultActivityFieldForm("sres-bess"), solarOnly).battery_accreditation, undefined);
 });

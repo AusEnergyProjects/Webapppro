@@ -22,7 +22,10 @@ const helperCode = ts.transpileModule(helperSource, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText;
 const helperExports = {};
-new Function('exports', helperCode)(helperExports);
+const flowCode = ts.transpileModule(read('../../src/lib/trade-activity-form-flow.ts'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+const flowExports = {};
+new Function('exports', flowCode)(flowExports);
+new Function('exports', 'require', helperCode)(helperExports, () => flowExports);
 
 const { activityBookingDocumentDeliveryState, activityCurrentSignatureKeys, activityOptionLabel, activityProgress, activitySectionProgress,
   activitySignerDefault, mergeActivityAnswers } = helperExports;
@@ -39,14 +42,14 @@ test('sequential saves reconcile disjoint server changes without dropping phone 
   });
 });
 
-test('a real same-answer concurrent edit remains explicit', () => {
+test('the current phone answer wins automatically when the same answer changed remotely', () => {
   const result = mergeActivityAnswers(
     { existingSystem: 'gas' },
     { existingSystem: 'electric' },
     { existingSystem: 'wood' },
   );
   assert.deepEqual(result.conflicts, ['existingSystem']);
-  assert.equal(result.merged.existingSystem, 'wood');
+  assert.equal(result.merged.existingSystem, 'electric');
 });
 
 test('system-derived answers always follow the latest portal record', () => {
@@ -67,7 +70,7 @@ test('resolving a same-key conflict preserves every disjoint edit', () => {
   const base = { existingSystem: 'gas', customerNote: 'Gate closed', officeNote: 'Call ahead' };
   const local = { existingSystem: 'electric', customerNote: 'Gate open', officeNote: 'Call ahead' };
   const remote = { existingSystem: 'wood', customerNote: 'Gate closed', officeNote: 'Tenant confirmed' };
-  assert.deepEqual(mergeActivityAnswers(base, local, remote).merged, {
+  assert.deepEqual(mergeActivityAnswers(base, local, remote, new Set(), 'remote').merged, {
     existingSystem: 'wood', customerNote: 'Gate open', officeNote: 'Tenant confirmed',
   });
   assert.deepEqual(mergeActivityAnswers(base, local, remote, new Set(), 'local').merged, {

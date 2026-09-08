@@ -298,6 +298,14 @@ function inferredAutofill(fieldKey: string, programCode = "", activityCode = "")
     "creditex.nsw.pdrs_accreditation_number": creditexAccreditationSource("NSW-PDRS", activityCode),
     delivery_business_identity: "job.trade.identity",
     assigned_technician_identity: "job.assignee.fullName",
+    installers: "job.assignee.profile",
+    saa: "job.assignee.profile",
+    battery_accreditation: "job.assignee.profile",
+    installer_licences: "job.assignee.profile",
+    licensed_roles: "job.assignee.profile",
+    installer_details_company_and_licences: "job.assignee.profile",
+    wind_professionals: "job.assignee.profile",
+    hydro_professionals: "job.assignee.profile",
     "job-and-nomination:assigned_trade_and_technician": "job.assignee.businessAndTechnician",
     trade_business_and_assigned_technician: "job.assignee.businessAndTechnician",
     "binding.installer.full_name": "job.assignee.fullName",
@@ -351,12 +359,8 @@ function inferredAutofill(fieldKey: string, programCode = "", activityCode = "")
 }
 
 function isSupportedAutofill(source: string) {
+  if (source === "job.assignee.profile") return true;
   return /^(?:job\.property\.fullAddress|job\.customer\.(?:name|fullName|email|phone|companyName|abnOrAcn|identity)|job\.customer\.authorisedSignatory\.(?:signatory_name|signatory_company|signatory_email|signatory_phone)|job\.trade\.(?:name|address|phone|email|identity)|job\.assignee\.(?:fullName|businessAndTechnician)|job\.credential\.(?:electrician|licensed_plumber|registered_plumber|refrigerant_handler|installer|designer)|job\.credentialType\.(?:installer|designer|connection)|creditex\.provider\.(?:legalName|abn|email|phone|contact|identity|accreditation\.[A-Z-]+\..+))$/.test(source);
-}
-
-function isEditableRolePrefill(programCode: string, fieldKey: string) {
-  return programCode === "SRES" && /^(?:binding\.)?(?:installer|designer|electrician)\./.test(fieldKey)
-    || /^workers\.(?:electrician|licensed_plumber|registered_plumber|refrigerant_handler)\./.test(fieldKey);
 }
 
 function derivedDeliveryFields(documents: readonly ActivityConsumerDocument[]): ActivityField[] {
@@ -795,7 +799,7 @@ export function defaultActivityFieldForm(templateId: string, variantId = ""): Ac
       const role = human(specialist[1]);
       const fact = specialist[2] === "licence_or_registration" ? "licence or registration number" : human(specialist[2]);
       field.label = `${role[0].toUpperCase()}${role.slice(1)} ${fact}`;
-      field.help = [field.help, `Enter the ${fact} for the ${role} who performed this work.`].filter(Boolean).join(" ");
+      field.help = "Filled from the assigned team member and business profile.";
     }
     const suppliedAutofill = field.autofill || "";
     const autofill = isSupportedAutofill(suppliedAutofill) ? suppliedAutofill
@@ -803,7 +807,7 @@ export function defaultActivityFieldForm(templateId: string, variantId = ""): Ac
     if (!autofill && ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEY_SET.has(field.key)) continue;
     if (autofill && isSupportedAutofill(autofill)) {
       field.autofill = autofill;
-      field.presentation = isEditableRolePrefill(candidate.programCode, field.key) ? "prefilled" : "derived";
+      field.presentation = "derived";
     } else if (field.autofill || field.presentation === "derived" || field.presentation === "prefilled") {
       delete field.autofill;
       delete field.presentation;
@@ -920,6 +924,7 @@ export type ActivityPrefillContext = {
   businessPhone?: string;
   businessEmail?: string;
   technician: string;
+  workerCredentials?: readonly { name: string; number: string; type: string; jurisdiction: string; gate: string }[];
   credentialNumbers?: Partial<Record<"electrician" | "licensed_plumber" | "registered_plumber" | "refrigerant_handler" | "installer" | "designer", string>>;
   credentialTypes?: Partial<Record<"installer" | "designer" | "connection", string>>;
 };
@@ -955,6 +960,25 @@ function sourcePrefill(field: ActivityField, context: ActivityPrefillContext) {
   if (source === "job.trade.identity") return joined(context.businessName, context.businessAddress, context.businessPhone, context.businessEmail);
   if (source === "job.assignee.fullName") return context.technician;
   if (source === "job.assignee.businessAndTechnician") return joined(context.businessName, context.technician);
+  if (source === "job.assignee.profile") {
+    const credentials = (context.workerCredentials || []).filter((item) => item.number && (
+      (['licensed_electrician', 'licensed_plumber', 'refrigerant_handler'].includes(item.gate) && item.type === 'licence')
+      || (item.gate === 'registered_plumber' && item.type === 'registration')
+      || (['sres_installer_accreditation', 'sres_designer_accreditation'].includes(item.gate)
+        && item.type === 'accreditation' && item.jurisdiction === 'NATIONAL')));
+    if (!context.technician || !credentials.length) return "";
+    const hasGate = (gate: string) => credentials.some((item) => item.gate === gate);
+    if (['saa', 'battery_accreditation', 'wind_professionals', 'hydro_professionals'].includes(field.key)) {
+      if (!['sres_installer_accreditation', 'sres_designer_accreditation', 'licensed_electrician'].every(hasGate)) return "";
+      if (field.key === 'battery_accreditation' && !['sres_installer_accreditation', 'sres_designer_accreditation']
+        .every((gate) => credentials.some((item) => item.gate === gate && /battery|batteries/i.test(item.name)))) return "";
+    }
+    if (['installer_licences', 'licensed_roles'].includes(field.key)
+      && (!hasGate('licensed_electrician') || !(hasGate('licensed_plumber') || hasGate('registered_plumber')))) return "";
+    return joined(`Assigned technician: ${context.technician}`, context.businessName, context.businessAddress,
+      context.businessPhone, context.businessEmail,
+      ...credentials.map((item) => `${item.name} (${item.type}, ${item.jurisdiction}): ${item.number}`));
+  }
   const credentials = context.credentialNumbers || {};
   if (source === "job.credential.electrician") return credentials.electrician || "";
   if (source === "job.credential.licensed_plumber") return credentials.licensed_plumber || "";
