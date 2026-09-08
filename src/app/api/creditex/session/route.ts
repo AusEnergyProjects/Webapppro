@@ -2,6 +2,7 @@ import {
   ComplianceAccessError,
   requireComplianceAccess,
 } from "@/lib/compliance-access-server";
+import { canEditCreditexFieldMasters } from "@/lib/creditex-field-master-access";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -86,6 +87,7 @@ export async function GET(request: Request) {
         displayName: member.displayName,
         role: member.role,
         governanceIdentityVerified: member.governanceIdentityVerified,
+        canEditFieldMasters: canEditCreditexFieldMasters(member),
         organisation: {
           code: member.organisationCode,
           legalName: member.organisationLegalName,

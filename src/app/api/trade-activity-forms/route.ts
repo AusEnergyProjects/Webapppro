@@ -2,6 +2,7 @@ import { getD1 } from "../../../../db";
 import { adminJson, requireAdminIdentity, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { requireComplianceAccess } from "@/lib/compliance-access-server";
+import { canEditCreditexFieldMasters } from "@/lib/creditex-field-master-access";
 import { resolveActiveCreditexOfficialSourceOrganisation } from "@/lib/creditex-official-source-custody-server";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
 import { activityFieldCatalogue, applyDefaultActivityFormPolicy, defaultActivityFieldForm } from "@/lib/trade-activity-forms-library";
@@ -61,7 +62,7 @@ async function masterActor(request: Request, mode: string) {
   }
   if (mode !== "creditex") throw new Error("ACTIVITY_AUTHOR_REQUIRED");
   const actor = await requireComplianceAccess(request, { allowedRoles: ["admin", "case_manager", "reviewer"] }, getD1());
-  if (actor.organisationCode.toUpperCase() !== "CREDITEX-AU" || !actor.governanceIdentityVerified) throw new Error("ACTIVITY_AUTHOR_REQUIRED");
+  if (!canEditCreditexFieldMasters(actor)) throw new Error("ACTIVITY_AUTHOR_REQUIRED");
   return { uid: actor.uid, organisationId: actor.organisationId };
 }
 

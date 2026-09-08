@@ -16,6 +16,7 @@ const route = read("../src/app/api/trade-crm/route.ts");
 const customerSortSql = read("../src/lib/trade-crm-register-sort-sql.ts");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const newJob = read("../src/components/TradeNewJobForm.tsx");
+const recoverableWorkspace = read("../src/components/RecoverableTradeWorkspace.tsx");
 const hub = read("../src/components/TradeBusinessHub.tsx");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const customerLifecycle = read("../src/components/CustomerAssetLifecycle.tsx");
@@ -433,7 +434,7 @@ test("installer dashboard and reports use compact server-owned read models", () 
 });
 
 test("all installer Schedule entry paths use the one permanent CRM dispatch workspace", () => {
-  assert.match(crm, /const TradeScheduleWorkspace = dynamic\(\(\) => import\("\.\/TradeScheduleWorkspace"\)/);
+  assert.match(crm, /const TradeScheduleWorkspace = recoverableTradeWorkspace\(\(\) => import\("\.\/TradeScheduleWorkspace"\)/);
   assert.match(crm, /if \(item === "schedule"\) \{ openVisualSchedule\(\); return; \}/);
   assert.match(crm, /onClick=\{\(\) => openVisualSchedule\(\)\} aria-label=\{`Open today's \$\{metrics\.todayVisits\} scheduled visits`\}/);
   assert.match(crm, /view === "schedule"[\s\S]*?<TradeScheduleWorkspace user=\{user\} permissions=\{staffPermissions\} initialWeekStart=\{scheduleWeekStart\}/);
@@ -483,7 +484,7 @@ test("heavy workspaces load dynamically and profile readiness does not wait for 
     assert.match(dashboard, new RegExp(`const ${workspace} = dynamic\\(\\(\\) => import\\("\\./${workspace}"\\)`));
     assert.doesNotMatch(dashboard, new RegExp(`import \\{ ${workspace} \\} from "\\./${workspace}"`));
   }
-  for (const workspace of ["TradeIntegrationCentre", "TradeFieldWorkPanel", "TradePriceBookWorkspace", "TradeNewJobForm", "TradeQuickInvoicePanel", "TradeScheduleWorkspace"]) {
+  for (const workspace of ["TradeIntegrationCentre", "TradeFieldWorkPanel", "TradePriceBookWorkspace", "TradeQuickInvoicePanel"]) {
     assert.match(crm, new RegExp(`const ${workspace} = dynamic\\(\\(\\) => import\\("\\./${workspace}"\\)`));
   }
 
@@ -496,6 +497,20 @@ test("heavy workspaces load dynamically and profile readiness does not wait for 
   assert.match(profileLoad, /setLoading\(false\)/);
   assert.doesNotMatch(profileLoad, /trade-opportunities/);
   assert.match(dashboard.slice(profileLoadEnd), /if \(!user \|\| !profile[\s\S]*?fetch\("\/api\/trade-opportunities"/);
+});
+
+test("new job and schedule loaders recover instead of leaving stale chunks blank", () => {
+  assert.match(crm, /import type \{ TradeNewJobInitial \} from "\.\/TradeNewJobForm";/);
+  assert.match(crm, /const TradeNewJobForm = recoverableTradeWorkspace\(\(\) => import\("\.\/TradeNewJobForm"\)/);
+  assert.match(crm, /const TradeNewJobForm = recoverableTradeWorkspace\(\(\) => import\("\.\/TradeNewJobForm"\)\.then\(\(module\) => module\.TradeNewJobForm\)\);/);
+  assert.match(crm, /<TradeNewJobForm key=/);
+  assert.match(newJob, /module\.TradeScheduleWorkspace\), false\);/);
+  assert.match(recoverableWorkspace, /const key = "tlinkRetry"/);
+  assert.match(recoverableWorkspace, /if \(!sessionStorage\.getItem\(key\)\)/);
+  assert.match(recoverableWorkspace, /location\.reload\(\)/);
+  assert.match(recoverableWorkspace, /return function TradeWorkspaceLoadFailure/);
+  assert.match(crm, /if \(creating !== "job"\) return;[\s\S]*?newJobHeadingRef\.current\?\.scrollIntoView\(\{ block: "start" \}\);[\s\S]*?newJobHeadingRef\.current\?\.focus\(\{ preventScroll: true \}\);/);
+  assert.match(crm, /<h3 ref=\{newJobHeadingRef\} tabIndex=\{-1\}>Create job<\/h3>/);
 });
 
 test("My day exposes owner scoped local workload and direct action charts", () => {

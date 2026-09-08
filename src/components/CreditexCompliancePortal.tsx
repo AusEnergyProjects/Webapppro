@@ -47,6 +47,7 @@ type ComplianceSession = {
   displayName: string;
   role: ComplianceRole;
   governanceIdentityVerified: boolean;
+  canEditFieldMasters: boolean;
   organisation: {
     code: string;
     legalName: string;
@@ -1391,6 +1392,7 @@ export function CreditexCompliancePortal() {
               sourceEndpoint="/api/creditex/official-sources"
               sourceBatchEndpoint="/api/creditex/official-sources/batch-import"
               canCaptureSource={["admin", "case_manager"].includes(session.role)}
+              fieldMasterCanAuthor={session.canEditFieldMasters}
               onDownloadSource={downloadOfficialSource}
               contextLabel="Creditex"
             />

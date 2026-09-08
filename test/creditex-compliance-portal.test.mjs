@@ -528,6 +528,8 @@ test("governance is admin-only with bounded draft, publish and withdraw actions"
   assert.match(portal, /session\.role === "admin"/);
   assert.match(portal, /session\.governanceIdentityVerified/);
   assert.match(sessionRoute, /governanceIdentityVerified: member\.governanceIdentityVerified/);
+  assert.match(sessionRoute, /canEditFieldMasters: canEditCreditexFieldMasters\(member\)/);
+  assert.match(portal, /fieldMasterCanAuthor=\{session\.canEditFieldMasters\}/);
   assert.doesNotMatch(portal, /SHARED_GOVERNANCE_EMAIL_LOCAL_PARTS/);
   assert.match(portal, /window\.confirm\(warning\)/);
   for (const action of [

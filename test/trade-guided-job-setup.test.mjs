@@ -89,7 +89,7 @@ test("guided setup starts trade-owned work as a customer or job and creates one 
 });
 
 test("guided appointment setup keeps the authorised week visible and permits deliberate double booking", () => {
-  assert.match(form, /import \{ TradeScheduleWorkspace \} from "\.\/TradeScheduleWorkspace"/);
+  assert.match(form, /recoverableTradeWorkspace\(\(\) => import\("\.\/TradeScheduleWorkspace"\)[\s\S]*?false\);/);
   assert.match(form, /<TradeScheduleWorkspace[\s\S]*variant="job"[\s\S]*proposalStatusId=\{appointmentScheduleStatusId\}/);
   assert.match(form, /onProposalValidation=\{handleAppointmentProposalValidation\}/);
   assert.match(form, /onProposalChange=\{handleAppointmentProposalChange\}/);

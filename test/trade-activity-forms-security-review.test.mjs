@@ -8,6 +8,7 @@ import { PDFDict, PDFDocument, PDFName } from "pdf-lib";
 import * as core from "../src/lib/trade-activity-forms.ts";
 import * as flow from "../src/lib/trade-activity-form-flow.ts";
 import * as receipt from "../src/lib/scheduled-activity-customer-document-receipt.ts";
+import { canEditCreditexFieldMasters } from "../src/lib/creditex-field-master-access.ts";
 import { renderActivityFieldPdf, validateActivityEvidenceBytes } from "../src/lib/trade-activity-forms-pdf.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -151,15 +152,45 @@ test("a required system-filled value cannot be blank when its declaration is sig
   } finally { database.close(); }
 });
 
-test("actual Creditex organisation membership can author while another organisation is rejected", async () => {
-  let organisationCode = "CREDITEX-AU";
+test("named Creditex field-master editors can author without governed-review permission while unsafe identities are rejected", async () => {
+  let identity = {
+    uid: "creditex-reviewer",
+    organisationId: "creditex-a",
+    organisationCode: "CREDITEX-AU",
+    governanceIdentityVerified: false,
+    role: "reviewer",
+    displayName: "Casey Reviewer",
+    email: "casey.reviewer@creditex.example",
+  };
   const masterActor = sourceFunction(read("../src/app/api/trade-activity-forms/route.ts"), "masterActor", {
-    getD1: () => ({}), requireComplianceAccess: async () => ({ uid: "creditex-reviewer", organisationId: "creditex-a", organisationCode, governanceIdentityVerified: true }),
+    canEditCreditexFieldMasters,
+    getD1: () => ({}),
+    requireComplianceAccess: async () => identity,
   });
   const request = new Request("https://example.test/api/trade-activity-forms");
-  assert.deepEqual(await masterActor(request, "creditex"), { uid: "creditex-reviewer", organisationId: "creditex-a" });
-  organisationCode = "OTHER-PROVIDER";
-  await assert.rejects(masterActor(request, "creditex"), /ACTIVITY_AUTHOR_REQUIRED/);
+  for (const role of ["admin", "case_manager", "reviewer"]) {
+    identity = { ...identity, role };
+    assert.deepEqual(await masterActor(request, "creditex"), { uid: "creditex-reviewer", organisationId: "creditex-a" });
+  }
+  for (const unsafeIdentity of [
+    { organisationCode: "OTHER-PROVIDER" },
+    { role: "auditor" },
+    { email: "info@creditex.example" },
+    { displayName: "Casey" },
+    { displayName: "Creditex Admin" },
+  ]) {
+    identity = { ...identity, ...unsafeIdentity };
+    await assert.rejects(masterActor(request, "creditex"), /ACTIVITY_AUTHOR_REQUIRED/);
+    identity = {
+      uid: "creditex-reviewer",
+      organisationId: "creditex-a",
+      organisationCode: "CREDITEX-AU",
+      governanceIdentityVerified: false,
+      role: "reviewer",
+      displayName: "Casey Reviewer",
+      email: "casey.reviewer@creditex.example",
+    };
+  }
 });
 
 test("records cannot be opened or read across business or assigned-worker boundaries", async () => {

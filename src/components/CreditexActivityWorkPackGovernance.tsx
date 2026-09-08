@@ -1057,6 +1057,7 @@ export function CreditexActivityWorkPackGovernance({
   sourceEndpoint,
   sourceBatchEndpoint,
   canCaptureSource,
+  fieldMasterCanAuthor,
   onDownloadSource,
   contextLabel,
 }: {
@@ -1065,6 +1066,7 @@ export function CreditexActivityWorkPackGovernance({
   sourceEndpoint: string;
   sourceBatchEndpoint: string;
   canCaptureSource: boolean;
+  fieldMasterCanAuthor?: boolean;
   onDownloadSource: (
     artifactId: string,
     originalFileName: string,
@@ -1451,7 +1453,7 @@ export function CreditexActivityWorkPackGovernance({
 
       {(status || error) && <div className={error ? styles.error : styles.status} role={error ? "alert" : "status"}>{error || status}</div>}
 
-      <CreditexFieldFormMasters api={api} actorMode={endpoint.startsWith('/api/admin/') ? 'admin' : 'creditex'} canAuthor={snapshot.access.canAuthor} />
+      <CreditexFieldFormMasters api={api} actorMode={endpoint.startsWith('/api/admin/') ? 'admin' : 'creditex'} canAuthor={fieldMasterCanAuthor ?? snapshot.access.canAuthor} />
       <CreditexOfficialSourceBatchAcquisition
         api={api}
         endpoint={sourceBatchEndpoint}

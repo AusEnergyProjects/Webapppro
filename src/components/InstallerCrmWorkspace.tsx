@@ -16,6 +16,7 @@ import { type NamedWorkspaceListView, WorkspaceSavedViews } from "./WorkspaceSav
 import { downloadWorkspaceCsv, type WorkspaceTableColumn, WorkspaceTableTools } from "./WorkspaceTableTools";
 import { appointmentDurationMinutes, durationLabel, nextAppointmentSlot, scheduleProposalKey, type ScheduleProposalValidation } from "@/lib/trade-schedule";
 import type { TradeNewJobInitial } from "./TradeNewJobForm";
+import { recoverableTradeWorkspace } from "./RecoverableTradeWorkspace";
 import type { TradeTeamPermissions } from "./TradeTeamSettings";
 import type { CustomerDocumentDelivery, CustomerDocumentSendResult } from "./TradeCustomerDocumentDeliveryPanel";
 import {
@@ -50,9 +51,9 @@ const TradePhotoRequestPanel = dynamic(() => import("./TradePhotoRequestPanel").
 const TradePhotoTemplateLibrary = dynamic(() => import("./TradePhotoTemplateLibrary").then((module) => module.TradePhotoTemplateLibrary));
 const TradePriceBookWorkspace = dynamic(() => import("./TradePriceBookWorkspace").then((module) => module.TradePriceBookWorkspace));
 const TradeJobReadinessPanel = dynamic(() => import("./TradeJobReadinessPanel").then((module) => module.TradeJobReadinessPanel));
-const TradeNewJobForm = dynamic(() => import("./TradeNewJobForm").then((module) => module.TradeNewJobForm));
+const TradeNewJobForm = recoverableTradeWorkspace(() => import("./TradeNewJobForm").then((module) => module.TradeNewJobForm));
 const TradeQuickInvoicePanel = dynamic(() => import("./TradeQuickInvoicePanel").then((module) => module.TradeQuickInvoicePanel));
-const TradeScheduleWorkspace = dynamic(() => import("./TradeScheduleWorkspace").then((module) => module.TradeScheduleWorkspace));
+const TradeScheduleWorkspace = recoverableTradeWorkspace(() => import("./TradeScheduleWorkspace").then((module) => module.TradeScheduleWorkspace));
 const TradeCustomerDocumentDeliveryPanel = dynamic(() => import("./TradeCustomerDocumentDeliveryPanel").then((module) => module.TradeCustomerDocumentDeliveryPanel));
 
 type Customer = {
@@ -437,6 +438,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   const customerPreferencesReady = Boolean(staffPermissions) || savedCustomerPreferencesReady;
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState("");
+  const newJobHeadingRef = useRef<HTMLHeadingElement>(null);
   const bootstrapStarted = useRef(false);
   const jobPreferencesLoaded = useRef(false);
   const customerPreferencesLoaded = useRef(false);
@@ -456,6 +458,15 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   const canCreateJob = !staffPermissions || staffPermissions.canCreateJobs;
   const canSearchCustomerFields = true;
   const canSearchCustomerDirectory = !staffPermissions || (staffPermissions.canViewCustomers && staffPermissions.canSearchCustomers);
+
+  useEffect(() => {
+    if (creating !== "job") return;
+    const frame = window.requestAnimationFrame(() => {
+      newJobHeadingRef.current?.scrollIntoView({ block: "start" });
+      newJobHeadingRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [creating]);
 
   useEffect(() => {
     if (!jobActionId) return;
@@ -1287,8 +1298,8 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       <nav className="crm-today-actions" aria-label="Quick actions"><button type="button" className="primary" onClick={() => { setNewJobSeed(null); setFocusedJobId(""); setView("jobs"); setCreating("job"); }}>New job</button><button type="button" onClick={() => openVisualSchedule()}>Schedule</button><button type="button" onClick={() => { setCreating(""); setView("customers"); }}>Customers</button><button type="button" onClick={() => { setPriceBookView("items"); setView("pricebook"); }}>Price book</button><button type="button" onClick={() => { setPriceBookView("packets"); setView("pricebook"); }}>Common jobs</button><button type="button" onClick={() => onOpenInvoices?.()} disabled={!onOpenInvoices}>Invoices</button></nav>
     </div>}
     {view === "jobs" && creating === "job" && <div className="crm-view crm-create-screen">
-      <div className="crm-page-heading"><div><span>New job</span><h3>Create a clear work record</h3><p>Only the essentials are needed now. TLink assigns a private support reference after saving.</p></div><button type="button" className="crm-back-button" onClick={() => setCreating("")}>Back to all jobs</button></div>
-      <section className="crm-create-card"><div className="crm-create-guidance"><strong>One guided setup</strong><p>Create the job once, plan the relevant certificate activity, schedule the visit and carry the same TLink ID into field capture and compliance review.</p></div><TradeNewJobForm key={newJobSeed?.sourceEnquiryId || "blank-job"} user={user} templates={templates} teamMembers={teamMembers} allowCustomerSearch={canSearchCustomerDirectory} canAssignJobs={!staffPermissions || staffPermissions.canAssignJobs} assignmentScope={staffPermissions?.jobScope || "team"} busy={busy === "create-job"} initial={newJobSeed || undefined} onSubmit={createJob} /></section>
+      <div className="crm-page-heading"><div><h3 ref={newJobHeadingRef} tabIndex={-1}>Create job</h3></div><button type="button" className="crm-back-button" onClick={() => setCreating("")}>Back to all jobs</button></div>
+      <section className="crm-create-card"><TradeNewJobForm key={newJobSeed?.sourceEnquiryId || "blank-job"} user={user} templates={templates} teamMembers={teamMembers} allowCustomerSearch={canSearchCustomerDirectory} canAssignJobs={!staffPermissions || staffPermissions.canAssignJobs} assignmentScope={staffPermissions?.jobScope || "team"} busy={busy === "create-job"} initial={newJobSeed || undefined} onSubmit={createJob} /></section>
     </div>}
 
     {view === "jobs" && creating !== "job" && focusedJobId && <div className="crm-view crm-job-workspace">

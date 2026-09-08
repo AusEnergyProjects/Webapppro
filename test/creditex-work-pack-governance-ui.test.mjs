@@ -9,12 +9,14 @@ const documentOutputs = read("../src/components/CreditexWorkPackDocumentOutputEd
 const documentOutputCss = read("../src/components/CreditexWorkPackDocumentOutputEditor.module.css");
 const creditex = read("../src/components/CreditexCompliancePortal.tsx");
 const admin = read("../src/components/AdminOperationsPortal.tsx");
+const fieldMasters = read("../src/components/CreditexFieldFormMasters.tsx");
 
 test("Creditex and AEA admin share one governed activity form builder", () => {
   assert.match(creditex, /id="creditex-tab-forms"/);
   assert.match(creditex, /endpoint="\/api\/creditex\/work-packs"/);
   assert.match(creditex, /sourceEndpoint="\/api\/creditex\/official-sources"/);
   assert.match(creditex, /canCaptureSource=\{\["admin", "case_manager"\]/);
+  assert.match(creditex, /fieldMasterCanAuthor=\{session\.canEditFieldMasters\}/);
   assert.match(creditex, /onDownloadSource=\{downloadOfficialSource\}/);
   assert.match(admin, /tab === "form-governance"/);
   assert.match(admin, /endpoint="\/api\/admin\/compliance-work-packs"/);
@@ -23,6 +25,10 @@ test("Creditex and AEA admin share one governed activity form builder", () => {
   assert.match(admin, /onDownloadSource=\{downloadOfficialSource\}/);
   assert.match(admin, /!\(init\.body instanceof FormData\)/);
   assert.match(admin, /Supporting non-program field templates/);
+  assert.match(builder, /canAuthor=\{fieldMasterCanAuthor \?\? snapshot\.access\.canAuthor\}/);
+  assert.match(fieldMasters, /requires a named Creditex administrator, case manager or reviewer login/);
+  assert.match(fieldMasters, /Bootstrap, shared-mailbox and auditor accounts stay read-only/);
+  assert.match(fieldMasters, /Operations Control Centre → 13 Field forms/);
 });
 
 test("Forms can capture and inspect one governed source artifact without making it selectable early", () => {

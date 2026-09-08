@@ -7,7 +7,7 @@ import {
   AustralianAddressLookup,
   type AustralianAddressSuggestion,
 } from "./AustralianAddressLookup";
-import { TradeScheduleWorkspace } from "./TradeScheduleWorkspace";
+import { recoverableTradeWorkspace } from "./RecoverableTradeWorkspace";
 import {
   nextAppointmentSlot,
   scheduleProposalKey,
@@ -24,6 +24,8 @@ import {
   activityPremisesVariantId,
   activityRequiresPremisesVariant,
 } from "@/lib/trade-compliance-intent";
+
+const TradeScheduleWorkspace = recoverableTradeWorkspace(() => import("./TradeScheduleWorkspace").then((module) => module.TradeScheduleWorkspace), false);
 
 type Template = { id: string; name: string; title: string; serviceCategory: string; priority: string; description: string; taskTitles: string[] };
 type Customer = { id: string; customerNumber: string; displayName: string; email: string; phone: string; suburb: string; postcode: string };
