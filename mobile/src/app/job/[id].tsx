@@ -103,13 +103,6 @@ type PendingWorkPackPhotoCapture = PendingPhotoCapture & {
   workPackLink?: WorkPackUploadLink;
 };
 
-type CustomerDocumentSendResult = {
-  requested: boolean;
-  status: 'not_required' | 'provider_accepted' | 'failed' | 'unavailable';
-  canRetry: boolean;
-  message: string;
-};
-
 function readable(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
 async function openVerifiedWorkPackDocument(
@@ -277,7 +270,6 @@ export default function JobScreen() {
   const [activeFormId, setActiveFormId] = useState<string | null>(() => openCommercial === 'quote' || openCommercial === 'invoice' ? openCommercial : null);
   const [activityRecords, setActivityRecords] = useState<ActivityFieldSummary[]>([]);
   const [activityLoadError, setActivityLoadError] = useState('');
-  const [customerDocumentStatus, setCustomerDocumentStatus] = useState('');
   const recoveringPhoto = useRef(false);
   const launchingCamera = useRef(false);
 
@@ -445,33 +437,6 @@ export default function JobScreen() {
     const reload = setTimeout(() => void load(), 0);
     return () => clearTimeout(reload);
   }, [load, sync.conflicts, sync.queuedActions, sync.queuedUploads, sync.running]);
-
-  async function resendCustomerDocuments() {
-    if (!job) return;
-    if (!sync.online) {
-      setCustomerDocumentStatus('Reconnect to send the required customer documents.');
-      return;
-    }
-    setBusy('customer-documents');
-    setCustomerDocumentStatus('Sending the required customer documents...');
-    try {
-      const response = await apiRequest<{ customerDocuments?: CustomerDocumentSendResult }>('/api/trade-crm', {
-        method: 'POST',
-        body: JSON.stringify({ action: 'resend_activity_customer_documents', workOrderId: job.id }),
-      });
-      const result = response.customerDocuments;
-      if (!result || typeof result.message !== 'string' || typeof result.canRetry !== 'boolean') {
-        throw new Error('TLink received an unreadable customer-document delivery result. Try again.');
-      }
-      setCustomerDocumentStatus(result.message);
-      await syncNow();
-      await load();
-    } catch (error) {
-      setCustomerDocumentStatus(error instanceof Error ? error.message : 'The customer documents could not be sent.');
-    } finally {
-      setBusy('');
-    }
-  }
 
   async function advanceFieldJob() {
     if (!job || !completableAppointmentStatuses.has(job.appointmentStatus)) return;
@@ -1282,12 +1247,6 @@ export default function JobScreen() {
   const fieldForms = job.forms || [];
   const complianceIntents = job.complianceIntents || [];
   const complianceCases = complianceCasesForJob(job);
-  const requiresBookingDocuments = complianceIntents.some((intent) => (intent.bookingDocumentCount || 0) > 0);
-  const customerDocumentDelivery = job.customerDocuments;
-  const customerDocumentsAccepted = customerDocumentDelivery
-    ? ['provider_accepted', 'sent', 'delivered'].includes(customerDocumentDelivery.status)
-    : false;
-  const customerDocumentRetryAvailable = !customerDocumentDelivery || customerDocumentDelivery.canRetry;
   const canCompleteJob = completableAppointmentStatuses.has(job.appointmentStatus) && !['completed', 'cancelled'].includes(job.stage);
   const syncLabel = !sync.online ? 'Offline' : sync.conflicts ? 'Action required' : sync.running || sync.queuedActions || sync.queuedUploads ? 'Syncing' : 'Saved';
   const creditexManual = job.fieldLane === 'creditex_manual';
@@ -1309,19 +1268,6 @@ export default function JobScreen() {
         <MaterialCommunityIcons name={job.protectedJob ? 'shield-lock-outline' : 'map-marker-check-outline'} size={26} color={colours.green} />
         <View style={styles.flex}><Text style={styles.cardTitle}>{syntheticManual ? 'Manual compliance workflow test' : job.protectedJob ? 'Australian Energy Assessments protected job' : 'Direct customer job'}</Text><Text style={styles.body}>{syntheticManual ? 'Use only the supplied test alias and synthetic postcode. This lane cannot create certificates, registry submissions, trades or settlements.' : job.protectedJob ? 'Customer name, phone, email and street address stay protected. Use the Australian Energy Assessments platform for communication.' : job.serviceAddress || `${job.siteArea || 'Service area'} | Address is not stored offline yet.`}</Text></View>
       </View>
-
-      {requiresBookingDocuments ? <View style={styles.card}>
-        <Text style={styles.label}>BOOKING DOCUMENTS</Text>
-        <Text style={styles.cardTitle}>Customer document delivery</Text>
-        <Text style={customerDocumentsAccepted ? styles.body : styles.warningText}>{customerDocumentDelivery
-          ? customerDocumentsAccepted
-            ? `${customerDocumentDelivery.documentIds.length} required document${customerDocumentDelivery.documentIds.length === 1 ? ' was' : 's were'} accepted for email delivery${customerDocumentDelivery.deliveredAt ? ' and confirmed delivered' : ''}.`
-            : customerDocumentDelivery.lastError || 'The required booking PDFs must be sent before the customer declaration is signed.'
-          : 'No successful delivery is recorded for the required booking PDFs.'}</Text>
-        {!customerDocumentsAccepted && customerDocumentRetryAvailable ? <FieldButton disabled={Boolean(busy) || !sync.online} loading={busy === 'customer-documents'} onPress={() => void resendCustomerDocuments()}>Send required documents</FieldButton> : null}
-        {!customerDocumentsAccepted && !customerDocumentRetryAvailable ? <Text style={styles.meta}>Update the customer email or ask an administrator to reconcile this delivery before signing.</Text> : null}
-        {customerDocumentStatus ? <Text accessibilityLiveRegion="polite" style={styles.meta}>{customerDocumentStatus}</Text> : null}
-      </View> : null}
 
       {!activeFormId ? <View style={styles.card}>
         <Text style={styles.cardTitle}>Visit</Text>

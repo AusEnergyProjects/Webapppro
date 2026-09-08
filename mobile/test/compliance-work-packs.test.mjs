@@ -456,6 +456,26 @@ test('signature capture requires vector strokes and produces deterministic paylo
   assert.match(jobScreen, /signerName: signerBinding\.signerName/);
   assert.match(jobScreen, /fields: \{ \.\.\.signerBinding\.fields \}/);
   assert.match(signatureCapture, /MAX_SIGNATURE_POINTS = 1_024/);
+  assert.match(signatureCapture, /pointerEvents="box-only"/);
+  assert.match(signatureCapture, /onPanResponderRelease: commitSignature/);
+  assert.match(signatureCapture, /onPanResponderTerminate: commitSignature/);
+  assert.doesNotMatch(signatureCapture, /translateX/);
+  assert.doesNotMatch(signatureCapture, /onChangeRef\.current\(liveValue\)/);
+  const geometry = executableBundle(
+    signatureCapture,
+    ['signaturePointDistance', 'signatureSegmentLayout'],
+    'const STROKE_WIDTH = 3;',
+  );
+  const diagonal = geometry.signatureSegmentLayout({ x: 0.1, y: 0.2 }, { x: 0.9, y: 0.8 }, 300, 220);
+  assert.equal(diagonal.left + diagonal.width / 2, 150);
+  assert.equal(diagonal.top + 1.5, 110);
+  assert.equal(diagonal.angle, Math.atan2(132, 240));
+  const dot = geometry.signatureSegmentLayout({ x: 0.25, y: 0.5 }, { x: 0.25, y: 0.5 }, 300, 220);
+  assert.deepEqual(dot, { left: 73.5, top: 108.5, width: 3, angle: 0 });
+  assert.equal(
+    geometry.signaturePointDistance({ x: 0, y: 0 }, { x: 0.02, y: 0 }, 100, 200),
+    geometry.signaturePointDistance({ x: 0, y: 0 }, { x: 0, y: 0.01 }, 100, 200),
+  );
   const typedOnly = {
     signerRoleKey: 'customer',
     signerCapacity: 'Customer',
@@ -522,6 +542,10 @@ test('review keeps governed delivery identities read-only and signing uses large
   assert.match(signatureCapture, /Clear signature/);
   assert.match(signatureCapture, /liveValue\.strokes\.map/);
   assert.match(signatureCapture, /const signed = liveValue\.strokes\.length/);
+  assert.match(signatureCapture, /signatureDraftFingerprint\(value\)/);
+  assert.match(signatureCapture, /if \(appliedFingerprint\.current === incomingFingerprint\) return/);
+  assert.match(signatureCapture, /liveValueRef\.current = value/);
+  assert.match(signatureCapture, /setLiveValue\(value\)/);
   assert.match(signatureCapture, /displayOnly/);
   assert.match(wizard, /capturedSignatureDraft/);
   assert.match(wizard, /signature\.signaturePayload\?\.strokes/);

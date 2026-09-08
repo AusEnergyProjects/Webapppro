@@ -1952,12 +1952,9 @@ export async function POST(request: Request) {
         if (customerType === "business" ? !businessName : !firstName && !lastName) return adminJson({ ok: false, error: customerType === "business" ? "Add the business name." : "Add the customer name." }, 400);
         if (!email) return adminJson({ ok: false, error: "Add the customer email address." }, 400);
         if (!EMAIL_PATTERN.test(email)) return adminJson({ ok: false, error: "Check the customer email address." }, 400);
-        if (phone && phone.replace(/\D/g, "").length < 8) return adminJson({ ok: false, error: "Check the customer mobile number." }, 400);
-        if (!quickQuote && phone.replace(/\D/g, "").length < 8) return adminJson({ ok: false, error: "Add a valid customer mobile number." }, 400);
-        const partialQuickQuoteAddress = quickQuote && Boolean(addressLine1 || suburb || addressState || postcode);
-        if ((!quickQuote || partialQuickQuoteAddress)
-          && (!addressLine1 || !suburb || !ADDRESS_STATES.has(addressState) || !/^\d{4}$/.test(postcode))) {
-          return adminJson({ ok: false, error: "Add the full service street, suburb, state and four-digit postcode, or leave the address blank for now." }, 400);
+        if (phone.replace(/\D/g, "").length < 8) return adminJson({ ok: false, error: "Add a valid customer mobile number." }, 400);
+        if (!addressLine1 || !suburb || !ADDRESS_STATES.has(addressState) || !/^\d{4}$/.test(postcode)) {
+          return adminJson({ ok: false, error: "Add the full service street, suburb, state and four-digit postcode." }, 400);
         }
         if (!quickQuote) {
           const duplicateCandidates = await findDirectCustomerDuplicates(db, identity.uid, { email, phone, businessNumber, addressLine1, suburb, addressState, postcode });

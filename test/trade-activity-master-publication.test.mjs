@@ -192,17 +192,8 @@ test("the save API validates the governed output before writing it", async () =>
   } finally { database.close(); }
 });
 
-test("customer agreement is blocked with a clear resend message when required documents were not accepted", async () => {
-  const { database, route } = fixture({ serverOverrides: { openActivityRecord: async () => {
-    throw new Error("ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED");
-  } } });
-  try {
-    const response = await route.POST(new Request("https://test.invalid/api/trade-activity-forms", { method: "POST",
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "open", workOrderId: "job", intentId: "intent" }) }));
-    const body = await response.json();
-    assert.equal(response.status, 409); assert.equal(body.code, "ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED");
-    assert.match(body.error, /Resend the required customer documents.*before customer agreement/i);
-  } finally { database.close(); }
+test("customer email delivery is not mapped to a field progression blocker", () => {
+  assert.doesNotMatch(source, /ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED|Resend the required customer documents/);
 });
 
 function editableForm() {

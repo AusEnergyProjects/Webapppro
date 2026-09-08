@@ -43,6 +43,7 @@ type AddressProvenance = {
   entryMode: 'manual_pending_review' | 'provider_selected';
   provider: string; providerReference: string; formattedAddress: string; selectionProof: string;
 };
+const AUSTRALIAN_STATES = new Set(['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA']);
 
 type InputProps = {
   label: string; value: string; onChangeText: (value: string) => void; placeholder?: string;
@@ -96,7 +97,6 @@ export default function NewCommercialScreen() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [showProperty, setShowProperty] = useState(false);
   const [addressLine1, setAddressLine1] = useState('');
   const [addressLine2, setAddressLine2] = useState('');
   const [suburb, setSuburb] = useState('');
@@ -127,9 +127,8 @@ export default function NewCommercialScreen() {
   useEffect(() => {
     if (kind !== 'quote') return;
     const controller = new AbortController();
-    setOptionsError('');
     void apiRequest<FieldJobOptions>('/api/field/job-options', { signal: controller.signal })
-      .then((result) => { if (!controller.signal.aborted) setOptions(result); })
+      .then((result) => { if (!controller.signal.aborted) { setOptionsError(''); setOptions(result); } })
       .catch((caught) => { if (!controller.signal.aborted) setOptionsError(caught instanceof Error ? caught.message : 'Work types could not be loaded.'); });
     return () => controller.abort();
   }, [kind, optionsAttempt]);
@@ -144,7 +143,7 @@ export default function NewCommercialScreen() {
       return;
     }
     const addressQuery = addressLine1.trim();
-    if (stage !== 'new-customer' || !showProperty || addressQuery.length < 3) return;
+    if (stage !== 'new-customer' || addressQuery.length < 3) return;
     let active = true;
     const controller = new AbortController();
     const timeout = setTimeout(() => {
@@ -166,7 +165,7 @@ export default function NewCommercialScreen() {
       }).finally(() => { if (active) setAddressLookupBusy(false); });
     }, 280);
     return () => { active = false; controller.abort(); clearTimeout(timeout); };
-  }, [addressLine1, addressPredictionSession.token, showProperty, stage]);
+  }, [addressLine1, addressPredictionSession.token, stage]);
 
   async function search() {
     const term = query.trim();
@@ -252,10 +251,9 @@ export default function NewCommercialScreen() {
   function continueNewCustomer() {
     if (!firstName.trim() || !lastName.trim()) return setError('Add the customer first and last name.');
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError('Add the customer email used to send the quote.');
-    if (phone && phone.replace(/\D/g, '').length < 8) return setError('Check the optional customer mobile number.');
-    const hasAddress = Boolean(addressLine1.trim() || suburb.trim() || addressState.trim() || postcode.trim());
-    if (hasAddress && (!addressLine1.trim() || !suburb.trim() || !/^[A-Za-z]{2,3}$/.test(addressState.trim()) || !/^\d{4}$/.test(postcode.trim()))) {
-      return setError('Complete the optional street, suburb, state and four-digit postcode, or leave the property blank for now.');
+    if (phone.replace(/\D/g, '').length < 8) return setError('Add a valid customer mobile number.');
+    if (!addressLine1.trim() || !suburb.trim() || !AUSTRALIAN_STATES.has(addressState.trim().toUpperCase()) || !/^\d{4}$/.test(postcode.trim())) {
+      return setError('Add the full property street, suburb, state and four-digit postcode.');
     }
     setError(''); setStage('work');
   }
@@ -320,23 +318,21 @@ export default function NewCommercialScreen() {
       <FieldInput label="First name" value={firstName} onChangeText={setFirstName} autoCapitalize="words" />
       <FieldInput label="Last name" value={lastName} onChangeText={setLastName} autoCapitalize="words" />
       <FieldInput label="Email for the quote" value={email} onChangeText={setEmail} inputMode="email" autoCapitalize="none" />
-      <FieldButton variant="quiet" onPress={() => setShowProperty((current) => !current)}>{showProperty ? 'Hide optional contact and property' : 'Add optional mobile or property'}</FieldButton>
-      {showProperty ? <>
-        <FieldInput label="Mobile, optional" value={phone} onChangeText={setPhone} inputMode="tel" />
-        <FieldInput label="Search street address, optional" value={addressLine1} onChangeText={changeAddressLine1} autoCapitalize="words" placeholder="Start typing the street address" />
-        {addressPredictionSession.predictions.length ? <View style={styles.addressSuggestions}>{addressPredictionSession.predictions.map((prediction) => <Pressable accessibilityRole="button" accessibilityLabel={`Use address ${prediction.label}`} key={`${prediction.provider}:${prediction.id}`} onPress={() => void chooseAddress(prediction)} style={styles.addressSuggestion}><MaterialCommunityIcons name="map-marker-outline" color={colours.green} size={22} /><Text style={styles.addressSuggestionText}>{prediction.label}</Text></Pressable>)}{addressPredictionSession.predictions.some((prediction) => prediction.provider === 'google-places' || prediction.provider === 'google-geocoding') ? <Text style={styles.addressAttribution}>Google Maps</Text> : null}</View> : null}
-        <Text accessibilityLiveRegion="polite" style={styles.addressHelp}>{addressLookupBusy ? 'Searching addresses...' : addressLookupMessage}</Text>
-        <FieldInput label="Unit or level, optional" value={addressLine2} onChangeText={(value) => changeAddressDetail(setAddressLine2, value)} autoCapitalize="words" />
-        <FieldInput label="Suburb, optional" value={suburb} onChangeText={(value) => changeAddressDetail(setSuburb, value)} autoCapitalize="words" />
-        <View style={styles.row}><View style={styles.flex}><FieldInput label="State" value={addressState} onChangeText={(value) => changeAddressDetail(setAddressState, value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 3))} autoCapitalize="characters" /></View><View style={styles.flex}><FieldInput label="Postcode" value={postcode} onChangeText={(value) => changeAddressDetail(setPostcode, value.replace(/\D/g, '').slice(0, 4))} inputMode="tel" /></View></View>
-      </> : null}
+      <FieldInput label="Mobile" value={phone} onChangeText={setPhone} inputMode="tel" />
+      <Text style={styles.cardTitle}>Property</Text>
+      <FieldInput label="Search street address" value={addressLine1} onChangeText={changeAddressLine1} autoCapitalize="words" placeholder="Start typing the street address" />
+      {addressPredictionSession.predictions.length ? <View style={styles.addressSuggestions}>{addressPredictionSession.predictions.map((prediction) => <Pressable accessibilityRole="button" accessibilityLabel={`Use address ${prediction.label}`} key={`${prediction.provider}:${prediction.id}`} onPress={() => void chooseAddress(prediction)} style={styles.addressSuggestion}><MaterialCommunityIcons name="map-marker-outline" color={colours.green} size={22} /><Text style={styles.addressSuggestionText}>{prediction.label}</Text></Pressable>)}{addressPredictionSession.predictions.some((prediction) => prediction.provider === 'google-places' || prediction.provider === 'google-geocoding') ? <Text style={styles.addressAttribution}>Google Maps</Text> : null}</View> : null}
+      <Text accessibilityLiveRegion="polite" style={styles.addressHelp}>{addressLookupBusy ? 'Searching addresses...' : addressLookupMessage}</Text>
+      <FieldInput label="Unit or level, optional" value={addressLine2} onChangeText={(value) => changeAddressDetail(setAddressLine2, value)} autoCapitalize="words" />
+      <FieldInput label="Suburb" value={suburb} onChangeText={(value) => changeAddressDetail(setSuburb, value)} autoCapitalize="words" />
+      <View style={styles.row}><View style={styles.flex}><FieldInput label="State" value={addressState} onChangeText={(value) => changeAddressDetail(setAddressState, value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 3))} autoCapitalize="characters" /></View><View style={styles.flex}><FieldInput label="Postcode" value={postcode} onChangeText={(value) => changeAddressDetail(setPostcode, value.replace(/\D/g, '').slice(0, 4))} inputMode="tel" /></View></View>
       <FieldButton onPress={continueNewCustomer}>Continue to work</FieldButton>
       <FieldButton variant="secondary" onPress={() => { setError(''); setStage('find'); }}>Back</FieldButton>
     </View> : null}
 
     {stage === 'work' ? <View style={styles.card}>
       <Text style={styles.cardTitle}>Work</Text>
-      <View style={styles.summary}><Text style={styles.resultTitle}>{selectedCustomer?.displayName || `${firstName} ${lastName}`.trim()}</Text><Text style={styles.resultText}>{selectedCustomer ? addressLine(selectedCustomer) || 'Property to be confirmed' : addressLine1 ? [addressLine1, suburb, addressState, postcode].filter(Boolean).join(', ') : 'Property to be confirmed'}</Text></View>
+      <View style={styles.summary}><Text style={styles.resultTitle}>{selectedCustomer?.displayName || `${firstName} ${lastName}`.trim()}</Text><Text style={styles.resultText}>{selectedCustomer?.phone || phone}</Text><Text style={styles.resultText}>{selectedCustomer ? addressLine(selectedCustomer) || 'Property to be confirmed' : [addressLine1, addressLine2, suburb, addressState, postcode].filter(Boolean).join(', ')}</Text></View>
       {optionsError ? <><Text accessibilityLiveRegion="polite" style={styles.error}>{optionsError}</Text><FieldButton variant="secondary" onPress={() => setOptionsAttempt((value) => value + 1)}>Retry work types</FieldButton></> : null}
       <FieldSelect label="Work type" value={serviceCategory} options={serviceOptions} onChange={setServiceCategory} disabled={!options} placeholder={options ? 'Choose work type' : 'Loading work types'} />
       <FieldInput label="Short work description, optional" value={description} onChangeText={setDescription} placeholder="What the customer wants quoted" multiline />

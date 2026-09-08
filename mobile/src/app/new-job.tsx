@@ -46,13 +46,6 @@ type CustomerCandidate = {
   addressState: string; postcode: string; reasons: string[];
 };
 type CalendarInviteResult = { requested: boolean; status: 'not_requested' | 'accepted' | 'failed' | 'unavailable'; message: string };
-type CustomerDocumentResult = {
-  requested: boolean;
-  status: 'not_required' | 'provider_accepted' | 'failed' | 'unavailable';
-  canRetry: boolean;
-  message: string;
-};
-
 function addDays(days: number) { const date = new Date(); date.setDate(date.getDate() + days); return date; }
 function dateKey(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
 function timeParts(value: string) { const [hourText, minute = '00'] = value.split(':'); const hour24 = Number(hourText); return { hour: hour24 % 12 || 12, minute, period: hour24 < 12 ? 'am' : 'pm' } as const; }
@@ -326,10 +319,11 @@ export default function NewJobScreen() {
     setAddressPredictionSession({ token: Crypto.randomUUID(), query: '', predictions: [] }); setAddressLookupBusy(false);
     setBusy(true);
     try {
-      const result = await apiRequest<{ ok: boolean; id: string; workNumber?: string; calendarInvite?: CalendarInviteResult; customerDocuments?: CustomerDocumentResult }>('/api/trade-crm', {
+      const result = await apiRequest<{ ok: boolean; id: string; workNumber?: string; calendarInvite?: CalendarInviteResult }>('/api/trade-crm', {
         method: 'POST', body: JSON.stringify({
           action: 'create_scheduled_job', customerMode: selectedCustomer ? 'existing' : 'new', crmCustomerId: selectedCustomer?.customerId || '',
           serviceSiteMode: selectedCustomer ? 'existing' : 'new', serviceSiteId: selectedCustomer?.serviceSiteId || '', customerType: selectedCustomer?.customerType || 'residential',
+          duplicateOverride: !selectedCustomer,
           firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim().toLowerCase(), phone: phone.trim(), siteLabel: 'Service property',
           addressLine1: addressLine1.trim(), addressLine2: addressLine2.trim(), suburb: suburb.trim(), addressState, postcode,
           addressEntryMode: addressProvenance.entryMode, addressProvider: addressProvenance.provider, addressProviderReference: addressProvenance.providerReference,
@@ -343,14 +337,11 @@ export default function NewJobScreen() {
       });
       await syncNow();
       const inviteMessage = result.calendarInvite?.requested ? `\n\n${result.calendarInvite.message}` : '';
-      const documentMessage = result.customerDocuments?.requested ? `\n\n${result.customerDocuments.message}` : '';
-      const documentsNeedAttention = result.customerDocuments?.requested && result.customerDocuments.status !== 'provider_accepted';
-      const documentsRecipientNeedsUpdate = documentsNeedAttention && result.customerDocuments?.canRetry === false;
-      Alert.alert(documentsRecipientNeedsUpdate ? 'Job added, customer email needs attention' : documentsNeedAttention ? 'Job added, documents need attention' : 'Job added',
-        `${result.workNumber || 'The new job'} is saved in the selected worker's schedule.${documentMessage}${inviteMessage}`,
-        [{ text: documentsNeedAttention ? 'Open job' : 'Open schedule', onPress: () => {
+      Alert.alert('Job added',
+        `${result.workNumber || 'The new job'} is saved in the selected worker's schedule.${inviteMessage}`,
+        [{ text: 'Open schedule', onPress: () => {
           allowExit.current = true;
-          router.replace(documentsNeedAttention ? `/job/${result.id}` : '/(tabs)/work');
+          router.replace('/(tabs)/work');
         } }]);
     } catch (caught) {
       const matches = caught instanceof ApiError && Array.isArray(caught.payload.duplicateCandidates) ? caught.payload.duplicateCandidates as CustomerCandidate[] : [];

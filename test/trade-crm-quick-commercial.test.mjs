@@ -8,9 +8,9 @@ import * as rental from '../src/lib/trade-rental-assessment.mjs';
 const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 function moduleAt(path, mocks = {}) {
   const output = ts.transpileModule(read(path), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  const module = { exports: {} };
-  new Function('require', 'module', 'exports', output)(name => mocks[name] || {}, module, module.exports);
-  return module.exports;
+  const moduleRecord = { exports: {} };
+  new Function('require', 'module', 'exports', output)(name => mocks[name] || {}, moduleRecord, moduleRecord.exports);
+  return moduleRecord.exports;
 }
 const clean = (value, limit) => typeof value === 'string' ? value.trim().slice(0, limit) : '';
 const deniedSideEffect = () => { throw new Error('Quick quote invoked a scheduling or compliance side effect'); };
@@ -117,7 +117,8 @@ function fixture(overrides = {}) {
   }
   return { database, post, insertCustomer, queries, access, getInvoiceJobs, insertJob };
 }
-const quick = overrides => ({ action: 'create_quick_quote_job', clientRequestId: 'phone-request-0000001', customerMode: 'new', firstName: 'Casey', lastName: 'Client', email: 'casey@example.test', serviceCategory: 'hot-water', description: 'Supply and install unit', ...overrides });
+const quick = overrides => ({ action: 'create_quick_quote_job', clientRequestId: 'phone-request-0000001', customerMode: 'new', firstName: 'Casey', lastName: 'Client', email: 'casey@example.test', phone: '0412 345 678',
+  addressLine1: '12 Main St', suburb: 'Melbourne', addressState: 'VIC', postcode: '3000', serviceCategory: 'hot-water', description: 'Supply and install unit', ...overrides });
 
 test('quick customer search is owner scoped, bounded, literal and accepts normalized phone numbers', async () => {
   const { database, post, insertCustomer, queries } = fixture();
@@ -164,7 +165,8 @@ test('new-customer quick quote creates an unscheduled unassigned job once and ig
     for (const field of ['scheduled_start', 'scheduled_end', 'assignee_member_id', 'assignee_label']) assert.equal(work[field], '');
     for (const table of ['trade_crm_appointments', 'trade_work_order_compliance_intents']) assert.equal(database.prepare(`SELECT COUNT(*) count FROM ${table}`).get().count, 0);
     const customer = database.prepare('SELECT * FROM trade_crm_customers').get();
-    assert.equal(customer.email, 'casey@example.test'); assert.equal(customer.phone, ''); assert.equal(customer.address_line_1, '');
+    assert.equal(customer.email, 'casey@example.test'); assert.equal(customer.phone, '0412 345 678'); assert.equal(customer.address_line_1, '12 Main St');
+    assert.equal(customer.suburb, 'Melbourne'); assert.equal(customer.address_state, 'VIC'); assert.equal(customer.postcode, '3000');
     const replay = await post(body);
     assert.equal(replay.status, 200, JSON.stringify(replay.body)); assert.equal(replay.body.id, first.body.id); assert.equal(replay.body.idempotentReplay, true);
     assert.equal(database.prepare('SELECT COUNT(*) count FROM trade_work_orders').get().count, 1);
@@ -203,10 +205,11 @@ test('existing-customer quick quote needs matching owner/site/email without cust
   } finally { database.close(); }
 });
 
-test('quick quote validates email, request identity, and partial optional contact details before writing', async () => {
+test('quick quote requires valid email, mobile and full property details before writing', async () => {
   const { database, post } = fixture();
   try {
-    for (const body of [quick({ email: '' }), quick({ email: 'bad' }), quick({ clientRequestId: '' }), quick({ clientRequestId: 'short' }), quick({ phone: '123' }), quick({ addressLine1: 'Incomplete address' })]) {
+    for (const body of [quick({ email: '' }), quick({ email: 'bad' }), quick({ clientRequestId: '' }), quick({ clientRequestId: 'short' }),
+      quick({ phone: '' }), quick({ phone: '123' }), quick({ addressLine1: '' }), quick({ suburb: '' }), quick({ addressState: '' }), quick({ postcode: '' })]) {
       const result = await post(body); assert.equal(result.status, 400, JSON.stringify(result.body));
     }
     assert.equal(database.prepare('SELECT COUNT(*) count FROM trade_work_orders').get().count, 0);
@@ -221,7 +224,7 @@ test('own-job-only staff cannot create an inaccessible unassigned quick quote', 
   } finally { database.close(); }
 });
 
-test('rental quote can be priced before a service address or compliance activities are scheduled', async () => {
+test('rental quote can be priced before compliance activities are scheduled', async () => {
   const { database, post } = fixture();
   try { const result = await post(quick({ serviceCategory: rental.RENTAL_INSPECTION_SERVICE_CATEGORY }));
     assert.equal(result.status, 201, JSON.stringify(result.body));

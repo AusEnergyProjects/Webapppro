@@ -4,7 +4,7 @@ import { File, Paths } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Image, Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Linking, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -342,7 +342,9 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   }
   return <View style={styles.shell}>
     <View style={styles.header}><Pressable disabled={Boolean(busy)} onPress={() => void leave()} style={styles.job}><MaterialCommunityIcons name="arrow-left" size={22} color={colours.green} /><Text style={styles.link}>Job</Text></Pressable><Text style={styles.reference}>{data.inspection?.inspectionNumber || summary.inspectionNumber}</Text><Text style={styles.status}>{busy ? 'Saving...' : hasDraft ? 'Draft on phone' : 'Saved'}</Text></View>
-    <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.content}
+      automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled"
+      onFocus={(event) => scroll.current?.scrollResponderScrollNativeHandleToKeyboard(event.target, 96, true)}>
       {!loaded ? <Text style={styles.body}>Opening assessment...</Text> : !online ? <Text style={styles.body}>Reconnect to load the assessment. Your draft is saved on this phone.</Text> : !active ? <Text style={styles.body}>{error || 'This assessment is not available.'}</Text> : <>
       {page === 'categories' ? <>
         <Text style={styles.title}>{active.title}</Text>

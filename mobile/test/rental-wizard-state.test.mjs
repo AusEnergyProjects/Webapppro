@@ -48,8 +48,15 @@ test('photo linking cannot run before its upload reference has been saved locall
   assert.equal(linked, false);
 });
 
+const source = readFileSync(new URL('../src/components/rental-inspection-workflow.tsx', import.meta.url), 'utf8');
+
+test('rental metadata inputs remain visible above the device keyboard', () => {
+  assert.match(source, /automaticallyAdjustKeyboardInsets=\{Platform\.OS === 'ios'\}/);
+  assert.match(source, /keyboardDismissMode="on-drag"/);
+  assert.match(source, /scrollResponderScrollNativeHandleToKeyboard\(event\.target, 96, true\)/);
+});
+
 test('camera is available before an answer exists and metadata mutations use the server revision contract', () => {
-  const source = readFileSync(new URL('../src/components/rental-inspection-workflow.tsx', import.meta.url), 'utf8');
   const capture = source.slice(source.indexOf('async function capture()'), source.indexOf('async function updatePhoto'));
   assert.ok(capture.indexOf('await persist(next)') < capture.indexOf('await observeLocation(true)'), 'Photo reference must survive GPS errors');
   assert.doesNotMatch(capture, /if \(!item\.id\)|if \(!draft\.item\.id\)/);

@@ -16,11 +16,11 @@ import { apiRequest, ApiError } from '@/lib/api';
 import { getSetting, setSetting } from '@/lib/database';
 import { API_BASE_URL } from '@/lib/config';
 import { observeLocation } from '@/lib/evidence';
-import { activityBookingDocumentDeliveryState, activityCurrentSignatureKeys, activityOptionLabel, activityProgress, activitySectionProgress, activitySignerDefault, mergeActivityAnswers } from '@/lib/activity-field-wizard';
+import { activityCurrentSignatureKeys, activityOptionLabel, activityProgress, activitySectionProgress, activitySignerDefault, mergeActivityAnswers } from '@/lib/activity-field-wizard';
 import { colours, radius, spacing } from '@/lib/theme';
 import type { FieldWorkPackSignatureDraft, FieldWorkPackSignerRole } from '@/lib/types';
 import type { ActivityAnswers, ActivityRecord } from '../../../src/lib/trade-activity-form-types';
-import { activityBaseFieldKey, activityRepeatCount, boundActivityDeclaration, activityWizardSteps, activityWizardPages, activityWizardPageForStepKey, type ExpandedActivityField } from '../../../src/lib/trade-activity-form-flow';
+import { activityBaseFieldKey, activityRepeatCount, activityRepeatItemLabel, activityRepeatKey, boundActivityDeclaration, removeLastActivityRepeat, activityWizardSteps, activityWizardPages, activityWizardPageForStepKey, type ExpandedActivityField } from '../../../src/lib/trade-activity-form-flow';
 
 const endpoint = '/api/trade-activity-forms';
 export type ActivityFieldSummary = { id: string; intentId: string; title: string; status: 'not_started' | ActivityRecord['status']; recordNumber: string; progress: { complete: number; total: number } };
@@ -28,17 +28,6 @@ type Presented = Omit<ActivityRecord, 'evidence'> & { evidence: Omit<ActivityRec
 type CaptureMetadata = { capturedAt: string; latitude: number | null; longitude: number | null; accuracy: number | null; metadataOrigin: 'device_capture' | 'file_upload'; locationObservedAt?: string; mocked?: boolean | null };
 type PendingFile = { id: string; fieldKey: string; uri: string; name: string; contentType: string; metadata: CaptureMetadata };
 type Cache = { record: Presented; answers: ActivityAnswers; pending: PendingFile[]; stepKey: string; camera?: { fieldKey: string; metadata: CaptureMetadata } };
-type CustomerDocumentResult = {
-  status: 'provider_accepted' | 'failed' | 'not_required' | 'unavailable';
-  canRetry?: boolean;
-  message: string;
-  documents?: unknown[];
-  acceptedAt?: string;
-  documentIds?: string[];
-  documentSha256Set?: string[];
-};
-
-
 function signatureDraft(role: string, name: string): FieldWorkPackSignatureDraft {
   return { signerRoleKey: role, signerName: name, signerCapacity: role, identity: {}, strokes: [], capturedAt: '' };
 }
@@ -88,10 +77,12 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   const [cache, setCache] = useState<Cache | null>(null);
   const cacheRef = useRef<Cache | null>(null);
   const writes = useRef(Promise.resolve());
+  const syncs = useRef(Promise.resolve());
   const actionRunning = useRef(false);
+  const moving = useRef(false);
   const [busy, setBusy] = useState('loading');
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
-  const [customerDocumentResult, setCustomerDocumentResult] = useState<CustomerDocumentResult | null>(null);
   const [overview, setOverview] = useState(true);
   const [signature, setSignature] = useState<FieldWorkPackSignatureDraft>(signatureDraft('', ''));
   const [acknowledged, setAcknowledged] = useState(false);
@@ -215,7 +206,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
           setSignature((current) => ({ ...current, strokes: [], capturedAt: '' }));
           setAcknowledged(false);
           setError(caught.message);
-        } else setError('Your latest work is saved on this phone. Tap Next to continue saving.');
+        } else setError('TLink refreshed the latest saved details. Check this signature page and try again.');
       } else setError(caught instanceof Error ? caught.message : 'The action could not be completed. Your draft is retained.');
     }
     finally { actionRunning.current = false; setBusy(''); }
@@ -225,39 +216,42 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     return response.record;
   }
   async function acceptResponse(snapshot: Cache, nextRecord: Presented) {
+    const current = cacheRef.current?.record.id === snapshot.record.id ? cacheRef.current : snapshot;
+    const answers = mergeActivityAnswers(snapshot.answers, current.answers, nextRecord.answers, derivedAnswerKeys(nextRecord)).merged;
     const next: Cache = {
-      ...snapshot,
+      ...current,
       record: nextRecord,
-      answers: nextRecord.answers,
-      stepKey: availableStepKey(nextRecord, nextRecord.answers, snapshot.stepKey),
+      answers,
+      stepKey: availableStepKey(nextRecord, answers, current.stepKey),
     };
     await remember(next);
-    return nextRecord;
+    return next;
   }
   async function request(action: string, body: Record<string, unknown> = {}) {
-    const latest = cacheRef.current;
-    if (!latest || !online) throw new Error('Reconnect to save this action. Your draft stays on this phone.');
-    try {
-      const response = await apiRequest<{ record: Presented }>(endpoint, { method: 'POST', body: JSON.stringify({ action, recordId: latest.record.id, expectedRevision: latest.record.revision,
-        ...(action === 'save' ? { baseAnswers: latest.record.answers } : {}), ...body }) });
-      return acceptResponse(latest, response.record);
-    } catch (caught) {
-      if (!(caught instanceof ApiError) || caught.code !== 'ACTIVITY_REVISION_CONFLICT' || action !== 'save') throw caught;
-      const fresh = await latestRecord(latest.record.id);
-      const reconciliation = reconcileAnswers(latest.record.answers, latest.answers, fresh);
-      const reconciled: Cache = {
-        ...latest,
-        record: fresh,
-        answers: reconciliation.merged,
-        stepKey: availableStepKey(fresh, reconciliation.merged, latest.stepKey),
-      };
-      await remember(reconciled);
-      const response = await apiRequest<{ record: Presented }>(endpoint, {
-        method: 'POST',
-        body: JSON.stringify({ action, recordId: fresh.id, expectedRevision: fresh.revision, ...body, answers: reconciliation.merged, baseAnswers: fresh.answers }),
-      });
-      return acceptResponse(reconciled, response.record);
+    const initial = cacheRef.current;
+    if (!initial || !online) throw new Error('Reconnect to save this action. Your draft stays on this phone.');
+    let latest: Cache = initial;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const response = await apiRequest<{ record: Presented }>(endpoint, { method: 'POST', body: JSON.stringify({ action, recordId: latest.record.id, expectedRevision: latest.record.revision,
+          ...body, ...(action === 'save' ? { answers: latest.answers, baseAnswers: latest.record.answers } : {}) }) });
+        return acceptResponse(latest, response.record);
+      } catch (caught) {
+        if (!(caught instanceof ApiError) || caught.code !== 'ACTIVITY_REVISION_CONFLICT' || action !== 'save' || attempt === 2) throw caught;
+        const fresh = await latestRecord(latest.record.id);
+        const cached = cacheRef.current;
+        const current: Cache = cached?.record.id === latest.record.id ? cached : latest;
+        const reconciliation = reconcileAnswers(latest.record.answers, current.answers, fresh);
+        latest = {
+          ...current,
+          record: fresh,
+          answers: reconciliation.merged,
+          stepKey: availableStepKey(fresh, reconciliation.merged, current.stepKey),
+        };
+        await remember(latest);
+      }
     }
+    throw new Error('The activity form could not be saved.');
   }
   function answer(key: string, value: string | number | boolean) {
     if (!cacheRef.current) return;
@@ -267,6 +261,21 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     const latest = cacheRef.current;
     if (!latest || JSON.stringify(latest.answers) === JSON.stringify(latest.record.answers)) return;
     await request('save', { answers: latest.answers });
+  }
+  function queuePageSync(fieldKeys: readonly string[]) {
+    const uniqueKeys = [...new Set(fieldKeys)];
+    syncs.current = syncs.current.catch(() => undefined).then(async () => {
+      if (!online) return;
+      setSyncing(true);
+      try {
+        await saveAnswers();
+        for (const fieldKey of uniqueKeys) await uploadPending(fieldKey);
+      } catch (caught) {
+        setError(`${caught instanceof Error ? caught.message : 'TLink could not sync this page.'} Your work remains saved on this phone and will retry with the next save.`);
+      } finally {
+        setSyncing(false);
+      }
+    });
   }
   async function retainFile(fieldKey: string, uri: string, name: string, contentType: string, metadata: CaptureMetadata) {
     if (!cacheRef.current) return;
@@ -334,19 +343,23 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       } catch (caught) {
         if (!(caught instanceof ApiError) || caught.code !== 'ACTIVITY_REVISION_CONFLICT') throw caught;
         const fresh = await latestRecord(latest.record.id);
-        const reconciliation = reconcileAnswers(latest.record.answers, latest.answers, fresh);
+        const cached = cacheRef.current;
+        const current: Cache = cached?.record.id === latest.record.id ? cached : latest;
+        const reconciliation = reconcileAnswers(latest.record.answers, current.answers, fresh);
         uploadSnapshot = {
-          ...latest,
+          ...current,
           record: fresh,
           answers: reconciliation.merged,
-          stepKey: availableStepKey(fresh, reconciliation.merged, latest.stepKey),
+          stepKey: availableStepKey(fresh, reconciliation.merged, current.stepKey),
         };
         await remember(uploadSnapshot);
         form.set('expectedRevision', String(fresh.revision));
         response = await apiRequest<{ record: Presented }>(endpoint, { method: 'POST', body: form });
       }
       finally { if (previewUri) { const preview = new File(previewUri); if (preview.exists) preview.delete(); } }
-      await remember({ ...uploadSnapshot, record: response.record, answers: response.record.answers, pending: uploadSnapshot.pending.filter((item) => item.id !== pending.id) });
+      await acceptResponse(uploadSnapshot, response.record);
+      const accepted = cacheRef.current;
+      if (accepted) await remember({ ...accepted, pending: accepted.pending.filter((item) => item.id !== pending.id) });
       // Only remove this task's local copy after its server receipt is durably saved.
       const file = new File(pending.uri); if (file.exists) file.delete();
     }
@@ -358,23 +371,72 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     const index = Math.max(0, currentSteps.findIndex((item) => item.key === latest.stepKey));
     await remember({ ...latest, stepKey: currentSteps[Math.max(0, Math.min(currentSteps.length - 1, index + delta))].key });
   }
+  async function addRepeatItem(group: string) {
+    const latest = cacheRef.current;
+    if (!latest) return;
+    const count = activityRepeatCount(latest.record.form, latest.answers, group);
+    if (count >= 20) return;
+    const answers = { ...latest.answers, [`$repeat.${group}`]: count + 1 };
+    const nextPage = activityWizardPages(latest.record.form, answers).find((page) => page.kind === 'fields'
+      && page.fields.some((field) => field.repeatGroup === group && field.repeatIndex === count));
+    await remember({ ...latest, answers, stepKey: nextPage?.key || latest.stepKey });
+    queuePageSync([]);
+  }
+  function removeRepeatItem(group: string) {
+    const latest = cacheRef.current;
+    if (!latest) return;
+    const count = activityRepeatCount(latest.record.form, latest.answers, group);
+    if (count <= 1) return;
+    const removedIndex = count - 1;
+    const fieldKeys = latest.record.form.fields.filter((field) => field.repeatGroup === group)
+      .map((field) => activityRepeatKey(field.key, removedIndex));
+    if (latest.record.evidence.some((item) => fieldKeys.includes(item.fieldKey))) {
+      setError(`This ${activityRepeatItemLabel(group)} has already uploaded evidence and cannot be removed from the field record.`);
+      return;
+    }
+    const itemLabel = activityRepeatItemLabel(group);
+    Alert.alert(`Remove this ${itemLabel}?`, 'This removes the accidental item and any answers or pending files attached to it.', [
+      { text: 'Keep item', style: 'cancel' },
+      { text: 'Remove item', style: 'destructive', onPress: () => void perform('remove', async () => {
+        const current = cacheRef.current;
+        if (!current) return;
+        const pending = current.pending.filter((item) => fieldKeys.includes(item.fieldKey));
+        const answers = removeLastActivityRepeat(current.record.form, current.answers, group);
+        const previousPage = [...activityWizardPages(current.record.form, answers)].reverse().find((page) => page.kind === 'fields'
+          && page.fields.some((field) => field.repeatGroup === group && field.repeatIndex === removedIndex - 1));
+        await remember({ ...current, answers, pending: current.pending.filter((item) => !fieldKeys.includes(item.fieldKey)), stepKey: previousPage?.key || current.stepKey });
+        for (const item of pending) { const file = new File(item.uri); if (file.exists) file.delete(); }
+        queuePageSync([]);
+      }) },
+    ]);
+  }
   async function next() {
     if (!step || !cache) return;
+    if (step.kind === 'fields') {
+      if (!editable) { await move(1); return; }
+      if (moving.current) return;
+      for (const field of step.fields) {
+        const value = cacheRef.current?.answers[field.key];
+        if (field.required && !['photo', 'document'].includes(field.type) && (value === undefined || value === '')) return setError(`Complete ${field.label.toLowerCase()} before continuing.`);
+        if (field.requiredValue !== undefined && value !== field.requiredValue) return setError(`Complete ${field.label.toLowerCase()} before continuing. Your answer is retained.`);
+        const current = cacheRef.current;
+        if (field.required && ['photo', 'document'].includes(field.type) && !current?.record.evidence.some((item) => item.fieldKey === field.key) && !current?.pending.some((item) => item.fieldKey === field.key)) return setError(`Add ${field.label.toLowerCase()} before continuing.`);
+      }
+      setError('');
+      const fieldKeys = step.fields.map((field) => field.key);
+      moving.current = true;
+      try {
+        await move(1);
+        if (online) queuePageSync(fieldKeys);
+      } finally {
+        moving.current = false;
+      }
+      return;
+    }
     await perform('next', async () => {
       if (!editable) { await move(1); return; }
-      if (step.kind === 'fields') {
-        for (const field of step.fields) {
-          const value = cacheRef.current?.answers[field.key];
-          if (field.required && !['photo', 'document'].includes(field.type) && (value === undefined || value === '')) throw new Error(`Complete ${field.label.toLowerCase()} before continuing.`);
-          if (field.requiredValue !== undefined && value !== field.requiredValue) throw new Error(`Complete ${field.label.toLowerCase()} before continuing. Your answer is retained.`);
-          const current = cacheRef.current;
-          if (field.required && ['photo', 'document'].includes(field.type) && !current?.record.evidence.some((item) => item.fieldKey === field.key) && !current?.pending.some((item) => item.fieldKey === field.key)) throw new Error(`Add ${field.label.toLowerCase()} before continuing.`);
-        }
-        if (online) {
-          await saveAnswers();
-          for (const field of step.fields) await uploadPending(field.key);
-        }
-      } else if (step.kind === 'signature' && !currentSignature) {
+      if (step.kind === 'signature' && !currentSignature) {
+        await syncs.current;
         if (!acknowledged) throw new Error('Confirm the declaration before signing.');
         const displayed = cacheRef.current;
         await saveAnswers();
@@ -395,33 +457,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       await move(1);
     });
   }
-  async function resendCustomerDocuments() {
-    setCustomerDocumentResult(null);
-    await perform('customer-documents', async () => {
-      const response = await apiRequest<{ customerDocuments?: CustomerDocumentResult }>('/api/trade-crm', {
-        method: 'POST',
-        body: JSON.stringify({ action: 'resend_activity_customer_documents', workOrderId }),
-      });
-      const result = response.customerDocuments;
-      const hasDocumentResult = Array.isArray(result?.documents)
-        || (Array.isArray(result?.documentIds) && Array.isArray(result?.documentSha256Set));
-      if (!result || !['provider_accepted', 'failed', 'not_required', 'unavailable'].includes(result.status)
-        || !hasDocumentResult || typeof result.message !== 'string' || !result.message.trim()) {
-        throw new Error('TLink received an unreadable customer-document delivery result. Try again.');
-      }
-      setCustomerDocumentResult(result);
-      if (result.status !== 'provider_accepted' || !cacheRef.current) return;
-      const local = cacheRef.current;
-      try {
-        const fresh = await latestRecord(local.record.id);
-        const reconciliation = reconcileAnswers(local.record.answers, local.answers, fresh);
-        await remember({ ...local, record: fresh, answers: reconciliation.merged, stepKey: availableStepKey(fresh, reconciliation.merged, local.stepKey) });
-      } catch {
-        setError('The customer documents were accepted for delivery, but this form could not refresh the receipt. Reopen it when connected.');
-      }
-    });
-  }
-  async function leave() { await writes.current; await onChanged(); onReturnToJob(); }
+  async function leave() { await writes.current; await syncs.current; await onChanged(); onReturnToJob(); }
   async function share() {
     await perform('share', async () => {
       if (!record) return;
@@ -436,7 +472,6 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   const signatureDeclarationKeys = activityCurrentSignatureKeys(record.signatures, record.missing);
   const overallProgress = activityProgress(steps, cache.answers, evidenceFieldKeys, signatureDeclarationKeys);
   const sections = activitySectionProgress(steps, cache.answers, evidenceFieldKeys);
-  const customerDocumentDelivery = activityBookingDocumentDeliveryState(record.form.fields, cache.answers);
   const systemMissing = record.missing.filter((item) => record.form.fields
     .find((field) => field.key === activityBaseFieldKey(item.key))?.presentation === 'derived');
   const fieldMissing = record.missing.filter((item) => !systemMissing.includes(item));
@@ -448,6 +483,16 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   const signerRole: FieldWorkPackSignerRole = { roleKey: signature.signerRoleKey, label: step?.kind === 'signature' ? step.declaration.role : 'Signer', capacity: signature.signerCapacity,
     identitySource: technicianSignature ? 'assigned_worker' : step?.kind === 'signature' && step.declaration.role === 'customer' ? 'customer_context' : 'manual_verified',
     minimumSignatures: 1, maximumSignatures: 1, identityRequirements: [] };
+  const repeatField = step?.kind === 'fields' ? step.fields.find((field) => field.repeatGroup) : undefined;
+  const followingPage = pages[stepIndex + 1];
+  const repeatItemContinues = Boolean(repeatField && followingPage?.kind === 'fields' && followingPage.fields.some((field) =>
+    field.repeatGroup === repeatField.repeatGroup && field.repeatIndex === repeatField.repeatIndex));
+  const repeatCount = repeatField?.repeatGroup ? activityRepeatCount(record.form, cache.answers, repeatField.repeatGroup) : 1;
+  const showRepeatActions = Boolean(repeatField?.repeatGroup && !repeatItemContinues && repeatField.repeatIndex === repeatCount - 1);
+  const repeatItemLabel = repeatField?.repeatGroup ? activityRepeatItemLabel(repeatField.repeatGroup) : 'item';
+  const repeatItemKeys = repeatField?.repeatGroup ? record.form.fields.filter((field) => field.repeatGroup === repeatField.repeatGroup)
+    .map((field) => activityRepeatKey(field.key, repeatField.repeatIndex)) : [];
+  const repeatItemHasSavedEvidence = record.evidence.some((item) => repeatItemKeys.includes(item.fieldKey));
   function renderField(field: ExpandedActivityField) {
     if (!record || !cache) return null;
     const pendingHere = cache.pending.filter((item) => item.fieldKey === field.key);
@@ -466,26 +511,23 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
             {savedHere.map((item) => <Text key={item.id} style={styles.text}>{item.fileName}{item.latitude !== null ? ` · ${item.latitude.toFixed(5)}, ${item.longitude?.toFixed(5)}` : ''}</Text>)}
             {pendingHere.map((item) => <View key={item.id} style={styles.group}>{item.contentType.startsWith('image/') ? <Image alt="Pending site evidence" accessibilityLabel="Pending site evidence" source={{ uri: item.uri }} style={styles.preview} resizeMode="contain" /> : null}<Text style={styles.small}>{item.name} · Original retained on this phone</Text><FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => Alert.alert('Remove pending file?', 'This file has not been submitted.', [{ text: 'Keep' }, { text: 'Remove', onPress: () => void perform('remove', async () => { await remember({ ...cache, pending: cache.pending.filter((file) => file.id !== item.id) }); const file = new File(item.uri); if (file.exists) file.delete(); }) }])}>Remove pending file</FieldButton></View>)}
           </> : field.type === 'date' ? <FieldDatePicker label="Choose date" value={String(cache.answers[field.key] ?? '')} disabled={!editable || locked || Boolean(busy)} onChange={(value) => answer(field.key, value)} /> : <TextInput accessibilityLabel={field.label} value={String(cache.answers[field.key] ?? '')} editable={editable && !locked && !busy} placeholder="Enter answer" placeholderTextColor={colours.muted} keyboardType={field.type === 'number' ? 'decimal-pad' : 'default'} style={styles.input} onChangeText={(value) => answer(field.key, field.type === 'number' && value !== '' && Number.isFinite(Number(value)) ? Number(value) : value)} />}
-          {field.repeatGroup && !locked ? <FieldButton variant="quiet" disabled={!editable || Boolean(busy) || activityRepeatCount(record.form, cache.answers, field.repeatGroup) >= 20} onPress={() => { const group = field.repeatGroup!; answer(`$repeat.${group}`, activityRepeatCount(record.form, cache.answers, group) + 1); }}>Add another {field.repeatGroup.replaceAll('_', ' ')}</FieldButton> : null}
-
     </View>;
   }
   return <View style={styles.container}>
-    <View style={styles.header}><FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => { if (overview) void perform('leaving', leave); else setOverview(true); }}>{overview ? 'Job' : 'Back'}</FieldButton><View style={styles.flex}><Text numberOfLines={2} style={styles.small}>{record.form.title}</Text><Text style={styles.small}>{record.recordNumber} · {online ? 'Connected' : 'Draft on this phone'}</Text></View><FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => setOverview(!overview)}>{overview ? 'Continue' : 'Sections'}</FieldButton></View>
-    <ScrollView ref={scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" scrollEnabled={true}>
+    <View style={styles.header}><FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => { if (overview) void perform('leaving', leave); else setOverview(true); }}>{overview ? 'Job' : 'Back'}</FieldButton><View style={styles.flex}><Text numberOfLines={2} style={styles.small}>{record.form.title}</Text><Text style={styles.small}>{record.recordNumber} · {syncing ? 'Saving in background' : online ? 'Connected' : 'Draft on this phone'}</Text></View><FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => setOverview(!overview)}>{overview ? 'Continue' : 'Sections'}</FieldButton></View>
+    <ScrollView
+      ref={scroll}
+      automaticallyAdjustKeyboardInsets
+      contentContainerStyle={styles.body}
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="handled"
+      onFocus={(event) => scroll.current?.scrollResponderScrollNativeHandleToKeyboard(event.target, 96, true)}
+      scrollEnabled={true}
+    >
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
       <ProgressMeter label="Form progress" complete={overallProgress.complete} total={overallProgress.total} />
       {overview ? <>
         <Text style={styles.title}>{record.form.title}</Text><Text style={styles.text}>Complete the questions, evidence and signatures, then submit to Creditex.</Text>
-        {customerDocumentResult ? <View accessibilityLiveRegion="polite" style={['failed', 'unavailable'].includes(customerDocumentResult.status) ? styles.deliveryFailed : styles.deliveryResult}>
-          <Text style={styles.text}>{customerDocumentResult.message}</Text>
-        </View> : null}
-        {customerDocumentDelivery.applicable && !customerDocumentDelivery.accepted ? <View style={styles.deliveryRecovery}>
-          <Text style={styles.progressLabel}>Customer documents need attention</Text>
-          <Text style={styles.small}>Send the required booking PDFs to the customer before they agree to the upgrade.</Text>
-          {customerDocumentResult?.canRetry !== false ? <FieldButton disabled={!online || Boolean(busy)} loading={busy === 'customer-documents'} onPress={() => void resendCustomerDocuments()}>Resend customer documents</FieldButton> : null}
-          {!online ? <Text style={styles.small}>Reconnect to send these documents.</Text> : null}
-        </View> : null}
         {systemMissing.length ? <View style={styles.deliveryRecovery}>
           <Text style={styles.progressLabel}>Job or profile details need attention</Text>
           <Text style={styles.small}>TLink fills these automatically. Update the customer, business, assigned team member or job record in the portal, then reopen this form.</Text>
@@ -503,7 +545,12 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       </> : <>
         {currentSection ? <ProgressMeter compact label={currentSection.label} complete={currentSection.complete} total={currentSection.total} /> : null}
         <Text style={styles.small}>{step?.kind === 'fields' ? `Section ${stepIndex + 1} of ${pages.length} · ${step.fields.length} items` : step?.kind === 'signature' ? 'Signature' : 'Final review'}</Text><Text style={styles.title}>{title}</Text>
-        {step?.kind === 'fields' ? <>{step.fields.map(renderField)}        </> : step?.kind === 'signature' ? currentSignature ? <Text style={styles.text}>Signed by {currentSignature.signerName} on {new Date(currentSignature.signedAt).toLocaleString('en-AU')}.</Text> : <>
+        {step?.kind === 'fields' ? <>{step.fields.map(renderField)}{showRepeatActions && repeatField?.repeatGroup && !locked ? <View style={styles.repeatActions}>
+          <Text style={styles.progressLabel}>{repeatItemLabel.charAt(0).toUpperCase() + repeatItemLabel.slice(1)} {repeatField.repeatIndex + 1}</Text>
+          <FieldButton variant="secondary" disabled={!editable || Boolean(busy) || repeatCount >= 20} onPress={() => void addRepeatItem(repeatField.repeatGroup!)}>Add another {repeatItemLabel}</FieldButton>
+          {repeatCount > 1 ? <FieldButton variant="danger" disabled={!editable || Boolean(busy) || repeatItemHasSavedEvidence} onPress={() => removeRepeatItem(repeatField.repeatGroup!)}>Remove this {repeatItemLabel}</FieldButton> : null}
+          {repeatItemHasSavedEvidence ? <Text style={styles.small}>This item has uploaded evidence and stays in the field record.</Text> : null}
+        </View> : null}</> : step?.kind === 'signature' ? currentSignature ? <Text style={styles.text}>Signed by {currentSignature.signerName} on {new Date(currentSignature.signedAt).toLocaleString('en-AU')}.</Text> : <>
           <Text style={styles.small}>The signing date and time are recorded automatically when this signature is saved.</Text>
           {technicianSignature ? <View style={styles.derived}><Text style={styles.text}>{boundSignerName || 'Assigned technician profile name missing'}</Text><Text style={styles.small}>Technician identity comes from the active team member assigned to this job.</Text></View>
             : <TextInput accessibilityLabel="Signer's full name" value={signature.signerName} placeholder="Signer's full name" placeholderTextColor={colours.muted} editable={editable && !busy} style={styles.input} onChangeText={(signerName) => setSignature({ ...signature, signerName, strokes: [], capturedAt: '' })} />}
@@ -533,8 +580,8 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
           {systemMissing.length ? <Text style={styles.error}>TLink is missing system details: {systemMissing.map((item) => item.label).join(', ')}. Update the related portal record and reopen this form.</Text> : null}
           {fieldMissing.slice(0, 8).map((item) => <FieldButton key={item.key} variant="secondary" onPress={() => { const target = activityWizardPageForStepKey(pages, item.key); if (target) void remember({ ...cache, stepKey: target.key }); }}>{item.label}</FieldButton>)}
           {fieldMissing.length > 8 ? <Text style={styles.small}>{fieldMissing.length - 8} more questions will follow.</Text> : null}
-          {cache.pending.length ? <FieldButton disabled={!online || Boolean(busy)} onPress={() => void perform('upload', async () => { await saveAnswers(); for (const key of new Set(cache.pending.map((item) => item.fieldKey))) await uploadPending(key); })}>Upload {cache.pending.length} pending files</FieldButton> : null}
-          {record.status === 'draft' ? <FieldButton disabled={!editable || !online || Boolean(busy) || cache.pending.length > 0} loading={busy === 'submit'} onPress={() => void perform('submit', async () => { await saveAnswers(); await request('submit'); await onChanged(); })}>Submit completed form to Creditex</FieldButton> : <><FieldButton disabled={!online || Boolean(busy)} onPress={() => void share()}>Share completed report</FieldButton><FieldButton variant="secondary" onPress={() => void perform('revoke', async () => { await apiRequest(endpoint, { method: 'POST', body: JSON.stringify({ action: 'revoke_report', recordId: record.id }) }); setError('Previous report links have been revoked.'); })}>Revoke report links</FieldButton></>}
+          {cache.pending.length ? <FieldButton disabled={!online || Boolean(busy)} onPress={() => void perform('upload', async () => { await syncs.current; await saveAnswers(); for (const key of new Set(cache.pending.map((item) => item.fieldKey))) await uploadPending(key); })}>Upload {cache.pending.length} pending files</FieldButton> : null}
+          {record.status === 'draft' ? <FieldButton disabled={!editable || !online || Boolean(busy) || cache.pending.length > 0} loading={busy === 'submit'} onPress={() => void perform('submit', async () => { await syncs.current; await saveAnswers(); await request('submit'); await onChanged(); })}>Submit completed form to Creditex</FieldButton> : <><FieldButton disabled={!online || Boolean(busy)} onPress={() => void share()}>Share completed report</FieldButton><FieldButton variant="secondary" onPress={() => void perform('revoke', async () => { await apiRequest(endpoint, { method: 'POST', body: JSON.stringify({ action: 'revoke_report', recordId: record.id }) }); setError('Previous report links have been revoked.'); })}>Revoke report links</FieldButton></>}
         </>}
       </>}
     </ScrollView>
@@ -560,6 +607,5 @@ const styles = StyleSheet.create({
   derived: { gap: spacing.xs, padding: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.surfaceRaised },
   evidenceBinding: { color: colours.green, fontSize: 14, fontWeight: '700' }, pressed: { opacity: 0.72 },
   deliveryRecovery: { gap: spacing.sm, padding: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colours.green, backgroundColor: colours.surfaceRaised },
-  deliveryResult: { padding: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colours.green, backgroundColor: colours.mint },
-  deliveryFailed: { padding: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colours.red, backgroundColor: colours.redSoft },
+  repeatActions: { gap: spacing.sm, padding: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colours.green, backgroundColor: colours.surfaceRaised },
 });

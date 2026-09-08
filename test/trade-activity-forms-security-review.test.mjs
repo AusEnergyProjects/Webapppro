@@ -91,11 +91,11 @@ function fixture(fieldForm = form(), options = {}) {
       activityConsumerDocuments: () => options.consumerDocuments || [],
       applyDefaultActivityFormPolicy: options.applyPolicy || ((value) => value),
       ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS: {
-        deliveryId: "delivery.id",
-        providerAccepted: "delivery.provider", method: "delivery.method", acceptedAt: "delivery.accepted",
-        recipient: "delivery.recipient", appointmentId: "delivery.appointment",
-        documentIds: "delivery.ids", documentSha256Set: "delivery.hashes",
-        packSha256: "delivery.pack",
+        deliveryId: "delivery.booking_documents.delivery_id",
+        providerAccepted: "delivery.booking_documents.provider_accepted", method: "delivery.booking_documents.method", acceptedAt: "delivery.booking_documents.accepted_at",
+        recipient: "delivery.booking_documents.recipient", appointmentId: "delivery.booking_documents.appointment_id",
+        documentIds: "delivery.booking_documents.document_ids", documentSha256Set: "delivery.booking_documents.document_sha256_set",
+        packSha256: "delivery.booking_documents.pack_sha256",
       },
     },
     "./trade-activity-forms.ts": core,
@@ -132,7 +132,7 @@ test("file and PDF custody digests are the SHA-256 of original bytes", () => {
 
 test("server progress counts required field work and signatures without system-filled fields", () => {
   const fieldForm = form();
-  fieldForm.fields.push({ ...field("delivery.provider", "before", "boolean"), presentation: "derived" });
+  fieldForm.fields.push({ ...field("delivery.booking_documents.provider_accepted", "before", "boolean"), presentation: "derived" });
   const { database, server } = fixture(fieldForm);
   try {
     const record = { id: "record-a", recordNumber: "TAF-A", intentId: "intent-a", workOrderId: "job-a", ownerUid: "owner-a",
@@ -431,15 +431,15 @@ test("provider-accepted booking document receipts hydrate records and cannot be 
   const derived = (key, type = "text") => ({ ...field(key, "before", type, false), presentation: "derived" });
   const fieldForm = form();
   fieldForm.fields.push(
-    derived("delivery.id"),
-    derived("delivery.provider", "boolean"),
-    derived("delivery.method"),
-    derived("delivery.accepted"),
-    derived("delivery.recipient"),
-    derived("delivery.appointment"),
-    derived("delivery.ids"),
-    derived("delivery.hashes"),
-    derived("delivery.pack"),
+    derived("delivery.booking_documents.delivery_id"),
+    derived("delivery.booking_documents.provider_accepted", "boolean"),
+    derived("delivery.booking_documents.method"),
+    derived("delivery.booking_documents.accepted_at"),
+    derived("delivery.booking_documents.recipient"),
+    derived("delivery.booking_documents.appointment_id"),
+    derived("delivery.booking_documents.document_ids"),
+    derived("delivery.booking_documents.document_sha256_set"),
+    derived("delivery.booking_documents.pack_sha256"),
   );
   const { database, server, access } = fixture(fieldForm, { consumerDocuments: [{ key: "factsheet" }] });
   try {
@@ -449,29 +449,29 @@ test("provider-accepted booking document receipts hydrate records and cannot be 
     database.prepare("INSERT INTO trade_work_order_events VALUES (?, ?, ?, ?, ?, ?)").run("event", "job-a", "owner-a", "customer_documents_provider_accepted",
       acceptedCustomerDocumentDelivery(database, { documentSha256Set: [hash] }), "2026-09-08T01:02:03.000Z");
     const opened = await server.openActivityRecord(access, "job-a", "intent-a");
-    assert.equal(opened.answers["delivery.provider"], true);
-    assert.equal(opened.answers["delivery.method"], "email");
-    assert.equal(opened.answers["delivery.recipient"], "pat@example.com");
+    assert.equal(opened.answers["delivery.booking_documents.provider_accepted"], true);
+    assert.equal(opened.answers["delivery.booking_documents.method"], "email");
+    assert.equal(opened.answers["delivery.booking_documents.recipient"], "pat@example.com");
     const saved = await server.saveActivityAnswers(access, opened.id, opened.revision, {
-      ...opened.answers, before_name: "Pat", "delivery.provider": false, "delivery.method": "paper",
+      ...opened.answers, before_name: "Pat", "delivery.booking_documents.provider_accepted": false, "delivery.booking_documents.method": "paper",
     });
-    assert.equal(saved.answers["delivery.provider"], true);
-    assert.equal(saved.answers["delivery.method"], "email");
+    assert.equal(saved.answers["delivery.booking_documents.provider_accepted"], true);
+    assert.equal(saved.answers["delivery.booking_documents.method"], "email");
     assert.equal(saved.answers.before_name, "Pat");
     const signed = await server.signActivityDeclaration(access, saved.id, { expectedRevision: saved.revision,
       declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes });
     const reloaded = await server.loadActivityRecord(access, signed.id);
-    assert.equal(reloaded.answers["delivery.accepted"], "2026-09-08T01:02:03.000Z");
+    assert.equal(reloaded.answers["delivery.booking_documents.accepted_at"], "2026-09-08T01:02:03.000Z");
     assert.deepEqual(core.activityMissing(reloaded, "before"), []);
   } finally { database.close(); }
 });
 
-test("a changed customer email clears a persisted booking-document receipt before signing", async () => {
+test("a changed customer email clears its receipt without blocking on-device signing", async () => {
   const derived = (key, type = "text") => ({ ...field(key, "before", type, false), presentation: "derived" });
   const fieldForm = form();
   fieldForm.fields.push(
-    derived("delivery.id"), derived("delivery.provider", "boolean"), derived("delivery.method"), derived("delivery.accepted"),
-    derived("delivery.recipient"), derived("delivery.appointment"), derived("delivery.ids"), derived("delivery.hashes"), derived("delivery.pack"),
+    derived("delivery.booking_documents.delivery_id"), derived("delivery.booking_documents.provider_accepted", "boolean"), derived("delivery.booking_documents.method"), derived("delivery.booking_documents.accepted_at"),
+    derived("delivery.booking_documents.recipient"), derived("delivery.booking_documents.appointment_id"), derived("delivery.booking_documents.document_ids"), derived("delivery.booking_documents.document_sha256_set"), derived("delivery.booking_documents.pack_sha256"),
   );
   const { database, server, access } = fixture(fieldForm, { consumerDocuments: [{ key: "factsheet" }] });
   try {
@@ -481,22 +481,24 @@ test("a changed customer email clears a persisted booking-document receipt befor
       acceptedCustomerDocumentDelivery(database), "2026-09-08T01:02:03.000Z");
     const opened = await server.openActivityRecord(access, "job-a", "intent-a");
     const saved = await server.saveActivityAnswers(access, opened.id, opened.revision, { ...opened.answers, before_name: "Pat" });
-    assert.equal(saved.answers["delivery.provider"], true);
+    assert.equal(saved.answers["delivery.booking_documents.provider_accepted"], true);
     database.prepare("UPDATE trade_crm_customers SET email = ? WHERE id = ? AND firebase_uid = ?").run("new-address@example.com", "customer-a", "owner-a");
     const refreshed = await server.loadActivityRecord(access, saved.id);
-    assert.equal(refreshed.answers["delivery.provider"], undefined);
-    assert.equal(refreshed.answers["delivery.recipient"], undefined);
-    await assert.rejects(server.signActivityDeclaration(access, saved.id, { expectedRevision: saved.revision,
-      declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes }), /ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED/);
+    assert.equal(refreshed.answers["delivery.booking_documents.provider_accepted"], undefined);
+    assert.equal(refreshed.answers["delivery.booking_documents.recipient"], undefined);
+    const signed = await server.signActivityDeclaration(access, saved.id, { expectedRevision: refreshed.revision,
+      declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes });
+    assert.equal(signed.signatures.length, 1);
+    assert.equal(signed.answers["delivery.booking_documents.provider_accepted"], undefined);
   } finally { database.close(); }
 });
 
-test("a customer-document delivery bound to a different activity or variant cannot hydrate or permit signing", async () => {
+test("a customer-document delivery bound to a different activity or variant cannot hydrate but does not block signing", async () => {
   const derived = (key, type = "text") => ({ ...field(key, "before", type, false), presentation: "derived" });
   const fieldForm = { ...form(), variantId: "variant-a" };
   fieldForm.fields.push(
-    derived("delivery.id"), derived("delivery.provider", "boolean"), derived("delivery.method"), derived("delivery.accepted"),
-    derived("delivery.recipient"), derived("delivery.appointment"), derived("delivery.ids"), derived("delivery.hashes"), derived("delivery.pack"),
+    derived("delivery.booking_documents.delivery_id"), derived("delivery.booking_documents.provider_accepted", "boolean"), derived("delivery.booking_documents.method"), derived("delivery.booking_documents.accepted_at"),
+    derived("delivery.booking_documents.recipient"), derived("delivery.booking_documents.appointment_id"), derived("delivery.booking_documents.document_ids"), derived("delivery.booking_documents.document_sha256_set"), derived("delivery.booking_documents.pack_sha256"),
   );
   const { database, server, access } = fixture(fieldForm, { consumerDocuments: [{ key: "factsheet" }] });
   try {
@@ -514,24 +516,24 @@ test("a customer-document delivery bound to a different activity or variant cann
         }), "2026-09-08T01:02:03.000Z");
 
     let record = await server.openActivityRecord(access, "job-a", "intent-a", "variant-a");
-    assert.equal(record.answers["delivery.id"], undefined);
-    assert.equal(record.answers["delivery.provider"], undefined);
-    assert.equal(record.answers["delivery.pack"], undefined);
+    assert.equal(record.answers["delivery.booking_documents.delivery_id"], undefined);
+    assert.equal(record.answers["delivery.booking_documents.provider_accepted"], undefined);
+    assert.equal(record.answers["delivery.booking_documents.pack_sha256"], undefined);
     record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Pat" });
-    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
-      declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes }),
-    /ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED/);
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes });
     const stored = JSON.parse(database.prepare("SELECT payload FROM trade_activity_field_records WHERE id = ?").get(record.id).payload);
-    assert.deepEqual(stored.signatures, []);
+    assert.equal(stored.signatures.length, 1);
+    assert.equal(stored.answers["delivery.booking_documents.provider_accepted"], undefined);
   } finally { database.close(); }
 });
 
-test("a terminal provider event invalidates an unsigned customer-document receipt until resend", async () => {
+test("a terminal provider event invalidates its receipt without stopping the field workflow", async () => {
   const derived = (key, type = "text") => ({ ...field(key, "before", type, false), presentation: "derived" });
   const fieldForm = form();
   fieldForm.fields.push(
-    derived("delivery.id"), derived("delivery.provider", "boolean"), derived("delivery.method"), derived("delivery.accepted"),
-    derived("delivery.recipient"), derived("delivery.appointment"), derived("delivery.ids"), derived("delivery.hashes"), derived("delivery.pack"),
+    derived("delivery.booking_documents.delivery_id"), derived("delivery.booking_documents.provider_accepted", "boolean"), derived("delivery.booking_documents.method"), derived("delivery.booking_documents.accepted_at"),
+    derived("delivery.booking_documents.recipient"), derived("delivery.booking_documents.appointment_id"), derived("delivery.booking_documents.document_ids"), derived("delivery.booking_documents.document_sha256_set"), derived("delivery.booking_documents.pack_sha256"),
   );
   const { database, server, access } = fixture(fieldForm, { consumerDocuments: [{ key: "factsheet" }] });
   try {
@@ -541,23 +543,24 @@ test("a terminal provider event invalidates an unsigned customer-document receip
       acceptedCustomerDocumentDelivery(database), "2026-09-08T01:02:03.000Z");
     let record = await server.openActivityRecord(access, "job-a", "intent-a");
     record = await server.saveActivityAnswers(access, record.id, record.revision, { ...record.answers, before_name: "Pat" });
-    assert.equal(record.answers["delivery.provider"], true);
+    assert.equal(record.answers["delivery.booking_documents.provider_accepted"], true);
     database.prepare("UPDATE trade_activity_customer_document_deliveries SET status = 'bounced' WHERE id = ?").run("delivery-a");
     const refreshed = await server.loadActivityRecord(access, record.id);
-    assert.equal(refreshed.answers["delivery.provider"], undefined);
-    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
-      declarationKey: "before_customer", signerName: "Pat", acknowledged: true, strokes }), /ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED/);
+    assert.equal(refreshed.answers["delivery.booking_documents.provider_accepted"], undefined);
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: refreshed.revision,
+      declarationKey: "before_customer", signerName: "Pat", acknowledged: true, strokes });
+    assert.equal(record.signatures.length, 1);
   } finally { database.close(); }
 });
 
-test("customer signing atomically rejects a delivery that bounces at the field-record write boundary", async () => {
+test("a delivery bounce at the write boundary is retained for office follow-up without rejecting the signature", async () => {
   let armBounce = false;
   let bounced = false;
   const derived = (key, type = "text") => ({ ...field(key, "before", type, false), presentation: "derived" });
   const fieldForm = form();
   fieldForm.fields.push(
-    derived("delivery.id"), derived("delivery.provider", "boolean"), derived("delivery.method"), derived("delivery.accepted"),
-    derived("delivery.recipient"), derived("delivery.appointment"), derived("delivery.ids"), derived("delivery.hashes"), derived("delivery.pack"),
+    derived("delivery.booking_documents.delivery_id"), derived("delivery.booking_documents.provider_accepted", "boolean"), derived("delivery.booking_documents.method"), derived("delivery.booking_documents.accepted_at"),
+    derived("delivery.booking_documents.recipient"), derived("delivery.booking_documents.appointment_id"), derived("delivery.booking_documents.document_ids"), derived("delivery.booking_documents.document_sha256_set"), derived("delivery.booking_documents.pack_sha256"),
   );
   const { database, server, access } = fixture(fieldForm, {
     consumerDocuments: [{ key: "factsheet" }],
@@ -578,27 +581,27 @@ test("customer signing atomically rejects a delivery that bounces at the field-r
         acceptedCustomerDocumentDelivery(database), "2026-09-08T01:02:03.000Z");
     let record = await server.openActivityRecord(access, "job-a", "intent-a");
     record = await server.saveActivityAnswers(access, record.id, record.revision, { ...record.answers, before_name: "Pat" });
-    assert.equal(record.answers["delivery.provider"], true);
+    assert.equal(record.answers["delivery.booking_documents.provider_accepted"], true);
 
     armBounce = true;
-    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
-      declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes }),
-    /ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED/);
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes });
     assert.equal(bounced, true);
     const stored = JSON.parse(database.prepare("SELECT payload FROM trade_activity_field_records WHERE id = ?").get(record.id).payload);
-    assert.deepEqual(stored.signatures, []);
+    assert.equal(stored.signatures.length, 1);
     assert.equal(stored.revision, record.revision);
     const refreshed = await server.loadActivityRecord(access, record.id);
-    assert.equal(refreshed.answers["delivery.provider"], undefined);
+    assert.equal(refreshed.answers["delivery.booking_documents.provider_accepted"], undefined);
+    assert.deepEqual(core.activityMissing(refreshed, "before"), []);
   } finally { database.close(); }
 });
 
-test("a bounced signed customer-document receipt requires a fresh receipt and customer signature while retaining audit signatures", async () => {
+test("delivery reconciliation never invalidates an on-device customer signature", async () => {
   const derived = (key, type = "text") => ({ ...field(key, "before", type, false), presentation: "derived" });
   const fieldForm = form();
   fieldForm.fields.push(
-    derived("delivery.id"), derived("delivery.provider", "boolean"), derived("delivery.method"), derived("delivery.accepted"),
-    derived("delivery.recipient"), derived("delivery.appointment"), derived("delivery.ids"), derived("delivery.hashes"), derived("delivery.pack"),
+    derived("delivery.booking_documents.delivery_id"), derived("delivery.booking_documents.provider_accepted", "boolean"), derived("delivery.booking_documents.method"), derived("delivery.booking_documents.accepted_at"),
+    derived("delivery.booking_documents.recipient"), derived("delivery.booking_documents.appointment_id"), derived("delivery.booking_documents.document_ids"), derived("delivery.booking_documents.document_sha256_set"), derived("delivery.booking_documents.pack_sha256"),
   );
   const { database, server, access } = fixture(fieldForm, { consumerDocuments: [{ key: "factsheet" }] });
   try {
@@ -611,7 +614,7 @@ test("a bounced signed customer-document receipt requires a fresh receipt and cu
         acceptedCustomerDocumentDelivery(database), "2026-09-08T01:02:03.000Z");
 
     let record = await server.openActivityRecord(access, "job-a", "intent-a");
-    assert.equal(record.answers["delivery.provider"], true);
+    assert.equal(record.answers["delivery.booking_documents.provider_accepted"], true);
     record = await server.saveActivityAnswers(access, record.id, record.revision, {
       ...record.answers, before_name: "Pat", after_model: "Installed unit",
     });
@@ -622,10 +625,10 @@ test("a bounced signed customer-document receipt requires a fresh receipt and cu
 
     database.prepare("UPDATE trade_activity_customer_document_deliveries SET status = 'bounced' WHERE id = ?").run("delivery-a");
     record = await server.loadActivityRecord(access, record.id);
-    assert.equal(record.answers["delivery.provider"], undefined);
-    assert.equal(record.answers["delivery.accepted"], undefined);
-    assert.deepEqual(record.signatures, [originalCustomerSignature], "The invalidated signature remains in the audit history");
-    assert.ok(core.activityMissing(record, "before").some((item) => item.key === "before_customer" && item.kind === "signature"));
+    assert.equal(record.answers["delivery.booking_documents.provider_accepted"], undefined);
+    assert.equal(record.answers["delivery.booking_documents.accepted_at"], undefined);
+    assert.deepEqual(record.signatures, [originalCustomerSignature]);
+    assert.deepEqual(core.activityMissing(record, "before"), []);
 
     const resendAcceptedAt = "2026-09-08T02:02:03.000Z";
     database.prepare("INSERT INTO trade_work_order_events VALUES (?, ?, ?, ?, ?, ?)")
@@ -634,18 +637,12 @@ test("a bounced signed customer-document receipt requires a fresh receipt and cu
           id: "delivery-b", providerMessageId: "email-b", acceptedAt: resendAcceptedAt,
         }), resendAcceptedAt);
     record = await server.loadActivityRecord(access, record.id);
-    assert.equal(record.answers["delivery.provider"], true);
-    assert.equal(record.answers["delivery.accepted"], resendAcceptedAt);
+    assert.equal(record.answers["delivery.booking_documents.provider_accepted"], true);
+    assert.equal(record.answers["delivery.booking_documents.accepted_at"], resendAcceptedAt);
     assert.deepEqual(record.signatures, [originalCustomerSignature]);
-    assert.ok(core.activityMissing(record, "before").some((item) => item.key === "before_customer" && item.kind === "signature"),
-      "The old signature does not attest to the replacement receipt");
-
-    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
-      declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes });
-    const customerSignatures = record.signatures.filter((item) => item.declarationKey === "before_customer");
-    assert.equal(customerSignatures.length, 2);
-    assert.deepEqual(customerSignatures[0], originalCustomerSignature);
-    assert.notEqual(customerSignatures[1].scopeSha256, originalCustomerSignature.scopeSha256);
+    assert.deepEqual(core.activityMissing(record, "before"), []);
+    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Pat Customer", acknowledged: true, strokes }), /ACTIVITY_DECLARATION_ALREADY_SIGNED/);
     assert.deepEqual(core.activityMissing(record, "before"), []);
 
     record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
@@ -659,8 +656,8 @@ test("receipt hydration skips an invalid same-time candidate and finds the lates
   const derived = (key, type = "text") => ({ ...field(key, "before", type, false), presentation: "derived" });
   const fieldForm = form();
   fieldForm.fields.push(
-    derived("delivery.id"), derived("delivery.provider", "boolean"), derived("delivery.method"), derived("delivery.accepted"),
-    derived("delivery.recipient"), derived("delivery.appointment"), derived("delivery.ids"), derived("delivery.hashes"), derived("delivery.pack"),
+    derived("delivery.booking_documents.delivery_id"), derived("delivery.booking_documents.provider_accepted", "boolean"), derived("delivery.booking_documents.method"), derived("delivery.booking_documents.accepted_at"),
+    derived("delivery.booking_documents.recipient"), derived("delivery.booking_documents.appointment_id"), derived("delivery.booking_documents.document_ids"), derived("delivery.booking_documents.document_sha256_set"), derived("delivery.booking_documents.pack_sha256"),
   );
   const { database, server, access } = fixture(fieldForm, { consumerDocuments: [{ key: "factsheet" }] });
   try {
@@ -673,27 +670,32 @@ test("receipt hydration skips an invalid same-time candidate and finds the lates
     database.prepare("INSERT INTO trade_work_order_events VALUES (?, ?, ?, ?, ?, ?)").run("event-a-good", "job-a", "owner-a", "customer_documents_provider_accepted", accepted, occurredAt);
     database.prepare("INSERT INTO trade_work_order_events VALUES (?, ?, ?, ?, ?, ?)").run("event-z-bad", "job-a", "owner-a", "customer_documents_provider_accepted", bounced, occurredAt);
     const record = await server.openActivityRecord(access, "job-a", "intent-a");
-    assert.equal(record.answers["delivery.provider"], true);
-    assert.equal(record.answers["delivery.accepted"], "2026-09-08T01:02:03.000Z");
+    assert.equal(record.answers["delivery.booking_documents.provider_accepted"], true);
+    assert.equal(record.answers["delivery.booking_documents.accepted_at"], "2026-09-08T01:02:03.000Z");
   } finally { database.close(); }
 });
 
-test("required booking documents block agreement until the exact customer pack has provider acceptance", async () => {
+test("booking email delivery stays advisory while the complete field record can be signed and submitted", async () => {
   const derived = (key, type = "text") => ({ ...field(key, "before", type, false), presentation: "derived" });
   const fieldForm = form();
   fieldForm.fields.push(
-    derived("delivery.id"), derived("delivery.provider", "boolean"), derived("delivery.method"), derived("delivery.accepted"),
-    derived("delivery.recipient"), derived("delivery.appointment"), derived("delivery.ids"), derived("delivery.hashes"), derived("delivery.pack"),
+    derived("delivery.booking_documents.delivery_id"), derived("delivery.booking_documents.provider_accepted", "boolean"), derived("delivery.booking_documents.method"), derived("delivery.booking_documents.accepted_at"),
+    derived("delivery.booking_documents.recipient"), derived("delivery.booking_documents.appointment_id"), derived("delivery.booking_documents.document_ids"), derived("delivery.booking_documents.document_sha256_set"), derived("delivery.booking_documents.pack_sha256"),
   );
   const { database, server, access } = fixture(fieldForm, { consumerDocuments: [{ key: "factsheet" }] });
   try {
     database.prepare("INSERT INTO trade_crm_customers VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run("customer-a", "owner-a", "Pat", "Customer", "pat@example.com", "0400000000", "", "");
     database.prepare("INSERT INTO trade_crm_job_details VALUES (?, ?, ?, ?, ?)").run("job-a", "owner-a", "direct", "customer-a", "");
     let record = await server.openActivityRecord(access, "job-a", "intent-a");
-    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Pat" });
-    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
-      declarationKey: "before_customer", signerName: "Pat", acknowledged: true, strokes }), /ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED/);
-    await assert.rejects(server.submitActivityRecord(access, record.id, record.revision), /ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED/);
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Pat", after_model: "Installed unit" });
+    assert.equal(record.answers["delivery.booking_documents.provider_accepted"], undefined);
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Pat", acknowledged: true, strokes });
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes });
+    record = await server.submitActivityRecord(access, record.id, record.revision);
+    assert.equal(record.status, "submitted_for_creditex_review");
+    assert.equal(record.answers["delivery.booking_documents.provider_accepted"], undefined);
   } finally { database.close(); }
 });
 

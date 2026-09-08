@@ -22,10 +22,24 @@ export function mergeActivityAnswers(base: ActivityAnswers, local: ActivityAnswe
 
 export const activityBaseFieldKey = (key: string) => key.replace(/\[([1-9]|1[0-9])\]$/, '');
 export const activityRepeatKey = (key: string, index: number) => index ? `${key}[${index}]` : key;
+export function activityRepeatItemLabel(group: string) {
+  const readable = group.replace(/\[\]$/, '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+  if (readable.endsWith('ies')) return `${readable.slice(0, -3)}y`;
+  return readable.endsWith('s') && !readable.endsWith('ss') ? readable.slice(0, -1) : readable || 'item';
+}
 export function activityRepeatCount(form: ActivityForm, answers: ActivityAnswers, group: string) {
   if (!form.fields.some((field) => field.repeatGroup === group)) return 1;
   const value = answers[`$repeat.${group}`];
   return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 20 ? value : 1;
+}
+export function removeLastActivityRepeat(form: ActivityForm, answers: ActivityAnswers, group: string) {
+  const count = activityRepeatCount(form, answers, group);
+  if (count <= 1) return answers;
+  const next = { ...answers, [`$repeat.${group}`]: count - 1 };
+  for (const field of form.fields.filter((item) => item.repeatGroup === group)) {
+    for (let index = count - 1; index < 20; index += 1) delete next[activityRepeatKey(field.key, index)];
+  }
+  return next;
 }
 export function fieldConditionMet(condition: ActivityCondition | undefined, answers: ActivityAnswers, form?: ActivityForm, group?: string, index = 0): boolean {
   if (!condition) return true;

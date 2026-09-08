@@ -1379,6 +1379,7 @@ function SignaturePrompt({
       {role.identityRequirements.map((requirement) => <Text key={requirement.fieldKey} style={styles.meta}>{requirement.label}: {signerBinding?.fields[requirement.fieldKey] || 'Not available'}</Text>)}
     </View>
     <SignatureCapture
+      key={`${responseKey}:${signerBinding?.signerName || ''}:${JSON.stringify(signerBinding?.fields || {})}`}
       declaration={attestation.text}
       signerRole={role}
       value={value}

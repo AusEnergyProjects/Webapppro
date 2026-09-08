@@ -56,7 +56,9 @@ export function activityDeclarationText(declaration: ActivityDeclaration, answer
 }
 
 export function activitySigningScope(record: Pick<ActivityRecord, "id" | "formSha256" | "form" | "answers" | "evidence"> & Partial<Pick<ActivityRecord, "signatures">>, phase: ActivityPhase) {
-  const fields = record.form.fields.filter((field) => phase === "after" || field.phase === "before");
+  // Delivery callbacks belong to the office audit trail. A later delivery event
+  // must not invalidate a declaration already signed on the job device.
+  const fields = record.form.fields.filter((field) => !field.key.startsWith("delivery.booking_documents.") && (phase === "after" || field.phase === "before"));
   const keys = new Set(fields.map((field) => field.key));
   const addConditionKeys = (condition: ActivityCondition | undefined) => {
     if (!condition) return;

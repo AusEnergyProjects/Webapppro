@@ -9,6 +9,7 @@ const read = (file) => fs.readFileSync(path.join(here, file), 'utf8');
 const work = read('../src/app/(tabs)/work.tsx');
 const quickCommercial = read('../src/app/new-commercial.tsx');
 const commercial = read('../src/components/field-commercial-workspace.tsx');
+const screen = read('../src/components/screen.tsx');
 const accessRoute = read('../../src/app/api/field/access/route.ts');
 const fieldPermissions = read('../../src/lib/trade-field-permissions.ts');
 const quoteRoute = read('../../src/app/api/trade-quotes/route.ts');
@@ -42,10 +43,19 @@ test('commercial quick actions are search-first and reuse the native line editor
   assert.match(quickCommercial, /accessibilityLabel=\{`Use address \$\{prediction\.label\}`\}/);
   assert.match(quickCommercial, /addressEntryMode: addressProvenance\.entryMode/);
   assert.match(quickCommercial, />Google Maps<\/Text>/);
+  assert.doesNotMatch(quickCommercial, /showProperty|Add optional mobile or property|Mobile, optional|Search street address, optional|Suburb, optional/);
+  assert.match(quickCommercial, /<FieldInput label="Mobile"/);
+  assert.match(quickCommercial, /<FieldInput label="Search street address"/);
+  assert.match(quickCommercial, /<FieldInput label="Suburb"/);
+  assert.match(quickCommercial, /phone\.replace\(\/\\D\/g, ''\)\.length < 8/);
+  assert.match(quickCommercial, /AUSTRALIAN_STATES\.has\(addressState\.trim\(\)\.toUpperCase\(\)\)/);
+  assert.match(quickCommercial, /selectedCustomer\?\.phone \|\| phone/);
   assert.match(quickCommercial, /<FieldCommercialWorkspace/);
   assert.match(quickCommercial, /stage !== 'editor'/);
   assert.match(quickCommercial, /Retry work types/);
   assert.match(commercial, /kind === 'quote' \? '\/api\/trade-quotes' : '\/api\/trade-quick-invoices'/);
+  assert.match(screen, /automaticallyAdjustKeyboardInsets=\{Platform\.OS === 'ios'\}/);
+  assert.match(screen, /scrollResponderScrollNativeHandleToKeyboard\(event\.target, spacing\.lg, true\)/);
 });
 
 test('server projections and document routes remain the authority for boss and team grants', () => {

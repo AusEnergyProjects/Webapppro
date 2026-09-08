@@ -20,12 +20,24 @@ import type {
 } from '@/lib/types';
 
 const PAD_HEIGHT = 220;
+const STROKE_WIDTH = 3;
 const MAX_SIGNATURE_STROKES = 32;
 // Keep the exact vector packet comfortably below the mobile sync request cap.
 const MAX_SIGNATURE_POINTS = 1_024;
 
 function bounded(value: number) {
   return Math.max(0, Math.min(1, value));
+}
+
+function signatureDraftFingerprint(value: FieldWorkPackSignatureDraft) {
+  return JSON.stringify([
+    value.signerRoleKey,
+    value.signerName,
+    value.signerCapacity,
+    Object.entries(value.identity).sort(([left], [right]) => left.localeCompare(right)),
+    value.capturedAt,
+    value.strokes,
+  ]);
 }
 
 function touchPoint(
@@ -42,6 +54,35 @@ function touchPoint(
   };
 }
 
+function signaturePointDistance(
+  start: FieldWorkPackSignaturePoint,
+  end: FieldWorkPackSignaturePoint,
+  width: number,
+  height: number,
+) {
+  return Math.hypot((end.x - start.x) * width, (end.y - start.y) * height);
+}
+
+function signatureSegmentLayout(
+  start: FieldWorkPackSignaturePoint,
+  end: FieldWorkPackSignaturePoint,
+  width: number,
+  height: number,
+) {
+  const x1 = start.x * width;
+  const y1 = start.y * height;
+  const x2 = end.x * width;
+  const y2 = end.y * height;
+  const length = Math.hypot(x2 - x1, y2 - y1);
+  const renderedLength = Math.max(length + STROKE_WIDTH, STROKE_WIDTH);
+  return {
+    left: (x1 + x2) / 2 - renderedLength / 2,
+    top: (y1 + y2) / 2 - STROKE_WIDTH / 2,
+    width: renderedLength,
+    angle: Math.atan2(y2 - y1, x2 - x1),
+  };
+}
+
 function Segment({
   start,
   end,
@@ -53,23 +94,14 @@ function Segment({
   width: number;
   height: number;
 }) {
-  const x1 = start.x * width;
-  const y1 = start.y * height;
-  const x2 = end.x * width;
-  const y2 = end.y * height;
-  const length = Math.hypot(x2 - x1, y2 - y1);
-  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const layout = signatureSegmentLayout(start, end, width, height);
   return <View style={[
     styles.segment,
     {
-      left: x1,
-      top: y1,
-      width: Math.max(length, 2),
-      transform: [
-        { translateX: length / 2 },
-        { rotateZ: `${angle}rad` },
-        { translateX: -length / 2 },
-      ],
+      left: layout.left,
+      top: layout.top,
+      width: layout.width,
+      transform: [{ rotateZ: `${layout.angle}rad` }],
     },
   ]} />;
 }
@@ -113,22 +145,34 @@ export function SignatureCapture({
 }) {
   const [size, setSize] = useState({ width: 1, height: PAD_HEIGHT });
   const [liveValue, setLiveValue] = useState(value);
+  const liveValueRef = useRef(value);
+  const incomingFingerprint = useMemo(() => signatureDraftFingerprint(value), [value]);
+  const appliedFingerprint = useRef(incomingFingerprint);
   const captureDisabled = disabled || displayOnly;
-  const onChangeRef = useRef(onChange);
+
   useEffect(() => {
+    if (appliedFingerprint.current === incomingFingerprint) return;
+    appliedFingerprint.current = incomingFingerprint;
+    liveValueRef.current = value;
+    // The parent can clear an invalidated signature while this component stays mounted.
     setLiveValue(value);
-  }, [value]);
-  useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
-  useEffect(() => {
-    onChangeRef.current(liveValue);
-  }, [liveValue]);
+  }, [incomingFingerprint, value]);
+
+  const updateLiveValue = useCallback((update: (current: FieldWorkPackSignatureDraft) => FieldWorkPackSignatureDraft) => {
+    const next = update(liveValueRef.current);
+    if (next === liveValueRef.current) return;
+    liveValueRef.current = next;
+    setLiveValue(next);
+  }, []);
+
+  const commitSignature = useCallback(() => {
+    if (!captureDisabled) onChange(liveValueRef.current);
+  }, [captureDisabled, onChange]);
 
   const startStroke = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
-    if (captureDisabled) return;
+    if (captureDisabled || event.nativeEvent.touches.length > 1) return;
     const firstPoint = touchPoint(event, size.width, size.height);
-    setLiveValue((current) => {
+    updateLiveValue((current) => {
       const currentPointCount = current.strokes.reduce(
         (count, stroke) => count + stroke.points.length,
         0,
@@ -148,12 +192,12 @@ export function SignatureCapture({
         capturedAt: current.capturedAt || new Date(firstPoint.capturedAtMs).toISOString(),
       };
     });
-  }, [captureDisabled, size.height, size.width]);
+  }, [captureDisabled, size.height, size.width, updateLiveValue]);
 
   const moveStroke = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
-    if (captureDisabled) return;
+    if (captureDisabled || event.nativeEvent.touches.length > 1) return;
     const point = touchPoint(event, size.width, size.height);
-    setLiveValue((current) => {
+    updateLiveValue((current) => {
       if (!current.strokes.length) return current;
       const pointCount = current.strokes.reduce(
         (count, stroke) => count + stroke.points.length,
@@ -163,7 +207,7 @@ export function SignatureCapture({
       const strokes = [...current.strokes];
       const activeStroke = strokes[strokes.length - 1];
       const previous = activeStroke.points[activeStroke.points.length - 1];
-      if (Math.hypot(point.x - previous.x, point.y - previous.y) < 0.0025) {
+      if (signaturePointDistance(previous, point, size.width, size.height) < 1.5) {
         return current;
       }
       strokes[strokes.length - 1] = {
@@ -172,15 +216,20 @@ export function SignatureCapture({
       };
       return { ...current, strokes };
     });
-  }, [captureDisabled, size.height, size.width]);
+  }, [captureDisabled, size.height, size.width, updateLiveValue]);
 
+  // PanResponder stores these callbacks and invokes them from native touch
+  // events; none of the refs are read while this responder is created.
+  // eslint-disable-next-line react-hooks/refs
   const responder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => !captureDisabled,
     onMoveShouldSetPanResponder: () => !captureDisabled,
     onPanResponderGrant: startStroke,
     onPanResponderMove: moveStroke,
+    onPanResponderRelease: commitSignature,
+    onPanResponderTerminate: commitSignature,
     onPanResponderTerminationRequest: () => false,
-  }), [captureDisabled, moveStroke, startStroke]);
+  }), [captureDisabled, commitSignature, moveStroke, startStroke]);
 
   function layout(event: LayoutChangeEvent) {
     const { width, height } = event.nativeEvent.layout;
@@ -219,6 +268,7 @@ export function SignatureCapture({
     </View>
     <View
       {...responder.panHandlers}
+      pointerEvents="box-only"
       accessible
       accessibilityLabel={`${signerRole.label} signature drawing area`}
       accessibilityHint={displayOnly ? 'Captured signature' : 'Draw the signature with a finger or stylus'}
@@ -246,11 +296,12 @@ export function SignatureCapture({
       {!displayOnly ? <Pressable
         accessibilityRole="button"
         disabled={captureDisabled || !liveValue.strokes.length}
-        onPress={() => setLiveValue((current) => ({
-          ...current,
-          strokes: [],
-          capturedAt: '',
-        }))}
+        onPress={() => {
+          const next = { ...liveValueRef.current, strokes: [], capturedAt: '' };
+          liveValueRef.current = next;
+          setLiveValue(next);
+          onChange(next);
+        }}
         style={({ pressed }) => [styles.clear, pressed && styles.pressed, (!liveValue.strokes.length || captureDisabled) && styles.disabled]}
       >
         <Text style={styles.clearText}>Clear signature</Text>
@@ -272,7 +323,7 @@ const styles = StyleSheet.create({
   boundIdentityLabel: { color: colours.green, fontSize: 11, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
   boundIdentityName: { color: colours.ink, fontSize: 17, fontWeight: '800' },
   pad: { backgroundColor: colours.white, borderColor: colours.green, borderRadius: radius.sm, borderWidth: 2, height: PAD_HEIGHT, overflow: 'hidden', position: 'relative' },
-  segment: { backgroundColor: colours.forest, borderRadius: 2, height: 3, position: 'absolute' },
+  segment: { backgroundColor: colours.forest, borderRadius: STROKE_WIDTH / 2, height: STROKE_WIDTH, position: 'absolute' },
   placeholder: { alignItems: 'center', bottom: 0, justifyContent: 'center', left: 0, position: 'absolute', right: 0, top: 0 },
   placeholderText: { color: colours.muted, fontSize: 16, fontWeight: '700', marginTop: spacing.xs },
   footer: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },

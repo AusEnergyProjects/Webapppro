@@ -754,7 +754,7 @@ test("an outcome pending beyond Resend's idempotency window fails closed without
   assert.match(stored.last_error, /administrator to reconcile/);
 });
 
-test("job creation commits before mail and returns desktop and mobile delivery recovery", () => {
+test("job creation commits before mail while delivery recovery stays in the desktop office flow", () => {
   const route = fs.readFileSync(new URL("../src/app/api/trade-crm/route.ts", import.meta.url), "utf8");
   const desktop = fs.readFileSync(new URL("../src/components/InstallerCrmWorkspace.tsx", import.meta.url), "utf8");
   const desktopDelivery = fs.readFileSync(new URL("../src/components/TradeCustomerDocumentDeliveryPanel.tsx", import.meta.url), "utf8");
@@ -777,16 +777,14 @@ test("job creation commits before mail and returns desktop and mobile delivery r
   assert.match(desktop, /complianceIntents\.some\(\(intent\) => intent\.bookingDocumentCount > 0\)/);
   assert.match(route, /provider_status \|\| ""\) !== "reconciliation_required"/);
   assert.match(desktopDelivery, /delivery\?\.canRetry !== false/);
-  assert.match(mobile, /Job added, documents need attention/);
-  assert.match(mobile, /customerDocuments\?\.requested && result\.customerDocuments\.status !== 'provider_accepted'/);
-  assert.match(mobile, /customerDocuments\?\.canRetry === false/);
-  assert.match(mobile, /documentsNeedAttention \? `\/job\/\$\{result\.id\}` : '\/\(tabs\)\/work'/);
+  assert.match(mobile, /Alert\.alert\('Job added'/);
+  assert.doesNotMatch(mobile, /documentsNeedAttention|documentsRecipientNeedsUpdate|Job added, documents need attention/);
+  assert.match(mobile, /router\.replace\('\/\(tabs\)\/work'\)/);
   assert.match(syncRoute, /delivery\.id customer_document_delivery_id/);
   assert.match(syncRoute, /providerStatus !== "reconciliation_required"/);
   assert.match(syncRoute, /bookingDocumentCount:/);
   assert.match(mobileTypes, /customerDocuments\?: FieldCustomerDocumentDelivery/);
-  assert.match(mobileJob, /Send required documents/);
-  assert.match(mobileJob, /resend_activity_customer_documents/);
+  assert.doesNotMatch(mobileJob, /Send required documents|resend_activity_customer_documents|before the customer declaration is signed/);
 });
 
 test("an assigned field worker can resend the same variant-bound pack from the job", () => {

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACTIVITY_WIZARD_PAGE_FIELD_LIMIT, activityWizardPageForStepKey, activityWizardPages, activityWizardSteps,
-  boundActivityDeclaration, expandedActivityFields, fieldConditionMet } from '../src/lib/trade-activity-form-flow.ts';
+import { ACTIVITY_WIZARD_PAGE_FIELD_LIMIT, activityRepeatItemLabel, activityWizardPageForStepKey, activityWizardPages, activityWizardSteps,
+  boundActivityDeclaration, expandedActivityFields, fieldConditionMet, removeLastActivityRepeat } from '../src/lib/trade-activity-form-flow.ts';
 import { activityMissing, normaliseActivityAnswers, activitySigningScope } from '../src/lib/trade-activity-forms.ts';
 
 const field = (key, type = 'text', extra = {}) => ({ key, type, label: key, section: 'Equipment', required: true, phase: 'after', options: [], help: '', ...extra });
@@ -73,6 +73,18 @@ test('every repeated required photo and answer blocks completion independently',
   assert.deepEqual(activityMissing(record(answers), 'after', false).map((item) => item.key), ['photo', 'serial[1]', 'photo[1]']);
   assert.throws(() => normaliseActivityAnswers(form, { '$repeat.not-a-group': 2 }), /INVALID_ACTIVITY_REPEAT/);
   assert.throws(() => normaliseActivityAnswers(form, { '$repeat.units': 1, 'serial[1]': 'hidden' }), /INVALID_ACTIVITY_REPEAT/);
+});
+test('removing the last repeated item prunes only its answers and never drops below one item', () => {
+  const three = { '$repeat.units': 3, consent: false, installed: true, serial: 'A', 'installed[1]': true, 'serial[1]': 'B', 'installed[2]': true, 'serial[2]': 'C' };
+  const two = removeLastActivityRepeat(form, three, 'units');
+  assert.deepEqual(two, { '$repeat.units': 2, consent: false, installed: true, serial: 'A', 'installed[1]': true, 'serial[1]': 'B' });
+  assert.doesNotThrow(() => normaliseActivityAnswers(form, two));
+  assert.deepEqual(removeLastActivityRepeat(form, { '$repeat.units': 1, installed: true }, 'units'), { '$repeat.units': 1, installed: true });
+});
+test('repeat group identifiers become short singular labels for field buttons', () => {
+  assert.equal(activityRepeatItemLabel('decommissionedProducts[]'), 'decommissioned product');
+  assert.equal(activityRepeatItemLabel('installed_products'), 'installed product');
+  assert.equal(activityRepeatItemLabel('sites[]'), 'site');
 });
 test('repeated evidence and count changes are bound into the exact signed scope', () => {
   const original = record({ '$repeat.units': 2, installed: true, 'installed[1]': true });

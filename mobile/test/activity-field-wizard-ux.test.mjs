@@ -27,7 +27,7 @@ const flowExports = {};
 new Function('exports', flowCode)(flowExports);
 new Function('exports', 'require', helperCode)(helperExports, () => flowExports);
 
-const { activityBookingDocumentDeliveryState, activityCurrentSignatureKeys, activityOptionLabel, activityProgress, activitySectionProgress,
+const { activityCurrentSignatureKeys, activityOptionLabel, activityProgress, activitySectionProgress,
   activitySignerDefault, mergeActivityAnswers } = helperExports;
 
 test('sequential saves reconcile disjoint server changes without dropping phone answers', () => {
@@ -83,16 +83,6 @@ test('raw option codes always have a readable fallback while explicit governed l
   assert.equal(activityOptionLabel('iii'), 'Scenario III');
   assert.equal(activityOptionLabel('some'), 'Some');
   assert.equal(activityOptionLabel('iii', 'Scenario III: Ducted gas heater replaced by a multi-split system'), 'Scenario III: Ducted gas heater replaced by a multi-split system');
-});
-
-test('booking-document recovery is shown only for an unaccepted derived receipt', () => {
-  const fields = [
-    { key: 'delivery.booking_documents.provider_accepted', presentation: 'derived' },
-    { key: 'delivery.booking_documents.accepted_at', presentation: 'derived' },
-  ];
-  assert.deepEqual(activityBookingDocumentDeliveryState(fields, {}), { applicable: true, accepted: false });
-  assert.deepEqual(activityBookingDocumentDeliveryState(fields, { 'delivery.booking_documents.provider_accepted': true }), { applicable: true, accepted: true });
-  assert.deepEqual(activityBookingDocumentDeliveryState([{ ...fields[0], presentation: 'question' }], {}), { applicable: false, accepted: false });
 });
 
 test('overall and section progress count required work and local evidence only', () => {
@@ -198,8 +188,7 @@ test('the native wizard uses Expo 57 File parts and hierarchical back navigation
   assert.match(wizard, /usePreventRemove\(true/);
   assert.match(wizard, /if \(!overview\) \{\s*setOverview\(true\)/);
   assert.match(wizard, /activityOptionLabel\(value, field\?\.optionLabels\?\.\[value\]\)/);
-  assert.match(wizard, /resend_activity_customer_documents/);
-  assert.match(wizard, /customerDocumentDelivery\.applicable && !customerDocumentDelivery\.accepted/);
+  assert.doesNotMatch(wizard, /resend_activity_customer_documents|Resend customer documents|Customer documents need attention/);
   assert.match(wizard, /Job or profile details need attention/);
   assert.match(wizard, /TLink is missing system details/);
   assert.match(wizard, /step\.declaration\.role === 'technician' \? cache\.record\.signerDefaults\.technician : signature\.signerName/);
@@ -210,5 +199,16 @@ test('the native wizard uses Expo 57 File parts and hierarchical back navigation
   assert.doesNotMatch(wizard, /FieldSelect label="Activity type"/);
   assert.match(wizard, /total \? `\$\{complete\}\/\$\{total\}` : 'Optional'/);
   assert.doesNotMatch(wizard, /Review latest saved version/);
+  assert.doesNotMatch(wizard, /Your latest work is saved on this phone\. Tap Next to continue saving/);
+  assert.match(wizard, /scrollResponderScrollNativeHandleToKeyboard\(event\.target, 96, true\)/);
+  assert.match(wizard, /await move\(1\);[\s\S]{0,100}if \(online\) queuePageSync\(fieldKeys\);/);
+  assert.match(wizard, /syncs\.current = syncs\.current\.catch\(\(\) => undefined\)\.then/);
+  assert.match(wizard, /mergeActivityAnswers\(snapshot\.answers, current\.answers, nextRecord\.answers/);
+  assert.match(wizard, /showRepeatActions && repeatField\?\.repeatGroup/);
+  assert.match(wizard, /variant="secondary"/);
+  assert.match(wizard, />Add another \{repeatItemLabel\}<\/FieldButton>/);
+  assert.match(wizard, /variant="danger"/);
+  assert.match(wizard, />Remove this \{repeatItemLabel\}<\/FieldButton>/);
+  assert.doesNotMatch(wizard, /field\.repeatGroup\.replaceAll/);
   assert.doesNotMatch(wizard, /Step \{stepIndex \+ 1\} of \{steps\.length\}/);
 });

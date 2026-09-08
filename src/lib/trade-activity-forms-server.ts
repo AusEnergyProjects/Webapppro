@@ -32,53 +32,6 @@ function activityConsumerDocumentIds(form: Pick<ActivityForm, "activityTemplateI
   return activityConsumerDocuments(form.activityTemplateId, form.variantId).map((document) => document.key);
 }
 
-function receiptAnswersAreAccepted(form: ActivityForm, answers: ActivityAnswers) {
-  const requiredIds = activityConsumerDocumentIds(form);
-  if (!requiredIds.length) return true;
-  const ids = String(answers[ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.documentIds] || "").split(",").map((item) => item.trim()).filter(Boolean);
-  const hashes = String(answers[ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.documentSha256Set] || "").split(",").map((item) => item.trim()).filter(Boolean);
-  const acceptedAt = String(answers[ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.acceptedAt] || "");
-  const recipient = String(answers[ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.recipient] || "");
-  const appointmentId = String(answers[ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.appointmentId] || "");
-  const deliveryId = String(answers[ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.deliveryId] || "");
-  const packSha256 = String(answers[ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.packSha256] || "");
-  return answers[ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.providerAccepted] === true
-    && answers[ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.method] === "email"
-    && Number.isFinite(Date.parse(acceptedAt)) && new Date(acceptedAt).toISOString() === acceptedAt
-    && recipient === recipient.trim().toLowerCase() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)
-    && /^[a-z0-9][a-z0-9._:-]{0,159}$/i.test(appointmentId)
-    && /^[a-z0-9][a-z0-9._:-]{0,159}$/i.test(deliveryId)
-    && /^[0-9a-f]{64}$/.test(packSha256)
-    && ids.length === hashes.length && ids.length > 0 && new Set(ids).size === ids.length
-    && hashes.every((hash) => /^[0-9a-f]{64}$/.test(hash))
-    && requiredIds.every((id) => ids.includes(id));
-}
-
-function assertActivityCustomerDocumentsAccepted(record: ActivityRecord) {
-  if (!receiptAnswersAreAccepted(record.form, record.answers)) throw new Error("ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED");
-}
-
-function acceptedCustomerDocumentGuard(record: ActivityRecord) {
-  if (!activityConsumerDocumentIds(record.form).length) return null;
-  assertActivityCustomerDocumentsAccepted(record);
-  const documentIds = String(record.answers[ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.documentIds] || "")
-    .split(",").map((item) => item.trim()).filter(Boolean);
-  const documentSha256Set = String(record.answers[ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.documentSha256Set] || "")
-    .split(",").map((item) => item.trim()).filter(Boolean);
-  const recipient = String(record.answers[ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.recipient] || "");
-  return {
-    deliveryId: String(record.answers[ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.deliveryId] || ""),
-    appointmentId: String(record.answers[ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.appointmentId] || ""),
-    acceptedAt: String(record.answers[ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.acceptedAt] || ""),
-    recipientSha256: activityHash(recipient),
-    documentIds: JSON.stringify(documentIds),
-    documentSha256Set: JSON.stringify(documentSha256Set),
-    packSha256: String(record.answers[ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.packSha256] || ""),
-    activityTemplateId: record.form.activityTemplateId,
-    variantId: record.form.variantId,
-  };
-}
-
 function replaceCustomerDocumentReceiptAnswers(answers: ActivityAnswers, receipt: ActivityAnswers) {
   const current = { ...answers };
   for (const key of Object.values(ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS)) delete current[key];
@@ -504,48 +457,27 @@ export async function openActivityRecord(access: TeamAccess, workOrderId: string
   return loadActivityRecord(access, stored.id);
 }
 
-async function saveRecord(access: TeamAccess, previous: ActivityRecord, next: ActivityRecord, pdf?: { key: string; hash: string }, expectedAssigneeMemberId = "", requireCustomerDocuments = false) {
+async function saveRecord(access: TeamAccess, previous: ActivityRecord, next: ActivityRecord, pdf?: { key: string; hash: string }, expectedAssigneeMemberId = "") {
   // Re-check the current worker assignment at the mutation boundary.
   await assignedJob(access, previous.workOrderId);
-  const receiptGuard = requireCustomerDocuments ? acceptedCustomerDocumentGuard(next) : null;
   next.revision = previous.revision + 1; next.updatedAt = iso();
-  const receiptGuardSql = receiptGuard ? `AND EXISTS (SELECT 1 FROM trade_activity_customer_document_deliveries delivery
-        WHERE delivery.work_order_id = trade_activity_field_records.work_order_id
-          AND delivery.firebase_uid = trade_activity_field_records.owner_uid
-          AND delivery.id = ? AND delivery.appointment_id = ? AND delivery.recipient_email_sha256 = ?
-          AND delivery.document_ids = ? AND delivery.document_sha256_set = ?
-          AND delivery.pack_sha256 = ? AND delivery.accepted_at = ?
-          AND delivery.status IN ('provider_accepted', 'sent', 'delivered')
-          AND EXISTS (SELECT 1 FROM json_each(delivery.activity_bindings) binding
-            WHERE json_extract(binding.value, '$.activityTemplateId') = ?
-              AND json_extract(binding.value, '$.variantId') = ?))` : "";
   const result = await getD1().prepare(`UPDATE trade_activity_field_records SET revision = ?, status = ?, payload = ?, actor_uid = ?, updated_at = ?, submitted_at = ?, pdf_object_key = ?, pdf_sha256 = ?
     WHERE id = ? AND owner_uid = ? AND revision = ? AND status = 'draft'
       AND EXISTS (SELECT 1 FROM trade_work_orders w WHERE w.id = work_order_id AND w.firebase_uid = owner_uid
         AND w.record_status = 'active' AND (? = 1 OR w.assignee_member_id = ?)
         AND (? = '' OR w.assignee_member_id = ?))
-      AND EXISTS (SELECT 1 FROM trade_work_order_compliance_intents i WHERE i.id = intent_id AND i.status IN ('planned', 'case_linked'))
-      ${receiptGuardSql}`)
+      AND EXISTS (SELECT 1 FROM trade_work_order_compliance_intents i WHERE i.id = intent_id AND i.status IN ('planned', 'case_linked'))`)
     .bind(next.revision, next.status, activityCanonical(next), access.actorUid, next.updatedAt, next.submittedAt, pdf?.key || "", pdf?.hash || "",
       previous.id, access.ownerUid, previous.revision, access.isOwner || access.jobScope === "team" ? 1 : 0, access.memberId,
-      expectedAssigneeMemberId, expectedAssigneeMemberId,
-      ...(receiptGuard ? [receiptGuard.deliveryId, receiptGuard.appointmentId, receiptGuard.recipientSha256, receiptGuard.documentIds,
-        receiptGuard.documentSha256Set, receiptGuard.packSha256, receiptGuard.acceptedAt,
-        receiptGuard.activityTemplateId, receiptGuard.variantId] : [])).run();
+      expectedAssigneeMemberId, expectedAssigneeMemberId).run();
   if (result.meta.changes !== 1) {
-    // Zero writes can mean a changed assignment, withdrawn intent or bounced email,
-    // not just another editor. Reload with the same access checks to identify it.
+    // Zero writes can mean a changed assignment or withdrawn intent, not just
+    // another editor. Reload with the same access checks to identify it.
     const latest = await loadActivityRecord(access, previous.id, true);
     assertActivityEditable(latest, previous.revision);
     if (expectedAssigneeMemberId) {
       const assignment = await assignedJob(access, previous.workOrderId);
       if (assignment.assignee_member_id !== expectedAssigneeMemberId) throw new Error("ACTIVITY_TECHNICIAN_SIGNER_NOT_ASSIGNED");
-    }
-    if (receiptGuard) {
-      assertActivityCustomerDocumentsAccepted(latest);
-      if (activityCanonical(acceptedCustomerDocumentGuard(latest)) !== activityCanonical(receiptGuard)) {
-        throw new Error("ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED");
-      }
     }
     throw new Error("ACTIVITY_SAVE_FAILED");
   }
@@ -609,7 +541,6 @@ export async function signActivityDeclaration(access: TeamAccess, id: string, bo
   // Bind to the displayed content, allowing harmless revision changes automatically.
   assertActivityEditable(previous, body.expectedScope === undefined ? body.expectedRevision : previous.revision);
   if (body.expectedScope !== undefined && body.expectedScope !== activitySigningScope(previous, declaration.phase)) throw new Error("ACTIVITY_SIGNING_SCOPE_CHANGED");
-  assertActivityCustomerDocumentsAccepted(previous);
   const suppliedSignerName = string(body.signerName, 150);
   let signerName = suppliedSignerName;
   if (declaration.role === "technician") {
@@ -634,7 +565,7 @@ export async function signActivityDeclaration(access: TeamAccess, id: string, bo
     signedAt: iso(), actorUid: access.actorUid, strokes: validateActivityStrokes(body.strokes),
   }] };
   assertActivitySignedScopeUnchanged(previous, next);
-  return saveRecord(access, previous, next, undefined, declaration.role === "technician" ? access.memberId : "", true);
+  return saveRecord(access, previous, next, undefined, declaration.role === "technician" ? access.memberId : "");
 }
 
 function capturedMetadata(raw: unknown) {
@@ -713,7 +644,6 @@ export async function readActivityEvidence(record: ActivityRecord, evidenceId: s
 
 export async function submitActivityRecord(access: TeamAccess, id: string, expectedRevision: unknown) {
   const previous = await loadActivityRecord(access, id, true); assertActivityEditable(previous, expectedRevision);
-  assertActivityCustomerDocumentsAccepted(previous);
   if (activityMissing(previous).length) throw new Error("ACTIVITY_FORM_INCOMPLETE");
   const assets = new Map<string, Uint8Array>();
   for (const evidence of previous.evidence) {
@@ -731,7 +661,7 @@ export async function submitActivityRecord(access: TeamAccess, id: string, expec
   const bytes = await renderActivityFieldPdf(next, assets, await loadCustomerPlanPdfFonts());
   const key = `activity-field/${access.ownerUid}/${id}/final/${crypto.randomUUID()}.pdf`; const hash = activityHash(bytes);
   await bucket().put(key, bytes, { httpMetadata: { contentType: "application/pdf" }, customMetadata: { sha256: hash, fieldRecordId: id } });
-  try { return await saveRecord(access, previous, next, { key, hash }, "", true); } catch (error) { await bucket().delete(key); throw error; }
+  try { return await saveRecord(access, previous, next, { key, hash }); } catch (error) { await bucket().delete(key); throw error; }
 }
 
 export async function readActivityConsumerDocument(version: string) {

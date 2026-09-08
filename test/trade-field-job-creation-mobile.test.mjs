@@ -111,7 +111,7 @@ test("provider-selected locality remains signed while only manual addresses are 
   assert.match(mobile, /setLocalities\(\[\]\); setLocalityBusy\(false\); setLocalityMessage\('Address suggestion selected\. Its suburb and postcode are preserved\.'\)/);
 });
 
-test("an exact saved-customer email can be selected instead of creating a duplicate", () => {
+test("a saved customer can be selected while an intentional new customer can keep matching details", () => {
   assert.match(mobile, /find_field_customer_by_email/);
   assert.match(mobile, /Existing customer found/);
   assert.match(mobile, /customerMode: selectedCustomer \? 'existing' : 'new'/);
@@ -120,6 +120,7 @@ test("an exact saved-customer email can be selected instead of creating a duplic
   assert.match(crmRoute, /action === "find_field_customer_by_email"/);
   assert.match(crmRoute, /directCustomerHasEmail/);
   assert.match(dedup, /lower\(c\.email\) = \? OR lower\(cc\.email\) = \?/);
+  assert.match(mobile, /duplicateOverride: !selectedCustomer/);
 });
 
 test("mobile bookings bind premises-specific activity variants through sync and form opening", () => {

@@ -26,7 +26,6 @@ const errorMessages: Record<string, [number, string]> = {
   ACTIVITY_REVISION_CONFLICT: [409, "The latest changes are being saved. Your work is retained."],
   ACTIVITY_SIGNING_SCOPE_CHANGED: [409, "The work details changed before signing. Check the updated details and sign again."],
   ACTIVITY_ALREADY_SUBMITTED: [409, "This completed record has already been provided to Creditex."],
-  ACTIVITY_CUSTOMER_DOCUMENTS_NOT_ACCEPTED: [409, "Resend the required customer documents and wait for the email provider to accept them before customer agreement."],
   ACTIVITY_TECHNICIAN_SIGNER_NOT_ASSIGNED: [409, "The assigned technician must sign this work. Check the job's worker assignment."],
   ACTIVITY_SIGNING_PROFILE_NAME_REQUIRED: [400, "Add your first and last name for technician signing."],
   ACTIVITY_SIGNING_PROFILE_CHANGED: [409, "Your team profile or job assignment changed. Reopen this signature to use the current details."],

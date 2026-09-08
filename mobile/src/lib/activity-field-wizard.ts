@@ -21,7 +21,6 @@ type ProgressFieldStep = Extract<ProgressStep, { kind: 'field' }>;
 type ProgressSignatureStep = Extract<ProgressStep, { kind: 'signature' }>;
 type RequiredProgressStep = ProgressFieldStep | ProgressSignatureStep;
 
-type BookingDocumentField = { key: string; presentation?: 'question' | 'prefilled' | 'derived' };
 type ActivitySignatureIdentity = { declarationKey: string };
 type ActivityMissingIdentity = { key: string; kind: string };
 type ActivitySignerDefaults = { signerDefaults?: { technician?: string; customer?: string } };
@@ -36,15 +35,6 @@ export function activityOptionLabel(value: string, explicit?: string) {
   if (/^(n_?a|not_applicable)$/i.test(raw)) return 'Not applicable';
   const readable = raw.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
   return readable.charAt(0).toUpperCase() + readable.slice(1);
-}
-
-export function activityBookingDocumentDeliveryState(fields: readonly BookingDocumentField[], answers: ActivityAnswers) {
-  const receiptFields = fields.filter((field) => field.presentation === 'derived' && /(?:^|[._])booking_documents\./.test(field.key));
-  const acceptance = receiptFields.find((field) => field.key.endsWith('.provider_accepted'));
-  return {
-    applicable: receiptFields.length > 0,
-    accepted: Boolean(acceptance && answers[acceptance.key] === true),
-  };
 }
 
 export function activityCurrentSignatureKeys(
