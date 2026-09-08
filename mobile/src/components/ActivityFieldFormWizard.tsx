@@ -566,7 +566,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
         {step?.kind === 'fields' ? <>{step.fields.map(renderField)}{showRepeatActions && repeatField?.repeatGroup && !locked ? <View style={styles.repeatActions}>
           <Text style={styles.progressLabel}>{repeatItemLabel.charAt(0).toUpperCase() + repeatItemLabel.slice(1)} {repeatField.repeatIndex + 1}</Text>
           <FieldButton variant="secondary" disabled={!editable || Boolean(busy) || repeatCount >= 20} onPress={() => void addRepeatItem(repeatField.repeatGroup!)}>Add another {repeatItemLabel}</FieldButton>
-          {repeatCount > 1 ? <FieldButton variant="danger" disabled={!editable || Boolean(busy) || syncing || repeatItemHasSavedEvidence} onPress={() => removeRepeatItem(repeatField.repeatGroup!)}>Remove this {repeatItemLabel}</FieldButton> : null}
+          {repeatCount > 1 ? <FieldButton variant="danger" disabled={!editable || Boolean(busy) || repeatItemHasSavedEvidence} onPress={() => removeRepeatItem(repeatField.repeatGroup!)}>Remove this {repeatItemLabel}</FieldButton> : null}
           {repeatItemHasSavedEvidence ? <Text style={styles.small}>This item has uploaded evidence and stays in the field record.</Text> : null}
         </View> : null}</> : step?.kind === 'signature' ? currentSignature ? <Text style={styles.text}>Signed by {currentSignature.signerName} on {new Date(currentSignature.signedAt).toLocaleString('en-AU')}.</Text> : <>
           <Text style={styles.small}>The signing date and time are recorded automatically when this signature is saved.</Text>

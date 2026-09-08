@@ -201,7 +201,8 @@ test('the native wizard uses Expo 57 File parts and hierarchical back navigation
   assert.doesNotMatch(wizard, /Review latest saved version/);
   assert.doesNotMatch(wizard, /Your latest work is saved on this phone\. Tap Next to continue saving/);
   assert.match(wizard, /await waitForBackgroundSync\(\)/);
-  assert.match(wizard, /syncing \|\| repeatItemHasSavedEvidence/);
+  assert.doesNotMatch(wizard, /disabled=\{[^}]*syncing/);
+  assert.match(wizard, /disabled=\{!editable \|\| Boolean\(busy\) \|\| repeatItemHasSavedEvidence\}/);
   assert.match(wizard, /scrollResponderScrollNativeHandleToKeyboard\(event\.target, 96, true\)/);
   assert.match(wizard, /await move\(1\);[\s\S]{0,100}if \(online\) queuePageSync\(fieldKeys\);/);
   assert.match(wizard, /syncs\.current = syncs\.current\.catch\(\(\) => undefined\)\.then/);
