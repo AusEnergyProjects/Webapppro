@@ -116,7 +116,7 @@ test("a completed multi-activity job is audited only after every active activity
       ('intent-b', 'multi', 'owner', 'case-b', 'case_linked'),
       ('intent-old', 'multi', 'owner', 'case-old', 'superseded');
     INSERT INTO compliance_cases VALUES
-      ('case-a', 'creditex', 'multi', 'owner', 'intent-a', 'accepted', '2026-09-09T10:00:00Z'),
+      ('case-a', 'creditex', 'multi', 'owner', 'intent-a', 'rejected', '2026-09-09T10:00:00Z'),
       ('case-b', 'creditex', 'multi', 'owner', 'intent-b', 'open', '2026-09-09T11:00:00Z'),
       ('case-old', 'creditex', 'multi', 'owner', 'intent-old', 'rejected', '2026-09-09T12:00:00Z');
   `);
@@ -135,5 +135,8 @@ test("a completed multi-activity job is audited only after every active activity
   assert.deepEqual(read(), { audit_outcome: null, lifecycle_status: "completed" });
   db.prepare(`UPDATE compliance_cases SET status = 'accepted', updated_at = ? WHERE id = 'case-b'`)
     .run("2026-09-09T13:00:00Z");
+  assert.deepEqual(read(), { audit_outcome: "failed", lifecycle_status: "audited" });
+  db.prepare(`UPDATE compliance_cases SET status = 'accepted', updated_at = ? WHERE id = 'case-a'`)
+    .run("2026-09-09T14:00:00Z");
   assert.deepEqual(read(), { audit_outcome: "passed", lifecycle_status: "audited" });
 });

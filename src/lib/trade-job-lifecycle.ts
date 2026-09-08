@@ -196,24 +196,25 @@ export function tradeJobAuditOutcomeSql(workAlias = "w") {
       AND ${intentAlias}.status IN ('planned', 'case_linked')`;
   const legacyOutcomeSql = auditOutcomeSql((caseAlias) => `${caseAlias}.work_order_id = ${workAlias}.id
         AND ${caseAlias}.installer_uid = ${workAlias}.firebase_uid`);
-  const activeIntentOutcomeSql = auditOutcomeSql((caseAlias) => `${caseAlias}.work_order_id = ${workAlias}.id
-        AND ${caseAlias}.installer_uid = ${workAlias}.firebase_uid
-        AND EXISTS (
-          SELECT 1 FROM trade_work_order_compliance_intents outcome_intent
-          WHERE ${activeIntentWhere("outcome_intent")}
-            AND (${caseAlias}.compliance_intent_id = outcome_intent.id
-              OR (outcome_intent.compliance_case_id <> ''
-                AND ${caseAlias}.id = outcome_intent.compliance_case_id)))`);
-  const pendingIntentOutcomeSql = tradeActivityAuditOutcomeSql("pending_audit_intent");
+  const currentIntentOutcomeSql = tradeActivityAuditOutcomeSql("aggregate_audit_intent");
+  const activeIntentOutcomeSql = `(SELECT CASE
+      WHEN COUNT(*) = 0 THEN NULL
+      WHEN SUM(CASE WHEN COALESCE(current_outcome, '') = '' THEN 1 ELSE 0 END) > 0 THEN NULL
+      WHEN SUM(CASE WHEN current_outcome = 'failed' THEN 1 ELSE 0 END) > 0 THEN 'failed'
+      WHEN SUM(CASE WHEN current_outcome = 'correction_required' THEN 1 ELSE 0 END) > 0 THEN 'correction_required'
+      WHEN SUM(CASE WHEN current_outcome = 'duplicate' THEN 1 ELSE 0 END) > 0 THEN 'duplicate'
+      WHEN SUM(CASE WHEN current_outcome = 'withdrawn' THEN 1 ELSE 0 END) > 0 THEN 'withdrawn'
+      ELSE 'passed' END
+    FROM (
+      SELECT ${currentIntentOutcomeSql} current_outcome
+      FROM trade_work_order_compliance_intents aggregate_audit_intent
+      WHERE ${activeIntentWhere("aggregate_audit_intent")}
+    ) active_intent_outcomes)`;
   return `(CASE
     WHEN EXISTS (
       SELECT 1 FROM trade_work_order_compliance_intents active_audit_intent
       WHERE ${activeIntentWhere("active_audit_intent")}
-    ) THEN CASE WHEN NOT EXISTS (
-      SELECT 1 FROM trade_work_order_compliance_intents pending_audit_intent
-      WHERE ${activeIntentWhere("pending_audit_intent")}
-        AND COALESCE(${pendingIntentOutcomeSql}, '') = ''
-    ) THEN ${activeIntentOutcomeSql} ELSE NULL END
+    ) THEN ${activeIntentOutcomeSql}
     ELSE ${legacyOutcomeSql}
   END)`;
 }
