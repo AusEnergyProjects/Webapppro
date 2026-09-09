@@ -4,7 +4,7 @@ export type RentalMetadataField = {
   type: 'text' | 'textarea' | 'date' | 'select' | 'checkbox';
   required: boolean;
   phase?: 'setup' | 'profile' | 'final';
-  source?: 'team_profile' | 'assessment';
+  source?: 'team_profile' | 'assessment' | 'automatic';
   help: string;
   placeholder: string;
   options: Array<{ value: string; label: string }>;
@@ -216,7 +216,7 @@ export function newRentalItem(
   module: RentalAssessmentModule,
   section: RentalAssessmentSection,
   check: RentalAssessmentCheck,
-  instanceKey = check.repeatBy === 'property' ? 'property' : 'first',
+  instanceKey = module.key === 'minimum_standards' || check.repeatBy === 'property' ? 'property' : 'first',
 ): RentalAssessmentItem {
   return {
     id: '',
@@ -225,7 +225,7 @@ export function newRentalItem(
     sectionKey: section.key,
     checkKey: check.key,
     instanceKey,
-    locationLabel: '',
+    locationLabel: instanceKey === 'property' ? 'Property' : '',
     outcome: '',
     response: {},
     publicNotes: '',
@@ -234,4 +234,24 @@ export function newRentalItem(
     sortOrder: 0,
     revision: 0,
   };
+}
+
+/** Routes server completion blockers to the actual answer, including historical item keys. */
+export function rentalCompletionTarget(module: RentalAssessmentModule, items: RentalAssessmentItem[], blockerKey: string):
+  { kind: 'check'; sectionKey: string; checkIndex: number; instanceKey?: string } | { kind: 'metadata'; fieldKey: string } | null {
+  if (blockerKey.startsWith('metadata:')) return { kind: 'metadata', fieldKey: blockerKey.slice('metadata:'.length) };
+  if (blockerKey.startsWith('check:')) {
+    const [, sectionKey, checkKey] = blockerKey.split(':');
+    const section = module.template.sections.find((entry) => entry.key === sectionKey);
+    const checkIndex = section?.checks.findIndex((entry) => entry.key === checkKey) ?? -1;
+    if (checkIndex >= 0) return { kind: 'check', sectionKey, checkIndex };
+  }
+  const detailKey = blockerKey.slice(blockerKey.indexOf(':') + 1);
+  const item = items.find((entry) => entry.moduleId === module.id && entry.itemKey
+    && (detailKey === entry.itemKey || detailKey.startsWith(entry.itemKey + ':')));
+  if (!item) return null;
+  const section = module.template.sections.find((entry) => entry.key === item.sectionKey);
+  const checkIndex = section?.checks.findIndex((entry) => entry.key === item.checkKey) ?? -1;
+  return checkIndex >= 0 ? { kind: 'check', sectionKey: item.sectionKey, checkIndex,
+    ...(module.key !== 'minimum_standards' ? { instanceKey: item.instanceKey } : {}) } : null;
 }

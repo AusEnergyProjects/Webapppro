@@ -35,6 +35,7 @@ import {
 } from "@/lib/trade-rental-report-links";
 import { loadCustomerPlanPdfFonts } from "@/lib/customer-plan-pdf-fonts";
 import { rentalEvidenceCapture, rentalEvidencePhotoCapture } from "@/lib/trade-rental-evidence.mjs";
+import { rentalAssessorCheckPresentation } from "@/lib/rental-assessor-workflow.mjs";
 import { assertRentalModuleCredentialCurrent } from "@/lib/trade-rental-credentials";
 import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
 
@@ -242,7 +243,7 @@ async function reportSource(access: TeamAccess, workOrderId: string) {
       answers: parsedObject(assessmentModule.answers),
       items: moduleItems.map((item) => ({
         id: String(item.id), itemKey: String(item.item_key), sectionKey: String(item.section_key),
-        checkKey: String(item.check_key), locationLabel: String(item.location_label || ""),
+        checkKey: String(item.check_key), instanceKey: String(item.instance_key || "property"), locationLabel: String(item.location_label || ""),
         outcome: String(item.outcome), requiredEvidenceCount: number(item.required_evidence_count),
         publicNotes: String(item.public_notes || ""),
         responseJson: parsedObject(item.response_json),
@@ -382,6 +383,9 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
   const modulePublicIds = new Map(source.modules.map((module) => [String(module.id), crypto.randomUUID()]));
   const itemPublicIds = new Map(source.items.map((item) => [String(item.id), crypto.randomUUID()]));
   const findingPublicIds = new Map(source.findings.map((finding) => [String(finding.id), crypto.randomUUID()]));
+  const historicalItemIds = new Set(source.items.filter((item) => item.instance_key && item.instance_key !== "property"
+    && source.modules.some((module) => module.id === item.module_id && module.module_key === "minimum_standards"))
+    .map((item) => String(item.id)));
   const modules = source.modules.map((module) => {
     const template = parsedObject(module.template_snapshot);
     const moduleItems = source.items.filter((item) => item.module_id === module.id);
@@ -393,7 +397,7 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
       status: String(module.status),
       reportBoundary: String(template.reportBoundary || ""),
       assessmentScope: String(template.assessmentScope || "current_minimum_standards"),
-      credentialGate: String(template.credentialGate || module.required_capability || ""),
+      credentialGate: String(parsedObject(module.credential_snapshot).gate || template.credentialGate || module.required_capability || ""),
       credential: parsedObject(module.credential_snapshot),
       answers: parsedObject(module.answers),
       completedAt: String(module.completed_at || ""),
@@ -406,8 +410,11 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
           summary: String(section.summary || ""),
           items: moduleItems.filter((item) => item.section_key === section.key).map((item) => {
             const assessmentCheck = checks.map(parsedObject).find((check) => check.key === item.check_key);
+            const historicalObservation = historicalItemIds.has(String(item.id));
             return {
-              ...itemPresentation(item, String(assessmentCheck?.prompt || item.check_key)),
+              ...itemPresentation(item, historicalObservation ? `Earlier observation: ${String(assessmentCheck?.prompt || item.check_key)}`
+                : module.module_key === "minimum_standards" ? rentalAssessorCheckPresentation(assessmentCheck || { key: item.check_key }).prompt : String(assessmentCheck?.prompt || item.check_key)),
+              historicalObservation,
               effectiveFrom: String(assessmentCheck?.effectiveFrom || ""),
               assessmentPhase: String(assessmentCheck?.assessmentPhase || (template.assessmentScope === "energy_readiness_2027" ? "energy_readiness_2027" : "current")),
               trigger: String(assessmentCheck?.trigger || ""),
@@ -441,6 +448,7 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
       : publicFinding.status;
     return {
       ...publicFinding,
+      ...(historicalItemIds.has(String(itemId)) ? { historicalObservation: true, title: `Earlier observation: ${String(publicFinding.title || "Recorded issue")}` } : {}),
       status,
       id: String(findingPublicIds.get(String(id))),
       moduleId: String(modulePublicIds.get(String(moduleId)) || ""),

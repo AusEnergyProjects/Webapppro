@@ -103,7 +103,7 @@ test("server-derived completion requires metadata, answers, evidence and observe
   const base = {
     moduleTemplate,
     answers: { declaration: true },
-    items: [{ id: "item-1", itemKey, sectionKey: "locks", checkKey: "entry_lock",
+    items: [{ id: "item-1", itemKey, sectionKey: "locks", checkKey: "entry_lock", instanceKey: "property",
       locationLabel: "Front door", outcome: "does_not_meet", requiredEvidenceCount: 1, responseJson: {} }],
     evidenceCounts: { "item-1": 2 }, photoCounts: { "item-1": 2 },
     findings: [{ itemId: "item-1", title: "Front lock fails", description: "Deadlock does not engage.",

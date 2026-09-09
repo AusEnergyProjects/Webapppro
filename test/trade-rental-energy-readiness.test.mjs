@@ -57,7 +57,7 @@ test("rental scope has a dedicated persisted field while retaining the database-
 test("readiness still requires actual observations, evidence, findings and final declarations", () => {
   const moduleTemplate = templates.rentalAssessmentTemplateSnapshot(["minimum_standards"], "energy_readiness_2027").modules.minimum_standards;
   const items = moduleTemplate.sections.flatMap((section) => section.checks.map((check) => ({
-    id: check.key, itemKey: check.key, sectionKey: section.key, checkKey: check.key,
+    id: check.key, itemKey: check.key, instanceKey: "property", sectionKey: section.key, checkKey: check.key,
     locationLabel: "Recorded area", outcome: "meets", requiredEvidenceCount: 1,
   })));
   const input = { moduleTemplate, items, findings: [], evidenceCounts: Object.fromEntries(items.map((item) => [item.id, 1])), photoCounts: Object.fromEntries(items.map((item) => [item.id, 1])),
@@ -155,64 +155,49 @@ const post = (route, value) => route.POST(new Request("https://test.example/api/
   method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ workOrderId: "job", ...value }),
 }));
 
-test("room-linked window checks retain four independent answers per window and preserve the earlier property seal record", async () => {
+test("dwelling answers need no room, window roster or location and preserve historical observations", async () => {
   const fixture = databaseFixture();
   try {
-    const room = { id: "room-1", label: "Bedroom 1", type: "bedroom" };
-    fixture.sql.prepare("UPDATE trade_rental_inspection_modules SET answers = ?").run(JSON.stringify({ roomRoster: [room] }));
+    const template = JSON.parse(fixture.sql.prepare("SELECT template_snapshot FROM trade_rental_inspection_modules").get().template_snapshot);
+    template.credentialGate = "qualified_assessor";
+    template.sections.forEach((section) => section.checks.forEach((check) => {
+      if (check.credentialGate === "assigned_assessor") check.credentialGate = "qualified_assessor";
+    }));
+    fixture.sql.prepare("UPDATE trade_rental_inspection_modules SET template_snapshot = ?, required_capability = 'qualified_assessor'").run(JSON.stringify(template));
     const frozen = fixture.sql.prepare("SELECT template_snapshot FROM trade_rental_inspection_modules").get().template_snapshot;
     const route = loadRoute(fixture);
-    const save = async (body) => {
+    for (const [sectionKey, checkKey] of [["toilets", "toilet_function"], ["lighting", "artificial_lighting"], ["windows", "window_operation_security"], ["draughtproofing", "windows_2027_readiness"]]) {
       const revision = fixture.sql.prepare("SELECT revision FROM trade_rental_inspection_modules").get().revision;
       const response = await post(route, { action: "save_item", moduleId: "module", expectedModuleRevision: revision, expectedItemRevision: 0,
-        outcome: "meets", ...body });
-      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
-      return response.json();
-    };
-    await save({ sectionKey: "draughtproofing", checkKey: "windows_2027_readiness", instanceKey: "property", locationLabel: "Earlier property observation", response: {} });
-    for (const instanceKey of ["window-one", "window-two"]) {
-      for (const check of workflow.RENTAL_WINDOW_CHECKS) {
-        const payload = await save({ sectionKey: check.sectionKey, checkKey: check.checkKey, instanceKey,
-          locationLabel: `${room.label} - ${instanceKey}`, response: { roomId: ` ${room.id} ` } });
-        const saved = payload.items.find((item) => item.checkKey === check.checkKey && item.instanceKey === instanceKey);
-        assert.ok(saved, `${check.checkKey} must retain ${instanceKey}`);
-        assert.equal(saved.response.roomId, room.id);
-      }
+        sectionKey, checkKey, instanceKey: "property", outcome: "meets", response: {} });
+      assert.equal(response.status, 200, `${checkKey}: ${JSON.stringify(await response.clone().json())}`);
+      const saved = (await response.json()).items.find((item) => item.checkKey === checkKey);
+      assert.equal(saved.instanceKey, "property");
+      assert.equal(saved.locationLabel, "Property");
     }
-    const sealed = fixture.sql.prepare("SELECT instance_key,location_label,response_json FROM trade_rental_inspection_items WHERE check_key = 'windows_2027_readiness' ORDER BY instance_key").all();
-    assert.deepEqual(sealed.map((item) => item.instance_key), ["property", "window-one", "window-two"]);
-    assert.equal(sealed[0].location_label, "Earlier property observation");
-    assert.deepEqual(JSON.parse(sealed[0].response_json), {});
-    assert.equal(fixture.sql.prepare("SELECT template_snapshot FROM trade_rental_inspection_modules").get().template_snapshot, frozen);
-    const before = fixture.sql.prepare("SELECT COUNT(*) count FROM trade_rental_inspection_items").get().count;
-    const revision = fixture.sql.prepare("SELECT revision FROM trade_rental_inspection_modules").get().revision;
-    const forbidden = await post(route, { action: "save_item", moduleId: "module", expectedModuleRevision: revision, expectedItemRevision: 0,
-      sectionKey: "heating", checkKey: "heating_2027_readiness", instanceKey: "invented-heater", outcome: "meets", response: { roomId: room.id } });
-    assert.equal(forbidden.status, 400);
-    assert.equal(fixture.sql.prepare("SELECT COUNT(*) count FROM trade_rental_inspection_items").get().count, before);
+    assert.equal(fixture.sql.prepare("SELECT template_snapshot FROM trade_rental_inspection_modules").get().template_snapshot, frozen, "Frozen template remains available for audit");
+    assert.equal(fixture.sql.prepare("SELECT public_notes FROM trade_rental_inspection_items WHERE id = 'old-item'").get().public_notes, "Existing observation");
+    assert.equal(fixture.sql.prepare("SELECT COUNT(*) count FROM trade_rental_inspection_items").get().count, 5);
+    assert.equal((await post(loadRoute(fixture, { ownerUid: "other-owner" }), { action: "save_item", moduleId: "module", expectedModuleRevision: 5,
+      sectionKey: "lighting", checkKey: "artificial_lighting", outcome: "meets" })).status, 404);
   } finally { fixture.sql.close(); }
 });
 
-test("window room identity rejects malformed or foreign IDs and resolves only this module's legacy room observations", async () => {
+test("pending earlier window answers retain their identity without requiring room setup", async () => {
   const fixture = databaseFixture();
   try {
-    fixture.sql.exec("UPDATE trade_rental_inspection_items SET check_key='artificial_lighting', section_key='lighting', instance_key='legacy-room', location_label='Front bedroom'");
-    const room = workflow.rentalRoomsFromItems([], [{ checkKey: "artificial_lighting", instanceKey: "legacy-room", locationLabel: "Front bedroom" }])[0];
     const route = loadRoute(fixture);
     const base = { action: "save_item", moduleId: "module", expectedModuleRevision: 1, expectedItemRevision: 0,
-      sectionKey: "windows", checkKey: "window_operation_security", instanceKey: "window-one", locationLabel: "Front bedroom - Window 1", outcome: "meets" };
-    for (const roomId of [null, {}, [], "", "a".repeat(121), "bad/id", "foreign-room"]) {
-      const response = await post(route, { ...base, response: { roomId } });
-      assert.equal(response.status, 400, JSON.stringify(roomId));
+      sectionKey: "draughtproofing", checkKey: "windows_2027_readiness", instanceKey: "old-window", locationLabel: "Earlier front window", outcome: "meets" };
+    for (const roomId of [null, {}, [], "", "a".repeat(121), "bad/id"]) {
+      assert.equal((await post(route, { ...base, response: { roomId } })).status, 400);
     }
-    fixture.sql.exec("UPDATE trade_rental_inspection_items SET firebase_uid='other-owner'");
-    assert.equal((await post(route, { ...base, response: { roomId: room.id } })).status, 400, "A foreign owner's room does not grant an association");
-    fixture.sql.exec("UPDATE trade_rental_inspection_items SET firebase_uid='owner',module_id='other-module'");
-    assert.equal((await post(route, { ...base, response: { roomId: room.id } })).status, 400, "A room in another module is not this assessment's room");
-    fixture.sql.exec("UPDATE trade_rental_inspection_items SET module_id='module'");
-    const saved = await post(route, { ...base, response: { roomId: room.id } });
-    assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()));
-    assert.equal((await saved.json()).items.find((item) => item.instanceKey === "window-one").response.roomId, room.id);
+    const response = await post(route, { ...base, response: { roomId: "earlier-room" } });
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+    const saved = (await response.json()).items.find((item) => item.instanceKey === "old-window");
+    assert.equal(saved.locationLabel, "Earlier front window");
+    assert.equal(saved.response.roomId, "earlier-room");
+    assert.equal(saved.itemKey, templates.rentalAssessmentItemKey("minimum_standards", "draughtproofing", "windows_2027_readiness", "old-window"), "Photo queue still resolves the captured item");
   } finally { fixture.sql.close(); }
 });
 
@@ -326,47 +311,58 @@ test("scope API switches unissued tests with CAS, retains old observations and r
   } finally { fixture.sql.close(); }
 });
 
-test("room rosters persist through legacy metadata saves and reject stale or invalid mutations", async () => {
+test("metadata patches preserve answers and historical rooms while dates and profile details are automatic", async () => {
   const fixture = databaseFixture();
   try {
+    const roster = [{ id: "old-room", label: "Earlier room", type: "bedroom" }];
+    fixture.sql.prepare("UPDATE trade_rental_inspection_modules SET answers = ?").run(JSON.stringify({ roomRoster: roster, dwellingClass: "house", occupancyAtAssessment: "vacant", coverageConfirmed: false }));
+    fixture.sql.exec("UPDATE trade_rental_inspection_items SET created_at = '2026-09-08T15:30:00Z'");
     const route = loadRoute(fixture);
-    const type = workflow.RENTAL_ROOM_TYPES[0].value;
-    const roomRoster = [{ id: "room-1", label: "Front room", type }, { id: "room-2", label: "Rear room", type }];
-    const body = { action: "save_module_answers", moduleId: "module", expectedRevision: 1, answers: { roomRoster, inspectionDate: "2026-09-09" } };
+    const body = { action: "save_module_answers", moduleId: "module", expectedRevision: 1,
+      answers: { agreementStartDate: "2026-01-01", inspectionDate: "2099-01-01", assessorName: "Forged name", qualificationNumber: "FAKE", roomRoster: [] } };
     const saved = await post(route, body);
     assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()));
-    assert.deepEqual((await saved.json()).modules[0].answers.roomRoster, roomRoster);
-    assert.equal((await post(route, body)).status, 409, "An old device cannot replace a newer room list");
-    const legacy = await post(route, { ...body, expectedRevision: 2, answers: { inspectionDate: "2026-09-10" } });
-    assert.equal(legacy.status, 200);
-    assert.deepEqual((await legacy.json()).modules[0].answers.roomRoster, roomRoster);
-    for (const invalid of [{}, "room", null, [{ id: "bad:id", label: "Room", type }], [{ id: "room-1", label: "", type }],
-      [{ id: "room-1", label: "Room", type: "invented" }], [roomRoster[0], roomRoster[0]],
-      [roomRoster[0], { ...roomRoster[1], label: " FRONT ROOM " }], Array.from({ length: 81 }, (_, index) => ({ id: `r${index}`, label: `Room ${index}`, type }))]) {
-      const rejected = await post(route, { ...body, expectedRevision: 3, answers: { roomRoster: invalid } });
-      assert.equal(rejected.status, 400, JSON.stringify(invalid));
-      assert.equal((await rejected.json()).code, "RENTAL_ROOM_ROSTER_INVALID");
-    }
-    assert.equal(fixture.sql.prepare("SELECT revision FROM trade_rental_inspection_modules").get().revision, 3);
-    assert.deepEqual(JSON.parse(fixture.sql.prepare("SELECT answers FROM trade_rental_inspection_modules").get().answers).roomRoster, roomRoster);
-    fixture.sql.exec("UPDATE trade_rental_inspection_modules SET status = 'complete'");
-    assert.equal((await post(route, { ...body, expectedRevision: 3 })).status, 409);
+    let answers = (await saved.json()).modules[0].answers;
+    assert.equal(answers.inspectionDate, "2026-09-09", "Australian assessment date comes from its first recorded observation");
+    assert.equal(answers.assessorName, "Alex Installer");
+    assert.equal(answers.qualificationNumber, "");
+    assert.equal(answers.dwellingClass, "house");
+    assert.equal(answers.occupancyAtAssessment, "vacant");
+    assert.equal(answers.agreementStartDate, "2026-01-01");
+    assert.deepEqual(answers.roomRoster, roster, "Retired roster stays in history but cannot be edited by new workflow");
+    assert.equal((await post(route, body)).status, 409);
+    const changed = await post(route, { ...body, expectedRevision: 2, answers: { weatherConditions: "Dry" } });
+    assert.equal(changed.status, 200);
+    answers = JSON.parse(fixture.sql.prepare("SELECT answers FROM trade_rental_inspection_modules").get().answers);
+    assert.equal(answers.inspectionDate, "2026-09-09");
+    assert.equal(answers.agreementStartDate, "2026-01-01");
+    assert.equal(answers.weatherConditions, "Dry");
     fixture.sql.exec("UPDATE trade_rental_inspections SET status = 'issued'");
     assert.equal((await post(route, { ...body, expectedRevision: 3 })).status, 409);
     assert.equal((await post(loadRoute(fixture, { ownerUid: "other-owner" }), body)).status, 404);
   } finally { fixture.sql.close(); }
 });
 
-test("room data is rejected for licensed modules", async () => {
+test("older qualified-assessor forms use Team profile details and retain an honest empty qualification", async () => {
   const fixture = databaseFixture();
   try {
-    const template = templates.rentalAssessmentTemplateSnapshot(["electrical_safety_check"]).modules.electrical_safety_check;
-    fixture.sql.prepare("UPDATE trade_rental_inspection_modules SET module_key = 'electrical_safety_check', template_snapshot = ?").run(JSON.stringify(template));
-    const route = loadRoute(fixture);
-    const response = await post(route, { action: "save_module_answers", moduleId: "module", expectedRevision: 1,
-      answers: { roomRoster: [{ id: "room-1", label: "Room", type: workflow.RENTAL_ROOM_TYPES[0].value }] } });
-    assert.equal(response.status, 400);
-    assert.equal((await response.json()).code, "RENTAL_ROOM_ROSTER_INVALID");
+    const input = { db: fixture.d1, ownerUid: "owner", assessorMemberId: "worker", moduleKey: "minimum_standards", requiredCapability: "qualified_assessor",
+      answers: { assessorDeclaration: true, qualificationType: "Forged", qualificationNumber: "FAKE" }, confirmedAt: "2026-09-09T00:00:00Z" };
+    const empty = await credentials.currentRentalModuleCredentialSnapshot(input);
+    assert.equal(empty.verificationBasis, "assigned_team_profile");
+    assert.equal(empty.gate, "assigned_assessor");
+    assert.equal(empty.credentialNumber, "");
+    fixture.sql.exec(`INSERT INTO trade_team_member_credentials VALUES ('credential','owner','worker','training','Property assessor','ASSESS-42',
+      '', 'active','VIC','','2026-09-07','');`);
+    const current = await credentials.currentRentalModuleCredentialSnapshot(input);
+    assert.equal(current.credentialNumber, "ASSESS-42");
+    assert.equal(current.credentialName, "Property assessor");
+    assert.equal(current.assessorName, "Alex Installer");
+    const checked = await credentials.assertRentalModuleCredentialCurrent({ ...input, storedSnapshot: current, completedAt: input.confirmedAt, checkedAt: input.confirmedAt });
+    assert.deepEqual(checked, current);
+    fixture.sql.exec("UPDATE trade_team_member_credentials SET status = 'archived'");
+    await assert.rejects(() => credentials.assertRentalModuleCredentialCurrent({ ...input, storedSnapshot: current, completedAt: input.confirmedAt, checkedAt: input.confirmedAt }), /CREDENTIAL_CHANGED/);
+    await assert.rejects(() => credentials.currentRentalModuleCredentialSnapshot({ ...input, answers: {} }), /CREDENTIAL_REQUIRED/);
   } finally { fixture.sql.close(); }
 });
 
@@ -392,6 +388,46 @@ test("saved assessor identity is taken from Team and observations invalidate ear
     assert.equal(credential.credentialNumber, "");
     await assert.rejects(() => credentials.currentRentalModuleCredentialSnapshot({ db: fixture.d1, ownerUid: "owner", assessorMemberId: "worker",
       moduleKey: "minimum_standards", requiredCapability: "assigned_assessor", answers: {}, confirmedAt: "2026-09-07T00:00:00Z" }), /CREDENTIAL_REQUIRED/);
+  } finally { fixture.sql.close(); }
+});
+
+test("an older dwelling module completes with its automatic date and Team identity without rooms or manual qualifications", async () => {
+  const fixture = databaseFixture();
+  try {
+    const full = templates.rentalAssessmentTemplateSnapshot(["minimum_standards"]).modules.minimum_standards;
+    const toilets = full.sections.find((section) => section.key === "toilets");
+    const frozen = { ...full, credentialGate: "qualified_assessor", sections: [{ ...toilets,
+      checks: toilets.checks.map((check) => ({ ...check, repeatBy: "room", credentialGate: "qualified_assessor" })) }],
+      metadataFields: [
+        { key: "inspectionDate", type: "date", required: true },
+        { key: "qualificationType", type: "text", required: true },
+        { key: "qualificationNumber", type: "text", required: true },
+        { key: "credentialConfirmed", type: "checkbox", required: true },
+        { key: "coverageConfirmed", type: "checkbox", required: true },
+        { key: "assessorDeclaration", type: "checkbox", required: true },
+      ] };
+    fixture.sql.prepare("UPDATE trade_rental_inspection_modules SET template_snapshot = ?, required_capability = 'qualified_assessor', answers = '{}'").run(JSON.stringify(frozen));
+    fixture.sql.exec("DELETE FROM trade_rental_inspection_items");
+    const route = loadRoute(fixture);
+    const observed = await post(route, { action: "save_item", moduleId: "module", expectedModuleRevision: 1, expectedItemRevision: 0,
+      sectionKey: "toilets", checkKey: "toilet_function", instanceKey: "property", outcome: "meets", response: {} });
+    assert.equal(observed.status, 200, JSON.stringify(await observed.clone().json()));
+    const started = JSON.parse(fixture.sql.prepare("SELECT answers FROM trade_rental_inspection_modules").get().answers).inspectionDate;
+    assert.match(started, /^\d{4}-\d{2}-\d{2}$/);
+    const declared = await post(route, { action: "save_module_answers", moduleId: "module", expectedRevision: 2,
+      answers: { coverageConfirmed: true, assessorDeclaration: true } });
+    assert.equal(declared.status, 200, JSON.stringify(await declared.clone().json()));
+    const completed = await post(route, { action: "complete_module", moduleId: "module", expectedRevision: 3 });
+    assert.equal(completed.status, 200, JSON.stringify(await completed.clone().json()));
+    const saved = fixture.sql.prepare("SELECT status,answers,credential_snapshot,template_snapshot FROM trade_rental_inspection_modules").get();
+    const answers = JSON.parse(saved.answers);
+    assert.equal(saved.status, "complete");
+    assert.equal(answers.assessorName, "Alex Installer");
+    assert.equal(answers.inspectionDate, started);
+    assert.equal(answers.qualificationNumber, "");
+    assert.equal(answers.roomRoster, undefined);
+    assert.equal(JSON.parse(saved.credential_snapshot).verificationBasis, "assigned_team_profile");
+    assert.equal(JSON.parse(saved.template_snapshot).credentialGate, "qualified_assessor", "Original frozen template remains unchanged");
   } finally { fixture.sql.close(); }
 });
 

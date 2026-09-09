@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
+import { rentalAssessorMetadataField } from '../../src/lib/rental-assessor-workflow.mjs';
 
 const source = readFileSync(new URL('../src/lib/rental-save-queue.ts', import.meta.url), 'utf8');
 const output = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
@@ -85,13 +86,14 @@ function harness(shared = {}) {
       advance(result);
     } else if (body.action === 'save_module_answers') {
       assert.equal(body.expectedRevision, result.modules[0].revision);
-      result.modules[0].answers = body.answers;
+      result.modules[0].answers = { ...result.modules[0].answers, ...body.answers };
       advance(result);
     }
     return clone(result);
   }
   state.handler ||= defaultRequest;
   const modules = {
+    '../../../src/lib/rental-assessor-workflow.mjs': { rentalAssessorMetadataField },
     'expo-crypto': { randomUUID: () => `00000000-0000-4000-8000-${String(++state.uuid).padStart(12, '0')}` },
     'expo-file-system': { File, Directory, Paths: { document: 'file:///document' } },
     'expo-image-manipulator': { SaveFormat: { JPEG: 'jpeg' }, ImageManipulator: { manipulate: (sourceUri) => {
@@ -625,4 +627,67 @@ test('SQLite sync counts include all 50 pending rental photos and exclude linked
     new Function('exports', 'getDatabase', countOutput)(exports, async () => ({ getFirstAsync: async (sql) => db.prepare(sql).get() }));
     assert.deepEqual(await exports.queueCounts(), { actions: 2, uploads: 52, conflicts: 0 });
   } finally { db.close(); }
+});
+
+test('ordinary metadata never resends server declarations; false invalidations can queue on frozen templates', async () => {
+  const h = harness(), input = fixture().input;
+  input.module.template.metadataFields.push({ key: 'coverageConfirmed', type: 'checkbox' }, { key: 'inspectionDate', type: 'date' }, { key: 'qualificationNumber' });
+  h.state.result.modules[0].template = clone(input.module.template);
+  h.state.result.modules[0].answers.assessorDeclaration = true;
+  input.body = { action: 'save_module_answers', moduleId: 'module-1', answers: { addressNotes: 'Gate beside driveway', coverageConfirmed: false } };
+  input.draftKey = 'metadata:property';
+  await h.queue.enqueueRentalSave(input); await h.queue.processRentalSaveQueue('job-1');
+  const sent = h.state.calls.find((call) => call.body?.action === 'save_module_answers');
+  assert.deepEqual(sent.body.answers, { addressNotes: 'Gate beside driveway', coverageConfirmed: false });
+  assert.equal(h.state.result.modules[0].answers.assessorDeclaration, true);
+  for (const answers of [{ coverageConfirmed: true }, { inspectionDate: '2026-09-09' }, { qualificationNumber: '123' }]) {
+    input.body.answers = answers;
+    await assert.rejects(h.queue.enqueueRentalSave(input), (error) => error.code === 'RENTAL_FINAL_ANSWERS_REQUIRE_SYNC');
+  }
+});
+
+test('legacy queued metadata uses automatic date and Team details, and never replays a final declaration', async () => {
+  const h = harness(), input = fixture().input;
+  input.module.template.metadataFields.push({ key: 'inspectionDate', type: 'date' }, { key: 'qualificationNumber' }, { key: 'coverageConfirmed', type: 'checkbox' });
+  h.state.result.modules[0].template = clone(input.module.template);
+  Object.assign(h.state.result.modules[0].answers, { inspectionDate: '2026-09-09', qualificationNumber: 'TEAM-123', coverageConfirmed: false });
+  input.body = { action: 'save_module_answers', moduleId: 'module-1', answers: {
+    inspectionDate: '2026-09-08', qualificationNumber: 'OLD-TYPED-VALUE', coverageConfirmed: true, addressNotes: 'Side gate',
+  } };
+  h.store.set('rental-save:firebase%3Aalice:legacy', JSON.stringify({ ...input, schemaVersion: 1, id: 'legacy', ownerKey: 'firebase:alice', createdAt: 1, status: 'queued', error: '', photos: [] }));
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.deepEqual(h.state.calls.find((call) => call.body?.action === 'save_module_answers').body.answers, { coverageConfirmed: false, addressNotes: 'Side gate' });
+  assert.equal(h.state.result.modules[0].answers.inspectionDate, '2026-09-09');
+  assert.equal(h.state.result.modules[0].answers.qualificationNumber, 'TEAM-123');
+  assert.equal(h.state.result.modules[0].answers.coverageConfirmed, false);
+});
+
+test('a legacy queue containing only derived profile metadata finishes without a server write', async () => {
+  const h = harness(), input = fixture().input;
+  input.module.template.metadataFields.push({ key: 'qualificationNumber' });
+  h.state.result.modules[0].template = clone(input.module.template);
+  h.state.result.modules[0].answers.qualificationNumber = 'TEAM-123';
+  input.body = { action: 'save_module_answers', moduleId: 'module-1', answers: { qualificationNumber: 'OLD-TYPED-VALUE' } };
+  h.store.set('rental-save:firebase%3Aalice:legacy', JSON.stringify({ ...input, schemaVersion: 1, id: 'legacy', ownerKey: 'firebase:alice', createdAt: 1, status: 'queued', error: '', photos: [] }));
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.equal(h.state.calls.filter((call) => call.body?.action).length, 0);
+  assert.equal(h.state.result.modules[0].answers.qualificationNumber, 'TEAM-123');
+});
+
+test('previously conflicted legacy identity and queued declarations recover without approving an assessment', async () => {
+  for (const answers of [{ qualificationNumber: 'OLD' }, { coverageConfirmed: true }]) {
+    const h = harness(), input = fixture().input;
+    input.module.template.metadataFields.push({ key: 'qualificationNumber' }, { key: 'coverageConfirmed', type: 'checkbox' });
+    input.module.answers.coverageConfirmed = false;
+    h.state.result.modules[0].template = clone(input.module.template);
+    Object.assign(h.state.result.modules[0].answers, { qualificationNumber: 'TEAM-123', coverageConfirmed: true });
+    input.body = { action: 'save_module_answers', moduleId: 'module-1', answers };
+    h.store.set('rental-save:firebase%3Aalice:legacy', JSON.stringify({ ...input, schemaVersion: 1, id: 'legacy', ownerKey: 'firebase:alice', createdAt: 1, status: 'conflict', error: 'Old form rejected this field', photos: [] }));
+    await h.queue.processRentalSaveQueue('job-1');
+    assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0);
+    assert.equal(h.state.result.modules[0].answers.qualificationNumber, 'TEAM-123');
+    if (answers.coverageConfirmed) assert.equal(h.state.result.modules[0].answers.coverageConfirmed, false);
+  }
 });

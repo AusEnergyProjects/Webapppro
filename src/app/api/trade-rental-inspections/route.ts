@@ -22,7 +22,7 @@ import {
   RENTAL_ASSESSMENT_SCOPES,
 } from "@/lib/trade-rental-assessment.mjs";
 import { rentalEvidenceCapture, rentalEvidencePhotoCapture } from "@/lib/trade-rental-evidence.mjs";
-import { RENTAL_WINDOW_CHECKS, normalizeRentalRoomRoster, rentalRoomsFromItems, rentalAssessorEvidenceRequirement } from "@/lib/rental-assessor-workflow.mjs";
+import { rentalAssessorEvidenceRequirement } from "@/lib/rental-assessor-workflow.mjs";
 import {
   RENTAL_OBSERVATION_NUMBER_FIELDS,
   RENTAL_OBSERVATION_SELECT_OPTIONS,
@@ -95,6 +95,14 @@ function dateValue(value: unknown) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
 }
 
+function assessmentDate(answers: Row, recordedAt: unknown, fallback = new Date().toISOString()) {
+  const saved = dateValue(answers.inspectionDate);
+  if (saved) return saved;
+  const recorded = new Date(String(recordedAt || fallback));
+  const date = Number.isFinite(recorded.getTime()) ? recorded : new Date(fallback);
+  return date.toLocaleDateString("en-CA", { timeZone: "Australia/Melbourne" });
+}
+
 function responseObject(value: unknown) {
   const source = parsedObject(value);
   const result: Row = {};
@@ -142,10 +150,6 @@ function responseObject(value: unknown) {
 function normaliseModuleAnswers(moduleTemplate: Row, value: unknown) {
   const source = parsedObject(value);
   const result: Row = {};
-  if (Object.hasOwn(source, "roomRoster")) {
-    if (moduleTemplate.key !== "minimum_standards") throw new Error("RENTAL_ROOM_ROSTER_INVALID");
-    result.roomRoster = normalizeRentalRoomRoster(source.roomRoster);
-  }
   for (const rawField of parsedArray(moduleTemplate.metadataFields)) {
     const field = parsedObject(rawField);
     const key = cleanAdminText(field.key, 80);
@@ -201,8 +205,6 @@ function inspectionError(error: unknown) {
   if (code === "RENTAL_RESPONSE_TOO_LARGE") return adminJson({ ok: false, error: "The assessment response is too large." }, 413);
   if (code === "RENTAL_OBSERVATION_RESPONSE_INVALID") return adminJson({ ok: false, code,
     error: "Choose a listed observation option and enter measurements as zero or positive numbers." }, 400);
-  if (code === "RENTAL_ROOM_ROSTER_INVALID") return adminJson({ ok: false, code,
-    error: "Add a valid room name and room type. Each room must have its own ID and name." }, 400);
   if (code === "INVALID_RENTAL_ITEM_KEY") return adminJson({ ok: false, error: "The repeated assessment item is invalid." }, 400);
   if (code === "RENTAL_MODULES_INCOMPLETE") return adminJson({ ok: false, error: "Every selected module must pass its completion checks before the report can be issued." }, 409);
   if (code === "RENTAL_MODULE_SET_INVALID") return adminJson({ ok: false, error: "The attached assessment modules do not match the frozen job selection. Ask an administrator to repair the job before issuing." }, 409);
@@ -270,7 +272,7 @@ function presentModule(row: Row) {
     status: String(row.status),
     templateVersion: integer(row.template_version),
     title: String(row.template_name),
-    requiredCapability: String(row.required_capability),
+    requiredCapability: row.module_key === "minimum_standards" ? "assigned_assessor" : String(row.required_capability),
     template: parsedObject(row.template_snapshot),
     answers: parsedObject(row.answers),
     credential: parsedObject(row.credential_snapshot),
@@ -385,8 +387,10 @@ async function assessmentPayload(context: InspectionContext, origin = "") {
     const profileAnswers = await rentalModuleProfileAnswers({ db, ownerUid: context.access.ownerUid,
       assessorMemberId: String(context.inspection.assessor_member_id || ""), moduleKey: assessmentModule.key,
       requiredCapability: assessmentModule.requiredCapability, checkedAt: new Date().toISOString() });
-    return { ...assessmentModule, answers: { inspectionDate: new Date().toLocaleDateString("en-CA", { timeZone: "Australia/Melbourne" }),
-      ...assessmentModule.answers, ...profileAnswers } };
+    const firstObservation = itemRows.results.filter((item) => item.module_id === assessmentModule.id)
+      .map((item) => String(item.created_at || "")).filter(Boolean).sort()[0];
+    return { ...assessmentModule, answers: { ...assessmentModule.answers, ...profileAnswers,
+      inspectionDate: assessmentDate(assessmentModule.answers, firstObservation) } };
   }));
   const items = itemRows.results.map(presentItem).filter((item) => {
     const template = modules.find((module) => module.id === item.moduleId)?.template;
@@ -540,9 +544,12 @@ async function saveModuleAnswers(context: InspectionContext, body: Row) {
     requiredCapability: String(assessmentModule.required_capability), checkedAt: now });
   const submittedAnswers = parsedObject(body.answers);
   const currentAnswers = parsedObject(assessmentModule.answers);
-  const preservedRooms = !Object.hasOwn(submittedAnswers, "roomRoster") && Object.hasOwn(currentAnswers, "roomRoster")
-    ? { roomRoster: currentAnswers.roomRoster } : {};
-  const answers = normaliseModuleAnswers(template, { ...preservedRooms, ...submittedAnswers, ...profileAnswers });
+  const firstObservation = await getD1().prepare(`SELECT MIN(created_at) first_recorded_at FROM trade_rental_inspection_items
+    WHERE inspection_id = ? AND module_id = ? AND firebase_uid = ?`)
+    .bind(context.inspection.id, moduleId, context.access.ownerUid).first<Row>();
+  const answers = { ...normaliseModuleAnswers(template, { ...currentAnswers, ...submittedAnswers, ...profileAnswers }),
+    ...profileAnswers, inspectionDate: assessmentDate(currentAnswers, firstObservation?.first_recorded_at, now),
+    ...(Object.hasOwn(currentAnswers, "roomRoster") ? { roomRoster: currentAnswers.roomRoster } : {}) };
   const nextRevision = expectedRevision + 1;
   return await guardedMutation({
     context,
@@ -662,41 +669,28 @@ async function saveItem(context: InspectionContext, body: Row) {
   if (!located) return adminJson({ ok: false, error: "Choose a valid assessment check." }, 400);
   const assessmentCheck = parsedObject(located.check);
   const response = responseObject(body.response);
-  if (response.roomId) {
-    if (assessmentModule.module_key !== "minimum_standards" || !RENTAL_WINDOW_CHECKS.some((entry) => entry.checkKey === checkKey)) {
-      return adminJson({ ok: false, error: "A room-linked window is required for this response." }, 400);
-    }
-    const roster = normalizeRentalRoomRoster(parsedObject(assessmentModule.answers).roomRoster ?? []);
-    let roomExists = roster.some((room) => room.id === response.roomId);
-    if (!roomExists) {
-      // Older forms derived rooms from their observations. Resolve only within
-      // this already authorised inspection and module; never trust a foreign ID.
-      const observations = await getD1().prepare(`SELECT check_key, instance_key, location_label FROM trade_rental_inspection_items
-        WHERE inspection_id = ? AND module_id = ? AND firebase_uid = ?`)
-        .bind(context.inspection.id, moduleId, context.access.ownerUid).all<Row>();
-      const rooms = rentalRoomsFromItems(roster, observations.results.map((item) => ({ checkKey: item.check_key, instanceKey: item.instance_key, locationLabel: item.location_label })));
-      roomExists = rooms.some((room) => room.id === response.roomId);
-    }
-    if (!roomExists) return adminJson({ ok: false, error: "Choose a room from this assessment before recording its window." }, 400);
-  }
-  // Frozen older templates describe draught seals as one property check.
-  // Explicit room-linked windows keep separate identities without rewriting
-  // that template or changing any existing property record.
+  // Pending answers captured by an earlier app keep their item identity so
+  // their queued photos still attach correctly. The dwelling workflow always
+  // submits property; no room roster is needed to save or finish it.
   const perWindowReadiness = assessmentModule.module_key === "minimum_standards" && checkKey === "windows_2027_readiness"
     && Boolean(response.roomId) && body.instanceKey !== "property";
   if (perWindowReadiness && (typeof body.instanceKey !== "string" || !/^[A-Za-z0-9_-]{1,120}$/.test(body.instanceKey))) {
     return adminJson({ ok: false, error: "Choose a valid window from this room." }, 400);
   }
-  const repeated = String(assessmentCheck.repeatBy || "property") !== "property" || perWindowReadiness;
+  const dwellingAnswer = assessmentModule.module_key === "minimum_standards"
+    && (!body.instanceKey || body.instanceKey === "property");
+  if (dwellingAnswer) delete response.roomId;
+  const repeated = !dwellingAnswer && (String(assessmentCheck.repeatBy || "property") !== "property" || perWindowReadiness);
   const instanceKey = repeated ? cleanAdminText(body.instanceKey, 120) : "property";
-  const locationLabel = cleanAdminText(body.locationLabel, 300);
+  const locationLabel = dwellingAnswer ? "Property" : cleanAdminText(body.locationLabel, 300);
   if (repeated && (!instanceKey || !locationLabel)) {
     return adminJson({ ok: false, error: "Add a clear location for this repeated assessment item." }, 400);
   }
   const itemKey = rentalAssessmentItemKey(String(assessmentModule.module_key), sectionKey, checkKey, instanceKey);
   const outcome = cleanAdminText(body.outcome, 60);
   if (!OUTCOMES.has(outcome)) return adminJson({ ok: false, error: "Choose an assessment result." }, 400);
-  if (outcome === "meets" && assessmentCheck.credentialGate && assessmentCheck.credentialGate !== template.credentialGate) {
+  if (outcome === "meets" && ["licensed_electrician", "licensed_gasfitter", "suitably_qualified_smoke_alarm_worker"].includes(String(assessmentCheck.credentialGate))
+    && assessmentCheck.credentialGate !== template.credentialGate) {
     const gate = String(assessmentCheck.credentialGate);
     const specialistModuleKey = gate === "licensed_electrician" ? "electrical_safety_check" : gate === "licensed_gasfitter" ? "gas_safety_check" : "smoke_alarm_check";
     const profile = await rentalModuleProfileAnswers({ db: getD1(), ownerUid: context.access.ownerUid,
@@ -728,6 +722,11 @@ async function saveItem(context: InspectionContext, body: Row) {
   }
   const itemId = existing ? String(existing.id) : crypto.randomUUID();
   const now = new Date().toISOString();
+  const savedAnswers = parsedObject(assessmentModule.answers);
+  const firstObservation = dateValue(savedAnswers.inspectionDate) ? null : await getD1().prepare(`SELECT MIN(created_at) first_recorded_at
+    FROM trade_rental_inspection_items WHERE inspection_id = ? AND module_id = ? AND firebase_uid = ?`)
+    .bind(context.inspection.id, moduleId, context.access.ownerUid).first<Row>();
+  const inspectionDate = assessmentDate(savedAnswers, firstObservation?.first_recorded_at, now);
   const nextItemRevision = expectedItemRevision + 1;
   const nextModuleRevision = expectedModuleRevision + 1;
   const requiredEvidenceCount = Math.min(20, rentalAssessorEvidenceRequirement(assessmentCheck, outcome).minimumFiles);
@@ -750,14 +749,14 @@ async function saveItem(context: InspectionContext, body: Row) {
         internalNotes, requiredEvidenceCount, sortOrder, context.access.actorUid, now, now, now);
   const additional: D1PreparedStatement[] = [
     getD1().prepare(`UPDATE trade_rental_inspection_modules
-      SET status = 'draft', credential_snapshot = '{}', answers = json_remove(answers, '$.coverageConfirmed', '$.assessorDeclaration', '$.credentialConfirmed'), revision = ?, completed_by_uid = '', completed_at = '', updated_at = ?
+      SET status = 'draft', credential_snapshot = '{}', answers = json_set(json_remove(answers, '$.coverageConfirmed', '$.assessorDeclaration', '$.credentialConfirmed'), '$.inspectionDate', ?), revision = ?, completed_by_uid = '', completed_at = '', updated_at = ?
       WHERE id = ? AND inspection_id = ? AND firebase_uid = ? AND revision = ?
         AND status IN ('not_started', 'draft')
         AND EXISTS (SELECT 1 FROM trade_rental_inspection_items item
           WHERE item.id = ? AND item.inspection_id = trade_rental_inspection_modules.inspection_id
             AND item.module_id = trade_rental_inspection_modules.id AND item.firebase_uid = trade_rental_inspection_modules.firebase_uid
             AND item.revision = ? AND item.updated_at = ?)`)
-      .bind(nextModuleRevision, now, moduleId, context.inspection.id, context.access.ownerUid,
+      .bind(inspectionDate, nextModuleRevision, now, moduleId, context.inspection.id, context.access.ownerUid,
         expectedModuleRevision, itemId, nextItemRevision, now),
   ];
   const adverse = ["does_not_meet", "specialist_verification_required", "not_accessible", "exemption_evidence_pending"].includes(outcome);
@@ -966,23 +965,29 @@ async function completeModule(context: InspectionContext, body: Row) {
   ]);
   const evidenceCounts = Object.fromEntries(evidenceRows.results.map((row) => [String(row.item_id), integer(row.count)]));
   const photoCounts = Object.fromEntries(evidenceRows.results.map((row) => [String(row.item_id), integer(row.photo_count)]));
+  const now = new Date().toISOString();
+  const savedAnswers = parsedObject(assessmentModule.answers);
+  const profileAnswers = await rentalModuleProfileAnswers({ db: getD1(), ownerUid: context.access.ownerUid,
+    assessorMemberId: context.access.memberId, moduleKey: String(assessmentModule.module_key),
+    requiredCapability: String(assessmentModule.required_capability), checkedAt: now });
+  const firstObservation = itemRows.results.map((item) => String(item.created_at || "")).filter(Boolean).sort()[0];
+  const answers = { ...savedAnswers, ...profileAnswers, inspectionDate: assessmentDate(savedAnswers, firstObservation, now) };
   const completion = rentalAssessmentCompletion({
     moduleTemplate: parsedObject(assessmentModule.template_snapshot),
-    answers: parsedObject(assessmentModule.answers),
+    answers,
     items: itemRows.results.map((row) => ({ ...presentItem(row), responseJson: parsedObject(row.response_json) })),
     findings: findingRows.results.map(presentFinding),
     evidenceCounts,
     photoCounts,
   });
   if (!completion.complete) return adminJson({ ok: false, error: "Finish the highlighted assessment items before completing this module.", blockers: completion.blockers }, 409);
-  const now = new Date().toISOString();
   const credential = await currentRentalModuleCredentialSnapshot({
     db: getD1(),
     ownerUid: context.access.ownerUid,
     assessorMemberId: context.access.memberId,
     moduleKey: String(assessmentModule.module_key),
     requiredCapability: String(assessmentModule.required_capability),
-    answers: assessmentModule.answers,
+    answers,
     confirmedAt: now,
   });
   const nextRevision = expectedRevision + 1;
@@ -1013,10 +1018,10 @@ async function completeModule(context: InspectionContext, body: Row) {
   return await guardedMutation({
     context,
     primary: getD1().prepare(`UPDATE trade_rental_inspection_modules
-      SET status = 'complete', credential_snapshot = ?, revision = ?, completed_by_uid = ?, completed_at = ?, updated_at = ?
+      SET status = 'complete', answers = ?, credential_snapshot = ?, revision = ?, completed_by_uid = ?, completed_at = ?, updated_at = ?
       WHERE id = ? AND inspection_id = ? AND firebase_uid = ? AND revision = ?
         AND status IN ('not_started', 'draft') ${credentialPredicate}`)
-      .bind(JSON.stringify(credential), nextRevision, context.access.actorUid, now, now, moduleId,
+      .bind(JSON.stringify(answers), JSON.stringify(credential), nextRevision, context.access.actorUid, now, now, moduleId,
         context.inspection.id, context.access.ownerUid, expectedRevision, ...credentialBindings),
     successPredicate: `EXISTS (SELECT 1 FROM trade_rental_inspection_modules module
       WHERE module.id = ? AND module.inspection_id = trade_rental_inspections.id

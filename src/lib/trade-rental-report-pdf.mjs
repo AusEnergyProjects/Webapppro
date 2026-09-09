@@ -298,9 +298,10 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   keyValue("Report reference", snapshot.report.number);
   keyValue("Prepared for", brief(snapshot.property?.customerName, 85));
   rule(7);
-  const currentIssues = allItems.filter((item) => !item.readiness && item.outcome === "does_not_meet").length;
-  const futureIssues = allItems.filter((item) => item.readiness && item.outcome === "does_not_meet").length;
-  const uncertain = allItems.filter((item) => !["meets", "does_not_meet", "not_applicable"].includes(item.outcome)).length;
+  const currentItems = allItems.filter((item) => !item.historicalObservation);
+  const currentIssues = currentItems.filter((item) => !item.readiness && item.outcome === "does_not_meet").length;
+  const futureIssues = currentItems.filter((item) => item.readiness && item.outcome === "does_not_meet").length;
+  const uncertain = currentItems.filter((item) => !["meets", "does_not_meet", "not_applicable"].includes(item.outcome)).length;
   const stats = [[currentIssues, "Current issues", palette.danger], [futureIssues, "Future upgrades", palette.blue], [uncertain, "Need verification", palette.warning], [reportFindings.length, "Work items", palette.primary]];
   ensure(77);
   for (let index = 0; index < stats.length; index += 1) {

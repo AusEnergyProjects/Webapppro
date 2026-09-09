@@ -31,7 +31,7 @@ export function rentalObservationNumberIsValid(value) {
   return !text || (/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(text) && Number.isFinite(Number(text)));
 }
 export function rentalObservationResponseLabel(key) {
-  const names = { roomLengthMetres: "Room length", roomWidthMetres: "Room width", roomHeightMetres: "Ceiling height", widthMm: "Width", heightMm: "Height", depthMm: "Depth", areaSquareMetres: "Bare ceiling area", sealLengthMetres: "Affected edge length", flowLitresPerMinute: "Water flow", collectedLitres: "Water collected", flowSeconds: "Collection time", count: "Count", workingBurners: "Working burners", insulationDepthMm: "Insulation depth", hatchWidthMm: "Hatch width", accessWidthMm: "Clear access width", cabinetWidthMm: "Cabinet opening width", cabinetHeightMm: "Cabinet opening height", cabinetDepthMm: "Cabinet opening depth", model: "Equipment and labels", measurement: "Measurements", limitationReason: "Observation limitation" };
+  const names = { roomLengthMetres: "Room length", roomWidthMetres: "Room width", roomHeightMetres: "Ceiling height", widthMm: "Width", heightMm: "Height", depthMm: "Depth", areaSquareMetres: "Total insulation area required", sealLengthMetres: "Total draughtproofing length", flowLitresPerMinute: "Water flow", collectedLitres: "Water collected", flowSeconds: "Collection time", count: "Count", workingBurners: "Working burners", insulationDepthMm: "Insulation depth", hatchWidthMm: "Hatch width", accessWidthMm: "Clear access width", cabinetWidthMm: "Cabinet opening width", cabinetHeightMm: "Cabinet opening height", cabinetDepthMm: "Cabinet opening depth", model: "Equipment and labels", measurement: "Measurements", limitationReason: "Observation limitation" };
   const name = names[key] || String(key).replace(/([a-z0-9])([A-Z])/g, "$1 $2").replaceAll("_", " ").replace(/^\w/, (character) => character.toUpperCase());
   const unit = RENTAL_OBSERVATION_NUMBER_FIELDS[key];
   return unit ? `${name} (${unit})` : name;
@@ -42,6 +42,9 @@ export const RENTAL_OBSERVATION_SELECT_OPTIONS = Object.freeze({
   accessStatus: choices(["Clear access", "Narrow or obstructed", "Not accessed"]),
   limitationStatus: choices(["No limitation", "Not accessible", "Unsafe to measure", "Label unreadable", "Other"]),
   insulationType: choices(["Batts", "Loose fill", "Foil", "None visible", "Unknown", "Other"]),
+  insulationRating: choices(["None", "Below R5", "R5 or above", "Unknown"]),
+  ventType: choices(["Wall grille", "Air brick", "Covered / sealed vent", "Mixed types", "Not sure"]),
+  welsRating: choices(["Not labelled / unknown", "Below 3 stars", "3 stars", "4 stars or above"]),
 });
 const heaterOptions = choices(["Split system", "Ducted", "Gas heater", "Wood / solid fuel", "Other", "No heater", "Unknown"]);
 const coolingOptions = choices(["Split system", "Ducted", "Evaporative", "Other", "No fixed cooling", "Unknown"]);
@@ -75,7 +78,8 @@ export function rentalObservationFields(checkKey) {
     ...(checkKey !== "heating_2027_readiness" ? [shortText("limitationReason", "Earlier observation limitation", { legacy: true })] : []),
   ];
   if (checkKey === "switchboard_observation") return [shortText("model", "Board location / readable labels (optional)"), ...limitationFields()];
-  if (["showerhead_rating", "appliance_identity_condition", "alarm_identity_location", "fixed_special_equipment"].includes(checkKey)) return [...identityFields(), ...limitationFields()];
+  if (checkKey === "showerhead_rating") return [selectField("welsRating", "Confirmed WELS rating", RENTAL_OBSERVATION_SELECT_OPTIONS.welsRating, { shared: true }), ...identityFields(), { ...numberField("flowLitresPerMinute", "Main shower flow (litres per minute)"), shared: true }, ...limitationFields()];
+  if (["appliance_identity_condition", "alarm_identity_location", "fixed_special_equipment"].includes(checkKey)) return [...identityFields(), ...limitationFields()];
   /** @type {Record<string, RentalObservationField[]>} */
   const specific = {
     cooktop_function: [...identityFields(), numberField("widthMm", "Cooktop width"), numberField("depthMm", "Cooktop depth"), numberField("workingBurners", "Working burners")],
@@ -83,14 +87,14 @@ export function rentalObservationFields(checkKey) {
       ...[numberField("cabinetWidthMm", "Cabinet opening width, if safely visible"), numberField("cabinetHeightMm", "Cabinet opening height, if safely visible"), numberField("cabinetDepthMm", "Cabinet opening depth, if safely visible")]
         .map((field) => ({ ...field, showForOutcomes: ["does_not_meet"], requiredForAdverse: false })),
       ...[numberField("widthMm", "Earlier oven width"), numberField("heightMm", "Earlier oven height"), numberField("depthMm", "Earlier oven depth")].map((field) => ({ ...field, legacy: true, requiredForAdverse: false }))],
-    ceiling_2027_readiness: [selectField("insulationType", "Visible insulation", RENTAL_OBSERVATION_SELECT_OPTIONS.insulationType), numberField("areaSquareMetres", "Bare ceiling area"), numberField("insulationDepthMm", "Visible insulation depth"), numberField("hatchWidthMm", "Hatch width"), shortText("model", "Product / R-value label, if readable")],
-    windows_2027_readiness: [numberField("sealLengthMetres", "Length needing a seal"), ...[numberField("widthMm", "Earlier window width"), numberField("heightMm", "Earlier window height")].map((field) => ({ ...field, legacy: true }))].map((field) => ({ ...field, showForOutcomes: ["does_not_meet"] })),
-    doors_2027_readiness: [numberField("count", "Doors needing seals"), numberField("sealLengthMetres", "Total length needing a seal"), shortText("actionTaken", "Which doors? For example, front and laundry"), ...[numberField("widthMm", "Earlier door width"), numberField("heightMm", "Earlier door height")].map((field) => ({ ...field, legacy: true }))].map((field) => ({ ...field, showForOutcomes: ["does_not_meet"] })),
-    vents_2027_readiness: [shortText("actionTaken", "Where are the vents? For example, lounge wall"), numberField("count", "Unsealed vents seen"), numberField("widthMm", "Vent width"), numberField("heightMm", "Vent height")].map((field) => ({ ...field, showForOutcomes: ["does_not_meet", "specialist_verification_required"] })),
-    shower_2027_readiness: [...identityFields(), numberField("flowLitresPerMinute", "Water flow"), numberField("collectedLitres", "Water collected"), numberField("flowSeconds", "Collection time")],
+    ceiling_2027_readiness: [selectField("insulationRating", "Existing roof insulation", RENTAL_OBSERVATION_SELECT_OPTIONS.insulationRating), numberField("areaSquareMetres", "Total insulation required (square metres)"), shortText("model", "Product / R-value label, if readable")],
+    windows_2027_readiness: [{ ...numberField("sealLengthMetres", "Total window draughtproofing length (metres)"), showForOutcomes: ["does_not_meet"] }],
+    doors_2027_readiness: [numberField("count", "Total doors needing seals"), numberField("sealLengthMetres", "Total door draughtproofing length (metres)")].map((field) => ({ ...field, showForOutcomes: ["does_not_meet"] })),
+    vents_2027_readiness: [selectField("ventType", "Wall vent type", RENTAL_OBSERVATION_SELECT_OPTIONS.ventType, { showForOutcomes: ["meets", "does_not_meet", "specialist_verification_required"] }), { ...numberField("count", "Total wall vents needing sealing"), showForOutcomes: ["does_not_meet", "specialist_verification_required"] }],
+    shower_2027_readiness: [selectField("welsRating", "Confirmed WELS rating", RENTAL_OBSERVATION_SELECT_OPTIONS.welsRating, { shared: true }), ...identityFields(), { ...numberField("flowLitresPerMinute", "Main shower flow (litres per minute)"), shared: true }],
     cooling_2027_readiness: [selectField("applianceType", "Cooling type", coolingOptions), ...identityFields(), ...roomFields(), selectField("accessStatus", "Access to equipment", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus)],
     hot_water_2027_readiness: [selectField("applianceType", "Hot-water type", hotWaterOptions), ...identityFields(), numberField("widthMm", "Unit width"), numberField("heightMm", "Unit height"), numberField("accessWidthMm", "Clear access width"), selectField("accessStatus", "Access to equipment", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus)],
-    window_covering: [numberField("widthMm", "Window width"), numberField("heightMm", "Window height")].map((field) => ({ ...field, showForOutcomes: ["does_not_meet"] })),
+    window_covering: [{ ...numberField("count", "Total coverings needing attention"), showForOutcomes: ["does_not_meet"] }],
   };
   if (!specific[checkKey]) return [];
   return [...specific[checkKey], ...limitationFields(), shortText("measurement", "Earlier measurement notes", { legacy: true }), ...(specific[checkKey].some((field) => field.key === "actionTaken") ? [] : [shortText("actionTaken", "Earlier location notes", { legacy: true })])];
@@ -131,10 +135,14 @@ export function rentalSharedObservationResponse({ target, candidates, currentRes
         && normalizedLocation(currentResponse[key]) !== normalizedLocation(candidate.response[key]))) continue;
     for (const key of sharedKeys) {
       if (recordedKeys.includes(key) || !rentalObservationFields(candidate.checkKey).some((field) => field.shared && field.key === key)) continue;
+      const value = candidate.response?.[key];
+      // Older shower records did not capture these fields. A saved blank must
+      // not hide the first opportunity to record the rating and flow.
+      if (["welsRating", "flowLitresPerMinute"].includes(key) && (value === undefined || value === null || String(value).trim() === "")) continue;
       recordedKeys.push(key);
       sourceCheckKey ||= candidate.checkKey;
-      if (!Object.hasOwn(currentResponse, key) && typeof candidate.response?.[key] === "string" && candidate.response[key].trim()) {
-        response[key] = candidate.response[key];
+      if (!Object.hasOwn(currentResponse, key) && (typeof value === "string" && value.trim() || typeof value === "number" && Number.isFinite(value))) {
+        response[key] = value;
         inheritedKeys.push(key);
       }
     }

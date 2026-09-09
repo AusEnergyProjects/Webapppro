@@ -1,5 +1,5 @@
 import { rentalObservationBlockers, rentalObservationFields } from "./rental-quotation.mjs";
-import { normalizeRentalRoomRoster, rentalAssessorEvidenceRequirement, rentalRoomsForCheck, rentalRoomItemInstance, RENTAL_WINDOW_CHECKS, rentalRoomWindowItems } from "./rental-assessor-workflow.mjs";
+import { rentalAssessorEvidenceRequirement, rentalAssessorMetadataField, rentalAssessorCheckPresentation } from "./rental-assessor-workflow.mjs";
 
 export const RENTAL_INSPECTION_SERVICE_CATEGORY = "rental-inspection";
 
@@ -141,7 +141,7 @@ function field(key, label, type, options = {}) {
     placeholder: options.placeholder || "",
     options: Object.freeze(options.options || []),
     phase: options.phase || (type === "checkbox" ? "final" : ["assessorName", "electricianName", "gasfitterName", "workerName", "licenceNumber", "qualificationType", "qualificationNumber"].includes(key) ? "profile" : "setup"),
-    source: options.source || (["assessorName", "electricianName", "gasfitterName", "workerName", "licenceNumber", "qualificationType", "qualificationNumber"].includes(key) ? "team_profile" : "assessment"),
+    source: options.source || (key === "inspectionDate" ? "automatic" : ["assessorName", "electricianName", "gasfitterName", "workerName", "licenceNumber", "qualificationType", "qualificationNumber"].includes(key) ? "team_profile" : "assessment"),
   });
 }
 
@@ -178,7 +178,7 @@ const minimumStandardsMetadata = Object.freeze([
     help: "List every locked, unsafe, concealed or otherwise inaccessible area. Enter None when the whole property was accessible.",
   }),
   field("weatherConditions", "Weather or site conditions that affected observations", "text"),
-  field("coverageConfirmed", "I have added every relevant room, door, window, fixture and area to the repeatable checks", "checkbox", { required: true }),
+  field("coverageConfirmed", "I have checked the property and recorded any areas I could not access", "checkbox", { required: true }),
   field("assessorDeclaration", "I confirm this assessment is complete and accurate to the best of my knowledge", "checkbox", { required: true }),
 ]);
 
@@ -648,6 +648,9 @@ export function rentalAssessmentTemplateSnapshot(value, assessmentScope) {
     selectedModules: moduleKeys,
     modules: Object.fromEntries(moduleKeys.map((key) => [key, {
       ...template.modules[key],
+      ...(key === "minimum_standards" ? { sections: template.modules[key].sections.map((section) => ({ ...section,
+        checks: section.checks.map((assessmentCheck) => ({ ...assessmentCheck, repeatBy: "property", prompt: rentalAssessorCheckPresentation(assessmentCheck).prompt })),
+      })) } : {}),
       assessmentScope: key === "minimum_standards" ? scope : "statutory_safety_check",
       templateKey: template.key,
       templateVersion: template.version,
@@ -688,6 +691,7 @@ function requiredMetadataBlockers(moduleTemplate, answers) {
   const fields = Array.isArray(moduleTemplate?.metadataFields) ? moduleTemplate.metadataFields : [];
   return fields.flatMap((metadataField) => {
     if (!metadataField?.required) return [];
+    if (moduleTemplate.key === "minimum_standards" && (rentalAssessorMetadataField(metadataField).source === "team_profile" || metadataField.key === "credentialConfirmed")) return [];
     const value = answers[metadataField.key];
     if (metadataField.type === "select" && value && !metadataField.options.some((option) => option.value === value)) return [{ key: `metadata:${metadataField.key}`, label: `${metadataField.label}: choose a listed option.` }];
     if (metadataField.type === "checkbox" ? value === true : String(value || "").trim()) return [];
@@ -706,42 +710,23 @@ export function rentalAssessmentCompletion(input) {
   const photoCounts = parsedObject(input?.photoCounts);
   const answers = parsedObject(input?.answers);
   const blockers = [...requiredMetadataBlockers(moduleTemplate, answers)];
-  let roomRoster = [];
-  try { roomRoster = answers.roomRoster === undefined ? [] : normalizeRentalRoomRoster(answers.roomRoster); }
-  catch { blockers.push({ key: "room-roster", label: "Review the room list before completing the assessment." }); }
-  const windowItems = items.map((item) => ({ ...item, response: parsedObject(item.responseJson) }));
-  const roomWindows = roomRoster.flatMap((room) => rentalRoomWindowItems(room, windowItems));
+  const dwellingAssessment = moduleTemplate.key === "minimum_standards";
   const observationsOnly = moduleTemplate.metadataFields?.some((field) => field.key === "rentalRegime") && !rentalRegimeAssessment(answers).applicable;
   if (observationsOnly && !items.length) blockers.push({ key: "observations", label: "Record at least one observation with its evidence before completing an observations report." });
 
   for (const section of sections) {
     for (const assessmentCheck of Array.isArray(section?.checks) ? section.checks : []) {
       if (assessmentCheck?.required === false) continue;
-      const checkItems = items.filter((item) => item?.sectionKey === section.key && item?.checkKey === assessmentCheck.key);
+      const checkItems = items.filter((item) => item?.sectionKey === section.key && item?.checkKey === assessmentCheck.key
+        && (!dwellingAssessment || item.instanceKey === "property"));
       if (!checkItems.length && observationsOnly) continue;
       if (!checkItems.length) {
-        blockers.push({ key: `check:${section.key}:${assessmentCheck.key}`, label: `${section.title}: ${assessmentCheck.prompt} has not been assessed.` });
+        blockers.push({ key: `check:${section.key}:${assessmentCheck.key}`, label: `${section.title}: ${rentalAssessorCheckPresentation(assessmentCheck).prompt}` });
         continue;
-      }
-      if (!observationsOnly) {
-        for (const room of rentalRoomsForCheck(assessmentCheck, roomRoster)) {
-          const instanceKey = rentalRoomItemInstance(room, assessmentCheck.key, items);
-          if (!checkItems.some((item) => item.instanceKey === instanceKey)) {
-            blockers.push({ key: `room:${room.id}:${assessmentCheck.key}`, label: `${room.label}: ${assessmentCheck.prompt} has not been assessed.` });
-          }
-        }
-        if (RENTAL_WINDOW_CHECKS.some((check) => check.checkKey === assessmentCheck.key)) {
-          for (const window of roomWindows) {
-            const instanceKey = rentalRoomItemInstance({ id: window.instanceKey, label: window.locationLabel, type: "other" }, assessmentCheck.key, items);
-            if (!checkItems.some((item) => item.instanceKey === instanceKey)) {
-              blockers.push({ key: `window:${window.instanceKey}:${assessmentCheck.key}`, label: `${window.locationLabel}: ${assessmentCheck.prompt} has not been assessed.` });
-            }
-          }
-        }
       }
       for (const item of checkItems) {
         const itemLabel = String(item.locationLabel || section.title || assessmentCheck.prompt);
-        if (assessmentCheck.repeatBy !== "property" && !String(item.locationLabel || "").trim()) {
+        if (!dwellingAssessment && assessmentCheck.repeatBy !== "property" && !String(item.locationLabel || "").trim()) {
           blockers.push({ key: `location:${item.itemKey}`, label: `${section.title}: add the location for every repeated item.` });
         }
         const outcome = String(item.outcome || "not_assessed");
@@ -770,6 +755,7 @@ export function rentalAssessmentCompletion(input) {
           }
         }
         if (outcome === "meets" && assessmentCheck.credentialGate && assessmentCheck.credentialGate !== moduleTemplate.credentialGate
+          && !(dwellingAssessment && ["assigned_assessor", "qualified_assessor"].includes(assessmentCheck.credentialGate))
           && (response.credentialVerified !== true || !String(response.credentialNumber || "").trim())) {
           blockers.push({ key: `credential:${item.itemKey}`, label: `${itemLabel} needs the specialist credential and verification used for this result.` });
         }

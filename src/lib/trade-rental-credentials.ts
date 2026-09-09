@@ -131,9 +131,21 @@ export async function rentalModuleProfileAnswers(input: {
   const member = await input.db.prepare(`SELECT id, display_name, first_name, last_name
     FROM trade_team_members WHERE id = ? AND owner_uid = ? AND status = 'active' LIMIT 1`)
     .bind(input.assessorMemberId, input.ownerUid).first<Row>();
-  if (!member) return {};
+  if (!member) return input.moduleKey === "minimum_standards"
+    ? { assessorName: "", qualificationType: "", qualificationNumber: "" } : {};
   const name = [text(member.first_name), text(member.last_name)].filter(Boolean).join(" ") || text(member.display_name);
-  if (input.moduleKey === "minimum_standards") return { assessorName: name };
+  if (input.moduleKey === "minimum_standards") {
+    // These are profile details for the report, not authority to perform a
+    // licensed safety test. Those tests keep the gate-specific lookup below.
+    const qualification = await input.db.prepare(`SELECT name, credential_type, credential_number
+      FROM trade_team_member_credentials
+      WHERE owner_uid = ? AND team_member_id = ? AND status = 'active'
+        AND (expires_at = '' OR date(expires_at) >= date(?))
+      ORDER BY updated_at DESC, id DESC LIMIT 1`)
+      .bind(input.ownerUid, input.assessorMemberId, input.checkedAt.slice(0, 10)).first<Row>();
+    return { assessorName: name, qualificationType: text(qualification?.name || qualification?.credential_type),
+      qualificationNumber: text(qualification?.credential_number) };
+  }
   const credential = await input.db.prepare(`SELECT credential.name, credential.credential_type, credential.credential_number
     FROM trade_team_member_credentials credential
     JOIN trade_team_member_files file ON file.id = credential.file_id
@@ -167,7 +179,7 @@ export async function currentRentalModuleCredentialSnapshot(input: {
 }): Promise<RentalCredentialSnapshot> {
   const answers = parsedObject(input.answers);
   const observationalAssessment = input.moduleKey === "minimum_standards"
-    && input.requiredCapability === "assigned_assessor";
+    && ["assigned_assessor", "qualified_assessor"].includes(input.requiredCapability);
   if ((!observationalAssessment && !asserted(answers.credentialConfirmed)) || !asserted(answers.assessorDeclaration)) {
     throw new Error("RENTAL_MODULE_CREDENTIAL_REQUIRED");
   }
@@ -180,39 +192,20 @@ export async function currentRentalModuleCredentialSnapshot(input: {
   if (!assessorName || !input.confirmedAt) throw new Error("RENTAL_MODULE_CREDENTIAL_REQUIRED");
   const shared = baseSnapshot({
     moduleKey: input.moduleKey,
-    gate: input.requiredCapability,
+    gate: observationalAssessment ? "assigned_assessor" : input.requiredCapability,
     assessorMemberId: input.assessorMemberId,
     assessorName,
     confirmedAt: input.confirmedAt,
   });
 
   if (observationalAssessment) {
+    const profile = await rentalModuleProfileAnswers({ ...input, checkedAt: input.confirmedAt });
     return {
       ...shared,
-      credentialType: "", credentialName: "", credentialNumber: "", issuer: "", jurisdiction: "VIC", expiresAt: "",
+      credentialType: text(profile.qualificationType), credentialName: text(profile.qualificationType),
+      credentialNumber: text(profile.qualificationNumber), issuer: "", jurisdiction: "VIC", expiresAt: "",
       supportingFileName: "", supportingFileTitle: "", supportingFileSha256: "", supportingFileRecordedAt: "",
       verificationBasis: "assigned_team_profile", recordedAt: input.confirmedAt,
-    };
-  }
-
-  if (input.moduleKey === "minimum_standards" && input.requiredCapability === "qualified_assessor") {
-    const type = text(answers.qualificationType);
-    const number = text(answers.qualificationNumber);
-    if (!type || !number) throw new Error("RENTAL_MODULE_CREDENTIAL_REQUIRED");
-    return {
-      ...shared,
-      credentialType: type,
-      credentialName: type,
-      credentialNumber: number,
-      issuer: "Assessor declared",
-      jurisdiction: "VIC",
-      expiresAt: "",
-      supportingFileName: "",
-      supportingFileTitle: "",
-      supportingFileSha256: "",
-      supportingFileRecordedAt: "",
-      verificationBasis: "assessor_declaration",
-      recordedAt: input.confirmedAt,
     };
   }
 

@@ -2,6 +2,8 @@ import * as Crypto from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 
+import { rentalAssessorMetadataField } from '../../../src/lib/rental-assessor-workflow.mjs';
+
 import { ApiError, apiRequest } from '@/lib/api';
 import { firebaseAuth } from '@/lib/auth';
 import { assertLocalDataOwner, getLocalDataOwner, readRentalSetting, rentalQueueSettings,
@@ -193,11 +195,19 @@ export async function enqueueRentalSave(input: RentalSaveInput): Promise<RentalS
     throw new RentalSaveQueueError('This answer cannot be queued without its assessment identity.', 'RENTAL_SAVE_INVALID');
   }
   if (snapshot.body.action === 'save_module_answers') {
-    const fields = Object.keys(object(snapshot.body.answers));
-    if (!fields.length || fields.some((key) => !(key === 'roomRoster' && snapshot.module.key === 'minimum_standards') && !snapshot.module.template.metadataFields.some((field) => field.key === key && field.phase !== 'final' && field.source !== 'team_profile'))) {
+    const patch = object(snapshot.body.answers);
+    const fields = Object.keys(patch);
+    if (!fields.length || fields.some((key) => {
+      if (key === 'roomRoster' && snapshot.module.key === 'minimum_standards') return false;
+      const original = snapshot.module.template.metadataFields.find((field) => field.key === key);
+      const field = original && rentalAssessorMetadataField(original);
+      return !field || field.source === 'team_profile' || field.source === 'automatic'
+        || (field.phase === 'final' && patch[key] !== false);
+    })) {
       throw new RentalSaveQueueError('Final declarations must be saved after the assessment has synced.', 'RENTAL_FINAL_ANSWERS_REQUIRE_SYNC');
     }
   }
+
   const owner = await ownerNow();
   const record = await serial(localGates, jobKey(owner, snapshot.workOrderId), async () => {
     await checkOwner(owner);
@@ -273,14 +283,33 @@ function answerMatches(record: RentalSaveRecord, item: RentalAssessmentItem | un
   return Object.keys(details).every((key) => equal(finding.details[key], details[key]));
 }
 
+function metadataReplayRule(assessmentModule: RentalAssessmentModule, key: string, value: unknown) {
+  const original = assessmentModule.template.metadataFields.find((field) => field.key === key);
+  const field = original && rentalAssessorMetadataField(original);
+  if (field?.source === 'team_profile' || field?.source === 'automatic'
+    || (assessmentModule.key === 'minimum_standards' && key === 'credentialConfirmed')) return 'derived';
+  return field?.phase === 'final' && value === true ? 'invalidate' : null;
+}
+
 async function saveAnswer(owner: LocalDataOwner, record: RentalSaveRecord, result: RentalAssessmentResult) {
   const assessmentModule = currentModule(record, result);
   if (record.body.action === 'save_module_answers') {
-    const patch = object(record.body.answers);
+    const patch = { ...object(record.body.answers) };
+    const invalidated = new Set<string>();
+    for (const key of Object.keys(patch)) {
+      const rule = metadataReplayRule(assessmentModule, key, patch[key]);
+      if (rule === 'derived') {
+        delete patch[key];
+      } else if (rule === 'invalidate') {
+        // Older frozen forms allowed these into the background queue. Require a fresh declaration after delivery.
+        patch[key] = false;
+        invalidated.add(key);
+      }
+    }
     const keys = Object.keys(patch);
     if (!keys.every((key) => equal(assessmentModule.answers[key], patch[key]))) {
-      if (keys.some((key) => !equal(assessmentModule.answers[key], record.module.answers[key]) && !equal(assessmentModule.answers[key], patch[key]))) throw conflict('An assessment detail changed elsewhere. Review it before saving.');
-      result = await request(owner, record.workOrderId, { ...record.body, answers: { ...assessmentModule.answers, ...patch }, expectedRevision: assessmentModule.revision });
+      if (keys.some((key) => !invalidated.has(key) && !equal(assessmentModule.answers[key], record.module.answers[key]) && !equal(assessmentModule.answers[key], patch[key]))) throw conflict('An assessment detail changed elsewhere. Review it before saving.');
+      result = await request(owner, record.workOrderId, { ...record.body, answers: patch, expectedRevision: assessmentModule.revision });
     }
     record.answerSaved = true;
     await persist(owner, record);
@@ -426,7 +455,10 @@ async function processJob(owner: LocalDataOwner, workOrderId: string) {
   while (true) {
     await checkOwner(owner);
     const record = (await recordsFor(owner, workOrderId)).find((entry) => !attempted.has(entry.id)
-      && ['queued', 'syncing', 'retry'].includes(entry.status));
+      && (['queued', 'syncing', 'retry'].includes(entry.status)
+        || (entry.status === 'conflict' && entry.body.action === 'save_module_answers' && !entry.photos.length
+          && Object.keys(object(entry.body.answers)).length > 0
+          && Object.entries(object(entry.body.answers)).every(([key, value]) => metadataReplayRule(entry.module, key, value)))));
     if (!record) return;
     attempted.add(record.id);
     try { await processRecord(owner, record); }
@@ -502,9 +534,7 @@ export async function requestWhenRentalSynced(workOrderId: string, body: Record<
         expectedModuleRevision: assessmentModule?.revision, expectedRevision: assessmentModule?.revision ?? current.inspection?.revision })) {
         if (snapshot[field] !== undefined && snapshot[field] !== revision) throw conflict('This assessment changed while saving. Review the latest details and try again.');
       }
-      const mutation = { ...snapshot };
-      if (snapshot.action === 'save_module_answers') mutation.answers = { ...assessmentModule?.answers, ...object(snapshot.answers) };
-      return await request(owner, workOrderId, mutation);
+      return await request(owner, workOrderId, snapshot);
     } finally { finalizing.delete(key); }
   });
 }

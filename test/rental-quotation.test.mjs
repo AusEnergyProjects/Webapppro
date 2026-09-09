@@ -14,15 +14,28 @@ import { rentalAssessmentTemplateSnapshot, rentalAssessmentCompletion, rentalChe
 const quotation = { status: "ready", measurements: "6 x 4 m = 24 m2, tape measured", specification: "R5 to bare area", access: "Hallway hatch; electrical clearance before work", exclusions: "Electrical rectification separately quoted" };
 const finding = () => ({ title: "Insulate bare ceiling area", description: "Bare area above rear bedroom", tradeCategory: "Insulation installer", scopeSummary: "Install suitable R5 insulation to the measured area after clearance", quantityMilli: 24000, unitLabel: "m2", details: { quotation: { ...quotation } } });
 
+test("older shower answers cannot hide uncaptured WELS and flow fields", () => {
+  const target = { moduleId: "one", checkKey: "shower_2027_readiness", instanceKey: "property", locationLabel: "Property" };
+  const candidate = { ...target, checkKey: "showerhead_rating", outcome: "meets", response: { model: "Recorded model" } };
+  const old = rentalSharedObservationResponse({ target, candidates: [candidate] });
+  assert.ok(!old.recordedKeys.includes("welsRating"));
+  assert.ok(!old.recordedKeys.includes("flowLitresPerMinute"));
+  candidate.response = { model: "Recorded model", welsRating: "3 stars", flowLitresPerMinute: 0 };
+  const recorded = rentalSharedObservationResponse({ target, candidates: [candidate] });
+  assert.equal(recorded.response.welsRating, "3 stars");
+  assert.equal(recorded.response.flowLitresPerMinute, 0);
+});
+
 test("covering and window-seal measurements are only prompted when work is needed", () => {
   for (const key of ["window_covering", "windows_2027_readiness"]) {
     const fields = rentalAssessorFields({ key });
     const measurements = fields.filter((field) => field.input === "number");
-    assert.ok(measurements.length >= 2);
+    assert.equal(measurements.length, 1, "Only the dwelling total is needed");
+    assert.ok(!fields.some(field => ['widthMm', 'heightMm'].includes(field.key)));
     assert.ok(measurements.every((field) => field.showForOutcomes?.join() === "does_not_meet"));
     assert.deepEqual(rentalObservationBlockers({ checkKey: key, outcome: "meets", response: {}, finding: {} }), []);
     assert.ok(rentalObservationBlockers({ checkKey: key, outcome: "does_not_meet", response: {}, finding: {} }).length);
-    assert.deepEqual(rentalObservationBlockers({ checkKey: key, outcome: "does_not_meet", response: { widthMm: "2400", heightMm: "1800" }, finding: {} }), []);
+    assert.deepEqual(rentalObservationBlockers({ checkKey: key, outcome: "does_not_meet", response: { [measurements[0].key]: "12" }, finding: {} }), []);
   }
 });
 
@@ -49,7 +62,7 @@ test("historical quotation details and limitations remain readable without becom
 
 test("server completion accepts evidence-only findings and retains photo and observation requirements", () => {
   const moduleTemplate = { key: "minimum_standards", sections: [{ key: "windows", title: "Window sealing", checks: [{ key: "seals", required: true, requiredEvidenceCount: 1, repeatBy: "property" }] }] };
-  const item = { id: "seals", itemKey: "seals", sectionKey: "windows", checkKey: "seals", outcome: "does_not_meet" };
+  const item = { id: "seals", itemKey: "seals", sectionKey: "windows", checkKey: "seals", instanceKey: "property", outcome: "does_not_meet" };
   const input = { moduleTemplate, items: [item], findings: [{ itemId: "seals", title: "Window observation", description: "Visible gap at bedroom window", quantityMilli: 0, unitLabel: "", scopeSummary: "", details: {} }], evidenceCounts: { seals: 2 }, photoCounts: { seals: 2 } };
   for (const templateVersion of [1, 2, 3]) {
     input.moduleTemplate.templateVersion = templateVersion;
@@ -76,7 +89,7 @@ test("measurable upgrade observations need basic measurements or an honest acces
     assert.deepEqual(rentalObservationBlockers({ ...input, response: { measurement: "Bedroom 4 x 3 m" }, photoCount: 0 }), [], "Shared assessment completion enforces the outcome-specific photo policy");
   }
   const moduleTemplate = { key: "minimum_standards", sections: [{ key: "insulation", title: "Insulation", checks: [{ key: "ceiling_2027_readiness", required: true, repeatBy: "property", requiredEvidenceCount: 1 }] }] };
-  const input = { moduleTemplate, items: [{ id: "ceiling", itemKey: "ceiling", sectionKey: "insulation", checkKey: "ceiling_2027_readiness", outcome: "does_not_meet", responseJson: {} }], findings: [{ itemId: "ceiling", title: "Bare ceiling", description: "No insulation above rear bedroom" }], evidenceCounts: { ceiling: 2 }, photoCounts: { ceiling: 2 } };
+  const input = { moduleTemplate, items: [{ id: "ceiling", itemKey: "ceiling", sectionKey: "insulation", checkKey: "ceiling_2027_readiness", instanceKey: "property", outcome: "does_not_meet", responseJson: {} }], findings: [{ itemId: "ceiling", title: "Bare ceiling", description: "No insulation above rear bedroom" }], evidenceCounts: { ceiling: 2 }, photoCounts: { ceiling: 2 } };
   assert.equal(rentalAssessmentCompletion(input).complete, false);
   input.items[0].responseJson.measurement = "Rear bedroom, 12 m2 bare area from 4 m x 3 m room dimensions";
   assert.equal(rentalAssessmentCompletion(input).complete, true);
@@ -85,7 +98,7 @@ test("measurable upgrade observations need basic measurements or an honest acces
 test("electrical referral has no trade-writing wall and cannot bypass licensed verification", () => {
   const source = rentalAssessmentTemplateSnapshot(["minimum_standards"]).modules.minimum_standards;
   const check = source.sections.find((section) => section.key === "electrical_safety").checks.find((entry) => entry.key === "outlet_lighting_protection");
-  const input = { moduleTemplate: { key: source.key, credentialGate: source.credentialGate, sections: [{ key: "electrical_safety", title: "Electrical safety", checks: [check] }] }, items: [{ id: "board", itemKey: "board", sectionKey: "electrical_safety", checkKey: check.key, outcome: "specialist_verification_required", responseJson: {} }], findings: [{ itemId: "board", title: "Electrical observation", description: "Hallway board photographed. Circuit protection needs an electrician to check.", quantityMilli: 0, details: {} }], evidenceCounts: { board: 2 }, photoCounts: { board: 2 } };
+  const input = { moduleTemplate: { key: source.key, credentialGate: source.credentialGate, sections: [{ key: "electrical_safety", title: "Electrical safety", checks: [check] }] }, items: [{ id: "board", itemKey: "board", sectionKey: "electrical_safety", checkKey: check.key, instanceKey: "property", outcome: "specialist_verification_required", responseJson: {} }], findings: [{ itemId: "board", title: "Electrical observation", description: "Hallway board photographed. Circuit protection needs an electrician to check.", quantityMilli: 0, details: {} }], evidenceCounts: { board: 2 }, photoCounts: { board: 2 } };
   assert.deepEqual(rentalAssessorFields(check), []);
   assert.equal(rentalAssessmentCompletion(input).complete, true);
   input.items[0].outcome = "meets";
@@ -116,8 +129,8 @@ test("practical observation prompts cover safe assessor measurements without inv
     assert.equal(new Set(fields.map((field) => field.key)).size, fields.length);
   }
   const showerFields = rentalObservationFields("shower_2027_readiness");
-  assert.deepEqual(showerFields.filter((field) => field.input === "number").map((field) => [field.key, field.unit]), [["flowLitresPerMinute", "L/min"], ["collectedLitres", "L"], ["flowSeconds", "seconds"]]);
-  assert.equal(rentalObservationFields("ceiling_2027_readiness").find((field) => field.key === "insulationType").input, "select");
+  assert.deepEqual(showerFields.filter((field) => field.input === "number").map((field) => [field.key, field.unit]), [["flowLitresPerMinute", "L/min"]]);
+  assert.equal(rentalObservationFields("ceiling_2027_readiness").find((field) => field.key === "insulationRating").input, "select");
   assert.equal(rentalObservationFields("switchboard_observation").some((field) => field.key === "measurement"), false);
   assert.match(rentalFindingDescriptionLabel("not_accessible"), /could not be checked/);
   assert.match(rentalFindingDescriptionLabel("specialist_verification_required"), /could you see/);
@@ -181,7 +194,7 @@ test("latest queued or local shared capture supersedes older saved values withou
   assert.deepEqual(rentalSharedObservationResponse({ target, candidates: [source, { ...newer, locationLabel: "Other room" }] }).response, {}, "A moved latest record must not expose an obsolete location snapshot");
   const template = rentalAssessmentTemplateSnapshot(["minimum_standards"]).modules.minimum_standards;
   const showerChecks = template.sections.flatMap((section) => section.checks).filter((check) => ["showerhead_rating", "shower_2027_readiness"].includes(check.key));
-  assert.ok(showerChecks.every((check) => check.repeatBy === "shower"));
+  assert.ok(showerChecks.every((check) => check.repeatBy === "property"));
   assert.equal(showerChecks.length, 2);
 });
 

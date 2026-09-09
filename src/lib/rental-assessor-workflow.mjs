@@ -1,67 +1,23 @@
 /** Presentation and evidence policy for the assessor workflow, not a legal certification rule. */
 export const RENTAL_ASSESSOR_TITLE = "Rental assessment + 2027";
 
-/** @typedef {{id: string, label: string, type: string}} RentalRoom */
-/** @typedef {{sectionKey: string, checkKey: string}} RentalRoomCheck */
-
-export const RENTAL_ROOM_TYPES = Object.freeze([
-  { value: "bedroom", label: "Bedroom" },
-  { value: "living_room", label: "Living room" },
-  { value: "dining_room", label: "Dining room" },
-  { value: "kitchen", label: "Kitchen" },
-  { value: "bathroom", label: "Bathroom" },
-  { value: "toilet", label: "Toilet" },
-  { value: "laundry", label: "Laundry" },
-  { value: "hallway", label: "Hallway or passage" },
-  { value: "study", label: "Study" },
-  { value: "other", label: "Other room" },
-  { value: "exterior", label: "Outside area" },
-].map((type) => Object.freeze(type)));
-
-/** @type {ReadonlyArray<Readonly<RentalRoomCheck>>} */
-export const RENTAL_ROOM_CHECKS = Object.freeze([
-  Object.freeze({ sectionKey: "lighting", checkKey: "artificial_lighting" }),
-  Object.freeze({ sectionKey: "lighting", checkKey: "habitable_daylight" }),
-  Object.freeze({ sectionKey: "mould_damp", checkKey: "mould_damp_observation" }),
-  Object.freeze({ sectionKey: "structural_soundness", checkKey: "structure_weatherproofing" }),
-  Object.freeze({ sectionKey: "ventilation", checkKey: "room_ventilation" }),
-]);
-
-export const RENTAL_WINDOW_CHECKS = Object.freeze([
-  { sectionKey: "windows", checkKey: "window_operation_security" },
-  { sectionKey: "window_coverings", checkKey: "window_covering" },
-  { sectionKey: "window_covering_cords", checkKey: "cord_anchor" },
-  { sectionKey: "draughtproofing", checkKey: "windows_2027_readiness" },
-].map((check) => Object.freeze(check)));
-
-/** Prefer the operation record, retaining a window even when another check was saved first.
- * @template {{checkKey?:string,instanceKey?:string,locationLabel?:string,response?:Record<string,unknown>}} T
- * @param {RentalRoom} room @param {readonly T[]} items
- * @returns {T[]}
+/** Normalize older frozen forms without asking the assessor to re-enter identity or today's date.
+ * @template {{key:string,type?:string,phase?:string,source?:string}} T
+ * @param {T} field
+ * @returns {T & {phase:string,source:string}}
  */
-export function rentalRoomWindowItems(room, items) {
-  const candidates = items.filter((item) => RENTAL_WINDOW_CHECKS.some((check) => check.checkKey === checkKey(item))
-    && (record(item.response).roomId === room.id || (checkKey(item) === "window_operation_security" && !record(item.response).roomId && normalizedLabel(item.locationLabel) === normalizedLabel(room.label))));
-  const primary = candidates.filter((item) => checkKey(item) === "window_operation_security");
-  const windows = [...primary];
-  for (const item of candidates) {
-    if (!windows.some((window) => rentalRoomItemInstance({ id: window.instanceKey || "", label: window.locationLabel || "", type: "other" }, checkKey(item), items) === item.instanceKey)) windows.push(item);
+export function rentalAssessorMetadataField(field) {
+  if (field.key === "inspectionDate") return { ...field, phase: "setup", source: "automatic" };
+  if (["assessorName", "electricianName", "gasfitterName", "workerName", "licenceNumber", "qualificationType", "qualificationNumber"].includes(field.key)) {
+    return { ...field, phase: "profile", source: "team_profile" };
   }
-  return windows;
+  return { ...field, phase: field.phase || (field.type === "checkbox" ? "final" : "setup"), source: field.source || "assessment" };
 }
 
-/** @param {RentalRoom} room @param {unknown} items */
-export function rentalNextRoomWindowLabel(room, items) {
-  const labels = new Set((Array.isArray(items) ? items : []).map((item) => normalizedLabel(record(item).locationLabel)));
-  let number = 1;
-  while (labels.has(normalizedLabel(`${room.label} - Window ${number}`))) number++;
-  return `${room.label} - Window ${number}`;
-}
-
-const fixedWindowNote = "Fixed glazing; this window is not designed to open.";
+const fixedWindowNote = "No openable windows at the property; fixed glazing only.";
 /** @param {unknown} outcome @param {unknown} publicNotes */
 export function rentalWindowIsFixed(outcome, publicNotes) {
-  return outcome === "not_applicable" && String(publicNotes || "").includes(fixedWindowNote);
+  return outcome === "not_applicable" && (String(publicNotes || "").includes(fixedWindowNote) || String(publicNotes || "").includes("Fixed glazing; this window is not designed to open."));
 }
 /** Keep the existing outcome contract and an honest public reason, without asking the assessor to type it.
  * @param {unknown} check @param {string} outcome @param {string} [currentPublicNotes]
@@ -78,144 +34,20 @@ export function rentalAssessorOutcomePatch(check, outcome, currentPublicNotes = 
   return { outcome, publicNotes: currentPublicNotes === fixedWindowNote ? "" : currentPublicNotes };
 }
 
-const roomTypeKeys = new Set(RENTAL_ROOM_TYPES.map((type) => type.value));
-const roomCheckKeys = new Set(RENTAL_ROOM_CHECKS.map((check) => check.checkKey));
-const daylightRoomTypes = new Set(["bedroom", "living_room", "dining_room", "kitchen", "study", "other"]);
-const identityPattern = /^[A-Za-z0-9_-]{1,120}$/;
-
 /** @param {unknown} value @returns {Record<string, unknown>} */
 function record(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
-/** @param {unknown} value */
-function normalizedLabel(value) {
-  return typeof value === "string" ? value.trim().replace(/\s+/g, " ").toLowerCase() : "";
-}
 /** @param {unknown} check */
 function checkKey(check) {
   return typeof check === "string" ? check : String(record(check).key || record(check).checkKey || "");
-}
-/** @param {string} label */
-function legacyRoomId(label) {
-  let hash = 2166136261;
-  for (const character of normalizedLabel(label)) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619) >>> 0;
-  return `legacy_room_${hash.toString(36)}`;
-}
-function invalidRoster() {
-  return Object.assign(new Error("RENTAL_ROOM_ROSTER_INVALID"), { code: "RENTAL_ROOM_ROSTER_INVALID" });
-}
-
-/** Validate the persisted roster. Omission handling belongs to the save boundary.
- * @param {unknown} value
- * @returns {RentalRoom[]}
- */
-export function normalizeRentalRoomRoster(value) {
-  if (!Array.isArray(value) || value.length > 80) throw invalidRoster();
-  const ids = new Set();
-  const labels = new Set();
-  return value.map((entry) => {
-    const room = record(entry);
-    const id = typeof room.id === "string" ? room.id.trim() : "";
-    const label = typeof room.label === "string" ? room.label.trim().replace(/\s+/g, " ") : "";
-    const type = typeof room.type === "string" ? room.type : "";
-    const labelKey = normalizedLabel(label);
-    if (!identityPattern.test(id) || !label || label.length > 120 || !roomTypeKeys.has(type)
-      || ids.has(id) || labels.has(labelKey)) throw invalidRoster();
-    ids.add(id);
-    labels.add(labelKey);
-    return { id, label, type };
-  });
-}
-
-/** Unknown room types do not silently create or exempt any checks.
- * Other room is deliberately inclusive until its use is confirmed by the assessor.
- * @param {unknown} type
- * @returns {RentalRoomCheck[]}
- */
-export function rentalRoomChecks(type) {
-  if (typeof type !== "string" || !roomTypeKeys.has(type)) return [];
-  return RENTAL_ROOM_CHECKS.filter((check) => {
-    if (type === "exterior") return check.checkKey === "structure_weatherproofing";
-    if (check.checkKey === "habitable_daylight") return daylightRoomTypes.has(type);
-    if (check.checkKey === "room_ventilation") return type !== "hallway";
-    return true;
-  }).map((check) => ({ ...check }));
-}
-
-/** @param {unknown} check @param {unknown} roster @returns {RentalRoom[]} */
-export function rentalRoomsForCheck(check, roster) {
-  if (!Array.isArray(roster)) return [];
-  const key = checkKey(check);
-  return roster.filter((room) => rentalRoomChecks(record(room).type).some((entry) => entry.checkKey === key));
-}
-
-/** Reuse the actual existing check identity, never another check's saved result.
- * Callers must pass items from the target module only.
- * @param {RentalRoom} room @param {string} key @param {unknown} items
- * @returns {string}
- */
-export function rentalRoomItemInstance(room, key, items) {
-  const candidates = (Array.isArray(items) ? items : []).map(record).filter((item) => checkKey(item) === key);
-  const location = normalizedLabel(room.label);
-  const exact = candidates.find((item) => item.instanceKey === room.id && normalizedLabel(item.locationLabel) === location);
-  if (exact) return room.id;
-  const sameLocation = candidates.filter((item) => normalizedLabel(item.locationLabel) === location
-    && identityPattern.test(String(item.instanceKey || "")));
-  // Ambiguous duplicate legacy locations must not silently select one assessment.
-  if (sameLocation.length === 1) return String(sameLocation[0].instanceKey);
-  if (!candidates.some((item) => item.instanceKey === room.id)) return room.id;
-  const usedIds = new Set((Array.isArray(items) ? items : []).map((item) => String(record(item).instanceKey || "")));
-  const base = `room_${room.id.slice(0, 100)}`;
-  let suffix = 1;
-  let fresh = `${base}_${suffix}`;
-  while (usedIds.has(fresh)) fresh = `${base}_${++suffix}`;
-  return fresh;
-}
-
-/** Build a display roster without rewriting historical item identities or outcomes.
- * Legacy room types remain Other until the assessor records their actual use.
- * Callers must pass items from the target module only.
- * @param {unknown} roster @param {unknown} items @returns {RentalRoom[]}
- */
-export function rentalRoomsFromItems(roster, items) {
-  /** @type {RentalRoom[]} */
-  const rooms = [];
-  const labels = new Set();
-  const ids = new Set();
-  for (const value of Array.isArray(roster) ? roster : []) {
-    try {
-      const [room] = normalizeRentalRoomRoster([value]);
-      if (ids.has(room.id) || labels.has(normalizedLabel(room.label))) continue;
-      rooms.push(room);
-      ids.add(room.id);
-      labels.add(normalizedLabel(room.label));
-    } catch { /* Malformed saved display data is not a new authorised room. */ }
-  }
-  const candidates = (Array.isArray(items) ? items : []).map(record);
-  for (const item of candidates) {
-    if (!roomCheckKeys.has(checkKey(item))) continue;
-    const label = typeof item.locationLabel === "string" ? item.locationLabel.trim().replace(/\s+/g, " ") : "";
-    if (!label || label.length > 120 || labels.has(normalizedLabel(label))) continue;
-    // A historical instance ID belongs to one check, not to a room. Give the
-    // room its own stable identity and continue resolving old checks by location.
-    const base = legacyRoomId(label);
-    let id = base;
-    let suffix = 1;
-    const occupied = (candidate) => ids.has(candidate) || candidates.some((entry) => entry.instanceKey === candidate
-      && normalizedLabel(entry.locationLabel) !== normalizedLabel(label));
-    while (occupied(id)) id = `${base}_${suffix++}`;
-    rooms.push({ id, label, type: "other" });
-    ids.add(id);
-    labels.add(normalizedLabel(label));
-  }
-  return rooms;
 }
 
 const ordinaryClearChecks = new Set([
   "bathroom_facilities", "bathroom_water", "kitchen_preparation", "kitchen_sink_water",
   "cooktop_function", "oven_function", "laundry_connections", "artificial_lighting",
   "habitable_daylight", "external_door_lock", "mould_damp_observation", "structure_weatherproofing",
-  "bins", "window_operation_security", "window_covering",
+  "bins", "window_operation_security", "window_covering", "toilet_function",
 ]);
 const equipmentChecks = new Set([
   "showerhead_rating", "switchboard_observation", "main_living_heater", "heater_operation", "heater_efficiency",
@@ -233,7 +65,16 @@ export function rentalAssessorEvidenceRequirement(check, outcome) {
   const requested = Number(definition.requiredEvidenceCount);
   const requiredFiles = Number.isInteger(requested) && requested >= 0 ? requested : 1;
   const credential = String(definition.credentialGate || "assigned_assessor");
-  const specialist = credential !== "assigned_assessor" || ["test_result", "action_record"].includes(String(definition.responseType));
+  const specialist = !["assigned_assessor", "qualified_assessor"].includes(credential) || ["test_result", "action_record"].includes(String(definition.responseType));
+  const sealOrVent = ["doors_2027_readiness", "windows_2027_readiness", "vents_2027_readiness"].includes(key);
+  if (sealOrVent && ["meets", "does_not_meet", "specialist_verification_required"].includes(String(outcome))) {
+    const vent = key === "vents_2027_readiness";
+    return { minimumFiles: outcome === "does_not_meet" ? Math.max(2, requiredFiles) : Math.max(1, requiredFiles),
+      minimumPhotos: outcome === "does_not_meet" ? 2 : 1,
+      reason: vent
+        ? "Photograph each wall vent type, including the grille or air brick and any existing cover or seal. Add an overview and close photo where work is needed."
+        : "Photograph the existing door or window weather seals close up and show their condition. Include missing or damaged sections where work is needed." };
+  }
   if (outcome === "does_not_meet") return { minimumFiles: Math.max(2, requiredFiles), minimumPhotos: 2, reason: "Add an overview and a close photo of the issue, where safe. If it cannot be inspected safely, record that it could not be checked." };
   if (outcome === "not_accessible") return { minimumFiles: 0, minimumPhotos: 0, reason: "Describe what could not be reached and why. Add any safe supporting evidence available." };
   if (outcome === "specialist_verification_required" || outcome === "exemption_evidence_pending") return { minimumFiles: 0, minimumPhotos: 0, reason: "Record what is known and what needs verification. Attach any available photo or document; do not invent missing evidence." };
@@ -249,7 +90,7 @@ export function rentalAssessorEvidenceRequirement(check, outcome) {
 const presentation = {
   bathroom_facilities: { prompt: "Is there a basin and a shower or bath?", meets: "Yes, both are present", adverse: "A required fixture is missing" },
   bathroom_water: { prompt: "Do the bathroom fixtures have hot and cold water?", meets: "Yes, water works", adverse: "Water supply problem" },
-  showerhead_rating: { prompt: "Is this showerhead's water rating confirmed?", meets: "Required rating or permitted alternative verified", adverse: "Does not meet the required rating" },
+  showerhead_rating: { prompt: "Does the main shower have a WELS water-efficiency rating?", meets: "3 stars or higher confirmed", adverse: "Below 3 stars", specialist: "Rating not confirmed", help: "Read the WELS label or confirmed model rating. Record the main shower's flow in litres per minute. Flow alone does not prove its WELS rating. Note any other shower that needs attention." },
   switchboard_observation: { prompt: "Can you record the switchboard and its labels?", meets: "Board and labels recorded", adverse: "A visible issue needs attention" },
   outlet_lighting_protection: { prompt: "Has an electrician verified the required circuit protection?", meets: "Required protection verified", adverse: "Protection does not meet requirements" },
   main_living_heater: { prompt: "Is the required fixed heater in the main living room?", meets: "Qualifying heater is present", adverse: "Required heater missing or unsuitable" },
@@ -260,25 +101,25 @@ const presentation = {
   cooktop_function: { prompt: "Do at least two cooktop burners work?", meets: "At least two burners work", adverse: "Fewer than two work" },
   oven_function: { prompt: "If there is an oven, does it work?", meets: "Oven works", adverse: "Oven does not work" },
   laundry_connections: { prompt: "If there is a laundry, are hot and cold water connections available?", meets: "Required connections are available", adverse: "A required connection is missing" },
-  artificial_lighting: { prompt: "Do the lights work in this space?", meets: "Lights work", adverse: "A light is missing or not working", help: "Check the lights safely. No photo is needed when they work; photograph any issue." },
-  habitable_daylight: { prompt: "Does this room get natural daylight?", meets: "Daylight reaches the room", adverse: "No natural daylight", help: "Daylight can come through a window or from an adjoining room. Record if you could not check in daylight." },
-  mould_damp_observation: { prompt: "Can you see mould or damp in this space?", meets: "No mould or damp seen", adverse: "Mould or damp seen", help: "Look at accessible walls, ceilings and other surfaces. Photograph any affected area. You do not need to diagnose its cause." },
-  structure_weatherproofing: { prompt: "Can you see damage, leaks or another building issue here?", meets: "No visible issue seen", adverse: "Visible issue needs attention", help: "Look for visible damage, cracks, water entry or deterioration. Record what you can see; a specialist determines the cause where needed." },
-  external_door_lock: { prompt: "Does this entry door have the required working lock?", meets: "Required lock works", adverse: "Lock is missing or not working" },
-  toilet_function: { prompt: "Does this toilet work and have the required enclosure and waste connection?", meets: "Operation, enclosure and waste connection confirmed", adverse: "A required part needs attention" },
-  room_ventilation: { prompt: "What can you confirm about ventilation in this room?", meets: "Ventilation requirement verified with evidence", adverse: "A ventilation problem is confirmed", specialist: "Needs ventilation verification", help: "Record the window, vent or fan you can see. A working fan or opening window does not by itself prove the room meets the requirement. Use Needs ventilation verification if you do not have a supporting assessment." },
+  artificial_lighting: { prompt: "Do the lights work throughout the property?", meets: "Lights work", adverse: "A light is missing or not working", help: "Check the lights in the rooms, corridors and hallways. Photograph problems only." },
+  habitable_daylight: { prompt: "Do the living spaces and bedrooms receive natural daylight?", meets: "Daylight reaches the living spaces", adverse: "A living space has no natural daylight", help: "Check the property once. Daylight can come through a window or from an adjoining room. Choose Could not check if daylight was unavailable." },
+  mould_damp_observation: { prompt: "Is mould or damp present in the property?", meets: "No mould or damp seen", adverse: "Mould or damp seen", help: "Look at accessible walls, ceilings and other surfaces. Photograph affected areas only. You do not need to diagnose the cause." },
+  structure_weatherproofing: { prompt: "Are there visible leaks, damage or building problems?", meets: "No visible issue seen", adverse: "Visible issue needs attention", help: "Look for water entry, cracks or visible deterioration. Photograph problems and briefly describe what you see." },
+  external_door_lock: { prompt: "Do the outside entry doors have working locks?", meets: "Required locks work", adverse: "A lock is missing or not working", help: "Check the entry doors once. Confirm the deadlock or permitted locking device works. Photograph any problem." },
+  toilet_function: { prompt: "Does the property have a working toilet?", meets: "Yes, a working toilet is provided", adverse: "No working toilet", help: "Flush the toilet and check for an obvious problem. It must be in an enclosed space and connected to wastewater. Record only what you can see; no plumbing test is required here." },
+  room_ventilation: { prompt: "Is the property adequately ventilated?", meets: "Ventilation requirement verified with evidence", adverse: "A ventilation problem is confirmed", specialist: "Needs ventilation verification", help: "Look at opening windows, vents and exhaust fans across the property. A working fan or opening window does not by itself prove compliance. Record visible issues, or use Needs ventilation verification when the required assessment is unavailable." },
   bins: { prompt: "Are suitable rubbish and recycling bins provided with lids that keep vermin out?", meets: "Both suitable bins are provided", adverse: "A bin is missing or unsuitable" },
-  window_operation_security: { prompt: "Does this window open and close properly?", meets: "Works properly", adverse: "Something is wrong", help: "Open and close it. Check it stays open safely and the latch or lock works. Choose Fixed window if it is not designed to open." },
-  window_covering: { prompt: "Do the curtains or blinds close properly?", meets: "Yes, privacy and light blocking are adequate", adverse: "Missing, broken or inadequate", help: "In bedrooms and living areas, close the curtains or blinds and check they provide privacy and block light. Measure only when a replacement is needed." },
-  cord_anchor: { prompt: "Are this covering's cord and safety fittings confirmed safe?", meets: "Cord and fitting requirements verified", adverse: "Cord or fitting does not meet requirements" },
+  window_operation_security: { prompt: "Do the openable windows work and latch securely?", meets: "All openable windows work and latch", adverse: "A window or latch needs attention", help: "Check all openable windows once. They must open, close, stay in place and latch or lock securely. Fixed glass does not need an opening check." },
+  window_covering: { prompt: "Do bedroom and living-area windows have suitable curtains or blinds?", meets: "Yes, privacy and light blocking are adequate", adverse: "Missing, broken or inadequate", help: "Close the coverings and check privacy and light blocking. Photograph any that need attention. No separate window entries or dimensions are needed." },
+  cord_anchor: { prompt: "Are blind cords secured with the required safety fittings?", meets: "Cord and fitting requirements verified", adverse: "A cord or fitting needs attention", help: "Check accessible cords and anchors across the property. Choose Does not apply if there are no corded blinds. Keep measurements or fitting evidence where required to confirm safety." },
   heating_2027_readiness: { prompt: "Is the main living room heater ready for the 2027 requirement?" },
   cooling_2027_readiness: { prompt: "Is the main living room cooling ready for the 2027 requirement?" },
   hot_water_2027_readiness: { prompt: "Is the hot water system ready for its 2027 replacement requirement?" },
-  shower_2027_readiness: { prompt: "Is this showerhead ready for the 2027 water rating requirement?" },
-  ceiling_2027_readiness: { prompt: "Is insulation present throughout this accessible ceiling area?", meets: "Insulation covers the accessible area", adverse: "An area has no insulation" },
+  shower_2027_readiness: { prompt: "Do the showers meet the 2027 WELS requirement?", meets: "4 stars or higher confirmed", adverse: "A showerhead needs replacement", specialist: "Rating not confirmed", help: "Use the recorded WELS rating and label photos. From 1 March 2027, the new-agreement or periodic-conversion requirement is 4 stars. Include any other shower needing replacement in the report." },
+  ceiling_2027_readiness: { prompt: "Is roof insulation present?", meets: "Present throughout the accessible ceiling", adverse: "None, or some bare areas", help: "Choose the existing R-value if known and record the total area needing insulation. Existing insulation need not be upgraded solely because it is below R5. Bare ceiling areas require R5 insulation when the new rule applies. Only inspect from a safe access point." },
   doors_2027_readiness: { prompt: "Are the outside doors sealed around every edge?", meets: "Yes, all edges are sealed", adverse: "Seals are missing or damaged", specialist: "Not sure", help: "Close each outside door. Look along the top, sides and bottom for gaps or damaged seals. If work is needed, record the doors, total seal length and photos. Doors must still open and close normally." },
-  windows_2027_readiness: { prompt: "Is this window sealed around every edge?", meets: "Yes, all edges are sealed", adverse: "Seals are missing or damaged", specialist: "Not sure", help: "Close the window and check around its edges. If a seal is missing or damaged, measure the length needing a seal and photograph it. The window must still work normally." },
-  vents_2027_readiness: { prompt: "Are there any unsealed wall vents?", meets: "The wall vents are already sealed", adverse: "Unsealed wall vents seen", specialist: "Not sure what the vent is for", help: "Look for open wall grilles or air bricks. Record their locations, count and sizes, with photos. Choose No wall vents if none are present. Do not block vents during the assessment; the installer must check gas and ventilation requirements first." },
+  windows_2027_readiness: { prompt: "Are the outside windows sealed around every edge?", meets: "Yes, all edges are sealed", adverse: "Seals are missing or damaged", specialist: "Not sure", help: "Close the windows and check their edges. Photograph the existing seals. If work is needed, add the total length needing tape or caulking in metres. No window widths or heights are needed." },
+  vents_2027_readiness: { prompt: "Are there wall vents that need sealing?", meets: "Wall vents are already sealed", adverse: "Unsealed wall vents seen", specialist: "Not sure what the vent is for", help: "Count the unsealed wall vents and photograph each vent type. Choose No wall vents if none are present. Do not block them; the installer must check gas and ventilation requirements first." },
 };
 
 /** Plain labels preserve every stored outcome's direction and current/future distinction.
@@ -302,9 +143,7 @@ export function rentalAssessorCheckPresentation(check, options = {}) {
     { value: "exemption_evidence_pending", label: "Possible exception; evidence needed" },
   ];
   const simpleWindow = ["window_operation_security", "window_covering"].includes(checkKey(check));
-  if (checkKey(check) === "window_operation_security") outcomeOptions[4].label = options.outcome === "not_applicable" && !rentalWindowIsFixed(options.outcome, options.publicNotes)
-    ? "Does not apply (saved answer)" : "Fixed window (does not open)";
-  if (checkKey(check) === "window_covering") outcomeOptions[4].label = "Not required in this room";
+  if (checkKey(check) === "window_operation_security") outcomeOptions[4].label = "No openable windows";
   if (checkKey(check) === "vents_2027_readiness") outcomeOptions[4].label = "No wall vents";
   return {
     prompt: wording?.prompt || String(definition.prompt || "Record the assessment result"),
