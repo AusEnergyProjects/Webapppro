@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 3 September 2026
+Last reconciled: 9 September 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -16,6 +16,12 @@ The dated audit is the immutable evidence baseline. [Release truth](./docs/RELEA
 
 Sequence is dependency based, not a calendar promise. A source change is not a release. A roadmap item is complete only when its required tests, release identity and runtime evidence are recorded.
 
+## Current system-polish direction
+
+The [9 September system audit](./docs/audit/2026-09-09-system-polish.md) supersedes earlier customer-account plans. Household self-service accounts are retired; public enquiries, trade CRM customer/site records, secure quote acceptance and trade evidence remain. The implementation removes obsolete code and fixes lead body limits, electricity ranking, search, notification polling and field schedule visibility.
+
+Next product priority: complete one provider-approved activity from enquiry through field evidence, review and accepted submission. Use the existing activity governance projection to distinguish estimate, capture, export and submission readiness. A catalogue entry is not a completed certificate workflow. The audit contains the ordered work and acceptance gates; existing public measurement checks remain operational follow-up, not the product expansion strategy.
+
 ## Product decisions
 
 - TLink trade software costs A$0.
@@ -23,7 +29,7 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 - A trade applicant must supply a checksum-valid Australian Business Number.
 - A valid checksum is only an input check. An authorised reviewer must verify the business against an authoritative source before any trade workspace or trade API becomes available.
 - Installer and supplier access is governed by authoritative per-member permissions and own-work or team-work scopes. Saved presets copy defaults only and never authorize access. Licences, insurance, product evidence, privacy controls and jurisdiction rules remain separate approval gates where applicable.
-- Household accounts remain free and private.
+- Household planning and enquiries work without a customer account. Trade and staff accounts remain reviewed and permission scoped.
 - Household planning remains independent, brand-agnostic and advisory. It is not represented as a NatHERS assessment, certificate, quote or savings guarantee.
 - Household advice records owner or renter tenure separately from strata or common-property approval and supports several concurrent goals because authority, comfort, budget and upgrade sequencing can differ.
 - TLink remains the authoritative trade record until an approved migration changes that boundary.

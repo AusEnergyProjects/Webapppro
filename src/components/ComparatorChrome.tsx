@@ -33,11 +33,6 @@ export function SiteHeader({ active }: { active: SiteActive }) {
         <PublicSiteSearch />
         <SiteNav active={active} />
         <div className="site-header-actions">
-          {active === "account" ? (
-            <Link className="site-account-link active" href="/account" prefetch={false} aria-current="page">
-              <span aria-hidden="true">&#9679;</span> Account
-            </Link>
-          ) : null}
           <Link
             className="site-book-link"
             href="/book-an-assessment"

@@ -1,12 +1,11 @@
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { canAssignJob, requireInstallerTeamAccess } from "@/lib/trade-team-server";
-import { serviceFollowUpDueState, serviceFollowUpReadiness, serviceReminderDraft } from "@/lib/trade-service-follow-ups";
-import { sendServiceReminderProviderMessage, serviceReminderIdempotencyKey, serviceReminderProviderConfiguration, type ReminderChannel } from "@/lib/service-reminder-delivery";
+import { serviceFollowUpDueState } from "@/lib/trade-service-follow-ups";
 
 export const runtime = "edge";
 
-const ACTIONS = new Set(["save_preparation", "prepare_reminder", "suppress", "complete", "reopen", "send_reminder", "retry_delivery"]);
+const ACTIONS = new Set(["save_preparation", "suppress", "complete", "reopen"]);
 
 function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "";
@@ -15,21 +14,14 @@ function errorResponse(error: unknown) {
   if (code === "DISPATCH_REQUIRED") return adminJson({ ok: false, error: "Only the owner, manager or coordinator can prepare service follow-ups." }, 403);
   if (code === "FOLLOW_UP_NOT_FOUND") return adminJson({ ok: false, error: "Service follow-up not found." }, 404);
   if (code === "MEMBER_NOT_FOUND") return adminJson({ ok: false, error: "Choose an active team member." }, 404);
-  if (code === "CONSENT_REQUIRED") return adminJson({ ok: false, error: "The customer has not provided active lifecycle reminder consent for this asset." }, 409);
-  if (code === "REMINDER_TOO_EARLY") return adminJson({ ok: false, error: "This reminder is outside the customer's selected lead-time window." }, 409);
   if (code === "SUPPRESSION_REASON_REQUIRED") return adminJson({ ok: false, error: "Add a suppression reason before suppressing this follow-up." }, 400);
   if (code === "REVISION_CONFLICT") return adminJson({ ok: false, error: "This follow-up changed after you opened it. Refresh the queue before saving again." }, 409);
-  if (code === "CHANNEL_NOT_ALLOWED") return adminJson({ ok: false, error: "The customer has not enabled this reminder channel or has opted out." }, 409);
-  if (code === "CHANNEL_NOT_CONFIGURED") return adminJson({ ok: false, error: "This delivery channel is not active in operations settings." }, 503);
-  if (code === "FOLLOW_UP_NOT_READY") return adminJson({ ok: false, error: "Prepare and review the current reminder before sending it." }, 409);
-  if (code === "DAILY_LIMIT_REACHED") return adminJson({ ok: false, error: "The delivery channel has reached its daily safety limit." }, 429);
-  if (code === "DELIVERY_NOT_RETRYABLE") return adminJson({ ok: false, error: "This delivery cannot be retried." }, 409);
   return adminJson({ ok: false, error: "The service follow-up request could not be completed." }, 500);
 }
 
 async function followUpPayload(ownerUid: string) {
   const db = getD1();
-  const [rows, members, account, settingRows, deliveryRows] = await Promise.all([
+  const [rows, members, deliveryRows] = await Promise.all([
     db.prepare(`WITH lifecycle AS (
       SELECT p.id service_plan_id, p.service_type, p.cadence_months, p.next_due_at, p.work_order_id,
         a.id asset_id, a.asset_category, a.brand, a.model_number, a.crm_customer_id, a.service_site_id,
@@ -53,17 +45,7 @@ async function followUpPayload(ownerUid: string) {
       WHERE p.firebase_uid = ? AND p.status = 'active' AND a.record_status = 'active'
         AND a.review_status = 'confirmed' AND a.asset_status = 'active'
     )
-    SELECT lifecycle.*, preference.id preference_id, preference.reminders_enabled, preference.email_enabled, preference.sms_enabled,
-      preference.reminder_lead_days, customer.account_status customer_account_status,
-      CASE WHEN customer.email != '' THEN 1 ELSE 0 END has_email,
-      EXISTS (SELECT 1 FROM customer_service_reminder_contacts contact WHERE contact.customer_uid = lifecycle.customer_uid
-        AND contact.mobile_e164 != '' AND contact.mobile_verified_at != '') has_verified_mobile,
-      EXISTS (SELECT 1 FROM customer_service_reminder_opt_outs optout WHERE optout.customer_uid = lifecycle.customer_uid
-        AND optout.channel = 'email') email_opted_out,
-      EXISTS (SELECT 1 FROM customer_service_reminder_opt_outs optout WHERE optout.customer_uid = lifecycle.customer_uid
-        AND optout.channel = 'sms') sms_opted_out,
-      EXISTS (SELECT 1 FROM customer_consent_receipts receipt WHERE receipt.firebase_uid = lifecycle.customer_uid
-        AND receipt.purpose = 'customer_account' AND receipt.withdrawn_at = '') account_consent,
+    SELECT lifecycle.*,
       follow_up.id follow_up_id, follow_up.status stored_status, follow_up.assignee_member_id,
       follow_up.suppression_reason, follow_up.internal_notes, follow_up.reminder_subject, follow_up.reminder_body,
       follow_up.revision, follow_up.updated_at follow_up_updated_at, member.display_name assignee_label,
@@ -71,8 +53,6 @@ async function followUpPayload(ownerUid: string) {
         WHERE event.service_plan_id = lifecycle.service_plan_id AND event.event_type = 'service_completed'
         ORDER BY event.serviced_at DESC, event.created_at DESC LIMIT 1) last_serviced_at
     FROM lifecycle
-    LEFT JOIN customer_asset_lifecycle_preferences preference ON preference.customer_uid = lifecycle.customer_uid AND preference.asset_id = lifecycle.asset_id
-    LEFT JOIN customer_accounts customer ON customer.firebase_uid = lifecycle.customer_uid
     LEFT JOIN trade_service_follow_ups follow_up ON follow_up.firebase_uid = ? AND follow_up.service_plan_id = lifecycle.service_plan_id
       AND follow_up.due_at = lifecycle.next_due_at
     LEFT JOIN trade_team_members member ON member.id = follow_up.assignee_member_id AND member.owner_uid = follow_up.firebase_uid
@@ -80,9 +60,6 @@ async function followUpPayload(ownerUid: string) {
     ORDER BY lifecycle.next_due_at, customer_name, lifecycle.asset_id LIMIT 500`).bind(ownerUid, ownerUid).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, display_name, status FROM trade_team_members
       WHERE owner_uid = ? AND status = 'active' ORDER BY display_name, email`).bind(ownerUid).all<Record<string, unknown>>(),
-    db.prepare("SELECT business_name FROM trade_accounts WHERE firebase_uid = ?").bind(ownerUid).first<Record<string, unknown>>(),
-    db.prepare(`SELECT channel, provider, enabled, sender_label, daily_limit, revision, updated_at
-      FROM service_reminder_channel_settings ORDER BY channel`).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, follow_up_id, channel, provider, content_revision, status, attempts, provider_status,
       last_error, queued_at, sent_at, delivered_at, failed_at, created_at, updated_at
       FROM service_reminder_deliveries WHERE firebase_uid = ? ORDER BY created_at DESC LIMIT 1000`)
@@ -90,15 +67,9 @@ async function followUpPayload(ownerUid: string) {
   ]);
   const now = new Date();
   const followUps = rows.results.map((row) => {
-    const readiness = serviceFollowUpReadiness({
-      customerUid: String(row.customer_uid || ""), accountActive: row.customer_account_status === "active",
-      accountConsent: Boolean(row.account_consent), preferenceExists: Boolean(row.preference_id),
-      remindersEnabled: Boolean(row.reminders_enabled), reminderLeadDays: Number(row.reminder_lead_days || 30),
-      dueAt: String(row.next_due_at), now,
-    });
     const storedStatus = String(row.stored_status || "preparing");
     const status = storedStatus === "completed" || storedStatus === "suppressed" ? storedStatus
-      : storedStatus === "ready" && readiness !== "eligible" ? "blocked_consent" : storedStatus;
+      : "preparing";
     return {
       key: `${row.service_plan_id}:${row.next_due_at}`, id: String(row.follow_up_id || ""), servicePlanId: String(row.service_plan_id),
       assetId: String(row.asset_id), customerId: String(row.crm_customer_id), serviceSiteId: String(row.service_site_id),
@@ -106,17 +77,12 @@ async function followUpPayload(ownerUid: string) {
       customerName: String(row.customer_name || "Customer"), siteLabel: String(row.site_label || "Service site"),
       siteSummary: [row.suburb, row.address_state, row.postcode].filter(Boolean).join(" "), assetCategory: String(row.asset_category),
       brand: String(row.brand), modelNumber: String(row.model_number), serviceType: String(row.service_type), cadenceMonths: Number(row.cadence_months),
-      dueAt: String(row.next_due_at), dueState: serviceFollowUpDueState(String(row.next_due_at), now), readiness,
-      consentStatus: readiness === "missing_consent" ? "missing" : readiness === "withdrawn" ? "withdrawn" : "confirmed",
-      reminderLeadDays: Number(row.reminder_lead_days || 30), status, storedStatus, assigneeMemberId: String(row.assignee_member_id || ""),
+      dueAt: String(row.next_due_at), dueState: serviceFollowUpDueState(String(row.next_due_at), now),
+      status, storedStatus, assigneeMemberId: String(row.assignee_member_id || ""),
       assigneeLabel: String(row.assignee_label || ""), suppressionReason: String(row.suppression_reason || ""),
       internalNotes: String(row.internal_notes || ""), reminderSubject: String(row.reminder_subject || ""),
       reminderBody: String(row.reminder_body || ""), revision: Number(row.revision || 0), lastServicedAt: String(row.last_serviced_at || ""),
       protectedJob: Boolean(row.protected_job), updatedAt: String(row.follow_up_updated_at || ""),
-      channelEligibility: {
-        email: Boolean(row.email_enabled) && Boolean(row.has_email) && !Boolean(row.email_opted_out),
-        sms: Boolean(row.sms_enabled) && Boolean(row.has_verified_mobile) && !Boolean(row.sms_opted_out),
-      },
       deliveries: deliveryRows.results.filter((delivery) => delivery.follow_up_id === row.follow_up_id).map((delivery) => ({
         id: String(delivery.id), channel: String(delivery.channel), provider: String(delivery.provider),
         contentRevision: Number(delivery.content_revision), status: String(delivery.status), attempts: Number(delivery.attempts),
@@ -126,15 +92,10 @@ async function followUpPayload(ownerUid: string) {
       })),
     };
   });
-  const providerConfiguration = serviceReminderProviderConfiguration();
   return {
     followUps,
     members: members.results.map((row) => ({ id: String(row.id), displayName: String(row.display_name), status: String(row.status) })),
-    businessName: String(account?.business_name || "Your installer"),
-    channels: settingRows.results.map((row) => ({ channel: String(row.channel), provider: String(row.provider), enabled: Boolean(row.enabled),
-      configured: row.channel === "email" ? providerConfiguration.email.configured && providerConfiguration.email.callbacks
-        : providerConfiguration.sms.configured && providerConfiguration.sms.callbacks,
-      senderLabel: String(row.sender_label), dailyLimit: Number(row.daily_limit), revision: Number(row.revision), updatedAt: String(row.updated_at) })),
+    channels: [],
   };
 }
 
@@ -149,88 +110,6 @@ export async function GET(request: Request) {
   } catch (error) { return errorResponse(error); }
 }
 
-type FollowUpCandidate = Awaited<ReturnType<typeof followUpPayload>>["followUps"][number];
-
-async function dispatchServiceReminder(request: Request, access: Awaited<ReturnType<typeof requireInstallerTeamAccess>>,
-  payload: Awaited<ReturnType<typeof followUpPayload>>, candidate: FollowUpCandidate, channel: ReminderChannel, retry: boolean) {
-  if (!candidate.id || candidate.storedStatus !== "ready" || candidate.readiness !== "eligible" || !candidate.reminderBody) throw new Error("FOLLOW_UP_NOT_READY");
-  if (!candidate.channelEligibility[channel]) throw new Error("CHANNEL_NOT_ALLOWED");
-  const setting = payload.channels.find((item) => item.channel === channel);
-  if (!setting?.enabled || !setting.configured) throw new Error("CHANNEL_NOT_CONFIGURED");
-  const db = getD1(); const now = new Date().toISOString(); const today = now.slice(0, 10);
-  const sentToday = await db.prepare(`SELECT COUNT(*) total FROM service_reminder_deliveries
-    WHERE firebase_uid = ? AND channel = ? AND substr(created_at, 1, 10) = ? AND status NOT IN ('failed', 'opted_out')`)
-    .bind(access.ownerUid, channel, today).first<{ total: number }>();
-  if (Number(sentToday?.total || 0) >= setting.dailyLimit) throw new Error("DAILY_LIMIT_REACHED");
-  const recipient = await db.prepare(`SELECT account.firebase_uid customer_uid, account.email,
-      COALESCE(contact.mobile_e164, '') mobile_e164
-    FROM trade_installed_assets asset
-    LEFT JOIN trade_handover_packs pack ON pack.id = asset.handover_pack_id
-    LEFT JOIN customer_projects project ON project.id = pack.customer_project_id
-    LEFT JOIN customer_asset_ownerships ownership ON ownership.handover_pack_id = asset.handover_pack_id AND ownership.status = 'active'
-    JOIN customer_accounts account ON account.firebase_uid = COALESCE(ownership.customer_uid, project.firebase_uid)
-      AND account.account_status = 'active'
-    JOIN customer_asset_lifecycle_preferences preference ON preference.customer_uid = account.firebase_uid AND preference.asset_id = asset.id
-      AND preference.reminders_enabled = 1
-    LEFT JOIN customer_service_reminder_contacts contact ON contact.customer_uid = account.firebase_uid AND contact.mobile_verified_at != ''
-    WHERE asset.id = ? AND asset.firebase_uid = ? AND asset.record_status = 'active'
-      AND ((? = 'email' AND preference.email_enabled = 1) OR (? = 'sms' AND preference.sms_enabled = 1))
-      AND EXISTS (SELECT 1 FROM customer_consent_receipts receipt WHERE receipt.firebase_uid = account.firebase_uid
-        AND receipt.purpose = 'customer_account' AND receipt.withdrawn_at = '')
-      AND NOT EXISTS (SELECT 1 FROM customer_service_reminder_opt_outs optout WHERE optout.customer_uid = account.firebase_uid
-        AND optout.channel = ?) LIMIT 1`)
-    .bind(candidate.assetId, access.ownerUid, channel, channel, channel).first<Record<string, unknown>>();
-  const destination = channel === "email" ? String(recipient?.email || "") : String(recipient?.mobile_e164 || "");
-  if (!recipient?.customer_uid || !destination) throw new Error("CHANNEL_NOT_ALLOWED");
-  const idempotencyKey = await serviceReminderIdempotencyKey(candidate.id, channel, candidate.revision);
-  const deliveryId = crypto.randomUUID();
-  await db.prepare(`INSERT INTO service_reminder_deliveries
-    (id, follow_up_id, firebase_uid, customer_uid, asset_id, channel, provider, content_revision, idempotency_key,
-     status, attempts, provider_message_id, provider_status, last_error, queued_at, sent_at, delivered_at, failed_at,
-     created_by_uid, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', 0, ?, 'queued', '', ?, '', '', '', ?, ?, ?)
-    ON CONFLICT(idempotency_key) DO NOTHING`)
-    .bind(deliveryId, candidate.id, access.ownerUid, recipient.customer_uid, candidate.assetId, channel, setting.provider,
-      candidate.revision, idempotencyKey, deliveryId, now, access.actorUid, now, now).run();
-  const delivery = await db.prepare(`SELECT id, status, attempts, provider_message_id FROM service_reminder_deliveries WHERE idempotency_key = ?`)
-    .bind(idempotencyKey).first<Record<string, unknown>>();
-  if (!delivery) throw new Error("DELIVERY_NOT_RETRYABLE");
-  if (!retry && (delivery.id !== deliveryId || Number(delivery.attempts) > 0)) return;
-  if (retry && (delivery.status !== "failed" || Number(delivery.attempts) >= 3 || String(delivery.provider_message_id) !== String(delivery.id))) {
-    throw new Error("DELIVERY_NOT_RETRYABLE");
-  }
-  const attempt = Number(delivery.attempts) + 1;
-  try {
-    const canonical = String(process.env.SERVICE_REMINDER_TWILIO_CALLBACK_URL || `${new URL(request.url).origin}/api/service-reminder-provider-events/twilio`);
-    const result = await sendServiceReminderProviderMessage({ channel, recipient: destination, subject: candidate.reminderSubject,
-      body: `${candidate.reminderBody}\n\nManage or stop reminders from the related project in your private account: ${new URL("/account", request.url)}`,
-      idempotencyKey, callbackUrl: canonical });
-    await db.batch([
-      db.prepare(`UPDATE service_reminder_deliveries SET status = 'sent', attempts = ?, provider_message_id = ?, provider_status = ?,
-        sent_at = ?, failed_at = '', last_error = '', updated_at = ? WHERE id = ?`)
-        .bind(attempt, result.providerMessageId, result.providerStatus, now, now, delivery.id),
-      db.prepare(`INSERT OR IGNORE INTO service_reminder_delivery_events
-        (id, delivery_id, provider_event_key, event_type, provider_status, summary, occurred_at, created_at)
-        VALUES (?, ?, ?, 'provider_accepted', ?, 'The configured provider accepted the authorised reminder.', ?, ?)`)
-        .bind(crypto.randomUUID(), delivery.id, `local:${delivery.id}:${attempt}`, result.providerStatus, now, now),
-      db.prepare(`INSERT INTO trade_service_follow_up_events (id, follow_up_id, firebase_uid, actor_uid, event_type, summary, created_at)
-        VALUES (?, ?, ?, ?, 'send_reminder', ?, ?)`)
-        .bind(crypto.randomUUID(), candidate.id, access.ownerUid, access.actorUid, `Authorised ${channel} service reminder accepted by ${setting.provider}.`, now),
-    ]);
-  } catch (error) {
-    await db.batch([
-      db.prepare(`UPDATE service_reminder_deliveries SET status = 'failed', attempts = ?, provider_status = 'request_failed',
-        last_error = ?, failed_at = ?, updated_at = ? WHERE id = ?`)
-        .bind(attempt, error instanceof Error ? error.name.slice(0, 120) : "DeliveryError", now, now, delivery.id),
-      db.prepare(`INSERT OR IGNORE INTO service_reminder_delivery_events
-        (id, delivery_id, provider_event_key, event_type, provider_status, summary, occurred_at, created_at)
-        VALUES (?, ?, ?, 'request_failed', 'request_failed', 'The provider request failed before a delivery receipt was stored.', ?, ?)`)
-        .bind(crypto.randomUUID(), delivery.id, `local:${delivery.id}:${attempt}`, now, now),
-    ]);
-    throw error;
-  }
-}
-
 export async function PATCH(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
@@ -239,19 +118,14 @@ export async function PATCH(request: Request) {
       || !access.canSearchCustomers) throw new Error("DISPATCH_REQUIRED");
     const body = await request.json() as Record<string, unknown>;
     const action = cleanAdminText(body.action, 40);
+    if (["prepare_reminder", "send_reminder", "retry_delivery"].includes(action)) {
+      return adminJson({ ok: false, code: "CUSTOMER_ACCOUNTS_RETIRED", error: "Customer-account reminders have closed. You can still track service follow-ups here." }, 410);
+    }
     if (!ACTIONS.has(action)) return adminJson({ ok: false, error: "Unsupported follow-up action." }, 400);
     const servicePlanId = cleanAdminText(body.servicePlanId, 180); const dueAt = cleanAdminText(body.dueAt, 10);
     const payload = await followUpPayload(access.ownerUid);
     const candidate = payload.followUps.find((item) => item.servicePlanId === servicePlanId && item.dueAt === dueAt);
     if (!candidate) throw new Error("FOLLOW_UP_NOT_FOUND");
-    if (action === "send_reminder" || action === "retry_delivery") {
-      const channel = cleanAdminText(body.channel, 10) as ReminderChannel;
-      if (channel !== "email" && channel !== "sms") return adminJson({ ok: false, error: "Choose email or SMS." }, 400);
-      await dispatchServiceReminder(request, access, payload, candidate, channel, action === "retry_delivery");
-      return adminJson({ ok: true, ...(await followUpPayload(access.ownerUid)) });
-    }
-    if (action === "prepare_reminder" && candidate.readiness === "too_early") throw new Error("REMINDER_TOO_EARLY");
-    if (action === "prepare_reminder" && candidate.readiness !== "eligible") throw new Error("CONSENT_REQUIRED");
     const memberId = cleanAdminText(body.memberId, 180);
     if (memberId !== candidate.assigneeMemberId
       && !canAssignJob(access, candidate.assigneeMemberId, memberId)) throw new Error("DISPATCH_REQUIRED");
@@ -273,14 +147,11 @@ export async function PATCH(request: Request) {
     const current = await db.prepare(`SELECT id, revision, reminder_subject, reminder_body FROM trade_service_follow_ups
       WHERE firebase_uid = ? AND service_plan_id = ? AND due_at = ?`).bind(access.ownerUid, servicePlanId, dueAt).first<Record<string, unknown>>();
     if (!current || Number(current.revision) !== Number(body.expectedRevision)) throw new Error("REVISION_CONFLICT");
-    const nextStatus = action === "prepare_reminder" ? "ready" : action === "suppress" ? "suppressed"
+    const nextStatus = action === "suppress" ? "suppressed"
       : action === "complete" ? "completed" : "preparing";
-    const draft = action === "prepare_reminder" ? serviceReminderDraft({ businessName: payload.businessName, brand: candidate.brand,
-      modelNumber: candidate.modelNumber, serviceType: candidate.serviceType, dueAt: candidate.dueAt, siteLabel: candidate.siteLabel })
-      : { subject: String(current.reminder_subject || ""), body: String(current.reminder_body || "") };
+    const draft = { subject: String(current.reminder_subject || ""), body: String(current.reminder_body || "") };
     const nextRevision = Number(current.revision) + 1;
-    const summary = action === "prepare_reminder" ? "Consent-eligible service reminder prepared for review."
-      : action === "suppress" ? "Service follow-up suppressed with an internal reason."
+    const summary = action === "suppress" ? "Service follow-up suppressed with an internal reason."
         : action === "complete" ? "Service follow-up preparation completed." : action === "reopen" ? "Service follow-up reopened for preparation."
           : "Service follow-up preparation details updated.";
     const results = await db.batch([

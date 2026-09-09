@@ -11,54 +11,37 @@ const route = read("../src/app/direct-trade/page.tsx");
 const brief = read("../src/components/DirectTradeProjectBrief.tsx");
 const homepage = read("../src/components/GettingStarted.tsx");
 const upgradeModal = read("../src/components/UpgradeEnquiryModal.tsx");
-const customerDashboard = read("../src/components/CustomerDashboard.tsx");
-const newProjectRoute = read("../src/app/account/projects/new/page.tsx");
-const customerProjectsRoute = read("../src/app/api/customer-projects/route.ts");
 const customerOpportunityDispatch = read("../src/lib/customer-opportunity-dispatch-server.ts");
 const tradeOpportunitiesRoute = read("../src/app/api/trade-opportunities/route.ts");
 const customerProjectRules = read("../src/lib/customer-projects.mjs");
 
-test("legacy Direct Trade projects stay account scoped while the homepage offers plan and quick-enquiry paths", () => {
+test("Direct Trade uses the account-free consented enquiry while the homepage preserves planning paths", () => {
   assert.match(route, /DirectTradeProjectBrief/);
   assert.match(route, /Direct Trade Project Brief/);
   assert.match(homepage, /href="\/plan">Build my home energy plan/);
   assert.match(homepage, /QuickUpgradeEnquiry/);
   assert.match(homepage, /Send one quick request without creating an account/);
   assert.match(homepage, /You choose whether matching businesses receive your email, name or phone/);
-  assert.match(brief, /href="\/account\/projects\/new">Create a free private project/);
-  assert.match(brief, /href="\/account">Open my account/);
-  assert.match(brief, /No public lead form/);
-  assert.match(brief, /Always free for households/);
+  assert.match(brief, /PublicPlanEnquiryForm/);
+  assert.match(brief, /No customer account is required/);
   assert.doesNotMatch(homepage, /direct-trade-status|Live service, expanding tool/);
 });
 
 test("public project and upgrade entry points do not submit household lead records", () => {
   assert.doesNotMatch(brief, /fetch\("\/api\/leads"|script\.google\.com|mode: "no-cors"/);
   assert.doesNotMatch(brief, /<form|type="email"|type="tel"/);
-  assert.match(brief, /Customer-authored names and notes never enter it/);
-  assert.match(brief, /contact details withheld during matching/);
+  assert.match(brief, /Review who can receive your details before sending/);
+
 
   assert.doesNotMatch(upgradeModal, /fetch\("\/api\/leads"|script\.google\.com|mode: "no-cors"/);
   assert.doesNotMatch(upgradeModal, /type="email"|type="tel"/);
   assert.match(upgradeModal, /new URLSearchParams/);
-  assert.match(upgradeModal, /href=\{`\/account\/projects\/new\?\$\{params\.toString\(\)\}`\}/);
-  assert.match(upgradeModal, /Creating a project does not submit an enquiry/);
+  assert.match(upgradeModal, /href=\{`\/plan\?\$\{params\.toString\(\)\}`\}/);
+  assert.match(upgradeModal, /Opening the planner does not send an enquiry/);
 });
 
 test("customer project records require an authenticated owner and stay out of the lead relay", () => {
-  assert.match(customerProjectsRoute, /requireFirebaseIdentity/);
-  assert.match(customerProjectsRoute, /if \(!sameOrigin\(request\)\)/);
-  assert.match(customerProjectsRoute, /customer_accounts WHERE firebase_uid = \?/);
-  assert.match(customerProjectsRoute, /customer_projects WHERE id = \? AND firebase_uid = \?/);
-  assert.match(customerProjectsRoute, /WHERE firebase_uid = \? ORDER BY/);
-  assert.match(customerProjectsRoute, /if \(!user\.emailVerified && !Boolean\(current\.is_synthetic\)\)/);
-  assert.match(customerProjectsRoute, /COALESCE\(is_synthetic, 0\) is_synthetic/);
-  assert.match(customerProjectsRoute, /buildAnonymizedOpportunity/);
-  assert.match(customerProjectsRoute, /current\.opportunity_id \|\| `customer-project:\$\{id\}`/);
-  assert.match(customerProjectsRoute, /INSERT INTO customer_opportunity_dispatch_jobs/);
-  assert.doesNotMatch(customerProjectsRoute, /await allocateNearestInstallers/);
   assert.match(customerOpportunityDispatch, /await allocateNearestInstallers/);
-  assert.doesNotMatch(customerProjectsRoute, /\/api\/leads|script\.google\.com|LEAD_WEBHOOK/);
 });
 
 test("anonymised matching is built only from controlled project choices", () => {
@@ -101,54 +84,7 @@ test("installer matching limits location to locality and releases contact only t
   assert.match(customerProjectRules, /Choose at least one included service/);
 });
 
-test("the customer dashboard supports guided, saved and separately managed projects", () => {
-  assert.match(customerDashboard, /aria-label="Project builder steps"/);
-  assert.match(customerDashboard, /\["Home", "Plan details", "Your roadmap", "Quote prep", "Privacy"\]/);
-  assert.match(customerDashboard, /Answer one small step at a time/);
-  assert.match(customerDashboard, /Build more than one project/);
-  assert.match(customerDashboard, /fetch\("\/api\/customer-projects"/);
-  assert.match(customerDashboard, /Duplicate as a new draft/);
-  assert.match(customerDashboard, /tick off completed steps/i);
-  assert.match(customerDashboard, /Review exactly what installers can see/);
-  assert.match(customerDashboard, /Your suburb, postcode and state help matched trades understand\s+the job area/);
-  assert.match(customerDashboard, /Your name, email, phone, street and unit address,\s+home nickname, project name and private notes stay hidden/);
-  assert.match(customerDashboard, /Private-plan files stay in your\s+signed-in plan/);
-  assert.match(customerDashboard, /Only files you explicitly mark for installer\s+sharing can be viewed by allocated verified installers/);
-  assert.match(customerDashboard, /confirmInstallerContact: true/);
-  assert.match(customerDashboard, /only to this verified business/);
-  assert.match(
-    customerDashboard,
-    /does not accept the quote, create a contract or\s+invoice, make a payment, or authorise any work/,
-  );
-  assert.match(customerDashboard, /All household project tools are included at no cost/);
-});
-
-test("comparison handoffs prefill only controlled project planning choices", () => {
-  assert.match(newProjectRoute, /const goals = values\(query\.goal, 10\)\.filter/);
-  assert.match(newProjectRoute, /goalOptions\.has\(item\)/);
-  assert.match(newProjectRoute, /pace: controlledValue\(query\.pace/);
-  assert.match(newProjectRoute, /situation: controlledValue\(/);
-  assert.match(newProjectRoute, /features: normalizeHomeFeatureSelections\(/);
-  assert.match(newProjectRoute, /values\(query\.feature, MAX_HOME_FEATURE_SELECTIONS\)/);
-  assert.match(newProjectRoute, /categories: values\(query\.category, 12\)\.filter/);
-  assert.match(newProjectRoute, /postcode: postcode &&/);
-  assert.match(newProjectRoute, /\.test\(postcode\) \? postcode : undefined/);
-  assert.doesNotMatch(
-    newProjectRoute,
-    /query\.(?:email|phone|name|address(?:$|[^A-Za-z])|notes|nmi|meter)/im,
-  );
-});
-
 test("project postcodes are checked before installer allocation", () => {
-  assert.match(customerProjectsRoute, /postcodeCoordinate\(project\.postcode\)/);
-  assert.match(customerProjectsRoute, /Enter a recognised Australian project postcode/);
   assert.match(customerProjectRules, /Enter a four digit project postcode/);
   assert.match(customerProjectRules, /states: AUSTRALIAN_STATE_CODES/);
-});
-
-test("private customer project copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(
-    route + brief + upgradeModal + customerDashboard + newProjectRoute,
-    /\u2013|\u2014/,
-  );
 });

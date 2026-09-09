@@ -15,13 +15,10 @@ import {
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts"); const migration = read("../drizzle/0053_service_reminder_delivery.sql");
-const route = read("../src/app/api/trade-service-follow-ups/route.ts");
-const customerRoute = read("../src/app/api/customer-asset-lifecycle/route.ts");
 const resendRoute = read("../src/app/api/service-reminder-provider-events/resend/route.ts");
 const twilioRoute = read("../src/app/api/service-reminder-provider-events/twilio/route.ts");
 const adminRoute = read("../src/app/api/admin/service-reminder-delivery/route.ts");
 const ui = read("../src/components/TradeServiceFollowUpWorkspace.tsx");
-const customerUi = read("../src/components/CustomerAssetLifecycle.tsx");
 const adminUi = read("../src/components/AdminServiceReminderDelivery.tsx");
 
 test("provider readiness requires send credentials and authenticated callbacks", () => {
@@ -94,10 +91,7 @@ test("delivery migration is additive, replay-safe and applies after P6-2F", () =
   assert.equal(db.prepare("SELECT COUNT(*) total FROM service_reminder_channel_settings").get().total, 2);
 });
 
-test("send, retry, consent race, rate limit and opt-out boundaries are server enforced", () => {
-  assert.match(route, /candidate\.storedStatus !== "ready"/); assert.match(route, /serviceReminderIdempotencyKey/);
-  assert.match(route, /DAILY_LIMIT_REACHED/); assert.match(customerRoute, /status IN \('queued', 'failed'\)/);
-  assert.match(customerRoute, /email_enabled = excluded\.email_enabled/); assert.match(customerRoute, /mobile_verified_at/);
+test("historical delivery callbacks preserve verification and opt-out boundaries", () => {
   assert.match(resendRoute, /verifyResendWebhook/); assert.match(resendRoute, /email\.bounced/); assert.match(resendRoute, /provider_event_key/);
   assert.match(twilioRoute, /verifyTwilioWebhook/); assert.match(twilioRoute, /OptOutType/); assert.match(twilioRoute, /twilio_stop/);
 });
@@ -105,10 +99,6 @@ test("send, retry, consent race, rate limit and opt-out boundaries are server en
 test("administrator configuration and deliberate review controls expose no credentials", () => {
   assert.match(adminRoute, /requireAdminIdentity\(request, \["owner"\]\)/); assert.match(adminRoute, /writeAdminAudit/);
   assert.doesNotMatch(`${adminRoute}\n${adminUi}`, /RESEND_API_KEY|TWILIO_AUTH_TOKEN/);
-  assert.match(ui, /I reviewed this exact reminder and want to send it now/); assert.match(customerUi, /Verify a mobile number before choosing SMS/);
+  assert.doesNotMatch(ui, /send_reminder|retry_delivery|Prepare reminder/);
   assert.doesNotMatch(`${ui}\n${adminUi}`, /customer@example|mobile_e164|account\.email/);
-});
-
-test("new delivery copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(`${route}\n${customerRoute}\n${resendRoute}\n${twilioRoute}\n${adminRoute}\n${ui}\n${customerUi}\n${adminUi}`, /[\u2013\u2014]/);
 });

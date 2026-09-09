@@ -10,7 +10,7 @@ const migration = read("../drizzle/0054_service_follow_up_reporting.sql");
 const route = read("../src/app/api/admin/service-follow-up-reporting/route.ts");
 const ui = read("../src/components/AdminServiceFollowUpReporting.tsx");
 const portal = read("../src/components/AdminOperationsPortal.tsx");
-const css = read("../src/app/globals.css");
+const css = read("../src/app/globals.css") + read("../src/components/AdminOperationsPortal.css");
 
 test("report filters default to 30 days and enforce bounded canonical ranges", () => {
   const now = new Date("2026-07-17T12:00:00.000Z");

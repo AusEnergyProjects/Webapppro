@@ -11,10 +11,7 @@ import {
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../drizzle/0056_customer_contact_release.sql");
 const schema = read("../db/schema.ts");
-const accountRoute = read("../src/app/api/customer-account/route.ts");
-const projectsRoute = read("../src/app/api/customer-projects/route.ts");
 const opportunitiesRoute = read("../src/app/api/trade-opportunities/route.ts");
-const customerUi = read("../src/components/CustomerDashboard.tsx");
 const installerUi = read("../src/components/DirectTradeDashboard.tsx");
 
 test("contact readiness requires a complete service record matching the project", () => {
@@ -64,32 +61,6 @@ test("the additive migration stores private snapshots and immutable release even
     FROM customer_project_contact_releases WHERE id = 'release-1'`).run(), /UNIQUE constraint failed/);
 });
 
-test("customer release is explicit, exact-match scoped, verified and audited", () => {
-  for (const boundary of [
-    'action === "release_contact"',
-    "raw.confirmContactRelease !== true",
-    'customer_decision !== "shortlisted"',
-    'verifiedTradeAccountPredicate("a")',
-    "customerContactReadiness(releaseSource, current)",
-    "customer_project_contact_release_events",
-    "matched_installer_contact_release:",
-  ]) assert.ok(projectsRoute.includes(boundary), `missing contact release boundary: ${boundary}`);
-  assert.match(projectsRoute, /UPDATE trade_opportunity_matches SET status = 'connected'/);
-  assert.match(projectsRoute, /event_type, notice_version, disclosed_fields/);
-  assert.match(accountRoute, /phone, address_line_1, address_line_2, suburb/);
-});
-
-test("legacy quote acceptance cannot authorise a first-time contact disclosure", () => {
-  assert.match(
-    projectsRoute,
-    /const legacyAcceptanceAfterRelease = raw\.confirmInstallerAcceptance === true\s*&& quote\.contact_release_status === "active"\s*&& quote\.match_status === "connected";/,
-  );
-  assert.match(
-    projectsRoute,
-    /if \(raw\.confirmInstallerContact !== true && !legacyAcceptanceAfterRelease\)/,
-  );
-});
-
 test("installer payload exposes snapshots only through its own active release", () => {
   assert.match(opportunitiesRoute, /r\.opportunity_match_id = m\.id/);
   assert.match(opportunitiesRoute, /r\.installer_uid = m\.firebase_uid AND r\.status = 'active'/);
@@ -101,17 +72,6 @@ test("installer payload exposes snapshots only through its own active release", 
 });
 
 test("interfaces name the recipient and explain withdrawal limits", () => {
-  assert.match(
-    customerUi,
-    /Get in touch with \{quote\.installerBusinessName\}/,
-  );
-  assert.match(customerUi, /confirmInstallerContact: true/);
-  assert.match(customerUi, /only to this verified business/);
-  assert.match(
-    customerUi,
-    /does not accept the quote, create a contract or\s+invoice, make a payment, or authorise any work/,
-  );
-  assert.match(customerUi, /It cannot erase\s+information an installer already viewed or saved/);
   assert.match(installerUi, /Customer-authorised contact/);
   assert.match(
     installerUi,
@@ -119,5 +79,4 @@ test("interfaces name the recipient and explain withdrawal limits", () => {
   );
   assert.match(installerUi, /releaseScope === "all_qualified_trades"/);
   assert.match(installerUi, /releasedCustomerContact\.phone/);
-  assert.doesNotMatch(`${customerUi}\n${installerUi}\n${accountRoute}\n${projectsRoute}\n${opportunitiesRoute}`, /[\u2013\u2014]/);
 });

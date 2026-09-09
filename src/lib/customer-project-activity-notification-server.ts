@@ -160,34 +160,9 @@ function recipient(context: DeliveryRow) {
 }
 
 function ineligibility(context: DeliveryRow) {
+  if (context.audience === "customer") return "Customer self-service accounts have been retired.";
   if (Number(context.installer_access_approved || 0) !== 1) {
     return "The installer no longer has active verified access.";
-  }
-  if (
-    context.event_type === "installer_quote_submitted"
-    && context.audience === "customer"
-  ) {
-    if (
-      context.quote_status !== "submitted"
-      || !["reviewing", "shortlisted"].includes(
-        String(context.customer_decision),
-      )
-    ) {
-      return "The quote is no longer waiting for customer review.";
-    }
-    if (
-      context.customer_account_status !== "active"
-      || !Boolean(context.account_updates)
-      || !Boolean(context.customer_account_consent)
-    ) {
-      return "Customer project-update consent is not active.";
-    }
-    if (Boolean(context.customer_email_opted_out)) {
-      return "The customer has opted out of email updates.";
-    }
-    return validEmail(context.customer_email)
-      ? ""
-      : "The authoritative customer email is unavailable.";
   }
   if (
     context.event_type === "customer_installer_accepted"

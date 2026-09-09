@@ -23,7 +23,6 @@ import { ENERGY_SERVICE_IDS } from "../src/lib/energy-service-catalogue.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../drizzle/0081_customer_project_advisor.sql");
-const route = read("../src/app/api/customer-projects/route.ts");
 const tradeOpportunitiesRoute = read("../src/app/api/trade-opportunities/route.ts");
 const tradeProfileRoute = read("../src/app/api/trade-profile/route.ts");
 const tradePartnerForm = read("../src/components/DirectTradePartnerForm.tsx");
@@ -757,8 +756,6 @@ test("completed plan steps are intersected with the edited plan", () => {
     { items: [{ id: "keep" }, { id: "new" }] },
   );
   assert.deepEqual(completed, ["keep"]);
-  assert.match(route, /completed_plan_items = \?/);
-  assert.match(route, /reconcileCompletedPlanItems/);
 });
 
 test("installer submission no longer requires a household access routine", () => {
@@ -931,7 +928,4 @@ test("the forward migration backfills goals and the API writes both contracts", 
 
   assert.match(schema, /goals: text\("goals"\)\.notNull\(\)\.default\("\[\]"\)/);
   assert.equal((schema.match(/serviceCategories: text\("service_categories"\)\.notNull\(\)\.default\("\[\]"\)/g) || []).length >= 2, true);
-  assert.match(route, /goals: JSON\.stringify\(project\.goals\)|JSON\.stringify\(project\.goals\)/);
-  assert.match(route, /goal, goals, pace/);
-  assert.match(route, /goals,\s*pace/);
 });

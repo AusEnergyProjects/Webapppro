@@ -18,7 +18,7 @@ test('strict validation accepts a priceable time of use contract', async () => {
   const { validateElectricityTariff } = await import('../src/lib/electricity-tariff-validation.mjs');
   assert.deepEqual(validateElectricityTariff(validContract()), {
     valid: true,
-    schemaVersion: 'aea-electricity-tariff-1.1.0',
+    schemaVersion: 'aea-electricity-tariff-1.2.0',
     errors: [],
     limitations: [],
   });
@@ -66,7 +66,7 @@ test('controlled-load and supported demand tariffs pass strict priceability vali
   });
   assert.deepEqual(validateElectricityTariff(contract), {
     valid: true,
-    schemaVersion: 'aea-electricity-tariff-1.1.0',
+    schemaVersion: 'aea-electricity-tariff-1.2.0',
     errors: [],
     limitations: [],
   });

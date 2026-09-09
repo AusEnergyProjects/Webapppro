@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { FieldPermissions } from '@/components/job-work-selection';
 import { apiRequest } from '@/lib/api';
+import { effectiveJobStart, isUnscheduledJob } from '@/lib/schedule';
 import { colours, radius, spacing } from '@/lib/theme';
 import type { FieldJob } from '@/lib/types';
 import { useApp } from '@/providers/app-provider';
@@ -67,7 +68,7 @@ function JobCard({ job }: { job: FieldJob }) {
         <View style={[styles.stage, (job.stage === 'blocked' || job.auditOutcome === 'failed' || job.auditOutcome === 'correction_required') && styles.blocked]}><Text style={styles.stageText}>{jobStatusLabel(job)}</Text></View>
       </View>
       <Text style={styles.jobTitle}>{job.title || 'Field job'}</Text>
-      <View style={styles.fact}><MaterialCommunityIcons name="clock-outline" color={colours.muted} size={19} /><Text style={styles.factText}>{dayLabel(job.scheduledStart)}</Text></View>
+      <View style={styles.fact}><MaterialCommunityIcons name="clock-outline" color={colours.muted} size={19} /><Text style={styles.factText}>{dayLabel(effectiveJobStart(job))}</Text></View>
       <View style={styles.fact}><MaterialCommunityIcons name={job.protectedJob ? 'shield-lock-outline' : 'map-marker-outline'} color={job.protectedJob ? colours.green : colours.muted} size={19} /><Text numberOfLines={2} style={styles.factText}>{job.protectedJob ? `${job.siteArea || 'Service region'} | Australian Energy Assessments protected` : job.serviceAddress || job.siteArea || 'Address available when assigned'}</Text></View>
       <View style={styles.progressRow}><Text style={styles.progressText}>{rental
         ? rental.status === 'issued'
@@ -85,8 +86,9 @@ export default function WorkScreen() {
   const week = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
   const selectedKey = dateKey(selectedDate);
   const selectedJobs = useMemo(() => jobs
-    .filter((job) => dateKey(job.appointmentStartsAt || job.scheduledStart) === selectedKey)
-    .sort((left, right) => (left.appointmentStartsAt || left.scheduledStart).localeCompare(right.appointmentStartsAt || right.scheduledStart)), [jobs, selectedKey]);
+    .filter((job) => dateKey(effectiveJobStart(job)) === selectedKey)
+    .sort((left, right) => Date.parse(effectiveJobStart(left)) - Date.parse(effectiveJobStart(right))), [jobs, selectedKey]);
+  const unscheduledJobs = useMemo(() => jobs.filter(isUnscheduledJob), [jobs]);
   const selectedLabel = selectedDate.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' });
   const [quickAction, setQuickAction] = useState<QuickAction | null>(null);
   const [commercialPermissions, setCommercialPermissions] = useState<FieldPermissions | null>(null);
@@ -141,7 +143,7 @@ export default function WorkScreen() {
           </View>
           <View style={styles.dayStrip}>{week.map((date) => {
             const active = dateKey(date) === selectedKey;
-            const count = jobs.filter((job) => dateKey(job.appointmentStartsAt || job.scheduledStart) === dateKey(date)).length;
+            const count = jobs.filter((job) => dateKey(effectiveJobStart(job)) === dateKey(date)).length;
             return <Pressable key={dateKey(date)} onPress={() => setSelectedDate(date)} style={[styles.day, active && styles.dayActive]}><Text style={[styles.dayName, active && styles.dayTextActive]}>{date.toLocaleDateString('en-AU', { weekday: 'narrow' })}</Text><Text style={[styles.dayNumber, active && styles.dayTextActive]}>{date.getDate()}</Text>{count ? <View style={[styles.jobDot, active && styles.jobDotActive]} /> : <View style={styles.jobDotPlaceholder} />}</Pressable>;
           })}</View>
         </View>
@@ -149,6 +151,10 @@ export default function WorkScreen() {
         <View style={styles.dayHeading}><View><Text style={styles.section}>{dateKey(new Date()) === selectedKey ? 'Today' : selectedLabel}</Text><Text style={styles.jobCount}>{selectedJobs.length} {selectedJobs.length === 1 ? 'job' : 'jobs'}</Text></View><MaterialCommunityIcons name="calendar-check-outline" size={27} color={colours.green} /></View>
         {selectedJobs.map((job) => <JobCard key={job.id} job={job} />)}
         {!selectedJobs.length && !sync.running ? <View style={styles.empty}><MaterialCommunityIcons name="calendar-blank-outline" size={42} color={colours.green} /><Text style={styles.emptyTitle}>No jobs on this day</Text><Text style={styles.emptyText}>Choose another date or pull down to refresh. A job appears here as soon as the office assigns it to you.</Text></View> : null}
+        {unscheduledJobs.length > 0 && <>
+          <View style={styles.dayHeading}><View><Text style={styles.section}>Unscheduled</Text><Text style={styles.jobCount}>{unscheduledJobs.length} assigned {unscheduledJobs.length === 1 ? 'job' : 'jobs'} awaiting a date</Text></View></View>
+          {unscheduledJobs.map((job) => <JobCard key={job.id} job={job} />)}
+        </>}
       </ScrollView>
       <Modal animationType="fade" transparent visible={quickAction !== null} onRequestClose={() => setQuickAction(null)}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close new action menu" onPress={() => setQuickAction(null)} style={styles.modalBackdrop}>

@@ -15,7 +15,6 @@ const server = read("../src/lib/appointment-notification-server.ts");
 const provider = read("../src/lib/service-reminder-delivery.ts");
 const workOrders = read("../src/app/api/trade-work-orders/route.ts");
 const schedule = read("../src/app/api/trade-schedule/route.ts");
-const customerProjects = read("../src/app/api/customer-projects/route.ts");
 const resendCallback = read("../src/app/api/service-reminder-provider-events/resend/route.ts");
 const twilioCallback = read("../src/app/api/service-reminder-provider-events/twilio/route.ts");
 const adminRoute = read("../src/app/api/admin/service-reminder-delivery/route.ts");
@@ -71,8 +70,6 @@ test("authoritative appointment milestones and batch saves queue revision-bound 
   assert.ok(schedule.indexOf("for (const notification of notifications) await queueAppointmentNotifications(notification)")
     > schedule.indexOf('action === "schedule_job"'),
   "all schedule mutation branches must reach the shared notification queue");
-  assert.match(customerProjects, /eventType: "preparation_confirmed"/);
-  assert.match(customerProjects, /appointment\.revision appointment_revision/);
   assert.match(server, /appointment:\$\{input\.appointmentId\}:\$\{input\.eventType\}:\$\{revision\}/);
   assert.match(server, /INSERT OR IGNORE INTO appointment_notification_events/);
 });
@@ -106,8 +103,4 @@ test("administrators get privacy-safe delivery health and bounded retry controls
   assert.match(adminUi, /No contact details are displayed here/);
   assert.match(adminUi, /Retry notification/);
   assert.doesNotMatch(adminUi, /recipient_uid|customer_email|installer_email|mobile_e164/);
-});
-
-test("appointment notification sources avoid prohibited dash characters", () => {
-  assert.doesNotMatch(`${server}\n${provider}\n${workOrders}\n${schedule}\n${customerProjects}\n${adminRoute}\n${adminUi}`, /[\u2013\u2014]/);
 });

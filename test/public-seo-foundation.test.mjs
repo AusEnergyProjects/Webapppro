@@ -128,7 +128,7 @@ test("header and footer expose assessment conversion and verified profiles", () 
   assert.match(siteFooter, /PUBLIC_SITE\.legalName/);
   assert.match(siteFooter, /PUBLIC_SITE\.address\.streetAddress/);
   assert.match(styles, /\.site-book-link, \.site-call-link/);
-  assert.match(styles, /@media \(max-width: 520px\)[\s\S]*grid-row: 3/);
+  assert.match(styles, /@media \(max-width: 720px\)[\s\S]*grid-row: 3/);
 });
 
 test("crawl controls exclude private surfaces and publish only verified sitemap dates", () => {

@@ -104,7 +104,7 @@ test('loader reports partial source coverage without discarding successful plans
   assert.deepEqual(calls.find((call) => call.url.includes('/energy/plans?')).headers, { 'x-v': '1', 'x-min-v': '1' });
   assert.deepEqual(calls.find((call) => call.url.endsWith('/energy/plans/p1')).headers, { 'x-v': '3', 'x-min-v': '3' });
   assert.match(result.sourceHash, /^sha256:[a-f0-9]{64}$/);
-  assert.equal(result.tariffSchemaVersion, 'aea-electricity-tariff-1.1.0');
+  assert.equal(result.tariffSchemaVersion, 'aea-electricity-tariff-1.2.0');
 });
 
 test('loader rejects malformed tariffs and reports validation separately from unavailable details', async () => {

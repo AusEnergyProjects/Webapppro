@@ -15,7 +15,7 @@ test("Direct Trade standards are connected to every marketplace entry journey", 
     household,
     /href="\/direct-trade\/standards"[\s\S]*Read the marketplace standards/,
   );
-  assert.match(household, /href="\/account\/projects\/new"/);
+  assert.match(household, /PublicPlanEnquiryForm/);
   assert.match(partners, /href="\/direct-trade\/standards">Read the marketplace and customer standards/);
 });
 

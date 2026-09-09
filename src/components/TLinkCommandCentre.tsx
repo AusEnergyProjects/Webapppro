@@ -51,6 +51,7 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<SearchKind | "all">("all");
   const [records, setRecords] = useState<SearchRecord[]>([]);
+  const [resultKey, setResultKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -89,22 +90,33 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
     requestRef.current?.abort();
     if (!open || term.length < 2) return;
     let active = true;
+    let timedOut = false;
     const controller = new AbortController();
     requestRef.current = controller;
     const debounce = window.setTimeout(() => {
       setLoading(true);
       setStatus("");
-      const timeout = window.setTimeout(() => controller.abort(), 6000);
+      const timeout = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+        if (active) {
+          setLoading(false);
+          setStatus("Search took too long. Try again or narrow your search.");
+        }
+      }, 6000);
       void user.getIdToken().then((token) => fetch(`/api/tlink-search?q=${encodeURIComponent(term)}&kind=${category}`, {
         headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal,
       })).then(async (response) => {
         const result = await response.json().catch(() => ({}));
         if (!response.ok || result.ok === false) throw new Error(result.error || "TLink search could not be completed.");
-        if (active) setRecords(Array.isArray(result.records) ? result.records : []);
+        if (active && !controller.signal.aborted) {
+          setRecords(Array.isArray(result.records) ? result.records : []);
+          setResultKey(`${category}:${term}`);
+        }
       }).catch((error) => {
-        if (!active || controller.signal.aborted) return;
+        if (!active) return;
         setRecords([]);
-        setStatus(error instanceof Error ? error.message : "TLink search could not be completed.");
+        setStatus(timedOut ? "Search took too long. Try again or narrow your search." : error instanceof Error ? error.message : "TLink search could not be completed.");
       }).finally(() => {
         window.clearTimeout(timeout);
         if (active) setLoading(false);
@@ -117,7 +129,8 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
     };
   }, [category, open, query, user]);
 
-  const results = records.filter((record) => partnerType === "supplier" || record.kind !== "order");
+  const results = resultKey === `${category}:${query.trim()}`
+    ? records.filter((record) => partnerType === "supplier" || record.kind !== "order") : [];
   const availableKinds = useMemo(() => (["job", "customer", "product", "order", "team"] as SearchKind[])
     .filter((kind) => {
       if (partnerType === "supplier") return kind === "product" || (kind === "order" && businessOperations);
@@ -192,7 +205,10 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
               const value = event.target.value;
               setQuery(value);
               setActiveIndex(0);
-              if (value.trim().length < 2) { setRecords([]); setLoading(false); setStatus(""); }
+              setRecords([]);
+              setResultKey("");
+              setLoading(value.trim().length >= 2);
+              setStatus("");
             }}
             onKeyDown={onInputKeyDown}
             placeholder={partnerType === "supplier" ? "Search product, model, order or installer" : "Search job, customer, product or team member"}
@@ -222,7 +238,7 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
           </div>}
           {query.trim().length === 1 && <div className="tlink-command-empty"><strong>Keep typing</strong><span>Enter at least two characters to search.</span></div>}
           {query.trim().length >= 2 && loading && !results.length && <div className="tlink-command-empty loading"><strong>Searching your workspace</strong><span>Checking the latest matching records...</span></div>}
-          {query.trim().length >= 2 && !loading && !results.length && <div className="tlink-command-empty"><strong>No matching records</strong><span>{partnerType === "supplier" ? "Try a model code, product name, order number or installer." : "Try a job ID, customer name, model code or team member."}</span></div>}
+          {query.trim().length >= 2 && !loading && !status && !results.length && <div className="tlink-command-empty"><strong>No matching records</strong><span>{partnerType === "supplier" ? "Try a model code, product name, order number or installer." : "Try a job ID, customer name, model code or team member."}</span></div>}
           {results.length > 0 && <div className="tlink-command-results" role="listbox" aria-label="TLink search results">
             {results.map((record, index) => <button
               key={`${record.kind}:${record.id}`}

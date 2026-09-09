@@ -21,7 +21,6 @@ import {
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../drizzle/0082_customer_advisor_profile.sql");
-const route = read("../src/app/api/customer-projects/route.ts");
 const schema = read("../db/schema.ts");
 
 const project = {
@@ -698,9 +697,4 @@ test("the additive migration and owner-scoped API persist the advisor profile", 
   db.close();
 
   assert.match(schema, /advisorProfile: text\("advisor_profile"\)\.notNull\(\)\.default\("\{\}"\)/);
-  assert.match(route, /advisorProfile: normalizeCustomerAdvisorProfile/);
-  assert.match(route, /JSON\.stringify\(project\.advisorProfile\)/);
-  assert.match(route, /advisor_profile = \?/);
-  assert.match(route, /private_notes, advisor_profile, plan_snapshot/);
-  assert.match(route, /WHERE id = \? AND firebase_uid = \?/);
 });

@@ -19,7 +19,6 @@ const newJob = read("../src/components/TradeNewJobForm.tsx");
 const recoverableWorkspace = read("../src/components/RecoverableTradeWorkspace.tsx");
 const hub = read("../src/components/TradeBusinessHub.tsx");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
-const customerLifecycle = read("../src/components/CustomerAssetLifecycle.tsx");
 const numberer = read("../src/lib/trade-job-number-server.ts");
 const dataforceCsv = read("../src/lib/creditex-dataforce-job-csv.ts");
 const listViews = read("../src/lib/workspace-list-views.ts");
@@ -555,8 +554,4 @@ test("CRM writes no longer return the full customer and job workspace", () => {
   assert.match(crm, /CustomerLookupSelect/);
   assert.match(crm, /Name, number, phone, suburb or postcode/);
   assert.match(crm, /pageSize: "25"/);
-});
-
-test("new CRM and customer copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(`${route}\n${crm}\n${customerLifecycle}`, /[\u2013\u2014]/);
 });

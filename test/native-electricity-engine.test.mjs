@@ -1,6 +1,52 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { estimateNativePlan, NATIVE_ENGINE_VERSION } from "../src/lib/electricity/native-tariff-engine.ts";
+import { normalizePlanDetail } from "../src/lib/electricity-cdr.mjs";
+import { validateElectricityTariff } from "../src/lib/electricity-tariff-validation.mjs";
+
+test("annual rankings exclude gaps, overlaps and malformed season boundaries", () => {
+  const input = plan({ rateBlockUType: "singleRate", singleRate: { rates: [{ unitPrice: 0.25 }] } });
+  const inputs = { annualGeneralKwh: 4000, annualControlledKwh: 0, profile: profile(), assumeConditional: false };
+  for (const periods of [
+    [{ ...input.contract.tariffPeriod[0], endDate: "01-31" }],
+    [input.contract.tariffPeriod[0], input.contract.tariffPeriod[0]],
+    [{ ...input.contract.tariffPeriod[0], endDate: undefined }],
+  ]) {
+    const contract = { ...input.contract, tariffPeriod: periods };
+    assert.equal(validateElectricityTariff(contract).valid, false);
+    assert.equal(estimateNativePlan({ ...input, contract }, inputs).ok, false);
+  }
+  const wrapped = { ...input.contract, tariffPeriod: [
+    { ...input.contract.tariffPeriod[0], startDate: "10-01", endDate: "03-31" },
+    { ...input.contract.tariffPeriod[0], startDate: "04-01", endDate: "09-30" },
+  ] };
+  assert.equal(validateElectricityTariff(wrapped).valid, true);
+  assert.ok(Math.abs(estimateNativePlan({ ...input, contract: wrapped }, inputs).result.annualCost - 1501.5) < 1e-8);
+});
+
+test("stepped, dated and ambiguous solar credits are excluded rather than overstated", () => {
+  const input = plan({ rateBlockUType: "singleRate", singleRate: { rates: [{ unitPrice: 0.25 }] } });
+  const inputs = { annualGeneralKwh: 4000, annualControlledKwh: 0, annualExportKwh: 3650, profile: profile(), assumeConditional: false };
+  const flat = { scheme: "CURRENT", singleTariff: { rates: [{ unitPrice: 0.12 }] } };
+  for (const solarFeedInTariff of [
+    [{ scheme: "CURRENT", singleTariff: { period: "P1D", rates: [{ unitPrice: 0.12, volume: 5 }, { unitPrice: 0.02 }] } }],
+    [{ ...flat, endDate: "2026-09-30" }],
+    [flat, { ...flat, singleTariff: { rates: [{ unitPrice: 0.02 }] } }],
+  ]) {
+    const result = estimateNativePlan({ ...input, contract: { ...input.contract, solarFeedInTariff } }, inputs);
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /solar feed-in/i);
+  }
+  assert.equal(estimateNativePlan({ ...input, contract: { ...input.contract, solarFeedInTariff: [flat] } }, inputs).result.feedIn, 438);
+});
+
+test("merged detail and direct rankings reject expired, future and malformed availability", () => {
+  const input = plan({ rateBlockUType: "singleRate", singleRate: { rates: [{ unitPrice: 0.25 }] } });
+  for (const dates of [{ effectiveTo: "2000-01-01" }, { effectiveFrom: "2099-01-01" }, { effectiveTo: "invalid" }]) {
+    assert.equal(normalizePlanDetail(input, { electricityContract: input.contract, ...dates }), null);
+    assert.equal(estimateNativePlan({ ...input, ...dates }, { annualGeneralKwh: 4000, annualControlledKwh: 0, profile: profile(), assumeConditional: false }).ok, false);
+  }
+});
 
 function profile({ peak = 1, offPeak = 1 } = {}) {
   return Array.from({ length: 7 }, (_, day) => Array.from({ length: 48 }, (_, bin) => {
@@ -8,6 +54,18 @@ function profile({ peak = 1, offPeak = 1 } = {}) {
     return day < 5 && hour >= 15 && hour < 21 ? peak : offPeak;
   }));
 }
+
+test("time-varying export credits reject absent and malformed time windows", () => {
+  const inputs = { annualGeneralKwh: 4000, annualControlledKwh: 0, annualExportKwh: 3650, profile: profile(), exportProfile: profile(), assumeConditional: false };
+  for (const timeVariations of [undefined, [], [{}], [{ days: ["MON"], startTime: "bad", endTime: "24:00" }], [{ days: ["INVALID"], startTime: "00:00", endTime: "24:00" }]]) {
+    const input = plan({ rateBlockUType: "singleRate", singleRate: { rates: [{ unitPrice: 0.25 }] } }, {
+      solarFeedInTariff: [{ timeVaryingTariffs: [{ rates: [{ unitPrice: 0.12 }], timeVariations }] }],
+    });
+    const result = estimateNativePlan(input, inputs);
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /windows are missing or invalid/);
+  }
+});
 
 function plan(rateBlock, extra = {}) {
   return {
@@ -26,7 +84,7 @@ test("native single-rate pricing reconciles supply, usage, controlled load and d
   });
   const estimate = estimateNativePlan(input, { annualGeneralKwh: 4000, annualControlledKwh: 1000, profile: profile(), assumeConditional: true });
   assert.equal(estimate.ok, true);
-  assert.equal(NATIVE_ENGINE_VERSION, "aea-native-electricity-0.5.0");
+  assert.equal(NATIVE_ENGINE_VERSION, "aea-native-electricity-0.6.0");
   const result = estimate.result;
   assert.ok(Math.abs(result.supply - 401.5) < 1e-9);
   assert.ok(Math.abs(result.usage - 1100) < 1e-9);

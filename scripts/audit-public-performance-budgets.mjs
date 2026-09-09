@@ -154,7 +154,6 @@ const rootLayoutEntries = [
 ];
 const surfaceEntries = {
   public: lazyKey,
-  customer: "src/components/CustomerDashboard.tsx",
   trade: "src/components/DirectTradeDashboard.tsx",
   creditex: "src/components/CreditexCompliancePortal.tsx",
   admin: adminKey,
@@ -209,7 +208,6 @@ assertSourceBoundary("src/app/layout.tsx", "LazyEnergyAssistantWidget");
 assertSourceBoundary("src/app/layout.tsx", "SiteDatePicker");
 assertSourceBoundary("src/app/layout.tsx", "AnalyticsConsent");
 for (const layout of [
-  "src/app/account/layout.tsx",
   "src/app/direct-trade/layout.tsx",
   "src/app/operations/layout.tsx",
 ]) {
@@ -238,12 +236,11 @@ const surfaceEntryFiles = Object.fromEntries(
   Object.entries(surfaceEntries).map(([surface, key]) => [surface, requireEntry(manifest, key).file]),
 );
 if (new Set(Object.values(surfaceEntryFiles)).size !== Object.keys(surfaceEntryFiles).length) {
-  fail("public, customer, trade, Creditex and admin surfaces must keep separate entry chunks");
+  fail("public, trade, Creditex and admin surfaces must keep separate entry chunks");
 }
 
 const publicGraph = collectStaticGraph(manifest, surfaceEntries.public);
 for (const protectedKey of [
-  surfaceEntries.customer,
   surfaceEntries.trade,
   surfaceEntries.creditex,
   surfaceEntries.admin,
@@ -278,6 +275,9 @@ for (const selector of [
   ".customer-account-page",
   ".trade-portal-shell",
   ".tlink-site-header",
+  ".admin-workspace",
+  ".admin-directory-layout",
+  ".admin-notification-card",
 ]) {
   if (rootCssSource.includes(selector)) {
     fail(`root stylesheet contains route-owned selector ${selector}`);
@@ -285,7 +285,6 @@ for (const selector of [
 }
 const protectedCssSource = fs.readFileSync(path.join(clientRoot, protectedCss[0]), "utf8");
 for (const selector of [
-  ".customer-account-page",
   ".trade-portal-shell",
 ]) {
   if (!protectedCssSource.includes(selector)) {
@@ -313,7 +312,6 @@ const surfaceBytes = Object.fromEntries(
 );
 for (const [surface, maximum] of Object.entries({
   public: 305_000,
-  customer: 960_000,
   trade: 1_000_000,
   creditex: 1_850_000,
   admin: 1_400_000,
@@ -402,6 +400,6 @@ const routeSummary = Object.entries(routeGraphs)
   .join("; ");
 
 console.log(
-  `Public performance budgets passed: root launcher ${lazyBytes} bytes, deferred assistant ${assistantBytes} bytes, root layout CSS ${globalCss.bytes} bytes. Surface graphs: public ${surfaceBytes.public}, customer ${surfaceBytes.customer}, trade ${surfaceBytes.trade}, Creditex ${surfaceBytes.creditex}, admin ${surfaceBytes.admin} bytes.`,
+  `Public performance budgets passed: root launcher ${lazyBytes} bytes, deferred assistant ${assistantBytes} bytes, root layout CSS ${globalCss.bytes} bytes. Surface graphs: public ${surfaceBytes.public}, trade ${surfaceBytes.trade}, Creditex ${surfaceBytes.creditex}, admin ${surfaceBytes.admin} bytes.`,
   `Actual route graphs (page + root layout): ${routeSummary}.`,
 );

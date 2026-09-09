@@ -26,12 +26,12 @@ export function UpgradeEnquiryModal({ enquiryCode, title, postcode, onClose }: U
   if (/^\d{4}$/.test(postcode)) params.set("postcode", postcode);
   return <div className="modal-ov show" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <div className="modal private-project-modal" role="dialog" aria-modal="true" aria-labelledby="gas-enquiry-title">
-      <span className="private-project-modal-label">Private account project</span>
-      <h3 id="gas-enquiry-title">Save {title.toLowerCase()} without sharing contact details</h3>
-      <p>Create a free project with this upgrade preselected. Your comparison stays private, and installers can respond only to a later anonymised scope inside the platform.</p>
-      <ul><li>No phone number or street address required to save a plan</li><li>No customer details released while saving or matching</li><li>Save the roadmap and return from any device</li><li>You control any later named-installer handover</li></ul>
-      <div className="enqbtns"><a ref={actionRef} className="mclose" href={`/account/projects/new?${params.toString()}`}>Save as a free project</a><button className="mcancel" type="button" onClick={onClose}>Keep comparing</button></div>
-      <p className="enqfine">Creating a project does not submit an enquiry. You review the installer view and choose when to request responses.</p>
+      <span className="private-project-modal-label">Plan your upgrade</span>
+      <h3 id="gas-enquiry-title">Save {title.toLowerCase()} in your home energy plan</h3>
+      <p>Open the planner with this upgrade preselected. You can download your plan or choose to send an enquiry without creating an account.</p>
+      <ul><li>No account needed to make a plan</li><li>Your upgrade and postcode carry across</li><li>Review your choices before sending an enquiry</li><li>Choose whether to share your details with suitable trades</li></ul>
+      <div className="enqbtns"><a ref={actionRef} className="mclose" href={`/plan?${params.toString()}`}>Open my plan</a><button className="mcancel" type="button" onClick={onClose}>Keep comparing</button></div>
+      <p className="enqfine">Opening the planner does not send an enquiry or share your contact details.</p>
     </div>
   </div>;
 }

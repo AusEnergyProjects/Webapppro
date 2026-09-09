@@ -3,15 +3,6 @@ import fs from "node:fs";
 import test from "node:test";
 
 import { normalizePublicPlanSnapshot } from "../src/lib/public-plan-enquiry.mjs";
-
-const accountHandoffPage = fs.readFileSync(
-  new URL("../src/app/account/projects/new/page.tsx", import.meta.url),
-  "utf8",
-);
-const customerDashboard = fs.readFileSync(
-  new URL("../src/components/CustomerDashboard.tsx", import.meta.url),
-  "utf8",
-);
 const enquiryForm = fs.readFileSync(
   new URL("../src/components/PublicPlanEnquiryForm.tsx", import.meta.url),
   "utf8",
@@ -50,26 +41,6 @@ test("the no-account enquiry preserves every complete home-context answer", () =
   for (const key of Object.keys(completeContext)) {
     assert.match(enquiryForm, new RegExp(`${key}: planSnapshot\\.propertyContext\\?\\.${key}`));
   }
-});
-
-test("the free-account handoff restores every complete home-context answer", () => {
-  for (const key of Object.keys(completeContext)) {
-    assert.match(
-      accountHandoffPage,
-      new RegExp(`${key}: controlledValue\\([\\s\\S]*?query\\.${key}`),
-    );
-  }
-  for (const key of Object.keys(completeContext).filter(
-    (value) => value !== "propertyType",
-  )) {
-    assert.match(
-      customerDashboard,
-      new RegExp(
-        `${key}:\\s*selection\\.${key}\\s*\\|\\|\\s*draft\\.propertyContext\\.${key}`,
-      ),
-    );
-  }
-  assert.match(customerDashboard, /propertyType: selection\.propertyType \|\| draft\.propertyType/);
 });
 
 test("unsupported home-context values fail closed instead of being restored", () => {

@@ -22,12 +22,9 @@ function loadTypescriptModule(path, mocks) {
 }
 const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0055_appointment_rescheduling.sql");
-const customerRoute = read("../src/app/api/customer-appointment-rescheduling/route.ts");
 const dispatchRoute = read("../src/app/api/trade-schedule/route.ts");
 const scheduleServer = read("../src/lib/trade-schedule-server.ts");
-const customerUi = read("../src/components/CustomerAppointmentRescheduling.tsx");
 const dispatchUi = read("../src/components/TradeScheduleWorkspace.tsx");
-const dashboard = read("../src/components/CustomerDashboard.tsx");
 const css = read("../src/app/globals.css");
 
 function sqliteD1(database) {
@@ -209,25 +206,6 @@ test("the additive migration stores requests, immutable events and reconstructab
   assert.deepEqual(names, ["trade_crm_appointment_reschedule_events", "trade_crm_appointment_reschedule_requests", "trade_crm_appointment_revisions"]);
 });
 
-test("customer rescheduling SQL compiles against the complete production migration chain", () => {
-  const db = new DatabaseSync(":memory:");
-  const files = ["0000_complex_absorbing_man.sql", "0001_futuristic_frog_thor.sql",
-    "0011_even_reavers.sql", "0015_aromatic_black_knight.sql",
-    "0006_silky_wild_pack.sql", "0007_gifted_silhouette.sql", "0009_groovy_zaran.sql",
-    "0019_melodic_unus.sql", "0025_dizzy_spot.sql", "0026_lovely_zodiak.sql",
-    "0047_customer_service_site_foundation.sql", "0051_team_scheduling_capacity.sql",
-    "0055_appointment_rescheduling.sql", "0079_trade_abn_access_gate.sql"];
-  for (const file of files) for (const statement of read(`../drizzle/${file}`).split("--> statement-breakpoint").map((item) => item.trim()).filter(Boolean)) db.exec(statement);
-  const join = customerRoute.match(/const authorisedCustomerJoin = `([\s\S]*?)`;/)?.[1];
-  assert.ok(join);
-  const queries = [...customerRoute.matchAll(/prepare\(`([\s\S]*?)`\)/g)].map((match) => match[1]
-    .replace("${authorisedCustomerJoin}", join)
-    .replace(/\$\{verifiedTradeAccountPredicate\(\"[A-Za-z_][A-Za-z0-9_]*\"\)\}/g, "1 = 1"))
-    .filter((sql) => !sql.includes("${"));
-  assert.ok(queries.length >= 7);
-  for (const sql of queries) assert.doesNotThrow(() => db.prepare(sql), `customer rescheduling SQL should compile: ${sql.slice(0, 90)}`);
-});
-
 test("AEA lead scheduling requires an accepted current quote while direct jobs remain schedulable", async () => {
   const db = new DatabaseSync(":memory:");
   db.exec(`
@@ -318,39 +296,6 @@ test("schedule availability permits overlapping appointments for every worker", 
   await assert.doesNotReject(() => server.assertTradeScheduleAvailable({ ...window, memberId: "member-a" }));
 });
 
-test("only a verified active customer linked to the authoritative CRM email can create or view requests", () => {
-  for (const boundary of ["requireFirebaseIdentity", "identity.emailVerified", "customer_accounts", "account_status = 'active'", "sameOrigin", "customer_firebase_uid = ?", "LOWER(c.email) = LOWER(?)", "trade_crm_customer_contacts", "d.customer_source = 'trade_owned'"]) assert.ok(customerRoute.includes(boundary), `missing customer boundary: ${boundary}`);
-  assert.match(customerRoute, /verifiedTradeAccountPredicate\("installer_access"\)/);
-  assert.match(customerRoute, /installer_access\.partner_type = 'installer'/);
-  assert.match(customerRoute, /a\.status = 'scheduled' AND a\.starts_at > \?/);
-  assert.match(customerRoute, /expectedAppointmentRevision/);
-  assert.match(customerRoute, /DUPLICATE_REQUEST/);
-  assert.match(customerRoute, /active_key = \?/);
-  assert.doesNotMatch(customerRoute, /private_notes|hazard_notes|assigneeLabel:/);
-});
-
-test("historical requests remain visible without exposing a revoked installer's current schedule", () => {
-  assert.match(customerRoute, /LEFT JOIN trade_accounts current_installer/);
-  assert.match(customerRoute, /verifiedTradeAccountPredicate\("current_installer"\)/);
-  assert.match(customerRoute, /CASE WHEN current_installer\.firebase_uid IS NULL THEN '' ELSE a\.starts_at END current_starts_at/);
-  assert.match(customerRoute, /CASE WHEN current_installer\.firebase_uid IS NULL THEN '' ELSE a\.ends_at END current_ends_at/);
-  assert.match(customerRoute, /original_starts_at/);
-  assert.match(customerRoute, /original_ends_at/);
-});
-
-test("customer submission creates one review task and audit history without changing the appointment", () => {
-  assert.match(customerRoute, /FROM trade_accounts mutation_installer/);
-  assert.match(customerRoute, /verifiedTradeAccountPredicate\("mutation_installer"\)/);
-  assert.match(customerRoute, /Number\(mutationResults\[0\]\?\.meta\.changes \|\| 0\) !== 1/);
-  assert.ok((customerRoute.match(/FROM trade_crm_appointment_reschedule_requests request_guard/g) || []).length >= 4);
-  assert.match(customerRoute, /INSERT INTO trade_crm_appointment_reschedule_requests/);
-  assert.match(customerRoute, /INSERT INTO trade_work_order_tasks/);
-  assert.match(customerRoute, /INSERT INTO trade_crm_appointment_reschedule_events/);
-  assert.match(customerRoute, /appointment_reschedule_requested/);
-  assert.doesNotMatch(customerRoute, /UPDATE trade_crm_appointments/);
-  assert.match(customerRoute, /The existing schedule remains unchanged/);
-});
-
 test("dispatch decisions are owner scoped, revision protected and recheck conflicts before acceptance", () => {
   assert.match(dispatchRoute, /action === "review_reschedule_request"/);
   for (const decision of ["accepted", "rejected", "alternative_proposed"]) assert.match(dispatchRoute, new RegExp(decision));
@@ -408,17 +353,6 @@ for (const [conflictCode, errorPattern] of [["UNAVAILABLE_CONFLICT", /unavailabl
 }
 
 test("customer and dispatch interfaces expose deliberate review with delegated date ranges", () => {
-  for (const copy of ["Request another suitable time", "Send for installer review", "The existing appointment has not changed", "Request history"]) assert.match(customerUi, new RegExp(copy));
-  assert.match(customerUi, /data-date-range-group/);
-  assert.match(customerUi, /data-date-range-role="start"/);
-  assert.match(customerUi, /data-date-range-role="end"/);
-  assert.match(dashboard, /href="\/account\/appointments"/);
   for (const copy of ["Review before changing the schedule", "Propose alternative", "Accept and reschedule", "review_reschedule_request"]) assert.match(dispatchUi, new RegExp(copy));
-  assert.match(css, /\.customer-reschedule-form/);
   assert.match(css, /\.schedule-request-decision/);
-  assert.match(css, /@media[\s\S]*?\.customer-reschedule-form[\s\S]*?grid-template-columns: 1fr/);
-});
-
-test("new appointment rescheduling sources avoid prohibited dash characters", () => {
-  assert.doesNotMatch(`${customerRoute}\n${dispatchRoute}\n${customerUi}\n${dispatchUi}`, /[\u2013\u2014]/);
 });

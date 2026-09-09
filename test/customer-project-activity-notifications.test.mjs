@@ -17,7 +17,6 @@ const acceptanceMigration = read("../drizzle/0091_customer_project_quote_accepta
 const schema = read("../db/schema.ts");
 const activityServer = read("../src/lib/customer-project-activity-notification-server.ts");
 const tradeOpportunities = read("../src/app/api/trade-opportunities/route.ts");
-const customerProjects = read("../src/app/api/customer-projects/route.ts");
 const quoteEditor = read("../src/components/InstallerPlatformQuote.tsx");
 const resendCallback = read("../src/app/api/service-reminder-provider-events/resend/route.ts");
 const worker = read("../worker/index.ts");
@@ -432,65 +431,6 @@ test("exact opportunity targeting validates one match id and remains owner scope
   assert.match(
     tradeOpportunities,
     /\.bind\(user\.uid, requestedMatchId, requestedMatchId\)/,
-  );
-});
-
-test("chosen installer contact activity and release are deterministic in one batch", () => {
-  assert.match(
-    customerProjects,
-    /decision === "accepted"[\s\S]*quote\.customer_decision === "accepted"[\s\S]*return json\(\{ ok: true/,
-  );
-  assert.match(
-    customerProjects,
-    /if \(quote\.customer_decision === "accepted"\)[\s\S]*already connected/,
-  );
-  assert.match(customerProjects, /confirmInstallerContact/);
-  assert.match(
-    customerProjects,
-    /INSERT INTO customer_project_contact_releases[\s\S]*INSERT INTO customer_project_quote_acceptance_claims/,
-  );
-  assert.match(customerProjects, /customer_project_quote_acceptance_claims/);
-  assert.match(
-    customerProjects,
-    /INSERT INTO customer_project_quote_acceptance_claims[\s\S]*candidate\.customer_decision IN \('reviewing', 'shortlisted'\)/,
-  );
-  assert.match(
-    customerProjects,
-    /SET customer_decision = 'accepted'[\s\S]*customer_decision IN \('reviewing', 'shortlisted'\)/,
-  );
-  assert.match(
-    customerProjects,
-    /NOT EXISTS \([\s\S]*FROM customer_project_quote_acceptance_claims claim[\s\S]*claim\.project_id = \? AND claim\.customer_uid = \?/,
-  );
-  assert.match(
-    customerProjects,
-    /decisionResults\[decisionMutationIndex\]\?\.meta\.changes/,
-  );
-  assert.match(
-    customerProjects,
-    /eventKey: `platform-installer-accepted:\$\{quoteId\}`/,
-  );
-  assert.match(customerProjects, /eventType: "customer_installer_accepted"/);
-  assert.match(customerProjects, /audience: "installer"/);
-  assert.match(
-    customerProjects,
-    /statements\.push\(\.\.\.acceptanceActivity\.statements\)/,
-  );
-
-  const activityPush = customerProjects.indexOf(
-    "statements.push(...acceptanceActivity.statements)",
-  );
-  const acceptanceBatch = customerProjects.indexOf(
-    "await db.batch(statements)",
-    activityPush,
-  );
-  assert.ok(
-    activityPush > 0 && acceptanceBatch > activityPush,
-    "acceptance state and its activity event must share one D1 batch",
-  );
-  assert.match(
-    customerProjects,
-    /return activityDeliveryId[\s\S]*activityDispatchJson\(responseBody, activityDeliveryId\)/,
   );
 });
 

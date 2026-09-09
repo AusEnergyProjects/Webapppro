@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
+import { electricitySeasonCoverageError } from "../../public/electricity-tariff-guards.mjs";
 
-export const ELECTRICITY_TARIFF_SCHEMA_VERSION = "aea-electricity-tariff-1.1.0";
+export const ELECTRICITY_TARIFF_SCHEMA_VERSION = "aea-electricity-tariff-1.2.0";
 
 const DAYS = new Set(["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]);
 const DISCOUNT_METHODS = new Set(["percentOfBill", "percentOfUse", "fixedAmount"]);
@@ -126,6 +127,8 @@ export function validateElectricityTariff(contract) {
   });
 
   if (!priceablePeriods) errors.push("At least one priceable energy tariff period is required");
+  const coverageError = electricitySeasonCoverageError(periods);
+  if (coverageError) errors.push(coverageError);
   (contract.discounts || []).forEach((discount) => {
     if (!DISCOUNT_METHODS.has(discount?.methodUType)) limitations.add("unsupported_discount_not_costed");
   });

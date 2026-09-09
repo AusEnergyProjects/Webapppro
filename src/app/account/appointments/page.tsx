@@ -1,5 +1,5 @@
-import { CustomerDashboard } from "@/components/CustomerDashboard";
+import { permanentRedirect } from "next/navigation";
 
-export default function CustomerAppointmentsPage() {
-  return <CustomerDashboard initialView="appointments" />;
+export default function RetiredAccountPage() {
+  permanentRedirect("/plan");
 }

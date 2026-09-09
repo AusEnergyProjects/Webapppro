@@ -1284,7 +1284,7 @@ export function DirectTradeDashboard() {
       .filter((item) => !leadStatusFilter || item.matchStatus === leadStatusFilter)
       .filter((item) => !leadStateFilter || item.state === leadStateFilter)
       .filter((item) => !leadServiceFilter || (item.matchedCategories.length ? item.matchedCategories : item.serviceCategories).includes(leadServiceFilter))
-      .filter((item) => !term || `${item.title} ${item.summary} ${item.projectType} ${item.suburb} ${item.postcode} ${item.state} ${item.distanceBand}`.toLowerCase().includes(term));
+      .filter((item) => !term || `${item.title} ${item.summary} ${item.projectType} ${item.suburb} ${item.postcode} ${item.state} ${item.distanceBand} ${item.customerContact?.name || ""} ${item.customerContact?.email || ""} ${item.customerContact?.phone || ""}`.toLowerCase().includes(term));
   }, [leadSearch, leadServiceFilter, leadStateFilter, leadStatusFilter, opportunities]);
   const selectedLeadOpportunity = visibleLeadOpportunities.find((item) => item.matchId === selectedOpportunityMatchId)
     || visibleLeadOpportunities[0]
@@ -2233,7 +2233,7 @@ export function DirectTradeDashboard() {
                 setWorkspace(target.workspace);
               }}
             />
-            {!isSupplier && <TradeJobNotifications user={user} onNavigate={(target) => {
+            {!isSupplier && <TradeJobNotifications key={user.uid} user={user} onNavigate={(target) => {
               setCommandTarget(target);
               setWorkspace(target.workspace);
             }} onOpenOpportunity={(matchId) => void openOpportunityNotification(matchId)} />}
@@ -2481,7 +2481,7 @@ export function DirectTradeDashboard() {
                           <span>Search</span>
                           <input
                             aria-label="Search leads"
-                            placeholder="Scope, service or region"
+                            placeholder="Customer, scope, service or region"
                             value={leadSearch}
                             onChange={(event) => setLeadSearch(event.target.value)}
                           />

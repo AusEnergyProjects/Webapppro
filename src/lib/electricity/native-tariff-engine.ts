@@ -1,6 +1,7 @@
 import type { HalfHourlyGrid, Nem12AllocatedDay } from "./nem12-types.ts";
+import { isElectricityPlanAvailable, electricitySeasonCoverageError, electricityFeedInLimitation } from "../../../public/electricity-tariff-guards.mjs";
 
-export const NATIVE_ENGINE_VERSION = "aea-native-electricity-0.5.0";
+export const NATIVE_ENGINE_VERSION = "aea-native-electricity-0.6.0";
 const GST = 1.1;
 const DAY_INDEX: Record<string, number> = { MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4, SAT: 5, SUN: 6 };
 
@@ -44,11 +45,13 @@ type Discount = {
   percentOfUse?: { rate?: number | string };
   fixedAmount?: { amount?: number | string };
 };
-type FeedInRate = { unitPrice?: number | string };
+type FeedInRate = { unitPrice?: number | string; volume?: number | string | null; measureUnit?: string };
 type FeedInTariff = {
   scheme?: string;
-  singleTariff?: { rates?: FeedInRate[] };
-  timeVaryingTariffs?: Array<{ rates?: FeedInRate[]; timeVariations?: TimeWindow[]; timeOfUse?: TimeWindow[] }>;
+  startDate?: string;
+  endDate?: string;
+  singleTariff?: { period?: string; rates?: FeedInRate[] };
+  timeVaryingTariffs?: Array<{ period?: string; rates?: FeedInRate[]; timeVariations?: TimeWindow[]; timeOfUse?: TimeWindow[] }>;
 };
 
 export interface NativeElectricityContract {
@@ -469,10 +472,15 @@ function priceRateBlock(block: ControlledLoad, annualKwh: number, profile: HalfH
 }
 
 export function estimateNativePlan(plan: NativePlanInput, inputs: NativeEstimateInputs): NativeEstimateResult {
+  if (!isElectricityPlanAvailable(plan)) return { ok: false, reason: "This offer is expired, not yet available or has invalid availability dates." };
   const periods = plan.contract.tariffPeriod || [];
   if (!periods.length) return { ok: false, reason: "No tariff periods were published." };
   const hasDemand = periods.some((period) => period.rateBlockUType === "demandCharges");
   if (hasDemand && (!inputs.demandReady || !inputs.demandSeries?.length)) return { ok: false, reason: "Demand pricing requires a near-complete year of high-quality interval data." };
+  const coverageError = electricitySeasonCoverageError(periods);
+  if (coverageError) return { ok: false, reason: coverageError };
+  const solarLimitation = electricityFeedInLimitation(plan.contract, inputs.annualExportKwh, inputs.exportProfile);
+  if (solarLimitation) return { ok: false, reason: solarLimitation };
   const eligibility = evaluateEligibility(plan.contract, inputs);
   if (eligibility.reason) return { ok: false, reason: eligibility.reason };
 

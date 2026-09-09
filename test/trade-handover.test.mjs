@@ -14,11 +14,9 @@ const migration = read("../drizzle/0016_fair_ultragirl.sql");
 const tradeRoute = read("../src/app/api/trade-handover/route.ts");
 const documentRoute = read("../src/app/api/trade-handover/documents/route.ts");
 const adminRoute = read("../src/app/api/admin/handovers/route.ts");
-const customerRoute = read("../src/app/api/customer-projects/route.ts");
 const workOrderRoute = read("../src/app/api/trade-work-orders/route.ts");
 const tradeUi = read("../src/components/TradeHandoverCentre.tsx");
 const adminUi = read("../src/components/AdminHandoverReview.tsx");
-const customerUi = read("../src/components/CustomerDashboard.tsx");
 const handoverSchema = schema.slice(
   schema.indexOf("export const tradeHandoverPacks"),
   schema.indexOf("export const tradeOpportunities"),
@@ -148,20 +146,9 @@ test("admin approval resolves the notification, writes an audit record and contr
   assert.match(tradeRoute, /requiresAction: true/);
 });
 
-test("customer projects expose only published packs and customer-visible document metadata", () => {
-  assert.match(customerRoute, /p\.status = 'published'/);
-  assert.match(customerRoute, /customer_visible = 1/);
-  assert.match(customerRoute, /handoverPacks/);
-  assert.doesNotMatch(customerRoute, /objectKey:|object_key:/);
-  assert.match(customerUi, /Your digital asset and handover library/);
-  assert.match(customerUi, /this free household account/);
-});
-
 test("approved asset histories remain available instead of disappearing through archive actions", () => {
   assert.match(workOrderRoute, /ASSET_RECORD_RETAINED/);
   assert.match(workOrderRoute, /Work records with an installed asset or handover history stay available/);
-  assert.match(customerRoute, /Projects with an approved asset and handover history stay available/);
-  assert.match(customerUi, /Asset and handover history stays in your completed project\s+library/);
 });
 
 test("new handover user-facing copy avoids prohibited dash characters", () => {

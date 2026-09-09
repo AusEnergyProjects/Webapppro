@@ -1,6 +1,5 @@
-export const dynamic = "force-dynamic";
-import { CustomerDashboard } from "@/components/CustomerDashboard";
+import { permanentRedirect } from "next/navigation";
 
-export default function AccountQuotesPage() {
-  return <CustomerDashboard initialView="quotes" />;
+export default function RetiredAccountPage() {
+  permanentRedirect("/plan");
 }

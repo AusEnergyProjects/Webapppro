@@ -1,3 +1,5 @@
+import { isElectricityPlanAvailable } from "../../public/electricity-tariff-guards.mjs";
+
 export const ELECTRICITY_PLAN_CACHE_TTL_MS = 60 * 60 * 1_000;
 export const ELECTRICITY_PLAN_CACHE_MAX_STALE_MS = 24 * 60 * 60 * 1_000;
 const DEFAULT_MAX_ENTRIES = 120;
@@ -39,6 +41,14 @@ export function createElectricityPlanCache({
   if (typeof loadPlans !== "function") throw new TypeError("loadPlans is required.");
   const entries = new Map();
 
+  function availableResult(result) {
+    if (!usableResult(result)) return null;
+    const plans = result.plans.filter((plan) => isElectricityPlanAvailable(plan, now()));
+    if (!plans.length) return null;
+    if (plans.length === result.plans.length) return result;
+    return { ...result, plans, source: { ...result.source, partial: true } };
+  }
+
   function touch(key, entry) {
     entries.delete(key);
     entries.set(key, entry);
@@ -56,7 +66,8 @@ export function createElectricityPlanCache({
     if (!entry?.lastSuccess) return null;
     const ageMs = now() - entry.lastSuccess.createdAt;
     if (ageMs > maxStaleMs) return null;
-    return fallbackResult(entry.lastSuccess.result, ageMs, refreshInProgress);
+    const result = availableResult(entry.lastSuccess.result);
+    return result ? fallbackResult(result, ageMs, refreshInProgress) : null;
   }
 
   function beginRefresh(key, postcode, customerType, previousEntry) {
@@ -66,8 +77,9 @@ export function createElectricityPlanCache({
     };
     const inFlight = Promise.resolve()
       .then(() => loadPlans({ postcode, customerType }))
-      .then((result) => {
-        if (!usableResult(result)) throw noUsablePlansError();
+      .then((loaded) => {
+        const result = availableResult(loaded);
+        if (!result) throw noUsablePlansError();
         const completed = {
           lastSuccess: { result, createdAt: now() },
           inFlight: null,
@@ -94,8 +106,11 @@ export function createElectricityPlanCache({
     const key = cacheKey(postcode, customerType);
     const existing = entries.get(key);
     if (existing?.lastSuccess && now() - existing.lastSuccess.createdAt < freshTtlMs) {
-      touch(key, existing);
-      return { result: existing.lastSuccess.result, cache: "memory_hit" };
+      const result = availableResult(existing.lastSuccess.result);
+      if (result) {
+        touch(key, existing);
+        return { result, cache: "memory_hit" };
+      }
     }
     if (existing?.inFlight) {
       const fallback = currentFallback(existing, true);

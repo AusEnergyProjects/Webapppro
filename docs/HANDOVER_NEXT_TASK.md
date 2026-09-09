@@ -1,5 +1,24 @@
 # Next task handover
 
+Status: system audit and polish implemented for publication. Customer self-service accounts are retired.
+Prepared: 9 September 2026
+
+## Active contract: system polish, 9 September 2026
+
+User outcome: a simpler and more reliable path from household enquiry to trade job, supported by accurate comparisons and explicit program readiness.
+
+Owner: this coordinating task, branch `codex/system-polish`, isolated worktree `C:\Webproject\aea-energy-system-polish`. Starting live source: `23464a47b5349f6f3316dbc52253c8dc55578fdd`, Sites 554, verified against GitHub main on 9 September.
+
+Scope authorised by James: audit the current product against ServiceM8, JACK, Tradify and field apps; remove obsolete customer acquisition paths; fix evidenced pricing, search, lead-intake, field-work and loading defects; record an ordered product plan; publish matching source to GitHub and Sites. James confirmed the existing customer accounts are test data and can be removed. The implementation retires self-service without erasing shared trade/evidence history or globally deleting Firebase identities. No weakened approvals, invented certificate rules, paid-service provisioning or replacement architecture.
+
+Acceptance: new household enquiries use the existing account-free consented flow; customer self-service registration, dashboards and APIs are retired; protected trade evidence remains accessible; unsupported tariff totals cannot rank as accurate annual prices; current search results match the query; lead bodies are bounded before decoding; field dates and unscheduled assignments are usable; public routes do not load admin-only styles. Preserve existing responsive themes and role/owner controls.
+
+Validation: meaningful boundary regressions and affected suites first; typecheck, lint, full existing release validation for the security change, publication build and focused live route/provenance checks. Mobile changes require its package checks and the existing compatible preview update process. A signed-in/device result is not inferred from source checks.
+
+Stop conditions: conflicting live source, loss of an existing privacy boundary, a destructive migration, unavailable publishing credentials or an unverified statutory rule. Preserve completed work and report the exact remaining dependency. The dated audit contains findings and the ordered next steps; historical handovers below are not current deployment evidence.
+
+## Historical handover
+
 Status: the Australian Energy Assessments public website is live on the apex domain. Sites version 499 is deployed with exact release provenance; the next executable task is `PUBLIC-MEASUREMENT-PROVENANCE-86`.
 
 Prepared: 3 September 2026

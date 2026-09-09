@@ -40,17 +40,12 @@ const plannerRoute = read("../src/app/plan/page.tsx");
 const plannerPrintRoute = read("../src/app/plan/print/page.tsx");
 const planPdfButton = read("../src/components/DownloadCustomerPlanPdfButton.tsx");
 const planPdfClient = read("../src/lib/customer-plan-pdf-client.ts");
-const newProjectRoute = read("../src/app/account/projects/new/page.tsx");
 const gettingStartedRoute = read("../src/app/getting-started/page.tsx");
 const layout = read("../src/app/layout.tsx");
 const directTradeLayout = read("../src/app/direct-trade/layout.tsx");
 const legacyComparator = read("../public/electricity-comparator.html");
 const customerAndToolTypography = [
-  "CustomerDraftDeleteDialog.module.css",
-  "CustomerInstallerRequestDialog.module.css",
-  "CustomerPlanHistoryProgress.module.css",
   "CustomerPlanReportPreviewDialog.module.css",
-  "CustomerProjectPhotoCapture.module.css",
   "EnergyAssistantWidget.module.css",
   "HomeFeatureIntake.module.css",
   "JobInformationUpload.module.css",
@@ -212,15 +207,12 @@ test("public header pages are prepared before a click while private workspaces s
   assert.doesNotMatch(bookLink, /prefetch=\{false\}/);
   assert.doesNotMatch(surgeHeaderButton, /prefetch=\{false\}/);
   assert.match(tlinkLink, /prefetch=\{false\}/);
-  assert.match(chrome, /className="site-account-link active" href="\/account" prefetch=\{false\}/);
 });
 
 test("public navigation keeps TLink clearly branded", () => {
-  assert.match(chrome, /active === "account" \? \([\s\S]*?<Link className="site-account-link active" href="\/account"/);
   assert.match(chrome, /href="\/direct-trade\/dashboard"[\s\S]*?aria-label="Open TLink"/);
   assert.match(chrome, /title="TLink"/);
   assert.match(styles, /\.site-tlink-mark \{[^}]*flex: 0 0 34px;[^}]*object-fit: contain;[^}]*width: 34px;/);
-  assert.equal(chrome.match(/href="\/account"/g)?.length, 1);
   assert.match(guide, /quick request without creating an account/);
   assert.match(guide, /Find matching trades/);
   assert.doesNotMatch(guide, /account is optional|Save or ask trades|Create an account after seeing your roadmap/);
@@ -572,10 +564,6 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(plannerPrintRoute, /returnParams\.append\("feature", item\)/);
   assert.match(plannerPrintRoute, /returnParams\.append\("goal", item\)/);
   assert.match(plannerPrintRoute, /returnParams\.set\("postcode", suppliedPostcode\)/);
-  assert.match(newProjectRoute, /goals = values\(query\.goal, 10\)/);
-  assert.match(newProjectRoute, /MAX_HOME_FEATURE_SELECTIONS/);
-  assert.match(newProjectRoute, /normalizeHomeFeatureSelections/);
-  assert.match(newProjectRoute, /postcode: postcode &&/);
   assert.match(styles, /\.planner-results-heading h2,[^}]*overflow-wrap: anywhere;/);
   assert.match(styles, /@media print \{/);
   assert.match(styles, /\.planner-page \{ max-width: var\(--layout-max\);/);

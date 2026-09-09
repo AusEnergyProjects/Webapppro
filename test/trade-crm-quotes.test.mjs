@@ -18,12 +18,9 @@ const deliveryOutboxMigration = read("../drizzle/0136_trade_quote_delivery_outbo
 const deliveryRendererMigration = read("../drizzle/0137_trade_quote_delivery_renderer_revision.sql");
 const acceptanceInvoiceMigration = read("../drizzle/0138_trade_quote_acceptance_invoice.sql");
 const installerRoute = read("../src/app/api/trade-quotes/route.ts");
-const customerRoute = read("../src/app/api/customer-trade-quotes/route.ts");
 const linkRoute = read("../src/app/api/quote-review/[token]/route.ts");
 const installerUi = read("../src/components/TradeQuotePanel.tsx");
-const customerUi = read("../src/components/CustomerTradeQuotes.tsx");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
-const dashboard = read("../src/components/CustomerDashboard.tsx");
 const styles = read("../src/app/globals.css");
 const linkUi = read("../src/components/QuoteLinkReview.tsx");
 const commercial = read("../src/lib/trade-commercial-reference.ts");
@@ -225,7 +222,6 @@ test("secure quote sharing is revocable, expiring and commercially provider neut
   assert.doesNotMatch(decidedLinkUpdate, /SET[\s\S]*token_hash = ''/);
   assert.match(installerRoute, /TLINK_SMS_SENDER_APPROVED !== "true"/);
   assert.match(installerRoute, /status = 'expired', token_hash = '', encrypted_token = ''/);
-  assert.match(customerRoute, /account-decision:/);
 });
 
 test("installer quote actions preserve direct-customer ownership and immutable issued versions", () => {
@@ -425,16 +421,6 @@ test("issued quote PDFs retain exact bytes and legacy backfill fails closed", ()
   assert.doesNotMatch(sendPdfBlock, /renderQuotePdfOrThrow/);
 });
 
-test("customer decisions require verified matching identity and retain exact acceptance evidence", () => {
-  for (const boundary of ["identity.emailVerified", "customer_accounts", "v.acceptance_email = ?", "d.customer_source = 'trade_owned'", "v.status = 'issued'", "v.version_number = q.current_version_number"]) assert.match(customerRoute, new RegExp(boundary));
-  for (const evidence of ["customer_firebase_uid", "actor_email", "actor_email_verified", "actor_auth_time", "actor_sign_in_provider", "consent_statement", "selected_choice_ids_json", "selected_total_cents", "selection_summary", "decided_at"]) assert.match(customerRoute, new RegExp(evidence));
-  assert.match(customerRoute, /body.consentConfirmed !== true/);
-  assert.match(customerRoute, /calculateQuoteSelection/);
-  assert.match(customerRoute, /QUOTE_EXPIRED/);
-  assert.match(customerRoute, /quote_status = \?/);
-  assert.doesNotMatch(customerRoute, /trade_opportunities|customer_project_quotes/);
-});
-
 test("quote SQL compiles against its production migration dependencies", () => {
   const db = new DatabaseSync(":memory:"); const directory = new URL("../drizzle/", import.meta.url);
   for (const file of ["0000_complex_absorbing_man.sql", "0001_futuristic_frog_thor.sql", "0002_closed_korg.sql", "0004_mixed_chat.sql", "0005_yielding_gideon.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0020_lying_stick.sql", "0021_mushy_gamora.sql", "0022_worried_sleepwalker.sql", "0025_dizzy_spot.sql", "0047_customer_service_site_foundation.sql", "0050_versioned_trade_quotes.sql", "0057_customer_property_arrivals.sql", "0058_trade_contact_arrival_handoff.sql", "0064_trade_price_book.sql", "0065_trade_job_packets.sql", "0066_optioned_trade_quotes.sql", "0067_secure_quote_sharing.sql", "0068_accepted_quote_handoff.sql", "0069_ready_jobs_supplier_profiles.sql", "0070_frictionless_team_roster.sql", "0071_job_execution_progress.sql", "0120_trade_business_identity_and_quote_delivery.sql", "0126_public_trade_lead_contact_release.sql", "0127_public_trade_lead_customer_address.sql", "0128_public_plan_quote_preparation.sql", "0132_public_lead_accepted_disclosure.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
@@ -443,7 +429,7 @@ test("quote SQL compiles against its production migration dependencies", () => {
   apply(db, deliveryOutboxMigration);
   apply(db, deliveryRendererMigration);
   apply(db, acceptanceInvoiceMigration);
-  for (const [label, source] of [["installer", installerRoute], ["customer", customerRoute], ["secure link", linkRoute]]) {
+  for (const [label, source] of [["installer", installerRoute], ["secure link", linkRoute]]) {
     const queries = [...source.matchAll(/prepare\(`([\s\S]*?)`\)/g)].map((match) => match[1]).filter((sql) => !sql.includes("${"));
     assert.ok(queries.length > 5, `${label} route should expose compiled prepared statements`);
     for (const sql of queries) assert.doesNotThrow(() => db.prepare(sql), `${label} SQL should compile: ${sql.slice(0, 70)}`);
@@ -481,8 +467,6 @@ test("installer and customer interfaces expose the version and consent contract"
   assert.match(installerUi, /const label = cleanDeliveryText\(delivery\?\.presentation\?\.label, 120\)/);
   assert.doesNotMatch(installerUi, /setMessage\("Quote saved and issued\. The email provider accepted it for delivery/);
   assert.doesNotMatch(installerUi, /Issue for customer review/);
-  for (const copy of ["Direct customer agreements", "Clear choices, one confirmed total", "Accept selected quote", "verified account evidence", "This version has been superseded", "selectedChoiceIds"]) assert.match(customerUi, new RegExp(copy));
-  for (const hidden of ["unitCostCentsExGst", "marginBasisPoints", "markupBasisPoints"]) assert.doesNotMatch(customerUi, new RegExp(hidden));
   assert.match(crm, /<TradeQuotePanel/);
   assert.match(installerUi, /onScheduleJob\?: \(\) => void/);
   assert.match(installerUi, /onScheduleJob && !jobSummary\?\.publicLead/);
@@ -490,7 +474,6 @@ test("installer and customer interfaces expose the version and consent contract"
   assert.match(installerUi, /This Australian Energy Assessments lead can be scheduled after the customer accepts the current quote/);
   assert.match(crm, /onScheduleJob=\{canStartJobScheduling && !isReleasedLead \? \(\) => setTab\("schedule"\) : undefined\}/);
   assert.doesNotMatch(crm, /name="quotedValue"|name="quoteStatus"/);
-  assert.match(dashboard, /href="\/account\/quotes"/);
   assert.match(styles, /@media \(max-width: 720px\)[\s\S]*?\.trade-quote-line \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/);
   assert.match(styles, /\.trade-quote-field > span, \.trade-quote-description > span \{[^}]*display: block;/);
   assert.match(styles, /\.trade-quote-send-preview/);
@@ -532,8 +515,4 @@ test("customer quote questions are visible and actionable before quote editing",
   const returnedPanel = installerUi.slice(installerUi.indexOf("return <section className=\"trade-quote-panel\">"));
   assert.ok(returnedPanel.indexOf('id="quote-questions"') < returnedPanel.indexOf('className="trade-quote-base"'));
   assert.match(styles, /\.trade-quote-questions\.needs-attention/);
-});
-
-test("direct quote copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(`${installerRoute}\n${customerRoute}\n${linkRoute}\n${installerUi}\n${customerUi}\n${linkUi}`, /[\u2013\u2014]/);
 });

@@ -37,18 +37,33 @@ export function TradeJobNotifications({
   const navigationNonce = useRef(0);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const dialogRef = useRef<HTMLElement | null>(null);
+  const loadController = useRef<AbortController | null>(null);
 
   const load = useCallback(async (background = false) => {
+    if (document.visibilityState === "hidden" || loadController.current) return;
+    const controller = new AbortController();
+    loadController.current = controller;
+    const timeout = window.setTimeout(() => {
+      controller.abort();
+      if (loadController.current !== controller) return;
+      loadController.current = null;
+      if (!background) setStatus("Work updates took too long to load. Open notifications again to retry.");
+    }, 15_000);
     try {
       const token = await user.getIdToken();
+      if (controller.signal.aborted) return;
       const response = await fetch("/api/trade-job-notifications", {
-        headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
+        headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal,
       });
       const result = await response.json().catch(() => ({})) as Result;
+      if (controller.signal.aborted) return;
       if (!response.ok) throw new Error(result.error || "Work updates could not be loaded.");
       setItems(result.items || []); setUnreadCount(Number(result.unreadCount || 0)); setStatus("");
     } catch (error) {
-      if (!background) setStatus(error instanceof Error ? error.message : "Work updates could not be loaded.");
+      if (!background && !controller.signal.aborted) setStatus(error instanceof Error ? error.message : "Work updates could not be loaded.");
+    } finally {
+      window.clearTimeout(timeout);
+      if (loadController.current === controller) loadController.current = null;
     }
   }, [user]);
 
@@ -57,7 +72,15 @@ export function TradeJobNotifications({
     const interval = window.setInterval(() => void load(true), 30_000);
     const onFocus = () => void load(true);
     window.addEventListener("focus", onFocus);
-    return () => { window.clearTimeout(initial); window.clearInterval(interval); window.removeEventListener("focus", onFocus); };
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+      loadController.current?.abort();
+      loadController.current = null;
+    };
   }, [load]);
 
   const closeNotifications = useCallback(() => {

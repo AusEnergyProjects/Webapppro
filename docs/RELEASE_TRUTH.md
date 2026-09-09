@@ -4,13 +4,21 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 3 September 2026
+Last reconciled locally: 9 September 2026
 
-Deployment evidence last verified: 3 September 2026
+Deployment evidence last verified: 9 September 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current public production release: predictive navigation and exact provenance
+## Current implementation: system audit and polish
+
+The [system audit](./audit/2026-09-09-system-polish.md) records the implemented changes, competitor benchmark, program-coverage boundary and next product priorities. Branch `codex/system-polish` starts from exact live source `23464a47b5349f6f3316dbc52253c8dc55578fdd`, verified as GitHub main and Sites version 554 on 9 September. This source supersedes the older version 499 release narrative below.
+
+Customer self-service pages, account APIs and dependent reminder sending are retired. Public planning and enquiries, trade/staff access, CRM records, secure quotes, evidence download authorisation and historical audit records remain. Source changes also harden lead request limits and electricity ranking, remove obsolete/shared styling, improve trade search and polling, and show undated field assignments.
+
+This section is the committed implementation record, prepared before publication. The release task supplies the subsequent exact GitHub/Sites version, environment revision, archive and live HTTP evidence. Do not infer a deployment from this document or treat historical release sections as current runtime proof. The supported field update goes to the existing Android preview channel; physical-device application is a separate verification.
+
+## Historical public production release: predictive navigation and exact provenance
 
 Australian Energy Assessments is live at `https://ausenergyassessments.com`. The apex hostname is the canonical public origin. Public GET and HEAD requests to the previous `https://compare.ausenergyassessments.com` hostname return a permanent 308 redirect to the same path and query on the apex; `/api` routes are deliberately excluded. Durable no longer serves the apex or `www` and is retained only as the emergency rollback target for the initial 48-hour monitoring window.
 

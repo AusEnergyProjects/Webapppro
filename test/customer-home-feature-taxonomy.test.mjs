@@ -19,7 +19,6 @@ const publicPlanner = read("../src/components/HomeEnergyPlanner.tsx");
 const plannerSchema = read("../src/lib/home-energy-planner-schema.ts");
 const sharedIntake = read("../src/components/HomeFeatureIntake.tsx");
 const publicPlanPage = read("../src/app/plan/page.tsx");
-const newProjectPage = read("../src/app/account/projects/new/page.tsx");
 
 const question = (id) => customerHomeFeatureSections
   .flatMap((section) => section.questions)
@@ -902,8 +901,6 @@ test("the public planner uses the accessible shared intake and bounded query han
   assert.match(sharedIntake, /question\.mode === "single" \? "radio" : "checkbox"/);
   assert.match(sharedIntake, /updateHomeFeatureSelection\(/);
   assert.match(publicPlanPage, /MAX_HOME_FEATURE_SELECTIONS/);
-  assert.match(newProjectPage, /MAX_HOME_FEATURE_SELECTIONS/);
-  assert.match(newProjectPage, /normalizeHomeFeatureSelections/);
 });
 
 test("the taxonomy release is versioned and the previous plan remains migratable", () => {

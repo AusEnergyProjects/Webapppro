@@ -784,7 +784,7 @@ const TOPIC_ACTIONS: Readonly<
     { id: "open-product-calculator", label: "Check approved products and programs", href: "/calculator" },
   ],
   safety_consumer_rights: [
-    { id: "prepare-project", label: "Prepare a private project brief", href: "/account/projects/new" },
+    { id: "prepare-project", label: "Send an upgrade enquiry", href: "/direct-trade" },
   ],
   renters_strata: [
     { id: "open-project-guide", label: "Open the project preparation guide", href: "/guides/project-preparation" },

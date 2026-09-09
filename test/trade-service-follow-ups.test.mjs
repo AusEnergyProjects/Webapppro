@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { daysUntilIsoDate, serviceFollowUpDueState, serviceFollowUpReadiness, serviceReminderDraft } from "../src/lib/trade-service-follow-ups.ts";
+import { daysUntilIsoDate, serviceFollowUpDueState } from "../src/lib/trade-service-follow-ups.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
@@ -12,27 +12,13 @@ const ui = read("../src/components/TradeServiceFollowUpWorkspace.tsx");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const teamPortal = read("../src/components/TradeTeamPortal.tsx");
 const lifecycleRoute = read("../src/app/api/trade-asset-lifecycle/route.ts");
-const customerLifecycleRoute = read("../src/app/api/customer-asset-lifecycle/route.ts");
-const customerLifecycleUi = read("../src/components/CustomerAssetLifecycle.tsx");
 
-test("due states and reminder windows are deterministic", () => {
+test("service due states are deterministic", () => {
   const now = new Date("2026-07-17T12:00:00Z");
   assert.equal(daysUntilIsoDate("2026-07-17", now), 0);
   assert.equal(serviceFollowUpDueState("2026-07-16", now), "overdue");
   assert.equal(serviceFollowUpDueState("2026-08-01", now), "due_soon");
   assert.equal(serviceFollowUpDueState("2026-09-01", now), "upcoming");
-  assert.equal(serviceFollowUpReadiness({ customerUid: "customer", accountActive: true, accountConsent: true, preferenceExists: true, remindersEnabled: true, reminderLeadDays: 30, dueAt: "2026-08-01", now }), "eligible");
-  assert.equal(serviceFollowUpReadiness({ customerUid: "customer", accountActive: true, accountConsent: true, preferenceExists: true, remindersEnabled: true, reminderLeadDays: 7, dueAt: "2026-08-01", now }), "too_early");
-  assert.equal(serviceFollowUpReadiness({ customerUid: "", accountActive: true, accountConsent: true, preferenceExists: true, remindersEnabled: true, reminderLeadDays: 30, dueAt: "2026-08-01", now }), "missing_consent");
-  assert.equal(serviceFollowUpReadiness({ customerUid: "customer", accountActive: true, accountConsent: true, preferenceExists: true, remindersEnabled: false, reminderLeadDays: 30, dueAt: "2026-08-01", now }), "withdrawn");
-});
-
-test("prepared reminder content is bounded and customer safe", () => {
-  const draft = serviceReminderDraft({ businessName: "AEA Services", brand: "Example", modelNumber: "HP-1", serviceType: "annual_service", dueAt: "2026-08-01", siteLabel: "Main home" });
-  assert.match(draft.subject, /Annual Service due for Example HP-1/);
-  assert.match(draft.body, /Contact AEA Services/);
-  assert.doesNotMatch(`${draft.subject} ${draft.body}`, /@|\+61|04\d{8}/);
-  assert.ok(draft.subject.length <= 180); assert.ok(draft.body.length <= 800);
 });
 
 test("follow-up records and audit events are additive and uniqueness protected", () => {
@@ -68,18 +54,10 @@ test("every static follow-up query compiles against its production migration cha
   for (const sql of queries) assert.doesNotThrow(() => db.prepare(sql), `follow-up SQL should compile: ${sql.slice(0, 90)}`);
 });
 
-test("server readiness uses explicit reporting and customer-directory permissions, preference, consent and ownership", () => {
-  for (const boundary of ["requireInstallerTeamAccess", "sameOrigin", "canRunReports", "canViewCustomers", "canSearchCustomers", "firebase_uid = ?", "customer_asset_lifecycle_preferences", "customer_consent_receipts", "customer_asset_ownerships"]) assert.match(route, new RegExp(boundary));
+test("follow-ups require reporting and customer-directory permissions and exact ownership", () => {
+  for (const boundary of ["requireInstallerTeamAccess", "sameOrigin", "canRunReports", "canViewCustomers", "canSearchCustomers", "firebase_uid = ?", "customer_asset_ownerships"]) assert.match(route, new RegExp(boundary));
   assert.doesNotMatch(route, /access\.role|canDispatch\(access\)/);
-  assert.match(route, /preference\.id preference_id/);
-  assert.match(route, /receipt\.purpose = 'customer_account'/);
-  assert.match(route, /receipt\.withdrawn_at = ''/);
   assert.match(route, /lifecycle\.protected_job = 0 OR lifecycle\.customer_uid != ''/);
-  assert.match(route, /candidate\.readiness !== "eligible"/);
-  assert.match(customerLifecycleRoute, /remindersEnabled: row \? Boolean\(row\.reminders_enabled\) : false/);
-  assert.match(customerLifecycleRoute, /recorded: Boolean\(row\)/);
-  assert.match(customerLifecycleUi, /Allow service reminders/);
-  assert.match(customerLifecycleUi, /Off until you explicitly enable it/);
 });
 
 test("status writes are revision protected, idempotently materialised and audited", () => {
@@ -96,10 +74,10 @@ test("completed service advances the authoritative plan while follow-ups remain 
   assert.match(migration, /UNIQUE INDEX `trade_service_follow_ups_plan_due_idx`/);
 });
 
-test("follow-up payload preserves privacy while sends require a reviewed provider boundary", () => {
+test("follow-up tracking preserves privacy and historical delivery receipts", () => {
   assert.doesNotMatch(route, /c\.email|c\.phone|address_line_1|customer_contact_id/);
   assert.doesNotMatch(ui, /customer_email|customer_phone|mobile_e164|account\.email/);
-  for (const copy of ["Prepare, review and send service reminders", "I reviewed this exact reminder", "Customer", "Site", "Asset", "Due state", "Assignee", "Consent", "Prepare reminder", "Suppression reason", "Send email", "Send SMS"]) assert.match(ui, new RegExp(copy));
+  for (const copy of ["Track service follow-ups", "Previous delivery receipts remain available", "Customer", "Site", "Asset", "Due state", "Assignee", "Suppression reason", "Save follow-up"]) assert.match(ui, new RegExp(copy));
   assert.match(dashboard, /workspace === "follow-ups"/); assert.match(dashboard, /<TradeServiceFollowUpWorkspace/);
   assert.match(teamPortal, /permissions\.canRunReports/);
   assert.match(teamPortal, /staffPermissions=\{permissions\}/);

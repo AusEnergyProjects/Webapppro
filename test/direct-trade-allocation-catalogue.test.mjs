@@ -22,7 +22,6 @@ const adminMatches = read(
 const supplierUi = read("../src/components/SupplierCatalogueWorkspace.tsx");
 const installerUi = read("../src/components/InstallerProductMarketplace.tsx");
 const standards = read("../src/app/direct-trade/standards/page.tsx");
-const customerBrief = read("../src/components/DirectTradeProjectBrief.tsx");
 const stripeWebhook = read("../src/app/api/stripe/webhook/route.ts");
 const access = read("../src/app/direct-trade/access/page.tsx");
 
@@ -85,11 +84,8 @@ test("household opportunity distribution is deduplicated while response and expi
   assert.doesNotMatch(adminMatches, /trade_capability|capability_review/);
   assert.match(standards, /Households control what is shared/i);
   assert.match(standards, /approved matching trades receive the postcode, selected services, full property address and any written message/i);
-  assert.match(
-    customerBrief,
-    /customer-controlled connection/i,
-  );
-  assert.match(customerBrief, /contact details withheld during matching/i);
+
+
 });
 
 test("wholesalers cannot access leads and installers only see approved published products", () => {

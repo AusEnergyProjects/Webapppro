@@ -819,28 +819,3 @@ test("plan email request accepts one bounded address, explicit consent and no ex
     privateNotes: "must not be accepted",
   }).ok, false);
 });
-
-test("email route enforces verified ownership, durable rate limiting and honest provider acceptance", () => {
-  const route = fs.readFileSync(
-    new URL("../src/app/api/customer-project-plan-email/route.ts", import.meta.url),
-    "utf8",
-  );
-  assert.match(route, /requireFirebaseIdentity/);
-  assert.match(route, /identity\.emailVerified/);
-  assert.match(route, /account_status/);
-  assert.match(route, /firebase_uid = \?/);
-  assert.match(route, /archived_at = ''/);
-  assert.match(route, /createSharedLeadRateLimiter/);
-  assert.match(route, /customer-plan-email:\$\{identity\.uid\}/);
-  assert.match(
-    route,
-    /normalized\.value\.projectId\}:\$\{normalized\.value\.recipient\}:\$\{normalized\.value\.requestId\}/,
-  );
-  assert.match(route, /status: "accepted"/);
-  assert.match(
-    route,
-    /Accepted by the email provider\. Inbox delivery has not been confirmed\./,
-  );
-  assert.match(route, /status NOT IN \('withdrawn', 'archived'\)/);
-  assert.doesNotMatch(route, /SELECT \* FROM customer_projects/);
-});

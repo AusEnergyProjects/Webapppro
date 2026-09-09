@@ -6,6 +6,7 @@ import {
 } from "@/lib/energy-assistant-lead-server";
 import { CUSTOMER_OPPORTUNITY_DISPATCH_HEADER } from "@/lib/customer-opportunity-dispatch-server";
 import { createSharedLeadRateLimiter } from "@/lib/lead-rate-limit.mjs";
+import { readBoundedRequestText, RequestBodyTooLargeError } from "@/lib/bounded-request-body.mjs";
 
 export const runtime = "edge";
 
@@ -45,13 +46,13 @@ async function bodyFrom(request: Request) {
   if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
     throw new EnergyAssistantLeadError(413, "BODY_TOO_LARGE", "This service request is too large.");
   }
-  const source = await request.text();
-  if (new TextEncoder().encode(source).byteLength > MAX_BODY_BYTES) {
-    throw new EnergyAssistantLeadError(413, "BODY_TOO_LARGE", "This service request is too large.");
-  }
   try {
+    const source = await readBoundedRequestText(request, MAX_BODY_BYTES);
     return JSON.parse(source) as unknown;
-  } catch {
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      throw new EnergyAssistantLeadError(413, "BODY_TOO_LARGE", "This service request is too large.");
+    }
     throw new EnergyAssistantLeadError(400, "INVALID_JSON", "Send a valid service request.");
   }
 }

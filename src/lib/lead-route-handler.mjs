@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { readBoundedRequestText, RequestBodyTooLargeError } from "./bounded-request-body.mjs";
 
 const MAX_BODY_BYTES = 64 * 1024;
 const WEBHOOK_SIGNING_SECRET_MIN_LENGTH = 32;
@@ -100,12 +101,12 @@ export function createLeadPostHandler({
 
     let raw;
     try {
-      const text = await request.text();
-      if (text.length > MAX_BODY_BYTES) {
+      const text = await readBoundedRequestText(request, MAX_BODY_BYTES);
+      raw = JSON.parse(text);
+    } catch (error) {
+      if (error instanceof RequestBodyTooLargeError) {
         return respond({ ok: false, error: "Request is too large." }, 413, "body_too_large");
       }
-      raw = JSON.parse(text);
-    } catch {
       return respond({ ok: false, error: "Invalid JSON." }, 400, "invalid_json");
     }
 
@@ -117,7 +118,7 @@ export function createLeadPostHandler({
       && isPublicRentalAssessmentRequest(raw?.enquiry);
     if (raw?.submissionType !== "comparison" && !publicPlanEnquiry && !quickUpgradeEnquiry && !rentalAssessmentRequest) {
       return respond(
-        { ok: false, error: "This type of upgrade project must be created inside a free private customer account." },
+        { ok: false, error: "Use the home energy planner or upgrade enquiry form for this request." },
         400,
         "protected_project_required",
       );

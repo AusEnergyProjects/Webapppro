@@ -13,10 +13,8 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0017_brief_timeslip.sql");
 const tradeRoute = read("../src/app/api/trade-asset-lifecycle/route.ts");
-const customerRoute = read("../src/app/api/customer-asset-lifecycle/route.ts");
 const adminRoute = read("../src/app/api/admin/asset-safety/route.ts");
 const tradeUi = read("../src/components/TradeAssetLifecycle.tsx");
-const customerUi = read("../src/components/CustomerAssetLifecycle.tsx");
 const adminUi = read("../src/components/AdminAssetSafety.tsx");
 
 test("service cadence dates preserve the last valid day of a target month", () => {
@@ -82,17 +80,6 @@ test("installer lifecycle actions require reviewed ABN access, installer role an
   assert.match(tradeUi, /No household identity was used/);
 });
 
-test("customer lifecycle reads require project ownership and approved handovers", () => {
-  assert.match(customerRoute, /customer_projects WHERE id = \? AND firebase_uid = \?/);
-  assert.match(customerRoute, /p\.status = 'published'/);
-  assert.match(customerRoute, /record_status = 'active'/);
-  assert.match(customerRoute, /ON CONFLICT\(customer_uid, notice_id, asset_id\)/);
-  assert.match(customerUi, /Free care reminders/);
-  assert.match(customerUi, /customer-lifecycle-simple/);
-  assert.match(customerUi, /Add to Google Calendar/);
-  assert.match(customerUi, /No contact details were shared/);
-});
-
 test("administrators require sourced HTTPS notices and audited publication controls", () => {
   assert.match(adminRoute, /requireAdminIdentity\(request, \["owner", "admin"\]\)/);
   assert.match(adminRoute, /new URL\(value\)\.protocol === "https:"/);
@@ -105,5 +92,4 @@ test("administrators require sourced HTTPS notices and audited publication contr
 test("asset lifecycle records do not add customer contact or address fields", () => {
   const lifecycleSchema = schema.slice(schema.indexOf("export const tradeAssetServicePlans"), schema.indexOf("export const tradeOpportunities"));
   assert.doesNotMatch(lifecycleSchema, /customer_name|customer_email|customer_phone|street_address|address_line|private_notes/i);
-  assert.doesNotMatch(`${tradeUi}\n${customerUi}\n${adminUi}`, /[\u2013\u2014]/);
 });

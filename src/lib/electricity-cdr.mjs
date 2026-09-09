@@ -5,6 +5,7 @@ import {
   validateElectricityTariff,
 } from "./electricity-tariff-validation.mjs";
 import { resolveCustomerPlanUrl, retailerWebsite } from "./retailer-links.mjs";
+import { isElectricityPlanAvailable } from "../../public/electricity-tariff-guards.mjs";
 
 export const ELECTRICITY_CDR_DIRECTORY_URL =
   "https://jxeeno.github.io/energy-cdr-prd-endpoints/energy-prd-endpoints.json";
@@ -101,11 +102,7 @@ export function normalizePlanSummary(plan, retailer, postcode, customerType) {
   if (postcodeMatches(postcode, geography.excludedPostcodes)) return null;
   if (!Array.isArray(geography.includedPostcodes) || !geography.includedPostcodes.length) return null;
   if (!postcodeMatches(postcode, geography.includedPostcodes)) return null;
-  const now = Date.now();
-  const effectiveFrom = plan.effectiveFrom ? Date.parse(plan.effectiveFrom) : null;
-  const effectiveTo = plan.effectiveTo ? Date.parse(plan.effectiveTo) : null;
-  if (effectiveFrom != null && (!Number.isFinite(effectiveFrom) || effectiveFrom > now)) return null;
-  if (effectiveTo != null && (!Number.isFinite(effectiveTo) || effectiveTo <= now)) return null;
+  if (!isElectricityPlanAvailable(plan)) return null;
   const information = plan.additionalInformation || {};
   return {
     planId: String(plan.planId),
@@ -128,6 +125,11 @@ export function normalizePlanDetail(summary, payload) {
   const data = payload?.data || payload;
   const contract = data?.electricityContract;
   if (!contract) return null;
+  const availability = {
+    effectiveFrom: data.effectiveFrom ?? summary.effectiveFrom ?? null,
+    effectiveTo: data.effectiveTo ?? summary.effectiveTo ?? null,
+  };
+  if (!isElectricityPlanAvailable(availability)) return null;
   const information = data.additionalInformation || {};
   return {
     ...summary,
@@ -139,8 +141,7 @@ export function normalizePlanDetail(summary, payload) {
     ),
     eligibility: Array.isArray(contract.eligibility) ? contract.eligibility : [],
     fees: Array.isArray(contract.fees) ? contract.fees.length : 0,
-    effectiveFrom: data.effectiveFrom || summary.effectiveFrom || null,
-    effectiveTo: data.effectiveTo || summary.effectiveTo || null,
+    ...availability,
     lastUpdated: Number.isFinite(Date.parse(data.lastUpdated)) ? data.lastUpdated : summary.lastUpdated,
   };
 }

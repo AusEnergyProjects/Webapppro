@@ -12,8 +12,6 @@ const directoryRoute = read("../src/app/api/admin/directory/route.ts");
 const inbox = read("../src/components/AdminNotificationInbox.tsx");
 const directory = read("../src/components/AdminAccountDirectory.tsx");
 const portal = read("../src/components/AdminOperationsPortal.tsx");
-const customerAccount = read("../src/app/api/customer-account/route.ts");
-const customerProjects = read("../src/app/api/customer-projects/route.ts");
 const tradeProfile = read("../src/app/api/trade-profile/route.ts");
 const verification = read("../src/app/api/trade-verification/documents/route.ts");
 const tradeOpportunities = read("../src/app/api/trade-opportunities/route.ts");
@@ -49,9 +47,6 @@ test("operations cases have ownership, response targets and indexed queues", () 
 });
 
 test("every primary signup, enquiry, approval and trade response boundary creates an operations event", () => {
-  assert.match(customerAccount, /eventType: "customer\.signup"/);
-  assert.match(customerProjects, /eventType: "customer\.enquiry_submitted"/);
-  assert.match(customerProjects, /requiresAction: true/);
   assert.match(tradeProfile, /eventType: "trade\.signup"/);
   assert.match(verification, /trade\.verification_evidence_uploaded/);
   assert.match(tradeOpportunities, /installer\.quote_submitted/);

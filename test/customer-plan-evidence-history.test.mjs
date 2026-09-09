@@ -11,12 +11,7 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
 const migration = read("../drizzle/0083_customer_plan_evidence_history.sql");
 const schema = read("../db/schema.ts");
-const evidenceRoute = read("../src/app/api/customer-project-evidence/route.ts");
-const projectsRoute = read("../src/app/api/customer-projects/route.ts");
 const opportunitiesRoute = read("../src/app/api/trade-opportunities/route.ts");
-const emailRoute = read("../src/app/api/customer-project-plan-email/route.ts");
-const dashboard = read("../src/components/CustomerDashboard.tsx");
-const historyProgress = read("../src/components/CustomerPlanHistoryProgress.tsx");
 
 test("the additive migration preserves legacy evidence scope and creates private history tables", () => {
   const db = new DatabaseSync(":memory:");
@@ -70,63 +65,10 @@ test("the additive migration preserves legacy evidence scope and creates private
 });
 
 test("evidence links are owner controlled and private files cannot enter installer responses", () => {
-  assert.match(evidenceRoute, /normaliseFactKeys/);
-  assert.match(evidenceRoute, /SHARING_SCOPES/);
-  assert.match(evidenceRoute, /"private-plan"/);
-  assert.match(evidenceRoute, /"allocated-installers"/);
-  assert.match(evidenceRoute, /record\.sharing_scope !== "allocated-installers"/);
-  assert.match(evidenceRoute, /export async function PATCH/);
-  assert.match(evidenceRoute, /confirmInstallerPhotoSharing/);
   assert.match(
     opportunitiesRoute,
     /e\.sharing_scope = 'allocated-installers'/,
   );
-  assert.match(
-    projectsRoute,
-    /sharing_scope = 'allocated-installers'/,
-  );
-  assert.match(emailRoute, /SELECT fact_keys, sharing_scope/);
-  assert.match(evidenceRoute, /const grantingInstallerAccess =/);
-  assert.match(evidenceRoute, /if \(grantingInstallerAccess\)/);
-  assert.match(
-    evidenceRoute,
-    /const storedBytes = file\.type\.startsWith\("image\/"\)\s*\?\s*sanitiseQuotingPhoto/,
-  );
-});
-
-test("roadmap revisions and outcome check-ins stay in the owner project contract", () => {
-  assert.match(projectsRoute, /customer_project_plan_revisions/);
-  assert.match(projectsRoute, /event_type, plan_version/);
-  assert.match(projectsRoute, /roadmapChanged/);
-  assert.match(projectsRoute, /action === "record_outcome"/);
-  assert.match(projectsRoute, /COMFORT_OUTCOMES/);
-  assert.match(projectsRoute, /ENERGY_OUTCOMES/);
-  assert.match(projectsRoute, /customer_project_outcome_checkins/);
-  assert.match(projectsRoute, /ROW_NUMBER\(\) OVER \(\s*PARTITION BY project_id/);
-  assert.match(projectsRoute, /cleanPlanRevision\(raw\.expectedPlanRevision\)/);
-  assert.match(projectsRoute, /const nextPlanRevision = currentPlanRevision \+ 1/);
-  assert.match(
-    projectsRoute,
-    /status = 'draft'\s+AND plan_revision = \?/,
-  );
-  assert.match(projectsRoute, /restored_from_revision/);
-  assert.match(projectsRoute, /results\[0\]\?\.meta\.changes/);
-  assert.match(projectsRoute, /results\[1\]\?\.meta\.changes/);
-  assert.doesNotMatch(projectsRoute, /SELECT MAX\(revision_number\) revision_number/);
-  assert.match(projectsRoute, /PLAN_REVISION_RETENTION_LIMIT/);
-  assert.match(projectsRoute, /OUTCOME_CHECKIN_RETENTION_LIMIT/);
-  assert.match(
-    projectsRoute,
-    /COALESCE\(CAST\(json_extract\(plan_snapshot, '\$\.version'\) AS text\), ''\)/,
-  );
-  assert.match(historyProgress, /Private plan history/);
-  assert.match(historyProgress, /Save private check-in/);
-  assert.match(
-    historyProgress,
-    /do not prove that a roadmap[\s\S]*caused a change/i,
-  );
-  assert.match(dashboard, /Home fact supported by|Home fact supported/i);
-  assert.match(dashboard, /Private to my plan/);
 });
 
 test("JPEG, PNG and WebP metadata is stripped before any image category is stored", () => {

@@ -3,6 +3,32 @@ import assert from 'node:assert/strict';
 
 import { createElectricityPlanCache } from '../src/lib/electricity-plan-cache.mjs';
 
+test('fresh cache and outage fallback never return an offer after its availability ends', async () => {
+  let clock = Date.parse('2026-09-09T00:00:00Z');
+  let calls = 0;
+  const cache = createElectricityPlanCache({ now: () => clock, loadPlans: async () => {
+    if (++calls > 1) throw new Error('offline');
+    return { plans: [{ planId: 'expiring', effectiveTo: '2026-09-09T00:30:00Z' }] };
+  } });
+  await cache.get('3000', 'RESIDENTIAL');
+  clock = Date.parse('2026-09-09T00:30:00Z');
+  await assert.rejects(cache.get('3000', 'RESIDENTIAL'), /offline/);
+});
+
+test('cache filters expired records while retaining available offers and original evidence', async () => {
+  let clock = 0;
+  const cache = createElectricityPlanCache({ now: () => clock, loadPlans: async () => ({
+    plans: [{ planId: 'ended', effectiveTo: new Date(1000).toISOString() }, { planId: 'current' }],
+    fetchedAt: 'original', source: { hash: 'original-hash' },
+  }) });
+  await cache.get('3000', 'RESIDENTIAL'); clock = 1000;
+  const { result } = await cache.get('3000', 'RESIDENTIAL');
+  assert.deepEqual(result.plans.map(p => p.planId), ['current']);
+  assert.equal(result.source.partial, true);
+  assert.equal(result.fetchedAt, 'original');
+  assert.equal(result.source.hash, 'original-hash');
+});
+
 function planResult(planId) {
   return {
     plans: [{ planId }],

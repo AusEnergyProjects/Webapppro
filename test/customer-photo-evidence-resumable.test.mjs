@@ -12,15 +12,6 @@ const multiPhotoMigration = read(
   "../drizzle/0086_customer_evidence_multi_photo_prompts.sql",
 );
 const schema = read("../db/schema.ts");
-const evidenceRoute = read(
-  "../src/app/api/customer-project-evidence/route.ts",
-);
-const uploadRoute = read(
-  "../src/app/api/customer-project-evidence/uploads/route.ts",
-);
-const customerProjectsRoute = read(
-  "../src/app/api/customer-projects/route.ts",
-);
 const evidenceContract = read("../src/lib/customer-project-evidence.ts");
 const evidenceBucket = read(
   "../src/lib/customer-project-evidence-bucket.ts",
@@ -268,106 +259,14 @@ test("the public contract supports stable prompt thumbnails without leaking stor
   assert.doesNotMatch(uploadPayload, /stagingObjectKey/);
   assert.match(uploadPayload, /parts: parts\.map/);
   assert.match(uploadPayload, /uploadedBytes/);
-
-  assert.match(
-    evidenceRoute,
-    /WHERE id = \? AND customer_uid = \? AND status = 'active'/,
-  );
-  assert.match(evidenceRoute, /Content-Disposition": `inline/);
-  assert.match(evidenceRoute, /Cache-Control": "private, no-store"/);
-  assert.match(evidenceRoute, /Content-Security-Policy": "default-src 'none'; sandbox"/);
-  assert.match(customerProjectsRoute, /captureSlot: item\.capture_slot/);
-  assert.match(customerProjectsRoute, /privacyStatus: item\.privacy_status/);
-  assert.match(customerProjectsRoute, /revision: Number\(item\.revision/);
-  assert.match(customerProjectsRoute, /thumbnailUrl/);
 });
 
 test("resumable photo storage is owner scoped, bounded and metadata stripped", () => {
-  assert.match(uploadRoute, /requireFirebaseIdentity/);
-  assert.match(uploadRoute, /customer_uid = \?/);
-  assert.match(uploadRoute, /account_status = 'active'/);
-  assert.match(uploadRoute, /CUSTOMER_EVIDENCE_MAX_PROJECT_FILES/);
-  assert.match(uploadRoute, /CUSTOMER_EVIDENCE_MAX_FILE_BYTES/);
-  assert.match(uploadRoute, /CUSTOMER_EVIDENCE_PART_SIZE_BYTES/);
-  assert.match(uploadRoute, /CUSTOMER_EVIDENCE_SESSION_HOURS/);
-  assert.match(uploadRoute, /CUSTOMER_EVIDENCE_SESSION_RETENTION_DAYS/);
-  assert.match(uploadRoute, /createMultipartUpload/);
-  assert.match(uploadRoute, /resumeMultipartUpload/);
-  assert.match(uploadRoute, /metadataHash/);
-  assert.match(uploadRoute, /IDEMPOTENCY_MISMATCH/);
-  assert.doesNotMatch(uploadRoute, /CAPTURE_SLOT_OCCUPIED/);
-  assert.doesNotMatch(evidenceRoute, /CAPTURE_SLOT_OCCUPIED/);
-  assert.match(uploadRoute, /EVIDENCE_REVISION_CONFLICT/);
-  assert.match(uploadRoute, /expectedEvidenceRevision/);
-  assert.match(uploadRoute, /status = 'abandoned'/);
-  assert.match(uploadRoute, /status = 'expired'/);
-  assert.match(uploadRoute, /status = 'finalising'/);
-  assert.match(uploadRoute, /finishFinalisingSession/);
-  assert.match(uploadRoute, /private_object_cleanup_failed/);
-  assert.match(uploadRoute, /sanitiseQuotingPhoto/);
-  assert.ok(
-    uploadRoute.indexOf("sanitiseQuotingPhoto")
-      < uploadRoute.indexOf("await bucket.put(finalObjectKey"),
-  );
-  assert.match(
-    uploadRoute,
-    /customer-projects\/\$\{user\.uid\}\/\$\{session\.project_id\}\/\$\{crypto\.randomUUID\(\)\}/,
-  );
-  assert.doesNotMatch(uploadRoute, /raw\.fileName|raw\.objectKey/);
-  assert.match(uploadRoute, /confirmInstallerPhotoSharing/);
-  assert.match(uploadRoute, /CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION/);
   assert.match(evidenceBucket, /createMultipartUpload/);
   assert.match(evidenceBucket, /resumeMultipartUpload/);
 });
 
-test("initiate retries validate the retained session before returning committed evidence", () => {
-  const initiateStart = uploadRoute.indexOf("async function initiate(");
-  const initiateEnd = uploadRoute.indexOf(
-    "async function uploadPart(",
-    initiateStart,
-  );
-  const initiate = uploadRoute.slice(initiateStart, initiateEnd);
-  const existingSession = initiate.indexOf(
-    "FROM customer_project_evidence_upload_sessions",
-  );
-  const committedEvidence = initiate.indexOf(
-    "const committedByClient =",
-  );
-  assert.ok(existingSession > 0);
-  assert.ok(committedEvidence > existingSession);
-  assert.match(
-    initiate,
-    /existing\.metadata_hash !== metadataHash/,
-  );
-  assert.match(
-    initiate,
-    /existing\.status === "completed"[\s\S]*findEvidence/,
-  );
-  assert.match(
-    initiate,
-    /upload: committedUploadPayload\(committedByClient\)[\s\S]*evidence: publicCustomerEvidence\(committedByClient\)/,
-  );
-  assert.match(
-    uploadRoute,
-    /function committedUploadPayload[\s\S]*status: "completed"/,
-  );
-});
-
 test("metadata updates, retakes and removals use revision compare and swap", () => {
-  assert.match(evidenceRoute, /const expectedRevision = Number\(raw\.expectedRevision\)/);
-  assert.match(
-    evidenceRoute,
-    /status = 'active'\s+AND revision = \? AND object_key = \?/,
-  );
-  assert.match(evidenceRoute, /SET status = 'deleting', revision = \?/);
-  assert.match(evidenceRoute, /code: "EVIDENCE_DELETE_RETRY"/);
-  assert.match(evidenceRoute, /code: "EVIDENCE_REVISION_CONFLICT"/);
-  assert.match(uploadRoute, /SET client_upload_id = \?, file_name = \?/);
-  assert.match(uploadRoute, /'replaced'/);
-  assert.match(
-    uploadRoute,
-    /AND status = 'active' AND revision = \? AND object_key = \?/,
-  );
   assert.doesNotMatch(schema, /customer_project_evidence_capture_slot_idx/);
   assert.doesNotMatch(
     schema,
@@ -375,15 +274,4 @@ test("metadata updates, retakes and removals use revision compare and swap", () 
   );
   assert.match(schema, /customerProjectEvidenceUploadSessions/);
   assert.match(schema, /customerProjectEvidenceUploadParts/);
-});
-
-test("new customer evidence copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(
-    resumableMigration
-      + multiPhotoMigration
-      + evidenceRoute
-      + uploadRoute
-      + evidenceContract,
-    /\u2013|\u2014/,
-  );
 });

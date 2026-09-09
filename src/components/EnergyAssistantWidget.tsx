@@ -271,16 +271,12 @@ function SurgeMascot({ peeking = false }: { peeking?: boolean }) {
 
 const SAFE_EXACT_ACTIONS = new Set([
   "/",
-  "/account",
-  "/account/appointments",
-  "/account/profile",
-  "/account/projects/new",
-  "/account/quotes",
   "/assessments",
   "/calculator",
   "/compare",
   "/compare/gas",
   "/creditex/compliance",
+  "/direct-trade",
   "/direct-trade/dashboard",
   "/direct-trade/standards",
   "/guides",

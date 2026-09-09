@@ -26,7 +26,7 @@ const recommendations = {
   battery: { id: "battery", stage: "Test storage last", title: "Size storage from surplus solar and evening demand", text: "Use usable capacity, power, reserve, efficiency, warranty, backup behaviour and the current written discount assumption.", href: "/guides/batteries", action: "Open the battery guide" },
   ev: { id: "ev", stage: "Coordinate the load", title: "Match home charging to driving, solar and site capacity", text: "A standard outlet may cover modest driving. A dedicated charger needs a licensed electrician, compatible controls and possible switchboard or supply work.", href: "/guides/ev-charging", action: "Open the EV charging guide" },
   support: { id: "support", stage: "Before accepting a quote", title: "Confirm rebates, certificates and finance at the official source", text: "Treat every incentive as conditional until the product, installer, property, timing and application pathway have been confirmed.", href: "/rebates", action: "Check rebates and assistance" },
-  brief: { id: "brief", stage: "When the scope is clear", title: "Save the roadmap as a private project", text: "Carry the services, priorities, region and approval situation into a privacy-safe account project for suitable verified capability.", href: "/account/projects/new", action: "Create a private project" },
+  brief: { id: "brief", stage: "When the scope is clear", title: "Get help with your home energy plan", text: "Send an account-free enquiry when you are ready, with separate consent before your details are shared.", href: "/direct-trade", action: "Send an upgrade enquiry" },
 };
 
 export function createHomeEnergyPlan(input = {}) {

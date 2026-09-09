@@ -12,10 +12,8 @@ import {
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../drizzle/0092_trade_opportunity_matching_locality.sql");
 const schema = read("../db/schema.ts");
-const projectRoute = read("../src/app/api/customer-projects/route.ts");
 const opportunityRoute = read("../src/app/api/trade-opportunities/route.ts");
 const notificationServer = read("../src/lib/opportunity-notification-server.ts");
-const requestDialog = read("../src/components/CustomerInstallerRequestDialog.tsx");
 
 test("matching locality is bounded and appears only under the current notice version", () => {
   const snapshot = matchingLocalitySnapshot({
@@ -83,10 +81,6 @@ test("a non-customer opportunity without a project receipt remains state-only", 
 });
 
 test("the current matching notice explicitly describes locality and protected fields", () => {
-  for (const value of ["suburb", "postcode", "state"]) {
-    assert.match(requestDialog, new RegExp(value, "i"));
-  }
-  assert.match(requestDialog, /Installers cannot see your name, phone number or street\s+address until you approve a direct contact handover/);
   assert.match(CUSTOMER_MATCHING_NOTICE_VERSION, /^2026-08-01-/);
   assert.match(CUSTOMER_MATCHING_NOTICE_VERSION, /matching-locality/);
 });
@@ -115,18 +109,6 @@ test("the additive migration leaves every legacy opportunity locality blank", ()
 test("submission snapshots validated locality and writes the locality-specific receipt", () => {
   assert.match(schema, /suburb: text\("suburb"\)\.notNull\(\)\.default\(""\)/);
   assert.match(migration, /ALTER TABLE `trade_opportunities`[\s\S]*ADD `suburb` text DEFAULT '' NOT NULL/);
-  assert.match(
-    projectRoute,
-    /matchingLocalitySnapshot\(\{\s*suburb: authoritativeContact\.suburb,[\s\S]*postcode: opportunity\.postcode,[\s\S]*state: opportunity\.state/,
-  );
-  assert.match(
-    projectRoute,
-    /INSERT INTO trade_opportunities[\s\S]*\(id, title, project_type, suburb, postcode, state,[\s\S]*matchingLocality\.suburb, matchingLocality\.postcode, matchingLocality\.state/,
-  );
-  assert.match(
-    projectRoute,
-    /customer-project-submit:\$\{id\}`[\s\S]*CUSTOMER_MATCHING_NOTICE_VERSION/,
-  );
 });
 
 test("trade API and notification SQL bind locality to the exact project and current receipt", () => {
