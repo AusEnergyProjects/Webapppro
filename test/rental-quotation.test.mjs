@@ -1,26 +1,46 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { rentalQuotation, rentalQuotationBlockers, rentalObservationFields } from "../src/lib/rental-quotation.mjs";
+import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalQuotationBlockers, rentalObservationFields } from "../src/lib/rental-quotation.mjs";
 import { rentalAssessmentTemplateSnapshot, rentalAssessmentCompletion, rentalCheckIsReadiness, rentalRegimeAssessment } from "../src/lib/trade-rental-assessment.mjs";
-import { rentalSuggestedTrade, RENTAL_REFERRAL_TRADES } from "../src/lib/rental-referral-trades.mjs";
 
 const quotation = { status: "ready", measurements: "6 x 4 m = 24 m2, tape measured", specification: "R5 to bare area", access: "Hallway hatch; electrical clearance before work", exclusions: "Electrical rectification separately quoted" };
 const finding = () => ({ title: "Insulate bare ceiling area", description: "Bare area above rear bedroom", tradeCategory: "Insulation installer", scopeSummary: "Install suitable R5 insulation to the measured area after clearance", quantityMilli: 24000, unitLabel: "m2", details: { quotation: { ...quotation } } });
 
-test("quote readiness requires measured scope, access, specification, exclusions and evidence", () => {
-  assert.deepEqual(rentalQuotationBlockers(finding(), "does_not_meet", 2), []);
+test("finalisation requires a complete quotation scope and photos without a readiness choice", () => {
+  assert.deepEqual(rentalQuotationBlockers(finding(), 2), []);
   for (const key of ["measurements", "specification", "access", "exclusions"]) {
     const partial = finding(); partial.details.quotation[key] = "";
-    assert.ok(rentalQuotationBlockers(partial, "does_not_meet", 2).length, key);
+    assert.ok(rentalQuotationBlockers(partial, 2).length, key);
   }
-  assert.ok(rentalQuotationBlockers({ ...finding(), quantityMilli: 0 }, "does_not_meet", 2).length);
-  assert.ok(rentalQuotationBlockers(finding(), "does_not_meet", 1).length);
-  const unresolved = finding(); unresolved.details.quotation.missingInformation = "Site measurement still required.";
-  assert.ok(rentalQuotationBlockers(unresolved, "does_not_meet", 2).length);
-  for (const outcome of ["not_accessible", "specialist_verification_required", "exemption_evidence_pending"]) assert.ok(rentalQuotationBlockers(finding(), outcome, 2).length);
-  assert.ok(rentalQuotationBlockers({ ...finding(), details: {} }, "does_not_meet", 2).length);
-  assert.deepEqual(rentalQuotationBlockers({ ...finding(), details: { quotation: { status: "further_information", missingInformation: "Electrician to verify concealed services." } } }, "specialist_verification_required", 1), []);
-  assert.equal(rentalQuotation({ status: { arbitrary: true } }).status, "");
+  assert.ok(rentalQuotationBlockers({ ...finding(), quantityMilli: 0 }, 2).length);
+  assert.ok(rentalQuotationBlockers({ ...finding(), unitLabel: "" }, 2).length);
+  for (const count of [0, 1, undefined, NaN]) assert.ok(rentalQuotationBlockers(finding(), count).length);
+  assert.ok(rentalQuotationBlockers({ ...finding(), details: { quotation: { status: "further_information", missingInformation: "Return for measurements" } } }, 2).length, "The retired escape path cannot finalise an incomplete scope");
+  const current = finding(); delete current.details.quotation.status;
+  assert.deepEqual(rentalQuotationBlockers(current, 2), []);
+  const legacy = rentalQuotation({ exclusions: "Disposal included", missingInformation: "Concealed framing was not visible" });
+  assert.match(legacy.exclusions, /Concealed framing was not visible/);
+  assert.equal(Object.hasOwn(legacy, "status"), false);
+  assert.deepEqual(rentalQuotation(legacy), legacy, "Legacy limitations are preserved once without duplication");
+  const longLegacy = rentalQuotation({ exclusions: "A".repeat(4000), missingInformation: "B".repeat(4000) });
+  assert.ok(longLegacy.exclusions.endsWith("B".repeat(4000)));
+  assert.ok(longLegacy.exclusions.length <= RENTAL_QUOTATION_FIELDS.find((field) => field.key === "exclusions").maxLength);
+});
+
+test("new and older rental findings require quotation details and photos without naming a trade", () => {
+  const moduleTemplate = { key: "minimum_standards", sections: [{ key: "windows", title: "Window sealing", checks: [{ key: "seals", required: true, requiredEvidenceCount: 1, repeatBy: "property" }] }] };
+  const item = { id: "seals", itemKey: "seals", sectionKey: "windows", checkKey: "seals", outcome: "does_not_meet" };
+  const input = { moduleTemplate, items: [item], findings: [{ ...finding(), itemId: "seals", tradeCategory: "" }], evidenceCounts: { seals: 2 }, photoCounts: { seals: 2 } };
+  for (const templateVersion of [1, 2, 3]) {
+    input.moduleTemplate.templateVersion = templateVersion;
+    const result = rentalAssessmentCompletion(input);
+    assert.equal(result.complete, true, JSON.stringify(result.blockers));
+    assert.equal(rentalAssessmentCompletion({ ...input, photoCounts: {} }).complete, false, "Documents cannot replace location/detail photos");
+    assert.equal(rentalAssessmentCompletion({ ...input, findings: [{ ...input.findings[0], details: {} }] }).complete, false);
+  }
+  input.items[0].outcome = "specialist_verification_required";
+  input.findings[0] = { ...input.findings[0], title: "Test circuit protection", description: "Protection requires licensed verification", scopeSummary: "Test one switchboard and issue the testing record", quantityMilli: 1000, unitLabel: "switchboard", details: { quotation: { measurements: "One board, hallway, labelled circuits photographed", specification: "Verify RCD and circuit-breaker protection; provide testing results", access: "Vacant home, hallway access, isolation appointment included", exclusions: "Testing and report included; concealed rectification excluded" } } };
+  assert.equal(rentalAssessmentCompletion(input).complete, true, "A fully described licensed testing task is quotable without declaring the equipment compliant");
 });
 
 test("new full assessments preserve all 15 current categories and distinguish eight future checks", () => {
@@ -31,9 +51,6 @@ test("new full assessments preserve all 15 current categories and distinguish ei
   assert.equal(checks.filter((check) => !rentalCheckIsReadiness(check, template.assessmentScope)).length, 24);
   assert.equal(rentalCheckIsReadiness({}, "energy_readiness_2027"), true, "Historical readiness snapshots retain their meaning");
   assert.equal(rentalCheckIsReadiness({ assessmentPhase: "current" }, "energy_readiness_2027"), false);
-  assert.ok(RENTAL_REFERRAL_TRADES.includes("Insulation installer"));
-  assert.equal(rentalSuggestedTrade("ceiling_2027_readiness"), "Insulation installer");
-  assert.equal(rentalSuggestedTrade("unknown_check"), "");
 });
 
 test("practical observation prompts cover safe assessor measurements without inventing design results", () => {

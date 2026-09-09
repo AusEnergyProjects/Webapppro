@@ -20,13 +20,12 @@ import { RENTAL_ADVERSE_OUTCOMES, RENTAL_OUTCOMES, RENTAL_READINESS_OUTCOMES, ne
   type RentalAssessmentModule, type RentalAssessmentSection } from '@/lib/rental-inspection';
 import { colours, radius, spacing } from '@/lib/theme';
 import type { FieldRentalInspectionSummary } from '@/lib/types';
-import { RENTAL_REFERRAL_TRADES, rentalSuggestedTrade } from '../../../src/lib/rental-referral-trades.mjs';
 import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalQuotationGuidance } from '../../../src/lib/rental-quotation.mjs';
 
 type Props = { workOrderId: string; summary: FieldRentalInspectionSummary; online: boolean; onChanged: () => Promise<void>; onReturnToJob?: () => void };
 type Photo = { uri: string; width: number; height: number; capture: ReturnType<typeof observedTime>; location: Awaited<ReturnType<typeof observeLocation>> | null; mediaId?: string };
 type Draft = { outcome: string; locationLabel: string; publicNotes: string; internalNotes: string;
-  findingTitle: string; findingDescription: string; tradeCategory: string; scopeSummary: string;
+  findingTitle: string; findingDescription: string; scopeSummary: string;
   quantity: string; unitLabel: string; quotation: Record<string, string>;
   severity: string; immediateAction: string; notified: boolean; response: Record<string, unknown>; photos: Photo[] };
 type Cursor = { sectionKey: string; checkIndex: number; instanceKey: string };
@@ -40,7 +39,7 @@ const itemKey = (module: RentalAssessmentModule, cursor: Cursor) => draftPrefix(
 function initialDraft(item: RentalAssessmentItem, data: RentalAssessmentResult): Draft {
   const finding = data.findings?.find((f) => f.itemId === item.id);
   return { outcome: item.outcome, locationLabel: item.locationLabel, publicNotes: item.publicNotes, internalNotes: item.internalNotes,
-    findingTitle: finding?.title || '', findingDescription: finding?.description || item.publicNotes || '', tradeCategory: finding?.tradeCategory || rentalSuggestedTrade(item.checkKey),
+    findingTitle: finding?.title || '', findingDescription: finding?.description || item.publicNotes || '',
     scopeSummary: finding?.scopeSummary || '', severity: finding?.severity || 'required',
     quantity: finding ? String(finding.quantityMilli / 1000) : '', unitLabel: finding?.unitLabel || 'each', quotation: rentalQuotation(finding?.details.quotation),
     immediateAction: String(finding?.details.immediateAction || ''), notified: finding?.details.responsiblePeopleNotified === true,
@@ -284,14 +283,14 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     if (draft.outcome === 'not_applicable' && !draft.publicNotes.trim()) throw new Error('Explain why this check does not apply.');
     const adverse = RENTAL_ADVERSE_OUTCOMES.has(draft.outcome);
     if (adverse && (!Number.isFinite(Number(draft.quantity || 0)) || Number(draft.quantity || 0) < 0 || Number(draft.quantity || 0) > 1000000)) throw new Error('Enter a valid quantity, or leave it blank when not measured.');
-    if (adverse && (!draft.findingDescription.trim() || !draft.tradeCategory || !draft.scopeSummary.trim())) throw new Error('Complete the finding and recommended work.');
+    if (adverse && (!draft.findingDescription.trim() || !draft.scopeSummary.trim())) throw new Error('Complete the finding and recommended work.');
     if (adverse && draft.severity === 'immediate_safety_risk' && (!draft.immediateAction.trim() || !draft.notified)) throw new Error('Record the make-safe action and notification.');
     const existingFinding = data.findings?.find((finding) => finding.itemId === item.id);
     let current = await request({ action: 'save_item', moduleId: active.id, expectedModuleRevision: active.revision,
       expectedItemRevision: item.revision, sectionKey: section.key, checkKey: check.key, instanceKey: item.instanceKey,
       locationLabel: draft.locationLabel.trim(), outcome: draft.outcome, response: draft.response, publicNotes: draft.publicNotes.trim(), internalNotes: draft.internalNotes.trim(), sortOrder: item.sortOrder,
       finding: adverse ? { ...existingFinding, title: draft.findingTitle.trim() || section.title + ': ' + readable(draft.outcome), description: draft.findingDescription.trim(),
-        tradeCategory: draft.tradeCategory, scopeSummary: draft.scopeSummary.trim(), severity: draft.severity, recommendedAction: draft.scopeSummary.trim(),
+        scopeSummary: draft.scopeSummary.trim(), severity: draft.severity, recommendedAction: draft.scopeSummary.trim(),
         quantityMilli: Math.round(Number(draft.quantity || 0) * 1000), unitLabel: draft.unitLabel || 'each',
         details: { ...existingFinding?.details, quotation: draft.quotation, immediateAction: draft.immediateAction.trim(), responsiblePeopleNotified: draft.notified } } : undefined });
     const saved = current.items?.find((i) => i.moduleId === active.id && i.sectionKey === section.key && i.checkKey === check.key && i.instanceKey === item.instanceKey);
@@ -305,6 +304,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     }
     const photos = current.evidence?.filter((e) => e.itemId === saved.id && e.status === 'active').length || 0;
     if (photos < check.requiredEvidenceCount) throw new Error('Answer saved. Add the required photo before moving on.');
+    if (adverse && (current.evidence?.filter((e) => e.itemId === saved.id && e.status === 'active' && e.contentType.startsWith('image/')).length || 0) < 2) throw new Error('Answer saved. Add an overview and close photo of the proposed work before moving on.');
     const next = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts } }; delete next.drafts[key];
     setCache(next); cacheRef.current = next; await persist(next); await onChanged();
     advanceQuestion();
@@ -319,14 +319,13 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     }
     if ((page === 'answer' || page === 'details') && RENTAL_ADVERSE_OUTCOMES.has(draft.outcome)) {
       change({ findingDescription: draft.findingDescription.trim() ? draft.findingDescription : draft.publicNotes,
-        tradeCategory: draft.tradeCategory || rentalSuggestedTrade(check.key),
         quotation: { ...rentalQuotation(draft.quotation), measurements: draft.quotation?.measurements || String(draft.response.measurement || ''), specification: draft.quotation?.specification || [draft.response.make, draft.response.model].filter(Boolean).join(' ') },
         quantity: draft.quantity ?? String((data.findings?.find((finding) => finding.itemId === item?.id)?.quantityMilli || 0) / 1000),
         unitLabel: draft.unitLabel || data.findings?.find((finding) => finding.itemId === item?.id)?.unitLabel || 'each' });
       setPage('finding'); return;
     }
     if (page === 'finding') {
-      if (editable && (!draft.findingDescription.trim() || !draft.tradeCategory || !draft.scopeSummary.trim())) return setError('Add the observed problem, next step and trade needed.');
+      if (editable && (!draft.findingDescription.trim() || !draft.scopeSummary.trim())) return setError('Add the observed problem and recommended work.');
       if (draft.severity === 'immediate_safety_risk') { setPage('safety'); return; }
     }
     if (editable) await perform('save', saveAnswer); else advanceQuestion();
@@ -375,7 +374,8 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
         {sections.map((s) => { const count = s.checks.filter((c, checkIndex) => {
           const entries = data.items?.filter((i) => i.moduleId === active.id && i.sectionKey === s.key && i.checkKey === c.key) || [];
           const pending = Object.keys(cache.drafts).some((draftKey) => draftKey.startsWith(draftPrefix(active) + [s.key, checkIndex].join(':') + ':'));
-          return !pending && entries.length > 0 && entries.every((entry) => entry.outcome && (data.evidence?.filter((e) => e.itemId === entry.id && e.status === 'active').length || 0) >= c.requiredEvidenceCount);
+          return !pending && entries.length > 0 && entries.every((entry) => entry.outcome && (data.evidence?.filter((e) => e.itemId === entry.id && e.status === 'active').length || 0) >= c.requiredEvidenceCount
+            && (!RENTAL_ADVERSE_OUTCOMES.has(entry.outcome) || (data.evidence?.filter((e) => e.itemId === entry.id && e.status === 'active' && e.contentType.startsWith('image/')).length || 0) >= 2));
         }).length;
           return <Pressable key={s.key} disabled={Boolean(busy)} onPress={() => openCheck(s)} style={styles.category}><MaterialCommunityIcons name={count === s.checks.length ? 'check-circle-outline' : 'camera-outline'} size={23} color={colours.green} /><View style={styles.flex}><Text style={styles.categoryTitle}>{s.title}</Text><Text style={styles.small}>{count}/{s.checks.length} checked</Text></View><MaterialCommunityIcons name="chevron-right" size={24} color={colours.green} /></Pressable>; })}
         <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => { setMetadataIndex(0); setPage(active.status === 'complete' || !metadata.length ? 'review' : 'metadata'); }}>Review and finish</FieldButton>
@@ -409,7 +409,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
           {check.assessmentPhase === 'energy_readiness_2027' ? <Text style={styles.small}>2027 energy readiness · {check.trigger}</Text> : null}
           <View style={styles.options}>{(check.assessmentPhase === 'energy_readiness_2027' || (!check.assessmentPhase && active.template.assessmentScope === 'energy_readiness_2027') ? RENTAL_READINESS_OUTCOMES : RENTAL_OUTCOMES).map((option) => <Pressable key={option.value} disabled={!editable || Boolean(busy)} onPress={() => change({ outcome: option.value })} style={[styles.option, draft.outcome === option.value && styles.selected]}><Text style={styles.categoryTitle}>{option.label}</Text></Pressable>)}</View>
           {draft.outcome === 'not_applicable' ? <RentalTextField label="Why does this not apply?" value={draft.publicNotes} editable={editable && !busy} onChange={(v) => change({ publicNotes: v })} multiline /> : null}
-          <View style={styles.photo}><Text style={styles.body}>{check.photoGuidance}</Text><FieldButton variant="secondary" disabled={!editable || Boolean(busy)} loading={busy === 'camera'} onPress={() => void capture()}>Take photo</FieldButton><Text style={styles.small}>{evidence.length} linked · {draft.photos.length} on this phone · {check.requiredEvidenceCount} required</Text>
+          <View style={styles.photo}><Text style={styles.body}>{check.photoGuidance}</Text>{RENTAL_ADVERSE_OUTCOMES.has(draft.outcome) ? <Text style={styles.small}>Include an overview and close detail with a scale or readable label so the work can be quoted.</Text> : null}<FieldButton variant="secondary" disabled={!editable || Boolean(busy)} loading={busy === 'camera'} onPress={() => void capture()}>Take photo</FieldButton><Text style={styles.small}>{evidence.length} linked · {draft.photos.length} on this phone · {Math.max(check.requiredEvidenceCount, RENTAL_ADVERSE_OUTCOMES.has(draft.outcome) ? 2 : 0)} required{RENTAL_ADVERSE_OUTCOMES.has(draft.outcome) ? ' (at least 2 photos)' : ''}</Text>
           {draft.photos.map((p, index) => <View key={p.uri} style={styles.pendingPhoto}>
             <Image source={{ uri: p.uri }} style={styles.thumbnail} alt={`Pending photo ${index + 1}`} accessibilityLabel={`Pending photo ${index + 1}`} />
             <Text style={styles.small}>Photo {index + 1} saved {new Date(p.capture.captureObservedAtUtc).toLocaleTimeString()} · {p.mediaId ? 'Uploaded, ready to link' : p.location?.location.state === 'captured' ? 'GPS ' + Math.round(p.location.location.accuracyMetres || 0) + ' m' : 'GPS needed'}</Text>
@@ -437,15 +437,12 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
         </> : page === 'finding' ? <>
           <RentalTextField label="Observed problem" value={draft.findingDescription} editable={editable && !busy} onChange={(v) => change({ findingDescription: v })} multiline />
           <RentalTextField label="Recommended next step" value={draft.scopeSummary} editable={editable && !busy} onChange={(v) => change({ scopeSummary: v })} multiline />
-          <FieldSelect label="Trade needed" placeholder="Choose the trade for this follow-up" value={draft.tradeCategory} disabled={!editable || Boolean(busy)} options={RENTAL_REFERRAL_TRADES.map((v) => ({ value: v, label: v }))} onChange={(v) => change({ tradeCategory: v })} />
           <FieldSelect label="Priority" value={draft.severity} disabled={!editable || Boolean(busy)} options={['required', 'urgent', 'immediate_safety_risk', 'recommended', 'information'].map((value) => ({ value, label: readable(value) }))} onChange={(v) => change({ severity: v })} />
           <Text style={styles.body}>Record what you can see and measure safely. Photograph labels and connections; leave design, sizing and concealed services for the qualified trade.</Text>
           <Text style={styles.small}>{rentalQuotationGuidance(check.key)}</Text>
-          <RentalTextField label="Quantity (leave blank if not measured)" value={draft.quantity || ''} editable={editable && !busy} onChange={(v) => change({ quantity: v })} />
+          <RentalTextField label="Quantity for the work" value={draft.quantity || ''} editable={editable && !busy} onChange={(v) => change({ quantity: v })} />
           <RentalTextField label="Unit, for example m2, metres or each" value={draft.unitLabel || 'each'} editable={editable && !busy} onChange={(v) => change({ unitLabel: v })} />
-          <FieldSelect label="Can the trade price this scope from the report?" placeholder="Select after recording the scope" value={draft.quotation?.status || ''} disabled={!editable || Boolean(busy)} options={[{ value: 'ready', label: 'Scope and evidence ready for quoting' }, { value: 'further_information', label: 'More information or a site visit needed' }]} onChange={(v) => change({ quotation: { ...rentalQuotation(draft.quotation), status: v } })} />
-          {RENTAL_QUOTATION_FIELDS.map((field) => <View key={field.key}><RentalTextField label={field.label} value={draft.quotation?.[field.key] || ''} editable={editable && !busy} onChange={(v) => change({ quotation: { ...rentalQuotation(draft.quotation), [field.key]: v } })} multiline /><Text style={styles.small}>{field.help}</Text></View>)}
-          {draft.quotation?.status === 'further_information' || draft.quotation?.missingInformation ? <RentalTextField label="What is missing, and who can confirm it? Clear only once resolved." value={draft.quotation?.missingInformation || ''} editable={editable && !busy} onChange={(v) => change({ quotation: { ...rentalQuotation(draft.quotation), missingInformation: v } })} multiline /> : null}
+          {RENTAL_QUOTATION_FIELDS.map((field) => <View key={field.key}><RentalTextField label={`${field.label} *`} value={draft.quotation?.[field.key] || ''} editable={editable && !busy} onChange={(v) => change({ quotation: { ...rentalQuotation(draft.quotation), [field.key]: v } })} multiline maxLength={field.maxLength || 4000} /><Text style={styles.small}>{field.help}</Text></View>)}
         </> : page === 'safety' ? <>
           <RentalTextField label="What was done to make it safe?" value={draft.immediateAction} editable={editable && !busy} onChange={(v) => change({ immediateAction: v })} multiline />
           <FieldButton variant={draft.notified ? 'primary' : 'secondary'} disabled={!editable || Boolean(busy)} onPress={() => change({ notified: !draft.notified })}>{draft.notified ? 'Notification confirmed' : 'Confirm responsible people were notified'}</FieldButton>

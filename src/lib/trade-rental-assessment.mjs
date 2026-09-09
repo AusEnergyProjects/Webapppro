@@ -702,6 +702,7 @@ export function rentalAssessmentCompletion(input) {
   const items = (Array.isArray(input?.items) ? input.items : []).filter((item) => sections.some((section) => section.key === item.sectionKey && section.checks?.some((check) => check.key === item.checkKey)));
   const findings = Array.isArray(input?.findings) ? input.findings : [];
   const evidenceCounts = parsedObject(input?.evidenceCounts);
+  const photoCounts = parsedObject(input?.photoCounts);
   const answers = parsedObject(input?.answers);
   const blockers = [...requiredMetadataBlockers(moduleTemplate, answers)];
   const observationsOnly = moduleTemplate.metadataFields?.some((field) => field.key === "rentalRegime") && !rentalRegimeAssessment(answers).applicable;
@@ -747,11 +748,11 @@ export function rentalAssessmentCompletion(input) {
         if (["does_not_meet", "specialist_verification_required", "not_accessible", "exemption_evidence_pending"].includes(outcome)) {
           const finding = findings.find((candidate) => candidate?.itemId === item.id || candidate?.itemKey === item.itemKey);
           if (!finding || !String(finding.title || "").trim() || !String(finding.description || "").trim()
-            || !String(finding.tradeCategory || "").trim() || !String(finding.scopeSummary || "").trim()) {
-            blockers.push({ key: `finding:${item.itemKey}`, label: `${itemLabel} needs a clear finding, responsible trade and quote-ready scope.` });
+            || !String(finding.scopeSummary || "").trim()) {
+            blockers.push({ key: `finding:${item.itemKey}`, label: `${itemLabel} needs a clear finding and work scope.` });
           }
-          if (finding && Number(moduleTemplate.templateVersion) >= 3) {
-            for (const [index, message] of rentalQuotationBlockers(finding, outcome, suppliedEvidenceCount).entries()) {
+          if (finding) {
+            for (const [index, message] of rentalQuotationBlockers(finding, photoCounts[item.id] ?? photoCounts[item.itemKey] ?? 0).entries()) {
               blockers.push({ key: `quotation:${item.itemKey}:${index}`, label: `${itemLabel}: ${message}` });
             }
           }

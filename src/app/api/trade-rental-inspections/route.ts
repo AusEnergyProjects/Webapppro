@@ -22,7 +22,7 @@ import {
   RENTAL_ASSESSMENT_SCOPES,
 } from "@/lib/trade-rental-assessment.mjs";
 import { rentalEvidenceCapture, rentalEvidencePhotoCapture } from "@/lib/trade-rental-evidence.mjs";
-import { rentalQuotation } from "@/lib/rental-quotation.mjs";
+import { RENTAL_QUOTATION_FIELDS, rentalQuotation } from "@/lib/rental-quotation.mjs";
 import { currentRentalModuleCredentialSnapshot, rentalModuleProfileAnswers } from "@/lib/trade-rental-credentials";
 import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
 import {
@@ -163,7 +163,7 @@ function inspectionError(error: unknown) {
   if (code === "RENTAL_ASSESSMENT_SCOPE_INVALID") return adminJson({ ok: false, error: "Choose a valid rental assessment scope." }, 400);
   if (code === "RENTAL_MEDIA_MISMATCH") return adminJson({ ok: false, error: "That evidence file does not belong to this job." }, 409);
   if (code === "RENTAL_EVIDENCE_METADATA_REQUIRED") return adminJson({ ok: false, error: "Assessment photos must include a valid TLink capture time and GPS location. Retake the photo in the field app or add it from a location-enabled browser." }, 409);
-  if (code === "RENTAL_FINDING_REQUIRED") return adminJson({ ok: false, error: "An adverse result needs a clear finding title, description, responsible trade and quote-ready scope before it can be saved." }, 400);
+  if (code === "RENTAL_FINDING_REQUIRED") return adminJson({ ok: false, error: "An adverse result needs a clear finding title, description and work scope before it can be saved." }, 400);
   if (code === "RENTAL_MUTATION_CONFLICT" || code === "ONLINE_MUTATION_CONFLICT") return adminJson({ ok: false, error: "This assessment changed on another device. Refresh before trying again." }, 409);
   if (code === "RENTAL_RESPONSE_TOO_LARGE") return adminJson({ ok: false, error: "The assessment response is too large." }, 413);
   if (code === "INVALID_RENTAL_ITEM_KEY") return adminJson({ ok: false, error: "The repeated assessment item is invalid." }, 400);
@@ -362,6 +362,9 @@ async function assessmentPayload(context: InspectionContext, origin = "") {
     item.id,
     evidence.filter((entry) => entry.itemId === item.id && entry.status === "active").length,
   ]));
+  const photoCounts = Object.fromEntries(items.map((item) => [item.id,
+    evidence.filter((entry) => entry.itemId === item.id && entry.status === "active" && entry.evidenceType === "photo" && entry.contentType.startsWith("image/")).length,
+  ]));
   const usedEvidenceBytes = evidenceRows.results
     .filter((entry) => entry.status === "active")
     .reduce((total, entry) => total + integer(entry.size_bytes), 0);
@@ -371,6 +374,7 @@ async function assessmentPayload(context: InspectionContext, origin = "") {
     items: items.filter((item) => item.moduleId === module.id).map((item) => ({ ...item, responseJson: item.response })),
     findings: findings.filter((finding) => finding.moduleId === module.id),
     evidenceCounts,
+    photoCounts,
   })]));
   return {
     inspection: presentInspection(context.inspection),
@@ -571,12 +575,14 @@ function findingInput(body: Row, outcome: string, itemKey: string, locationLabel
   const description = cleanAdminText(source.description, 8000);
   const tradeCategory = cleanAdminText(source.tradeCategory, 120);
   const scopeSummary = cleanAdminText(source.scopeSummary, 8000);
-  if (!title || !description || !tradeCategory || !scopeSummary) throw new Error("RENTAL_FINDING_REQUIRED");
+  if (!title || !description || !scopeSummary) throw new Error("RENTAL_FINDING_REQUIRED");
   const requestedSeverity = cleanAdminText(source.severity, 40);
   const severity = FINDING_SEVERITIES.has(requestedSeverity) ? requestedSeverity : "required";
   const detailsSource = parsedObject(source.details);
+  const quotation = rentalQuotation(detailsSource.quotation);
+  if (RENTAL_QUOTATION_FIELDS.some((field) => quotation[field.key].length > (field.maxLength || 4000))) throw new Error("RENTAL_RESPONSE_TOO_LARGE");
   const details = {
-    quotation: Object.fromEntries(Object.entries(rentalQuotation(detailsSource.quotation)).map(([key, value]) => [key, cleanAdminText(value, key === "status" ? 40 : 4000)])),
+    quotation: Object.fromEntries(RENTAL_QUOTATION_FIELDS.map((field) => [field.key, cleanAdminText(quotation[field.key], field.maxLength || 4000)])),
     immediateAction: cleanAdminText(detailsSource.immediateAction, 2000),
     responsiblePeopleNotified: cleanBoolean(detailsSource.responsiblePeopleNotified),
     notificationRecipient: cleanAdminText(detailsSource.notificationRecipient, 500),
@@ -594,7 +600,7 @@ function findingInput(body: Row, outcome: string, itemKey: string, locationLabel
     locationLabel,
     recommendedAction: cleanAdminText(source.recommendedAction, 4000),
     scopeSummary,
-    quantityMilli: Math.min(1_000_000_000, Math.max(0, integer(source.quantityMilli, 1000))),
+    quantityMilli: Math.min(1_000_000_000, Math.max(0, integer(source.quantityMilli, 0))),
     unitLabel: cleanAdminText(source.unitLabel, 40) || "each",
     details,
     internalNotes: cleanAdminText(source.internalNotes, 4000),
@@ -880,18 +886,21 @@ async function completeModule(context: InspectionContext, body: Row) {
       .bind(context.inspection.id, moduleId, context.access.ownerUid).all<Row>(),
     getD1().prepare(`SELECT * FROM trade_rental_findings WHERE inspection_id = ? AND module_id = ? AND firebase_uid = ?`)
       .bind(context.inspection.id, moduleId, context.access.ownerUid).all<Row>(),
-    getD1().prepare(`SELECT item_id, COUNT(*) count FROM trade_rental_evidence_links
+    getD1().prepare(`SELECT item_id, COUNT(*) count,
+        SUM(CASE WHEN evidence_type = 'photo' THEN 1 ELSE 0 END) photo_count FROM trade_rental_evidence_links
       WHERE inspection_id = ? AND module_id = ? AND firebase_uid = ? AND status = 'active'
       GROUP BY item_id`)
       .bind(context.inspection.id, moduleId, context.access.ownerUid).all<Row>(),
   ]);
   const evidenceCounts = Object.fromEntries(evidenceRows.results.map((row) => [String(row.item_id), integer(row.count)]));
+  const photoCounts = Object.fromEntries(evidenceRows.results.map((row) => [String(row.item_id), integer(row.photo_count)]));
   const completion = rentalAssessmentCompletion({
     moduleTemplate: parsedObject(assessmentModule.template_snapshot),
     answers: parsedObject(assessmentModule.answers),
     items: itemRows.results.map((row) => ({ ...presentItem(row), responseJson: parsedObject(row.response_json) })),
     findings: findingRows.results.map(presentFinding),
     evidenceCounts,
+    photoCounts,
   });
   if (!completion.complete) return adminJson({ ok: false, error: "Finish the highlighted assessment items before completing this module.", blockers: completion.blockers }, 409);
   const now = new Date().toISOString();

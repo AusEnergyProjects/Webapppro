@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
-import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalQuotationBlockers } from "@/lib/rental-quotation.mjs";
+import { RENTAL_QUOTATION_FIELDS, rentalQuotation } from "@/lib/rental-quotation.mjs";
 import { useEffect, useMemo, useState } from "react";
 import styles from "./RentalReportViewer.module.css";
 
@@ -37,7 +37,6 @@ type Finding = {
   standardReference: string;
   status: string;
   severity: string;
-  tradeCategory: string;
   locationLabel: string;
   recommendedAction: string;
   scopeSummary: string;
@@ -98,12 +97,6 @@ type RentalReport = {
 };
 
 type Result = { ok?: boolean; report?: RentalReport; error?: string };
-
-function quoteReady(finding: Finding, report: RentalReport) {
-  const outcome = report.modules.flatMap((module) => module.sections.flatMap((section) => section.items)).find((item) => item.id === finding.itemId)?.outcome;
-  const evidenceCount = report.evidence.filter((entry) => entry.itemId === finding.itemId || entry.findingId === finding.id).length;
-  return rentalQuotation(finding.details.quotation).status === "ready" && rentalQuotationBlockers(finding, outcome, evidenceCount).length === 0;
-}
 
 const outcomeLabels: Record<string, string> = {
   meets: "Meets",
@@ -197,10 +190,10 @@ export function RentalReportViewer({ token }: { token: string }) {
   const openFindings = useMemo(() => (report?.findings || []).filter((finding) => finding.status !== "compliant"), [report]);
   const resolvedFindings = useMemo(() => (report?.findings || []).filter((finding) => finding.status === "compliant"), [report]);
   const groupedFindings = useMemo(() => Object.entries(openFindings.reduce<Record<string, Finding[]>>((groups, finding) => {
-    const trade = finding.tradeCategory || "Assessor follow-up";
-    (groups[trade] ||= []).push(finding);
+    const category = report?.modules.flatMap((module) => module.sections).find((section) => section.items.some((item) => item.id === finding.itemId))?.title || displayLabel(finding.category || "Required work");
+    (groups[category] ||= []).push(finding);
     return groups;
-  }, {})), [openFindings]);
+  }, {})), [openFindings, report]);
 
   async function copyLink() {
     try {
@@ -252,12 +245,12 @@ export function RentalReportViewer({ token }: { token: string }) {
 
     <section className={styles.summaryCards}>
       <article><span>Selected modules</span><strong>{report.modules.length}</strong><small>{report.modules.map((module) => module.title).join(" | ")}</small></article>
-      <article><span>Outstanding findings</span><strong>{openFindings.length}</strong><small>{groupedFindings.length} responsible trade group{groupedFindings.length === 1 ? "" : "s"}</small></article>
+      <article><span>Outstanding findings</span><strong>{openFindings.length}</strong><small>{groupedFindings.length} work categor{groupedFindings.length === 1 ? "y" : "ies"}</small></article>
       <article><span>Evidence files</span><strong>{report.evidence.length}</strong><small>Photos and documents linked to exact checks</small></article>
     </section>
 
     <section className={styles.contentSection} id="findings">
-      <header><span>Quote-ready register</span><h2>Findings and work scopes</h2><p>Grouped by responsible trade so repairs can be scoped and quoted without searching through the entire report.</p></header>
+      <header><span>Scope for quoting</span><h2>Findings and work details</h2><p>Grouped by the work required, with measurements, evidence and any information still to confirm.</p></header>
       {!openFindings.length ? <div className={styles.empty}><strong>No outstanding findings recorded</strong><span>Review the full assessment for every observed result, limitation and evidence file.</span></div>
         : groupedFindings.map(([trade, findings]) => <section className={styles.tradeGroup} key={trade}>
           <header><h3>{trade}</h3><strong>{findings.length} item{findings.length === 1 ? "" : "s"}</strong></header>
@@ -266,13 +259,10 @@ export function RentalReportViewer({ token }: { token: string }) {
             <dl>
               <div><dt>Status</dt><dd>{displayLabel(finding.status)}</dd></div>
               <div><dt>Category</dt><dd>{displayLabel(finding.category)}</dd></div>
-              <div><dt>Responsible trade</dt><dd>{finding.tradeCategory || "Assessor follow-up"}</dd></div>
               <div><dt>Finding</dt><dd>{finding.description}</dd></div>
               {finding.recommendedAction && finding.recommendedAction !== finding.scopeSummary && <div><dt>Recommended action</dt><dd>{finding.recommendedAction}</dd></div>}
               <div className={styles.scopeRow}><dt>Work required</dt><dd>{finding.scopeSummary}</dd></div>
-              <div><dt>Quoting status</dt><dd>{quoteReady(finding, report) ? "Scope confirmed by assessor for quoting" : "Further information required before quoting"}</dd></div>
               {RENTAL_QUOTATION_FIELDS.map((field) => rentalQuotation(finding.details.quotation)[field.key] ? <div key={field.key}><dt>{field.label}</dt><dd>{rentalQuotation(finding.details.quotation)[field.key]}</dd></div> : null)}
-              {rentalQuotation(finding.details.quotation).missingInformation && <div><dt>Information still needed</dt><dd>{rentalQuotation(finding.details.quotation).missingInformation}</dd></div>}
               <div><dt>Quantity</dt><dd>{finding.quantityMilli / 1000} {finding.unitLabel}</dd></div>
               {finding.standardReference && <div><dt>Reference</dt><dd>{finding.standardReference}</dd></div>}
               {finding.severity === "immediate_safety_risk" && <>

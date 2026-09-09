@@ -128,6 +128,8 @@ test("rental assessment PDF is readable, branded and excludes internal notes rec
   assert.match(content, /-37\.813629, 144\.963058/);
   assert.match(content, /7 metres/);
   assert.doesNotMatch(content, /NaN/);
+  assert.doesNotMatch(content, /plumber|Responsible trade|Further information required before quoting|Ready to quote/);
+  assert.match(content, /Scope for quoting/);
   for (const secret of ["MODULE SECRET", "ITEM SECRET", "RESPONSE SECRET", "FINDING SECRET", "NESTED SECRET"]) {
     assert.doesNotMatch(content, new RegExp(secret));
   }

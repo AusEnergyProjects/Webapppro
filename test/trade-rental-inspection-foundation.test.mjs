@@ -105,10 +105,10 @@ test("server-derived completion requires metadata, answers, evidence and quote-r
     answers: { declaration: true },
     items: [{ id: "item-1", itemKey, sectionKey: "locks", checkKey: "entry_lock",
       locationLabel: "Front door", outcome: "does_not_meet", requiredEvidenceCount: 1, responseJson: {} }],
-    evidenceCounts: { "item-1": 1 },
+    evidenceCounts: { "item-1": 2 }, photoCounts: { "item-1": 2 },
     findings: [{ itemId: "item-1", title: "Front lock fails", description: "Deadlock does not engage.",
       tradeCategory: "Locksmith", scopeSummary: "Replace the front-door deadlock and prove operation.",
-      severity: "required", details: {} }],
+      severity: "required", quantityMilli: 1000, unitLabel: "each", details: { quotation: { measurements: "One front deadlock; door thickness 40 mm", specification: "Compatible keyed deadlock; photographed existing fitting", access: "Ground-level front entry; tenant access arranged", exclusions: "Include removal, fitting and keys; exclude door/frame replacement" } } }],
   };
   assert.deepEqual(rentalAssessmentCompletion(base), { complete: true, blockers: [] });
   const unsafe = structuredClone(base);

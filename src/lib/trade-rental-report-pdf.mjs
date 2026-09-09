@@ -1,7 +1,7 @@
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { publicRentalReportValue, rentalCheckIsReadiness } from "./trade-rental-assessment.mjs";
-import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalQuotationBlockers } from "./rental-quotation.mjs";
+import { RENTAL_QUOTATION_FIELDS, rentalQuotation } from "./rental-quotation.mjs";
 import { rentalImageWithinReportLimit } from "./trade-rental-image-dimensions.mjs";
 
 const PAGE_WIDTH = 595.28;
@@ -10,14 +10,16 @@ const MARGIN = 40;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 
 const palette = Object.freeze({
-  ink: rgb(0.06, 0.16, 0.19),
-  muted: rgb(0.34, 0.43, 0.45),
-  primary: rgb(0.03, 0.40, 0.36),
-  accent: rgb(0.25, 0.78, 0.62),
-  line: rgb(0.82, 0.88, 0.87),
-  soft: rgb(0.94, 0.97, 0.96),
-  warning: rgb(0.62, 0.32, 0.04),
-  danger: rgb(0.67, 0.14, 0.08),
+  ink: rgb(0.94, 0.97, 1),
+  muted: rgb(0.63, 0.73, 0.79),
+  primary: rgb(0.38, 0.94, 0.81),
+  accent: rgb(0.38, 0.94, 0.81),
+  line: rgb(0.15, 0.27, 0.33),
+  soft: rgb(0.06, 0.14, 0.19),
+  background: rgb(0.022, 0.052, 0.086),
+  blue: rgb(0.49, 0.67, 1),
+  warning: rgb(1, 0.77, 0.45),
+  danger: rgb(1, 0.54, 0.51),
   white: rgb(1, 1, 1),
 });
 
@@ -95,7 +97,7 @@ function outcomeLabel(outcome) {
   })[outcome] || label(outcome || "Not assessed");
 }
 
-export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = {}, fontBytes = {}) {
+export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = {}, fontBytes = {}, brandBytes) {
   if (!snapshot || snapshot.schemaVersion !== "tlink-rental-report-v1" || !snapshot.report?.number || !snapshot.property?.address) {
     throw new TypeError("A valid rental assessment report snapshot is required.");
   }
@@ -115,23 +117,31 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   const bold = useEmbeddedFonts
     ? await pdf.embedFont(fontBytes.bold, { subset: false })
     : await pdf.embedFont(StandardFonts.HelveticaBold);
+  const brand = brandBytes instanceof Uint8Array ? await pdf.embedPng(brandBytes) : null;
   const pages = [];
   const evidenceReferences = new Map((snapshot.evidence || []).map((entry, index) => [entry.id, `E${String(index + 1).padStart(3, "0")}`]));
   const renderedEvidence = new Map();
-  const allItems = (snapshot.modules || []).flatMap((module) => (module.sections || []).flatMap((section) => (section.items || []).map((item) => ({ ...item, readiness: rentalCheckIsReadiness(item, module.assessmentScope) }))));
+  const allItems = (snapshot.modules || []).flatMap((module) => (module.sections || []).flatMap((section) => (section.items || []).map((item) => ({ ...item, sectionTitle: section.title, readiness: rentalCheckIsReadiness(item, module.assessmentScope) }))));
+  const workArea = (finding) => allItems.find((item) => item.id === finding.itemId)?.sectionTitle || label(finding.category || "Required work");
   const reportFindings = (snapshot.findings || []).filter((finding) => finding.status !== "compliant");
   const resolvedFindings = (snapshot.findings || []).filter((finding) => finding.status === "compliant");
   const findingEvidence = (finding) => (snapshot.evidence || []).filter((entry) => entry.findingId === finding.id || entry.itemId === finding.itemId);
-  const quoteReady = (finding) => rentalQuotation(finding.details?.quotation).status === "ready" && !rentalQuotationBlockers(finding, allItems.find((item) => item.id === finding.itemId)?.outcome, findingEvidence(finding).length).length;
   let page;
   let y;
 
   function addPage() {
     page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     pages.push(page);
-    page.drawRectangle({ x: 0, y: PAGE_HEIGHT - 8, width: PAGE_WIDTH, height: 8, color: palette.accent });
-    if (snapshot.preview === true) page.drawText("SAMPLE LAYOUT | Illustrative information | Not an issued assessment", { x: MARGIN, y: PAGE_HEIGHT - 23, size: 7, font: bold, color: palette.warning });
-    y = PAGE_HEIGHT - MARGIN;
+    page.drawRectangle({ x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT, color: palette.background });
+    for (let index = 0; index < 14; index += 1) {
+      page.drawLine({ start: { x: PAGE_WIDTH - 245 + index * 18, y: PAGE_HEIGHT }, end: { x: PAGE_WIDTH, y: PAGE_HEIGHT - 245 + index * 12 }, thickness: 0.6, color: palette.primary, opacity: 0.09 });
+      page.drawLine({ start: { x: 0, y: index * 10 }, end: { x: 120 + index * 8, y: 0 }, thickness: 0.6, color: palette.blue, opacity: 0.08 });
+    }
+    if (brand) page.drawImage(brand, { x: MARGIN, y: PAGE_HEIGHT - 48, width: 25, height: 25 });
+    page.drawText("TLink", { x: MARGIN + (brand ? 33 : 0), y: PAGE_HEIGHT - 41, font: bold, size: 17, color: palette.ink });
+    page.drawText("PROPERTY ASSESSMENTS", { x: MARGIN + 91, y: PAGE_HEIGHT - 38, font: regular, size: 7, color: palette.muted });
+    if (snapshot.preview === true) page.drawText("SAMPLE | NOT ISSUED", { x: PAGE_WIDTH - MARGIN - 96, y: PAGE_HEIGHT - 38, size: 6.8, font: bold, color: palette.warning });
+    y = PAGE_HEIGHT - 76;
   }
 
   function ensure(height) {
@@ -147,7 +157,7 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     const lines = wrap(font, value, size, width);
     for (const line of lines) {
       ensure(lineHeight + 2);
-      if (line) page.drawText(line, { x, y, size, font, color: options.color || palette.ink });
+      if (line) page.drawText(line, { x, y: y - size, size, font, color: options.color || palette.ink });
       y -= lineHeight;
     }
     if (options.after) {
@@ -165,13 +175,14 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   }
 
   function kicker(value) {
-    text(safe(value).toUpperCase(), { bold: true, size: 7.3, lineHeight: 9, color: palette.primary, after: 5 });
+    text(safe(value).toUpperCase(), { bold: true, size: 7.5, lineHeight: 10, color: palette.primary, after: 8 });
   }
 
   function heading(kickerText, value, description = "") {
-    ensure(description ? 66 : 46);
+    ensure(description ? 94 : 70);
+    y -= 10;
     kicker(kickerText);
-    text(value, { bold: true, size: 17, lineHeight: 21, after: description ? 3 : 8 });
+    text(value, { bold: true, size: 18, lineHeight: 24, after: 10 });
     if (description) text(description, { size: 8.8, lineHeight: 12, color: palette.muted, after: 8 });
   }
 
@@ -180,16 +191,16 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     if (!printable) return;
     const keyWidth = options.keyWidth || 145;
     const size = options.size || 8.6;
-    const keyLines = wrap(bold, safe(key), 7.7, keyWidth - 8);
+    const keyLines = wrap(regular, safe(key), 8.2, keyWidth - 8);
     const valueLines = wrap(regular, printable, size, CONTENT_WIDTH - keyWidth - 8);
     const lineCount = Math.max(keyLines.length, valueLines.length);
     for (let index = 0; index < lineCount; index += 1) {
       ensure(15);
-      if (keyLines[index]) page.drawText(keyLines[index], { x: MARGIN, y, font: bold, size: 7.7, color: palette.muted });
-      if (valueLines[index]) page.drawText(valueLines[index], { x: MARGIN + keyWidth, y, font: regular, size, color: palette.ink });
-      y -= 11;
+      if (keyLines[index]) page.drawText(keyLines[index], { x: MARGIN, y: y - 8.6, font: regular, size: 8.2, color: palette.muted });
+      if (valueLines[index]) page.drawText(valueLines[index], { x: MARGIN + keyWidth, y: y - size, font: regular, size, color: palette.ink });
+      y -= 13;
     }
-    y -= 4;
+    y -= 5;
   }
 
   function badge(value, tone = "primary") {
@@ -202,9 +213,9 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     const width = Math.min(CONTENT_WIDTH, bold.widthOfTextAtSize(visible, fontSize) + 16);
     ensure(23);
     const color = tone === "danger" ? palette.danger : tone === "warning" ? palette.warning : palette.primary;
-    page.drawRectangle({ x: MARGIN, y: y - 3, width, height: 17, color, opacity: 0.12 });
-    page.drawText(visible, { x: MARGIN + 8, y: y + 2, font: bold, size: fontSize, color });
-    y -= 24;
+    page.drawRectangle({ x: MARGIN, y: y - 20, width, height: 20, color, opacity: 0.12 });
+    page.drawText(visible, { x: MARGIN + 8, y: y - 13, font: bold, size: fontSize, color });
+    y -= 30;
   }
 
   const embeddedEvidence = new Map();
@@ -235,32 +246,33 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     if (printed.length) text(`Evidence: ${printed.map((entry) => `${evidenceReferences.get(entry.id)} (page ${renderedEvidence.get(entry.id)})`).join(", ")}`, { size: 8, color: palette.muted, after: 5 });
     entries = entries.filter((entry) => !renderedEvidence.has(entry.id));
     if (!entries.length) return;
+    ensure(217);
     text("Evidence", { bold: true, size: 8.2, color: palette.primary, after: 4 });
     const columnWidth = (CONTENT_WIDTH - 14) / 2;
     for (let offset = 0; offset < entries.length; offset += 2) {
       const row = entries.slice(offset, offset + 2);
       const images = await Promise.all(row.map(embedEvidence));
-      ensure(227);
+      ensure(200);
       const top = y;
       for (let column = 0; column < row.length; column += 1) {
         const entry = row[column];
         const image = images[column];
         const x = MARGIN + column * (columnWidth + 14);
-        page.drawRectangle({ x, y: top - 166, width: columnWidth, height: 166, color: palette.soft });
+        page.drawRectangle({ x, y: top - 145, width: columnWidth, height: 145, color: palette.soft });
         if (image) {
-          const scale = Math.min(columnWidth / image.width, 166 / image.height);
+          const scale = Math.min(columnWidth / image.width, 145 / image.height);
           const width = image.width * scale;
           const height = image.height * scale;
-          page.drawImage(image, { x: x + (columnWidth - width) / 2, y: top - 166 + (166 - height) / 2, width, height });
+          page.drawImage(image, { x: x + (columnWidth - width) / 2, y: top - 145 + (145 - height) / 2, width, height });
         } else {
           page.drawText(evidenceAssets[entry.id]?.bytes ? "Evidence attached to this PDF" : "Evidence file indexed", { x: x + 12, y: top - 82, font: regular, size: 8, color: palette.muted });
         }
         renderedEvidence.set(entry.id, pages.length);
         const caption = (entry.caption || entry.purpose || entry.fileName || "Evidence");
         const lines = wrap(regular, evidenceReferences.get(entry.id) + " | " + safe(caption), 7.8, columnWidth).slice(0, 3);
-        for (let line = 0; line < lines.length; line += 1) page.drawText(lines[line], { x, y: top - 181 - line * 10, font: regular, size: 7.8, color: palette.muted });
+        for (let line = 0; line < lines.length; line += 1) page.drawText(lines[line], { x, y: top - 159 - line * 10, font: regular, size: 7.8, color: palette.muted });
       }
-      y = top - 223;
+      y = top - 198;
     }
   }
 
@@ -277,11 +289,10 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   }
 
   addPage();
-  kicker(snapshot.business?.name || "TLink trade business");
-  text("RENTAL PROPERTY", { bold: true, size: 10, color: palette.primary, after: 6 });
-  text("Assessment & upgrade report", { bold: true, size: 25, lineHeight: 30, after: 10 });
+  kicker("Property condition + upgrade planning");
+  text("Rental assessment", { bold: true, size: 32, lineHeight: 40, after: 12 });
   text(snapshot.property.address, { bold: true, size: 16, lineHeight: 20, width: CONTENT_WIDTH, after: 12 });
-  text(snapshot.inspection?.title || "Victorian rental minimum standards assessment", { size: 9, color: palette.muted, after: 10 });
+  text(snapshot.inspection?.title || "Victorian rental minimum standards assessment", { size: 9, lineHeight: 13, color: palette.muted, after: 18 });
   keyValue("Assessment date", dateOnly(snapshot.inspection?.assessmentDate || snapshot.report.issuedAt));
   keyValue("Prepared by", brief(snapshot.issuer?.name, 85));
   keyValue("Report reference", snapshot.report.number);
@@ -290,60 +301,55 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   const currentIssues = allItems.filter((item) => !item.readiness && item.outcome === "does_not_meet").length;
   const futureIssues = allItems.filter((item) => item.readiness && item.outcome === "does_not_meet").length;
   const uncertain = allItems.filter((item) => !["meets", "does_not_meet", "not_applicable"].includes(item.outcome)).length;
-  const readyCount = reportFindings.filter(quoteReady).length;
-  const stats = [[currentIssues, "Current issues"], [futureIssues, "Future upgrades"], [uncertain, "Need verification"], [readyCount, "Scopes ready to quote"]];
+  const stats = [[currentIssues, "Current issues", palette.danger], [futureIssues, "Future upgrades", palette.blue], [uncertain, "Need verification", palette.warning], [reportFindings.length, "Work items", palette.primary]];
   ensure(77);
   for (let index = 0; index < stats.length; index += 1) {
     const x = MARGIN + index * (CONTENT_WIDTH + 8) / 4;
     page.drawRectangle({ x, y: y - 65, width: (CONTENT_WIDTH - 24) / 4, height: 65, color: palette.soft });
-    page.drawText(String(stats[index][0]), { x: x + 12, y: y - 27, size: 22, font: bold, color: palette.primary });
+    page.drawRectangle({ x, y: y - 2, width: (CONTENT_WIDTH - 24) / 4, height: 2, color: stats[index][2] });
+    page.drawText(String(stats[index][0]), { x: x + 12, y: y - 31, size: 23, font: bold, color: stats[index][2] });
     page.drawText(stats[index][1], { x: x + 12, y: y - 48, size: 7.2, font: regular, color: palette.ink });
   }
   y -= 84;
   heading("At a glance", "Work to arrange");
-  for (const finding of reportFindings.slice(0, 3)) keyValue(brief(finding.tradeCategory || "Assessor follow-up", 35), brief(finding.title));
-  if (reportFindings.length > 3) text(`Plus ${reportFindings.length - 3} further work scopes in the trade schedules.`, { size: 8.5, color: palette.muted, after: 6 });
+  for (const finding of reportFindings.slice(0, 3)) keyValue(brief(workArea(finding), 35), brief(finding.title));
+  if (reportFindings.length > 3) text(`Plus ${reportFindings.length - 3} further scopes in the work details.`, { size: 8.5, color: palette.muted, after: 6 });
   if (!reportFindings.length) text("No outstanding work scopes recorded.", { size: 9, after: 6 });
-  heading("For owners and agents", "What happens next");
+  heading("For owners and agents", "Next steps");
   const urgent = reportFindings.filter((finding) => ["immediate_safety_risk", "urgent"].includes(finding.severity));
-  text(urgent.length ? "Urgent attention: " + urgent.slice(0, 2).map((finding) => brief(finding.title, 90)).join("; ") + ". See the relevant trade work schedule for immediate actions." : "No immediate or urgent safety finding was recorded. Review the work schedules for required repairs and any limitations.", { size: 9.2, lineHeight: 13, after: 7 });
-  text(reportFindings.length ? "Send the relevant trade schedule and its evidence pages for pricing. " + (reportFindings.length - readyCount) + " scope(s) still need information before quoting. Future upgrades show their own legal start date and trigger." : "No outstanding work scopes were recorded. Read the assessment and access limitations before relying on any individual result.", { size: 9.2, lineHeight: 13, after: 10 });
+  text(urgent.length ? "Urgent attention: " + urgent.slice(0, 2).map((finding) => brief(finding.title, 90)).join("; ") + ". See the work details for immediate actions." : "No immediate or urgent safety finding was recorded. Review the work details and limitations.", { size: 9.2, lineHeight: 14, after: 9 });
+  text(reportFindings.length ? "Use the work scopes, measurements and photos to request itemised quotes. Each scope includes access requirements and pricing allowances. Future upgrades show their own start date and trigger." : "No outstanding work scopes were recorded. Read the assessment and access limitations before relying on any individual result.", { size: 9.2, lineHeight: 14, after: 10 });
   if (allItems.some((item) => item.readiness)) text("Planning findings do not establish non-compliance today.", { size: 8.5, color: palette.muted, after: 8 });
-  keyValue("How to use this report", "1. Review this summary.  2. Open the work schedule for your trade.  3. Check the linked photos, measurements and exclusions.");
   const limitation = snapshot.inspection?.applicabilityLimitation;
   if (limitation) { badge("Applicable minimum standards not assessed", "warning"); text(limitation, { size: 8.5, lineHeight: 12, after: 5 }); }
-  text("This report records the assessed conditions and scope at the inspection date. It is not a blanket compliance certificate. Separate electrical, gas and smoke-alarm records apply only where included and authenticated. Quoting readiness is the assessor's recorded scope assessment; contractors confirm their design and installation obligations.", { size: 8, lineHeight: 11, color: palette.muted });
+  text("This report records the assessed conditions and scope at the inspection date. It is not a blanket compliance certificate. Separate electrical, gas and smoke-alarm records apply only where included and authenticated. Contractors retain responsibility for compliant design and installation within the recorded scope and allowances.", { size: 8, lineHeight: 11, color: palette.muted });
 
   addPage();
-  heading("Trade work schedules", "Findings and required work", "Each trade has a dedicated schedule. Use the measured scope and linked evidence to price the work; check missing information and exclusions before committing.");
+  heading("02 / Work details", "Scope for quoting", "Measured work, specifications, access requirements and supporting evidence for each upgrade.");
   if (!reportFindings.length) {
     badge("No outstanding findings recorded");
   }
-  const orderedFindings = [...reportFindings].sort((a, b) => (a.tradeCategory || "").localeCompare(b.tradeCategory || ""));
-  let previousTrade = "";
+  const orderedFindings = [...reportFindings].sort((a, b) => workArea(a).localeCompare(workArea(b)));
+  let previousArea = "";
   for (let index = 0; index < orderedFindings.length; index += 1) {
     const finding = orderedFindings[index];
-    const trade = finding.tradeCategory || "Assessment follow-up";
-    if (trade !== previousTrade) {
-      if (previousTrade) addPage();
-      heading("Work schedule", trade);
-      previousTrade = trade;
+    const area = workArea(finding);
+    if (area !== previousArea) {
+      ensure(260);
+      text(area, { bold: true, size: 15, lineHeight: 20, after: 10 });
+      previousArea = area;
     }
     ensure(95);
     const tone = finding.severity === "immediate_safety_risk" ? "danger" : ["urgent", "required"].includes(finding.severity) ? "warning" : "primary";
-    badge(`${String(index + 1).padStart(2, "0")} | ${label(finding.severity)} | ${finding.tradeCategory || "Trade follow-up"}`, tone);
+    badge(`ITEM ${String(index + 1).padStart(2, "0")} | ${label(finding.severity)}`, tone);
     text(finding.title, { bold: true, size: 11, lineHeight: 15, after: 3 });
     keyValue("Status", label(finding.status));
-    keyValue("Category", label(finding.category));
-    keyValue("Responsible trade", finding.tradeCategory);
     keyValue("Location", finding.locationLabel);
     keyValue("Finding", finding.description);
     if (finding.recommendedAction && finding.recommendedAction !== finding.scopeSummary) keyValue("Recommended action", finding.recommendedAction);
     keyValue("Work required", finding.scopeSummary);
     const quotation = rentalQuotation(finding.details?.quotation);
-    badge(quoteReady(finding) ? "Scope and evidence ready for quoting" : "Further information required before quoting", quoteReady(finding) ? "primary" : "warning");
     for (const field of RENTAL_QUOTATION_FIELDS) keyValue(field.label, quotation[field.key]);
-    keyValue("Information still needed", quotation.missingInformation || (quoteReady(finding) ? "" : "Quoting information has not been fully confirmed."));
     const assessedItem = allItems.find((item) => item.id === finding.itemId);
     if (assessedItem?.trigger) keyValue("Future requirement trigger", assessedItem.trigger);
     keyValue("Quantity", Number(finding.quantityMilli) > 0 ? `${Number(finding.quantityMilli) / 1000} ${finding.unitLabel || "each"}` : "Not measured; confirm before pricing");
@@ -361,7 +367,7 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     text("Resolved finding history", { bold: true, size: 13, lineHeight: 17, color: palette.primary, after: 4 });
     text("These findings were recorded earlier in the assessment and marked compliant or resolved before issue.", { size: 8.7, lineHeight: 12, color: palette.muted, after: 8 });
     for (const finding of resolvedFindings) {
-      badge(`Resolved | ${finding.tradeCategory || "Assessment follow-up"}`);
+      badge("Resolved finding");
       text(finding.title, { bold: true, size: 10, lineHeight: 14, after: 3 });
       keyValue("Category", label(finding.category));
       keyValue("Location", finding.locationLabel);
@@ -372,7 +378,7 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   }
 
   for (const assessmentModule of snapshot.modules || []) {
-    addPage();
+    ensure(280);
     heading(assessmentModule.required ? "Included module" : "Optional module", assessmentModule.title, assessmentModule.reportBoundary);
     badge(`Completed | ${assessmentModule.completedAt ? dateTime(assessmentModule.completedAt) : "Recorded"}`);
     if (assessmentModule.credential && Object.keys(assessmentModule.credential).length) {
@@ -445,6 +451,8 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   keyValue("Declaration", snapshot.issuer?.declaration);
   keyValue("Issued at", dateTime(snapshot.report.issuedAt));
   rule();
+  const sourceHeight = (snapshot.sources || []).reduce((height, source) => height + wrap(regular, source.url, 7.2, CONTENT_WIDTH).length * 10 + 25, 70);
+  ensure(Math.min(sourceHeight, PAGE_HEIGHT - 132));
   heading("Governing sources", "Rule sources preserved with this report");
   for (const source of snapshot.sources || []) {
     text([source.title, source.version, source.effectiveFrom ? `effective ${dateOnly(source.effectiveFrom)}` : ""].filter(Boolean).join(" | "), { bold: true, size: 7.3, lineHeight: 10 });
@@ -454,7 +462,7 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   for (let index = 0; index < pages.length; index += 1) {
     const footer = pages[index];
     footer.drawLine({ start: { x: MARGIN, y: 38 }, end: { x: PAGE_WIDTH - MARGIN, y: 38 }, thickness: 0.6, color: palette.line });
-    footer.drawText(safe(`${snapshot.report.number} | ${snapshot.property.address}`), { x: MARGIN, y: 24, font: regular, size: 6.8, color: palette.muted, maxWidth: 390 });
+    footer.drawText(brief(`${snapshot.report.number} | ${snapshot.property.address}`, 100), { x: MARGIN, y: 24, font: regular, size: 6.8, color: palette.muted });
     footer.drawText(`Page ${index + 1} of ${pages.length}`, { x: PAGE_WIDTH - MARGIN - 72, y: 24, font: regular, size: 6.8, color: palette.muted });
   }
   return new Uint8Array(await pdf.save({ useObjectStreams: true }));

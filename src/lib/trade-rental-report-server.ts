@@ -142,7 +142,6 @@ function findingPresentation(row: Row) {
     standardReference: String(row.standard_reference || ""),
     status: String(row.finding_status),
     severity: String(row.severity),
-    tradeCategory: String(row.trade_category || ""),
     locationLabel: String(row.location_label || ""),
     recommendedAction: String(row.recommended_action || ""),
     scopeSummary: String(row.scope_summary || ""),
@@ -233,6 +232,8 @@ async function reportSource(access: TeamAccess, workOrderId: string) {
   }
   const evidenceCounts = Object.fromEntries(activeEvidence.map((evidence) => String(evidence.item_id))
     .map((itemId) => [itemId, activeEvidence.filter((evidence) => String(evidence.item_id) === itemId).length]));
+  const photoCounts = Object.fromEntries(activeItems.map((item) => [String(item.id), activeEvidence.filter((evidence) =>
+    String(evidence.item_id) === String(item.id) && evidence.evidence_type === "photo" && String(evidence.content_type).startsWith("image/")).length]));
   const presentedFindings = findingRows.results.filter((finding) => activeItemIds.has(String(finding.item_id))).map(findingPresentation);
   for (const assessmentModule of moduleRows.results) {
     const moduleItems = itemRows.results.filter((item) => item.module_id === assessmentModule.id);
@@ -248,6 +249,7 @@ async function reportSource(access: TeamAccess, workOrderId: string) {
       })),
       findings: presentedFindings.filter((finding) => finding.moduleId === assessmentModule.id),
       evidenceCounts,
+      photoCounts,
     });
     if (!completion.complete) throw new Error("RENTAL_MODULES_INCOMPLETE");
   }
@@ -707,7 +709,8 @@ export async function issueRentalAssessmentReport(input: {
     const { createRentalAssessmentPdfBytes } = await import(
       "@/lib/trade-rental-report-pdf.mjs"
     );
-    const pdfBytes = await createRentalAssessmentPdfBytes(snapshot, assets, fonts);
+    const { rentalReportBrandBytes } = await import("@/lib/trade-rental-report-brand");
+    const pdfBytes = await createRentalAssessmentPdfBytes(snapshot, assets, fonts, rentalReportBrandBytes());
     pdfReference = await prepareImmutableIssuedPdfReference({
       kind: "rental-report",
       documentId: reportId,

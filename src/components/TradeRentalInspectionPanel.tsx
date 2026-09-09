@@ -9,7 +9,6 @@ import {
   useState,
 } from "react";
 import type { User } from "firebase/auth";
-import { RENTAL_REFERRAL_TRADES, rentalSuggestedTrade } from "@/lib/rental-referral-trades.mjs";
 import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalQuotationGuidance } from "@/lib/rental-quotation.mjs";
 import { rentalCheckIsReadiness } from "@/lib/trade-rental-assessment.mjs";
 import styles from "./TradeRentalInspectionPanel.module.css";
@@ -178,7 +177,6 @@ const severityOptions = [
   ["information", "Information only"],
 ] as const;
 
-const tradeOptions = RENTAL_REFERRAL_TRADES;
 
 const adverseOutcomes = new Set([
   "does_not_meet",
@@ -398,6 +396,8 @@ function AssessmentItemCard({
   const isAdverse = adverseOutcomes.has(outcome);
   const readiness = rentalCheckIsReadiness(check, module.template.assessmentScope);
   const quotation = rentalQuotation(finding?.details.quotation);
+  quotation.measurements ||= String(item.response.measurement || "");
+  quotation.specification ||= [item.response.make, item.response.model].filter(Boolean).join(" ");
   const repeated = check.repeatBy !== "property";
   const itemBusy = busy === `item:${item.instanceKey}`;
   const uploadBusy = busy === `upload:${item.id}`;
@@ -430,14 +430,14 @@ function AssessmentItemCard({
       standardReference: String(values.get("standardReference") || ""),
       status: String(values.get("findingStatus") || ""),
       severity,
-      tradeCategory: String(values.get("tradeCategory") || ""),
+      tradeCategory: finding?.tradeCategory || "",
       recommendedAction: String(values.get("scopeSummary") || ""),
       scopeSummary: String(values.get("scopeSummary") || ""),
       quantityMilli: Math.round(Math.max(0, Number(values.get("quantity") || 0)) * 1000),
       unitLabel: String(values.get("unitLabel") || "each"),
       internalNotes: String(values.get("findingInternalNotes") || ""),
       details: {
-        quotation: Object.fromEntries(["status", ...RENTAL_QUOTATION_FIELDS.map((field) => field.key), "missingInformation"].map((key) => [key, String(values.get(`quotation_${key}`) || "")])),
+        quotation: Object.fromEntries(RENTAL_QUOTATION_FIELDS.map((field) => field.key).map((key) => [key, String(values.get(`quotation_${key}`) || "")])),
         immediateAction: String(values.get("immediateAction") || ""),
         responsiblePeopleNotified: values.has("responsiblePeopleNotified"),
         notificationRecipient: String(values.get("notificationRecipient") || ""),
@@ -549,19 +549,16 @@ function AssessmentItemCard({
         <label><span>Observed problem *</span><textarea name="findingDescription" required rows={3} maxLength={8000} defaultValue={finding?.description || item.publicNotes || ""} disabled={readOnly} /></label>
         <div className={styles.detailGrid}>
           <label><span>Severity *</span><select name="severity" value={severity} onChange={(event) => setSeverity(event.target.value)} disabled={readOnly}>{severityOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
-          <label><span>Trade needed *</span><select name="tradeCategory" required defaultValue={finding?.tradeCategory || rentalSuggestedTrade(check.key)} disabled={readOnly}><option value="">Choose a trade</option>{tradeOptions.map((trade) => <option value={trade} key={trade}>{trade}</option>)}</select></label>
           <label><span>Finding status</span><input value={severity === "immediate_safety_risk" ? "Safety issue" : outcome === "does_not_meet" ? readiness ? "Upgrade planning" : "Does not meet this check" : "Requires verification"} readOnly aria-describedby={`status-${item.instanceKey}`} /><small id={`status-${item.instanceKey}`}>Set automatically from the assessment result and safety severity.</small></label>
           <label><span>Rule or standard reference</span><input name="standardReference" defaultValue={finding?.standardReference || ""} maxLength={500} disabled={readOnly} /></label>
         </div>
         <label><span>Recommended work *</span><textarea name="scopeSummary" required rows={3} maxLength={8000} defaultValue={finding?.scopeSummary || finding?.recommendedAction || ""} placeholder="State what needs to be repaired, replaced, tested or confirmed, including the exact location." disabled={readOnly} /></label>
         <div className={styles.detailGrid}>
-          <label><span>Measured quantity</span><input name="quantity" type="number" min="0" max="1000000" step="0.001" defaultValue={finding ? finding.quantityMilli / 1000 : ""} placeholder="Leave blank if not measured" disabled={readOnly} /></label>
+          <label><span>Measured quantity</span><input name="quantity" type="number" min="0" max="1000000" step="0.001" defaultValue={finding ? finding.quantityMilli / 1000 : ""} placeholder="Measured amount or number of services" disabled={readOnly} /></label>
           <label><span>Unit</span><input name="unitLabel" defaultValue={finding?.unitLabel || "each"} maxLength={40} disabled={readOnly} /></label>
         </div>
-        <aside className={styles.guidance}><strong>Information for the quoting trade</strong><p>{rentalQuotationGuidance(check.key)}</p><small>Record visible facts and safe measurements. Photograph labels and connections. Design, sizing and concealed services remain for a qualified trade to confirm.</small></aside>
-        <label><span>Can the trade price this scope from the report?</span><select name="quotation_status" defaultValue={quotation.status} disabled={readOnly}><option value="">Not yet confirmed</option><option value="ready">Scope and evidence ready for quoting</option><option value="further_information">More information or a site visit needed</option></select></label>
-        {RENTAL_QUOTATION_FIELDS.map((field) => <label key={field.key}><span>{field.label}</span><textarea name={`quotation_${field.key}`} rows={2} maxLength={4000} defaultValue={quotation[field.key]} disabled={readOnly} /><small>{field.help}</small></label>)}
-        <label><span>What is missing, and who can confirm it?</span><textarea name="quotation_missingInformation" rows={2} maxLength={4000} defaultValue={quotation.missingInformation} disabled={readOnly} /></label>
+        <aside className={styles.guidance}><strong>Capture the complete quote scope</strong><p>{rentalQuotationGuidance(check.key)}</p><small>Record visible facts and safe measurements, with an overview and close photo. Include the scope, access and allowances needed to price the work. Licensed design and testing remain with qualified contractors.</small></aside>
+        {RENTAL_QUOTATION_FIELDS.map((field) => <label key={field.key}><span>{field.label} *</span><textarea name={`quotation_${field.key}`} rows={2} maxLength={field.maxLength || 4000} defaultValue={quotation[field.key]} disabled={readOnly} /><small>{field.help}</small></label>)}
         {severity === "immediate_safety_risk" && <aside className={styles.safetyStop}>
           <strong>Stop and make the situation safe</strong>
           <p>Do not leave this as a quote item only. Record the immediate action and who was told.</p>
@@ -583,6 +580,7 @@ function AssessmentItemCard({
 
     <section className={styles.evidenceArea}>
       <header><div><span>Evidence</span><strong>{evidence.length} of {item.requiredEvidenceCount || check.requiredEvidenceCount} required file{(item.requiredEvidenceCount || check.requiredEvidenceCount) === 1 ? "" : "s"}</strong></div></header>
+      {isAdverse && <p>{evidence.filter((entry) => entry.contentType.startsWith("image/")).length} of 2 required photos: include an overview and close detail with a scale or readable label so the work can be quoted.</p>}
       {evidence.length > 0 && <ul>{evidence.map((entry) => <li key={entry.id}><div><strong>{entry.fileName}</strong><small>{entry.caption || entry.purpose} | {bytesLabel(entry.sizeBytes)}</small>{entry.capture && <small>{entry.capture.source === "in_app_camera" ? "Captured" : "Added"} {dateLabel(entry.capture.capturedAtUtc)}{entry.capture.locationCaptured && entry.capture.latitude !== null && entry.capture.longitude !== null && entry.capture.accuracyMetres !== null ? ` | device-reported GPS ${entry.capture.latitude.toFixed(6)}, ${entry.capture.longitude.toFixed(6)} | accuracy ${Math.round(entry.capture.accuracyMetres)} m` : ""}</small>}</div>{!readOnly && <button type="button" disabled={busy === `unlink:${entry.id}`} onClick={() => void onUnlink(item, entry.id)}>{busy === `unlink:${entry.id}` ? "Removing..." : "Remove link"}</button>}</li>)}</ul>}
       {!item.id ? <p className={styles.saveFirst}>Save the answer first, then attach the required photo or document.</p>
         : !readOnly && <form className={styles.uploadForm} onSubmit={upload}>
