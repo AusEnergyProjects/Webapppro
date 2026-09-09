@@ -1,7 +1,9 @@
+import { rentalQuotationBlockers, rentalObservationFields } from "./rental-quotation.mjs";
+
 export const RENTAL_INSPECTION_SERVICE_CATEGORY = "rental-inspection";
 
 export const RENTAL_ASSESSMENT_TEMPLATE_KEY = "vic-rental-minimum-standards";
-export const RENTAL_ASSESSMENT_TEMPLATE_VERSION = 2;
+export const RENTAL_ASSESSMENT_TEMPLATE_VERSION = 3;
 export const RENTAL_ASSESSMENT_TEMPLATE_EFFECTIVE_FROM = "2026-06-30";
 export const RENTAL_REPORT_LINK_DAYS = 60;
 
@@ -116,7 +118,7 @@ function check(key, prompt, options = {}) {
     ] : options.responseType === "action_record" ? [
       { key: "actionTaken", label: "Action taken or reason no action was required", required: true },
       { key: "certificateNumber", label: "Related certificate or service record reference, if applicable", required: false },
-    ] : [],
+    ] : rentalObservationFields(key),
     repeatBy: options.repeatBy || "property",
     photoGuidance: options.photoGuidance || "Take one clear overview and one close photo of anything that affects the answer.",
     help: options.help || "Record only what you observed or tested. Use Specialist verification required when the answer needs a licensed or suitably qualified person.",
@@ -124,6 +126,7 @@ function check(key, prompt, options = {}) {
     effectiveFrom: options.effectiveFrom || "",
     trigger: options.trigger || "",
     sourceUrl: options.sourceUrl || "",
+    assessmentPhase: options.assessmentPhase || "current",
   });
 }
 
@@ -144,6 +147,11 @@ function field(key, label, type, options = {}) {
 const minimumStandardsMetadata = Object.freeze([
   field("assessorName", "Assessor", "text", { source: "team_profile", phase: "profile" }),
   field("inspectionDate", "Assessment date", "date", { required: true }),
+  field("rentalRegime", "Which rental type is being assessed?", "select", {
+    required: true,
+    help: "This checklist covers ordinary residential rentals under Schedule 4. Community or specialised housing and rooming houses need their own applicable standards confirmed.",
+    options: [{ value: "ordinary_residential", label: "Ordinary residential rental" }, { value: "community_specialised", label: "Community or specialised housing" }, { value: "rooming_house", label: "Rooming house" }, { value: "not_sure", label: "Needs confirmation" }],
+  }),
   field("agreementStartDate", "Rental agreement start date, if known", "date", {
     help: "This helps identify which effective-dated rule applies. Leave blank when it has not been confirmed.",
   }),
@@ -181,7 +189,7 @@ const minimumStandardsSections = Object.freeze([
     checks: Object.freeze([
       check("bathroom_facilities", "The bathroom has a washbasin and a shower or bath.", { photoGuidance: "Photograph the whole bathroom from the doorway, then the basin and shower or bath." }),
       check("bathroom_water", "Hot and cold water are available at the required bathroom fixtures.", { photoGuidance: "Photograph the taps and capture the water running. Do not photograph occupants." }),
-      check("showerhead_rating", "The showerhead meets the current water efficiency requirement or a supported installation exception applies.", { photoGuidance: "Photograph the complete showerhead, its make and model, and the WELS label or supporting product evidence." }),
+      check("showerhead_rating", "This showerhead has a verified 3-star WELS rating, or an evidenced permitted alternative.", { repeatBy: "shower", help: "Record the make, model and rating for each shower. A 1 or 2-star alternative needs evidence that a 3-star showerhead cannot be installed or operate effectively. An unknown rating needs verification.", photoGuidance: "Photograph the complete showerhead, its make and model, and the WELS label or supporting product evidence." }),
     ]),
   }),
   Object.freeze({
@@ -189,7 +197,7 @@ const minimumStandardsSections = Object.freeze([
     title: "Electrical safety minimum standard",
     summary: "Record the switchboard and obtain licensed verification of circuit breaker and residual current device protection where required.",
     checks: Object.freeze([
-      check("switchboard_observation", "The switchboard and circuit schedule have been recorded.", { photoGuidance: "Take a straight, readable photo of the complete switchboard exterior, then the open board and circuit schedule only when safe and authorised." }),
+      check("switchboard_observation", "The switchboard and circuit schedule have been recorded.", { photoGuidance: "Photograph the board location, accessible front labels and readable circuit schedule. Do not remove covers or touch electrical parts. Record hidden or unreadable details as unknown for the electrician." }),
       check("outlet_lighting_protection", "Power outlet and lighting circuits have the required circuit breaker and residual current device protection.", { credentialGate: "licensed_electrician", photoGuidance: "A photo alone cannot prove this result. Record the electrician verification and supporting switchboard evidence." }),
     ]),
   }),
@@ -200,7 +208,7 @@ const minimumStandardsSections = Object.freeze([
     checks: Object.freeze([
       check("main_living_heater", "A qualifying fixed heater is installed in the main living area.", { photoGuidance: "Photograph the main living area showing the heater location, then photograph the heater front and data plate." }),
       check("heater_operation", "The main living area heater operates as intended.", { photoGuidance: "Photograph the operating display or control and record the heating mode used for the function test." }),
-      check("heater_efficiency", "The heater satisfies the efficiency rule that applies to this property and agreement.", { photoGuidance: "Photograph the energy rating, make, model and serial. Record the property class and agreement trigger used." }),
+      check("heater_efficiency", "The heater satisfies the efficiency rule that applies to this property and agreement.", { help: "For agreements from 29 March 2023: qualifying non-ducted heat pumps or gas space heaters need at least 2 stars; accepted ducted or hydronic systems need a main-living-area outlet, and domestic solid-fuel heaters are included. A supported apartment exception still needs a working fixed heater. Unknown rating or applicability needs verification.", photoGuidance: "Photograph the energy rating, make, model and serial. Record the property class and agreement trigger used." }),
     ]),
   }),
   Object.freeze({
@@ -210,7 +218,7 @@ const minimumStandardsSections = Object.freeze([
     checks: Object.freeze([
       check("kitchen_preparation", "The kitchen has a dedicated food preparation and cooking area.", { photoGuidance: "Take a wide photo that shows the preparation surface, sink and cooking appliances together." }),
       check("kitchen_sink_water", "The kitchen sink has hot and cold water.", { photoGuidance: "Photograph the sink and taps, then capture hot and cold water running." }),
-      check("cooktop_function", "The cooktop has the required functioning burners.", { photoGuidance: "Photograph the cooktop and each burner operating. Keep flammable objects clear." }),
+      check("cooktop_function", "The cooktop is in good working order with at least two working burners.", { help: "Record the number of working burners and demonstrate operation only where safe.", photoGuidance: "Photograph the cooktop and each burner operating. Keep flammable objects clear." }),
       check("oven_function", "The oven functions when an oven is provided.", { photoGuidance: "Photograph the oven, controls and operating indicator. Select Not applicable only when no oven is provided." }),
     ]),
   }),
@@ -260,7 +268,7 @@ const minimumStandardsSections = Object.freeze([
     title: "Toilets",
     summary: "Check each toilet, flush operation, waste connection and room configuration.",
     checks: Object.freeze([
-      check("toilet_function", "This toilet is present, functioning and connected to an appropriate waste system.", { repeatBy: "toilet", photoGuidance: "Photograph the whole toilet room, pan and cistern, visible waste connection and the flush operating." }),
+      check("toilet_function", "This toilet works, connects to an accepted wastewater system and is in an appropriate enclosed area.", { repeatBy: "toilet", help: "The toilet may be in a toilet room, bathroom, combined bathroom/laundry or separate enclosed structure. Record the wastewater connection; uncertainty needs verification.", photoGuidance: "Photograph the whole toilet room, pan and cistern, visible waste connection and the flush operating." }),
     ]),
   }),
   Object.freeze({
@@ -268,7 +276,7 @@ const minimumStandardsSections = Object.freeze([
     title: "Ventilation",
     summary: "Check natural or mechanical ventilation in habitable rooms and wet areas.",
     checks: Object.freeze([
-      check("room_ventilation", "This room has the required natural or mechanical ventilation.", { repeatBy: "room", photoGuidance: "Photograph openable windows, permanent vents and exhaust fans. Show the window open or the fan operating." }),
+      check("room_ventilation", "This room meets the ventilation requirement for its building class, supported by recorded evidence.", { repeatBy: "room", help: "Record building class, room use and the measurement, specification or competent verification against Schedule 4 clause 13 / BCA 2019. A running fan or open window alone does not establish compliance. Select specialist verification when the basis is unknown.", photoGuidance: "Photograph openable windows, permanent vents and exhaust fans. Show the window open or the fan operating." }),
     ]),
   }),
   Object.freeze({
@@ -284,7 +292,7 @@ const minimumStandardsSections = Object.freeze([
     title: "Windows",
     summary: "Check every openable external window and its latch or security device.",
     checks: Object.freeze([
-      check("window_operation_security", "This external window opens, closes and has a functioning latch or security device.", { repeatBy: "openable_external_window", photoGuidance: "Photograph the whole window closed and open, then the latch or security device. Record its room and position." }),
+      check("window_operation_security", "This external window opens, closes, stays in its set position and has a working latch securing it against entry from outside.", { repeatBy: "openable_external_window", photoGuidance: "Photograph the whole window closed and open, then the latch or security device. Record its room, position and ability to remain set open or closed." }),
     ]),
   }),
   Object.freeze({
@@ -300,7 +308,7 @@ const minimumStandardsSections = Object.freeze([
     title: "Window covering cords",
     summary: "Check every corded internal window covering for the required anchor or safety device and loop controls.",
     checks: Object.freeze([
-      check("cord_anchor", "This corded window covering has the required secure cord anchor or safety device and controlled loop.", { repeatBy: "corded_window_covering", photoGuidance: "Photograph the whole covering, the cord path, anchor or cleat, installation height and the measured loop. Record any retention test performed." }),
+      check("cord_anchor", "This window covering meets the cord-loop and anchor installation requirements.", { repeatBy: "corded_window_covering", help: "A loose cord must not form a loop 220 mm or longer below 1,600 mm. Cleats must be at least 1,600 mm high. A lower cord guide needs evidence it withstands 70 N for 10 seconds in any direction and prevents a 220 mm loop. Follow installation instructions; obtain specialist verification where this cannot be confirmed.", photoGuidance: "Photograph the whole covering, the cord path, anchor or cleat, installation height and the measured loop. Record any retention test performed." }),
     ]),
   }),
 ]);
@@ -476,11 +484,11 @@ export const VIC_RENTAL_ASSESSMENT_TEMPLATE = Object.freeze({
 
 export const RENTAL_ASSESSMENT_SCOPES = Object.freeze([
   { key: "energy_readiness_2027", label: "2027 rental energy readiness", description: "Heating, cooling, hot water, showers, ceiling insulation and draughtproofing." },
-  { key: "current_minimum_standards", label: "Full rental minimum standards", description: "All 15 current minimum-standard categories." },
+  { key: "current_minimum_standards", label: "Full minimum standards + 2027 readiness", description: "All 15 current categories plus the 2027 energy changes and later cooling deadline." },
 ]);
 
 export function normalizeRentalAssessmentScope(value) {
-  if (value === undefined || value === null || value === "") return "energy_readiness_2027";
+  if (value === undefined || value === null || value === "") return "current_minimum_standards";
   return RENTAL_ASSESSMENT_SCOPES.some((scope) => scope.key === value) ? value : "";
 }
 
@@ -496,6 +504,7 @@ const energySources = Object.freeze([
 
 function energyCheck(key, prompt, help, options = {}) {
   return check(key, prompt, {
+    assessmentPhase: "energy_readiness_2027",
     effectiveFrom: "2027-03-01",
     help,
     sourceUrl: energySourceBase,
@@ -574,6 +583,42 @@ export const VIC_RENTAL_ENERGY_READINESS_TEMPLATE = Object.freeze({
   },
 });
 
+const combinedSections = minimumStandardsSections.map((section) => ({
+  ...section,
+  checks: [...section.checks, ...(energyReadinessSections.find((future) => future.key === section.key)?.checks || [])],
+}));
+combinedSections.push(...energyReadinessSections.filter((section) => !minimumStandardsSections.some((current) => current.key === section.key)));
+const fullAssessmentTemplate = {
+  ...VIC_RENTAL_ASSESSMENT_TEMPLATE,
+  title: "Victorian rental minimum standards assessment and 2027 readiness report",
+  reviewedOn: "2026-09-09",
+  sources: [...currentSources, ...energySources],
+  modules: {
+    ...VIC_RENTAL_ASSESSMENT_TEMPLATE.modules,
+    minimum_standards: {
+      ...VIC_RENTAL_ASSESSMENT_TEMPLATE.modules.minimum_standards,
+      title: "Full minimum standards + 2027 readiness",
+      reportBoundary: "Ordinary Victorian residential rentals: all 15 current minimum-standard categories, with a separate 2027 energy-readiness assessment and July 2030 cooling deadline. Future-readiness gaps are not current non-compliance findings. Community or specialised housing and rooming houses require their applicable regime to be confirmed. Separate electrical, gas and smoke safety checks are included only when completed in their own authenticated modules.",
+      sections: combinedSections,
+    },
+  },
+};
+
+export function rentalCheckIsReadiness(assessmentCheck, scope) {
+  return assessmentCheck?.assessmentPhase === "energy_readiness_2027"
+    || (!assessmentCheck?.assessmentPhase && scope === "energy_readiness_2027");
+}
+
+export function rentalRegimeAssessment(answers) {
+  const regime = answers?.rentalRegime;
+  return { applicable: regime === "ordinary_residential", limitation: ({
+    ordinary_residential: "",
+    community_specialised: "Applicable minimum standards not assessed: a Schedule 6 assessment is required for community or specialised housing.",
+    rooming_house: "Applicable minimum standards not assessed: a rooming-house standards assessment is required.",
+    not_sure: "Rental regime unconfirmed. Applicable minimum standards have not been determined or assessed.",
+  })[regime] ?? "The rental regime was not recorded. Applicability of the selected minimum standards needs confirmation." };
+}
+
 function parseMaybeJson(value) {
   if (typeof value !== "string") return value;
   try { return JSON.parse(value); } catch { return null; }
@@ -596,7 +641,7 @@ export function rentalAssessmentTemplateSnapshot(value, assessmentScope) {
   const requestedScope = normalizeRentalAssessmentScope(assessmentScope);
   if (!requestedScope) throw new Error("RENTAL_ASSESSMENT_SCOPE_INVALID");
   const scope = moduleKeys.includes("minimum_standards") ? requestedScope : "current_minimum_standards";
-  const template = scope === "energy_readiness_2027" ? VIC_RENTAL_ENERGY_READINESS_TEMPLATE : VIC_RENTAL_ASSESSMENT_TEMPLATE;
+  const template = scope === "energy_readiness_2027" ? VIC_RENTAL_ENERGY_READINESS_TEMPLATE : fullAssessmentTemplate;
   return structuredClone({
     ...template,
     selectedModules: moduleKeys,
@@ -643,6 +688,7 @@ function requiredMetadataBlockers(moduleTemplate, answers) {
   return fields.flatMap((metadataField) => {
     if (!metadataField?.required) return [];
     const value = answers[metadataField.key];
+    if (metadataField.type === "select" && value && !metadataField.options.some((option) => option.value === value)) return [{ key: `metadata:${metadataField.key}`, label: `${metadataField.label}: choose a listed option.` }];
     if (metadataField.type === "checkbox" ? value === true : String(value || "").trim()) return [];
     return [{ key: `metadata:${metadataField.key}`, label: `${metadataField.label} is required.` }];
   });
@@ -652,17 +698,20 @@ export function rentalAssessmentCompletion(input) {
   const moduleTemplate = input?.moduleTemplate && typeof input.moduleTemplate === "object"
     ? input.moduleTemplate
     : {};
-  const items = Array.isArray(input?.items) ? input.items : [];
+  const sections = Array.isArray(moduleTemplate.sections) ? moduleTemplate.sections : [];
+  const items = (Array.isArray(input?.items) ? input.items : []).filter((item) => sections.some((section) => section.key === item.sectionKey && section.checks?.some((check) => check.key === item.checkKey)));
   const findings = Array.isArray(input?.findings) ? input.findings : [];
   const evidenceCounts = parsedObject(input?.evidenceCounts);
   const answers = parsedObject(input?.answers);
   const blockers = [...requiredMetadataBlockers(moduleTemplate, answers)];
+  const observationsOnly = moduleTemplate.metadataFields?.some((field) => field.key === "rentalRegime") && !rentalRegimeAssessment(answers).applicable;
+  if (observationsOnly && !items.length) blockers.push({ key: "observations", label: "Record at least one observation with its evidence before completing an observations report." });
 
-  const sections = Array.isArray(moduleTemplate.sections) ? moduleTemplate.sections : [];
   for (const section of sections) {
     for (const assessmentCheck of Array.isArray(section?.checks) ? section.checks : []) {
       if (assessmentCheck?.required === false) continue;
       const checkItems = items.filter((item) => item?.sectionKey === section.key && item?.checkKey === assessmentCheck.key);
+      if (!checkItems.length && observationsOnly) continue;
       if (!checkItems.length) {
         blockers.push({ key: `check:${section.key}:${assessmentCheck.key}`, label: `${section.title}: ${assessmentCheck.prompt} has not been assessed.` });
         continue;
@@ -700,6 +749,11 @@ export function rentalAssessmentCompletion(input) {
           if (!finding || !String(finding.title || "").trim() || !String(finding.description || "").trim()
             || !String(finding.tradeCategory || "").trim() || !String(finding.scopeSummary || "").trim()) {
             blockers.push({ key: `finding:${item.itemKey}`, label: `${itemLabel} needs a clear finding, responsible trade and quote-ready scope.` });
+          }
+          if (finding && Number(moduleTemplate.templateVersion) >= 3) {
+            for (const [index, message] of rentalQuotationBlockers(finding, outcome, suppliedEvidenceCount).entries()) {
+              blockers.push({ key: `quotation:${item.itemKey}:${index}`, label: `${itemLabel}: ${message}` });
+            }
           }
           if (finding?.severity === "immediate_safety_risk") {
             const details = parsedObject(finding.details);

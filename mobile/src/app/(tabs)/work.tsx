@@ -1,12 +1,12 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { FieldPermissions } from '@/components/job-work-selection';
 import { apiRequest } from '@/lib/api';
-import { effectiveJobStart, isUnscheduledJob } from '@/lib/schedule';
+import { effectiveJobStart, isUnscheduledJob, matchesJobSearch } from '@/lib/schedule';
 import { colours, radius, spacing } from '@/lib/theme';
 import type { FieldJob } from '@/lib/types';
 import { useApp } from '@/providers/app-provider';
@@ -68,13 +68,15 @@ function JobCard({ job }: { job: FieldJob }) {
         <View style={[styles.stage, (job.stage === 'blocked' || job.auditOutcome === 'failed' || job.auditOutcome === 'correction_required') && styles.blocked]}><Text style={styles.stageText}>{jobStatusLabel(job)}</Text></View>
       </View>
       <Text style={styles.jobTitle}>{job.title || 'Field job'}</Text>
+      {!job.protectedJob && job.customerName ? <Text style={styles.factText}>{job.customerName}</Text> : null}
       <View style={styles.fact}><MaterialCommunityIcons name="clock-outline" color={colours.muted} size={19} /><Text style={styles.factText}>{dayLabel(effectiveJobStart(job))}</Text></View>
       <View style={styles.fact}><MaterialCommunityIcons name={job.protectedJob ? 'shield-lock-outline' : 'map-marker-outline'} color={job.protectedJob ? colours.green : colours.muted} size={19} /><Text numberOfLines={2} style={styles.factText}>{job.protectedJob ? `${job.siteArea || 'Service region'} | Australian Energy Assessments protected` : job.serviceAddress || job.siteArea || 'Address available when assigned'}</Text></View>
       <View style={styles.progressRow}><Text style={styles.progressText}>{rental
         ? rental.status === 'issued'
           ? `Rental report issued | ${rental.progress.evidenceFiles} evidence files`
           : `${rental.progress.completeModules} of ${rental.progress.moduleTotal} assessment modules complete`
-        : `${done} of ${job.tasks.length} checklist items complete`}</Text><MaterialCommunityIcons name="chevron-right" color={colours.green} size={24} /></View>
+        : job.tasks.length ? `${done} of ${job.tasks.length} checklist items complete`
+          : (job.complianceIntents?.length || job.forms?.length) ? 'Open job forms and details' : 'Open job details'}</Text><MaterialCommunityIcons name="chevron-right" color={colours.green} size={24} /></View>
     </Pressable>
   );
 }
@@ -83,6 +85,9 @@ export default function WorkScreen() {
   const { jobs, sync, syncNow, user } = useApp();
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const [search, setSearch] = useState('');
+  const searching = Boolean(search.trim());
+  const searchResults = useMemo(() => jobs.filter((job) => matchesJobSearch(job, search)), [jobs, search]);
   const week = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
   const selectedKey = dateKey(selectedDate);
   const selectedJobs = useMemo(() => jobs
@@ -130,11 +135,17 @@ export default function WorkScreen() {
 
   return (
     <SafeAreaView edges={['bottom']} style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={sync.running} onRefresh={() => void syncNow()} tintColor={colours.green} />}>
+      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={sync.running} onRefresh={() => void syncNow()} tintColor={colours.green} />}>
         <View style={styles.hero}>
           <View><Text style={styles.eyebrow}>MY SCHEDULE</Text><Text style={styles.heading}>Good day, {user?.displayName?.split(' ')[0] || 'there'}</Text></View>
           <View style={[styles.connection, !sync.online && styles.offline]}><View style={styles.dot} /><Text style={styles.connectionText}>{sync.online ? 'Connected' : 'Offline'}</Text></View>
         </View>
+        <View style={styles.searchRow}><MaterialCommunityIcons name="magnify" size={24} color={colours.muted} /><TextInput accessibilityLabel="Search downloaded jobs" value={search} onChangeText={setSearch} placeholder="Search customer, address or job number" placeholderTextColor={colours.muted} autoCorrect={false} returnKeyType="search" style={styles.searchInput} />{search ? <Pressable accessibilityRole="button" accessibilityLabel="Clear job search" onPress={() => setSearch('')} style={styles.iconButton}><MaterialCommunityIcons name="close" size={22} color={colours.ink} /></Pressable> : null}</View>
+        {searching ? <>
+          <View><Text style={styles.section}>Search results</Text><Text style={styles.jobCount}>{searchResults.length} {searchResults.length === 1 ? 'match' : 'matches'} across downloaded jobs</Text></View>
+          {searchResults.map((job) => <JobCard key={job.id} job={job} />)}
+          {!searchResults.length ? <View style={styles.empty}><Text style={styles.emptyTitle}>No matching jobs</Text><Text style={styles.emptyText}>Try a customer name, street or job number. Pull down to refresh assigned jobs.</Text></View> : null}
+        </> : <>
         <View style={styles.calendarCard}>
           <View style={styles.calendarTop}>
             <Pressable accessibilityLabel="Previous week" onPress={() => setWeekStart((value) => addDays(value, -7))} style={styles.iconButton}><MaterialCommunityIcons name="chevron-left" size={26} color={colours.ink} /></Pressable>
@@ -155,6 +166,7 @@ export default function WorkScreen() {
           <View style={styles.dayHeading}><View><Text style={styles.section}>Unscheduled</Text><Text style={styles.jobCount}>{unscheduledJobs.length} assigned {unscheduledJobs.length === 1 ? 'job' : 'jobs'} awaiting a date</Text></View></View>
           {unscheduledJobs.map((job) => <JobCard key={job.id} job={job} />)}
         </>}
+        </>}
       </ScrollView>
       <Modal animationType="fade" transparent visible={quickAction !== null} onRequestClose={() => setQuickAction(null)}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close new action menu" onPress={() => setQuickAction(null)} style={styles.modalBackdrop}>
@@ -170,7 +182,7 @@ export default function WorkScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-      <Pressable accessibilityRole="button" accessibilityLabel="Open new action menu" onPress={openQuickActions} style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}><MaterialCommunityIcons name="plus" color={colours.white} size={32} /></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Open new action menu" onPress={openQuickActions} style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}><MaterialCommunityIcons name="plus" color={colours.white} size={28} /><Text style={styles.addButtonText}>New</Text></Pressable>
     </SafeAreaView>
   );
 }
@@ -178,6 +190,9 @@ export default function WorkScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colours.cream },
   content: { padding: spacing.md, gap: spacing.md, paddingBottom: 112 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colours.surface, borderRadius: radius.md, borderColor: colours.line, borderWidth: 1, paddingHorizontal: spacing.sm, minHeight: 54 },
+  searchInput: { flex: 1, minWidth: 0, minHeight: 52, color: colours.ink, fontSize: 15 },
+  addButtonText: { color: colours.white, fontWeight: '800', fontSize: 17 },
   hero: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: spacing.sm },
   eyebrow: { color: colours.green, fontSize: 12, fontWeight: '800', letterSpacing: 1.2 },
   heading: { color: colours.ink, fontSize: 28, lineHeight: 34, fontWeight: '800', marginTop: 3 },
@@ -232,5 +247,5 @@ const styles = StyleSheet.create({
   actionLabel: { color: colours.ink, fontSize: 17, fontWeight: '800' },
   actionDetail: { color: colours.muted, lineHeight: 19 },
   actionError: { color: colours.red, lineHeight: 20, padding: spacing.sm },
-  addButton: { position: 'absolute', right: spacing.lg, bottom: spacing.lg, width: 62, height: 62, borderRadius: 22, backgroundColor: colours.green, alignItems: 'center', justifyContent: 'center', elevation: 8, shadowColor: '#001f21', shadowOpacity: 0.24, shadowRadius: 10, shadowOffset: { width: 0, height: 5 } },
+  addButton: { position: 'absolute', right: spacing.lg, bottom: spacing.lg, paddingHorizontal: spacing.md, height: 58, borderRadius: 22, flexDirection: 'row', gap: spacing.xs, backgroundColor: colours.green, alignItems: 'center', justifyContent: 'center', elevation: 8, shadowColor: '#001f21', shadowOpacity: 0.24, shadowRadius: 10, shadowOffset: { width: 0, height: 5 } },
 });

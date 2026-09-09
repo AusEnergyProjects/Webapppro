@@ -36,7 +36,6 @@ export async function GET(request: Request) {
     const services = [
       { id: "rental-inspection", label: "Rental inspections and safety checks" },
       ...ENERGY_SERVICE_CATALOGUE,
-      { id: "electrical", label: "Electrical work" }, { id: "plumbing", label: "Plumbing" },
       { id: "mounting-hardware", label: "Mounting hardware" }, { id: "controls", label: "Controls" },
     ];
     if (category && !services.some((item) => item.id === category)) return adminJson({ ok: false, error: "Choose a valid work type." }, 400);

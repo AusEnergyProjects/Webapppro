@@ -317,7 +317,7 @@ test("job setup and field workspace attach one frozen rental workflow with guard
   assert.match(mobilePanel, /expectedItemRevision: item\.revision/);
   assert.match(fieldRoute, /rentalEvidencePhotoCapture\(evidenceEnvelope, \{ receivedAtUtc: now \}\)/);
   assert.match(assessmentPanel, /Internal assessment note/);
-  assert.match(assessmentPanel, /Quote-ready scope/);
+  assert.match(assessmentPanel, /Recommended work/);
   assert.match(assignmentHelper, /rentalInspectionAssignmentStatements/);
   assert.match(assignmentHelper, /UPDATE trade_rental_inspections/);
   assert.match(assignmentHelper, /assessor_snapshot/);

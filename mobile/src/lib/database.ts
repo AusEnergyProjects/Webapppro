@@ -112,6 +112,13 @@ async function openDatabase() {
     await db.execAsync("ALTER TABLE jobs ADD COLUMN field_lane TEXT NOT NULL DEFAULT 'trade_team';");
   }
   const actionColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(action_queue)');
+  if (!actionColumns.some((column) => column.name === 'dispatched_at')) {
+    // Legacy rows may have reached the server even when no response was received.
+    await db.withTransactionAsync(async () => {
+      await db.execAsync("ALTER TABLE action_queue ADD COLUMN dispatched_at TEXT NOT NULL DEFAULT '';");
+      await db.runAsync("UPDATE action_queue SET dispatched_at = ?", new Date().toISOString());
+    });
+  }
   if (!actionColumns.some((column) => column.name === 'field_lane')) {
     await db.execAsync("ALTER TABLE action_queue ADD COLUMN field_lane TEXT NOT NULL DEFAULT 'trade_team';");
   }
@@ -219,7 +226,13 @@ export async function applyChanges(
       );
     }
     for (const change of changes.filter((item) => item.operation === 'upsert' && item.entity)) {
-      await saveJob(db, { ...(change.entity as FieldJob), fieldLane: mode }, serverTime);
+      const job = { ...(change.entity as FieldJob), fieldLane: mode };
+      const pending = await db.getAllAsync<{ payload: string; updated_at: string }>(
+        "SELECT payload, updated_at FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry') ORDER BY created_at, rowid",
+        change.entityId, mode,
+      );
+      for (const row of pending) applyQueuedForm(job, JSON.parse(row.payload) as OfflineAction, row.updated_at);
+      await saveJob(db, job, serverTime);
     }
     if (bootstrap) {
       const uploads = await db.getAllAsync<{ work_order_id: string; local_uri: string }>(
@@ -298,6 +311,36 @@ async function workOrderFieldLane(
   return fieldLane(row?.field_lane);
 }
 
+function applyQueuedForm(job: FieldJob, action: OfflineAction, savedAt: string) {
+  if (action.type !== 'save_job_form' || !action.formId || !action.answers) return;
+  const form = job.forms.find((item) => item.id === action.formId);
+  if (!form) return;
+  form.answers = action.answers;
+  form.status = action.complete ? 'complete' : 'draft';
+  form.missing = form.template.fields.filter((field) => field.required && (field.type === 'checkbox'
+    ? action.answers?.[field.key] !== true : !String(action.answers?.[field.key] || '').trim())).map((field) => field.label);
+  form.ready = !form.missing.length;
+  form.completedAt = action.complete ? savedAt : '';
+  form.updatedAt = savedAt;
+}
+
+async function persistQueuedAction(
+  db: SQLite.SQLiteDatabase, incoming: OfflineAction, merged: OfflineAction,
+  existing: { id: string; payload: string } | undefined, now: string,
+) {
+  if (existing) {
+    const result = await db.runAsync(
+      "UPDATE action_queue SET payload = ?, status = 'queued', retry_after = '', updated_at = ? WHERE id = ? AND payload = ? AND dispatched_at = '' AND status IN ('queued', 'retry')",
+      JSON.stringify(merged), now, existing.id, existing.payload,
+    );
+    if (result.changes === 1) return merged;
+  }
+  await db.runAsync(`INSERT INTO action_queue (id, work_order_id, field_lane, payload, status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 'queued', ?, ?)`,
+  incoming.clientActionId, incoming.workOrderId, incoming.fieldLane || 'trade_team', JSON.stringify(incoming), now, now);
+  return incoming;
+}
+
 export async function queueAction(action: OfflineAction) {
   const db = await getDatabase();
   const now = new Date().toISOString();
@@ -306,15 +349,15 @@ export async function queueAction(action: OfflineAction) {
   if (phaseError) throw new Error(phaseError);
   let queuedAction: OfflineAction = { ...action, fieldLane: lane };
   if (action.type === 'work_pack_commit' && action.caseInstanceId) {
-    const candidates = await db.getAllAsync<{ id: string; payload: string }>(
-      "SELECT id, payload FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
+    const candidates = await db.getAllAsync<{ id: string; payload: string; dispatched_at: string }>(
+      "SELECT id, payload, dispatched_at FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
       action.workOrderId,
       lane,
     );
     const existing = candidates.map((candidate) => ({
       ...candidate,
       action: JSON.parse(candidate.payload) as OfflineAction,
-    })).find((candidate) => candidate.action.type === 'work_pack_commit'
+    })).find((candidate) => !candidate.dispatched_at && candidate.action.type === 'work_pack_commit'
       && candidate.action.caseInstanceId === action.caseInstanceId);
     if (existing) {
       if (
@@ -324,20 +367,15 @@ export async function queueAction(action: OfflineAction) {
         throw new Error('This work pack has a newer saved base. Sync it before adding another change.');
       }
       queuedAction = mergeQueuedWorkPackCommit(existing.action, { ...action, fieldLane: lane });
-      await db.runAsync(
-        "UPDATE action_queue SET payload = ?, status = 'queued', retry_after = '', updated_at = ? WHERE id = ?",
-        JSON.stringify(queuedAction),
-        now,
-        existing.id,
-      );
+      queuedAction = await persistQueuedAction(db, { ...action, fieldLane: lane }, queuedAction, existing, now);
     } else {
       await db.runAsync(`INSERT INTO action_queue (id, work_order_id, field_lane, payload, status, created_at, updated_at)
         VALUES (?, ?, ?, ?, 'queued', ?, ?)`,
       action.clientActionId, action.workOrderId, lane, JSON.stringify(queuedAction), now, now);
     }
   } else if (action.type === 'work_pack_capture_signatures' && action.caseInstanceId) {
-    const candidates = await db.getAllAsync<{ id: string; payload: string }>(
-      "SELECT id, payload FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
+    const candidates = await db.getAllAsync<{ id: string; payload: string; dispatched_at: string }>(
+      "SELECT id, payload, dispatched_at FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
       action.workOrderId,
       lane,
     );
@@ -352,46 +390,36 @@ export async function queueAction(action: OfflineAction) {
       throw new Error('Sync the saved work-pack changes and prepared version before signing.');
     }
     const existing = parsed.find((candidate) =>
-      candidate.action.type === 'work_pack_capture_signatures'
+      !candidate.dispatched_at && candidate.action.type === 'work_pack_capture_signatures'
       && candidate.action.caseInstanceId === action.caseInstanceId);
     if (existing) {
       queuedAction = mergeQueuedWorkPackSignatureCapture(
         existing.action,
         { ...action, fieldLane: lane },
       );
-      await db.runAsync(
-        "UPDATE action_queue SET payload = ?, status = 'queued', retry_after = '', updated_at = ? WHERE id = ?",
-        JSON.stringify(queuedAction),
-        now,
-        existing.id,
-      );
+      queuedAction = await persistQueuedAction(db, { ...action, fieldLane: lane }, queuedAction, existing, now);
     } else {
       await db.runAsync(`INSERT INTO action_queue (id, work_order_id, field_lane, payload, status, created_at, updated_at)
         VALUES (?, ?, ?, ?, 'queued', ?, ?)`,
       action.clientActionId, action.workOrderId, lane, JSON.stringify(queuedAction), now, now);
     }
   } else if (action.type === 'work_pack_update_customer_context' && action.caseInstanceId) {
-    const candidates = await db.getAllAsync<{ id: string; payload: string }>(
-      "SELECT id, payload FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
+    const candidates = await db.getAllAsync<{ id: string; payload: string; dispatched_at: string }>(
+      "SELECT id, payload, dispatched_at FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
       action.workOrderId,
       lane,
     );
     const existing = candidates.map((candidate) => ({
       ...candidate,
       action: JSON.parse(candidate.payload) as OfflineAction,
-    })).find((candidate) => candidate.action.type === 'work_pack_update_customer_context'
+    })).find((candidate) => !candidate.dispatched_at && candidate.action.type === 'work_pack_update_customer_context'
       && candidate.action.caseInstanceId === action.caseInstanceId);
     if (existing) {
       queuedAction = mergeQueuedWorkPackCustomerContext(
         existing.action,
         { ...action, fieldLane: lane },
       );
-      await db.runAsync(
-        "UPDATE action_queue SET payload = ?, status = 'queued', retry_after = '', updated_at = ? WHERE id = ?",
-        JSON.stringify(queuedAction),
-        now,
-        existing.id,
-      );
+      queuedAction = await persistQueuedAction(db, { ...action, fieldLane: lane }, queuedAction, existing, now);
     } else {
       await db.runAsync(`INSERT INTO action_queue (id, work_order_id, field_lane, payload, status, created_at, updated_at)
         VALUES (?, ?, ?, ?, 'queued', ?, ?)`,
@@ -405,8 +433,8 @@ export async function queueAction(action: OfflineAction) {
       'work_pack_run_calculator',
     ].includes(action.type)
   ) {
-    const candidates = await db.getAllAsync<{ id: string; payload: string }>(
-      "SELECT id, payload FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
+    const candidates = await db.getAllAsync<{ id: string; payload: string; dispatched_at: string }>(
+      "SELECT id, payload, dispatched_at FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
       action.workOrderId,
       lane,
     );
@@ -425,7 +453,7 @@ export async function queueAction(action: OfflineAction) {
       throw new Error('Sync the current work-pack change before choosing another governed setup item.');
     }
     const existing = parsed.find((candidate) =>
-      candidate.action.type === action.type
+      !candidate.dispatched_at && candidate.action.type === action.type
       && candidate.action.caseInstanceId === action.caseInstanceId
       && candidate.action.dependencyKey === action.dependencyKey);
     if (existing) {
@@ -440,25 +468,20 @@ export async function queueAction(action: OfflineAction) {
         fieldLane: lane,
         clientActionId: existing.action.clientActionId,
       };
-      await db.runAsync(
-        "UPDATE action_queue SET payload = ?, status = 'queued', retry_after = '', updated_at = ? WHERE id = ?",
-        JSON.stringify(queuedAction),
-        now,
-        existing.id,
-      );
+      queuedAction = await persistQueuedAction(db, { ...action, fieldLane: lane }, queuedAction, existing, now);
     } else {
       await db.runAsync(`INSERT INTO action_queue (id, work_order_id, field_lane, payload, status, created_at, updated_at)
         VALUES (?, ?, ?, ?, 'queued', ?, ?)`,
       action.clientActionId, action.workOrderId, lane, JSON.stringify(queuedAction), now, now);
     }
   } else if (action.type === 'save_job_form' && action.formId) {
-    const candidates = await db.getAllAsync<{ id: string; payload: string }>(
-      "SELECT id, payload FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
+    const candidates = await db.getAllAsync<{ id: string; payload: string; dispatched_at: string }>(
+      "SELECT id, payload, dispatched_at FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
       action.workOrderId,
       lane,
     );
     const existing = candidates.map((row) => ({ ...row, action: JSON.parse(row.payload) as OfflineAction }))
-      .find((row) => row.action.type === 'save_job_form' && row.action.formId === action.formId);
+      .find((row) => !row.dispatched_at && row.action.type === 'save_job_form' && row.action.formId === action.formId);
     if (existing) {
       queuedAction = {
         ...action,
@@ -466,8 +489,7 @@ export async function queueAction(action: OfflineAction) {
         clientActionId: existing.action.clientActionId,
         baseRevision: existing.action.baseRevision,
       };
-      await db.runAsync("UPDATE action_queue SET payload = ?, status = 'queued', retry_after = '', updated_at = ? WHERE id = ?",
-        JSON.stringify(queuedAction), now, existing.id);
+      queuedAction = await persistQueuedAction(db, { ...action, fieldLane: lane }, queuedAction, existing, now);
     } else {
       await db.runAsync(`INSERT INTO action_queue (id, work_order_id, field_lane, payload, status, created_at, updated_at)
         VALUES (?, ?, ?, ?, 'queued', ?, ?)`,
@@ -522,17 +544,7 @@ export async function queueAction(action: OfflineAction) {
       task.completedAt = action.status === 'done' ? now : '';
     }
   }
-  if (queuedAction.type === 'save_job_form' && queuedAction.formId && queuedAction.answers) {
-    const form = job.forms.find((item) => item.id === queuedAction.formId);
-    if (form) {
-      form.answers = queuedAction.answers;
-      form.status = queuedAction.complete ? 'complete' : 'draft';
-      form.ready = form.template.fields.every((field) => !field.required || (field.type === 'checkbox' ? queuedAction.answers?.[field.key] === true : Boolean(String(queuedAction.answers?.[field.key] || '').trim())));
-      form.missing = form.template.fields.filter((field) => field.required && (field.type === 'checkbox' ? queuedAction.answers?.[field.key] !== true : !String(queuedAction.answers?.[field.key] || '').trim())).map((field) => field.label);
-      form.completedAt = queuedAction.complete ? now : '';
-      form.updatedAt = now;
-    }
-  }
+  applyQueuedForm(job, queuedAction, now);
   if (action.type === 'work_pack_commit' && action.caseInstanceId) {
     const pack = job.activityWorkPacks?.find(
       (item) => item.instance.id === action.caseInstanceId,
@@ -819,13 +831,15 @@ export function mergeQueuedWorkPackCustomerContext(
 
 export async function queuedActions(mode: FieldAccessMode, limit = 50) {
   const db = await getDatabase();
-  return db.getAllAsync<QueueRow>(
-    `SELECT * FROM action_queue WHERE field_lane = ? AND status IN ('queued', 'retry')
-      AND (retry_after = '' OR retry_after <= ?) ORDER BY created_at LIMIT ?`,
-    mode,
-    new Date().toISOString(),
-    limit,
+  const now = new Date().toISOString();
+  const rows = await db.getAllAsync<QueueRow & { queue_order: number }>(
+    `UPDATE action_queue SET dispatched_at = CASE WHEN dispatched_at = '' THEN ? ELSE dispatched_at END
+      WHERE id IN (SELECT id FROM action_queue WHERE field_lane = ? AND status IN ('queued', 'retry')
+      AND (retry_after = '' OR retry_after <= ?) ORDER BY created_at, rowid LIMIT ?)
+      RETURNING *, rowid AS queue_order`,
+    now, mode, now, limit,
   );
+  return rows.sort((left, right) => left.created_at.localeCompare(right.created_at) || left.queue_order - right.queue_order);
 }
 
 export async function resolveAction(
@@ -859,7 +873,7 @@ export async function resolveAction(
       const clientActionId = `act-${Crypto.randomUUID()}`;
       const rebased = { ...action, clientActionId, baseRevision: currentRevision };
       await db.runAsync(`UPDATE action_queue SET id = ?, payload = ?, status = 'queued', attempts = attempts + 1,
-        retry_after = '', error_code = '', error_message = '', updated_at = ? WHERE id = ?`,
+        dispatched_at = '', retry_after = '', error_code = '', error_message = '', updated_at = ? WHERE id = ?`,
       clientActionId, JSON.stringify(rebased), now, id);
       return;
     }
@@ -888,7 +902,7 @@ export async function retryConflict(id: string, action: OfflineAction) {
   const result = await db.runAsync(
     `UPDATE action_queue
       SET id = ?, work_order_id = ?, field_lane = ?, payload = ?, status = 'queued', attempts = 0,
-        retry_after = '', error_code = '', error_message = '', created_at = ?, updated_at = ?
+        dispatched_at = '', retry_after = '', error_code = '', error_message = '', created_at = ?, updated_at = ?
       WHERE id = ? AND work_order_id = ? AND field_lane = ? AND status = 'conflict'`,
     action.clientActionId,
     action.workOrderId,

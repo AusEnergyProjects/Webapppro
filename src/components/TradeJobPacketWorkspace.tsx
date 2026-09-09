@@ -20,7 +20,7 @@ type Draft = { name: string; serviceCategory: string; jobTemplateId: string; sug
 
 const SERVICE_OPTIONS = [
   ...ENERGY_SERVICE_OPTIONS,
-  ["electrical", "Electrical"], ["plumbing", "Plumbing"], ["mounting-hardware", "Mounting hardware"],
+  ["mounting-hardware", "Mounting hardware"],
   ["controls", "Controls"],
 ] as const;
 const SERVICE_CATEGORIES = new Set<string>(SERVICE_OPTIONS.map(([value]) => value));

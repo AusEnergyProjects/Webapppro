@@ -143,13 +143,11 @@ const lifecycleLabel = (value: string | null | undefined) => value
 const serviceOptions = [
   ...ENERGY_SERVICE_OPTIONS,
   ["rental-inspection", "Rental inspection"],
-  ["electrical", "Electrical services"], ["plumbing", "Plumbing services"],
   ["mounting-hardware", "Mounting and hardware"], ["controls", "Energy controls"],
 ] as const;
 const serviceLabels: Record<string, string> = {
   ...ENERGY_SERVICE_LABELS,
   "rental-inspection": "Rental inspection",
-  electrical: "Electrical services", plumbing: "Plumbing services",
   "mounting-hardware": "Mounting and hardware", controls: "Energy controls",
   "insulation-draughts": "Insulation and draught control",
 };

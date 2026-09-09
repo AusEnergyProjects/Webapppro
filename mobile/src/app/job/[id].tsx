@@ -46,6 +46,7 @@ import {
 import { activityIntentComplete } from '@/lib/activity-field-completion';
 import { APP_VERSION } from '@/lib/config';
 import { getDeviceId } from '@/lib/device';
+import { localWorkDate } from '@/lib/schedule';
 import {
   buildEvidenceEnvelope,
   cameraPermissionState,
@@ -287,6 +288,9 @@ export default function JobScreen() {
     syncNow,
   } = useApp();
   const [job, setJob] = useState<FieldJob | null>(null);
+  const [loadingJob, setLoadingJob] = useState(true);
+  const [jobLoadError, setJobLoadError] = useState('');
+  const [savedMessage, setSavedMessage] = useState('');
   const [workPackProblems, setWorkPackProblems] = useState<Record<string, string>>({});
   const [pendingWorkPackActions, setPendingWorkPackActions] = useState<Record<string, string[]>>({});
   const [duration, setDuration] = useState('');
@@ -301,9 +305,11 @@ export default function JobScreen() {
   });
   const recoveringPhoto = useRef(false);
   const launchingCamera = useRef(false);
+  const pickingDocument = useRef(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (refreshActivityForms = true) => {
     const workOrderId = String(id);
+    try {
     const [nextJob, problems, pendingActions, queuedCompletion, finishedActivityIntents] = await Promise.all([
       findJob(workOrderId),
       listWorkPackProblems(workOrderId),
@@ -312,16 +318,23 @@ export default function JobScreen() {
       listLocallyFinishedActivityIntentIds(workOrderId),
     ]);
     setJob(nextJob);
+    setLoadingJob(false);
+    setJobLoadError('');
     setWorkPackProblems(problems);
     setPendingWorkPackActions(pendingActions);
     setCompletionQueue(queuedCompletion);
     setLocallyFinishedActivityIntentIds(finishedActivityIntents);
+    if (!refreshActivityForms) return;
     if (nextJob?.complianceIntents?.length && nextJob.fieldLane !== 'creditex_manual') {
       try {
         const response = await apiRequest<{ records: ActivityFieldSummary[] }>("/api/trade-activity-forms?workOrderId=" + encodeURIComponent(workOrderId));
         setActivityRecords(response.records); setActivityLoadError('');
       } catch { setActivityLoadError('Connect to refresh activity form progress. Saved drafts remain available.'); }
     } else { setActivityRecords([]); setActivityLoadError(''); }
+    } catch {
+      setLoadingJob(false);
+      setJobLoadError('This job could not be loaded from your device. Try again.');
+    }
   }, [findJob, id]);
 
   const processPendingPhoto = useCallback(async (pending: PendingWorkPackPhotoCapture) => {
@@ -412,13 +425,7 @@ export default function JobScreen() {
           clearSettingKey: PENDING_PHOTO_SETTING,
         });
       }
-      const locationMessage = location.state === 'captured'
-        ? ` Location accuracy was ${location.accuracyMetres === null ? 'not reported' : `${Math.round(location.accuracyMetres)} metres`}.`
-        : ` Location was recorded as ${readable(location.state)}.`;
-      Alert.alert(
-        'Evidence saved',
-        `${sync.online ? 'The original file and capture record are uploading securely.' : 'The original file and capture record will upload when reception returns.'}${locationMessage} Compliance review is still required against the applicable scheme rules.`,
-      );
+      setSavedMessage('Photo saved on this device. Upload progress is shown in Sync.');
       return linkedClientUploadId;
     } catch (error) {
       if (linkedClientUploadId) await discardUpload(linkedClientUploadId);
@@ -430,7 +437,7 @@ export default function JobScreen() {
       setBusy('');
       recoveringPhoto.current = false;
     }
-  }, [findJob, saveAction, saveUpload, sync.online]);
+  }, [findJob, saveAction, saveUpload]);
 
   const recoverPendingPhoto = useCallback(async () => {
     if (recoveringPhoto.current) return;
@@ -494,8 +501,12 @@ export default function JobScreen() {
     const task = job.tasks.find((item) => item.id === taskId);
     if (!task) return;
     setBusy(`task:${taskId}`);
-    await saveAction({ type: 'set_task_status', workOrderId: job.id, taskId, baseRevision: task.revision, status: task.status === 'done' ? 'pending' : 'done' });
-    await load(); setBusy('');
+    try {
+      await saveAction({ type: 'set_task_status', workOrderId: job.id, taskId, baseRevision: task.revision, status: task.status === 'done' ? 'pending' : 'done' });
+      await load(false);
+    } catch (error) {
+      Alert.alert('Task could not be saved', error instanceof Error ? error.message : 'Try again.');
+    } finally { setBusy(''); }
   }
 
   async function addTime() {
@@ -509,21 +520,25 @@ export default function JobScreen() {
     const minutes = Number(duration);
     if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) return Alert.alert('Check the time', 'Enter the number of minutes worked, from 1 to 1440.');
     setBusy('time');
-    const today = new Date().toISOString().slice(0, 10);
-    await saveAction({ type: 'add_time_entry', workOrderId: job.id, baseRevision: job.revision, workDate: today, durationMinutes: minutes, notes: notes.trim() });
-    setDuration(''); setNotes(''); setBusy('');
-    Alert.alert('Time saved', sync.online ? 'The entry is syncing now.' : 'The entry is secure on this device and will sync later.');
+    setSavedMessage('');
+    try {
+      await saveAction({ type: 'add_time_entry', workOrderId: job.id, baseRevision: job.revision, workDate: localWorkDate(), durationMinutes: minutes, notes: notes.trim() });
+      setDuration(''); setNotes('');
+      await load(false);
+      setSavedMessage(`${minutes} minutes saved on this device. Check Sync for upload status.`);
+    } catch (error) {
+      Alert.alert('Time could not be saved', error instanceof Error ? error.message : 'Your entry is still here. Try again.');
+    } finally { setBusy(''); }
   }
 
   async function saveForm(form: FieldForm, answers: Record<string, string | boolean>, complete: boolean) {
     if (!job) return;
     const missing = form.template.fields.filter((field) => field.required && (field.type === 'checkbox' ? answers[field.key] !== true : !String(answers[field.key] || '').trim())).map((field) => field.label);
-    if (complete && missing.length) return Alert.alert('Finish the required fields', missing.join('\n'));
+    if (complete && missing.length) throw new Error(`Finish the required fields: ${missing.join(', ')}`);
     setBusy(`form:${form.id}`);
     try {
       await saveAction({ type: 'save_job_form', workOrderId: job.id, formId: form.id, baseRevision: form.revision, answers, complete });
-      await load();
-      Alert.alert(complete ? 'Completion saved for sync' : 'Draft saved', sync.online ? 'The field record is syncing now.' : 'The field record is secure on this device and will sync when reception returns.');
+      await load(false);
     } finally { setBusy(''); }
   }
 
@@ -601,7 +616,7 @@ export default function JobScreen() {
   }
 
   async function chooseDocument(selection?: GovernedEvidenceSelection) {
-    if (!job) return;
+    if (!job || pickingDocument.current) return;
     const requirement = selection?.requirement;
     let identifiers;
     try {
@@ -616,6 +631,10 @@ export default function JobScreen() {
       const blocker = captureBlocker(requirement, 'document');
       if (blocker) return Alert.alert('Document capture is unavailable', blocker);
     }
+    pickingDocument.current = true;
+    setBusy(evidenceBusyKey('document', selection));
+    setSavedMessage('');
+    try {
     const configuredTypes = requirement?.allowedContentTypes?.filter((contentType) => ALLOWED_EVIDENCE_TYPES.has(contentType)) || [];
     const result = await DocumentPicker.getDocumentAsync({
       type: configuredTypes.length ? configuredTypes : DEFAULT_DOCUMENT_TYPES,
@@ -637,8 +656,6 @@ export default function JobScreen() {
       source: 'document_picker',
       identifiers,
     });
-    setBusy(evidenceBusyKey('document', selection));
-    try {
       await saveUpload({
         workOrderId: job.id,
         uri: asset.uri,
@@ -649,13 +666,11 @@ export default function JobScreen() {
         caption: evidenceCaption(selection),
         evidenceEnvelope: envelope,
       });
-      Alert.alert(
-        'Original file saved',
-        `${sync.online ? 'The file and SHA-256 capture record are uploading securely.' : 'The file and SHA-256 capture record will upload when reception returns.'} Compliance review is still required against the applicable scheme rules.`,
-      );
+      setSavedMessage('Document saved on this device. Upload progress is shown in Sync.');
     } catch (error) {
       Alert.alert('File was not saved', error instanceof Error ? error.message : 'Choose the original file and try again.');
     } finally {
+      pickingDocument.current = false;
       setBusy('');
     }
   }
@@ -1262,7 +1277,7 @@ export default function JobScreen() {
     }
   }
 
-  if (!job) return <Screen><View style={styles.empty}><MaterialCommunityIcons name="briefcase-remove-outline" size={42} color={colours.muted} /><Text style={styles.title}>Job is not available</Text><Text style={styles.body}>It may have been unassigned or removed during sync.</Text></View></Screen>;
+  if (!job) return <Screen><View style={styles.empty}><MaterialCommunityIcons name={loadingJob ? 'briefcase-outline' : 'briefcase-remove-outline'} size={42} color={colours.muted} /><Text style={styles.title}>{loadingJob ? 'Opening job...' : 'Job is not available'}</Text><Text style={styles.body}>{loadingJob ? 'Loading the saved job from your device.' : jobLoadError || 'It may have been unassigned or removed during sync.'}</Text>{jobLoadError ? <FieldButton onPress={() => void load()}>Try again</FieldButton> : null}</View></Screen>;
 
   const completed = job.tasks.filter((task) => task.status === 'done').length;
   const fieldForms = job.forms || [];
@@ -1282,24 +1297,31 @@ export default function JobScreen() {
   if (selectedBusinessForm) return <Screen><JobFieldForm key={selectedBusinessForm.id} form={selectedBusinessForm} busy={busy === 'form:' + selectedBusinessForm.id} onSave={saveForm} onReturnToJob={() => setActiveFormId(null)} /></Screen>;
   if (job.rentalInspection && activeFormId === 'rental') return <Screen scroll={false} style={{ padding: 0 }}><RentalInspectionWorkflow workOrderId={job.id} summary={job.rentalInspection} online={sync.online} onReturnToJob={() => setActiveFormId(null)} onChanged={async () => { await syncNow(); await load(); }} /></Screen>;
   return (
-    <Screen>
+    <Screen scrollKey={activeFormId || 'overview'}>
       <View style={styles.hero}>
         <View style={styles.badges}><View style={styles.jobNumber}><Text style={styles.jobNumberText}>{job.workNumber}</Text></View><View style={styles.stage}><Text style={styles.stageText}>{lifecycleLabel(job, activityRecords, finishQueued)}</Text></View>{syntheticManual ? <View style={styles.syntheticBadge}><Text style={styles.syntheticBadgeText}>SYNTHETIC TEST ONLY</Text></View> : null}</View>
         <Text style={styles.title}>{job.title || 'Field job'}</Text>
-        <Text style={styles.body}>{job.customerName} | {job.protectedJob ? job.siteArea || 'Protected service area' : job.serviceAddress || job.siteArea || 'Service site not added'}</Text>
+        <Text style={styles.body}>{job.protectedJob ? job.siteArea || 'Protected service area' : [job.customerName, job.serviceAddress || job.siteArea || 'Service site not added'].filter(Boolean).join(' | ')}</Text>
         {job.appointmentStartsAt ? <Text style={styles.meta}>{new Date(job.appointmentStartsAt).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}</Text> : null}
       </View>
 
-      <View style={[styles.privacy, job.protectedJob && styles.protected]}>
+      {savedMessage ? <Text accessibilityLiveRegion="polite" style={styles.meta}>{savedMessage}</Text> : null}
+      {jobLoadError ? <Text accessibilityLiveRegion="polite" style={styles.warningText}>{jobLoadError}</Text> : null}
+
+      {job.protectedJob || syntheticManual ? <View style={[styles.privacy, job.protectedJob && styles.protected]}>
         <MaterialCommunityIcons name={job.protectedJob ? 'shield-lock-outline' : 'map-marker-check-outline'} size={26} color={colours.green} />
         <View style={styles.flex}><Text style={styles.cardTitle}>{syntheticManual ? 'Manual compliance workflow test' : job.protectedJob ? 'Australian Energy Assessments protected job' : 'Direct customer job'}</Text><Text style={styles.body}>{syntheticManual ? 'Use only the supplied test alias and synthetic postcode. This lane cannot create certificates, registry submissions, trades or settlements.' : job.protectedJob ? 'Customer name, phone, email and street address stay protected. Use the Australian Energy Assessments platform for communication.' : job.serviceAddress || `${job.siteArea || 'Service area'} | Address is not stored offline yet.`}</Text></View>
-      </View>
+      </View> : null}
 
       {!activeFormId ? <View style={styles.card}>
-        <Text style={styles.cardTitle}>Visit</Text>
-        {!job.protectedJob && (job.customerPhone || job.serviceAddress) ? <View style={styles.row}>{job.customerPhone ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`tel:${job.customerPhone.replace(/[^+\d]/g, '')}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Call</Text></Pressable> : null}{job.serviceAddress ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.serviceAddress)}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Get directions</Text></Pressable> : null}</View> : null}
+        <Text style={styles.cardTitle}>Job actions</Text>
+        {!job.protectedJob && (job.customerPhone || job.serviceAddress) ? <View style={styles.row}>{job.customerPhone ? <><Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`tel:${job.customerPhone.replace(/[^+\d]/g, '')}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Call</Text></Pressable><Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`sms:${job.customerPhone.replace(/[^+\d]/g, '')}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Text</Text></Pressable></> : null}{job.serviceAddress ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.serviceAddress)}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Directions</Text></Pressable> : null}</View> : null}
+        <View style={styles.row}><FieldButton variant="secondary" style={styles.flex} onPress={() => setActiveFormId('files')}>Job files</FieldButton>{!creditexManual ? <FieldButton variant="secondary" style={styles.flex} onPress={() => setActiveFormId('time')}>Record time</FieldButton> : null}</View>
+        {!syntheticManual && !complianceCases.length ? <FieldButton variant="secondary" disabled={Boolean(busy)} loading={busy === 'photo:general'} onPress={() => void capturePhoto()}>Take photo</FieldButton> : null}
         {job.description ? <Text style={styles.body}>{job.description}</Text> : null}
       </View> : null}
+
+      {!creditexManual ? <FieldCommercialWorkspace workOrderId={job.id} selected={activeFormId} onSelect={setActiveFormId} online={sync.online} protectedJob={job.protectedJob} /> : null}
 
       {!activeFormId ? <View style={styles.card}>
         <Text style={styles.cardTitle}>{['completed', 'cancelled'].includes(job.stage) ? 'Job forms' : 'Forms to complete'}</Text>
@@ -1315,12 +1337,12 @@ export default function JobScreen() {
           const activityRecord = activityRecords.find((record) => record.intentId === intent.id);
           return <Pressable key={intent.id} accessibilityRole="button" onPress={() => setActiveFormId(intent.id)} style={styles.formRow}>
             <MaterialCommunityIcons name={done ? 'check-circle-outline' : 'alert-circle-outline'} size={27} color={done ? colours.green : colours.amber} />
-            <View style={styles.flex}><Text style={styles.taskTitle}>{intent.programCode} {intent.activityCode} | {intent.activityTitle}</Text><Text style={styles.meta}>{activityRecord?.recordNumber || pack?.instance.id || intent.id} | {done ? 'Complete' : activityRecord?.id || pack ? 'Continue form' : 'Start form'}</Text></View>
+            <View style={styles.flex}><Text style={styles.taskTitle}>{intent.programCode} {intent.activityCode} | {intent.activityTitle}</Text><Text style={styles.meta}>{activityRecord?.recordNumber ? `${activityRecord.recordNumber} | ` : ''}{done ? 'Complete' : activityRecord?.id || pack ? 'Continue form' : 'Start form'}</Text></View>
             <MaterialCommunityIcons name="chevron-right" size={24} color={colours.green} />
           </Pressable>;
         })}
         {job.rentalInspection ? <Pressable accessibilityRole="button" onPress={() => setActiveFormId('rental')} style={styles.formRow}><MaterialCommunityIcons name={job.rentalInspection.status === 'issued' ? 'check-circle-outline' : 'home-search-outline'} size={27} color={colours.green} /><View style={styles.flex}><Text style={styles.taskTitle}>Rental inspections and safety checks</Text><Text style={styles.meta}>{job.rentalInspection.progress.completeModules}/{job.rentalInspection.progress.moduleTotal} complete</Text></View><MaterialCommunityIcons name="chevron-right" size={24} color={colours.green} /></Pressable> : null}
-        {fieldForms.map((form) => <Pressable key={form.id} accessibilityRole="button" onPress={() => setActiveFormId(form.id)} style={styles.formRow}><MaterialCommunityIcons name={form.status === 'complete' ? 'check-circle-outline' : 'alert-circle-outline'} size={27} color={form.status === 'complete' ? colours.green : colours.amber} /><View style={styles.flex}><Text style={styles.taskTitle}>{form.name}</Text><Text style={styles.meta}>{form.id} | {form.status === 'complete' ? 'Complete' : `${form.missing.length} required`}</Text></View><MaterialCommunityIcons name="chevron-right" size={24} color={colours.green} /></Pressable>)}
+        {fieldForms.map((form) => <Pressable key={form.id} accessibilityRole="button" onPress={() => setActiveFormId(form.id)} style={styles.formRow}><MaterialCommunityIcons name={form.status === 'complete' ? 'check-circle-outline' : 'alert-circle-outline'} size={27} color={form.status === 'complete' ? colours.green : colours.amber} /><View style={styles.flex}><Text style={styles.taskTitle}>{form.name}</Text><Text style={styles.meta}>{form.status === 'complete' ? 'Complete' : form.missing.length ? `${form.missing.length} required fields remaining` : 'Ready to complete'}</Text></View><MaterialCommunityIcons name="chevron-right" size={24} color={colours.green} /></Pressable>)}
         {!complianceIntents.length && !fieldForms.length && !job.rentalInspection ? <Text style={styles.body}>No forms are attached to this job.</Text> : null}
         {!creditexManual && !['completed', 'cancelled'].includes(job.stage) ? <FieldButton variant="secondary" onPress={() => setActiveFormId('form-library')}>Add form or business questions</FieldButton> : null}
       </View> : null}
@@ -1372,12 +1394,10 @@ export default function JobScreen() {
 
       {!creditexManual && activeFormId === 'form-library' ? <FieldFormLibrary workOrderId={job.id} serviceCategory={job.serviceCategory} online={sync.online} onBack={() => setActiveFormId(null)} onChanged={async () => { await syncNow(); await load(); }} /> : null}
 
-      {!activeFormId ? <View style={styles.row}><FieldButton variant="secondary" style={styles.flex} onPress={() => setActiveFormId('files')}>Job files</FieldButton>{!creditexManual ? <FieldButton variant="secondary" style={styles.flex} onPress={() => setActiveFormId('time')}>Record time</FieldButton> : null}</View> : null}
-
       {activeFormId === 'files' ? <View style={styles.card}>
         <FieldButton variant="secondary" onPress={() => setActiveFormId(null)}>Job</FieldButton>
         <Text style={styles.label}>FIELD EVIDENCE</Text><Text style={styles.cardTitle}>Photos and documents</Text>
-        <Text style={styles.body}>The app preserves the exact file returned by the camera picker without further editing or recompression, requests available EXIF, adds independent time and location observations, and hashes the exact queued bytes with SHA-256. Files save encrypted on this device first and resume automatically after a connection drops.</Text>
+        <Text style={styles.body}>Photos and documents save securely on this device and upload when connected. Use the matching requirement below for program evidence.</Text>
         {syntheticManual ? <Text style={styles.warningText}>Manual program testing only. A physical-device report and server-verified retained bytes are required before a prompt counts as complete. Compliance review is still separate.</Text> : null}
         <Text style={styles.meta}>These records support audit review. They are not a government or scheme acceptance decision.</Text>
         {complianceCases.length > 1 ? <Text style={styles.multiCaseNotice}>This job has {complianceCases.length} governed activities. Capture each requirement inside its matching case below.</Text> : null}
@@ -1401,12 +1421,11 @@ export default function JobScreen() {
       {!creditexManual && activeFormId === 'time' ? <View style={styles.card}>
         <FieldButton variant="secondary" onPress={() => setActiveFormId(null)}>Job</FieldButton>
         <Text style={styles.label}>TIME ENTRY</Text><Text style={styles.cardTitle}>Record today&apos;s work</Text>
+        <View style={styles.row}>{[15, 30, 60, 120].map((minutes) => <FieldButton key={minutes} variant="secondary" style={styles.flex} disabled={Boolean(busy)} onPress={() => setDuration(String(minutes))}>{minutes < 60 ? `${minutes}m` : `${minutes / 60}h`}</FieldButton>)}</View>
         <Text style={styles.inputLabel}>Minutes worked</Text><TextInput style={styles.input} value={duration} onChangeText={setDuration} keyboardType="number-pad" placeholder="For example, 90" />
         <Text style={styles.inputLabel}>Work note, optional</Text><TextInput style={[styles.input, styles.notes]} multiline value={notes} onChangeText={setNotes} placeholder={job.protectedJob ? 'Describe the work only. Do not add customer contact details.' : 'Briefly describe completed work'} maxLength={500} />
         <FieldButton loading={busy === 'time'} disabled={!duration} onPress={() => void addTime()}>Save time entry</FieldButton>
       </View> : null}
-
-      {!creditexManual ? <FieldCommercialWorkspace workOrderId={job.id} selected={activeFormId} onSelect={setActiveFormId} online={sync.online} protectedJob={job.protectedJob} /> : null}
 
       {!activeFormId && !creditexManual ? <View style={styles.card}>
         <Text style={styles.cardTitle}>Complete job</Text>

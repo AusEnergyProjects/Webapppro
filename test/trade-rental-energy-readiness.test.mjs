@@ -6,11 +6,12 @@ import ts from "typescript";
 import * as templates from "../src/lib/trade-rental-assessment.mjs";
 import * as credentials from "../src/lib/trade-rental-credentials.ts";
 import * as evidence from "../src/lib/trade-rental-evidence.mjs";
+import * as quotation from "../src/lib/rental-quotation.mjs";
 
 const scopeMigration = fs.readFileSync(new URL("../drizzle/0171_trade_rental_assessment_scope.sql", import.meta.url), "utf8");
 
 test("readiness selects six future energy areas while retaining the complete current assessment", () => {
-  const snapshot = templates.rentalAssessmentTemplateSnapshot(["minimum_standards"]);
+  const snapshot = templates.rentalAssessmentTemplateSnapshot(["minimum_standards"], "energy_readiness_2027");
   const assessmentModule = snapshot.modules.minimum_standards;
   assert.equal(snapshot.assessmentScope, "energy_readiness_2027");
   assert.equal(snapshot.key, "vic-rental-minimum-standards");
@@ -28,7 +29,10 @@ test("readiness selects six future energy areas while retaining the complete cur
   assert.match(assessmentModule.sections[4].checks[0].help, /Existing insulation need not be upgraded/);
   assert.match(assessmentModule.sections.at(-1).checks.at(-1).help, /unflued or open-flued.*six months/i);
   assert.match(assessmentModule.reportBoundary, /not a declaration of non-compliance today/);
-  assert.equal(templates.rentalAssessmentTemplateSnapshot(["minimum_standards"], "current_minimum_standards").modules.minimum_standards.sections.length, 15);
+  const full = templates.rentalAssessmentTemplateSnapshot(["minimum_standards"]);
+  assert.equal(full.assessmentScope, "current_minimum_standards");
+  assert.equal(full.modules.minimum_standards.sections.length, 20);
+  assert.equal(full.modules.minimum_standards.sections.flatMap((section) => section.checks).length, 32);
   assert.throws(() => templates.rentalAssessmentTemplateSnapshot(["minimum_standards"], "invented"), /SCOPE_INVALID/);
 });
 
@@ -50,13 +54,13 @@ test("rental scope has a dedicated persisted field while retaining the database-
 });
 
 test("readiness still requires actual observations, evidence, findings and final declarations", () => {
-  const moduleTemplate = templates.rentalAssessmentTemplateSnapshot(["minimum_standards"]).modules.minimum_standards;
+  const moduleTemplate = templates.rentalAssessmentTemplateSnapshot(["minimum_standards"], "energy_readiness_2027").modules.minimum_standards;
   const items = moduleTemplate.sections.flatMap((section) => section.checks.map((check) => ({
     id: check.key, itemKey: check.key, sectionKey: section.key, checkKey: check.key,
     locationLabel: "Recorded area", outcome: "meets", requiredEvidenceCount: 1,
   })));
   const input = { moduleTemplate, items, findings: [], evidenceCounts: Object.fromEntries(items.map((item) => [item.id, 1])),
-    answers: { inspectionDate: "2026-09-07", dwellingClass: "house", coverageConfirmed: true, assessorDeclaration: true } };
+    answers: { inspectionDate: "2026-09-07", rentalRegime: "ordinary_residential", dwellingClass: "house", coverageConfirmed: true, assessorDeclaration: true } };
   assert.equal(templates.rentalAssessmentCompletion(input).complete, true);
   assert.equal(templates.rentalAssessmentCompletion({ ...input, evidenceCounts: {} }).complete, false);
   assert.equal(templates.rentalAssessmentCompletion({ ...input, answers: { ...input.answers, assessorDeclaration: false } }).complete, false);
@@ -131,6 +135,7 @@ function loadRoute(fixture, permissions = {}) {
         } catch (error) { fixture.sql.exec("ROLLBACK"); throw error; }
       } },
     "@/lib/trade-rental-assessment.mjs": templates,
+    "@/lib/rental-quotation.mjs": quotation,
     "@/lib/trade-rental-evidence.mjs": evidence,
     "@/lib/trade-rental-credentials": credentials,
     "@/lib/trade-rental-schema-guards": { ensureTradeRentalSchemaGuards: async () => {} },

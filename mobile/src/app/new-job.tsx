@@ -80,8 +80,8 @@ export default function NewJobScreen() {
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [duration, setDuration] = useState(90);
   const [selectedModules, setSelectedModules] = useState<string[]>(['minimum_standards']);
-  const [rentalAssessmentScope, setRentalAssessmentScope] = useState('energy_readiness_2027');
-  const [serviceCategory, setServiceCategory] = useState('rental-inspection');
+  const [rentalAssessmentScope, setRentalAssessmentScope] = useState('current_minimum_standards');
+  const [serviceCategory, setServiceCategory] = useState('');
   const [buildingType, setBuildingType] = useState('not_sure');
   const [plannedActivities, setPlannedActivities] = useState<PlannedFieldActivity[]>([]);
   const [jobOptions, setJobOptions] = useState<FieldJobOptions | null>(null);
@@ -287,6 +287,7 @@ export default function NewJobScreen() {
   function workError() {
     if (!jobOptions || optionsLoading) return 'Wait for current work and team options to load.';
     if (optionsError) return optionsError;
+    if (!jobOptions.services.some((service) => service.id === serviceCategory)) return 'Choose the type of work for this job.';
     if (serviceCategory === 'rental-inspection' && !selectedModules.length) return 'Choose at least one assessment or safety-check workflow.';
     if (serviceCategory === 'rental-inspection' && addressState !== 'VIC') return 'Rental inspection jobs require a Victorian service address.';
     if (!validPlannedActivities(plannedActivities, jobOptions)) return 'Remove any activity that is no longer available for this property.';
@@ -379,7 +380,7 @@ export default function NewJobScreen() {
       {serviceCategory === 'rental-inspection' ? <>
         {selectedModules.includes('minimum_standards') ? <FieldSelect label="Rental assessment scope" value={rentalAssessmentScope} options={[
           { value: 'energy_readiness_2027', label: '2027 rental energy readiness' },
-          { value: 'current_minimum_standards', label: 'Full rental minimum standards' },
+          { value: 'current_minimum_standards', label: 'Full minimum standards + 2027 readiness' },
         ]} onChange={setRentalAssessmentScope} /> : null}
         <Text style={styles.help}>Choose the inspections needed for this property.</Text>
       {modules.map((module) => { const selected = selectedModules.includes(module.key); return <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: selected }} key={module.key} onPress={() => toggleModule(module.key)} style={[styles.choice, selected && styles.choiceSelected]}><MaterialCommunityIcons name={module.icon} size={24} color={selected ? colours.green : colours.muted} /><Text style={styles.choiceText}>{module.label}</Text><MaterialCommunityIcons name={selected ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={25} color={selected ? colours.green : colours.muted} /></Pressable>; })}

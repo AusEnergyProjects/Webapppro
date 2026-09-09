@@ -66,7 +66,6 @@ type AddressValue = {
 const serviceOptions = [
   ...ENERGY_SERVICE_OPTIONS,
   ["rental-inspection", "Rental inspection"],
-  ["electrical", "Electrical services"], ["plumbing", "Plumbing services"],
   ["mounting-hardware", "Mounting and hardware"], ["controls", "Energy controls"],
 ] as const;
 const serviceCategories = new Set<string>(serviceOptions.map(([value]) => value));

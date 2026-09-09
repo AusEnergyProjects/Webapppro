@@ -14,6 +14,7 @@ import {
   RENTAL_ASSESSMENT_FINDING_SEVERITIES,
   RENTAL_ASSESSMENT_OUTCOMES,
   rentalAssessmentCheck,
+  rentalCheckIsReadiness,
   rentalAssessmentCompletion,
   rentalAssessmentItemKey,
   rentalAssessmentTemplateSnapshot,
@@ -21,6 +22,7 @@ import {
   RENTAL_ASSESSMENT_SCOPES,
 } from "@/lib/trade-rental-assessment.mjs";
 import { rentalEvidenceCapture, rentalEvidencePhotoCapture } from "@/lib/trade-rental-evidence.mjs";
+import { rentalQuotation } from "@/lib/rental-quotation.mjs";
 import { currentRentalModuleCredentialSnapshot, rentalModuleProfileAnswers } from "@/lib/trade-rental-credentials";
 import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
 import {
@@ -574,6 +576,7 @@ function findingInput(body: Row, outcome: string, itemKey: string, locationLabel
   const severity = FINDING_SEVERITIES.has(requestedSeverity) ? requestedSeverity : "required";
   const detailsSource = parsedObject(source.details);
   const details = {
+    quotation: Object.fromEntries(Object.entries(rentalQuotation(detailsSource.quotation)).map(([key, value]) => [key, cleanAdminText(value, key === "status" ? 40 : 4000)])),
     immediateAction: cleanAdminText(detailsSource.immediateAction, 2000),
     responsiblePeopleNotified: cleanBoolean(detailsSource.responsiblePeopleNotified),
     notificationRecipient: cleanAdminText(detailsSource.notificationRecipient, 500),
@@ -683,7 +686,8 @@ async function saveItem(context: InspectionContext, body: Row) {
   const existingFinding = await getD1().prepare(`SELECT id, revision FROM trade_rental_findings
     WHERE inspection_id = ? AND finding_key = ? AND firebase_uid = ?`)
     .bind(context.inspection.id, `finding:${itemKey}`, context.access.ownerUid).first<Row>();
-  const finding = adverse ? findingInput(body, outcome, itemKey, locationLabel, template.assessmentScope === "energy_readiness_2027") : null;
+  const ordinaryRegimeUnconfirmed = Number(template.templateVersion) >= 3 && assessmentModule.module_key === "minimum_standards" && parsedObject(assessmentModule.answers).rentalRegime !== "ordinary_residential";
+  const finding = adverse ? findingInput(body, outcome, itemKey, locationLabel, rentalCheckIsReadiness(assessmentCheck, template.assessmentScope) || ordinaryRegimeUnconfirmed) : null;
   if (finding) {
     const findingId = existingFinding ? String(existingFinding.id) : crypto.randomUUID();
     const findingRevision = integer(existingFinding?.revision) + 1;

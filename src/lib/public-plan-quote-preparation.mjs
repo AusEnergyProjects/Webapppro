@@ -102,6 +102,30 @@ const ENERGY_ASSISTANT_QUESTION_DEFINITIONS = Object.freeze([
     options: ["As soon as practical", "Within 3 months", "Within 6 months", "Planning for later", "Not sure"],
   },
   {
+    id: "electrical-work",
+    label: "What do you need an electrician to do?",
+    services: ["electrical"],
+    options: ["Power points or switches", "Lighting or ceiling fans", "Switchboard or safety switches", "Wiring for an appliance", "Find and repair a fault", "Several jobs", "Not sure"],
+  },
+  {
+    id: "electrical-area",
+    label: "Where is the electrical work needed?",
+    services: ["electrical"],
+    options: ["One room", "Several rooms", "Switchboard or meter area", "Garage or outdoor area", "Whole property", "Not sure"],
+  },
+  {
+    id: "plumbing-work",
+    label: "What do you need a plumber to do?",
+    services: ["plumbing"],
+    options: ["Repair a leak", "Clear a blocked drain", "Repair or replace taps or a toilet", "Connect an appliance", "Renovation plumbing", "Several jobs", "Not sure"],
+  },
+  {
+    id: "plumbing-area",
+    label: "Where is the plumbing work needed?",
+    services: ["plumbing"],
+    options: ["Kitchen", "Bathroom or toilet", "Laundry", "Outside or underground", "Several areas", "Not sure"],
+  },
+  {
     id: "assessment-purpose",
     label: "What should the energy assessment help you decide?",
     services: ["assessment"],

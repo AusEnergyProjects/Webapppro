@@ -31,7 +31,6 @@ type Result = { ok?: boolean; templates?: PhotoTemplate[]; error?: string };
 
 const serviceOptions = [
   ...ENERGY_SERVICE_OPTIONS,
-  ["electrical", "Electrical services"], ["plumbing", "Plumbing services"],
   ["mounting-hardware", "Mounting and hardware"], ["controls", "Energy controls"],
 ] as const;
 const serviceCategories = new Set<string>(serviceOptions.map(([value]) => value));

@@ -49,7 +49,7 @@ test("offline jobs actions uploads and cursors are isolated by field lane", () =
   );
   assert.match(
     database,
-    /SELECT \* FROM action_queue WHERE field_lane = \? AND status IN/,
+    /SELECT id FROM action_queue WHERE field_lane = \? AND status IN/,
   );
   assert.match(
     database,

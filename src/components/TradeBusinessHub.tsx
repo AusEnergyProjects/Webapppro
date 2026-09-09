@@ -75,8 +75,6 @@ const serviceLabels: Record<string, string> = {
   glazing: "Glazing",
   "window-coverings": "Blinds, shutters and external shading",
   "ev-charging": "EV charging",
-  electrical: "Electrical services",
-  plumbing: "Plumbing services",
   "mounting-hardware": "Mounting and hardware",
   controls: "Energy controls",
   "product-fulfilment": "Product fulfilment",

@@ -109,6 +109,23 @@ test("business owners and field users with full scheduling grants can select eli
   }
 });
 
+test("electrical, plumbing and insulation specialists can be registered and assigned through the same service catalogue", async () => {
+  const { db, get } = fixture();
+  try {
+    for (const service of ["electrical", "plumbing", "insulation"]) {
+      const capabilities = energyServices.normalizeEnergyServiceIds([service]);
+      assert.deepEqual(capabilities, [service], `${service} must be accepted by business registration`);
+      db.prepare("INSERT INTO trade_team_members VALUES (?, 'business', ?, ?, 'active', ?)")
+        .run(service, `${service}-worker`, `${service} specialist`, JSON.stringify(capabilities));
+      const response = await get({ serviceCategory: service });
+      assert.equal(response.status, 200);
+      const result = await response.json();
+      assert.equal(result.services.filter((item) => item.id === service).length, 1);
+      assert.deepEqual(result.assignees.map((item) => item.id).sort(), [service, "self"].sort());
+    }
+  } finally { db.close(); }
+});
+
 test("own-scope or incomplete scheduling grants cannot expose other workers through search or selected IDs", async () => {
   for (const permissions of [
     { canAssignJobs: false, jobScope: "team", canRescheduleJobs: true, scheduleScope: "team" },

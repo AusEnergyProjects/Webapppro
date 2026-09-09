@@ -14,6 +14,7 @@ import {
   publicRentalReportValue,
   rentalAssessmentCompletion,
   rentalAssessmentCheck,
+  rentalRegimeAssessment,
   rentalReportExpiresAt,
 } from "@/lib/trade-rental-assessment.mjs";
 import {
@@ -406,6 +407,7 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
             return {
               ...itemPresentation(item, String(assessmentCheck?.prompt || item.check_key)),
               effectiveFrom: String(assessmentCheck?.effectiveFrom || ""),
+              assessmentPhase: String(assessmentCheck?.assessmentPhase || (template.assessmentScope === "energy_readiness_2027" ? "energy_readiness_2027" : "current")),
               trigger: String(assessmentCheck?.trigger || ""),
               sourceUrl: String(assessmentCheck?.sourceUrl || ""),
               id: String(itemPublicIds.get(String(item.id))),
@@ -416,7 +418,9 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
     };
   });
   const minimumAnswers = parsedObject(source.modules.find((module) => module.module_key === "minimum_standards")?.answers);
+  const regimeAssessment = rentalRegimeAssessment(minimumAnswers);
   const readiness = source.inspection.assessment_scope === "energy_readiness_2027";
+  const fullReadiness = modules.some((module) => module.sections.some((section) => section.items.some((item) => item.assessmentPhase === "energy_readiness_2027")));
   const safetyChecksOnly = !source.modules.some((assessmentModule) => assessmentModule.module_key === "minimum_standards");
   const sources: Row[] = [];
   for (const assessmentModule of source.modules) {
@@ -428,8 +432,14 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
   const businessName = String(source.business.document_business_name || source.business.business_name || "TLink trade business");
   const findings = source.findings.map((finding) => {
     const { id, moduleId, itemId, ...publicFinding } = finding;
+    const reportModule = modules.find((module) => module.id === modulePublicIds.get(String(moduleId)));
+    const reportItem = reportModule?.sections.flatMap((section) => section.items).find((item) => item.id === itemPublicIds.get(String(itemId)));
+    const status = reportModule?.key === "minimum_standards" && publicFinding.status !== "compliant" && publicFinding.severity !== "immediate_safety_risk"
+      ? !regimeAssessment.applicable ? "not_tested" : reportItem?.outcome === "does_not_meet" ? reportItem.assessmentPhase === "energy_readiness_2027" ? "recommendation" : "non_compliant" : "not_tested"
+      : publicFinding.status;
     return {
       ...publicFinding,
+      status,
       id: String(findingPublicIds.get(String(id))),
       moduleId: String(modulePublicIds.get(String(moduleId)) || ""),
       itemId: String(itemPublicIds.get(String(itemId)) || ""),
@@ -462,9 +472,11 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
     },
     property: propertyProjection(propertySnapshot),
     inspection: {
-      title: readiness ? "2027 Victorian rental energy readiness assessment" : safetyChecksOnly ? "Victorian rental safety-check report" : "Victorian rental minimum standards assessment",
+      title: readiness ? "2027 Victorian rental energy readiness assessment" : safetyChecksOnly ? "Victorian rental safety-check report" : fullReadiness ? "Victorian rental minimum standards assessment and 2027 readiness report" : "Victorian rental minimum standards assessment",
       assessmentScope: readiness ? "energy_readiness_2027" : "current_minimum_standards",
-      reportBoundary: readiness ? "Energy readiness assessment for phased future requirements. Planning findings do not establish non-compliance with current rental law. Refer to each recorded standard's date and trigger." : "Assessment of the selected current rental minimum standards and safety-check modules.",
+      reportBoundary: readiness ? "Energy readiness assessment for phased future requirements. Planning findings do not establish non-compliance with current rental law. Refer to each recorded standard's date and trigger." : modules.find((module) => module.key === "minimum_standards")?.reportBoundary || "Assessment of the selected safety-check modules.",
+      rentalRegime: String(minimumAnswers.rentalRegime || "unconfirmed"),
+      applicabilityLimitation: safetyChecksOnly ? "" : regimeAssessment.limitation,
       number: String(source.inspection.inspection_number),
       jurisdiction: "VIC",
       templateKey: String(source.inspection.template_key),

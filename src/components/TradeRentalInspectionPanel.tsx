@@ -9,6 +9,9 @@ import {
   useState,
 } from "react";
 import type { User } from "firebase/auth";
+import { RENTAL_REFERRAL_TRADES, rentalSuggestedTrade } from "@/lib/rental-referral-trades.mjs";
+import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalQuotationGuidance } from "@/lib/rental-quotation.mjs";
+import { rentalCheckIsReadiness } from "@/lib/trade-rental-assessment.mjs";
 import styles from "./TradeRentalInspectionPanel.module.css";
 
 type MetadataField = {
@@ -31,6 +34,9 @@ type AssessmentCheck = {
   photoGuidance: string;
   help: string;
   credentialGate: string;
+  assessmentPhase?: string;
+  trigger?: string;
+  responseFields?: Array<{ key: string; label: string; required: boolean }>;
 };
 
 type AssessmentSection = {
@@ -41,6 +47,8 @@ type AssessmentSection = {
 };
 
 type ModuleTemplate = {
+  assessmentScope?: string;
+  templateVersion?: number;
   key: string;
   title: string;
   credentialGate: string;
@@ -170,23 +178,7 @@ const severityOptions = [
   ["information", "Information only"],
 ] as const;
 
-const tradeOptions = [
-  "Assessor follow-up",
-  "Builder",
-  "Carpenter",
-  "Electrician",
-  "Gasfitter",
-  "Glazier",
-  "Heating and cooling technician",
-  "Locksmith",
-  "Mould or moisture specialist",
-  "Painter",
-  "Plumber",
-  "Roof plumber",
-  "Smoke alarm technician",
-  "Structural engineer",
-  "Window furnishings installer",
-];
+const tradeOptions = RENTAL_REFERRAL_TRADES;
 
 const adverseOutcomes = new Set([
   "does_not_meet",
@@ -404,6 +396,8 @@ function AssessmentItemCard({
   const [outcome, setOutcome] = useState(item.outcome || "");
   const [severity, setSeverity] = useState(finding?.severity || "required");
   const isAdverse = adverseOutcomes.has(outcome);
+  const readiness = rentalCheckIsReadiness(check, module.template.assessmentScope);
+  const quotation = rentalQuotation(finding?.details.quotation);
   const repeated = check.repeatBy !== "property";
   const itemBusy = busy === `item:${item.instanceKey}`;
   const uploadBusy = busy === `upload:${item.id}`;
@@ -414,7 +408,9 @@ function AssessmentItemCard({
     if (!form.reportValidity()) throw new Error("Finish the required fields in this answer before saving the section.");
     if (!outcome) throw new Error("Choose an assessment result before saving the section.");
     const values = new FormData(form);
-    const response = {
+    const response: Record<string, unknown> = {
+      ...item.response,
+      ...Object.fromEntries((check.responseFields || []).map((field) => [field.key, String(values.get(field.key) || "")])),
       make: String(values.get("make") || ""),
       model: String(values.get("model") || ""),
       serialNumber: String(values.get("serialNumber") || ""),
@@ -427,6 +423,7 @@ function AssessmentItemCard({
       credentialNumber: String(values.get("credentialNumber") || ""),
       credentialVerified: values.has("credentialVerified"),
     };
+    for (const field of check.responseFields || []) response[field.key] = String(values.get(field.key) || "");
     const findingBody = isAdverse ? {
       title: String(values.get("findingTitle") || ""),
       description: String(values.get("findingDescription") || ""),
@@ -434,12 +431,13 @@ function AssessmentItemCard({
       status: String(values.get("findingStatus") || ""),
       severity,
       tradeCategory: String(values.get("tradeCategory") || ""),
-      recommendedAction: String(values.get("recommendedAction") || ""),
+      recommendedAction: String(values.get("scopeSummary") || ""),
       scopeSummary: String(values.get("scopeSummary") || ""),
-      quantityMilli: Math.round(Math.max(0, Number(values.get("quantity") || 1)) * 1000),
+      quantityMilli: Math.round(Math.max(0, Number(values.get("quantity") || 0)) * 1000),
       unitLabel: String(values.get("unitLabel") || "each"),
       internalNotes: String(values.get("findingInternalNotes") || ""),
       details: {
+        quotation: Object.fromEntries(["status", ...RENTAL_QUOTATION_FIELDS.map((field) => field.key), "missingInformation"].map((key) => [key, String(values.get(`quotation_${key}`) || "")])),
         immediateAction: String(values.get("immediateAction") || ""),
         responsiblePeopleNotified: values.has("responsiblePeopleNotified"),
         notificationRecipient: String(values.get("notificationRecipient") || ""),
@@ -511,7 +509,7 @@ function AssessmentItemCard({
         <legend>Result *</legend>
         {outcomeOptions.map(([value, label]) => <label className={outcome === value ? styles.selectedOutcome : ""} key={value}>
           <input type="radio" name="outcome" value={value} checked={outcome === value} onChange={() => setOutcome(value)} />
-          <span>{label}</span>
+          <span>{readiness && value === "meets" ? "Ready for this requirement" : readiness && value === "does_not_meet" ? "Upgrade planning needed" : label}</span>
         </label>)}
       </fieldset>
 
@@ -527,17 +525,18 @@ function AssessmentItemCard({
         <small>This is visible to the agent, rental provider and trades viewing the issued report.</small>
       </label>
 
+      {(check.responseFields || []).map((field) => <label key={field.key}><span>{field.label}</span><textarea name={field.key} rows={2} maxLength={500} defaultValue={String(response[field.key] || "")} required={field.required && ["meets", "does_not_meet"].includes(outcome)} disabled={readOnly} /></label>)}
       <details className={styles.technicalDetails}>
         <summary>Measurements, equipment and specialist verification</summary>
         <div className={styles.detailGrid}>
           <label><span>Make</span><input name="make" defaultValue={String(response.make || "")} maxLength={500} disabled={readOnly} /></label>
-          <label><span>Model</span><input name="model" defaultValue={String(response.model || "")} maxLength={500} disabled={readOnly} /></label>
+          {!check.responseFields?.some((field) => field.key === "model") && <label><span>Model</span><input name="model" defaultValue={String(response.model || "")} maxLength={500} disabled={readOnly} /></label>}
           <label><span>Serial number</span><input name="serialNumber" defaultValue={String(response.serialNumber || "")} maxLength={500} disabled={readOnly} /></label>
-          <label><span>Measurement</span><input name="measurement" defaultValue={String(response.measurement || "")} maxLength={500} disabled={readOnly} /></label>
+          {!check.responseFields?.some((field) => field.key === "measurement") && <label><span>Measurement</span><input name="measurement" defaultValue={String(response.measurement || "")} maxLength={500} disabled={readOnly} /></label>}
           <label><span>Unit</span><input name="measurementUnit" defaultValue={String(response.measurementUnit || "")} maxLength={100} placeholder="mm, ohm, seconds" disabled={readOnly} /></label>
-          <label><span>Test method</span><input name="testMethod" defaultValue={String(response.testMethod || "")} maxLength={500} disabled={readOnly} /></label>
-          <label><span>Test instrument</span><input name="testInstrument" defaultValue={String(response.testInstrument || "")} maxLength={500} disabled={readOnly} /></label>
-          <label><span>Test result</span><input name="testResult" defaultValue={String(response.testResult || "")} maxLength={500} disabled={readOnly} /></label>
+          {!check.responseFields?.some((field) => field.key === "testMethod") && <label><span>Test method</span><input name="testMethod" defaultValue={String(response.testMethod || "")} maxLength={500} disabled={readOnly} /></label>}
+          {!check.responseFields?.some((field) => field.key === "testInstrument") && <label><span>Test instrument</span><input name="testInstrument" defaultValue={String(response.testInstrument || "")} maxLength={500} disabled={readOnly} /></label>}
+          {!check.responseFields?.some((field) => field.key === "testResult") && <label><span>Test result</span><input name="testResult" defaultValue={String(response.testResult || "")} maxLength={500} disabled={readOnly} /></label>}
           <label><span>Specialist credential type</span><input name="credentialType" defaultValue={String(response.credentialType || "")} maxLength={500} disabled={readOnly} /></label>
           <label><span>Specialist credential number</span><input name="credentialNumber" defaultValue={String(response.credentialNumber || "")} maxLength={500} disabled={readOnly} /></label>
           <label className={styles.checkField}><input type="checkbox" name="credentialVerified" defaultChecked={response.credentialVerified === true} disabled={readOnly} /><span>I checked the specialist credential used for this result</span></label>
@@ -546,20 +545,23 @@ function AssessmentItemCard({
 
       {isAdverse && <section className={styles.findingFields}>
         <header><span>Finding and work scope</span><strong>Required before completion</strong></header>
-        <label><span>Finding title *</span><input name="findingTitle" required defaultValue={finding?.title || ""} maxLength={240} placeholder="Short description a trade can scan" disabled={readOnly} /></label>
-        <label><span>What is wrong or still unverified *</span><textarea name="findingDescription" required rows={3} maxLength={8000} defaultValue={finding?.description || ""} disabled={readOnly} /></label>
+        <label><span>Finding title *</span><input name="findingTitle" required defaultValue={finding?.title || `${section.title}: follow-up work`} maxLength={240} placeholder="Short description a trade can scan" disabled={readOnly} /></label>
+        <label><span>Observed problem *</span><textarea name="findingDescription" required rows={3} maxLength={8000} defaultValue={finding?.description || item.publicNotes || ""} disabled={readOnly} /></label>
         <div className={styles.detailGrid}>
           <label><span>Severity *</span><select name="severity" value={severity} onChange={(event) => setSeverity(event.target.value)} disabled={readOnly}>{severityOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
-          <label><span>Responsible trade *</span><select name="tradeCategory" required defaultValue={finding?.tradeCategory || ""} disabled={readOnly}><option value="">Choose a trade</option>{tradeOptions.map((trade) => <option value={trade} key={trade}>{trade}</option>)}</select></label>
-          <label><span>Finding status</span><input value={severity === "immediate_safety_risk" ? "Safety issue" : outcome === "does_not_meet" ? "Non-compliant" : "Requires verification"} readOnly aria-describedby={`status-${item.instanceKey}`} /><small id={`status-${item.instanceKey}`}>Set automatically from the assessment result and safety severity.</small></label>
+          <label><span>Trade needed *</span><select name="tradeCategory" required defaultValue={finding?.tradeCategory || rentalSuggestedTrade(check.key)} disabled={readOnly}><option value="">Choose a trade</option>{tradeOptions.map((trade) => <option value={trade} key={trade}>{trade}</option>)}</select></label>
+          <label><span>Finding status</span><input value={severity === "immediate_safety_risk" ? "Safety issue" : outcome === "does_not_meet" ? readiness ? "Upgrade planning" : "Does not meet this check" : "Requires verification"} readOnly aria-describedby={`status-${item.instanceKey}`} /><small id={`status-${item.instanceKey}`}>Set automatically from the assessment result and safety severity.</small></label>
           <label><span>Rule or standard reference</span><input name="standardReference" defaultValue={finding?.standardReference || ""} maxLength={500} disabled={readOnly} /></label>
         </div>
-        <label><span>Recommended action</span><textarea name="recommendedAction" rows={2} maxLength={4000} defaultValue={finding?.recommendedAction || ""} disabled={readOnly} /></label>
-        <label><span>Quote-ready scope *</span><textarea name="scopeSummary" required rows={3} maxLength={8000} defaultValue={finding?.scopeSummary || ""} placeholder="State what needs to be repaired, replaced, tested or confirmed, including the exact location." disabled={readOnly} /></label>
+        <label><span>Recommended work *</span><textarea name="scopeSummary" required rows={3} maxLength={8000} defaultValue={finding?.scopeSummary || finding?.recommendedAction || ""} placeholder="State what needs to be repaired, replaced, tested or confirmed, including the exact location." disabled={readOnly} /></label>
         <div className={styles.detailGrid}>
-          <label><span>Quantity</span><input name="quantity" type="number" min="0" max="1000000" step="0.001" defaultValue={(finding?.quantityMilli || 1000) / 1000} disabled={readOnly} /></label>
+          <label><span>Measured quantity</span><input name="quantity" type="number" min="0" max="1000000" step="0.001" defaultValue={finding ? finding.quantityMilli / 1000 : ""} placeholder="Leave blank if not measured" disabled={readOnly} /></label>
           <label><span>Unit</span><input name="unitLabel" defaultValue={finding?.unitLabel || "each"} maxLength={40} disabled={readOnly} /></label>
         </div>
+        <aside className={styles.guidance}><strong>Information for the quoting trade</strong><p>{rentalQuotationGuidance(check.key)}</p><small>Record visible facts and safe measurements. Photograph labels and connections. Design, sizing and concealed services remain for a qualified trade to confirm.</small></aside>
+        <label><span>Can the trade price this scope from the report?</span><select name="quotation_status" defaultValue={quotation.status} disabled={readOnly}><option value="">Not yet confirmed</option><option value="ready">Scope and evidence ready for quoting</option><option value="further_information">More information or a site visit needed</option></select></label>
+        {RENTAL_QUOTATION_FIELDS.map((field) => <label key={field.key}><span>{field.label}</span><textarea name={`quotation_${field.key}`} rows={2} maxLength={4000} defaultValue={quotation[field.key]} disabled={readOnly} /><small>{field.help}</small></label>)}
+        <label><span>What is missing, and who can confirm it?</span><textarea name="quotation_missingInformation" rows={2} maxLength={4000} defaultValue={quotation.missingInformation} disabled={readOnly} /></label>
         {severity === "immediate_safety_risk" && <aside className={styles.safetyStop}>
           <strong>Stop and make the situation safe</strong>
           <p>Do not leave this as a quote item only. Record the immediate action and who was told.</p>
@@ -927,6 +929,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
     <aside className={styles.boundary}>
       <strong>{activeModule.template.title}</strong>
       <p>{activeModule.template.reportBoundary}</p>
+      {canEdit && !latestReport && activeModule.key === "minimum_standards" && (activeModule.template.assessmentScope !== "current_minimum_standards" || Number(activeModule.template.templateVersion || 1) < 3) && <button type="button" className={styles.primaryButton} disabled={Boolean(busy) || dirtyItems.size > 0} onClick={() => void mutate({ action: "set_assessment_scope", moduleId: activeModule.id, scope: "current_minimum_standards", expectedInspectionRevision: data.inspection?.revision, expectedModuleRevision: activeModule.revision }, "scope", "Full assessment attached. Saved observations retained; review the added checks and declarations.")}>Expand to full minimum standards + 2027 readiness</button>}
       <span>Required issuer capability: {activeModule.requiredCapability.replaceAll("_", " ")}</span>
     </aside>
 

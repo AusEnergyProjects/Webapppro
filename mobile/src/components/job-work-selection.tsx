@@ -65,6 +65,7 @@ export function JobWorkSelection({ options, serviceCategory, onServiceChange, bu
 }) {
   const [programId, setProgramId] = useState('');
   const [activityId, setActivityId] = useState('');
+  const [showPrograms, setShowPrograms] = useState(false);
   const [additionalWork, setAdditionalWork] = useState(false);
   const [additionalCategory, setAdditionalCategory] = useState('');
   const formCategory = additionalWork ? additionalCategory : serviceCategory;
@@ -79,8 +80,8 @@ export function JobWorkSelection({ options, serviceCategory, onServiceChange, bu
     && fieldActivityRequiresPremisesVariant(activityId)
     && !selectedVariantId;
   return <View style={styles.stack}>
-    <FieldSelect label="Work type" value={serviceCategory} options={options.services.map((item) => ({ value: item.id, label: item.label }))} onChange={(value) => {
-      if (value !== serviceCategory) { setProgramId(''); setActivityId(''); setAdditionalWork(false); setAdditionalCategory(''); onActivitiesChange([]); onServiceChange(value); }
+    <FieldSelect label="Work type" placeholder="Choose the work you will do" value={serviceCategory} options={options.services.map((item) => ({ value: item.id, label: item.label }))} onChange={(value) => {
+      if (value !== serviceCategory) { setProgramId(''); setActivityId(''); setAdditionalWork(false); setAdditionalCategory(''); setShowPrograms(false); onActivitiesChange([]); onServiceChange(value); }
     }} />
     <FieldSelect label="Premises type" value={buildingType} options={fieldBuildingTypeOptions} onChange={onBuildingTypeChange} placeholder="Choose the premises" />
     {activities.map((selected, index) => {
@@ -92,13 +93,14 @@ export function JobWorkSelection({ options, serviceCategory, onServiceChange, bu
         <FieldButton variant="quiet" onPress={() => onActivitiesChange(activities.filter((_, i) => i !== index))}>Remove form</FieldButton>
       </View>;
     })}
-    {activities.length < 12 && !additionalWork ? <FieldButton variant="quiet" onPress={() => { setAdditionalWork(true); setAdditionalCategory(''); setProgramId(''); setActivityId(''); }}>Add another type of work</FieldButton> : null}
+    {serviceCategory && !showPrograms ? <FieldButton variant="quiet" onPress={() => setShowPrograms(true)}>Add program form</FieldButton> : null}
+    {showPrograms && activities.length < 12 && !additionalWork ? <FieldButton variant="quiet" onPress={() => { setAdditionalWork(true); setAdditionalCategory(''); setProgramId(''); setActivityId(''); }}>Add another program activity</FieldButton> : null}
     {additionalWork ? <>
       <FieldSelect label="Additional work type" value={additionalCategory} options={options.services.filter((item) => options.activities.some((activity) => activity.serviceCategory === item.id)).map((item) => ({ value: item.id, label: item.label }))} onChange={(value) => { setAdditionalCategory(value); setProgramId(''); setActivityId(''); }} placeholder="Choose the additional work" />
       <FieldButton variant="quiet" onPress={() => { setAdditionalWork(false); setAdditionalCategory(''); setProgramId(''); setActivityId(''); }}>Cancel additional work</FieldButton>
     </> : null}
-    {matchingPrograms.length ? <Text style={styles.label}>Program forms, optional</Text> : null}
-    {matchingPrograms.length && activities.length < 12 ? <>
+    {showPrograms && matchingPrograms.length ? <Text style={styles.label}>Program forms, optional</Text> : null}
+    {showPrograms && matchingPrograms.length && activities.length < 12 ? <>
       <FieldSelect label="Certificate or program" value={programId} options={matchingPrograms.map((item) => ({ value: item.id, label: item.label }))} onChange={(value) => { setProgramId(value); setActivityId(''); }} placeholder="Choose if this work claims a benefit" />
       {program ? <FieldSelect label="Activity" value={activityId} options={available.map((item) => ({ value: item.id, label: `${item.code} | ${item.title}` }))} onChange={setActivityId} /> : null}
       {premisesRequired ? <Text style={styles.warning}>Choose residential or business premises before adding this activity form.</Text> : null}

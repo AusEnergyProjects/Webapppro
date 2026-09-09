@@ -24,6 +24,7 @@ export type RentalAssessmentCheck = {
   effectiveFrom?: string;
   trigger?: string;
   sourceUrl?: string;
+  assessmentPhase?: 'current' | 'energy_readiness_2027';
 };
 
 export type RentalAssessmentSection = {
@@ -214,23 +215,11 @@ export const RENTAL_ADVERSE_OUTCOMES = new Set([
   'exemption_evidence_pending',
 ]);
 
-export const RENTAL_TRADES = [
-  'Assessor follow-up',
-  'Builder',
-  'Carpenter',
-  'Electrician',
-  'Gasfitter',
-  'Glazier',
-  'Heating and cooling technician',
-  'Locksmith',
-  'Mould or moisture specialist',
-  'Painter',
-  'Plumber',
-  'Roof plumber',
-  'Smoke alarm technician',
-  'Structural engineer',
-  'Window furnishings installer',
-] as const;
+export function rentalAccessLimitations(items: RentalAssessmentItem[], moduleId: string): string {
+  return items.filter((item) => item.moduleId === moduleId && item.outcome === 'not_accessible')
+    .map((item) => [item.locationLabel, item.publicNotes].filter(Boolean).join(': '))
+    .filter(Boolean).join('\n');
+}
 
 export function newRentalItem(
   module: RentalAssessmentModule,

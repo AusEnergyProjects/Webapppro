@@ -128,7 +128,7 @@ test("web and native field interfaces expose forms progressively", () => {
   assert.match(syncRoute, /FROM trade_job_forms f JOIN trade_work_orders/);
   assert.match(syncRoute, /forms: formRows\.results/);
   assert.match(mobileJob, /Forms to complete/);
-  assert.match(mobileJob, /will sync when reception returns/);
+  assert.match(mobileJob, /Photos and documents save securely on this device and upload when connected/);
   assert.match(mobileJob, /save_job_form/);
 });
 

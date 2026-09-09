@@ -139,7 +139,6 @@ const SERVICE_LABELS: Record<string, string> = {
   ...ENERGY_SERVICE_LABELS,
   [RENTAL_INSPECTION_SERVICE_CATEGORY]: "Rental inspection",
   "insulation-draughts": "Insulation and draught control",
-  electrical: "Electrical services", plumbing: "Plumbing services",
   "mounting-hardware": "Mounting and hardware", controls: "Energy controls", other: "Other work",
 };
 const APPOINTMENT_LABELS: Record<string, string> = {

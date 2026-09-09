@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
+import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalQuotationBlockers } from "@/lib/rental-quotation.mjs";
 import { useEffect, useMemo, useState } from "react";
 import styles from "./RentalReportViewer.module.css";
 
@@ -54,6 +55,7 @@ type ReportItem = {
   publicNotes: string;
   trigger?: string;
   effectiveFrom?: string;
+  assessmentPhase?: string;
 };
 
 type ReportModule = {
@@ -86,7 +88,7 @@ type RentalReport = {
   report: { number: string; revision: number; issuedAt: string };
   business: { name: string; abn: string; contactName: string; email: string; phone: string; address: string };
   property: { address: string; customerName: string; customerEmail: string; customerPhone: string; buildingType: string };
-  inspection: { number: string; rulesEffectiveFrom: string; assessmentDate: string; templateVersion: number; title?: string; assessmentScope?: string; reportBoundary?: string };
+  inspection: { number: string; rulesEffectiveFrom: string; assessmentDate: string; templateVersion: number; title?: string; assessmentScope?: string; reportBoundary?: string; applicabilityLimitation?: string };
   issuer: { name: string; role: string; email: string; phone: string; qualificationType: string; qualificationNumber: string; declaration: string };
   modules: ReportModule[];
   findings: Finding[];
@@ -96,6 +98,12 @@ type RentalReport = {
 };
 
 type Result = { ok?: boolean; report?: RentalReport; error?: string };
+
+function quoteReady(finding: Finding, report: RentalReport) {
+  const outcome = report.modules.flatMap((module) => module.sections.flatMap((section) => section.items)).find((item) => item.id === finding.itemId)?.outcome;
+  const evidenceCount = report.evidence.filter((entry) => entry.itemId === finding.itemId || entry.findingId === finding.id).length;
+  return rentalQuotation(finding.details.quotation).status === "ready" && rentalQuotationBlockers(finding, outcome, evidenceCount).length === 0;
+}
 
 const outcomeLabels: Record<string, string> = {
   meets: "Meets",
@@ -139,7 +147,7 @@ function visibleEntries(value: Record<string, unknown>) {
 
 function ResultPill({ outcome, readiness = false }: { outcome: string; readiness?: boolean }) {
   const tone = outcome === "meets" || outcome === "not_applicable" ? styles.good
-    : outcome === "does_not_meet" ? styles.bad : styles.caution;
+    : outcome === "does_not_meet" && !readiness ? styles.bad : styles.caution;
   const label = readiness && outcome === "meets" ? "Ready for the recorded requirement"
     : readiness && outcome === "does_not_meet" ? "Upgrade planning required" : outcomeLabels[outcome] || displayLabel(outcome);
   return <span className={`${styles.resultPill} ${tone}`}>{label}</span>;
@@ -218,6 +226,7 @@ export function RentalReportViewer({ token }: { token: string }) {
         <h1>{report.property.address}</h1>
         <p>{report.report.number} | revision {report.report.revision}</p>
         {report.inspection.reportBoundary && <p>{report.inspection.reportBoundary}</p>}
+        {report.inspection.applicabilityLimitation && <p><strong>{report.inspection.applicabilityLimitation}</strong></p>}
       </div>
       <aside>
         <span>Issued by</span>
@@ -259,8 +268,11 @@ export function RentalReportViewer({ token }: { token: string }) {
               <div><dt>Category</dt><dd>{displayLabel(finding.category)}</dd></div>
               <div><dt>Responsible trade</dt><dd>{finding.tradeCategory || "Assessor follow-up"}</dd></div>
               <div><dt>Finding</dt><dd>{finding.description}</dd></div>
-              {finding.recommendedAction && <div><dt>Recommended action</dt><dd>{finding.recommendedAction}</dd></div>}
-              <div className={styles.scopeRow}><dt>Quote-ready scope</dt><dd>{finding.scopeSummary}</dd></div>
+              {finding.recommendedAction && finding.recommendedAction !== finding.scopeSummary && <div><dt>Recommended action</dt><dd>{finding.recommendedAction}</dd></div>}
+              <div className={styles.scopeRow}><dt>Work required</dt><dd>{finding.scopeSummary}</dd></div>
+              <div><dt>Quoting status</dt><dd>{quoteReady(finding, report) ? "Scope confirmed by assessor for quoting" : "Further information required before quoting"}</dd></div>
+              {RENTAL_QUOTATION_FIELDS.map((field) => rentalQuotation(finding.details.quotation)[field.key] ? <div key={field.key}><dt>{field.label}</dt><dd>{rentalQuotation(finding.details.quotation)[field.key]}</dd></div> : null)}
+              {rentalQuotation(finding.details.quotation).missingInformation && <div><dt>Information still needed</dt><dd>{rentalQuotation(finding.details.quotation).missingInformation}</dd></div>}
               <div><dt>Quantity</dt><dd>{finding.quantityMilli / 1000} {finding.unitLabel}</dd></div>
               {finding.standardReference && <div><dt>Reference</dt><dd>{finding.standardReference}</dd></div>}
               {finding.severity === "immediate_safety_risk" && <>
@@ -303,7 +315,7 @@ export function RentalReportViewer({ token }: { token: string }) {
           {module.sections.map((section) => <section className={styles.assessmentSection} key={section.key}>
             <header><h3>{section.title}</h3><p>{section.summary}</p></header>
             <div>{section.items.map((item) => <article className={styles.answer} key={item.id}>
-              <div><ResultPill outcome={item.outcome} readiness={module.assessmentScope === "energy_readiness_2027"} />{item.locationLabel && <strong>{item.locationLabel}</strong>}</div>
+              <div>{report.inspection.applicabilityLimitation && module.key === "minimum_standards" ? <span>{item.outcome === "meets" ? "Observation satisfactory; legal applicability unconfirmed" : outcomeLabels[item.outcome] || displayLabel(item.outcome)}</span> : <ResultPill outcome={item.outcome} readiness={item.assessmentPhase === "energy_readiness_2027" || (!item.assessmentPhase && module.assessmentScope === "energy_readiness_2027")} />}{item.locationLabel && <strong>{item.locationLabel}</strong>}</div>
               <h4>{item.prompt}</h4>
               {item.trigger && <p>Applies when: {item.trigger}</p>}
               {item.publicNotes && <p>{item.publicNotes}</p>}

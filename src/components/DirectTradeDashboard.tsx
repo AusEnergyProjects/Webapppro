@@ -335,8 +335,6 @@ function opportunityNextAction(opportunity: DashboardOpportunity) {
 
 const capabilityLabels: Record<string, string> = {
   ...ENERGY_SERVICE_LABELS,
-  electrical: "Electrical services",
-  plumbing: "Plumbing services",
   "mounting-hardware": "Mounting and hardware",
   controls: "Energy controls",
 };
