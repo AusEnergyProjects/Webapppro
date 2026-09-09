@@ -36,6 +36,7 @@ const errorMessages: Record<string, [number, string]> = {
   ACTIVITY_DECLARATION_ALREADY_SIGNED: [409, "This declaration has already been signed."],
   ACTIVITY_DECLARATION_DETAILS_REQUIRED: [409, "Complete the declaration details before signing."],
   ACTIVITY_FORM_INCOMPLETE: [409, "Complete the required answers, evidence and signatures before providing this record to Creditex."],
+  ACTIVITY_APPROVED_PRODUCT_REQUIRED: [409, "Choose an approved brand and model for the installation date before providing this record to Creditex."],
   ACTIVITY_REPORT_LINK_UNAVAILABLE: [404, "This report link has expired or been revoked."],
   ACTIVITY_REPORT_NOT_READY: [409, "This completed report is not ready yet."],
   ACTIVITY_REPORT_UNAVAILABLE: [404, "This completed report could not be found."],

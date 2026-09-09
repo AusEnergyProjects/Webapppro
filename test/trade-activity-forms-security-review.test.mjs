@@ -111,6 +111,9 @@ function fixture(fieldForm = form(), options = {}) {
     },
     "./trade-activity-forms.ts": core,
     "./trade-activity-form-flow.ts": flow,
+    "./creditex-official-product-registry-server.ts": {
+      searchOfficialProducts: options.searchOfficialProducts || (async () => ({ matchCount: 1 })),
+    },
     "./scheduled-activity-customer-document-receipt.ts": receipt,
     "./trade-activity-forms-pdf.ts": { validateActivityEvidenceBytes,
       renderActivityFieldPdf: options.renderActivityFieldPdf || (async () => new TextEncoder().encode("%PDF-test-final-custody")) },
@@ -353,6 +356,55 @@ test("approved product facets stay behind record-scoped installer access and use
       veuActivityCode: "3D", limit: "50" },
   ]);
   assert.ok(waterHeaterCalls.every(([, , options]) => options.allowStaleAcceptedSnapshot === true));
+});
+
+test("submission rejects a brand and model that are not an approved pair for the installation date", async () => {
+  const fieldForm = form();
+  fieldForm.activityTemplateId = "veu-6";
+  fieldForm.programCode = "VEU";
+  fieldForm.fields.push(
+    { ...field("customer_property.installation_date", "after", "date"), presentation: "derived", autofill: "job.scheduled_installation_date" },
+    { ...field("installed_product.brand", "after"), repeatGroup: "installedProducts[]" },
+    { ...field("installed_product.model", "after"), repeatGroup: "installedProducts[]" },
+  );
+  let approved = false;
+  const calls = [];
+  const { database, server, access } = fixture(fieldForm, {
+    activityPrefill: () => ({ "customer_property.installation_date": "2026-09-08" }),
+    searchOfficialProducts: async (...args) => {
+      calls.push(args);
+      return { matchCount: approved ? 1 : 0 };
+    },
+  });
+  try {
+    database.prepare("UPDATE trade_work_order_compliance_intents SET activity_template_id = 'veu-6' WHERE id = 'intent-a'").run();
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, {
+      before_name: "Customer",
+      after_model: "Unit",
+      "installed_product.brand": "Approved Brand",
+      "installed_product.model": "APPROVED-100",
+    });
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes });
+
+    await assert.rejects(server.submitActivityRecord(access, record.id, record.revision), /ACTIVITY_APPROVED_PRODUCT_REQUIRED/);
+    assert.deepEqual(calls[0][1], {
+      productKind: "veu_air_conditioner",
+      installationDate: "2026-09-08",
+      brand: "Approved Brand",
+      model: "APPROVED-100",
+      veuActivityCode: "6",
+      limit: 1,
+    });
+    assert.deepEqual(calls[0][2], { allowStaleAcceptedSnapshot: true });
+
+    approved = true;
+    record = await server.submitActivityRecord(access, record.id, record.revision);
+    assert.equal(record.status, "submitted_for_creditex_review");
+  } finally { database.close(); }
 });
 
 test("named Creditex field-master editors can author without governed-review permission while unsafe identities are rejected", async () => {

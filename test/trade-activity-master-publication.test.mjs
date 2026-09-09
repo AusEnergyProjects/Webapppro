@@ -86,6 +86,7 @@ function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
     "./trade-team-server": { assignedJob: async (_access, id) => { assert.equal(id, "job"); return { assignee_member_id: "worker", assignee_label: "Worker" }; } },
     "./trade-activity-forms-library.ts": library, "./trade-activity-forms.ts": core, "./trade-activity-form-flow.ts": flow,
     "./scheduled-activity-customer-document-receipt.ts": { parseScheduledActivityCustomerDocumentReceipt: () => null },
+    "./creditex-official-product-registry-server.ts": { searchOfficialProducts: async () => ({ items: [], matchCount: 0 }) },
     "./trade-activity-forms-pdf.ts": { validateActivityEvidenceBytes },
   });
   const dependencies = {

@@ -15,6 +15,7 @@ import {
   type ActivityAnswers, type ActivityEvidence, type ActivityForm, type ActivityRecord,
 } from "./trade-activity-forms.ts";
 import { activityBaseFieldKey, expandedActivityFields, mergeActivityAnswers } from "./trade-activity-form-flow.ts";
+import { searchOfficialProducts } from "./creditex-official-product-registry-server.ts";
 import { parseScheduledActivityCustomerDocumentReceipt } from "./scheduled-activity-customer-document-receipt.ts";
 import type { TradeJobAuditOutcome, TradeJobLifecycleStatus } from "./trade-job-lifecycle.ts";
 
@@ -882,9 +883,49 @@ function historicalActivityPdfDates(row: ActivityPdfRow) {
   return dates;
 }
 
+async function assertApprovedActivityProducts(record: ActivityRecord) {
+  const form = activityFieldWorkerForm(record.form);
+  const fields = expandedActivityFields(form, record.answers);
+  const modelFields = fields.filter((field) => field.approvedProduct?.role === "model");
+  if (!modelFields.length) return;
+  const installationDate = string(record.answers["customer_property.installation_date"], 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(installationDate)) throw new Error("ACTIVITY_APPROVED_PRODUCT_REQUIRED");
+
+  const selections = modelFields.map((modelField) => {
+    const contract = modelField.approvedProduct!;
+    const brandField = fields.find((field) => field.repeatIndex === modelField.repeatIndex
+      && field.baseKey === contract.brandFieldKey && field.approvedProduct?.role === "brand"
+      && field.approvedProduct.productKind === contract.productKind
+      && JSON.stringify(field.approvedProduct.veuActivityCodes) === JSON.stringify(contract.veuActivityCodes));
+    const brand = brandField ? string(record.answers[brandField.key], 300) : "";
+    const model = string(record.answers[modelField.key], 500);
+    if (!brandField || !brand || !model || !contract.veuActivityCodes.length) throw new Error("ACTIVITY_APPROVED_PRODUCT_REQUIRED");
+    return { brand, model, contract };
+  });
+
+  const unique = [...new Map(selections.map((selection) => [
+    JSON.stringify([selection.brand, selection.model, selection.contract.productKind, selection.contract.veuActivityCodes]),
+    selection,
+  ])).values()];
+  for (let offset = 0; offset < unique.length; offset += 6) {
+    await Promise.all(unique.slice(offset, offset + 6).map(async ({ brand, model, contract }) => {
+      const results = await Promise.all(contract.veuActivityCodes.map((veuActivityCode) => searchOfficialProducts(getD1(), {
+        productKind: contract.productKind,
+        installationDate,
+        brand,
+        model,
+        veuActivityCode,
+        limit: 1,
+      }, { allowStaleAcceptedSnapshot: true })));
+      if (!results.some((result) => result.matchCount > 0)) throw new Error("ACTIVITY_APPROVED_PRODUCT_REQUIRED");
+    }));
+  }
+}
+
 export async function submitActivityRecord(access: TeamAccess, id: string, expectedRevision: unknown) {
   const previous = await loadActivityRecord(access, id, true); assertActivityEditable(previous, expectedRevision);
   if (activityUserActionableMissing(previous).length) throw new Error("ACTIVITY_FORM_INCOMPLETE");
+  await assertApprovedActivityProducts(previous);
   const assets = await activityReportAssets(previous);
   const next: ActivityRecord = { ...previous, status: "submitted_for_creditex_review", submittedAt: iso() };
   const [{ renderActivityFieldPdf }, { loadCustomerPlanPdfFonts }] = await Promise.all([import("./trade-activity-forms-pdf.ts"), import("./customer-plan-pdf-fonts")]);
