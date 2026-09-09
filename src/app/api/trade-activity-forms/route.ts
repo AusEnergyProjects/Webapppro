@@ -5,7 +5,7 @@ import { requireComplianceAccess } from "@/lib/compliance-access-server";
 import { canEditCreditexFieldMasters } from "@/lib/creditex-field-master-access";
 import { resolveActiveCreditexOfficialSourceOrganisation } from "@/lib/creditex-official-source-custody-server";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
-import { activityFieldCatalogue, applyDefaultActivityFormPolicy, defaultActivityFieldForm } from "@/lib/trade-activity-forms-library";
+import { activityFieldCatalogue, activityFieldWorkerForm, applyDefaultActivityFormPolicy, defaultActivityFieldForm } from "@/lib/trade-activity-forms-library";
 import { activityCanonical, activityHash, normaliseActivityAnswers, type ActivityForm } from "@/lib/trade-activity-forms";
 import {
   activityPresentation, activitySigningProfileSetup, saveActivitySigningProfile, changeActivityVariant, listActivityRecords, loadActivityRecord, openActivityRecord, readActivityConsumerDocument, readActivityEvidence, readActivityPdf,
@@ -37,6 +37,10 @@ const errorMessages: Record<string, [number, string]> = {
   ACTIVITY_DECLARATION_DETAILS_REQUIRED: [409, "Complete the declaration details before signing."],
   ACTIVITY_FORM_INCOMPLETE: [409, "Complete the required answers, evidence and signatures before providing this record to Creditex."],
   ACTIVITY_REPORT_LINK_UNAVAILABLE: [404, "This report link has expired or been revoked."],
+  ACTIVITY_REPORT_NOT_READY: [409, "This completed report is not ready yet."],
+  ACTIVITY_REPORT_UNAVAILABLE: [404, "This completed report could not be found."],
+  ACTIVITY_REPORT_INTEGRITY_FAILED: [409, "This completed report failed its integrity check."],
+  ACTIVITY_STORAGE_UNAVAILABLE: [503, "The secure file store is temporarily unavailable."],
   INVALID_ACTIVITY_FILE: [400, "Choose a JPEG, PNG or PDF file up to 8 MB. Photo questions require an image."],
   ACTIVITY_EVIDENCE_LIMIT: [400, "This record has reached its evidence limit."],
   ACTIVITY_REPORT_EVIDENCE_LIMIT: [400, "Add a smaller report preview for this image. The original file remains the evidence record."],
@@ -58,6 +62,31 @@ function bytesResponse(data: { bytes: Uint8Array; contentType: string; fileName:
   return new Response(new Uint8Array(data.bytes), { headers: { "Content-Type": data.contentType,
     "Content-Disposition": `inline; filename="${data.fileName.replace(/[^a-zA-Z0-9._ -]/g, "_")}"`,
     "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer" } });
+}
+
+function approvedProductSearchContract(form: ActivityForm) {
+  if (!Array.isArray(form.fields)) throw new Error("INVALID_ACTIVITY_REQUEST");
+  const brands = form.fields.filter((field) => field.approvedProduct?.role === "brand");
+  const models = form.fields.filter((field) => field.approvedProduct?.role === "model");
+  if (brands.length !== 1 || models.length !== 1) throw new Error("INVALID_ACTIVITY_REQUEST");
+  const brand = brands[0]; const model = models[0];
+  const brandContract = brand.approvedProduct!; const modelContract = model.approvedProduct!;
+  if (modelContract.brandFieldKey !== brand.key || brand.repeatGroup !== model.repeatGroup
+    || brandContract.productKind !== modelContract.productKind
+    || JSON.stringify(brandContract.veuActivityCodes) !== JSON.stringify(modelContract.veuActivityCodes)) {
+    throw new Error("INVALID_ACTIVITY_REQUEST");
+  }
+  return brandContract;
+}
+
+function mergeApprovedProductOptions(results: readonly { facets: { brands: { value: string; label: string; count: number }[];
+  models: { value: string; label: string; count: number }[] } }[], key: "brands" | "models") {
+  const merged = new Map<string, { value: string; label: string; count: number }>();
+  for (const result of results) for (const option of result.facets[key]) {
+    const current = merged.get(option.value);
+    merged.set(option.value, { value: option.value, label: option.label, count: (current?.count || 0) + option.count });
+  }
+  return [...merged.values()].sort((left, right) => left.label.localeCompare(right.label) || left.value.localeCompare(right.value));
 }
 async function masterActor(request: Request, mode: string) {
   if (mode === "admin") {
@@ -86,6 +115,16 @@ function validateMaster(raw: unknown, expected: ActivityForm): ActivityForm {
       || (field.presentation !== undefined && !["question", "prefilled", "derived"].includes(field.presentation))
       || (field.autofill !== undefined && (typeof field.autofill !== "string" || !/^[a-zA-Z0-9._:\[\]-]{1,240}$/.test(field.autofill)))
       || (field.sourceRequirementId !== undefined && (typeof field.sourceRequirementId !== "string" || !/^[a-zA-Z0-9._:-]{1,240}$/.test(field.sourceRequirementId)))
+      || (field.approvedProduct !== undefined && (!field.approvedProduct || typeof field.approvedProduct !== "object" || Array.isArray(field.approvedProduct)
+        || !["brand", "model"].includes(field.approvedProduct.role)
+        || !["veu_water_heater", "veu_air_conditioner"].includes(field.approvedProduct.productKind)
+        || !Array.isArray(field.approvedProduct.veuActivityCodes) || field.approvedProduct.veuActivityCodes.length < 1
+        || field.approvedProduct.veuActivityCodes.length > 12 || field.approvedProduct.veuActivityCodes.some((code) => typeof code !== "string" || !/^[0-9A-Z()ivx-]{1,20}$/.test(code))
+        || (field.approvedProduct.brandFieldKey !== undefined && (typeof field.approvedProduct.brandFieldKey !== "string"
+          || !/^[a-zA-Z0-9._:-]{1,180}$/.test(field.approvedProduct.brandFieldKey)))
+        || (field.approvedProduct.role === "brand" && field.approvedProduct.brandFieldKey !== undefined)
+        || (field.approvedProduct.role === "model" && !field.approvedProduct.brandFieldKey)
+        || Object.keys(field.approvedProduct).some((key) => !["role", "productKind", "veuActivityCodes", "brandFieldKey"].includes(key))))
       || (field.evidenceFor !== undefined && (!Array.isArray(field.evidenceFor) || field.evidenceFor.length > 24
         || field.evidenceFor.some((key) => typeof key !== "string" || !/^[a-zA-Z0-9._:\[\]-]{1,180}$/.test(key))))
       || (field.requireLocation !== undefined && (typeof field.requireLocation !== "boolean" || (field.requireLocation && field.type !== "photo")))
@@ -99,6 +138,10 @@ function validateMaster(raw: unknown, expected: ActivityForm): ActivityForm {
         || Object.entries(field.optionLabels).some(([key, label]) => !field.options.includes(key) || typeof label !== "string" || !label.trim() || label.length > 1000)))
       || (field.type === "select" && field.options.length < 2)) throw new Error("INVALID_ACTIVITY_MASTER");
     keys.add(field.key);
+  }
+  for (const field of form.fields.filter((item) => item.approvedProduct?.role === "model")) {
+    const brand = form.fields.find((item) => item.key === field.approvedProduct?.brandFieldKey);
+    if (!brand || brand.approvedProduct?.role !== "brand" || brand.repeatGroup !== field.repeatGroup) throw new Error("INVALID_ACTIVITY_MASTER");
   }
   const conditionValid = (value: unknown, depth = 0): boolean => {
     if (value === undefined) return true;
@@ -169,10 +212,11 @@ function validateMaster(raw: unknown, expected: ActivityForm): ActivityForm {
 
 const escape = (value: unknown) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 export async function GET(request: Request) {
-  if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const query = new URL(request.url).searchParams; const token = query.get("reportToken") || "";
-    if (query.has("consumerDocument")) return bytesResponse(await readActivityConsumerDocument(query.get("consumerDocument") || ""));
+    // A share token is the read-only bearer credential for this one immutable
+    // report. Validate it before the browser-origin gate so a customer can open
+    // the link from email or another site without needing a TLink session.
     if (token) {
       const record = await sharedActivityRecord(token);
       if (query.get("view") === "pdf") return bytesResponse(await readActivityPdf(record));
@@ -180,6 +224,8 @@ export async function GET(request: Request) {
       const base = `?reportToken=${encodeURIComponent(token)}`;
       return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${escape(record.form.title)} | TLink</title><style>body{font:16px system-ui;background:#081923;color:#e8f4f7;margin:0}main{max-width:800px;margin:auto;padding:24px}a{color:#62e5c0}article{padding:18px;background:#112b39;border-radius:12px;margin:16px 0}img{width:100%;max-height:500px;object-fit:contain}small{overflow-wrap:anywhere;color:#b9cbd3}h1{font-size:28px}</style><main><p>TLink / Creditex</p><h1>${escape(record.form.title)}</h1><p>${escape(record.recordNumber)} | Completed ${escape(record.submittedAt)}</p><p>Field record provided to Creditex for review.</p><p><a href="${base}&view=pdf">View complete signed report (PDF)</a></p>${record.evidence.map((item) => `<article><h2>${escape(record.form.fields.find((field) => field.key === item.fieldKey)?.label || item.fileName)}</h2>${item.contentType.startsWith("image/") ? `<img alt="${escape(item.fileName)}" src="${base}&view=evidence&evidenceId=${encodeURIComponent(item.id)}">` : `<a href="${base}&view=evidence&evidenceId=${encodeURIComponent(item.id)}">${escape(item.fileName)}</a>`}<p>Captured ${escape(item.capturedAt || "Time unavailable")}</p><p>Location: ${item.latitude === null || item.longitude === null ? "Unavailable" : escape(`${item.latitude}, ${item.longitude} (accuracy ${item.accuracy ?? "unavailable"} m)`)}</p><small>Original SHA-256 ${escape(item.sha256)}</small></article>`).join("")}</main></html>`, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store", "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff" } });
     }
+    if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
+    if (query.has("consumerDocument")) return bytesResponse(await readActivityConsumerDocument(query.get("consumerDocument") || ""));
     if (query.get("view") === "masters" || query.get("view") === "review_queue") {
       const actor = await masterActor(request, query.get("actorMode") || "");
       if (query.get("view") === "review_queue") {
@@ -198,19 +244,19 @@ export async function GET(request: Request) {
       if (!id) throw new Error("INVALID_ACTIVITY_REQUEST");
       const record = await loadActivityRecord(access, id);
       if (view === "official_products") {
-        if (record.form.activityTemplateId !== "veu-6") throw new Error("INVALID_ACTIVITY_REQUEST");
+        const contract = approvedProductSearchContract(activityFieldWorkerForm(record.form));
         const installationDate = str(record.answers["customer_property.installation_date"]);
         if (!installationDate) throw new Error("INVALID_ACTIVITY_INSTALLATION_DATE");
         const { searchOfficialProducts } = await import("@/lib/creditex-official-product-registry-server");
-        const result = await searchOfficialProducts(getD1(), {
-          productKind: "veu_air_conditioner", installationDate,
+        const results = await Promise.all(contract.veuActivityCodes.map((veuActivityCode) => searchOfficialProducts(getD1(), {
+          productKind: contract.productKind, installationDate,
           brand: query.get("brand") || undefined, model: query.get("model") || undefined,
-          veuActivityCode: "6", limit: "50",
-        }, { allowStaleAcceptedSnapshot: true });
+          veuActivityCode, limit: "50",
+        }, { allowStaleAcceptedSnapshot: true })));
         return adminJson({
           ok: true,
-          brands: result.facets.brands.map(({ value, label, count }) => ({ value, label, count })),
-          models: result.facets.models.map(({ value, label, count }) => ({ value, label, count })),
+          brands: mergeApprovedProductOptions(results, "brands"),
+          models: mergeApprovedProductOptions(results, "models"),
         });
       }
       if (view === "pdf") return bytesResponse(await readActivityPdf(record));

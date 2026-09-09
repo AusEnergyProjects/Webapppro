@@ -473,7 +473,23 @@ function applySystemDerivedFieldPolicy(fields: ActivityField[], programCode: str
   }
 }
 
+const ACTIVITY_APPROVED_PRODUCT_SELECTORS = {
+  "veu-3": { productKind: "veu_water_heater", veuActivityCodes: ["3C", "3D"] },
+  "veu-6": { productKind: "veu_air_conditioner", veuActivityCodes: ["6"] },
+} as const;
+const RETIRED_ACTIVITY_3_PRODUCT_FIELDS = new Set([
+  "installed_product.heat_pump_model",
+  "installed_product.tank_model",
+]);
+
+function isRetiredFieldWorkerField(templateId: string, field: Pick<ActivityField, "key">) {
+  return templateId === "veu-3" && RETIRED_ACTIVITY_3_PRODUCT_FIELDS.has(field.key);
+}
+
 function applyFieldWorkerPolicy(fields: ActivityField[], templateId: string) {
+  for (let index = fields.length - 1; index >= 0; index--) {
+    if (isRetiredFieldWorkerField(templateId, fields[index])) fields.splice(index, 1);
+  }
   for (const field of fields) {
     if (isOfficeCommercialField(field)) {
       field.presentation = "derived";
@@ -481,24 +497,47 @@ function applyFieldWorkerPolicy(fields: ActivityField[], templateId: string) {
       field.help = "Completed from the TLink quote, invoice or Creditex calculation outside the installer workflow.";
     }
   }
-  if (templateId !== "veu-6") return;
+  const productSelector = ACTIVITY_APPROVED_PRODUCT_SELECTORS[templateId as keyof typeof ACTIVITY_APPROVED_PRODUCT_SELECTORS];
+  if (!productSelector) return;
   const byKey = new Map(fields.map((field) => [field.key, field]));
+  const brand = byKey.get("installed_product.brand");
+  if (brand) {
+    brand.label = "Approved brand";
+    brand.help = "Choose from the current VEU approved-product register.";
+    brand.type = "text";
+    delete brand.autofill;
+    delete brand.presentation;
+    brand.approvedProduct = { role: "brand", productKind: productSelector.productKind,
+      veuActivityCodes: [...productSelector.veuActivityCodes] };
+  }
+  const model = byKey.get("installed_product.model");
+  if (model) {
+    model.label = "Approved model";
+    model.help = "Choose an approved model for the selected brand.";
+    model.type = "text";
+    delete model.autofill;
+    delete model.presentation;
+    model.approvedProduct = { role: "model", productKind: productSelector.productKind,
+      veuActivityCodes: [...productSelector.veuActivityCodes], brandFieldKey: "installed_product.brand" };
+  }
+  const serial = byKey.get("installed_product.serial_numbers");
+  if (serial) {
+    serial.label = "Serial number";
+    serial.help = "Enter the serial number shown on this installed unit.";
+  }
   const category = byKey.get("installed_product.category");
   if (category) {
     category.presentation = "derived";
     delete category.autofill;
     category.help = "Resolved from the approved product selected in TLink.";
   }
-  const brand = byKey.get("installed_product.brand");
-  if (brand) {
-    brand.label = "Approved brand";
-    brand.help = "Choose from the current VEU approved-product register.";
+  const systemSize = byKey.get("installed_product.system_size");
+  if (systemSize) {
+    systemSize.presentation = "derived";
+    delete systemSize.autofill;
+    systemSize.help = "Resolved from the approved product selected in TLink.";
   }
-  const model = byKey.get("installed_product.model");
-  if (model) {
-    model.label = "Approved model";
-    model.help = "Choose an approved model for the selected brand.";
-  }
+  if (templateId !== "veu-6") return;
   const heating = byKey.get("installed_product.indoor_heating_kw");
   if (heating) {
     heating.label = "Total installed heating capacity (kW)";
@@ -1000,6 +1039,7 @@ export function applyDefaultActivityFormPolicy(form: ActivityForm, baseline: Act
   const stripUnsupportedGenericCustomerDocuments = NO_GENERIC_CUSTOMER_DOCUMENT_GATE_TEMPLATES.has(baseline.activityTemplateId);
   const current = form.fields.filter((field) => !((governedCustomerDocuments || stripUnsupportedGenericCustomerDocuments) && isRedundantManualCustomerDocumentField(field))
     && !isSignatureTimestamp(field.key, field.autofill)
+    && !isRetiredFieldWorkerField(baseline.activityTemplateId, field)
     && (!isInstallerIdSelfieField(field) || field.key === baselineInstallerSelfieKey)
     && !(field.key === "evidence.air-conditioner-photos" && replacedRequirementIds.has("air-conditioner-photos")));
   const fields = current.map((field) => {
@@ -1007,7 +1047,15 @@ export function applyDefaultActivityFormPolicy(form: ActivityForm, baseline: Act
     if (policy?.sourceRequirementId || policy?.key === baselineInstallerSelfieKey
       || (policy && ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEY_SET.has(policy.key))) return structuredClone(policy);
     const governed: ActivityField = { ...field };
-    if (policy?.presentation === "derived" || policy?.presentation === "prefilled") {
+    if (policy?.approvedProduct) {
+      governed.approvedProduct = structuredClone(policy.approvedProduct);
+      governed.type = policy.type;
+      governed.phase = policy.phase;
+      governed.required = policy.required;
+      governed.repeatGroup = policy.repeatGroup;
+      delete governed.autofill;
+      delete governed.presentation;
+    } else if (policy?.presentation === "derived" || policy?.presentation === "prefilled") {
       governed.presentation = policy.presentation;
       governed.autofill = policy.autofill;
       governed.type = policy.type;
@@ -1015,6 +1063,7 @@ export function applyDefaultActivityFormPolicy(form: ActivityForm, baseline: Act
       governed.required = policy.required;
     } else {
       delete governed.autofill;
+      delete governed.approvedProduct;
       delete governed.sourceRequirementId;
       delete governed.evidenceFor;
       if (governed.presentation === "derived" || governed.presentation === "prefilled") delete governed.presentation;
@@ -1031,6 +1080,7 @@ export function applyDefaultActivityFormPolicy(form: ActivityForm, baseline: Act
   });
   for (const policy of baseline.fields) {
     const controlled = policy.presentation === "derived" || policy.presentation === "prefilled"
+      || Boolean(policy.approvedProduct)
       || policy.key === baselineInstallerSelfieKey
       || Boolean(policy.sourceRequirementId) || policy.requiredValue !== undefined;
     if (controlled && !fields.some((field) => field.key === policy.key)) fields.push(structuredClone(policy));

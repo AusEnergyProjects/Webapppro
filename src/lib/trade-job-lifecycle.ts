@@ -219,10 +219,7 @@ export function tradeJobAuditOutcomeSql(workAlias = "w") {
   END)`;
 }
 
-/**
- * Actual field progress only. Automatically-created blank forms and scheduled
- * rental records do not move a job to partial.
- */
+/** Actual field progress, including an opened activity draft. */
 export function tradeJobHasProgressSql(workAlias = "w") {
   return `(EXISTS (
       SELECT 1 FROM trade_job_forms progress_form
@@ -235,7 +232,7 @@ export function tradeJobHasProgressSql(workAlias = "w") {
       SELECT 1 FROM trade_activity_field_records progress_record
       WHERE progress_record.work_order_id = ${workAlias}.id
         AND progress_record.owner_uid = ${workAlias}.firebase_uid
-        AND (progress_record.status = 'submitted_for_creditex_review'
+        AND (progress_record.status IN ('draft', 'submitted_for_creditex_review')
           OR COALESCE(json_extract(progress_record.payload, '$.hasUserEdits'), 0) = 1
           OR COALESCE(json_array_length(progress_record.payload, '$.evidence'), 0) > 0
           OR COALESCE(json_array_length(progress_record.payload, '$.signatures'), 0) > 0))

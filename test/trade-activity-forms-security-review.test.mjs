@@ -70,7 +70,12 @@ function fixture(fieldForm = form(), options = {}) {
   const d1 = { prepare(sql) { return { bind(...values) { return {
     async first() { return database.prepare(sql).get(...values) || null; },
     async all() { return { results: database.prepare(sql).all(...values) }; },
-    async run() { await options.beforeRun?.({ sql, values, database }); const result = database.prepare(sql).run(...values); return { success: true, meta: { changes: Number(result.changes) } }; },
+    async run() {
+      await options.beforeRun?.({ sql, values, database });
+      const result = database.prepare(sql).run(...values);
+      await options.afterRun?.({ sql, values, database, result });
+      return { success: true, meta: { changes: Number(result.changes) } };
+    },
   }; } }; } };
   d1.batch = async (statements) => {
     database.exec("BEGIN");
@@ -79,7 +84,11 @@ function fixture(fieldForm = form(), options = {}) {
   };
   const objects = new Map();
   const bucket = {
-    async get(key) { const bytes = objects.get(key); return bytes ? { async arrayBuffer() { return Uint8Array.from(bytes).buffer; } } : null; },
+    async get(key) {
+      await options.beforeGet?.(key);
+      const bytes = objects.get(key);
+      return bytes ? { async arrayBuffer() { return Uint8Array.from(bytes).buffer; } } : null;
+    },
     async put(key, bytes) { objects.set(key, Uint8Array.from(bytes)); },
     async delete(key) { objects.delete(key); },
   };
@@ -103,7 +112,8 @@ function fixture(fieldForm = form(), options = {}) {
     "./trade-activity-forms.ts": core,
     "./trade-activity-form-flow.ts": flow,
     "./scheduled-activity-customer-document-receipt.ts": receipt,
-    "./trade-activity-forms-pdf.ts": { validateActivityEvidenceBytes, renderActivityFieldPdf: async () => new TextEncoder().encode("%PDF-test-final-custody") },
+    "./trade-activity-forms-pdf.ts": { validateActivityEvidenceBytes,
+      renderActivityFieldPdf: options.renderActivityFieldPdf || (async () => new TextEncoder().encode("%PDF-test-final-custody")) },
     "./customer-plan-pdf-fonts": { loadCustomerPlanPdfFonts: async () => ({ regular: new Uint8Array(), bold: new Uint8Array() }) },
   });
   const access = { ownerUid: "owner-a", actorUid: "field-member:worker-a", memberId: "worker-a", isOwner: false,
@@ -207,9 +217,15 @@ test("submission blocks technician work but leaves derived profile and office ga
   } finally { database.close(); }
 });
 
-test("the Activity 6 product facets stay behind record-scoped installer access and use the record installation date", async () => {
+test("approved product facets stay behind record-scoped installer access and use each record's installation date and metadata", async () => {
   const database = { fixture: "official-products" };
   const access = { ownerUid: "owner-a", actorUid: "field-member:worker-a", memberId: "worker-a" };
+  const staleProductForm = (activityTemplateId) => ({ activityTemplateId, programCode: "VEU", fields: [
+    { key: "installed_product.brand", label: "Brand", type: "text", required: true, options: [], help: "", phase: "after",
+      repeatGroup: "installedProducts[]" },
+    { key: "installed_product.model", label: "Model", type: "text", required: true, options: [], help: "", phase: "after",
+      repeatGroup: "installedProducts[]" },
+  ] });
   const route = ({ requireAccess = async () => access, loadRecord, searchProducts }) => loadModule(
     read("../src/app/api/trade-activity-forms/route.ts"), {
       "../../../../db": { getD1: () => database },
@@ -222,7 +238,7 @@ test("the Activity 6 product facets stay behind record-scoped installer access a
       "@/lib/creditex-field-master-access": { canEditCreditexFieldMasters: () => false },
       "@/lib/creditex-official-source-custody-server": { resolveActiveCreditexOfficialSourceOrganisation: async () => "creditex" },
       "@/lib/bounded-json-request": { BoundedJsonRequestError: class extends Error {}, readBoundedJsonRequest: async () => ({}) },
-      "@/lib/trade-activity-forms-library": {}, "@/lib/trade-activity-forms": {},
+      "@/lib/trade-activity-forms-library": { activityFieldWorkerForm }, "@/lib/trade-activity-forms": {},
       "@/lib/trade-activity-forms-server": { loadActivityRecord: loadRecord },
       "@/lib/creditex-official-product-registry-server": { searchOfficialProducts: searchProducts },
     },
@@ -254,7 +270,7 @@ test("the Activity 6 product facets stay behind record-scoped installer access a
   const wrongActivity = route({
     loadRecord: async (receivedAccess, id) => {
       assert.equal(receivedAccess, access); assert.equal(id, "record-veu-44");
-      return { form: { activityTemplateId: "veu-44" }, answers: { "customer_property.installation_date": "2026-09-12" } };
+      return { form: { activityTemplateId: "veu-44", fields: [] }, answers: { "customer_property.installation_date": "2026-09-12" } };
     },
     searchProducts: async () => { registryCalls += 1; },
   });
@@ -267,7 +283,8 @@ test("the Activity 6 product facets stay behind record-scoped installer access a
   const approvedProducts = route({
     loadRecord: async (receivedAccess, id) => {
       assert.equal(receivedAccess, access); assert.equal(id, "record-veu-6");
-      return { form: { activityTemplateId: "veu-6" }, answers: { "customer_property.installation_date": "2026-09-12" } };
+      return { form: staleProductForm("veu-6"), signatures: [{ id: "existing-signature" }],
+        answers: { "customer_property.installation_date": "2026-09-12" } };
     },
     searchProducts: async (...args) => {
       calls.push(args);
@@ -295,6 +312,47 @@ test("the Activity 6 product facets stay behind record-scoped installer access a
     brand: "Daikin", model: "FTXM25", veuActivityCode: "6", limit: "50",
   });
   assert.deepEqual(calls[0][2], { allowStaleAcceptedSnapshot: true });
+
+  const waterHeaterCalls = [];
+  const activity3Products = route({
+    loadRecord: async (receivedAccess, id) => {
+      assert.equal(receivedAccess, access); assert.equal(id, "record-veu-3");
+      return { form: staleProductForm("veu-3"), signatures: [{ id: "existing-signature" }],
+        answers: { "customer_property.installation_date": "2026-09-20" } };
+    },
+    searchProducts: async (...args) => {
+      waterHeaterCalls.push(args);
+      const activityCode = args[1].veuActivityCode;
+      return { facets: {
+        brands: activityCode === "3C"
+          ? [{ value: "Aqua", label: "Aqua", count: 2 }, { value: "Shared", label: "Shared", count: 1 }]
+          : [{ value: "Shared", label: "Shared", count: 3 }, { value: "Thermal", label: "Thermal", count: 1 }],
+        models: activityCode === "3C"
+          ? [{ value: "HP-250", label: "HP-250", count: 2 }]
+          : [{ value: "HP-315", label: "HP-315", count: 1 }],
+      } };
+    },
+  });
+  response = await activity3Products.GET(new Request(`${endpoint}&recordId=record-veu-3&brand=Shared`));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true,
+    brands: [
+      { value: "Aqua", label: "Aqua", count: 2 },
+      { value: "Shared", label: "Shared", count: 4 },
+      { value: "Thermal", label: "Thermal", count: 1 },
+    ],
+    models: [
+      { value: "HP-250", label: "HP-250", count: 2 },
+      { value: "HP-315", label: "HP-315", count: 1 },
+    ],
+  });
+  assert.deepEqual(waterHeaterCalls.map(([, input]) => input), [
+    { productKind: "veu_water_heater", installationDate: "2026-09-20", brand: "Shared", model: undefined,
+      veuActivityCode: "3C", limit: "50" },
+    { productKind: "veu_water_heater", installationDate: "2026-09-20", brand: "Shared", model: undefined,
+      veuActivityCode: "3D", limit: "50" },
+  ]);
+  assert.ok(waterHeaterCalls.every(([, , options]) => options.allowStaleAcceptedSnapshot === true));
 });
 
 test("named Creditex field-master editors can author without governed-review permission while unsafe identities are rejected", async () => {
@@ -1051,11 +1109,111 @@ test("corrupted stored evidence is rejected and a revoked share token no longer 
     record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Unit" });
     for (const declaration of ["before_customer", "after_technician"]) record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision, declarationKey: declaration, signerName: "Signer", acknowledged: true, strokes });
     record = await server.submitActivityRecord(access, record.id, record.revision);
+    const retainedReport = await server.readActivityPdf(record);
+    assert.equal(retainedReport.contentType, "application/pdf");
+    assert.equal(new TextDecoder().decode(retainedReport.bytes), "%PDF-test-final-custody");
     const url = new URL(await server.shareActivityReport(access, record.id, "https://example.test"));
     const token = url.searchParams.get("reportToken");
-    assert.equal((await server.sharedActivityRecord(token)).id, record.id);
+    const sharedRecord = await server.sharedActivityRecord(token);
+    assert.equal(sharedRecord.id, record.id);
+    assert.equal(new TextDecoder().decode((await server.readActivityPdf(sharedRecord)).bytes), "%PDF-test-final-custody");
     await server.shareActivityReport(access, record.id, "https://example.test", true);
     await assert.rejects(server.sharedActivityRecord(token), /ACTIVITY_REPORT_LINK_UNAVAILABLE/);
+  } finally { database.close(); }
+});
+
+test("a missing immutable activity PDF is restored at the same key for authenticated and shared reads", async () => {
+  const { database, server, access, objects } = fixture();
+  try {
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Unit" });
+    for (const declaration of ["before_customer", "after_technician"]) record = await server.signActivityDeclaration(access, record.id, {
+      expectedRevision: record.revision, declarationKey: declaration, signerName: "Signer", acknowledged: true, strokes,
+    });
+    record = await server.submitActivityRecord(access, record.id, record.revision);
+    const row = database.prepare("SELECT pdf_object_key, pdf_sha256 FROM trade_activity_field_records WHERE id = ?").get(record.id);
+    const shareUrl = new URL(await server.shareActivityReport(access, record.id, "https://example.test"));
+    const shared = await server.sharedActivityRecord(shareUrl.searchParams.get("reportToken"));
+
+    objects.delete(row.pdf_object_key);
+    assert.equal(new TextDecoder().decode((await server.readActivityPdf(record)).bytes), "%PDF-test-final-custody");
+    assert.equal(core.activityHash(objects.get(row.pdf_object_key)), row.pdf_sha256);
+    assert.equal(new TextDecoder().decode((await server.readActivityPdf(shared)).bytes), "%PDF-test-final-custody");
+
+    const corrupt = new TextEncoder().encode("%PDF-corrupt");
+    objects.set(row.pdf_object_key, corrupt);
+    await assert.rejects(server.readActivityPdf(record), /ACTIVITY_REPORT_INTEGRITY_FAILED/);
+    assert.deepEqual(objects.get(row.pdf_object_key), corrupt, "Recovery must not replace an existing object that fails its retained hash");
+  } finally { database.close(); }
+});
+
+test("a committed submission keeps its final PDF when D1 loses the update response", async () => {
+  let failSubmittedResponse = true;
+  const { database, server, access, objects } = fixture(form(), {
+    afterRun({ sql, values }) {
+      if (failSubmittedResponse && sql.includes("UPDATE trade_activity_field_records SET revision")
+        && values[1] === "submitted_for_creditex_review") {
+        failSubmittedResponse = false;
+        throw new Error("simulated response loss after commit");
+      }
+    },
+  });
+  try {
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Unit" });
+    for (const declaration of ["before_customer", "after_technician"]) record = await server.signActivityDeclaration(access, record.id, {
+      expectedRevision: record.revision, declarationKey: declaration, signerName: "Signer", acknowledged: true, strokes,
+    });
+    const submitted = await server.submitActivityRecord(access, record.id, record.revision);
+    const row = database.prepare("SELECT status, pdf_object_key, pdf_sha256 FROM trade_activity_field_records WHERE id = ?").get(record.id);
+    assert.equal(submitted.status, "submitted_for_creditex_review");
+    assert.equal(row.status, "submitted_for_creditex_review");
+    assert.equal(core.activityHash(objects.get(row.pdf_object_key)), row.pdf_sha256);
+  } finally { database.close(); }
+});
+
+test("submission verifies independent evidence reads concurrently within the server cap", async () => {
+  let activeReads = 0; let peakReads = 0;
+  const { database, server, access } = fixture(form(), {
+    async beforeGet() {
+      activeReads += 1; peakReads = Math.max(peakReads, activeReads);
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      activeReads -= 1;
+    },
+  });
+  try {
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=", "base64");
+    for (let index = 0; index < 4; index += 1) {
+      record = await server.uploadActivityEvidence(access, record.id, record.revision, "photo",
+        new File([png], `photo-${index}.png`, { type: "image/png" }), {}, crypto.randomUUID());
+    }
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Unit" });
+    for (const declaration of ["before_customer", "after_technician"]) record = await server.signActivityDeclaration(access, record.id, {
+      expectedRevision: record.revision, declarationKey: declaration, signerName: "Signer", acknowledged: true, strokes,
+    });
+    await server.submitActivityRecord(access, record.id, record.revision);
+    assert.equal(peakReads, 4, "All four independent evidence reads should overlap instead of blocking the submit path serially");
+  } finally { database.close(); }
+});
+
+test("a signed stale Activity 3 draft ignores retired hidden fields when it is submitted", async () => {
+  const staleActivity3 = form();
+  staleActivity3.activityTemplateId = "veu-3";
+  staleActivity3.fields.push(field("retired.office_only", "after"));
+  const { database, server, access } = fixture(staleActivity3, {
+    activityFieldWorkerForm: (stored) => ({ ...stored, fields: stored.fields.filter((item) => item.key !== "retired.office_only") }),
+  });
+  try {
+    database.prepare("UPDATE trade_work_order_compliance_intents SET activity_template_id = 'veu-3' WHERE id = 'intent-a'").run();
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Unit" });
+    for (const declaration of ["before_customer", "after_technician"]) record = await server.signActivityDeclaration(access, record.id, {
+      expectedRevision: record.revision, declarationKey: declaration, signerName: "Signer", acknowledged: true, strokes,
+    });
+    assert.ok(core.activityMissing(record).some((item) => item.key === "retired.office_only"));
+    const submitted = await server.submitActivityRecord(access, record.id, record.revision);
+    assert.equal(submitted.status, "submitted_for_creditex_review");
   } finally { database.close(); }
 });
 
@@ -1112,6 +1270,23 @@ test("a final PDF retains a captured image after its conditional question is no 
   const pdf = await PDFDocument.load(rendered);
   const imageResources = pdf.getPages().flatMap((page) => page.node.Resources()?.lookupMaybe(PDFName.of("XObject"), PDFDict)?.entries() || []);
   assert.ok(imageResources.length > 0, "Retained original photo must be embedded in the final PDF, including when its question was subsequently hidden");
+});
+
+test("activity PDF rendering is deterministic for its retained document timestamp", async () => {
+  const submittedAt = "2026-09-08T23:39:48.789Z";
+  const serializedAt = "2026-09-08T23:39:48.000Z";
+  const record = { id: "record-deterministic", recordNumber: "TAF-DETERMINISTIC", workOrderId: "job-a", form: form(),
+    answers: {}, evidence: [], signatures: [], submittedAt };
+  const fonts = {
+    regular: fs.readFileSync(new URL("../public/fonts/LiberationSans-Regular.ttf", import.meta.url)),
+    bold: fs.readFileSync(new URL("../public/fonts/LiberationSans-Bold.ttf", import.meta.url)),
+  };
+  const first = await renderActivityFieldPdf(record, new Map(), fonts, new Date(submittedAt));
+  const second = await renderActivityFieldPdf(record, new Map(), fonts, new Date(serializedAt));
+  assert.deepEqual(first, second);
+  const pdf = await PDFDocument.load(first, { updateMetadata: false });
+  assert.equal(pdf.getCreationDate().toISOString(), serializedAt);
+  assert.equal(pdf.getModificationDate().toISOString(), serializedAt);
 });
 
 test("location-required capture rejects missing, mocked or stale location and retries remain idempotent", async () => {

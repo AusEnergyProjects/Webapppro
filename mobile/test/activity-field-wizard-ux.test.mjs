@@ -215,7 +215,7 @@ test('the native wizard uses Expo 57 File parts and hierarchical back navigation
   assert.match(wizard, /await syncPendingSignatures\(\)/);
   assert.match(wizard, /if \(online\) queuePageSync\(\[\], true\);/);
   assert.match(wizard, /Connectivity is the retry trigger/);
-  assert.match(wizard, /await waitForBackgroundSync\(\); await saveAnswers\(\); await syncPendingSignatures\(\); await request\('submit'\)/);
+  assert.match(wizard, /await waitForBackgroundSync\(\);\s*await saveAnswers\(\);\s*await syncPendingSignatures\(\);\s*await request\('submit'\)/);
   assert.match(wizard, /Signature saved on this phone\. TLink is syncing it automatically\./);
   assert.match(wizard, /signingUserContentChanged/);
   assert.doesNotMatch(wizard, /The details to sign have changed/);
@@ -237,14 +237,81 @@ test('the native wizard uses Expo 57 File parts and hierarchical back navigation
   assert.doesNotMatch(wizard, /Step \{stepIndex \+ 1\} of \{steps\.length\}/);
 });
 
-test('Activity 6 uses approved product choices and review counts only field work', () => {
+test('approved-product metadata drives the brand and filtered model choices for every supported activity', () => {
   const wizard = read('../src/components/ActivityFieldFormWizard.tsx');
+  const library = read('../../src/lib/trade-activity-forms-library.ts');
   assert.match(wizard, /new URLSearchParams\(\{ recordId, view: 'official_products' \}\)/);
-  assert.match(wizard, /record\.form\.activityTemplateId === 'veu-6'/);
+  assert.match(wizard, /field\.approvedProduct\?\.role === 'brand'/);
+  assert.match(wizard, /field\.approvedProduct\?\.role === 'model'/);
+  assert.match(wizard, /field\.approvedProduct\.brandFieldKey/);
   assert.match(wizard, /FieldSelect label="Choose approved brand"[\s\S]{0,160}options=\{approvedBrands\}/);
   assert.match(wizard, /FieldSelect label="Choose approved model"[\s\S]{0,180}options=\{approvedModels\[selectedBrand\] \|\| \[\]\}/);
-  assert.match(wizard, /delete answers\[activityRepeatKey\('installed_product\.model', field\.repeatIndex\)\]/);
+  assert.match(wizard, /candidate\.approvedProduct\?\.role === 'model'[\s\S]{0,180}candidate\.approvedProduct\.brandFieldKey === field\.baseKey/);
+  assert.match(wizard, /delete answers\[activityRepeatKey\(modelField\.key, field\.repeatIndex\)\]/);
   assert.match(wizard, /approvedBrands\.some\(\(option\) => option\.value === value\)/);
-  assert.match(wizard, /\$\{fieldMissing\.length\} field item/);
+  assert.doesNotMatch(wizard, /activityTemplateId === 'veu-6'/);
+  assert.doesNotMatch(wizard, /activity6Brand|activity6Model|selectedActivity6Brands/);
+  assert.match(library, /"veu-3": \{ productKind: "veu_water_heater", veuActivityCodes: \["3C", "3D"\] \}/);
+  assert.match(library, /"veu-6": \{ productKind: "veu_air_conditioner", veuActivityCodes: \["6"\] \}/);
+  assert.match(wizard, /\$\{fieldMissing\.length\} required item/);
   assert.doesNotMatch(wizard, /\$\{record\.missing\.length\} required item/);
+});
+
+test('one signature page per signer covers every applicable declaration after the field pages', () => {
+  const wizard = read('../src/components/ActivityFieldFormWizard.tsx');
+  const { streamlinedActivityPages } = loadFunctions(wizard, ['streamlinedActivityPages']);
+  const pages = [
+    { key: 'before-fields', kind: 'fields', phase: 'before', section: 'Before', fields: [], legacyStepKeys: ['before-fields'] },
+    { key: 'installer-a', kind: 'signature', phase: 'before', declaration: { key: 'installer-a', role: 'technician' }, legacyStepKeys: ['installer-a'] },
+    { key: 'after-fields', kind: 'fields', phase: 'after', section: 'After', fields: [], legacyStepKeys: ['after-fields'] },
+    { key: 'installer-b', kind: 'signature', phase: 'after', declaration: { key: 'installer-b', role: 'technician' }, legacyStepKeys: ['installer-b'] },
+    { key: 'customer-a', kind: 'signature', phase: 'after', declaration: { key: 'customer-a', role: 'customer' }, legacyStepKeys: ['customer-a'] },
+    { key: 'customer-b', kind: 'signature', phase: 'after', declaration: { key: 'customer-b', role: 'customer' }, legacyStepKeys: ['customer-b'] },
+    { key: 'review', kind: 'review', legacyStepKeys: ['review'] },
+  ];
+
+  const result = streamlinedActivityPages(pages);
+  assert.deepEqual(result.map((page) => page.kind), ['fields', 'fields', 'signature', 'signature', 'review']);
+  assert.deepEqual(result[2].legacyStepKeys, ['installer-a', 'installer-b']);
+  assert.deepEqual(result[3].legacyStepKeys, ['customer-a', 'customer-b']);
+});
+
+test('signature sync completes before-work declarations before any after-work signature', () => {
+  const wizard = read('../src/components/ActivityFieldFormWizard.tsx');
+  const { pendingSignatureToSync } = loadFunctions(wizard, ['pendingSignatureToSync']);
+  const pending = [
+    { declarationKey: 'installer-after', phase: 'after' },
+    { declarationKey: 'customer-before', phase: 'before' },
+    { declarationKey: 'customer-after', phase: 'after' },
+  ];
+  const requiredBefore = new Set(['installer-before', 'customer-before']);
+
+  assert.equal(pendingSignatureToSync([pending[0]], requiredBefore, new Set(['installer-before'])), undefined);
+  assert.equal(pendingSignatureToSync(pending, requiredBefore, new Set(['installer-before'])), pending[1]);
+  assert.equal(pendingSignatureToSync([pending[0], pending[2]], requiredBefore,
+    new Set(['installer-before', 'customer-before'])), pending[0]);
+  assert.match(wizard, /activityWizardPages\(snapshot\.record\.form, snapshot\.answers\)[\s\S]{0,220}page\.declaration\.phase === 'before'[\s\S]{0,100}page\.declaration\.required/);
+});
+
+test('a grouped signature is retained for all covered declarations and final submission has a Done exit', () => {
+  const wizard = read('../src/components/ActivityFieldFormWizard.tsx');
+  assert.match(wizard, /const declarations = step\.legacyStepKeys\.flatMap[\s\S]{0,240}latest\.record\.form\.declarations\.find/);
+  assert.match(wizard, /const queued = declarations\.filter[\s\S]{0,500}declarationKey: declaration\.key[\s\S]{0,500}strokes: signature\.strokes/);
+  assert.match(wizard, /pendingSignatures: \[\.\.\.\(latest\.pendingSignatures \|\| \[\]\)\.filter[\s\S]{0,160}\.\.\.queued\]/);
+  assert.match(wizard, /signatureReviewDeclaration[\s\S]{0,300}signatureDeclarations\.map/);
+  assert.match(wizard, /One signature confirms all \{signatureDeclarations\.length\} declarations for this signer/);
+  assert.match(wizard, /I have read and agree to \{signatureDeclarations\.length > 1 \? 'these declarations' : 'this declaration'\}/);
+  assert.match(wizard, /const retryRevision = action === 'save' \|\| action === 'submit'/);
+  assert.match(wizard, /record\.status === 'submitted_for_creditex_review' \? 'Done'/);
+  assert.match(wizard, /record\.status === 'submitted_for_creditex_review' \? finish\(\) : void next\(\)/);
+  assert.match(wizard, /function finish\(\) \{\s*onReturnToJob\(\)/);
+  assert.match(wizard, /async function submitCompletedActivity\(\) \{\s*await waitForBackgroundSync\(\);\s*await saveAnswers\(\);\s*await syncPendingSignatures\(\);\s*await request\('submit'\)/);
+  assert.match(wizard, /onPress=\{\(\) => void perform\('submit', submitCompletedActivity\)\}/);
+  assert.match(wizard, />\{busy === 'submit' \? 'Finishing form…' : 'Submit completed form to Creditex'\}<\/FieldButton>/);
+  assert.doesNotMatch(wizard, /loading=\{busy === 'submit'\}/);
+  assert.match(wizard, /while \(true\) \{\s*const snapshot = cacheRef\.current;[\s\S]{0,500}const queued = pendingSignatureToSync/);
+  assert.match(wizard, /const fieldMissing = steps\.flatMap/);
+  assert.match(wizard, /for \(const signaturePage of pages\.filter\(\(page\) => page\.kind === 'signature'\)\)/);
+  assert.doesNotMatch(wizard, /const fieldMissing = record\.missing\.filter/);
+  assert.doesNotMatch(wizard, /step\?\.kind === 'review' \|\|/);
 });

@@ -52,14 +52,16 @@ test("SQL projection uses actual progress and the newest explicit audit result",
     INSERT INTO trade_work_orders VALUES
       ('unscheduled', 'owner', 'ready', ''),
       ('scheduled', 'owner', 'scheduled', '2026-09-09T09:00:00Z'),
+      ('draft-activity', 'owner', 'scheduled', '2026-09-09T09:30:00Z'),
       ('partial', 'owner', 'scheduled', '2026-09-09T10:00:00Z'),
       ('completed', 'owner', 'completed', '2026-09-09T11:00:00Z'),
       ('audited', 'owner', 'completed', '2026-09-09T12:00:00Z'),
       ('cancelled', 'owner', 'cancelled', '2026-09-09T13:00:00Z');
     INSERT INTO trade_crm_job_details VALUES
-      ('unscheduled', 'quoting'), ('scheduled', 'scheduled'), ('partial', 'scheduled'),
+      ('unscheduled', 'quoting'), ('scheduled', 'scheduled'), ('draft-activity', 'scheduled'), ('partial', 'scheduled'),
       ('completed', 'complete'), ('audited', 'complete'), ('cancelled', 'lost');
     INSERT INTO trade_job_forms VALUES ('partial', 'owner', 'draft', '{"existing":"captured"}');
+    INSERT INTO trade_activity_field_records VALUES ('draft-activity', 'owner', 'draft', '{}');
     INSERT INTO compliance_cases VALUES ('case-audited', 'creditex', 'audited', 'owner', '', 'accepted', '2026-09-09T10:00:00Z');
     INSERT INTO compliance_submission_batch_items VALUES ('item-audited', 'creditex', 'case-audited', 'accepted', '2026-09-09T11:00:00Z');
     INSERT INTO compliance_submission_responses VALUES ('response-audited', 'creditex', 'item-audited', 'duplicate', '2026-09-09T12:00:00Z');
@@ -82,6 +84,7 @@ test("SQL projection uses actual progress and the newest explicit audit result",
     { id: "audited", audit_outcome: "duplicate", lifecycle_status: "audited" },
     { id: "cancelled", audit_outcome: "passed", lifecycle_status: "cancelled" },
     { id: "completed", audit_outcome: null, lifecycle_status: "completed" },
+    { id: "draft-activity", audit_outcome: null, lifecycle_status: "partial" },
     { id: "partial", audit_outcome: null, lifecycle_status: "partial" },
     { id: "scheduled", audit_outcome: null, lifecycle_status: "scheduled" },
     { id: "unscheduled", audit_outcome: null, lifecycle_status: "unscheduled" },

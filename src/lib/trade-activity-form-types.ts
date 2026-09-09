@@ -2,6 +2,12 @@ export type ActivityAnswer = string | number | boolean;
 export type ActivityAnswers = Record<string, ActivityAnswer>;
 export type ActivityPhase = "before" | "after";
 export type ActivityCondition = { all?: ActivityCondition[]; any?: ActivityCondition[]; fieldKey?: string; equals?: ActivityAnswer; notEquals?: ActivityAnswer; lessThanOrEqual?: number };
+export type ActivityApprovedProductSelector = {
+  role: "brand" | "model";
+  productKind: "veu_water_heater" | "veu_air_conditioner";
+  veuActivityCodes: string[];
+  brandFieldKey?: string;
+};
 export type ActivityField = {
   key: string; section: string; label: string;
   type: "text" | "number" | "date" | "select" | "boolean" | "photo" | "document";
@@ -10,6 +16,7 @@ export type ActivityField = {
   presentation?: "question" | "prefilled" | "derived";
   optionLabels?: Record<string, string>;
   sourceRequirementId?: string;
+  approvedProduct?: ActivityApprovedProductSelector;
   evidenceFor?: string[];
   requiredValue?: ActivityAnswer; requireLocation?: boolean;
   referenceDocuments?: { title: string; url: string }[];

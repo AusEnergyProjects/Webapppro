@@ -65,8 +65,14 @@ export async function validateActivityEvidenceBytes(bytes: Uint8Array, contentTy
 }
 
 export async function renderActivityFieldPdf(record: ActivityRecord,
-  assets: Map<string, Uint8Array>, fonts: { regular: Uint8Array; bold: Uint8Array }) {
+  assets: Map<string, Uint8Array>, fonts: { regular: Uint8Array; bold: Uint8Array },
+  documentDate = new Date(record.submittedAt)) {
+  if (!Number.isFinite(documentDate.getTime())) throw new Error("ACTIVITY_REPORT_TIMESTAMP_INVALID");
   const pdf = await PDFDocument.create();
+  // Pin pdf-lib's otherwise clock-derived metadata so a missing immutable
+  // report can be reproduced byte-for-byte from its retained record.
+  pdf.setCreationDate(documentDate);
+  pdf.setModificationDate(documentDate);
   pdf.registerFontkit(fontkit);
   const regular = await pdf.embedFont(fonts.regular, { subset: true });
   const bold = await pdf.embedFont(fonts.bold, { subset: true });

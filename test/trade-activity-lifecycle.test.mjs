@@ -21,6 +21,7 @@ test("activity lifecycle follows cancellation, audit, completion, progress and s
   const derive = sourceFunction(serverSource, "deriveActivityLifecycle");
   assert.deepEqual(derive({}), { status: "unscheduled", auditOutcome: null });
   assert.deepEqual(derive({ scheduledStart: "2026-09-09T09:00:00Z" }), { status: "scheduled", auditOutcome: null });
+  assert.deepEqual(derive({ fieldRecordStatus: "draft", scheduledStart: "2026-09-09T09:00:00Z" }), { status: "partial", auditOutcome: null });
   assert.deepEqual(derive({ hasUserProgress: 1, scheduledStart: "2026-09-09T09:00:00Z" }), { status: "partial", auditOutcome: null });
   assert.deepEqual(derive({ activeWorkPack: 1 }), { status: "partial", auditOutcome: null });
   assert.deepEqual(derive({ fieldRecordStatus: "submitted_for_creditex_review", activeWorkPack: 1 }), { status: "completed", auditOutcome: null });

@@ -488,6 +488,56 @@ test("VEU Activity 6 presents each scenario and equipment controller before its 
   }
 });
 
+test("VEU Activities 3 and 6 describe approved brand and model selection through governed field metadata", () => {
+  for (const [templateId, variants, productKind, activityCodes] of [
+    ["veu-3", ["veu_3_residential", "veu_3_business"], "veu_water_heater", ["3C", "3D"]],
+    ["veu-6", ["veu_6_residential", "veu_6_business"], "veu_air_conditioner", ["6"]],
+  ]) {
+    for (const variant of variants) {
+      const form = defaultActivityFieldForm(templateId, variant);
+      const brand = form.fields.find((field) => field.key === "installed_product.brand");
+      const model = form.fields.find((field) => field.key === "installed_product.model");
+      assert.deepEqual(brand?.approvedProduct, { role: "brand", productKind, veuActivityCodes: activityCodes }, `${variant}: brand`);
+      assert.deepEqual(model?.approvedProduct, { role: "model", productKind, veuActivityCodes: activityCodes,
+        brandFieldKey: "installed_product.brand" }, `${variant}: model`);
+      assert.equal(brand?.presentation, undefined, `${variant}: brand remains a field-worker choice`);
+      assert.equal(model?.presentation, undefined, `${variant}: model remains a field-worker choice`);
+    }
+  }
+});
+
+test("VEU Activity 3 keeps one plain serial prompt and removes duplicate product identifiers", () => {
+  for (const variant of ["veu_3_residential", "veu_3_business"]) {
+    const baseline = defaultActivityFieldForm("veu-3", variant);
+    const serial = baseline.fields.find((field) => field.key === "installed_product.serial_numbers");
+    const systemSize = baseline.fields.find((field) => field.key === "installed_product.system_size");
+    assert.equal(serial?.label, "Serial number", variant);
+    assert.equal(serial?.presentation, undefined, variant);
+    assert.equal(systemSize?.presentation, "derived", variant);
+    assert.ok(!activityWizardSteps(baseline, {}).some((step) => step.kind === "field"
+      && step.field.baseKey === "installed_product.system_size"), variant);
+    assert.ok(!baseline.fields.some((field) => ["installed_product.heat_pump_model", "installed_product.tank_model"].includes(field.key)), variant);
+
+    const stale = structuredClone(baseline);
+    delete stale.fields.find((field) => field.key === "installed_product.brand").approvedProduct;
+    stale.fields.find((field) => field.key === "installed_product.model").approvedProduct = {
+      role: "model", productKind: "veu_air_conditioner", veuActivityCodes: ["6"], brandFieldKey: "wrong.brand",
+    };
+    stale.fields.push(
+      { key: "installed_product.heat_pump_model", section: "Installed equipment", label: "Heat pump model number", type: "text",
+        required: true, options: [], help: "", phase: "after", repeatGroup: "installedProducts[]" },
+      { key: "installed_product.tank_model", section: "Installed equipment", label: "Tank model number", type: "text",
+        required: true, options: [], help: "", phase: "after", repeatGroup: "installedProducts[]" },
+    );
+    const governed = applyDefaultActivityFormPolicy(stale, baseline);
+    assert.deepEqual(governed.fields.find((field) => field.key === "installed_product.brand")?.approvedProduct,
+      baseline.fields.find((field) => field.key === "installed_product.brand")?.approvedProduct, variant);
+    assert.deepEqual(governed.fields.find((field) => field.key === "installed_product.model")?.approvedProduct,
+      baseline.fields.find((field) => field.key === "installed_product.model")?.approvedProduct, variant);
+    assert.ok(!governed.fields.some((field) => ["installed_product.heat_pump_model", "installed_product.tank_model"].includes(field.key)), variant);
+  }
+});
+
 test("SRES battery VPP questions use the recorded numeric distance without a duplicate confirmation", () => {
   const form = defaultActivityFieldForm("sres-bess", "sres_bess");
   const vpp = form.fields.find((field) => field.key === "vpp_capable");
@@ -769,7 +819,8 @@ test("every supported appointment, customer, property, Creditex, trade, worker a
         if (field.autofill) assert.match(field.autofill, supported, `${item.activityTemplateId}/${variant}: ${field.key}`);
         else assert.ok(Object.values(ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS).includes(field.key)
           || field.help === "Completed from the TLink quote, invoice or Creditex calculation outside the installer workflow."
-          || item.activityTemplateId === "veu-6" && ["installed_product.category", "installed_product.same_oem"].includes(field.key),
+          || item.activityTemplateId === "veu-6" && ["installed_product.category", "installed_product.same_oem"].includes(field.key)
+          || item.activityTemplateId === "veu-3" && field.key === "installed_product.system_size",
         `${item.activityTemplateId}/${variant}: ${field.key}`);
       }
       for (const field of form.fields.filter((candidate) => supported.test(candidate.autofill || ""))) {

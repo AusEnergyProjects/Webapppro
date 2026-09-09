@@ -155,8 +155,11 @@ type ActivitySignerSetup = { firstName: string; lastName: string; canSave: boole
 
 function activityUserActionableMissing(record: ActivityRecord, phase?: ActivityForm["fields"][number]["phase"], includeSignatures = true) {
   const fields = new Map(activityFieldWorkerForm(record.form).fields.map((field) => [field.key, field]));
-  return activityMissing(record, phase, includeSignatures).filter((item) => item.kind === "signature"
-    || fields.get(activityBaseFieldKey(item.key))?.presentation !== "derived");
+  return activityMissing(record, phase, includeSignatures).filter((item) => {
+    if (item.kind === "signature") return true;
+    const field = fields.get(activityBaseFieldKey(item.key));
+    return field !== undefined && field.presentation !== "derived";
+  });
 }
 
 export function activityPresentation(record: ActivityRecord, signerSetup?: ActivitySignerSetup) {
@@ -198,7 +201,7 @@ export function deriveActivityLifecycle(signals: ActivityLifecycleSignals): {
   if (value(signals.fieldRecordStatus) === "submitted_for_creditex_review" || Number(signals.completedWorkPack) === 1) {
     return { status: "completed", auditOutcome: null };
   }
-  if (Number(signals.hasUserProgress) === 1 || Number(signals.activeWorkPack) === 1) {
+  if (value(signals.fieldRecordStatus) === "draft" || Number(signals.hasUserProgress) === 1 || Number(signals.activeWorkPack) === 1) {
     return { status: "partial", auditOutcome: null };
   }
   if (value(signals.parentStage) === "scheduled" || value(signals.scheduledStart)) {
@@ -815,26 +818,93 @@ export async function readActivityEvidence(record: ActivityRecord, evidenceId: s
   return { bytes, contentType: item.contentType, fileName: item.fileName };
 }
 
+type ActivityPdfRow = {
+  status: string;
+  payload: string;
+  submitted_at: string;
+  updated_at: string;
+  pdf_object_key: string;
+  pdf_sha256: string;
+};
+
+async function activityPdfRow(id: string, ownerUid: string) {
+  return getD1().prepare(`SELECT status, payload, submitted_at, updated_at, pdf_object_key, pdf_sha256
+    FROM trade_activity_field_records WHERE id = ? AND owner_uid = ? LIMIT 1`)
+    .bind(id, ownerUid).first<ActivityPdfRow>();
+}
+
+function immutableActivityPdfRecord(row: ActivityPdfRow, id: string, ownerUid: string): ActivityRecord {
+  try {
+    const stored = JSON.parse(row.payload) as ActivityRecord;
+    if (row.status !== "submitted_for_creditex_review" || stored.status !== "submitted_for_creditex_review"
+      || stored.id !== id || stored.ownerUid !== ownerUid || !stored.form || activityHash(stored.form) !== stored.formSha256
+      || !Array.isArray(stored.evidence) || !Array.isArray(stored.signatures)
+      || !row.pdf_object_key.startsWith(`activity-field/${ownerUid}/${id}/final/`) || !row.pdf_object_key.endsWith(".pdf")
+      || !/^[0-9a-f]{64}$/.test(row.pdf_sha256)) throw new Error("invalid");
+    return stored;
+  } catch { throw new Error("ACTIVITY_REPORT_INTEGRITY_FAILED"); }
+}
+
+async function activityReportAssets(record: ActivityRecord) {
+  const assets = new Map<string, Uint8Array>();
+  // Evidence is independent, but cap concurrent R2 reads so a large allowed
+  // record cannot create an unbounded request burst.
+  for (let offset = 0; offset < record.evidence.length; offset += 6) {
+    const batch = await Promise.all(record.evidence.slice(offset, offset + 6).map(async (evidence) => {
+      if (evidence.previewObjectKey && evidence.previewSha256) {
+        await readActivityEvidence(record, evidence.id);
+        const preview = await bucket().get(evidence.previewObjectKey);
+        if (!preview) throw new Error("ACTIVITY_EVIDENCE_UNAVAILABLE");
+        const bytes = new Uint8Array(await preview.arrayBuffer());
+        if (activityHash(bytes) !== evidence.previewSha256) throw new Error("ACTIVITY_EVIDENCE_INTEGRITY_FAILED");
+        return [evidence.id, bytes] as const;
+      }
+      return [evidence.id, (await readActivityEvidence(record, evidence.id)).bytes] as const;
+    }));
+    for (const [id, bytes] of batch) assets.set(id, bytes);
+  }
+  return assets;
+}
+
+function historicalActivityPdfDates(row: ActivityPdfRow) {
+  const submitted = Date.parse(row.submitted_at);
+  const updated = Date.parse(row.updated_at);
+  // Existing clock-derived reports can only be replayed safely across a small,
+  // authoritative interval which contains the original render operation.
+  if (!Number.isFinite(submitted) || !Number.isFinite(updated) || updated < submitted || updated - submitted > 60_000) {
+    throw new Error("ACTIVITY_REPORT_INTEGRITY_FAILED");
+  }
+  const first = Math.floor(submitted / 1000) * 1000;
+  const last = Math.floor(updated / 1000) * 1000;
+  const dates = [new Date(first)];
+  if (last !== first) dates.push(new Date(last));
+  for (let value = last - 1000; value > first; value -= 1000) dates.push(new Date(value));
+  return dates;
+}
+
 export async function submitActivityRecord(access: TeamAccess, id: string, expectedRevision: unknown) {
   const previous = await loadActivityRecord(access, id, true); assertActivityEditable(previous, expectedRevision);
   if (activityUserActionableMissing(previous).length) throw new Error("ACTIVITY_FORM_INCOMPLETE");
-  const assets = new Map<string, Uint8Array>();
-  for (const evidence of previous.evidence) {
-    if (evidence.previewObjectKey && evidence.previewSha256) {
-      await readActivityEvidence(previous, evidence.id);
-      const preview = await bucket().get(evidence.previewObjectKey);
-      if (!preview) throw new Error("ACTIVITY_EVIDENCE_UNAVAILABLE");
-      const bytes = new Uint8Array(await preview.arrayBuffer());
-      if (activityHash(bytes) !== evidence.previewSha256) throw new Error("ACTIVITY_EVIDENCE_INTEGRITY_FAILED");
-      assets.set(evidence.id, bytes);
-    } else assets.set(evidence.id, (await readActivityEvidence(previous, evidence.id)).bytes);
-  }
+  const assets = await activityReportAssets(previous);
   const next: ActivityRecord = { ...previous, status: "submitted_for_creditex_review", submittedAt: iso() };
   const [{ renderActivityFieldPdf }, { loadCustomerPlanPdfFonts }] = await Promise.all([import("./trade-activity-forms-pdf.ts"), import("./customer-plan-pdf-fonts")]);
-  const bytes = await renderActivityFieldPdf(next, assets, await loadCustomerPlanPdfFonts());
+  const bytes = await renderActivityFieldPdf(next, assets, await loadCustomerPlanPdfFonts(), new Date(next.submittedAt));
   const key = `activity-field/${access.ownerUid}/${id}/final/${crypto.randomUUID()}.pdf`; const hash = activityHash(bytes);
   await bucket().put(key, bytes, { httpMetadata: { contentType: "application/pdf" }, customMetadata: { sha256: hash, fieldRecordId: id } });
-  try { return await saveRecord(access, previous, next, { key, hash }); } catch (error) { await bucket().delete(key); throw error; }
+  try { return await saveRecord(access, previous, next, { key, hash }); }
+  catch (error) {
+    // A D1 write can commit even when its response fails. Only delete the new
+    // immutable object after a successful read proves that the row did not
+    // retain this exact key and hash.
+    let committed: ActivityPdfRow | null;
+    try { committed = await activityPdfRow(id, access.ownerUid); } catch { throw error; }
+    if (committed?.status === "submitted_for_creditex_review"
+      && committed.pdf_object_key === key && committed.pdf_sha256 === hash) {
+      return immutableActivityPdfRecord(committed, id, access.ownerUid);
+    }
+    await bucket().delete(key);
+    throw error;
+  }
 }
 
 export async function readActivityConsumerDocument(version: string) {
@@ -844,14 +914,36 @@ export async function readActivityConsumerDocument(version: string) {
 }
 
 export async function readActivityPdf(record: ActivityRecord) {
-  const row = await getD1().prepare(`SELECT pdf_object_key, pdf_sha256 FROM trade_activity_field_records WHERE id = ? AND owner_uid = ? AND status = 'submitted_for_creditex_review'`)
-    .bind(record.id, record.ownerUid).first<{ pdf_object_key: string; pdf_sha256: string }>();
-  if (!row) throw new Error("ACTIVITY_REPORT_NOT_READY");
+  const row = await activityPdfRow(record.id, record.ownerUid);
+  if (!row || row.status !== "submitted_for_creditex_review") throw new Error("ACTIVITY_REPORT_NOT_READY");
+  const stored = immutableActivityPdfRecord(row, record.id, record.ownerUid);
   const object = await bucket().get(row.pdf_object_key);
-  if (!object) throw new Error("ACTIVITY_REPORT_UNAVAILABLE");
-  const bytes = new Uint8Array(await object.arrayBuffer());
-  if (activityHash(bytes) !== row.pdf_sha256) throw new Error("ACTIVITY_REPORT_INTEGRITY_FAILED");
-  return { bytes, contentType: "application/pdf", fileName: `${record.recordNumber}.pdf` };
+  if (object) {
+    const bytes = new Uint8Array(await object.arrayBuffer());
+    if (activityHash(bytes) !== row.pdf_sha256) throw new Error("ACTIVITY_REPORT_INTEGRITY_FAILED");
+    return { bytes, contentType: "application/pdf", fileName: `${stored.recordNumber}.pdf` };
+  }
+
+  const assets = await activityReportAssets(stored);
+  const [{ renderActivityFieldPdf }, { loadCustomerPlanPdfFonts }] = await Promise.all([import("./trade-activity-forms-pdf.ts"), import("./customer-plan-pdf-fonts")]);
+  const fonts = await loadCustomerPlanPdfFonts();
+  let recovered: Uint8Array | null = null;
+  for (const documentDate of historicalActivityPdfDates(row)) {
+    const candidate = await renderActivityFieldPdf(stored, assets, fonts, documentDate);
+    if (activityHash(candidate) === row.pdf_sha256) { recovered = candidate; break; }
+  }
+  if (!recovered) throw new Error("ACTIVITY_REPORT_INTEGRITY_FAILED");
+
+  // Do not overwrite an object that appeared while recovery was running.
+  const raced = await bucket().get(row.pdf_object_key);
+  if (raced) {
+    const bytes = new Uint8Array(await raced.arrayBuffer());
+    if (activityHash(bytes) !== row.pdf_sha256) throw new Error("ACTIVITY_REPORT_INTEGRITY_FAILED");
+    return { bytes, contentType: "application/pdf", fileName: `${stored.recordNumber}.pdf` };
+  }
+  await bucket().put(row.pdf_object_key, recovered, { httpMetadata: { contentType: "application/pdf" },
+    customMetadata: { sha256: row.pdf_sha256, fieldRecordId: stored.id } });
+  return { bytes: recovered, contentType: "application/pdf", fileName: `${stored.recordNumber}.pdf` };
 }
 
 export async function shareActivityReport(access: TeamAccess, id: string, origin: string, revoke = false) {

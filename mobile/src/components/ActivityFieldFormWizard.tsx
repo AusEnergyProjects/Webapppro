@@ -30,6 +30,18 @@ type PendingFile = { id: string; fieldKey: string; uri: string; name: string; co
 type PendingSignature = { declarationKey: string; declarationText: string; phase: 'before' | 'after'; role: 'customer' | 'technician' | 'other'; signerName: string; strokes: FieldWorkPackSignatureDraft['strokes'] };
 type Cache = { record: Presented; answers: ActivityAnswers; pending: PendingFile[]; pendingSignatures?: PendingSignature[]; stepKey: string; camera?: { fieldKey: string; metadata: CaptureMetadata } };
 type ApprovedProductOption = { value: string; label: string; count: number };
+
+function pendingSignatureToSync(
+  pending: readonly PendingSignature[],
+  requiredBeforeDeclarationKeys: ReadonlySet<string>,
+  currentSignatureKeys: ReadonlySet<string>,
+) {
+  const before = pending.find((item) => item.phase === 'before');
+  if (before) return before;
+  if ([...requiredBeforeDeclarationKeys].some((key) => !currentSignatureKeys.has(key))) return undefined;
+  return pending.find((item) => item.phase === 'after');
+}
+
 function signatureDraft(role: string, name: string): FieldWorkPackSignatureDraft {
   return { signerRoleKey: role, signerName: name, signerCapacity: role, identity: {}, strokes: [], capturedAt: '' };
 }
@@ -45,8 +57,35 @@ function rebaseUntouchedSignatureDraft(
   return signatureDraft(role, nextDefault);
 }
 
+function streamlinedActivityPages(source: ReturnType<typeof activityWizardPages>) {
+  const fieldPages = source.filter((page) => page.kind === 'fields');
+  const signaturePages: ReturnType<typeof activityWizardPages> = [];
+  const signerPageIndexes = new Map<string, number>();
+  const review = source.find((page) => page.kind === 'review');
+  for (const page of source) {
+    if (page.kind !== 'signature') continue;
+    if (!['customer', 'technician'].includes(page.declaration.role)) {
+      signaturePages.push(page);
+      continue;
+    }
+    const existingIndex = signerPageIndexes.get(page.declaration.role);
+    if (existingIndex === undefined) {
+      signerPageIndexes.set(page.declaration.role, signaturePages.length);
+      signaturePages.push(page);
+      continue;
+    }
+    const existing = signaturePages[existingIndex];
+    if (existing?.kind !== 'signature') continue;
+    signaturePages[existingIndex] = {
+      ...existing,
+      legacyStepKeys: [...new Set([...existing.legacyStepKeys, ...page.legacyStepKeys])],
+    };
+  }
+  return [...fieldPages, ...signaturePages, ...(review ? [review] : [])];
+}
+
 function availableStepKey(record: Presented, answers: ActivityAnswers, requested = '') {
-  const available = activityWizardPages(record.form, answers);
+  const available = streamlinedActivityPages(activityWizardPages(record.form, answers));
   return activityWizardPageForStepKey(available, requested)?.key || available[0]?.key || 'review';
 }
 
@@ -119,24 +158,41 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   const cacheKey = `activity-form:${workOrderId}:${intentId}`;
   const record = cache?.record;
   const steps = cache ? activityWizardSteps(cache.record.form, cache.answers) : [];
-  const pages = cache ? activityWizardPages(cache.record.form, cache.answers) : [];
+  const pages = cache ? streamlinedActivityPages(activityWizardPages(cache.record.form, cache.answers)) : [];
   const stepIndex = Math.max(0, pages.findIndex((item) => item.key === cache?.stepKey));
   const step = pages[stepIndex];
   const editable = record?.status === 'draft';
-  const currentSignature = step?.kind === 'signature' && !record?.missing.some((item) => item.kind === 'signature' && item.key === step.declaration.key)
-    ? [...(record?.signatures || [])].reverse().find((item) => item.declarationKey === step.declaration.key)
-    : undefined;
-  const pendingSignature = step?.kind === 'signature'
-    ? cache?.pendingSignatures?.find((item) => item.declarationKey === step.declaration.key)
-    : undefined;
-  const selectedActivity6Brands = record?.form.activityTemplateId === 'veu-6'
-    ? [...new Set(Object.entries(cache?.answers || {}).filter(([key, value]) => activityBaseFieldKey(key) === 'installed_product.brand' && typeof value === 'string' && value.trim()).map(([, value]) => String(value)))]
+  const signatureDeclarations = step?.kind === 'signature' && record
+    ? step.legacyStepKeys.flatMap((key) => {
+      const declaration = record.form.declarations.find((item) => item.key === key);
+      return declaration ? [declaration] : [];
+    })
     : [];
-  const selectedActivity6BrandsKey = selectedActivity6Brands.sort().join('\u0000');
+  const currentSignatureKeys = record ? activityCurrentSignatureKeys(record.signatures, record.missing) : new Set<string>();
+  const pendingSignatureKeys = new Set((cache?.pendingSignatures || []).map((item) => item.declarationKey));
+  const signatureGroupCurrent = signatureDeclarations.length > 0
+    && signatureDeclarations.every((declaration) => currentSignatureKeys.has(declaration.key));
+  const signatureGroupRetained = signatureDeclarations.length > 0
+    && signatureDeclarations.every((declaration) => currentSignatureKeys.has(declaration.key) || pendingSignatureKeys.has(declaration.key));
+  const currentSignature = step?.kind === 'signature' && signatureGroupCurrent
+    ? [...(record?.signatures || [])].reverse().find((item) => step.legacyStepKeys.includes(item.declarationKey))
+    : undefined;
+  const pendingSignature = step?.kind === 'signature' && !currentSignature && signatureGroupRetained
+    ? cache?.pendingSignatures?.find((item) => step.legacyStepKeys.includes(item.declarationKey))
+    : undefined;
+  const approvedBrandFieldKeys = new Set(record?.form.fields
+    .filter((field) => field.approvedProduct?.role === 'brand').map((field) => field.key) || []);
+  const hasApprovedProductSelector = approvedBrandFieldKeys.size > 0
+    && Boolean(record?.form.fields.some((field) => field.approvedProduct?.role === 'model'));
+  const selectedApprovedBrands = [...new Set(Object.entries(cache?.answers || {})
+    .filter(([key, value]) => approvedBrandFieldKeys.has(activityBaseFieldKey(key)) && typeof value === 'string' && value.trim())
+    .map(([, value]) => String(value)))];
+  const selectedApprovedBrandsKey = selectedApprovedBrands.sort().join('\u0000');
+  const approvedProductInstallationDate = String(cache?.answers['customer_property.installation_date'] || '');
 
   function remember(value: Cache) {
     const previous = cacheRef.current;
-    const target = activityWizardPageForStepKey(activityWizardPages(value.record.form, value.answers), value.stepKey);
+    const target = activityWizardPageForStepKey(streamlinedActivityPages(activityWizardPages(value.record.form, value.answers)), value.stepKey);
     value = { ...value, stepKey: target?.key || 'review' };
     if (previous?.stepKey !== value.stepKey) {
       setAcknowledged(false);
@@ -205,9 +261,9 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   }, [online]);
   useEffect(() => {
     const recordId = record?.id;
-    if (!online || !recordId || record.form.activityTemplateId !== 'veu-6') return;
+    if (!online || !recordId || !hasApprovedProductSelector || !approvedProductInstallationDate) return;
     let disposed = false;
-    const selectedBrands = selectedActivity6BrandsKey ? selectedActivity6BrandsKey.split('\u0000') : [];
+    const selectedBrands = selectedApprovedBrandsKey ? selectedApprovedBrandsKey.split('\u0000') : [];
     void (async () => {
       setProductsLoading(true);
       setProductsError('');
@@ -229,7 +285,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       }
     })();
     return () => { disposed = true; };
-  }, [online, record?.id, record?.form.activityTemplateId, selectedActivity6BrandsKey]);
+  }, [online, record?.id, hasApprovedProductSelector, approvedProductInstallationDate, selectedApprovedBrandsKey]);
   useEffect(() => {
     scroll.current?.scrollTo({ y: 0, animated: false });
   }, [cache?.stepKey, overview]);
@@ -272,7 +328,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
           setSignature((current) => ({ ...current, strokes: [], capturedAt: '' }));
           setAcknowledged(false);
           setError(caught.message);
-        } else setError('TLink refreshed the latest saved details. Check this signature page and try again.');
+        } else setError('TLink loaded the latest saved details automatically.');
       } else setError(caught instanceof Error ? caught.message : 'The action could not be completed. Your draft is retained.');
     }
     finally { actionRunning.current = false; setBusy(''); }
@@ -293,7 +349,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     await remember(next);
     return next;
   }
-  async function request(action: string, body: Record<string, unknown> = {}) {
+  async function request(action: string, body: Record<string, unknown> = {}): Promise<Cache> {
     const initial = cacheRef.current;
     if (!initial || !online) throw new Error('Reconnect to save this action. Your draft stays on this phone.');
     let latest: Cache = initial;
@@ -303,8 +359,10 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
           ...body, ...(action === 'save' ? { answers: latest.answers, baseAnswers: latest.record.answers } : {}) }) });
         return acceptResponse(latest, response.record);
       } catch (caught) {
-        if (!(caught instanceof ApiError) || caught.code !== 'ACTIVITY_REVISION_CONFLICT' || action !== 'save' || attempt === 2) throw caught;
+        const retryRevision = action === 'save' || action === 'submit';
+        if (!(caught instanceof ApiError) || caught.code !== 'ACTIVITY_REVISION_CONFLICT' || !retryRevision || attempt === 2) throw caught;
         const fresh = await latestRecord(latest.record.id);
+        if (fresh.status === 'submitted_for_creditex_review') return acceptResponse(latest, fresh);
         const cached = cacheRef.current;
         const current: Cache = cached?.record.id === latest.record.id ? cached : latest;
         const reconciliation = reconcileAnswers(latest.record.answers, current.answers, fresh);
@@ -315,6 +373,10 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
           stepKey: availableStepKey(fresh, reconciliation.merged, current.stepKey),
         };
         await remember(latest);
+        if (action === 'submit' && JSON.stringify(latest.answers) !== JSON.stringify(fresh.answers)) {
+          latest = await request('save');
+          if (latest.record.status === 'submitted_for_creditex_review') return latest;
+        }
       }
     }
     throw new Error('The activity form could not be saved.');
@@ -327,7 +389,10 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     const latest = cacheRef.current;
     if (!latest) return;
     const answers = { ...latest.answers, [field.key]: value };
-    delete answers[activityRepeatKey('installed_product.model', field.repeatIndex)];
+    for (const modelField of latest.record.form.fields.filter((candidate) => candidate.approvedProduct?.role === 'model'
+      && candidate.approvedProduct.brandFieldKey === field.baseKey)) {
+      delete answers[activityRepeatKey(modelField.key, field.repeatIndex)];
+    }
     void remember({ ...latest, answers }).catch(() => setError('Could not save the approved product on this phone. Keep this form open and try again.'));
   }
   async function saveAnswers() {
@@ -336,9 +401,16 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     await request('save', { answers: latest.answers });
   }
   async function syncPendingSignatures() {
-    for (const queued of [...(cacheRef.current?.pendingSignatures || [])]) {
-      let latest = cacheRef.current;
-      if (!latest) return;
+    while (true) {
+      const snapshot = cacheRef.current;
+      if (!snapshot) return;
+      const requiredBeforeDeclarationKeys = new Set(activityWizardPages(snapshot.record.form, snapshot.answers)
+        .flatMap((page) => page.kind === 'signature' && page.declaration.phase === 'before' && page.declaration.required
+          ? [page.declaration.key] : []));
+      const serverSignatureKeys = activityCurrentSignatureKeys(snapshot.record.signatures, snapshot.record.missing);
+      const queued = pendingSignatureToSync(snapshot.pendingSignatures || [], requiredBeforeDeclarationKeys, serverSignatureKeys);
+      if (!queued) return;
+      let latest = snapshot;
       const record = latest.record;
       const declaration = record.form.declarations.find((item) => item.key === queued.declarationKey);
       if (!declaration) throw new Error('This declaration changed. Open its signature section and sign it again.');
@@ -349,8 +421,9 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       }
       if (boundActivityDeclaration(declaration, latest.answers) !== queued.declarationText) throw new Error('This declaration changed. Open its signature section and sign it again.');
       for (let attempt = 0; attempt < 2; attempt += 1) {
-        latest = cacheRef.current;
-        if (!latest) return;
+        const current = cacheRef.current;
+        if (!current) return;
+        latest = current;
         try {
           await request('sign', { declarationKey: queued.declarationKey,
             signerName: queued.role === 'technician' ? latest.record.signerDefaults.technician : queued.signerName,
@@ -501,7 +574,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   async function move(delta: number) {
     const latest = cacheRef.current;
     if (!latest) return;
-    const currentSteps = activityWizardPages(latest.record.form, latest.answers);
+    const currentSteps = streamlinedActivityPages(activityWizardPages(latest.record.form, latest.answers));
     const index = Math.max(0, currentSteps.findIndex((item) => item.key === latest.stepKey));
     await remember({ ...latest, stepKey: currentSteps[Math.max(0, Math.min(currentSteps.length - 1, index + delta))].key });
   }
@@ -511,7 +584,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     const count = activityRepeatCount(latest.record.form, latest.answers, group);
     if (count >= 20) return;
     const answers = { ...latest.answers, [`$repeat.${group}`]: count + 1 };
-    const nextPage = activityWizardPages(latest.record.form, answers).find((page) => page.kind === 'fields'
+    const nextPage = streamlinedActivityPages(activityWizardPages(latest.record.form, answers)).find((page) => page.kind === 'fields'
       && page.fields.some((field) => field.repeatGroup === group && field.repeatIndex === count));
     await remember({ ...latest, answers, stepKey: nextPage?.key || latest.stepKey });
     queuePageSync([]);
@@ -546,7 +619,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
         }
         const pending = current.pending.filter((item) => currentFieldKeys.includes(item.fieldKey));
         const answers = removeLastActivityRepeat(current.record.form, current.answers, group);
-        const previousPage = [...activityWizardPages(current.record.form, answers)].reverse().find((page) => page.kind === 'fields'
+        const previousPage = [...streamlinedActivityPages(activityWizardPages(current.record.form, answers))].reverse().find((page) => page.kind === 'fields'
           && page.fields.some((field) => field.repeatGroup === group && field.repeatIndex === currentRemovedIndex - 1));
         await remember({ ...current, answers, pending: current.pending.filter((item) => !currentFieldKeys.includes(item.fieldKey)), stepKey: previousPage?.key || current.stepKey });
         for (const item of pending) { const file = new File(item.uri); if (file.exists) file.delete(); }
@@ -561,13 +634,13 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       if (moving.current) return;
       for (const field of step.fields) {
         const value = cacheRef.current?.answers[field.key];
-        const baseKey = activityBaseFieldKey(field.key);
-        if (record?.form.activityTemplateId === 'veu-6' && baseKey === 'installed_product.brand') {
+        if (field.approvedProduct?.role === 'brand') {
           if (productsLoading) return setError('The approved brand list is loading. Try Next again in a moment.');
           if (productsError || !approvedBrands.some((option) => option.value === value)) return setError(productsError || 'Choose an approved brand before continuing.');
         }
-        if (record?.form.activityTemplateId === 'veu-6' && baseKey === 'installed_product.model') {
-          const brand = String(cacheRef.current?.answers[activityRepeatKey('installed_product.brand', field.repeatIndex)] || '');
+        if (field.approvedProduct?.role === 'model') {
+          const brandFieldKey = field.approvedProduct.brandFieldKey;
+          const brand = brandFieldKey ? String(cacheRef.current?.answers[activityRepeatKey(brandFieldKey, field.repeatIndex)] || '') : '';
           if (productsLoading) return setError('The approved model list is loading. Try Next again in a moment.');
           if (productsError || !(approvedModels[brand] || []).some((option) => option.value === value)) return setError(productsError || 'Choose an approved model before continuing.');
         }
@@ -595,13 +668,25 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       const signerName = step.declaration.role === 'technician' ? latest.record.signerDefaults.technician : signature.signerName.trim();
       if (!signerName) return setError('Add the signer name before signing.');
       if (!signature.strokes.length) return setError('Draw the signature before saving it.');
-      const queued: PendingSignature = { declarationKey: step.declaration.key,
-        declarationText: boundActivityDeclaration(step.declaration, latest.answers), phase: step.declaration.phase,
-        role: step.declaration.role, signerName, strokes: signature.strokes };
-      const nextPages = activityWizardPages(latest.record.form, latest.answers);
+      const declarations = step.legacyStepKeys.flatMap((key) => {
+        const declaration = latest.record.form.declarations.find((item) => item.key === key);
+        return declaration ? [declaration] : [];
+      });
+      if (!declarations.length) return setError('This declaration is no longer part of the activity form.');
+      const alreadyCurrent = activityCurrentSignatureKeys(latest.record.signatures, latest.record.missing);
+      const queued = declarations.filter((declaration) => !alreadyCurrent.has(declaration.key)).map((declaration): PendingSignature => ({
+        declarationKey: declaration.key,
+        declarationText: boundActivityDeclaration(declaration, latest.answers),
+        phase: declaration.phase,
+        role: declaration.role,
+        signerName,
+        strokes: signature.strokes,
+      }));
+      const declarationKeys = new Set(declarations.map((declaration) => declaration.key));
+      const nextPages = streamlinedActivityPages(activityWizardPages(latest.record.form, latest.answers));
       const index = Math.max(0, nextPages.findIndex((item) => item.key === latest.stepKey));
       const transition = remember({ ...latest,
-        pendingSignatures: [...(latest.pendingSignatures || []).filter((item) => item.declarationKey !== queued.declarationKey), queued],
+        pendingSignatures: [...(latest.pendingSignatures || []).filter((item) => !declarationKeys.has(item.declarationKey)), ...queued],
         stepKey: nextPages[Math.min(nextPages.length - 1, index + 1)].key });
       setError('');
       if (online) queuePageSync([], true);
@@ -614,6 +699,16 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     });
   }
   async function leave() { await writes.current; await syncs.current; await onChanged(); onReturnToJob(); }
+  function finish() {
+    onReturnToJob();
+    void onChanged().catch(() => undefined);
+  }
+  async function submitCompletedActivity() {
+    await waitForBackgroundSync();
+    await saveAnswers();
+    await syncPendingSignatures();
+    await request('submit');
+  }
   async function share() {
     await perform('share', async () => {
       if (!record) return;
@@ -623,14 +718,48 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   }
 
   if (!record || !cache) return <View style={styles.body}><Text style={styles.title}>{busy ? 'Loading activity form…' : 'Activity form'}</Text>{error ? <Text style={styles.error}>{error}</Text> : null}<FieldButton variant="secondary" onPress={onReturnToJob}>Job</FieldButton></View>;
-  const title = step?.kind === 'fields' ? step.section : step?.kind === 'review' ? 'Review and submit' : step?.declaration.title || record.form.title;
+  const title = step?.kind === 'fields' ? step.section : step?.kind === 'review' ? 'Review and submit'
+    : step?.declaration.role === 'technician' ? `Installer declaration${signatureDeclarations.length > 1 ? 's' : ''} and sign-off`
+      : step?.declaration.role === 'customer' ? `Customer declaration${signatureDeclarations.length > 1 ? 's' : ''} and permission`
+        : step?.declaration.title || record.form.title;
+  const signatureReviewDeclaration = step?.kind === 'signature' && signatureDeclarations.length > 1
+    ? { ...step.declaration, title, text: `This one signature applies to all ${signatureDeclarations.length} declarations below.\n\n${signatureDeclarations.map((declaration, index) =>
+      `${index + 1}. ${declaration.title}\n${boundActivityDeclaration(declaration, cache.answers)}`).join('\n\n')}` }
+    : step?.kind === 'signature' ? step.declaration : null;
   const evidenceFieldKeys = new Set([...record.evidence.map((item) => item.fieldKey), ...cache.pending.map((item) => item.fieldKey)]);
   const signatureDeclarationKeys = new Set([...activityCurrentSignatureKeys(record.signatures, record.missing),
     ...(cache.pendingSignatures || []).map((item) => item.declarationKey)]);
   const overallProgress = activityProgress(steps, cache.answers, evidenceFieldKeys, signatureDeclarationKeys);
   const sections = activitySectionProgress(steps, cache.answers, evidenceFieldKeys);
-  const fieldMissing = record.missing.filter((item) => item.kind === 'signature' || record.form.fields
-    .find((field) => field.key === activityBaseFieldKey(item.key))?.presentation !== 'derived');
+  const fieldMissing = steps.flatMap((wizardStep) => {
+    if (wizardStep.kind !== 'field' || !wizardStep.field.required) return [];
+    const field = wizardStep.field;
+    const value = cache.answers[field.key];
+    const missingEvidence = ['photo', 'document'].includes(field.type) && !evidenceFieldKeys.has(field.key);
+    const missingAnswer = !['photo', 'document'].includes(field.type)
+      && (value === undefined || value === '' || (field.requiredValue !== undefined && value !== field.requiredValue));
+    const unapprovedBrand = field.approvedProduct?.role === 'brand'
+      && !approvedBrands.some((option) => option.value === value);
+    const approvedBrandFieldKey = field.approvedProduct?.brandFieldKey;
+    const selectedBrand = approvedBrandFieldKey
+      ? String(cache.answers[activityRepeatKey(approvedBrandFieldKey, field.repeatIndex)] || '') : '';
+    const unapprovedModel = field.approvedProduct?.role === 'model'
+      && !(approvedModels[selectedBrand] || []).some((option) => option.value === value);
+    return missingEvidence || missingAnswer || unapprovedBrand || unapprovedModel
+      ? [{ key: field.key, label: field.label, kind: missingEvidence ? 'evidence' : 'answer' }]
+      : [];
+  });
+  for (const signaturePage of pages.filter((page) => page.kind === 'signature')) {
+    const requiredKeys = signaturePage.legacyStepKeys.filter((key) => record.form.declarations
+      .some((declaration) => declaration.key === key && declaration.required));
+    if (requiredKeys.some((key) => !signatureDeclarationKeys.has(key))) {
+      fieldMissing.push({ key: signaturePage.key,
+        label: signaturePage.declaration.role === 'technician' ? `Installer declaration${requiredKeys.length > 1 ? 's' : ''} and sign-off`
+          : signaturePage.declaration.role === 'customer' ? `Customer declaration${requiredKeys.length > 1 ? 's' : ''} and permission`
+            : signaturePage.declaration.title,
+        kind: 'signature' });
+    }
+  }
   const currentSection = step?.kind === 'fields' ? sections.find((item) => item.key === `${step.phase}:${step.section}`) : undefined;
   const technicianSignature = step?.kind === 'signature' && step.declaration.role === 'technician';
   const boundSignerName = technicianSignature ? record.signerDefaults.technician : signature.signerName;
@@ -651,10 +780,11 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   const repeatItemHasSavedEvidence = record.evidence.some((item) => repeatItemKeys.includes(item.fieldKey));
   function renderField(field: ExpandedActivityField) {
     if (!record || !cache) return null;
-    const baseKey = activityBaseFieldKey(field.key);
-    const activity6Brand = record.form.activityTemplateId === 'veu-6' && baseKey === 'installed_product.brand';
-    const activity6Model = record.form.activityTemplateId === 'veu-6' && baseKey === 'installed_product.model';
-    const selectedBrand = String(cache.answers[activityRepeatKey('installed_product.brand', field.repeatIndex)] || '');
+    const approvedBrand = field.approvedProduct?.role === 'brand';
+    const approvedModel = field.approvedProduct?.role === 'model';
+    const approvedBrandFieldKey = field.approvedProduct?.brandFieldKey;
+    const selectedBrand = approvedBrandFieldKey
+      ? String(cache.answers[activityRepeatKey(approvedBrandFieldKey, field.repeatIndex)] || '') : '';
     const pendingHere = cache.pending.filter((item) => item.fieldKey === field.key);
     const savedHere = record.evidence.filter((item) => item.fieldKey === field.key);
     const evidenceForLabels = field.evidenceFor?.map((key) => record.form.fields.find((item) => item.key === key)?.label || key).filter(Boolean) || [];
@@ -664,8 +794,8 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
           {field.help ? <Text style={styles.text}>{field.help}</Text> : null}
           {(field.referenceDocuments || []).map((document) => { const url = new URL(document.url, API_BASE_URL).toString(); return <View key={url} style={styles.group}><Text style={styles.text}>{document.title}</Text><View style={styles.row}><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => void perform('document', async () => { await Linking.openURL(url); })}>Open document</FieldButton><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => void perform('document', async () => { await Share.share({ message: `${document.title}\n${url}`, url }); })}>Share copy</FieldButton></View></View>; })}
           {field?.presentation === 'derived' ? <View style={styles.derived}><Text style={styles.text}>{cache.answers[field.key] === undefined || cache.answers[field.key] === '' ? 'Recorded automatically by TLink.' : String(cache.answers[field.key])}</Text><Text style={styles.small}>This value comes from the job, business, assigned team member or signature record.</Text></View>
-            : activity6Brand ? <><FieldSelect label="Choose approved brand" value={String(cache.answers[field.key] ?? '')} options={approvedBrands} placeholder={productsLoading ? 'Loading approved brands…' : 'Choose approved brand'} onChange={(value) => answerApprovedBrand(field, value)} disabled={!editable || Boolean(busy) || productsLoading || Boolean(productsError)} />{productsError ? <Text style={styles.error}>{productsError}</Text> : null}</>
-              : activity6Model ? <><FieldSelect label="Choose approved model" value={String(cache.answers[field.key] ?? '')} options={approvedModels[selectedBrand] || []} placeholder={!selectedBrand ? 'Choose a brand first' : productsLoading ? 'Loading approved models…' : 'Choose approved model'} onChange={(value) => answer(field.key, value)} disabled={!editable || Boolean(busy) || !selectedBrand || productsLoading || Boolean(productsError)} />{productsError ? <Text style={styles.error}>{productsError}</Text> : null}</>
+            : approvedBrand ? <><FieldSelect label="Choose approved brand" value={String(cache.answers[field.key] ?? '')} options={approvedBrands} placeholder={productsLoading ? 'Loading approved brands…' : 'Choose approved brand'} onChange={(value) => answerApprovedBrand(field, value)} disabled={!editable || Boolean(busy) || productsLoading || Boolean(productsError)} />{productsError ? <Text style={styles.error}>{productsError}</Text> : null}</>
+              : approvedModel ? <><FieldSelect label="Choose approved model" value={String(cache.answers[field.key] ?? '')} options={approvedModels[selectedBrand] || []} placeholder={!selectedBrand ? 'Choose a brand first' : productsLoading ? 'Loading approved models…' : 'Choose approved model'} onChange={(value) => answer(field.key, value)} disabled={!editable || Boolean(busy) || !selectedBrand || productsLoading || Boolean(productsError)} />{productsError ? <Text style={styles.error}>{productsError}</Text> : null}</>
                 : field.type === 'boolean' ? <View style={styles.row}>{[true, false].map((value) => <Pressable key={String(value)} accessibilityRole="radio" accessibilityState={{ selected: cache.answers[field.key] === value }} disabled={!editable || Boolean(busy)} onPress={() => answer(field.key, value)} style={[styles.choice, cache.answers[field.key] === value && styles.selected]}><Text style={styles.text}>{value ? 'Yes' : 'No'}</Text></Pressable>)}</View>
                   : field.type === 'select' ? <FieldSelect label="Choose an answer" value={String(cache.answers[field.key] ?? '')} options={field.options.map((value) => ({ value, label: activityOptionLabel(value, field?.optionLabels?.[value]) }))} onChange={(value) => answer(field.key, value)} disabled={!editable || Boolean(busy)} /> : ['photo', 'document'].includes(field.type) ? <>
             {evidenceForLabels.length ? <Text style={styles.evidenceBinding}>Evidence for: {evidenceForLabels.join(', ')}</Text> : null}
@@ -715,11 +845,12 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
           <FieldButton variant="secondary" onPress={() => setReadingDeclaration(true)}>Read assignment form</FieldButton>
           <Modal visible={readingDeclaration} animationType="slide" onRequestClose={() => setReadingDeclaration(false)}>
             <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-              <ScrollView contentContainerStyle={styles.body}><ActivityAssignmentReview record={record} answers={cache.answers} declaration={step.declaration} /></ScrollView>
+              <ScrollView contentContainerStyle={styles.body}><ActivityAssignmentReview record={record} answers={cache.answers} declaration={signatureReviewDeclaration || step.declaration} /></ScrollView>
               <View style={styles.footer}><FieldButton style={styles.flex} onPress={() => setReadingDeclaration(false)}>Back to signature</FieldButton></View>
             </View>
           </Modal>
-          <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: acknowledged }} disabled={!editable || Boolean(busy)} onPress={() => setAcknowledged(!acknowledged)} style={styles.choice}><Text style={styles.text}>{acknowledged ? '☑' : '☐'} I have read and agree to this declaration.</Text></Pressable>
+          {signatureDeclarations.length > 1 ? <Text style={styles.small}>One signature confirms all {signatureDeclarations.length} declarations for this signer shown in the assignment form.</Text> : null}
+          <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: acknowledged }} disabled={!editable || Boolean(busy)} onPress={() => setAcknowledged(!acknowledged)} style={styles.choice}><Text style={styles.text}>{acknowledged ? '☑' : '☐'} I have read and agree to {signatureDeclarations.length > 1 ? 'these declarations' : 'this declaration'}.</Text></Pressable>
           {technicianSignature && !boundSignerName ? <View style={styles.deliveryRecovery}>
             <Text style={styles.progressLabel}>Set up your signing name once</Text>
             <Text style={styles.text}>Your team profile needs your personal name for signatures. It will be saved to Teams and filled automatically on future jobs.</Text>
@@ -734,15 +865,15 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
             </> : <Text style={styles.text}>The assigned technician needs to open this job on their own device, or have their personal name saved in Teams.</Text>}
           </View> : <SignatureCapture key={`${record.id}:${step.key}:${boundSignerName}`} signerRole={signerRole} declaration={boundActivityDeclaration(step.declaration, cache.answers)} showDeclaration={false} value={boundSignature} disabled={!editable || Boolean(busy)} onChange={setSignature} />}
         </> : <>
-          <Text style={styles.text}>{record.status === 'submitted_for_creditex_review' ? 'Submitted to Creditex. The completed record is saved with this job.' : `${fieldMissing.length} field item${fieldMissing.length === 1 ? '' : 's'} remaining.`}</Text>
+          <Text style={styles.text}>{record.status === 'submitted_for_creditex_review' ? 'Submitted to Creditex. The completed record is saved with this job.' : `${fieldMissing.length} required item${fieldMissing.length === 1 ? '' : 's'} remaining.`}</Text>
           {fieldMissing.slice(0, 8).map((item) => <FieldButton key={item.key} variant="secondary" onPress={() => { const target = activityWizardPageForStepKey(pages, item.key); if (target) void remember({ ...cache, stepKey: target.key }); }}>{item.label}</FieldButton>)}
           {fieldMissing.length > 8 ? <Text style={styles.small}>{fieldMissing.length - 8} more questions will follow.</Text> : null}
           {cache.pending.length ? <FieldButton disabled={!online || Boolean(busy)} onPress={() => void perform('upload', async () => { await syncs.current; await saveAnswers(); for (const key of new Set(cache.pending.map((item) => item.fieldKey))) await uploadPending(key); })}>Upload {cache.pending.length} pending files</FieldButton> : null}
-          {record.status === 'draft' ? <FieldButton disabled={!editable || !online || Boolean(busy) || cache.pending.length > 0} loading={busy === 'submit'} onPress={() => void perform('submit', async () => { await waitForBackgroundSync(); await saveAnswers(); await syncPendingSignatures(); await request('submit'); await onChanged(); })}>Submit completed form to Creditex</FieldButton> : <><FieldButton disabled={!online || Boolean(busy)} onPress={() => void share()}>Share completed report</FieldButton><FieldButton variant="secondary" onPress={() => void perform('revoke', async () => { await apiRequest(endpoint, { method: 'POST', body: JSON.stringify({ action: 'revoke_report', recordId: record.id }) }); setError('Previous report links have been revoked.'); })}>Revoke report links</FieldButton></>}
+          {record.status === 'draft' ? <FieldButton disabled={!editable || !online || Boolean(busy) || cache.pending.length > 0 || fieldMissing.length > 0} onPress={() => void perform('submit', submitCompletedActivity)}>{busy === 'submit' ? 'Finishing form…' : 'Submit completed form to Creditex'}</FieldButton> : <><FieldButton disabled={!online || Boolean(busy)} onPress={() => void share()}>Share completed report</FieldButton><FieldButton variant="secondary" onPress={() => void perform('revoke', async () => { await apiRequest(endpoint, { method: 'POST', body: JSON.stringify({ action: 'revoke_report', recordId: record.id }) }); setError('Previous report links have been revoked.'); })}>Revoke report links</FieldButton></>}
         </>}
       </>}
     </ScrollView>
-    {!overview ? <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy) || stepIndex === 0} onPress={() => void move(-1)}>Previous</FieldButton><FieldButton style={styles.flex} disabled={Boolean(busy) || step?.kind === 'review' || (technicianSignature && !boundSignerName)} loading={busy === 'next'} onPress={() => void next()}>{step?.kind === 'signature' && !currentSignature && !pendingSignature ? 'Save signature' : 'Next'}</FieldButton></View> : null}
+    {!overview ? <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy) || stepIndex === 0} onPress={() => void move(-1)}>Previous</FieldButton><FieldButton style={styles.flex} disabled={Boolean(busy) || (step?.kind === 'review' && record.status !== 'submitted_for_creditex_review') || (technicianSignature && !boundSignerName)} loading={busy === 'next'} onPress={() => step?.kind === 'review' && record.status === 'submitted_for_creditex_review' ? finish() : void next()}>{step?.kind === 'review' && record.status === 'submitted_for_creditex_review' ? 'Done' : step?.kind === 'signature' && !currentSignature && !pendingSignature ? 'Save signature' : 'Next'}</FieldButton></View> : null}
   </View>;
 }
 
