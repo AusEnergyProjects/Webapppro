@@ -2,7 +2,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Application from 'expo-application';
 import { Redirect } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Linking, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { FieldButton } from '@/components/field-button';
 import { Screen } from '@/components/screen';
@@ -155,7 +155,7 @@ export default function SignInScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={styles.flex}>
       <Screen>
         <StartupSettings />
         <View style={styles.brand}>
@@ -189,7 +189,7 @@ export default function SignInScreen() {
         </View>
         <Text style={styles.privacy}>Your PIN works once on this phone. Only jobs assigned to your TLink access are downloaded.</Text>
       </Screen>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

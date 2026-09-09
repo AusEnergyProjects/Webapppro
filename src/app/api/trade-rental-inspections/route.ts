@@ -22,7 +22,13 @@ import {
   RENTAL_ASSESSMENT_SCOPES,
 } from "@/lib/trade-rental-assessment.mjs";
 import { rentalEvidenceCapture, rentalEvidencePhotoCapture } from "@/lib/trade-rental-evidence.mjs";
-import { RENTAL_QUOTATION_FIELDS, rentalQuotation } from "@/lib/rental-quotation.mjs";
+import {
+  RENTAL_OBSERVATION_NUMBER_FIELDS,
+  RENTAL_OBSERVATION_SELECT_OPTIONS,
+  RENTAL_QUOTATION_FIELDS,
+  rentalObservationNumberIsValid,
+  rentalQuotation,
+} from "@/lib/rental-quotation.mjs";
 import { currentRentalModuleCredentialSnapshot, rentalModuleProfileAnswers } from "@/lib/trade-rental-credentials";
 import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
 import {
@@ -102,6 +108,24 @@ function responseObject(value: unknown) {
     const text = cleanAdminText(source[key], 500);
     if (text) result[key] = text;
   }
+  for (const key of Object.keys(RENTAL_OBSERVATION_NUMBER_FIELDS)) {
+    const value = source[key];
+    if (value === undefined || value === null || value === "") continue;
+    if (typeof value !== "string" && typeof value !== "number") throw new Error("RENTAL_OBSERVATION_RESPONSE_INVALID");
+    const text = String(value).trim();
+    if (!text) continue;
+    if (text.length > 500 || !rentalObservationNumberIsValid(text)) throw new Error("RENTAL_OBSERVATION_RESPONSE_INVALID");
+    result[key] = text;
+  }
+  for (const [key, options] of Object.entries(RENTAL_OBSERVATION_SELECT_OPTIONS)) {
+    const value = source[key];
+    if (value === undefined || value === null || value === "") continue;
+    if (typeof value !== "string") throw new Error("RENTAL_OBSERVATION_RESPONSE_INVALID");
+    const selected = value.trim();
+    if (!selected) continue;
+    if (!options.some((option) => option.value === selected)) throw new Error("RENTAL_OBSERVATION_RESPONSE_INVALID");
+    result[key] = selected;
+  }
   for (const key of ["credentialVerified", "responsiblePeopleNotified", "repairCompleted", "isolatedOrDisconnected"]) {
     if (source[key] !== undefined) result[key] = cleanBoolean(source[key]);
   }
@@ -166,6 +190,8 @@ function inspectionError(error: unknown) {
   if (code === "RENTAL_FINDING_REQUIRED") return adminJson({ ok: false, error: "Add a short description of what was observed or could not be checked." }, 400);
   if (code === "RENTAL_MUTATION_CONFLICT" || code === "ONLINE_MUTATION_CONFLICT") return adminJson({ ok: false, error: "This assessment changed on another device. Refresh before trying again." }, 409);
   if (code === "RENTAL_RESPONSE_TOO_LARGE") return adminJson({ ok: false, error: "The assessment response is too large." }, 413);
+  if (code === "RENTAL_OBSERVATION_RESPONSE_INVALID") return adminJson({ ok: false, code,
+    error: "Choose a listed observation option and enter measurements as zero or positive numbers." }, 400);
   if (code === "INVALID_RENTAL_ITEM_KEY") return adminJson({ ok: false, error: "The repeated assessment item is invalid." }, 400);
   if (code === "RENTAL_MODULES_INCOMPLETE") return adminJson({ ok: false, error: "Every selected module must pass its completion checks before the report can be issued." }, 409);
   if (code === "RENTAL_MODULE_SET_INVALID") return adminJson({ ok: false, error: "The attached assessment modules do not match the frozen job selection. Ask an administrator to repair the job before issuing." }, 409);
@@ -637,7 +663,13 @@ async function saveItem(context: InspectionContext, body: Row) {
       assessorMemberId: String(context.inspection.assessor_member_id || ""), moduleKey: specialistModuleKey,
       requiredCapability: gate, checkedAt: new Date().toISOString() });
     const credentialNumber = String(profile.licenceNumber || profile.qualificationNumber || "");
-    if (!credentialNumber) throw new Error("RENTAL_MODULE_CREDENTIAL_REQUIRED");
+    if (!credentialNumber) {
+      const credentialLabel = gate === "licensed_electrician" ? "electrician licence"
+        : gate === "licensed_gasfitter" ? "gasfitting credential" : "smoke alarm qualification";
+      return adminJson({ ok: false, code: "RENTAL_ITEM_CREDENTIAL_REQUIRED", moduleId, sectionKey, checkKey,
+        checkLabel: String(assessmentCheck.prompt), requiredCapability: gate,
+        error: `${String(parsedObject(located.section).title)}: marking this result as meeting the standard needs the assigned assessor's current ${credentialLabel}. Choose Specialist verification needed to save observations and photos for a professional to check.` }, 409);
+    }
     response.credentialVerified = true;
     response.credentialNumber = credentialNumber;
     response.credentialType = gate;

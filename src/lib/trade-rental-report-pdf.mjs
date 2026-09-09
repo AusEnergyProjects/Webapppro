@@ -1,7 +1,7 @@
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { publicRentalReportValue, rentalCheckIsReadiness } from "./trade-rental-assessment.mjs";
-import { RENTAL_QUOTATION_FIELDS, rentalQuotation } from "./rental-quotation.mjs";
+import { RENTAL_QUOTATION_FIELDS, RENTAL_OBSERVATION_NUMBER_FIELDS, rentalQuotation, rentalObservationResponseLabel } from "./rental-quotation.mjs";
 import { rentalImageWithinReportLimit } from "./trade-rental-image-dimensions.mjs";
 
 const PAGE_WIDTH = 595.28;
@@ -354,9 +354,7 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     const legacyValues = new Set(Object.values(quotation).map((value) => safe(value).trim()).filter(Boolean));
     for (const [key, value] of objectEntries(assessedItem?.response)) {
       const printable = typeof value === "boolean" ? (value ? "Yes" : "No") : safe(value);
-      if (!legacyValues.has(printable.trim())) keyValue(({
-        measurement: "Measurements", model: "Equipment and labels", limitationReason: "Observation limitation",
-      })[key] || label(key), printable);
+      if (Object.hasOwn(RENTAL_OBSERVATION_NUMBER_FIELDS, key) || !legacyValues.has(printable.trim())) keyValue(rentalObservationResponseLabel(key), printable);
     }
     if (assessedItem?.trigger) keyValue("Future requirement trigger", assessedItem.trigger);
     if (Number(finding.quantityMilli) > 0) keyValue("Quantity", `${Number(finding.quantityMilli) / 1000} ${finding.unitLabel || "each"}`);
@@ -419,7 +417,7 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
         if (item.locationLabel) keyValue("Location", item.locationLabel);
         if (item.publicNotes) keyValue("Report detail", item.publicNotes);
         for (const [key, value] of objectEntries(item.response)) {
-          keyValue(label(key), typeof value === "boolean" ? (value ? "Yes" : "No") : value);
+          keyValue(rentalObservationResponseLabel(key), typeof value === "boolean" ? (value ? "Yes" : "No") : value);
         }
         await evidenceBlock((snapshot.evidence || []).filter((entry) => entry.itemId === item.id));
         y -= 4;

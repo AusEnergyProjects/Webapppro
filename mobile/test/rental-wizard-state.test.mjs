@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
+import { rentalAssessorFields, rentalObservationNumberIsValid } from '../../src/lib/rental-quotation.mjs';
 
 const code = ts.transpileModule(readFileSync(new URL('../src/lib/rental-inspection.ts', import.meta.url), 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
@@ -51,9 +52,9 @@ test('photo linking cannot run before its upload reference has been saved locall
 const source = readFileSync(new URL('../src/components/rental-inspection-workflow.tsx', import.meta.url), 'utf8');
 
 test('rental metadata inputs remain visible above the device keyboard', () => {
-  assert.match(source, /automaticallyAdjustKeyboardInsets=\{Platform\.OS === 'ios'\}/);
+  assert.match(source, /<KeyboardAwareScrollView ref=\{scroll\}/);
   assert.match(source, /keyboardDismissMode="on-drag"/);
-  assert.match(source, /scrollResponderScrollNativeHandleToKeyboard\(event\.target, 96, true\)/);
+  assert.doesNotMatch(source, /scrollResponderScrollNativeHandleToKeyboard/);
 });
 
 test('camera is available before an answer exists and metadata mutations use the server revision contract', () => {
@@ -83,7 +84,7 @@ function saveEnvironment() {
   return {
     active: { id: 'module', revision: 1 }, item: { revision: 0, instanceKey: 'property', sortOrder: 0 }, storedItem: undefined,
     section: { key: 'bathroom' }, check: { key: 'bathroom', repeatBy: 'property', requiredEvidenceCount: 1, prompt: 'Bathroom condition' },
-    draft, data: { findings: [] }, evidence: [], RENTAL_ADVERSE_OUTCOMES: new Set(),
+    draft, data: { findings: [] }, evidence: [], RENTAL_ADVERSE_OUTCOMES: new Set(), rentalAssessorFields, rentalObservationNumberIsValid,
     workOrderId: 'job', key: 'draft', cacheRef: { current: { drafts: { draft }, answers: {} } },
     setSaves() {}, setCache() {}, persist: async () => {}, advanced: false,
     onChanged() { throw new Error('Parent network refresh must not block Next'); },
@@ -135,4 +136,72 @@ test('editing one property answer retains only dirty fields, without hidden prof
     cacheRef: { current: { drafts: {}, answers: { module: { areasNotAccessed: 'Garage' } } } }, setCache() {} };
   new Function('environment', `with (environment) { const exports = {}; ${compiled}; exports.changeAnswer('inspectionDate', '2026-09-09'); }`)(environment);
   assert.deepEqual(environment.cacheRef.current.answers.module, { areasNotAccessed: 'Garage', inspectionDate: '2026-09-09' });
+});
+
+function mountedNext(environment) {
+  const implementation = source.slice(source.indexOf('  async function next()'), source.indexOf('  async function saveMetadata()'));
+  const compiled = ts.transpileModule('export ' + implementation.trim(), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  return new Function('environment', 'with (environment) { const exports = {}; ' + compiled + '; return exports.next; }')(environment);
+}
+function nextEnvironment() {
+  const env = { draft: { outcome: 'meets', response: { applianceType: 'Split system' }, findingDescription: '', severity: 'required' },
+    check: { responseType: 'outcome' }, editable: true, page: 'answer', responseFields: [{ key: 'applianceType' }],
+    RENTAL_ADVERSE_OUTCOMES: new Set(['does_not_meet', 'specialist_verification_required']), calls: [],
+    detailIndex: 0, detailField: undefined };
+  env.setPage = (page) => { env.page = page; env.calls.push(page); };
+  env.setDetailIndex = (index) => { env.detailIndex = index; };
+  env.setError = (error) => env.calls.push(error);
+  env.perform = async (_name, action) => action();
+  env.saveAnswer = async () => { env.calls.push('saved'); };
+  env.advanceQuestion = () => { env.calls.push('advanced'); };
+  return env;
+}
+
+test('Next saves each ordinary heater check directly without showing the same equipment page again', async () => {
+  for (const key of ['main_living_heater', 'heater_operation', 'heater_efficiency', 'heating_2027_readiness']) {
+    const env = nextEnvironment(); env.check.key = key;
+    await mountedNext(env)();
+    assert.deepEqual(env.calls, ['saved'], key);
+  }
+});
+
+test('an explicitly tapped observation saves inline and immediate danger still requires its safety page', async () => {
+  const env = nextEnvironment(); env.draft.outcome = 'specialist_verification_required';
+  env.draft.findingDescription = 'Visible condition recorded; specialist verification needed';
+  await mountedNext(env)();
+  assert.deepEqual(env.calls, ['saved']);
+  env.calls.length = 0; env.draft.severity = 'immediate_safety_risk';
+  await mountedNext(env)();
+  assert.deepEqual(env.calls, ['safety']);
+});
+
+test('a missing observation and a missing licensed test result cannot be silently skipped', async () => {
+  const env = nextEnvironment(); env.draft.outcome = 'does_not_meet';
+  await mountedNext(env)();
+  assert.deepEqual(env.calls, ['Add a short note about what you saw or could not check.']);
+  env.calls.length = 0; env.draft.outcome = 'meets'; env.check.responseType = 'test_result';
+  await mountedNext(env)();
+  assert.deepEqual(env.calls, ['details']);
+  env.calls.length = 0; env.detailField = { key: 'testResult', required: true };
+  await mountedNext(env)();
+  assert.deepEqual(env.calls, ['Record this result before continuing.']);
+});
+
+test('queued read-only answers advance and compact controls use numeric keyboards rather than giant textareas', async () => {
+  const env = nextEnvironment(); env.editable = false;
+  await mountedNext(env)();
+  assert.deepEqual(env.calls, ['advanced']);
+  const control = source.slice(source.indexOf('function RentalObservationInput'), source.indexOf('function findingChoices'));
+  assert.match(control, /<FieldSelect/);
+  assert.match(control, /keyboardType=\{field.input === 'number' \? 'decimal-pad'/);
+  assert.match(control, /multiline=\{field.input === 'textarea'\}/);
+});
+
+test('invalid measurements stay editable on the phone instead of creating a queue conflict', async () => {
+  const env = saveEnvironment(); env.check.key = 'heating_2027_readiness'; env.draft.response.roomLengthMetres = '4..2';
+  env.enqueueRentalSave = () => { throw new Error('Invalid observation must not enter queue'); };
+  await assert.rejects(mountedSaveAnswer(env), /Enter a zero or positive number for room length/);
+  assert.equal(env.cacheRef.current.drafts.draft.response.roomLengthMetres, '4..2');
 });

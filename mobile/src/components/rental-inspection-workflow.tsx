@@ -3,10 +3,11 @@ import * as Crypto from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Image, Linking, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from '@/components/keyboard-aware-scroll-view';
 import { FieldButton } from '@/components/field-button';
 import { FieldSelect } from '@/components/field-select';
 import { FieldDatePicker } from '@/components/field-date-picker';
@@ -18,7 +19,7 @@ import { RENTAL_ADVERSE_OUTCOMES, RENTAL_OUTCOMES, RENTAL_READINESS_OUTCOMES, ne
   type RentalAssessmentModule, type RentalAssessmentSection } from '@/lib/rental-inspection';
 import { colours, radius, spacing } from '@/lib/theme';
 import type { FieldRentalInspectionSummary } from '@/lib/types';
-import { rentalQuotation, rentalAssessorFields, rentalFindingDescriptionLabel, rentalObservationBlockers } from '../../../src/lib/rental-quotation.mjs';
+import { rentalQuotation, rentalAssessorFields, rentalFindingDescriptionLabel, rentalObservationBlockers, rentalSharedObservationResponse, rentalObservationNumberIsValid } from '../../../src/lib/rental-quotation.mjs';
 import { acknowledgeRentalSave, loadRentalResult, discardRentalSave, enqueueRentalSave, getRentalSaveState,
   processRentalSaveQueue, requestWhenRentalSynced, subscribeRentalSaves,
   type RentalSaveRecord, type RentalQueuedPhoto } from '@/lib/rental-save-queue';
@@ -56,6 +57,28 @@ function RentalTextField({ label, value, onChange, editable, multiline = false, 
   return <View style={styles.field}><Text style={styles.label}>{label}</Text><TextInput editable={editable}
     style={[styles.input, multiline && styles.notes]} value={value} onChangeText={onChange} multiline={multiline} maxLength={maxLength ?? (multiline ? 4000 : 500)} /></View>;
 }
+type ObservationField = ReturnType<typeof rentalAssessorFields>[number];
+function RentalObservationInput({ field, value, editable, onChange }: {
+  field: ObservationField; value: unknown; editable: boolean; onChange: (value: string) => void;
+}) {
+  const text = String(value ?? '');
+  if (field.input === 'select') {
+    const options = field.options || [];
+    return <FieldSelect label={field.label} value={text} disabled={!editable} onChange={onChange}
+      options={text && !options.some((option) => option.value === text) ? [...options, { value: text, label: text }] : options} />;
+  }
+  return <View style={styles.field}><Text style={styles.label}>{field.label}{field.unit ? ' (' + field.unit + ')' : ''}</Text>
+    <TextInput accessibilityLabel={field.label} editable={editable} style={[styles.input, field.input === 'textarea' && styles.notes]}
+      value={text} onChangeText={onChange} multiline={field.input === 'textarea'}
+      keyboardType={field.input === 'number' ? 'decimal-pad' : 'default'} inputMode={field.input === 'number' ? 'decimal' : 'text'}
+      maxLength={field.input === 'number' ? 12 : 500} /></View>;
+}
+function findingChoices(outcome: string): string[] {
+  if (outcome === 'specialist_verification_required') return ['Visible condition recorded; specialist verification needed', 'Label unreadable', 'Could not safely check'];
+  if (outcome === 'not_accessible') return ['Access blocked', 'Area locked', 'Unsafe to access', 'Occupant did not allow access'];
+  if (outcome === 'exemption_evidence_pending') return ['Supporting document not available', 'Exemption evidence not provided'];
+  return ['Missing', 'Not working when checked', 'Visible damage', 'Worn or deteriorated', 'Gaps visible'];
+}
 export function RentalInspectionWorkflow({ workOrderId, summary, online, onChanged, onReturnToJob }: Props) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
@@ -70,6 +93,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [guidanceOpen, setGuidanceOpen] = useState(false);
+  const [editEquipmentKey, setEditEquipmentKey] = useState('');
   const [saves, setSaves] = useState<RentalSaveRecord[]>([]);
   const busyRef = useRef(false);
   const mounted = useRef(true);
@@ -190,8 +214,30 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const pendingPhotos = pendingSaves.reduce((total, entry) => total + entry.photos.filter((photo) => !photo.linked).length, 0);
   const queuedAnswer = [...pendingSaves].reverse().find((entry) => entry.draftKey === key);
   const queuedDraft = queuedAnswer && isDraft(queuedAnswer.draftSnapshot) ? queuedAnswer.draftSnapshot : undefined;
-  const draft = item ? cache.drafts[key] || queuedDraft || initialDraft(item, data) : undefined;
-  const responseFields = draft && draft.outcome && draft.outcome !== 'not_applicable' && check ? rentalAssessorFields(check) : [];
+  const baseDraft = item ? cache.drafts[key] || queuedDraft || initialDraft(item, data) : undefined;
+  const candidates: Parameters<typeof rentalSharedObservationResponse>[0]['candidates'] = [...(data.items || [])];
+  for (const record of saves) {
+    const body = record.body;
+    if (body.action !== 'save_item' || !isDraft(record.draftSnapshot)) continue;
+    candidates.push({ moduleId: String(body.moduleId), sectionKey: String(body.sectionKey), checkKey: String(body.checkKey), instanceKey: String(body.instanceKey),
+      locationLabel: record.draftSnapshot.locationLabel, outcome: record.draftSnapshot.outcome, response: record.draftSnapshot.response });
+  }
+  if (active) for (const [savedKey, savedDraft] of Object.entries(cache.drafts)) {
+    if (!savedKey.startsWith(draftPrefix(active))) continue;
+    const [sectionKey, index, ...instance] = savedKey.slice(draftPrefix(active).length).split(':');
+    const savedCheck = sections.find((entry) => entry.key === sectionKey)?.checks[Number(index)];
+    if (savedCheck) candidates.push({ moduleId: active.id, sectionKey, checkKey: savedCheck.key, instanceKey: instance.join(':'),
+      locationLabel: savedDraft.locationLabel, outcome: savedDraft.outcome, response: savedDraft.response });
+  }
+  const sharedObservation = rentalSharedObservationResponse({
+    target: { moduleId: active?.id || '', sectionKey: section?.key, checkKey: check?.key || '', instanceKey: cursor.instanceKey, locationLabel: baseDraft?.locationLabel },
+    candidates, currentResponse: baseDraft?.response || {},
+  });
+  const draft = baseDraft ? { ...baseDraft, response: sharedObservation.response } : undefined;
+  const responseFields = draft && draft.outcome && draft.outcome !== 'not_applicable' && check ? rentalAssessorFields(check).filter((entry) =>
+    (!entry.legacy || String(draft.response[entry.key] ?? '').trim())
+    && (!entry.showIf || entry.showIf.values.includes(String(draft.response[entry.showIf.key] ?? '')) || String(draft.response[entry.key] ?? '').trim())
+    && (!entry.shared || !sharedObservation.recordedKeys.includes(entry.key) || editEquipmentKey === key)) : [];
   const detailField = responseFields[detailIndex];
   const editable = data.permissions?.canEdit === true && active?.status !== 'complete'
     && (!['answer', 'details', 'finding', 'safety'].includes(page) || !queuedAnswer);
@@ -213,7 +259,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const evidence = item ? data.evidence?.filter((e) => e.itemId === item.id && e.status === 'active') || [] : [];
   function change(values: Partial<Draft>) {
     if (!draft) return;
-    const next = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts, [key]: { ...(cacheRef.current.drafts[key] || draft), ...values } } };
+    const next = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts, [key]: { ...(cacheRef.current.drafts[key] || draft), response: draft.response, ...values } } };
     cacheRef.current = next; setCache(next);
   }
   async function request(body: Record<string, unknown>) {
@@ -340,6 +386,12 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   async function saveAnswer() {
     if (!active || !item || !draft || !section || !check) return;
     if (!draft.outcome) throw new Error('Choose an answer.');
+    for (const responseField of rentalAssessorFields(check).filter((entry) => entry.input === 'number')) {
+      const value = String(draft.response[responseField.key] ?? '').trim();
+      if (value && !rentalObservationNumberIsValid(value)) {
+        throw new Error('Enter a zero or positive number for ' + responseField.label.toLowerCase() + '.');
+      }
+    }
     if (check.repeatBy !== 'property' && !draft.locationLabel.trim()) throw new Error('Add the room or item location.');
     if (draft.outcome === 'not_applicable' && !draft.publicNotes.trim()) throw new Error('Explain why this check does not apply.');
     const adverse = RENTAL_ADVERSE_OUTCOMES.has(draft.outcome);
@@ -384,19 +436,19 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     if (!draft || !check) return;
     if (!editable) return advanceQuestion();
     if (!draft.outcome) return setError('Choose an answer.');
-    if (page === 'answer' && responseFields.length) { setDetailIndex(0); setPage('details'); return; }
+    if (page === 'answer' && check.responseType !== 'outcome' && responseFields.length) { setDetailIndex(0); setPage('details'); return; }
     if (page === 'details') {
-      if (editable && detailField?.required && !String(draft.response[detailField.key] || '').trim()) return setError('Record this result before continuing.');
+      if (editable && detailField?.required && !String(draft.response[detailField.key] ?? '').trim()) return setError('Record this result before continuing.');
       if (check.responseType !== 'outcome' && detailIndex + 1 < responseFields.length) { setDetailIndex(detailIndex + 1); return; }
     }
-    if ((page === 'answer' || page === 'details') && RENTAL_ADVERSE_OUTCOMES.has(draft.outcome)) {
+    if (check.responseType !== 'outcome' && (page === 'answer' || page === 'details') && RENTAL_ADVERSE_OUTCOMES.has(draft.outcome)) {
       change({ findingDescription: draft.findingDescription.trim() ? draft.findingDescription : draft.publicNotes || String(draft.response.limitationReason || ''),
         quotation: { ...rentalQuotation(draft.quotation), measurements: draft.quotation?.measurements || String(draft.response.measurement || ''), specification: draft.quotation?.specification || [draft.response.make, draft.response.model].filter(Boolean).join(' ') },
         quantity: draft.quantity ?? String((data.findings?.find((finding) => finding.itemId === item?.id)?.quantityMilli || 0) / 1000),
         unitLabel: draft.unitLabel || data.findings?.find((finding) => finding.itemId === item?.id)?.unitLabel || 'each' });
       setPage('finding'); return;
     }
-    if (page === 'finding') {
+    if (page === 'finding' || (page === 'answer' && RENTAL_ADVERSE_OUTCOMES.has(draft.outcome))) {
       if (editable && !draft.findingDescription.trim()) return setError('Add a short note about what you saw or could not check.');
       if (draft.severity === 'immediate_safety_risk') { setPage('safety'); return; }
     }
@@ -451,8 +503,8 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   }
   function previous() {
     setError('');
-    if (page === 'safety') return setPage('finding');
-    if (page === 'finding') { if (responseFields.length) { setDetailIndex(responseFields.length - 1); return setPage('details'); } return setPage('answer'); }
+    if (page === 'safety') return setPage(check?.responseType === 'outcome' ? 'answer' : 'finding');
+    if (page === 'finding') { if (check?.responseType !== 'outcome' && responseFields.length) { setDetailIndex(responseFields.length - 1); return setPage('details'); } return setPage('answer'); }
     if (page === 'details') { if (detailIndex > 0) return setDetailIndex(detailIndex - 1); return setPage('answer'); }
     if (page === 'metadata' && metadataIndex > 0) return setMetadataIndex(metadataIndex - 1);
     if (page === 'answer' && section) {
@@ -466,13 +518,12 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   }
   return <View style={styles.shell}>
     <View style={styles.header}><Pressable disabled={Boolean(busy)} onPress={() => void leave()} style={styles.job}><MaterialCommunityIcons name="arrow-left" size={22} color={colours.green} /><Text style={styles.link}>Job</Text></Pressable><Text style={styles.reference}>{data.inspection?.inspectionNumber || summary.inspectionNumber}</Text><Text style={styles.status}>{busy ? 'Saving on phone...' : pendingSaves.length ? pendingSaves.some((entry) => entry.status === 'syncing') ? pendingPhotos ? `${pendingPhotos} photos syncing` : 'Syncing answers' : 'Saved on phone' : hasDraft ? 'Draft on phone' : 'Saved'}</Text></View>
-    <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.content}
-      automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled"
-      onFocus={(event) => scroll.current?.scrollResponderScrollNativeHandleToKeyboard(event.target, 96, true)}>
+    <KeyboardAwareScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.content}
+      keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
       {!loaded ? <Text style={styles.body}>Opening assessment...</Text> : !active ? <Text style={styles.body}>{error || (!online ? 'Reconnect once to open this assessment. Your draft is saved on this phone.' : 'This assessment is not available.')}</Text> : <>
       {!online ? <Text style={styles.small}>Working offline. Answers and photos stay on this phone and sync when reception returns.</Text> : null}
       {pendingSaves.length ? <View style={styles.syncNotice}><Text style={styles.small}>{pendingSaves.length} {pendingSaves.length === 1 ? 'answer' : 'answers'}{pendingPhotos ? ` and ${pendingPhotos} ${pendingPhotos === 1 ? 'photo' : 'photos'}` : ''} saved on this phone. You can keep assessing while they sync.</Text>
-        {pendingSaves.filter((entry) => entry.error).slice(0, 1).map((record) => <View key={record.id}><Text accessibilityRole="alert" style={styles.error}>{record.error}</Text>
+        {pendingSaves.filter((entry) => entry.error).slice(0, 1).map((record) => <View key={record.id}><Text accessibilityRole="alert" style={styles.error}>{record.draftKey === key || record === queuedMetadata ? record.error : 'A saved answer needs review. Your current check can continue.'}</Text>
           <FieldButton variant="quiet" onPress={() => openQueuedAnswer(record)}>Open saved answer</FieldButton>
           {record.status !== 'conflict' ? <FieldButton variant="quiet" disabled={!online} onPress={() => { void processRentalSaveQueue(workOrderId).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Could not sync. Your answers remain on this phone.')); }}>Retry sync</FieldButton> : null}
         </View>)}
@@ -525,7 +576,23 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
           </> : null}
           {check.assessmentPhase === 'energy_readiness_2027' ? <Text style={styles.small}>2027 energy readiness · {check.trigger}</Text> : null}
           <View style={styles.options}>{(check.assessmentPhase === 'energy_readiness_2027' || (!check.assessmentPhase && active.template.assessmentScope === 'energy_readiness_2027') ? RENTAL_READINESS_OUTCOMES : RENTAL_OUTCOMES).map((option) => <Pressable key={option.value} disabled={!editable || Boolean(busy)} onPress={() => change({ outcome: option.value })} style={[styles.option, draft.outcome === option.value && styles.selected]}><Text style={styles.categoryTitle}>{option.label}</Text></Pressable>)}</View>
-          {draft.outcome === 'not_applicable' ? <RentalTextField label="Why does this not apply?" value={draft.publicNotes} editable={editable && !busy} onChange={(v) => change({ publicNotes: v })} multiline /> : null}
+          {draft.outcome === 'not_applicable' ? <RentalTextField label="Why does this not apply?" value={draft.publicNotes} editable={editable && !busy} onChange={(v) => change({ publicNotes: v })} /> : null}
+          {check.credentialGate && check.credentialGate !== 'assigned_assessor' ? <Text style={styles.small}>Record what you can see and choose Specialist verification needed when licensed verification is needed.</Text> : null}
+          {check.responseType === 'outcome' && draft.outcome && draft.outcome !== 'not_applicable' ? <>
+            {sharedObservation.recordedKeys.length ? <View style={styles.syncNotice}>
+              <Text style={styles.small}>Equipment details already recorded{sharedObservation.recordedKeys.map((fieldKey) => String(draft.response[fieldKey] ?? '')).filter(Boolean).length ? ': ' + sharedObservation.recordedKeys.map((fieldKey) => String(draft.response[fieldKey] ?? '')).filter(Boolean).join(' · ') : '.'}</Text>
+              <Pressable disabled={!editable || Boolean(busy)} onPress={() => setEditEquipmentKey(editEquipmentKey === key ? '' : key)}><Text style={styles.link}>{editEquipmentKey === key ? 'Keep recorded details' : 'Edit equipment details'}</Text></Pressable>
+            </View> : null}
+            {responseFields.map((responseField) => <RentalObservationInput key={responseField.key} field={responseField} value={draft.response[responseField.key]} editable={editable && !busy}
+              onChange={(value) => change({ response: { ...draft.response, [responseField.key]: value } })} />)}
+          </> : null}
+          {check.responseType === 'outcome' && RENTAL_ADVERSE_OUTCOMES.has(draft.outcome) ? <>
+            <Text style={styles.label}>{rentalFindingDescriptionLabel(draft.outcome)}</Text>
+            <View style={styles.options}>{findingChoices(draft.outcome).map((choice) => <Pressable key={choice} disabled={!editable || Boolean(busy)}
+              onPress={() => change({ findingDescription: choice })} style={[styles.option, draft.findingDescription === choice && styles.selected]}><Text style={styles.categoryTitle}>{choice}</Text></Pressable>)}</View>
+            <RentalTextField label="Details, if needed" value={draft.findingDescription} editable={editable && !busy} onChange={(value) => change({ findingDescription: value })} />
+            <FieldButton variant={draft.severity === 'immediate_safety_risk' ? 'primary' : 'secondary'} disabled={!editable || Boolean(busy)} onPress={() => change({ severity: draft.severity === 'immediate_safety_risk' ? 'required' : 'immediate_safety_risk' })}>{draft.severity === 'immediate_safety_risk' ? 'Immediate danger flagged' : 'Flag an immediate danger'}</FieldButton>
+          </> : null}
           <View style={styles.photo}><Text style={styles.body}>{check.photoGuidance}</Text>{RENTAL_ADVERSE_OUTCOMES.has(draft.outcome) ? <Text style={styles.small}>Include an overview and close detail with a scale or readable label so the work can be quoted.</Text> : null}<FieldButton variant="secondary" disabled={!editable || Boolean(busy)} loading={busy === 'camera'} onPress={() => void capture()}>Take photo</FieldButton><Text style={styles.small}>{evidence.length} linked · {draft.photos.length} on this phone · {Math.max(check.requiredEvidenceCount, RENTAL_ADVERSE_OUTCOMES.has(draft.outcome) ? 2 : 0)} required{RENTAL_ADVERSE_OUTCOMES.has(draft.outcome) ? ' (at least 2 photos)' : ''}</Text>
           {draft.photos.map((p, index) => <View key={p.uri} style={styles.pendingPhoto}>
             <Image source={{ uri: p.uri }} style={styles.thumbnail} alt={`Pending photo ${index + 1}`} accessibilityLabel={`Pending photo ${index + 1}`} />
@@ -549,8 +616,8 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
             setCache(nextCache); cacheRef.current = nextCache; await persist(nextCache); setPage('categories');
           }) }])}>Discard unsaved item</FieldButton> : null}
         </> : page === 'details' && detailField ? <>
-          <Text style={styles.small}>{check.responseType === 'outcome' ? 'Measurements and equipment' : `Test details · ${detailIndex + 1} of ${responseFields.length}`}</Text>
-          {(check.responseType === 'outcome' ? responseFields : [detailField]).map((field) => <RentalTextField key={field.key} label={field.label} value={String(draft.response[field.key] || '')} editable={editable && !busy} onChange={(value) => change({ response: { ...draft.response, [field.key]: value } })} multiline maxLength={500} />)}
+          <Text style={styles.small}>Test details · {detailIndex + 1} of {responseFields.length}</Text>
+          <RentalObservationInput field={detailField} value={draft.response[detailField.key]} editable={editable && !busy} onChange={(value) => change({ response: { ...draft.response, [detailField.key]: value } })} />
         </> : page === 'finding' ? <>
           <RentalTextField label={rentalFindingDescriptionLabel(draft.outcome)} value={draft.findingDescription} editable={editable && !busy} onChange={(v) => change({ findingDescription: v })} multiline />
           <Text style={styles.small}>A short description is enough. The photos and measurements already recorded will appear with this note in the report.</Text>
@@ -563,7 +630,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       </>}
       {(page === 'metadata' ? queuedMetadata : queuedAnswer)?.status === 'conflict' ? <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => void reviewQueuedAnswer()}>Review saved answer</FieldButton> : null}
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-    </ScrollView>
+    </KeyboardAwareScrollView>
     {page !== 'categories' ? <View style={[styles.footer, { paddingBottom: Math.max(12, insets.bottom) }]}><FieldButton variant="secondary" style={styles.flex} disabled={Boolean(busy)} onPress={previous}>Previous</FieldButton>
       {page === 'metadata' ? <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'metadata'} onPress={() => { if (editable) void saveMetadata(); else if (metadataIndex + 1 < metadata.length) setMetadataIndex(metadataIndex + 1); else setPage('review'); }}>Next</FieldButton> : page === 'review' ? <FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => setPage('categories')}>Categories</FieldButton> : <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'save'} onPress={() => void next()}>Next</FieldButton>}
     </View> : null}
@@ -575,7 +642,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 }, content: { padding: spacing.md, gap: 14, paddingBottom: 24 }, flex: { flex: 1 }, title: { color: colours.ink, fontSize: 21, fontWeight: '700', lineHeight: 28 },
   body: { color: colours.muted, fontSize: 14, lineHeight: 20 }, small: { color: colours.muted, fontSize: 12, lineHeight: 18 }, label: { color: colours.ink, fontWeight: '600' },
   field: { gap: 8 }, input: { color: colours.ink, backgroundColor: colours.surface, borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm, padding: 12, minHeight: 48 },
-  notes: { minHeight: 110, textAlignVertical: 'top' }, category: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm, padding: 14, backgroundColor: colours.surface },
+  notes: { minHeight: 72, maxHeight: 120, textAlignVertical: 'top' }, category: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm, padding: 14, backgroundColor: colours.surface },
   categoryTitle: { color: colours.ink, fontSize: 15, fontWeight: '600' }, options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   option: { minWidth: '46%', flexGrow: 1, flexBasis: '46%', minHeight: 54, justifyContent: 'center', padding: 12, borderRadius: radius.sm, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.surface },
   selected: { borderColor: colours.green, backgroundColor: colours.mintStrong }, link: { color: colours.green, fontSize: 15, fontWeight: '600', paddingVertical: 8 },

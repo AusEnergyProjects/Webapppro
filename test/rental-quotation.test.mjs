@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalObservationBlockers, rentalObservationFields, rentalAssessorFields, rentalFindingDescriptionLabel } from "../src/lib/rental-quotation.mjs";
+import { readFile } from "node:fs/promises";
+import ts from "typescript";
+import * as React from "react";
+import * as jsxRuntime from "react/jsx-runtime";
+import { renderToStaticMarkup } from "react-dom/server";
+import * as quotationModule from "../src/lib/rental-quotation.mjs";
+import * as assessmentModule from "../src/lib/trade-rental-assessment.mjs";
+import { RENTAL_QUOTATION_FIELDS, RENTAL_OBSERVATION_NUMBER_FIELDS, rentalQuotation, rentalObservationBlockers, rentalObservationFields, rentalAssessorFields, rentalFindingDescriptionLabel, rentalObservationGroup, rentalSharedObservationResponse, rentalObservationResponseLabel } from "../src/lib/rental-quotation.mjs";
 import { rentalAssessmentTemplateSnapshot, rentalAssessmentCompletion, rentalCheckIsReadiness, rentalRegimeAssessment } from "../src/lib/trade-rental-assessment.mjs";
 
 const quotation = { status: "ready", measurements: "6 x 4 m = 24 m2, tape measured", specification: "R5 to bare area", access: "Hallway hatch; electrical clearance before work", exclusions: "Electrical rectification separately quoted" };
@@ -60,7 +67,7 @@ test("electrical referral has no trade-writing wall and cannot bypass licensed v
   input.items[0].outcome = "meets";
   assert.match(rentalAssessmentCompletion(input).blockers.map((blocker) => blocker.label).join(" "), /specialist credential/);
   const testCheck = { key: "rcd_testing", responseType: "test_result", responseFields: [{ key: "testResult", label: "Measured result", required: true }] };
-  assert.deepEqual(rentalAssessorFields(testCheck), testCheck.responseFields);
+  assert.deepEqual(rentalAssessorFields(testCheck), testCheck.responseFields.map((field) => ({ ...field, input: "textarea" })));
   input.moduleTemplate.sections[0].checks = [{ ...testCheck, required: true, repeatBy: "property", credentialGate: "licensed_electrician" }];
   input.items[0].checkKey = "rcd_testing";
   input.items[0].responseJson = { credentialVerified: true, credentialNumber: "REC-123" };
@@ -84,13 +91,110 @@ test("practical observation prompts cover safe assessor measurements without inv
     assert.ok(fields.some((field) => field.key === "limitationReason"), key);
     assert.equal(new Set(fields.map((field) => field.key)).size, fields.length);
   }
-  assert.match(rentalObservationFields("shower_2027_readiness").find((field) => field.key === "measurement").label, /litres\/minute.*timed seconds/);
-  assert.match(rentalObservationFields("ceiling_2027_readiness").find((field) => field.key === "model").label, /Depth alone does not prove R-value/);
+  const showerFields = rentalObservationFields("shower_2027_readiness");
+  assert.deepEqual(showerFields.filter((field) => field.input === "number").map((field) => [field.key, field.unit]), [["flowLitresPerMinute", "L/min"], ["collectedLitres", "L"], ["flowSeconds", "seconds"]]);
+  assert.equal(rentalObservationFields("ceiling_2027_readiness").find((field) => field.key === "insulationType").input, "select");
   assert.equal(rentalObservationFields("switchboard_observation").some((field) => field.key === "measurement"), false);
   assert.match(rentalFindingDescriptionLabel("not_accessible"), /could not be checked/);
   assert.match(rentalFindingDescriptionLabel("specialist_verification_required"), /could you see/);
   const oldCheck = { key: "ceiling_2027_readiness", responseType: "outcome", responseFields: [{ key: "measurement", label: "Target R-value and installation specification", required: false }] };
   assert.doesNotMatch(JSON.stringify(rentalAssessorFields(oldCheck)), /installation specification|target R-value|making good|service route/i);
+});
+
+test("structured observations retain explicit units and accept safe measurements without narrative", () => {
+  const input = { checkKey: "heating_2027_readiness", outcome: "does_not_meet", photoCount: 2, finding: { details: {} } };
+  assert.deepEqual(rentalObservationBlockers({ ...input, response: { roomLengthMetres: "4.2", roomWidthMetres: "3", roomHeightMetres: "2.4" } }), []);
+  assert.deepEqual(rentalObservationBlockers({ ...input, response: { limitationStatus: "Unsafe to measure" } }), []);
+  assert.ok(rentalObservationBlockers({ ...input, response: { roomLengthMetres: "not a number" } }).length);
+  assert.ok(rentalObservationBlockers({ ...input, response: { limitationStatus: "Label unreadable" } }).length, "An unreadable label does not replace room measurements");
+  assert.deepEqual(rentalObservationBlockers({ ...input, checkKey: "shower_2027_readiness", response: { flowLitresPerMinute: "0" } }), [], "No flow is a recordable measured value");
+  for (const [key, unit] of Object.entries(RENTAL_OBSERVATION_NUMBER_FIELDS)) if (unit) assert.ok(rentalObservationResponseLabel(key).endsWith(`(${unit})`));
+  const heater = rentalAssessorFields({ key: "main_living_heater" });
+  assert.equal(heater.find((field) => field.key === "applianceType").input, "select");
+  assert.ok(heater.find((field) => field.key === "applianceType").options.every((option) => option.value === option.label));
+  assert.ok(heater.every((field) => field.input !== "textarea"));
+  for (const value of ["", "  ", "0", "4.2", ".5", 0, 2.4]) assert.equal(quotationModule.rentalObservationNumberIsValid(value), true);
+  for (const value of ["1e3", "1,000", "-1", "Infinity", true, {}, []]) assert.equal(quotationModule.rentalObservationNumberIsValid(value), false);
+});
+
+test("heater identity is captured once, including skipped optional fields, while results remain independent", () => {
+  const target = { moduleId: "module", sectionKey: "heating", checkKey: "heating_2027_readiness", instanceKey: "property", locationLabel: "" };
+  const source = { ...target, checkKey: "main_living_heater", outcome: "meets", response: { applianceType: "Gas heater", model: "Older readable label text", credentialNumber: "PRIVATE", testResult: "PASS", limitationReason: "Only this check was obstructed", outcome: "meets" } };
+  const result = rentalSharedObservationResponse({ target, candidates: [source], currentResponse: { measurement: "Earlier room notes" } });
+  assert.equal(rentalObservationGroup(target.checkKey), rentalObservationGroup(source.checkKey));
+  assert.deepEqual(result.response, { measurement: "Earlier room notes", applianceType: "Gas heater", model: "Older readable label text" });
+  assert.deepEqual(result.recordedKeys, ["applianceType", "model", "serialNumber"]);
+  assert.equal(result.sourceCheckKey, "main_living_heater");
+  assert.equal(rentalAssessorFields({ key: "heater_efficiency" }).filter((field) => field.shared && !result.recordedKeys.includes(field.key)).length, 0, "Blank optional serial is not asked on every check");
+  const blank = rentalSharedObservationResponse({ target, candidates: [{ ...source, response: {} }], currentResponse: {} });
+  assert.equal(blank.recordedKeys.length, 3);
+  assert.deepEqual(blank.response, {});
+  assert.deepEqual(source.response.model, "Older readable label text", "Reading reusable defaults never mutates the source");
+});
+
+test("shared defaults refuse other assets, rooms, instances, modules and conflicting equipment", () => {
+  const target = { moduleId: "module", sectionKey: "heating", checkKey: "heater_efficiency", instanceKey: "heater-1", locationLabel: "Living room" };
+  const source = { ...target, checkKey: "main_living_heater", outcome: "meets", response: { applianceType: "Gas heater", model: "MODEL-A", serialNumber: "SERIAL-A" } };
+  for (const changed of [{ moduleId: "other-module" }, { instanceKey: "heater-2" }, { locationLabel: "Bedroom" }, { checkKey: "cooling_2027_readiness" }, { outcome: "not_assessed" }]) {
+    assert.deepEqual(rentalSharedObservationResponse({ target, candidates: [{ ...source, ...changed }], currentResponse: {} }).response, {}, JSON.stringify(changed));
+  }
+  for (const currentResponse of [{ model: "MODEL-B" }, { serialNumber: "SERIAL-B" }, { applianceType: "Split system" }]) {
+    assert.deepEqual(rentalSharedObservationResponse({ target, candidates: [source], currentResponse }).response, currentResponse);
+  }
+  assert.deepEqual(rentalSharedObservationResponse({ target: { ...target, locationLabel: "" }, candidates: [{ ...source, locationLabel: "" }], currentResponse: {} }).response, {}, "Unnamed repeatable assets cannot be matched");
+  assert.equal(rentalSharedObservationResponse({ target, candidates: [{ ...source, locationLabel: "  LIVING   room " }], currentResponse: {} }).response.model, "MODEL-A");
+  const currentResponse = { model: "", actionTaken: "Own observation remains" };
+  assert.deepEqual(rentalSharedObservationResponse({ target, candidates: [source], currentResponse }).response, { ...currentResponse, applianceType: "Gas heater", serialNumber: "SERIAL-A" }, "An explicitly cleared current field stays cleared");
+});
+
+test("latest queued or local shared capture supersedes older saved values without reviving blanks", () => {
+  const target = { moduleId: "module", checkKey: "heater_efficiency", instanceKey: "property", locationLabel: "" };
+  const source = { ...target, checkKey: "main_living_heater", outcome: "meets", response: { model: "OLD MODEL" } };
+  const newer = { ...source, response: { model: "NEW MODEL" } };
+  assert.equal(rentalSharedObservationResponse({ target, candidates: [source, newer] }).response.model, "NEW MODEL");
+  assert.deepEqual(rentalSharedObservationResponse({ target, candidates: [source, { ...newer, response: {} }] }).response, {});
+  assert.deepEqual(rentalSharedObservationResponse({ target, candidates: [source, { ...newer, outcome: "not_assessed" }] }).recordedKeys, []);
+  assert.deepEqual(rentalSharedObservationResponse({ target, candidates: [source, { ...newer, locationLabel: "Other room" }] }).response, {}, "A moved latest record must not expose an obsolete location snapshot");
+  const template = rentalAssessmentTemplateSnapshot(["minimum_standards"]).modules.minimum_standards;
+  const showerChecks = template.sections.flatMap((section) => section.checks).filter((check) => ["showerhead_rating", "shower_2027_readiness"].includes(check.key));
+  assert.ok(showerChecks.every((check) => check.repeatBy === "shower"));
+  assert.equal(showerChecks.length, 2);
+});
+
+test("web markup uses compact controls and removes already captured equipment fields on later heater checks", async () => {
+  const source = (await readFile(new URL("../src/components/TradeRentalInspectionPanel.tsx", import.meta.url), "utf8"))
+    .replace("function AssessmentItemCard(", "export function AssessmentItemCard(");
+  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
+  const record = { exports: {} };
+  const dependencies = {
+    react: React, "react/jsx-runtime": jsxRuntime,
+    "@/lib/rental-quotation.mjs": quotationModule,
+    "@/lib/trade-rental-assessment.mjs": assessmentModule,
+    "./TradeRentalInspectionPanel.module.css": { __esModule: true, default: new Proxy({}, { get: (_target, key) => String(key) }) },
+  };
+  new Function("require", "module", "exports", compiled)((id) => {
+    if (!(id in dependencies)) throw new Error(`Unexpected web test dependency: ${id}`);
+    return dependencies[id];
+  }, record, record.exports);
+  const template = rentalAssessmentTemplateSnapshot(["minimum_standards"]).modules.minimum_standards;
+  const section = template.sections.find((entry) => entry.key === "heating");
+  const baseItem = { id: "", moduleId: "module", sectionKey: "heating", checkKey: "main_living_heater", instanceKey: "property", locationLabel: "", outcome: "meets", response: {}, revision: 0, publicNotes: "", requiredEvidenceCount: 1 };
+  const props = { module: { id: "module", template }, section, item: baseItem, evidence: [], observationCandidates: [], busy: "", readOnly: false,
+    onSave() {}, onUpload() {}, onUnlink() {}, onDirtyChange() {}, onRegisterDraft() {}, onObservationChange() {} };
+  const render = (key, candidates = []) => renderToStaticMarkup(React.createElement(record.exports.AssessmentItemCard, { ...props, check: section.checks.find((entry) => entry.key === key), item: { ...baseItem, checkKey: key }, observationCandidates: candidates }));
+  const first = render("main_living_heater");
+  assert.match(first, /<select[^>]*name="applianceType"/);
+  assert.match(first, /<input[^>]*name="model"/);
+  assert.doesNotMatch(first, /<textarea[^>]*name="(?:model|serialNumber)"/);
+  const candidates = [{ ...baseItem, id: "saved-heater", response: { applianceType: "Gas heater", model: "Recorded MODEL-42" } }];
+  const later = render("heater_efficiency", candidates);
+  assert.match(later, /Equipment details already recorded/);
+  assert.match(later, /Recorded MODEL-42/);
+  assert.doesNotMatch(later, /<(?:input|select|textarea)[^>]*name="(?:model|serialNumber|applianceType)"/);
+  const future = render("heating_2027_readiness", candidates);
+  assert.match(future, /<input(?=[^>]*type="number")(?=[^>]*name="roomLengthMetres")[^>]*>/);
+  assert.match(future, /Room length \(m\)/);
+  assert.doesNotMatch(future, /<(?:input|select|textarea)[^>]*name="(?:model|serialNumber|applianceType|measurement)"/);
 });
 
 test("completion permits honest limited observations but never infers the applicable rental regime", () => {

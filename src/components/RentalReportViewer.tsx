@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
-import { RENTAL_QUOTATION_FIELDS, rentalQuotation } from "@/lib/rental-quotation.mjs";
+import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalObservationResponseLabel } from "@/lib/rental-quotation.mjs";
 import { useEffect, useMemo, useState } from "react";
 import styles from "./RentalReportViewer.module.css";
 
@@ -309,7 +309,7 @@ export function RentalReportViewer({ token }: { token: string }) {
               <h4>{item.prompt}</h4>
               {item.trigger && <p>Applies when: {item.trigger}</p>}
               {item.publicNotes && <p>{item.publicNotes}</p>}
-              {visibleEntries(item.response).length > 0 && <dl>{visibleEntries(item.response).map(([key, value]) => <div key={key}><dt>{displayLabel(key)}</dt><dd>{typeof value === "boolean" ? value ? "Yes" : "No" : String(value)}</dd></div>)}</dl>}
+              {visibleEntries(item.response).length > 0 && <dl>{visibleEntries(item.response).map(([key, value]) => <div key={key}><dt>{rentalObservationResponseLabel(key)}</dt><dd>{typeof value === "boolean" ? value ? "Yes" : "No" : String(value)}</dd></div>)}</dl>}
               <EvidenceGallery entries={report.evidence.filter((entry) => entry.itemId === item.id)} />
             </article>)}</div>
           </section>)}

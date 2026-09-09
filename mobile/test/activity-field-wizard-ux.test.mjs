@@ -204,7 +204,9 @@ test('the native wizard uses Expo 57 File parts and hierarchical back navigation
   assert.match(wizard, /await waitForBackgroundSync\(\)/);
   assert.doesNotMatch(wizard, /disabled=\{[^}]*syncing/);
   assert.match(wizard, /disabled=\{!editable \|\| Boolean\(busy\) \|\| repeatItemHasSavedEvidence\}/);
-  assert.match(wizard, /scrollResponderScrollNativeHandleToKeyboard\(event\.target, 96, true\)/);
+  assert.match(wizard, /import \{ KeyboardAwareScrollView \} from '@\/components\/keyboard-aware-scroll-view'/);
+  assert.match(wizard, /<KeyboardAwareScrollView/);
+  assert.doesNotMatch(wizard, /scrollResponderScrollNativeHandleToKeyboard/);
   assert.match(wizard, /const transition = move\(1\);[\s\S]{0,100}if \(online\) queuePageSync\(fieldKeys\);[\s\S]{0,80}await transition;/);
   assert.match(wizard, /const syncWorkerRunning = useRef\(false\)/);
   assert.match(wizard, /const pendingSyncKeys = useRef\(new Set<string>\(\)\)/);

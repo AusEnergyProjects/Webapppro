@@ -17,48 +17,125 @@ export function rentalQuotation(value) {
   return fields;
 }
 
+export const RENTAL_OBSERVATION_NUMBER_FIELDS = Object.freeze({
+  roomLengthMetres: "m", roomWidthMetres: "m", roomHeightMetres: "m", widthMm: "mm", heightMm: "mm", depthMm: "mm",
+  areaSquareMetres: "m2", sealLengthMetres: "m", flowLitresPerMinute: "L/min", collectedLitres: "L", flowSeconds: "seconds",
+  count: "", workingBurners: "", insulationDepthMm: "mm", hatchWidthMm: "mm", accessWidthMm: "mm",
+});
+export function rentalObservationNumberIsValid(value) {
+  if (value === undefined || value === null) return true;
+  if (typeof value === "number") return Number.isFinite(value) && value >= 0;
+  if (typeof value !== "string") return false;
+  const text = value.trim();
+  return !text || (/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(text) && Number.isFinite(Number(text)));
+}
+export function rentalObservationResponseLabel(key) {
+  const names = { roomLengthMetres: "Room length", roomWidthMetres: "Room width", roomHeightMetres: "Ceiling height", widthMm: "Width", heightMm: "Height", depthMm: "Depth", areaSquareMetres: "Bare ceiling area", sealLengthMetres: "Affected edge length", flowLitresPerMinute: "Water flow", collectedLitres: "Water collected", flowSeconds: "Collection time", count: "Count", workingBurners: "Working burners", insulationDepthMm: "Insulation depth", hatchWidthMm: "Hatch width", accessWidthMm: "Clear access width", model: "Equipment and labels", measurement: "Measurements", limitationReason: "Observation limitation" };
+  const name = names[key] || String(key).replace(/([a-z0-9])([A-Z])/g, "$1 $2").replaceAll("_", " ").replace(/^\w/, (character) => character.toUpperCase());
+  const unit = RENTAL_OBSERVATION_NUMBER_FIELDS[key];
+  return unit ? `${name} (${unit})` : name;
+}
+/** @param {string[]} labels @returns {Array<{value: string, label: string}>} */
+const choices = (labels) => labels.map((label) => ({ value: label, label }));
+export const RENTAL_OBSERVATION_SELECT_OPTIONS = Object.freeze({
+  accessStatus: choices(["Clear access", "Narrow or obstructed", "Not accessed"]),
+  limitationStatus: choices(["No limitation", "Not accessible", "Unsafe to measure", "Label unreadable", "Other"]),
+  insulationType: choices(["Batts", "Loose fill", "Foil", "None visible", "Unknown", "Other"]),
+});
+const heaterOptions = choices(["Split system", "Ducted", "Gas heater", "Wood / solid fuel", "Other", "No heater", "Unknown"]);
+const coolingOptions = choices(["Split system", "Ducted", "Evaporative", "Other", "No fixed cooling", "Unknown"]);
+const hotWaterOptions = choices(["Heat pump", "Electric storage", "Gas storage", "Instant gas", "Solar", "Other", "Unknown"]);
+
+/** @typedef {{ key: string, label: string, required: boolean, input: 'text'|'number'|'select'|'textarea', unit?: string, options?: Array<{value:string,label:string}>, showIf?: {key:string,values:string[]}, shared?: boolean, legacy?: boolean, requiredForAdverse?: boolean }} RentalObservationField */
+/** @returns {RentalObservationField} */
+const shortText = (key, label, extra = {}) => ({ key, label, required: false, input: "text", ...extra });
+/** @returns {RentalObservationField} */
+const selectField = (key, label, options, extra = {}) => ({ key, label, required: false, input: "select", options, ...extra });
+/** @returns {RentalObservationField} */
+const numberField = (key, label) => ({ key, label, required: false, input: "number", unit: RENTAL_OBSERVATION_NUMBER_FIELDS[key], requiredForAdverse: true });
+const identityFields = () => [shortText("model", "Make / model from label (optional)", { shared: true }), shortText("serialNumber", "Serial number (optional)", { shared: true })];
+const limitationFields = () => [selectField("limitationStatus", "Anything you could not check?", RENTAL_OBSERVATION_SELECT_OPTIONS.limitationStatus), shortText("limitationReason", "Brief reason", { showIf: { key: "limitationStatus", values: ["Other"] } })];
+const roomFields = () => [numberField("roomLengthMetres", "Room length"), numberField("roomWidthMetres", "Room width"), numberField("roomHeightMetres", "Ceiling height")];
+const heatingChecks = ["main_living_heater", "heater_operation", "heater_efficiency", "heating_2027_readiness"];
+
+/** Explicit asset groups; heating and cooling are never assumed to be the same unit. */
+export function rentalObservationGroup(checkKey) {
+  if (heatingChecks.includes(checkKey)) return "primary_heater";
+  if (["showerhead_rating", "shower_2027_readiness"].includes(checkKey)) return "showerhead";
+  return "";
+}
+
+/** @returns {RentalObservationField[]} */
 export function rentalObservationFields(checkKey) {
-  const measurements = {
-    cooktop_function: "Cooktop width and depth (mm), and how many burners worked",
-    oven_function: "Oven and accessible opening width, height and depth (mm)",
-    ceiling_2027_readiness: "Bare ceiling area (m2) and how you measured it; visible insulation depth and hatch width (mm), if accessible",
-    windows_2027_readiness: "Which windows have gaps? Record their width, height and affected edge lengths (mm or metres)",
-    doors_2027_readiness: "Which doors have gaps? Record door width and affected edge lengths (mm or metres)",
-    vents_2027_readiness: "Vent locations, number and opening width and height (mm)",
-    shower_2027_readiness: "Water flow (litres/minute), collected water volume and timed seconds, if tested",
-    heating_2027_readiness: "Living room length, width and height (metres)",
-    cooling_2027_readiness: "Living room length, width and height (metres)",
-    hot_water_2027_readiness: "Existing unit width and height, nearby clear space and access width (mm), if accessible",
-    window_covering: "Window location, width and height (mm)",
+  if (heatingChecks.includes(checkKey)) return [
+    selectField("applianceType", "Heater type", heaterOptions, { shared: true }), ...identityFields(),
+    ...(checkKey === "heating_2027_readiness" ? [...roomFields(), selectField("accessStatus", "Access to heater", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus), ...limitationFields()] : []),
+    shortText("measurement", "Earlier measurement notes", { legacy: true }), shortText("actionTaken", "Earlier location notes", { legacy: true }),
+    ...(checkKey !== "heating_2027_readiness" ? [shortText("limitationReason", "Earlier observation limitation", { legacy: true })] : []),
+  ];
+  if (checkKey === "switchboard_observation") return [shortText("model", "Board location / readable labels (optional)"), ...limitationFields()];
+  if (["showerhead_rating", "appliance_identity_condition", "alarm_identity_location", "fixed_special_equipment"].includes(checkKey)) return [...identityFields(), ...limitationFields()];
+  /** @type {Record<string, RentalObservationField[]>} */
+  const specific = {
+    cooktop_function: [...identityFields(), numberField("widthMm", "Cooktop width"), numberField("depthMm", "Cooktop depth"), numberField("workingBurners", "Working burners")],
+    oven_function: [...identityFields(), numberField("widthMm", "Opening width"), numberField("heightMm", "Opening height"), numberField("depthMm", "Opening depth")],
+    ceiling_2027_readiness: [selectField("insulationType", "Visible insulation", RENTAL_OBSERVATION_SELECT_OPTIONS.insulationType), numberField("areaSquareMetres", "Bare ceiling area"), numberField("insulationDepthMm", "Visible insulation depth"), numberField("hatchWidthMm", "Hatch width"), shortText("model", "Product / R-value label, if readable")],
+    windows_2027_readiness: [numberField("widthMm", "Window width"), numberField("heightMm", "Window height"), numberField("sealLengthMetres", "Affected edge length")],
+    doors_2027_readiness: [numberField("widthMm", "Door width"), numberField("heightMm", "Door height"), numberField("sealLengthMetres", "Affected edge length")],
+    vents_2027_readiness: [numberField("count", "Number of vents"), numberField("widthMm", "Vent width"), numberField("heightMm", "Vent height")],
+    shower_2027_readiness: [...identityFields(), numberField("flowLitresPerMinute", "Water flow"), numberField("collectedLitres", "Water collected"), numberField("flowSeconds", "Collection time")],
+    cooling_2027_readiness: [selectField("applianceType", "Cooling type", coolingOptions), ...identityFields(), ...roomFields(), selectField("accessStatus", "Access to equipment", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus)],
+    hot_water_2027_readiness: [selectField("applianceType", "Hot-water type", hotWaterOptions), ...identityFields(), numberField("widthMm", "Unit width"), numberField("heightMm", "Unit height"), numberField("accessWidthMm", "Clear access width"), selectField("accessStatus", "Access to equipment", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus)],
+    window_covering: [numberField("widthMm", "Window width"), numberField("heightMm", "Window height")],
   };
-  if (checkKey === "switchboard_observation") return [
-    { key: "model", label: "Board location and any readable labels. Write Unknown for hidden or unreadable details; leave covers in place.", required: false },
-    { key: "limitationReason", label: "Anything you could not safely see, and why", required: false },
-  ];
-  if (["main_living_heater", "heater_operation", "heater_efficiency", "showerhead_rating", "appliance_identity_condition", "alarm_identity_location", "fixed_special_equipment"].includes(checkKey)) return [
-    { key: "model", label: "Equipment type, make, model and any readable rating or date from its label, or Unknown. Add a label photo when readable.", required: false },
-    { key: "serialNumber", label: "Serial number, if readable", required: false },
-    { key: "limitationReason", label: "Anything you could not safely see or check, and why", required: false },
-  ];
-  if (!measurements[checkKey]) return [];
-  return [
-    ...(/^(heating|cooling|hot_water|shower|cooktop|oven)_/.test(checkKey) ? [{ key: "model", label: "Existing equipment type, make and model from its label, or Unknown. Add a label photo when readable.", required: false }] : []),
-    { key: "measurement", label: measurements[checkKey], required: false, requiredForAdverse: true },
-    ...(/^(heating|cooling|hot_water)_/.test(checkKey) ? [{ key: "actionTaken", label: "Where is the equipment? Note visible access obstacles, such as steps or a narrow gate.", required: false }] : []),
-    ...(checkKey === "ceiling_2027_readiness" ? [{ key: "model", label: "Visible insulation material and any readable product or R-value label, or Unknown. Depth alone does not prove R-value.", required: false }] : []),
-    { key: "limitationReason", label: "Anything you could not safely identify or measure, and why", required: false },
-  ];
+  if (!specific[checkKey]) return [];
+  return [...specific[checkKey], ...limitationFields(), shortText("measurement", "Earlier measurement notes", { legacy: true }), shortText("actionTaken", "Earlier location notes", { legacy: true })];
 }
 
 /**
- * Use current capture wording for drafts, without replacing licensed test/action requirements.
  * @param {{ key: string, responseType?: string, responseFields?: Array<{ key: string, label: string, required: boolean }> }} assessmentCheck
- * @returns {Array<{ key: string, label: string, required: boolean, requiredForAdverse?: boolean }>}
+ * @returns {RentalObservationField[]}
  */
 export function rentalAssessorFields(assessmentCheck) {
-  if (["test_result", "action_record"].includes(assessmentCheck?.responseType)) return assessmentCheck.responseFields || [];
+  if (["test_result", "action_record"].includes(assessmentCheck?.responseType)) return (assessmentCheck.responseFields || []).map((field) => ({ ...field, input: "textarea" }));
   const fields = rentalObservationFields(assessmentCheck?.key);
-  return fields.length ? fields : (assessmentCheck?.responseFields || []);
+  return fields.length ? fields : (assessmentCheck?.responseFields || []).map((field) => ({ ...field, input: "text" }));
+}
+
+const normalizedLocation = (value) => String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+/**
+ * Candidate order is oldest to newest: server, queued, then local. Only safe identity fields carry.
+ * @param {{target:{moduleId:string,sectionKey?:string,checkKey:string,instanceKey:string,locationLabel?:string},candidates:Array<{moduleId:string,sectionKey?:string,checkKey:string,instanceKey:string,locationLabel?:string,outcome?:string,response?:Record<string,unknown>}>,currentResponse?:Record<string,unknown>}} input
+ */
+export function rentalSharedObservationResponse({ target, candidates, currentResponse = {} }) {
+  const response = { ...currentResponse };
+  const group = rentalObservationGroup(target.checkKey);
+  const inheritedKeys = [], recordedKeys = [];
+  let sourceCheckKey = "";
+  if (!group || !target.moduleId || !target.instanceKey) return { response, inheritedKeys, recordedKeys, sourceCheckKey };
+  const location = normalizedLocation(target.locationLabel);
+  if (!location && target.instanceKey !== "property") return { response, inheritedKeys, recordedKeys, sourceCheckKey };
+  const sharedKeys = rentalObservationFields(target.checkKey).filter((field) => field.shared).map((field) => field.key);
+  const seenChecks = new Set();
+  for (const candidate of [...candidates].reverse()) {
+    if (candidate.moduleId !== target.moduleId || candidate.instanceKey !== target.instanceKey
+      || candidate.checkKey === target.checkKey || seenChecks.has(candidate.checkKey)) continue;
+    seenChecks.add(candidate.checkKey);
+    if (normalizedLocation(candidate.locationLabel) !== location || rentalObservationGroup(candidate.checkKey) !== group
+      || !candidate.outcome || candidate.outcome === "not_assessed"
+      || sharedKeys.some((key) => normalizedLocation(currentResponse[key]) && normalizedLocation(candidate.response?.[key])
+        && normalizedLocation(currentResponse[key]) !== normalizedLocation(candidate.response[key]))) continue;
+    for (const key of sharedKeys) {
+      if (recordedKeys.includes(key) || !rentalObservationFields(candidate.checkKey).some((field) => field.shared && field.key === key)) continue;
+      recordedKeys.push(key);
+      sourceCheckKey ||= candidate.checkKey;
+      if (!Object.hasOwn(currentResponse, key) && typeof candidate.response?.[key] === "string" && candidate.response[key].trim()) {
+        response[key] = candidate.response[key];
+        inheritedKeys.push(key);
+      }
+    }
+  }
+  return { response, inheritedKeys, recordedKeys, sourceCheckKey };
 }
 
 export function rentalFindingDescriptionLabel(outcome) {
@@ -71,10 +148,16 @@ export function rentalFindingDescriptionLabel(outcome) {
 export function rentalObservationBlockers({ checkKey, outcome, response, finding, photoCount }) {
   const blockers = [];
   if (!(Number(photoCount) >= 2)) blockers.push("Add an overview photo and a close photo of the affected area before completing the assessment.");
+  const numericFields = rentalObservationFields(checkKey).filter((field) => field.input === "number");
+  const numericValues = numericFields.filter((field) => String(response?.[field.key] ?? "").trim());
+  const validNumber = (field) => rentalObservationNumberIsValid(response[field.key]);
+  for (const field of numericValues.filter((field) => !validNumber(field))) blockers.push(`Enter a valid number for ${field.label.toLowerCase()}.`);
   const measurementNeeded = outcome === "does_not_meet"
-    && rentalObservationFields(checkKey).some((field) => field.requiredForAdverse);
+    && numericFields.some((field) => field.requiredForAdverse);
   if (measurementNeeded && !String(response?.measurement || "").trim()
+    && !numericValues.some(validNumber)
     && !String(response?.limitationReason || "").trim()
+    && !["Not accessible", "Unsafe to measure"].includes(response?.limitationStatus)
     && !rentalQuotation(finding?.details?.quotation).measurements.trim()) {
     blockers.push("Record the basic measurements, or explain what you could not safely measure.");
   }

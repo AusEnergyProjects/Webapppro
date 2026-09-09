@@ -54,8 +54,9 @@ test('commercial quick actions are search-first and reuse the native line editor
   assert.match(quickCommercial, /stage !== 'editor'/);
   assert.match(quickCommercial, /Retry work types/);
   assert.match(commercial, /kind === 'quote' \? '\/api\/trade-quotes' : '\/api\/trade-quick-invoices'/);
-  assert.match(screen, /automaticallyAdjustKeyboardInsets=\{Platform\.OS === 'ios'\}/);
-  assert.match(screen, /scrollResponderScrollNativeHandleToKeyboard\(event\.target, spacing\.lg, true\)/);
+  assert.match(screen, /import \{ KeyboardAwareScrollView \} from '@\/components\/keyboard-aware-scroll-view'/);
+  assert.match(screen, /<KeyboardAwareScrollView/);
+  assert.doesNotMatch(screen, /scrollResponderScrollNativeHandleToKeyboard|automaticallyAdjustKeyboardInsets/);
 });
 
 test('server projections and document routes remain the authority for boss and team grants', () => {

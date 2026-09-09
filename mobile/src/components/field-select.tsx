@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { FieldButton } from './field-button';
 import { colours, radius, spacing } from '@/lib/theme';
+import { KeyboardAwareScrollView } from '@/components/keyboard-aware-scroll-view';
 
 export function FieldSelect({ label, value, options, onChange, disabled = false, placeholder = 'Choose an option' }: {
   label: string; value: string; options: readonly { value: string; label: string }[];
@@ -19,13 +20,13 @@ export function FieldSelect({ label, value, options, onChange, disabled = false,
     <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)} transparent>
       <View style={styles.backdrop}><View style={styles.sheet} accessibilityViewIsModal>
         <Text style={styles.heading}>{label}</Text>
-        {options.length > 8 ? <TextInput accessibilityLabel={`Search ${label.toLowerCase()}`} value={search} onChangeText={setSearch} placeholder="Search" placeholderTextColor={colours.muted} style={[styles.input, styles.value]} /> : null}
-        <ScrollView keyboardShouldPersistTaps="handled">
+        <KeyboardAwareScrollView keyboardShouldPersistTaps="handled">
+          {options.length > 8 ? <TextInput accessibilityLabel={`Search ${label.toLowerCase()}`} value={search} onChangeText={setSearch} placeholder="Search" placeholderTextColor={colours.muted} style={[styles.input, styles.value]} /> : null}
           {shown.map((option) => <Pressable key={option.value} accessibilityRole="radio" accessibilityState={{ selected: value === option.value }} onPress={() => { onChange(option.value); setOpen(false); }} style={styles.option}>
             <Text style={[styles.value, option.value === value && styles.selected]}>{option.value === value ? '● ' : '○ '}{option.label}</Text>
           </Pressable>)}
           {!shown.length ? <Text style={styles.value}>No matching options.</Text> : null}
-        </ScrollView>
+        </KeyboardAwareScrollView>
         <FieldButton variant="secondary" onPress={() => setOpen(false)}>Close</FieldButton>
       </View></View>
     </Modal>

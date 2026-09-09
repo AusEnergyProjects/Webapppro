@@ -10,6 +10,7 @@ import {
   decodePDFRawStream,
 } from "pdf-lib";
 import { createRentalAssessmentPdfBytes } from "../src/lib/trade-rental-report-pdf.mjs";
+import { RENTAL_OBSERVATION_NUMBER_FIELDS, rentalObservationResponseLabel } from "../src/lib/rental-quotation.mjs";
 
 function decodedPageContent(pdf) {
   const output = [];
@@ -159,6 +160,17 @@ test("finding details retain a real quantity and do not repeat identical legacy 
   const content = decodedPageContent(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
   assert.match(content, /24 m2/);
   assert.equal(content.split("UNIQUE MEASURED AREA 24 m2").length - 1, 2, "The value appears once in the finding and once in the detailed assessment checklist");
+});
+
+test("structured assessment measurements print their units in both finding and checklist", async () => {
+  const snapshot = reportSnapshot();
+  snapshot.findings[0].quantityMilli = 0;
+  snapshot.findings[0].details.quotation = { measurements: "4" };
+  snapshot.modules[0].sections[0].items[0].response = Object.fromEntries(Object.keys(RENTAL_OBSERVATION_NUMBER_FIELDS).map((key) => [key, "4"]));
+  const content = decodedPageContent(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
+  for (const key of Object.keys(RENTAL_OBSERVATION_NUMBER_FIELDS)) {
+    assert.equal(content.split(rentalObservationResponseLabel(key)).length - 1, 2, `${key} retains a readable unit even when a legacy free-text value has the same number`);
+  }
 });
 
 test("rental assessment PDF rejects an incomplete report snapshot", async () => {

@@ -8,6 +8,7 @@ import { Alert, Image, Linking, Modal, Pressable, ScrollView, Share, StyleSheet,
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FieldButton } from '@/components/field-button';
+import { KeyboardAwareScrollView } from '@/components/keyboard-aware-scroll-view';
 import { FieldDatePicker } from '@/components/field-date-picker';
 import { FieldSelect } from '@/components/field-select';
 import { ActivityAssignmentReview } from '@/components/ActivityAssignmentReview';
@@ -822,13 +823,11 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   }
   return <View style={styles.container}>
     <View style={styles.header}><FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => { if (overview) void perform('leaving', leave); else setOverview(true); }}>{overview ? 'Job' : 'Back'}</FieldButton><View style={styles.flex}><Text numberOfLines={2} style={styles.small}>{record.form.title}</Text><Text style={styles.small}>{record.recordNumber} · {syncing ? 'Saving in background' : online ? 'Connected' : 'Draft on this phone'}</Text></View><FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => setOverview(!overview)}>{overview ? 'Continue' : 'Sections'}</FieldButton></View>
-    <ScrollView
+    <KeyboardAwareScrollView
       ref={scroll}
-      automaticallyAdjustKeyboardInsets
       contentContainerStyle={styles.body}
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
-      onFocus={(event) => scroll.current?.scrollResponderScrollNativeHandleToKeyboard(event.target, 96, true)}
       scrollEnabled={true}
     >
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
@@ -887,7 +886,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
           {record.status === 'submitted_for_creditex_review' ? <><FieldButton disabled={!online || Boolean(busy)} onPress={() => void share()}>Share completed report</FieldButton><FieldButton variant="secondary" onPress={() => void perform('revoke', async () => { await apiRequest(endpoint, { method: 'POST', body: JSON.stringify({ action: 'revoke_report', recordId: record.id }) }); setError('Previous report links have been revoked.'); })}>Revoke report links</FieldButton></> : null}
         </>}
       </>}
-    </ScrollView>
+    </KeyboardAwareScrollView>
     {!overview ? <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy) || stepIndex === 0} onPress={() => void move(-1)}>Previous</FieldButton><FieldButton style={styles.flex} disabled={Boolean(busy) || (step?.kind === 'review' && record.status === 'draft' && fieldMissing.length > 0) || (technicianSignature && !boundSignerName)} loading={busy === 'next'} onPress={() => step?.kind === 'review' && record.status === 'draft' ? void finishImmediately() : step?.kind === 'review' ? finish() : void next()}>{step?.kind === 'review' ? 'Done' : step?.kind === 'signature' && !currentSignature && !pendingSignature ? 'Save signature' : 'Next'}</FieldButton></View> : null}
   </View>;
 }

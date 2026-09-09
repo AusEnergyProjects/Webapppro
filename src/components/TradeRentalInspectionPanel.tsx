@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import type { User } from "firebase/auth";
-import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalAssessorFields, rentalFindingDescriptionLabel } from "@/lib/rental-quotation.mjs";
+import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalAssessorFields, rentalFindingDescriptionLabel, rentalSharedObservationResponse, rentalObservationNumberIsValid } from "@/lib/rental-quotation.mjs";
 import { rentalCheckIsReadiness } from "@/lib/trade-rental-assessment.mjs";
 import styles from "./TradeRentalInspectionPanel.module.css";
 
@@ -369,6 +369,8 @@ function AssessmentItemCard({
   item,
   finding,
   evidence,
+  observationCandidates,
+  onObservationChange,
   busy,
   readOnly,
   onSave,
@@ -383,6 +385,8 @@ function AssessmentItemCard({
   item: LocalItem;
   finding?: AssessmentFinding;
   evidence: AssessmentEvidence[];
+  observationCandidates: AssessmentItem[];
+  onObservationChange: (item: AssessmentItem) => void;
   busy: string;
   readOnly: boolean;
   onSave: (body: Record<string, unknown>) => Promise<void>;
@@ -397,6 +401,19 @@ function AssessmentItemCard({
   const readiness = rentalCheckIsReadiness(check, module.template.assessmentScope);
   const quotation = rentalQuotation(finding?.details.quotation);
   const responseFields = rentalAssessorFields(check);
+  const [responseValues, setResponseValues] = useState<Record<string, unknown>>(item.response);
+  const [editEquipment, setEditEquipment] = useState(false);
+  const [locationLabel, setLocationLabel] = useState(item.locationLabel);
+  const shared = rentalSharedObservationResponse({ target: { ...item, locationLabel }, candidates: observationCandidates, currentResponse: responseValues });
+  const equipmentKeys = responseFields.filter((field) => field.shared).map((field) => field.key);
+  const ownEquipmentRecorded = Boolean(item.id) && equipmentKeys.some((key) => String(item.response[key] || "").trim());
+  const recordedKeys = ownEquipmentRecorded ? equipmentKeys : shared.recordedKeys;
+  const visibleFields = responseFields.filter((field) => {
+    const value = String(shared.response[field.key] ?? "").trim();
+    if (field.shared && recordedKeys.includes(field.key) && !editEquipment) return false;
+    if (field.legacy && !value) return false;
+    return !field.showIf || value || field.showIf.values.includes(String(shared.response[field.showIf.key] || ""));
+  });
   const needsSpecialistCredential = outcome === "meets" && Boolean(check.credentialGate)
     && check.credentialGate !== module.template.credentialGate;
   const repeated = check.repeatBy !== "property";
@@ -405,12 +422,22 @@ function AssessmentItemCard({
   const dirtyKey = item.id || `${module.id}:${section.key}:${check.key}:${item.instanceKey}`;
   const formRef = useRef<HTMLFormElement>(null);
 
+  function responseFromForm(values: FormData) {
+    const formLocation = String(values.get("locationLabel") ?? locationLabel).trim().replace(/\s+/g, " ").toLowerCase();
+    const locationChanged = formLocation !== locationLabel.trim().replace(/\s+/g, " ").toLowerCase();
+    const response: Record<string, unknown> = { ...(locationChanged ? responseValues : shared.response) };
+    for (const field of responseFields) if (values.has(field.key) && !(locationChanged && field.shared && !Object.hasOwn(responseValues, field.key))) response[field.key] = String(values.get(field.key) || "");
+    return response;
+  }
+
   function mutationBody(form: HTMLFormElement) {
     if (!form.reportValidity()) throw new Error("Finish the required fields in this answer before saving the section.");
     if (!outcome) throw new Error("Choose an assessment result before saving the section.");
     const values = new FormData(form);
-    const response: Record<string, unknown> = { ...item.response };
-    for (const field of responseFields) response[field.key] = String(values.get(field.key) || "");
+    const response = responseFromForm(values);
+    for (const field of responseFields) if (field.input === "number" && !rentalObservationNumberIsValid(response[field.key])) {
+      throw new Error(`Enter a valid number for ${field.label.toLowerCase()}.`);
+    }
     if (needsSpecialistCredential) {
       response.credentialType = String(values.get("credentialType") || "");
       response.credentialNumber = String(values.get("credentialNumber") || "");
@@ -492,10 +519,14 @@ function AssessmentItemCard({
       </div>
       <strong>{item.id ? `Saved v${item.revision}` : "Not saved"}</strong>
     </header>
-    <form ref={formRef} className={styles.itemForm} onSubmit={submit} onChange={() => onDirtyChange(dirtyKey, true)}>
+    <form ref={formRef} className={styles.itemForm} onSubmit={submit} onChange={(event) => {
+      onDirtyChange(dirtyKey, true);
+      const values = new FormData(event.currentTarget);
+      onObservationChange({ ...item, locationLabel: String(values.get("locationLabel") || locationLabel), outcome: String(values.get("outcome") || outcome), response: responseFromForm(values) });
+    }}>
       {repeated && <label>
         <span>Exact location *</span>
-        <input name="locationLabel" required defaultValue={item.locationLabel} maxLength={300} placeholder="For example, Bedroom 2 north window" disabled={readOnly} />
+        <input name="locationLabel" required value={locationLabel} onChange={(event) => setLocationLabel(event.target.value)} maxLength={300} placeholder="For example, Bedroom 2 north window" disabled={readOnly} />
       </label>}
       <fieldset className={styles.outcomes} disabled={readOnly}>
         <legend>Result *</legend>
@@ -517,7 +548,24 @@ function AssessmentItemCard({
         <small>This is visible to the agent, rental provider and trades viewing the issued report.</small>
       </label>
 
-      {responseFields.map((field) => <label key={field.key}><span>{field.label}</span><textarea name={field.key} rows={2} maxLength={500} defaultValue={String(response[field.key] || (field.key === "measurement" ? quotation.measurements : ""))} required={field.required && ["meets", "does_not_meet"].includes(outcome)} disabled={readOnly} /></label>)}
+      {recordedKeys.length > 0 && <aside className={styles.guidance}>
+        <strong>Equipment details already recorded</strong>
+        <p>{equipmentKeys.map((key) => String(shared.response[key] || "")).filter(Boolean).join(" · ") || "Optional label details were left blank."}</p>
+        {!readOnly && <button type="button" className={styles.secondaryButton} onClick={() => setEditEquipment((current) => !current)}>{editEquipment ? "Keep these details" : "Edit equipment details"}</button>}
+      </aside>}
+      <div className={styles.detailGrid}>{visibleFields.map((field) => {
+        const value = String(shared.response[field.key] ?? "");
+        const required = field.required && ["meets", "does_not_meet"].includes(outcome);
+        const change = (next: string) => setResponseValues((current) => ({ ...current, [field.key]: next }));
+        return <label key={field.key}><span>{field.label}{field.unit ? ` (${field.unit})` : ""}</span>
+          {field.input === "select" ? <select name={field.key} value={value} onChange={(event) => change(event.target.value)} disabled={readOnly} required={required}>
+            <option value="">Select if known</option>
+            {value && !field.options?.some((option) => option.value === value) && <option value={value}>{value}</option>}
+            {field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select> : field.input === "textarea" ? <textarea name={field.key} rows={2} maxLength={500} value={value} onChange={(event) => change(event.target.value)} required={required} disabled={readOnly} />
+            : <input name={field.key} type={field.input === "number" ? "number" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} min={field.input === "number" ? 0 : undefined} step={field.input === "number" ? "any" : undefined} maxLength={500} value={value} onChange={(event) => change(event.target.value)} required={required} disabled={readOnly} />}
+        </label>;
+      })}</div>
       {needsSpecialistCredential && <details className={styles.technicalDetails} open>
         <summary>Specialist verification used for this result</summary>
         <div className={styles.detailGrid}>
@@ -586,8 +634,15 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
   const [activeModuleId, setActiveModuleId] = useState("");
   const [activeSectionKey, setActiveSectionKey] = useState("");
   const [localItems, setLocalItems] = useState<Record<string, LocalItem[]>>({});
+  const [observationDrafts, setObservationDrafts] = useState<Record<string, AssessmentItem>>({});
   const [dirtyItems, setDirtyItems] = useState<Set<string>>(() => new Set());
   const itemDraftProviders = useRef(new Map<string, AssessmentItemDraftProvider>());
+  const recordObservation = useCallback((item: AssessmentItem) => {
+    const key = `${item.moduleId}:${item.checkKey}:${item.instanceKey}`;
+    setObservationDrafts((current) => ({ ...current, [key]: item }));
+  }, []);
+  const observationCandidates = [...(data.items || []), ...Object.values(observationDrafts).filter((draft) => !(data.items || []).some((saved) =>
+    saved.moduleId === draft.moduleId && saved.checkKey === draft.checkKey && saved.instanceKey === draft.instanceKey && saved.revision > draft.revision))];
 
   const markItemDirty = useCallback((itemKey: string, dirty: boolean) => {
     setDirtyItems((current) => {
@@ -945,7 +1000,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
               const evidence = (data.evidence || []).filter((entry) => entry.itemId === item.id && entry.status === "active");
                return <AssessmentItemCard key={`${item.id || item.instanceKey}:${item.revision}`}
                 module={activeModule} section={activeSection} check={check} item={{ ...item, sortOrder: (sections.findIndex((section) => section.key === activeSection.key) + 1) * 100 + checkIndex * 10 + instanceIndex }}
-                finding={finding} evidence={evidence} busy={busy} readOnly={!canEdit || activeModule.status === "complete"}
+                finding={finding} evidence={evidence} observationCandidates={observationCandidates} onObservationChange={recordObservation} busy={busy} readOnly={!canEdit || activeModule.status === "complete"}
                 onSave={(body) => saveItem(item, body)} onUpload={uploadEvidence} onUnlink={unlinkEvidence} onDirtyChange={markItemDirty} onRegisterDraft={registerItemDraft} />;
             })}
             {check.repeatBy !== "property" && canEdit && activeModule.status !== "complete" && <button type="button" className={styles.addInstance} onClick={() => addRepeatedItem(activeSection, check)}>Add another {check.repeatBy.replaceAll("_", " ")}</button>}

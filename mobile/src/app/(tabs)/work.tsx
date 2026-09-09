@@ -1,7 +1,8 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAwareScrollView } from '@/components/keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { FieldPermissions } from '@/components/job-work-selection';
@@ -135,7 +136,7 @@ export default function WorkScreen() {
 
   return (
     <SafeAreaView edges={['bottom']} style={styles.safe}>
-      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={sync.running} onRefresh={() => void syncNow()} tintColor={colours.green} />}>
+      <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={sync.running} onRefresh={() => void syncNow()} tintColor={colours.green} />}>
         <View style={styles.hero}>
           <View><Text style={styles.eyebrow}>MY SCHEDULE</Text><Text style={styles.heading}>Good day, {user?.displayName?.split(' ')[0] || 'there'}</Text></View>
           <View style={[styles.connection, !sync.online && styles.offline]}><View style={styles.dot} /><Text style={styles.connectionText}>{sync.online ? 'Connected' : 'Offline'}</Text></View>
@@ -167,7 +168,7 @@ export default function WorkScreen() {
           {unscheduledJobs.map((job) => <JobCard key={job.id} job={job} />)}
         </>}
         </>}
-      </ScrollView>
+      </KeyboardAwareScrollView>
       <Modal animationType="fade" transparent visible={quickAction !== null} onRequestClose={() => setQuickAction(null)}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close new action menu" onPress={() => setQuickAction(null)} style={styles.modalBackdrop}>
           <Pressable accessibilityViewIsModal onPress={(event) => event.stopPropagation()} style={styles.actionSheet}>

@@ -153,6 +153,85 @@ const post = (route, value) => route.POST(new Request("https://test.example/api/
   method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ workOrderId: "job", ...value }),
 }));
 
+test("ordinary rental observations save without specialist credentials while circuit verification stays protected", async () => {
+  const fixture = databaseFixture();
+  try {
+    const route = loadRoute(fixture);
+    const assessmentModule = templates.rentalAssessmentTemplateSnapshot(["minimum_standards"]).modules.minimum_standards;
+    const checks = assessmentModule.sections.flatMap((section) => section.checks.map((check) => ({ section, check })));
+    assert.deepEqual(checks.filter(({ check }) => check.credentialGate !== assessmentModule.credentialGate)
+      .map(({ check }) => check.key), ["outlet_lighting_protection"]);
+    for (const { section, check } of checks.filter(({ check }) => check.credentialGate === "assigned_assessor")) {
+      const revision = fixture.sql.prepare("SELECT revision FROM trade_rental_inspection_modules").get().revision;
+      const response = await post(route, { action: "save_item", moduleId: "module", expectedModuleRevision: revision, expectedItemRevision: 0,
+        sectionKey: section.key, checkKey: check.key, instanceKey: "property", locationLabel: "Observed area", outcome: "meets",
+        response: { model: "Readable equipment label" }, publicNotes: "Observed safely without licensed testing" });
+      assert.equal(response.status, 200, `${check.key}: ${JSON.stringify(await response.clone().json())}`);
+    }
+    assert.equal(fixture.sql.prepare("SELECT COUNT(*) count FROM trade_team_member_credentials").get().count, 0);
+    const revision = fixture.sql.prepare("SELECT revision FROM trade_rental_inspection_modules").get().revision;
+    const verification = await post(route, { action: "save_item", moduleId: "module", expectedModuleRevision: revision, expectedItemRevision: 0,
+      sectionKey: "electrical_safety", checkKey: "outlet_lighting_protection", outcome: "meets",
+      response: { credentialVerified: true, credentialNumber: "CLIENT-FORGED", credentialType: "licensed_electrician" } });
+    assert.equal(verification.status, 409);
+    const blocked = await verification.json();
+    assert.equal(blocked.code, "RENTAL_ITEM_CREDENTIAL_REQUIRED");
+    assert.equal(blocked.moduleId, "module");
+    assert.equal(blocked.sectionKey, "electrical_safety");
+    assert.equal(blocked.checkKey, "outlet_lighting_protection");
+    assert.equal(blocked.checkLabel, checks.find(({ check }) => check.key === blocked.checkKey).check.prompt);
+    assert.equal(blocked.requiredCapability, "licensed_electrician");
+    assert.match(blocked.error, /Specialist verification needed/);
+    assert.doesNotMatch(blocked.error, /module can be completed/);
+    assert.equal(fixture.sql.prepare("SELECT revision FROM trade_rental_inspection_modules").get().revision, revision);
+    assert.equal(fixture.sql.prepare("SELECT COUNT(*) count FROM trade_rental_inspection_items WHERE check_key = 'outlet_lighting_protection'").get().count, 0);
+  } finally { fixture.sql.close(); }
+});
+
+test("structured observations persist every shared field, including zero, without losing legacy notes", async () => {
+  const fixture = databaseFixture();
+  try {
+    const responseValues = {
+      ...Object.fromEntries(Object.keys(quotation.RENTAL_OBSERVATION_NUMBER_FIELDS).map((key, index) => [key, index ? "12.5" : 0])),
+      ...Object.fromEntries(Object.entries(quotation.RENTAL_OBSERVATION_SELECT_OPTIONS).map(([key, options]) => [key, options[0].value])),
+      applianceType: "Legacy installer description", measurement: "Earlier dimensions retained", model: "Existing model label",
+      serialNumber: "SERIAL-123", actionTaken: "Observed from ground level", limitationReason: "Roof access was locked", unknownField: "discard",
+    };
+    const response = await post(loadRoute(fixture), { action: "save_item", moduleId: "module", expectedModuleRevision: 1, expectedItemRevision: 0,
+      sectionKey: "heating", checkKey: "heating_2027_readiness", outcome: "meets", response: responseValues });
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+    const row = fixture.sql.prepare("SELECT response_json FROM trade_rental_inspection_items WHERE check_key = 'heating_2027_readiness'").get();
+    const expected = { ...responseValues }; delete expected.unknownField;
+    expected[Object.keys(quotation.RENTAL_OBSERVATION_NUMBER_FIELDS)[0]] = "0";
+    assert.deepEqual(JSON.parse(row.response_json), expected);
+  } finally { fixture.sql.close(); }
+});
+
+test("invalid structured measurements and choices are rejected before saving observations", async () => {
+  const fixture = databaseFixture();
+  try {
+    const route = loadRoute(fixture);
+    const numberKey = Object.keys(quotation.RENTAL_OBSERVATION_NUMBER_FIELDS)[0];
+    const invalidResponses = [
+      ...[-1, "-0.5", "Infinity", "NaN", "0x10", "12 mm", "9".repeat(501), {}, [], true].map((value) => ({ [numberKey]: value })),
+      ...Object.keys(quotation.RENTAL_OBSERVATION_SELECT_OPTIONS).flatMap((key) => [{ [key]: "made-up-option" }, { [key]: true }]),
+    ];
+    for (const value of invalidResponses) {
+      const response = await post(route, { action: "save_item", moduleId: "module", expectedModuleRevision: 1, expectedItemRevision: 0,
+        sectionKey: "heating", checkKey: "heating_2027_readiness", outcome: "meets", response: value });
+      assert.equal(response.status, 400, JSON.stringify(value));
+      assert.equal((await response.json()).code, "RENTAL_OBSERVATION_RESPONSE_INVALID");
+    }
+    assert.equal(fixture.sql.prepare("SELECT revision FROM trade_rental_inspection_modules").get().revision, 1);
+    assert.equal(fixture.sql.prepare("SELECT COUNT(*) count FROM trade_rental_inspection_items WHERE check_key = 'heating_2027_readiness'").get().count, 0);
+    const empty = Object.fromEntries([...Object.keys(quotation.RENTAL_OBSERVATION_NUMBER_FIELDS), ...Object.keys(quotation.RENTAL_OBSERVATION_SELECT_OPTIONS)].map((key) => [key, ""]));
+    const optional = await post(route, { action: "save_item", moduleId: "module", expectedModuleRevision: 1, expectedItemRevision: 0,
+      sectionKey: "heating", checkKey: "heating_2027_readiness", outcome: "meets", response: empty });
+    assert.equal(optional.status, 200);
+    assert.deepEqual(JSON.parse(fixture.sql.prepare("SELECT response_json FROM trade_rental_inspection_items WHERE check_key = 'heating_2027_readiness'").get().response_json), {});
+  } finally { fixture.sql.close(); }
+});
+
 test("scope API switches unissued tests with CAS, retains old observations and rejects issued records", async () => {
   const fixture = databaseFixture();
   try {
@@ -218,6 +297,9 @@ test("assessment API saves an electrical observation without trade scope and pre
     assert.equal(saved.finding_status, "not_tested");
     const payload = await response.json();
     assert.equal(payload.completion.module.complete, false, "Saving an observation does not bypass remaining checks or photo evidence");
+    const item = fixture.sql.prepare("SELECT outcome, response_json FROM trade_rental_inspection_items WHERE check_key = 'outlet_lighting_protection'").get();
+    assert.equal(item.outcome, "specialist_verification_required");
+    assert.equal(JSON.parse(item.response_json).credentialVerified, undefined);
   } finally { fixture.sql.close(); }
 });
 
@@ -232,11 +314,21 @@ test("a specialist result uses the assigned Team licence and cannot accept a mad
     fixture.sql.exec(`INSERT INTO trade_team_member_credentials VALUES ('credential','owner','worker','licence','Electrical licence','LIC-VERIFIED',
       'licensed_electrician','active','VIC','2099-12-31','2026-09-07','credential-file');
       INSERT INTO trade_team_member_files VALUES ('credential-file','owner','worker','active','2099-12-31');`);
+    for (const [table, field, invalid, valid] of [
+      ["trade_team_member_credentials", "expires_at", "2020-01-01", "2099-12-31"],
+      ["trade_team_member_files", "status", "archived", "active"],
+      ["trade_team_member_credentials", "team_member_id", "other-worker", "worker"],
+    ]) {
+      fixture.sql.prepare(`UPDATE ${table} SET ${field} = ?`).run(invalid);
+      assert.equal((await post(route, input)).status, 409, `${table}.${field}`);
+      fixture.sql.prepare(`UPDATE ${table} SET ${field} = ?`).run(valid);
+    }
     const response = await post(route, input);
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
     const saved = JSON.parse(fixture.sql.prepare("SELECT response_json FROM trade_rental_inspection_items WHERE check_key = 'outlet_lighting_protection'").get().response_json);
     assert.equal(saved.credentialNumber, "LIC-VERIFIED");
     assert.equal(saved.credentialVerified, true);
+    assert.equal(saved.credentialType, "licensed_electrician");
   } finally { fixture.sql.close(); }
 });
 
