@@ -11,6 +11,16 @@ import * as workflow from "../src/lib/rental-assessor-workflow.mjs";
 
 const scopeMigration = fs.readFileSync(new URL("../drizzle/0171_trade_rental_assessment_scope.sql", import.meta.url), "utf8");
 
+test("frozen room-based declarations use the current dwelling wording in completion warnings", () => {
+  const moduleTemplate = { key: "minimum_standards", sections: [], metadataFields: [
+    { key: "coverageConfirmed", type: "checkbox", required: true, label: "I have added every relevant room, door, window, fixture and area to the repeatable checks" },
+  ] };
+  const completion = templates.rentalAssessmentCompletion({ moduleTemplate, answers: {} });
+  assert.equal(completion.blockers.find((entry) => entry.key === "metadata:coverageConfirmed").label,
+    "I have checked the property and recorded any areas I could not access is required.");
+  assert.match(moduleTemplate.metadataFields[0].label, /every relevant room/, "The historical template remains unchanged");
+});
+
 test("readiness selects six future energy areas while retaining the complete current assessment", () => {
   const snapshot = templates.rentalAssessmentTemplateSnapshot(["minimum_standards"], "energy_readiness_2027");
   const assessmentModule = snapshot.modules.minimum_standards;

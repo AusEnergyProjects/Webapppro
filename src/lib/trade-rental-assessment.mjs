@@ -692,10 +692,12 @@ function requiredMetadataBlockers(moduleTemplate, answers) {
   return fields.flatMap((metadataField) => {
     if (!metadataField?.required) return [];
     if (moduleTemplate.key === "minimum_standards" && (rentalAssessorMetadataField(metadataField).source === "team_profile" || metadataField.key === "credentialConfirmed")) return [];
+    const label = moduleTemplate.key === "minimum_standards" && metadataField.key === "coverageConfirmed"
+      ? minimumStandardsMetadata.find((entry) => entry.key === "coverageConfirmed").label : metadataField.label;
     const value = answers[metadataField.key];
     if (metadataField.type === "select" && value && !metadataField.options.some((option) => option.value === value)) return [{ key: `metadata:${metadataField.key}`, label: `${metadataField.label}: choose a listed option.` }];
     if (metadataField.type === "checkbox" ? value === true : String(value || "").trim()) return [];
-    return [{ key: `metadata:${metadataField.key}`, label: `${metadataField.label} is required.` }];
+    return [{ key: `metadata:${metadataField.key}`, label: `${label} is required.` }];
   });
 }
 
