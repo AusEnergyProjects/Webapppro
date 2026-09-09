@@ -88,7 +88,7 @@ test("report links expire after 60 days and public findings exclude internal not
   assert.equal(canonicalRentalJson({ b: 2, a: { d: 4, c: 3 } }), '{"a":{"c":3,"d":4},"b":2}');
 });
 
-test("server-derived completion requires metadata, answers, evidence and quote-ready findings", () => {
+test("server-derived completion requires metadata, answers, evidence and observed findings", () => {
   const moduleTemplate = {
     key: "minimum_standards",
     credentialGate: "qualified_assessor",
@@ -107,8 +107,7 @@ test("server-derived completion requires metadata, answers, evidence and quote-r
       locationLabel: "Front door", outcome: "does_not_meet", requiredEvidenceCount: 1, responseJson: {} }],
     evidenceCounts: { "item-1": 2 }, photoCounts: { "item-1": 2 },
     findings: [{ itemId: "item-1", title: "Front lock fails", description: "Deadlock does not engage.",
-      tradeCategory: "Locksmith", scopeSummary: "Replace the front-door deadlock and prove operation.",
-      severity: "required", quantityMilli: 1000, unitLabel: "each", details: { quotation: { measurements: "One front deadlock; door thickness 40 mm", specification: "Compatible keyed deadlock; photographed existing fitting", access: "Ground-level front entry; tenant access arranged", exclusions: "Include removal, fitting and keys; exclude door/frame replacement" } } }],
+      scopeSummary: "", severity: "required", quantityMilli: 0, unitLabel: "", details: {} }],
   };
   assert.deepEqual(rentalAssessmentCompletion(base), { complete: true, blockers: [] });
   const unsafe = structuredClone(base);
@@ -174,7 +173,7 @@ test("rental evidence preserves capture time and requires GPS for photos", () =>
   imprecise.location.accuracyMetres = 100.1;
   assert.equal(rentalEvidencePhotoCapture(imprecise, { receivedAtUtc: "2026-08-24T04:06:00.000Z" }), null);
   const stale = structuredClone(photoEnvelope);
-  assert.equal(rentalEvidencePhotoCapture(stale, { receivedAtUtc: "2026-08-24T04:21:00.001Z" }), null);
+  assert.equal(rentalEvidencePhotoCapture(stale, { receivedAtUtc: "2026-08-31T04:05:06.001Z" }), null);
   const mismatchedTimes = structuredClone(photoEnvelope);
   mismatchedTimes.location.observedAtUtc = "2026-08-24T04:08:00.001Z";
   assert.equal(rentalEvidencePhotoCapture(mismatchedTimes, { receivedAtUtc: "2026-08-24T04:08:30.000Z" }), null);
@@ -312,12 +311,13 @@ test("job setup and field workspace attach one frozen rental workflow with guard
   assert.match(mobilePanel, /Take photo/);
   assert.match(mobilePanel, /rentalAdjacentQuestion/);
   assert.match(mobilePanel, /for \(const photo of draft\.photos\)/);
-  assert.match(mobilePanel, /delete next\.drafts\[key\]/);
-  assert.match(mobilePanel, /if \(!saved\) throw new Error/);
+  assert.match(mobilePanel, /await enqueueRentalSave/);
+  assert.match(mobilePanel, /delete nextCache\.drafts\[key\]/);
+  assert.match(mobilePanel, /pendingSaves\.length > 0/);
   assert.match(mobilePanel, /expectedItemRevision: item\.revision/);
   assert.match(fieldRoute, /rentalEvidencePhotoCapture\(evidenceEnvelope, \{ receivedAtUtc: now \}\)/);
   assert.match(assessmentPanel, /Internal assessment note/);
-  assert.match(assessmentPanel, /Recommended work/);
+  assert.match(assessmentPanel, /rentalFindingDescriptionLabel\(outcome\)/);
   assert.match(assignmentHelper, /rentalInspectionAssignmentStatements/);
   assert.match(assignmentHelper, /UPDATE trade_rental_inspections/);
   assert.match(assignmentHelper, /assessor_snapshot/);

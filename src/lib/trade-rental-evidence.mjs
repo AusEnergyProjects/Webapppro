@@ -21,7 +21,8 @@ function iso(value) {
 }
 
 const MAX_RENTAL_PHOTO_ACCURACY_METRES = 100;
-const MAX_RENTAL_PHOTO_AGE_MS = 15 * 60 * 1000;
+// Delivery may be delayed offline; capture and GPS timestamps remain the original device observations.
+const MAX_RENTAL_PHOTO_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_RENTAL_PHOTO_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const MAX_RENTAL_LOCATION_CAPTURE_GAP_MS = 2 * 60 * 1000;
 

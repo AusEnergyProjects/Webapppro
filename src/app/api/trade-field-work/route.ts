@@ -219,6 +219,42 @@ async function sha256(bytes: Uint8Array) {
   return Array.from(digest).map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
+type RentalUploadRecord = {
+  id: string; object_key: string; original_sha256: string; category: string;
+  content_type: string; size_bytes: number; file_name: string; caption: string;
+  evidence_envelope: string; job_revision: number;
+};
+
+async function rentalUploadIdentity(ownerUid: string, workOrderId: string, clientUploadId: string) {
+  return "rental-" + await sha256(new TextEncoder().encode(JSON.stringify([
+    "rental-photo-v1", ownerUid, workOrderId, clientUploadId,
+  ])));
+}
+
+async function findRentalUpload(id: string, ownerUid: string, workOrderId: string) {
+  return getD1().prepare(`SELECT media.id, media.object_key, media.original_sha256, media.category,
+      media.content_type, media.size_bytes, media.file_name, media.caption, media.evidence_envelope,
+      job.revision AS job_revision
+    FROM trade_crm_job_media media JOIN trade_work_orders job
+      ON job.id = media.work_order_id AND job.firebase_uid = media.firebase_uid
+    WHERE media.id = ? AND media.firebase_uid = ? AND media.work_order_id = ? AND job.record_status = 'active'`)
+    .bind(id, ownerUid, workOrderId).first<RentalUploadRecord>();
+}
+
+function rentalUploadReplay(record: RentalUploadRecord, input: {
+  sha256: string; category: string; contentType: string; sizeBytes: number;
+  fileName: string; caption: string; evidenceEnvelope: string;
+}) {
+  if (record.original_sha256 !== input.sha256 || record.category !== input.category
+    || record.content_type !== input.contentType || Number(record.size_bytes) !== input.sizeBytes
+    || record.file_name !== input.fileName || record.caption !== input.caption
+    || record.evidence_envelope !== input.evidenceEnvelope) {
+    return adminJson({ ok: false, code: "UPLOAD_IDENTITY_CONFLICT",
+      error: "This upload ID was already used for a different photo or capture record." }, 409);
+  }
+  return adminJson({ ok: true, uploadedMediaId: record.id, revision: Number(record.job_revision) });
+}
+
 function fieldError(error: unknown) {
   if (error instanceof BoundedJsonRequestError) {
     return adminJson({
@@ -582,16 +618,31 @@ async function upload(request: Request, access: TeamAccess) {
   if (!(file instanceof File) || !file.name) return adminJson({ ok: false, error: "Choose a photo or PDF." }, 400);
   if (!ALLOWED_TYPES.has(file.type)) return adminJson({ ok: false, error: "Upload a JPEG, PNG, WebP or PDF file." }, 400);
   if (file.size <= 0 || file.size > MAX_FILE_BYTES) return adminJson({ ok: false, error: "The file must be no larger than 8 MB." }, 400);
+  const clientUploadValue = form.get("clientUploadId");
+  const clientUploadId = typeof clientUploadValue === "string" ? clientUploadValue.trim().toLowerCase() : "";
+  if (form.has("clientUploadId") && (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(clientUploadId)
+    || String(job.service_category || "") !== "rental-inspection" || !file.type.startsWith("image/"))) {
+    return adminJson({ ok: false, code: "UPLOAD_IDENTITY_INVALID", error: "Use a valid photo upload ID for a rental assessment image." }, 400);
+  }
+  const fileBytes = new Uint8Array(await file.arrayBuffer());
+  const originalSha256 = await sha256(fileBytes);
+  const id = clientUploadId ? await rentalUploadIdentity(access.ownerUid, workOrderId, clientUploadId) : crypto.randomUUID();
+  const uploadIdentity = { sha256: originalSha256, category, contentType: file.type, sizeBytes: file.size,
+    fileName: safeName(file.name), caption: cleanAdminText(form.get("caption"), 300), evidenceEnvelope };
+  if (clientUploadId) {
+    const existing = await findRentalUpload(id, access.ownerUid, workOrderId);
+    // A previously accepted capture remains replayable after its original receipt window.
+    if (existing) return rentalUploadReplay(existing, uploadIdentity);
+  }
   const now = new Date().toISOString();
   if (String(job.service_category || "") === "rental-inspection" && file.type.startsWith("image/")
     && !rentalEvidencePhotoCapture(evidenceEnvelope, { receivedAtUtc: now })) {
-    return adminJson({ ok: false, error: "Rental assessment photos need a current device-reported capture time, non-mocked GPS position and accuracy within 100 metres." }, 400);
+    return adminJson({ ok: false, error: "Rental assessment photos must have been captured within the last seven days, with a non-mocked GPS position recorded within two minutes of capture and accuracy within 100 metres." }, 400);
   }
-  const id = crypto.randomUUID();
+  // Each attempt owns its object; a concurrent loser must never delete the winning upload.
   const objectKey = `crm-job-media/${access.ownerUid}/${workOrderId}/${crypto.randomUUID()}`;
   const revision = nextJobRevision(job.revision);
   const store = bucket();
-  const fileBytes = new Uint8Array(await file.arrayBuffer());
   if (String(job.service_category || "") === "rental-inspection"
     && ["image/png", "image/jpeg"].includes(file.type)) {
     if (!rentalImageWithinReportLimit(fileBytes, file.type, {
@@ -601,7 +652,6 @@ async function upload(request: Request, access: TeamAccess) {
       return adminJson({ ok: false, error: "Prepare the photo in TLink before uploading. Images must be valid and no larger than 4096 pixels or 12 megapixels." }, 400);
     }
   }
-  const originalSha256 = await sha256(fileBytes);
   await store.put(objectKey, exactArrayBuffer(fileBytes), { httpMetadata: { contentType: file.type },
     customMetadata: { owner: access.ownerUid, actor: access.actorUid, workOrderId, mediaId: id } });
   try {
@@ -621,7 +671,20 @@ async function upload(request: Request, access: TeamAccess) {
       ...jobSyncChangeStatements(getD1(), { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now,
         audienceMemberId: job.assignee_member_id }),
     ]);
-  } catch (error) { await store.delete(objectKey); throw error; }
+  } catch (error) {
+    if (clientUploadId) {
+      const existing = await findRentalUpload(id, access.ownerUid, workOrderId);
+      if (existing) {
+        if (existing.object_key !== objectKey) await store.delete(objectKey);
+        return rentalUploadReplay(existing, uploadIdentity);
+      }
+      // An uncertain database acknowledgement may still commit. Retain this attempt's
+      // object unless a different committed object proves that it is unused.
+      throw error;
+    }
+    await store.delete(objectKey); throw error;
+  }
+  if (clientUploadId) return adminJson({ ok: true, uploadedMediaId: id, revision }, 201);
   return adminJson({ ok: true, revision, ...(await payload(access, workOrderId)) }, 201);
 }
 

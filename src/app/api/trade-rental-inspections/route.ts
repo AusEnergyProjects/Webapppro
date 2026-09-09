@@ -163,7 +163,7 @@ function inspectionError(error: unknown) {
   if (code === "RENTAL_ASSESSMENT_SCOPE_INVALID") return adminJson({ ok: false, error: "Choose a valid rental assessment scope." }, 400);
   if (code === "RENTAL_MEDIA_MISMATCH") return adminJson({ ok: false, error: "That evidence file does not belong to this job." }, 409);
   if (code === "RENTAL_EVIDENCE_METADATA_REQUIRED") return adminJson({ ok: false, error: "Assessment photos must include a valid TLink capture time and GPS location. Retake the photo in the field app or add it from a location-enabled browser." }, 409);
-  if (code === "RENTAL_FINDING_REQUIRED") return adminJson({ ok: false, error: "An adverse result needs a clear finding title, description and work scope before it can be saved." }, 400);
+  if (code === "RENTAL_FINDING_REQUIRED") return adminJson({ ok: false, error: "Add a short description of what was observed or could not be checked." }, 400);
   if (code === "RENTAL_MUTATION_CONFLICT" || code === "ONLINE_MUTATION_CONFLICT") return adminJson({ ok: false, error: "This assessment changed on another device. Refresh before trying again." }, 409);
   if (code === "RENTAL_RESPONSE_TOO_LARGE") return adminJson({ ok: false, error: "The assessment response is too large." }, 413);
   if (code === "INVALID_RENTAL_ITEM_KEY") return adminJson({ ok: false, error: "The repeated assessment item is invalid." }, 400);
@@ -575,7 +575,7 @@ function findingInput(body: Row, outcome: string, itemKey: string, locationLabel
   const description = cleanAdminText(source.description, 8000);
   const tradeCategory = cleanAdminText(source.tradeCategory, 120);
   const scopeSummary = cleanAdminText(source.scopeSummary, 8000);
-  if (!title || !description || !scopeSummary) throw new Error("RENTAL_FINDING_REQUIRED");
+  if (!title || !description) throw new Error("RENTAL_FINDING_REQUIRED");
   const requestedSeverity = cleanAdminText(source.severity, 40);
   const severity = FINDING_SEVERITIES.has(requestedSeverity) ? requestedSeverity : "required";
   const detailsSource = parsedObject(source.details);

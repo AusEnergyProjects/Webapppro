@@ -203,6 +203,24 @@ test("saved assessor identity is taken from Team and observations invalidate ear
   } finally { fixture.sql.close(); }
 });
 
+test("assessment API saves an electrical observation without trade scope and preserves its unresolved result", async () => {
+  const fixture = databaseFixture();
+  try {
+    const route = loadRoute(fixture);
+    const response = await post(route, { action: "save_item", moduleId: "module", expectedModuleRevision: 1, expectedItemRevision: 0,
+      sectionKey: "electrical_safety", checkKey: "outlet_lighting_protection", instanceKey: "property", outcome: "specialist_verification_required",
+      response: {}, finding: { title: "Electrical observation", description: "Hallway board photographed. Protection needs an electrician to check." } });
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+    const saved = fixture.sql.prepare("SELECT description, scope_summary, quantity_milli, finding_status FROM trade_rental_findings").get();
+    assert.equal(saved.description, "Hallway board photographed. Protection needs an electrician to check.");
+    assert.equal(saved.scope_summary, "");
+    assert.equal(saved.quantity_milli, 0);
+    assert.equal(saved.finding_status, "not_tested");
+    const payload = await response.json();
+    assert.equal(payload.completion.module.complete, false, "Saving an observation does not bypass remaining checks or photo evidence");
+  } finally { fixture.sql.close(); }
+});
+
 test("a specialist result uses the assigned Team licence and cannot accept a made-up per-job credential", async () => {
   const fixture = databaseFixture();
   try {

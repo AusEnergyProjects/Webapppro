@@ -318,14 +318,14 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   heading("For owners and agents", "Next steps");
   const urgent = reportFindings.filter((finding) => ["immediate_safety_risk", "urgent"].includes(finding.severity));
   text(urgent.length ? "Urgent attention: " + urgent.slice(0, 2).map((finding) => brief(finding.title, 90)).join("; ") + ". See the work details for immediate actions." : "No immediate or urgent safety finding was recorded. Review the work details and limitations.", { size: 9.2, lineHeight: 14, after: 9 });
-  text(reportFindings.length ? "Use the work scopes, measurements and photos to request itemised quotes. Each scope includes access requirements and pricing allowances. Future upgrades show their own start date and trigger." : "No outstanding work scopes were recorded. Read the assessment and access limitations before relying on any individual result.", { size: 9.2, lineHeight: 14, after: 10 });
+  text(reportFindings.length ? "Share the observations, measurements and photos with the relevant trades. They use this evidence to define the work and prepare quotes. Future upgrades show their own start date and trigger." : "No outstanding work scopes were recorded. Read the assessment and access limitations before relying on any individual result.", { size: 9.2, lineHeight: 14, after: 10 });
   if (allItems.some((item) => item.readiness)) text("Planning findings do not establish non-compliance today.", { size: 8.5, color: palette.muted, after: 8 });
   const limitation = snapshot.inspection?.applicabilityLimitation;
   if (limitation) { badge("Applicable minimum standards not assessed", "warning"); text(limitation, { size: 8.5, lineHeight: 12, after: 5 }); }
-  text("This report records the assessed conditions and scope at the inspection date. It is not a blanket compliance certificate. Separate electrical, gas and smoke-alarm records apply only where included and authenticated. Contractors retain responsibility for compliant design and installation within the recorded scope and allowances.", { size: 8, lineHeight: 11, color: palette.muted });
+  text("This report records the assessed conditions at the inspection date. It is not a blanket compliance certificate. Separate electrical, gas and smoke-alarm records apply only where included and authenticated. Contractors remain responsible for defining the work, compliant design and installation.", { size: 8, lineHeight: 11, color: palette.muted });
 
   addPage();
-  heading("02 / Work details", "Scope for quoting", "Measured work, specifications, access requirements and supporting evidence for each upgrade.");
+  heading("02 / Work details", "Observations for quoting", "Observed conditions, recorded measurements and photos for trades to assess the work and prepare quotes.");
   if (!reportFindings.length) {
     badge("No outstanding findings recorded");
   }
@@ -351,8 +351,15 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     const quotation = rentalQuotation(finding.details?.quotation);
     for (const field of RENTAL_QUOTATION_FIELDS) keyValue(field.label, quotation[field.key]);
     const assessedItem = allItems.find((item) => item.id === finding.itemId);
+    const legacyValues = new Set(Object.values(quotation).map((value) => safe(value).trim()).filter(Boolean));
+    for (const [key, value] of objectEntries(assessedItem?.response)) {
+      const printable = typeof value === "boolean" ? (value ? "Yes" : "No") : safe(value);
+      if (!legacyValues.has(printable.trim())) keyValue(({
+        measurement: "Measurements", model: "Equipment and labels", limitationReason: "Observation limitation",
+      })[key] || label(key), printable);
+    }
     if (assessedItem?.trigger) keyValue("Future requirement trigger", assessedItem.trigger);
-    keyValue("Quantity", Number(finding.quantityMilli) > 0 ? `${Number(finding.quantityMilli) / 1000} ${finding.unitLabel || "each"}` : "Not measured; confirm before pricing");
+    if (Number(finding.quantityMilli) > 0) keyValue("Quantity", `${Number(finding.quantityMilli) / 1000} ${finding.unitLabel || "each"}`);
     keyValue("Reference", finding.standardReference);
     if (finding.severity === "immediate_safety_risk") {
       keyValue("Immediate action", finding.details?.immediateAction);

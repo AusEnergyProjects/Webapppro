@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import type { User } from "firebase/auth";
-import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalQuotationGuidance } from "@/lib/rental-quotation.mjs";
+import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalAssessorFields, rentalFindingDescriptionLabel } from "@/lib/rental-quotation.mjs";
 import { rentalCheckIsReadiness } from "@/lib/trade-rental-assessment.mjs";
 import styles from "./TradeRentalInspectionPanel.module.css";
 
@@ -396,8 +396,9 @@ function AssessmentItemCard({
   const isAdverse = adverseOutcomes.has(outcome);
   const readiness = rentalCheckIsReadiness(check, module.template.assessmentScope);
   const quotation = rentalQuotation(finding?.details.quotation);
-  quotation.measurements ||= String(item.response.measurement || "");
-  quotation.specification ||= [item.response.make, item.response.model].filter(Boolean).join(" ");
+  const responseFields = rentalAssessorFields(check);
+  const needsSpecialistCredential = outcome === "meets" && Boolean(check.credentialGate)
+    && check.credentialGate !== module.template.credentialGate;
   const repeated = check.repeatBy !== "property";
   const itemBusy = busy === `item:${item.instanceKey}`;
   const uploadBusy = busy === `upload:${item.id}`;
@@ -408,36 +409,27 @@ function AssessmentItemCard({
     if (!form.reportValidity()) throw new Error("Finish the required fields in this answer before saving the section.");
     if (!outcome) throw new Error("Choose an assessment result before saving the section.");
     const values = new FormData(form);
-    const response: Record<string, unknown> = {
-      ...item.response,
-      ...Object.fromEntries((check.responseFields || []).map((field) => [field.key, String(values.get(field.key) || "")])),
-      make: String(values.get("make") || ""),
-      model: String(values.get("model") || ""),
-      serialNumber: String(values.get("serialNumber") || ""),
-      measurement: String(values.get("measurement") || ""),
-      measurementUnit: String(values.get("measurementUnit") || ""),
-      testMethod: String(values.get("testMethod") || ""),
-      testInstrument: String(values.get("testInstrument") || ""),
-      testResult: String(values.get("testResult") || ""),
-      credentialType: String(values.get("credentialType") || ""),
-      credentialNumber: String(values.get("credentialNumber") || ""),
-      credentialVerified: values.has("credentialVerified"),
-    };
-    for (const field of check.responseFields || []) response[field.key] = String(values.get(field.key) || "");
+    const response: Record<string, unknown> = { ...item.response };
+    for (const field of responseFields) response[field.key] = String(values.get(field.key) || "");
+    if (needsSpecialistCredential) {
+      response.credentialType = String(values.get("credentialType") || "");
+      response.credentialNumber = String(values.get("credentialNumber") || "");
+      response.credentialVerified = values.has("credentialVerified");
+    }
     const findingBody = isAdverse ? {
-      title: String(values.get("findingTitle") || ""),
-      description: String(values.get("findingDescription") || ""),
-      standardReference: String(values.get("standardReference") || ""),
-      status: String(values.get("findingStatus") || ""),
+      title: finding?.title || `${section.title}: ${readiness && outcome === "does_not_meet" ? "upgrade observation" : "assessment observation"}`,
+      description: String(values.get("publicNotes") || ""),
+      standardReference: finding?.standardReference || "",
       severity,
       tradeCategory: finding?.tradeCategory || "",
-      recommendedAction: String(values.get("scopeSummary") || ""),
-      scopeSummary: String(values.get("scopeSummary") || ""),
-      quantityMilli: Math.round(Math.max(0, Number(values.get("quantity") || 0)) * 1000),
-      unitLabel: String(values.get("unitLabel") || "each"),
+      recommendedAction: finding?.recommendedAction || "",
+      scopeSummary: finding?.scopeSummary || "",
+      quantityMilli: finding?.quantityMilli || 0,
+      unitLabel: finding?.unitLabel || "each",
       internalNotes: String(values.get("findingInternalNotes") || ""),
       details: {
-        quotation: Object.fromEntries(RENTAL_QUOTATION_FIELDS.map((field) => field.key).map((key) => [key, String(values.get(`quotation_${key}`) || "")])),
+        ...finding?.details,
+        quotation,
         immediateAction: String(values.get("immediateAction") || ""),
         responsiblePeopleNotified: values.has("responsiblePeopleNotified"),
         notificationRecipient: String(values.get("notificationRecipient") || ""),
@@ -455,7 +447,7 @@ function AssessmentItemCard({
       locationLabel: String(values.get("locationLabel") || ""),
       outcome,
       response,
-      publicNotes: String(values.get("publicNotes") || ""),
+      publicNotes: isAdverse ? item.publicNotes : String(values.get("publicNotes") || ""),
       internalNotes: String(values.get("internalNotes") || ""),
       sortOrder: item.sortOrder,
       finding: findingBody,
@@ -520,45 +512,33 @@ function AssessmentItemCard({
       </aside>
 
       <label>
-        <span>Report detail{outcome === "not_applicable" ? " *" : ""}</span>
-        <textarea name="publicNotes" required={outcome === "not_applicable"} rows={3} maxLength={4000} defaultValue={item.publicNotes} placeholder={outcome === "not_applicable" ? "Explain why this standard does not apply at this property. This appears in the final report." : "Describe what was observed, tested or measured. This appears in the final report."} disabled={readOnly} />
+        <span>{isAdverse ? rentalFindingDescriptionLabel(outcome) : "Report detail"}{isAdverse || outcome === "not_applicable" ? " *" : ""}</span>
+        <textarea name="publicNotes" required={isAdverse || outcome === "not_applicable"} rows={3} maxLength={isAdverse ? 8000 : 4000} defaultValue={finding?.description || item.publicNotes} placeholder={outcome === "not_applicable" ? "Explain why this standard does not apply at this property. This appears in the final report." : "A short description of what you saw, checked or measured, including the location."} disabled={readOnly} />
         <small>This is visible to the agent, rental provider and trades viewing the issued report.</small>
       </label>
 
-      {(check.responseFields || []).map((field) => <label key={field.key}><span>{field.label}</span><textarea name={field.key} rows={2} maxLength={500} defaultValue={String(response[field.key] || "")} required={field.required && ["meets", "does_not_meet"].includes(outcome)} disabled={readOnly} /></label>)}
-      <details className={styles.technicalDetails}>
-        <summary>Measurements, equipment and specialist verification</summary>
+      {responseFields.map((field) => <label key={field.key}><span>{field.label}</span><textarea name={field.key} rows={2} maxLength={500} defaultValue={String(response[field.key] || (field.key === "measurement" ? quotation.measurements : ""))} required={field.required && ["meets", "does_not_meet"].includes(outcome)} disabled={readOnly} /></label>)}
+      {needsSpecialistCredential && <details className={styles.technicalDetails} open>
+        <summary>Specialist verification used for this result</summary>
         <div className={styles.detailGrid}>
-          <label><span>Make</span><input name="make" defaultValue={String(response.make || "")} maxLength={500} disabled={readOnly} /></label>
-          {!check.responseFields?.some((field) => field.key === "model") && <label><span>Model</span><input name="model" defaultValue={String(response.model || "")} maxLength={500} disabled={readOnly} /></label>}
-          <label><span>Serial number</span><input name="serialNumber" defaultValue={String(response.serialNumber || "")} maxLength={500} disabled={readOnly} /></label>
-          {!check.responseFields?.some((field) => field.key === "measurement") && <label><span>Measurement</span><input name="measurement" defaultValue={String(response.measurement || "")} maxLength={500} disabled={readOnly} /></label>}
-          <label><span>Unit</span><input name="measurementUnit" defaultValue={String(response.measurementUnit || "")} maxLength={100} placeholder="mm, ohm, seconds" disabled={readOnly} /></label>
-          {!check.responseFields?.some((field) => field.key === "testMethod") && <label><span>Test method</span><input name="testMethod" defaultValue={String(response.testMethod || "")} maxLength={500} disabled={readOnly} /></label>}
-          {!check.responseFields?.some((field) => field.key === "testInstrument") && <label><span>Test instrument</span><input name="testInstrument" defaultValue={String(response.testInstrument || "")} maxLength={500} disabled={readOnly} /></label>}
-          {!check.responseFields?.some((field) => field.key === "testResult") && <label><span>Test result</span><input name="testResult" defaultValue={String(response.testResult || "")} maxLength={500} disabled={readOnly} /></label>}
           <label><span>Specialist credential type</span><input name="credentialType" defaultValue={String(response.credentialType || "")} maxLength={500} disabled={readOnly} /></label>
           <label><span>Specialist credential number</span><input name="credentialNumber" defaultValue={String(response.credentialNumber || "")} maxLength={500} disabled={readOnly} /></label>
           <label className={styles.checkField}><input type="checkbox" name="credentialVerified" defaultChecked={response.credentialVerified === true} disabled={readOnly} /><span>I checked the specialist credential used for this result</span></label>
         </div>
-      </details>
+      </details>}
 
       {isAdverse && <section className={styles.findingFields}>
-        <header><span>Finding and work scope</span><strong>Required before completion</strong></header>
-        <label><span>Finding title *</span><input name="findingTitle" required defaultValue={finding?.title || `${section.title}: follow-up work`} maxLength={240} placeholder="Short description a trade can scan" disabled={readOnly} /></label>
-        <label><span>Observed problem *</span><textarea name="findingDescription" required rows={3} maxLength={8000} defaultValue={finding?.description || item.publicNotes || ""} disabled={readOnly} /></label>
+        <header><span>Observation</span><strong>Include an overview and close photo</strong></header>
         <div className={styles.detailGrid}>
           <label><span>Severity *</span><select name="severity" value={severity} onChange={(event) => setSeverity(event.target.value)} disabled={readOnly}>{severityOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
           <label><span>Finding status</span><input value={severity === "immediate_safety_risk" ? "Safety issue" : outcome === "does_not_meet" ? readiness ? "Upgrade planning" : "Does not meet this check" : "Requires verification"} readOnly aria-describedby={`status-${item.instanceKey}`} /><small id={`status-${item.instanceKey}`}>Set automatically from the assessment result and safety severity.</small></label>
-          <label><span>Rule or standard reference</span><input name="standardReference" defaultValue={finding?.standardReference || ""} maxLength={500} disabled={readOnly} /></label>
         </div>
-        <label><span>Recommended work *</span><textarea name="scopeSummary" required rows={3} maxLength={8000} defaultValue={finding?.scopeSummary || finding?.recommendedAction || ""} placeholder="State what needs to be repaired, replaced, tested or confirmed, including the exact location." disabled={readOnly} /></label>
-        <div className={styles.detailGrid}>
-          <label><span>Measured quantity</span><input name="quantity" type="number" min="0" max="1000000" step="0.001" defaultValue={finding ? finding.quantityMilli / 1000 : ""} placeholder="Measured amount or number of services" disabled={readOnly} /></label>
-          <label><span>Unit</span><input name="unitLabel" defaultValue={finding?.unitLabel || "each"} maxLength={40} disabled={readOnly} /></label>
-        </div>
-        <aside className={styles.guidance}><strong>Capture the complete quote scope</strong><p>{rentalQuotationGuidance(check.key)}</p><small>Record visible facts and safe measurements, with an overview and close photo. Include the scope, access and allowances needed to price the work. Licensed design and testing remain with qualified contractors.</small></aside>
-        {RENTAL_QUOTATION_FIELDS.map((field) => <label key={field.key}><span>{field.label} *</span><textarea name={`quotation_${field.key}`} rows={2} maxLength={field.maxLength || 4000} defaultValue={quotation[field.key]} disabled={readOnly} /><small>{field.help}</small></label>)}
+        <small>Record what you can safely see and measure. The trade uses your observations and photos to decide the work and prepare a quote.</small>
+        {(finding?.scopeSummary || RENTAL_QUOTATION_FIELDS.some((field) => quotation[field.key])) && <details className={styles.technicalDetails}>
+          <summary>Earlier recorded work details</summary>
+          {finding?.scopeSummary && <p>{finding.scopeSummary}</p>}
+          {RENTAL_QUOTATION_FIELDS.filter((field) => quotation[field.key]).map((field) => <p key={field.key}><strong>{field.label}</strong><br />{quotation[field.key]}</p>)}
+        </details>}
         {severity === "immediate_safety_risk" && <aside className={styles.safetyStop}>
           <strong>Stop and make the situation safe</strong>
           <p>Do not leave this as a quote item only. Record the immediate action and who was told.</p>

@@ -1,4 +1,5 @@
 import * as Crypto from 'expo-crypto';
+import { Directory, File, Paths } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 import * as SQLite from 'expo-sqlite';
 
@@ -31,6 +32,56 @@ const DATABASE_KEY_NAME = 'aea-field-database-key-v1';
 const DATABASE_OWNER_KEY = 'aea-field-database-owner-v1';
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let purgePromise: Promise<void> | null = null;
+let localOwnerEpoch = 0;
+const localOwnerListeners = new Set<() => void>();
+
+export type LocalDataOwner = { key: string; epoch: number };
+
+export function subscribeLocalDataOwner(listener: () => void) {
+  localOwnerListeners.add(listener);
+  return () => { localOwnerListeners.delete(listener); };
+}
+
+export async function getLocalDataOwner(): Promise<LocalDataOwner> {
+  const epoch = localOwnerEpoch;
+  const key = await SecureStore.getItemAsync(DATABASE_OWNER_KEY);
+  if (!key || epoch !== localOwnerEpoch || purgePromise) throw new Error('The local account changed. Sign in again before saving.');
+  return { key, epoch };
+}
+
+export function assertLocalDataOwner(owner: LocalDataOwner) {
+  if (owner.epoch !== localOwnerEpoch || purgePromise) throw new Error('The local account changed. Sign in again before saving.');
+}
+
+// Keep an in-flight worker bound to the database it opened, never a replacement account's database.
+export async function rentalQueueSettings(owner: LocalDataOwner) {
+  assertLocalDataOwner(owner);
+  const db = await getDatabase();
+  assertLocalDataOwner(owner);
+  const rows = await db.getAllAsync<{ key: string; value: string }>(
+    "SELECT key, value FROM settings WHERE key LIKE 'rental-save:%' ORDER BY key",
+  );
+  assertLocalDataOwner(owner);
+  return rows;
+}
+
+export async function readRentalSetting(owner: LocalDataOwner, key: string) {
+  assertLocalDataOwner(owner);
+  const db = await getDatabase();
+  assertLocalDataOwner(owner);
+  const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM settings WHERE key = ?', key);
+  assertLocalDataOwner(owner);
+  return row?.value || '';
+}
+
+export async function writeRentalSetting(owner: LocalDataOwner, key: string, value: string | null) {
+  assertLocalDataOwner(owner);
+  const db = await getDatabase();
+  assertLocalDataOwner(owner);
+  if (value === null) await db.runAsync('DELETE FROM settings WHERE key = ?', key);
+  else await db.runAsync('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', key, value);
+  assertLocalDataOwner(owner);
+}
 
 function fieldLane(value: unknown): FieldAccessMode {
   return value === 'creditex_manual' ? 'creditex_manual' : 'trade_team';
@@ -1101,10 +1152,19 @@ export async function queueCounts() {
   const conflicts = await db.getFirstAsync<{ count: number }>(`SELECT
     (SELECT COUNT(*) FROM action_queue WHERE status IN ('conflict', 'rejected'))
     + (SELECT COUNT(*) FROM upload_queue WHERE status = 'rejected') count`);
+  const rentalSaves = await db.getFirstAsync<{ count: number; errors: number }>(`SELECT COUNT(*) count,
+    COALESCE(SUM(CASE WHEN json_extract(value, '$.status') = 'conflict' THEN 1 ELSE 0 END), 0) errors
+    FROM settings WHERE key LIKE 'rental-save:%' AND json_valid(value)
+      AND json_extract(value, '$.status') <> 'succeeded'`);
+  const rentalPhotos = await db.getFirstAsync<{ count: number }>(`SELECT COUNT(*) count
+    FROM settings, json_each(CASE WHEN json_valid(settings.value) THEN settings.value ELSE '{}' END, '$.photos') photo
+    WHERE settings.key LIKE 'rental-save:%' AND json_valid(settings.value)
+      AND json_extract(settings.value, '$.status') <> 'succeeded'
+      AND COALESCE(json_extract(photo.value, '$.linked'), 0) <> 1`);
   return {
-    actions: (actions?.count || 0) + (activityCompletions?.count || 0),
-    uploads: uploads?.count || 0,
-    conflicts: (conflicts?.count || 0) + (activityCompletions?.errors || 0),
+    actions: (actions?.count || 0) + (activityCompletions?.count || 0) + (rentalSaves?.count || 0),
+    uploads: (uploads?.count || 0) + (rentalPhotos?.count || 0),
+    conflicts: (conflicts?.count || 0) + (activityCompletions?.errors || 0) + (rentalSaves?.errors || 0),
   };
 }
 
@@ -1189,8 +1249,22 @@ export async function prepareLocalDataOwner(firebaseUid: string) {
   });
 }
 
+function purgeRentalLocalPhotos() {
+  const documents = new Directory(Paths.document);
+  for (const name of ['rental-save-photos', 'rental-original-photos']) {
+    const directory = new Directory(documents, name);
+    if (directory.exists) directory.delete();
+  }
+  // Earlier rental captures used individual UUID files directly in documents. Delete only that exact owned pattern.
+  if (documents.exists) for (const entry of documents.list()) {
+    if (entry instanceof File && /^rental-photo-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:jpg|png|heic)$/i.test(entry.name)) entry.delete();
+  }
+}
+
 export async function purgeLocalData() {
   if (purgePromise) return purgePromise;
+  localOwnerEpoch += 1;
+  for (const listener of localOwnerListeners) listener();
   const activeDatabase = databasePromise;
   databasePromise = null;
   purgePromise = (async () => {
@@ -1198,6 +1272,7 @@ export async function purgeLocalData() {
       const db = await activeDatabase;
       await db.closeAsync();
     }
+    purgeRentalLocalPhotos();
     await SQLite.deleteDatabaseAsync(DATABASE_NAME);
     await SecureStore.deleteItemAsync(DATABASE_KEY_NAME);
     await SecureStore.deleteItemAsync(DATABASE_OWNER_KEY);

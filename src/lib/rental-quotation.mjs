@@ -17,43 +17,66 @@ export function rentalQuotation(value) {
   return fields;
 }
 
-export function rentalQuotationBlockers(finding, evidenceCount) {
-  const quote = rentalQuotation(finding?.details?.quotation);
-  const blockers = [];
-  for (const field of RENTAL_QUOTATION_FIELDS) if (!quote[field.key].trim()) blockers.push(`${field.label} is required so the work can be quoted from this assessment.`);
-  if (!(Number(finding?.quantityMilli) > 0) || !String(finding?.unitLabel || "").trim()) blockers.push("Record the quantity and unit for the measured work or defined testing service.");
-  if (!(Number(evidenceCount) >= 2)) blockers.push("Add at least two photos showing the work location and close detail before finalising the assessment.");
-  return blockers;
-}
-
-export function rentalQuotationGuidance(checkKey) {
-  if (checkKey === "ceiling_2027_readiness") return "Insulation: measure each uninsulated area in m2; record existing coverage/depth, target R-value, hatch dimensions, roof clearance, downlights, wiring and obstructions. Include overview, measurement/sketch and close photos. Identify the required pre-installation electrical check.";
-  if (/heater|heating|cooling/.test(checkKey)) return "Heating/cooling: record room dimensions and ceiling height, existing make/model and rating, proposed indoor/outdoor locations, pipe/cable route and length, drainage, access and electrical supply. Capacity and circuit suitability need qualified confirmation.";
-  if (/hot_water/.test(checkKey)) return "Hot water: record existing make/model/capacity, connections, proposed location and clearances, pipe/cable distances, drainage, access and removal route. Record plumbing and electrical prerequisites.";
-  if (/window|door|cord/.test(checkKey)) return "Openings: identify each room and opening; measure width/height or seal length, record material, frame/lock/covering type and mounting position. Photograph the whole opening and detail with a scale.";
-  return "Capture an overview, close detail and measured scope. Record the equipment/materials, access, work included and explicit allowances for concealed conditions. The report must contain the information needed to quote.";
-}
-
 export function rentalObservationFields(checkKey) {
   const measurements = {
-    switchboard_observation: "Visible main-switch rating and phase label, board location and readable circuit schedule photo. Unknown if not labelled; do not remove covers.",
-    cooktop_function: "Appliance/recess width, height and depth (mm), working burner count, visible socket/isolator and any cabinetry changes",
-    oven_function: "Appliance/recess width, height and depth (mm), visible connection/isolator and approximate accessible service route",
-    ceiling_2027_readiness: "Uninsulated area (m2), how measured, existing insulation depth and hatch size (mm)",
-    windows_2027_readiness: "Window locations, total seal/tape length (metres) and gap sizes (mm)",
-    doors_2027_readiness: "Door locations and widths (mm), perimeter seal length (metres) and number of door-bottom seals",
-    vents_2027_readiness: "Vent locations, count and opening dimensions (mm)",
-    shower_2027_readiness: "Measured water flow (litres/minute), collected volume and timed seconds",
-    heating_2027_readiness: "Equipment width/height/depth (mm), room length/width/height (metres) and possible replacement location",
-    cooling_2027_readiness: "Equipment dimensions (mm), room dimensions (metres) and possible indoor/outdoor locations",
-    hot_water_2027_readiness: "Cylinder/equipment dimensions (mm), label capacity (litres), available space and access width (mm)",
+    cooktop_function: "Cooktop width and depth (mm), and how many burners worked",
+    oven_function: "Oven and accessible opening width, height and depth (mm)",
+    ceiling_2027_readiness: "Bare ceiling area (m2) and how you measured it; visible insulation depth and hatch width (mm), if accessible",
+    windows_2027_readiness: "Which windows have gaps? Record their width, height and affected edge lengths (mm or metres)",
+    doors_2027_readiness: "Which doors have gaps? Record door width and affected edge lengths (mm or metres)",
+    vents_2027_readiness: "Vent locations, number and opening width and height (mm)",
+    shower_2027_readiness: "Water flow (litres/minute), collected water volume and timed seconds, if tested",
+    heating_2027_readiness: "Living room length, width and height (metres)",
+    cooling_2027_readiness: "Living room length, width and height (metres)",
+    hot_water_2027_readiness: "Existing unit width and height, nearby clear space and access width (mm), if accessible",
+    window_covering: "Window location, width and height (mm)",
   };
+  if (checkKey === "switchboard_observation") return [
+    { key: "model", label: "Board location and any readable labels. Write Unknown for hidden or unreadable details; leave covers in place.", required: false },
+    { key: "limitationReason", label: "Anything you could not safely see, and why", required: false },
+  ];
+  if (["main_living_heater", "heater_operation", "heater_efficiency", "showerhead_rating", "appliance_identity_condition", "alarm_identity_location", "fixed_special_equipment"].includes(checkKey)) return [
+    { key: "model", label: "Equipment type, make, model and any readable rating or date from its label, or Unknown. Add a label photo when readable.", required: false },
+    { key: "serialNumber", label: "Serial number, if readable", required: false },
+    { key: "limitationReason", label: "Anything you could not safely see or check, and why", required: false },
+  ];
   if (!measurements[checkKey]) return [];
   return [
-    ...( /^(heating|cooling|hot_water|shower|cooktop|oven)_/.test(checkKey) ? [{ key: "model", label: "Existing equipment: fuel/type, make/model/serial and readable label photo reference", required: false }] : []),
-    { key: "measurement", label: measurements[checkKey], required: false },
-    ...(/^(heating|cooling|hot_water)_/.test(checkKey) ? [{ key: "actionTaken", label: checkKey.startsWith("hot_water") ? "Proposed location and delivery/removal route: steps, narrow points, fencing, vegetation, ground works and nearby windows/neighbours. Photograph the route." : "Equipment to retain/remove, visible flues or penetrations and making good. Photograph affected walls and the proposed locations.", required: false }] : []),
-    ...(checkKey === "ceiling_2027_readiness" ? [{ key: "model", label: "Existing insulation material and readable R-value/product-label evidence, or Unknown. Depth alone does not prove R-value.", required: false }] : []),
+    ...(/^(heating|cooling|hot_water|shower|cooktop|oven)_/.test(checkKey) ? [{ key: "model", label: "Existing equipment type, make and model from its label, or Unknown. Add a label photo when readable.", required: false }] : []),
+    { key: "measurement", label: measurements[checkKey], required: false, requiredForAdverse: true },
+    ...(/^(heating|cooling|hot_water)_/.test(checkKey) ? [{ key: "actionTaken", label: "Where is the equipment? Note visible access obstacles, such as steps or a narrow gate.", required: false }] : []),
+    ...(checkKey === "ceiling_2027_readiness" ? [{ key: "model", label: "Visible insulation material and any readable product or R-value label, or Unknown. Depth alone does not prove R-value.", required: false }] : []),
     { key: "limitationReason", label: "Anything you could not safely identify or measure, and why", required: false },
   ];
+}
+
+/**
+ * Use current capture wording for drafts, without replacing licensed test/action requirements.
+ * @param {{ key: string, responseType?: string, responseFields?: Array<{ key: string, label: string, required: boolean }> }} assessmentCheck
+ * @returns {Array<{ key: string, label: string, required: boolean, requiredForAdverse?: boolean }>}
+ */
+export function rentalAssessorFields(assessmentCheck) {
+  if (["test_result", "action_record"].includes(assessmentCheck?.responseType)) return assessmentCheck.responseFields || [];
+  const fields = rentalObservationFields(assessmentCheck?.key);
+  return fields.length ? fields : (assessmentCheck?.responseFields || []);
+}
+
+export function rentalFindingDescriptionLabel(outcome) {
+  if (outcome === "not_accessible") return "What could not be checked, and why?";
+  if (outcome === "specialist_verification_required") return "What could you see, and what needs checking?";
+  if (outcome === "exemption_evidence_pending") return "What evidence is missing?";
+  return "What did you notice?";
+}
+
+export function rentalObservationBlockers({ checkKey, outcome, response, finding, photoCount }) {
+  const blockers = [];
+  if (!(Number(photoCount) >= 2)) blockers.push("Add an overview photo and a close photo of the affected area before completing the assessment.");
+  const measurementNeeded = outcome === "does_not_meet"
+    && rentalObservationFields(checkKey).some((field) => field.requiredForAdverse);
+  if (measurementNeeded && !String(response?.measurement || "").trim()
+    && !String(response?.limitationReason || "").trim()
+    && !rentalQuotation(finding?.details?.quotation).measurements.trim()) {
+    blockers.push("Record the basic measurements, or explain what you could not safely measure.");
+  }
+  return blockers;
 }

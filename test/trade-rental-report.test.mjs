@@ -129,10 +129,36 @@ test("rental assessment PDF is readable, branded and excludes internal notes rec
   assert.match(content, /7 metres/);
   assert.doesNotMatch(content, /NaN/);
   assert.doesNotMatch(content, /plumber|Responsible trade|Further information required before quoting|Ready to quote/);
-  assert.match(content, /Scope for quoting/);
+  assert.match(content, /Observations for quoting/);
   for (const secret of ["MODULE SECRET", "ITEM SECRET", "RESPONSE SECRET", "FINDING SECRET", "NESTED SECRET"]) {
     assert.doesNotMatch(content, new RegExp(secret));
   }
+});
+
+test("evidence-only finding shows assessor details before photos without promising a trade scope", async () => {
+  const snapshot = reportSnapshot();
+  snapshot.findings[0] = { ...snapshot.findings[0], scopeSummary: "", recommendedAction: "", quantityMilli: 0, details: {} };
+  snapshot.modules[0].sections[0].items[0].response = { measurement: "Bedroom window is 1200 x 1500 mm", model: "Readable label: SAMPLE-42", limitationReason: "Upper frame could not be reached safely" };
+  snapshot.evidence = [{ id: "photo-1", itemId: "item-1", findingId: "finding-1", fileName: "window-photo.jpg", caption: "WINDOW EVIDENCE MARKER", contentType: "image/jpeg" }];
+  const pdf = await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot));
+  const content = decodedPageContent(pdf);
+  assert.doesNotMatch(content, /Not measured; confirm before pricing|Each scope includes access requirements|Measured work, specifications|Quantity/);
+  assert.match(content, /Observations for quoting/);
+  for (const value of Object.values(snapshot.modules[0].sections[0].items[0].response)) {
+    const position = content.indexOf(value);
+    assert.ok(position >= 0 && position < content.indexOf("WINDOW EVIDENCE MARKER"), `${value} must appear in the finding before its evidence`);
+  }
+});
+
+test("finding details retain a real quantity and do not repeat identical legacy quotation measurements", async () => {
+  const snapshot = reportSnapshot();
+  snapshot.findings[0].quantityMilli = 24000;
+  snapshot.findings[0].unitLabel = "m2";
+  snapshot.findings[0].details.quotation = { measurements: "UNIQUE MEASURED AREA 24 m2" };
+  snapshot.modules[0].sections[0].items[0].response = { measurement: "UNIQUE MEASURED AREA 24 m2" };
+  const content = decodedPageContent(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
+  assert.match(content, /24 m2/);
+  assert.equal(content.split("UNIQUE MEASURED AREA 24 m2").length - 1, 2, "The value appears once in the finding and once in the detailed assessment checklist");
 });
 
 test("rental assessment PDF rejects an incomplete report snapshot", async () => {

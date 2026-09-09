@@ -15,6 +15,7 @@ import {
 import { deviceRegistration, forgetPushToken, getDeviceId } from '@/lib/device';
 import type { FieldAccessMode, OfflineAction, SyncResponse } from '@/lib/types';
 import { processUploadQueue } from '@/lib/uploads';
+import { processRentalSaveQueue } from '@/lib/rental-save-queue';
 import { processActivityFormCompletionQueue } from '@/lib/activity-form-completion';
 
 let activeSync: Promise<SyncOutcome> | null = null;
@@ -160,6 +161,10 @@ async function performSync(verifiedModes?: FieldAccessMode[]): Promise<SyncOutco
     for (const mode of modes) {
       await registerDevice(mode);
       if (mode === 'trade_team') await processActivityFormCompletionQueue();
+      // A large photo backlog must not hold up new assignments, ordinary actions or the next job.
+      if (mode === 'trade_team') void processRentalSaveQueue().catch(() => {
+        // The rental queue retains each failed answer and its error for retry or review.
+      });
       // Work-pack artifact commits and prepared-revision signature captures
       // reference exact uploaded bytes by stable clientUploadId. Complete the
       // uploads before sending either authoritative action.
@@ -176,7 +181,9 @@ async function performSync(verifiedModes?: FieldAccessMode[]): Promise<SyncOutco
       queuedUploads: counts.uploads,
       conflicts: counts.conflicts,
       updateRequired: '',
-      message: counts.conflicts ? 'Work is saved. Review the items that changed elsewhere.' : 'All field work is safely synced.',
+      message: counts.conflicts ? 'Work is saved. Review the items that changed elsewhere.'
+        : counts.actions || counts.uploads ? 'Work is saved on this device. Some answers or photos are still waiting to sync.'
+          : 'All field work is safely synced.',
     };
   } catch (error) {
     if (error instanceof ApiError && ['DEVICE_REVOKED', 'DEVICE_REAUTHORISATION_REQUIRED'].includes(error.code)) {
