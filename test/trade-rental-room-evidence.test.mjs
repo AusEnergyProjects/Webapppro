@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { rentalAssessmentCompletion, rentalAssessmentTemplateSnapshot } from '../src/lib/trade-rental-assessment.mjs';
+import { rentalAssessmentCompletion, rentalAssessmentTemplateSnapshot, publicRentalReportValue } from '../src/lib/trade-rental-assessment.mjs';
 import { RENTAL_ROOM_TYPES } from '../src/lib/rental-assessor-workflow.mjs';
 
 function assessment(checkKey, outcome = 'meets') {
@@ -72,4 +72,26 @@ test('inaccessible areas retain honest findings without requiring unsafe photos'
   input.findings = [{ itemId: 'item-1', title: 'Locked room', description: 'The room was locked and no key was available' }];
   assert.equal(rentalAssessmentCompletion(input).complete, true);
   assert.equal(input.items[0].outcome, 'not_accessible');
+});
+
+test('each recorded room window needs its own covering answer before completion', () => {
+  const input = assessment('window_covering');
+  const full = rentalAssessmentTemplateSnapshot(['minimum_standards']).modules.minimum_standards;
+  input.moduleTemplate.sections.push(full.sections.find((section) => section.key === 'windows'));
+  input.answers.roomRoster = [{ id: 'room-1', label: 'Front bedroom', type: 'bedroom' }];
+  const first = { ...input.items[0], instanceKey: 'window-1', locationLabel: 'Front bedroom - Window 1', responseJson: JSON.stringify({ roomId: 'room-1' }) };
+  const operation = { ...first, id: 'operation-1', itemKey: 'operation-1', sectionKey: 'windows', checkKey: 'window_operation_security' };
+  const secondOperation = { ...operation, id: 'operation-2', itemKey: 'operation-2', instanceKey: 'window-2', locationLabel: 'Front bedroom - Window 2' };
+  input.items = [first, operation, secondOperation];
+  assert.deepEqual(rentalAssessmentCompletion(input).blockers.map((blocker) => blocker.key), ['window:window-2:window_covering']);
+  input.items.push({ ...first, id: 'covering-2', itemKey: 'covering-2', instanceKey: 'legacy-covering-key', locationLabel: secondOperation.locationLabel });
+  assert.equal(rentalAssessmentCompletion(input).complete, true, 'An existing answer at this exact window location remains usable');
+  input.items.at(-1).outcome = 'not_assessed';
+  assert.equal(rentalAssessmentCompletion(input).complete, false, 'An unanswered second window cannot borrow the first result');
+});
+
+test('report observations retain useful measurements without exposing internal room identifiers', () => {
+  const input = { locationLabel: 'Lounge - Window 1', response: { roomId: 'room-internal-id', sealLengthMetres: '4.8' } };
+  assert.deepEqual(publicRentalReportValue(input), { locationLabel: 'Lounge - Window 1', response: { sealLengthMetres: '4.8' } });
+  assert.equal(input.response.roomId, 'room-internal-id', 'The editable job retains its room association');
 });

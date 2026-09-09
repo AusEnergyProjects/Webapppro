@@ -1,5 +1,5 @@
 import { rentalObservationBlockers, rentalObservationFields } from "./rental-quotation.mjs";
-import { normalizeRentalRoomRoster, rentalAssessorEvidenceRequirement, rentalRoomsForCheck, rentalRoomItemInstance } from "./rental-assessor-workflow.mjs";
+import { normalizeRentalRoomRoster, rentalAssessorEvidenceRequirement, rentalRoomsForCheck, rentalRoomItemInstance, RENTAL_WINDOW_CHECKS, rentalRoomWindowItems } from "./rental-assessor-workflow.mjs";
 
 export const RENTAL_INSPECTION_SERVICE_CATEGORY = "rental-inspection";
 
@@ -709,6 +709,8 @@ export function rentalAssessmentCompletion(input) {
   let roomRoster = [];
   try { roomRoster = answers.roomRoster === undefined ? [] : normalizeRentalRoomRoster(answers.roomRoster); }
   catch { blockers.push({ key: "room-roster", label: "Review the room list before completing the assessment." }); }
+  const windowItems = items.map((item) => ({ ...item, response: parsedObject(item.responseJson) }));
+  const roomWindows = roomRoster.flatMap((room) => rentalRoomWindowItems(room, windowItems));
   const observationsOnly = moduleTemplate.metadataFields?.some((field) => field.key === "rentalRegime") && !rentalRegimeAssessment(answers).applicable;
   if (observationsOnly && !items.length) blockers.push({ key: "observations", label: "Record at least one observation with its evidence before completing an observations report." });
 
@@ -726,6 +728,14 @@ export function rentalAssessmentCompletion(input) {
           const instanceKey = rentalRoomItemInstance(room, assessmentCheck.key, items);
           if (!checkItems.some((item) => item.instanceKey === instanceKey)) {
             blockers.push({ key: `room:${room.id}:${assessmentCheck.key}`, label: `${room.label}: ${assessmentCheck.prompt} has not been assessed.` });
+          }
+        }
+        if (RENTAL_WINDOW_CHECKS.some((check) => check.checkKey === assessmentCheck.key)) {
+          for (const window of roomWindows) {
+            const instanceKey = rentalRoomItemInstance({ id: window.instanceKey, label: window.locationLabel, type: "other" }, assessmentCheck.key, items);
+            if (!checkItems.some((item) => item.instanceKey === instanceKey)) {
+              blockers.push({ key: `window:${window.instanceKey}:${assessmentCheck.key}`, label: `${window.locationLabel}: ${assessmentCheck.prompt} has not been assessed.` });
+            }
           }
         }
       }
@@ -802,7 +812,7 @@ export function publicRentalReportValue(value) {
   if (Array.isArray(value)) return value.map(publicRentalReportValue);
   if (!value || typeof value !== "object") return value;
   return Object.fromEntries(Object.entries(value)
-    .filter(([key]) => key !== "internalNotes" && key !== "internal_notes")
+    .filter(([key]) => key !== "internalNotes" && key !== "internal_notes" && key !== "roomId")
     .map(([key, nested]) => [key, publicRentalReportValue(nested)]));
 }
 

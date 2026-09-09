@@ -11,7 +11,7 @@ import {
 import type { User } from "firebase/auth";
 import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalAssessorFields, rentalFindingDescriptionLabel, rentalSharedObservationResponse, rentalObservationNumberIsValid } from "@/lib/rental-quotation.mjs";
 import { rentalCheckIsReadiness } from "@/lib/trade-rental-assessment.mjs";
-import { RENTAL_ROOM_TYPES, normalizeRentalRoomRoster, rentalRoomChecks, rentalRoomsFromItems, rentalRoomItemInstance, rentalAssessorCheckPresentation, rentalAssessorEvidenceRequirement } from "@/lib/rental-assessor-workflow.mjs";
+import { RENTAL_ROOM_TYPES, RENTAL_WINDOW_CHECKS, normalizeRentalRoomRoster, rentalRoomChecks, rentalRoomsFromItems, rentalRoomItemInstance, rentalAssessorCheckPresentation, rentalAssessorEvidenceRequirement, rentalAssessorOutcomePatch, rentalWindowIsFixed, rentalRoomWindowItems, rentalNextRoomWindowLabel } from "@/lib/rental-assessor-workflow.mjs";
 import styles from "./TradeRentalInspectionPanel.module.css";
 
 type MetadataField = {
@@ -159,11 +159,21 @@ type AssessmentResult = {
 
 type LocalItem = AssessmentItem & { localOnly?: boolean };
 type AssessmentRoom = { id: string; label: string; type: string };
-type AssessmentGroup = { key: string; title: string; summary: string; room?: AssessmentRoom; retainedItems?: AssessmentItem[]; entries: Array<{ section: AssessmentSection; check: AssessmentCheck }> };
+type AssessmentGroup = { key: string; title: string; summary: string; room?: AssessmentRoom; windowRoom?: AssessmentRoom; windowItem?: AssessmentItem; retainedItems?: AssessmentItem[]; entries: Array<{ section: AssessmentSection; check: AssessmentCheck }> };
+
+function roomWindowsGroup(assessmentModule: AssessmentModule, room: AssessmentRoom, windowItem: AssessmentItem): AssessmentGroup {
+  const entries = RENTAL_WINDOW_CHECKS.flatMap(({ checkKey }) => {
+    const section = assessmentModule.template.sections.find((candidate) => candidate.checks.some((check) => check.key === checkKey));
+    const check = section?.checks.find((candidate) => candidate.key === checkKey);
+    return section && check ? [{ section, check }] : [];
+  });
+  return { key: `windows:${room.id}`, title: windowItem.locationLabel, summary: "Check this window, its covering and any draught gaps together. Add another window when this room has more than one.", windowRoom: room, windowItem, entries };
+}
 
 function assessmentGroups(assessmentModule: AssessmentModule, items: AssessmentItem[]) {
   const sections = assessmentModule.template.sections;
   const roomCheckKeys = new Set(RENTAL_ROOM_TYPES.flatMap((type) => rentalRoomChecks(type.value)).map((entry) => entry.checkKey));
+  const windowCheckKeys = new Set(RENTAL_WINDOW_CHECKS.map((entry) => entry.checkKey));
   const usesRooms = assessmentModule.key === "minimum_standards" && sections.some((section) => section.checks.some((check) => roomCheckKeys.has(check.key)));
   const rooms: AssessmentRoom[] = usesRooms ? rentalRoomsFromItems(normalizeRentalRoomRoster(assessmentModule.answers.roomRoster ?? []), items) : [];
   const roomGroups: AssessmentGroup[] = rooms.map((room) => ({
@@ -174,20 +184,26 @@ function assessmentGroups(assessmentModule: AssessmentModule, items: AssessmentI
       return section && check ? [{ section, check }] : [];
     }),
   }));
+  const windowGroups = rooms.flatMap((room) => rentalRoomWindowItems(room, items).map((windowItem) => roomWindowsGroup(assessmentModule, room, windowItem)));
   const propertyGroups: AssessmentGroup[] = sections.flatMap((section) => {
-    const entries = section.checks.filter((check) => !usesRooms || !roomCheckKeys.has(check.key)).map((check) => ({ section, check }));
+    const entries = section.checks.filter((check) => !usesRooms || (!roomCheckKeys.has(check.key) && !windowCheckKeys.has(check.key))).map((check) => ({ section, check }));
     return entries.length ? [{ key: section.key, title: section.title, summary: section.summary, entries }] : [];
   });
-  const retained = usesRooms ? items.filter((item) => roomCheckKeys.has(item.checkKey) && !roomGroups.some((group) => group.entries.some(({ section, check }) => groupItems(group, section, check, items).some((candidate) => candidate.id === item.id)))) : [];
+  const retained = usesRooms ? items.filter((item) => (roomCheckKeys.has(item.checkKey) || windowCheckKeys.has(item.checkKey)) && ![...roomGroups, ...windowGroups].some((group) => group.entries.some(({ section, check }) => groupItems(group, section, check, items).some((candidate) => candidate.id === item.id)))) : [];
   const retainedGroups: AssessmentGroup[] = sections.flatMap((section) => {
     const entries = section.checks.filter((check) => retained.some((item) => item.sectionKey === section.key && item.checkKey === check.key)).map((check) => ({ section, check }));
     return entries.length ? [{ key: `earlier:${section.key}`, title: `Earlier ${section.title.toLowerCase()} observations`, summary: "Saved observations that do not match a single current room remain here with their original location and evidence.", entries, retainedItems: retained }] : [];
   });
-  return { usesRooms, rooms, groups: [...roomGroups, ...propertyGroups, ...retainedGroups] };
+  return { usesRooms, rooms, groups: [...roomGroups, ...propertyGroups, ...retainedGroups], windowGroups };
 }
 
 function groupItems(group: AssessmentGroup, section: AssessmentSection, check: AssessmentCheck, items: AssessmentItem[]) {
   const matching = (group.retainedItems || items).filter((item) => item.sectionKey === section.key && item.checkKey === check.key);
+  if (group.windowItem) {
+    const windowIdentity = { id: group.windowItem.instanceKey, label: group.windowItem.locationLabel, type: "other" };
+    const instance = rentalRoomItemInstance(windowIdentity, check.key, items);
+    return matching.filter((item) => item.instanceKey === instance);
+  }
   if (!group.room) return matching;
   const instance = rentalRoomItemInstance(group.room, check.key, items);
   return matching.filter((item) => item.instanceKey === instance);
@@ -338,6 +354,10 @@ function localRepeatedItem(module: AssessmentModule, section: AssessmentSection,
   };
 }
 
+function localRoomWindow(assessmentModule: AssessmentModule, section: AssessmentSection, check: AssessmentCheck, room: AssessmentRoom, items: AssessmentItem[]): LocalItem {
+  return { ...localRepeatedItem(assessmentModule, section, check), locationLabel: rentalNextRoomWindowLabel(room, items), response: { roomId: room.id } };
+}
+
 function RoomRosterForm({ rooms, roomTypes, lockedRoomIds, needsConfirmation = false, busy, readOnly, onSave }: {
   rooms: AssessmentRoom[];
   roomTypes: readonly { value: string; label: string }[];
@@ -470,10 +490,12 @@ function AssessmentItemCard({
   roomLabel?: string;
 }) {
   const [outcome, setOutcome] = useState(item.outcome || "");
+  const [publicNotes, setPublicNotes] = useState(finding?.description || item.publicNotes);
   const [severity, setSeverity] = useState(finding?.severity || "required");
   const isAdverse = adverseOutcomes.has(outcome);
   const readiness = rentalCheckIsReadiness(check, module.template.assessmentScope);
-  const presentation = rentalAssessorCheckPresentation(check, { assessmentScope: module.template.assessmentScope });
+  const presentation = rentalAssessorCheckPresentation(check, { assessmentScope: module.template.assessmentScope, outcome, publicNotes });
+  const fixedWindow = check.key === "window_operation_security" && rentalWindowIsFixed(outcome, publicNotes);
   const evidenceRequirement = rentalAssessorEvidenceRequirement(check, outcome);
   const quotation = rentalQuotation(finding?.details.quotation);
   const responseFields = rentalAssessorFields(check);
@@ -488,7 +510,7 @@ function AssessmentItemCard({
     const value = String(shared.response[field.key] ?? "").trim();
     if (field.shared && recordedKeys.includes(field.key) && !editEquipment) return false;
     if (field.legacy && !value) return false;
-    if (field.showForOutcomes && !field.showForOutcomes.includes(outcome) && !value) return false;
+    if (field.showForOutcomes && !field.showForOutcomes.includes(outcome)) return false;
     return !field.showIf || value || field.showIf.values.includes(String(shared.response[field.showIf.key] || ""));
   });
   const needsSpecialistCredential = outcome === "meets" && Boolean(check.credentialGate)
@@ -608,7 +630,11 @@ function AssessmentItemCard({
       <fieldset className={styles.outcomes} disabled={readOnly}>
         <legend>Result *</legend>
         {presentation.outcomeOptions.map(({ value, label }) => <label className={outcome === value ? styles.selectedOutcome : ""} key={value}>
-          <input type="radio" name="outcome" value={value} checked={outcome === value} onChange={() => setOutcome(value)} />
+          <input type="radio" name="outcome" value={value} checked={outcome === value} onChange={() => {
+            const patch = rentalAssessorOutcomePatch(check, value, publicNotes);
+            setOutcome(patch.outcome);
+            if (patch.publicNotes !== undefined) setPublicNotes(patch.publicNotes);
+          }} />
           <span>{label}</span>
         </label>)}
       </fieldset>
@@ -619,11 +645,11 @@ function AssessmentItemCard({
         <small>{presentation.help}</small>
       </aside>
 
-      <label>
+      {fixedWindow ? <><input type="hidden" name="publicNotes" value={publicNotes} /><p>{publicNotes}</p></> : <label>
         <span>{isAdverse ? rentalFindingDescriptionLabel(outcome) : "Report detail"}{isAdverse || outcome === "not_applicable" ? " *" : ""}</span>
-        <textarea name="publicNotes" required={isAdverse || outcome === "not_applicable"} rows={3} maxLength={isAdverse ? 8000 : 4000} defaultValue={finding?.description || item.publicNotes} placeholder={outcome === "not_applicable" ? "Explain why this standard does not apply at this property. This appears in the final report." : "A short description of what you saw, checked or measured, including the location."} disabled={readOnly} />
+        <textarea name="publicNotes" required={isAdverse || outcome === "not_applicable"} rows={3} maxLength={isAdverse ? 8000 : 4000} value={publicNotes} onChange={(event) => setPublicNotes(event.target.value)} placeholder={outcome === "not_applicable" ? "Explain why this standard does not apply at this property. This appears in the final report." : "A short description of what you saw, checked or measured, including the location."} disabled={readOnly} />
         <small>This is visible to the agent, rental provider and trades viewing the issued report.</small>
-      </label>
+      </label>}
 
       {recordedKeys.length > 0 && <aside className={styles.guidance}>
         <strong>Equipment details already recorded</strong>
@@ -710,6 +736,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
   const [status, setStatus] = useState("");
   const [activeModuleId, setActiveModuleId] = useState("");
   const [activeSectionKey, setActiveSectionKey] = useState("");
+  const [activeWindowInstanceKey, setActiveWindowInstanceKey] = useState("");
   const [localItems, setLocalItems] = useState<Record<string, LocalItem[]>>({});
   const [observationDrafts, setObservationDrafts] = useState<Record<string, AssessmentItem>>({});
   const [dirtyItems, setDirtyItems] = useState<Set<string>>(() => new Set());
@@ -763,7 +790,11 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
   const activeItems = useMemo(() => (data.items || []).filter((item) => item.moduleId === activeModule?.id), [data.items, activeModule?.id]);
   const workflow = useMemo(() => activeModule ? assessmentGroups(activeModule, activeItems) : { usesRooms: false, rooms: [], groups: [] }, [activeModule, activeItems]);
   const roomRosterUnconfirmed = workflow.usesRooms && (!workflow.rooms.length || JSON.stringify(workflow.rooms) !== JSON.stringify(activeModule?.answers.roomRoster || []));
-  const activeSection = workflow.groups.find((section) => section.key === activeSectionKey);
+  const windowRoom = workflow.rooms.find((room) => `windows:${room.id}` === activeSectionKey);
+  const windowCandidates = [...activeItems, ...Object.values(localItems).flat().filter((item) => item.moduleId === activeModule?.id && !activeItems.some((saved) => saved.checkKey === item.checkKey && saved.instanceKey === item.instanceKey))];
+  const roomWindows = windowRoom ? rentalRoomWindowItems(windowRoom, windowCandidates) : [];
+  const activeWindow = roomWindows.find((item) => item.instanceKey === activeWindowInstanceKey) || roomWindows[0];
+  const activeSection = activeModule && windowRoom && activeWindow ? roomWindowsGroup(activeModule, windowRoom, activeWindow) : workflow.groups.find((section) => section.key === activeSectionKey);
   const canEdit = !readOnly && data.permissions?.canEdit === true;
   const moduleCompletion = activeModule ? data.completion?.[activeModule.id] : undefined;
   const allModulesComplete = (data.modules || []).length > 0 && (data.modules || []).every((module) => module.status === "complete");
@@ -772,8 +803,8 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
   const progress = useMemo(() => {
     const allChecks = (data.modules || []).flatMap((assessmentModule) => {
       const items = (data.items || []).filter((item) => item.moduleId === assessmentModule.id);
-      const { groups, usesRooms, rooms } = assessmentGroups(assessmentModule, items);
-      const checks = groups.flatMap((group) => group.entries.map(({ section, check }) => ({ assessed: groupItems(group, section, check, items).some((item) => item.outcome) })));
+      const { groups, windowGroups, usesRooms, rooms } = assessmentGroups(assessmentModule, items);
+      const checks = [...groups, ...windowGroups].flatMap((group) => group.entries.map(({ section, check }) => ({ assessed: groupItems(group, section, check, items).some((item) => item.outcome) })));
       if (usesRooms && !rooms.length) checks.push({ assessed: false });
       return checks;
     });
@@ -951,6 +982,28 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
     setLocalItems((current) => ({ ...current, [key]: [...(current[key] || []), localRepeatedItem(activeModule, section, check)] }));
   }
 
+  async function openRoomWindows(room: AssessmentRoom, selectedWindow?: AssessmentItem, addWindow = false) {
+    if (!activeModule) return;
+    const assessmentModule = activeModule;
+    const navigate = () => {
+      const section = assessmentModule.template.sections.find((candidate) => candidate.checks.some((check) => check.key === "window_operation_security"));
+      const check = section?.checks.find((candidate) => candidate.key === "window_operation_security");
+      if (!section || !check) return;
+      const available = rentalRoomWindowItems(room, windowCandidates);
+      const chosen = !addWindow && (selectedWindow || available[0]);
+      const next = chosen || localRoomWindow(assessmentModule, section, check, room, windowCandidates);
+      if (!chosen) {
+        const key = `${assessmentModule.id}:${section.key}:${check.key}`;
+        setLocalItems((current) => ({ ...current, [key]: [...(current[key] || []), next] }));
+      }
+      setActiveWindowInstanceKey(next.instanceKey);
+      setActiveSectionKey(`windows:${room.id}`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+    if (dirtyItems.size > 0) await saveSectionAndContinue(navigate);
+    else navigate();
+  }
+
   function returnToSectionOverview() {
     if (dirtyItems.size > 0 && !window.confirm("Return to all sections without saving the changes still open on this screen?")) return;
     setDirtyItems(new Set());
@@ -958,7 +1011,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async function saveSectionAndContinue() {
+  async function saveSectionAndContinue(afterSave?: () => void) {
     if (!activeSection) return;
     setBusy("section-continue");
     setStatus(dirtyItems.size > 0 ? "Saving every changed answer in this section..." : "Confirming saved section progress...");
@@ -1011,6 +1064,13 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
       } else {
         current = await load();
       }
+      if (afterSave) { afterSave(); setStatus(`${activeSection.title} saved.`); return; }
+      if (activeSection.windowRoom) {
+        setActiveSectionKey(`room:${activeSection.windowRoom.id}`);
+        setStatus(`${activeSection.title} saved. Back at ${activeSection.windowRoom.label}.`);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
       const currentIndex = workflow.groups.findIndex((section) => section.key === activeSection.key);
       const nextSection = workflow.groups[currentIndex + 1];
       setActiveSectionKey(nextSection?.key || "");
@@ -1060,7 +1120,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
     <MetadataForm module={activeModule} busy={busy === `metadata:${activeModule.id}`} readOnly={!canEdit || activeModule.status === "complete"} onSave={saveMetadata} /></>}
 
     {!activeSection && workflow.usesRooms && <RoomRosterForm rooms={workflow.rooms} roomTypes={RENTAL_ROOM_TYPES} needsConfirmation={roomRosterUnconfirmed}
-      lockedRoomIds={new Set(workflow.rooms.filter((room) => rentalRoomChecks(room.type).some(({ checkKey }) => activeItems.some((item) => item.checkKey === checkKey && item.instanceKey === rentalRoomItemInstance(room, checkKey, activeItems)))).map((room) => room.id))}
+      lockedRoomIds={new Set(workflow.rooms.filter((room) => rentalRoomWindowItems(room, activeItems).length > 0 || rentalRoomChecks(room.type).some(({ checkKey }) => activeItems.some((item) => item.checkKey === checkKey && item.instanceKey === rentalRoomItemInstance(room, checkKey, activeItems)))).map((room) => room.id))}
       busy={Boolean(busy)} readOnly={!canEdit || activeModule.status === "complete"} onSave={saveRooms} />}
 
     <div className={styles.sectionLayout}>
@@ -1078,34 +1138,47 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
       </section> : <main className={styles.sectionContent}>
         <button type="button" className={styles.backToSections} onClick={returnToSectionOverview}>← Back to all sections</button>
         <header className={styles.sectionHeader}>
-          <span>{activeSection.room ? "Room" : "Section"} {workflow.groups.findIndex((section) => section.key === activeSection.key) + 1} of {workflow.groups.length}</span>
+          <span>{activeSection.windowRoom ? `Windows in ${activeSection.windowRoom.label}` : `${activeSection.room ? "Room" : "Section"} ${workflow.groups.findIndex((section) => section.key === activeSection.key) + 1} of ${workflow.groups.length}`}</span>
           <h4>{activeSection.title}</h4>
           <p>{activeSection.summary}</p>
+          {activeSection.room && sections.some((section) => section.checks.some((check) => check.key === "window_operation_security")) && <button type="button" className={styles.secondaryButton} disabled={Boolean(busy)} onClick={() => { if (activeSection.room) void openRoomWindows(activeSection.room); }}>Windows in {activeSection.room.label}</button>}
+          {activeSection.windowRoom && <div className={styles.detailGrid}>
+            <label><span>Window</span><select value={activeWindow?.instanceKey || ""} disabled={Boolean(busy)} onChange={(event) => {
+              const selected = roomWindows.find((item) => item.instanceKey === event.target.value);
+              if (selected && activeSection.windowRoom) void openRoomWindows(activeSection.windowRoom, selected);
+            }}>{roomWindows.map((item) => <option key={item.instanceKey} value={item.instanceKey}>{item.locationLabel}</option>)}</select></label>
+            {canEdit && activeModule.status !== "complete" && <button type="button" className={styles.addInstance} disabled={Boolean(busy)} onClick={() => { if (activeSection.windowRoom) void openRoomWindows(activeSection.windowRoom, undefined, true); }}>Add another window</button>}
+          </div>}
         </header>
         {activeSection.entries.map(({ section, check }, checkIndex) => {
           const key = `${activeModule.id}:${section.key}:${check.key}`;
-          const stored = groupItems(activeSection, section, check, activeItems);
+          const stored = groupItems(activeSection, section, check, activeSection.windowItem ? windowCandidates : activeItems);
           const first = initialItem(activeModule, section, check);
           if (activeSection.room) { first.instanceKey = rentalRoomItemInstance(activeSection.room, check.key, activeItems); first.locationLabel = activeSection.room.label; }
+          if (activeSection.windowItem && activeSection.windowRoom) {
+            first.instanceKey = rentalRoomItemInstance({ id: activeSection.windowItem.instanceKey, label: activeSection.windowItem.locationLabel, type: "other" }, check.key, windowCandidates);
+            first.locationLabel = activeSection.windowItem.locationLabel;
+            first.response = { roomId: activeSection.windowRoom.id };
+          }
           const workingItems: LocalItem[] = [
             ...(stored.length ? stored : [first]),
-            ...(activeSection.room ? [] : localItems[key] || []),
+            ...(activeSection.room || activeSection.windowItem ? [] : localItems[key] || []),
           ];
           return <section className={styles.checkGroup} key={check.key}>
             {workingItems.map((item, instanceIndex) => {
               const finding = data.findings?.find((candidate) => candidate.itemId === item.id);
               const evidence = (data.evidence || []).filter((entry) => entry.itemId === item.id && entry.status === "active");
                return <AssessmentItemCard key={`${item.id || item.instanceKey}:${item.revision}`}
-                module={activeModule} section={section} check={check} roomLabel={activeSection.room?.label} item={{ ...item, sortOrder: (sections.findIndex((candidate) => candidate.key === section.key) + 1) * 100 + checkIndex * 10 + instanceIndex }}
+                module={activeModule} section={section} check={check} roomLabel={activeSection.room?.label || (activeSection.windowItem ? item.locationLabel : undefined)} item={{ ...item, sortOrder: (sections.findIndex((candidate) => candidate.key === section.key) + 1) * 100 + checkIndex * 10 + instanceIndex }}
                 finding={finding} evidence={evidence} observationCandidates={observationCandidates} onObservationChange={recordObservation} busy={busy} readOnly={!canEdit || activeModule.status === "complete"}
                 onSave={(body) => saveItem(item, body)} onUpload={uploadEvidence} onUnlink={unlinkEvidence} onDirtyChange={markItemDirty} onRegisterDraft={registerItemDraft} />;
             })}
-            {!activeSection.room && !activeSection.retainedItems && check.repeatBy !== "property" && canEdit && activeModule.status !== "complete" && <button type="button" className={styles.addInstance} onClick={() => addRepeatedItem(section, check)}>Add another {check.repeatBy.replaceAll("_", " ")}</button>}
+            {!activeSection.room && !activeSection.windowItem && !activeSection.retainedItems && check.repeatBy !== "property" && canEdit && activeModule.status !== "complete" && <button type="button" className={styles.addInstance} onClick={() => addRepeatedItem(section, check)}>Add another {check.repeatBy.replaceAll("_", " ")}</button>}
           </section>;
         })}
         <div className={styles.sectionActions}>
           <button type="button" onClick={returnToSectionOverview}>Back to all sections</button>
-          <button type="button" className={styles.primaryButton} disabled={Boolean(busy)} onClick={() => void saveSectionAndContinue()}>{busy === "section-continue" ? "Saving section..." : workflow.groups.findIndex((section) => section.key === activeSection.key) < workflow.groups.length - 1 ? "Save section and continue" : "Save section and return"}</button>
+          <button type="button" className={styles.primaryButton} disabled={Boolean(busy)} onClick={() => void saveSectionAndContinue()}>{busy === "section-continue" ? "Saving section..." : activeSection.windowRoom ? "Save window and return to room" : workflow.groups.findIndex((section) => section.key === activeSection.key) < workflow.groups.length - 1 ? "Save section and continue" : "Save section and return"}</button>
           <small>This saves every changed answer on the screen before moving forward. The smaller Save button remains available when you want to save one answer immediately.</small>
         </div>
       </main>}

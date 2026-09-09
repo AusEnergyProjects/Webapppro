@@ -155,6 +155,67 @@ const post = (route, value) => route.POST(new Request("https://test.example/api/
   method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ workOrderId: "job", ...value }),
 }));
 
+test("room-linked window checks retain four independent answers per window and preserve the earlier property seal record", async () => {
+  const fixture = databaseFixture();
+  try {
+    const room = { id: "room-1", label: "Bedroom 1", type: "bedroom" };
+    fixture.sql.prepare("UPDATE trade_rental_inspection_modules SET answers = ?").run(JSON.stringify({ roomRoster: [room] }));
+    const frozen = fixture.sql.prepare("SELECT template_snapshot FROM trade_rental_inspection_modules").get().template_snapshot;
+    const route = loadRoute(fixture);
+    const save = async (body) => {
+      const revision = fixture.sql.prepare("SELECT revision FROM trade_rental_inspection_modules").get().revision;
+      const response = await post(route, { action: "save_item", moduleId: "module", expectedModuleRevision: revision, expectedItemRevision: 0,
+        outcome: "meets", ...body });
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+      return response.json();
+    };
+    await save({ sectionKey: "draughtproofing", checkKey: "windows_2027_readiness", instanceKey: "property", locationLabel: "Earlier property observation", response: {} });
+    for (const instanceKey of ["window-one", "window-two"]) {
+      for (const check of workflow.RENTAL_WINDOW_CHECKS) {
+        const payload = await save({ sectionKey: check.sectionKey, checkKey: check.checkKey, instanceKey,
+          locationLabel: `${room.label} - ${instanceKey}`, response: { roomId: ` ${room.id} ` } });
+        const saved = payload.items.find((item) => item.checkKey === check.checkKey && item.instanceKey === instanceKey);
+        assert.ok(saved, `${check.checkKey} must retain ${instanceKey}`);
+        assert.equal(saved.response.roomId, room.id);
+      }
+    }
+    const sealed = fixture.sql.prepare("SELECT instance_key,location_label,response_json FROM trade_rental_inspection_items WHERE check_key = 'windows_2027_readiness' ORDER BY instance_key").all();
+    assert.deepEqual(sealed.map((item) => item.instance_key), ["property", "window-one", "window-two"]);
+    assert.equal(sealed[0].location_label, "Earlier property observation");
+    assert.deepEqual(JSON.parse(sealed[0].response_json), {});
+    assert.equal(fixture.sql.prepare("SELECT template_snapshot FROM trade_rental_inspection_modules").get().template_snapshot, frozen);
+    const before = fixture.sql.prepare("SELECT COUNT(*) count FROM trade_rental_inspection_items").get().count;
+    const revision = fixture.sql.prepare("SELECT revision FROM trade_rental_inspection_modules").get().revision;
+    const forbidden = await post(route, { action: "save_item", moduleId: "module", expectedModuleRevision: revision, expectedItemRevision: 0,
+      sectionKey: "heating", checkKey: "heating_2027_readiness", instanceKey: "invented-heater", outcome: "meets", response: { roomId: room.id } });
+    assert.equal(forbidden.status, 400);
+    assert.equal(fixture.sql.prepare("SELECT COUNT(*) count FROM trade_rental_inspection_items").get().count, before);
+  } finally { fixture.sql.close(); }
+});
+
+test("window room identity rejects malformed or foreign IDs and resolves only this module's legacy room observations", async () => {
+  const fixture = databaseFixture();
+  try {
+    fixture.sql.exec("UPDATE trade_rental_inspection_items SET check_key='artificial_lighting', section_key='lighting', instance_key='legacy-room', location_label='Front bedroom'");
+    const room = workflow.rentalRoomsFromItems([], [{ checkKey: "artificial_lighting", instanceKey: "legacy-room", locationLabel: "Front bedroom" }])[0];
+    const route = loadRoute(fixture);
+    const base = { action: "save_item", moduleId: "module", expectedModuleRevision: 1, expectedItemRevision: 0,
+      sectionKey: "windows", checkKey: "window_operation_security", instanceKey: "window-one", locationLabel: "Front bedroom - Window 1", outcome: "meets" };
+    for (const roomId of [null, {}, [], "", "a".repeat(121), "bad/id", "foreign-room"]) {
+      const response = await post(route, { ...base, response: { roomId } });
+      assert.equal(response.status, 400, JSON.stringify(roomId));
+    }
+    fixture.sql.exec("UPDATE trade_rental_inspection_items SET firebase_uid='other-owner'");
+    assert.equal((await post(route, { ...base, response: { roomId: room.id } })).status, 400, "A foreign owner's room does not grant an association");
+    fixture.sql.exec("UPDATE trade_rental_inspection_items SET firebase_uid='owner',module_id='other-module'");
+    assert.equal((await post(route, { ...base, response: { roomId: room.id } })).status, 400, "A room in another module is not this assessment's room");
+    fixture.sql.exec("UPDATE trade_rental_inspection_items SET module_id='module'");
+    const saved = await post(route, { ...base, response: { roomId: room.id } });
+    assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()));
+    assert.equal((await saved.json()).items.find((item) => item.instanceKey === "window-one").response.roomId, room.id);
+  } finally { fixture.sql.close(); }
+});
+
 test("ordinary rental observations save without specialist credentials while circuit verification stays protected", async () => {
   const fixture = databaseFixture();
   try {

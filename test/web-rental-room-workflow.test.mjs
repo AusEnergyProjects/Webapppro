@@ -10,7 +10,7 @@ import * as assessment from "../src/lib/trade-rental-assessment.mjs";
 import * as workflowHelpers from "../src/lib/rental-assessor-workflow.mjs";
 
 const source = readFileSync(new URL("../src/components/TradeRentalInspectionPanel.tsx", import.meta.url), "utf8");
-const exposed = source.replace(/function (assessmentGroups|groupItems|RoomRosterForm|AssessmentItemCard)\(/g, "export function $1(");
+const exposed = source.replace(/function (assessmentGroups|groupItems|roomWindowsGroup|localRoomWindow|RoomRosterForm|AssessmentItemCard)\(/g, "export function $1(");
 const compiled = ts.transpileModule(exposed, { compilerOptions: {
   module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
 } }).outputText;
@@ -26,7 +26,7 @@ new Function("require", "module", "exports", compiled)((id) => {
   assert.ok(id in dependencies, `Unexpected dependency ${id}`);
   return dependencies[id];
 }, output, output.exports);
-const { assessmentGroups, groupItems, RoomRosterForm, AssessmentItemCard } = output.exports;
+const { assessmentGroups, groupItems, roomWindowsGroup, localRoomWindow, RoomRosterForm, AssessmentItemCard } = output.exports;
 const template = assessment.rentalAssessmentTemplateSnapshot(["minimum_standards"]).modules.minimum_standards;
 const bedroom = { id: "room-bedroom", label: "Bedroom 1", type: "bedroom" };
 const bathroom = { id: "room-bathroom", label: "Bathroom 1", type: "bathroom" };
@@ -46,14 +46,15 @@ function renderCard(group, entry, outcome = "meets") {
   }));
 }
 
-test("web rooms reuse one identity across the applicable checks while retaining every full assessment check", () => {
-  const workflow = assessmentGroups(assessmentModule(), []);
+test("web rooms reuse one identity and keep all full assessment checks across rooms, windows and property", () => {
+  const windowItem = item("window_operation_security", bedroom, { sectionKey: "windows", instanceKey: "window-1", locationLabel: "Bedroom 1 - Window 1", response: { roomId: bedroom.id } });
+  const workflow = assessmentGroups(assessmentModule(), [windowItem]);
   const bedroomGroup = workflow.groups.find((group) => group.room?.id === bedroom.id);
   const bathroomGroup = workflow.groups.find((group) => group.room?.id === bathroom.id);
   assert.deepEqual(bedroomGroup.entries.map((entry) => entry.check.key), workflowHelpers.RENTAL_ROOM_CHECKS.map((entry) => entry.checkKey));
   assert.ok(!bathroomGroup.entries.some((entry) => entry.check.key === "habitable_daylight"));
   assert.equal(workflow.rooms.length, 2);
-  assert.deepEqual(new Set(workflow.groups.flatMap((group) => group.entries.map((entry) => entry.check.key))),
+  assert.deepEqual(new Set([...workflow.groups, ...workflow.windowGroups].flatMap((group) => group.entries.map((entry) => entry.check.key))),
     new Set(template.sections.flatMap((section) => section.checks.map((check) => check.key))));
   for (const entry of bedroomGroup.entries) {
     const markup = renderCard(bedroomGroup, entry);
@@ -146,4 +147,107 @@ test("new mobile rental jobs request the single full form while retaining separa
   assert.doesNotMatch(mobile, /Rental assessment scope|setRentalAssessmentScope|energy_readiness_2027/);
   assert.match(mobile, /electrical_safety_check/);
   assert.match(mobile, /gas_safety_check/);
+});
+
+test("each named window groups its own four checks without duplicating them in property sections", () => {
+  const first = item("window_operation_security", bedroom, { id: "window-one", sectionKey: "windows", instanceKey: "window-one", locationLabel: "Bedroom 1 - Window 1", response: { roomId: bedroom.id } });
+  const second = item("window_operation_security", bedroom, { id: "window-two", sectionKey: "windows", instanceKey: "window-two", locationLabel: "Bedroom 1 - Window 2", response: { roomId: bedroom.id } });
+  const covering = item("window_covering", bedroom, { id: "covering-one", sectionKey: "window_coverings", instanceKey: "window-one", locationLabel: first.locationLabel, outcome: "does_not_meet", response: { roomId: bedroom.id } });
+  const unrelated = item("window_covering", bedroom, { id: "earlier-covering", sectionKey: "window_coverings", instanceKey: "unmatched", locationLabel: "North upstairs window" });
+  const saved = [first, second, covering, unrelated];
+  const workflow = assessmentGroups(assessmentModule(), saved);
+  assert.equal(workflow.windowGroups.length, 2);
+  for (const group of workflow.windowGroups) {
+    assert.deepEqual(group.entries.map(({ check }) => check.key), workflowHelpers.RENTAL_WINDOW_CHECKS.map((check) => check.checkKey));
+    assert.equal(group.title, group.windowItem.locationLabel);
+  }
+  const firstGroup = roomWindowsGroup(assessmentModule(), bedroom, first);
+  const secondGroup = roomWindowsGroup(assessmentModule(), bedroom, second);
+  const entry = firstGroup.entries.find(({ check }) => check.key === "window_covering");
+  assert.deepEqual(groupItems(firstGroup, entry.section, entry.check, saved).map((answer) => answer.id), [covering.id]);
+  assert.deepEqual(groupItems(secondGroup, entry.section, entry.check, saved), []);
+  const ordinary = workflow.groups.filter((group) => !group.retainedItems);
+  assert.ok(!ordinary.some((group) => group.entries.some(({ check }) => workflowHelpers.RENTAL_WINDOW_CHECKS.some((windowCheck) => windowCheck.checkKey === check.key))));
+  const reachableEarlier = workflow.groups.flatMap((group) => group.entries.flatMap(({ section, check }) => groupItems(group, section, check, saved)));
+  assert.ok(reachableEarlier.some((answer) => answer.id === unrelated.id));
+  assert.ok(!reachableEarlier.some((answer) => answer.id === covering.id));
+});
+
+test("adding another room window creates a new identity and numbered location without renaming saved windows", () => {
+  const section = template.sections.find((entry) => entry.key === "windows");
+  const check = section.checks.find((entry) => entry.key === "window_operation_security");
+  const earlier = item(check.key, bedroom, { sectionKey: section.key, instanceKey: "legacy", locationLabel: bedroom.label });
+  const first = localRoomWindow(assessmentModule(), section, check, bedroom, [earlier]);
+  const second = localRoomWindow(assessmentModule(), section, check, bedroom, [earlier, first]);
+  assert.equal(first.locationLabel, "Bedroom 1 - Window 1");
+  assert.equal(second.locationLabel, "Bedroom 1 - Window 2");
+  assert.notEqual(first.instanceKey, second.instanceKey);
+  assert.deepEqual(first.response, { roomId: bedroom.id });
+  assert.equal(earlier.locationLabel, bedroom.label);
+  assert.equal(earlier.instanceKey, "legacy");
+});
+
+function renderWindowCard(checkKey, extra = {}) {
+  const section = template.sections.find((entry) => entry.checks.some((check) => check.key === checkKey));
+  const check = section.checks.find((entry) => entry.key === checkKey);
+  return renderToStaticMarkup(React.createElement(AssessmentItemCard, {
+    module: assessmentModule(), section, check,
+    item: item(checkKey, bedroom, { sectionKey: section.key, instanceKey: "window-one", locationLabel: "Bedroom 1 - Window 1", ...extra }),
+    roomLabel: "Bedroom 1 - Window 1", evidence: [], observationCandidates: [], busy: "", readOnly: false,
+    onSave() {}, onUpload() {}, onUnlink() {}, onDirtyChange() {}, onRegisterDraft() {}, onObservationChange() {},
+  }));
+}
+
+test("window operation uses four plain answers and records fixed glazing without another required text field", () => {
+  const ordinary = renderWindowCard("window_operation_security");
+  assert.equal((ordinary.match(/type="radio"/g) || []).length, 4);
+  assert.match(ordinary, /Does this window open and close properly\?/);
+  assert.doesNotMatch(ordinary, /Needs verification|Possible exception|Exact location/);
+  const patch = workflowHelpers.rentalAssessorOutcomePatch("window_operation_security", "not_applicable");
+  const fixed = renderWindowCard("window_operation_security", patch);
+  assert.match(fixed, /name="publicNotes" value="Fixed glazing; this window is not designed to open\."/);
+  assert.doesNotMatch(fixed, /textarea name="publicNotes"|Explain why this standard/);
+  const legacy = renderWindowCard("window_operation_security", { outcome: "not_applicable", publicNotes: "No window in this location." });
+  assert.match(legacy, /Does not apply \(saved answer\)/);
+  assert.match(legacy, /No window in this location/);
+  const specialist = renderWindowCard("window_operation_security", { outcome: "specialist_verification_required" });
+  assert.match(specialist, /Needs verification/);
+  assert.equal((specialist.match(/type="radio"/g) || []).length, 5);
+});
+
+test("successful window covering and draught checks hide measurement inputs even when earlier measurements exist", () => {
+  for (const checkKey of ["window_covering", "windows_2027_readiness"]) {
+    const response = { widthMm: "2400", heightMm: "1200", sealLengthMetres: "7.2" };
+    const clear = renderWindowCard(checkKey, { response });
+    assert.doesNotMatch(clear, /name="widthMm"|name="heightMm"|name="sealLengthMetres"/);
+    assert.match(clear, /type="hidden" name="locationLabel" value="Bedroom 1 - Window 1"/);
+    const defect = renderWindowCard(checkKey, { response, outcome: "does_not_meet" });
+    assert.match(defect, /name="widthMm"[^>]*value="2400"/);
+    assert.match(defect, /name="heightMm"[^>]*value="1200"/);
+  }
+});
+
+test("the real window shortcut saves dirty room answers before creating or opening a window", async () => {
+  const start = source.indexOf("  async function openRoomWindows(");
+  const end = source.indexOf("\n  function returnToSectionOverview", start);
+  const navigateCode = ts.transpileModule(source.slice(start, end), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const calls = [];
+  let finishSave;
+  let local = {};
+  const environment = {
+    activeModule: assessmentModule(), windowCandidates: [], dirtyItems: new Set(["changed-room-answer"]),
+    rentalRoomWindowItems: workflowHelpers.rentalRoomWindowItems, localRoomWindow,
+    setLocalItems: (update) => { local = update(local); calls.push("created"); },
+    setActiveWindowInstanceKey: () => calls.push("selected-window"), setActiveSectionKey: (key) => calls.push(key),
+    window: { scrollTo() {} },
+    saveSectionAndContinue: (afterSave) => new Promise((resolve) => { calls.push("save-first"); finishSave = () => { afterSave(); resolve(); }; }),
+  };
+  const open = new Function(...Object.keys(environment), `${navigateCode}; return openRoomWindows;`)(...Object.values(environment));
+  const opening = open(bedroom);
+  assert.deepEqual(calls, ["save-first"]);
+  assert.deepEqual(local, {});
+  finishSave();
+  await opening;
+  assert.deepEqual(calls, ["save-first", "created", "selected-window", `windows:${bedroom.id}`]);
+  assert.equal(Object.values(local).flat()[0].locationLabel, "Bedroom 1 - Window 1");
 });

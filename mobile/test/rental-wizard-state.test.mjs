@@ -3,23 +3,15 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 import { rentalAssessorFields, rentalObservationNumberIsValid, rentalObservationBlockers } from '../../src/lib/rental-quotation.mjs';
-import { rentalAssessorEvidenceRequirement, rentalRoomChecks, rentalRoomItemInstance, RENTAL_ROOM_CHECKS } from '../../src/lib/rental-assessor-workflow.mjs';
+import { rentalAssessorEvidenceRequirement, rentalRoomChecks, rentalRoomItemInstance, RENTAL_ROOM_CHECKS, RENTAL_WINDOW_CHECKS,
+  rentalRoomWindowItems, rentalNextRoomWindowLabel, rentalAssessorOutcomePatch } from '../../src/lib/rental-assessor-workflow.mjs';
 
 const code = ts.transpileModule(readFileSync(new URL('../src/lib/rental-inspection.ts', import.meta.url), 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText;
 const exports = {};
 new Function('exports', code)(exports);
-const { rentalAdjacentQuestion, rentalObservationsComplete, deliverRentalPhoto } = exports;
-
-test('Next and Previous visit every question inside each category, including read-only records', () => {
-  const sections = [{ key: 'first', checks: [{ key: 'a' }, { key: 'b' }] }, { key: 'second', checks: [{ key: 'c' }] }];
-  assert.deepEqual(rentalAdjacentQuestion(sections, 'first', 0, 1), { section: sections[0], checkIndex: 1 });
-  assert.deepEqual(rentalAdjacentQuestion(sections, 'first', 1, 1), { section: sections[1], checkIndex: 0 });
-  assert.deepEqual(rentalAdjacentQuestion(sections, 'second', 0, -1), { section: sections[0], checkIndex: 1 });
-  assert.equal(rentalAdjacentQuestion(sections, 'second', 0, 1), null);
-  assert.equal(rentalAdjacentQuestion(sections, 'unknown', 0, 1), null);
-});
+const { rentalObservationsComplete, deliverRentalPhoto } = exports;
 
 test('final declarations require real observation and evidence completion', () => {
   const result = (blockers) => ({ completion: { assessment: { complete: false, blockers } } });
@@ -222,7 +214,7 @@ test('clear mould and visible damage observations advance with no photos; a defe
 
 function mountedHandler(name, nextName, environment) {
   const start = source.search(new RegExp('  (?:async )?function ' + name + '\\('));
-  const end = source.search(new RegExp('  (?:async )?function ' + nextName + '\\('));
+  const end = nextName === '$render' ? source.indexOf('  return <View style={styles.shell}>') : source.search(new RegExp('  (?:async )?function ' + nextName + '\\('));
   assert.ok(start >= 0 && end > start);
   const compiled = ts.transpileModule('export ' + source.slice(start, end).trim(), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
@@ -237,10 +229,11 @@ test('room navigation visits applicable checks together and never opens another 
     if (!group) { group = { key: entry.sectionKey, checks: [] }; all.push(group); }
     group.checks.push({ key: entry.checkKey }); return all;
   }, []);
-  const env = { sections, roomItems: [], rentalRoomChecks, rentalRoomItemInstance, page: 'answer', activeRoom: room,
+  const env = { sections, roomItems: [], rentalRoomChecks, rentalRoomItemInstance, page: 'answer', activeRoom: room, activeWindow: undefined,
+    setWindowContextId() {},
     setRoomContextId(id) { env.roomId = id; }, setCursor(cursor) { env.cursor = cursor; },
     setGuidanceOpen() {}, setError() {}, setPage(page) { env.page = page; } };
-  env.openRoomCheck = mountedHandler('openRoomCheck', 'saveRooms', env);
+  env.openRoomCheck = mountedHandler('openRoomCheck', 'openRoomWindows', env);
   env.roomSteps = rentalRoomChecks(room.type).map((step) => ({ section: sections.find((s) => s.key === step.sectionKey) }));
   const advance = mountedHandler('advanceQuestion', 'changeAnswer', env);
   env.openRoomCheck(room);
@@ -289,4 +282,123 @@ test('room-list conflict recovery keeps a durable copy before retiring supersede
   calls.length = 0; env.persist = async () => { throw new Error('Storage full'); };
   await assert.rejects(() => mountedHandler('reviewQueuedRooms', 'previous', env)(false), /Storage full/);
   assert.deepEqual(calls, [], 'Never discard queue records when the durable recovery copy fails');
+});
+
+
+function windowEnvironment() {
+  const room = { id: 'bedroom-2', label: 'Rear bedroom', type: 'bedroom' };
+  const sections = RENTAL_WINDOW_CHECKS.map((entry) => ({ key: entry.sectionKey, checks: [{ key: entry.checkKey, repeatBy: 'window' }] }));
+  const env = { active: { id: 'module', key: 'minimum_standards', template: {} }, activeRoom: room, activeWindow: undefined,
+    windowSteps: sections.map((section) => ({ section, checkIndex: 0 })), roomItems: [], data: {}, page: 'answer',
+    windowCheckIndex: 0, rentalRoomItemInstance, rentalNextRoomWindowLabel,
+    setRoomContextId(id) { env.roomId = id; }, setWindowContextId(id) { env.windowId = id; },
+    setCursor(cursor) { env.cursor = cursor; env.section = sections.find((section) => section.key === cursor.sectionKey); env.check = env.section.checks[cursor.checkIndex]; },
+    setGuidanceOpen() {}, setError() {}, setPage(page) { env.page = page; },
+    perform: async (_name, action) => action(), cacheRef: { current: { drafts: {}, answers: {} } }, setCache() {},
+    Crypto: { randomUUID: () => 'window-new' }, itemKey: (_assessment, cursor) => [cursor.sectionKey, cursor.checkIndex, cursor.instanceKey].join(':'),
+    initialDraft: () => ({ outcome: '', response: {}, photos: [] }), newRentalItem: () => ({}) };
+  env.openRoomWindows = mountedHandler('openRoomWindows', 'openWindowCheck', env);
+  env.openWindowCheck = mountedHandler('openWindowCheck', 'addWindow', env);
+  return env;
+}
+
+test('one window visits operation, covering, cord safety and seals with its existing individual answer identities', () => {
+  const env = windowEnvironment();
+  const window = { instanceKey: 'window-1', locationLabel: 'Rear bedroom - Window 1' };
+  env.activeWindow = window;
+  env.roomItems = RENTAL_WINDOW_CHECKS.map((entry, index) => ({ checkKey: entry.checkKey,
+    instanceKey: index === 0 ? window.instanceKey : 'legacy-' + index, locationLabel: window.locationLabel, outcome: index === 1 ? 'does_not_meet' : 'meets' }));
+  const original = structuredClone(env.roomItems);
+  const advance = mountedHandler('advanceQuestion', 'changeAnswer', env);
+  env.openWindowCheck(env.activeRoom, window);
+  for (let index = 0; index < env.windowSteps.length; index++) {
+    env.windowCheckIndex = index;
+    assert.equal(env.cursor.instanceKey, index === 0 ? 'window-1' : 'legacy-' + index);
+    assert.equal(env.check.key, RENTAL_WINDOW_CHECKS[index].checkKey);
+    advance();
+  }
+  assert.equal(env.page, 'roomWindows');
+  assert.deepEqual(env.roomItems, original, 'Navigation never copies another check outcome or changes legacy IDs');
+  const previous = mountedHandler('previous', '$render', env);
+  env.page = 'answer'; env.windowCheckIndex = 3; env.openWindowCheck(env.activeRoom, window, 3);
+  previous(); assert.equal(env.check.key, RENTAL_WINDOW_CHECKS[2].checkKey);
+  env.windowCheckIndex = 0; previous(); assert.equal(env.page, 'roomWindows');
+});
+
+test('adding a window waits only for durable local identity and restores its room after a restart', async () => {
+  const env = windowEnvironment();
+  env.roomItems = [{ checkKey: 'window_operation_security', instanceKey: 'older', locationLabel: 'Rear bedroom - Window 1', response: { roomId: env.activeRoom.id } }];
+  let releaseStorage; let stored; let opened = false;
+  env.persist = async (cache) => { await new Promise((resolve) => { releaseStorage = resolve; }); stored = structuredClone(cache); };
+  env.openWindowCheck = () => { opened = true; };
+  const adding = mountedHandler('addWindow', 'saveRooms', env)(env.activeRoom);
+  assert.equal(opened, false);
+  releaseStorage(); await adding;
+  assert.equal(opened, true);
+  const draft = Object.values(stored.drafts)[0];
+  assert.equal(draft.locationLabel, 'Rear bedroom - Window 2');
+  assert.deepEqual(draft.response, { roomId: 'bedroom-2' });
+  assert.equal(draft.outcome, '');
+  const recovered = rentalRoomWindowItems(env.activeRoom, [{ ...draft, checkKey: 'window_operation_security', instanceKey: 'window-new' }]);
+  assert.equal(recovered.length, 1);
+  const failed = windowEnvironment(); failed.persist = async () => { throw new Error('Storage full'); };
+  failed.openWindowCheck = () => assert.fail('Must stay on the menu if storage fails');
+  await assert.rejects(() => mountedHandler('addWindow', 'saveRooms', failed)(failed.activeRoom), /Storage full/);
+});
+
+test('property navigation keeps door and wall vent indices while skipping the separate window loops', () => {
+  const section = { key: 'draughtproofing', checks: [
+    { key: 'doors_2027_readiness', repeatBy: 'door' }, { key: 'windows_2027_readiness', repeatBy: 'window' }, { key: 'vents_2027_readiness', repeatBy: 'vent' },
+  ] };
+  const env = { section, check: section.checks[0], cursor: { checkIndex: 0 }, activeRoom: undefined, activeWindow: undefined,
+    propertySteps: [{ section, checkIndex: 0 }, { section, checkIndex: 2 }], repeatInstances: () => [],
+    openCheck(group, index) { env.opened = { group, index }; }, page: 'answer', setError() {}, setPage(page) { env.page = page; } };
+  mountedHandler('advanceQuestion', 'changeAnswer', env)();
+  assert.equal(env.opened.index, 2);
+  env.cursor.checkIndex = 2; env.check = section.checks[2];
+  mountedHandler('previous', '$render', env)(); assert.equal(env.opened.index, 0);
+});
+
+test('working coverings hide retained quotation dimensions without discarding them; fixed windows save their reason without typing', async () => {
+  const declaration = source.slice(source.indexOf('  const responseFields ='), source.indexOf('  const detailField ='));
+  const compiled = ts.transpileModule(declaration + '\nreturn responseFields;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const evaluate = (environment) => new Function('environment', 'with(environment){' + compiled + '}')(environment);
+  const draft = { outcome: 'meets', response: { widthMm: '2400', heightMm: '1800' } };
+  const env = { draft, check: { key: 'window_covering' }, rentalAssessorFields, sharedObservation: { recordedKeys: [] }, editEquipmentKey: '', key: 'draft' };
+  assert.equal(evaluate(env).some((field) => field.key === 'widthMm'), false);
+  assert.equal(draft.response.widthMm, '2400');
+  draft.outcome = 'does_not_meet'; assert.equal(evaluate(env).some((field) => field.key === 'widthMm'), true);
+  const saving = saveEnvironment(); saving.check = { key: 'window_operation_security', repeatBy: 'window' };
+  saving.draft.locationLabel = 'Rear bedroom - Window 1'; saving.draft.photos = [];
+  Object.assign(saving.draft, rentalAssessorOutcomePatch(saving.check, 'not_applicable', 'Frosted glazing'));
+  let queued; saving.enqueueRentalSave = async (input) => { queued = input; return { id: 'fixed' }; };
+  saving.advanceQuestion = () => {}; await mountedSaveAnswer(saving)();
+  assert.match(queued.body.publicNotes, /Frosted glazing/);
+  assert.match(queued.body.publicNotes, /not designed to open/);
+});
+
+
+test('legacy energy-only snapshots keep window sealing in property navigation until a room/window anchor exists', () => {
+  const modes = source.slice(source.indexOf('  const usesRooms ='), source.indexOf('  const rooms ='));
+  const steps = source.slice(source.indexOf('  const windowSteps ='), source.indexOf('  const windowCheckIndex ='));
+  const property = source.slice(source.indexOf('  const propertySteps ='), source.indexOf('  const earlierWindowItems ='));
+  const compiled = ts.transpileModule(modes + steps + property + '\nreturn { usesRooms, usesRoomWindows, windowSteps, propertySteps };', {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const evaluate = (sections) => new Function('environment', 'with(environment){' + compiled + '}')({
+    sections, active: { key: 'minimum_standards' }, RENTAL_ROOM_CHECKS, RENTAL_WINDOW_CHECKS,
+  });
+  const legacy = [{ key: 'draughtproofing', checks: [{ key: 'doors_2027_readiness' }, { key: 'windows_2027_readiness' }, { key: 'vents_2027_readiness' }] }];
+  const result = evaluate(legacy);
+  assert.equal(result.usesRooms, false);
+  assert.equal(result.windowSteps.length, 0);
+  assert.deepEqual(result.propertySteps.map((step) => step.checkIndex), [0, 1, 2]);
+  const withoutAnchor = evaluate([...legacy, { key: 'lighting', checks: [{ key: 'artificial_lighting' }] }]);
+  assert.equal(withoutAnchor.usesRooms, true);
+  assert.equal(withoutAnchor.usesRoomWindows, false);
+  assert.deepEqual(withoutAnchor.propertySteps.map((step) => step.checkIndex), [0, 1, 2]);
+  const full = evaluate([...legacy, { key: 'lighting', checks: [{ key: 'artificial_lighting' }] }, { key: 'windows', checks: [{ key: 'window_operation_security' }] }]);
+  assert.equal(full.usesRoomWindows, true);
+  assert.deepEqual(full.propertySteps.map((step) => step.checkIndex), [0, 2]);
+  assert.equal(full.windowSteps[0].section.checks[full.windowSteps[0].checkIndex].key, 'window_operation_security');
 });

@@ -5,6 +5,7 @@ import {
   normalizeRentalRoomRoster, rentalRoomChecks, rentalRoomsForCheck,
   rentalRoomsFromItems, rentalRoomItemInstance, rentalAssessorEvidenceRequirement,
   rentalAssessorCheckPresentation,
+  RENTAL_WINDOW_CHECKS, rentalRoomWindowItems, rentalNextRoomWindowLabel, rentalAssessorOutcomePatch, rentalWindowIsFixed,
 } from "../src/lib/rental-assessor-workflow.mjs";
 import { rentalAssessmentTemplateSnapshot, RENTAL_ASSESSMENT_OUTCOMES } from "../src/lib/trade-rental-assessment.mjs";
 
@@ -183,11 +184,83 @@ test("the full assessment keeps 24 current and eight future checks with their or
   assert.equal(views.filter((view) => view.phaseLabel === "2027 readiness").length, 8);
   for (let index = 0; index < checks.length; index++) {
     assert.ok(views[index].prompt && views[index].help);
-    assert.deepEqual(views[index].outcomeOptions.map((option) => option.value), [...RENTAL_ASSESSMENT_OUTCOMES]);
-    if (checks[index].assessmentPhase === "energy_readiness_2027") assert.equal(views[index].help, checks[index].help);
+    const simpleWindow = ["window_operation_security", "window_covering"].includes(checks[index].key);
+    assert.deepEqual(views[index].outcomeOptions.map((option) => option.value), simpleWindow
+      ? ["meets", "does_not_meet", "not_accessible", "not_applicable"] : [...RENTAL_ASSESSMENT_OUTCOMES]);
+    if (checks[index].assessmentPhase === "energy_readiness_2027" && !["doors_2027_readiness", "windows_2027_readiness", "vents_2027_readiness"].includes(checks[index].key)) assert.equal(views[index].help, checks[index].help);
   }
   const ceiling = views[checks.findIndex((check) => check.key === "ceiling_2027_readiness")];
   assert.match(ceiling.prompt, /insulation present throughout this accessible ceiling area/i);
   assert.match(ceiling.help, /Existing insulation need not be upgraded/);
   assert.equal(rentalAssessorCheckPresentation({ key: "unknown", prompt: "Preserved specialist question", help: "Preserved legal basis" }).help, "Preserved legal basis");
+});
+
+test("ordinary window choices are practical and fixed glazing records its own honest reason", () => {
+  const check = { key: "window_operation_security" };
+  const view = rentalAssessorCheckPresentation(check);
+  assert.equal(view.prompt, "Does this window open and close properly?");
+  assert.match(view.help, /latch or lock works/);
+  assert.equal(view.outcomeOptions.length, 4);
+  const fixed = rentalAssessorOutcomePatch(check, "not_applicable");
+  assert.equal(fixed.outcome, "not_applicable");
+  assert.equal(rentalWindowIsFixed(fixed.outcome, fixed.publicNotes), true);
+  assert.equal(rentalAssessorCheckPresentation(check, fixed).outcomeOptions.find((option) => option.value === "not_applicable").label, "Fixed window (does not open)");
+  assert.deepEqual(rentalAssessorOutcomePatch(check, "meets", fixed.publicNotes), { outcome: "meets", publicNotes: "" });
+  const custom = rentalAssessorOutcomePatch(check, "not_applicable", "Fixed panel beside the entry");
+  assert.ok(custom.publicNotes.startsWith("Fixed panel beside the entry\n"));
+  assert.deepEqual(rentalAssessorOutcomePatch(check, "not_applicable", custom.publicNotes), custom, "Never duplicate the automatic note");
+  assert.equal(rentalAssessorOutcomePatch(check, "does_not_meet", "Keep this existing record").publicNotes, "Keep this existing record");
+});
+
+test("previous exception and verification results remain readable without offering them on every new window", () => {
+  for (const key of ["window_operation_security", "window_covering"]) {
+    for (const outcome of ["specialist_verification_required", "exemption_evidence_pending"]) {
+      const view = rentalAssessorCheckPresentation({ key }, { outcome });
+      assert.ok(view.outcomeOptions.some((option) => option.value === outcome));
+    }
+  }
+  const old = rentalAssessorCheckPresentation({ key: "window_operation_security" }, { outcome: "not_applicable", publicNotes: "Not an external window" });
+  assert.equal(old.outcomeOptions.find((option) => option.value === "not_applicable").label, "Does not apply (saved answer)");
+  assert.equal(rentalWindowIsFixed("not_applicable", "Not an external window"), false);
+});
+
+test("room window lists keep separate assets and reuse only explicit or exact legacy room links", () => {
+  const items = [
+    { checkKey: "window_operation_security", instanceKey: "window-a", locationLabel: "Front bedroom - Window 1", response: { roomId: bedroom.id } },
+    { checkKey: "window_operation_security", instanceKey: "window-b", locationLabel: "Front bedroom - Window 2", response: { roomId: bedroom.id } },
+    { checkKey: "window_operation_security", instanceKey: "legacy", locationLabel: " FRONT  BEDROOM ", response: {} },
+    { checkKey: "window_operation_security", instanceKey: "unconfirmed", locationLabel: "Front bedroom north window", response: {} },
+    { checkKey: "window_operation_security", instanceKey: "other-room", locationLabel: bedroom.label, response: { roomId: "rear-bedroom" } },
+    { checkKey: "window_covering", instanceKey: "window-a", locationLabel: "Front bedroom - Window 1", response: { roomId: bedroom.id }, outcome: "meets" },
+  ];
+  const before = structuredClone(items);
+  assert.deepEqual(rentalRoomWindowItems(bedroom, items).map((item) => item.instanceKey), ["window-a", "window-b", "legacy"]);
+  assert.equal(rentalNextRoomWindowLabel(bedroom, items), "Front bedroom - Window 3");
+  assert.equal(rentalRoomItemInstance({ id: "window-b", label: items[1].locationLabel, type: "other" }, "window_covering", items), "window-b");
+  assert.equal(RENTAL_WINDOW_CHECKS.length, 4);
+  assert.deepEqual(items, before, "Selection cannot copy or rewrite any window's result");
+});
+
+test("a covering saved before the operation keeps its room and window identity after reload", () => {
+  const covering = { checkKey: "window_covering", instanceKey: "window-a", locationLabel: "Front bedroom - Window 1", response: { roomId: bedroom.id }, outcome: "meets" };
+  assert.deepEqual(rentalRoomWindowItems(bedroom, [covering]), [covering]);
+  const operation = { ...covering, checkKey: "window_operation_security", outcome: "not_assessed" };
+  assert.deepEqual(rentalRoomWindowItems(bedroom, [covering, operation]), [operation], "The operation record becomes the representative without creating a second window");
+  const legacyChild = { ...covering, instanceKey: "old-covering-id" };
+  assert.deepEqual(rentalRoomWindowItems(bedroom, [legacyChild, operation]), [operation], "A matching legacy child is not a second window");
+});
+
+test("draught checks ask for observable gaps and retain the installer safety boundary", () => {
+  for (const key of ["doors_2027_readiness", "windows_2027_readiness"]) {
+    const view = rentalAssessorCheckPresentation({ key });
+    assert.match(view.prompt, /sealed around every edge/);
+    assert.equal(view.outcomeOptions.find((option) => option.value === "does_not_meet").label, "Seals are missing or damaged");
+  }
+  const vent = rentalAssessorCheckPresentation({ key: "vents_2027_readiness" });
+  assert.match(vent.help, /installer must check gas and ventilation requirements first/);
+  assert.equal(vent.outcomeOptions.find((option) => option.value === "not_applicable").label, "No wall vents");
+  const none = rentalAssessorOutcomePatch("vents_2027_readiness", "not_applicable");
+  assert.match(none.publicNotes, /No wall vents/);
+  assert.equal(rentalAssessorEvidenceRequirement("vents_2027_readiness", none.outcome).minimumPhotos, 0);
+  assert.deepEqual(rentalAssessorOutcomePatch("vents_2027_readiness", "does_not_meet", none.publicNotes), { outcome: "does_not_meet", publicNotes: "" });
 });

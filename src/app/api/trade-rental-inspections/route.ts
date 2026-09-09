@@ -22,7 +22,7 @@ import {
   RENTAL_ASSESSMENT_SCOPES,
 } from "@/lib/trade-rental-assessment.mjs";
 import { rentalEvidenceCapture, rentalEvidencePhotoCapture } from "@/lib/trade-rental-evidence.mjs";
-import { normalizeRentalRoomRoster, rentalAssessorEvidenceRequirement } from "@/lib/rental-assessor-workflow.mjs";
+import { RENTAL_WINDOW_CHECKS, normalizeRentalRoomRoster, rentalRoomsFromItems, rentalAssessorEvidenceRequirement } from "@/lib/rental-assessor-workflow.mjs";
 import {
   RENTAL_OBSERVATION_NUMBER_FIELDS,
   RENTAL_OBSERVATION_SELECT_OPTIONS,
@@ -98,6 +98,10 @@ function dateValue(value: unknown) {
 function responseObject(value: unknown) {
   const source = parsedObject(value);
   const result: Row = {};
+  if (source.roomId !== undefined) {
+    if (typeof source.roomId !== "string" || !/^[A-Za-z0-9_-]{1,120}$/.test(source.roomId.trim())) throw new Error("RENTAL_OBSERVATION_RESPONSE_INVALID");
+    result.roomId = source.roomId.trim();
+  }
   const textFields = [
     "make", "model", "serialNumber", "measurement", "measurementUnit", "testMethod",
     "testInstrument", "testInstrumentSerial", "testResult", "acceptanceLimit", "actionTaken",
@@ -657,7 +661,33 @@ async function saveItem(context: InspectionContext, body: Row) {
   const located = rentalAssessmentCheck(template, sectionKey, checkKey);
   if (!located) return adminJson({ ok: false, error: "Choose a valid assessment check." }, 400);
   const assessmentCheck = parsedObject(located.check);
-  const repeated = String(assessmentCheck.repeatBy || "property") !== "property";
+  const response = responseObject(body.response);
+  if (response.roomId) {
+    if (assessmentModule.module_key !== "minimum_standards" || !RENTAL_WINDOW_CHECKS.some((entry) => entry.checkKey === checkKey)) {
+      return adminJson({ ok: false, error: "A room-linked window is required for this response." }, 400);
+    }
+    const roster = normalizeRentalRoomRoster(parsedObject(assessmentModule.answers).roomRoster ?? []);
+    let roomExists = roster.some((room) => room.id === response.roomId);
+    if (!roomExists) {
+      // Older forms derived rooms from their observations. Resolve only within
+      // this already authorised inspection and module; never trust a foreign ID.
+      const observations = await getD1().prepare(`SELECT check_key, instance_key, location_label FROM trade_rental_inspection_items
+        WHERE inspection_id = ? AND module_id = ? AND firebase_uid = ?`)
+        .bind(context.inspection.id, moduleId, context.access.ownerUid).all<Row>();
+      const rooms = rentalRoomsFromItems(roster, observations.results.map((item) => ({ checkKey: item.check_key, instanceKey: item.instance_key, locationLabel: item.location_label })));
+      roomExists = rooms.some((room) => room.id === response.roomId);
+    }
+    if (!roomExists) return adminJson({ ok: false, error: "Choose a room from this assessment before recording its window." }, 400);
+  }
+  // Frozen older templates describe draught seals as one property check.
+  // Explicit room-linked windows keep separate identities without rewriting
+  // that template or changing any existing property record.
+  const perWindowReadiness = assessmentModule.module_key === "minimum_standards" && checkKey === "windows_2027_readiness"
+    && Boolean(response.roomId) && body.instanceKey !== "property";
+  if (perWindowReadiness && (typeof body.instanceKey !== "string" || !/^[A-Za-z0-9_-]{1,120}$/.test(body.instanceKey))) {
+    return adminJson({ ok: false, error: "Choose a valid window from this room." }, 400);
+  }
+  const repeated = String(assessmentCheck.repeatBy || "property") !== "property" || perWindowReadiness;
   const instanceKey = repeated ? cleanAdminText(body.instanceKey, 120) : "property";
   const locationLabel = cleanAdminText(body.locationLabel, 300);
   if (repeated && (!instanceKey || !locationLabel)) {
@@ -666,7 +696,6 @@ async function saveItem(context: InspectionContext, body: Row) {
   const itemKey = rentalAssessmentItemKey(String(assessmentModule.module_key), sectionKey, checkKey, instanceKey);
   const outcome = cleanAdminText(body.outcome, 60);
   if (!OUTCOMES.has(outcome)) return adminJson({ ok: false, error: "Choose an assessment result." }, 400);
-  const response = responseObject(body.response);
   if (outcome === "meets" && assessmentCheck.credentialGate && assessmentCheck.credentialGate !== template.credentialGate) {
     const gate = String(assessmentCheck.credentialGate);
     const specialistModuleKey = gate === "licensed_electrician" ? "electrical_safety_check" : gate === "licensed_gasfitter" ? "gas_safety_check" : "smoke_alarm_check";

@@ -27,6 +27,57 @@ export const RENTAL_ROOM_CHECKS = Object.freeze([
   Object.freeze({ sectionKey: "ventilation", checkKey: "room_ventilation" }),
 ]);
 
+export const RENTAL_WINDOW_CHECKS = Object.freeze([
+  { sectionKey: "windows", checkKey: "window_operation_security" },
+  { sectionKey: "window_coverings", checkKey: "window_covering" },
+  { sectionKey: "window_covering_cords", checkKey: "cord_anchor" },
+  { sectionKey: "draughtproofing", checkKey: "windows_2027_readiness" },
+].map((check) => Object.freeze(check)));
+
+/** Prefer the operation record, retaining a window even when another check was saved first.
+ * @template {{checkKey?:string,instanceKey?:string,locationLabel?:string,response?:Record<string,unknown>}} T
+ * @param {RentalRoom} room @param {readonly T[]} items
+ * @returns {T[]}
+ */
+export function rentalRoomWindowItems(room, items) {
+  const candidates = items.filter((item) => RENTAL_WINDOW_CHECKS.some((check) => check.checkKey === checkKey(item))
+    && (record(item.response).roomId === room.id || (checkKey(item) === "window_operation_security" && !record(item.response).roomId && normalizedLabel(item.locationLabel) === normalizedLabel(room.label))));
+  const primary = candidates.filter((item) => checkKey(item) === "window_operation_security");
+  const windows = [...primary];
+  for (const item of candidates) {
+    if (!windows.some((window) => rentalRoomItemInstance({ id: window.instanceKey || "", label: window.locationLabel || "", type: "other" }, checkKey(item), items) === item.instanceKey)) windows.push(item);
+  }
+  return windows;
+}
+
+/** @param {RentalRoom} room @param {unknown} items */
+export function rentalNextRoomWindowLabel(room, items) {
+  const labels = new Set((Array.isArray(items) ? items : []).map((item) => normalizedLabel(record(item).locationLabel)));
+  let number = 1;
+  while (labels.has(normalizedLabel(`${room.label} - Window ${number}`))) number++;
+  return `${room.label} - Window ${number}`;
+}
+
+const fixedWindowNote = "Fixed glazing; this window is not designed to open.";
+/** @param {unknown} outcome @param {unknown} publicNotes */
+export function rentalWindowIsFixed(outcome, publicNotes) {
+  return outcome === "not_applicable" && String(publicNotes || "").includes(fixedWindowNote);
+}
+/** Keep the existing outcome contract and an honest public reason, without asking the assessor to type it.
+ * @param {unknown} check @param {string} outcome @param {string} [currentPublicNotes]
+ */
+export function rentalAssessorOutcomePatch(check, outcome, currentPublicNotes = "") {
+  if (checkKey(check) === "vents_2027_readiness") {
+    const note = "No wall vents were observed during the assessment.";
+    if (outcome === "not_applicable") return { outcome, publicNotes: currentPublicNotes.trim() || note };
+    return { outcome, publicNotes: currentPublicNotes === note ? "" : currentPublicNotes };
+  }
+  if (checkKey(check) !== "window_operation_security") return { outcome };
+  if (outcome === "not_applicable") return { outcome, publicNotes: currentPublicNotes.includes(fixedWindowNote) ? currentPublicNotes
+    : [currentPublicNotes.trim(), fixedWindowNote].filter(Boolean).join("\n") };
+  return { outcome, publicNotes: currentPublicNotes === fixedWindowNote ? "" : currentPublicNotes };
+}
+
 const roomTypeKeys = new Set(RENTAL_ROOM_TYPES.map((type) => type.value));
 const roomCheckKeys = new Set(RENTAL_ROOM_CHECKS.map((check) => check.checkKey));
 const daylightRoomTypes = new Set(["bedroom", "living_room", "dining_room", "kitchen", "study", "other"]);
@@ -217,23 +268,23 @@ const presentation = {
   toilet_function: { prompt: "Does this toilet work and have the required enclosure and waste connection?", meets: "Operation, enclosure and waste connection confirmed", adverse: "A required part needs attention" },
   room_ventilation: { prompt: "What can you confirm about ventilation in this room?", meets: "Ventilation requirement verified with evidence", adverse: "A ventilation problem is confirmed", specialist: "Needs ventilation verification", help: "Record the window, vent or fan you can see. A working fan or opening window does not by itself prove the room meets the requirement. Use Needs ventilation verification if you do not have a supporting assessment." },
   bins: { prompt: "Are suitable rubbish and recycling bins provided with lids that keep vermin out?", meets: "Both suitable bins are provided", adverse: "A bin is missing or unsuitable" },
-  window_operation_security: { prompt: "Does this window open, close, stay in place and latch securely?", meets: "Window and latch work", adverse: "Window or latch needs attention" },
-  window_covering: { prompt: "Does this bedroom or living room window have a covering for privacy and light blocking?", meets: "Suitable covering is present", adverse: "Covering is missing or unsuitable" },
+  window_operation_security: { prompt: "Does this window open and close properly?", meets: "Works properly", adverse: "Something is wrong", help: "Open and close it. Check it stays open safely and the latch or lock works. Choose Fixed window if it is not designed to open." },
+  window_covering: { prompt: "Do the curtains or blinds close properly?", meets: "Yes, privacy and light blocking are adequate", adverse: "Missing, broken or inadequate", help: "In bedrooms and living areas, close the curtains or blinds and check they provide privacy and block light. Measure only when a replacement is needed." },
   cord_anchor: { prompt: "Are this covering's cord and safety fittings confirmed safe?", meets: "Cord and fitting requirements verified", adverse: "Cord or fitting does not meet requirements" },
   heating_2027_readiness: { prompt: "Is the main living room heater ready for the 2027 requirement?" },
   cooling_2027_readiness: { prompt: "Is the main living room cooling ready for the 2027 requirement?" },
   hot_water_2027_readiness: { prompt: "Is the hot water system ready for its 2027 replacement requirement?" },
   shower_2027_readiness: { prompt: "Is this showerhead ready for the 2027 water rating requirement?" },
   ceiling_2027_readiness: { prompt: "Is insulation present throughout this accessible ceiling area?", meets: "Insulation covers the accessible area", adverse: "An area has no insulation" },
-  doors_2027_readiness: { prompt: "Are the required external door gaps sealed for 2027?" },
-  windows_2027_readiness: { prompt: "Are the required window gaps sealed for 2027?" },
-  vents_2027_readiness: { prompt: "Are the required wall vents addressed for 2027?" },
+  doors_2027_readiness: { prompt: "Are the outside doors sealed around every edge?", meets: "Yes, all edges are sealed", adverse: "Seals are missing or damaged", specialist: "Not sure", help: "Close each outside door. Look along the top, sides and bottom for gaps or damaged seals. If work is needed, record the doors, total seal length and photos. Doors must still open and close normally." },
+  windows_2027_readiness: { prompt: "Is this window sealed around every edge?", meets: "Yes, all edges are sealed", adverse: "Seals are missing or damaged", specialist: "Not sure", help: "Close the window and check around its edges. If a seal is missing or damaged, measure the length needing a seal and photograph it. The window must still work normally." },
+  vents_2027_readiness: { prompt: "Are there any unsealed wall vents?", meets: "The wall vents are already sealed", adverse: "Unsealed wall vents seen", specialist: "Not sure what the vent is for", help: "Look for open wall grilles or air bricks. Record their locations, count and sizes, with photos. Choose No wall vents if none are present. Do not block vents during the assessment; the installer must check gas and ventilation requirements first." },
 };
 
 /** Plain labels preserve every stored outcome's direction and current/future distinction.
  * Existing legal help remains available wherever a short observation cannot state all criteria.
  * @param {unknown} check
- * @param {{assessmentScope?:unknown}} [options]
+ * @param {{assessmentScope?:unknown,outcome?:unknown,publicNotes?:unknown}} [options]
  */
 export function rentalAssessorCheckPresentation(check, options = {}) {
   const definition = record(check);
@@ -242,17 +293,23 @@ export function rentalAssessorCheckPresentation(check, options = {}) {
   const observationsOnly = options.assessmentScope === "observations_only";
   const meets = observationsOnly ? "Observation recorded; compliance not assessed"
     : wording?.meets || (future ? "Ready for the applicable 2027 requirement" : "Requirement verified");
+  const outcomeOptions = [
+    { value: "meets", label: meets },
+    { value: "does_not_meet", label: wording?.adverse || (future ? "Work needed for the applicable 2027 requirement" : "Requirement not met") },
+    { value: "specialist_verification_required", label: wording?.specialist || "Needs verification" },
+    { value: "not_accessible", label: "Could not check" },
+    { value: "not_applicable", label: "Does not apply" },
+    { value: "exemption_evidence_pending", label: "Possible exception; evidence needed" },
+  ];
+  const simpleWindow = ["window_operation_security", "window_covering"].includes(checkKey(check));
+  if (checkKey(check) === "window_operation_security") outcomeOptions[4].label = options.outcome === "not_applicable" && !rentalWindowIsFixed(options.outcome, options.publicNotes)
+    ? "Does not apply (saved answer)" : "Fixed window (does not open)";
+  if (checkKey(check) === "window_covering") outcomeOptions[4].label = "Not required in this room";
+  if (checkKey(check) === "vents_2027_readiness") outcomeOptions[4].label = "No wall vents";
   return {
     prompt: wording?.prompt || String(definition.prompt || "Record the assessment result"),
     help: wording?.help || String(definition.help || "Record what you can confirm. Choose Needs verification when the result is not established."),
     phaseLabel: future ? "2027 readiness" : "Current requirement",
-    outcomeOptions: [
-      { value: "meets", label: meets },
-      { value: "does_not_meet", label: wording?.adverse || (future ? "Work needed for the applicable 2027 requirement" : "Requirement not met") },
-      { value: "specialist_verification_required", label: wording?.specialist || "Needs verification" },
-      { value: "not_accessible", label: "Could not check" },
-      { value: "not_applicable", label: "Does not apply" },
-      { value: "exemption_evidence_pending", label: "Possible exception; evidence needed" },
-    ],
+    outcomeOptions: outcomeOptions.filter((option) => !simpleWindow || !["specialist_verification_required", "exemption_evidence_pending"].includes(option.value) || option.value === options.outcome),
   };
 }

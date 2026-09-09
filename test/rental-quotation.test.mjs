@@ -14,6 +14,18 @@ import { rentalAssessmentTemplateSnapshot, rentalAssessmentCompletion, rentalChe
 const quotation = { status: "ready", measurements: "6 x 4 m = 24 m2, tape measured", specification: "R5 to bare area", access: "Hallway hatch; electrical clearance before work", exclusions: "Electrical rectification separately quoted" };
 const finding = () => ({ title: "Insulate bare ceiling area", description: "Bare area above rear bedroom", tradeCategory: "Insulation installer", scopeSummary: "Install suitable R5 insulation to the measured area after clearance", quantityMilli: 24000, unitLabel: "m2", details: { quotation: { ...quotation } } });
 
+test("covering and window-seal measurements are only prompted when work is needed", () => {
+  for (const key of ["window_covering", "windows_2027_readiness"]) {
+    const fields = rentalAssessorFields({ key });
+    const measurements = fields.filter((field) => field.input === "number");
+    assert.ok(measurements.length >= 2);
+    assert.ok(measurements.every((field) => field.showForOutcomes?.join() === "does_not_meet"));
+    assert.deepEqual(rentalObservationBlockers({ checkKey: key, outcome: "meets", response: {}, finding: {} }), []);
+    assert.ok(rentalObservationBlockers({ checkKey: key, outcome: "does_not_meet", response: {}, finding: {} }).length);
+    assert.deepEqual(rentalObservationBlockers({ checkKey: key, outcome: "does_not_meet", response: { widthMm: "2400", heightMm: "1800" }, finding: {} }), []);
+  }
+});
+
 test("a working oven has no measurement prompts; replacement dimensions refer only to the cabinet", () => {
   const fields = rentalAssessorFields({ key: "oven_function" });
   const visible = (outcome) => fields.filter((field) => !field.legacy && (!field.showForOutcomes || field.showForOutcomes.includes(outcome)));
@@ -226,4 +238,14 @@ test("completion permits honest limited observations but never infers the applic
   assert.equal(rentalAssessmentCompletion({ moduleTemplate, items: [item], answers: { ...answers, rentalRegime: "not_sure" }, evidenceCounts: {} }).complete, true, "Clear ordinary observations no longer require a photo");
   const readiness = rentalAssessmentTemplateSnapshot(["minimum_standards"], "energy_readiness_2027").modules.minimum_standards;
   assert.equal(rentalAssessmentCompletion({ moduleTemplate: readiness, items: [item], answers: { ...answers, rentalRegime: "not_sure" }, evidenceCounts: { one: 1 } }).complete, false, "Historical items outside the active scope cannot complete an empty observations report");
+});
+
+test("draught quoting uses seal lengths and vent sizes only when relevant", () => {
+  const window = rentalObservationFields("windows_2027_readiness");
+  assert.deepEqual(window.filter((field) => field.input === "number" && !field.legacy).map((field) => field.key), ["sealLengthMetres"]);
+  for (const key of ["doors_2027_readiness", "windows_2027_readiness", "vents_2027_readiness"]) {
+    const fields = rentalObservationFields(key);
+    assert.equal(new Set(fields.map((field) => field.key)).size, fields.length, "No duplicate location inputs");
+    assert.ok(fields.filter((field) => field.input === "number").every((field) => !field.showForOutcomes.includes("meets")));
+  }
 });

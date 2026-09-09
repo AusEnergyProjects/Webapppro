@@ -183,15 +183,6 @@ export function rentalObservationsComplete(result: RentalAssessmentResult, modul
   return Boolean(completion && completion.blockers.every((blocker) => blocker.key.startsWith('metadata:')));
 }
 
-export function rentalAdjacentQuestion(sections: RentalAssessmentSection[], sectionKey: string, checkIndex: number, direction: 1 | -1) {
-  const sectionIndex = sections.findIndex((section) => section.key === sectionKey);
-  if (sectionIndex < 0) return null;
-  const nextIndex = checkIndex + direction;
-  if (nextIndex >= 0 && nextIndex < sections[sectionIndex].checks.length) return { section: sections[sectionIndex], checkIndex: nextIndex };
-  const nextSection = sections[sectionIndex + direction];
-  return nextSection ? { section: nextSection, checkIndex: direction === 1 ? 0 : nextSection.checks.length - 1 } : null;
-}
-
 // Remember a successful upload before linking it, so a failed link can retry the same job file.
 export async function deliverRentalPhoto<T>(input: {
   mediaId?: string;

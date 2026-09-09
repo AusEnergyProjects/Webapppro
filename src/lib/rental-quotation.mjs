@@ -84,16 +84,16 @@ export function rentalObservationFields(checkKey) {
         .map((field) => ({ ...field, showForOutcomes: ["does_not_meet"], requiredForAdverse: false })),
       ...[numberField("widthMm", "Earlier oven width"), numberField("heightMm", "Earlier oven height"), numberField("depthMm", "Earlier oven depth")].map((field) => ({ ...field, legacy: true, requiredForAdverse: false }))],
     ceiling_2027_readiness: [selectField("insulationType", "Visible insulation", RENTAL_OBSERVATION_SELECT_OPTIONS.insulationType), numberField("areaSquareMetres", "Bare ceiling area"), numberField("insulationDepthMm", "Visible insulation depth"), numberField("hatchWidthMm", "Hatch width"), shortText("model", "Product / R-value label, if readable")],
-    windows_2027_readiness: [numberField("widthMm", "Window width"), numberField("heightMm", "Window height"), numberField("sealLengthMetres", "Affected edge length")],
-    doors_2027_readiness: [numberField("widthMm", "Door width"), numberField("heightMm", "Door height"), numberField("sealLengthMetres", "Affected edge length")],
-    vents_2027_readiness: [numberField("count", "Number of vents"), numberField("widthMm", "Vent width"), numberField("heightMm", "Vent height")],
+    windows_2027_readiness: [numberField("sealLengthMetres", "Length needing a seal"), ...[numberField("widthMm", "Earlier window width"), numberField("heightMm", "Earlier window height")].map((field) => ({ ...field, legacy: true }))].map((field) => ({ ...field, showForOutcomes: ["does_not_meet"] })),
+    doors_2027_readiness: [numberField("count", "Doors needing seals"), numberField("sealLengthMetres", "Total length needing a seal"), shortText("actionTaken", "Which doors? For example, front and laundry"), ...[numberField("widthMm", "Earlier door width"), numberField("heightMm", "Earlier door height")].map((field) => ({ ...field, legacy: true }))].map((field) => ({ ...field, showForOutcomes: ["does_not_meet"] })),
+    vents_2027_readiness: [shortText("actionTaken", "Where are the vents? For example, lounge wall"), numberField("count", "Unsealed vents seen"), numberField("widthMm", "Vent width"), numberField("heightMm", "Vent height")].map((field) => ({ ...field, showForOutcomes: ["does_not_meet", "specialist_verification_required"] })),
     shower_2027_readiness: [...identityFields(), numberField("flowLitresPerMinute", "Water flow"), numberField("collectedLitres", "Water collected"), numberField("flowSeconds", "Collection time")],
     cooling_2027_readiness: [selectField("applianceType", "Cooling type", coolingOptions), ...identityFields(), ...roomFields(), selectField("accessStatus", "Access to equipment", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus)],
     hot_water_2027_readiness: [selectField("applianceType", "Hot-water type", hotWaterOptions), ...identityFields(), numberField("widthMm", "Unit width"), numberField("heightMm", "Unit height"), numberField("accessWidthMm", "Clear access width"), selectField("accessStatus", "Access to equipment", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus)],
-    window_covering: [numberField("widthMm", "Window width"), numberField("heightMm", "Window height")],
+    window_covering: [numberField("widthMm", "Window width"), numberField("heightMm", "Window height")].map((field) => ({ ...field, showForOutcomes: ["does_not_meet"] })),
   };
   if (!specific[checkKey]) return [];
-  return [...specific[checkKey], ...limitationFields(), shortText("measurement", "Earlier measurement notes", { legacy: true }), shortText("actionTaken", "Earlier location notes", { legacy: true })];
+  return [...specific[checkKey], ...limitationFields(), shortText("measurement", "Earlier measurement notes", { legacy: true }), ...(specific[checkKey].some((field) => field.key === "actionTaken") ? [] : [shortText("actionTaken", "Earlier location notes", { legacy: true })])];
 }
 
 /**
