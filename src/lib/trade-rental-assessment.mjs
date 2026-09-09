@@ -1,4 +1,5 @@
 import { rentalObservationBlockers, rentalObservationFields } from "./rental-quotation.mjs";
+import { normalizeRentalRoomRoster, rentalAssessorEvidenceRequirement, rentalRoomsForCheck, rentalRoomItemInstance } from "./rental-assessor-workflow.mjs";
 
 export const RENTAL_INSPECTION_SERVICE_CATEGORY = "rental-inspection";
 
@@ -705,6 +706,9 @@ export function rentalAssessmentCompletion(input) {
   const photoCounts = parsedObject(input?.photoCounts);
   const answers = parsedObject(input?.answers);
   const blockers = [...requiredMetadataBlockers(moduleTemplate, answers)];
+  let roomRoster = [];
+  try { roomRoster = answers.roomRoster === undefined ? [] : normalizeRentalRoomRoster(answers.roomRoster); }
+  catch { blockers.push({ key: "room-roster", label: "Review the room list before completing the assessment." }); }
   const observationsOnly = moduleTemplate.metadataFields?.some((field) => field.key === "rentalRegime") && !rentalRegimeAssessment(answers).applicable;
   if (observationsOnly && !items.length) blockers.push({ key: "observations", label: "Record at least one observation with its evidence before completing an observations report." });
 
@@ -716,6 +720,14 @@ export function rentalAssessmentCompletion(input) {
       if (!checkItems.length) {
         blockers.push({ key: `check:${section.key}:${assessmentCheck.key}`, label: `${section.title}: ${assessmentCheck.prompt} has not been assessed.` });
         continue;
+      }
+      if (!observationsOnly) {
+        for (const room of rentalRoomsForCheck(assessmentCheck, roomRoster)) {
+          const instanceKey = rentalRoomItemInstance(room, assessmentCheck.key, items);
+          if (!checkItems.some((item) => item.instanceKey === instanceKey)) {
+            blockers.push({ key: `room:${room.id}:${assessmentCheck.key}`, label: `${room.label}: ${assessmentCheck.prompt} has not been assessed.` });
+          }
+        }
       }
       for (const item of checkItems) {
         const itemLabel = String(item.locationLabel || section.title || assessmentCheck.prompt);
@@ -730,10 +742,16 @@ export function rentalAssessmentCompletion(input) {
         if (outcome === "not_applicable" && !String(item.publicNotes || "").trim()) {
           blockers.push({ key: `not-applicable:${item.itemKey}`, label: `${itemLabel} needs a clear public reason before it can be marked Not applicable.` });
         }
-        const requiredEvidenceCount = Math.max(0, Number(item.requiredEvidenceCount ?? assessmentCheck.requiredEvidenceCount ?? 0));
+        const evidenceRequirement = rentalAssessorEvidenceRequirement({ ...assessmentCheck,
+          requiredEvidenceCount: Math.max(Number(item.requiredEvidenceCount || 0), Number(assessmentCheck.requiredEvidenceCount || 0)) }, outcome);
+        const requiredEvidenceCount = evidenceRequirement.minimumFiles;
         const suppliedEvidenceCount = Math.max(0, Number(evidenceCounts[item.id] ?? evidenceCounts[item.itemKey] ?? 0));
         if (suppliedEvidenceCount < requiredEvidenceCount) {
           blockers.push({ key: `evidence:${item.itemKey}`, label: `${itemLabel} needs ${requiredEvidenceCount - suppliedEvidenceCount} more evidence file${requiredEvidenceCount - suppliedEvidenceCount === 1 ? "" : "s"}.` });
+        }
+        const suppliedPhotoCount = Math.max(0, Number(photoCounts[item.id] ?? photoCounts[item.itemKey] ?? 0));
+        if (suppliedPhotoCount < evidenceRequirement.minimumPhotos) {
+          blockers.push({ key: `photo:${item.itemKey}`, label: `${itemLabel}: ${evidenceRequirement.reason}` });
         }
         const response = parsedObject(item.responseJson);
         for (const responseField of assessmentCheck.responseFields || []) {
@@ -751,8 +769,7 @@ export function rentalAssessmentCompletion(input) {
             blockers.push({ key: `finding:${item.itemKey}`, label: `${itemLabel} needs a short description of what was observed or could not be checked.` });
           }
           if (finding) {
-            for (const [index, message] of rentalObservationBlockers({ checkKey: assessmentCheck.key, outcome, response, finding,
-              photoCount: photoCounts[item.id] ?? photoCounts[item.itemKey] ?? 0 }).entries()) {
+            for (const [index, message] of rentalObservationBlockers({ checkKey: assessmentCheck.key, outcome, response, finding }).entries()) {
               blockers.push({ key: `observation:${item.itemKey}:${index}`, label: `${itemLabel}: ${message}` });
             }
           }

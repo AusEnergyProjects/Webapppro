@@ -194,7 +194,7 @@ export async function enqueueRentalSave(input: RentalSaveInput): Promise<RentalS
   }
   if (snapshot.body.action === 'save_module_answers') {
     const fields = Object.keys(object(snapshot.body.answers));
-    if (!fields.length || fields.some((key) => !snapshot.module.template.metadataFields.some((field) => field.key === key && field.phase !== 'final' && field.source !== 'team_profile'))) {
+    if (!fields.length || fields.some((key) => !(key === 'roomRoster' && snapshot.module.key === 'minimum_standards') && !snapshot.module.template.metadataFields.some((field) => field.key === key && field.phase !== 'final' && field.source !== 'team_profile'))) {
       throw new RentalSaveQueueError('Final declarations must be saved after the assessment has synced.', 'RENTAL_FINAL_ANSWERS_REQUIRE_SYNC');
     }
   }

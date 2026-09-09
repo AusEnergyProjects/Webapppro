@@ -22,6 +22,7 @@ import {
   RENTAL_ASSESSMENT_SCOPES,
 } from "@/lib/trade-rental-assessment.mjs";
 import { rentalEvidenceCapture, rentalEvidencePhotoCapture } from "@/lib/trade-rental-evidence.mjs";
+import { normalizeRentalRoomRoster, rentalAssessorEvidenceRequirement } from "@/lib/rental-assessor-workflow.mjs";
 import {
   RENTAL_OBSERVATION_NUMBER_FIELDS,
   RENTAL_OBSERVATION_SELECT_OPTIONS,
@@ -137,6 +138,10 @@ function responseObject(value: unknown) {
 function normaliseModuleAnswers(moduleTemplate: Row, value: unknown) {
   const source = parsedObject(value);
   const result: Row = {};
+  if (Object.hasOwn(source, "roomRoster")) {
+    if (moduleTemplate.key !== "minimum_standards") throw new Error("RENTAL_ROOM_ROSTER_INVALID");
+    result.roomRoster = normalizeRentalRoomRoster(source.roomRoster);
+  }
   for (const rawField of parsedArray(moduleTemplate.metadataFields)) {
     const field = parsedObject(rawField);
     const key = cleanAdminText(field.key, 80);
@@ -192,6 +197,8 @@ function inspectionError(error: unknown) {
   if (code === "RENTAL_RESPONSE_TOO_LARGE") return adminJson({ ok: false, error: "The assessment response is too large." }, 413);
   if (code === "RENTAL_OBSERVATION_RESPONSE_INVALID") return adminJson({ ok: false, code,
     error: "Choose a listed observation option and enter measurements as zero or positive numbers." }, 400);
+  if (code === "RENTAL_ROOM_ROSTER_INVALID") return adminJson({ ok: false, code,
+    error: "Add a valid room name and room type. Each room must have its own ID and name." }, 400);
   if (code === "INVALID_RENTAL_ITEM_KEY") return adminJson({ ok: false, error: "The repeated assessment item is invalid." }, 400);
   if (code === "RENTAL_MODULES_INCOMPLETE") return adminJson({ ok: false, error: "Every selected module must pass its completion checks before the report can be issued." }, 409);
   if (code === "RENTAL_MODULE_SET_INVALID") return adminJson({ ok: false, error: "The attached assessment modules do not match the frozen job selection. Ask an administrator to repair the job before issuing." }, 409);
@@ -527,7 +534,11 @@ async function saveModuleAnswers(context: InspectionContext, body: Row) {
   const profileAnswers = await rentalModuleProfileAnswers({ db: getD1(), ownerUid: context.access.ownerUid,
     assessorMemberId: String(context.inspection.assessor_member_id || ""), moduleKey: String(assessmentModule.module_key),
     requiredCapability: String(assessmentModule.required_capability), checkedAt: now });
-  const answers = normaliseModuleAnswers(template, { ...parsedObject(body.answers), ...profileAnswers });
+  const submittedAnswers = parsedObject(body.answers);
+  const currentAnswers = parsedObject(assessmentModule.answers);
+  const preservedRooms = !Object.hasOwn(submittedAnswers, "roomRoster") && Object.hasOwn(currentAnswers, "roomRoster")
+    ? { roomRoster: currentAnswers.roomRoster } : {};
+  const answers = normaliseModuleAnswers(template, { ...preservedRooms, ...submittedAnswers, ...profileAnswers });
   const nextRevision = expectedRevision + 1;
   return await guardedMutation({
     context,
@@ -690,7 +701,7 @@ async function saveItem(context: InspectionContext, body: Row) {
   const now = new Date().toISOString();
   const nextItemRevision = expectedItemRevision + 1;
   const nextModuleRevision = expectedModuleRevision + 1;
-  const requiredEvidenceCount = Math.min(20, Math.max(0, integer(assessmentCheck.requiredEvidenceCount, 0)));
+  const requiredEvidenceCount = Math.min(20, rentalAssessorEvidenceRequirement(assessmentCheck, outcome).minimumFiles);
   const sortOrder = Math.min(10_000, Math.max(0, integer(body.sortOrder, 0)));
   const primary = existing
     ? getD1().prepare(`UPDATE trade_rental_inspection_items SET location_label = ?, outcome = ?, response_json = ?,

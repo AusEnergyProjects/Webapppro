@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
-import { rentalAssessorFields, rentalObservationNumberIsValid } from '../../src/lib/rental-quotation.mjs';
+import { rentalAssessorFields, rentalObservationNumberIsValid, rentalObservationBlockers } from '../../src/lib/rental-quotation.mjs';
+import { rentalAssessorEvidenceRequirement, rentalRoomChecks, rentalRoomItemInstance, RENTAL_ROOM_CHECKS } from '../../src/lib/rental-assessor-workflow.mjs';
 
 const code = ts.transpileModule(readFileSync(new URL('../src/lib/rental-inspection.ts', import.meta.url), 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
@@ -85,6 +86,7 @@ function saveEnvironment() {
     active: { id: 'module', revision: 1 }, item: { revision: 0, instanceKey: 'property', sortOrder: 0 }, storedItem: undefined,
     section: { key: 'bathroom' }, check: { key: 'bathroom', repeatBy: 'property', requiredEvidenceCount: 1, prompt: 'Bathroom condition' },
     draft, data: { findings: [] }, evidence: [], RENTAL_ADVERSE_OUTCOMES: new Set(), rentalAssessorFields, rentalObservationNumberIsValid,
+    rentalAssessorEvidenceRequirement, rentalObservationBlockers,
     workOrderId: 'job', key: 'draft', cacheRef: { current: { drafts: { draft }, answers: {} } },
     setSaves() {}, setCache() {}, persist: async () => {}, advanced: false,
     onChanged() { throw new Error('Parent network refresh must not block Next'); },
@@ -204,4 +206,87 @@ test('invalid measurements stay editable on the phone instead of creating a queu
   env.enqueueRentalSave = () => { throw new Error('Invalid observation must not enter queue'); };
   await assert.rejects(mountedSaveAnswer(env), /Enter a zero or positive number for room length/);
   assert.equal(env.cacheRef.current.drafts.draft.response.roomLengthMetres, '4..2');
+});
+
+test('clear mould and visible damage observations advance with no photos; a defect still needs context and detail', async () => {
+  for (const key of ['mould_damp_observation', 'structure_weatherproofing']) {
+    const env = saveEnvironment(); env.check.key = key; env.draft.photos = [];
+    env.enqueueRentalSave = async () => ({ id: 'local' }); env.advanceQuestion = () => { env.advanced = true; };
+    await mountedSaveAnswer(env)();
+    assert.equal(env.advanced, true, key);
+  }
+  const env = saveEnvironment(); env.check.key = 'mould_damp_observation'; env.draft.outcome = 'does_not_meet';
+  env.draft.photos = []; env.enqueueRentalSave = () => { throw new Error('Missing evidence must not enter queue'); };
+  await assert.rejects(mountedSaveAnswer(env), /photo/i);
+});
+
+function mountedHandler(name, nextName, environment) {
+  const start = source.search(new RegExp('  (?:async )?function ' + name + '\\('));
+  const end = source.search(new RegExp('  (?:async )?function ' + nextName + '\\('));
+  assert.ok(start >= 0 && end > start);
+  const compiled = ts.transpileModule('export ' + source.slice(start, end).trim(), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  return new Function('environment', 'with (environment) { const exports = {}; ' + compiled + '; return exports.' + name + '; }')(environment);
+}
+
+test('room navigation visits applicable checks together and never opens another room or repeats a category', () => {
+  const room = { id: 'bedroom-2', label: 'Rear bedroom', type: 'bedroom' };
+  const sections = RENTAL_ROOM_CHECKS.reduce((all, entry) => {
+    let group = all.find((s) => s.key === entry.sectionKey);
+    if (!group) { group = { key: entry.sectionKey, checks: [] }; all.push(group); }
+    group.checks.push({ key: entry.checkKey }); return all;
+  }, []);
+  const env = { sections, roomItems: [], rentalRoomChecks, rentalRoomItemInstance, page: 'answer', activeRoom: room,
+    setRoomContextId(id) { env.roomId = id; }, setCursor(cursor) { env.cursor = cursor; },
+    setGuidanceOpen() {}, setError() {}, setPage(page) { env.page = page; } };
+  env.openRoomCheck = mountedHandler('openRoomCheck', 'saveRooms', env);
+  env.roomSteps = rentalRoomChecks(room.type).map((step) => ({ section: sections.find((s) => s.key === step.sectionKey) }));
+  const advance = mountedHandler('advanceQuestion', 'changeAnswer', env);
+  env.openRoomCheck(room);
+  for (let index = 0; index < env.roomSteps.length; index++) {
+    env.section = sections.find((s) => s.key === env.cursor.sectionKey);
+    env.check = env.section.checks[env.cursor.checkIndex]; env.roomCheckIndex = index;
+    assert.equal(env.roomId, room.id);
+    assert.equal(env.cursor.instanceKey, room.id);
+    assert.equal(env.check.key, rentalRoomChecks(room.type)[index].checkKey);
+    advance();
+  }
+  assert.equal(env.page, 'categories');
+  assert.equal(env.roomId, '');
+});
+
+test('saving a first room preserves an absent roster base, then the next room uses the pending roster base', async () => {
+  const first = { id: 'a', label: 'Bedroom 1', type: 'bedroom' };
+  const second = { id: 'b', label: 'Bathroom 1', type: 'bathroom' };
+  const queued = [];
+  const env = { active: { id: 'module', revision: 1, answers: { address: 'Saved address' } }, pendingAnswers: {},
+    workOrderId: 'job', Crypto: { randomUUID: () => 'save-' + queued.length }, cacheRef: { current: { drafts: {}, answers: {} } },
+    enqueueRentalSave: async (input) => { queued.push(input); return { id: 'local' }; }, setSaves() {} };
+  const saveRooms = mountedHandler('saveRooms', 'addRoom', env);
+  await saveRooms([first]);
+  assert.equal(queued[0].module.answers.roomRoster, undefined);
+  env.pendingAnswers.roomRoster = [first];
+  await saveRooms([first, second]);
+  assert.deepEqual(queued[1].module.answers.roomRoster, [first]);
+  assert.deepEqual(queued[1].body.answers.roomRoster, [first, second]);
+  assert.equal(queued[1].module.answers.address, 'Saved address');
+});
+
+test('room-list conflict recovery keeps a durable copy before retiring superseded saves', async () => {
+  const room = { id: 'a', label: 'Bedroom', type: 'bedroom' };
+  const calls = [];
+  const env = { active: { id: 'module' }, rooms: [room], pendingSaves: [
+    { id: 'roster-1', body: { action: 'save_module_answers', moduleId: 'module', answers: { roomRoster: [room] } } },
+    { id: 'photo-answer', body: { action: 'save_item', moduleId: 'module' } },
+  ], cacheRef: { current: { drafts: { existing: { photo: 'keep' } }, answers: {} } },
+    perform: async (_name, action) => action(), persist: async () => calls.push('persist'),
+    discardRentalSave: async (id) => calls.push(id), setCache() {}, setSaves() {}, setPage() {}, setError() {} };
+  await mountedHandler('reviewQueuedRooms', 'previous', env)(false);
+  assert.deepEqual(calls, ['persist', 'roster-1']);
+  assert.deepEqual(env.cacheRef.current.answers.module.roomRoster, [room]);
+  assert.deepEqual(env.cacheRef.current.drafts.existing, { photo: 'keep' });
+  calls.length = 0; env.persist = async () => { throw new Error('Storage full'); };
+  await assert.rejects(() => mountedHandler('reviewQueuedRooms', 'previous', env)(false), /Storage full/);
+  assert.deepEqual(calls, [], 'Never discard queue records when the durable recovery copy fails');
 });

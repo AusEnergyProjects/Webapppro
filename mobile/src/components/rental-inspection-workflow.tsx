@@ -13,13 +13,15 @@ import { FieldSelect } from '@/components/field-select';
 import { FieldDatePicker } from '@/components/field-date-picker';
 import { assertLocalDataOwner, getLocalDataOwner, readRentalSetting, writeRentalSetting, type LocalDataOwner } from '@/lib/database';
 import { observeLocation, observedTime } from '@/lib/evidence';
-import { RENTAL_ADVERSE_OUTCOMES, RENTAL_OUTCOMES, RENTAL_READINESS_OUTCOMES, newRentalItem,
+import { RENTAL_ADVERSE_OUTCOMES, newRentalItem,
   rentalObservationsComplete, rentalAdjacentQuestion, rentalAccessLimitations,
   type RentalAssessmentItem, type RentalAssessmentResult,
   type RentalAssessmentModule, type RentalAssessmentSection } from '@/lib/rental-inspection';
 import { colours, radius, spacing } from '@/lib/theme';
 import type { FieldRentalInspectionSummary } from '@/lib/types';
 import { rentalQuotation, rentalAssessorFields, rentalFindingDescriptionLabel, rentalObservationBlockers, rentalSharedObservationResponse, rentalObservationNumberIsValid } from '../../../src/lib/rental-quotation.mjs';
+import { RENTAL_ASSESSOR_TITLE, RENTAL_ROOM_TYPES, RENTAL_ROOM_CHECKS, rentalRoomChecks, rentalRoomsFromItems, rentalRoomItemInstance,
+  rentalAssessorCheckPresentation, rentalAssessorEvidenceRequirement } from '../../../src/lib/rental-assessor-workflow.mjs';
 import { acknowledgeRentalSave, loadRentalResult, discardRentalSave, enqueueRentalSave, getRentalSaveState,
   processRentalSaveQueue, requestWhenRentalSynced, subscribeRentalSaves,
   type RentalSaveRecord, type RentalQueuedPhoto } from '@/lib/rental-save-queue';
@@ -31,7 +33,7 @@ type Draft = { outcome: string; locationLabel: string; publicNotes: string; inte
   quantity: string; unitLabel: string; quotation: Record<string, string>;
   severity: string; immediateAction: string; notified: boolean; response: Record<string, unknown>; photos: Photo[] };
 type Cursor = { sectionKey: string; checkIndex: number; instanceKey: string };
-type Page = 'categories' | 'answer' | 'details' | 'finding' | 'safety' | 'metadata' | 'review';
+type Page = 'addRoom' | 'roomSetup' | 'categories' | 'answer' | 'details' | 'finding' | 'safety' | 'metadata' | 'review';
 type Cache = { drafts: Record<string, Draft>; answers: Record<string, Record<string, unknown>> };
 const emptyCache: Cache = { drafts: {}, answers: {} };
 const readable = (s: string) => s.replaceAll('_', ' ');
@@ -94,6 +96,9 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const [error, setError] = useState('');
   const [guidanceOpen, setGuidanceOpen] = useState(false);
   const [editEquipmentKey, setEditEquipmentKey] = useState('');
+  const [roomContextId, setRoomContextId] = useState('');
+  const [editLocationKey, setEditLocationKey] = useState('');
+  const [newRoomName, setNewRoomName] = useState('');
   const [saves, setSaves] = useState<RentalSaveRecord[]>([]);
   const busyRef = useRef(false);
   const mounted = useRef(true);
@@ -151,7 +156,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       if (!assessmentModule) { remaining[id] = patch; continue; }
       const dirty = Object.fromEntries(Object.entries(patch).filter(([fieldKey, value]) => {
         const field = assessmentModule.template.metadataFields.find((entry) => entry.key === fieldKey);
-        return field && field.source !== 'team_profile' && field.phase !== 'profile'
+        return (field && field.source !== 'team_profile' && field.phase !== 'profile' || fieldKey === 'roomRoster' && assessmentModule.key === 'minimum_standards')
           && JSON.stringify(value) !== JSON.stringify(assessmentModule.answers[fieldKey]);
       }));
       if (Object.keys(dirty).length) remaining[id] = dirty;
@@ -214,7 +219,13 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const pendingPhotos = pendingSaves.reduce((total, entry) => total + entry.photos.filter((photo) => !photo.linked).length, 0);
   const queuedAnswer = [...pendingSaves].reverse().find((entry) => entry.draftKey === key);
   const queuedDraft = queuedAnswer && isDraft(queuedAnswer.draftSnapshot) ? queuedAnswer.draftSnapshot : undefined;
-  const baseDraft = item ? cache.drafts[key] || queuedDraft || initialDraft(item, data) : undefined;
+  const pendingAnswers: Record<string, unknown> = {};
+  for (const entry of pendingSaves) {
+    if (entry.body.action === 'save_module_answers' && entry.body.moduleId === active?.id
+      && entry.body.answers && typeof entry.body.answers === 'object' && !Array.isArray(entry.body.answers)) Object.assign(pendingAnswers, entry.body.answers);
+  }
+  const answers = active ? { ...active.answers, ...pendingAnswers, ...cache.answers[active.id] } : {};
+  const savedDraft = item ? cache.drafts[key] || queuedDraft || initialDraft(item, data) : undefined;
   const candidates: Parameters<typeof rentalSharedObservationResponse>[0]['candidates'] = [...(data.items || [])];
   for (const record of saves) {
     const body = record.body;
@@ -229,6 +240,26 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     if (savedCheck) candidates.push({ moduleId: active.id, sectionKey, checkKey: savedCheck.key, instanceKey: instance.join(':'),
       locationLabel: savedDraft.locationLabel, outcome: savedDraft.outcome, response: savedDraft.response });
   }
+  // Local edits supersede the same server identity; different legacy entries remain separate.
+  const roomItems = [...new Map(candidates.filter((entry) => entry.moduleId === active?.id)
+    .map((entry) => [[entry.sectionKey, entry.checkKey, entry.instanceKey].join(':'), entry])).values()];
+  const rooms = active?.key === 'minimum_standards' ? rentalRoomsFromItems(answers.roomRoster, roomItems) : [];
+  const hasRoomListDraft = active && Array.isArray(cache.answers[active.id]?.roomRoster);
+  const roomListConfirmed = rooms.every((room) => Array.isArray(answers.roomRoster)
+    && answers.roomRoster.some((saved) => saved.id === room.id && saved.label === room.label && saved.type === room.type));
+  const earlierRoomItems = roomItems.filter((entry) => RENTAL_ROOM_CHECKS.some((check) => check.checkKey === entry.checkKey)
+    && !rooms.some((room) => rentalRoomChecks(room.type).some((check) => check.checkKey === entry.checkKey)
+      && rentalRoomItemInstance(room, entry.checkKey, roomItems) === entry.instanceKey));
+  const activeRoom = rooms.find((entry) => entry.id === roomContextId);
+  const roomSteps = activeRoom ? rentalRoomChecks(activeRoom.type).flatMap((entry) => {
+    const group = sections.find((s) => s.key === entry.sectionKey);
+    const index = group?.checks.findIndex((c) => c.key === entry.checkKey) ?? -1;
+    return group && index >= 0 ? [{ section: group, checkIndex: index }] : [];
+  }) : [];
+  const roomCheckIndex = roomSteps.findIndex((entry) => entry.section.key === section?.key && entry.checkIndex === cursor.checkIndex);
+  const baseDraft = savedDraft ? { ...savedDraft, locationLabel: savedDraft.locationLabel || activeRoom?.label || '' } : undefined;
+  const presentation = check ? rentalAssessorCheckPresentation(check, { assessmentScope: active?.template.assessmentScope }) : undefined;
+  const photoRequirement = check ? rentalAssessorEvidenceRequirement(check, baseDraft?.outcome || '') : { minimumFiles: 0, minimumPhotos: 0, reason: '' };
   const sharedObservation = rentalSharedObservationResponse({
     target: { moduleId: active?.id || '', sectionKey: section?.key, checkKey: check?.key || '', instanceKey: cursor.instanceKey, locationLabel: baseDraft?.locationLabel },
     candidates, currentResponse: baseDraft?.response || {},
@@ -236,21 +267,16 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const draft = baseDraft ? { ...baseDraft, response: sharedObservation.response } : undefined;
   const responseFields = draft && draft.outcome && draft.outcome !== 'not_applicable' && check ? rentalAssessorFields(check).filter((entry) =>
     (!entry.legacy || String(draft.response[entry.key] ?? '').trim())
+    && (!entry.showForOutcomes || entry.showForOutcomes.includes(draft.outcome) || String(draft.response[entry.key] ?? '').trim())
     && (!entry.showIf || entry.showIf.values.includes(String(draft.response[entry.showIf.key] ?? '')) || String(draft.response[entry.key] ?? '').trim())
     && (!entry.shared || !sharedObservation.recordedKeys.includes(entry.key) || editEquipmentKey === key)) : [];
   const detailField = responseFields[detailIndex];
   const editable = data.permissions?.canEdit === true && active?.status !== 'complete'
     && (!['answer', 'details', 'finding', 'safety'].includes(page) || !queuedAnswer);
   const activeHasDraft = active ? Object.keys(cache.drafts).some((entry) => entry.startsWith(draftPrefix(active))) : false;
-  const observationsReady = active ? rentalObservationsComplete(data, active.id) && !activeHasDraft && !pendingSaves.length : false;
-  const metadata = active?.template.metadataFields.filter((f) => f.phase !== 'profile' && f.source !== 'team_profile'
+  const observationsReady = active ? rentalObservationsComplete(data, active.id) && !activeHasDraft && !pendingSaves.length && roomListConfirmed : false;
+  const metadata = active?.template.metadataFields.filter((f) => f.key !== 'roomRoster' && f.phase !== 'profile' && f.source !== 'team_profile'
     && (f.phase !== 'final' || observationsReady)) || [];
-  const pendingAnswers: Record<string, unknown> = {};
-  for (const entry of pendingSaves) {
-    if (entry.body.action === 'save_module_answers' && entry.body.moduleId === active?.id
-      && entry.body.answers && typeof entry.body.answers === 'object' && !Array.isArray(entry.body.answers)) Object.assign(pendingAnswers, entry.body.answers);
-  }
-  const answers = active ? { ...active.answers, ...pendingAnswers, ...cache.answers[active.id] } : {};
   const accessSuggestion = active ? rentalAccessLimitations(data.items || [], active.id) : '';
   const field = metadata[metadataIndex];
   const queuedMetadata = pendingSaves.find((entry) => entry.draftKey === `metadata:${active?.id}:${field?.key}`);
@@ -287,6 +313,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     await perform('leave', async () => { await persist(); onReturnToJob?.(); });
   }
   function openCheck(s: RentalAssessmentSection, index = 0, instanceKey?: string) {
+    setRoomContextId('');
     const target = s.checks[index];
     const prior = data.items?.find((i) => i.moduleId === active?.id && i.sectionKey === s.key && i.checkKey === target.key);
     setCursor({ sectionKey: s.key, checkIndex: index, instanceKey: instanceKey || prior?.instanceKey || (target.repeatBy === 'property' ? 'property' : 'first') });
@@ -308,14 +335,60 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     }
     return saved;
   }
+  function openRoomCheck(room: (typeof rooms)[number], index = 0) {
+    const steps = rentalRoomChecks(room.type).flatMap((entry) => {
+      const group = sections.find((s) => s.key === entry.sectionKey);
+      const checkIndex = group?.checks.findIndex((c) => c.key === entry.checkKey) ?? -1;
+      return group && checkIndex >= 0 ? [{ section: group, checkIndex }] : [];
+    });
+    const step = steps[index];
+    if (!step) return;
+    const target = step.section.checks[step.checkIndex];
+    setRoomContextId(room.id);
+    setCursor({ sectionKey: step.section.key, checkIndex: step.checkIndex, instanceKey: rentalRoomItemInstance(room, target.key, roomItems) });
+    setGuidanceOpen(false); setError(''); setPage('answer');
+  }
+  async function saveRooms(nextRooms: typeof rooms) {
+    if (!active) return;
+    const body = { action: 'save_module_answers', moduleId: active.id, expectedRevision: active.revision, answers: { roomRoster: nextRooms } };
+    const record = await enqueueRentalSave({ workOrderId, body, module: { ...active, answers: { ...active.answers, ...pendingAnswers } },
+      draftKey: 'rooms:' + Crypto.randomUUID(), draftSnapshot: body.answers });
+    setSaves((current) => [...current.filter((entry) => entry.id !== record.id), record]);
+    if (cacheRef.current.answers[active.id]?.roomRoster) {
+      const patch = { ...cacheRef.current.answers[active.id] }; delete patch.roomRoster;
+      const nextCache = { ...cacheRef.current, answers: { ...cacheRef.current.answers } };
+      if (Object.keys(patch).length) nextCache.answers[active.id] = patch; else delete nextCache.answers[active.id];
+      await persist(nextCache); cacheRef.current = nextCache; setCache(nextCache);
+    }
+  }
+  async function addRoom(type: string) {
+    if (!active) return;
+    await perform('room', async () => {
+      const typeLabel = RENTAL_ROOM_TYPES.find((entry) => entry.value === type)?.label || 'Room';
+      let suffix = 1;
+      while (rooms.some((entry) => entry.label.toLowerCase() === (typeLabel + ' ' + suffix).toLowerCase())) suffix++;
+      const label = newRoomName.trim() || typeLabel + ' ' + suffix;
+      if (rooms.some((entry) => entry.label.toLowerCase() === label.toLowerCase())) throw new Error('That room is already listed. Open it from Rooms.');
+      const room = { id: Crypto.randomUUID(), label, type };
+      const body = { action: 'save_module_answers', moduleId: active.id, expectedRevision: active.revision, answers: { roomRoster: [...rooms, room] } };
+      await saveRooms(body.answers.roomRoster);
+      setNewRoomName(''); openRoomCheck(room);
+    });
+  }
   function advanceQuestion() {
     if (!section || !check) return;
+    if (activeRoom && roomCheckIndex >= 0) {
+      if (roomCheckIndex + 1 < roomSteps.length) openRoomCheck(activeRoom, roomCheckIndex + 1);
+      else { setRoomContextId(''); setPage('categories'); }
+      return;
+    }
     if (check.repeatBy !== 'property') {
       const entries = repeatInstances(section, cursor.checkIndex);
       const index = entries.findIndex((entry) => entry.value === cursor.instanceKey);
       if (index >= 0 && entries[index + 1]) return openCheck(section, cursor.checkIndex, entries[index + 1].value);
     }
-    const target = rentalAdjacentQuestion(sections, section.key, cursor.checkIndex, 1);
+    const propertySections = active?.key === 'minimum_standards' ? sections.filter((entry) => !entry.checks.every((c) => RENTAL_ROOM_CHECKS.some((r) => r.checkKey === c.key))) : sections;
+    const target = rentalAdjacentQuestion(propertySections, section.key, cursor.checkIndex, 1);
     if (target) openCheck(target.section, target.checkIndex);
     else { setMetadataIndex(0); setPage(editable && metadata.length ? 'metadata' : 'review'); }
   }
@@ -406,11 +479,12 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
         quantityMilli: existingFinding?.quantityMilli || 0, unitLabel: existingFinding?.unitLabel || 'each',
         details: { ...existingFinding?.details, quotation: draft.quotation, immediateAction: draft.immediateAction.trim(), responsiblePeopleNotified: draft.notified } } : undefined };
     const photoCount = evidence.filter((entry) => entry.contentType.startsWith('image/')).length + draft.photos.length;
-    if (evidence.length + draft.photos.length < check.requiredEvidenceCount || (adverse && photoCount < 2)) {
-      throw new Error(adverse ? 'Take an overview and a close photo before continuing.' : 'Take the required photo before continuing.');
+    const requirement = rentalAssessorEvidenceRequirement(check, draft.outcome);
+    if (evidence.length + draft.photos.length < requirement.minimumFiles || photoCount < requirement.minimumPhotos) {
+      throw new Error(requirement.reason);
     }
     if (adverse) {
-      const blockers = rentalObservationBlockers({ checkKey: check.key, outcome: draft.outcome, response: draft.response, finding: body.finding, photoCount });
+      const blockers = rentalObservationBlockers({ checkKey: check.key, outcome: draft.outcome, response: draft.response, finding: body.finding });
       if (blockers.length) throw new Error(blockers[0]);
     }
     for (const photo of draft.photos) {
@@ -490,6 +564,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     if (!assessmentModule) return;
     setModuleId(assessmentModule.id);
     if (record.body.action === 'save_module_answers') {
+      if (record.body.answers && typeof record.body.answers === 'object' && 'roomRoster' in record.body.answers) { setPage('categories'); setError(record.error); return; }
       const fields = assessmentModule.template.metadataFields.filter((entry) => entry.phase !== 'profile' && entry.source !== 'team_profile');
       const fieldKey = Object.keys(record.body.answers || {})[0];
       setMetadataIndex(Math.max(0, fields.findIndex((entry) => entry.key === fieldKey))); setPage('metadata');
@@ -501,6 +576,20 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     }
     setError('');
   }
+  async function reviewQueuedRooms(useLatest: boolean) {
+    if (!active) return;
+    await perform('restoreRooms', async () => {
+      const records = pendingSaves.filter((entry) => entry.body.action === 'save_module_answers' && entry.body.moduleId === active.id
+        && entry.body.answers && typeof entry.body.answers === 'object' && 'roomRoster' in entry.body.answers);
+      const selected = useLatest ? rentalRoomsFromItems(active.answers.roomRoster, roomItems) : rooms;
+      const restored = { ...cacheRef.current, answers: { ...cacheRef.current.answers, [active.id]: { ...cacheRef.current.answers[active.id], roomRoster: selected } } };
+      // Keep the selected list durable before removing any superseded queue records.
+      await persist(restored); cacheRef.current = restored; setCache(restored);
+      for (const record of records) await discardRentalSave(record.id);
+      setSaves((current) => current.filter((entry) => !records.some((record) => record.id === entry.id)));
+      setPage('categories'); setError('Review the room list below, then save it. All recorded answers and photos are retained.');
+    });
+  }
   function previous() {
     setError('');
     if (page === 'safety') return setPage(check?.responseType === 'outcome' ? 'answer' : 'finding');
@@ -508,10 +597,12 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     if (page === 'details') { if (detailIndex > 0) return setDetailIndex(detailIndex - 1); return setPage('answer'); }
     if (page === 'metadata' && metadataIndex > 0) return setMetadataIndex(metadataIndex - 1);
     if (page === 'answer' && section) {
+      if (activeRoom && roomCheckIndex >= 0) { if (roomCheckIndex > 0) openRoomCheck(activeRoom, roomCheckIndex - 1); else { setRoomContextId(''); setPage('categories'); } return; }
       const entries = repeatInstances(section, cursor.checkIndex);
       const index = entries.findIndex((entry) => entry.value === cursor.instanceKey);
       if (index > 0) return openCheck(section, cursor.checkIndex, entries[index - 1].value);
-      const prior = rentalAdjacentQuestion(sections, section.key, cursor.checkIndex, -1);
+      const propertySections = active?.key === 'minimum_standards' ? sections.filter((entry) => !entry.checks.every((c) => RENTAL_ROOM_CHECKS.some((r) => r.checkKey === c.key))) : sections;
+      const prior = rentalAdjacentQuestion(propertySections, section.key, cursor.checkIndex, -1);
       if (prior) return openCheck(prior.section, prior.checkIndex);
     }
     setPage('categories');
@@ -525,29 +616,58 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       {pendingSaves.length ? <View style={styles.syncNotice}><Text style={styles.small}>{pendingSaves.length} {pendingSaves.length === 1 ? 'answer' : 'answers'}{pendingPhotos ? ` and ${pendingPhotos} ${pendingPhotos === 1 ? 'photo' : 'photos'}` : ''} saved on this phone. You can keep assessing while they sync.</Text>
         {pendingSaves.filter((entry) => entry.error).slice(0, 1).map((record) => <View key={record.id}><Text accessibilityRole="alert" style={styles.error}>{record.draftKey === key || record === queuedMetadata ? record.error : 'A saved answer needs review. Your current check can continue.'}</Text>
           <FieldButton variant="quiet" onPress={() => openQueuedAnswer(record)}>Open saved answer</FieldButton>
+          {record.status === 'conflict' && record.body.moduleId === active.id && record.body.action === 'save_module_answers' && record.body.answers && typeof record.body.answers === 'object' && 'roomRoster' in record.body.answers ? <>
+            <Text style={styles.small}>Latest room list: {rentalRoomsFromItems(active.answers.roomRoster, data.items?.filter((entry) => entry.moduleId === active.id)).map((room) => room.label).join(', ') || 'None'}. Phone room list: {rooms.map((room) => room.label).join(', ') || 'None'}.</Text>
+            <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => void reviewQueuedRooms(false)}>Review phone room list</FieldButton>
+            <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => void reviewQueuedRooms(true)}>Review latest room list</FieldButton>
+          </> : null}
           {record.status !== 'conflict' ? <FieldButton variant="quiet" disabled={!online} onPress={() => { void processRentalSaveQueue(workOrderId).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Could not sync. Your answers remain on this phone.')); }}>Retry sync</FieldButton> : null}
         </View>)}
       </View> : null}
       {page === 'categories' ? <>
-        <Text style={styles.title}>{active.title}</Text>
+        <Text style={styles.title}>{active.key === 'minimum_standards' ? RENTAL_ASSESSOR_TITLE : active.title}</Text>
         {data.modules && data.modules.length > 1 ? <FieldSelect label="Assessment" value={active.id} disabled={Boolean(busy)} options={data.modules.map((m) => ({ value: m.id, label: m.title }))} onChange={setModuleId} /> : null}
-        {active.key === 'minimum_standards' && active.status !== 'complete' ? <FieldSelect label="Assessment scope" value={active.template.assessmentScope || 'current_minimum_standards'} disabled={!editable || Boolean(busy) || !online || pendingSaves.length > 0 || activeHasDraft} options={[{ value: 'current_minimum_standards', label: 'Full minimum standards + 2027 readiness' }, { value: 'energy_readiness_2027', label: '2027 energy readiness only' }]} onChange={(scope) => {
-          Alert.alert('Change assessment scope?', 'Saved observations remain in the job history. This changes the checklist for this unissued assessment.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Use this scope', onPress: () => void perform('scope', async () => {
-            await request({ action: 'set_assessment_scope', moduleId: active.id, scope, expectedInspectionRevision: data.inspection?.revision, expectedModuleRevision: active.revision }); setPage('categories');
-          }) }]);
-        }} /> : null}
-        {editable && active.key === 'minimum_standards' && (active.template.assessmentScope !== 'current_minimum_standards' || Number(active.template.templateVersion || 1) < 3) ? <FieldButton disabled={Boolean(busy) || activeHasDraft || pendingSaves.length > 0 || !online} onPress={() => void perform('scope', async () => { await request({ action: 'set_assessment_scope', moduleId: active.id, scope: 'current_minimum_standards', expectedInspectionRevision: data.inspection?.revision, expectedModuleRevision: active.revision }); })}>Expand to full assessment + 2027 readiness</FieldButton> : null}
-        <Text style={styles.body}>Choose a category. Answer, take the photo, then tap Next.</Text>
-        {sections.map((s) => { const count = s.checks.filter((c, checkIndex) => {
+        {editable && active.key === 'minimum_standards' && (active.template.assessmentScope !== 'current_minimum_standards' || Number(active.template.templateVersion || 1) < 3) ? <FieldButton disabled={Boolean(busy) || activeHasDraft || pendingSaves.length > 0 || !online} onPress={() => void perform('scope', async () => { await request({ action: 'set_assessment_scope', moduleId: active.id, scope: 'current_minimum_standards', expectedInspectionRevision: data.inspection?.revision, expectedModuleRevision: active.revision }); })}>Open the complete rental assessment</FieldButton> : null}
+        {active.key === 'minimum_standards' ? <>
+          <Text style={styles.body}>Work through each room, then check the equipment and outside areas. Take photos of problems and equipment where requested.</Text>
+          <Text style={styles.title}>Rooms</Text>
+          <Text style={styles.small}>Add each room once. Its lighting, daylight, mould, visible damage and ventilation checks stay together.</Text>
+          {rooms.map((room) => {
+            const checks = rentalRoomChecks(room.type).filter((entry) => sections.some((s) => s.key === entry.sectionKey && s.checks.some((c) => c.key === entry.checkKey)));
+            const count = checks.filter((entry) => roomItems.some((i) => i.checkKey === entry.checkKey && i.instanceKey === rentalRoomItemInstance(room, entry.checkKey, roomItems) && i.outcome)).length;
+            return <Pressable key={room.id} disabled={Boolean(busy)} onPress={() => openRoomCheck(room)} style={styles.category}><MaterialCommunityIcons name="home-outline" size={23} color={colours.green} /><View style={styles.flex}><Text style={styles.categoryTitle}>{room.label}</Text><Text style={styles.small}>{count}/{checks.length} checks recorded</Text></View></Pressable>;
+          })}
+          <FieldButton variant="secondary" disabled={!editable || Boolean(busy)} onPress={() => { setNewRoomName(''); setPage('addRoom'); }}>Add room</FieldButton>
+          {(!roomListConfirmed || hasRoomListDraft) && editable ? <FieldButton disabled={Boolean(busy)} onPress={() => void perform('rooms', () => saveRooms(rooms))}>{hasRoomListDraft ? 'Save this room list' : 'Confirm room list'}</FieldButton> : null}
+          {earlierRoomItems.length ? <><Text style={styles.label}>Earlier observations</Text><Text style={styles.small}>These saved entries have their own location or need matching to a room. Their answers and photos are retained.</Text>
+            {earlierRoomItems.map((entry) => <FieldButton key={[entry.sectionKey, entry.checkKey, entry.instanceKey].join(':')} variant="secondary" disabled={Boolean(busy)} onPress={() => {
+              const group = sections.find((s) => s.key === entry.sectionKey); const index = group?.checks.findIndex((c) => c.key === entry.checkKey) ?? -1;
+              if (group && index >= 0) openCheck(group, index, entry.instanceKey);
+            }}>{entry.locationLabel || 'Unnamed location'} · {sections.find((s) => s.key === entry.sectionKey)?.title || 'Room check'}</FieldButton>)}</> : null}
+          <Text style={styles.title}>Equipment and property</Text>
+        </> : <Text style={styles.body}>Choose a category to continue.</Text>}
+        {sections.filter((entry) => active.key !== 'minimum_standards' || !entry.checks.every((c) => RENTAL_ROOM_CHECKS.some((r) => r.checkKey === c.key))).map((s) => { const count = s.checks.filter((c, checkIndex) => {
           if (pendingSaves.some((entry) => entry.body.moduleId === active.id && entry.body.sectionKey === s.key && entry.body.checkKey === c.key)) return true;
           const entries = data.items?.filter((i) => i.moduleId === active.id && i.sectionKey === s.key && i.checkKey === c.key) || [];
           const pending = Object.keys(cache.drafts).some((draftKey) => draftKey.startsWith(draftPrefix(active) + [s.key, checkIndex].join(':') + ':'));
-          return !pending && entries.length > 0 && entries.every((entry) => entry.outcome && (data.evidence?.filter((e) => e.itemId === entry.id && e.status === 'active').length || 0) >= c.requiredEvidenceCount
-            && (!RENTAL_ADVERSE_OUTCOMES.has(entry.outcome) || (data.evidence?.filter((e) => e.itemId === entry.id && e.status === 'active' && e.contentType.startsWith('image/')).length || 0) >= 2));
+          return !pending && entries.length > 0 && entries.every((entry) => {
+            const requirement = rentalAssessorEvidenceRequirement(c, entry.outcome);
+            return entry.outcome && (data.evidence?.filter((e) => e.itemId === entry.id && e.status === 'active').length || 0) >= requirement.minimumFiles
+              && (data.evidence?.filter((e) => e.itemId === entry.id && e.status === 'active' && e.contentType.startsWith('image/')).length || 0) >= requirement.minimumPhotos;
+          });
         }).length;
           return <Pressable key={s.key} disabled={Boolean(busy)} onPress={() => openCheck(s)} style={styles.category}><MaterialCommunityIcons name={count === s.checks.length ? 'check-circle-outline' : 'camera-outline'} size={23} color={colours.green} /><View style={styles.flex}><Text style={styles.categoryTitle}>{s.title}</Text><Text style={styles.small}>{count}/{s.checks.length} recorded</Text></View><MaterialCommunityIcons name="chevron-right" size={24} color={colours.green} /></Pressable>; })}
         <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => { setMetadataIndex(0); setPage(active.status === 'complete' || !metadata.length ? 'review' : 'metadata'); }}>Review and finish</FieldButton>
         {!observationsReady && active.status !== 'complete' ? <Text style={styles.small}>The final declaration appears after all answers and required photos are saved.</Text> : null}
+      </> : page === 'addRoom' ? <>
+        <Text style={styles.title}>Add a room</Text><Text style={styles.body}>Tap the room type to start. We name it for you, or enter a name below first.</Text>
+        <RentalTextField label="Room name (optional)" value={newRoomName} editable={!busy} onChange={setNewRoomName} maxLength={120} />
+        <View style={styles.options}>{RENTAL_ROOM_TYPES.map((roomType) => <Pressable key={roomType.value} style={styles.option} disabled={!editable || Boolean(busy)} onPress={() => void addRoom(roomType.value)}><Text style={styles.categoryTitle}>{roomType.label}</Text></Pressable>)}</View>
+      </> : page === 'roomSetup' && activeRoom ? <>
+        <Text style={styles.title}>{activeRoom.label}</Text><Text style={styles.body}>What is this space used for? This sets the checks that apply.</Text>
+        <View style={styles.options}>{RENTAL_ROOM_TYPES.map((roomType) => <Pressable key={roomType.value} style={[styles.option, activeRoom.type === roomType.value && styles.selected]} disabled={!editable || Boolean(busy)} onPress={() => void perform('room', async () => {
+          const updated = { ...activeRoom, type: roomType.value }; await saveRooms(rooms.map((room) => room.id === updated.id ? updated : room)); openRoomCheck(updated);
+        })}><Text style={styles.categoryTitle}>{roomType.label}</Text></Pressable>)}</View>
       </> : page === 'metadata' && field ? <>
         <Text style={styles.small}>{field.phase === 'final' ? 'Final declaration' : 'Property details'} · {metadataIndex + 1} of {metadata.length}</Text>
         <Text style={styles.title}>{field.label}</Text>
@@ -562,20 +682,28 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
         {(active.template.metadataFields || []).filter((f) => f.source === 'team_profile').map((f) => <Text key={f.key} style={styles.body}>{f.label}: {String(active.answers[f.key] || 'Not recorded in Team profile')}</Text>)}
         {!allComplete ? <>
           {(data.completion?.[active.id]?.blockers || []).map((b) => <Text key={b.key} style={styles.error}>{b.label}</Text>)}
-          <FieldButton disabled={active.status === 'complete' || !data.completion?.[active.id]?.complete || activeHasDraft || Boolean(cache.answers[active.id]) || Boolean(busy) || pendingSaves.length > 0 || !online} loading={busy === 'complete'} onPress={() => void perform('complete', async () => { if (active.status === 'complete') return; await request({ action: 'complete_module', moduleId: active.id, expectedRevision: active.revision }); await onChanged(); })}>{active.status === 'complete' ? 'Module complete' : 'Complete assessment'}</FieldButton>
+          {!roomListConfirmed ? <Text style={styles.error}>Confirm the room list before finishing.</Text> : null}
+          <FieldButton disabled={active.status === 'complete' || !data.completion?.[active.id]?.complete || !roomListConfirmed || activeHasDraft || Boolean(cache.answers[active.id]) || Boolean(busy) || pendingSaves.length > 0 || !online} loading={busy === 'complete'} onPress={() => void perform('complete', async () => { if (active.status === 'complete') return; await request({ action: 'complete_module', moduleId: active.id, expectedRevision: active.revision }); await onChanged(); })}>{active.status === 'complete' ? 'Module complete' : 'Complete assessment'}</FieldButton>
         </> : null}
         {!report && data.permissions?.canIssue ? <FieldButton disabled={!allComplete || Boolean(busy) || pendingSaves.length > 0 || !online} loading={busy === 'issue'} onPress={() => void perform('issue', async () => { await request({ action: 'issue_report' }); await onChanged(); })}>Create report</FieldButton> : null}
         {report ? <><Text style={styles.body}>{report.reportNumber}</Text>{report.link?.shareUrl ? <><FieldButton onPress={() => void Share.share({ message: report.link?.shareUrl || '', url: report.link?.shareUrl })}>Share report</FieldButton><FieldButton variant="secondary" onPress={() => void Linking.openURL(report.link?.shareUrl || '')}>Open report</FieldButton></> : <Text style={styles.body}>The report is retained in this job. Ask the owner to manage its sharing link.</Text>}</> : null}
       </> : draft && item && section && check ? <>
-        <Text style={styles.small}>{section.title} · {cursor.checkIndex + 1} of {section.checks.length}</Text>
-        <Text style={styles.title}>{check.prompt}</Text>
+        <Text style={styles.small}>{activeRoom ? activeRoom.label + ' · ' + (roomCheckIndex + 1) + ' of ' + roomSteps.length : section.title + ' · ' + (cursor.checkIndex + 1) + ' of ' + section.checks.length}</Text>
+        <Text style={styles.title}>{presentation?.prompt || check.prompt}</Text>
+        {presentation?.help ? <Text style={styles.small}>{presentation.help}</Text> : null}
         {page === 'answer' ? <>
-          {check.repeatBy !== 'property' ? <>
-            {repeatInstances(section, cursor.checkIndex).length > 0 ? <FieldSelect label="Recorded items" value={cursor.instanceKey} disabled={Boolean(busy)} options={repeatInstances(section, cursor.checkIndex)} onChange={(instance) => openCheck(section, cursor.checkIndex, instance)} /> : null}
-            <RentalTextField label="Room or item location" value={draft.locationLabel} editable={editable && !busy} onChange={(v) => change({ locationLabel: v })} />
+          {activeRoom ? <><FieldSelect label="Room" value={activeRoom.id} disabled={Boolean(busy)} options={rooms.map((room) => ({ value: room.id, label: room.label }))}
+            onChange={(id) => { const room = rooms.find((entry) => entry.id === id); if (room) openRoomCheck(room); }} />
+            {roomCheckIndex === 0 ? <Pressable disabled={!editable || Boolean(busy)} onPress={() => setPage('roomSetup')}><Text style={styles.link}>{RENTAL_ROOM_TYPES.find((entry) => entry.value === activeRoom.type)?.label} · Change room type</Text></Pressable> : null}
+            <Pressable disabled={!editable || Boolean(busy)} onPress={() => { setNewRoomName(''); setPage('addRoom'); }}><Text style={styles.link}>Add another room</Text></Pressable>
+          </> : check.repeatBy !== 'property' ? <>
+            {draft.locationLabel && repeatInstances(section, cursor.checkIndex).length > 0 && editLocationKey !== key ? <>
+              <FieldSelect label="Location" value={cursor.instanceKey} disabled={Boolean(busy)} options={repeatInstances(section, cursor.checkIndex)} onChange={(instance) => openCheck(section, cursor.checkIndex, instance)} />
+              <Pressable disabled={!editable || Boolean(busy)} onPress={() => setEditLocationKey(key)}><Text style={styles.link}>Edit location</Text></Pressable>
+            </> : <RentalTextField label="Location" value={draft.locationLabel} editable={editable && !busy} onChange={(v) => change({ locationLabel: v })} />}
           </> : null}
           {check.assessmentPhase === 'energy_readiness_2027' ? <Text style={styles.small}>2027 energy readiness · {check.trigger}</Text> : null}
-          <View style={styles.options}>{(check.assessmentPhase === 'energy_readiness_2027' || (!check.assessmentPhase && active.template.assessmentScope === 'energy_readiness_2027') ? RENTAL_READINESS_OUTCOMES : RENTAL_OUTCOMES).map((option) => <Pressable key={option.value} disabled={!editable || Boolean(busy)} onPress={() => change({ outcome: option.value })} style={[styles.option, draft.outcome === option.value && styles.selected]}><Text style={styles.categoryTitle}>{option.label}</Text></Pressable>)}</View>
+          <View style={styles.options}>{(presentation?.outcomeOptions || []).map((option) => <Pressable key={option.value} disabled={!editable || Boolean(busy)} onPress={() => change({ outcome: option.value, ...(option.value === 'specialist_verification_required' && check.key === 'room_ventilation' ? { findingDescription: 'Ventilation requirement not verified during this assessment.' } : {}) })} style={[styles.option, draft.outcome === option.value && styles.selected]}><Text style={styles.categoryTitle}>{option.label}</Text></Pressable>)}</View>
           {draft.outcome === 'not_applicable' ? <RentalTextField label="Why does this not apply?" value={draft.publicNotes} editable={editable && !busy} onChange={(v) => change({ publicNotes: v })} /> : null}
           {check.credentialGate && check.credentialGate !== 'assigned_assessor' ? <Text style={styles.small}>Record what you can see and choose Specialist verification needed when licensed verification is needed.</Text> : null}
           {check.responseType === 'outcome' && draft.outcome && draft.outcome !== 'not_applicable' ? <>
@@ -593,7 +721,10 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
             <RentalTextField label="Details, if needed" value={draft.findingDescription} editable={editable && !busy} onChange={(value) => change({ findingDescription: value })} />
             <FieldButton variant={draft.severity === 'immediate_safety_risk' ? 'primary' : 'secondary'} disabled={!editable || Boolean(busy)} onPress={() => change({ severity: draft.severity === 'immediate_safety_risk' ? 'required' : 'immediate_safety_risk' })}>{draft.severity === 'immediate_safety_risk' ? 'Immediate danger flagged' : 'Flag an immediate danger'}</FieldButton>
           </> : null}
-          <View style={styles.photo}><Text style={styles.body}>{check.photoGuidance}</Text>{RENTAL_ADVERSE_OUTCOMES.has(draft.outcome) ? <Text style={styles.small}>Include an overview and close detail with a scale or readable label so the work can be quoted.</Text> : null}<FieldButton variant="secondary" disabled={!editable || Boolean(busy)} loading={busy === 'camera'} onPress={() => void capture()}>Take photo</FieldButton><Text style={styles.small}>{evidence.length} linked · {draft.photos.length} on this phone · {Math.max(check.requiredEvidenceCount, RENTAL_ADVERSE_OUTCOMES.has(draft.outcome) ? 2 : 0)} required{RENTAL_ADVERSE_OUTCOMES.has(draft.outcome) ? ' (at least 2 photos)' : ''}</Text>
+          <View style={styles.photo}>
+            {photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? <><Text style={styles.body}>{photoRequirement.reason}</Text><Text style={styles.small}>{check.photoGuidance}</Text></> : <Text style={styles.small}>No photo required for this answer. Add one if it helps explain your observation.</Text>}
+            <FieldButton variant="secondary" disabled={!editable || Boolean(busy)} loading={busy === 'camera'} onPress={() => void capture()}>{photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? 'Take photo' : 'Add optional photo'}</FieldButton>
+            {evidence.length || draft.photos.length || photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? <Text style={styles.small}>{evidence.length} linked · {draft.photos.length} on this phone{photoRequirement.minimumPhotos ? ' · ' + photoRequirement.minimumPhotos + ' photos required' : photoRequirement.minimumFiles ? ' · ' + photoRequirement.minimumFiles + ' evidence file required' : ''}</Text> : null}
           {draft.photos.map((p, index) => <View key={p.uri} style={styles.pendingPhoto}>
             <Image source={{ uri: p.uri }} style={styles.thumbnail} alt={`Pending photo ${index + 1}`} accessibilityLabel={`Pending photo ${index + 1}`} />
             <Text style={styles.small}>Photo {index + 1} saved {new Date(p.capture.captureObservedAtUtc).toLocaleTimeString()} · {p.mediaId ? 'Uploaded, ready to link' : p.location?.location.state === 'captured' ? 'GPS ' + Math.round(p.location.location.accuracyMetres || 0) + ' m' : 'GPS needed'}</Text>
@@ -602,7 +733,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
           </View>)}</View>
           <Pressable onPress={() => setGuidanceOpen(!guidanceOpen)}><Text style={styles.link}>{guidanceOpen ? 'Hide guidance' : 'Standard and guidance'}</Text></Pressable>
           {guidanceOpen ? <><Text style={styles.body}>{check.help}</Text>{check.effectiveFrom ? <Text style={styles.small}>Applies from {check.effectiveFrom}. {check.trigger}</Text> : null}{check.sourceUrl ? <Pressable onPress={() => void Linking.openURL(check.sourceUrl || '')}><Text style={styles.link}>Official source</Text></Pressable> : null}<RentalTextField label="Optional report note" value={draft.publicNotes} editable={editable && !busy} onChange={(v) => change({ publicNotes: v })} multiline /></> : null}
-          {check.repeatBy !== 'property' ? <FieldButton variant="quiet" disabled={!editable || Boolean(busy)} onPress={() => void perform('draft', async () => {
+          {!activeRoom && check.repeatBy !== 'property' ? <FieldButton variant="quiet" disabled={!editable || Boolean(busy)} onPress={() => void perform('draft', async () => {
             await persist();
             const nextCursor = { sectionKey: section.key, checkIndex: cursor.checkIndex, instanceKey: Crypto.randomUUID() };
             const nextKey = itemKey(active, nextCursor);
@@ -611,7 +742,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
             setCache(nextCache); cacheRef.current = nextCache; await persist(nextCache);
             openCheck(section, cursor.checkIndex, nextCursor.instanceKey);
           })}>Add another {readable(check.repeatBy)}</FieldButton> : null}
-          {check.repeatBy !== 'property' && !item.id && cache.drafts[key] ? <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => Alert.alert('Discard unsaved item?', 'This removes this item from the draft. Saved job records are retained.', [{ text: 'Keep item', style: 'cancel' }, { text: 'Discard item', style: 'destructive', onPress: () => void perform('discard', async () => {
+          {!activeRoom && check.repeatBy !== 'property' && !item.id && cache.drafts[key] ? <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => Alert.alert('Discard unsaved item?', 'This removes this item from the draft. Saved job records are retained.', [{ text: 'Keep item', style: 'cancel' }, { text: 'Discard item', style: 'destructive', onPress: () => void perform('discard', async () => {
             const nextCache = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts } }; delete nextCache.drafts[key];
             setCache(nextCache); cacheRef.current = nextCache; await persist(nextCache); setPage('categories');
           }) }])}>Discard unsaved item</FieldButton> : null}
@@ -632,7 +763,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     </KeyboardAwareScrollView>
     {page !== 'categories' ? <View style={[styles.footer, { paddingBottom: Math.max(12, insets.bottom) }]}><FieldButton variant="secondary" style={styles.flex} disabled={Boolean(busy)} onPress={previous}>Previous</FieldButton>
-      {page === 'metadata' ? <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'metadata'} onPress={() => { if (editable) void saveMetadata(); else if (metadataIndex + 1 < metadata.length) setMetadataIndex(metadataIndex + 1); else setPage('review'); }}>Next</FieldButton> : page === 'review' ? <FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => setPage('categories')}>Categories</FieldButton> : <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'save'} onPress={() => void next()}>Next</FieldButton>}
+      {page === 'addRoom' || page === 'roomSetup' ? null : page === 'metadata' ? <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'metadata'} onPress={() => { if (editable) void saveMetadata(); else if (metadataIndex + 1 < metadata.length) setMetadataIndex(metadataIndex + 1); else setPage('review'); }}>Next</FieldButton> : page === 'review' ? <FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => setPage('categories')}>Categories</FieldButton> : <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'save'} onPress={() => void next()}>Next</FieldButton>}
     </View> : null}
   </View>;
 }

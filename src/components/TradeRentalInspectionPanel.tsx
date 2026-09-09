@@ -11,6 +11,7 @@ import {
 import type { User } from "firebase/auth";
 import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalAssessorFields, rentalFindingDescriptionLabel, rentalSharedObservationResponse, rentalObservationNumberIsValid } from "@/lib/rental-quotation.mjs";
 import { rentalCheckIsReadiness } from "@/lib/trade-rental-assessment.mjs";
+import { RENTAL_ROOM_TYPES, normalizeRentalRoomRoster, rentalRoomChecks, rentalRoomsFromItems, rentalRoomItemInstance, rentalAssessorCheckPresentation, rentalAssessorEvidenceRequirement } from "@/lib/rental-assessor-workflow.mjs";
 import styles from "./TradeRentalInspectionPanel.module.css";
 
 type MetadataField = {
@@ -157,17 +158,42 @@ type AssessmentResult = {
 };
 
 type LocalItem = AssessmentItem & { localOnly?: boolean };
+type AssessmentRoom = { id: string; label: string; type: string };
+type AssessmentGroup = { key: string; title: string; summary: string; room?: AssessmentRoom; retainedItems?: AssessmentItem[]; entries: Array<{ section: AssessmentSection; check: AssessmentCheck }> };
+
+function assessmentGroups(assessmentModule: AssessmentModule, items: AssessmentItem[]) {
+  const sections = assessmentModule.template.sections;
+  const roomCheckKeys = new Set(RENTAL_ROOM_TYPES.flatMap((type) => rentalRoomChecks(type.value)).map((entry) => entry.checkKey));
+  const usesRooms = assessmentModule.key === "minimum_standards" && sections.some((section) => section.checks.some((check) => roomCheckKeys.has(check.key)));
+  const rooms: AssessmentRoom[] = usesRooms ? rentalRoomsFromItems(normalizeRentalRoomRoster(assessmentModule.answers.roomRoster ?? []), items) : [];
+  const roomGroups: AssessmentGroup[] = rooms.map((room) => ({
+    key: `room:${room.id}`, title: room.label, summary: "Complete the checks for this room, then continue to the next area.", room,
+    entries: rentalRoomChecks(room.type).flatMap((entry) => {
+      const section = sections.find((candidate) => candidate.key === entry.sectionKey);
+      const check = section?.checks.find((candidate) => candidate.key === entry.checkKey);
+      return section && check ? [{ section, check }] : [];
+    }),
+  }));
+  const propertyGroups: AssessmentGroup[] = sections.flatMap((section) => {
+    const entries = section.checks.filter((check) => !usesRooms || !roomCheckKeys.has(check.key)).map((check) => ({ section, check }));
+    return entries.length ? [{ key: section.key, title: section.title, summary: section.summary, entries }] : [];
+  });
+  const retained = usesRooms ? items.filter((item) => roomCheckKeys.has(item.checkKey) && !roomGroups.some((group) => group.entries.some(({ section, check }) => groupItems(group, section, check, items).some((candidate) => candidate.id === item.id)))) : [];
+  const retainedGroups: AssessmentGroup[] = sections.flatMap((section) => {
+    const entries = section.checks.filter((check) => retained.some((item) => item.sectionKey === section.key && item.checkKey === check.key)).map((check) => ({ section, check }));
+    return entries.length ? [{ key: `earlier:${section.key}`, title: `Earlier ${section.title.toLowerCase()} observations`, summary: "Saved observations that do not match a single current room remain here with their original location and evidence.", entries, retainedItems: retained }] : [];
+  });
+  return { usesRooms, rooms, groups: [...roomGroups, ...propertyGroups, ...retainedGroups] };
+}
+
+function groupItems(group: AssessmentGroup, section: AssessmentSection, check: AssessmentCheck, items: AssessmentItem[]) {
+  const matching = (group.retainedItems || items).filter((item) => item.sectionKey === section.key && item.checkKey === check.key);
+  if (!group.room) return matching;
+  const instance = rentalRoomItemInstance(group.room, check.key, items);
+  return matching.filter((item) => item.instanceKey === instance);
+}
 type FieldMedia = { id: string; fileName: string; createdAt: string };
 type FieldUploadResult = { ok?: boolean; media?: FieldMedia[]; error?: string };
-
-const outcomeOptions = [
-  ["meets", "Meets the standard"],
-  ["does_not_meet", "Does not meet"],
-  ["specialist_verification_required", "Specialist verification required"],
-  ["not_accessible", "Not accessible"],
-  ["not_applicable", "Not applicable"],
-  ["exemption_evidence_pending", "Claimed exemption, evidence pending"],
-] as const;
 
 const severityOptions = [
   ["immediate_safety_risk", "Immediate safety risk"],
@@ -312,6 +338,52 @@ function localRepeatedItem(module: AssessmentModule, section: AssessmentSection,
   };
 }
 
+function RoomRosterForm({ rooms, roomTypes, lockedRoomIds, needsConfirmation = false, busy, readOnly, onSave }: {
+  rooms: AssessmentRoom[];
+  roomTypes: readonly { value: string; label: string }[];
+  lockedRoomIds: Set<string>;
+  needsConfirmation?: boolean;
+  busy: boolean;
+  readOnly: boolean;
+  onSave: (rooms: AssessmentRoom[]) => Promise<void>;
+}) {
+  const [error, setError] = useState("");
+  async function addRoom(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = new FormData(form);
+    const type = String(values.get("roomType") || "");
+    const roomType = roomTypes.find((entry) => entry.value === type);
+    if (!roomType || rooms.length >= 80) return;
+    let label = String(values.get("roomLabel") || "").trim().replace(/\s+/g, " ");
+    const existingLabels = new Set(rooms.map((room) => room.label.trim().replace(/\s+/g, " ").toLowerCase()));
+    if (!label) {
+      let number = 1;
+      do { label = `${roomType.label} ${number++}`; } while (existingLabels.has(label.toLowerCase()));
+    }
+    if (existingLabels.has(label.toLowerCase())) { setError("That room is already in the list. Open it below to continue its checks."); return; }
+    setError("");
+    try {
+      await onSave([...rooms, { id: crypto.randomUUID(), label, type }]);
+      form.reset();
+    } catch { /* The workspace displays the save error and retains this form. */ }
+  }
+  return <section className={styles.roomSetup} aria-label="Property rooms">
+    <header><span>Set up once</span><h4>Rooms and areas</h4><p>Add each room once. Its lighting, daylight, mould, visible damage and ventilation checks stay together.</p></header>
+    {rooms.length > 0 && <ul>{rooms.map((room) => <li key={room.id}><strong>{room.label}</strong>{readOnly ? <small>{roomTypes.find((entry) => entry.value === room.type)?.label || room.type}</small> : <select aria-label={`Room use for ${room.label}`} value={room.type} disabled={busy} onChange={(event) => void onSave(rooms.map((entry) => entry.id === room.id ? { ...entry, type: event.target.value } : entry)).catch(() => undefined)}>{roomTypes.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}</select>}
+      {!readOnly && !lockedRoomIds.has(room.id) && <button type="button" disabled={busy} aria-label={`Remove ${room.label}`} onClick={() => void onSave(rooms.filter((entry) => entry.id !== room.id)).catch(() => undefined)}>Remove</button>}
+    </li>)}</ul>}
+    {!readOnly && needsConfirmation && rooms.length > 0 && <div className={styles.roomConfirmation}><p>These rooms come from earlier observations. Check each room use, then confirm the list for this assessment.</p><button type="button" className={styles.primaryButton} disabled={busy} onClick={() => void onSave(rooms).catch(() => undefined)}>Confirm room list</button></div>}
+    {!readOnly && <form className={styles.roomAddForm} onSubmit={addRoom}>
+      <label><span>Room type</span><select name="roomType" disabled={busy || rooms.length >= 80}>{roomTypes.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}</select></label>
+      <label><span>Name, optional</span><input name="roomLabel" maxLength={120} placeholder="For example, Rear bedroom" disabled={busy || rooms.length >= 80} /></label>
+      <button type="submit" className={styles.primaryButton} disabled={busy || rooms.length >= 80}>{busy ? "Saving room..." : "Add room"}</button>
+      <small>Names are generated automatically when left blank. Rooms with saved answers stay in this assessment.</small>
+    </form>}
+    {error && <p role="alert">{error}</p>}
+  </section>;
+}
+
 function MetadataForm({ module, busy, readOnly, onSave }: {
   module: AssessmentModule;
   busy: boolean;
@@ -324,7 +396,7 @@ function MetadataForm({ module, busy, readOnly, onSave }: {
     event.preventDefault();
     const form = event.currentTarget;
     const values = new FormData(form);
-    const answers: Record<string, unknown> = {};
+    const answers: Record<string, unknown> = { ...module.answers };
     for (const field of fields) {
       answers[field.key] = field.type === "checkbox"
         ? values.has(field.key)
@@ -378,6 +450,7 @@ function AssessmentItemCard({
   onUnlink,
   onDirtyChange,
   onRegisterDraft,
+  roomLabel,
 }: {
   module: AssessmentModule;
   section: AssessmentSection;
@@ -394,11 +467,14 @@ function AssessmentItemCard({
   onUnlink: (item: AssessmentItem, evidenceId: string) => Promise<void>;
   onDirtyChange: (itemKey: string, dirty: boolean) => void;
   onRegisterDraft: (itemKey: string, provider: AssessmentItemDraftProvider | null) => void;
+  roomLabel?: string;
 }) {
   const [outcome, setOutcome] = useState(item.outcome || "");
   const [severity, setSeverity] = useState(finding?.severity || "required");
   const isAdverse = adverseOutcomes.has(outcome);
   const readiness = rentalCheckIsReadiness(check, module.template.assessmentScope);
+  const presentation = rentalAssessorCheckPresentation(check, { assessmentScope: module.template.assessmentScope });
+  const evidenceRequirement = rentalAssessorEvidenceRequirement(check, outcome);
   const quotation = rentalQuotation(finding?.details.quotation);
   const responseFields = rentalAssessorFields(check);
   const [responseValues, setResponseValues] = useState<Record<string, unknown>>(item.response);
@@ -412,6 +488,7 @@ function AssessmentItemCard({
     const value = String(shared.response[field.key] ?? "").trim();
     if (field.shared && recordedKeys.includes(field.key) && !editEquipment) return false;
     if (field.legacy && !value) return false;
+    if (field.showForOutcomes && !field.showForOutcomes.includes(outcome) && !value) return false;
     return !field.showIf || value || field.showIf.values.includes(String(shared.response[field.showIf.key] || ""));
   });
   const needsSpecialistCredential = outcome === "meets" && Boolean(check.credentialGate)
@@ -514,8 +591,8 @@ function AssessmentItemCard({
   return <article className={`${styles.itemCard} ${outcome ? styles.answered : ""}`}>
     <header>
       <div>
-        <span>{repeated ? "Repeatable check" : "Property check"}</span>
-        <h5>{check.prompt}</h5>
+        <span>{roomLabel || (repeated ? "Item check" : "Property check")}{presentation.phaseLabel ? ` · ${presentation.phaseLabel}` : ""}</span>
+        <h5>{presentation.prompt}</h5>
       </div>
       <strong>{item.id ? `Saved v${item.revision}` : "Not saved"}</strong>
     </header>
@@ -524,22 +601,22 @@ function AssessmentItemCard({
       const values = new FormData(event.currentTarget);
       onObservationChange({ ...item, locationLabel: String(values.get("locationLabel") || locationLabel), outcome: String(values.get("outcome") || outcome), response: responseFromForm(values) });
     }}>
-      {repeated && <label>
+      {roomLabel ? <input type="hidden" name="locationLabel" value={roomLabel} /> : repeated && <label>
         <span>Exact location *</span>
         <input name="locationLabel" required value={locationLabel} onChange={(event) => setLocationLabel(event.target.value)} maxLength={300} placeholder="For example, Bedroom 2 north window" disabled={readOnly} />
       </label>}
       <fieldset className={styles.outcomes} disabled={readOnly}>
         <legend>Result *</legend>
-        {outcomeOptions.map(([value, label]) => <label className={outcome === value ? styles.selectedOutcome : ""} key={value}>
+        {presentation.outcomeOptions.map(({ value, label }) => <label className={outcome === value ? styles.selectedOutcome : ""} key={value}>
           <input type="radio" name="outcome" value={value} checked={outcome === value} onChange={() => setOutcome(value)} />
-          <span>{readiness && value === "meets" ? "Ready for this requirement" : readiness && value === "does_not_meet" ? "Upgrade planning needed" : label}</span>
+          <span>{label}</span>
         </label>)}
       </fieldset>
 
       <aside className={styles.guidance}>
-        <strong>What to photograph</strong>
-        <p>{check.photoGuidance}</p>
-        <small>{check.help}</small>
+        <strong>{evidenceRequirement.minimumFiles === 0 ? "Photos are optional for this answer" : "What to photograph"}</strong>
+        <p>{evidenceRequirement.minimumFiles === 0 ? evidenceRequirement.reason : check.photoGuidance}</p>
+        <small>{presentation.help}</small>
       </aside>
 
       <label>
@@ -576,7 +653,7 @@ function AssessmentItemCard({
       </details>}
 
       {isAdverse && <section className={styles.findingFields}>
-        <header><span>Observation</span><strong>Include an overview and close photo</strong></header>
+        <header><span>Observation</span><strong>{evidenceRequirement.minimumPhotos > 0 ? "Include an overview and close photo" : "Record what needs follow-up"}</strong></header>
         <div className={styles.detailGrid}>
           <label><span>Severity *</span><select name="severity" value={severity} onChange={(event) => setSeverity(event.target.value)} disabled={readOnly}>{severityOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
           <label><span>Finding status</span><input value={severity === "immediate_safety_risk" ? "Safety issue" : outcome === "does_not_meet" ? readiness ? "Upgrade planning" : "Does not meet this check" : "Requires verification"} readOnly aria-describedby={`status-${item.instanceKey}`} /><small id={`status-${item.instanceKey}`}>Set automatically from the assessment result and safety severity.</small></label>
@@ -607,10 +684,10 @@ function AssessmentItemCard({
     </form>
 
     <section className={styles.evidenceArea}>
-      <header><div><span>Evidence</span><strong>{evidence.length} of {item.requiredEvidenceCount || check.requiredEvidenceCount} required file{(item.requiredEvidenceCount || check.requiredEvidenceCount) === 1 ? "" : "s"}</strong></div></header>
-      {isAdverse && <p>{evidence.filter((entry) => entry.contentType.startsWith("image/")).length} of 2 required photos: include an overview and close detail with a scale or readable label so the work can be quoted.</p>}
+      <header><div><span>Evidence</span><strong>{evidenceRequirement.minimumFiles === 0 ? `${evidence.length} optional file${evidence.length === 1 ? "" : "s"}` : `${evidence.length} of ${evidenceRequirement.minimumFiles} required file${evidenceRequirement.minimumFiles === 1 ? "" : "s"}`}</strong></div></header>
+      {evidenceRequirement.minimumPhotos > 0 && <p>{evidence.filter((entry) => entry.contentType.startsWith("image/")).length} of {evidenceRequirement.minimumPhotos} required photo{evidenceRequirement.minimumPhotos === 1 ? "" : "s"}. {evidenceRequirement.reason}</p>}
       {evidence.length > 0 && <ul>{evidence.map((entry) => <li key={entry.id}><div><strong>{entry.fileName}</strong><small>{entry.caption || entry.purpose} | {bytesLabel(entry.sizeBytes)}</small>{entry.capture && <small>{entry.capture.source === "in_app_camera" ? "Captured" : "Added"} {dateLabel(entry.capture.capturedAtUtc)}{entry.capture.locationCaptured && entry.capture.latitude !== null && entry.capture.longitude !== null && entry.capture.accuracyMetres !== null ? ` | device-reported GPS ${entry.capture.latitude.toFixed(6)}, ${entry.capture.longitude.toFixed(6)} | accuracy ${Math.round(entry.capture.accuracyMetres)} m` : ""}</small>}</div>{!readOnly && <button type="button" disabled={busy === `unlink:${entry.id}`} onClick={() => void onUnlink(item, entry.id)}>{busy === `unlink:${entry.id}` ? "Removing..." : "Remove link"}</button>}</li>)}</ul>}
-      {!item.id ? <p className={styles.saveFirst}>Save the answer first, then attach the required photo or document.</p>
+      {!item.id ? <p className={styles.saveFirst}>{evidenceRequirement.minimumFiles === 0 ? "Save this answer. You can add a photo later if it helps explain the observation." : "Save the answer first, then attach the required photo or document."}</p>
         : !readOnly && <form className={styles.uploadForm} onSubmit={upload}>
           <label><span>Photo or PDF</span><input name="file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" required /></label>
           <p>A fresh device-reported GPS position within 100 metres is required for every assessment photo. TLink records the time, coordinates and accuracy in the issued report. PDFs record the time they were added.</p>
@@ -683,16 +760,24 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
 
   const activeModule = data.modules?.find((module) => module.id === activeModuleId) || data.modules?.[0];
   const sections = useMemo(() => activeModule?.template.sections || [], [activeModule]);
-
-  const activeSection = sections.find((section) => section.key === activeSectionKey);
+  const activeItems = useMemo(() => (data.items || []).filter((item) => item.moduleId === activeModule?.id), [data.items, activeModule?.id]);
+  const workflow = useMemo(() => activeModule ? assessmentGroups(activeModule, activeItems) : { usesRooms: false, rooms: [], groups: [] }, [activeModule, activeItems]);
+  const roomRosterUnconfirmed = workflow.usesRooms && (!workflow.rooms.length || JSON.stringify(workflow.rooms) !== JSON.stringify(activeModule?.answers.roomRoster || []));
+  const activeSection = workflow.groups.find((section) => section.key === activeSectionKey);
   const canEdit = !readOnly && data.permissions?.canEdit === true;
   const moduleCompletion = activeModule ? data.completion?.[activeModule.id] : undefined;
   const allModulesComplete = (data.modules || []).length > 0 && (data.modules || []).every((module) => module.status === "complete");
   const latestReport = data.reports?.find((report) => report.status === "issued");
 
   const progress = useMemo(() => {
-    const allChecks = (data.modules || []).flatMap((module) => module.template.sections.flatMap((section) => section.checks.map((check) => ({ moduleId: module.id, sectionKey: section.key, checkKey: check.key }))));
-    const assessed = allChecks.filter((check) => data.items?.some((item) => item.moduleId === check.moduleId && item.sectionKey === check.sectionKey && item.checkKey === check.checkKey && item.outcome)).length;
+    const allChecks = (data.modules || []).flatMap((assessmentModule) => {
+      const items = (data.items || []).filter((item) => item.moduleId === assessmentModule.id);
+      const { groups, usesRooms, rooms } = assessmentGroups(assessmentModule, items);
+      const checks = groups.flatMap((group) => group.entries.map(({ section, check }) => ({ assessed: groupItems(group, section, check, items).some((item) => item.outcome) })));
+      if (usesRooms && !rooms.length) checks.push({ assessed: false });
+      return checks;
+    });
+    const assessed = allChecks.filter((check) => check.assessed).length;
     const completeModules = (data.modules || []).filter((module) => module.status === "complete").length;
     return { assessed, total: allChecks.length, completeModules, moduleTotal: data.modules?.length || 0,
       percent: allChecks.length ? Math.round(assessed / allChecks.length * 100) : 0 };
@@ -728,6 +813,12 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
   async function saveMetadata(answers: Record<string, unknown>) {
     if (!activeModule) return;
     await mutate({ action: "save_module_answers", moduleId: activeModule.id, expectedRevision: activeModule.revision, answers }, `metadata:${activeModule.id}`, "Assessment details saved.");
+  }
+
+  async function saveRooms(rooms: AssessmentRoom[]) {
+    if (!activeModule) return;
+    await mutate({ action: "save_module_answers", moduleId: activeModule.id, expectedRevision: activeModule.revision,
+      answers: { ...activeModule.answers, roomRoster: rooms } }, `rooms:${activeModule.id}`, "Room list saved. Use it for every room check.");
   }
 
   async function saveItem(item: LocalItem, body: Record<string, unknown>) {
@@ -920,8 +1011,8 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
       } else {
         current = await load();
       }
-      const currentIndex = sections.findIndex((section) => section.key === activeSection.key);
-      const nextSection = sections[currentIndex + 1];
+      const currentIndex = workflow.groups.findIndex((section) => section.key === activeSection.key);
+      const nextSection = workflow.groups[currentIndex + 1];
       setActiveSectionKey(nextSection?.key || "");
       setStatus(nextSection ? `${activeSection.title} saved. Opening ${nextSection.title}.` : `${activeSection.title} saved. Back at all sections.`);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -952,7 +1043,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
     </header>
 
     {!activeSection && <><nav className={styles.moduleNav} aria-label="Assessment modules">
-      {(data.modules || []).map((module) => <button type="button" className={module.id === activeModule.id ? styles.activeModule : ""} onClick={() => { setActiveModuleId(module.id); setActiveSectionKey(""); }} key={module.id}>
+      {(data.modules || []).map((module) => <button type="button" disabled={Boolean(busy)} className={module.id === activeModule.id ? styles.activeModule : ""} onClick={() => { setActiveModuleId(module.id); setActiveSectionKey(""); }} key={module.id}>
         <span>{module.required ? "Included" : "Optional"}</span>
         <strong>{module.title}</strong>
         <small>{module.status === "complete" ? "Complete" : data.completion?.[module.id]?.blockers.length ? `${data.completion[module.id].blockers.length} items to finish` : "Ready to complete"}</small>
@@ -968,58 +1059,65 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
 
     <MetadataForm module={activeModule} busy={busy === `metadata:${activeModule.id}`} readOnly={!canEdit || activeModule.status === "complete"} onSave={saveMetadata} /></>}
 
+    {!activeSection && workflow.usesRooms && <RoomRosterForm rooms={workflow.rooms} roomTypes={RENTAL_ROOM_TYPES} needsConfirmation={roomRosterUnconfirmed}
+      lockedRoomIds={new Set(workflow.rooms.filter((room) => rentalRoomChecks(room.type).some(({ checkKey }) => activeItems.some((item) => item.checkKey === checkKey && item.instanceKey === rentalRoomItemInstance(room, checkKey, activeItems)))).map((room) => room.id))}
+      busy={Boolean(busy)} readOnly={!canEdit || activeModule.status === "complete"} onSave={saveRooms} />}
+
     <div className={styles.sectionLayout}>
       {!activeSection ? <section className={styles.sectionOverview}>
-        <header><span>Assessment workflow</span><h4>Choose a section</h4><p>Each section opens on its own screen. Saved answers stay attached to this job, and Back always returns to this list.</p></header>
+        <header><span>Assessment workflow</span><h4>{workflow.usesRooms ? "Rooms and property checks" : "Choose a section"}</h4><p>{workflow.usesRooms ? "Work through each room, then the property systems and fixtures. All current minimum-standard categories and 2027 readiness checks remain included." : "Each section opens on its own screen. Saved answers stay attached to this job, and Back always returns to this list."}</p></header>
         <nav className={styles.sectionNav} aria-label="Assessment sections">
-          {sections.map((section, index) => {
-            const assessed = section.checks.filter((check) => data.items?.some((item) => item.moduleId === activeModule.id && item.sectionKey === section.key && item.checkKey === check.key && item.outcome)).length;
-            const complete = assessed === section.checks.length;
-            return <button type="button" onClick={() => { setActiveSectionKey(section.key); window.scrollTo({ top: 0, behavior: "smooth" }); }} key={section.key}>
-              <span>{index + 1}</span><span><strong>{section.title}</strong><small>{assessed} of {section.checks.length} checks saved</small></span><b aria-label={complete ? "Section answers saved" : "Section in progress"}>{complete ? "✓" : "›"}</b>
+          {workflow.groups.map((section, index) => {
+            const assessed = section.entries.filter(({ section: sourceSection, check }) => groupItems(section, sourceSection, check, activeItems).some((item) => item.outcome)).length;
+            const complete = assessed === section.entries.length;
+            return <button type="button" disabled={Boolean(busy)} onClick={() => { setActiveSectionKey(section.key); window.scrollTo({ top: 0, behavior: "smooth" }); }} key={section.key}>
+              <span>{index + 1}</span><span><strong>{section.title}</strong><small>{section.room ? "Room checks · " : ""}{assessed} of {section.entries.length} checks saved</small></span><b aria-label={complete ? "Section answers saved" : "Section in progress"}>{complete ? "✓" : "›"}</b>
             </button>;
           })}
         </nav>
       </section> : <main className={styles.sectionContent}>
         <button type="button" className={styles.backToSections} onClick={returnToSectionOverview}>← Back to all sections</button>
         <header className={styles.sectionHeader}>
-          <span>Section {sections.findIndex((section) => section.key === activeSection.key) + 1} of {sections.length}</span>
+          <span>{activeSection.room ? "Room" : "Section"} {workflow.groups.findIndex((section) => section.key === activeSection.key) + 1} of {workflow.groups.length}</span>
           <h4>{activeSection.title}</h4>
           <p>{activeSection.summary}</p>
         </header>
-        {activeSection.checks.map((check, checkIndex) => {
-          const key = `${activeModule.id}:${activeSection.key}:${check.key}`;
-          const stored = (data.items || []).filter((item) => item.moduleId === activeModule.id && item.sectionKey === activeSection.key && item.checkKey === check.key);
+        {activeSection.entries.map(({ section, check }, checkIndex) => {
+          const key = `${activeModule.id}:${section.key}:${check.key}`;
+          const stored = groupItems(activeSection, section, check, activeItems);
+          const first = initialItem(activeModule, section, check);
+          if (activeSection.room) { first.instanceKey = rentalRoomItemInstance(activeSection.room, check.key, activeItems); first.locationLabel = activeSection.room.label; }
           const workingItems: LocalItem[] = [
-            ...(stored.length ? stored : [initialItem(activeModule, activeSection, check)]),
-            ...(localItems[key] || []),
+            ...(stored.length ? stored : [first]),
+            ...(activeSection.room ? [] : localItems[key] || []),
           ];
           return <section className={styles.checkGroup} key={check.key}>
             {workingItems.map((item, instanceIndex) => {
               const finding = data.findings?.find((candidate) => candidate.itemId === item.id);
               const evidence = (data.evidence || []).filter((entry) => entry.itemId === item.id && entry.status === "active");
                return <AssessmentItemCard key={`${item.id || item.instanceKey}:${item.revision}`}
-                module={activeModule} section={activeSection} check={check} item={{ ...item, sortOrder: (sections.findIndex((section) => section.key === activeSection.key) + 1) * 100 + checkIndex * 10 + instanceIndex }}
+                module={activeModule} section={section} check={check} roomLabel={activeSection.room?.label} item={{ ...item, sortOrder: (sections.findIndex((candidate) => candidate.key === section.key) + 1) * 100 + checkIndex * 10 + instanceIndex }}
                 finding={finding} evidence={evidence} observationCandidates={observationCandidates} onObservationChange={recordObservation} busy={busy} readOnly={!canEdit || activeModule.status === "complete"}
                 onSave={(body) => saveItem(item, body)} onUpload={uploadEvidence} onUnlink={unlinkEvidence} onDirtyChange={markItemDirty} onRegisterDraft={registerItemDraft} />;
             })}
-            {check.repeatBy !== "property" && canEdit && activeModule.status !== "complete" && <button type="button" className={styles.addInstance} onClick={() => addRepeatedItem(activeSection, check)}>Add another {check.repeatBy.replaceAll("_", " ")}</button>}
+            {!activeSection.room && !activeSection.retainedItems && check.repeatBy !== "property" && canEdit && activeModule.status !== "complete" && <button type="button" className={styles.addInstance} onClick={() => addRepeatedItem(section, check)}>Add another {check.repeatBy.replaceAll("_", " ")}</button>}
           </section>;
         })}
         <div className={styles.sectionActions}>
           <button type="button" onClick={returnToSectionOverview}>Back to all sections</button>
-          <button type="button" className={styles.primaryButton} disabled={Boolean(busy)} onClick={() => void saveSectionAndContinue()}>{busy === "section-continue" ? "Saving section..." : sections.findIndex((section) => section.key === activeSection.key) < sections.length - 1 ? "Save section and continue" : "Save section and return"}</button>
+          <button type="button" className={styles.primaryButton} disabled={Boolean(busy)} onClick={() => void saveSectionAndContinue()}>{busy === "section-continue" ? "Saving section..." : workflow.groups.findIndex((section) => section.key === activeSection.key) < workflow.groups.length - 1 ? "Save section and continue" : "Save section and return"}</button>
           <small>This saves every changed answer on the screen before moving forward. The smaller Save button remains available when you want to save one answer immediately.</small>
         </div>
       </main>}
     </div>
 
     {!activeSection && <><section className={styles.completionCard}>
-      <header><div><span>Server-checked completion</span><h4>{activeModule.title}</h4></div><strong>{activeModule.status === "complete" ? "Complete" : moduleCompletion?.complete ? "Ready" : "Not ready"}</strong></header>
+      <header><div><span>Server-checked completion</span><h4>{activeModule.title}</h4></div><strong>{activeModule.status === "complete" ? "Complete" : moduleCompletion?.complete && !roomRosterUnconfirmed ? "Ready" : "Not ready"}</strong></header>
+      {activeModule.status !== "complete" && roomRosterUnconfirmed && <p>Add and confirm the room list above before completing the assessment.</p>}
       {activeModule.status === "complete" ? <p>Completed {dateLabel(activeModule.completedAt)}. Reopen it only when a correction is required before issue.</p>
         : moduleCompletion?.blockers?.length ? <><p>The report cannot be issued until these items are cleared:</p><ul>{moduleCompletion.blockers.slice(0, 12).map((blocker) => <li key={blocker.key}>{blocker.label}</li>)}</ul>{moduleCompletion.blockers.length > 12 && <small>{moduleCompletion.blockers.length - 12} more blockers remain in the relevant sections.</small>}</>
           : <p>All required answers, evidence, findings, scope details and declarations pass the current completion rules.</p>}
-      {canEdit && <button type="button" className={activeModule.status === "complete" ? styles.secondaryButton : styles.primaryButton} disabled={Boolean(busy) || (activeModule.status !== "complete" && !moduleCompletion?.complete)} onClick={() => void changeModuleStatus()}>{busy === `module:${activeModule.id}` ? "Saving..." : activeModule.status === "complete" ? "Reopen module" : "Complete and lock module"}</button>}
+      {canEdit && <button type="button" className={activeModule.status === "complete" ? styles.secondaryButton : styles.primaryButton} disabled={Boolean(busy) || (activeModule.status !== "complete" && (!moduleCompletion?.complete || roomRosterUnconfirmed))} onClick={() => void changeModuleStatus()}>{busy === `module:${activeModule.id}` ? "Saving..." : activeModule.status === "complete" ? "Reopen module" : "Complete and lock module"}</button>}
     </section>
 
     <section className={styles.issueCard}>

@@ -80,7 +80,6 @@ export default function NewJobScreen() {
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [duration, setDuration] = useState(90);
   const [selectedModules, setSelectedModules] = useState<string[]>(['minimum_standards']);
-  const [rentalAssessmentScope, setRentalAssessmentScope] = useState('current_minimum_standards');
   const [serviceCategory, setServiceCategory] = useState('');
   const [buildingType, setBuildingType] = useState('not_sure');
   const [plannedActivities, setPlannedActivities] = useState<PlannedFieldActivity[]>([]);
@@ -333,7 +332,7 @@ export default function NewJobScreen() {
           complianceIntentMode: plannedActivities.length ? 'planned' : 'none',
           complianceActivitiesJson: JSON.stringify(plannedActivities),
           startsAt: `${selectedDate}T${time}`, durationMinutes: duration, appointmentType: 'site_visit', appointmentNotes: notes.trim(), description: notes.trim(),
-          rentalInspectionModulesJson: serviceCategory === 'rental-inspection' ? JSON.stringify(selectedModules) : '[]', rentalAssessmentScope, emailCalendarInvite,
+          rentalInspectionModulesJson: serviceCategory === 'rental-inspection' ? JSON.stringify(selectedModules) : '[]', rentalAssessmentScope: 'current_minimum_standards', emailCalendarInvite,
         }),
       });
       await syncNow();
@@ -378,10 +377,7 @@ export default function NewJobScreen() {
       {optionsError ? <><Text style={styles.error}>{optionsError}</Text><FieldButton variant="secondary" onPress={() => setOptionsAttempt((value) => value + 1)}>Retry work options</FieldButton></> : null}
       {jobOptions ? <JobWorkSelection options={jobOptions} serviceCategory={serviceCategory} onServiceChange={setServiceCategory} buildingType={buildingType} onBuildingTypeChange={changeBuildingType} activities={plannedActivities} onActivitiesChange={setPlannedActivities} /> : null}
       {serviceCategory === 'rental-inspection' ? <>
-        {selectedModules.includes('minimum_standards') ? <FieldSelect label="Rental assessment scope" value={rentalAssessmentScope} options={[
-          { value: 'energy_readiness_2027', label: '2027 rental energy readiness' },
-          { value: 'current_minimum_standards', label: 'Full minimum standards + 2027 readiness' },
-        ]} onChange={setRentalAssessmentScope} /> : null}
+        {selectedModules.includes('minimum_standards') ? <Text style={styles.help}>The rental assessment includes all current minimum standards and 2027 energy readiness.</Text> : null}
         <Text style={styles.help}>Choose the inspections needed for this property.</Text>
       {modules.map((module) => { const selected = selectedModules.includes(module.key); return <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: selected }} key={module.key} onPress={() => toggleModule(module.key)} style={[styles.choice, selected && styles.choiceSelected]}><MaterialCommunityIcons name={module.icon} size={24} color={selected ? colours.green : colours.muted} /><Text style={styles.choiceText}>{module.label}</Text><MaterialCommunityIcons name={selected ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={25} color={selected ? colours.green : colours.muted} /></Pressable>; })}
       </> : null}

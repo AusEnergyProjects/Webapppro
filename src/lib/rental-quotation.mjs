@@ -21,6 +21,7 @@ export const RENTAL_OBSERVATION_NUMBER_FIELDS = Object.freeze({
   roomLengthMetres: "m", roomWidthMetres: "m", roomHeightMetres: "m", widthMm: "mm", heightMm: "mm", depthMm: "mm",
   areaSquareMetres: "m2", sealLengthMetres: "m", flowLitresPerMinute: "L/min", collectedLitres: "L", flowSeconds: "seconds",
   count: "", workingBurners: "", insulationDepthMm: "mm", hatchWidthMm: "mm", accessWidthMm: "mm",
+  cabinetWidthMm: "mm", cabinetHeightMm: "mm", cabinetDepthMm: "mm",
 });
 export function rentalObservationNumberIsValid(value) {
   if (value === undefined || value === null) return true;
@@ -30,7 +31,7 @@ export function rentalObservationNumberIsValid(value) {
   return !text || (/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(text) && Number.isFinite(Number(text)));
 }
 export function rentalObservationResponseLabel(key) {
-  const names = { roomLengthMetres: "Room length", roomWidthMetres: "Room width", roomHeightMetres: "Ceiling height", widthMm: "Width", heightMm: "Height", depthMm: "Depth", areaSquareMetres: "Bare ceiling area", sealLengthMetres: "Affected edge length", flowLitresPerMinute: "Water flow", collectedLitres: "Water collected", flowSeconds: "Collection time", count: "Count", workingBurners: "Working burners", insulationDepthMm: "Insulation depth", hatchWidthMm: "Hatch width", accessWidthMm: "Clear access width", model: "Equipment and labels", measurement: "Measurements", limitationReason: "Observation limitation" };
+  const names = { roomLengthMetres: "Room length", roomWidthMetres: "Room width", roomHeightMetres: "Ceiling height", widthMm: "Width", heightMm: "Height", depthMm: "Depth", areaSquareMetres: "Bare ceiling area", sealLengthMetres: "Affected edge length", flowLitresPerMinute: "Water flow", collectedLitres: "Water collected", flowSeconds: "Collection time", count: "Count", workingBurners: "Working burners", insulationDepthMm: "Insulation depth", hatchWidthMm: "Hatch width", accessWidthMm: "Clear access width", cabinetWidthMm: "Cabinet opening width", cabinetHeightMm: "Cabinet opening height", cabinetDepthMm: "Cabinet opening depth", model: "Equipment and labels", measurement: "Measurements", limitationReason: "Observation limitation" };
   const name = names[key] || String(key).replace(/([a-z0-9])([A-Z])/g, "$1 $2").replaceAll("_", " ").replace(/^\w/, (character) => character.toUpperCase());
   const unit = RENTAL_OBSERVATION_NUMBER_FIELDS[key];
   return unit ? `${name} (${unit})` : name;
@@ -46,7 +47,7 @@ const heaterOptions = choices(["Split system", "Ducted", "Gas heater", "Wood / s
 const coolingOptions = choices(["Split system", "Ducted", "Evaporative", "Other", "No fixed cooling", "Unknown"]);
 const hotWaterOptions = choices(["Heat pump", "Electric storage", "Gas storage", "Instant gas", "Solar", "Other", "Unknown"]);
 
-/** @typedef {{ key: string, label: string, required: boolean, input: 'text'|'number'|'select'|'textarea', unit?: string, options?: Array<{value:string,label:string}>, showIf?: {key:string,values:string[]}, shared?: boolean, legacy?: boolean, requiredForAdverse?: boolean }} RentalObservationField */
+/** @typedef {{ key: string, label: string, required: boolean, input: 'text'|'number'|'select'|'textarea', unit?: string, options?: Array<{value:string,label:string}>, showIf?: {key:string,values:string[]}, showForOutcomes?: string[], shared?: boolean, legacy?: boolean, requiredForAdverse?: boolean }} RentalObservationField */
 /** @returns {RentalObservationField} */
 const shortText = (key, label, extra = {}) => ({ key, label, required: false, input: "text", ...extra });
 /** @returns {RentalObservationField} */
@@ -78,7 +79,10 @@ export function rentalObservationFields(checkKey) {
   /** @type {Record<string, RentalObservationField[]>} */
   const specific = {
     cooktop_function: [...identityFields(), numberField("widthMm", "Cooktop width"), numberField("depthMm", "Cooktop depth"), numberField("workingBurners", "Working burners")],
-    oven_function: [...identityFields(), numberField("widthMm", "Opening width"), numberField("heightMm", "Opening height"), numberField("depthMm", "Opening depth")],
+    oven_function: [...identityFields(),
+      ...[numberField("cabinetWidthMm", "Cabinet opening width, if safely visible"), numberField("cabinetHeightMm", "Cabinet opening height, if safely visible"), numberField("cabinetDepthMm", "Cabinet opening depth, if safely visible")]
+        .map((field) => ({ ...field, showForOutcomes: ["does_not_meet"], requiredForAdverse: false })),
+      ...[numberField("widthMm", "Earlier oven width"), numberField("heightMm", "Earlier oven height"), numberField("depthMm", "Earlier oven depth")].map((field) => ({ ...field, legacy: true, requiredForAdverse: false }))],
     ceiling_2027_readiness: [selectField("insulationType", "Visible insulation", RENTAL_OBSERVATION_SELECT_OPTIONS.insulationType), numberField("areaSquareMetres", "Bare ceiling area"), numberField("insulationDepthMm", "Visible insulation depth"), numberField("hatchWidthMm", "Hatch width"), shortText("model", "Product / R-value label, if readable")],
     windows_2027_readiness: [numberField("widthMm", "Window width"), numberField("heightMm", "Window height"), numberField("sealLengthMetres", "Affected edge length")],
     doors_2027_readiness: [numberField("widthMm", "Door width"), numberField("heightMm", "Door height"), numberField("sealLengthMetres", "Affected edge length")],
@@ -145,9 +149,8 @@ export function rentalFindingDescriptionLabel(outcome) {
   return "What did you notice?";
 }
 
-export function rentalObservationBlockers({ checkKey, outcome, response, finding, photoCount }) {
+export function rentalObservationBlockers({ checkKey, outcome, response, finding }) {
   const blockers = [];
-  if (!(Number(photoCount) >= 2)) blockers.push("Add an overview photo and a close photo of the affected area before completing the assessment.");
   const numericFields = rentalObservationFields(checkKey).filter((field) => field.input === "number");
   const numericValues = numericFields.filter((field) => String(response?.[field.key] ?? "").trim());
   const validNumber = (field) => rentalObservationNumberIsValid(response[field.key]);

@@ -268,6 +268,71 @@ test('metadata saves merge only their patch and preserve previous answers; final
   assert.equal(h.state.result.modules[0].answers.assessorDeclaration, true);
 });
 
+test('two room additions queued before delivery survive restart and retain both rooms with fresh CAS revisions', async (t) => {
+  for (const lostAcknowledgement of [false, true]) {
+    await t.test(lostAcknowledgement ? 'restart after the first room commits but its acknowledgement is lost' : 'restart before either room reaches the server', async () => {
+      const h = harness(), entered = deferred(), release = deferred();
+      const firstRoom = { id: 'room-front', label: 'Front bedroom', type: 'bedroom' };
+      const secondRoom = { id: 'room-rear', label: 'Rear bedroom', type: 'bedroom' };
+      function addition(rooms, pendingAnswers = {}) {
+        const input = fixture().input;
+        input.module.answers = { ...input.module.answers, ...clone(pendingAnswers) };
+        input.body = { action: 'save_module_answers', moduleId: input.module.id, answers: { roomRoster: clone(rooms) } };
+        input.draftKey = `rooms:${input.module.id}:${rooms.at(-1).id}`;
+        input.draftSnapshot = { roomRoster: clone(rooms) };
+        return input;
+      }
+      h.state.result.modules[0].answers.accessNotes = 'Keep the side gate shut';
+      h.state.handler = async (path, init) => {
+        const action = typeof init?.body === 'string' ? JSON.parse(init.body).action : '';
+        if (!lostAcknowledgement || action === 'save_module_answers') {
+          entered.resolve(); await release.promise;
+          if (lostAcknowledgement) await h.defaultRequest(path, init);
+          throw new Error(lostAcknowledgement ? 'First room acknowledgement lost' : 'Offline before room delivery');
+        }
+        return h.defaultRequest(path, init);
+      };
+      await h.queue.enqueueRentalSave(addition([firstRoom]));
+      await entered.promise;
+      const pending = await h.queue.getRentalSaveState('job-1');
+      const pendingAnswers = Object.assign({}, ...pending.records.map((record) => record.body.answers));
+      await h.queue.enqueueRentalSave(addition([...pendingAnswers.roomRoster, secondRoom], pendingAnswers));
+      const beforeRestart = await h.queue.getRentalSaveState('job-1');
+      assert.equal(beforeRestart.pending, 2);
+      assert.equal(beforeRestart.records[0].module.answers.roomRoster, undefined, 'The first snapshot preserves an absent legacy roster');
+      assert.deepEqual(beforeRestart.records[1].module.answers.roomRoster, [firstRoom], 'The second snapshot starts from the first pending addition');
+      assert.deepEqual(beforeRestart.records.map((record) => record.body.answers.roomRoster), [[firstRoom], [firstRoom, secondRoom]]);
+      release.resolve(); await h.queue.processRentalSaveQueue('job-1');
+      assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 2);
+      const restored = h.restart();
+      assert.deepEqual((await restored.queue.getRentalSaveState('job-1')).records.map((record) => record.body.answers.roomRoster), [[firstRoom], [firstRoom, secondRoom]]);
+      await restored.queue.processRentalSaveQueue('job-1');
+      const delivered = await restored.queue.getRentalSaveState('job-1');
+      assert.equal(delivered.pending, 0);
+      assert.equal(delivered.conflicts, 0);
+      assert.deepEqual(h.state.result.modules[0].answers.roomRoster, [firstRoom, secondRoom]);
+      assert.equal(h.state.result.modules[0].answers.accessNotes, 'Keep the side gate shut');
+      const saves = h.state.calls.filter((call) => call.body?.action === 'save_module_answers');
+      assert.deepEqual(saves.map((call) => call.body.expectedRevision), [1, 2]);
+      assert.deepEqual(saves.map((call) => call.body.answers.roomRoster), [[firstRoom], [firstRoom, secondRoom]]);
+      assert.equal(h.state.result.modules[0].revision, 3);
+    });
+  }
+});
+
+test('room rosters cannot be queued for licensed modules or written outside minimum standards', async () => {
+  for (const moduleKey of ['electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check']) {
+    const h = harness(), input = fixture().input;
+    input.module.key = moduleKey;
+    input.body = { action: 'save_module_answers', moduleId: input.module.id,
+      answers: { roomRoster: [{ id: 'room-1', label: 'Bedroom', type: 'bedroom' }] } };
+    input.draftKey = 'rooms:module-1:room-1';
+    await assert.rejects(h.queue.enqueueRentalSave(input), (error) => error.code === 'RENTAL_FINAL_ANSWERS_REQUIRE_SYNC', moduleKey);
+    assert.equal(h.store.size, 0);
+    assert.equal(h.state.calls.length, 0);
+  }
+});
+
 test('a conflicting metadata field is retained for review instead of replacing the latest value', async () => {
   const h = harness(), input = fixture().input;
   h.state.result.modules[0].answers.addressNotes = 'Changed elsewhere';

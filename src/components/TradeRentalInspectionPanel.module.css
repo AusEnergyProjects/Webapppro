@@ -166,6 +166,23 @@
 .checkField span { display: grid; gap: 3px; }
 
 .sectionLayout { min-width: 0; }
+.roomSetup { background: var(--rental-soft); border: 1px solid var(--rental-line); border-radius: 18px; display: grid; gap: 16px; padding: clamp(16px, 3vw, 24px); }
+.roomSetup header > span { color: var(--rental-teal-dark); font-size: .76rem; font-weight: 800; text-transform: uppercase; }
+.roomSetup h4 { font-size: 1.35rem; margin: 4px 0; }
+.roomSetup p { color: var(--rental-muted); line-height: 1.5; margin: 0; }
+.roomSetup ul { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.roomSetup li { align-items: center; border: 1px solid var(--rental-line); border-radius: 12px; display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+.roomSetup li small { color: var(--rental-muted); }
+.roomSetup li select { background: var(--trade-field, #fff); border: 1px solid var(--rental-line); border-radius: 8px; color: var(--rental-ink); font: inherit; font-size: .8rem; padding: 6px; }
+.roomSetup li button { background: transparent; border: 0; color: var(--rental-teal-dark); cursor: pointer; font: inherit; font-size: .8rem; text-decoration: underline; }
+.roomAddForm { align-items: end; display: grid; gap: 12px; grid-template-columns: minmax(120px, 1fr) minmax(160px, 1.5fr) auto; }
+.roomAddForm label { display: grid; gap: 6px; }
+.roomAddForm label span { font-size: .84rem; font-weight: 700; }
+.roomAddForm select, .roomAddForm input { background: var(--trade-field, #fff); border: 1px solid var(--rental-line); border-radius: 10px; color: var(--rental-ink); font: inherit; min-width: 0; padding: 11px 12px; width: 100%; }
+.roomAddForm select:focus-visible, .roomAddForm input:focus-visible, .roomSetup button:focus-visible { outline: 3px solid var(--rental-teal); outline-offset: 3px; }
+.roomAddForm > small { color: var(--rental-muted); grid-column: 1 / -1; }
+.roomSetup button:disabled { cursor: not-allowed; opacity: .55; }
+.roomConfirmation { align-items: start; display: grid; gap: 10px; justify-items: start; }
 .sectionOverview { background: linear-gradient(180deg, #f7fbfa, #fff); border: 1px solid var(--rental-line); border-radius: 20px; display: grid; gap: 16px; overflow: hidden; padding: clamp(16px, 3vw, 24px); }
 .sectionOverview > header span { color: var(--rental-teal-dark); font-size: .76rem; font-weight: 850; text-transform: uppercase; }
 .sectionOverview > header h4 { font-size: clamp(1.3rem, 3vw, 1.8rem); margin: 4px 0; }
@@ -307,6 +324,7 @@
 }
 
 @media (max-width: 640px) {
+  .roomAddForm { grid-template-columns: 1fr; }
   .workspace { gap: 14px; }
   .hero { border-radius: 16px; grid-template-columns: 1fr; padding: 20px; }
   .heroStatus { align-items: flex-start; text-align: left; }

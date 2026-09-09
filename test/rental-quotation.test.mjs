@@ -7,11 +7,23 @@ import * as jsxRuntime from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as quotationModule from "../src/lib/rental-quotation.mjs";
 import * as assessmentModule from "../src/lib/trade-rental-assessment.mjs";
+import * as workflowModule from "../src/lib/rental-assessor-workflow.mjs";
 import { RENTAL_QUOTATION_FIELDS, RENTAL_OBSERVATION_NUMBER_FIELDS, rentalQuotation, rentalObservationBlockers, rentalObservationFields, rentalAssessorFields, rentalFindingDescriptionLabel, rentalObservationGroup, rentalSharedObservationResponse, rentalObservationResponseLabel } from "../src/lib/rental-quotation.mjs";
 import { rentalAssessmentTemplateSnapshot, rentalAssessmentCompletion, rentalCheckIsReadiness, rentalRegimeAssessment } from "../src/lib/trade-rental-assessment.mjs";
 
 const quotation = { status: "ready", measurements: "6 x 4 m = 24 m2, tape measured", specification: "R5 to bare area", access: "Hallway hatch; electrical clearance before work", exclusions: "Electrical rectification separately quoted" };
 const finding = () => ({ title: "Insulate bare ceiling area", description: "Bare area above rear bedroom", tradeCategory: "Insulation installer", scopeSummary: "Install suitable R5 insulation to the measured area after clearance", quantityMilli: 24000, unitLabel: "m2", details: { quotation: { ...quotation } } });
+
+test("a working oven has no measurement prompts; replacement dimensions refer only to the cabinet", () => {
+  const fields = rentalAssessorFields({ key: "oven_function" });
+  const visible = (outcome) => fields.filter((field) => !field.legacy && (!field.showForOutcomes || field.showForOutcomes.includes(outcome)));
+  assert.equal(visible("meets").filter((field) => field.input === "number").length, 0);
+  const measurements = visible("does_not_meet").filter((field) => field.input === "number");
+  assert.equal(measurements.length, 3);
+  assert.ok(measurements.every((field) => field.label.startsWith("Cabinet opening") && !field.required && !field.requiredForAdverse));
+  assert.ok(fields.filter((field) => ["widthMm", "heightMm", "depthMm"].includes(field.key)).every((field) => field.legacy));
+  assert.equal(rentalObservationResponseLabel("cabinetWidthMm"), "Cabinet opening width (mm)");
+});
 
 test("historical quotation details and limitations remain readable without becoming assessor requirements", () => {
   const legacy = rentalQuotation({ exclusions: "Disposal included", missingInformation: "Concealed framing was not visible" });
@@ -49,7 +61,7 @@ test("measurable upgrade observations need basic measurements or an honest acces
     assert.deepEqual(rentalObservationBlockers({ ...input, response: { limitationReason: "Hatch was locked and could not be opened safely" } }), []);
     assert.deepEqual(rentalObservationBlockers({ ...input, finding: finding() }), [], "Existing recorded measurements remain usable");
     assert.deepEqual(rentalObservationBlockers({ ...input, outcome: "specialist_verification_required" }), []);
-    for (const photoCount of [0, 1, undefined, NaN]) assert.ok(rentalObservationBlockers({ ...input, photoCount }).length);
+    assert.deepEqual(rentalObservationBlockers({ ...input, response: { measurement: "Bedroom 4 x 3 m" }, photoCount: 0 }), [], "Shared assessment completion enforces the outcome-specific photo policy");
   }
   const moduleTemplate = { key: "minimum_standards", sections: [{ key: "insulation", title: "Insulation", checks: [{ key: "ceiling_2027_readiness", required: true, repeatBy: "property", requiredEvidenceCount: 1 }] }] };
   const input = { moduleTemplate, items: [{ id: "ceiling", itemKey: "ceiling", sectionKey: "insulation", checkKey: "ceiling_2027_readiness", outcome: "does_not_meet", responseJson: {} }], findings: [{ itemId: "ceiling", title: "Bare ceiling", description: "No insulation above rear bedroom" }], evidenceCounts: { ceiling: 2 }, photoCounts: { ceiling: 2 } };
@@ -169,6 +181,7 @@ test("web markup uses compact controls and removes already captured equipment fi
   const dependencies = {
     react: React, "react/jsx-runtime": jsxRuntime,
     "@/lib/rental-quotation.mjs": quotationModule,
+    "@/lib/rental-assessor-workflow.mjs": workflowModule,
     "@/lib/trade-rental-assessment.mjs": assessmentModule,
     "./TradeRentalInspectionPanel.module.css": { __esModule: true, default: new Proxy({}, { get: (_target, key) => String(key) }) },
   };
@@ -210,7 +223,7 @@ test("completion permits honest limited observations but never infers the applic
   }
   for (const rentalRegime of ["", "invented", "ordinary_residential"]) assert.equal(rentalAssessmentCompletion({ moduleTemplate, items: [item], answers: { ...answers, rentalRegime }, evidenceCounts: { one: 1 } }).complete, false);
   assert.equal(rentalRegimeAssessment({}).applicable, false);
-  assert.equal(rentalAssessmentCompletion({ moduleTemplate, items: [item], answers: { ...answers, rentalRegime: "not_sure" }, evidenceCounts: {} }).complete, false);
+  assert.equal(rentalAssessmentCompletion({ moduleTemplate, items: [item], answers: { ...answers, rentalRegime: "not_sure" }, evidenceCounts: {} }).complete, true, "Clear ordinary observations no longer require a photo");
   const readiness = rentalAssessmentTemplateSnapshot(["minimum_standards"], "energy_readiness_2027").modules.minimum_standards;
   assert.equal(rentalAssessmentCompletion({ moduleTemplate: readiness, items: [item], answers: { ...answers, rentalRegime: "not_sure" }, evidenceCounts: { one: 1 } }).complete, false, "Historical items outside the active scope cannot complete an empty observations report");
 });
