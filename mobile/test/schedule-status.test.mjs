@@ -25,5 +25,7 @@ test('schedule cards use field-friendly lifecycle labels', () => {
   assert.match(schedule, /job\.lifecycleStatus \|\| job\.stage/);
   assert.match(schedule, /Audited \| \$\{outcome\}/);
   assert.match(jobDetails, /job\.lifecycleStatus \|\| job\.stage/);
+  assert.match(jobDetails, /activityRecords\.some\(\(record\) => record\.status !== 'not_started' \|\| record\.lifecycleStatus === 'partial'\)/);
+  assert.match(jobDetails, /lifecycleLabel\(job, activityRecords\)/);
   assert.match(jobDetails, /job\.auditOutcome/);
 });

@@ -679,9 +679,16 @@ function cursorValue(value: string | null) {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : Number.NaN;
 }
 
-function tradeJobAuditChangedAtSql(workAlias = "w") {
-  return `(SELECT MAX(audit_change.changed_at)
+function tradeJobDerivedLifecycleChangedAtSql(workAlias = "w") {
+  return `(SELECT MAX(lifecycle_change.changed_at)
     FROM (
+      SELECT progress_record.updated_at changed_at
+      FROM trade_activity_field_records progress_record
+      WHERE progress_record.work_order_id = ${workAlias}.id
+        AND progress_record.owner_uid = ${workAlias}.firebase_uid
+
+      UNION ALL
+
       SELECT response.created_at changed_at
       FROM compliance_submission_responses response
       JOIN compliance_submission_batch_items response_item
@@ -724,22 +731,22 @@ function tradeJobAuditChangedAtSql(workAlias = "w") {
       WHERE compliance_case.work_order_id = ${workAlias}.id
         AND compliance_case.installer_uid = ${workAlias}.firebase_uid
         AND compliance_case.status IN ('accepted', 'rejected', 'changes_requested')
-    ) audit_change)`;
+    ) lifecycle_change)`;
 }
 
-async function reconcileMissingAuditLifecycleChanges(
+async function reconcileMissingDerivedLifecycleChanges(
   access: TeamAccess,
   changedAt: string,
 ) {
   const audience = !access.isOwner && access.jobScope === "own"
     ? access.memberId
     : "";
-  const auditChangedAtSql = tradeJobAuditChangedAtSql("w");
+  const lifecycleChangedAtSql = tradeJobDerivedLifecycleChangedAtSql("w");
   await getD1().prepare(`INSERT INTO trade_team_sync_changes
       (owner_uid, audience_member_id, entity_type, entity_id, operation, revision, changed_at)
-    SELECT ?, ?, 'job', audit_job.id, 'upsert', audit_job.revision, ?
+    SELECT ?, ?, 'job', lifecycle_job.id, 'upsert', lifecycle_job.revision, ?
     FROM (
-      SELECT w.id, w.revision, ${auditChangedAtSql} audit_changed_at
+      SELECT w.id, w.revision, ${lifecycleChangedAtSql} lifecycle_changed_at
       FROM trade_work_orders w
       LEFT JOIN trade_crm_job_details d
         ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
@@ -751,18 +758,18 @@ async function reconcileMissingAuditLifecycleChanges(
       ORDER BY CASE WHEN ${syncJobTerminalSql("w", "d")} THEN 1 ELSE 0 END,
         w.scheduled_start = '', w.scheduled_start, w.updated_at DESC
       LIMIT ${MAX_SYNC_JOBS}
-    ) audit_job
-    WHERE COALESCE(audit_job.audit_changed_at, '') <> ''
+    ) lifecycle_job
+    WHERE COALESCE(lifecycle_job.lifecycle_changed_at, '') <> ''
       AND NOT EXISTS (
         SELECT 1
         FROM trade_team_sync_changes current_change
         WHERE current_change.owner_uid = ?
           AND current_change.audience_member_id = ?
           AND current_change.entity_type = 'job'
-          AND current_change.entity_id = audit_job.id
-          AND datetime(current_change.changed_at) >= datetime(audit_job.audit_changed_at)
+          AND current_change.entity_id = lifecycle_job.id
+          AND datetime(current_change.changed_at) >= datetime(lifecycle_job.lifecycle_changed_at)
       )
-    ORDER BY datetime(audit_job.audit_changed_at), audit_job.id
+    ORDER BY datetime(lifecycle_job.lifecycle_changed_at), lifecycle_job.id
     LIMIT ${MAX_SYNC_JOBS}`)
     .bind(
       access.ownerUid,
@@ -1345,7 +1352,7 @@ export async function GET(request: Request) {
     }
 
     const audience = !access.isOwner && access.jobScope === "own" ? access.memberId : "";
-    await reconcileMissingAuditLifecycleChanges(access, serverTime);
+    await reconcileMissingDerivedLifecycleChanges(access, serverTime);
     const rows = await getD1().prepare(`SELECT sequence, entity_type, entity_id, operation, revision, changed_at
       FROM trade_team_sync_changes WHERE owner_uid = ? AND audience_member_id = ? AND sequence > ?
       ORDER BY sequence LIMIT ?`).bind(access.ownerUid, audience, cursor, limit + 1).all<Record<string, unknown>>();

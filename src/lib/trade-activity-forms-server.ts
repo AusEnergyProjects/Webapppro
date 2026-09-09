@@ -758,30 +758,43 @@ function capturedMetadata(raw: unknown) {
     metadataOrigin: input.metadataOrigin === "device_capture" && capturedAt ? "device_capture" as const : "file_upload" as const };
 }
 
+function activityEvidenceContentType(bytes: Uint8Array) {
+  if (bytes.length >= 5 && new TextDecoder().decode(bytes.slice(0, 5)) === "%PDF-") return "application/pdf";
+  if (bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return "image/jpeg";
+  if (bytes.length >= 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => bytes[index] === byte)) return "image/png";
+  return "";
+}
+
+function activityEvidenceTypeMatches(declaredType: string, detectedType: string) {
+  const declared = declaredType.trim().toLowerCase();
+  return Boolean(detectedType) && (!declared || declared === "application/octet-stream" || declared === detectedType);
+}
+
 export async function uploadActivityEvidence(access: TeamAccess, id: string, expectedRevision: number, fieldKey: string, file: File, metadata: unknown, clientUploadId = "", preview?: File) {
   const previous = await loadActivityRecord(access, id, true);
   if (file.size < 5 || file.size > 8 * 1024 * 1024) throw new Error("INVALID_ACTIVITY_FILE");
   const bytes = new Uint8Array(await file.arrayBuffer()); const sha256 = activityHash(bytes);
+  const contentType = activityEvidenceContentType(bytes);
+  if (!activityEvidenceTypeMatches(file.type, contentType)) throw new Error("INVALID_ACTIVITY_FILE");
   if (clientUploadId && !/^[0-9a-f-]{36}$/i.test(clientUploadId)) throw new Error("INVALID_ACTIVITY_UPLOAD_ID");
   const existing = clientUploadId ? previous.evidence.find((item) => item.id === clientUploadId) : null;
   if (existing) {
-    if (existing.fieldKey !== fieldKey || existing.sha256 !== sha256 || existing.contentType !== file.type) throw new Error("ACTIVITY_UPLOAD_ID_CONFLICT");
+    if (existing.fieldKey !== fieldKey || existing.sha256 !== sha256 || existing.contentType !== contentType) throw new Error("ACTIVITY_UPLOAD_ID_CONFLICT");
     return previous;
   }
   assertActivityEditable(previous, expectedRevision);
   const field = expandedActivityFields(previous.form, previous.answers).find((item) => item.key === fieldKey);
   if (!field || !["photo", "document"].includes(field.type)) throw new Error("INVALID_ACTIVITY_FIELD");
-  if (file.size < 5 || file.size > 8 * 1024 * 1024 || !["image/jpeg", "image/png", "application/pdf"].includes(file.type)
-    || (field.type === "photo" && file.type === "application/pdf")) throw new Error("INVALID_ACTIVITY_FILE");
+  if (file.size < 5 || file.size > 8 * 1024 * 1024 || !["image/jpeg", "image/png", "application/pdf"].includes(contentType)
+    || (field.type === "photo" && contentType === "application/pdf")) throw new Error("INVALID_ACTIVITY_FILE");
   if (previous.evidence.length >= 150 || previous.evidence.filter((item) => item.fieldKey === fieldKey).length >= 20
     || previous.evidence.reduce((sum, item) => sum + item.size, 0) + file.size > 96 * 1024 * 1024) throw new Error("ACTIVITY_EVIDENCE_LIMIT");
-  if ((file.type === "application/pdf" && new TextDecoder().decode(bytes.slice(0, 5)) !== "%PDF-")
-    || (file.type === "image/jpeg" && (bytes[0] !== 255 || bytes[1] !== 216 || bytes[2] !== 255))
-    || (file.type === "image/png" && ![137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => bytes[index] === byte))) throw new Error("INVALID_ACTIVITY_FILE");
   const { validateActivityEvidenceBytes } = await import("./trade-activity-forms-pdf.ts");
-  await validateActivityEvidenceBytes(bytes, file.type);
+  await validateActivityEvidenceBytes(bytes, contentType);
   const previewBytes = preview ? new Uint8Array(await preview.arrayBuffer()) : null;
-  if (previewBytes && (file.type === "application/pdf" || previewBytes.length > 1024 * 1024 || preview?.type !== "image/jpeg")) throw new Error("INVALID_ACTIVITY_PREVIEW");
+  if (previewBytes && (contentType === "application/pdf" || previewBytes.length > 1024 * 1024
+    || activityEvidenceContentType(previewBytes) !== "image/jpeg"
+    || !activityEvidenceTypeMatches(preview?.type || "", "image/jpeg"))) throw new Error("INVALID_ACTIVITY_PREVIEW");
   if (previewBytes) await validateActivityEvidenceBytes(previewBytes, "image/jpeg");
   if (previous.evidence.reduce((sum, item) => sum + (item.previewSize || item.size), 0) + (previewBytes?.length || file.size) > 24 * 1024 * 1024) throw new Error("ACTIVITY_REPORT_EVIDENCE_LIMIT");
   const evidenceId = clientUploadId || crypto.randomUUID();
@@ -794,10 +807,10 @@ export async function uploadActivityEvidence(access: TeamAccess, id: string, exp
     || capture.locationMocked === true || Math.abs(Date.parse(capture.capturedAt) - Date.parse(capture.locationObservedAt)) > 120_000
     || Date.parse(capture.capturedAt) > Date.now() + 5 * 60 * 1000)) throw new Error("ACTIVITY_PHOTO_LOCATION_REQUIRED");
   const item: ActivityEvidence = { id: evidenceId, fieldKey, fileName: file.name.replace(/[\r\n\x00-\x1f]/g, "").slice(0, 180) || "Evidence",
-    contentType: file.type, size: bytes.byteLength, sha256, objectKey, uploadedAt: iso(), ...capture,
+    contentType, size: bytes.byteLength, sha256, objectKey, uploadedAt: iso(), ...capture,
     ...(previewBytes ? { previewObjectKey, previewSha256: activityHash(previewBytes), previewSize: previewBytes.length } : {}) };
   const next = { ...previous, evidence: [...previous.evidence, item] };
-  await bucket().put(objectKey, bytes, { httpMetadata: { contentType: file.type }, customMetadata: { sha256, fieldRecordId: id, evidenceId } });
+  await bucket().put(objectKey, bytes, { httpMetadata: { contentType }, customMetadata: { sha256, fieldRecordId: id, evidenceId } });
   try {
     if (previewBytes) await bucket().put(previewObjectKey, previewBytes, { httpMetadata: { contentType: "image/jpeg" }, customMetadata: { sha256: activityHash(previewBytes), originalSha256: sha256, fieldRecordId: id, evidenceId } });
     return await saveRecord(access, previous, next);

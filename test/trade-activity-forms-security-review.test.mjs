@@ -1360,6 +1360,27 @@ test("header-only malformed uploads are rejected before they can trap the saved 
   } finally { database.close(); }
 });
 
+test("mobile multipart uploads accept valid JPEG bytes when Android supplies a generic MIME type", async () => {
+  const { database, server, access, objects } = fixture();
+  try {
+    const record = await server.openActivityRecord(access, "job-a", "intent-a");
+    const jpeg = Buffer.from("/9j/wAALCAABAAEBAREA/9oACAEBAAA/AAD/2Q==", "base64");
+    const uploaded = await server.uploadActivityEvidence(
+      access,
+      record.id,
+      record.revision,
+      "photo",
+      new File([jpeg], "camera.jpg", { type: "application/octet-stream" }),
+      {},
+      crypto.randomUUID(),
+      new File([jpeg], "preview.jpg", { type: "application/octet-stream" }),
+    );
+    assert.equal(uploaded.evidence[0].contentType, "image/jpeg");
+    assert.ok(uploaded.evidence[0].previewObjectKey);
+    assert.equal(objects.size, 2);
+  } finally { database.close(); }
+});
+
 test("repeated required answers and photos bind to their own item and enter the signed scope", async () => {
   const repeated = form();
   repeated.fields = [field("before_name", "before"),

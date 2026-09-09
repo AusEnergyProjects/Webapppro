@@ -15,6 +15,7 @@ import {
 import { deviceRegistration, forgetPushToken, getDeviceId } from '@/lib/device';
 import type { FieldAccessMode, OfflineAction, SyncResponse } from '@/lib/types';
 import { processUploadQueue } from '@/lib/uploads';
+import { processActivityFormCompletionQueue } from '@/lib/activity-form-completion';
 
 let activeSync: Promise<SyncOutcome> | null = null;
 const MAX_SYNC_PAGES = 100;
@@ -158,6 +159,7 @@ async function performSync(verifiedModes?: FieldAccessMode[]): Promise<SyncOutco
     await purgeExpiredAddresses();
     for (const mode of modes) {
       await registerDevice(mode);
+      if (mode === 'trade_team') await processActivityFormCompletionQueue();
       // Work-pack artifact commits and prepared-revision signature captures
       // reference exact uploaded bytes by stable clientUploadId. Complete the
       // uploads before sending either authoritative action.

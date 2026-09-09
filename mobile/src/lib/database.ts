@@ -1061,6 +1061,13 @@ export async function setSetting(key: string, value: string) {
   );
 }
 
+export async function listActivityFormCacheSettings() {
+  const db = await getDatabase();
+  return db.getAllAsync<{ key: string; value: string }>(
+    "SELECT key, value FROM settings WHERE key LIKE 'activity-form:%' ORDER BY key",
+  );
+}
+
 export async function prepareLocalDataOwner(firebaseUid: string) {
   const ownerUid = firebaseUid.trim();
   if (!ownerUid) throw new Error('A signed-in account is required before opening local field data.');

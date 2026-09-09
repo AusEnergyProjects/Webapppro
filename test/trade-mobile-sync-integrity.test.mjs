@@ -18,11 +18,9 @@ const boundedJsonRequest = {
 
 const tradeJobLifecycleDependency = {
   ...tradeJobLifecycle,
-  tradeJobHasProgressSql: () => "0",
   tradeJobLifecycleStatusSql: (input) => tradeJobLifecycle.tradeJobLifecycleStatusSql({
     ...input,
     auditOutcomeSql: input.auditOutcomeSql || "NULL",
-    hasProgressSql: input.hasProgressSql || "0",
   }),
 };
 
@@ -992,6 +990,72 @@ test("bootstrap keeps active work ahead of retained completed history at the job
   assert.equal(
     result.payload.changes.filter((change) => change.entity.stage === "completed").length,
     499,
+  );
+});
+
+test("incremental sync repairs a stale scheduled lifecycle after an activity draft exactly once", async () => {
+  const database = syncDatabase("scheduled", 5);
+  const { route } = routeHarness(database);
+  const initial = await bootstrap(route);
+  assert.equal(initial.response.status, 200);
+  assert.equal(initial.payload.changes[0].entity.lifecycleStatus, "scheduled");
+
+  database.prepare(`INSERT INTO trade_work_order_compliance_intents
+    (id, work_order_id, intent_key, installer_uid,
+     compliance_organisation_id, program_template_id, activity_template_id,
+     program_code, registry_activity_code, planned_start, status,
+     intent_snapshot, compliance_case_id, created_at)
+    VALUES ('intent-activity-draft', 'job-1', 'intent-key-activity-draft',
+      'owner-1', 'org-creditex', 'program-veu', 'activity-6', 'VEU', '6',
+      '2026-09-09T09:00:00.000Z', 'planned', '{}', '',
+      '2026-09-08T08:00:00.000Z')`).run();
+  const record = {
+    id: "activity-draft",
+    intentId: "intent-activity-draft",
+    workOrderId: "job-1",
+    ownerUid: "owner-1",
+    organisationId: "org-creditex",
+    revision: 1,
+    status: "draft",
+    form: { activityTemplateId: "activity-6" },
+  };
+  database.prepare(`INSERT INTO trade_activity_field_records
+    (id, intent_id, work_order_id, owner_uid, organisation_id,
+     activity_template_id, revision, status, payload, actor_uid,
+     created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, 1, 'draft', ?, 'actor-1', ?, ?)`)
+    .run(
+      record.id,
+      record.intentId,
+      record.workOrderId,
+      record.ownerUid,
+      record.organisationId,
+      record.form.activityTemplateId,
+      JSON.stringify(record),
+      "2026-09-08T08:01:00.000Z",
+      "2026-09-08T08:01:00.000Z",
+    );
+  assert.equal(
+    database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count,
+    0,
+  );
+
+  const refreshed = await changesSince(route, initial.payload.nextCursor);
+  assert.equal(refreshed.response.status, 200);
+  assert.equal(refreshed.payload.changes.length, 1);
+  assert.equal(refreshed.payload.changes[0].operation, "upsert");
+  assert.equal(refreshed.payload.changes[0].entity.lifecycleStatus, "partial");
+  assert.equal(
+    database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count,
+    1,
+  );
+
+  const settled = await changesSince(route, refreshed.payload.nextCursor);
+  assert.equal(settled.response.status, 200);
+  assert.deepEqual(settled.payload.changes, []);
+  assert.equal(
+    database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count,
+    1,
   );
 });
 

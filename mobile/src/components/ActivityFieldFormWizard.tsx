@@ -13,6 +13,7 @@ import { FieldSelect } from '@/components/field-select';
 import { ActivityAssignmentReview } from '@/components/ActivityAssignmentReview';
 import { SignatureCapture } from '@/components/SignatureCapture';
 import { apiRequest, ApiError } from '@/lib/api';
+import { processActivityFormCompletionQueue } from '@/lib/activity-form-completion';
 import { getSetting, setSetting } from '@/lib/database';
 import { API_BASE_URL } from '@/lib/config';
 import { observeLocation } from '@/lib/evidence';
@@ -23,12 +24,12 @@ import type { ActivityAnswers, ActivityRecord } from '../../../src/lib/trade-act
 import { activityBaseFieldKey, activityRepeatCount, activityRepeatItemLabel, activityRepeatKey, boundActivityDeclaration, removeLastActivityRepeat, activityWizardSteps, activityWizardPages, activityWizardPageForStepKey, type ExpandedActivityField } from '../../../src/lib/trade-activity-form-flow';
 
 const endpoint = '/api/trade-activity-forms';
-export type ActivityFieldSummary = { id: string; intentId: string; title: string; status: 'not_started' | ActivityRecord['status']; recordNumber: string; progress: { complete: number; total: number } };
+export type ActivityFieldSummary = { id: string; intentId: string; title: string; status: 'not_started' | ActivityRecord['status']; lifecycleStatus?: 'unscheduled' | 'scheduled' | 'partial' | 'completed' | 'audited' | 'cancelled'; recordNumber: string; progress: { complete: number; total: number } };
 type Presented = Omit<ActivityRecord, 'evidence'> & { evidence: Omit<ActivityRecord['evidence'][number], 'objectKey'>[]; missing: { key: string; label: string; kind: string }[]; signerDefaults: { technician: string; customer: string }; signingScopes?: { before: string; after: string }; signerSetup?: { firstName: string; lastName: string; canSave: boolean; firstNameLocked?: boolean; lastNameLocked?: boolean } };
 type CaptureMetadata = { capturedAt: string; latitude: number | null; longitude: number | null; accuracy: number | null; metadataOrigin: 'device_capture' | 'file_upload'; locationObservedAt?: string; mocked?: boolean | null };
 type PendingFile = { id: string; fieldKey: string; uri: string; name: string; contentType: string; metadata: CaptureMetadata };
 type PendingSignature = { declarationKey: string; declarationText: string; phase: 'before' | 'after'; role: 'customer' | 'technician' | 'other'; signerName: string; strokes: FieldWorkPackSignatureDraft['strokes'] };
-type Cache = { record: Presented; answers: ActivityAnswers; pending: PendingFile[]; pendingSignatures?: PendingSignature[]; stepKey: string; camera?: { fieldKey: string; metadata: CaptureMetadata } };
+type Cache = { record: Presented; answers: ActivityAnswers; pending: PendingFile[]; pendingSignatures?: PendingSignature[]; stepKey: string; camera?: { fieldKey: string; metadata: CaptureMetadata }; finishRequested?: boolean; finishError?: string };
 type ApprovedProductOption = { value: string; label: string; count: number };
 
 function pendingSignatureToSync(
@@ -703,11 +704,15 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     onReturnToJob();
     void onChanged().catch(() => undefined);
   }
-  async function submitCompletedActivity() {
-    await waitForBackgroundSync();
-    await saveAnswers();
-    await syncPendingSignatures();
-    await request('submit');
+  function finishImmediately() {
+    const latest = cacheRef.current;
+    if (!latest) return;
+    const retained = remember({ ...latest, finishRequested: true, finishError: '' });
+    onReturnToJob();
+    void retained
+      .then(() => processActivityFormCompletionQueue(cacheKey))
+      .then(() => onChanged())
+      .catch(() => undefined);
   }
   async function share() {
     await perform('share', async () => {
@@ -865,15 +870,16 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
             </> : <Text style={styles.text}>The assigned technician needs to open this job on their own device, or have their personal name saved in Teams.</Text>}
           </View> : <SignatureCapture key={`${record.id}:${step.key}:${boundSignerName}`} signerRole={signerRole} declaration={boundActivityDeclaration(step.declaration, cache.answers)} showDeclaration={false} value={boundSignature} disabled={!editable || Boolean(busy)} onChange={setSignature} />}
         </> : <>
-          <Text style={styles.text}>{record.status === 'submitted_for_creditex_review' ? 'Submitted to Creditex. The completed record is saved with this job.' : `${fieldMissing.length} required item${fieldMissing.length === 1 ? '' : 's'} remaining.`}</Text>
+          <Text style={styles.text}>{record.status === 'submitted_for_creditex_review' ? 'Submitted to Creditex. The completed record is saved with this job.' : fieldMissing.length
+            ? `${fieldMissing.length} required item${fieldMissing.length === 1 ? '' : 's'} remaining.`
+            : 'Ready. Tap Done once. TLink will finish the upload and submission automatically in the background.'}</Text>
           {fieldMissing.slice(0, 8).map((item) => <FieldButton key={item.key} variant="secondary" onPress={() => { const target = activityWizardPageForStepKey(pages, item.key); if (target) void remember({ ...cache, stepKey: target.key }); }}>{item.label}</FieldButton>)}
           {fieldMissing.length > 8 ? <Text style={styles.small}>{fieldMissing.length - 8} more questions will follow.</Text> : null}
-          {cache.pending.length ? <FieldButton disabled={!online || Boolean(busy)} onPress={() => void perform('upload', async () => { await syncs.current; await saveAnswers(); for (const key of new Set(cache.pending.map((item) => item.fieldKey))) await uploadPending(key); })}>Upload {cache.pending.length} pending files</FieldButton> : null}
-          {record.status === 'draft' ? <FieldButton disabled={!editable || !online || Boolean(busy) || cache.pending.length > 0 || fieldMissing.length > 0} onPress={() => void perform('submit', submitCompletedActivity)}>{busy === 'submit' ? 'Finishing form…' : 'Submit completed form to Creditex'}</FieldButton> : <><FieldButton disabled={!online || Boolean(busy)} onPress={() => void share()}>Share completed report</FieldButton><FieldButton variant="secondary" onPress={() => void perform('revoke', async () => { await apiRequest(endpoint, { method: 'POST', body: JSON.stringify({ action: 'revoke_report', recordId: record.id }) }); setError('Previous report links have been revoked.'); })}>Revoke report links</FieldButton></>}
+          {record.status === 'submitted_for_creditex_review' ? <><FieldButton disabled={!online || Boolean(busy)} onPress={() => void share()}>Share completed report</FieldButton><FieldButton variant="secondary" onPress={() => void perform('revoke', async () => { await apiRequest(endpoint, { method: 'POST', body: JSON.stringify({ action: 'revoke_report', recordId: record.id }) }); setError('Previous report links have been revoked.'); })}>Revoke report links</FieldButton></> : null}
         </>}
       </>}
     </ScrollView>
-    {!overview ? <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy) || stepIndex === 0} onPress={() => void move(-1)}>Previous</FieldButton><FieldButton style={styles.flex} disabled={Boolean(busy) || (step?.kind === 'review' && record.status !== 'submitted_for_creditex_review') || (technicianSignature && !boundSignerName)} loading={busy === 'next'} onPress={() => step?.kind === 'review' && record.status === 'submitted_for_creditex_review' ? finish() : void next()}>{step?.kind === 'review' && record.status === 'submitted_for_creditex_review' ? 'Done' : step?.kind === 'signature' && !currentSignature && !pendingSignature ? 'Save signature' : 'Next'}</FieldButton></View> : null}
+    {!overview ? <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy) || stepIndex === 0} onPress={() => void move(-1)}>Previous</FieldButton><FieldButton style={styles.flex} disabled={Boolean(busy) || (step?.kind === 'review' && record.status === 'draft' && fieldMissing.length > 0) || (technicianSignature && !boundSignerName)} loading={busy === 'next'} onPress={() => step?.kind === 'review' && record.status === 'draft' ? finishImmediately() : step?.kind === 'review' ? finish() : void next()}>{step?.kind === 'review' ? 'Done' : step?.kind === 'signature' && !currentSignature && !pendingSignature ? 'Save signature' : 'Next'}</FieldButton></View> : null}
   </View>;
 }
 

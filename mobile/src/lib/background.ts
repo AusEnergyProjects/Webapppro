@@ -2,12 +2,15 @@ import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 
 import { firebaseAuth } from '@/lib/auth';
+import { getFieldPrincipal } from '@/lib/field-session';
 import { runSync } from '@/lib/sync';
 
 export const FIELD_SYNC_TASK = 'aea-field-secure-sync-v1';
 
 TaskManager.defineTask(FIELD_SYNC_TASK, async () => {
-  if (!firebaseAuth.currentUser) return BackgroundTask.BackgroundTaskResult.Success;
+  if (!firebaseAuth.currentUser && !await getFieldPrincipal()) {
+    return BackgroundTask.BackgroundTaskResult.Success;
+  }
   try {
     await runSync();
     return BackgroundTask.BackgroundTaskResult.Success;

@@ -105,9 +105,14 @@ type PendingWorkPackPhotoCapture = PendingPhotoCapture & {
 
 function readable(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
-function lifecycleLabel(job: FieldJob) {
-  const status = readable(job.lifecycleStatus || job.stage);
-  return job.lifecycleStatus === 'audited' && job.auditOutcome
+function lifecycleLabel(job: FieldJob, activityRecords: readonly ActivityFieldSummary[] = []) {
+  const serverStatus = job.lifecycleStatus || job.stage;
+  const effectiveStatus = ['unscheduled', 'scheduled', 'backlog', 'ready'].includes(serverStatus)
+    && activityRecords.some((record) => record.status !== 'not_started' || record.lifecycleStatus === 'partial')
+    ? 'partial'
+    : serverStatus;
+  const status = readable(effectiveStatus);
+  return effectiveStatus === 'audited' && job.auditOutcome
     ? `${status} | ${readable(job.auditOutcome)}`
     : status;
 }
@@ -1265,7 +1270,7 @@ export default function JobScreen() {
   return (
     <Screen>
       <View style={styles.hero}>
-        <View style={styles.badges}><View style={styles.jobNumber}><Text style={styles.jobNumberText}>{job.workNumber}</Text></View><View style={styles.stage}><Text style={styles.stageText}>{lifecycleLabel(job)}</Text></View>{syntheticManual ? <View style={styles.syntheticBadge}><Text style={styles.syntheticBadgeText}>SYNTHETIC TEST ONLY</Text></View> : null}</View>
+        <View style={styles.badges}><View style={styles.jobNumber}><Text style={styles.jobNumberText}>{job.workNumber}</Text></View><View style={styles.stage}><Text style={styles.stageText}>{lifecycleLabel(job, activityRecords)}</Text></View>{syntheticManual ? <View style={styles.syntheticBadge}><Text style={styles.syntheticBadgeText}>SYNTHETIC TEST ONLY</Text></View> : null}</View>
         <Text style={styles.title}>{job.title || 'Field job'}</Text>
         <Text style={styles.body}>{job.customerName} | {job.protectedJob ? job.siteArea || 'Protected service area' : job.serviceAddress || job.siteArea || 'Service site not added'}</Text>
         {job.appointmentStartsAt ? <Text style={styles.meta}>{new Date(job.appointmentStartsAt).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}</Text> : null}
