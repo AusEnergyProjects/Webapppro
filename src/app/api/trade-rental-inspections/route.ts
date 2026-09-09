@@ -43,6 +43,8 @@ import {
   revokeRentalReportLink,
 } from "@/lib/trade-rental-report-server";
 
+import { emailRentalAssessmentReport, rentalReportDeliveryRecipient, rentalReportDeliveryState } from "@/lib/trade-rental-report-email-server";
+
 export const runtime = "edge";
 
 type Row = Record<string, unknown>;
@@ -106,6 +108,10 @@ function assessmentDate(answers: Row, recordedAt: unknown, fallback = new Date()
 function responseObject(value: unknown) {
   const source = parsedObject(value);
   const result: Row = {};
+  if (source.showerCaptureVersion !== undefined) {
+    if (source.showerCaptureVersion !== 1) throw new Error("RENTAL_OBSERVATION_RESPONSE_INVALID");
+    result.showerCaptureVersion = 1;
+  }
   if (source.roomId !== undefined) {
     if (typeof source.roomId !== "string" || !/^[A-Za-z0-9_-]{1,120}$/.test(source.roomId.trim())) throw new Error("RENTAL_OBSERVATION_RESPONSE_INVALID");
     result.roomId = source.roomId.trim();
@@ -208,6 +214,7 @@ function inspectionError(error: unknown) {
   if (code === "INVALID_RENTAL_ITEM_KEY") return adminJson({ ok: false, error: "The repeated assessment item is invalid." }, 400);
   if (code === "RENTAL_MODULES_INCOMPLETE") return adminJson({ ok: false, error: "Every selected module must pass its completion checks before the report can be issued." }, 409);
   if (code === "RENTAL_MODULE_SET_INVALID") return adminJson({ ok: false, error: "The attached assessment modules do not match the frozen job selection. Ask an administrator to repair the job before issuing." }, 409);
+  if (code === "RENTAL_REPORT_ISSUING") return adminJson({ ok: false, code, error: "Your report is still being prepared. Finishing will retry automatically." }, 503);
   if (code === "RENTAL_REPORT_ISSUE_CONFLICT") return adminJson({ ok: false, error: "The report changed while it was being issued. Refresh before trying again." }, 409);
   if (code === "RENTAL_REPORT_RECONCILIATION_REQUIRED") return adminJson({ ok: false, error: "The report issue result is being reconciled. Its immutable files were preserved. Refresh before trying again, and contact support if it remains in progress." }, 503);
   if (code === "RENTAL_REPORT_CLEANUP_REQUIRED") return adminJson({ ok: false, error: "A failed report is still clearing its private staged files. Retry shortly, and contact support if this message remains." }, 503);
@@ -432,6 +439,8 @@ async function assessmentPayload(context: InspectionContext, origin = "") {
     },
     completion,
     reports,
+    deliveryRecipient: context.access.canRunReports ? await rentalReportDeliveryRecipient(context.access.ownerUid, context.workOrderId) : null,
+    reportDelivery: context.access.canRunReports ? await rentalReportDeliveryState(context.access.ownerUid, inspectionId) : null,
     permissions: {
       canEdit: context.access.canManageFieldEvidence && !TERMINAL_INSPECTION_STATUSES.has(String(context.inspection.status)),
       canIssue: context.access.memberId === String(context.inspection.assessor_member_id || "")
@@ -1103,12 +1112,26 @@ export async function POST(request: Request) {
       context = await contextFor(access, workOrderId);
       return adminJson({ ok: true, renewedLink, ...(await assessmentPayload(context, new URL(request.url).origin)) });
     }
-    assertEditable(context);
+    if (action === "email_report") {
+      try {
+        const reportDelivery = await emailRentalAssessmentReport({ access, workOrderId,
+          inspectionId: String(context.inspection.id), reportId: cleanAdminText(body.reportId, 180),
+          expectedRecipientEmail: cleanAdminText(body.expectedRecipientEmail, 180), origin: new URL(request.url).origin });
+        if (reportDelivery.status !== 'accepted') return adminJson({ ok: false, code: reportDelivery.status === 'reconciliation_required' ? 'REPORT_DELIVERY_REVIEW_REQUIRED' : 'REPORT_EMAIL_PENDING',
+          error: reportDelivery.message, reportDelivery }, reportDelivery.status === 'reconciliation_required' ? 409 : 503);
+        return adminJson({ ok: true, ...(await assessmentPayload(context, new URL(request.url).origin)), reportDelivery });
+      } catch (error) {
+        if (error instanceof Error && error.message === 'REPORT_RECIPIENT_CHANGED') return adminJson({ ok: false, code: 'REPORT_RECIPIENT_CHANGED',
+          error: 'The client email changed or is missing. Review the current customer details before emailing this report.' }, 409);
+        throw error;
+      }
+    }
     if (action === "issue_report") {
       const issuedReport = await issueRentalAssessmentReport({ access, workOrderId, origin: new URL(request.url).origin });
       context = await contextFor(access, workOrderId);
       return adminJson({ ok: true, issuedReport, ...(await assessmentPayload(context, new URL(request.url).origin)) });
     }
+    assertEditable(context);
     let result: InspectionContext | Response;
     if (action === "set_assessment_scope") result = await setAssessmentScope(context, body);
     else if (action === "save_module_answers") result = await saveModuleAnswers(context, body);

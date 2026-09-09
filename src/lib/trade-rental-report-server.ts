@@ -35,7 +35,7 @@ import {
 } from "@/lib/trade-rental-report-links";
 import { loadCustomerPlanPdfFonts } from "@/lib/customer-plan-pdf-fonts";
 import { rentalEvidenceCapture, rentalEvidencePhotoCapture } from "@/lib/trade-rental-evidence.mjs";
-import { rentalAssessorCheckPresentation } from "@/lib/rental-assessor-workflow.mjs";
+import { rentalAssessorCheckPresentation, rentalShowerAssessmentProjection } from "@/lib/rental-assessor-workflow.mjs";
 import { assertRentalModuleCredentialCurrent } from "@/lib/trade-rental-credentials";
 import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
 
@@ -169,7 +169,7 @@ function itemPresentation(row: Row, prompt: string) {
   };
 }
 
-async function reportSource(access: TeamAccess, workOrderId: string) {
+async function reportIssueContext(access: TeamAccess, workOrderId: string) {
   const db = getD1();
   if (!access.canRunReports) throw new Error("REPORT_PERMISSION_REQUIRED");
   const job = await assignedJob(access, workOrderId);
@@ -181,7 +181,15 @@ async function reportSource(access: TeamAccess, workOrderId: string) {
     || String(job.assignee_member_id || "") !== access.memberId) {
     throw new Error("ASSESSOR_REQUIRED");
   }
-  if (!["draft", "scheduled", "in_progress", "submitted"].includes(String(inspection.status))) {
+  return { job, inspection };
+}
+
+async function reportSource(access: TeamAccess, workOrderId: string) {
+  const db = getD1();
+  const { job, inspection } = await reportIssueContext(access, workOrderId);
+  if (String(inspection.status) === "issuing") throw new Error("RENTAL_REPORT_ISSUING");
+  if (!["draft", "scheduled", "in_progress", "submitted"].includes(String(inspection.status))
+    || ["completed", "cancelled"].includes(String(job.stage))) {
     throw new Error("RENTAL_INSPECTION_LOCKED");
   }
   const [moduleRows, itemRows, findingRows, evidenceRows, business, assessor] = await Promise.all([
@@ -381,14 +389,21 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
   const propertySnapshot = parsedObject(source.inspection.property_snapshot);
   const { evidence: sourceEvidence, assets, preparedObjects } = await evidenceForSnapshot(source.evidence, input);
   const modulePublicIds = new Map(source.modules.map((module) => [String(module.id), crypto.randomUUID()]));
-  const itemPublicIds = new Map(source.items.map((item) => [String(item.id), crypto.randomUUID()]));
-  const findingPublicIds = new Map(source.findings.map((finding) => [String(finding.id), crypto.randomUUID()]));
-  const historicalItemIds = new Set(source.items.filter((item) => item.instance_key && item.instance_key !== "property"
-    && source.modules.some((module) => module.id === item.module_id && module.module_key === "minimum_standards"))
+  const projected = source.modules.map((module) => rentalShowerAssessmentProjection({
+    moduleTemplate: { ...parsedObject(module.template_snapshot), key: String(module.module_key) },
+    items: source.items.filter((item) => item.module_id === module.id).map((item) => ({ ...itemPresentation(item, ""), moduleId: String(module.id) })),
+    findings: source.findings.filter((finding) => finding.moduleId === module.id),
+  }));
+  const reportItems = projected.flatMap((module) => module.items);
+  const reportFindings = projected.flatMap((module) => module.findings);
+  const itemPublicIds = new Map(reportItems.map((item) => [String(item.id), crypto.randomUUID()]));
+  const findingPublicIds = new Map(reportFindings.map((finding) => [String(finding.id), crypto.randomUUID()]));
+  const historicalItemIds = new Set(reportItems.filter((item) => item.instanceKey && item.instanceKey !== "property"
+    && source.modules.some((module) => module.id === item.moduleId && module.module_key === "minimum_standards"))
     .map((item) => String(item.id)));
   const modules = source.modules.map((module) => {
     const template = parsedObject(module.template_snapshot);
-    const moduleItems = source.items.filter((item) => item.module_id === module.id);
+    const moduleItems = reportItems.filter((item) => item.moduleId === module.id);
     return {
       id: String(modulePublicIds.get(String(module.id))),
       key: String(module.module_key),
@@ -408,12 +423,19 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
           key: String(section.key),
           title: String(section.title),
           summary: String(section.summary || ""),
-          items: moduleItems.filter((item) => item.section_key === section.key).map((item) => {
-            const assessmentCheck = checks.map(parsedObject).find((check) => check.key === item.check_key);
+          items: moduleItems.filter((item) => item.sectionKey === section.key).map((item) => {
+            const assessmentCheck = checks.map(parsedObject).find((check) => check.key === item.checkKey);
             const historicalObservation = historicalItemIds.has(String(item.id));
             return {
-              ...itemPresentation(item, historicalObservation ? `Earlier observation: ${String(assessmentCheck?.prompt || item.check_key)}`
-                : module.module_key === "minimum_standards" ? rentalAssessorCheckPresentation(assessmentCheck || { key: item.check_key }).prompt : String(assessmentCheck?.prompt || item.check_key)),
+              itemKey: String(item.itemKey), sectionKey: String(item.sectionKey), checkKey: String(item.checkKey),
+              instanceKey: String(item.instanceKey), locationLabel: String(item.locationLabel || ""),
+              outcome: String(item.outcome), response: parsedObject(item.response), publicNotes: String(item.publicNotes || ""),
+              requiredEvidenceCount: number(item.requiredEvidenceCount), completedAt: String(item.completedAt || ""),
+              ...(item.derived ? { derived: true } : {}),
+              prompt: historicalObservation ? `Earlier observation: ${String(assessmentCheck?.prompt || item.checkKey)}`
+                : item.derived ? "2027 showerhead readiness, derived from the recorded WELS rating"
+                  : module.module_key === "minimum_standards" ? rentalAssessorCheckPresentation(assessmentCheck || { key: item.checkKey }).prompt : String(assessmentCheck?.prompt || item.checkKey),
+              ...(item.evidenceSourceItemId ? { evidenceSourceItemId: String(itemPublicIds.get(String(item.evidenceSourceItemId)) || "") } : {}),
               historicalObservation,
               effectiveFrom: String(assessmentCheck?.effectiveFrom || ""),
               assessmentPhase: String(assessmentCheck?.assessmentPhase || (template.assessmentScope === "energy_readiness_2027" ? "energy_readiness_2027" : "current")),
@@ -439,7 +461,7 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
     }
   }
   const businessName = String(source.business.document_business_name || source.business.business_name || "TLink trade business");
-  const findings = source.findings.map((finding) => {
+  const findings = reportFindings.map((finding) => {
     const { id, moduleId, itemId, ...publicFinding } = finding;
     const reportModule = modules.find((module) => module.id === modulePublicIds.get(String(moduleId)));
     const reportItem = reportModule?.sections.flatMap((section) => section.items).find((item) => item.id === itemPublicIds.get(String(itemId)));
@@ -448,6 +470,8 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
       : publicFinding.status;
     return {
       ...publicFinding,
+      ...(parsedObject(publicFinding.details).evidenceSourceItemId ? { details: { ...parsedObject(publicFinding.details),
+        evidenceSourceItemId: String(itemPublicIds.get(String(parsedObject(publicFinding.details).evidenceSourceItemId)) || "") } } : {}),
       ...(historicalItemIds.has(String(itemId)) ? { historicalObservation: true, title: `Earlier observation: ${String(publicFinding.title || "Recorded issue")}` } : {}),
       status,
       id: String(findingPublicIds.get(String(id))),
@@ -648,14 +672,40 @@ async function recoverStaleRentalIssuance(ownerUid: string, workOrderId: string)
   }
 }
 
-export async function issueRentalAssessmentReport(input: {
-  access: TeamAccess;
-  workOrderId: string;
-  origin: string;
-}) {
-  const db = getD1();
-  await ensureTradeRentalSchemaGuards(db);
+type RentalReportIssueInput = { access: TeamAccess; workOrderId: string; origin: string };
+
+async function currentIssuedReport(context: Awaited<ReturnType<typeof reportIssueContext>>, input: RentalReportIssueInput) {
+  if (String(context.inspection.status) !== "issued") return null;
+  const reports = await ownerRentalReportPresentation({ ownerUid: input.access.ownerUid,
+    inspectionId: String(context.inspection.id), origin: input.origin, includeSecret: true });
+  const report = reports.find((entry) => entry.id === String(context.inspection.issued_report_id) && entry.status === "issued");
+  if (!report) throw new Error("RENTAL_REPORT_RECONCILIATION_REQUIRED");
+  return { reportId: report.id, reportNumber: report.reportNumber, revision: report.revision, issuedAt: report.issuedAt,
+    expiresAt: report.link?.expiresAt || "", shareUrl: report.link?.shareUrl || "", pdfUrl: report.link?.pdfUrl || "" };
+}
+
+export async function issueRentalAssessmentReport(input: RentalReportIssueInput) {
+  await ensureTradeRentalSchemaGuards(getD1());
+  const context = await reportIssueContext(input.access, input.workOrderId);
+  const existing = await currentIssuedReport(context, input);
+  if (existing) return existing;
+  if (["completed", "cancelled"].includes(String(context.job.stage))) throw new Error("RENTAL_INSPECTION_LOCKED");
   await recoverStaleRentalIssuance(input.access.ownerUid, input.workOrderId);
+  try {
+    return await createRentalAssessmentReport(input);
+  } catch (error) {
+    if (error instanceof Error && ["RENTAL_REPORT_ISSUING", "RENTAL_INSPECTION_LOCKED", "RENTAL_REPORT_ISSUE_CONFLICT"].includes(error.message)) {
+      const current = await reportIssueContext(input.access, input.workOrderId);
+      const issued = await currentIssuedReport(current, input);
+      if (issued) return issued;
+      if (String(current.inspection.status) === "issuing") throw new Error("RENTAL_REPORT_ISSUING");
+    }
+    throw error;
+  }
+}
+
+async function createRentalAssessmentReport(input: RentalReportIssueInput) {
+  const db = getD1();
   const source = await reportSource(input.access, input.workOrderId);
   const reportRevisionRow = await db.prepare(`SELECT COALESCE(MAX(revision), 0) revision
     FROM trade_rental_reports WHERE inspection_id = ? AND firebase_uid = ?`)

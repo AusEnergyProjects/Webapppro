@@ -46,3 +46,15 @@ test("the secure customer page and email expose the same bounded calendar handof
   assert.match(deliveryServer, /attachments/);
   assert.doesNotMatch(`${publicRoute}\n${customerUi}\n${deliveryServer}`, /[\u2013\u2014]/);
 });
+
+
+test('rescheduled and cancelled invites retain the original UID and advance sequence', () => {
+  const input = { workNumber: 'TLJ-1', businessName: 'AEA', startsAt: '2026-10-10T09:00', endsAt: '2026-10-10T10:00',
+    timeZone: 'Australia/Melbourne', attendeeEmail: 'client@example.test', organizerEmail: 'team@example.test' };
+  const original = customerAppointmentCalendar(input);
+  const moved = customerAppointmentCalendar({ ...input, startsAt: '2026-10-11T11:00', endsAt: '2026-10-11T12:00', originalStartsAt: input.startsAt, sequence: 2 });
+  const cancelled = customerAppointmentCalendar({ ...input, cancelled: true, sequence: 3 });
+  assert.equal(original.ics.match(/UID:(.+)/)[1], moved.ics.match(/UID:(.+)/)[1]);
+  assert.equal(original.ics.match(/UID:(.+)/)[1], cancelled.ics.match(/UID:(.+)/)[1]);
+  assert.match(moved.ics, /SEQUENCE:2/); assert.match(cancelled.ics, /METHOD:CANCEL/); assert.match(cancelled.ics, /STATUS:CANCELLED/);
+});

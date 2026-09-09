@@ -125,7 +125,8 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   const workArea = (finding) => allItems.find((item) => item.id === finding.itemId)?.sectionTitle || label(finding.category || "Required work");
   const reportFindings = (snapshot.findings || []).filter((finding) => finding.status !== "compliant");
   const resolvedFindings = (snapshot.findings || []).filter((finding) => finding.status === "compliant");
-  const findingEvidence = (finding) => (snapshot.evidence || []).filter((entry) => entry.findingId === finding.id || entry.itemId === finding.itemId);
+  const findingEvidence = (finding) => (snapshot.evidence || []).filter((entry) => entry.findingId === finding.id || entry.itemId === finding.itemId
+    || (finding.details?.evidenceSourceItemId && entry.itemId === finding.details.evidenceSourceItemId));
   let page;
   let y;
 

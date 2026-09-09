@@ -5,6 +5,7 @@ import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-
 import { addCalendarDays, appointmentEndsAt, assertAppointmentSlot, assertFutureAppointment, australiaLocalDateTime, defaultWorkingWindow, insideWorkingWindow, localDayAndMinute, normaliseLocalDateTime, normaliseScheduleRangeWeeks, normaliseWeekStart, scheduleConflictIds } from "@/lib/trade-schedule";
 import { parsePreferredWindows } from "@/lib/appointment-rescheduling";
 import { queueAppointmentNotifications } from "@/lib/appointment-notification-server";
+import { sendDirectAppointmentCalendarInvite } from "@/lib/direct-appointment-invite-server";
 import { syncCreatedAppointmentToConnectedCalendars } from "@/lib/trade-calendar-sync-server";
 import {
   isTradeComplianceIntentScheduleConflict,
@@ -697,15 +698,15 @@ export async function PATCH(request: Request) {
     } else if (action === "schedule_appointment") {
       const appointmentId = cleanAdminText(body.appointmentId, 180); const memberId = cleanAdminText(body.memberId, 180);
       assertScheduleTarget(access, memberId); const member = await activeMember(access.ownerUid, memberId);
-      const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = appointmentEndsAt(startsAt, body.durationMinutes);
+      const startsAt = assertAppointmentSlot(normaliseLocalDateTime(body.startsAt)); const endsAt = appointmentEndsAt(startsAt, body.durationMinutes);
       assertFutureAppointment(startsAt, localNow);
-      const current = await db.prepare(`SELECT a.id, a.work_order_id, a.revision, a.assignee_member_id,
+      const current = await db.prepare(`SELECT a.id, a.work_order_id, a.revision, a.assignee_member_id, a.assignee_label, a.starts_at, a.ends_at, a.status,
           w.revision job_revision, w.stage job_stage, w.service_category
         FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
-        WHERE a.id = ? AND a.firebase_uid = ? AND a.status = 'scheduled'`).bind(appointmentId, access.ownerUid).first<Record<string, unknown>>();
+        WHERE a.id = ? AND a.firebase_uid = ? AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'no_show')`).bind(appointmentId, access.ownerUid).first<Record<string, unknown>>();
       if (!current) throw new Error("APPOINTMENT_NOT_FOUND");
       if (["completed", "cancelled"].includes(String(current.job_stage))) throw new Error("TERMINAL_JOB_LOCKED");
-      if (Number(body.expectedRevision) !== Number(current.revision)) throw new Error("REVISION_CONFLICT");
+      if ((body.expectedJobRevision !== undefined && Number(body.expectedJobRevision) !== Number(current.job_revision)) || Number(body.expectedRevision) !== Number(current.revision)) throw new Error("REVISION_CONFLICT");
       await assertTradeJobReadyForScheduling(access.ownerUid, String(current.work_order_id));
       assertCurrentScheduleAssignment(access, String(current.assignee_member_id || ""));
       assertAssignmentChange(access, String(current.assignee_member_id || ""), memberId);
@@ -721,8 +722,15 @@ export async function PATCH(request: Request) {
       });
       await db.batch([
         ...complianceIntentStatements,
-        db.prepare(`UPDATE trade_crm_appointments SET starts_at = ?, ends_at = ?, assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ?
+        db.prepare(`INSERT OR IGNORE INTO trade_crm_appointment_revisions
+          (id, appointment_id, work_order_id, firebase_uid, revision, starts_at, ends_at, assignee_member_id,
+           assignee_label, change_source, source_reference, changed_by_uid, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'schedule_prior', '', ?, ?)`)
+          .bind(crypto.randomUUID(), appointmentId, current.work_order_id, access.ownerUid, current.revision,
+            current.starts_at, current.ends_at, current.assignee_member_id, current.assignee_label, access.actorUid, now),
+        db.prepare(`UPDATE trade_crm_appointments SET status = 'scheduled', starts_at = ?, ends_at = ?, assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND revision = ? AND assignee_member_id = ?
+            AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'no_show')
             AND EXISTS (SELECT 1 FROM trade_work_orders current_job
               WHERE current_job.id = trade_crm_appointments.work_order_id
                 AND current_job.firebase_uid = trade_crm_appointments.firebase_uid
@@ -735,7 +743,7 @@ export async function PATCH(request: Request) {
           changedAt: now,
           ownerUid: access.ownerUid,
         }),
-        db.prepare(`UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ?, scheduled_start = ?, scheduled_end = ?, revision = ?, updated_at = ?
+        db.prepare(`UPDATE trade_work_orders SET stage = CASE WHEN stage = 'no_show' THEN 'scheduled' ELSE stage END, assignee_member_id = ?, assignee_label = ?, scheduled_start = ?, scheduled_end = ?, revision = ?, updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND revision = ? AND assignee_member_id = ?
             AND stage = ? AND stage NOT IN ('completed', 'cancelled')`)
           .bind(memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), jobRevision, now,
@@ -756,6 +764,8 @@ export async function PATCH(request: Request) {
           previousAssigneeMemberId: String(current.assignee_member_id || ""),
           workOrderId: String(current.work_order_id),
         }),
+        scheduleMemberGuardStatement(db, { ownerUid: access.ownerUid, memberId,
+          serviceCategory: String(current.service_category || ''), changedAt: now }),
         tradeJobScheduleEligibilityGuardStatement(db, {
           ownerUid: access.ownerUid,
           workOrderId: String(current.work_order_id),
@@ -859,19 +869,33 @@ export async function PATCH(request: Request) {
       syncAppointmentIds.push(appointmentId);
     } else return adminJson({ ok: false, error: "Unsupported schedule action." }, 400);
     for (const notification of notifications) await queueAppointmentNotifications(notification);
-    const calendarSync = { connected: 0, attempted: 0, created: 0, updated: 0, unchanged: 0, synced: 0, failed: 0 };
-    for (const appointmentId of Array.from(new Set(syncAppointmentIds))) {
-      try {
-        const result = await syncCreatedAppointmentToConnectedCalendars(access.ownerUid, appointmentId, { force: true });
-        calendarSync.connected = Math.max(calendarSync.connected, Number(result.connected || 0));
-        calendarSync.attempted += Number(result.attempted || 0);
-        calendarSync.created += Number(result.created || 0);
-        calendarSync.updated += Number(result.updated || 0);
-        calendarSync.unchanged += Number(result.unchanged || 0);
-        calendarSync.synced += Number(result.synced || 0);
-        calendarSync.failed += Number(result.failed || 0);
-      } catch { calendarSync.failed += 1; }
-    }
-    return adminJson({ ok: true, ...(await schedulePayload(access, rangeStart, rangeWeeks)), calendarSync });
+    const [customerEmails, calendarSync] = await Promise.all([
+      (async () => {
+        const emails = [];
+        for (const notification of notifications) {
+          emails.push({ appointmentId: notification.appointmentId,
+            ...await sendDirectAppointmentCalendarInvite({ appointmentId: notification.appointmentId,
+              ownerUid: access.ownerUid, origin: new URL(request.url).origin, change: 'rescheduled' }) });
+        }
+        return emails;
+      })(),
+      (async () => {
+        const sync = { connected: 0, attempted: 0, created: 0, updated: 0, unchanged: 0, synced: 0, failed: 0 };
+        for (const appointmentId of Array.from(new Set(syncAppointmentIds))) {
+          try {
+            const result = await syncCreatedAppointmentToConnectedCalendars(access.ownerUid, appointmentId, { force: true });
+            sync.connected = Math.max(sync.connected, Number(result.connected || 0));
+            sync.attempted += Number(result.attempted || 0);
+            sync.created += Number(result.created || 0);
+            sync.updated += Number(result.updated || 0);
+            sync.unchanged += Number(result.unchanged || 0);
+            sync.synced += Number(result.synced || 0);
+            sync.failed += Number(result.failed || 0);
+          } catch { sync.failed += 1; }
+        }
+        return sync;
+      })(),
+    ]);
+    return adminJson({ ok: true, ...(await schedulePayload(access, rangeStart, rangeWeeks)), calendarSync, customerEmails });
   } catch (error) { return errorResponse(error); }
 }

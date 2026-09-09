@@ -5,7 +5,7 @@ import ts from 'typescript';
 const code = ts.transpileModule(fs.readFileSync(new URL('../src/lib/schedule.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
 const exports = {};
 new Function('exports', code)(exports);
-const { effectiveJobStart, isUnscheduledJob, matchesJobSearch, localWorkDate } = exports;
+const { effectiveJobStart, isUnscheduledJob, isVisibleScheduleJob, matchesJobSearch, localWorkDate } = exports;
 
 test('schedule uses the actual appointment consistently and falls back only to a valid job date', () => {
   const job = { stage: 'scheduled', appointmentStartsAt: '2026-09-10T02:00:00Z', scheduledStart: '2026-09-09T01:00:00Z' };
@@ -18,6 +18,23 @@ test('undated active assignments are reachable while terminal work does not fill
   for (const stage of ['completed', 'cancelled']) assert.equal(isUnscheduledJob({ stage }), false);
   assert.equal(isUnscheduledJob({ stage: 'in_progress', lifecycleStatus: 'audited' }), false);
   assert.equal(isUnscheduledJob({ stage: 'ready', scheduledStart: '2026-09-09T01:00:00Z' }), false);
+});
+
+test('a no-show leaves the appointment date and stays ready for rescheduling even with an old cached date', () => {
+  const job = { stage: 'no_show', scheduledStart: '2026-09-09T01:00:00Z', appointmentStartsAt: '2026-09-09T01:00:00Z' };
+  assert.equal(effectiveJobStart(job), '');
+  assert.equal(isUnscheduledJob(job), true);
+  assert.equal(isVisibleScheduleJob(job), true);
+  assert.equal(effectiveJobStart({ ...job, stage: 'in_progress', lifecycleStatus: 'no_show' }), '');
+});
+
+test('cancelled jobs disappear from schedule and search immediately after a confirmed server change', () => {
+  const job = { stage: 'cancelled', appointmentStartsAt: '2026-09-09T01:00:00Z' };
+  assert.equal(effectiveJobStart(job), '');
+  assert.equal(isUnscheduledJob(job), false);
+  assert.equal(isVisibleScheduleJob(job), false);
+  assert.equal(isVisibleScheduleJob({ stage: 'in_progress', lifecycleStatus: 'cancelled' }), false);
+  assert.equal(isVisibleScheduleJob({ stage: 'completed' }), true);
 });
 
 test('job search finds downloaded work by multiple words regardless of appointment date', () => {

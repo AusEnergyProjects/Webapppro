@@ -3,11 +3,13 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from '@/components/keyboard-aware-scroll-view';
+import { JobAppointmentActions } from '@/components/job-appointment-actions';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { FieldPermissions } from '@/components/job-work-selection';
 import { apiRequest } from '@/lib/api';
-import { effectiveJobStart, isUnscheduledJob, matchesJobSearch } from '@/lib/schedule';
+import { appointmentSavedMessage, type AppointmentAction, type AppointmentActionResult } from '@/lib/appointment-actions';
+import { effectiveJobStart, isUnscheduledJob, isVisibleScheduleJob, matchesJobSearch } from '@/lib/schedule';
 import { colours, radius, spacing } from '@/lib/theme';
 import type { FieldJob } from '@/lib/types';
 import { useApp } from '@/providers/app-provider';
@@ -28,6 +30,7 @@ const JOB_STAGE_LABELS: Record<string, string> = {
   blocked: 'Partial',
   completed: 'Completed',
   cancelled: 'Cancelled',
+  no_show: 'No show',
 };
 
 function stageLabel(value: string) {
@@ -59,18 +62,20 @@ function dateKey(value: Date | string) {
 
 type QuickAction = 'menu';
 
-function JobCard({ job }: { job: FieldJob }) {
+function JobCard({ job, onActions }: { job: FieldJob; onActions: (job: FieldJob) => void }) {
   const done = job.tasks.filter((task) => task.status === 'done').length;
   const rental = job.rentalInspection;
   return (
     <Pressable accessibilityRole="button" onPress={() => router.push(`/job/${job.id}`)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <View style={styles.cardTop}>
-        <View style={styles.number}><Text style={styles.numberText}>{job.workNumber}</Text></View>
-        <View style={[styles.stage, (job.stage === 'blocked' || job.auditOutcome === 'failed' || job.auditOutcome === 'correction_required') && styles.blocked]}><Text style={styles.stageText}>{jobStatusLabel(job)}</Text></View>
+        <View style={styles.cardIdentity}><View style={styles.number}><Text style={styles.numberText}>{job.workNumber}</Text></View>
+          <View style={[styles.stage, (job.stage === 'blocked' || job.stage === 'no_show' || job.auditOutcome === 'failed' || job.auditOutcome === 'correction_required') && styles.blocked]}><Text style={styles.stageText}>{jobStatusLabel(job)}</Text></View>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Actions for ${job.workNumber}`} onPress={(event) => { event.stopPropagation(); onActions(job); }} style={styles.jobActions}><MaterialCommunityIcons name="dots-vertical" color={colours.ink} size={26} /></Pressable>
       </View>
       <Text style={styles.jobTitle}>{job.title || 'Field job'}</Text>
       {!job.protectedJob && job.customerName ? <Text style={styles.factText}>{job.customerName}</Text> : null}
-      <View style={styles.fact}><MaterialCommunityIcons name="clock-outline" color={colours.muted} size={19} /><Text style={styles.factText}>{dayLabel(effectiveJobStart(job))}</Text></View>
+      <View style={styles.fact}><MaterialCommunityIcons name="clock-outline" color={colours.muted} size={19} /><Text style={styles.factText}>{job.stage === 'no_show' || job.lifecycleStatus === 'no_show' ? 'Ready to reschedule' : dayLabel(effectiveJobStart(job))}</Text></View>
       <View style={styles.fact}><MaterialCommunityIcons name={job.protectedJob ? 'shield-lock-outline' : 'map-marker-outline'} color={job.protectedJob ? colours.green : colours.muted} size={19} /><Text numberOfLines={2} style={styles.factText}>{job.protectedJob ? `${job.siteArea || 'Service region'} | Australian Energy Assessments protected` : job.serviceAddress || job.siteArea || 'Address available when assigned'}</Text></View>
       <View style={styles.progressRow}><Text style={styles.progressText}>{rental
         ? rental.status === 'issued'
@@ -84,22 +89,37 @@ function JobCard({ job }: { job: FieldJob }) {
 
 export default function WorkScreen() {
   const { jobs, sync, syncNow, user } = useApp();
+  const [actionJob, setActionJob] = useState<FieldJob | null>(null);
+  const [jobPatches, setJobPatches] = useState<Record<string, AppointmentActionResult['jobPatch']>>({});
+  const [appointmentMessage, setAppointmentMessage] = useState('');
+  const visibleJobs = useMemo(() => jobs.map((job) => {
+    const patch = jobPatches[job.id];
+    return patch && (patch.revision ?? 0) > job.revision ? { ...job, ...patch } : job;
+  }).filter(isVisibleScheduleJob), [jobs, jobPatches]);
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [search, setSearch] = useState('');
   const searching = Boolean(search.trim());
-  const searchResults = useMemo(() => jobs.filter((job) => matchesJobSearch(job, search)), [jobs, search]);
+  const searchResults = useMemo(() => visibleJobs.filter((job) => matchesJobSearch(job, search)), [visibleJobs, search]);
   const week = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
   const selectedKey = dateKey(selectedDate);
-  const selectedJobs = useMemo(() => jobs
+  const selectedJobs = useMemo(() => visibleJobs
     .filter((job) => dateKey(effectiveJobStart(job)) === selectedKey)
-    .sort((left, right) => Date.parse(effectiveJobStart(left)) - Date.parse(effectiveJobStart(right))), [jobs, selectedKey]);
-  const unscheduledJobs = useMemo(() => jobs.filter(isUnscheduledJob), [jobs]);
+    .sort((left, right) => Date.parse(effectiveJobStart(left)) - Date.parse(effectiveJobStart(right))), [visibleJobs, selectedKey]);
+  const unscheduledJobs = useMemo(() => visibleJobs.filter(isUnscheduledJob), [visibleJobs]);
   const selectedLabel = selectedDate.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' });
   const [quickAction, setQuickAction] = useState<QuickAction | null>(null);
   const [commercialPermissions, setCommercialPermissions] = useState<FieldPermissions | null>(null);
   const [permissionBusy, setPermissionBusy] = useState(false);
   const [permissionError, setPermissionError] = useState('');
+
+  function appointmentSaved(action: AppointmentAction, result: AppointmentActionResult) {
+    if (!actionJob) return;
+    setJobPatches((current) => ({ ...current, [actionJob.id]: result.jobPatch }));
+    setAppointmentMessage(appointmentSavedMessage(action, result));
+    setActionJob(null);
+    void syncNow();
+  }
 
   function chooseToday() {
     const today = new Date();
@@ -142,9 +162,10 @@ export default function WorkScreen() {
           <View style={[styles.connection, !sync.online && styles.offline]}><View style={styles.dot} /><Text style={styles.connectionText}>{sync.online ? 'Connected' : 'Offline'}</Text></View>
         </View>
         <View style={styles.searchRow}><MaterialCommunityIcons name="magnify" size={24} color={colours.muted} /><TextInput accessibilityLabel="Search downloaded jobs" value={search} onChangeText={setSearch} placeholder="Search customer, address or job number" placeholderTextColor={colours.muted} autoCorrect={false} returnKeyType="search" style={styles.searchInput} />{search ? <Pressable accessibilityRole="button" accessibilityLabel="Clear job search" onPress={() => setSearch('')} style={styles.iconButton}><MaterialCommunityIcons name="close" size={22} color={colours.ink} /></Pressable> : null}</View>
+        {appointmentMessage ? <View style={styles.syncNote}><Text accessibilityLiveRegion="polite" style={styles.syncText}>{appointmentMessage}</Text><Pressable accessibilityRole="button" accessibilityLabel="Dismiss appointment update" onPress={() => setAppointmentMessage('')} style={styles.iconButton}><MaterialCommunityIcons name="close" size={20} color={colours.ink} /></Pressable></View> : null}
         {searching ? <>
           <View><Text style={styles.section}>Search results</Text><Text style={styles.jobCount}>{searchResults.length} {searchResults.length === 1 ? 'match' : 'matches'} across downloaded jobs</Text></View>
-          {searchResults.map((job) => <JobCard key={job.id} job={job} />)}
+          {searchResults.map((job) => <JobCard key={job.id} job={job} onActions={setActionJob} />)}
           {!searchResults.length ? <View style={styles.empty}><Text style={styles.emptyTitle}>No matching jobs</Text><Text style={styles.emptyText}>Try a customer name, street or job number. Pull down to refresh assigned jobs.</Text></View> : null}
         </> : <>
         <View style={styles.calendarCard}>
@@ -155,20 +176,21 @@ export default function WorkScreen() {
           </View>
           <View style={styles.dayStrip}>{week.map((date) => {
             const active = dateKey(date) === selectedKey;
-            const count = jobs.filter((job) => dateKey(effectiveJobStart(job)) === dateKey(date)).length;
+            const count = visibleJobs.filter((job) => dateKey(effectiveJobStart(job)) === dateKey(date)).length;
             return <Pressable key={dateKey(date)} onPress={() => setSelectedDate(date)} style={[styles.day, active && styles.dayActive]}><Text style={[styles.dayName, active && styles.dayTextActive]}>{date.toLocaleDateString('en-AU', { weekday: 'narrow' })}</Text><Text style={[styles.dayNumber, active && styles.dayTextActive]}>{date.getDate()}</Text>{count ? <View style={[styles.jobDot, active && styles.jobDotActive]} /> : <View style={styles.jobDotPlaceholder} />}</Pressable>;
           })}</View>
         </View>
         <View style={styles.syncNote}><MaterialCommunityIcons name={sync.online ? 'cloud-check-outline' : 'cloud-off-outline'} size={21} color={colours.green} /><Text numberOfLines={2} style={styles.syncText}>{sync.message}</Text></View>
         <View style={styles.dayHeading}><View><Text style={styles.section}>{dateKey(new Date()) === selectedKey ? 'Today' : selectedLabel}</Text><Text style={styles.jobCount}>{selectedJobs.length} {selectedJobs.length === 1 ? 'job' : 'jobs'}</Text></View><MaterialCommunityIcons name="calendar-check-outline" size={27} color={colours.green} /></View>
-        {selectedJobs.map((job) => <JobCard key={job.id} job={job} />)}
+        {selectedJobs.map((job) => <JobCard key={job.id} job={job} onActions={setActionJob} />)}
         {!selectedJobs.length && !sync.running ? <View style={styles.empty}><MaterialCommunityIcons name="calendar-blank-outline" size={42} color={colours.green} /><Text style={styles.emptyTitle}>No jobs on this day</Text><Text style={styles.emptyText}>Choose another date or pull down to refresh. A job appears here as soon as the office assigns it to you.</Text></View> : null}
         {unscheduledJobs.length > 0 && <>
           <View style={styles.dayHeading}><View><Text style={styles.section}>Unscheduled</Text><Text style={styles.jobCount}>{unscheduledJobs.length} assigned {unscheduledJobs.length === 1 ? 'job' : 'jobs'} awaiting a date</Text></View></View>
-          {unscheduledJobs.map((job) => <JobCard key={job.id} job={job} />)}
+          {unscheduledJobs.map((job) => <JobCard key={job.id} job={job} onActions={setActionJob} />)}
         </>}
         </>}
       </KeyboardAwareScrollView>
+      {actionJob ? <JobAppointmentActions key={actionJob.id} job={actionJob} online={sync.online} onClose={() => setActionJob(null)} onSaved={appointmentSaved} /> : null}
       <Modal animationType="fade" transparent visible={quickAction !== null} onRequestClose={() => setQuickAction(null)}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close new action menu" onPress={() => setQuickAction(null)} style={styles.modalBackdrop}>
           <Pressable accessibilityViewIsModal onPress={(event) => event.stopPropagation()} style={styles.actionSheet}>
@@ -222,7 +244,9 @@ const styles = StyleSheet.create({
   jobCount: { color: colours.muted, marginTop: 2 },
   card: { backgroundColor: colours.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colours.line, padding: spacing.md, gap: spacing.sm },
   pressed: { opacity: 0.72 },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  cardIdentity: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xs },
+  jobActions: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
   number: { backgroundColor: colours.forest, borderRadius: 7, paddingHorizontal: 9, paddingVertical: 6 },
   numberText: { color: colours.white, fontSize: 12, fontWeight: '800' },
   stage: { backgroundColor: colours.mint, borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 6 },

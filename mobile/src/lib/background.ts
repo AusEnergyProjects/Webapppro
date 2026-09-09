@@ -4,6 +4,7 @@ import * as TaskManager from 'expo-task-manager';
 import { firebaseAuth } from '@/lib/auth';
 import { getFieldPrincipal } from '@/lib/field-session';
 import { runSync } from '@/lib/sync';
+import { processRentalSaveQueue } from '@/lib/rental-save-queue';
 
 export const FIELD_SYNC_TASK = 'aea-field-secure-sync-v1';
 
@@ -13,6 +14,8 @@ TaskManager.defineTask(FIELD_SYNC_TASK, async () => {
   }
   try {
     await runSync();
+    // Keep the OS task alive for rental photos and the durable finish request.
+    await processRentalSaveQueue();
     return BackgroundTask.BackgroundTaskResult.Success;
   } catch {
     return BackgroundTask.BackgroundTaskResult.Failed;

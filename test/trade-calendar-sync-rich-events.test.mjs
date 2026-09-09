@@ -672,3 +672,28 @@ test("a forced provider rejection is reported as failed instead of a false synce
     },
   );
 });
+
+
+test('cancelled appointment deletes the mapped Google event and records retryable failures', async () => {
+  const previousFetch = globalThis.fetch;
+  const updates = []; const requests = [];
+  const db = { prepare(sql) { return { bind(...values) { return {
+    first: async () => ({ revision: 9 }),
+    all: async () => ({ results: [{ ...connection('google_calendar'), external_event_id: 'existing-event', mapping_id: 'mapping' }] }),
+    run: async () => { updates.push({ sql, values }); return { success: true }; },
+  }; } }; } };
+  const calendar = loadTypescriptModule('../src/lib/trade-calendar-sync-server.ts', {
+    '../../db': { getD1: () => db },
+    '@/lib/trade-integration-crypto': { decryptIntegrationCredentials: async () => ({ access_token: 'token' }), encryptIntegrationCredentials: async () => 'encrypted' },
+    '@/lib/trade-integrations-server': { providerSetting: () => { throw new Error('unexpected refresh'); } },
+  });
+  try {
+    globalThis.fetch = async (url, init) => { requests.push({url,init}); return new Response(null,{status:204}); };
+    assert.equal((await calendar.cancelAppointmentInConnectedCalendars('owner','appointment')).synced,1);
+    assert.equal(requests[0].init.method,'DELETE'); assert.match(requests[0].url,/existing-event$/);
+    assert.match(updates[0].sql,/status = 'cancelled'/);
+    globalThis.fetch = async () => new Response(null,{status:503});
+    assert.equal((await calendar.cancelAppointmentInConnectedCalendars('owner','appointment')).failed,1);
+    assert.match(updates.at(-1).sql,/status = 'error'/);
+  } finally { globalThis.fetch = previousFetch; }
+});

@@ -10,6 +10,8 @@ type DirectAppointmentInviteInput = {
   endsAt: string;
   timeZone: string;
   sequence?: number;
+  originalStartsAt?: string;
+  change?: "rescheduled" | "cancelled";
 };
 
 function bounded(value: unknown, maximum: number) {
@@ -51,20 +53,32 @@ export function directAppointmentInviteDraft(input: DirectAppointmentInviteInput
     attendeeEmail: input.customerEmail,
     organizerEmail: input.organizerEmail,
     sequence: input.sequence,
+    originalStartsAt: input.originalStartsAt,
+    cancelled: input.change === "cancelled",
     productName: "TLink",
   });
   if (!calendar) return null;
-  const subject = `Your ${businessName} appointment | ${workNumber}`.slice(0, 160);
+  if (input.change === 'cancelled') {
+    const subject = `Appointment cancelled | ${workNumber}`;
+    const body = `Hi ${customerName},
+
+Your appointment with ${businessName} for ${appointmentTime} has been cancelled.
+TLink job reference: ${workNumber}
+
+The attached calendar update removes this appointment.`;
+    return { subject, body, html: `<p>${escapeHtml(body).replaceAll('\n', '<br>')}</p>`, calendar };
+  }
+  const subject = `Your ${businessName} appointment${input.change === "rescheduled" ? " has changed" : ""} | ${workNumber}`.slice(0, 160);
   const body = [
     `Hi ${customerName},`,
     "",
-    `Your appointment with ${businessName} is booked for ${appointmentTime}.`,
+    `Your appointment with ${businessName} ${input.change === "rescheduled" ? "has been rescheduled to" : "is booked for"} ${appointmentTime}.`,
     `TLink job reference: ${workNumber}`,
     "",
     `Add to Google Calendar: ${calendar.googleUrl}`,
     "",
     "A calendar file is attached so you can add the booking to your phone or calendar app.",
   ].join("\n");
-  const html = `<!doctype html><html><body style="margin:0;background:#06131f;color:#f3faf8;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#06131f"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#0b2030;border:1px solid #294657;border-radius:20px;overflow:hidden"><tr><td style="padding:28px 30px 12px;color:#54e3b2;font-size:22px;font-weight:800">TLink</td></tr><tr><td style="padding:8px 30px 30px"><p style="margin:0 0 10px;color:#9ab0b5;font-size:13px;font-weight:700;letter-spacing:1px">APPOINTMENT CONFIRMED</p><h1 style="margin:0 0 18px;color:#f3faf8;font-size:30px;line-height:1.2">Your booking is ready</h1><p style="margin:0 0 16px;color:#d9e7e4;font-size:17px;line-height:1.55">Hi ${escapeHtml(customerName)}, your appointment with <strong>${escapeHtml(businessName)}</strong> is booked.</p><div style="margin:22px 0;padding:20px;background:#10293a;border-radius:14px"><p style="margin:0 0 8px;color:#54e3b2;font-size:13px;font-weight:800">WHEN</p><p style="margin:0;color:#f3faf8;font-size:19px;font-weight:700">${escapeHtml(appointmentTime)}</p><p style="margin:14px 0 0;color:#9ab0b5;font-size:14px">TLink job reference ${escapeHtml(workNumber)}</p></div><p style="margin:24px 0"><a href="${escapeHtml(calendar.googleUrl)}" style="display:inline-block;background:#54e3b2;color:#06131f;text-decoration:none;font-size:16px;font-weight:800;padding:14px 20px;border-radius:12px">Add to Google Calendar</a></p><p style="margin:0;color:#9ab0b5;font-size:14px;line-height:1.5">The attached calendar file also works with Samsung Calendar, Apple Calendar, Outlook and other calendar apps.</p></td></tr></table></td></tr></table></body></html>`;
+  const html = `<!doctype html><html><body style="margin:0;background:#06131f;color:#f3faf8;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#06131f"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#0b2030;border:1px solid #294657;border-radius:20px;overflow:hidden"><tr><td style="padding:28px 30px 12px;color:#54e3b2;font-size:22px;font-weight:800">TLink</td></tr><tr><td style="padding:8px 30px 30px"><p style="margin:0 0 10px;color:#9ab0b5;font-size:13px;font-weight:700;letter-spacing:1px">${input.change === "rescheduled" ? "APPOINTMENT RESCHEDULED" : "APPOINTMENT CONFIRMED"}</p><h1 style="margin:0 0 18px;color:#f3faf8;font-size:30px;line-height:1.2">${input.change === "rescheduled" ? "Your booking has changed" : "Your booking is ready"}</h1><p style="margin:0 0 16px;color:#d9e7e4;font-size:17px;line-height:1.55">Hi ${escapeHtml(customerName)}, your appointment with <strong>${escapeHtml(businessName)}</strong> is booked.</p><div style="margin:22px 0;padding:20px;background:#10293a;border-radius:14px"><p style="margin:0 0 8px;color:#54e3b2;font-size:13px;font-weight:800">WHEN</p><p style="margin:0;color:#f3faf8;font-size:19px;font-weight:700">${escapeHtml(appointmentTime)}</p><p style="margin:14px 0 0;color:#9ab0b5;font-size:14px">TLink job reference ${escapeHtml(workNumber)}</p></div><p style="margin:24px 0"><a href="${escapeHtml(calendar.googleUrl)}" style="display:inline-block;background:#54e3b2;color:#06131f;text-decoration:none;font-size:16px;font-weight:800;padding:14px 20px;border-radius:12px">Add to Google Calendar</a></p><p style="margin:0;color:#9ab0b5;font-size:14px;line-height:1.5">The attached calendar file also works with Samsung Calendar, Apple Calendar, Outlook and other calendar apps.</p></td></tr></table></td></tr></table></body></html>`;
   return { subject, body, html, calendar };
 }

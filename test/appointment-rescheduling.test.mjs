@@ -139,6 +139,7 @@ function conflictDispatchRoute(conflictCode) {
     "@/lib/trade-team-sync-server": { jobSyncChangeStatements: () => [], nextJobRevision: (value) => Number(value) + 1 },
     "@/lib/trade-schedule": scheduleHelpers,
     "@/lib/appointment-rescheduling": { parsePreferredWindows },
+    "@/lib/direct-appointment-invite-server": { sendDirectAppointmentCalendarInvite: async () => ({ status: "accepted" }) },
     "@/lib/appointment-notification-server": { queueAppointmentNotifications: async () => {} },
     "@/lib/trade-calendar-sync-server": { syncCreatedAppointmentToConnectedCalendars: async () => ({ connected: 0, synced: 0, failed: 0 }) },
     "@/lib/trade-compliance-intent-replan-server": {

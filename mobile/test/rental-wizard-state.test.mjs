@@ -226,7 +226,7 @@ test('dwelling checks retain historical dimensions without asking for them again
   const compiled = ts.transpileModule(declaration + '\nreturn responseFields;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const evaluate = (environment) => new Function('environment', 'with(environment){' + compiled + '}')(environment);
   const draft = { outcome: 'meets', response: { widthMm: '2400', heightMm: '1800' } };
-  const env = { draft, active: { key: 'minimum_standards' }, check: { key: 'window_covering' }, rentalAssessorFields, sharedObservation: { recordedKeys: [] }, editEquipmentKey: '', key: 'draft' };
+  const env = { draft, active: { key: 'minimum_standards' }, check: { key: 'window_covering' }, showerCheck: false, rentalAssessorFields, sharedObservation: { recordedKeys: [] }, editEquipmentKey: '', key: 'draft' };
   assert.equal(evaluate(env).some((field) => field.key === 'widthMm'), false);
   assert.equal(draft.response.widthMm, '2400');
   draft.outcome = 'does_not_meet'; assert.equal(evaluate(env).some((field) => field.key === 'widthMm'), false);
@@ -296,15 +296,35 @@ test('old metadata snapshots hide automatic date and profile details and save on
   assert.equal(env.cacheRef.current.answers.module, undefined);
 });
 
-test('finish waits visibly for queued evidence, then requires remaining checks and declarations', async () => {
+test('finish confirms the assessment once and queues delivery without waiting for evidence', async () => {
   const env = { active: { id: 'module', status: 'draft', revision: 3 }, pendingSaves: [{ id: 'fifty-photos' }], activeHasDraft: false,
     data: { items: [], completion: { module: { complete: false, blockers: [{ key: 'metadata:assessorDeclaration', label: 'Confirm assessment' }] } } },
-    cache: { answers: {} }, rentalCompletionTarget, calls: [],
-    setFinishWhenSynced(value) { env.waiting = value; }, setError(message) { env.message = message; },
-    openCompletionIssue(key) { env.calls.push(key); }, request() { assert.fail('Cannot complete while photos or declarations are outstanding'); } };
+    cache: { answers: {} }, rentalCompletionTarget, calls: [], finishRequest: undefined, earlierDrafts: [], sections: [], workOrderId: 'job',
+    setError(message) { env.message = message; }, perform: async (_name, action) => action(), persist: async () => {},
+    onChanged: async () => {}, onReturnToJob() { env.left = true; }, enqueueRentalFinish: async (value) => { env.queued = value; },
+    Alert: { alert(_title, message, buttons) { env.message = message; env.confirm = buttons[1].onPress; } },
+    openCompletionIssue(key) { env.calls.push(key); }, request() { assert.fail('UI cannot complete while photos are outstanding'); } };
   const finish = mountedHandler('finishAssessment', 'previous', env);
-  await finish(); assert.equal(env.waiting, 'module'); assert.match(env.message, /sync/); assert.deepEqual(env.calls, []);
-  env.pendingSaves = []; await finish(); assert.deepEqual(env.calls, ['metadata:assessorDeclaration']);
+  await finish(); assert.match(env.message, /complete and accurate/); assert.equal(env.queued, undefined);
+  await env.confirm(); await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(env.queued.module.id, 'module'); assert.equal(env.left, true); assert.deepEqual(env.calls, []);
+});
+
+test('an older future-shower blocker opens the single visible shower check', () => {
+  const assessmentModule = { id: 'module', key: 'minimum_standards', template: { sections: [
+    { key: 'bathroom', checks: [{ key: 'bathroom_facilities' }, { key: 'showerhead_rating' }] },
+    { key: 'showers', checks: [{ key: 'shower_2027_readiness' }] },
+  ] } };
+  assert.deepEqual(rentalCompletionTarget(assessmentModule, [], 'check:showers:shower_2027_readiness'), { kind: 'check', sectionKey: 'bathroom', checkIndex: 1 });
+});
+
+test('a retained draft on the removed shower page opens recovery before finishing', async () => {
+  const env = { active: { id: 'module' }, finishRequest: undefined,
+    earlierDrafts: [['module:scope:3:showers:0:property', { photos: [{ uri: 'retained.jpg' }] }]],
+    setPage(value) { env.page = value; }, setError(value) { env.message = value; },
+    Alert: { alert() { assert.fail('Do not authorise a report while earlier photos need recovery'); } } };
+  await mountedHandler('finishAssessment', 'previous', env)();
+  assert.equal(env.page, 'earlier'); assert.match(env.message, /photos saved on the earlier shower/);
 });
 
 test('an untouched optional metadata field advances without queueing an empty answer', async () => {

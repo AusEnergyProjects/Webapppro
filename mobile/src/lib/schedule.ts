@@ -1,4 +1,4 @@
-type ScheduledJob = { appointmentStartsAt?: string; scheduledStart?: string; stage: string; lifecycleStatus?: string };
+type ScheduledJob = { appointmentStartsAt?: string; scheduledStart?: string; stage: string; lifecycleStatus?: string; appointmentStatus?: string };
 
 type SearchableJob = {
   workNumber: string; title: string; protectedJob: boolean; siteArea?: string;
@@ -18,8 +18,14 @@ export function localWorkDate(date = new Date()): string {
 }
 
 export function effectiveJobStart(job: ScheduledJob): string {
+  if (['no_show', 'cancelled'].includes(job.lifecycleStatus || job.stage)
+    || ['no_show', 'cancelled'].includes(job.stage)) return '';
   return [job.appointmentStartsAt, job.scheduledStart]
     .find((value) => Boolean(value) && Number.isFinite(Date.parse(value!))) || '';
+}
+
+export function isVisibleScheduleJob(job: ScheduledJob): boolean {
+  return job.stage !== 'cancelled' && job.lifecycleStatus !== 'cancelled';
 }
 
 export function isUnscheduledJob(job: ScheduledJob): boolean {

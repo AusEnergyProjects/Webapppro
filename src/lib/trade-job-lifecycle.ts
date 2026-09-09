@@ -2,6 +2,7 @@ export const TRADE_JOB_LIFECYCLE_STATUSES = [
   "unscheduled",
   "scheduled",
   "partial",
+  "no_show",
   "completed",
   "audited",
   "cancelled",
@@ -23,6 +24,7 @@ export const TRADE_JOB_LIFECYCLE_LABELS: Record<TradeJobLifecycleStatus, string>
   unscheduled: "Unscheduled",
   scheduled: "Scheduled",
   partial: "Partial",
+  no_show: "No show",
   completed: "Completed",
   audited: "Audited",
   cancelled: "Cancelled",
@@ -72,6 +74,7 @@ export function deriveTradeJobLifecycle(input: TradeJobLifecycleInput): TradeJob
   if (workStage === "cancelled" || pipelineStage === "lost") {
     return { status: "cancelled", auditOutcome: null };
   }
+  if (workStage === "no_show") return { status: "no_show", auditOutcome: null };
   const completed = workStage === "completed"
     || ["complete", "invoiced", "paid"].includes(pipelineStage);
   if (auditOutcome && completed) return { status: "audited", auditOutcome };
@@ -274,6 +277,7 @@ export function tradeJobLifecycleStatusSql(input: {
   const hasProgressSql = input.hasProgressSql || tradeJobHasProgressSql(workAlias);
   return `CASE
     WHEN ${workAlias}.stage = 'cancelled' OR ${detailAlias}.pipeline_stage = 'lost' THEN 'cancelled'
+    WHEN ${workAlias}.stage = 'no_show' THEN 'no_show'
     WHEN COALESCE(${auditOutcomeSql}, '') <> ''
       AND (${workAlias}.stage = 'completed' OR ${detailAlias}.pipeline_stage IN ('complete', 'invoiced', 'paid')) THEN 'audited'
     WHEN ${workAlias}.stage = 'completed' OR ${detailAlias}.pipeline_stage IN ('complete', 'invoiced', 'paid') THEN 'completed'
@@ -291,6 +295,7 @@ export function tradeJobLifecycleRankSql(statusSql: string) {
   return `CASE ${statusSql}
     WHEN 'unscheduled' THEN 1
     WHEN 'scheduled' THEN 2
+    WHEN 'no_show' THEN 3
     WHEN 'partial' THEN 3
     WHEN 'completed' THEN 4
     WHEN 'audited' THEN 5

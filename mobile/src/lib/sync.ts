@@ -210,7 +210,7 @@ export function runSync(verifiedModes?: FieldAccessMode[]) {
   return activeSync;
 }
 
-export async function localSyncOutcome(message = 'Work is saved on this device and will sync when connected.') {
+export async function localSyncOutcome(message?: string) {
   const counts = await queueCounts();
   return {
     lastSyncedAt: await getSetting('last_synced_at'),
@@ -218,6 +218,7 @@ export async function localSyncOutcome(message = 'Work is saved on this device a
     queuedUploads: counts.uploads,
     conflicts: counts.conflicts,
     updateRequired: '',
-    message,
+    message: message || (counts.conflicts ? 'Open Sync to review the saved items that need attention.'
+      : counts.actions || counts.uploads ? 'Work is saved on this device and will sync when connected.' : 'All field work is safely synced.'),
   } satisfies SyncOutcome;
 }

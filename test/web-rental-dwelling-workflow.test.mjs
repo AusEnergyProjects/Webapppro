@@ -10,7 +10,7 @@ import * as assessment from "../src/lib/trade-rental-assessment.mjs";
 import * as workflowHelpers from "../src/lib/rental-assessor-workflow.mjs";
 
 const source = readFileSync(new URL("../src/components/TradeRentalInspectionPanel.tsx", import.meta.url), "utf8");
-const exposed = source.replace(/function (assessmentGroups|groupItems|blockerSection|initialItem|metadataAnswerPatch|MetadataForm|AssessmentItemCard)\(/g, "export function $1(");
+const exposed = source.replace(/function (assessmentGroups|groupItems|earlierObservationItems|blockerSection|initialItem|metadataAnswerPatch|MetadataForm|AssessmentItemCard)\(/g, "export function $1(");
 const compiled = ts.transpileModule(exposed, { compilerOptions: {
   module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
 } }).outputText;
@@ -26,7 +26,7 @@ new Function("require", "module", "exports", compiled)((id) => {
   assert.ok(id in dependencies, `Unexpected dependency ${id}`);
   return dependencies[id];
 }, output, output.exports);
-const { assessmentGroups, groupItems, blockerSection, initialItem, metadataAnswerPatch, MetadataForm, AssessmentItemCard } = output.exports;
+const { assessmentGroups, groupItems, earlierObservationItems, blockerSection, initialItem, metadataAnswerPatch, MetadataForm, AssessmentItemCard } = output.exports;
 const template = assessment.rentalAssessmentTemplateSnapshot(["minimum_standards"]).modules.minimum_standards;
 const assessmentModule = (extra = {}) => ({
   id: "module", key: "minimum_standards", template, answers: {}, revision: 1, status: "draft", ...extra,
@@ -52,12 +52,40 @@ test("the dwelling walkthrough exposes every check once without requiring any ro
   for (const answers of [{}, { roomRoster: [{ id: "old-room", label: "Bedroom 1", type: "bedroom" }] }]) {
     const workflow = assessmentGroups(assessmentModule({ answers }));
     const actual = workflow.groups.flatMap((group) => group.entries.map(({ check }) => check.key));
-    assert.deepEqual(actual, template.sections.flatMap((section) => section.checks.map((check) => check.key)));
+    assert.deepEqual(actual, template.sections.flatMap((section) => section.checks.map((check) => check.key)).filter((key) => key !== "shower_2027_readiness"));
+    assert.ok(actual.includes("showerhead_rating"));
     assert.equal(new Set(actual).size, actual.length);
     assert.ok(workflow.groups.every((group) => group.dwelling));
     assert.ok(!Object.hasOwn(workflow, "rooms"));
   }
   assert.doesNotMatch(source, /RoomRosterForm|roomWindowsGroup|rentalRoomChecks|Add room|Add another window|roomRosterUnconfirmed/);
+});
+
+test("one shower rating and flow control replaces the repeated outcome and rating questions", () => {
+  const markup = renderCard("showerhead_rating", { id: "", response: { welsRating: "3 stars", flowLitresPerMinute: "8" } });
+  assert.equal((markup.match(/name="showerChoice"/g) || []).length, 6);
+  assert.equal((markup.match(/name="flowLitresPerMinute"/g) || []).length, 1);
+  assert.doesNotMatch(markup, /name="outcome"|name="welsRating"|name="serialNumber"/);
+  assert.match(markup, /checked="" value="3 stars"/);
+  const unknown = renderCard("showerhead_rating", { outcome: "specialist_verification_required", response: { welsRating: "Not labelled / unknown" } });
+  assert.match(unknown, /checked="" value="Not labelled \/ unknown"/);
+});
+
+test("retired shower observations and their evidence stay reachable under the main shower", () => {
+  const legacy = item("shower_2027_readiness", { itemKey: "legacy-shower", response: { welsRating: "3 stars" } });
+  const current = item("showerhead_rating");
+  const { section, check } = entryFor("showerhead_rating");
+  const earlier = earlierObservationItems(assessmentModule(), section, check, [current, legacy]);
+  assert.deepEqual(earlier.map(({ item }) => item.id), [legacy.id]);
+  assert.equal(earlier[0].check.key, "shower_2027_readiness");
+  const markup = renderCard(earlier[0].check.key, legacy, { historical: true, readOnly: true, evidence: [{ id: "photo-1", itemId: legacy.id, fileName: "existing-shower.jpg", contentType: "image/jpeg", sizeBytes: 1024, capture: null }] });
+  assert.match(markup, /Earlier observation|existing-shower.jpg/);
+  assert.doesNotMatch(markup, /Save changes|Remove link/);
+  const groups = assessmentGroups(assessmentModule()).groups;
+  for (const key of ["check:showers:shower_2027_readiness", "evidence:legacy-shower", "response:legacy-shower:flowLitresPerMinute"]) {
+    assert.equal(blockerSection({ key }, groups, [legacy]), section.key);
+  }
+  assert.equal(legacy.response.welsRating, "3 stars");
 });
 
 test("a historical room result cannot supply a dwelling answer, while an existing property record is reused", () => {

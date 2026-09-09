@@ -57,6 +57,7 @@ export type RentalSaveRecord = Omit<RentalSaveInput, 'photos'> & {
   savedItem?: RentalAssessmentItem;
   savedFinding?: RentalAssessmentFinding | null;
   answerSaved?: boolean;
+  finish?: { reviewed: RentalAssessmentResult; dependencyIds: string[]; email: boolean; recipientEmail: string };
 };
 export type RentalSaveState = {
   records: RentalSaveRecord[];
@@ -70,6 +71,7 @@ export class RentalSaveQueueError extends Error {
 }
 
 const listeners = new Map<string, Set<() => void>>();
+const allListeners = new Set<() => void>();
 const localGates = new Map<string, Promise<unknown>>();
 const jobGates = new Map<string, Promise<unknown>>();
 const imagePreparationGate = new Map<string, Promise<unknown>>();
@@ -111,6 +113,16 @@ async function checkOwner(owner: LocalDataOwner) {
 
 function emit(workOrderId: string) {
   for (const listener of listeners.get(workOrderId) || []) listener();
+  for (const listener of allListeners) listener();
+}
+
+export function subscribeAllRentalSaves(listener: () => void) {
+  allListeners.add(listener);
+  return () => { allListeners.delete(listener); };
+}
+
+export async function listPendingRentalSaves() {
+  return (await recordsFor(await ownerNow())).filter((entry) => entry.status !== 'succeeded');
 }
 
 export function subscribeRentalSaves(workOrderId: string, listener: () => void) {
@@ -213,6 +225,11 @@ export async function enqueueRentalSave(input: RentalSaveInput): Promise<RentalS
     await checkOwner(owner);
     if (finalizing.has(jobKey(owner, snapshot.workOrderId))) throw pendingError();
     const existing = await recordsFor(owner, snapshot.workOrderId);
+    for (const finish of existing.filter((entry) => entry.finish && entry.status !== 'succeeded')) {
+      finish.status = 'conflict';
+      finish.error = 'The assessment was edited after Finish was requested. Review it and finish again.';
+      await persist(owner, finish);
+    }
     const pending = existing.find((entry) => entry.draftKey === snapshot.draftKey && entry.status !== 'succeeded');
     if (pending) {
       if (equal(pending.body, snapshot.body) && equal(pending.draftSnapshot, snapshot.draftSnapshot)) return pending;
@@ -226,6 +243,100 @@ export async function enqueueRentalSave(input: RentalSaveInput): Promise<RentalS
   });
   void processRentalSaveQueue(snapshot.workOrderId).catch(() => undefined);
   return copy(record);
+}
+
+/** The assessor authorises completion of this snapshot, not any later office edits. */
+export async function enqueueRentalFinish(input: { workOrderId: string; module: RentalAssessmentModule;
+  reviewed: RentalAssessmentResult; email: boolean; recipientEmail: string }) {
+  const snapshot = copy(input);
+  const owner = await ownerNow();
+  const record = await serial(localGates, jobKey(owner, input.workOrderId), async () => {
+    await checkOwner(owner);
+    if (finalizing.has(jobKey(owner, input.workOrderId))) throw pendingError();
+    const existing = await recordsFor(owner, input.workOrderId);
+    const prior = existing.find((entry) => entry.finish && entry.status !== 'succeeded');
+    if (prior && prior.status !== 'conflict') return prior;
+    if (existing.some((entry) => !entry.finish && entry.status === 'conflict')) throw conflict('Open the saved answer that needs review before finishing. Your photos are retained.');
+    if (prior) await writeRentalSetting(owner, recordKey(prior), null);
+    const created: RentalSaveRecord = { schemaVersion: 1, id: Crypto.randomUUID(), ownerKey: owner.key,
+      workOrderId: snapshot.workOrderId, module: snapshot.module,
+      body: { action: 'finish_report', moduleId: snapshot.module.id }, draftKey: `finish:${snapshot.module.id}`,
+      draftSnapshot: null, createdAt: Math.max(Date.now(), ...existing.map((entry) => entry.createdAt + 1)),
+      status: 'queued', error: '', photos: [],
+      finish: { reviewed: snapshot.reviewed, dependencyIds: existing.filter((entry) => !entry.finish).map((entry) => entry.id),
+        email: snapshot.email, recipientEmail: snapshot.recipientEmail } };
+    await persist(owner, created);
+    return created;
+  });
+  void processRentalSaveQueue(input.workOrderId).catch(() => undefined);
+  return copy(record);
+}
+
+function assertReviewedFinish(record: RentalSaveRecord, current: RentalAssessmentResult, dependencies: RentalSaveRecord[]) {
+  const reviewed = record.finish!.reviewed;
+  const expectedItems = new Map((reviewed.items || []).map((item) => [item.id, item.revision]));
+  const expectedFindings = new Map((reviewed.findings || []).map((finding) => [finding.id, finding.revision]));
+  for (const dependency of dependencies) {
+    if (dependency.savedItem) expectedItems.set(dependency.savedItem.id, dependency.savedItem.revision);
+    if (dependency.savedFinding) expectedFindings.set(dependency.savedFinding.id, dependency.savedFinding.revision);
+  }
+  if ((current.items || []).length !== expectedItems.size || (current.items || []).some((item) => expectedItems.get(item.id) !== item.revision)
+    || (current.findings || []).length !== expectedFindings.size || (current.findings || []).some((finding) => expectedFindings.get(finding.id) !== finding.revision)) {
+    throw conflict('An answer changed after you requested Finish. Review the assessment and finish again.');
+  }
+  const expectedEvidence = new Set((reviewed.evidence || []).filter((entry) => entry.status === 'active').map((entry) => entry.jobMediaId + ':' + entry.itemId));
+  for (const dependency of dependencies) for (const photo of dependency.photos) {
+    if (photo.linked && dependency.savedItem) expectedEvidence.add(photo.mediaId + ':' + dependency.savedItem.id);
+  }
+  const activeEvidence = (current.evidence || []).filter((entry) => entry.status === 'active');
+  if (activeEvidence.length !== expectedEvidence.size || activeEvidence.some((entry) => !expectedEvidence.has(entry.jobMediaId + ':' + entry.itemId))) {
+    throw conflict('The report evidence changed after Finish was requested. Review it and finish again.');
+  }
+  for (const original of reviewed.modules || []) {
+    const latest = current.modules?.find((entry) => entry.id === original.id);
+    if (!latest || !equal(original.template, latest.template)) throw conflict('The assessment scope changed. Review it and finish again.');
+    const expected = { ...original.answers };
+    for (const dependency of dependencies.filter((entry) => entry.module.id === original.id && entry.body.action === 'save_module_answers')) Object.assign(expected, object(dependency.body.answers));
+    for (const field of original.template.metadataFields.map(rentalAssessorMetadataField)) {
+      if (field.phase === 'final' || field.source === 'team_profile' || field.source === 'automatic') continue;
+      if (!equal(expected[field.key] ?? '', latest.answers[field.key] ?? '')) throw conflict('Property details changed after Finish was requested. Review them and finish again.');
+    }
+  }
+}
+
+async function processFinish(owner: LocalDataOwner, record: RentalSaveRecord, initial: RentalAssessmentResult) {
+  const finish = record.finish!;
+  const gate = jobKey(owner, record.workOrderId);
+  finalizing.add(gate);
+  try {
+    let result = initial;
+    const dependencies = (await recordsFor(owner, record.workOrderId)).filter((entry) => finish.dependencyIds.includes(entry.id));
+    assertReviewedFinish(record, result, dependencies);
+    let assessmentModule = result.modules?.find((entry) => entry.id === record.module.id);
+    if (!assessmentModule) throw conflict('The assessment is no longer available.');
+    if (assessmentModule.status !== 'complete') {
+      // Only these two explicit review confirmations are authorised by the Finish dialog.
+      const answers = Object.fromEntries(assessmentModule.template.metadataFields.filter((field) =>
+        ['coverageConfirmed', 'assessorDeclaration'].includes(field.key) && field.type === 'checkbox').map((field) => [field.key, true]));
+      if (Object.entries(answers).some(([key, value]) => assessmentModule!.answers[key] !== value)) {
+        result = await request(owner, record.workOrderId, { action: 'save_module_answers', moduleId: assessmentModule.id,
+          expectedRevision: assessmentModule.revision, answers });
+        assessmentModule = result.modules!.find((entry) => entry.id === record.module.id)!;
+      }
+      const completion = result.completion?.[assessmentModule.id];
+      if (!completion?.complete) throw conflict(completion?.blockers[0]?.label || 'Review the outstanding property checks.');
+      result = await request(owner, record.workOrderId, { action: 'complete_module', moduleId: assessmentModule.id, expectedRevision: assessmentModule.revision });
+    }
+    if (result.permissions?.canIssue && result.modules?.every((entry) => entry.status === 'complete')) {
+      if (!result.reports?.some((entry) => entry.status === 'issued')) result = await request(owner, record.workOrderId, { action: 'issue_report' });
+      if (finish.email) {
+        const reportId = result.issuedReport?.reportId || result.reports?.find((entry) => entry.status === 'issued')?.id;
+        if (!reportId) throw new Error('The report is still being prepared. Delivery will retry.');
+        result = await request(owner, record.workOrderId, { action: 'email_report', reportId, expectedRecipientEmail: finish.recipientEmail });
+      }
+    } else if (finish.email) throw conflict('The other required assessment modules must be completed before the report can be emailed.');
+    await cacheResult(owner, record.workOrderId, result);
+  } finally { finalizing.delete(gate); }
 }
 
 function object(value: unknown): Record<string, unknown> {
@@ -426,6 +537,12 @@ async function processRecord(owner: LocalDataOwner, record: RentalSaveRecord) {
   record.status = 'syncing'; record.error = '';
   await persist(owner, record);
   let result = await request(owner, record.workOrderId);
+  if (record.finish) {
+    await processFinish(owner, record, result);
+    record.status = 'succeeded'; record.error = '';
+    await persist(owner, record);
+    return;
+  }
   result = await saveAnswer(owner, record, result);
   for (const photo of record.photos) {
     if (!photo.mediaId) await uploadPhoto(owner, record, photo);
@@ -460,6 +577,7 @@ async function processJob(owner: LocalDataOwner, workOrderId: string) {
           && Object.keys(object(entry.body.answers)).length > 0
           && Object.entries(object(entry.body.answers)).every(([key, value]) => metadataReplayRule(entry.module, key, value)))));
     if (!record) return;
+    if (record.finish && (await recordsFor(owner, workOrderId)).some((entry) => entry.id !== record.id && entry.status !== 'succeeded')) return;
     attempted.add(record.id);
     try { await processRecord(owner, record); }
     catch (error) {
@@ -492,6 +610,7 @@ export async function acknowledgeRentalSave(id: string) {
   const owner = await ownerNow();
   const record = (await recordsFor(owner)).find((entry) => entry.id === id);
   if (!record || record.status !== 'succeeded') return;
+  if ((await recordsFor(owner, record.workOrderId)).some((entry) => entry.status !== 'succeeded' && entry.finish?.dependencyIds.includes(id))) return;
   await serial(localGates, jobKey(owner, record.workOrderId), async () => {
     await checkOwner(owner);
     await writeRentalSetting(owner, recordKey(record), null);

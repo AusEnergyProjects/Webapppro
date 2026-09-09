@@ -78,7 +78,7 @@ export function rentalObservationFields(checkKey) {
     ...(checkKey !== "heating_2027_readiness" ? [shortText("limitationReason", "Earlier observation limitation", { legacy: true })] : []),
   ];
   if (checkKey === "switchboard_observation") return [shortText("model", "Board location / readable labels (optional)"), ...limitationFields()];
-  if (checkKey === "showerhead_rating") return [selectField("welsRating", "Confirmed WELS rating", RENTAL_OBSERVATION_SELECT_OPTIONS.welsRating, { shared: true }), ...identityFields(), { ...numberField("flowLitresPerMinute", "Main shower flow (litres per minute)"), shared: true }, ...limitationFields()];
+  if (checkKey === "showerhead_rating") return [selectField("welsRating", "Confirmed WELS rating", RENTAL_OBSERVATION_SELECT_OPTIONS.welsRating, { shared: true }), { ...numberField("flowLitresPerMinute", "Main shower flow (litres per minute)"), shared: true }, shortText("model", "Make / model from label (optional)", { shared: true }), ...limitationFields()];
   if (["appliance_identity_condition", "alarm_identity_location", "fixed_special_equipment"].includes(checkKey)) return [...identityFields(), ...limitationFields()];
   /** @type {Record<string, RentalObservationField[]>} */
   const specific = {
@@ -91,7 +91,7 @@ export function rentalObservationFields(checkKey) {
     windows_2027_readiness: [{ ...numberField("sealLengthMetres", "Total window draughtproofing length (metres)"), showForOutcomes: ["does_not_meet"] }],
     doors_2027_readiness: [numberField("count", "Total doors needing seals"), numberField("sealLengthMetres", "Total door draughtproofing length (metres)")].map((field) => ({ ...field, showForOutcomes: ["does_not_meet"] })),
     vents_2027_readiness: [selectField("ventType", "Wall vent type", RENTAL_OBSERVATION_SELECT_OPTIONS.ventType, { showForOutcomes: ["meets", "does_not_meet", "specialist_verification_required"] }), { ...numberField("count", "Total wall vents needing sealing"), showForOutcomes: ["does_not_meet", "specialist_verification_required"] }],
-    shower_2027_readiness: [selectField("welsRating", "Confirmed WELS rating", RENTAL_OBSERVATION_SELECT_OPTIONS.welsRating, { shared: true }), ...identityFields(), { ...numberField("flowLitresPerMinute", "Main shower flow (litres per minute)"), shared: true }],
+    shower_2027_readiness: [selectField("welsRating", "Confirmed WELS rating", RENTAL_OBSERVATION_SELECT_OPTIONS.welsRating, { shared: true }), { ...numberField("flowLitresPerMinute", "Main shower flow (litres per minute)"), shared: true }, shortText("model", "Make / model from label (optional)", { shared: true })],
     cooling_2027_readiness: [selectField("applianceType", "Cooling type", coolingOptions), ...identityFields(), ...roomFields(), selectField("accessStatus", "Access to equipment", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus)],
     hot_water_2027_readiness: [selectField("applianceType", "Hot-water type", hotWaterOptions), ...identityFields(), numberField("widthMm", "Unit width"), numberField("heightMm", "Unit height"), numberField("accessWidthMm", "Clear access width"), selectField("accessStatus", "Access to equipment", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus)],
     window_covering: [{ ...numberField("count", "Total coverings needing attention"), showForOutcomes: ["does_not_meet"] }],

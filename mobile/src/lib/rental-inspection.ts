@@ -115,6 +115,8 @@ export type RentalAssessmentEvidence = {
 
 export type RentalAssessmentResult = {
   ok?: boolean;
+  deliveryRecipient?: { email: string; name: string } | null;
+  reportDelivery?: { status: string; recipientEmail?: string; sentAt?: string };
   inspection?: {
     id: string;
     inspectionNumber: string;
@@ -240,6 +242,10 @@ export function newRentalItem(
 export function rentalCompletionTarget(module: RentalAssessmentModule, items: RentalAssessmentItem[], blockerKey: string):
   { kind: 'check'; sectionKey: string; checkIndex: number; instanceKey?: string } | { kind: 'metadata'; fieldKey: string } | null {
   if (blockerKey.startsWith('metadata:')) return { kind: 'metadata', fieldKey: blockerKey.slice('metadata:'.length) };
+  if (module.key === 'minimum_standards' && blockerKey.includes('shower_2027_readiness')) {
+    const section = module.template.sections.find((entry) => entry.checks.some((check) => check.key === 'showerhead_rating'));
+    if (section) return { kind: 'check', sectionKey: section.key, checkIndex: section.checks.findIndex((check) => check.key === 'showerhead_rating') };
+  }
   if (blockerKey.startsWith('check:')) {
     const [, sectionKey, checkKey] = blockerKey.split(':');
     const section = module.template.sections.find((entry) => entry.key === sectionKey);

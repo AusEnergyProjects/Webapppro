@@ -6,6 +6,7 @@ import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { ApiError, apiRequest, publicApiRequest } from '@/lib/api';
+import { subscribeAllRentalSaves } from '@/lib/rental-save-queue';
 import {
   accessStateForServerError,
   approvedAccess,
@@ -232,6 +233,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }), [syncNow]);
 
   const signedIn = Boolean(user);
+
+  useEffect(() => {
+    if (!signedIn) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = subscribeAllRentalSaves(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { void refreshLocal(); }, 100);
+    });
+    return () => { unsubscribe(); if (timer) clearTimeout(timer); };
+  }, [signedIn, refreshLocal]);
 
   useEffect(() => {
     const network = NetInfo.addEventListener((state) => {

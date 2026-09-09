@@ -43,6 +43,8 @@ export function customerAppointmentCalendar(input: {
   organizerEmail?: string;
   sequence?: number;
   productName?: string;
+  originalStartsAt?: string;
+  cancelled?: boolean;
 }) {
   const startsAt = calendarStamp(input.startsAt);
   const endsAt = calendarStamp(input.endsAt);
@@ -56,7 +58,7 @@ export function customerAppointmentCalendar(input: {
   const attendeeEmail = calendarEmail(input.attendeeEmail);
   const organizerEmail = calendarEmail(input.organizerEmail);
   const invitation = Boolean(attendeeEmail && organizerEmail);
-  const method = invitation ? "REQUEST" : "PUBLISH";
+  const method = input.cancelled ? "CANCEL" : invitation ? "REQUEST" : "PUBLISH";
   const sequence = Math.max(0, Math.min(99, Math.trunc(Number(input.sequence) || 0)));
   const google = new URL("https://calendar.google.com/calendar/render");
   google.searchParams.set("action", "TEMPLATE");
@@ -64,7 +66,7 @@ export function customerAppointmentCalendar(input: {
   google.searchParams.set("dates", `${startsAt}/${endsAt}`);
   google.searchParams.set("details", details);
   google.searchParams.set("ctz", timeZone);
-  const uid = `${workNumber}-${startsAt}`.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+  const uid = `${workNumber}-${calendarStamp(input.originalStartsAt || input.startsAt)}`.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
   const ics = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -83,7 +85,7 @@ export function customerAppointmentCalendar(input: {
       `ATTENDEE;CN=Customer;ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:${attendeeEmail}`,
       `SEQUENCE:${sequence}`,
     ] : []),
-    "STATUS:CONFIRMED",
+    input.cancelled ? "STATUS:CANCELLED" : "STATUS:CONFIRMED",
     "TRANSP:OPAQUE",
     "END:VEVENT",
     "END:VCALENDAR",

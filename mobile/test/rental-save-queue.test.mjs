@@ -88,6 +88,14 @@ function harness(shared = {}) {
       assert.equal(body.expectedRevision, result.modules[0].revision);
       result.modules[0].answers = { ...result.modules[0].answers, ...body.answers };
       advance(result);
+    } else if (body.action === 'complete_module') {
+      assert.equal(body.expectedRevision, result.modules[0].revision);
+      result.modules[0].status = 'complete'; advance(result);
+    } else if (body.action === 'issue_report') {
+      result.reports = [{ id: 'report-1', status: 'issued' }];
+    } else if (body.action === 'email_report') {
+      assert.equal(body.reportId, 'report-1');
+      result.reportDelivery = { status: 'sent', recipientEmail: body.expectedRecipientEmail };
     }
     return clone(result);
   }
@@ -150,6 +158,107 @@ test('enqueue commits an immutable snapshot without waiting for a stalled networ
   pending.resolve();
   await h.queue.processRentalSaveQueue('job-1');
   assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0);
+});
+
+function prepareFinish(h) {
+  const assessmentModule = h.state.result.modules[0];
+  assessmentModule.template.metadataFields.push({ key: 'coverageConfirmed', type: 'checkbox', phase: 'final' });
+  assessmentModule.template.metadataFields.find((field) => field.key === 'assessorDeclaration').type = 'checkbox';
+  h.state.result.completion = { 'module-1': { complete: true, blockers: [] } };
+  h.state.result.permissions = { canIssue: true };
+  return { workOrderId: 'job-1', module: clone(assessmentModule), reviewed: clone(h.state.result), email: true, recipientEmail: 'client@example.test' };
+}
+
+test('durable Finish returns while 50 photos wait and completes and emails once after restart', async () => {
+  const h = harness(), gate = deferred();
+  const finishInput = prepareFinish(h);
+  const input = fixture().input;
+  input.module = clone(h.state.result.modules[0]);
+  input.photos = Array.from({ length: 50 }, photo);
+  h.state.handler = async () => { await gate.promise; throw new Error('Offline'); };
+  const save = await h.queue.enqueueRentalSave(input);
+  const finish = await h.queue.enqueueRentalFinish(finishInput);
+  assert.equal(finish.status, 'queued');
+  assert.ok(h.store.size);
+  gate.resolve(); await h.queue.processRentalSaveQueue('job-1');
+  const restarted = h.restart();
+  await restarted.queue.processRentalSaveQueue('job-1');
+  const state = await restarted.queue.getRentalSaveState('job-1');
+  assert.equal(state.pending, 0, JSON.stringify(state.records.map((entry) => ({ id: entry.id, error: entry.error }))));
+  assert.equal(state.records.find((entry) => entry.id === save.id).photos.filter((entry) => entry.linked).length, 50);
+  assert.equal(h.state.result.modules[0].answers.coverageConfirmed, true);
+  assert.equal(h.state.result.modules[0].answers.assessorDeclaration, true);
+  assert.equal(h.state.result.reportDelivery.status, 'sent');
+  await restarted.queue.processRentalSaveQueue('job-1');
+  assert.equal(h.state.calls.filter((call) => call.body?.action === 'email_report').length, 1);
+});
+
+test('Finish cannot certify an answer changed on another device', async () => {
+  const h = harness(), gate = deferred();
+  const input = fixture().input;
+  await h.queue.enqueueRentalSave(input); await h.queue.processRentalSaveQueue('job-1');
+  const finishInput = prepareFinish(h);
+  h.state.handler = async (...args) => { await gate.promise; return h.defaultRequest(...args); };
+  await h.queue.enqueueRentalFinish(finishInput);
+  h.state.result.items[0].revision++;
+  gate.resolve(); await h.queue.processRentalSaveQueue('job-1');
+  const finish = (await h.queue.getRentalSaveState('job-1')).records.find((entry) => entry.finish);
+  assert.equal(finish.status, 'conflict');
+  assert.match(finish.error, /answer changed/);
+  assert.equal(h.state.calls.some((call) => call.body?.action === 'complete_module'), false);
+});
+
+test('global rental subscribers receive completion even with no assessment screen mounted', async () => {
+  const h = harness(); let updates = 0;
+  const unsubscribe = h.queue.subscribeAllRentalSaves(() => { updates++; });
+  await h.queue.enqueueRentalSave(fixture().input); await h.queue.processRentalSaveQueue('job-1');
+  assert.ok(updates >= 3);
+  assert.equal((await h.queue.listPendingRentalSaves()).length, 0);
+  unsubscribe();
+});
+
+test('Finish retains the exact recipient and retries a failed delivery without regenerating the report', async () => {
+  const h = harness(); const input = prepareFinish(h); let attempts = 0;
+  h.state.handler = async (...args) => {
+    const body = args[1]?.body && JSON.parse(args[1].body);
+    if (body?.action === 'email_report' && ++attempts === 1) throw new Error('No connection');
+    return h.defaultRequest(...args);
+  };
+  await h.queue.enqueueRentalFinish(input); await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.listPendingRentalSaves())[0].status, 'retry');
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.listPendingRentalSaves()).length, 0);
+  assert.equal(h.state.calls.filter((call) => call.body?.action === 'issue_report').length, 1);
+  assert.equal(h.state.result.reportDelivery.recipientEmail, 'client@example.test');
+});
+
+test('Finish survives a report timeout and in-progress retry, then emails the completed report once', async () => {
+  const h = harness(), input = prepareFinish(h);
+  let issueAttempts = 0;
+  h.state.handler = async (...args) => {
+    const body = args[1]?.body && JSON.parse(args[1].body);
+    if (body?.action === 'issue_report') {
+      issueAttempts++;
+      h.state.result.inspection.status = 'issuing';
+      if (issueAttempts === 1) throw new Error('Request timed out');
+      throw new h.ApiError('The report is being prepared. Delivery will retry.', 503);
+    }
+    return h.defaultRequest(...args);
+  };
+  await h.queue.enqueueRentalFinish(input); await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.listPendingRentalSaves())[0].status, 'retry');
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.listPendingRentalSaves())[0].status, 'retry');
+  assert.equal(issueAttempts, 2);
+  assert.equal(h.state.calls.filter((call) => call.body?.action === 'email_report').length, 0);
+  h.state.result.inspection.status = 'issued';
+  h.state.result.reports = [{ id: 'report-1', status: 'issued' }];
+  const restarted = h.restart();
+  await restarted.queue.processRentalSaveQueue('job-1');
+  await restarted.queue.processRentalSaveQueue('job-1');
+  assert.equal((await restarted.queue.listPendingRentalSaves()).length, 0);
+  assert.equal(h.state.calls.filter((call) => call.body?.action === 'issue_report').length, 0);
+  assert.equal(h.state.calls.filter((call) => call.body?.action === 'email_report').length, 1);
 });
 
 test('a failed durable local write rejects enqueue and does not start an API request', async () => {

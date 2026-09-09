@@ -25,13 +25,17 @@ export async function sendDirectAppointmentCalendarInvite(input: {
   appointmentId: string;
   ownerUid: string;
   origin: string;
+  change?: "rescheduled" | "cancelled";
 }): Promise<DirectAppointmentInviteResult> {
   const configuration = serviceReminderProviderConfiguration();
   if (!configuration.email.configured) {
     return { requested: true, status: "unavailable", message: "Email delivery is not configured." };
   }
   const row = await getD1().prepare(`SELECT a.id appointment_id, a.revision, a.starts_at, a.ends_at,
-      w.work_number, detail.crm_customer_id, customer.customer_type, customer.first_name, customer.last_name,
+      w.work_number, detail.crm_customer_id,
+      COALESCE((SELECT prior.starts_at FROM trade_crm_appointment_revisions prior
+        WHERE prior.appointment_id = a.id AND prior.firebase_uid = a.firebase_uid
+        ORDER BY prior.revision LIMIT 1), a.starts_at) original_starts_at, customer.customer_type, customer.first_name, customer.last_name,
       customer.business_name, customer.email customer_email, site.address_state,
       trade.business_name trade_business_name
     FROM trade_crm_appointments a
@@ -42,7 +46,8 @@ export async function sendDirectAppointmentCalendarInvite(input: {
     JOIN trade_crm_service_sites site ON site.id = detail.service_site_id
       AND site.firebase_uid = w.firebase_uid AND site.record_status = 'active'
     JOIN trade_accounts trade ON trade.firebase_uid = w.firebase_uid
-    WHERE a.id = ? AND a.firebase_uid = ? AND a.status = 'scheduled'
+    WHERE a.id = ? AND a.firebase_uid = ? AND a.status IN ('scheduled', 'cancelled')
+      AND w.source_type <> 'opportunity' AND detail.customer_source IN ('trade_owned', 'public_lead_released')
       AND w.record_status = 'active' LIMIT 1`).bind(input.appointmentId, input.ownerUid).first<Record<string, unknown>>();
   if (!row) return { requested: true, status: "unavailable", message: "The saved appointment could not be loaded for email." };
   const recipient = String(row.customer_email || "").trim().toLowerCase();
@@ -59,6 +64,8 @@ export async function sendDirectAppointmentCalendarInvite(input: {
     endsAt: String(row.ends_at || ""),
     timeZone: australianAppointmentTimeZone(row.address_state),
     sequence: Number(row.revision || 1) - 1,
+    originalStartsAt: String(row.original_starts_at || row.starts_at),
+    change: input.change,
   });
   if (!draft) return { requested: true, status: "unavailable", message: "The saved appointment time could not be added to a calendar." };
   try {

@@ -1,5 +1,5 @@
-export type JobStage = 'backlog' | 'ready' | 'scheduled' | 'in_progress' | 'blocked' | 'completed' | 'cancelled';
-export type JobLifecycleStatus = 'unscheduled' | 'scheduled' | 'partial' | 'completed' | 'audited' | 'cancelled';
+export type JobStage = 'backlog' | 'ready' | 'scheduled' | 'in_progress' | 'blocked' | 'completed' | 'cancelled' | 'no_show';
+export type JobLifecycleStatus = 'unscheduled' | 'scheduled' | 'partial' | 'completed' | 'audited' | 'cancelled' | 'no_show';
 export type JobAuditOutcome = 'passed' | 'failed' | 'duplicate' | 'correction_required' | 'withdrawn';
 export type TaskStatus = 'pending' | 'done';
 export type FieldAccessMode = 'trade_team' | 'creditex_manual';

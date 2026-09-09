@@ -143,3 +143,8 @@ test("a completed multi-activity job is audited only after every active activity
     .run("2026-09-09T14:00:00Z");
   assert.deepEqual(read(), { audit_outcome: "passed", lifecycle_status: "audited" });
 });
+
+
+test('no show remains ready to reschedule even when an earlier form has progress', () => {
+  assert.deepEqual(deriveTradeJobLifecycle({ workStage: 'no_show', pipelineStage: 'scheduled', hasProgress: true }), { status: 'no_show', auditOutcome: null });
+});

@@ -110,7 +110,7 @@ export function calendarEventDetails(provider: CalendarProvider, appointment: Ro
       `Open this job in TLink: ${jobUrl}`,
     ].filter(Boolean).join("\n");
   if (provider === "google_calendar") return {
-    summary, description, location,
+    summary, description, location, status: "confirmed",
     start: { dateTime: `${String(appointment.starts_at)}:00`, timeZone: ianaTimeZones[state] || ianaTimeZones.NSW },
     end: { dateTime: `${String(appointment.ends_at)}:00`, timeZone: ianaTimeZones[state] || ianaTimeZones.NSW },
     extendedProperties: { private: { tlinkAppointmentId: String(appointment.id), tlinkRevision: String(appointment.revision || 1) } },
@@ -340,4 +340,41 @@ export async function syncCreatedAppointmentToConnectedCalendars(ownerUid: strin
   if (!appointment) throw new Error("CALENDAR_APPOINTMENT_NOT_FOUND");
   const result = await syncCalendarConnections(ownerUid, connections.results, [appointment], options);
   return { connected: connections.results.length, ...result };
+}
+/** Remove a cancelled or missed appointment from connected provider calendars. Keep the mapping for retries. */
+export async function cancelAppointmentInConnectedCalendars(ownerUid: string, appointmentId: string) {
+  const db = getD1();
+  const appointment = await db.prepare(`SELECT revision FROM trade_crm_appointments
+    WHERE id = ? AND firebase_uid = ? AND status IN ('cancelled', 'no_show')`)
+    .bind(appointmentId, ownerUid).first<Row>();
+  if (!appointment) throw new Error('CALENDAR_APPOINTMENT_NOT_FOUND');
+  const connections = await db.prepare(`SELECT integration.*, mapping.external_event_id, mapping.id mapping_id
+    FROM trade_crm_integrations integration JOIN trade_crm_calendar_events mapping
+      ON mapping.firebase_uid = integration.firebase_uid AND mapping.provider = integration.provider
+    WHERE integration.firebase_uid = ? AND integration.status = 'connected'
+      AND mapping.appointment_id = ? AND mapping.external_event_id <> '' AND mapping.status <> 'cancelled'`)
+    .bind(ownerUid, appointmentId).all<Row>();
+  let synced = 0; let failed = 0;
+  for (const connection of connections.results) {
+    const provider = connection.provider as CalendarProvider;
+    if (!CALENDAR_PROVIDERS.includes(provider)) continue;
+    const now = new Date().toISOString();
+    try {
+      const credentials = await activeCredentials(provider, connection);
+      const url = provider === 'google_calendar'
+        ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(String(connection.external_event_id))}`
+        : `https://graph.microsoft.com/v1.0/me/events/${encodeURIComponent(String(connection.external_event_id))}`;
+      const response = await calendarProviderFetch(url, { method: 'DELETE', headers: { Authorization: `Bearer ${credentials.access_token}` } });
+      if (!response.ok && ![404, 410].includes(response.status)) throw new Error('CALENDAR_PROVIDER_FAILED');
+      await db.prepare(`UPDATE trade_crm_calendar_events SET status = 'cancelled', appointment_revision = ?, last_error = '',
+        last_synced_at = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`)
+        .bind(appointment.revision, now, now, connection.mapping_id, ownerUid).run();
+      synced += 1;
+    } catch (error) {
+      failed += 1;
+      await db.prepare(`UPDATE trade_crm_calendar_events SET status = 'error', last_error = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`)
+        .bind(error instanceof Error ? error.message : 'CALENDAR_PROVIDER_FAILED', now, connection.mapping_id, ownerUid).run();
+    }
+  }
+  return { connected: connections.results.length, attempted: connections.results.length, synced, failed };
 }

@@ -11,7 +11,7 @@ import {
 import type { User } from "firebase/auth";
 import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalAssessorFields, rentalFindingDescriptionLabel, rentalSharedObservationResponse, rentalObservationNumberIsValid } from "@/lib/rental-quotation.mjs";
 import { rentalCheckIsReadiness } from "@/lib/trade-rental-assessment.mjs";
-import { rentalAssessorCheckPresentation, rentalAssessorEvidenceRequirement, rentalAssessorOutcomePatch, rentalWindowIsFixed, rentalAssessorMetadataField } from "@/lib/rental-assessor-workflow.mjs";
+import { RENTAL_SHOWER_CHOICES, rentalAssessorSections, rentalShowerChoicePatch, rentalShowerChoiceValue, rentalAssessorCheckPresentation, rentalAssessorEvidenceRequirement, rentalAssessorOutcomePatch, rentalWindowIsFixed, rentalAssessorMetadataField } from "@/lib/rental-assessor-workflow.mjs";
 import styles from "./TradeRentalInspectionPanel.module.css";
 
 type MetadataField = {
@@ -164,7 +164,7 @@ type AssessmentGroup = { key: string; title: string; summary: string; dwelling: 
 
 function assessmentGroups(assessmentModule: AssessmentModule) {
   const dwelling = assessmentModule.key === "minimum_standards";
-  return { groups: assessmentModule.template.sections.map((section) => ({
+  return { groups: rentalAssessorSections(assessmentModule.template).map((section) => ({
     key: section.key, title: section.title,
     summary: dwelling ? "Answer once for the property. Add photos and total measurements where work is needed." : section.summary,
     dwelling, entries: section.checks.map((check) => ({ section, check })),
@@ -176,10 +176,32 @@ function groupItems(group: AssessmentGroup, section: AssessmentSection, check: A
     && (!group.dwelling || item.instanceKey === "property"));
 }
 
+function earlierObservationItems(module: AssessmentModule, section: AssessmentSection, check: AssessmentCheck, items: AssessmentItem[]) {
+  if (module.key !== "minimum_standards") return [];
+  const earlier = items.filter((item) => item.sectionKey === section.key && item.checkKey === check.key && item.instanceKey !== "property")
+    .map((item) => ({ item, section, check }));
+  if (check.key === "showerhead_rating") {
+    for (const sourceSection of module.template.sections) {
+      const sourceCheck = sourceSection.checks.find((candidate) => candidate.key === "shower_2027_readiness");
+      if (sourceCheck) earlier.push(...items.filter((item) => item.sectionKey === sourceSection.key && item.checkKey === sourceCheck.key)
+        .map((item) => ({ item, section: sourceSection, check: sourceCheck })));
+    }
+  }
+  return earlier;
+}
+
 function blockerSection(blocker: CompletionBlocker, groups: AssessmentGroup[], items: AssessmentItem[]) {
+  if (blocker.key.includes("shower_2027_readiness")) {
+    const mainShower = groups.find((group) => group.entries.some(({ check }) => check.key === "showerhead_rating"));
+    if (mainShower) return mainShower.key;
+  }
   const direct = groups.find((group) => group.entries.some(({ section, check }) => blocker.key === `check:${section.key}:${check.key}`));
   if (direct) return direct.key;
   const item = items.find((candidate) => candidate.itemKey && (blocker.key.endsWith(`:${candidate.itemKey}`) || blocker.key.includes(`:${candidate.itemKey}:`)));
+  if (item?.checkKey === "shower_2027_readiness") {
+    const mainShower = groups.find((group) => group.entries.some(({ check }) => check.key === "showerhead_rating"));
+    if (mainShower) return mainShower.key;
+  }
   return item ? groups.find((group) => group.entries.some(({ section, check }) => section.key === item.sectionKey && check.key === item.checkKey))?.key : undefined;
 }
 type FieldMedia = { id: string; fileName: string; createdAt: string };
@@ -429,6 +451,7 @@ function AssessmentItemCard({
   const evidenceRequirement = rentalAssessorEvidenceRequirement(check, outcome);
   const quotation = rentalQuotation(finding?.details.quotation);
   const responseFields = rentalAssessorFields(check);
+  const shower = ["showerhead_rating", "shower_2027_readiness"].includes(check.key);
   const [responseValues, setResponseValues] = useState<Record<string, unknown>>(item.response);
   const [editEquipment, setEditEquipment] = useState(false);
   const dwelling = module.key === "minimum_standards";
@@ -440,6 +463,7 @@ function AssessmentItemCard({
   const ownEquipmentRecorded = Boolean(item.id) && equipmentKeys.some((key) => String(item.response[key] || "").trim());
   const recordedKeys = ownEquipmentRecorded ? equipmentKeys : shared.recordedKeys;
   const visibleFields = responseFields.filter((field) => {
+    if (shower && field.key === "welsRating") return false;
     const value = String(shared.response[field.key] ?? "").trim();
     if (field.shared && recordedKeys.includes(field.key) && !editEquipment) return false;
     if (field.legacy && (!historical || !value)) return false;
@@ -559,15 +583,28 @@ function AssessmentItemCard({
     <form ref={formRef} className={styles.itemForm} onSubmit={submit} onChange={(event) => {
       onDirtyChange(dirtyKey, true);
       const values = new FormData(event.currentTarget);
-      onObservationChange({ ...item, locationLabel: String(values.get("locationLabel") || locationLabel), outcome: String(values.get("outcome") || outcome), response: responseFromForm(values) });
+      const response = responseFromForm(values);
+      const choice = String(values.get("showerChoice") || "");
+      const showerPatch = shower && choice ? rentalShowerChoicePatch(check, choice, response, publicNotes) : null;
+      onObservationChange({ ...item, locationLabel: String(values.get("locationLabel") || locationLabel),
+        outcome: showerPatch?.outcome || String(values.get("outcome") || outcome), response: showerPatch?.response || response,
+        publicNotes: showerPatch?.publicNotes ?? publicNotes });
     }}>
       {dwelling ? <input type="hidden" name="locationLabel" value={locationLabel} /> : repeated && <label>
         <span>Exact location *</span>
         <input name="locationLabel" required value={locationLabel} onChange={(event) => setLocationLabel(event.target.value)} maxLength={300} placeholder="For example, Bedroom 2 north window" disabled={readOnly} />
       </label>}
       <fieldset className={styles.outcomes} disabled={readOnly}>
-        <legend>Result *</legend>
-        {presentation.outcomeOptions.map(({ value, label }) => <label className={outcome === value ? styles.selectedOutcome : ""} key={value}>
+        <legend>{shower ? "WELS rating *" : "Result *"}</legend>
+        {shower ? RENTAL_SHOWER_CHOICES.map(({ value, label }) => <label className={rentalShowerChoiceValue({ outcome, response: shared.response }) === value ? styles.selectedOutcome : ""} key={value}>
+          <input type="radio" name="showerChoice" value={value} checked={rentalShowerChoiceValue({ outcome, response: shared.response }) === value} onChange={() => {
+            const patch = rentalShowerChoicePatch(check, value, shared.response, publicNotes);
+            setOutcome(patch.outcome);
+            setResponseValues(patch.response);
+            setPublicNotes(patch.publicNotes);
+          }} />
+          <span>{label}</span>
+        </label>) : presentation.outcomeOptions.map(({ value, label }) => <label className={outcome === value ? styles.selectedOutcome : ""} key={value}>
           <input type="radio" name="outcome" value={value} checked={outcome === value} onChange={() => {
             const patch = rentalAssessorOutcomePatch(check, value, publicNotes);
             setOutcome(patch.outcome);
@@ -722,7 +759,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
   }, [load]);
 
   const activeModule = data.modules?.find((module) => module.id === activeModuleId) || data.modules?.[0];
-  const sections = useMemo(() => activeModule?.template.sections || [], [activeModule]);
+  const sections = useMemo(() => rentalAssessorSections(activeModule?.template), [activeModule]);
   const activeItems = useMemo(() => (data.items || []).filter((item) => item.moduleId === activeModule?.id), [data.items, activeModule?.id]);
   const workflow = useMemo(() => activeModule ? assessmentGroups(activeModule) : { groups: [] }, [activeModule]);
   const activeSection = workflow.groups.find((section) => section.key === activeSectionKey);
@@ -1040,7 +1077,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
             ...(stored.length ? stored : [first]),
             ...(activeSection.dwelling ? [] : localItems[key] || []),
           ];
-          const historicalItems = activeSection.dwelling ? activeItems.filter((item) => item.sectionKey === section.key && item.checkKey === check.key && item.instanceKey !== "property") : [];
+          const historicalItems = earlierObservationItems(activeModule, section, check, activeItems);
           return <section className={styles.checkGroup} key={check.key}>
             {workingItems.map((item, instanceIndex) => {
               const finding = data.findings?.find((candidate) => candidate.itemId === item.id);
@@ -1053,7 +1090,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
             {historicalItems.length > 0 && <details className={styles.technicalDetails}>
               <summary>Earlier observations and evidence ({historicalItems.length})</summary>
               <p>These saved details are retained in the report. Record the property result above to confirm the whole dwelling.</p>
-              {historicalItems.map((item) => <AssessmentItemCard key={item.id} module={activeModule} section={section} check={check} item={item} historical
+              {historicalItems.map(({ item, section: earlierSection, check: earlierCheck }) => <AssessmentItemCard key={item.id} module={activeModule} section={earlierSection} check={earlierCheck} item={item} historical
                 finding={data.findings?.find((candidate) => candidate.itemId === item.id)} evidence={(data.evidence || []).filter((entry) => entry.itemId === item.id && entry.status === "active")}
                 observationCandidates={[]} onObservationChange={recordObservation} busy={busy} readOnly
                 onSave={async () => undefined} onUpload={uploadEvidence} onUnlink={unlinkEvidence} onDirtyChange={markItemDirty} onRegisterDraft={registerItemDraft} />)}

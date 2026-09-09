@@ -1,7 +1,7 @@
 import { getD1 } from "../../../../db";
 import { adminJson, sameOrigin } from "@/lib/admin-server";
 import { providerConfigured, providerSetting, requireInstallerOperations } from "@/lib/trade-integrations-server";
-import { CALENDAR_PROVIDERS, syncCalendarConnections } from "@/lib/trade-calendar-sync-server";
+import { CALENDAR_PROVIDERS, syncCalendarConnections, cancelAppointmentInConnectedCalendars } from "@/lib/trade-calendar-sync-server";
 import { addCalendarDays, normaliseWeekStart } from "@/lib/trade-schedule";
 
 export const runtime = "edge";
@@ -75,6 +75,14 @@ export async function POST(request: Request) {
     ]);
     if (!connections.results.length) return adminJson({ ok: false, error: "Connect Google Calendar or Outlook before syncing." }, 409);
     const result = await syncCalendarConnections(identity.uid, connections.results, appointmentResult.results, { force: true });
+    const removed = await db.prepare(`SELECT DISTINCT a.id FROM trade_crm_appointments a
+      JOIN trade_crm_calendar_events mapping ON mapping.appointment_id = a.id AND mapping.firebase_uid = a.firebase_uid
+      WHERE a.firebase_uid = ? AND a.status IN ('cancelled', 'no_show') AND mapping.status = 'error' LIMIT 50`)
+      .bind(identity.uid).all<Row>();
+    for (const appointment of removed.results) {
+      const cancellation = await cancelAppointmentInConnectedCalendars(identity.uid, String(appointment.id));
+      result.attempted += cancellation.attempted; result.synced += cancellation.synced; result.failed += cancellation.failed;
+    }
     return adminJson({ ok: true, ...result, providers: await providerRows(identity.uid) });
   } catch (error) { return calendarError(error); }
 }

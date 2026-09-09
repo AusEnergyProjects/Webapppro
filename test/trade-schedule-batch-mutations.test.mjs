@@ -216,7 +216,7 @@ function ownerAccess() {
   };
 }
 
-function scheduleRoute(d1, notifications = [], synced = [], access = ownerAccess()) {
+function scheduleRoute(d1, notifications = [], synced = [], access = ownerAccess(), effects = {}) {
   const adminJson = (body, status = 200) => Response.json(body, { status });
   const scheduleHelpers = loadTypescriptModule("../src/lib/trade-schedule.ts");
   const syncHelpers = loadTypescriptModule("../src/lib/trade-team-sync-server.ts");
@@ -238,6 +238,7 @@ function scheduleRoute(d1, notifications = [], synced = [], access = ownerAccess
     "@/lib/trade-team-sync-server": syncHelpers,
     "@/lib/trade-schedule": scheduleHelpers,
     "@/lib/appointment-rescheduling": { parsePreferredWindows: () => [] },
+    "@/lib/direct-appointment-invite-server": { sendDirectAppointmentCalendarInvite: async () => { if (effects.email) await effects.email(); return {status: "accepted"}; } },
     "@/lib/appointment-notification-server": {
       queueAppointmentNotifications: async (notification) => notifications.push(notification),
     },
@@ -491,4 +492,29 @@ test("schedule payload never projects protected AEA customer details", async () 
   assert.equal(appointment.notes, "");
   assert.equal(appointment.customerEmail, "");
   assert.equal(appointment.customerPhone, "");
+});
+
+test('reschedule starts calendar sync while the customer email is still pending', async () => {
+  const { d1 } = fixture();
+  const notifications = [];
+  const synced = [];
+  let releaseEmail;
+  let markEmailStarted;
+  const emailPending = new Promise(resolve => { releaseEmail = resolve; });
+  const emailStarted = new Promise(resolve => { markEmailStarted = resolve; });
+  const route = scheduleRoute(d1, notifications, synced, ownerAccess(), {
+    email: async () => { markEmailStarted(); await emailPending; },
+  });
+  const pending = route.PATCH(batchRequest(swappedChanges));
+  await emailStarted;
+  try {
+    assert.equal(notifications.length, 2, 'both durable notifications must be queued first');
+    assert.ok(synced.length > 0, 'calendar sync must not wait for the email provider');
+  } finally {
+    releaseEmail();
+  }
+  const result = await (await pending).json();
+  assert.equal(result.customerEmails.length, 2);
+  assert.equal(result.customerEmails[0].status, 'accepted');
+  assert.equal(result.calendarSync.synced, 2);
 });

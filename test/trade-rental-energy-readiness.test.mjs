@@ -123,7 +123,7 @@ function databaseFixture() {
   return { sql, d1 };
 }
 
-function loadRoute(fixture, permissions = {}) {
+function loadRoute(fixture, permissions = {}, reportApi = {}) {
   const access = { ownerUid: "owner", actorUid: "worker-uid", memberId: "worker", displayName: "Alex Installer", isOwner: false,
     canManageFieldEvidence: true, canViewFieldEvidence: true, canRunReports: true, ...permissions };
   const source = fs.readFileSync(new URL("../src/app/api/trade-rental-inspections/route.ts", import.meta.url), "utf8");
@@ -152,7 +152,8 @@ function loadRoute(fixture, permissions = {}) {
     "@/lib/trade-rental-credentials": credentials,
     "@/lib/trade-rental-schema-guards": { ensureTradeRentalSchemaGuards: async () => {} },
     "@/lib/bounded-json-request": { BoundedJsonRequestError: class extends Error {}, readBoundedJsonRequest: (request) => request.json() },
-    "@/lib/trade-rental-report-server": { ownerRentalReportPresentation: async () => [] },
+    "@/lib/trade-rental-report-email-server": { rentalReportDeliveryRecipient: async () => null, rentalReportDeliveryState: async () => null },
+    "@/lib/trade-rental-report-server": { ownerRentalReportPresentation: async () => [], ...reportApi },
   };
   new Function("require", "module", "exports", compiled)((id) => {
     if (!(id in dependencies)) throw new Error(`Unexpected dependency: ${id}`);
@@ -530,4 +531,113 @@ test("assignment credential predicate checks every selected professional gate us
     fixture.sql.exec("INSERT INTO trade_team_members VALUES ('owner','owner','active','Owner','Business','Owner')");
     assert.deepEqual(eligible(["licensed_electrician"]), ["worker"], "Business ownership never grants a professional credential");
   } finally { fixture.sql.close(); }
+});
+
+function reportIssuanceFixture() {
+  const fixture = databaseFixture();
+  fixture.sql.exec(`CREATE TABLE trade_rental_reports (
+    id TEXT, inspection_id TEXT, firebase_uid TEXT, report_number TEXT, revision INTEGER, status TEXT,
+    report_snapshot TEXT, pdf_object_key TEXT, pdf_sha256 TEXT, pdf_size_bytes INTEGER, issuer_snapshot TEXT,
+    issued_at TEXT, updated_at TEXT);
+    CREATE TABLE trade_rental_report_links (id TEXT,report_id TEXT,inspection_id TEXT,firebase_uid TEXT,
+    status TEXT,expires_at TEXT,view_count INTEGER,download_count INTEGER,token_issue INTEGER,
+    token_hash TEXT,encrypted_token TEXT,created_at TEXT);
+    UPDATE trade_rental_inspections SET status='issuing';`);
+  fixture.sql.prepare(`INSERT INTO trade_rental_reports VALUES
+    ('report','inspection','owner','RMS-TEST-R1',1,'staged','{}','','',0,'{}','',?)`).run(new Date().toISOString());
+  const access = { ownerUid: 'owner', actorUid: 'worker-uid', memberId: 'worker', canRunReports: true };
+  const source = fs.readFileSync(new URL('../src/lib/trade-rental-report-server.ts', import.meta.url), 'utf8');
+  const compiled = ts.transpileModule(`${source}\nexport { recoverStaleRentalIssuance };`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const dependencies = {
+    'cloudflare:workers': { env: {} }, '../../db': { getD1: () => fixture.d1 },
+    '@/lib/trade-team-server': { assignedJob: async (caller, id) => {
+      const job = fixture.sql.prepare('SELECT * FROM trade_work_orders WHERE id=? AND firebase_uid=?').get(id,caller.ownerUid);
+      if (!job) throw new Error('JOB_NOT_FOUND'); return job;
+    } },
+    '@/lib/trade-rental-schema-guards': { ensureTradeRentalSchemaGuards: async () => {} },
+  };
+  const moduleRecord = { exports: {} };
+  new Function('require','module','exports',compiled)((id) => dependencies[id] || {}, moduleRecord,moduleRecord.exports);
+  const markIssued = () => fixture.sql.exec(`UPDATE trade_rental_inspections SET status='issued',issued_report_id='report';
+    UPDATE trade_rental_reports SET status='issued',issued_at='2026-09-10T01:00:00Z';`);
+  return { ...fixture, server: moduleRecord.exports, access, markIssued,
+    issue: () => moduleRecord.exports.issueRentalAssessmentReport({ access, workOrderId:'job',origin:'https://test.example' }) };
+}
+
+test('active report generation returns transient503 and keeps editing locked', async () => {
+  const f = reportIssuanceFixture();
+  try {
+    const route = loadRoute(f, {}, f.server);
+    const response = await post(route, { action:'issue_report' });
+    assert.equal(response.status,503);
+    assert.equal((await response.json()).code,'RENTAL_REPORT_ISSUING');
+    assert.equal(f.sql.prepare('SELECT status FROM trade_rental_reports').get().status,'staged');
+    assert.equal((await post(route,{ action:'save_module_answers',moduleId:'module',expectedRevision:1,answers:{} })).status,409);
+  } finally { f.sql.close(); }
+});
+
+test('report retry returns the already issued report without issuing or renewing any links', async () => {
+  const f = reportIssuanceFixture();
+  try {
+    f.markIssued();
+    const route = loadRoute(f, {}, f.server);
+    for (let attempt=0;attempt<2;attempt++) {
+      const response = await post(route,{action:'issue_report'});
+      assert.equal(response.status,200);
+      assert.equal((await response.json()).issuedReport.reportId,'report');
+    }
+    assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_rental_reports').get().count,1);
+    assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_rental_report_links').get().count,0);
+    assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_rental_inspection_events').get().count,0);
+  } finally { f.sql.close(); }
+});
+
+test('report completing during a retry returns its current issued identity', async () => {
+  const f = reportIssuanceFixture();
+  try {
+    const originalPrepare = f.d1.prepare;
+    let inspectionReads=0;
+    f.d1.prepare = (query) => {
+      const statement = originalPrepare(query);
+      if (!query.includes('SELECT * FROM trade_rental_inspections')) return statement;
+      return { ...statement, bind(...values) {
+        const bound=statement.bind(...values);
+        return { ...bound, async first() {
+          const row=await bound.first();
+          if (++inspectionReads===2) f.markIssued();
+          return row;
+        } };
+      } };
+    };
+    const result = await f.issue();
+    assert.equal(result.reportId,'report');
+    assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_rental_reports').get().count,1);
+  } finally { f.sql.close(); }
+});
+
+test('idempotent report retries still reject missing permission, wrong owner and unassigned assessor', async () => {
+  for (const change of [{canRunReports:false},{ownerUid:'another-owner'},{memberId:'another-worker'}]) {
+    const f=reportIssuanceFixture();
+    try {
+      f.markIssued();Object.assign(f.access,change);
+      await assert.rejects(f.issue,/REPORT_PERMISSION_REQUIRED|JOB_NOT_FOUND|ASSESSOR_REQUIRED/);
+      assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_rental_reports').get().count,1);
+    } finally { f.sql.close(); }
+  }
+});
+
+test('stale recovery leaves active generation alone and releases only stages older than15minutes', async () => {
+  const f=reportIssuanceFixture();
+  try {
+    await f.server.recoverStaleRentalIssuance('owner','job');
+    assert.equal(f.sql.prepare('SELECT status FROM trade_rental_inspections').get().status,'issuing');
+    f.sql.prepare('UPDATE trade_rental_reports SET updated_at=?').run(new Date(Date.now()-16*60*1000).toISOString());
+    await f.server.recoverStaleRentalIssuance('owner','job');
+    assert.equal(f.sql.prepare('SELECT status FROM trade_rental_inspections').get().status,'in_progress');
+    const report=f.sql.prepare('SELECT status,issuer_snapshot FROM trade_rental_reports').get();
+    assert.equal(report.status,'failed');
+    assert.ok(JSON.parse(report.issuer_snapshot).cleanupCompletedAt);
+  } finally { f.sql.close(); }
 });

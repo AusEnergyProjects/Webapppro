@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Crypto from 'expo-crypto';
 import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import { FieldButton } from '@/components/field-button';
@@ -17,6 +17,7 @@ import {
 import { colours, radius, spacing } from '@/lib/theme';
 import type { OfflineAction, QueueRow, UploadRow } from '@/lib/types';
 import { useApp } from '@/providers/app-provider';
+import { listPendingRentalSaves, subscribeAllRentalSaves, type RentalSaveRecord } from '@/lib/rental-save-queue';
 
 function timeLabel(value: string) {
   if (!value) return 'Not synced yet';
@@ -27,19 +28,24 @@ export default function SyncScreen() {
   const { sync, syncNow, refreshLocal } = useApp();
   const [problems, setProblems] = useState<QueueRow[]>([]);
   const [problemUploads, setProblemUploads] = useState<UploadRow[]>([]);
+  const [rentalSaves, setRentalSaves] = useState<RentalSaveRecord[]>([]);
   const load = useCallback(async () => {
-    const [actions, uploads] = await Promise.all([listProblemActions(), listProblemUploads()]);
+    const [actions, uploads, rentals] = await Promise.all([listProblemActions(), listProblemUploads(), listPendingRentalSaves()]);
     setProblems(actions);
     setProblemUploads(uploads);
+    setRentalSaves(rentals);
   }, []);
   useFocusEffect(useCallback(() => {
     let active = true;
-    void Promise.all([listProblemActions(), listProblemUploads()]).then(([actions, uploads]) => {
+    const refresh = () => { void Promise.all([listProblemActions(), listProblemUploads(), listPendingRentalSaves()]).then(([actions, uploads, rentals]) => {
       if (!active) return;
       setProblems(actions);
       setProblemUploads(uploads);
-    });
-    return () => { active = false; };
+      setRentalSaves(rentals);
+    }); };
+    refresh();
+    const unsubscribe = subscribeAllRentalSaves(refresh);
+    return () => { active = false; unsubscribe(); };
   }, []));
 
   async function retry(item: QueueRow) {
@@ -95,7 +101,13 @@ export default function SyncScreen() {
         null
       )}
       {problemUploads.length ? <View style={styles.section}><Text style={styles.sectionTitle}>Recapture rejected evidence</Text><Text style={styles.body}>These files did not pass the server evidence checks and were not added to the compliance case.</Text>{problemUploads.map((item) => <View key={item.id} style={styles.problem}><View style={styles.flex}><Text style={styles.problemTitle}>{item.file_name}</Text><Text style={styles.body}>{item.error_message || 'Capture this evidence again from the job requirement.'}</Text></View><FieldButton variant="danger" onPress={() => discardRejectedUpload(item)}>Remove saved copy</FieldButton></View>)}</View> : null}
-      {!problems.length && !problemUploads.length ? <View style={styles.clear}><MaterialCommunityIcons name="check-decagram-outline" size={38} color={colours.green} /><Text style={styles.cardTitle}>Nothing needs your attention</Text><Text style={styles.body}>Any new assigned work or office changes will arrive through secure sync.</Text></View> : null}
+      {rentalSaves.length ? <View style={styles.section}><Text style={styles.sectionTitle}>Rental assessments</Text>{rentalSaves.map((item) => <View key={item.id} style={styles.problem}>
+        <Text style={styles.problemTitle}>{item.finish ? item.finish.email ? 'Finish and email report' : 'Finish assessment' : item.purpose || 'Saved assessment answer'}</Text>
+        <Text style={styles.body}>{item.error || (item.status === 'syncing' ? 'Syncing now' : 'Saved on this phone, waiting to sync')}</Text>
+        {item.photos.some((photo) => !photo.linked) ? <Text style={styles.body}>{item.photos.filter((photo) => !photo.linked).length} photos retained on this phone</Text> : null}
+        <FieldButton variant="secondary" onPress={() => router.push({ pathname: '/job/[id]', params: { id: item.workOrderId } })}>{item.status === 'conflict' ? 'Open job and review' : 'Open job'}</FieldButton>
+      </View>)}</View> : null}
+      {!problems.length && !problemUploads.length && !rentalSaves.length ? <View style={styles.clear}><MaterialCommunityIcons name="check-decagram-outline" size={38} color={colours.green} /><Text style={styles.cardTitle}>Nothing needs your attention</Text><Text style={styles.body}>Any new assigned work or office changes will arrive through secure sync.</Text></View> : null}
     </Screen>
   );
 }

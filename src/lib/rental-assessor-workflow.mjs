@@ -1,6 +1,92 @@
 /** Presentation and evidence policy for the assessor workflow, not a legal certification rule. */
 export const RENTAL_ASSESSOR_TITLE = "Rental assessment + 2027";
 
+export const RENTAL_SHOWER_CHOICES = Object.freeze([
+  { value: "4 stars or above", label: "4 stars or above" },
+  { value: "3 stars", label: "3 stars" },
+  { value: "Below 3 stars", label: "Below 3 stars" },
+  { value: "Not labelled / unknown", label: "Rating not confirmed" },
+  { value: "not_accessible", label: "Could not check" },
+  { value: "not_applicable", label: "No shower" },
+]);
+
+/** One observed rating supports two different standards. Flow alone never establishes a WELS rating. */
+export function rentalShowerChoicePatch(check, value, currentResponse = {}, currentPublicNotes = "") {
+  if (!RENTAL_SHOWER_CHOICES.some((choice) => choice.value === value)) throw new Error("INVALID_SHOWER_CHOICE");
+  const readiness = checkKey(check) === "shower_2027_readiness";
+  const rating = ["not_accessible", "not_applicable"].includes(value) ? "" : value;
+  const outcome = value === "not_accessible" || value === "not_applicable" ? value
+    : value === "Not labelled / unknown" ? "specialist_verification_required"
+      : value === "Below 3 stars" || (readiness && value === "3 stars") ? "does_not_meet" : "meets";
+  const absent = "No shower is installed at the property.";
+  return { outcome, response: { ...currentResponse, welsRating: rating, showerCaptureVersion: 1 },
+    publicNotes: value === "not_applicable" ? currentPublicNotes.trim() || absent : currentPublicNotes === absent ? "" : currentPublicNotes };
+}
+
+export function rentalShowerChoiceValue(item) {
+  if (["not_accessible", "not_applicable"].includes(item?.outcome)) return item.outcome;
+  const value = record(item?.response || parseResponse(item?.responseJson)).welsRating;
+  return RENTAL_SHOWER_CHOICES.some((choice) => choice.value === value) ? String(value) : "";
+}
+
+/** Keep standards in the frozen template, while asking for the shared shower observation only once.
+ * @template {{key:string,checks:Array<{key:string}>}} T
+ * @param {{key?:string,sections?:T[]}|null|undefined} moduleTemplate
+ * @returns {T[]}
+ */
+export function rentalAssessorSections(moduleTemplate) {
+  const sections = Array.isArray(moduleTemplate?.sections) ? moduleTemplate.sections : [];
+  if (moduleTemplate?.key !== "minimum_standards" || !sections.some((section) => section.checks?.some((check) => check.key === "showerhead_rating"))) return sections;
+  return sections.map((section) => ({ ...section, checks: section.checks.filter((check) => check.key !== "shower_2027_readiness") })).filter((section) => section.checks.length);
+}
+
+function parseResponse(value) {
+  if (typeof value !== "string") return record(value);
+  try { return record(JSON.parse(value)); } catch { return {}; }
+}
+
+/**
+ * Read-only projection. Original saved answers and evidence remain untouched.
+ * A future result references the single main-shower observation and its evidence.
+ * @param {{moduleTemplate: any, items: any[], findings?: any[]}} input
+ */
+export function rentalShowerAssessmentProjection({ moduleTemplate, items, findings = [] }) {
+  if (moduleTemplate?.key !== "minimum_standards") return { items, findings };
+  const sections = Array.isArray(moduleTemplate.sections) ? moduleTemplate.sections : [];
+  const futureSection = sections.find((section) => section.checks?.some((check) => check.key === "shower_2027_readiness"));
+  if (!futureSection) return { items, findings };
+  const main = items.find((item) => item.checkKey === "showerhead_rating" && item.instanceKey === "property" && item.outcome && item.outcome !== "not_assessed");
+  if (!main) return { items, findings };
+  const response = record(main.response || parseResponse(main.responseJson));
+  const choice = rentalShowerChoiceValue({ ...main, response });
+  // Older answers without an observed rating must not be promoted to either WELS threshold.
+  if (!choice || (["not_accessible", "not_applicable"].includes(choice) && response.showerCaptureVersion !== 1)) return { items, findings };
+  const patch = rentalShowerChoicePatch("shower_2027_readiness", choice, response, main.publicNotes || "");
+  if (["specialist_verification_required", "exemption_evidence_pending"].includes(main.outcome)) patch.outcome = main.outcome;
+  const existing = items.find((item) => item.checkKey === "shower_2027_readiness" && item.instanceKey === "property");
+  const id = existing?.id || `${main.id}-shower-2027`;
+  const itemKey = `${moduleTemplate.key}:${futureSection.key}:shower_2027_readiness:property`;
+  const projected = { ...main, ...existing, ...patch, id, itemKey, checkKey: "shower_2027_readiness", sectionKey: futureSection.key,
+    moduleId: main.moduleId, instanceKey: "property", locationLabel: "Main shower", responseJson: patch.response,
+    derived: true, evidenceSourceItemId: main.id, evidenceSourceItemKey: main.itemKey, requiredEvidenceCount: main.requiredEvidenceCount || 0 };
+  const originalFinding = findings.find((finding) => finding.itemId === main.id || finding.itemKey === main.itemKey);
+  const projectedFindings = findings.filter((finding) => !existing || (finding.itemId !== existing.id && finding.itemKey !== existing.itemKey));
+  if (["does_not_meet", "specialist_verification_required", "not_accessible", "exemption_evidence_pending"].includes(patch.outcome)) {
+    const flow = response.flowLitresPerMinute;
+    const measuredFlow = (typeof flow === "number" && Number.isFinite(flow) || typeof flow === "string" && /^\d+(?:\.\d+)?$/.test(flow.trim())) ? ` Main shower flow recorded: ${flow} L/min.` : "";
+    projectedFindings.push({ ...(originalFinding || {}), id: `${id}-finding`, moduleId: main.moduleId, itemId: id, itemKey,
+      findingKey: `${itemKey}:finding`, category: "showers", title: patch.outcome === "does_not_meet" ? "Showerhead upgrade for 2027" : "Shower WELS rating not established",
+      description: patch.outcome === "does_not_meet" ? `The main shower is recorded as ${choice.toLowerCase()}.${measuredFlow} Use the main-shower photographs in this report for the existing fitting. The 4-star requirement applies on a new agreement or conversion to periodic from 1 March 2027; any permitted plumbing exception needs supporting evidence.`
+        : originalFinding?.description || "The main shower's WELS rating could not be established from the assessment. Refer to the main-shower observation and evidence.",
+      status: "recommendation", severity: "recommended", locationLabel: "Main shower", derived: true,
+      recommendedAction: patch.outcome === "does_not_meet" ? "Quote a qualifying showerhead replacement using the recorded fitting and photographs." : originalFinding?.recommendedAction || "Review the recorded shower model and evidence to establish its WELS rating.",
+      scopeSummary: "Main shower", unitLabel: "each", quantityMilli: 1000,
+      details: { ...record(originalFinding?.details), evidenceSourceItemId: main.id },
+    });
+  }
+  return { items: [...items.filter((item) => item !== existing), projected], findings: projectedFindings };
+}
+
 /** Normalize older frozen forms without asking the assessor to re-enter identity or today's date.
  * @template {{key:string,type?:string,phase?:string,source?:string}} T
  * @param {T} field
@@ -90,7 +176,7 @@ export function rentalAssessorEvidenceRequirement(check, outcome) {
 const presentation = {
   bathroom_facilities: { prompt: "Is there a basin and a shower or bath?", meets: "Yes, both are present", adverse: "A required fixture is missing" },
   bathroom_water: { prompt: "Do the bathroom fixtures have hot and cold water?", meets: "Yes, water works", adverse: "Water supply problem" },
-  showerhead_rating: { prompt: "Does the main shower have a WELS water-efficiency rating?", meets: "3 stars or higher confirmed", adverse: "Below 3 stars", specialist: "Rating not confirmed", help: "Read the WELS label or confirmed model rating. Record the main shower's flow in litres per minute. Flow alone does not prove its WELS rating. Note any other shower that needs attention." },
+  showerhead_rating: { prompt: "What WELS rating is confirmed for the main shower?", meets: "3 stars or higher confirmed", adverse: "Below 3 stars", specialist: "Rating not confirmed", help: "Choose the rating once and measure the flow in litres per minute. TLink records today's 3-star requirement and the 2027 4-star requirement from this answer. Use a WELS label or confirmed model rating. Flow alone does not prove its WELS rating. Note any other shower needing attention." },
   switchboard_observation: { prompt: "Can you record the switchboard and its labels?", meets: "Board and labels recorded", adverse: "A visible issue needs attention" },
   outlet_lighting_protection: { prompt: "Has an electrician verified the required circuit protection?", meets: "Required protection verified", adverse: "Protection does not meet requirements" },
   main_living_heater: { prompt: "Is the required fixed heater in the main living room?", meets: "Qualifying heater is present", adverse: "Required heater missing or unsuitable" },
@@ -115,7 +201,7 @@ const presentation = {
   heating_2027_readiness: { prompt: "Is the main living room heater ready for the 2027 requirement?" },
   cooling_2027_readiness: { prompt: "Is the main living room cooling ready for the 2027 requirement?" },
   hot_water_2027_readiness: { prompt: "Is the hot water system ready for its 2027 replacement requirement?" },
-  shower_2027_readiness: { prompt: "Do the showers meet the 2027 WELS requirement?", meets: "4 stars or higher confirmed", adverse: "A showerhead needs replacement", specialist: "Rating not confirmed", help: "Use the recorded WELS rating and label photos. From 1 March 2027, the new-agreement or periodic-conversion requirement is 4 stars. Include any other shower needing replacement in the report." },
+  shower_2027_readiness: { prompt: "What WELS rating is confirmed for the main shower?", meets: "4 stars or higher confirmed", adverse: "A showerhead needs replacement", specialist: "Rating not confirmed", help: "Choose the rating and measure the flow in litres per minute. From 1 March 2027 the new-agreement or periodic-conversion requirement is 4 stars. Use a WELS label or confirmed model rating; flow alone does not prove the rating." },
   ceiling_2027_readiness: { prompt: "Is roof insulation present?", meets: "Present throughout the accessible ceiling", adverse: "None, or some bare areas", help: "Choose the existing R-value if known and record the total area needing insulation. Existing insulation need not be upgraded solely because it is below R5. Bare ceiling areas require R5 insulation when the new rule applies. Only inspect from a safe access point." },
   doors_2027_readiness: { prompt: "Are the outside doors sealed around every edge?", meets: "Yes, all edges are sealed", adverse: "Seals are missing or damaged", specialist: "Not sure", help: "Close each outside door. Look along the top, sides and bottom for gaps or damaged seals. If work is needed, record the doors, total seal length and photos. Doors must still open and close normally." },
   windows_2027_readiness: { prompt: "Are the outside windows sealed around every edge?", meets: "Yes, all edges are sealed", adverse: "Seals are missing or damaged", specialist: "Not sure", help: "Close the windows and check their edges. Photograph the existing seals. If work is needed, add the total length needing tape or caulking in metres. No window widths or heights are needed." },
