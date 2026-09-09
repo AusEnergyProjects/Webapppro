@@ -187,7 +187,9 @@ test("web and native surfaces show one primary action, Today checklist and truth
   assert.match(fieldPanel, /Offline/);
   assert.match(fieldPanel, /Action required/);
   assert.match(fieldPanel, /does not queue field actions offline/);
-  assert.match(mobile, /Reconnect before finishing/);
+  assert.match(mobile, /saveActionInBackground/);
+  assert.match(mobile, /Tap once to save completion on this phone/);
+  assert.doesNotMatch(mobile, /Reconnect before finishing/);
 });
 
 test("shared menus dismiss outside, on selection and Escape without leaking listeners", () => {

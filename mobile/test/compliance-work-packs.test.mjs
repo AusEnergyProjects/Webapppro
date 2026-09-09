@@ -562,8 +562,20 @@ test('review keeps governed delivery identities read-only and signing uses large
   assert.match(jobScreen, /record\.caseInstanceId !== pack\.instance\.id/);
   assert.match(jobScreen, /record\.downloadUrl/);
   assert.match(jobScreen, /onOpenFinalRecord=\{\(\) => openWorkPackFinalRecord\(pack\)\}/);
-  assert.match(jobScreen, /pack\.instance\.status !== 'completed' \|\| !pack\.finalRecord/);
+  assert.match(jobScreen, /pack\.instance\.status !== 'completed'[\s\S]*\|\| !record/);
   assert.doesNotMatch(wizard, /signatureObjectKey|objectKey/);
+});
+
+test('job completion is retained locally and does not wait for Creditex processing', () => {
+  assert.match(jobScreen, /function jobFinishLocalBlockers\(job: FieldJob\)/);
+  assert.match(jobScreen, /await saveActionInBackground\(\{ type: 'advance_field_job'/);
+  assert.doesNotMatch(
+    sourceFunction(jobScreen, 'jobFinishLocalBlockers'),
+    /activityWorkPacks|complianceIntents|governed evidence|Creditex/,
+  );
+  assert.match(database, /action\.transition === 'finish'[\s\S]*status IN \('conflict', 'rejected'\)/);
+  assert.match(database, /job\.stage = 'completed'/);
+  assert.match(database, /job\.lifecycleStatus = 'completed'/);
 });
 
 test('the mobile completion evaluator stays deterministic with the authoritative server evaluator', () => {

@@ -215,7 +215,7 @@ test('the native wizard uses Expo 57 File parts and hierarchical back navigation
   assert.match(wizard, /await syncPendingSignatures\(\)/);
   assert.match(wizard, /if \(online\) queuePageSync\(\[\], true\);/);
   assert.match(wizard, /Connectivity is the retry trigger/);
-  assert.match(wizard, /import \{ processActivityFormCompletionQueue \} from '@\/lib\/activity-form-completion'/);
+  assert.match(wizard, /import\s*\{[^}]*processActivityFormCompletionQueue[^}]*\}\s*from '@\/lib\/activity-form-completion'/s);
   assert.match(wizard, /Ready\. Tap Done once\. TLink will finish the upload and submission automatically in the background\./);
   assert.doesNotMatch(wizard, /Upload \{cache\.pending\.length\} pending files/);
   assert.doesNotMatch(wizard, /Submit completed form to Creditex/);

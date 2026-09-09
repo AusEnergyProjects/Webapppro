@@ -14,6 +14,10 @@ import {
 import { creditTotals, invoiceBalance } from "@/lib/trade-invoice-balance";
 import { australiaLocalDateTime } from "@/lib/trade-schedule";
 import { invoiceInputAppliesDiscount, lowersAuthoritativeTotal } from "@/lib/trade-discount-permissions";
+import {
+  buildQuoteInvoiceTemplate,
+  type QuoteInvoiceTemplate,
+} from "@/lib/trade-quote-invoice-template";
 
 export const runtime = "edge";
 
@@ -43,6 +47,8 @@ function invoiceError(error: unknown) {
   if (code === "QUICK_INVOICE_NOT_FOUND") return adminJson({ ok: false, error: "Quick invoice not found." }, 404);
   if (code === "QUICK_INVOICE_EXISTS") return adminJson({ ok: false, error: "This job already has a TLink invoice." }, 409);
   if (code === "ACCEPTED_INVOICE_EXISTS") return adminJson({ ok: false, error: "This job already has the invoice created from its accepted quote." }, 409);
+  if (code === "QUOTE_INVOICE_SOURCE_UNAVAILABLE") return adminJson({ ok: false, error: "The latest quote cannot be converted automatically. Start a blank invoice instead." }, 409);
+  if (code === "QUOTE_INVOICE_SOURCE_CHANGED") return adminJson({ ok: false, error: "The quote changed. Reopen the invoice to use its latest version." }, 409);
   if (code === "QUICK_INVOICE_JOB_NOT_FOUND") return adminJson({ ok: false, error: "Choose an active direct-customer job." }, 404);
   if (code === "QUICK_INVOICE_RECIPIENT_INVALID") return adminJson({ ok: false, error: "Add a valid email to the customer record before sending this invoice." }, 409);
   if (code === "waiting_for_channel") return adminJson({ ok: false, error: "Email delivery is not active yet. The invoice remains saved in the job." }, 503);
@@ -95,6 +101,62 @@ async function acceptedInvoiceRow(ownerUid: string, workOrderId: string) {
     LIMIT 1`)
     .bind(ownerUid, workOrderId)
     .first<Row>();
+}
+
+async function latestQuoteInvoiceTemplate(ownerUid: string, workOrderId: string) {
+  const db = getD1();
+  const source = await db.prepare(`SELECT
+      quote.id quote_id, quote.quote_number,
+      version.id quote_version_id, version.version_number,
+      version.status, version.terms
+    FROM trade_crm_quotes quote
+    JOIN trade_crm_quote_versions version
+      ON version.quote_id = quote.id
+      AND version.firebase_uid = quote.firebase_uid
+      AND version.version_number = quote.current_version_number
+    WHERE quote.work_order_id = ? AND quote.firebase_uid = ?
+    LIMIT 1`)
+    .bind(workOrderId, ownerUid)
+    .first<Row>();
+  if (!source) return null;
+  const [itemRows, choiceRows] = await Promise.all([
+    db.prepare(`SELECT position, quote_choice_id, description, quantity_milli,
+        tax_code, subtotal_cents, tax_cents, total_cents
+      FROM trade_crm_quote_items
+      WHERE quote_version_id = ? AND firebase_uid = ?
+      ORDER BY position`)
+      .bind(source.quote_version_id, ownerUid)
+      .all<Row>(),
+    db.prepare(`SELECT id, position, choice_kind, group_key, recommended
+      FROM trade_crm_quote_choices
+      WHERE quote_version_id = ? AND firebase_uid = ?
+      ORDER BY position`)
+      .bind(source.quote_version_id, ownerUid)
+      .all<Row>(),
+  ]);
+  return buildQuoteInvoiceTemplate({
+    quoteId: String(source.quote_id),
+    quoteVersionId: String(source.quote_version_id),
+    quoteNumber: String(source.quote_number),
+    versionNumber: Number(source.version_number),
+    status: String(source.status),
+    terms: String(source.terms || ""),
+  }, itemRows.results.map((item) => ({
+    position: Number(item.position),
+    quoteChoiceId: String(item.quote_choice_id || ""),
+    description: String(item.description || ""),
+    quantityMilli: Number(item.quantity_milli),
+    taxCode: String(item.tax_code),
+    subtotalCents: Number(item.subtotal_cents),
+    taxCents: Number(item.tax_cents),
+    totalCents: Number(item.total_cents),
+  })), choiceRows.results.map((choice) => ({
+    id: String(choice.id),
+    position: Number(choice.position),
+    kind: String(choice.choice_kind),
+    groupKey: String(choice.group_key),
+    recommended: Boolean(choice.recommended),
+  })));
 }
 
 function acceptedInvoicePayload(row: Row) {
@@ -240,9 +302,13 @@ export async function GET(request: Request) {
     const acceptedRow = row
       ? null
       : await acceptedInvoiceRow(access.ownerUid, workOrderId);
+    const quoteTemplate = row || acceptedRow
+      ? null
+      : await latestQuoteInvoiceTemplate(access.ownerUid, workOrderId);
     return adminJson({ ok: true, access: invoiceAccessPayload(access),
       invoice: row ? await completePayload(row) : null,
-      acceptedInvoice: acceptedRow ? acceptedInvoicePayload(acceptedRow) : null });
+      acceptedInvoice: acceptedRow ? acceptedInvoicePayload(acceptedRow) : null,
+      quoteTemplate });
   } catch (error) { return invoiceError(error); }
 }
 
@@ -261,7 +327,7 @@ export async function POST(request: Request) {
       "NSW",
       new Date(now),
     ).slice(0, 10);
-    if (action === "create_draft") {
+    if (action === "create_draft" || action === "create_from_quote") {
       const workOrderId = cleanAdminText(body.workOrderId, 180);
       const job = await db.prepare(`SELECT
           work.id,
@@ -290,10 +356,20 @@ export async function POST(request: Request) {
       if (await invoiceRow(access.ownerUid, "work_order_id", workOrderId)) {
         throw new Error("QUICK_INVOICE_EXISTS");
       }
-      if (!access.isOwner && !access.canApplyDiscounts && invoiceInputAppliesDiscount(body.discountCents)) {
+      let quoteTemplate: QuoteInvoiceTemplate | null = null;
+      if (action === "create_from_quote") {
+        quoteTemplate = await latestQuoteInvoiceTemplate(access.ownerUid, workOrderId);
+        if (!quoteTemplate) throw new Error("QUOTE_INVOICE_SOURCE_UNAVAILABLE");
+        if (cleanAdminText(body.quoteVersionId, 180) !== quoteTemplate.quoteVersionId) {
+          throw new Error("QUOTE_INVOICE_SOURCE_CHANGED");
+        }
+      }
+      if (!quoteTemplate && !access.isOwner && !access.canApplyDiscounts && invoiceInputAppliesDiscount(body.discountCents)) {
         throw new Error("DISCOUNT_REQUIRED");
       }
-      const draft = await resolveQuickInvoiceDraft(access.ownerUid, body.lines, body.discountCents,
+      const draft = await resolveQuickInvoiceDraft(access.ownerUid,
+        quoteTemplate?.lines || body.lines,
+        quoteTemplate?.discountCents ?? body.discountCents,
         access.isOwner || access.canViewPriceBook);
       const dueAt = cleanDate(body.dueAt);
       if (dueAt < australiaSydneyToday) throw new Error("INVALID_QUICK_INVOICE");
@@ -374,7 +450,9 @@ export async function POST(request: Request) {
               crypto.randomUUID(),
               workOrderId,
               access.ownerUid,
-              `${invoiceNumber} draft created from the saved job.`,
+              quoteTemplate
+                ? `${invoiceNumber} draft created from ${quoteTemplate.quoteNumber} version ${quoteTemplate.versionNumber}.`
+                : `${invoiceNumber} draft created from the saved job.`,
               now,
               invoiceId,
               access.ownerUid,

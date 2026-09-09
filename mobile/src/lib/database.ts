@@ -473,6 +473,26 @@ export async function queueAction(action: OfflineAction) {
         VALUES (?, ?, ?, ?, 'queued', ?, ?)`,
       action.clientActionId, action.workOrderId, lane, JSON.stringify(queuedAction), now, now);
     }
+  } else if (action.type === 'advance_field_job' && action.transition === 'finish') {
+    await db.runAsync(`DELETE FROM action_queue
+      WHERE work_order_id = ? AND field_lane = ? AND status IN ('conflict', 'rejected')
+        AND json_valid(payload)
+        AND json_extract(payload, '$.type') = 'advance_field_job'
+        AND json_extract(payload, '$.transition') = 'finish'`, action.workOrderId, lane);
+    const candidates = await db.getAllAsync<{ payload: string }>(
+      "SELECT payload FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
+      action.workOrderId,
+      lane,
+    );
+    const existing = candidates.map((candidate) => JSON.parse(candidate.payload) as OfflineAction)
+      .find((candidate) => candidate.type === 'advance_field_job' && candidate.transition === 'finish');
+    if (existing) {
+      queuedAction = existing;
+    } else {
+      await db.runAsync(`INSERT INTO action_queue (id, work_order_id, field_lane, payload, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'queued', ?, ?)`,
+      action.clientActionId, action.workOrderId, lane, JSON.stringify(queuedAction), now, now);
+    }
   } else {
     await db.runAsync(`INSERT INTO action_queue (id, work_order_id, field_lane, payload, status, created_at, updated_at)
       VALUES (?, ?, ?, ?, 'queued', ?, ?)`,
@@ -488,8 +508,12 @@ export async function queueAction(action: OfflineAction) {
   if (action.type === 'set_job_stage' && action.stage) job.stage = action.stage;
   if (action.type === 'advance_field_job' && action.transition) {
     const states = { start_travel: 'en_route', arrive: 'arrived', start_work: 'in_progress', finish: 'completed' } as const;
-    if (action.transition !== 'finish') job.appointmentStatus = states[action.transition];
+    job.appointmentStatus = states[action.transition];
     if (action.transition === 'start_work') job.stage = 'in_progress';
+    if (action.transition === 'finish') {
+      job.stage = 'completed';
+      job.lifecycleStatus = 'completed';
+    }
   }
   if (action.type === 'set_task_status' && action.taskId && action.status) {
     const task = job.tasks.find((item) => item.id === action.taskId);
@@ -806,15 +830,15 @@ export async function queuedActions(mode: FieldAccessMode, limit = 50) {
 
 export async function resolveAction(
   id: string,
-  result: { status: string; code?: string; error?: string; retryAfterSeconds?: number },
+  result: { status: string; code?: string; error?: string; retryAfterSeconds?: number; currentRevision?: number },
 ) {
   const db = await getDatabase();
   const now = new Date().toISOString();
+  const row = await db.getFirstAsync<{ payload: string }>(
+    'SELECT payload FROM action_queue WHERE id = ?',
+    id,
+  );
   if (result.status === 'applied' || result.status === 'duplicate') {
-    const row = await db.getFirstAsync<{ payload: string }>(
-      'SELECT payload FROM action_queue WHERE id = ?',
-      id,
-    );
     const uploadIds = row ? workPackUploadIds(JSON.parse(row.payload) as OfflineAction) : [];
     await db.withTransactionAsync(async () => {
       for (const clientUploadId of uploadIds) {
@@ -826,6 +850,19 @@ export async function resolveAction(
       await db.runAsync('DELETE FROM action_queue WHERE id = ?', id);
     });
     return;
+  }
+  if (result.status === 'conflict' && result.code === 'REVISION_CONFLICT' && row) {
+    const action = JSON.parse(row.payload) as OfflineAction;
+    const currentRevision = Number(result.currentRevision);
+    if (action.type === 'advance_field_job' && action.transition === 'finish'
+      && Number.isInteger(currentRevision) && currentRevision >= 1) {
+      const clientActionId = `act-${Crypto.randomUUID()}`;
+      const rebased = { ...action, clientActionId, baseRevision: currentRevision };
+      await db.runAsync(`UPDATE action_queue SET id = ?, payload = ?, status = 'queued', attempts = attempts + 1,
+        retry_after = '', error_code = '', error_message = '', updated_at = ? WHERE id = ?`,
+      clientActionId, JSON.stringify(rebased), now, id);
+      return;
+    }
   }
   const status = result.status === 'conflict' ? 'conflict' : result.status === 'rejected' ? 'rejected' : 'retry';
   const retryAfter = result.retryAfterSeconds
@@ -1076,6 +1113,29 @@ export async function listActivityFormCacheSettings() {
   return db.getAllAsync<{ key: string; value: string }>(
     "SELECT key, value FROM settings WHERE key LIKE 'activity-form:%' ORDER BY key",
   );
+}
+export type JobCompletionQueueState = {
+  finish: null | { status: string; errorCode: string; errorMessage: string };
+};
+
+export async function getJobCompletionQueueState(workOrderId: string): Promise<JobCompletionQueueState> {
+  const db = await getDatabase();
+  const finish = await db.getFirstAsync<{ status: string; error_code: string; error_message: string }>(`SELECT status, error_code, error_message
+    FROM action_queue
+    WHERE work_order_id = ?
+      AND json_valid(payload)
+      AND json_extract(payload, '$.type') = 'advance_field_job'
+      AND json_extract(payload, '$.transition') = 'finish'
+    ORDER BY CASE status WHEN 'queued' THEN 0 WHEN 'retry' THEN 1 WHEN 'conflict' THEN 2 ELSE 3 END,
+      updated_at DESC
+    LIMIT 1`, workOrderId);
+  return {
+    finish: finish ? {
+      status: finish.status,
+      errorCode: finish.error_code,
+      errorMessage: finish.error_message,
+    } : null,
+  };
 }
 
 export async function prepareLocalDataOwner(firebaseUid: string) {

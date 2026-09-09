@@ -373,12 +373,8 @@ test("every direct work-pack read boundary installs guards before its first quer
     "await ensureCreditexWorkPackSchemaGuards(database)",
     "database.prepare",
   );
-  assertGuardBeforeQuery(
-    sync,
-    "fieldFinishState",
-    "await ensureCreditexWorkPackSchemaGuards(db)",
-    "db.prepare",
-  );
+  const finishState = functionSlice(sync, "fieldFinishState");
+  assert.doesNotMatch(finishState, /CreditexWorkPack|COMPLIANCE_WORK_PACK|GOVERNED_EVIDENCE/);
   assertGuardBeforeQuery(
     custody,
     "captureOfficialSourceArtifact",

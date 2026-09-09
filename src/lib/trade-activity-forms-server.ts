@@ -396,6 +396,39 @@ function answersForUpgradedForm(form: ActivityForm, previous: ActivityAnswers) {
   return answers;
 }
 
+function activityAnswerValidationError(form: ActivityForm, raw: unknown, caught: unknown) {
+  if (!(caught instanceof Error) || !caught.message.startsWith("INVALID_ACTIVITY_")
+    || !raw || typeof raw !== "object" || Array.isArray(raw)) return caught;
+  const entries = Object.entries(raw as Row);
+  const repeats: ActivityAnswers = {};
+  for (const [key, value] of [
+    ...entries.filter(([key]) => key.startsWith("$repeat.")),
+    ...entries.filter(([key]) => !key.startsWith("$repeat.")),
+  ]) {
+    const candidate = key.startsWith("$repeat.") ? { ...repeats, [key]: value } : { ...repeats, [key]: value };
+    try {
+      normaliseActivityAnswers(form, candidate);
+      if (key.startsWith("$repeat.")) repeats[key] = value as ActivityAnswers[string];
+    } catch (itemError) {
+      if (!(itemError instanceof Error) || itemError.message !== caught.message) continue;
+      const field = form.fields.find((item) => item.key === activityBaseFieldKey(key));
+      return Object.assign(new Error(caught.message), {
+        fieldKey: key,
+        fieldLabel: field?.label || key.replace(/^\$repeat\./, "number of ").replace(/[._\[\]-]+/g, " "),
+      });
+    }
+  }
+  return caught;
+}
+
+function normaliseActivityAnswersForSave(form: ActivityForm, raw: unknown) {
+  try {
+    return normaliseActivityAnswers(form, raw);
+  } catch (caught) {
+    throw activityAnswerValidationError(form, raw, caught);
+  }
+}
+
 async function latestActivityMaster(organisationId: string, baseline: ActivityForm) {
   const row = await getD1().prepare(`SELECT form_json, form_sha256 FROM trade_activity_field_masters
     WHERE organisation_id = ? AND activity_template_id = ? AND variant_id = ? ORDER BY version DESC LIMIT 1`)
@@ -672,9 +705,9 @@ export async function saveActivityAnswers(access: TeamAccess, id: string, expect
     const previous = await loadActivityRecord(access, id, true);
     assertActivityEditable(previous, baseAnswers === undefined ? expectedRevision : previous.revision);
     const derived = new Set(previous.form.fields.filter((field) => field.presentation === "derived").map((field) => field.key));
-    const local = normaliseActivityAnswers(previous.form, answers);
+    const local = normaliseActivityAnswersForSave(previous.form, answers);
     const nextAnswers = baseAnswers === undefined ? local : mergeActivityAnswers(
-      normaliseActivityAnswers(previous.form, baseAnswers), local, previous.answers, derived,
+      normaliseActivityAnswersForSave(previous.form, baseAnswers), local, previous.answers, derived,
     ).merged;
     for (const key of derived) {
       delete nextAnswers[key];
@@ -718,7 +751,12 @@ export async function changeActivityVariant(access: TeamAccess, id: string, expe
 export async function signActivityDeclaration(access: TeamAccess, id: string, body: Row) {
   const previous = await loadActivityRecord(access, id, true);
   const declaration = previous.form.declarations.find((item) => item.key === body.declarationKey);
-  if (!declaration || !activityConditionMet(declaration.condition, previous.answers)) throw new Error("ACTIVITY_DECLARATION_INVALID");
+  if (!declaration || !activityConditionMet(declaration.condition, previous.answers)) {
+    throw Object.assign(new Error("ACTIVITY_DECLARATION_INVALID"), {
+      fieldKey: string(body.declarationKey),
+      fieldLabel: declaration?.title || "signature declaration",
+    });
+  }
   // A background save can advance the record without changing anything signed.
   // Bind to the displayed content, allowing harmless revision changes automatically.
   assertActivityEditable(previous, body.expectedScope === undefined ? body.expectedRevision : previous.revision);
@@ -739,10 +777,17 @@ export async function signActivityDeclaration(access: TeamAccess, id: string, bo
     && item.declarationSha256 === activityHash(declarationText) && item.scopeSha256 === signingScope)) {
     return previous;
   }
+  let strokes;
+  try {
+    strokes = validateActivityStrokes(body.strokes);
+  } catch (caught) {
+    if (!(caught instanceof Error) || !["ACTIVITY_SIGNATURE_REQUIRED", "INVALID_ACTIVITY_SIGNATURE"].includes(caught.message)) throw caught;
+    throw Object.assign(new Error(caught.message), { fieldKey: declaration.key, fieldLabel: declaration.title });
+  }
   const next = { ...previous, signatures: [...previous.signatures, {
     id: crypto.randomUUID(), declarationKey: declaration.key, signerName, role: declaration.role,
     phase: declaration.phase, declarationText, declarationSha256: activityHash(declarationText), scopeSha256: signingScope,
-    signedAt: iso(), actorUid: access.actorUid, strokes: validateActivityStrokes(body.strokes),
+    signedAt: iso(), actorUid: access.actorUid, strokes,
   }] };
   return saveRecord(access, previous, next, undefined, declaration.role === "technician" ? access.memberId : "");
 }

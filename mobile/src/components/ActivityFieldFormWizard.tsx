@@ -13,7 +13,7 @@ import { FieldSelect } from '@/components/field-select';
 import { ActivityAssignmentReview } from '@/components/ActivityAssignmentReview';
 import { SignatureCapture } from '@/components/SignatureCapture';
 import { apiRequest, ApiError } from '@/lib/api';
-import { processActivityFormCompletionQueue } from '@/lib/activity-form-completion';
+import { activitySignatureStrokesAreValid, processActivityFormCompletionQueue, sanitiseActivityAnswers } from '@/lib/activity-form-completion';
 import { getSetting, setSetting } from '@/lib/database';
 import { API_BASE_URL } from '@/lib/config';
 import { observeLocation } from '@/lib/evidence';
@@ -101,7 +101,8 @@ function derivedAnswerKeys(record: Presented) {
 }
 
 function reconcileAnswers(base: ActivityAnswers, local: ActivityAnswers, fresh: Presented) {
-  return mergeActivityAnswers(base, local, fresh.answers, derivedAnswerKeys(fresh));
+  const reconciled = mergeActivityAnswers(base, local, fresh.answers, derivedAnswerKeys(fresh));
+  return { ...reconciled, merged: sanitiseActivityAnswers(fresh.form, reconciled.merged) };
 }
 
 function signingUserContentChanged(previous: Presented, fresh: Presented, phase: 'before' | 'after') {
@@ -341,7 +342,8 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   }
   async function acceptResponse(snapshot: Cache, nextRecord: Presented) {
     const current = cacheRef.current?.record.id === snapshot.record.id ? cacheRef.current : snapshot;
-    const answers = mergeActivityAnswers(snapshot.answers, current.answers, nextRecord.answers, derivedAnswerKeys(nextRecord)).merged;
+    const answers = sanitiseActivityAnswers(nextRecord.form,
+      mergeActivityAnswers(snapshot.answers, current.answers, nextRecord.answers, derivedAnswerKeys(nextRecord)).merged);
     const next: Cache = {
       ...current,
       record: nextRecord,
@@ -670,6 +672,9 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       const signerName = step.declaration.role === 'technician' ? latest.record.signerDefaults.technician : signature.signerName.trim();
       if (!signerName) return setError('Add the signer name before signing.');
       if (!signature.strokes.length) return setError('Draw the signature before saving it.');
+      if (!activitySignatureStrokesAreValid(signature.strokes)) {
+        return setError('Make the signature span more of the box before saving it.');
+      }
       const declarations = step.legacyStepKeys.flatMap((key) => {
         const declaration = latest.record.form.declarations.find((item) => item.key === key);
         return declaration ? [declaration] : [];

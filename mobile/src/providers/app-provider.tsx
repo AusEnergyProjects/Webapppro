@@ -61,6 +61,7 @@ type AppValue = {
   syncNow: () => Promise<void>;
   findJob: (id: string) => Promise<FieldJob | null>;
   saveAction: (action: Omit<OfflineAction, 'clientActionId'>) => Promise<void>;
+  saveActionInBackground: (action: Omit<OfflineAction, 'clientActionId'>) => Promise<void>;
   saveUpload: (input: UploadInput) => Promise<void>;
   pinSignIn: (displayName: string, pin: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -270,6 +271,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (sync.online) await syncNow();
   }, [refreshLocal, sync.online, syncNow]);
 
+  const saveActionInBackground = useCallback(async (action: Omit<OfflineAction, 'clientActionId'>) => {
+    await queueAction({ ...action, clientActionId: `act-${Crypto.randomUUID()}` });
+    await refreshLocal();
+    if (sync.online) void syncNow();
+  }, [refreshLocal, sync.online, syncNow]);
+
   const saveUpload = useCallback(async (input: UploadInput) => {
     await addUpload({
       id: `upload-${Crypto.randomUUID()}`,
@@ -359,10 +366,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     syncNow,
     findJob: getJob,
     saveAction,
+    saveActionInBackground,
     saveUpload,
     pinSignIn,
     signOut,
-  }), [user, loading, access, jobs, sync, refreshLocal, syncNow, saveAction, saveUpload, pinSignIn, signOut]);
+  }), [user, loading, access, jobs, sync, refreshLocal, syncNow, saveAction, saveActionInBackground, saveUpload, pinSignIn, signOut]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

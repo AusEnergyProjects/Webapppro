@@ -25,6 +25,20 @@ function firstMatchIndex(source, pattern, label) {
   return match.index;
 }
 
+function loadFunctions(source, names, dependencies = {}) {
+  const sourceFile = ts.createSourceFile('subject.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const declarations = sourceFile.statements.filter((statement) =>
+    ts.isFunctionDeclaration(statement) && statement.name && names.includes(statement.name.text));
+  assert.deepEqual(declarations.map((statement) => statement.name.text), names);
+  const output = ts.transpileModule(declarations.map((statement) => statement.getFullText(sourceFile)).join('\n'), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
+  }).outputText;
+  const dependencyNames = Object.keys(dependencies);
+  return new Function('exports', ...dependencyNames, `${output}\nreturn { ${names.join(', ')} };`)(
+    {}, ...Object.values(dependencies),
+  );
+}
+
 const completion = read('../src/lib/activity-form-completion.ts');
 const database = read('../src/lib/database.ts');
 const sync = read('../src/lib/sync.ts');
@@ -119,19 +133,64 @@ test('signature retries refuse to apply a stale declaration scope', () => {
     'scope retry must compare the current bound declaration with the retained signed text');
 });
 
-test('completion intent survives failure and clears only after confirmed success', () => {
+test('completion intent retries transport failures, stops invalid-state loops, and clears after confirmed success', () => {
   const worker = sourceFunction(completion, 'completeCache');
   const catchIndex = firstMatchIndex(worker, /\bcatch\s*\(/, 'completion failure handler');
-  const retainedIndex = firstMatchIndex(worker.slice(catchIndex), /finishRequested\s*:\s*true/,
-    'retained completion intent') + catchIndex;
+  const classificationIndex = firstMatchIndex(worker.slice(catchIndex), /completionFailureNeedsAttention\s*\(/,
+    'completion failure classification') + catchIndex;
+  const retainedIndex = firstMatchIndex(worker.slice(catchIndex), /finishRequested\s*:\s*!needsAttention/,
+    'retryable-only completion intent') + catchIndex;
   const submittedIndex = firstMatchIndex(worker, /status\s*===\s*['"]submitted_for_creditex_review['"]/,
     'confirmed submitted state');
   const clearedIndex = firstMatchIndex(worker.slice(submittedIndex), /finishRequested\s*:\s*false/,
     'cleared completion intent') + submittedIndex;
 
-  assert.ok(retainedIndex > catchIndex);
+  assert.ok(classificationIndex > catchIndex && retainedIndex > classificationIndex);
   assert.ok(clearedIndex > submittedIndex,
     'finishRequested must clear only after the server confirms completion');
+});
+
+test('fresh-form reconciliation removes only answers the current form cannot save', () => {
+  const flowSource = read('../../src/lib/trade-activity-form-flow.ts');
+  const flowOutput = ts.transpileModule(flowSource, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  const flow = {};
+  new Function('exports', flowOutput)(flow);
+  const { sanitiseActivityAnswers } = loadFunctions(completion, ['sanitiseActivityAnswers'], {
+    activityBaseFieldKey: flow.activityBaseFieldKey,
+    activityRepeatCount: flow.activityRepeatCount,
+  });
+  const form = { fields: [
+    { key: 'scenario', type: 'select', options: ['current'], required: true },
+    { key: 'capacity', type: 'number', options: [], required: true },
+    { key: 'installedOn', type: 'date', options: [], required: true },
+    { key: 'model', type: 'text', options: [], required: true, repeatGroup: 'products[]' },
+    { key: 'photo', type: 'photo', options: [], required: true },
+  ] };
+
+  assert.deepEqual(sanitiseActivityAnswers(form, {
+    '$repeat.products[]': 1,
+    scenario: 'retired-option',
+    capacity: '3.5',
+    installedOn: '2026-09-09',
+    model: '  Emerald 270  ',
+    'model[1]': 'removed repeat',
+    photo: 'must-not-be-an-answer',
+    'retired.question': 'stale cache value',
+  }), {
+    '$repeat.products[]': 1,
+    installedOn: '2026-09-09',
+    model: 'Emerald 270',
+  });
+});
+
+test('mobile signature acceptance matches the server path-length boundary', () => {
+  const { activitySignatureStrokesAreValid } = loadFunctions(completion, ['activitySignatureStrokesAreValid']);
+  assert.equal(activitySignatureStrokesAreValid([{ points: [{ x: 0.2, y: 0.2 }, { x: 0.2, y: 0.2 }] }]), false);
+  assert.equal(activitySignatureStrokesAreValid([{ points: [
+    { x: 0.2, y: 0.2 }, { x: 0.26, y: 0.25 }, { x: 0.4, y: 0.4 },
+  ] }]), true);
 });
 
 test('pending and failed form completions remain visible in the ordinary sync counts', () => {

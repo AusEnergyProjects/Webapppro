@@ -33,7 +33,7 @@ test("accepted invoice lookup remains tenant and assigned-job scoped", () => {
 
 test("quick invoice creation rejects and transactionally guards accepted invoices", () => {
   assert.match(route, /ACCEPTED_INVOICE_EXISTS[\s\S]*409/);
-  const createBlock = route.slice(route.indexOf('if \(action === "create_draft"\)'.replaceAll("\\", "")), route.indexOf("const invoiceId = cleanAdminText(body.invoiceId"));
+  const createBlock = route.slice(route.indexOf('if (action === "create_draft" || action === "create_from_quote")'), route.indexOf("const invoiceId = cleanAdminText(body.invoiceId"));
   assert.match(createBlock, /if \(await acceptedInvoiceRow\(access\.ownerUid, workOrderId\)\)/);
   assert.match(createBlock, /INSERT INTO trade_crm_quick_invoices[\s\S]*WHERE NOT EXISTS \([\s\S]*FROM trade_crm_accepted_invoices accepted[\s\S]*accepted\.firebase_uid = \? AND accepted\.work_order_id = \?/);
   assert.match(createBlock, /const results = await db\.batch/);

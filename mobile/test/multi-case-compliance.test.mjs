@@ -215,13 +215,8 @@ test('governed evidence cannot be queued with a partial or unbound identifier se
   assert.match(jobScreen, /General job files remain separate and are not submitted against a governed requirement/);
 });
 
-test('field completion waits for required submissions, not later audit acceptance', () => {
-  assert.match(
-    jobScreen,
-    /requirement\.submittedCount < requirement\.minimumCount/,
-  );
-  assert.doesNotMatch(
-    jobScreen,
-    /governedEvidenceIncomplete[\s\S]{0,300}acceptedCount < requirement\.minimumCount/,
-  );
+test('field completion does not wait for Creditex evidence processing', () => {
+  const finishBlockers = sourceFunction(jobScreen, 'jobFinishLocalBlockers');
+  assert.doesNotMatch(finishBlockers, /submittedCount|acceptedCount|governedEvidence|complianceCase/);
+  assert.match(jobScreen, /TLink will finish uploads and server checks in the background/);
 });

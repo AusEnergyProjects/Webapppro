@@ -22,7 +22,6 @@ import { FieldCommercialWorkspace } from '@/components/field-commercial-workspac
 import { FieldFormLibrary } from '@/components/field-form-library';
 import { RentalInspectionWorkflow } from '@/components/rental-inspection-workflow';
 import { Screen } from '@/components/screen';
-import { activityIntentComplete } from '@/lib/activity-field-completion';
 import { firebaseAuth } from '@/lib/auth';
 import {
   apiRequest,
@@ -36,10 +35,12 @@ import {
 import {
   addUpload,
   discardUpload,
+  getJobCompletionQueueState,
   getSetting,
   listPendingWorkPackActions,
   listWorkPackProblems,
   setSetting,
+  type JobCompletionQueueState,
 } from '@/lib/database';
 import { APP_VERSION } from '@/lib/config';
 import { getDeviceId } from '@/lib/device';
@@ -105,8 +106,8 @@ type PendingWorkPackPhotoCapture = PendingPhotoCapture & {
 
 function readable(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
-function lifecycleLabel(job: FieldJob, activityRecords: readonly ActivityFieldSummary[] = []) {
-  const serverStatus = job.lifecycleStatus || job.stage;
+function lifecycleLabel(job: FieldJob, activityRecords: readonly ActivityFieldSummary[] = [], completionQueued = false) {
+  const serverStatus = completionQueued ? 'completed' : job.lifecycleStatus || job.stage;
   const effectiveStatus = ['unscheduled', 'scheduled', 'backlog', 'ready'].includes(serverStatus)
     && activityRecords.some((record) => record.status !== 'not_started' || record.lifecycleStatus === 'partial')
     ? 'partial'
@@ -115,6 +116,15 @@ function lifecycleLabel(job: FieldJob, activityRecords: readonly ActivityFieldSu
   return effectiveStatus === 'audited' && job.auditOutcome
     ? `${status} | ${readable(job.auditOutcome)}`
     : status;
+}
+
+function jobFinishLocalBlockers(job: FieldJob) {
+  return [
+    job.tasks.some((item) => item.status !== 'done') ? 'assigned tasks' : '',
+    job.forms.some((item) => item.status !== 'complete') ? 'required forms' : '',
+    job.rentalInspection && job.rentalInspection.status !== 'issued' ? 'the issued rental assessment report' : '',
+    job.openIssues ? 'open issues' : '',
+  ].filter(Boolean);
 }
 
 async function openVerifiedWorkPackDocument(
@@ -269,6 +279,7 @@ export default function JobScreen() {
   const {
     findJob,
     saveAction,
+    saveActionInBackground,
     saveUpload,
     sync,
     syncNow,
@@ -282,19 +293,24 @@ export default function JobScreen() {
   const [activeFormId, setActiveFormId] = useState<string | null>(() => openCommercial === 'quote' || openCommercial === 'invoice' ? openCommercial : null);
   const [activityRecords, setActivityRecords] = useState<ActivityFieldSummary[]>([]);
   const [activityLoadError, setActivityLoadError] = useState('');
+  const [completionQueue, setCompletionQueue] = useState<JobCompletionQueueState>({
+    finish: null,
+  });
   const recoveringPhoto = useRef(false);
   const launchingCamera = useRef(false);
 
   const load = useCallback(async () => {
     const workOrderId = String(id);
-    const [nextJob, problems, pendingActions] = await Promise.all([
+    const [nextJob, problems, pendingActions, queuedCompletion] = await Promise.all([
       findJob(workOrderId),
       listWorkPackProblems(workOrderId),
       listPendingWorkPackActions(workOrderId),
+      getJobCompletionQueueState(workOrderId),
     ]);
     setJob(nextJob);
     setWorkPackProblems(problems);
     setPendingWorkPackActions(pendingActions);
+    setCompletionQueue(queuedCompletion);
     if (nextJob?.complianceIntents?.length && nextJob.fieldLane !== 'creditex_manual') {
       try {
         const response = await apiRequest<{ records: ActivityFieldSummary[] }>("/api/trade-activity-forms?workOrderId=" + encodeURIComponent(workOrderId));
@@ -453,30 +469,18 @@ export default function JobScreen() {
   async function advanceFieldJob() {
     if (!job || !completableAppointmentStatuses.has(job.appointmentStatus)) return;
     const action = { transition: 'finish' as const };
-    const governedEvidenceIncomplete = complianceCasesForJob(job).some(
-      (complianceCase) => !(job.complianceIntents || []).some((intent) => intent.complianceCaseId === complianceCase.caseId && activityRecords.some((record) => record.intentId === intent.id && record.status === 'submitted_for_creditex_review')) && complianceCase.requirements.some(
-        (requirement) => requirement.submittedCount < requirement.minimumCount,
-      ),
-    );
-    const complianceWorkPackMissing = (job.complianceIntents || []).some(
-      (intent) => !activityIntentComplete(intent.id, activityRecords, job.activityWorkPacks || []),
-    );
-    const complianceWorkPackIncomplete = (job.activityWorkPacks || []).some(
-      (pack) => !activityRecords.some((record) => record.intentId === pack.instance.complianceIntentId && record.status === 'submitted_for_creditex_review') && (pack.instance.status !== 'completed' || !pack.finalRecord),
-    );
-    const localBlockers = [
-      job.tasks.some((item) => item.status !== 'done') ? 'assigned tasks' : '',
-      job.forms.some((item) => item.status !== 'complete') ? 'required forms' : '',
-      complianceWorkPackMissing || complianceWorkPackIncomplete ? 'compliance work packs' : '',
-      governedEvidenceIncomplete ? 'governed evidence' : '',
-      job.rentalInspection && job.rentalInspection.status !== 'issued' ? 'the issued rental assessment report' : '',
-      job.openIssues ? 'open issues' : '',
-    ].filter(Boolean);
-    if (action.transition === 'finish' && !sync.online) return Alert.alert('Reconnect before finishing', 'Finish must check current forms, evidence, issues and unsynchronised changes. Other field updates remain safely queued offline.');
-    if (action.transition === 'finish' && localBlockers.length) return Alert.alert('Finish the required work', `Complete ${localBlockers.join(', ')} first.`);
+    const localBlockers = jobFinishLocalBlockers(job);
+    if (localBlockers.length) return Alert.alert('Finish the required work', `Complete ${localBlockers.join(', ')} first.`);
     setBusy(`field:${action.transition}`);
-    try { await saveAction({ type: 'advance_field_job', workOrderId: job.id, baseRevision: job.revision, transition: action.transition }); await load(); }
-    catch { Alert.alert('Action required', 'The field action remains saved on this device. Open Sync to review it or try again when the connection is stable.'); }
+    try {
+      await saveActionInBackground({ type: 'advance_field_job', workOrderId: job.id, baseRevision: job.revision, transition: action.transition });
+      setCompletionQueue((current) => ({
+        ...current,
+        finish: { status: 'queued', errorCode: '', errorMessage: '' },
+      }));
+    } catch {
+      Alert.alert('Could not save completion', 'TLink could not retain the job completion on this device. Tap Complete job again.');
+    }
     finally { setBusy(''); }
   }
 
@@ -1260,6 +1264,11 @@ export default function JobScreen() {
   const complianceIntents = job.complianceIntents || [];
   const complianceCases = complianceCasesForJob(job);
   const canCompleteJob = completableAppointmentStatuses.has(job.appointmentStatus) && !['completed', 'cancelled'].includes(job.stage);
+  const finishQueued = completionQueue.finish?.status === 'queued' || completionQueue.finish?.status === 'retry';
+  const finishProblem = completionQueue.finish && !finishQueued
+    ? completionQueue.finish.errorMessage || 'TLink could not complete this job. Check the remaining work and try again.'
+    : '';
+  const finishBlockers = jobFinishLocalBlockers(job);
   const syncLabel = !sync.online ? 'Offline' : sync.conflicts ? 'Action required' : sync.running || sync.queuedActions || sync.queuedUploads ? 'Syncing' : 'Saved';
   const creditexManual = job.fieldLane === 'creditex_manual';
   const syntheticManual = job.recordMode === 'synthetic_test' && creditexManual;
@@ -1270,7 +1279,7 @@ export default function JobScreen() {
   return (
     <Screen>
       <View style={styles.hero}>
-        <View style={styles.badges}><View style={styles.jobNumber}><Text style={styles.jobNumberText}>{job.workNumber}</Text></View><View style={styles.stage}><Text style={styles.stageText}>{lifecycleLabel(job, activityRecords)}</Text></View>{syntheticManual ? <View style={styles.syntheticBadge}><Text style={styles.syntheticBadgeText}>SYNTHETIC TEST ONLY</Text></View> : null}</View>
+        <View style={styles.badges}><View style={styles.jobNumber}><Text style={styles.jobNumberText}>{job.workNumber}</Text></View><View style={styles.stage}><Text style={styles.stageText}>{lifecycleLabel(job, activityRecords, finishQueued)}</Text></View>{syntheticManual ? <View style={styles.syntheticBadge}><Text style={styles.syntheticBadgeText}>SYNTHETIC TEST ONLY</Text></View> : null}</View>
         <Text style={styles.title}>{job.title || 'Field job'}</Text>
         <Text style={styles.body}>{job.customerName} | {job.protectedJob ? job.siteArea || 'Protected service area' : job.serviceAddress || job.siteArea || 'Service site not added'}</Text>
         {job.appointmentStartsAt ? <Text style={styles.meta}>{new Date(job.appointmentStartsAt).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}</Text> : null}
@@ -1392,8 +1401,13 @@ export default function JobScreen() {
       {!activeFormId && !creditexManual ? <View style={styles.card}>
         <Text style={styles.cardTitle}>Complete job</Text>
         {job.openIssues ? <Text style={styles.warningText}>{job.openIssues} open issue(s) need attention before completion.</Text> : null}
-        <FieldButton disabled={!canCompleteJob || Boolean(busy) || !sync.online || sync.running || Boolean(sync.queuedActions || sync.queuedUploads || sync.conflicts) || job.tasks.some((task) => task.status !== 'done') || fieldForms.some((form) => form.status !== 'complete') || Boolean(job.rentalInspection && job.rentalInspection.status !== 'issued') || complianceIntents.some((intent) => !activityIntentComplete(intent.id, activityRecords, job.activityWorkPacks || [])) || Boolean(job.openIssues)} loading={busy === 'field:finish'} onPress={() => void advanceFieldJob()}>{job.stage === 'completed' ? 'Job complete' : 'Complete job'}</FieldButton>
-        <Text style={styles.meta}>{complianceIntents.length ? 'Complete the required work, forms, evidence and signatures, then sync. Creditex handles compliance review and certificate creation separately.' : 'Available when required work is complete and safely synced. The server checks the latest records before completing this job.'}</Text>
+        {finishProblem ? <Text style={styles.warningText}>{finishProblem}</Text> : null}
+        <FieldButton disabled={!canCompleteJob || Boolean(busy) || finishQueued || finishBlockers.length > 0} loading={busy === 'field:finish'} onPress={() => void advanceFieldJob()}>{job.stage === 'completed' ? 'Job complete' : finishQueued ? 'Completion saved' : 'Complete job'}</FieldButton>
+        <Text style={styles.meta}>{finishQueued
+          ? 'Done. TLink is finishing the saved Creditex files and closing this job in the background.'
+          : finishBlockers.length
+            ? `Complete ${finishBlockers.join(', ')} first.`
+            : 'Tap once to save completion on this phone. TLink will finish uploads and server checks in the background.'}</Text>
       </View> : null}
 
       <View style={styles.syncLine}><MaterialCommunityIcons name={sync.online ? sync.conflicts ? 'cloud-alert-outline' : 'cloud-check-outline' : 'cloud-off-outline'} size={20} color={colours.green} /><Text style={styles.body}>{syncLabel}</Text></View>

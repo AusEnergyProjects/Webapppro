@@ -18,7 +18,8 @@ type PriceItem = { id: string; name: string; sellPriceCentsExGst: number; taxCod
 type QuoteResult = { quote: Quote | null; authorisedEmails?: string[]; priceBookItems?: PriceItem[]; draftVersionId?: string; business?: { quoteDefaultTerms: string }; access?: { canManageQuotes: boolean; canSendQuotes: boolean }; delivery?: { status?: string; message?: string } };
 type InvoiceLine = { description: string; unitPriceCentsExGst: number; taxCode: string; priceBookItemId: string };
 type Invoice = { id: string; invoiceNumber: string; status: string; revision: number; lines: InvoiceLine[]; discountCents: number; dueAt: string; totalCents: number; deliveryStatus: string; deliveryEmail: string; canCorrect: boolean; canDownloadPdf: boolean };
-type InvoiceResult = { invoice: Invoice | null; acceptedInvoice: { invoiceNumber: string; status: string; totalCents: number; issueBlockerCode?: string } | null; access?: { canManageInvoices: boolean; canViewPriceBook: boolean } };
+type InvoiceQuoteTemplate = { quoteId: string; quoteVersionId: string; quoteNumber: string; versionNumber: number; status: string; terms: string; lines: InvoiceLine[]; discountCents: number; totalCents: number };
+type InvoiceResult = { invoice: Invoice | null; acceptedInvoice: { invoiceNumber: string; status: string; totalCents: number; issueBlockerCode?: string } | null; quoteTemplate?: InvoiceQuoteTemplate | null; access?: { canManageInvoices: boolean; canViewPriceBook: boolean } };
 const blank = (): Line => ({ description: '', quantity: '1', unitPrice: '', taxCode: 'gst', lineType: 'product', sectionHeading: 'Included work' });
 const editLine = (line: SavedLine): Line => ({ ...line, quantity: String(line.quantityMilli / 1000), unitPrice: persistedOverallDiscountUnitPrice(line) });
 const money = (value: number) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(value / 100);
@@ -63,6 +64,9 @@ function CommercialEditor({ workOrderId, kind, onBack, online, permissions }: {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [acceptedInvoice, setAcceptedInvoice] = useState<InvoiceResult['acceptedInvoice']>(null);
+  const [invoiceQuoteTemplate, setInvoiceQuoteTemplate] = useState<InvoiceQuoteTemplate | null>(null);
+  const [usingInvoiceQuote, setUsingInvoiceQuote] = useState(false);
+  const [invoiceDiscountCents, setInvoiceDiscountCents] = useState(0);
   const [lines, setLines] = useState<Line[]>([blank()]);
   const [choices, setChoices] = useState<SavedChoice[]>([]);
   const [priceItems, setPriceItems] = useState<PriceItem[]>([]);
@@ -101,7 +105,12 @@ function CommercialEditor({ workOrderId, kind, onBack, online, permissions }: {
   const applyInvoice = useCallback((result: InvoiceResult) => {
     setInvoice(result.invoice); setAcceptedInvoice(result.acceptedInvoice); setServerCanManage(result.access?.canManageInvoices === true);
     setServerCanSend(result.access?.canManageInvoices === true);
-    setLines(result.invoice?.lines.map((item) => ({ ...blank(), description: item.description, unitPrice: (item.unitPriceCentsExGst / 100).toFixed(2), taxCode: item.taxCode, priceBookItemId: item.priceBookItemId })) || [blank()]);
+    const quoteTemplate = !result.invoice && !result.acceptedInvoice ? result.quoteTemplate || null : null;
+    const sourceLines = result.invoice?.lines || quoteTemplate?.lines;
+    setInvoiceQuoteTemplate(quoteTemplate); setUsingInvoiceQuote(Boolean(quoteTemplate));
+    setLines(sourceLines?.map((item) => ({ ...blank(), description: item.description, unitPrice: (item.unitPriceCentsExGst / 100).toFixed(2), taxCode: item.taxCode, priceBookItemId: item.priceBookItemId })) || [blank()]);
+    setInvoiceDiscountCents(result.invoice?.discountCents || quoteTemplate?.discountCents || 0);
+    setTerms(quoteTemplate?.terms || '');
     setDate(result.invoice?.dueAt || futureDate(14)); setDirty(false); setLoaded(true);
   }, []);
   const load = useCallback((signal?: AbortSignal) => {
@@ -115,9 +124,13 @@ function CommercialEditor({ workOrderId, kind, onBack, online, permissions }: {
   useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [load]);
   const version = quote?.versions.find((item) => item.id === quote.editableDraft?.id)
     || quote?.versions.find((item) => item.versionNumber === quote.currentVersionNumber);
-  const savedTotal = kind === 'quote' ? defaultTradeQuoteTotal(version?.totalCents || 0, version?.choices || []) : invoice?.totalCents || 0;
+  const savedTotal = kind === 'quote' ? defaultTradeQuoteTotal(version?.totalCents || 0, version?.choices || []) : invoice?.totalCents || (usingInvoiceQuote ? invoiceQuoteTemplate?.totalCents || 0 : 0);
   const canEdit = online && loaded && serverCanManage && !busy && !acceptedInvoice && (kind === 'quote' || !invoice || invoice.canCorrect);
-  function change(index: number, patch: Partial<Line>) { setLines((current) => current.map((line, i) => i === index ? { ...line, ...patch } : line)); setDirty(true); setStatus(''); }
+  function change(index: number, patch: Partial<Line>) {
+    setLines((current) => current.map((line, i) => i === index ? { ...line, ...patch } : line));
+    if (kind === 'invoice') { setUsingInvoiceQuote(false); setInvoiceDiscountCents(0); }
+    setDirty(true); setStatus('');
+  }
   async function save() {
     if (!canEdit) return;
     setBusy('save'); setError(''); setStatus('');
@@ -128,8 +141,10 @@ function CommercialEditor({ workOrderId, kind, onBack, online, permissions }: {
           choices: choices.map(({ items, ...choice }) => ({ ...choice, lines: items.map(editLine) })), customerEmail, terms, customerMessage: message, validUntil: date }) });
         applyQuote({ ...result, authorisedEmails: emailOptions, priceBookItems: priceItems });
       } else {
-        const result = await apiRequest<InvoiceResult>(endpoint, { method: 'POST', body: JSON.stringify({ action: invoice ? 'correct_draft' : 'create_draft', workOrderId, invoiceId: invoice?.id,
-          expectedRevision: invoice?.revision, dueAt: date, discountCents: invoice?.discountCents || 0,
+        const createFromQuote = !invoice && usingInvoiceQuote && invoiceQuoteTemplate;
+        const result = await apiRequest<InvoiceResult>(endpoint, { method: 'POST', body: JSON.stringify({ action: invoice ? 'correct_draft' : createFromQuote ? 'create_from_quote' : 'create_draft', workOrderId, invoiceId: invoice?.id,
+          quoteVersionId: createFromQuote ? invoiceQuoteTemplate.quoteVersionId : undefined,
+          expectedRevision: invoice?.revision, dueAt: date, discountCents: invoiceDiscountCents,
           lines: lines.map((line) => ({ description: line.description, unitPriceCentsExGst: cents(line.unitPrice), taxCode: line.taxCode, priceBookItemId: line.priceBookItemId || '' })) }) });
         applyInvoice(result);
       }
@@ -172,6 +187,17 @@ function CommercialEditor({ workOrderId, kind, onBack, online, permissions }: {
     if (!dirty) return onBack();
     Alert.alert('Unsaved document', 'Save the draft before leaving, or discard your unsaved edits.', [{ text: 'Keep editing', style: 'cancel' }, { text: 'Discard edits', style: 'destructive', onPress: onBack }]);
   }
+  function startBlankInvoice() {
+    setUsingInvoiceQuote(false); setLines([blank()]); setInvoiceDiscountCents(0); setTerms(''); setDate(futureDate(14)); setDirty(false);
+    setError(''); setStatus('Blank invoice ready.');
+  }
+  function restoreQuoteInvoice() {
+    if (!invoiceQuoteTemplate) return;
+    setUsingInvoiceQuote(true);
+    setLines(invoiceQuoteTemplate.lines.map((item) => ({ ...blank(), description: item.description, unitPrice: (item.unitPriceCentsExGst / 100).toFixed(2), taxCode: item.taxCode, priceBookItemId: item.priceBookItemId })));
+    setInvoiceDiscountCents(invoiceQuoteTemplate.discountCents); setTerms(invoiceQuoteTemplate.terms); setDate(futureDate(14)); setDirty(false);
+    setError(''); setStatus(`${invoiceQuoteTemplate.quoteNumber} is ready to invoice.`);
+  }
   return <View style={styles.card}>
     <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={back}>Job</FieldButton>
     <Text style={styles.title}>{kind === 'quote' ? quote?.quoteNumber || 'Quick quote' : invoice?.invoiceNumber || acceptedInvoice?.invoiceNumber || 'Quick invoice'}</Text>
@@ -179,6 +205,15 @@ function CommercialEditor({ workOrderId, kind, onBack, online, permissions }: {
     {error ? <Text accessibilityLiveRegion="polite" style={styles.error}>{error}</Text> : null}
     {status ? <Text accessibilityLiveRegion="polite" style={styles.help}>{status}</Text> : null}
     {acceptedInvoice ? <><Text style={styles.text}>Invoice from the accepted quote: {money(acceptedInvoice.totalCents)} | {acceptedInvoice.status}</Text><Text style={styles.help}>This job already has its invoice. A second invoice cannot be created.</Text></> : loaded ? <>
+      {kind === 'invoice' && !invoice && invoiceQuoteTemplate ? <View style={styles.line}>
+        <Text style={styles.label}>{usingInvoiceQuote ? `Using latest quote ${invoiceQuoteTemplate.quoteNumber}` : 'Blank invoice selected'}</Text>
+        {usingInvoiceQuote ? <>
+          <Text style={styles.text}>{money(invoiceQuoteTemplate.totalCents)} including GST</Text>
+          {invoiceQuoteTemplate.discountCents ? <Text style={styles.help}>Includes the saved quote discount of {money(invoiceQuoteTemplate.discountCents)} before GST.</Text> : null}
+          {invoiceQuoteTemplate.terms ? <Text style={styles.help}>Quote terms: {invoiceQuoteTemplate.terms}</Text> : null}
+        </> : null}
+        <FieldButton variant="secondary" onPress={usingInvoiceQuote ? startBlankInvoice : restoreQuoteInvoice}>{usingInvoiceQuote ? 'Start a blank invoice instead' : `Use ${invoiceQuoteTemplate.quoteNumber}`}</FieldButton>
+      </View> : null}
       <Text style={styles.help}>{kind === 'invoice' ? 'Enter each line amount before GST.' : 'Enter unit prices before GST.'}</Text>
       {lines.map((line, index) => <View key={index} style={styles.line}>
         <Text style={styles.label}>Line {index + 1}</Text>
@@ -190,10 +225,10 @@ function CommercialEditor({ workOrderId, kind, onBack, online, permissions }: {
         {kind === 'quote' && !overallTradeQuoteDiscountKind(line) ? <Input label="Quantity" value={line.quantity} editable={canEdit} onChange={(value) => change(index, { quantity: value })} numeric /> : null}
         {overallTradeQuoteDiscountKind(line) === 'percent' ? <Text style={styles.help}>Overall discount: {Number(line.quantity) * 100}%</Text> : <Input label={overallTradeQuoteDiscountKind(line) === 'fixed' ? 'Overall discount, including GST' : kind === 'quote' ? 'Unit price, ex GST' : 'Line amount, ex GST'} value={line.unitPrice} editable={canEdit && !line.priceBookItemId && (!overallTradeQuoteDiscountKind(line) || permissions?.canApplyDiscounts === true)} onChange={(value) => change(index, { unitPrice: value })} numeric />}
         <FieldSelect label="Tax" value={line.taxCode} disabled={!canEdit || Boolean(line.priceBookItemId)} options={[{ value: 'gst', label: 'GST 10%' }, { value: 'none', label: 'No GST' }]} onChange={(value) => change(index, { taxCode: value })} />
-        {canEdit ? <View style={styles.row}>{lines.length > 1 || choices.length ? <FieldButton variant="quiet" onPress={() => { setLines((current) => current.filter((_, i) => i !== index)); setDirty(true); }}>Remove</FieldButton> : null}
+        {canEdit ? <View style={styles.row}>{lines.length > 1 || choices.length ? <FieldButton variant="quiet" onPress={() => { setLines((current) => current.filter((_, i) => i !== index)); if (kind === 'invoice') { setUsingInvoiceQuote(false); setInvoiceDiscountCents(0); } setDirty(true); }}>Remove</FieldButton> : null}
           {permissions?.canManagePriceBook && !line.priceBookItemId && line.description.trim() && Number(line.unitPrice) > 0 ? <FieldButton variant="quiet" onPress={() => void savePriceItem(line)}>Save price-book item</FieldButton> : null}</View> : null}
       </View>)}
-      {canEdit && lines.length < 8 ? <FieldButton variant="secondary" onPress={() => { setLines((current) => [...current, blank()]); setDirty(true); }}>Add line</FieldButton> : null}
+      {canEdit && lines.length < 8 ? <FieldButton variant="secondary" onPress={() => { setLines((current) => [...current, blank()]); if (kind === 'invoice') { setUsingInvoiceQuote(false); setInvoiceDiscountCents(0); } setDirty(true); }}>Add line</FieldButton> : null}
       {choices.map((choice) => <View key={choice.clientKey} style={styles.line}><Text style={styles.label}>{choice.name} | {money(choice.totalCents)}</Text>{choice.items.map((item, index) => <Text key={index} style={styles.text}>{item.description} | {money(item.totalCents)}</Text>)}<Text style={styles.help}>Saved alternative retained with this quote.</Text></View>)}
       {kind === 'quote' ? <>
         <FieldSelect label="Customer email" value={customerEmail} disabled={!canEdit} options={emailOptions.map((email) => ({ value: email, label: email }))} onChange={(value) => { setCustomerEmail(value); setDirty(true); }} />
@@ -201,7 +236,7 @@ function CommercialEditor({ workOrderId, kind, onBack, online, permissions }: {
         <Input label="Terms" value={terms} editable={canEdit} onChange={(value) => { setTerms(value); setDirty(true); }} multiline />
       </> : null}
       <Input label={kind === 'quote' ? 'Valid until, YYYY-MM-DD' : 'Due date, YYYY-MM-DD'} value={date} editable={canEdit} onChange={(value) => { setDate(value); setDirty(true); }} />
-      {canEdit ? <FieldButton onPress={() => void save()}>Save draft</FieldButton> : null}
+      {canEdit ? <FieldButton onPress={() => void save()}>{kind === 'invoice' && !invoice && usingInvoiceQuote && invoiceQuoteTemplate ? `Create invoice from ${invoiceQuoteTemplate.quoteNumber}` : 'Save draft'}</FieldButton> : null}
       {version || invoice ? <View style={styles.line}><Text style={styles.label}>{dirty ? 'Previously saved total' : choices.length ? 'Saved total with default options, including GST' : 'Saved total including GST'}</Text><Text style={styles.total}>{money(savedTotal)}</Text><Text style={styles.help}>{kind === 'quote' ? version?.status : `${invoice?.status} | email ${invoice?.deliveryStatus}`}</Text></View> : null}
       {serverCanSend && (version || invoice) ? <FieldButton disabled={dirty || Boolean(busy) || !online} onPress={() => void send()}>Review and send saved {kind}</FieldButton> : null}
       {kind === 'quote' && quote?.link?.pdfUrl ? <FieldButton variant="secondary" onPress={() => void Linking.openURL(quote.link!.pdfUrl)}>Open issued PDF</FieldButton> : null}

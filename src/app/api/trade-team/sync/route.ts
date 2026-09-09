@@ -2,7 +2,6 @@ import { getD1 } from "../../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { fieldTransitionExpectedStatus } from "@/lib/trade-field-completion-policy";
-import { submittedActivityFieldCaseSql, submittedActivityFieldRecordSql } from "@/lib/trade-activity-forms-completion";
 import { activityConsumerDocuments } from "@/lib/trade-activity-forms-library";
 import { nextJobRevision } from "@/lib/trade-team-sync-server";
 import { mobileAppPolicy, mobileErrorResponse, MOBILE_CLIENT_ID_PATTERN, MOBILE_CONTRACT_VERSION,
@@ -41,7 +40,6 @@ import type {
 import {
   reconcileReadyPlannedComplianceWorkPacks,
 } from "@/lib/creditex-compliance-server";
-import { ensureCreditexWorkPackSchemaGuards } from "@/lib/creditex-work-pack-schema-guards";
 import {
   tradeJobAuditOutcomeSql,
   tradeJobLifecycleStatusSql,
@@ -1776,123 +1774,14 @@ async function photoFinishState(
   }
 }
 
-const UNSATISFIED_GOVERNED_EVIDENCE_SQL = `SELECT 1
-  FROM compliance_cases governed_case
-  JOIN trade_work_orders governed_work
-    ON governed_work.id = governed_case.work_order_id
-    AND governed_work.firebase_uid = governed_case.installer_uid
-    AND governed_work.partner_type = 'installer'
-    AND governed_work.record_status = 'active'
-  JOIN compliance_evidence_policy_versions governed_policy
-    ON governed_policy.id = governed_case.evidence_policy_version_id
-    AND governed_policy.activity_version_id = governed_case.activity_version_id
-    AND governed_policy.organisation_id = governed_case.organisation_id
-  JOIN compliance_evidence_requirements governed_requirement
-    ON governed_requirement.policy_version_id = governed_policy.id
-    AND governed_requirement.organisation_id = governed_case.organisation_id
-  WHERE governed_case.work_order_id = ?
-    AND governed_case.installer_uid = ?
-    AND governed_case.status NOT IN ('rejected', 'closed')
-    AND NOT EXISTS (${submittedActivityFieldCaseSql("governed_case")})
-    AND (
-      SELECT COUNT(DISTINCT governed_evidence.original_sha256)
-      FROM compliance_case_evidence governed_evidence
-      WHERE governed_evidence.organisation_id = governed_case.organisation_id
-        AND governed_evidence.case_id = governed_case.id
-        AND governed_evidence.requirement_id = governed_requirement.id
-        AND governed_evidence.status IN ('received', 'under_review', 'accepted')
-        AND NOT EXISTS (
-          SELECT 1
-          FROM compliance_case_evidence replacement
-          WHERE replacement.organisation_id = governed_evidence.organisation_id
-            AND replacement.case_id = governed_evidence.case_id
-            AND replacement.supersedes_evidence_id = governed_evidence.id
-        )
-    ) < governed_requirement.minimum_count`;
-
-const UNLINKED_ACTIVE_COMPLIANCE_INTENT_SQL = `SELECT 1
-  FROM trade_work_order_compliance_intents planned_intent
-  JOIN trade_work_orders planned_work
-    ON planned_work.id = planned_intent.work_order_id
-    AND planned_work.firebase_uid = planned_intent.installer_uid
-    AND planned_work.partner_type = 'installer'
-    AND planned_work.record_status = 'active'
-  WHERE planned_intent.work_order_id = ?
-    AND planned_intent.installer_uid = ?
-    AND planned_intent.status IN ('planned', 'case_linked')
-    AND NOT EXISTS (${submittedActivityFieldRecordSql("planned_intent")})
-    AND NOT EXISTS (
-      SELECT 1
-      FROM compliance_cases linked_case
-      WHERE linked_case.id = planned_intent.compliance_case_id
-        AND linked_case.work_order_id = planned_intent.work_order_id
-        AND linked_case.compliance_intent_id = planned_intent.id
-        AND linked_case.installer_uid = planned_intent.installer_uid
-        AND linked_case.organisation_id = planned_intent.compliance_organisation_id
-        AND linked_case.status NOT IN ('rejected', 'closed')
-    )`;
-
-const INCOMPLETE_ACTIVE_COMPLIANCE_WORK_PACK_SQL = `SELECT 1
-  FROM trade_work_order_compliance_intents active_intent
-  JOIN trade_work_orders active_work
-    ON active_work.id = active_intent.work_order_id
-    AND active_work.firebase_uid = active_intent.installer_uid
-    AND active_work.partner_type = 'installer'
-    AND active_work.record_status = 'active'
-  JOIN compliance_cases linked_case
-    ON linked_case.id = active_intent.compliance_case_id
-    AND linked_case.work_order_id = active_intent.work_order_id
-    AND linked_case.compliance_intent_id = active_intent.id
-    AND linked_case.installer_uid = active_intent.installer_uid
-    AND linked_case.organisation_id = active_intent.compliance_organisation_id
-    AND linked_case.status NOT IN ('rejected', 'closed')
-  WHERE active_intent.work_order_id = ?
-    AND active_intent.installer_uid = ?
-    AND active_intent.status IN ('planned', 'case_linked')
-    AND NOT EXISTS (${submittedActivityFieldRecordSql("active_intent")})
-    AND NOT EXISTS (
-      SELECT 1
-      FROM compliance_activity_work_pack_instances current_pack
-      WHERE current_pack.organisation_id = linked_case.organisation_id
-        AND current_pack.compliance_case_id = linked_case.id
-        AND current_pack.work_order_id = linked_case.work_order_id
-        AND current_pack.compliance_intent_id = active_intent.id
-        AND current_pack.status = 'completed'
-        AND EXISTS (
-          SELECT 1
-          FROM compliance_activity_work_pack_final_records final_record
-          WHERE final_record.organisation_id = current_pack.organisation_id
-            AND final_record.instance_key = current_pack.instance_key
-            AND final_record.case_instance_id = current_pack.id
-            AND final_record.work_pack_version_id = current_pack.work_pack_version_id
-        )
-        AND NOT EXISTS (
-          SELECT 1
-          FROM compliance_activity_work_pack_instances newer_pack
-          WHERE newer_pack.organisation_id = current_pack.organisation_id
-            AND newer_pack.compliance_case_id = current_pack.compliance_case_id
-            AND newer_pack.revision > current_pack.revision
-        )
-    )`;
-
 async function fieldFinishState(ownerUid: string, workOrderId: string) {
   const db = getD1();
-  await ensureCreditexWorkPackSchemaGuards(db);
-  const [tasks, forms, issues, plan, unlinkedWorkPack, incompleteWorkPack, compliance, rentalReport, photo] = await Promise.all([
+  const [tasks, forms, issues, plan, rentalReport, photo] = await Promise.all([
     db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'done'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'complete'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? AND note_type = 'issue' AND issue_status = 'open'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) count FROM trade_crm_job_plan_requirements r JOIN trade_crm_job_plans p ON p.id = r.job_plan_id AND p.firebase_uid = r.firebase_uid
       WHERE p.work_order_id = ? AND p.firebase_uid = ? AND r.status NOT IN ('installed', 'complete', 'completed', 'done', 'not_required')`).bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
-    db.prepare(`SELECT EXISTS (${UNLINKED_ACTIVE_COMPLIANCE_INTENT_SQL}) blocked`)
-      .bind(workOrderId, ownerUid)
-      .first<Record<string, unknown>>(),
-    db.prepare(`SELECT EXISTS (${INCOMPLETE_ACTIVE_COMPLIANCE_WORK_PACK_SQL}) blocked`)
-      .bind(workOrderId, ownerUid)
-      .first<Record<string, unknown>>(),
-    db.prepare(`SELECT EXISTS (${UNSATISFIED_GOVERNED_EVIDENCE_SQL}) blocked`)
-      .bind(workOrderId, ownerUid)
-      .first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) count FROM trade_rental_inspections
       WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'issued'`)
       .bind(workOrderId, ownerUid)
@@ -1900,10 +1789,6 @@ async function fieldFinishState(ownerUid: string, workOrderId: string) {
     photoFinishState(db, ownerUid, workOrderId),
   ]);
   const blockers = [Number(tasks?.count || 0) ? "assigned tasks" : "", Number(forms?.count || 0) ? "required forms" : "", Number(issues?.count || 0) ? "open issues" : "", Number(plan?.count || 0) ? "work-plan items" : ""].filter(Boolean);
-  if (Number(unlinkedWorkPack?.blocked || 0) || Number(incompleteWorkPack?.blocked || 0)) {
-    blockers.push("Creditex compliance work packs");
-  }
-  if (Number(compliance?.blocked || 0)) blockers.push("governed evidence");
   if (Number(rentalReport?.count || 0)) blockers.push("the issued rental assessment report");
   if (!photo.ready) blockers.push("required photo proof");
   return { blockers, photoGuard: photo.guard };
@@ -2347,14 +2232,11 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
               'installed', 'complete', 'completed', 'done', 'not_required'
             )
         )
-        AND NOT EXISTS (${UNLINKED_ACTIVE_COMPLIANCE_INTENT_SQL})
-        AND NOT EXISTS (${INCOMPLETE_ACTIVE_COMPLIANCE_WORK_PACK_SQL})
         AND NOT EXISTS (
           SELECT 1 FROM trade_rental_inspections blocker
           WHERE blocker.work_order_id = ? AND blocker.firebase_uid = ?
             AND blocker.status <> 'issued'
         )
-        AND NOT EXISTS (${UNSATISFIED_GOVERNED_EVIDENCE_SQL})
         AND (
           (
             ? = 'none'
@@ -2389,12 +2271,6 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
     const photoGuard = finishState.photoGuard;
     const finishBlockerValues = [
       transitionName,
-      workOrderId,
-      access.ownerUid,
-      workOrderId,
-      access.ownerUid,
-      workOrderId,
-      access.ownerUid,
       workOrderId,
       access.ownerUid,
       workOrderId,

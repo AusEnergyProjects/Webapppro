@@ -8,7 +8,9 @@ import type { FieldWorkPackSignatureDraft } from '@/lib/types';
 import type { ActivityAnswers, ActivityRecord } from '../../../src/lib/trade-activity-form-types';
 import {
   activityBaseFieldKey,
+  activityRepeatCount,
   activityWizardPages,
+  activityWizardPageForStepKey,
   boundActivityDeclaration,
   mergeActivityAnswers,
 } from '../../../src/lib/trade-activity-form-flow';
@@ -16,6 +18,12 @@ import {
 const ENDPOINT = '/api/trade-activity-forms';
 const CACHE_KEY_PREFIX = 'activity-form:';
 const MAX_PREVIEW_BYTES = 1024 * 1024;
+
+class ActivityCompletionAttentionError extends Error {
+  constructor(message: string, public readonly fieldKey = '') {
+    super(message);
+  }
+}
 
 type PresentedActivityRecord = Omit<ActivityRecord, 'evidence'> & {
   evidence: Omit<ActivityRecord['evidence'][number], 'objectKey'>[];
@@ -64,6 +72,26 @@ type ActivityFormCache = {
 
 const activeCacheWorkers = new Map<string, Promise<void>>();
 
+export function activitySignatureStrokesAreValid(strokes: FieldWorkPackSignatureDraft['strokes']) {
+  if (!Array.isArray(strokes) || strokes.length < 1 || strokes.length > 32) return false;
+  let points = 0;
+  let distance = 0;
+  for (const stroke of strokes) {
+    if (!stroke || !Array.isArray(stroke.points) || stroke.points.length < 2) return false;
+    points += stroke.points.length;
+    for (let index = 0; index < stroke.points.length; index += 1) {
+      const point = stroke.points[index];
+      if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)
+        || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) return false;
+      if (index > 0) {
+        const previous = stroke.points[index - 1];
+        distance += Math.hypot(point.x - previous.x, point.y - previous.y);
+      }
+    }
+  }
+  return points >= 3 && points <= 1_024 && distance >= 0.1;
+}
+
 function activityFormCache(value: string): ActivityFormCache | null {
   try {
     const parsed = JSON.parse(value) as Partial<ActivityFormCache>;
@@ -89,8 +117,65 @@ function derivedAnswerKeys(record: PresentedActivityRecord) {
   return new Set(record.form.fields.filter((field) => field.presentation === 'derived').map((field) => field.key));
 }
 
+export function sanitiseActivityAnswers(form: PresentedActivityRecord['form'], answers: ActivityAnswers) {
+  const fields = new Map(form.fields.map((field) => [field.key, field]));
+  const clean: ActivityAnswers = {};
+  for (const [key, value] of Object.entries(answers)) {
+    if (!key.startsWith('$repeat.')) continue;
+    const group = key.slice('$repeat.'.length);
+    if (form.fields.some((field) => field.repeatGroup === group)
+      && typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 20) {
+      clean[key] = value;
+    }
+  }
+  for (const [key, value] of Object.entries(answers)) {
+    if (key.startsWith('$repeat.')) continue;
+    const baseKey = activityBaseFieldKey(key);
+    const field = fields.get(baseKey);
+    if (!field || ['photo', 'document'].includes(field.type)) continue;
+    if (key !== baseKey) {
+      const repeatIndex = Number(key.match(/\[(\d+)\]$/)?.[1]);
+      if (!field.repeatGroup || !Number.isInteger(repeatIndex)
+        || repeatIndex >= activityRepeatCount(form, clean, field.repeatGroup)) continue;
+    }
+    if (value === '' || value === null || value === undefined) continue;
+    if (field.type === 'boolean') {
+      if (typeof value === 'boolean') clean[key] = value;
+      continue;
+    }
+    if (field.type === 'number') {
+      if (typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1e12) clean[key] = value;
+      continue;
+    }
+    if (typeof value !== 'string' || value.length > 10_000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value)) continue;
+    const normalised = value.trim();
+    if (!normalised) continue;
+    if (field.type === 'select' && !field.options.includes(normalised)) continue;
+    if (field.type === 'date' && (!/^\d{4}-\d{2}-\d{2}$/.test(normalised)
+      || !Number.isFinite(Date.parse(normalised))
+      || new Date(normalised).toISOString().slice(0, 10) !== normalised)) continue;
+    clean[key] = normalised;
+  }
+  return clean;
+}
+
+function reconcilePendingSignatures(
+  pending: readonly PendingSignature[] | undefined,
+  fresh: PresentedActivityRecord,
+  answers: ActivityAnswers,
+) {
+  const activeDeclarations = new Set(activityWizardPages(fresh.form, answers)
+    .flatMap((page) => page.kind === 'signature' ? [page.declaration.key] : []));
+  return (pending || []).filter((signature) => {
+    const declaration = fresh.form.declarations.find((item) => item.key === signature.declarationKey);
+    return declaration && activeDeclarations.has(declaration.key)
+      && boundActivityDeclaration(declaration, answers) === signature.declarationText;
+  });
+}
+
 function reconcileAnswers(base: ActivityAnswers, local: ActivityAnswers, fresh: PresentedActivityRecord) {
-  return mergeActivityAnswers(base, local, fresh.answers, derivedAnswerKeys(fresh));
+  const reconciled = mergeActivityAnswers(base, local, fresh.answers, derivedAnswerKeys(fresh));
+  return { ...reconciled, merged: sanitiseActivityAnswers(fresh.form, reconciled.merged) };
 }
 
 function signingUserContentChanged(previous: PresentedActivityRecord, fresh: PresentedActivityRecord, phase: 'before' | 'after') {
@@ -138,8 +223,13 @@ async function acceptResponse(
   const current = stored?.record.id === snapshot.record.id ? stored : snapshot;
   const answers = nextRecord.status === 'submitted_for_creditex_review'
     ? nextRecord.answers
-    : mergeActivityAnswers(snapshot.answers, current.answers, nextRecord.answers, derivedAnswerKeys(nextRecord)).merged;
-  return remember(cacheKey, { ...current, ...patch, record: nextRecord, answers });
+    : sanitiseActivityAnswers(nextRecord.form,
+      mergeActivityAnswers(snapshot.answers, current.answers, nextRecord.answers, derivedAnswerKeys(nextRecord)).merged);
+  const next = { ...current, ...patch, record: nextRecord, answers };
+  return remember(cacheKey, {
+    ...next,
+    pendingSignatures: reconcilePendingSignatures(next.pendingSignatures, nextRecord, answers),
+  });
 }
 
 async function refresh(cacheKey: string, snapshot: ActivityFormCache) {
@@ -149,7 +239,12 @@ async function refresh(cacheKey: string, snapshot: ActivityFormCache) {
   const answers = fresh.status === 'submitted_for_creditex_review'
     ? fresh.answers
     : reconcileAnswers(snapshot.record.answers, current.answers, fresh).merged;
-  return remember(cacheKey, { ...current, record: fresh, answers });
+  return remember(cacheKey, {
+    ...current,
+    record: fresh,
+    answers,
+    pendingSignatures: reconcilePendingSignatures(current.pendingSignatures, fresh, answers),
+  });
 }
 
 async function saveAnswers(cacheKey: string, snapshot: ActivityFormCache) {
@@ -291,6 +386,16 @@ async function syncPendingSignatures(cacheKey: string, snapshot: ActivityFormCac
     if (boundActivityDeclaration(declaration, latest.answers) !== queued.declarationText) {
       throw new Error('This declaration changed. Open its signature section and sign it again.');
     }
+    if (!activitySignatureStrokesAreValid(queued.strokes)) {
+      latest = await remember(cacheKey, {
+        ...latest,
+        pendingSignatures: (latest.pendingSignatures || []).filter((item) => item.declarationKey !== queued.declarationKey),
+      });
+      throw new ActivityCompletionAttentionError(
+        'Open the signature section and draw the signature again. Make the signature span more of the box.',
+        queued.declarationKey,
+      );
+    }
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         const response = await apiRequest<{ record: PresentedActivityRecord }>(ENDPOINT, {
@@ -358,6 +463,43 @@ async function submit(cacheKey: string, snapshot: ActivityFormCache) {
   return latest;
 }
 
+function completionFailureNeedsAttention(caught: unknown) {
+  if (caught instanceof ActivityCompletionAttentionError) return true;
+  if (!(caught instanceof ApiError)) return false;
+  return caught.code.startsWith('INVALID_ACTIVITY_') || [
+    'ACTIVITY_APPROVED_PRODUCT_REQUIRED',
+    'ACTIVITY_DECLARATION_DETAILS_REQUIRED',
+    'ACTIVITY_DECLARATION_INVALID',
+    'ACTIVITY_FORM_INCOMPLETE',
+    'ACTIVITY_SIGNATURE_REQUIRED',
+    'ACTIVITY_SIGNING_NOT_READY',
+    'ACTIVITY_SIGNING_PROFILE_CHANGED',
+    'ACTIVITY_SIGNING_PROFILE_NAME_REQUIRED',
+    'ACTIVITY_TECHNICIAN_IDENTITY_REQUIRED',
+    'ACTIVITY_TECHNICIAN_SIGNER_NOT_ASSIGNED',
+  ].includes(caught.code);
+}
+
+function completionFailureStep(cache: ActivityFormCache, caught: unknown) {
+  const fieldKey = caught instanceof ActivityCompletionAttentionError
+    ? caught.fieldKey
+    : caught instanceof ApiError && typeof caught.payload.fieldKey === 'string' ? caught.payload.fieldKey : '';
+  const requested = fieldKey || cache.record.missing[0]?.key || '';
+  if (!requested) return cache.stepKey;
+  const pages = activityWizardPages(cache.record.form, cache.answers);
+  return activityWizardPageForStepKey(pages, requested)?.key || cache.stepKey;
+}
+
+function completionFailureMessage(cache: ActivityFormCache, caught: unknown) {
+  const fieldKey = caught instanceof ApiError && typeof caught.payload.fieldKey === 'string'
+    ? caught.payload.fieldKey : '';
+  const missing = cache.record.missing.find((item) => item.key === fieldKey) || cache.record.missing[0];
+  if (caught instanceof ApiError && caught.code === 'ACTIVITY_FORM_INCOMPLETE' && missing) {
+    return `Complete ${missing.label.toLowerCase()}, then tap Done once.`;
+  }
+  return caught instanceof Error ? caught.message : 'TLink will retry this form automatically.';
+}
+
 async function completeCache(cacheKey: string) {
   let cache = await readCache(cacheKey);
   if (!cache?.finishRequested) return;
@@ -380,10 +522,12 @@ async function completeCache(cacheKey: string) {
   } catch (caught) {
     const retained = await readCache(cacheKey);
     if (retained?.finishRequested) {
+      const needsAttention = completionFailureNeedsAttention(caught);
       await remember(cacheKey, {
         ...retained,
-        finishRequested: true,
-        finishError: caught instanceof Error ? caught.message : 'TLink will retry this form automatically.',
+        finishRequested: !needsAttention,
+        finishError: completionFailureMessage(retained, caught),
+        stepKey: needsAttention ? completionFailureStep(retained, caught) : retained.stepKey,
       });
     }
   }

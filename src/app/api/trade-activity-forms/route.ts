@@ -33,6 +33,8 @@ const errorMessages: Record<string, [number, string]> = {
   ACTIVITY_SIGNED_SCOPE_LOCKED: [409, "These details have been signed. Signed details must stay unchanged. After-work fields remain available after before-work signing."],
   ACTIVITY_SIGNING_NOT_READY: [409, "Complete the required fields and evidence for this stage before signing."],
   ACTIVITY_SIGNATURE_REQUIRED: [400, "Enter the signer's name, draw their signature and confirm the displayed declaration."],
+  INVALID_ACTIVITY_SIGNATURE: [400, "Open the signature section and draw the signature again. Make the signature span more of the box."],
+  ACTIVITY_DECLARATION_INVALID: [409, "This declaration changed. Open the signature section and sign it again."],
   ACTIVITY_DECLARATION_ALREADY_SIGNED: [409, "This declaration has already been signed."],
   ACTIVITY_DECLARATION_DETAILS_REQUIRED: [409, "Complete the declaration details before signing."],
   ACTIVITY_FORM_INCOMPLETE: [409, "Complete the required answers, evidence and signatures before providing this record to Creditex."],
@@ -52,8 +54,14 @@ const errorMessages: Record<string, [number, string]> = {
 function failure(error: unknown) {
   if (error instanceof BoundedJsonRequestError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   const code = error instanceof Error ? error.message : "ACTIVITY_REQUEST_FAILED";
+  const detail = error && typeof error === "object" ? error as Row : {};
+  const fieldKey = str(detail.fieldKey); const fieldLabel = str(detail.fieldLabel);
+  if (["INVALID_ACTIVITY_ANSWER", "INVALID_ACTIVITY_OPTION", "INVALID_ACTIVITY_DATE", "INVALID_ACTIVITY_REPEAT", "INVALID_ACTIVITY_FIELD"].includes(code)) {
+    const label = fieldLabel || "the highlighted form answer";
+    return adminJson({ ok: false, code, error: `Check ${label.toLowerCase()} and save it again.`, ...(fieldKey ? { fieldKey } : {}) }, 400);
+  }
   const known = errorMessages[code];
-  if (known) return adminJson({ ok: false, code, error: known[1] }, known[0]);
+  if (known) return adminJson({ ok: false, code, error: known[1], ...(fieldKey ? { fieldKey } : {}) }, known[0]);
   if (code.startsWith("INVALID_ACTIVITY_") || code === "ACTIVITY_DECLARATION_INVALID") return adminJson({ ok: false, code, error: "Check the form details and try again." }, 400);
   if (/AUTH|ACCESS|REQUIRED|IDENTITY|VERIFICATION|ROLE|SUSPENDED|INACTIVE/.test(code)) return adminJson({ ok: false, code, error: "Active authorised access is required." }, 403);
   console.error("Activity field form request failed", code);

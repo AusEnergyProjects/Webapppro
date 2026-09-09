@@ -1526,7 +1526,7 @@ test("bootstrap fails closed when one job exceeds the selected-activity work-pac
   assert.equal(result.payload.code, "SYNC_RESPONSE_CARDINALITY_EXCEEDED");
 });
 
-test("an activity awaiting its governed case blocks both server finish paths", async () => {
+test("field finish does not wait for a Creditex case to be created", async () => {
   const database = syncDatabase("in_progress", 5);
   prepareFinishableJob(database);
   seedComplianceIntent(database, { id: "intent-awaiting-pack" });
@@ -1539,8 +1539,7 @@ test("an activity awaiting its governed case blocks both server finish paths", a
     baseRevision: 5,
     stage: "completed",
   }]);
-  assert.equal(stageAttempt.payload.results[0].code, "FINISH_BLOCKED");
-  assert.match(stageAttempt.payload.results[0].error, /Creditex compliance work packs/);
+  assert.equal(stageAttempt.payload.results[0].code, "CONTROLLED_FIELD_TRANSITION_REQUIRED");
 
   const fieldAttempt = await postActions(route, [{
     clientActionId: "work-pack-field-finish",
@@ -1549,17 +1548,16 @@ test("an activity awaiting its governed case blocks both server finish paths", a
     baseRevision: 5,
     transition: "finish",
   }]);
-  assert.equal(fieldAttempt.payload.results[0].code, "FINISH_BLOCKED");
-  assert.match(fieldAttempt.payload.results[0].error, /Creditex compliance work packs/);
+  assert.equal(fieldAttempt.payload.results[0].status, "applied");
   assert.deepEqual(
     { ...database.prepare(`SELECT stage, revision FROM trade_work_orders
       WHERE id = 'job-1'`).get() },
-    { stage: "in_progress", revision: 5 },
+    { stage: "completed", revision: 6 },
   );
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_offline_actions").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_offline_actions").get().count, 1);
 });
 
-test("a linked activity remains blocked until its current work pack is completed", async () => {
+test("field finish does not wait for a linked Creditex work pack", async () => {
   const database = syncDatabase("in_progress", 5);
   prepareFinishableJob(database);
   seedLinkedWorkPack(database, { status: "in_progress" });
@@ -1572,8 +1570,7 @@ test("a linked activity remains blocked until its current work pack is completed
     baseRevision: 5,
     stage: "completed",
   }]);
-  assert.equal(stageAttempt.payload.results[0].code, "FINISH_BLOCKED");
-  assert.match(stageAttempt.payload.results[0].error, /Creditex compliance work packs/);
+  assert.equal(stageAttempt.payload.results[0].code, "CONTROLLED_FIELD_TRANSITION_REQUIRED");
 
   const fieldAttempt = await postActions(route, [{
     clientActionId: "linked-work-pack-field-finish",
@@ -1582,11 +1579,10 @@ test("a linked activity remains blocked until its current work pack is completed
     baseRevision: 5,
     transition: "finish",
   }]);
-  assert.equal(fieldAttempt.payload.results[0].code, "FINISH_BLOCKED");
-  assert.match(fieldAttempt.payload.results[0].error, /Creditex compliance work packs/);
+  assert.equal(fieldAttempt.payload.results[0].status, "applied");
 });
 
-test("only the current completed work-pack revision with its final PDF satisfies field finish", async () => {
+test("field finish is independent of Creditex work-pack revision and final-PDF state", async () => {
   const completedDatabase = syncDatabase("in_progress", 5);
   prepareFinishableJob(completedDatabase);
   seedLinkedWorkPack(completedDatabase, { status: "completed" });
@@ -1614,26 +1610,24 @@ test("only the current completed work-pack revision with its final PDF satisfies
     baseRevision: 5,
     transition: "finish",
   }]);
-  assert.equal(missingRecord.payload.results[0].code, "FINISH_BLOCKED");
-  assert.match(missingRecord.payload.results[0].error, /Creditex compliance work packs/);
+  assert.equal(missingRecord.payload.results[0].status, "applied");
 
   const supersededDatabase = syncDatabase("in_progress", 5);
   prepareFinishableJob(supersededDatabase);
   seedLinkedWorkPack(supersededDatabase, { status: "completed" });
   seedLinkedWorkPack(supersededDatabase, { status: "in_progress", revision: 2 });
   const supersededHarness = routeHarness(supersededDatabase);
-  const blocked = await postActions(supersededHarness.route, [{
+  const superseded = await postActions(supersededHarness.route, [{
     clientActionId: "superseded-completed-work-pack",
     type: "advance_field_job",
     workOrderId: "job-1",
     baseRevision: 5,
     transition: "finish",
   }]);
-  assert.equal(blocked.payload.results[0].code, "FINISH_BLOCKED");
-  assert.match(blocked.payload.results[0].error, /Creditex compliance work packs/);
+  assert.equal(superseded.payload.results[0].status, "applied");
 });
 
-test("the atomic finish guard rejects a work pack added after preflight", async () => {
+test("a Creditex work pack added during finish does not block field completion", async () => {
   const database = syncDatabase("in_progress", 5);
   prepareFinishableJob(database);
   const { route, d1 } = routeHarness(database);
@@ -1648,18 +1642,18 @@ test("the atomic finish guard rejects a work pack added after preflight", async 
     baseRevision: 5,
     transition: "finish",
   }]);
-  assert.equal(result.payload.results[0].status, "conflict");
+  assert.equal(result.payload.results[0].status, "applied");
   assert.deepEqual(
     { ...database.prepare(`SELECT stage, revision FROM trade_work_orders
       WHERE id = 'job-1'`).get() },
-    { stage: "in_progress", revision: 5 },
+    { stage: "completed", revision: 6 },
   );
   assert.deepEqual(
     { ...database.prepare(`SELECT status, revision FROM trade_crm_appointments
       WHERE id = 'appointment-1'`).get() },
-    { status: "in_progress", revision: 1 },
+    { status: "completed", revision: 2 },
   );
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events").get().count, 2);
 });
 
 test("offline stage changes cannot complete blocked work or reopen a terminal job", async () => {
@@ -1694,7 +1688,7 @@ test("offline stage changes cannot complete blocked work or reopen a terminal jo
   assert.equal(database.prepare("SELECT stage FROM trade_work_orders WHERE id = 'job-1'").get().stage, "completed");
 });
 
-test("bootstrap returns every owner-scoped compliance pack and both finish preflights require all governed evidence", async () => {
+test("bootstrap returns every owner-scoped compliance pack without making evidence a field-finish gate", async () => {
   const database = syncDatabase("in_progress", 5);
   prepareFinishableJob(database);
   seedGovernedComplianceCases(database);
@@ -1739,8 +1733,7 @@ test("bootstrap returns every owner-scoped compliance pack and both finish prefl
     baseRevision: 5,
     stage: "completed",
   }]);
-  assert.equal(stageAttempt.payload.results[0].code, "FINISH_BLOCKED");
-  assert.match(stageAttempt.payload.results[0].error, /governed evidence/);
+  assert.equal(stageAttempt.payload.results[0].code, "CONTROLLED_FIELD_TRANSITION_REQUIRED");
 
   const fieldAttempt = await postActions(route, [{
     clientActionId: "multi-case-field-finish",
@@ -1749,9 +1742,8 @@ test("bootstrap returns every owner-scoped compliance pack and both finish prefl
     baseRevision: 5,
     transition: "finish",
   }]);
-  assert.equal(fieldAttempt.payload.results[0].code, "FINISH_BLOCKED");
-  assert.match(fieldAttempt.payload.results[0].error, /governed evidence/);
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_offline_actions").get().count, 0);
+  assert.equal(fieldAttempt.payload.results[0].status, "applied");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_offline_actions").get().count, 1);
 
   database.prepare("DELETE FROM compliance_cases WHERE id = 'case-veec'").run();
   const singleCase = await bootstrap(route);
@@ -1770,7 +1762,7 @@ test("bootstrap returns every owner-scoped compliance pack and both finish prefl
   );
 });
 
-test("the atomic finish guard rechecks every governed case without foreign-tenant leakage", async () => {
+test("governed evidence review changes remain independent of atomic field finish", async () => {
   const database = syncDatabase("in_progress", 5);
   prepareFinishableJob(database);
   seedGovernedComplianceCases(database);
@@ -1791,37 +1783,21 @@ test("the atomic finish guard rechecks every governed case without foreign-tenan
     baseRevision: 5,
     transition: "finish",
   }]);
-  assert.equal(raced.payload.results[0].status, "conflict");
-  assert.deepEqual(
-    { ...database.prepare(`SELECT stage, revision FROM trade_work_orders
-      WHERE id = 'job-1'`).get() },
-    { stage: "in_progress", revision: 5 },
-  );
-  assert.deepEqual(
-    { ...database.prepare(`SELECT status, revision FROM trade_crm_appointments
-      WHERE id = 'appointment-1'`).get() },
-    { status: "in_progress", revision: 1 },
-  );
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events").get().count, 0);
-
-  database.prepare(`UPDATE compliance_case_evidence
-    SET status = 'received' WHERE id = 'evidence-veec'`).run();
-  const completed = await postActions(route, [{
-    clientActionId: "multi-case-finish-ready",
-    type: "advance_field_job",
-    workOrderId: "job-1",
-    baseRevision: 5,
-    transition: "finish",
-  }]);
-  assert.equal(completed.payload.results[0].status, "applied");
+  assert.equal(raced.payload.results[0].status, "applied");
   assert.deepEqual(
     { ...database.prepare(`SELECT stage, revision FROM trade_work_orders
       WHERE id = 'job-1'`).get() },
     { stage: "completed", revision: 6 },
   );
+  assert.deepEqual(
+    { ...database.prepare(`SELECT status, revision FROM trade_crm_appointments
+      WHERE id = 'appointment-1'`).get() },
+    { status: "completed", revision: 2 },
+  );
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events").get().count, 2);
 });
 
-test("superseded governed evidence cannot satisfy an offline finish", async () => {
+test("superseded governed evidence does not hold field completion open", async () => {
   const database = syncDatabase("in_progress", 5);
   prepareFinishableJob(database);
   seedGovernedComplianceCases(database);
@@ -1841,32 +1817,19 @@ test("superseded governed evidence cannot satisfy an offline finish", async () =
   `);
   const { route } = routeHarness(database);
 
-  const blocked = await postActions(route, [{
+  const completed = await postActions(route, [{
     clientActionId: "multi-case-superseded-evidence",
     type: "advance_field_job",
     workOrderId: "job-1",
     baseRevision: 5,
     transition: "finish",
   }]);
-  assert.equal(blocked.payload.results[0].code, "FINISH_BLOCKED");
-  assert.match(blocked.payload.results[0].error, /governed evidence/);
+  assert.equal(completed.payload.results[0].status, "applied");
   assert.deepEqual(
     { ...database.prepare(`SELECT stage, revision FROM trade_work_orders
       WHERE id = 'job-1'`).get() },
-    { stage: "in_progress", revision: 5 },
+    { stage: "completed", revision: 6 },
   );
-
-  database.prepare(`UPDATE compliance_case_evidence
-    SET status = 'under_review'
-    WHERE id = 'evidence-veec-replacement'`).run();
-  const completed = await postActions(route, [{
-    clientActionId: "multi-case-replacement-evidence",
-    type: "advance_field_job",
-    workOrderId: "job-1",
-    baseRevision: 5,
-    transition: "finish",
-  }]);
-  assert.equal(completed.payload.results[0].status, "applied");
 });
 
 for (const terminalStage of ["completed", "cancelled"]) {
