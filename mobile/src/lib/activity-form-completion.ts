@@ -1,5 +1,6 @@
-import { File } from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+import { Image } from 'react-native';
 
 import { activityCurrentSignatureKeys } from '@/lib/activity-field-wizard';
 import { ApiError, apiRequest } from '@/lib/api';
@@ -17,7 +18,16 @@ import {
 
 const ENDPOINT = '/api/trade-activity-forms';
 const CACHE_KEY_PREFIX = 'activity-form:';
-const MAX_PREVIEW_BYTES = 1024 * 1024;
+const MAX_ACTIVITY_IMAGE_UPLOAD_BYTES = 1024 * 1024;
+const ACTIVITY_IMAGE_UPLOAD_VERSION = 1;
+const ACTIVITY_IMAGE_UPLOAD_DIRECTORY = new Directory(Paths.document, 'activity-image-uploads');
+const ACTIVITY_IMAGE_UPLOAD_ATTEMPTS = [
+  [2560, 0.8],
+  [2200, 0.75],
+  [1920, 0.7],
+  [1600, 0.65],
+  [1280, 0.55],
+] as const;
 
 class ActivityCompletionAttentionError extends Error {
   constructor(message: string, public readonly fieldKey = '') {
@@ -48,6 +58,8 @@ type PendingFile = {
   name: string;
   contentType: string;
   metadata: CaptureMetadata;
+  preparedUploadUri?: string;
+  preparedUploadVersion?: number;
 };
 
 type PendingSignature = {
@@ -68,6 +80,7 @@ type ActivityFormCache = {
   camera?: { fieldKey: string; metadata: CaptureMetadata };
   finishRequested?: boolean;
   finishError?: string;
+  imageUploadRepairVersion?: number;
 };
 
 const activeCacheWorkers = new Map<string, Promise<void>>();
@@ -272,17 +285,84 @@ async function saveAnswers(cacheKey: string, snapshot: ActivityFormCache) {
   return latest;
 }
 
-async function generatedPreview(uri: string) {
-  for (const [width, compress] of [[1600, 0.75], [1280, 0.65], [1024, 0.55]] as const) {
-    const context = ImageManipulator.manipulate(uri);
-    context.resize({ width });
-    const rendered = await context.renderAsync();
-    const preview = await rendered.saveAsync({ format: SaveFormat.JPEG, compress });
-    const previewFile = new File(preview.uri);
-    if (previewFile.size <= MAX_PREVIEW_BYTES) return preview.uri;
-    if (previewFile.exists) previewFile.delete();
+export function boundedActivityImageResize(width: number, height: number, maxDimension = 2560) {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width < 1 || height < 1 || maxDimension < 1) {
+    throw new Error('This photo size could not be read. The original remains on this phone.');
   }
-  throw new Error('A report preview could not be prepared within its size limit. The original stays on this phone.');
+  if (Math.max(width, height) <= maxDimension) return null;
+  return width >= height ? { width: maxDimension } : { height: maxDimension };
+}
+
+function preparedActivityImageFile(pending: PendingFile) {
+  const safeId = pending.id.replace(/[^0-9a-z_-]/gi, '').slice(0, 80);
+  if (!safeId) throw new Error('This saved photo has an invalid upload identity. The original remains on this phone.');
+  return new File(ACTIVITY_IMAGE_UPLOAD_DIRECTORY, `${safeId}.v${ACTIVITY_IMAGE_UPLOAD_VERSION}.jpg`);
+}
+
+function validPreparedActivityImage(file: File) {
+  return file.exists && file.size >= 5 && file.size <= MAX_ACTIVITY_IMAGE_UPLOAD_BYTES;
+}
+
+async function rememberPreparedActivityImage(
+  cacheKey: string,
+  snapshot: ActivityFormCache,
+  pending: PendingFile,
+  prepared: File,
+) {
+  const stored = await readCache(cacheKey);
+  const current = stored?.record.id === snapshot.record.id ? stored : snapshot;
+  if (!current.pending.some((item) => item.id === pending.id)) {
+    throw new Error('This pending photo is no longer attached to the form.');
+  }
+  const next = await remember(cacheKey, {
+    ...current,
+    pending: current.pending.map((item) => item.id === pending.id ? {
+      ...item,
+      preparedUploadUri: prepared.uri,
+      preparedUploadVersion: ACTIVITY_IMAGE_UPLOAD_VERSION,
+    } : item),
+  });
+  return {
+    cache: next,
+    pending: next.pending.find((item) => item.id === pending.id) || pending,
+    file: prepared,
+  };
+}
+
+async function prepareActivityImageUpload(cacheKey: string, snapshot: ActivityFormCache, pending: PendingFile) {
+  if (pending.preparedUploadVersion === ACTIVITY_IMAGE_UPLOAD_VERSION && pending.preparedUploadUri) {
+    const retained = new File(pending.preparedUploadUri);
+    if (validPreparedActivityImage(retained)) return { cache: snapshot, pending, file: retained };
+    if (retained.exists) retained.delete();
+  }
+
+  const target = preparedActivityImageFile(pending);
+  if (validPreparedActivityImage(target)) {
+    return rememberPreparedActivityImage(cacheKey, snapshot, pending, target);
+  }
+  if (target.exists) target.delete();
+  if (!ACTIVITY_IMAGE_UPLOAD_DIRECTORY.exists) {
+    ACTIVITY_IMAGE_UPLOAD_DIRECTORY.create({ intermediates: true, idempotent: true });
+  }
+
+  const dimensions = await Image.getSize(pending.uri);
+  for (const [maxDimension, compress] of ACTIVITY_IMAGE_UPLOAD_ATTEMPTS) {
+    const context = ImageManipulator.manipulate(pending.uri);
+    const resize = boundedActivityImageResize(dimensions.width, dimensions.height, maxDimension);
+    if (resize) context.resize(resize);
+    const rendered = await context.renderAsync();
+    const result = await rendered.saveAsync({ format: SaveFormat.JPEG, compress });
+    const candidate = new File(result.uri);
+    try {
+      if (!validPreparedActivityImage(candidate)) continue;
+      await candidate.copy(target, { overwrite: true });
+      if (!validPreparedActivityImage(target)) throw new Error('The prepared photo could not be retained.');
+      return rememberPreparedActivityImage(cacheKey, snapshot, pending, target);
+    } finally {
+      if (candidate.exists) candidate.delete();
+    }
+  }
+  throw new Error('This photo could not be prepared for upload. The original remains on this phone.');
 }
 
 function assertCaptureMetadata(pending: PendingFile) {
@@ -301,6 +381,13 @@ function pendingFileIsImage(pending: PendingFile) {
   return /\.(?:jpe?g|png)\b/i.test(name);
 }
 
+function shouldRetryLegacyFailedImageUpload(cache: ActivityFormCache) {
+  return cache.finishRequested !== true
+    && Boolean(cache.finishError)
+    && (cache.imageUploadRepairVersion || 0) < ACTIVITY_IMAGE_UPLOAD_VERSION
+    && cache.pending.some(pendingFileIsImage);
+}
+
 async function removeReceivedPendingFile(
   cacheKey: string,
   snapshot: ActivityFormCache,
@@ -316,11 +403,16 @@ async function removeReceivedPendingFile(
   });
   const original = new File(pending.uri);
   if (original.exists) original.delete();
+  if (pending.preparedUploadUri && pending.preparedUploadUri !== pending.uri) {
+    const prepared = new File(pending.preparedUploadUri);
+    if (prepared.exists) prepared.delete();
+  }
   return accepted;
 }
 
-async function uploadPendingFile(cacheKey: string, snapshot: ActivityFormCache, pending: PendingFile) {
+async function uploadPendingFile(cacheKey: string, snapshot: ActivityFormCache, queued: PendingFile) {
   let latest = snapshot;
+  let pending = queued;
   const received = latest.record.evidence.find((item) => item.id === pending.id);
   if (received) return removeReceivedPendingFile(cacheKey, latest, pending, latest.record);
 
@@ -330,36 +422,33 @@ async function uploadPendingFile(cacheKey: string, snapshot: ActivityFormCache, 
     throw new Error('This saved original is unavailable. Remove it and take the photo again.');
   }
 
-  let previewUri = '';
-  try {
-    if (pendingFileIsImage(pending)) previewUri = await generatedPreview(pending.uri);
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const form = new FormData();
-      form.append('action', 'upload');
-      form.append('recordId', latest.record.id);
-      form.append('expectedRevision', String(latest.record.revision));
-      form.append('fieldKey', pending.fieldKey);
-      form.append('captureMetadata', JSON.stringify(pending.metadata));
-      form.append('clientUploadId', pending.id);
-      form.append('file', originalFile);
-      if (previewUri) form.append('preview', new File(previewUri));
-      try {
-        const response = await apiRequest<{ record: PresentedActivityRecord }>(ENDPOINT, { method: 'POST', body: form });
-        return removeReceivedPendingFile(cacheKey, latest, pending, response.record);
-      } catch (caught) {
-        let fresh: PresentedActivityRecord | null = null;
-        try { fresh = await latestRecord(latest.record.id); } catch { /* Preserve the original upload failure. */ }
-        if (fresh?.evidence.some((item) => item.id === pending.id)) {
-          return removeReceivedPendingFile(cacheKey, latest, pending, fresh);
-        }
-        if (!(caught instanceof ApiError) || caught.code !== 'ACTIVITY_REVISION_CONFLICT' || !fresh || attempt === 2) throw caught;
-        latest = await acceptResponse(cacheKey, latest, fresh);
+  let uploadFile = originalFile;
+  if (pendingFileIsImage(pending)) {
+    const prepared = await prepareActivityImageUpload(cacheKey, latest, pending);
+    latest = prepared.cache;
+    pending = prepared.pending;
+    uploadFile = prepared.file;
+  }
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const form = new FormData();
+    form.append('action', 'upload');
+    form.append('recordId', latest.record.id);
+    form.append('expectedRevision', String(latest.record.revision));
+    form.append('fieldKey', pending.fieldKey);
+    form.append('captureMetadata', JSON.stringify(pending.metadata));
+    form.append('clientUploadId', pending.id);
+    form.append('file', uploadFile);
+    try {
+      const response = await apiRequest<{ record: PresentedActivityRecord }>(ENDPOINT, { method: 'POST', body: form });
+      return removeReceivedPendingFile(cacheKey, latest, pending, response.record);
+    } catch (caught) {
+      let fresh: PresentedActivityRecord | null = null;
+      try { fresh = await latestRecord(latest.record.id); } catch { /* Preserve the original upload failure. */ }
+      if (fresh?.evidence.some((item) => item.id === pending.id)) {
+        return removeReceivedPendingFile(cacheKey, latest, pending, fresh);
       }
-    }
-  } finally {
-    if (previewUri) {
-      const previewFile = new File(previewUri);
-      if (previewFile.exists) previewFile.delete();
+      if (!(caught instanceof ApiError) || caught.code !== 'ACTIVITY_REVISION_CONFLICT' || !fresh || attempt === 2) throw caught;
+      latest = await acceptResponse(cacheKey, latest, fresh);
     }
   }
   return latest;
@@ -502,7 +591,14 @@ function completionFailureMessage(cache: ActivityFormCache, caught: unknown) {
 
 async function completeCache(cacheKey: string) {
   let cache = await readCache(cacheKey);
-  if (!cache?.finishRequested) return;
+  if (!cache || (!cache.finishRequested && !shouldRetryLegacyFailedImageUpload(cache))) return;
+  if ((cache.imageUploadRepairVersion || 0) < ACTIVITY_IMAGE_UPLOAD_VERSION) {
+    cache = await remember(cacheKey, {
+      ...cache,
+      finishRequested: true,
+      imageUploadRepairVersion: ACTIVITY_IMAGE_UPLOAD_VERSION,
+    });
+  }
   try {
     cache = await refresh(cacheKey, cache);
     if (cache.record.status === 'submitted_for_creditex_review') {
@@ -542,7 +638,10 @@ async function completeCache(cacheKey: string) {
 export async function processActivityFormCompletionQueue(cacheKey?: string) {
   const keys = cacheKey
     ? [cacheKey]
-    : (await listActivityFormCacheSettings()).flatMap((row) => activityFormCache(row.value)?.finishRequested ? [row.key] : []);
+    : (await listActivityFormCacheSettings()).flatMap((row) => {
+      const cache = activityFormCache(row.value);
+      return cache && (cache.finishRequested || shouldRetryLegacyFailedImageUpload(cache)) ? [row.key] : [];
+    });
   for (const key of [...new Set(keys)]) {
     if (!key.startsWith(CACHE_KEY_PREFIX)) continue;
     const existing = activeCacheWorkers.get(key);

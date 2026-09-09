@@ -1114,6 +1114,32 @@ export async function listActivityFormCacheSettings() {
     "SELECT key, value FROM settings WHERE key LIKE 'activity-form:%' ORDER BY key",
   );
 }
+
+export async function listLocallyFinishedActivityIntentIds(workOrderId: string) {
+  const rows = await (await getDatabase()).getAllAsync<{ value: string }>(
+    'SELECT value FROM settings WHERE key LIKE ? ORDER BY key',
+    `activity-form:${workOrderId}:%`,
+  );
+  const intentIds = new Set<string>();
+  for (const row of rows) {
+    try {
+      const cache = JSON.parse(row.value) as {
+        record?: { workOrderId?: unknown; intentId?: unknown; status?: unknown };
+        finishRequested?: unknown;
+        finishError?: unknown;
+      };
+      if (cache.record?.workOrderId !== workOrderId || typeof cache.record.intentId !== 'string') continue;
+      const finished = cache.record.status === 'submitted_for_creditex_review'
+        || cache.finishRequested === true
+        || (typeof cache.finishError === 'string' && cache.finishError.trim().length > 0);
+      if (finished) intentIds.add(cache.record.intentId);
+    } catch {
+      // Ignore malformed legacy settings. The server record remains authoritative.
+    }
+  }
+  return [...intentIds];
+}
+
 export type JobCompletionQueueState = {
   finish: null | { status: string; errorCode: string; errorMessage: string };
 };

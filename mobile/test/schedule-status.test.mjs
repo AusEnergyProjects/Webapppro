@@ -29,3 +29,11 @@ test('schedule cards use field-friendly lifecycle labels', () => {
   assert.match(jobDetails, /lifecycleLabel\(job, activityRecords, finishQueued\)/);
   assert.match(jobDetails, /job\.auditOutcome/);
 });
+
+test('a locally finished activity is immediately complete on job details', () => {
+  assert.match(jobDetails, /listLocallyFinishedActivityIntentIds\(workOrderId\)/);
+  assert.match(jobDetails, /activityIntentComplete\([\s\S]{0,180}locallyFinishedActivityIntentIds/);
+  assert.match(jobDetails, /onReturnToJob=\{\(\) => \{ setActiveFormId\(null\); void load\(\); \}\}/,
+    'returning from Done must refresh the durable local completion before rendering the row');
+  assert.match(jobDetails, /\? 'Job forms' : 'Forms to complete'/);
+});

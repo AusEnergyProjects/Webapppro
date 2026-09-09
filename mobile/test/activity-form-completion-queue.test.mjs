@@ -77,25 +77,45 @@ test('ordinary sync drains activity completions before fetching authoritative jo
     'submitted activity state must reach the server before the refreshed job lifecycle is fetched');
 });
 
-test('activity evidence retries retain stable upload identity and clean every generated preview', () => {
+test('activity image retries retain stable upload identity and a durable bounded JPEG', () => {
   assert.match(completion, /(?:append|set)\(\s*['"]clientUploadId['"]\s*,\s*pending\.id\s*\)/,
     'the retained pending ID must remain the server idempotency key');
-
-  const uploadRequest = firstMatchIndex(completion, /apiRequest[\s\S]{0,180}(?:method:\s*['"]POST['"]|body:\s*form)/,
-    'activity evidence upload request');
-  const finallyIndex = firstMatchIndex(completion.slice(uploadRequest), /\bfinally\b/,
-    'preview cleanup finally block') + uploadRequest;
-  const previewDeleteIndex = firstMatchIndex(completion.slice(finallyIndex),
-    /(?:new\s+File\(previewUri\)|preview(?:File)?)[\s\S]{0,180}\.delete\s*\(/,
-    'generated preview deletion') + finallyIndex;
-  assert.ok(previewDeleteIndex > finallyIndex,
-    'generated previews must be deleted after both successful and failed upload attempts');
+  assert.match(completion, /preparedUploadUri:\s*prepared\.uri/,
+    'the prepared file URI must be retained for identical retries');
+  assert.match(completion, /preparedUploadVersion:\s*ACTIVITY_IMAGE_UPLOAD_VERSION/);
+  assert.match(completion, /\[2560,\s*0\.8\]/);
+  assert.match(completion, /file\.size\s*<=\s*MAX_ACTIVITY_IMAGE_UPLOAD_BYTES/);
 });
 
-test('generic Android image files still receive a compact report preview', () => {
+test('generic Android images upload the compact canonical JPEG without a preview part', () => {
   assert.match(completion, /pending\.contentType\.toLowerCase\(\) !== 'application\/octet-stream'/);
   assert.match(completion, /\\\.\(\?:jpe\?g\|png\)\\b\/i/);
-  assert.match(completion, /if \(pendingFileIsImage\(pending\)\) previewUri = await generatedPreview\(pending\.uri\)/);
+  const upload = sourceFunction(completion, 'uploadPendingFile');
+  assert.match(upload, /prepareActivityImageUpload\(cacheKey,\s*latest,\s*pending\)/);
+  assert.match(upload, /append\(\s*['"]file['"]\s*,\s*uploadFile\s*\)/);
+  assert.doesNotMatch(upload, /append\(\s*['"]preview['"]/,
+    'the canonical image is already small enough for the report');
+  assert.match(upload, /captureMetadata['"]\s*,\s*JSON\.stringify\(pending\.metadata\)/,
+    'capture and GPS metadata must remain unchanged');
+});
+
+test('image resizing bounds the longest side and never enlarges a smaller photo', () => {
+  const { boundedActivityImageResize } = loadFunctions(completion, ['boundedActivityImageResize']);
+  assert.deepEqual(boundedActivityImageResize(8000, 6000), { width: 2560 });
+  assert.deepEqual(boundedActivityImageResize(3000, 4000), { height: 2560 });
+  assert.equal(boundedActivityImageResize(1600, 1200), null);
+});
+
+test('one legacy failed image completion is retried once after the upload repair', () => {
+  const retry = sourceFunction(completion, 'shouldRetryLegacyFailedImageUpload');
+  assert.match(retry, /Boolean\(cache\.finishError\)/);
+  assert.match(retry, /cache\.pending\.some\(pendingFileIsImage\)/);
+  assert.match(retry, /imageUploadRepairVersion[\s\S]*ACTIVITY_IMAGE_UPLOAD_VERSION/);
+  const worker = sourceFunction(completion, 'completeCache');
+  assert.match(worker, /imageUploadRepairVersion:\s*ACTIVITY_IMAGE_UPLOAD_VERSION/);
+  assert.match(worker, /finishRequested:\s*true/);
+  const queue = sourceFunction(completion, 'processActivityFormCompletionQueue');
+  assert.match(queue, /cache\.finishRequested\s*\|\|\s*shouldRetryLegacyFailedImageUpload\(cache\)/);
 });
 
 test('server receipt is persisted before the retained original is deleted', () => {
@@ -199,6 +219,17 @@ test('pending and failed form completions remain visible in the ordinary sync co
   assert.match(database, /json_extract\(value, '\$\.finishError'\)/);
   assert.match(database, /actions: \(actions\?\.count \|\| 0\) \+ \(activityCompletions\?\.count \|\| 0\)/);
   assert.match(database, /conflicts: \(conflicts\?\.count \|\| 0\) \+ \(activityCompletions\?\.errors \|\| 0\)/);
+});
+
+test('job activity rows can read the exact locally finished intent without completing sibling forms', () => {
+  const getter = sourceFunction(database, 'listLocallyFinishedActivityIntentIds');
+  assert.match(getter, /activity-form:\$\{workOrderId\}:%/,
+    'the cache lookup must be restricted to the open job');
+  assert.match(getter, /cache\.record\?\.workOrderId\s*!==\s*workOrderId/,
+    'parsed cache content must also belong to the open job');
+  assert.match(getter, /cache\.finishRequested\s*===\s*true/);
+  assert.match(getter, /cache\.finishError/);
+  assert.match(getter, /cache\.record\.intentId/);
 });
 
 test('background sync remains available to an active PIN field session', () => {

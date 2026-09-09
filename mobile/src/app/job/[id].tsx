@@ -37,11 +37,13 @@ import {
   discardUpload,
   getJobCompletionQueueState,
   getSetting,
+  listLocallyFinishedActivityIntentIds,
   listPendingWorkPackActions,
   listWorkPackProblems,
   setSetting,
   type JobCompletionQueueState,
 } from '@/lib/database';
+import { activityIntentComplete } from '@/lib/activity-field-completion';
 import { APP_VERSION } from '@/lib/config';
 import { getDeviceId } from '@/lib/device';
 import {
@@ -292,6 +294,7 @@ export default function JobScreen() {
   const [busy, setBusy] = useState('');
   const [activeFormId, setActiveFormId] = useState<string | null>(() => openCommercial === 'quote' || openCommercial === 'invoice' ? openCommercial : null);
   const [activityRecords, setActivityRecords] = useState<ActivityFieldSummary[]>([]);
+  const [locallyFinishedActivityIntentIds, setLocallyFinishedActivityIntentIds] = useState<string[]>([]);
   const [activityLoadError, setActivityLoadError] = useState('');
   const [completionQueue, setCompletionQueue] = useState<JobCompletionQueueState>({
     finish: null,
@@ -301,16 +304,18 @@ export default function JobScreen() {
 
   const load = useCallback(async () => {
     const workOrderId = String(id);
-    const [nextJob, problems, pendingActions, queuedCompletion] = await Promise.all([
+    const [nextJob, problems, pendingActions, queuedCompletion, finishedActivityIntents] = await Promise.all([
       findJob(workOrderId),
       listWorkPackProblems(workOrderId),
       listPendingWorkPackActions(workOrderId),
       getJobCompletionQueueState(workOrderId),
+      listLocallyFinishedActivityIntentIds(workOrderId),
     ]);
     setJob(nextJob);
     setWorkPackProblems(problems);
     setPendingWorkPackActions(pendingActions);
     setCompletionQueue(queuedCompletion);
+    setLocallyFinishedActivityIntentIds(finishedActivityIntents);
     if (nextJob?.complianceIntents?.length && nextJob.fieldLane !== 'creditex_manual') {
       try {
         const response = await apiRequest<{ records: ActivityFieldSummary[] }>("/api/trade-activity-forms?workOrderId=" + encodeURIComponent(workOrderId));
@@ -1272,7 +1277,7 @@ export default function JobScreen() {
   const syncLabel = !sync.online ? 'Offline' : sync.conflicts ? 'Action required' : sync.running || sync.queuedActions || sync.queuedUploads ? 'Syncing' : 'Saved';
   const creditexManual = job.fieldLane === 'creditex_manual';
   const syntheticManual = job.recordMode === 'synthetic_test' && creditexManual;
-  if (!creditexManual && complianceIntents.some((intent) => intent.id === activeFormId)) return <Screen scroll={false} style={{ padding: 0 }}><ActivityFieldFormWizard key={activeFormId} workOrderId={job.id} intentId={activeFormId!} variantId={complianceIntents.find((intent) => intent.id === activeFormId)?.variantId || ''} online={sync.online} onReturnToJob={() => setActiveFormId(null)} onChanged={async () => { await syncNow(); await load(); }} /></Screen>;
+  if (!creditexManual && complianceIntents.some((intent) => intent.id === activeFormId)) return <Screen scroll={false} style={{ padding: 0 }}><ActivityFieldFormWizard key={activeFormId} workOrderId={job.id} intentId={activeFormId!} variantId={complianceIntents.find((intent) => intent.id === activeFormId)?.variantId || ''} online={sync.online} onReturnToJob={() => { setActiveFormId(null); void load(); }} onChanged={async () => { await syncNow(); await load(); }} /></Screen>;
   const selectedBusinessForm = fieldForms.find((form) => form.id === activeFormId);
   if (selectedBusinessForm) return <Screen><JobFieldForm key={selectedBusinessForm.id} form={selectedBusinessForm} busy={busy === 'form:' + selectedBusinessForm.id} onSave={saveForm} onReturnToJob={() => setActiveFormId(null)} /></Screen>;
   if (job.rentalInspection && activeFormId === 'rental') return <Screen scroll={false} style={{ padding: 0 }}><RentalInspectionWorkflow workOrderId={job.id} summary={job.rentalInspection} online={sync.online} onReturnToJob={() => setActiveFormId(null)} onChanged={async () => { await syncNow(); await load(); }} /></Screen>;
@@ -1297,12 +1302,17 @@ export default function JobScreen() {
       </View> : null}
 
       {!activeFormId ? <View style={styles.card}>
-        <Text style={styles.cardTitle}>Forms to complete</Text>
+        <Text style={styles.cardTitle}>{['completed', 'cancelled'].includes(job.stage) ? 'Job forms' : 'Forms to complete'}</Text>
         {activityLoadError ? <Text style={styles.meta}>{activityLoadError}</Text> : null}
         {complianceIntents.map((intent) => {
           const pack = (job.activityWorkPacks || []).find((item) => item.instance.complianceIntentId === intent.id);
+          const done = activityIntentComplete(
+            intent.id,
+            activityRecords,
+            job.activityWorkPacks || [],
+            locallyFinishedActivityIntentIds,
+          );
           const activityRecord = activityRecords.find((record) => record.intentId === intent.id);
-          const done = activityRecord?.status === 'submitted_for_creditex_review' || (pack?.instance.status === 'completed' && Boolean(pack.finalRecord));
           return <Pressable key={intent.id} accessibilityRole="button" onPress={() => setActiveFormId(intent.id)} style={styles.formRow}>
             <MaterialCommunityIcons name={done ? 'check-circle-outline' : 'alert-circle-outline'} size={27} color={done ? colours.green : colours.amber} />
             <View style={styles.flex}><Text style={styles.taskTitle}>{intent.programCode} {intent.activityCode} | {intent.activityTitle}</Text><Text style={styles.meta}>{activityRecord?.recordNumber || pack?.instance.id || intent.id} | {done ? 'Complete' : activityRecord?.id || pack ? 'Continue form' : 'Start form'}</Text></View>

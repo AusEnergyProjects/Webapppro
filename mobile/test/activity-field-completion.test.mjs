@@ -21,3 +21,9 @@ test('the existing signed work-pack final record remains a valid completion path
   assert.equal(activityIntentComplete('legacy-activity', [], [pack]), true);
   assert.equal(activityIntentComplete('legacy-activity', [], [{ ...pack, finalRecord: null }]), false);
 });
+
+test('a finish saved on this phone completes only that activity immediately', () => {
+  const records = [{ intentId: 'air-conditioning', status: 'draft' }];
+  assert.equal(activityIntentComplete('air-conditioning', records, [], ['air-conditioning']), true);
+  assert.equal(activityIntentComplete('heat-pump', records, [], ['air-conditioning']), false);
+});
