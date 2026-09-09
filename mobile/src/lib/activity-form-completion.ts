@@ -199,6 +199,13 @@ function assertCaptureMetadata(pending: PendingFile) {
   }
 }
 
+function pendingFileIsImage(pending: PendingFile) {
+  if (pending.contentType.toLowerCase().startsWith('image/')) return true;
+  if (pending.contentType && pending.contentType.toLowerCase() !== 'application/octet-stream') return false;
+  const name = `${pending.name} ${pending.uri.split(/[?#]/, 1)[0]}`;
+  return /\.(?:jpe?g|png)\b/i.test(name);
+}
+
 async function removeReceivedPendingFile(
   cacheKey: string,
   snapshot: ActivityFormCache,
@@ -230,7 +237,7 @@ async function uploadPendingFile(cacheKey: string, snapshot: ActivityFormCache, 
 
   let previewUri = '';
   try {
-    if (pending.contentType.startsWith('image/')) previewUri = await generatedPreview(pending.uri);
+    if (pendingFileIsImage(pending)) previewUri = await generatedPreview(pending.uri);
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const form = new FormData();
       form.append('action', 'upload');

@@ -307,13 +307,16 @@ test('a grouped signature is retained for all covered declarations and final sub
   assert.match(wizard, /const retryRevision = action === 'save' \|\| action === 'submit'/);
   assert.match(wizard, /step\?\.kind === 'review' \? 'Done'/);
   assert.match(wizard, /function finish\(\) \{\s*onReturnToJob\(\)/);
-  assert.match(wizard, /function finishImmediately\(\) \{[\s\S]{0,260}finishRequested: true[\s\S]{0,180}onReturnToJob\(\);[\s\S]{0,180}processActivityFormCompletionQueue\(cacheKey\)/);
+  assert.match(wizard, /async function finishImmediately\(\) \{[\s\S]{0,300}finishRequested: true[\s\S]{0,180}onReturnToJob\(\);[\s\S]{0,180}processActivityFormCompletionQueue\(cacheKey\)/);
   const finishImmediately = wizard.slice(wizard.indexOf('function finishImmediately()'), wizard.indexOf('async function share()'));
   assert.ok(finishImmediately.indexOf('onReturnToJob();') < finishImmediately.indexOf('processActivityFormCompletionQueue(cacheKey)'),
     'Done must return to the job before background completion starts');
-  assert.doesNotMatch(finishImmediately.slice(0, finishImmediately.indexOf('onReturnToJob();')), /await\s/,
-    'Done must never wait for local persistence or the network before returning');
-  assert.match(wizard, /step\?\.kind === 'review' && record\.status === 'draft' \? finishImmediately\(\)/);
+  const beforeReturn = finishImmediately.slice(0, finishImmediately.indexOf('onReturnToJob();'));
+  assert.match(beforeReturn, /await remember\(/, 'the durable local finish marker must be saved before returning');
+  assert.doesNotMatch(beforeReturn, /apiRequest|processActivityFormCompletionQueue|request\(/,
+    'Done must never wait for network work before returning');
+  assert.match(wizard, /step\?\.kind === 'review' && record\.status === 'draft' \? void finishImmediately\(\)/);
+  assert.match(wizard, /saved\.finishError[\s\S]{0,140}TLink could not finish this form in the background/);
   assert.doesNotMatch(wizard, /cache\.pending\.length > 0/);
   assert.doesNotMatch(wizard, /!online \|\| Boolean\(busy\).*review/);
   assert.match(wizard, /while \(true\) \{\s*const snapshot = cacheRef\.current;[\s\S]{0,500}const queued = pendingSignatureToSync/);

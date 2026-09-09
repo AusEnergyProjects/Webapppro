@@ -216,6 +216,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
         saved = raw ? JSON.parse(raw) as Cache : null;
         if (disposed) return;
         if (saved) {
+          if (saved.finishError) setError(`TLink could not finish this form in the background: ${saved.finishError}`);
           await remember(saved);
           if (saved.camera) {
             const result = await ImagePicker.getPendingResultAsync();
@@ -704,15 +705,18 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     onReturnToJob();
     void onChanged().catch(() => undefined);
   }
-  function finishImmediately() {
+  async function finishImmediately() {
     const latest = cacheRef.current;
     if (!latest) return;
-    const retained = remember({ ...latest, finishRequested: true, finishError: '' });
-    onReturnToJob();
-    void retained
-      .then(() => processActivityFormCompletionQueue(cacheKey))
+    try {
+      await remember({ ...latest, finishRequested: true, finishError: '' });
+      onReturnToJob();
+      void processActivityFormCompletionQueue(cacheKey)
       .then(() => onChanged())
       .catch(() => undefined);
+    } catch {
+      setError('TLink could not save the finish request on this phone. Tap Done again.');
+    }
   }
   async function share() {
     await perform('share', async () => {
@@ -879,7 +883,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
         </>}
       </>}
     </ScrollView>
-    {!overview ? <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy) || stepIndex === 0} onPress={() => void move(-1)}>Previous</FieldButton><FieldButton style={styles.flex} disabled={Boolean(busy) || (step?.kind === 'review' && record.status === 'draft' && fieldMissing.length > 0) || (technicianSignature && !boundSignerName)} loading={busy === 'next'} onPress={() => step?.kind === 'review' && record.status === 'draft' ? finishImmediately() : step?.kind === 'review' ? finish() : void next()}>{step?.kind === 'review' ? 'Done' : step?.kind === 'signature' && !currentSignature && !pendingSignature ? 'Save signature' : 'Next'}</FieldButton></View> : null}
+    {!overview ? <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}><FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy) || stepIndex === 0} onPress={() => void move(-1)}>Previous</FieldButton><FieldButton style={styles.flex} disabled={Boolean(busy) || (step?.kind === 'review' && record.status === 'draft' && fieldMissing.length > 0) || (technicianSignature && !boundSignerName)} loading={busy === 'next'} onPress={() => step?.kind === 'review' && record.status === 'draft' ? void finishImmediately() : step?.kind === 'review' ? finish() : void next()}>{step?.kind === 'review' ? 'Done' : step?.kind === 'signature' && !currentSignature && !pendingSignature ? 'Save signature' : 'Next'}</FieldButton></View> : null}
   </View>;
 }
 

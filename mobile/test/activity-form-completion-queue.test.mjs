@@ -78,6 +78,12 @@ test('activity evidence retries retain stable upload identity and clean every ge
     'generated previews must be deleted after both successful and failed upload attempts');
 });
 
+test('generic Android image files still receive a compact report preview', () => {
+  assert.match(completion, /pending\.contentType\.toLowerCase\(\) !== 'application\/octet-stream'/);
+  assert.match(completion, /\\\.\(\?:jpe\?g\|png\)\\b\/i/);
+  assert.match(completion, /if \(pendingFileIsImage\(pending\)\) previewUri = await generatedPreview\(pending\.uri\)/);
+});
+
 test('server receipt is persisted before the retained original is deleted', () => {
   const receipt = sourceFunction(completion, 'removeReceivedPendingFile');
   const removePendingIndex = firstMatchIndex(receipt,
@@ -126,6 +132,14 @@ test('completion intent survives failure and clears only after confirmed success
   assert.ok(retainedIndex > catchIndex);
   assert.ok(clearedIndex > submittedIndex,
     'finishRequested must clear only after the server confirms completion');
+});
+
+test('pending and failed form completions remain visible in the ordinary sync counts', () => {
+  assert.match(database, /key LIKE 'activity-form:%'/);
+  assert.match(database, /json_extract\(value, '\$\.finishRequested'\) = 1/);
+  assert.match(database, /json_extract\(value, '\$\.finishError'\)/);
+  assert.match(database, /actions: \(actions\?\.count \|\| 0\) \+ \(activityCompletions\?\.count \|\| 0\)/);
+  assert.match(database, /conflicts: \(conflicts\?\.count \|\| 0\) \+ \(activityCompletions\?\.errors \|\| 0\)/);
 });
 
 test('background sync remains available to an active PIN field session', () => {

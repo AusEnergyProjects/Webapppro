@@ -1041,10 +1041,20 @@ export async function queueCounts() {
   const db = await getDatabase();
   const actions = await db.getFirstAsync<{ count: number }>("SELECT COUNT(*) count FROM action_queue WHERE status IN ('queued', 'retry')");
   const uploads = await db.getFirstAsync<{ count: number }>("SELECT COUNT(*) count FROM upload_queue WHERE status IN ('queued', 'uploading', 'retry')");
+  const activityCompletions = await db.getFirstAsync<{ count: number; errors: number }>(`SELECT COUNT(*) count,
+    COALESCE(SUM(CASE WHEN TRIM(COALESCE(json_extract(value, '$.finishError'), '')) <> '' THEN 1 ELSE 0 END), 0) errors
+    FROM settings
+    WHERE key LIKE 'activity-form:%'
+      AND json_valid(value)
+      AND json_extract(value, '$.finishRequested') = 1`);
   const conflicts = await db.getFirstAsync<{ count: number }>(`SELECT
     (SELECT COUNT(*) FROM action_queue WHERE status IN ('conflict', 'rejected'))
     + (SELECT COUNT(*) FROM upload_queue WHERE status = 'rejected') count`);
-  return { actions: actions?.count || 0, uploads: uploads?.count || 0, conflicts: conflicts?.count || 0 };
+  return {
+    actions: (actions?.count || 0) + (activityCompletions?.count || 0),
+    uploads: uploads?.count || 0,
+    conflicts: (conflicts?.count || 0) + (activityCompletions?.errors || 0),
+  };
 }
 
 export async function getSetting(key: string) {
