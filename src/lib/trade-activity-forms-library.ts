@@ -477,6 +477,11 @@ const ACTIVITY_APPROVED_PRODUCT_SELECTORS = {
   "veu-3": { productKind: "veu_water_heater", veuActivityCodes: ["3C", "3D"] },
   "veu-6": { productKind: "veu_air_conditioner", veuActivityCodes: ["6"] },
 } as const;
+
+export function activityApprovedProductContract(templateId: string) {
+  const contract = ACTIVITY_APPROVED_PRODUCT_SELECTORS[templateId as keyof typeof ACTIVITY_APPROVED_PRODUCT_SELECTORS];
+  return contract ? { productKind: contract.productKind, veuActivityCodes: [...contract.veuActivityCodes] } : null;
+}
 const RETIRED_ACTIVITY_3_PRODUCT_FIELDS = new Set([
   "installed_product.heat_pump_model",
   "installed_product.tank_model",

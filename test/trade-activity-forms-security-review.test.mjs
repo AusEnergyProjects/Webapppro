@@ -8,7 +8,7 @@ import { PDFDict, PDFDocument, PDFName } from "pdf-lib";
 import * as core from "../src/lib/trade-activity-forms.ts";
 import * as flow from "../src/lib/trade-activity-form-flow.ts";
 import * as receipt from "../src/lib/scheduled-activity-customer-document-receipt.ts";
-import { activityFieldWorkerForm } from "../src/lib/trade-activity-forms-library.ts";
+import { activityApprovedProductContract, activityFieldWorkerForm } from "../src/lib/trade-activity-forms-library.ts";
 import { canEditCreditexFieldMasters } from "../src/lib/creditex-field-master-access.ts";
 import { renderActivityFieldPdf, validateActivityEvidenceBytes } from "../src/lib/trade-activity-forms-pdf.ts";
 
@@ -99,6 +99,7 @@ function fixture(fieldForm = form(), options = {}) {
     "./trade-activity-forms-library.ts": {
       defaultActivityFieldForm: options.defaultFormFactory || (() => structuredClone(options.defaultForm || fieldForm)), activityPrefill: options.activityPrefill || (() => ({})),
       activityConsumerDocuments: () => options.consumerDocuments || [],
+      activityApprovedProductContract: options.activityApprovedProductContract || activityApprovedProductContract,
       activityFieldWorkerForm: options.activityFieldWorkerForm || activityFieldWorkerForm,
       applyDefaultActivityFormPolicy: options.applyPolicy || ((value) => value),
       ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS: {
@@ -404,6 +405,69 @@ test("submission rejects a brand and model that are not an approved pair for the
     approved = true;
     record = await server.submitActivityRecord(access, record.id, record.revision);
     assert.equal(record.status, "submitted_for_creditex_review");
+  } finally { database.close(); }
+});
+
+test("submission rejects a governed activity whose approved-product selectors are missing", async () => {
+  const fieldForm = form();
+  fieldForm.activityTemplateId = "veu-6";
+  fieldForm.programCode = "VEU";
+  fieldForm.fields.push({ ...field("customer_property.installation_date", "after", "date"), presentation: "derived" });
+  let searches = 0;
+  const { database, server, access } = fixture(fieldForm, {
+    activityPrefill: () => ({ "customer_property.installation_date": "2026-09-08" }),
+    searchOfficialProducts: async () => { searches += 1; return { matchCount: 1 }; },
+  });
+  try {
+    database.prepare("UPDATE trade_work_order_compliance_intents SET activity_template_id = 'veu-6' WHERE id = 'intent-a'").run();
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Unit" });
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes });
+    await assert.rejects(server.submitActivityRecord(access, record.id, record.revision), /ACTIVITY_APPROVED_PRODUCT_REQUIRED/);
+    assert.equal(searches, 0);
+  } finally { database.close(); }
+});
+
+test("Activity 3 product validation caps registry requests at six while accepting either governed activity code", async () => {
+  const fieldForm = form();
+  fieldForm.activityTemplateId = "veu-3";
+  fieldForm.programCode = "VEU";
+  fieldForm.fields.push(
+    { ...field("customer_property.installation_date", "after", "date"), presentation: "derived" },
+    { ...field("installed_product.brand", "after"), repeatGroup: "installedProducts[]" },
+    { ...field("installed_product.model", "after"), repeatGroup: "installedProducts[]" },
+  );
+  let active = 0; let peak = 0; let calls = 0;
+  const { database, server, access } = fixture(fieldForm, {
+    activityPrefill: () => ({ "customer_property.installation_date": "2026-09-08" }),
+    searchOfficialProducts: async (_database, input) => {
+      calls += 1; active += 1; peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      active -= 1;
+      return { matchCount: input.veuActivityCode === "3D" ? 1 : 0 };
+    },
+  });
+  try {
+    database.prepare("UPDATE trade_work_order_compliance_intents SET activity_template_id = 'veu-3' WHERE id = 'intent-a'").run();
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    const answers = { before_name: "Customer", after_model: "Unit", "$repeat.installedProducts[]": 4 };
+    for (let index = 0; index < 4; index += 1) {
+      const suffix = index ? `[${index}]` : "";
+      answers[`installed_product.brand${suffix}`] = `Approved Brand ${index + 1}`;
+      answers[`installed_product.model${suffix}`] = `APPROVED-${index + 1}`;
+    }
+    record = await server.saveActivityAnswers(access, record.id, record.revision, answers);
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes });
+    record = await server.submitActivityRecord(access, record.id, record.revision);
+    assert.equal(record.status, "submitted_for_creditex_review");
+    assert.equal(calls, 8);
+    assert.ok(peak <= 6, `peak registry concurrency was ${peak}`);
   } finally { database.close(); }
 });
 
@@ -1252,14 +1316,26 @@ test("submission verifies independent evidence reads concurrently within the ser
 test("a signed stale Activity 3 draft ignores retired hidden fields when it is submitted", async () => {
   const staleActivity3 = form();
   staleActivity3.activityTemplateId = "veu-3";
-  staleActivity3.fields.push(field("retired.office_only", "after"));
+  staleActivity3.fields.push(
+    { ...field("customer_property.installation_date", "after", "date"), presentation: "derived" },
+    { ...field("installed_product.brand", "after"), repeatGroup: "installedProducts[]" },
+    { ...field("installed_product.model", "after"), repeatGroup: "installedProducts[]" },
+    field("retired.office_only", "after"),
+  );
   const { database, server, access } = fixture(staleActivity3, {
-    activityFieldWorkerForm: (stored) => ({ ...stored, fields: stored.fields.filter((item) => item.key !== "retired.office_only") }),
+    activityPrefill: () => ({ "customer_property.installation_date": "2026-09-08" }),
+    activityFieldWorkerForm: (stored) => {
+      const current = activityFieldWorkerForm(stored);
+      return { ...current, fields: current.fields.filter((item) => item.key !== "retired.office_only") };
+    },
   });
   try {
     database.prepare("UPDATE trade_work_order_compliance_intents SET activity_template_id = 'veu-3' WHERE id = 'intent-a'").run();
     let record = await server.openActivityRecord(access, "job-a", "intent-a");
-    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Unit" });
+    record = await server.saveActivityAnswers(access, record.id, record.revision, {
+      before_name: "Customer", after_model: "Unit",
+      "installed_product.brand": "Approved Brand", "installed_product.model": "APPROVED-100",
+    });
     for (const declaration of ["before_customer", "after_technician"]) record = await server.signActivityDeclaration(access, record.id, {
       expectedRevision: record.revision, declarationKey: declaration, signerName: "Signer", acknowledged: true, strokes,
     });

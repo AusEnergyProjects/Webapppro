@@ -4,6 +4,7 @@ import { assignedJob, type TeamAccess } from "./trade-team-server";
 import {
   activityPrefill,
   activityConsumerDocuments,
+  activityApprovedProductContract,
   activityFieldWorkerForm,
   applyDefaultActivityFormPolicy,
   defaultActivityFieldForm,
@@ -887,16 +888,30 @@ async function assertApprovedActivityProducts(record: ActivityRecord) {
   const form = activityFieldWorkerForm(record.form);
   const fields = expandedActivityFields(form, record.answers);
   const modelFields = fields.filter((field) => field.approvedProduct?.role === "model");
-  if (!modelFields.length) return;
+  const expected = activityApprovedProductContract(form.activityTemplateId);
+  if (!modelFields.length) {
+    if (expected) throw new Error("ACTIVITY_APPROVED_PRODUCT_REQUIRED");
+    return;
+  }
   const installationDate = string(record.answers["customer_property.installation_date"], 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(installationDate)) throw new Error("ACTIVITY_APPROVED_PRODUCT_REQUIRED");
 
+  const sameActivityCodes = (left: readonly string[], right: readonly string[]) => {
+    const sortedLeft = [...left].sort();
+    const sortedRight = [...right].sort();
+    return sortedLeft.length === sortedRight.length && sortedLeft.every((value, index) => value === sortedRight[index]);
+  };
+
   const selections = modelFields.map((modelField) => {
     const contract = modelField.approvedProduct!;
+    if (expected && (contract.productKind !== expected.productKind
+      || !sameActivityCodes(contract.veuActivityCodes, expected.veuActivityCodes))) {
+      throw new Error("ACTIVITY_APPROVED_PRODUCT_REQUIRED");
+    }
     const brandField = fields.find((field) => field.repeatIndex === modelField.repeatIndex
       && field.baseKey === contract.brandFieldKey && field.approvedProduct?.role === "brand"
       && field.approvedProduct.productKind === contract.productKind
-      && JSON.stringify(field.approvedProduct.veuActivityCodes) === JSON.stringify(contract.veuActivityCodes));
+      && sameActivityCodes(field.approvedProduct.veuActivityCodes, contract.veuActivityCodes));
     const brand = brandField ? string(record.answers[brandField.key], 300) : "";
     const model = string(record.answers[modelField.key], 500);
     if (!brandField || !brand || !model || !contract.veuActivityCodes.length) throw new Error("ACTIVITY_APPROVED_PRODUCT_REQUIRED");
@@ -907,19 +922,27 @@ async function assertApprovedActivityProducts(record: ActivityRecord) {
     JSON.stringify([selection.brand, selection.model, selection.contract.productKind, selection.contract.veuActivityCodes]),
     selection,
   ])).values()];
-  for (let offset = 0; offset < unique.length; offset += 6) {
-    await Promise.all(unique.slice(offset, offset + 6).map(async ({ brand, model, contract }) => {
-      const results = await Promise.all(contract.veuActivityCodes.map((veuActivityCode) => searchOfficialProducts(getD1(), {
-        productKind: contract.productKind,
-        installationDate,
-        brand,
-        model,
-        veuActivityCode,
-        limit: 1,
-      }, { allowStaleAcceptedSnapshot: true })));
-      if (!results.some((result) => result.matchCount > 0)) throw new Error("ACTIVITY_APPROVED_PRODUCT_REQUIRED");
-    }));
+  const requests = unique.flatMap(({ brand, model, contract }, selectionIndex) => contract.veuActivityCodes.map((veuActivityCode) => ({
+    selectionIndex,
+    request: {
+      productKind: contract.productKind,
+      installationDate,
+      brand,
+      model,
+      veuActivityCode,
+      limit: 1,
+    },
+  })));
+  const matchedSelections = new Set<number>();
+  for (let offset = 0; offset < requests.length; offset += 6) {
+    const batch = requests.slice(offset, offset + 6);
+    const results = await Promise.all(batch.map(({ request }) => searchOfficialProducts(getD1(), request,
+      { allowStaleAcceptedSnapshot: true })));
+    results.forEach((result, index) => {
+      if (result.matchCount > 0) matchedSelections.add(batch[index].selectionIndex);
+    });
   }
+  if (matchedSelections.size !== unique.length) throw new Error("ACTIVITY_APPROVED_PRODUCT_REQUIRED");
 }
 
 export async function submitActivityRecord(access: TeamAccess, id: string, expectedRevision: unknown) {
