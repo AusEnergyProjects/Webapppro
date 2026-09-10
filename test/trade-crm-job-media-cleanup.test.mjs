@@ -8,6 +8,29 @@ import {
 import fs from "node:fs";
 const workflow = fs.readFileSync(new URL("../src/lib/public-lead-quote-workflow-server.ts", import.meta.url), "utf8");
 
+test('job deletion retries a failed multipart abort before removing its object and cleanup intent', async () => {
+  const row = { object_key: 'job/photo.jpg', upload_id: 'multipart', attempts: 0 };
+  const effects = []; let fails = true;
+  const options = { rows: [row], bucket: {
+    resumeMultipartUpload: (key, uploadId) => ({ abort: async () => { effects.push(['abort', key, uploadId]); if (fails) throw new Error('temporary storage failure'); } }),
+    delete: async (key) => { effects.push(['delete', key]); },
+  }, store: { isCanonical: async () => false, ownsClaim: async () => true,
+    clear: async () => { effects.push(['clear']); }, markFailed: async () => { effects.push(['retry']); } } };
+  assert.equal((await cleanupTradeCrmJobMediaRows(options)).failed, 1);
+  assert.deepEqual(effects.map((event) => event[0]), ['abort', 'retry']);
+  fails = false;
+  assert.equal((await cleanupTradeCrmJobMediaRows(options)).completed, 1);
+  assert.deepEqual(effects.map((event) => event[0]), ['abort', 'retry', 'abort', 'delete', 'clear']);
+});
+
+test('an already aborted or assembled upload does not leave job deletion cleanup stuck', async () => {
+  let deleted = false; let cleared = false;
+  const result = await cleanupTradeCrmJobMediaRows({ rows: [{ object_key: 'job/photo.jpg', upload_id: 'old-upload', attempts: 1 }],
+    bucket: { resumeMultipartUpload: () => ({ abort: async () => { throw Object.assign(new Error('No such upload'), { status: 404 }); } }), delete: async () => { deleted = true; } },
+    store: { isCanonical: async () => false, ownsClaim: async () => true, clear: async () => { cleared = true; }, markFailed: async () => assert.fail('A missing multipart upload is already cleared') } });
+  assert.equal(result.completed, 1); assert.equal(deleted, true); assert.equal(cleared, true);
+});
+
 test("failed accepted job-file staging cleanup retries later and clears its durable intent", async () => {
   const row = { object_key: "trade-accepted-leads/a/m/p/hash.jpg", attempts: 0 };
   let canonical = false;

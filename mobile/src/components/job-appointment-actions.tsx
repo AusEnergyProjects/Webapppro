@@ -9,6 +9,7 @@ import { KeyboardAwareScrollView } from '@/components/keyboard-aware-scroll-view
 import { apiRequest } from '@/lib/api';
 import { appointmentContactLinks, appointmentFormValues, appointmentTimeParts, appointmentTimeValue, type AppointmentAction, type AppointmentActionContext, type AppointmentActionResult } from '@/lib/appointment-actions';
 import { localWorkDate } from '@/lib/schedule';
+import { removeDeletedFieldJob } from '@/lib/sync';
 import { colours, radius, spacing } from '@/lib/theme';
 import type { FieldJob } from '@/lib/types';
 
@@ -90,15 +91,20 @@ export function JobAppointmentActions({ job, online, onClose, onSaved }: {
           appointmentId: context.appointment?.id || '', expectedAppointmentRevision: context.appointment?.revision || 0,
           ...(action === 'reschedule' ? { startsAt: `${date}T${time}`, durationMinutes, memberId } : {}),
           ...(action === 'update_customer' ? { customer: { ...customer, expectedUpdatedAt: context.customer?.updatedAt } } : {}),
+          ...(action === 'delete' ? { confirmDelete: true } : {}),
         }),
       });
+      if (result.deletedJobId) {
+        try { await removeDeletedFieldJob(result.deletedJobId); }
+        catch { result.deviceCleanupPending = true; }
+      }
       onSaved(action, result);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'This change could not be saved.');
     } finally { setBusy(false); }
   }
 
-  const title = { menu: 'Job actions', reschedule: 'Reschedule', no_show: 'Mark as no show', cancel: 'Cancel job', update_customer: 'Edit customer details' }[screen];
+  const title = { menu: 'Job actions', reschedule: 'Reschedule', no_show: 'Mark as no show', cancel: 'Cancel job', update_customer: 'Edit customer details', delete: 'Delete job' }[screen];
   return <Modal visible transparent animationType="slide" onRequestClose={close}>
     <View style={styles.backdrop}>
       <Pressable accessibilityRole="button" accessibilityLabel="Close job actions" disabled={busy} onPress={close} style={StyleSheet.absoluteFill} />
@@ -115,6 +121,7 @@ export function JobAppointmentActions({ job, online, onClose, onSaved }: {
             {links.call ? <ActionRow label="Call customer" icon="phone-outline" onPress={() => void openLink(links.call)} /> : null}
             {links.email ? <ActionRow label="Email customer" icon="email-outline" onPress={() => void openLink(links.email)} /> : null}
             {context?.permissions.editCustomer && context.customer && !job.protectedJob ? <ActionRow label="Edit customer details" icon="account-edit-outline" onPress={() => choose('update_customer')} /> : null}
+            {context?.permissions.deleteJob ? <ActionRow label="Delete job" icon="delete-outline" onPress={() => choose('delete')} /> : null}
             {job.protectedJob ? <Text style={styles.help}>Customer contact details are managed by Australian Energy Assessments.</Text> : null}
             {context && !context.permissions.reschedule && !context.permissions.noShow && !context.permissions.cancel ? <Text style={styles.help}>Appointment changes are controlled by your Team permissions.</Text> : null}
           </> : null}
@@ -134,6 +141,7 @@ export function JobAppointmentActions({ job, online, onClose, onSaved }: {
           </> : null}
           {screen === 'no_show' ? <><Text style={styles.help}>Remove this appointment from the schedule and keep the job ready to reschedule once you speak to the customer.</Text><FieldButton loading={busy} disabled={!online} onPress={() => void save('no_show')}>Mark as no show</FieldButton></> : null}
           {screen === 'cancel' ? <><Text style={styles.help}>Cancel this job and remove the appointment from the schedule and connected Google calendars. Existing assessment records are retained.</Text><FieldButton loading={busy} disabled={!online} onPress={() => void save('cancel')}>Confirm cancellation</FieldButton></> : null}
+          {screen === 'delete' ? <><Text style={styles.help}>Permanently delete this job, its forms, notes, photos and unaccepted quotes. The customer stays in your customer list. This cannot be undone.</Text><Text style={styles.help}>Jobs with protected financial, issued report or government-program history cannot be deleted.</Text><FieldButton loading={busy} disabled={!online || loading} onPress={() => void save('delete')}>Permanently delete job</FieldButton></> : null}
           {screen === 'update_customer' ? <>
             <ContactField label="First name" value={customer.firstName} editable={!busy} onChangeText={(value) => setCustomer((current) => ({ ...current, firstName: value }))} />
             <ContactField label="Last name" value={customer.lastName} editable={!busy} onChangeText={(value) => setCustomer((current) => ({ ...current, lastName: value }))} />

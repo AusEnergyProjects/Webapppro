@@ -15,7 +15,7 @@ import {
 import { deviceRegistration, forgetPushToken, getDeviceId } from '@/lib/device';
 import type { FieldAccessMode, OfflineAction, SyncResponse } from '@/lib/types';
 import { processUploadQueue } from '@/lib/uploads';
-import { processRentalSaveQueue } from '@/lib/rental-save-queue';
+import { processRentalSaveQueue, purgeDeletedRentalJob, restoreRentalJobAccess } from '@/lib/rental-save-queue';
 import { processActivityFormCompletionQueue } from '@/lib/activity-form-completion';
 
 let activeSync: Promise<SyncOutcome> | null = null;
@@ -68,6 +68,13 @@ export async function resolveFieldAccessMode() {
 
 function cursorSetting(mode: FieldAccessMode) {
   return `sync_cursor_${mode}`;
+}
+
+/** Apply a successful server deletion immediately, without waiting behind photo uploads. */
+export async function removeDeletedFieldJob(workOrderId: string) {
+  await purgeDeletedRentalJob(workOrderId);
+  await applyChanges([{ entityId: workOrderId, entityType: 'job', operation: 'delete',
+    sequence: 0, revision: 0 }], false, new Date().toISOString(), 'trade_team');
 }
 
 function actionForServer(row: { payload: string }) {
@@ -132,6 +139,12 @@ async function fetchChanges(mode: FieldAccessMode) {
     });
     if (cursor) params.set('cursor', cursor);
     const response = await apiRequest<SyncResponse>(`${syncPath(mode)}?${params}`);
+    // Authoritative removals must also retire retained rental drafts, finish requests and photos.
+    // Do this before advancing the cursor, so interrupted cleanup is replayed on the next sync.
+    if (mode === 'trade_team') for (const change of response.changes) {
+      if (change.operation === 'delete') await purgeDeletedRentalJob(change.entityId);
+      else if (change.entity) await restoreRentalJobAccess(change.entityId);
+    }
     await applyChanges(response.changes, response.bootstrap, response.serverTime, mode);
     const nextCursor = response.nextCursor;
     if (response.hasMore && nextCursor === cursor) {

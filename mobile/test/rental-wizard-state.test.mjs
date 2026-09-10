@@ -10,7 +10,7 @@ const code = ts.transpileModule(readFileSync(new URL('../src/lib/rental-inspecti
 }).outputText;
 const exports = {};
 new Function('exports', code)(exports);
-const { rentalObservationsComplete, deliverRentalPhoto, rentalCompletionTarget, newRentalItem } = exports;
+const { rentalObservationsComplete, deliverRentalPhoto, rentalCompletionTarget, rentalPendingCompletionBlockers, newRentalItem } = exports;
 
 test('final declarations require real observation and evidence completion', () => {
   const result = (blockers) => ({ completion: { assessment: { complete: false, blockers } } });
@@ -51,7 +51,8 @@ test('rental metadata inputs remain visible above the device keyboard', () => {
 
 test('camera is available before an answer exists and metadata mutations use the server revision contract', () => {
   const capture = source.slice(source.indexOf('async function capture()'), source.indexOf('async function updatePhoto'));
-  assert.ok(capture.indexOf('await persist(next)') < capture.indexOf('await observeLocation(true)'), 'Photo reference must survive GPS errors');
+  assert.ok(capture.indexOf('observeLocation(true)') < capture.indexOf('await ImagePicker.launchCameraAsync'), 'GPS starts while the camera is open');
+  assert.doesNotMatch(capture, /await locationCapture|await observeLocation/);
   assert.doesNotMatch(capture, /if \(!item\.id\)|if \(!draft\.item\.id\)/);
   assert.match(source, /Remove pending photo/);
   assert.match(source, /action: 'save_module_answers', moduleId: active\.id, expectedRevision: active\.revision/);
@@ -111,6 +112,17 @@ test('local storage failure retains the answer and both photos on the current sc
   await assert.rejects(mountedSaveAnswer(env), /Storage full/);
   assert.equal(env.advanced, false);
   assert.equal(env.cacheRef.current.drafts.draft.photos.length, 2);
+});
+
+test('Next saves and advances while the retained photo has no GPS fix yet', async () => {
+  const env = saveEnvironment();
+  env.draft.photos = [{ ...env.draft.photos[0], location: null, locationPending: true }];
+  env.enqueueRentalSave = async (input) => { env.queued = input; return { id: 'saved' }; };
+  env.advanceQuestion = () => { env.advanced = true; };
+  await mountedSaveAnswer(env)();
+  assert.equal(env.advanced, true);
+  assert.equal(env.queued.photos[0].locationPending, true);
+  assert.equal(env.queued.photos[0].location, null, 'A location is never invented to let Next continue');
 });
 
 test('assessor screens use observable fields without requiring a trade specification', () => {
@@ -221,6 +233,38 @@ function mountedHandler(name, nextName, environment) {
   return new Function('environment', 'with (environment) { const exports = {}; ' + compiled + '; return exports.' + name + '; }')(environment);
 }
 
+test('the camera releases the form after durable photo storage while GPS remains unresolved', async () => {
+  let resolveGps;
+  const gps = new Promise((resolve) => { resolveGps = resolve; });
+  const files = new Set(['camera.jpg']);
+  class Directory { constructor() { this.uri = 'file:///document/rental-original-photos'; } async create() {} }
+  class File {
+    constructor(...parts) { this.uri = parts.map((part) => part.uri || part).join('/'); }
+    get exists() { return files.has(this.uri); }
+    async copy(target) { files.add(target.uri); }
+    delete() { files.delete(this.uri); }
+  }
+  const env = { editable: true, draft: { photos: [] }, key: 'first', workOrderId: 'job',
+    busy: false, writes: [], cacheRef: { current: { drafts: {}, answers: {} } }, localOwner: { current: { key: 'owner', epoch: 1 } }, mounted: { current: true },
+    perform: async (_name, action) => { env.busy = true; try { await action(); } finally { env.busy = false; } },
+    observeLocation: () => gps, observedTime: () => ({ captureObservedAtUtc: new Date().toISOString() }),
+    ImagePicker: { requestCameraPermissionsAsync: async () => ({ granted: true }), CameraType: { back: 'back' },
+      launchCameraAsync: async () => ({ assets: [{ uri: 'camera.jpg', width: 3000, height: 2000, mimeType: 'image/jpeg' }] }) },
+    Crypto: { randomUUID: () => 'photo-id' }, Directory, File, Paths: { document: 'file:///document' },
+    assertLocalDataOwner() {}, setCache() {}, persist: async (cache) => { env.writes.push(JSON.parse(JSON.stringify(cache))); },
+    rememberRentalPhotoLocation: async (...args) => { env.remembered = args; }, setError(message) { env.error = message; } };
+  await mountedHandler('capture', 'updatePhoto', env)();
+  assert.equal(env.busy, false, 'GPS must not hold the global form busy flag');
+  assert.equal(env.writes.length, 1);
+  const retained = env.writes[0].drafts.first.photos[0];
+  assert.equal(retained.locationPending, true); assert.ok(files.has(retained.uri));
+  env.cacheRef.current = { drafts: {}, answers: {} }; // Next has already queued this photo.
+  resolveGps({ permission: { granted: true }, location: { state: 'captured' } });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(env.remembered[0], 'job'); assert.equal(env.remembered[1], retained.uri);
+  assert.deepEqual(env.cacheRef.current.drafts, {}, 'Late GPS must not recreate a submitted draft');
+});
+
 test('dwelling checks retain historical dimensions without asking for them again; fixed windows save their reason without typing', async () => {
   const declaration = source.slice(source.indexOf('  const responseFields ='), source.indexOf('  const detailField ='));
   const compiled = ts.transpileModule(declaration + '\nreturn responseFields;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -296,18 +340,19 @@ test('old metadata snapshots hide automatic date and profile details and save on
   assert.equal(env.cacheRef.current.answers.module, undefined);
 });
 
-test('finish confirms the assessment once and queues delivery without waiting for evidence', async () => {
+test('finish confirms once, queues delivery without waiting for evidence and stays on the result screen', async () => {
   const env = { active: { id: 'module', status: 'draft', revision: 3 }, pendingSaves: [{ id: 'fifty-photos' }], activeHasDraft: false,
     data: { items: [], completion: { module: { complete: false, blockers: [{ key: 'metadata:assessorDeclaration', label: 'Confirm assessment' }] } } },
-    cache: { answers: {} }, rentalCompletionTarget, calls: [], finishRequest: undefined, earlierDrafts: [], sections: [], workOrderId: 'job',
+    cache: { answers: {} }, completionBlockers: [], rentalCompletionTarget, calls: [], finishRequest: undefined, earlierDrafts: [], sections: [], workOrderId: 'job',
     setError(message) { env.message = message; }, perform: async (_name, action) => action(), persist: async () => {},
-    onChanged: async () => {}, onReturnToJob() { env.left = true; }, enqueueRentalFinish: async (value) => { env.queued = value; },
+    onChanged: async () => {}, onReturnToJob() { env.left = true; }, enqueueRentalFinish: async (value) => { env.queued = value; return { id: 'finish' }; },
+    setSaves() {}, setPage(value) { env.page = value; },
     Alert: { alert(_title, message, buttons) { env.message = message; env.confirm = buttons[1].onPress; } },
     openCompletionIssue(key) { env.calls.push(key); }, request() { assert.fail('UI cannot complete while photos are outstanding'); } };
   const finish = mountedHandler('finishAssessment', 'previous', env);
   await finish(); assert.match(env.message, /complete and accurate/); assert.equal(env.queued, undefined);
   await env.confirm(); await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(env.queued.module.id, 'module'); assert.equal(env.left, true); assert.deepEqual(env.calls, []);
+  assert.equal(env.queued.module.id, 'module'); assert.equal(env.left, undefined); assert.equal(env.page, 'review'); assert.deepEqual(env.calls, []);
 });
 
 test('an older future-shower blocker opens the single visible shower check', () => {
@@ -333,4 +378,23 @@ test('an untouched optional metadata field advances without queueing an empty an
     setPage(page) { env.page = page; }, setMetadataIndex() {}, perform() { assert.fail('An unset optional field needs no save'); } };
   await mountedHandler('saveMetadata', 'reviewQueuedAnswer', env)();
   assert.equal(env.page, 'review');
+});
+
+test('Finish stays on review and explains missing occupancy instead of moving the assessor elsewhere', async () => {
+  const env = { active: { id: 'module' }, finishRequest: undefined, earlierDrafts: [], pendingSaves: [],
+    completionBlockers: [{ key: 'metadata:occupancyAtAssessment', label: 'Occupancy during the assessment is required.' }],
+    setError(message) { env.message = message; }, setPage() { assert.fail('Missing answer must not eject the assessor'); },
+    Alert: { alert() { assert.fail('Incomplete assessment must not be authorised'); } } };
+  await mountedHandler('finishAssessment', 'previous', env)();
+  assert.match(env.message, /Occupancy during the assessment/);
+});
+
+test('review recognises saved offline occupancy but never hides invalid or conflicting answers', () => {
+  const assessmentModule = { id: 'module', template: { sections: [], metadataFields: [{ key: 'occupancyAtAssessment', type: 'select',
+    options: [{ value: 'vacant', label: 'Vacant' }] }] } };
+  const result = { completion: { module: { blockers: [{ key: 'metadata:occupancyAtAssessment', label: 'Occupancy required' }] } } };
+  const save = { status: 'queued', body: { action: 'save_module_answers', moduleId: 'module', answers: { occupancyAtAssessment: 'vacant' } } };
+  assert.deepEqual(rentalPendingCompletionBlockers(result, assessmentModule, [save]), []);
+  assert.equal(rentalPendingCompletionBlockers(result, assessmentModule, [{ ...save, status: 'conflict' }]).length, 1);
+  assert.equal(rentalPendingCompletionBlockers(result, assessmentModule, [{ ...save, body: { ...save.body, answers: { occupancyAtAssessment: 'invalid' } } }]).length, 1);
 });

@@ -258,7 +258,7 @@ export async function applyChanges(
     for (const change of changes.filter((item) => item.operation === 'delete')) {
       await db.runAsync('DELETE FROM jobs WHERE id = ? AND field_lane = ?', change.entityId, mode);
       await db.runAsync(
-        "DELETE FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status <> 'conflict'",
+        'DELETE FROM action_queue WHERE work_order_id = ? AND field_lane = ?',
         change.entityId,
         mode,
       );

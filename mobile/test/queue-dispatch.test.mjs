@@ -103,3 +103,14 @@ test('conflict retries clear the dispatch freeze only when minting a new ID', as
   assert.equal(retry.dispatched_at, '');
   assert.equal(JSON.parse(retry.payload).baseRevision, 3);
 });
+
+test('authoritative job deletion removes stuck conflicts and uploads only for that job and lane', async (t) => {
+  const f = fixture(); t.after(() => f.sql.close());
+  await f.api.queueAction(formAction('conflict', 'deleted job answer'));
+  await f.api.resolveAction('conflict', { status: 'conflict', error: 'Old revision' });
+  await f.api.queueAction({ ...formAction('other', 'retained'), workOrderId: 'other-job' });
+  f.sql.exec("INSERT INTO upload_queue VALUES ('upload', 'retry', 'job', 'trade_team', 'encrypted'); INSERT INTO upload_queue VALUES ('other-upload', 'retry', 'other-job', 'trade_team', 'other-encrypted')");
+  await f.api.applyChanges([{ operation: 'delete', entityId: 'job' }], false, 'now', 'trade_team');
+  assert.deepEqual(f.rows().map((row) => row.id), ['other']);
+  assert.deepEqual(f.sql.prepare('SELECT client_upload_id FROM upload_queue').all().map((row) => row.client_upload_id), ['other-upload']);
+});

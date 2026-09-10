@@ -1597,6 +1597,7 @@ export const publicTradeLeadQuotePhotoEvents = sqliteTable("public_trade_lead_qu
 ]);
 
 export const tradeCrmJobMediaCleanup = sqliteTable("trade_crm_job_media_cleanup", {
+  uploadId: text("upload_id").notNull().default(""),
   objectKey: text("object_key").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),
   workOrderId: text("work_order_id").notNull(),

@@ -47,3 +47,8 @@ test('appointment success keeps email and calendar failures visible instead of c
   assert.doesNotMatch(message, /email sent|calendar updated/i);
   assert.match(appointmentSavedMessage('no_show', { ok: true, jobPatch: {} }), /Ready to reschedule/);
 });
+
+test('confirmed deletion remains successful when device cleanup needs a sync retry', () => {
+  assert.equal(appointmentSavedMessage('delete', { ok: true, jobPatch: {}, deviceCleanupPending: true }),
+    'Job deleted. Customer details kept. Device cleanup will retry on Sync.');
+});

@@ -14,7 +14,7 @@ import { FieldDatePicker } from '@/components/field-date-picker';
 import { assertLocalDataOwner, getLocalDataOwner, readRentalSetting, writeRentalSetting, type LocalDataOwner } from '@/lib/database';
 import { observeLocation, observedTime } from '@/lib/evidence';
 import { RENTAL_ADVERSE_OUTCOMES, newRentalItem,
-  rentalObservationsComplete, rentalAccessLimitations, rentalCompletionTarget,
+  rentalObservationsComplete, rentalAccessLimitations, rentalCompletionTarget, rentalPendingCompletionBlockers,
   type RentalAssessmentItem, type RentalAssessmentResult,
   type RentalAssessmentModule, type RentalAssessmentSection } from '@/lib/rental-inspection';
 import { colours, radius, spacing } from '@/lib/theme';
@@ -24,7 +24,7 @@ import { RENTAL_ASSESSOR_TITLE, rentalAssessorMetadataField, rentalAssessorOutco
   rentalAssessorCheckPresentation, rentalAssessorEvidenceRequirement, rentalAssessorSections,
   RENTAL_SHOWER_CHOICES, rentalShowerChoicePatch, rentalShowerChoiceValue } from '../../../src/lib/rental-assessor-workflow.mjs';
 import { acknowledgeRentalSave, loadRentalResult, discardRentalSave, enqueueRentalSave, enqueueRentalFinish, getRentalSaveState,
-  processRentalSaveQueue, requestWhenRentalSynced, subscribeRentalSaves,
+  processRentalSaveQueue, rememberRentalPhotoLocation, requestWhenRentalSynced, subscribeRentalSaves,
   type RentalSaveRecord, type RentalQueuedPhoto } from '@/lib/rental-save-queue';
 
 type Props = { workOrderId: string; summary: FieldRentalInspectionSummary; online: boolean; onChanged: () => Promise<void>; onReturnToJob?: () => void };
@@ -217,6 +217,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const item = active && section && check ? storedItem || newRentalItem(active, section, check, cursor.instanceKey) : undefined;
   const key = active ? itemKey(active, cursor) : '';
   const pendingSaves = saves.filter((entry) => entry.status !== 'succeeded');
+  const completionBlockers = active ? rentalPendingCompletionBlockers(data, active, pendingSaves) : [];
   const finishRequest = pendingSaves.find((entry) => entry.finish);
   const pendingPhotos = pendingSaves.reduce((total, entry) => total + entry.photos.filter((photo) => !photo.linked).length, 0);
   const syncingPhotos = pendingSaves.filter((entry) => entry.status === 'syncing').reduce((total, entry) => total + entry.photos.filter((photo) => !photo.linked).length, 0);
@@ -366,6 +367,8 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
         Alert.alert('Camera access needed', 'Allow TLink to use the camera in Settings.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Open settings', onPress: () => void Linking.openSettings() }]);
         return;
       }
+      // GPS runs alongside the camera. Weak indoor reception must never hold the Next button.
+      const locationCapture = observeLocation(true);
       const captured = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 1, exif: true, cameraType: ImagePicker.CameraType.back });
       if (captured.canceled || !captured.assets[0]) return;
       const asset = captured.assets[0];
@@ -380,13 +383,21 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       try { await new File(asset.uri).copy(retained); assertLocalDataOwner(owner); }
       catch (error) { if (retained.exists) await retained.delete(); throw error; }
       // Retain the captured bytes before asking for location; a failed GPS fix must not lose the photo.
-      const photo: Photo = { uri: retained.uri, width: asset.width, height: asset.height, capture: observedTime(), location: null };
+      const photo: Photo = { uri: retained.uri, width: asset.width, height: asset.height, capture: observedTime(), location: null, locationPending: true };
       const currentDraft = cacheRef.current.drafts[key] || draft;
       const next = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts, [key]: { ...currentDraft, photos: [...currentDraft.photos, photo] } } };
       setCache(next); cacheRef.current = next; await persist(next);
-      const location = await observeLocation(true);
-      await updatePhoto(photo.uri, { location });
-      if (location.location.state !== 'captured') setError('Photo saved on this phone. Enable location, then retry its GPS before continuing.');
+      const capturedDraftKey = key;
+      void locationCapture.then(async (location) => {
+        // This checkpoint survives Next, navigation and a process restart. Never attach a later location to another photo.
+        await rememberRentalPhotoLocation(workOrderId, photo.uri, location, owner);
+        if (!mounted.current) return;
+        const current = cacheRef.current.drafts[capturedDraftKey];
+        if (!current?.photos.some((entry) => entry.uri === photo.uri)) return;
+        const next = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts, [capturedDraftKey]: { ...current,
+          photos: current.photos.map((entry) => entry.uri === photo.uri ? { ...entry, location, locationPending: false } : entry) } } };
+        cacheRef.current = next; setCache(next); await persist(next);
+      }).catch(() => { if (mounted.current) setError('The photo is saved. Its location needs review in Sync. You can keep assessing.'); });
     });
   }
   async function updatePhoto(uri: string, values: Partial<Photo>) {
@@ -414,7 +425,10 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       if (location.location.state !== 'captured') throw new Error('Location is still unavailable. Enable precise location in Settings.');
       // A later observation must not be represented as the location at capture.
       if (Math.abs(Date.parse(location.location.observedAtUtc) - Date.parse(photo.capture.captureObservedAtUtc)) > 120000) throw new Error('The GPS fix was too late for this photo. Remove it and take a new photo.');
-      await updatePhoto(photo.uri, { location });
+      const owner = localOwner.current;
+      if (!owner) throw new Error('The assessment is still opening.');
+      await rememberRentalPhotoLocation(workOrderId, photo.uri, location, owner);
+      await updatePhoto(photo.uri, { location, locationPending: false });
     });
   }
   async function saveAnswer() {
@@ -448,14 +462,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       const blockers = rentalObservationBlockers({ checkKey: check.key, outcome: draft.outcome, response: draft.response, finding: body.finding });
       if (blockers.length) throw new Error(blockers[0]);
     }
-    for (const photo of draft.photos) {
-      if (photo.mediaId) continue;
-      const location = photo.location?.location;
-      if (!location || location.state !== 'captured' || location.mocked === true || location.accuracyMetres === null || location.accuracyMetres > 100
-        || Math.abs(Date.parse(location.observedAtUtc) - Date.parse(photo.capture.captureObservedAtUtc)) > 120000) {
-        throw new Error('Photo saved on this phone. Retry its GPS, or retake it with location enabled.');
-      }
-    }
+    // Missing GPS is retained for Sync to explain and resolve. It must not trap the assessor on this check.
     // Next waits only for durable device storage. Network delivery belongs to the queue.
     const record = await enqueueRentalSave({ workOrderId, body, module: active, baseItem: storedItem || null,
       baseFinding: existingFinding || null, draftKey: key, draftSnapshot: draft, photos: draft.photos, purpose: check.prompt });
@@ -529,7 +536,10 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     setModuleId(assessmentModule.id);
     if (record.body.action === 'save_module_answers') {
       if (record.body.answers && typeof record.body.answers === 'object' && 'roomRoster' in record.body.answers) { setPage('categories'); setError(record.error); return; }
-      const fields = assessmentModule.template.metadataFields.map(rentalAssessorMetadataField).filter((entry) => entry.phase !== 'profile' && entry.source !== 'team_profile' && entry.source !== 'automatic');
+      const fields = assessmentModule.template.metadataFields.map(rentalAssessorMetadataField).filter((entry) => entry.key !== 'roomRoster'
+        && entry.phase !== 'profile' && entry.source !== 'team_profile' && entry.source !== 'automatic'
+        && !['coverageConfirmed', 'assessorDeclaration'].includes(entry.key)
+        && !(assessmentModule.key === 'minimum_standards' && entry.key === 'credentialConfirmed'));
       const fieldKey = Object.keys(record.body.answers || {})[0];
       setMetadataIndex(Math.max(0, fields.findIndex((entry) => entry.key === fieldKey))); setPage('metadata');
     } else {
@@ -556,25 +566,17 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     if (!active) return;
     if (finishRequest && finishRequest.status !== 'conflict') {
       void processRentalSaveQueue(workOrderId).catch(() => { /* Sync displays the retained error. */ });
-      await leave(); return;
+      return;
     }
     if (earlierDrafts.some(([draftKey]) => draftKey.endsWith(':property'))) {
       setPage('earlier'); setError('Review the photos saved on the earlier shower page before finishing.'); return;
     }
-    const blockers = (data.completion?.[active.id]?.blockers || []).filter((entry) => {
-      if (['metadata:coverageConfirmed', 'metadata:assessorDeclaration'].includes(entry.key)) return false;
-      const target = rentalCompletionTarget(active, data.items || [], entry.key);
-      if (target?.kind === 'check') {
-        const targetCheck = sections.find((group) => group.key === target.sectionKey)?.checks[target.checkIndex];
-        if (pendingSaves.some((save) => save.status !== 'conflict' && save.body.checkKey === targetCheck?.key && save.body.moduleId === active.id)) return false;
-      }
-      return true;
-    });
-    const first = blockers.find((entry) => rentalCompletionTarget(active, data.items || [], entry.key)?.kind === 'check')
-      || blockers.find((entry) => rentalCompletionTarget(active, data.items || [], entry.key));
-    if (first) { openCompletionIssue(first.key); return; }
+    const conflict = pendingSaves.find((entry) => !entry.finish && entry.status === 'conflict');
+    if (conflict) { setError('A saved answer needs review before the report can finish. Use Open saved answer above. ' + conflict.error); return; }
+    const blockers = completionBlockers;
+    if (blockers.length) { setError('Finish needs this answer: ' + blockers[0].label + ' Tap the answer above to complete it.'); return; }
     if (activeHasDraft) { setPage('categories'); setError('Save the unfinished answers shown in the categories before finishing.'); return; }
-    if (cache.answers[active.id] || blockers.length) { setError(blockers[0]?.label || 'Save the property details before finishing.'); return; }
+    if (cache.answers[active.id]) { setError('Save the property details before finishing.'); return; }
     const email = data.permissions?.canIssue === true && Boolean(data.deliveryRecipient?.email);
     Alert.alert(email ? 'Finish and email report?' : 'Finish assessment?',
       'I have checked the property, recorded areas I could not access, and confirm this assessment is complete and accurate to the best of my knowledge.'
@@ -582,8 +584,9 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       { text: 'Review', style: 'cancel' },
       { text: email ? 'Confirm and email' : 'Confirm and finish', onPress: () => void perform('complete', async () => {
         await persist();
-        await enqueueRentalFinish({ workOrderId, module: active, reviewed: data, email, recipientEmail: data.deliveryRecipient?.email || '' });
-        onReturnToJob?.();
+        const record = await enqueueRentalFinish({ workOrderId, module: active, reviewed: data, email, recipientEmail: data.deliveryRecipient?.email || '' });
+        setSaves((current) => [...current.filter((entry) => entry.id !== record.id), record]);
+        setPage('review');
         void onChanged().catch(() => { /* The durable finish request remains in Sync. */ });
       }) },
     ]);
@@ -669,13 +672,14 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
         <Text style={styles.title}>{report ? 'Assessment report' : 'Review and finish'}</Text>
         {(active.template.metadataFields || []).map(rentalAssessorMetadataField).filter((f) => f.source === 'team_profile').map((f) => <Text key={f.key} style={styles.body}>{f.label}: {String(active.answers[f.key] || 'Not recorded in Team profile')}</Text>)}
         {!allComplete ? <>
-          {(data.completion?.[active.id]?.blockers || []).filter((blocker) => !['metadata:coverageConfirmed', 'metadata:assessorDeclaration'].includes(blocker.key)).map((blocker) => <FieldButton key={blocker.key} variant="secondary" disabled={Boolean(busy)} onPress={() => openCompletionIssue(blocker.key)}>{blocker.label}</FieldButton>)}
+          {completionBlockers.map((blocker) => <FieldButton key={blocker.key} variant="secondary" disabled={Boolean(busy)} onPress={() => openCompletionIssue(blocker.key)}>{blocker.label}</FieldButton>)}
           {pendingSaves.length ? <Text style={styles.small}>Photos are saved on this phone. You can finish and leave this screen while they upload. If the app is closed, sync resumes when it can run again.</Text> : null}
-          <FieldButton disabled={Boolean(busy)} loading={busy === 'complete'} onPress={() => void finishAssessment()}>{finishRequest && finishRequest.status !== 'conflict' ? 'Finish queued | Return to job' : data.deliveryRecipient?.email && data.permissions?.canIssue ? 'Finish and email report' : 'Finish assessment'}</FieldButton>
+          <FieldButton disabled={Boolean(busy)} loading={busy === 'complete'} onPress={() => void finishAssessment()}>{finishRequest && finishRequest.status !== 'conflict' ? 'Finish saved | Retry sync' : data.deliveryRecipient?.email && data.permissions?.canIssue ? 'Finish and email report' : 'Finish assessment'}</FieldButton>
         </> : null}
         {!report && allComplete && data.permissions?.canIssue ? <FieldButton disabled={Boolean(busy)} loading={busy === 'complete'} onPress={() => void finishAssessment()}>{data.deliveryRecipient?.email ? 'Create and email report' : 'Create report'}</FieldButton> : null}
         {report && data.permissions?.canIssue && data.deliveryRecipient?.email && data.reportDelivery?.status !== 'accepted' ? <FieldButton disabled={Boolean(busy)} loading={busy === 'complete'} onPress={() => void finishAssessment()}>{finishRequest ? 'Retry report email' : 'Email report to client'}</FieldButton> : null}
         {data.reportDelivery?.status === 'accepted' ? <Text style={styles.body}>Report email accepted for delivery{data.reportDelivery.recipientEmail ? ` to ${data.reportDelivery.recipientEmail}` : ''}.</Text> : null}
+        {finishRequest ? <><Text style={styles.body}>{finishRequest.status === 'conflict' ? finishRequest.error : finishRequest.finish?.email ? `Finish is saved. The report will be emailed to ${finishRequest.finish.recipientEmail} when sync and validation finish.` : 'Finish is saved and will complete when sync and validation finish.'}</Text><FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => void leave()}>Return to job</FieldButton></> : null}
         {report ? <><Text style={styles.body}>{report.reportNumber}</Text>{report.link?.shareUrl ? <><FieldButton onPress={() => void Share.share({ message: report.link?.shareUrl || '', url: report.link?.shareUrl })}>Share report</FieldButton><FieldButton variant="secondary" onPress={() => void Linking.openURL(report.link?.shareUrl || '')}>Open report</FieldButton></> : <Text style={styles.body}>The report is retained in this job. Ask the owner to manage its sharing link.</Text>}</> : null}
       </> : draft && item && section && check ? <>
         <Text style={styles.small}>{section.title + ' | ' + (cursor.checkIndex + 1) + ' of ' + section.checks.length}</Text>
@@ -711,7 +715,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
             {evidence.length || draft.photos.length || photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? <Text style={styles.small}>{evidence.length} linked · {draft.photos.length} on this phone{photoRequirement.minimumPhotos ? ' · ' + photoRequirement.minimumPhotos + ' photos required' : photoRequirement.minimumFiles ? ' · ' + photoRequirement.minimumFiles + ' evidence file required' : ''}</Text> : null}
           {draft.photos.map((p, index) => <View key={p.uri} style={styles.pendingPhoto}>
             <Image source={{ uri: p.uri }} style={styles.thumbnail} alt={`Pending photo ${index + 1}`} accessibilityLabel={`Pending photo ${index + 1}`} />
-            <Text style={styles.small}>Photo {index + 1} saved {new Date(p.capture.captureObservedAtUtc).toLocaleTimeString()} · {p.mediaId ? 'Uploaded, ready to link' : p.location?.location.state === 'captured' ? 'GPS ' + Math.round(p.location.location.accuracyMetres || 0) + ' m' : 'GPS needed'}</Text>
+            <Text style={styles.small}>Photo {index + 1} saved {new Date(p.capture.captureObservedAtUtc).toLocaleTimeString()} · {p.mediaId ? 'Uploaded, ready to link' : p.location?.location.state === 'captured' ? 'GPS ' + Math.round(p.location.location.accuracyMetres || 0) + ' m' : p.locationPending ? 'Recording GPS; you can press Next' : 'GPS needs review; you can keep assessing'}</Text>
             {!p.mediaId && (p.location?.location.state !== 'captured' || p.location.location.accuracyMetres === null || p.location.location.accuracyMetres > 100 || p.location.location.mocked) ? <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => void refreshPhotoGps(index)}>Retry GPS</FieldButton> : null}
             <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => void removePhoto(p.uri)}>Remove pending photo</FieldButton>
           </View>)}</View>

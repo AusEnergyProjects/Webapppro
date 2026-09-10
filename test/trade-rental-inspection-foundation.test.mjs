@@ -311,7 +311,8 @@ test("job setup and field workspace attach one frozen rental workflow with guard
   assert.match(mobilePanel, /Take photo/);
   assert.match(mobilePanel, /propertySteps\[stepIndex \+ 1\]/);
   assert.match(mobilePanel, /propertySteps\[stepIndex - 1\]/);
-  assert.match(mobilePanel, /for \(const photo of draft\.photos\)/);
+  assert.match(mobilePanel, /rememberRentalPhotoLocation/);
+  assert.match(mobilePanel, /photos: draft\.photos/);
   assert.match(mobilePanel, /await enqueueRentalSave/);
   assert.match(mobilePanel, /delete nextCache\.drafts\[key\]/);
   assert.match(mobilePanel, /pendingSaves\.length > 0/);

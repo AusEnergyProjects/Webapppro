@@ -543,6 +543,104 @@ test('a conflicting metadata field is retained for review instead of replacing t
   assert.equal(h.state.result.modules[0].answers.addressNotes, 'Changed elsewhere');
 });
 
+test('server blank-field normalisation is not a conflicting occupancy edit and old conflicts recover', async () => {
+  const h = harness(), input = fixture().input;
+  const field = { key: 'occupancyAtAssessment', type: 'select', phase: 'setup' };
+  input.module.template.metadataFields.push(field);
+  h.state.result.modules[0].template.metadataFields.push(clone(field));
+  h.state.result.modules[0].answers.occupancyAtAssessment = '';
+  input.body = { action: 'save_module_answers', moduleId: input.module.id, answers: { occupancyAtAssessment: 'vacant' } };
+  const gate = deferred();
+  h.state.handler = async () => { await gate.promise; throw new Error('Offline'); };
+  const queued = await h.queue.enqueueRentalSave(input);
+  gate.resolve(); await h.queue.processRentalSaveQueue('job-1');
+  const recordKey = [...h.store.keys()].find((key) => key.endsWith(queued.id));
+  const record = JSON.parse(h.store.get(recordKey));
+  record.status = 'conflict'; record.error = 'An assessment detail changed elsewhere. Review it before saving.';
+  h.store.set(recordKey, JSON.stringify(record));
+  const restarted = h.restart();
+  await restarted.queue.processRentalSaveQueue('job-1');
+  assert.equal((await restarted.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.equal(h.state.result.modules[0].answers.occupancyAtAssessment, 'vacant');
+});
+
+test('automatic retry of a metadata conflict never overwrites an actual remote answer', async () => {
+  const h = harness(), input = fixture().input;
+  h.state.result.modules[0].answers.addressNotes = 'Keep this remote edit';
+  input.body = { action: 'save_module_answers', moduleId: input.module.id, answers: { addressNotes: 'Local edit' } };
+  await h.queue.enqueueRentalSave(input); await h.queue.processRentalSaveQueue('job-1');
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).conflicts, 1);
+  assert.equal(h.state.result.modules[0].answers.addressNotes, 'Keep this remote edit');
+  assert.equal(h.state.calls.some((call) => call.body?.action === 'save_module_answers'), false);
+});
+
+test('pending capture-time GPS never stops later answers and its durable fix resumes the photo', async () => {
+  const h = harness(), input = fixture().input;
+  const observed = photo(1);
+  observed.capture.captureObservedAtUtc = new Date().toISOString();
+  observed.location.location.observedAtUtc = observed.capture.captureObservedAtUtc;
+  input.photos = [{ ...observed, location: null, locationPending: true }];
+  await h.queue.enqueueRentalSave(input); await h.queue.processRentalSaveQueue('job-1');
+  const second = fixture().input;
+  second.body = { action: 'save_module_answers', moduleId: second.module.id, answers: { addressNotes: 'Next answer' } };
+  second.draftKey = 'metadata:next';
+  await h.queue.enqueueRentalSave(second); await h.queue.processRentalSaveQueue('job-1');
+  assert.equal(h.state.result.modules[0].answers.addressNotes, 'Next answer');
+  assert.equal(h.state.calls.some((call) => call.path === '/api/trade-field-work'), false);
+  await h.queue.rememberRentalPhotoLocation('job-1', observed.uri, observed.location, h.state.owner);
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.equal(h.state.result.evidence.length, 1);
+});
+
+test('missing or late GPS is retained honestly while Next answers continue', async () => {
+  const h = harness(), input = fixture().input;
+  input.photos = [{ ...photo(1), location: null, locationPending: true,
+    capture: { captureObservedAtUtc: new Date(Date.now() - 121000).toISOString() } }];
+  await h.queue.enqueueRentalSave(input); await h.queue.processRentalSaveQueue('job-1');
+  const state = await h.queue.getRentalSaveState('job-1');
+  assert.equal(state.records[0].status, 'conflict');
+  assert.match(state.records[0].error, /capture-time location/);
+  assert.equal(state.records[0].photos.length, 1);
+  assert.equal(h.state.calls.some((call) => call.path === '/api/trade-field-work'), false);
+});
+
+test('authoritative deletion purges only that job and aborts a late request without restoring its data', async () => {
+  const h = harness(), gate = deferred(), input = fixture().input;
+  const original = 'file:///document/rental-original-photos/deleted.jpg';
+  const prepared = 'file:///document/rental-save-photos/deleted.jpg';
+  const other = 'file:///document/rental-original-photos/other.jpg';
+  for (const uri of [original, prepared, other]) h.files.set(uri, { size: 12, bytes: uri });
+  input.photos = [{ ...photo(), uri: original, prepared: { uri: prepared, name: 'deleted.jpg', size: 12, envelope: '{}' } }];
+  let signal;
+  h.state.handler = async (...args) => { signal = args[1]?.signal; await gate.promise; return h.defaultRequest(...args); };
+  await h.queue.enqueueRentalSave(input);
+  await until(() => Boolean(signal));
+  h.store.set('rental-wizard:job-1', JSON.stringify({ drafts: { draft: { photos: [{ uri: original }] } } }));
+  h.store.set('rental-wizard:job-2', JSON.stringify({ drafts: { draft: { photos: [{ uri: other }] } } }));
+  const record = (await h.queue.getRentalSaveState('job-1')).records[0];
+  const otherRecord = { ...record, id: 'other', workOrderId: 'job-2', photos: [{ ...photo(), uri: other }] };
+  h.store.set('rental-save:firebase%3Aalice:other', JSON.stringify(otherRecord));
+  await h.queue.purgeDeletedRentalJob('job-1');
+  assert.equal(signal.aborted, true);
+  assert.equal(h.files.has(original), false); assert.equal(h.files.has(prepared), false);
+  assert.equal(h.files.has(other), true); assert.ok(h.store.has('rental-wizard:job-2'));
+  assert.equal((await h.queue.getRentalSaveState('job-1')).records.length, 0);
+  assert.equal((await h.queue.getRentalSaveState('job-2')).records.length, 1);
+  await h.queue.restoreRentalJobAccess('job-1');
+  await assert.rejects(h.queue.enqueueRentalSave(fixture().input), (error) => error.code === 'RENTAL_JOB_DELETED');
+  await h.queue.purgeDeletedRentalJob('job-1'); // A later deletion invalidates the queued reassignment callback.
+  gate.resolve(); await h.queue.processRentalSaveQueue('job-1');
+  await until(() => !h.store.has('rental-wizard:job-1'));
+  assert.equal((await h.queue.getRentalSaveState('job-1')).result, null);
+  await assert.rejects(h.queue.enqueueRentalSave(fixture().input), (error) => error.code === 'RENTAL_JOB_DELETED');
+  h.state.handler = h.defaultRequest;
+  await h.queue.restoreRentalJobAccess('job-1');
+  await h.queue.enqueueRentalSave(fixture().input); await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0, 'A genuine reassignment can save again');
+});
+
 test('cached inspection results do not regress and successful records stay until acknowledged', async () => {
   const h = harness(), { input } = fixture();
   await h.queue.enqueueRentalSave(input); await h.queue.processRentalSaveQueue('job-1');

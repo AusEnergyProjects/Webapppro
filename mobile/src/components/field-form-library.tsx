@@ -7,6 +7,7 @@ import { apiRequest } from '@/lib/api';
 import { colours, radius, spacing } from '@/lib/theme';
 import { FieldButton } from './field-button';
 import { FieldSelect } from './field-select';
+import { FieldJobActivityPicker } from './field-job-activity-picker';
 
 type Question = { key: string; label: string; type: string; required: boolean; options?: string[] };
 type BusinessForm = { id: string; templateKey: string; version: number; name: string; description: string; guidance: string; fields: Question[]; updatedAt: string; categories: string[]; jurisdiction: string };
@@ -77,8 +78,8 @@ export function FieldFormLibrary({ workOrderId, serviceCategory, onBack, onChang
   }
   return <View style={styles.card}>
     <FieldButton variant="secondary" disabled={busy} onPress={back}>{editing ? 'Form library' : 'Job'}</FieldButton>
-    <Text style={styles.title}>{editing ? 'Your business form' : 'Add a supporting form'}</Text>
-    <Text style={styles.help}>Business questions are additional to the mandatory activity forms. Saved versions stay with each job.</Text>
+    <Text style={styles.title}>{editing ? 'Your business form' : 'Add work or a form'}</Text>
+    {editing ? <Text style={styles.help}>Saved versions of your business forms stay with each job.</Text> : null}
     {!online ? <Text style={styles.help}>Reconnect to manage the form library.</Text> : null}
     {loading ? <Text style={styles.help}>Loading forms...</Text> : null}
     {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -95,6 +96,9 @@ export function FieldFormLibrary({ workOrderId, serviceCategory, onBack, onChang
       {questions.length < 30 ? <FieldButton variant="secondary" disabled={busy} onPress={() => { setQuestions((current) => [...current, fresh()]); setDirty(true); }}>Add question</FieldButton> : null}
       <FieldButton disabled={busy || loading || !online || !name.trim() || !guidance.trim()} onPress={() => void save()}>Save and make available</FieldButton>
     </> : <>
+      <FieldJobActivityPicker workOrderId={workOrderId} online={online} onChanged={onChanged} />
+      <Text style={styles.title}>Supporting forms</Text>
+      <Text style={styles.help}>Optional business checklists for this job.</Text>
       {jobForms.templates.map((template) => {
         const added = jobForms.forms.some((form) => form.templateKey === template.key && form.templateVersion === template.version);
         return <View key={template.key} style={styles.question}><Text style={styles.label}>{template.name}</Text><Text style={styles.help}>{template.description}</Text><FieldButton variant="secondary" disabled={busy || loading || !online || added} onPress={() => void add(template.key, template.version)}>{added ? 'Added to this job' : 'Add to job'}</FieldButton></View>;

@@ -9,6 +9,7 @@ import { previousTradeScheduleMutationGuardStatement } from "@/lib/trade-complia
 import { cancelAppointmentInConnectedCalendars } from "@/lib/trade-calendar-sync-server";
 import { sendDirectAppointmentCalendarInvite } from "@/lib/direct-appointment-invite-server";
 import { rentalAssignmentRequiredGates, rentalAssignmentCredentialSql } from "@/lib/trade-rental-credentials";
+import { deleteTradeJob, scheduleJobFileCleanup } from "@/lib/trade-job-deletion-server";
 
 export const runtime = "edge";
 type Row = Record<string, unknown>;
@@ -34,11 +35,15 @@ async function context(request: Request, workOrderId: string) {
   const active = Boolean(appointment && ['scheduled', 'en_route', 'arrived', 'in_progress'].includes(String(appointment.status)));
   const permissions = { reschedule: canReschedule && Boolean(appointment && (active || appointment.status === 'no_show')),
     noShow: canReschedule && active, cancel: mutable && Boolean(active || appointment?.status === 'no_show') && (access.isOwner || access.canManageJobs) && canReschedule,
-    editCustomer: !protectedJob && Boolean(customer) && (access.isOwner || access.canManageCustomers) };
+    editCustomer: !protectedJob && Boolean(customer) && (access.isOwner || access.canManageCustomers),
+    deleteJob: job.customer_source === 'trade_owned' && !protectedJob && (access.isOwner || access.canManageJobs) };
   return { access, job, appointment, customer: protectedJob ? null : customer, permissions };
 }
 
 function fail(error: unknown) {
+  if (error instanceof Error && 'code' in error && typeof error.code === 'string' && error.code.startsWith('JOB_DELETE_')) {
+    return adminJson({ ok: false, code: error.code, error: error.message }, error.code === 'JOB_DELETE_NOT_ALLOWED' ? 403 : 409);
+  }
   const code = error instanceof Error ? error.message : '';
   if (code === 'INVALID_DATE') return adminJson({ ok: false, error: 'Choose a valid appointment date.' }, 400);
   if (code === 'AUTH_REQUIRED') return adminJson({ ok: false, error: 'Sign in to continue.' }, 401);
@@ -53,18 +58,20 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const { access, job, appointment, customer, permissions } = await context(request, cleanAdminText(url.searchParams.get('workOrderId'), 180));
+    scheduleJobFileCleanup(getD1());
     const date = cleanAdminText(url.searchParams.get('appointmentDate'), 10) || String(appointment?.starts_at || '').slice(0, 10);
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Melbourne' }).format(new Date());
     const credentialDate = /^\d{4}-\d{2}-\d{2}$/.test(date) && date > today ? date : today;
-    const modules = job.service_category === 'rental-inspection' ? await getD1().prepare(`SELECT module_key FROM trade_rental_inspection_modules m
+    const modules = await getD1().prepare(`SELECT module_key FROM trade_rental_inspection_modules m
       JOIN trade_rental_inspections i ON i.id = m.inspection_id AND i.firebase_uid = m.firebase_uid
-      WHERE i.work_order_id = ? AND i.firebase_uid = ? AND m.status <> 'superseded'`).bind(job.id, access.ownerUid).all<Row>() : { results: [] };
+      WHERE i.work_order_id = ? AND i.firebase_uid = ? AND m.status <> 'superseded'`).bind(job.id, access.ownerUid).all<Row>();
     const gates = rentalAssignmentRequiredGates(modules.results.map(row => String(row.module_key)));
     const members = permissions.reschedule ? await getD1().prepare(`SELECT id, display_name FROM trade_team_members
       WHERE owner_uid = ? AND status = 'active'
         AND (member_uid = ? OR EXISTS (SELECT 1 FROM json_each(capabilities) WHERE value = ?))
+        AND (member_uid = ? OR ? = 0 OR EXISTS (SELECT 1 FROM json_each(capabilities) WHERE value = 'rental-inspection'))
         AND ${rentalAssignmentCredentialSql('trade_team_members.id', 'trade_team_members.owner_uid')}
-      ORDER BY display_name COLLATE NOCASE LIMIT 100`).bind(access.ownerUid, access.ownerUid, job.service_category,
+      ORDER BY display_name COLLATE NOCASE LIMIT 100`).bind(access.ownerUid, access.ownerUid, job.service_category, access.ownerUid, modules.results.length,
         JSON.stringify(gates), credentialDate, credentialDate).all<Row>() : { results: [] };
     return adminJson({ ok: true, job: { id: job.id, revision: Number(job.revision), stage: job.stage },
       appointment: appointment ? { id: appointment.id, revision: Number(appointment.revision), status: appointment.status,
@@ -85,6 +92,11 @@ export async function PATCH(request: Request) {
     const { access, job, appointment, customer, permissions } = await context(request, cleanAdminText(body.workOrderId, 180));
     if (Number(body.expectedRevision) !== Number(job.revision)) throw new Error('REVISION_CONFLICT');
     const db = getD1(); const now = new Date().toISOString();
+    if (action === 'delete') {
+      if (body.confirmDelete !== true) return adminJson({ ok: false, error: 'Confirm that you want to permanently delete this job.' }, 400);
+      if (!permissions.deleteJob) throw new Error('ACTION_NOT_ALLOWED');
+      return adminJson(await deleteTradeJob(db, access, job));
+    }
     if (action === 'update_customer') {
       if (!permissions.editCustomer || !customer) throw new Error('ACTION_NOT_ALLOWED');
       const patch = body.customer && typeof body.customer === 'object' && !Array.isArray(body.customer) ? body.customer as Row : {};
@@ -117,7 +129,7 @@ export async function PATCH(request: Request) {
     if (!appointment || String(body.appointmentId) !== appointment.id || Number(body.expectedAppointmentRevision) !== Number(appointment.revision)) throw new Error('REVISION_CONFLICT');
     if (action === 'reschedule') {
       if (!permissions.reschedule) throw new Error('ACTION_NOT_ALLOWED');
-      if (job.service_category === 'rental-inspection') {
+      {
         const modules = await db.prepare(`SELECT module_key FROM trade_rental_inspection_modules m
           JOIN trade_rental_inspections i ON i.id = m.inspection_id AND i.firebase_uid = m.firebase_uid
           WHERE i.work_order_id = ? AND i.firebase_uid = ? AND m.status <> 'superseded'`)
@@ -126,9 +138,10 @@ export async function PATCH(request: Request) {
         const date = String(body.startsAt || '').slice(0, 10);
         const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Melbourne' }).format(new Date());
         const checkedDate = date > today ? date : today;
-        const eligible = await db.prepare(`SELECT id FROM trade_team_members WHERE id = ? AND owner_uid = ? AND status = 'active'
+        const eligible = !modules.results.length || await db.prepare(`SELECT id FROM trade_team_members WHERE id = ? AND owner_uid = ? AND status = 'active'
+          AND (member_uid = ? OR EXISTS (SELECT 1 FROM json_each(capabilities) WHERE value = 'rental-inspection'))
           AND ${rentalAssignmentCredentialSql('trade_team_members.id', 'trade_team_members.owner_uid')}`)
-          .bind(cleanAdminText(body.memberId, 180), access.ownerUid, JSON.stringify(gates), checkedDate, checkedDate).first<Row>();
+          .bind(cleanAdminText(body.memberId, 180), access.ownerUid, access.ownerUid, JSON.stringify(gates), checkedDate, checkedDate).first<Row>();
         if (!eligible) return adminJson({ ok: false, code: 'RENTAL_ASSIGNEE_CREDENTIAL_REQUIRED',
           error: 'Choose a team member with the required current licence and supporting Team document for that appointment date.' }, 409);
       }

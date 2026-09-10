@@ -60,6 +60,7 @@ test("a stale cleanup worker is fenced from the newer acceptance object in actua
       '2026-08-12T00:00:00.000Z', '', '2026-08-12T00:00:00.000Z', '2026-08-12T00:00:00.000Z'
     );
   `);
+  database.exec(fs.readFileSync(new URL('../drizzle/0174_trade_job_media_cleanup_multipart.sql', import.meta.url), 'utf8'));
   const { drain, d1 } = loadCleanup(database);
   const objects = new Map([["crm-job-media/accepted-public-lead/tenant/job/photo/attempt-old/hash.jpg", "old-bytes"]]);
   const firstDeleteStarted = deferred();
@@ -87,7 +88,7 @@ test("a stale cleanup worker is fenced from the newer acceptance object in actua
   const newAttempt = "attempt-new";
   const newObjectKey = `crm-job-media/accepted-public-lead/tenant/job/photo/${newAttempt}/hash.jpg`;
   database.prepare(`INSERT INTO trade_crm_job_media_cleanup VALUES (?, 'owner-1', 'job-1', ?, '', 'staged', 0,
-    '2026-08-12T00:21:00.000Z', '', '2026-08-12T00:06:03.000Z', '2026-08-12T00:06:03.000Z')`)
+    '2026-08-12T00:21:00.000Z', '', '2026-08-12T00:06:03.000Z', '2026-08-12T00:06:03.000Z', '')`)
     .run(newObjectKey, newAttempt);
   objects.set(newObjectKey, "new-accepted-bytes");
 

@@ -81,6 +81,8 @@ function fixture() {
   const database = new DatabaseSync(":memory:");
   database.exec(`
     CREATE TABLE trade_accounts (firebase_uid text PRIMARY KEY NOT NULL, address_state text NOT NULL);
+    CREATE TABLE trade_rental_inspections (id text PRIMARY KEY, work_order_id text, firebase_uid text);
+    CREATE TABLE trade_rental_inspection_modules (inspection_id text, firebase_uid text, module_key text, status text);
     CREATE TABLE trade_work_orders (
       id text PRIMARY KEY NOT NULL, firebase_uid text NOT NULL, partner_type text NOT NULL,
       source_type text NOT NULL, work_number text NOT NULL, title text NOT NULL,
@@ -426,6 +428,18 @@ test("legacy schedule_appointment rolls back when its job becomes terminal after
   });
 });
 
+test("an attached rental assessment prevents a second active appointment on a different primary service", async () => {
+  const { database, d1 } = fixture();
+  database.prepare("INSERT INTO trade_rental_inspections VALUES ('rental-a', 'job-a', 'owner-a')").run();
+  const owner = database.prepare("SELECT firebase_uid FROM trade_work_orders WHERE id = 'job-a'").get().firebase_uid;
+  database.prepare("UPDATE trade_rental_inspections SET firebase_uid = ?").run(owner);
+  const response = await scheduleRoute(d1).PATCH(scheduleMutationRequest({ action: 'schedule_job', workOrderId: 'job-a',
+    expectedRevision: 3, memberId: 'member-a', startsAt: '2099-01-05T13:00', durationMinutes: 60 }));
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /appointment/i);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments WHERE work_order_id = 'job-a'").get().count, 1);
+});
+
 test("schedule payload only projects operational and contact details to authorised viewers", async () => {
   const ownerFixture = fixture();
   const ownerResponse = await scheduleRoute(ownerFixture.d1).GET(
@@ -548,6 +562,7 @@ test('mobile rescheduling preserves every selected weekday and uses its containi
         '@/lib/trade-team-server':{requireInstallerTeamAccess:async()=>access,assignedJob:teams.assignedJob},
         '@/lib/trade-team-permission-policy.mjs':{canRescheduleWithinScope},
         '@/lib/trade-schedule':loadTypescriptModule('../src/lib/trade-schedule.ts'),
+        '@/lib/trade-rental-credentials':loadTypescriptModule('../src/lib/trade-rental-credentials.ts'),
         '../../trade-schedule/route':{PATCH:async(request)=>{forwarded.push(await request.clone().json());return scheduler.PATCH(request);}},
       });
       const response=await route.PATCH(new Request('https://example.test/api/field/appointment-actions',{

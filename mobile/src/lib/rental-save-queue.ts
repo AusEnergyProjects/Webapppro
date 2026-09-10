@@ -24,6 +24,7 @@ export type RentalQueuedPhoto = {
   uri: string; width: number; height: number;
   capture: ReturnType<typeof observedTime>;
   location: Awaited<ReturnType<typeof observeLocation>> | null;
+  locationPending?: boolean;
   mediaId?: string;
   clientUploadId?: string;
   captureSessionId?: string;
@@ -70,18 +71,22 @@ export type RentalSaveState = {
 export class RentalSaveQueueError extends Error {
   constructor(message: string, public readonly code: string) { super(message); }
 }
+class RentalPhotoLocationPendingError extends Error {}
 
 const listeners = new Map<string, Set<() => void>>();
 const allListeners = new Set<() => void>();
 const localGates = new Map<string, Promise<unknown>>();
+const recordWriteGates = new Map<string, Promise<unknown>>();
 const jobGates = new Map<string, Promise<unknown>>();
 const imagePreparationGate = new Map<string, Promise<unknown>>();
 const workers = new Map<string, Promise<void>>();
 const finalizing = new Set<string>();
-const requests = new Set<AbortController>();
+const requests = new Map<AbortController, string>();
+const deletedJobs = new Map<string, symbol>();
 
 subscribeLocalDataOwner(() => {
-  for (const controller of requests) controller.abort();
+  for (const controller of requests.keys()) controller.abort();
+  deletedJobs.clear();
   for (const subscribers of listeners.values()) for (const listener of subscribers) listener();
 });
 
@@ -89,6 +94,24 @@ function copy<T>(value: T): T { return JSON.parse(JSON.stringify(value)); }
 function jobKey(owner: LocalDataOwner, workOrderId: string) { return `${owner.epoch}:${owner.key}:${workOrderId}`; }
 function resultKey(owner: LocalDataOwner, workOrderId: string) { return `rental-result:${encodeURIComponent(owner.key)}:${workOrderId}`; }
 function recordKey(record: RentalSaveRecord) { return `${PREFIX}${encodeURIComponent(record.ownerKey)}:${record.id}`; }
+function photoLocationKey(workOrderId: string, uri: string) { return `rental-photo-location:${workOrderId}:${encodeURIComponent(uri)}`; }
+function assertJobAvailable(owner: LocalDataOwner, workOrderId: string) {
+  assertLocalDataOwner(owner);
+  if (deletedJobs.has(jobKey(owner, workOrderId))) throw new RentalSaveQueueError('This job has been deleted.', 'RENTAL_JOB_DELETED');
+}
+
+/** Capture-time GPS can finish after the assessor has moved to the next check. */
+export async function rememberRentalPhotoLocation(workOrderId: string, uri: string, location: NonNullable<RentalQueuedPhoto['location']>, owner: LocalDataOwner) {
+  await serial(localGates, jobKey(owner, workOrderId), async () => {
+    await checkOwner(owner);
+    assertJobAvailable(owner, workOrderId);
+    await writeRentalSetting(owner, photoLocationKey(workOrderId, uri), JSON.stringify(location));
+  });
+  emit(workOrderId);
+  // A running worker may have just marked this photo as waiting for GPS. Resume after that attempt ends.
+  void (workers.get(jobKey(owner, workOrderId)) || Promise.resolve()).catch(() => undefined)
+    .then(() => processRentalSaveQueue(workOrderId)).catch(() => undefined);
+}
 
 async function serial<T>(gates: Map<string, Promise<unknown>>, key: string, task: () => Promise<T>): Promise<T> {
   const previous = gates.get(key) || Promise.resolve();
@@ -146,8 +169,11 @@ async function recordsFor(owner: LocalDataOwner, workOrderId?: string): Promise<
 }
 
 async function persist(owner: LocalDataOwner, record: RentalSaveRecord) {
-  await checkOwner(owner);
-  await writeRentalSetting(owner, recordKey(record), JSON.stringify(record));
+  await serial(recordWriteGates, jobKey(owner, record.workOrderId), async () => {
+    await checkOwner(owner);
+    assertJobAvailable(owner, record.workOrderId);
+    await writeRentalSetting(owner, recordKey(record), JSON.stringify(record));
+  });
   emit(record.workOrderId);
 }
 
@@ -160,6 +186,7 @@ async function cacheResult(owner: LocalDataOwner, workOrderId: string, result: R
   if (!result.inspection) return;
   await serial(localGates, jobKey(owner, workOrderId), async () => {
     await checkOwner(owner);
+    assertJobAvailable(owner, workOrderId);
     const previous = await cachedResult(owner, workOrderId);
     if (previous?.inspection && previous.inspection.id === result.inspection!.id
       && previous.inspection.revision > result.inspection!.revision) return;
@@ -222,6 +249,7 @@ export async function enqueueRentalSave(input: RentalSaveInput): Promise<RentalS
   }
 
   const owner = await ownerNow();
+  assertJobAvailable(owner, snapshot.workOrderId);
   const record = await serial(localGates, jobKey(owner, snapshot.workOrderId), async () => {
     await checkOwner(owner);
     if (finalizing.has(jobKey(owner, snapshot.workOrderId))) throw pendingError();
@@ -366,13 +394,15 @@ function pendingError() {
 
 async function request(owner: LocalDataOwner, workOrderId: string, body?: Record<string, unknown>) {
   await checkOwner(owner);
+  assertJobAvailable(owner, workOrderId);
   const controller = new AbortController();
-  requests.add(controller);
+  requests.set(controller, jobKey(owner, workOrderId));
   try {
     const result = await apiRequest<RentalAssessmentResult>(body ? ENDPOINT : `${ENDPOINT}?workOrderId=${encodeURIComponent(workOrderId)}`,
       body ? { method: 'POST', body: JSON.stringify({ ...body, workOrderId }), signal: controller.signal }
         : { signal: controller.signal });
     await checkOwner(owner);
+    assertJobAvailable(owner, workOrderId);
     await cacheResult(owner, workOrderId, result);
     return result;
   } finally { requests.delete(controller); }
@@ -416,6 +446,12 @@ function metadataReplayRule(assessmentModule: RentalAssessmentModule, key: strin
   return field?.phase === 'final' && value === true ? 'invalidate' : null;
 }
 
+function metadataEqual(assessmentModule: RentalAssessmentModule, key: string, left: unknown, right: unknown) {
+  // Server normalisation fills absent fields after the first save. That is not another assessor's edit.
+  const empty = assessmentModule.template.metadataFields.find((field) => field.key === key)?.type === 'checkbox' ? false : '';
+  return equal(left ?? empty, right ?? empty);
+}
+
 async function saveAnswer(owner: LocalDataOwner, record: RentalSaveRecord, result: RentalAssessmentResult) {
   const assessmentModule = currentModule(record, result);
   if (record.body.action === 'save_module_answers') {
@@ -432,8 +468,8 @@ async function saveAnswer(owner: LocalDataOwner, record: RentalSaveRecord, resul
       }
     }
     const keys = Object.keys(patch);
-    if (!keys.every((key) => equal(assessmentModule.answers[key], patch[key]))) {
-      if (keys.some((key) => !invalidated.has(key) && !equal(assessmentModule.answers[key], record.module.answers[key]) && !equal(assessmentModule.answers[key], patch[key]))) throw conflict('An assessment detail changed elsewhere. Review it before saving.');
+    if (!keys.every((key) => metadataEqual(assessmentModule, key, assessmentModule.answers[key], patch[key]))) {
+      if (keys.some((key) => !invalidated.has(key) && !metadataEqual(assessmentModule, key, assessmentModule.answers[key], record.module.answers[key]) && !metadataEqual(assessmentModule, key, assessmentModule.answers[key], patch[key]))) throw conflict('An assessment detail changed elsewhere. Review it before saving.');
       result = await request(owner, record.workOrderId, { ...record.body, answers: patch, expectedRevision: assessmentModule.revision });
     }
     record.answerSaved = true;
@@ -469,9 +505,20 @@ async function preparePhoto(owner: LocalDataOwner, record: RentalSaveRecord, pho
 
 async function preparePhotoCheckpoint(owner: LocalDataOwner, record: RentalSaveRecord, photo: PhotoCheckpoint) {
   await checkOwner(owner);
+  assertJobAvailable(owner, record.workOrderId);
   if (photo.prepared) {
     if (!new File(photo.prepared.uri).exists) throw conflict('A prepared photo is missing on this phone. Retake it after reviewing the saved answer.');
     return photo.prepared;
+  }
+  if (photo.locationPending) {
+    const capturedLocation = await readRentalSetting(owner, photoLocationKey(record.workOrderId, photo.uri));
+    if (capturedLocation) {
+      photo.location = JSON.parse(capturedLocation) as NonNullable<RentalQueuedPhoto['location']>;
+      photo.locationPending = false;
+      await persist(owner, record);
+    } else if (Date.now() - Date.parse(photo.capture.captureObservedAtUtc) < 120000) {
+      throw new RentalPhotoLocationPendingError('Photo saved. Capture-time GPS is still being recorded; you can keep assessing.');
+    }
   }
   const observation = photo.location;
   const location = observation?.location;
@@ -494,9 +541,11 @@ async function preparePhotoCheckpoint(owner: LocalDataOwner, record: RentalSaveR
       }
       rendered = await image.renderAsync();
       await checkOwner(owner);
+      assertJobAvailable(owner, record.workOrderId);
       const prepared = await rendered.saveAsync({ compress, format: SaveFormat.JPEG });
       candidate = new File(prepared.uri);
       await checkOwner(owner);
+      assertJobAvailable(owner, record.workOrderId);
       if (!candidate.exists || candidate.size < 1 || candidate.size > MAX_RENTAL_PHOTO_BYTES) continue;
       PHOTO_DIRECTORY.create({ intermediates: true, idempotent: true });
       const retained = new File(PHOTO_DIRECTORY, `${photo.clientUploadId}.jpg`);
@@ -504,6 +553,7 @@ async function preparePhotoCheckpoint(owner: LocalDataOwner, record: RentalSaveR
       try {
         await candidate.copy(retained, { overwrite: true });
         await checkOwner(owner);
+        assertJobAvailable(owner, record.workOrderId);
         if (retained.size !== candidate.size) throw new Error('The prepared photo could not be retained. The original remains on this phone.');
       } catch (error) {
         if (retained.exists) retained.delete();
@@ -537,7 +587,7 @@ async function uploadPhoto(owner: LocalDataOwner, record: RentalSaveRecord, phot
   form.append('evidenceEnvelope', prepared.envelope);
   form.append('file', new File(prepared.uri), prepared.name);
   const controller = new AbortController();
-  requests.add(controller);
+  requests.set(controller, jobKey(owner, record.workOrderId));
   try {
     const uploaded = await apiRequest<{ uploadedMediaId?: string }>('/api/trade-field-work', { method: 'POST', body: form, signal: controller.signal });
     await checkOwner(owner);
@@ -588,6 +638,7 @@ async function processJob(owner: LocalDataOwner, workOrderId: string) {
     const record = (await recordsFor(owner, workOrderId)).find((entry) => !attempted.has(entry.id)
       && (['queued', 'syncing', 'retry'].includes(entry.status)
         || (entry.status === 'conflict' && canRetryCredentialSave(entry))
+        || (entry.status === 'conflict' && entry.body.action === 'save_module_answers' && entry.error === 'An assessment detail changed elsewhere. Review it before saving.')
         || (entry.status === 'conflict' && entry.body.action === 'save_module_answers' && !entry.photos.length
           && Object.keys(object(entry.body.answers)).length > 0
           && Object.entries(object(entry.body.answers)).every(([key, value]) => metadataReplayRule(entry.module, key, value)))));
@@ -597,6 +648,7 @@ async function processJob(owner: LocalDataOwner, workOrderId: string) {
     try { await processRecord(owner, record); }
     catch (error) {
       await checkOwner(owner);
+      if (deletedJobs.has(jobKey(owner, workOrderId))) return;
       record.status = error instanceof RentalSaveQueueError || (error instanceof ApiError && [400, 409, 413, 422].includes(error.status)) ? 'conflict' : 'retry';
       record.error = error instanceof Error ? error.message : 'The answer is saved locally. Retry when connected.';
       const code = error instanceof RentalSaveQueueError || error instanceof ApiError ? error.code : '';
@@ -605,9 +657,65 @@ async function processJob(owner: LocalDataOwner, workOrderId: string) {
       if (credentialCode && record.body.action === 'save_item') record.error += ' Check Team qualifications and supporting documents, then Sync to retry. Your answer and photos are retained.';
       await persist(owner, record);
       if (error instanceof ApiError && [401, 403, 426].includes(error.status)) throw error;
-      if (record.status === 'retry') return;
+      if (record.status === 'retry' && !(error instanceof RentalPhotoLocationPendingError)) return;
     }
   }
+}
+
+/** Only call after the server confirms this job was deleted. Other jobs and the customer remain untouched. */
+export async function purgeDeletedRentalJob(workOrderId: string) {
+  const owner = await ownerNow();
+  const key = jobKey(owner, workOrderId);
+  deletedJobs.set(key, Symbol(workOrderId));
+  for (const [controller, requestJob] of requests) if (requestJob === key) controller.abort();
+  await serial(localGates, key, () => serial(recordWriteGates, key, async () => {
+    await checkOwner(owner);
+    const records = await recordsFor(owner, workOrderId);
+    const photoUris = new Set<string>();
+    for (const record of records) for (const photo of record.photos) {
+      photoUris.add(photo.uri);
+      if (photo.prepared?.uri) photoUris.add(photo.prepared.uri);
+    }
+    const wizardKey = 'rental-wizard:' + workOrderId;
+    const wizard = object(JSON.parse(await readRentalSetting(owner, wizardKey) || '{}'));
+    for (const draft of Object.values(object(wizard.drafts))) {
+      const photos = object(draft).photos;
+      if (Array.isArray(photos)) for (const photo of photos) {
+        const uri = object(photo).uri;
+        if (typeof uri === 'string') photoUris.add(uri);
+      }
+    }
+    const directories = ['rental-original-photos', 'rental-save-photos'].map((name) => new Directory(Paths.document, name).uri.replace(/\/+$/, '') + '/');
+    for (const uri of photoUris) {
+      assertLocalDataOwner(owner);
+      if (directories.some((directory) => uri.startsWith(directory) && !uri.slice(directory.length).includes('/'))) {
+        const file = new File(uri);
+        if (file.exists) file.delete();
+      }
+      await writeRentalSetting(owner, photoLocationKey(workOrderId, uri), null);
+    }
+    for (const record of records) await writeRentalSetting(owner, recordKey(record), null);
+    await writeRentalSetting(owner, resultKey(owner, workOrderId), null);
+    await writeRentalSetting(owner, wizardKey, null);
+  }));
+  emit(workOrderId);
+}
+
+/** An authoritative reassignment can reopen a purged job after its old worker has stopped. */
+export async function restoreRentalJobAccess(workOrderId: string) {
+  const owner = await ownerNow();
+  const key = jobKey(owner, workOrderId);
+  const deletion = deletedJobs.get(key);
+  if (!deletion) return;
+  const restore = () => {
+    assertLocalDataOwner(owner);
+    if (deletedJobs.get(key) !== deletion) return;
+    deletedJobs.delete(key);
+    emit(workOrderId);
+  };
+  const worker = workers.get(key);
+  if (worker) void worker.catch(() => undefined).then(restore).catch(() => undefined);
+  else restore();
 }
 
 export async function processRentalSaveQueue(workOrderId?: string): Promise<void> {

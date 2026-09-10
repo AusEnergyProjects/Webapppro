@@ -88,14 +88,15 @@ function JobCard({ job, onActions }: { job: FieldJob; onActions: (job: FieldJob)
 }
 
 export default function WorkScreen() {
-  const { jobs, sync, syncNow, user } = useApp();
+  const { jobs, sync, syncNow, refreshLocal, user } = useApp();
   const [actionJob, setActionJob] = useState<FieldJob | null>(null);
   const [jobPatches, setJobPatches] = useState<Record<string, AppointmentActionResult['jobPatch']>>({});
   const [appointmentMessage, setAppointmentMessage] = useState('');
-  const visibleJobs = useMemo(() => jobs.map((job) => {
+  const [deletedJobs, setDeletedJobs] = useState<string[]>([]);
+  const visibleJobs = useMemo(() => jobs.filter((job) => !deletedJobs.includes(job.id)).map((job) => {
     const patch = jobPatches[job.id];
     return patch && (patch.revision ?? 0) > job.revision ? { ...job, ...patch } : job;
-  }).filter(isVisibleScheduleJob), [jobs, jobPatches]);
+  }).filter(isVisibleScheduleJob), [jobs, jobPatches, deletedJobs]);
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [search, setSearch] = useState('');
@@ -115,9 +116,12 @@ export default function WorkScreen() {
 
   function appointmentSaved(action: AppointmentAction, result: AppointmentActionResult) {
     if (!actionJob) return;
+    const deletedJobId = result.deletedJobId;
+    if (deletedJobId) setDeletedJobs((current) => [...current, deletedJobId]);
     setJobPatches((current) => ({ ...current, [actionJob.id]: result.jobPatch }));
     setAppointmentMessage(appointmentSavedMessage(action, result));
     setActionJob(null);
+    if (deletedJobId) void refreshLocal();
     void syncNow();
   }
 

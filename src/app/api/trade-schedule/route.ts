@@ -803,7 +803,9 @@ export async function PATCH(request: Request) {
       if (!job) throw new Error("JOB_NOT_FOUND");
       if (["completed", "cancelled"].includes(String(job.stage))) throw new Error("TERMINAL_JOB_LOCKED");
       if (Number(body.expectedRevision) !== Number(job.revision)) throw new Error("REVISION_CONFLICT");
-      if (String(job.service_category || "") === "rental-inspection") {
+      if (String(job.service_category || "") === "rental-inspection" || await db.prepare(`SELECT 1
+        FROM trade_rental_inspections WHERE work_order_id = ? AND firebase_uid = ? LIMIT 1`)
+        .bind(workOrderId, access.ownerUid).first()) {
         const activeAppointment = await db.prepare(`SELECT id FROM trade_crm_appointments
           WHERE work_order_id = ? AND firebase_uid = ?
             AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress') LIMIT 1`)

@@ -98,6 +98,7 @@ function conflictDispatchRoute(conflictCode) {
     }
 
     async first() {
+      if (this.sql.includes("FROM trade_rental_inspections")) return null;
       if (this.sql.includes("FROM trade_accounts")) return { address_state: "VIC" };
       if (this.sql.includes("FROM trade_team_members")) {
         return { id: "member-a", member_uid: "owner-1", display_name: "Assigned worker", capabilities: "[]" };

@@ -15,6 +15,16 @@ export async function cleanupTradeCrmJobMediaRows(options) {
     }
     if (!await options.store.ownsClaim(row)) continue;
     try {
+      if (row.upload_id) {
+        if (!options.bucket.resumeMultipartUpload) throw new Error("multipart_cleanup_unavailable");
+        try {
+          await options.bucket.resumeMultipartUpload(row.object_key, row.upload_id).abort();
+        } catch (error) {
+          const status = error && typeof error === 'object' ? error.status : undefined;
+          const message = error instanceof Error ? error.message : String(error);
+          if (status !== 404 && !/not found|no such upload|does not exist/i.test(message)) throw error;
+        }
+      }
       await options.bucket.delete(row.object_key);
       if (await options.store.isCanonical(row)) {
         throw new Error("canonical_reference_appeared_during_cleanup");

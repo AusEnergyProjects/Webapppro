@@ -28,6 +28,7 @@ function fixture(t) {
       caption TEXT, evidence_envelope TEXT, original_sha256 TEXT, created_at TEXT, updated_at TEXT);
     CREATE TABLE trade_work_order_events (id TEXT PRIMARY KEY, work_order_id TEXT, firebase_uid TEXT,
       event_type TEXT, summary TEXT, created_at TEXT);
+    CREATE TABLE trade_rental_inspections (id TEXT PRIMARY KEY, work_order_id TEXT, firebase_uid TEXT);
     INSERT INTO trade_work_orders (id, firebase_uid, service_category) VALUES
       ('job', 'owner', 'rental-inspection'), ('job-two', 'owner', 'rental-inspection'),
       ('other-job', 'other-owner', 'rental-inspection'), ('electrical', 'owner', 'electrical');`);
@@ -111,6 +112,26 @@ test('lost acknowledgement replay returns one explicit photo ID without another 
   assert.deepEqual(await replay.json(), created);
   assert.deepEqual(f.counts(), [1, 1, 1]);
   assert.equal(f.putCount(), 1);
+});
+
+test('rental photos added to another service job retain upload identity and capture checks', async (t) => {
+  const f = fixture(t);
+  assert.equal((await f.upload({ job: 'electrical' })).status, 400);
+  f.sql.exec("INSERT INTO trade_rental_inspections VALUES ('rental', 'electrical', 'owner')");
+  const response = await f.upload({ job: 'electrical' });
+  assert.equal(response.status, 201);
+  assert.ok((await response.json()).uploadedMediaId);
+  assert.equal((await f.upload({ job: 'electrical' })).status, 200);
+  const invalid = { ...f.envelope, location: { ...f.envelope.location, mocked: true } };
+  assert.equal((await f.upload({ job: 'electrical', id: '2234afc6-7be2-4539-8a02-ffe221389bac', envelope: invalid })).status, 400);
+  assert.deepEqual(f.counts(), [1, 1, 1]);
+});
+
+test('an assessment owned by another business cannot enable rental uploads on this job', async (t) => {
+  const f = fixture(t);
+  f.sql.exec("INSERT INTO trade_rental_inspections VALUES ('rental', 'electrical', 'other-owner')");
+  assert.equal((await f.upload({ job: 'electrical' })).status, 400);
+  assert.deepEqual(f.counts(), [0, 0, 0]);
 });
 
 test('simultaneous identical requests retain only the winning object and create one event', async (t) => {

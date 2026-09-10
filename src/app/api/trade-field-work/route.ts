@@ -620,8 +620,14 @@ async function upload(request: Request, access: TeamAccess) {
   if (file.size <= 0 || file.size > MAX_FILE_BYTES) return adminJson({ ok: false, error: "The file must be no larger than 8 MB." }, 400);
   const clientUploadValue = form.get("clientUploadId");
   const clientUploadId = typeof clientUploadValue === "string" ? clientUploadValue.trim().toLowerCase() : "";
+  // A rental assessment may be added to an existing electrical or other service job.
+  // Its photo rules follow the attached assessment, not the job's original category.
+  const rentalPhoto = String(job.service_category || "") === "rental-inspection"
+    || (form.has("clientUploadId") && Boolean(await getD1().prepare(`SELECT 1 FROM trade_rental_inspections
+      WHERE work_order_id = ? AND firebase_uid = ? LIMIT 1`)
+      .bind(workOrderId, access.ownerUid).first()));
   if (form.has("clientUploadId") && (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(clientUploadId)
-    || String(job.service_category || "") !== "rental-inspection" || !file.type.startsWith("image/"))) {
+    || !rentalPhoto || !file.type.startsWith("image/"))) {
     return adminJson({ ok: false, code: "UPLOAD_IDENTITY_INVALID", error: "Use a valid photo upload ID for a rental assessment image." }, 400);
   }
   const fileBytes = new Uint8Array(await file.arrayBuffer());
@@ -635,7 +641,7 @@ async function upload(request: Request, access: TeamAccess) {
     if (existing) return rentalUploadReplay(existing, uploadIdentity);
   }
   const now = new Date().toISOString();
-  if (String(job.service_category || "") === "rental-inspection" && file.type.startsWith("image/")
+  if (rentalPhoto && file.type.startsWith("image/")
     && !rentalEvidencePhotoCapture(evidenceEnvelope, { receivedAtUtc: now })) {
     return adminJson({ ok: false, error: "Rental assessment photos must have been captured within the last seven days, with a non-mocked GPS position recorded within two minutes of capture and accuracy within 100 metres." }, 400);
   }
@@ -643,7 +649,7 @@ async function upload(request: Request, access: TeamAccess) {
   const objectKey = `crm-job-media/${access.ownerUid}/${workOrderId}/${crypto.randomUUID()}`;
   const revision = nextJobRevision(job.revision);
   const store = bucket();
-  if (String(job.service_category || "") === "rental-inspection"
+  if (rentalPhoto
     && ["image/png", "image/jpeg"].includes(file.type)) {
     if (!rentalImageWithinReportLimit(fileBytes, file.type, {
       maxDimension: MAX_IMAGE_DIMENSION,

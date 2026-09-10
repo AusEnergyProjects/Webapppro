@@ -2,12 +2,16 @@ import {
   cleanupTradeCrmJobMediaRows as cleanupRows,
 } from "./trade-crm-job-media-cleanup-core.mjs";
 
-export type TradeCrmJobMediaCleanupBucket = { delete(key: string): Promise<void> };
+export type TradeCrmJobMediaCleanupBucket = {
+  delete(key: string): Promise<void>;
+  resumeMultipartUpload?(key: string, uploadId: string): { abort(): Promise<void> };
+};
 type CleanupRow = {
   object_key: string;
   firebase_uid: string;
   work_order_id: string;
   attempt_id: string;
+  upload_id: string;
   claim_token: string;
   attempts: number;
 };
@@ -22,7 +26,7 @@ export async function drainTradeCrmJobMediaCleanup(options: {
   const limit = Math.min(50, Math.max(1, Math.floor(options.limit || 10)));
   const staleClaimAt = new Date(now.getTime() - 5 * 60 * 1000).toISOString();
   const due = await options.db.prepare(`SELECT object_key, firebase_uid, work_order_id,
-      attempt_id, attempts
+      attempt_id, upload_id, attempts
     FROM trade_crm_job_media_cleanup
     WHERE (status IN ('staged', 'retry') AND next_attempt_at <= ?)
       OR (status = 'claimed' AND updated_at <= ?)

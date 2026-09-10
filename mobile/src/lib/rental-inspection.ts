@@ -261,3 +261,28 @@ export function rentalCompletionTarget(module: RentalAssessmentModule, items: Re
   return checkIndex >= 0 ? { kind: 'check', sectionKey: item.sectionKey, checkIndex,
     ...(module.key !== 'minimum_standards' ? { instanceKey: item.instanceKey } : {}) } : null;
 }
+
+/** Saved device answers count toward review; the server still validates them before issuing anything. */
+export function rentalPendingCompletionBlockers(result: RentalAssessmentResult, module: RentalAssessmentModule,
+  pending: { status: string; body: Record<string, unknown> }[]) {
+  return (result.completion?.[module.id]?.blockers || []).filter((blocker) => {
+    if (['metadata:coverageConfirmed', 'metadata:assessorDeclaration'].includes(blocker.key)) return false;
+    const target = rentalCompletionTarget(module, result.items || [], blocker.key);
+    if (!target) return true;
+    return !pending.some((save) => {
+      if (save.status === 'conflict' || save.body.moduleId !== module.id) return false;
+      if (target.kind === 'check') {
+        const check = module.template.sections.find((section) => section.key === target.sectionKey)?.checks[target.checkIndex];
+        return save.body.action === 'save_item' && save.body.sectionKey === target.sectionKey && save.body.checkKey === check?.key
+          && save.body.instanceKey === (target.instanceKey || 'property');
+      }
+      const field = module.template.metadataFields.find((entry) => entry.key === target.fieldKey);
+      const patch = save.body.answers;
+      if (!field || save.body.action !== 'save_module_answers' || !patch || typeof patch !== 'object' || Array.isArray(patch)) return false;
+      const value = (patch as Record<string, unknown>)[target.fieldKey];
+      if (field.type === 'checkbox') return value === true;
+      if (!String(value ?? '').trim()) return false;
+      return field.type !== 'select' || field.options.some((option) => option.value === value);
+    });
+  });
+}

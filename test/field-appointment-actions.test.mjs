@@ -85,6 +85,8 @@ function fixture(overrides = {}, effects = {}) {
       source_reference text, assignee_member_id text, assignee_label text, stage text, service_category text,
       revision integer, record_status text, scheduled_start text, scheduled_end text, updated_at text);
     CREATE TABLE trade_crm_job_details(work_order_id text, firebase_uid text, crm_customer_id text, customer_source text);
+    CREATE TABLE trade_rental_inspections(id text, firebase_uid text, work_order_id text);
+    CREATE TABLE trade_rental_inspection_modules(inspection_id text, firebase_uid text, module_key text, status text);
     CREATE TABLE trade_crm_appointments(id text primary key, work_order_id text, firebase_uid text, revision integer,
       status text, starts_at text, ends_at text, assignee_member_id text, updated_at text, created_at text);
     CREATE TABLE trade_crm_customers(id text primary key, firebase_uid text, first_name text, last_name text,
@@ -119,6 +121,7 @@ function fixture(overrides = {}, effects = {}) {
     '@/lib/trade-calendar-sync-server': { cancelAppointmentInConnectedCalendars: async (...args) => { calendars.push(args); if (effects.calendar) await effects.calendar(...args); return {attempted:1,synced:1,failed:0}; } },
     '@/lib/direct-appointment-invite-server': { sendDirectAppointmentCalendarInvite: async (args) => { messages.push(args); if (effects.email) await effects.email(args); return {status:'accepted'}; } },
     '@/lib/trade-rental-credentials': loadTypescriptModule('../src/lib/trade-rental-credentials.ts'),
+    '@/lib/trade-job-deletion-server': { scheduleJobFileCleanup() {} },
     '../../trade-schedule/route': { PATCH: async (request) => { scheduleChanges.push(await request.json()); return Response.json({ok:true,customerEmails:[],calendarSync:{failed:0}}); } },
   });
   const patch = (action, extra={}) => route.PATCH(new Request('https://example.test/api/field/appointment-actions', {
@@ -169,15 +172,15 @@ test('contact editing updates primary contact and job revision, and stale custom
 test('reschedule rechecks rental credentials for the new date before calling scheduling', async () => {
  const f=fixture();f.database.exec(`
  UPDATE trade_work_orders SET service_category='rental-inspection';
- CREATE TABLE trade_rental_inspections(id text,firebase_uid text,work_order_id text);
- CREATE TABLE trade_rental_inspection_modules(inspection_id text,firebase_uid text,module_key text,status text);
- CREATE TABLE trade_team_members(id text,owner_uid text,status text);
+ CREATE TABLE IF NOT EXISTS trade_rental_inspections(id text,firebase_uid text,work_order_id text);
+ CREATE TABLE IF NOT EXISTS trade_rental_inspection_modules(inspection_id text,firebase_uid text,module_key text,status text);
+ CREATE TABLE trade_team_members(id text,owner_uid text,status text,member_uid text,capabilities text);
  CREATE TABLE trade_team_member_credentials(owner_uid text,team_member_id text,file_id text,rental_gate text,status text,
    credential_number text,jurisdiction text,credential_type text,expires_at text);
  CREATE TABLE trade_team_member_files(id text,owner_uid text,team_member_id text,status text,expires_at text);
  INSERT INTO trade_rental_inspections VALUES('inspection','owner','job');
  INSERT INTO trade_rental_inspection_modules VALUES('inspection','owner','electrical_safety_check','draft');
- INSERT INTO trade_team_members VALUES('worker','owner','active');
+ INSERT INTO trade_team_members VALUES('worker','owner','active','worker-user','["rental-inspection"]');
  INSERT INTO trade_team_member_files VALUES('file','owner','worker','active','2026-10-12');
  INSERT INTO trade_team_member_credentials VALUES('owner','worker','file','licensed_electrician','active','123','VIC','licence','2026-10-12');`);
  const response=await f.patch('reschedule',{startsAt:'2026-10-13T09:00',durationMinutes:60,memberId:'worker'});
