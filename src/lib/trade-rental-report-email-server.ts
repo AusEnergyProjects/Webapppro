@@ -93,7 +93,8 @@ export async function emailRentalAssessmentReport(input: Input) {
       let binary = ''; for (const byte of pdf.bytes) binary += String.fromCharCode(byte);
       attachments.push({ filename: `${pdf.reportNumber.replace(/[^a-zA-Z0-9-]/g, '-')}.pdf`, content: btoa(binary), contentType: 'application/pdf' });
     }
-    const body = `Hello,\n\nYour rental assessment report ${pdf.reportNumber} is ready. ${attachments.length ? 'The PDF report is attached.' : `View and download it here: ${link?.shareUrl}`}\n\nIt includes the property findings, evidence and measured work needed for quoting.\n\nTLink`;
+    const greeting = recipient.name === 'Client' ? 'Hello,' : `Hi ${recipient.name},`;
+    const body = `${greeting}\n\nYour rental assessment report ${pdf.reportNumber} is ready for you to review.\n\n${attachments.length ? 'A PDF copy is attached for your records.' : `You can view and download your report using the secure link below:\n${link?.shareUrl}`}\n\nIf you have any questions or would like to talk through the report, please get in touch.\n\nKind regards,\nTLink`;
     const result = await sendServiceReminderProviderMessage({ channel: 'email', recipient: recipient.email,
       subject: `Rental assessment report | ${pdf.reportNumber}`, body, attachments, idempotencyKey: key,
       messageType: 'tlink_rental_report', callbackUrl: new URL('/api/service-reminder-provider-events/twilio', input.origin).toString(),

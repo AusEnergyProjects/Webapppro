@@ -289,6 +289,93 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     }
   }
 
+  async function evidenceGallery() {
+    const gap = 14;
+    const cardWidth = (CONTENT_WIDTH - gap) / 2;
+    const innerWidth = cardWidth - 16;
+    const imageHeight = 165;
+    let galleryBodyTop = 0;
+    const startGalleryPage = (continued = false) => {
+      addPage();
+      kicker("Photographic evidence");
+      text(continued ? "Photo register | continued" : "Photo register", { bold: true, size: 18, lineHeight: 24, after: 6 });
+      if (!continued) text("Match each E-number to the assessment. Photos, captions and capture details are kept together. Other file formats are included as PDF attachments.", { size: 8.3, lineHeight: 11, color: palette.muted, after: 8 });
+      galleryBodyTop = y;
+    };
+    const cards = (snapshot.evidence || []).map((entry) => {
+      const lines = [];
+      const addLines = (value, options = {}) => {
+        if (!value) return;
+        const font = options.bold ? bold : regular;
+        const size = options.size || 7;
+        for (const line of wrap(font, value, size, innerWidth)) lines.push({ value: line, font, size, height: options.height || 9, color: options.bold ? palette.ink : palette.muted });
+      };
+      addLines(entry.caption || entry.purpose || "Assessment evidence", { bold: true, size: 8.2, height: 10.5 });
+      if (entry.purpose && entry.purpose !== entry.caption) addLines(`Purpose: ${entry.purpose}`);
+      addLines(`File: ${entry.fileName || "Evidence file"} | ${entry.contentType || "Unknown format"}`, { size: 6.5, height: 8 });
+      if (entry.capture?.capturedAtUtc) addLines(`${entry.capture.source === "in_app_camera" ? "Captured" : "Added"}: ${dateTime(entry.capture.capturedAtUtc)}`);
+      if (entry.capture?.locationCaptured) {
+        addLines(`Device-reported GPS: ${Number(entry.capture.latitude).toFixed(6)}, ${Number(entry.capture.longitude).toFixed(6)}`);
+        addLines(`Reported accuracy: ${Math.round(Number(entry.capture.accuracyMetres))} metres`);
+      }
+      if (entry.originalSha256) addLines(`SHA-256: ${entry.originalSha256}`, { size: 6.3, height: 8 });
+      return { entry, lines };
+    });
+    startGalleryPage();
+    if (!cards.length) text("No evidence files were recorded for this assessment.", { size: 9 });
+    for (let offset = 0; offset < cards.length; offset += 2) {
+      const row = cards.slice(offset, offset + 2);
+      const images = await Promise.all(row.map((card) => embedEvidence(card.entry)));
+      // Long captions continue explicitly instead of being clipped or running through the footer.
+      let continuation = false;
+      while (row.some((card) => card.lines.length)) {
+        const fixedHeight = continuation ? 30 : imageHeight + 36;
+        const fullHeight = fixedHeight + Math.max(...row.map((card) => card.lines.reduce((sum, line) => sum + line.height, 0)));
+        if (y < galleryBodyTop && y - Math.min(fullHeight, PAGE_HEIGHT - 178) < 56) startGalleryPage(true);
+        const available = y - 56 - fixedHeight;
+        const chunks = row.map((card) => {
+          const chunk = [];
+          let height = 0;
+          while (card.lines.length && height + card.lines[0].height <= available) {
+            const line = card.lines.shift();
+            chunk.push(line);
+            height += line.height;
+          }
+          return { chunk, height };
+        });
+        const rowHeight = fixedHeight + Math.max(...chunks.map((chunk) => chunk.height));
+        const top = y;
+        for (let column = 0; column < row.length; column += 1) {
+          const { entry } = row[column];
+          if (continuation && !chunks[column].chunk.length) continue;
+          const x = MARGIN + column * (cardWidth + gap);
+          page.drawRectangle({ x, y: top - rowHeight, width: cardWidth, height: rowHeight, color: palette.soft, borderColor: palette.line, borderWidth: 0.6 });
+          page.drawText(`${evidenceReferences.get(entry.id)}${continuation ? " | details continued" : ""}`, { x: x + 8, y: top - 14, font: bold, size: 8.2, color: palette.primary });
+          if (!continuation && renderedEvidence.has(entry.id)) page.drawText(`Assessment page ${renderedEvidence.get(entry.id)}`, { x: x + cardWidth - 86, y: top - 14, font: regular, size: 6.5, color: palette.muted });
+          if (!continuation) {
+            const image = images[column];
+            const imageBottom = top - 22 - imageHeight;
+            page.drawRectangle({ x: x + 8, y: imageBottom, width: innerWidth, height: imageHeight, color: palette.background });
+            if (image) {
+              const scale = Math.min(innerWidth / image.width, imageHeight / image.height);
+              page.drawImage(image, { x: x + 8 + (innerWidth - image.width * scale) / 2, y: imageBottom + (imageHeight - image.height * scale) / 2, width: image.width * scale, height: image.height * scale });
+            } else {
+              const message = evidenceAssets[entry.id]?.bytes ? "Open the file in PDF attachments" : "Preview unavailable; file not supplied";
+              page.drawText(message, { x: x + 15, y: imageBottom + imageHeight / 2, font: regular, size: 7.5, color: palette.muted });
+            }
+          }
+          let lineY = top - fixedHeight + 10;
+          for (const line of chunks[column].chunk) {
+            page.drawText(line.value, { x: x + 8, y: lineY - line.size, font: line.font, size: line.size, color: line.color });
+            lineY -= line.height;
+          }
+        }
+        y = top - rowHeight - gap;
+        continuation = true;
+      }
+    }
+  }
+
   for (const [entryIndex, entry] of (snapshot.evidence || []).entries()) {
     const asset = evidenceAssets[entry.id];
     if (!asset?.bytes || await embedEvidence(entry)) continue;
@@ -448,24 +535,8 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     }
   }
 
+  await evidenceGallery();
   addPage();
-  heading("Evidence register", "Files captured for this assessment", "JPEG and PNG photos are rendered in this report. Other supplied formats, including WebP, are embedded as PDF attachments. Every file is listed below with its integrity hash.");
-  for (const [index, entry] of (snapshot.evidence || []).entries()) {
-    text(`${index + 1}. ${entry.fileName || "Evidence file"}`, { bold: true, size: 8.2, lineHeight: 11, after: 3 });
-    if (entry.caption) keyValue("Caption", entry.caption, { keyWidth: 90, size: 7.8 });
-    if (entry.purpose && entry.purpose !== entry.caption) keyValue("Purpose", entry.purpose, { keyWidth: 90, size: 7.8 });
-    keyValue("Type", entry.contentType, { keyWidth: 90, size: 7.8 });
-    if (entry.capture?.capturedAtUtc) {
-      keyValue(entry.capture.source === "in_app_camera" ? "Captured" : "Added", dateTime(entry.capture.capturedAtUtc), { keyWidth: 90, size: 7.8 });
-      if (entry.capture.locationCaptured) {
-        keyValue("Device-reported GPS", `${Number(entry.capture.latitude).toFixed(6)}, ${Number(entry.capture.longitude).toFixed(6)}`, { keyWidth: 106, size: 7.8 });
-        keyValue("Reported accuracy", `${Math.round(Number(entry.capture.accuracyMetres))} metres`, { keyWidth: 106, size: 7.8 });
-      }
-    }
-    if (entry.originalSha256) keyValue("SHA-256", entry.originalSha256, { keyWidth: 90, size: 7.2 });
-    y -= 5;
-  }
-  rule();
   heading("Issuer declaration", "Assessment authentication");
   keyValue("Business", snapshot.business?.name);
   keyValue("ABN", snapshot.business?.abn);

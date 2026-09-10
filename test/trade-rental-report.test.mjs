@@ -177,6 +177,54 @@ test("rental assessment PDF rejects an incomplete report snapshot", async () => 
   await assert.rejects(() => createRentalAssessmentPdfBytes({ schemaVersion: "tlink-rental-report-v1" }), /valid rental assessment report snapshot/);
 });
 
+test("photo register renders every photo with its capture record on the same page and reuses embedded images", async () => {
+  const snapshot = reportSnapshot();
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=", "base64");
+  const assets = {};
+  snapshot.evidence = Array.from({ length: 13 }, (_, index) => {
+    const id = `photo-${index}`;
+    assets[id] = { bytes: png, contentType: "image/png" };
+    return { id, itemId: "item-1", fileName: `${id}.png`, contentType: "image/png", caption: `VISIBLE PHOTO ${index}`,
+      originalSha256: String(index).padStart(64, "0"), capture: { source: "in_app_camera", capturedAtUtc: "2026-09-10T03:00:00Z", locationCaptured: true, latitude: -37.813629, longitude: 144.963058, accuracyMetres: 7 } };
+  });
+  const original = structuredClone(snapshot);
+  const pdf = await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot, assets));
+  const galleryPages = pdf.getPages().map((page) => ({ page, content: decodedPageContent({ context: pdf.context, getPages: () => [page] }) }))
+    .filter(({ content }) => content.includes("Photo register"));
+  assert.ok(galleryPages.length >= 3, "A real multi-page gallery is required");
+  let photos = 0;
+  for (const { content } of galleryPages) {
+    const references = [...content.matchAll(/\bE\d{3} Tj/g)];
+    const draws = [...content.matchAll(/\/Image-[^\s]+ Do/g)];
+    assert.equal(draws.length, references.length, "Each evidence record must display its photo on that page");
+    assert.ok(draws.length >= 1 && draws.length <= 6);
+    assert.equal((content.match(/SHA-256:/g) || []).length, references.length, "Integrity data stays with the photo card");
+    assert.equal((content.match(/Reported accuracy/g) || []).length, references.length);
+    photos += draws.length;
+  }
+  assert.equal(photos, 13, "Every photo must be visible in the gallery, including those shown earlier");
+  const imageObjects = pdf.context.enumerateIndirectObjects().filter(([, object]) => object instanceof PDFRawStream && object.dict.get(PDFName.of("Subtype")) === PDFName.of("Image"));
+  assert.equal(imageObjects.length, 13, "Gallery reuse must not duplicate photo bytes embedded for the assessment");
+  assert.deepEqual(snapshot, original);
+});
+
+test("oversized evidence captions continue without dropping text and unavailable files are labelled accurately", async () => {
+  const snapshot = reportSnapshot();
+  snapshot.findings = [];
+  snapshot.evidence = [{ id: "long", fileName: "not-supplied.jpg", contentType: "image/jpeg", caption: `${"Detailed observation. ".repeat(900)}CAPTION END RETAINED`, originalSha256: "a".repeat(64) },
+    { id: "attachment", fileName: "support.pdf", contentType: "application/pdf", caption: "Supporting document" }];
+  const pdf = await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot, { attachment: { contentType: "application/pdf", bytes: new TextEncoder().encode("supporting document bytes") } }));
+  const content = decodedPageContent(pdf);
+  assert.match(content, /details continued/);
+  assert.match(content, /CAPTION END RETAINED/);
+  assert.match(content, /Preview unavailable; file not supplied/);
+  assert.match(content, /Open the file in PDF attachments/);
+  assert.equal((content.match(/Detailed/g) || []).length, 900);
+  assert.equal((content.match(/observation\./g) || []).length, 900);
+  const firstGalleryPage = pdf.getPages().map((page) => decodedPageContent({ context: pdf.context, getPages: () => [page] })).find((page) => page.includes("Photo register"));
+  assert.match(firstGalleryPage, /E001 Tj/, "A long first caption must not strand the gallery heading on an empty page");
+});
+
 test("customer report uses occupancy option labels and hides the shower implementation version without changing answers", async () => {
   const snapshot = reportSnapshot();
   snapshot.modules[0].answers.occupancyAtAssessment = "occupied_renter_present";
