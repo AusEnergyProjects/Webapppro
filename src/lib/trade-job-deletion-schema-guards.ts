@@ -1,4 +1,9 @@
-export type JobDeletionGuard = { readonly name: string; readonly sql: string; readonly legacySql: string };
+export type JobDeletionGuard = {
+  readonly name: string;
+  readonly sql: string;
+  readonly legacySql: string;
+  readonly legacySqlVariants?: readonly string[];
+};
 
 // Only the owner-scoped deletion transaction creates this permit, after its
 // revision/protected-history CAS. It removes the permit in the same transaction.
@@ -16,8 +21,8 @@ export function jobDeletionPermitSql(jobSql: string, ownerSql: string) {
       AND deleting_detail.customer_source IN ('trade_owned', 'public_lead_released'))`;
 }
 
-function guard(name: string, table: string, allowed: string, message: string, legacySql: string): JobDeletionGuard {
-  return { name, legacySql, sql: `CREATE TRIGGER IF NOT EXISTS \`${name}\` BEFORE DELETE ON \`${table}\` FOR EACH ROW
+function guard(name: string, table: string, allowed: string, message: string, legacySql: string, legacySqlVariants?: readonly string[]): JobDeletionGuard {
+  return { name, legacySql, legacySqlVariants, sql: `CREATE TRIGGER IF NOT EXISTS \`${name}\` BEFORE DELETE ON \`${table}\` FOR EACH ROW
     WHEN COALESCE((${allowed}), 0) = 0 BEGIN SELECT RAISE(ABORT, '${message}'); END;` };
 }
 
@@ -31,7 +36,10 @@ export const JOB_DELETION_SCHEMA_GUARDS: readonly JobDeletionGuard[] = [
       AND NOT EXISTS (SELECT 1 FROM compliance_cases c WHERE c.work_order_id = OLD.work_order_id AND c.installer_uid = OLD.installer_uid)
       AND NOT EXISTS (SELECT 1 FROM trade_activity_field_records r WHERE r.intent_id = OLD.id)`,
     'TRADE_COMPLIANCE_INTENT_DELETE_BLOCKED',
-    "CREATE TRIGGER IF NOT EXISTS `trade_compliance_intent_delete_guard` BEFORE DELETE ON `trade_work_order_compliance_intents` FOR EACH ROW BEGIN SELECT RAISE(ABORT, 'TRADE_COMPLIANCE_INTENT_DELETE_BLOCKED'); END;"),
+    "CREATE TRIGGER IF NOT EXISTS `trade_compliance_intent_delete_guard` BEFORE DELETE ON `trade_work_order_compliance_intents` FOR EACH ROW BEGIN SELECT RAISE(ABORT, 'TRADE_COMPLIANCE_INTENT_DELETE_BLOCKED'); END;",
+    // The 569 Creditex runtime installer used unquoted identifiers; the SQL
+    // migration used backticks. Keep both exact prior contracts explicit.
+    ["CREATE TRIGGER IF NOT EXISTS trade_compliance_intent_delete_guard BEFORE DELETE ON trade_work_order_compliance_intents FOR EACH ROW BEGIN SELECT RAISE(ABORT, 'TRADE_COMPLIANCE_INTENT_DELETE_BLOCKED'); END;"]),
   guard('trade_activity_field_record_no_delete', 'trade_activity_field_records',
     `${draftRecord('OLD')} AND ${jobDeletionPermitSql('OLD.work_order_id', 'OLD.owner_uid')}`,
     'Field record history must be retained.',
@@ -64,7 +72,8 @@ export async function upgradeJobDeletionGuards(database: D1Database, definitions
   for (const definition of definitions) {
     const current = installed.get(definition.name);
     if (current && canonical(current) === canonical(definition.sql)) continue;
-    if (current && canonical(current) !== canonical(definition.legacySql)) {
+    const knownPrevious = [definition.legacySql, ...(definition.legacySqlVariants || [])];
+    if (current && !knownPrevious.some((sql) => canonical(current) === canonical(sql))) {
       throw new Error(`JOB_DELETION_SCHEMA_GUARD_MISMATCH:${definition.name}`);
     }
     if (current) statements.push(database.prepare(`DROP TRIGGER \`${definition.name}\``));

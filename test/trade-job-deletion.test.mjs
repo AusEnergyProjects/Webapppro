@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
 import { JOB_DELETION_SCHEMA_GUARDS, upgradeJobDeletionGuards } from '../src/lib/trade-job-deletion-schema-guards.ts';
 import { canonicalTlinkSchemaGuardSql } from '../src/lib/tlink-schema-guards.ts';
+import { canonicalCreditexSchemaGuardSql } from '../src/lib/creditex-schema-guards.ts';
 import * as draftComplianceDeletion from '../src/lib/trade-job-draft-compliance-deletion.ts';
 
 const root = new URL('../', import.meta.url);
@@ -281,6 +282,31 @@ test('known old triggers upgrade without weakening unrelated or unknown schema d
   assert.equal(canonicalTlinkSchemaGuardSql(f.sql.prepare("SELECT sql FROM sqlite_schema WHERE name='trade_activity_field_record_no_delete'").get().sql), canonicalTlinkSchemaGuardSql(JOB_DELETION_SCHEMA_GUARDS.find((d) => d.name === 'trade_activity_field_record_no_delete').sql));
   f.sql.exec("DROP TRIGGER trade_activity_field_record_no_delete; CREATE TRIGGER trade_activity_field_record_no_delete BEFORE DELETE ON trade_activity_field_records BEGIN SELECT RAISE(ABORT, 'Unexpected contract'); END;");
   await assert.rejects(upgradeJobDeletionGuards(f.db, JOB_DELETION_SCHEMA_GUARDS, canonicalTlinkSchemaGuardSql), /JOB_DELETION_SCHEMA_GUARD_MISMATCH/);
+});
+
+test('release 569 runtime guards upgrade with their actual installed identifier quoting', async (t) => {
+  const f = fixture(t);
+  const previous = JSON.parse(fs.readFileSync(new URL('test/fixtures/job-deletion-guards-569.json', root), 'utf8'));
+  const definitions = [...JOB_DELETION_SCHEMA_GUARDS, ...draftComplianceDeletion.draftComplianceDeletionGuardDefinitions, ...draftComplianceDeletion.draftWorkPackDeletionGuardDefinitions];
+  assert.equal(previous.definitions.length, 13);
+  assert.equal(definitions.length - previous.definitions.length, 2, 'the two field-record guards originate only in migrations');
+  for (const historical of previous.definitions) {
+    assert.ok(definitions.some((definition) => definition.name === historical.name));
+    f.sql.exec(`DROP TRIGGER IF EXISTS \`${historical.name}\``);
+    f.sql.exec(historical.sql);
+  }
+  const intent = previous.definitions.find((definition) => definition.name === 'trade_compliance_intent_delete_guard');
+  assert.match(f.sql.prepare('SELECT sql FROM sqlite_schema WHERE name = ?').get(intent.name).sql, /^CREATE TRIGGER trade_compliance_intent_delete_guard BEFORE DELETE ON trade_work_order_compliance_intents /);
+  await upgradeJobDeletionGuards(f.db, definitions, canonicalCreditexSchemaGuardSql);
+  await upgradeJobDeletionGuards(f.db, definitions, canonicalCreditexSchemaGuardSql);
+  for (const definition of definitions) {
+    assert.equal(canonicalCreditexSchemaGuardSql(f.sql.prepare('SELECT sql FROM sqlite_schema WHERE name = ?').get(definition.name).sql), canonicalCreditexSchemaGuardSql(definition.sql));
+  }
+  f.sql.exec(`DROP TRIGGER \`${intent.name}\``);
+  f.sql.exec(intent.sql.replace('TRADE_COMPLIANCE_INTENT_DELETE_BLOCKED', 'Unexpected historical contract'));
+  const unexpected = f.sql.prepare('SELECT sql FROM sqlite_schema WHERE name = ?').get(intent.name).sql;
+  await assert.rejects(upgradeJobDeletionGuards(f.db, definitions, canonicalCreditexSchemaGuardSql), /JOB_DELETION_SCHEMA_GUARD_MISMATCH:trade_compliance_intent_delete_guard/);
+  assert.equal(f.sql.prepare('SELECT sql FROM sqlite_schema WHERE name = ?').get(intent.name).sql, unexpected);
 });
 
 test('existing financial history blocks deletion explicitly before any mutation', async (t) => {

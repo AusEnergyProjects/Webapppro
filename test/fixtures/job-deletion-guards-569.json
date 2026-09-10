@@ -1,0 +1,70 @@
+{
+  "sourceRevision": "227b5ec26026cacab4b6b0fa3081355ade21da0d",
+  "definitions": [
+    {
+      "registry": "src/lib/creditex-schema-guards.ts",
+      "name": "compliance_cases_no_delete",
+      "sql": "CREATE TRIGGER IF NOT EXISTS `compliance_cases_no_delete` BEFORE DELETE ON `compliance_cases` BEGIN SELECT RAISE(ABORT, 'Compliance cases cannot be deleted'); END;"
+    },
+    {
+      "registry": "src/lib/creditex-schema-guards.ts",
+      "name": "compliance_case_events_no_delete",
+      "sql": "CREATE TRIGGER IF NOT EXISTS `compliance_case_events_no_delete` BEFORE DELETE ON `compliance_case_events` BEGIN SELECT RAISE(ABORT, 'Compliance case events are append-only'); END;"
+    },
+    {
+      "registry": "src/lib/creditex-schema-guards.ts",
+      "name": "compliance_case_evidence_no_delete",
+      "sql": "CREATE TRIGGER IF NOT EXISTS `compliance_case_evidence_no_delete` BEFORE DELETE ON `compliance_case_evidence` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_EVIDENCE_NO_DELETE'); END;"
+    },
+    {
+      "registry": "src/lib/creditex-schema-guards.ts",
+      "name": "compliance_calculation_runs_no_delete",
+      "sql": "CREATE TRIGGER IF NOT EXISTS `compliance_calculation_runs_no_delete` BEFORE DELETE ON `compliance_calculation_runs` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_CALCULATION_RUN_IMMUTABLE'); END;"
+    },
+    {
+      "registry": "src/lib/creditex-schema-guards.ts",
+      "name": "compliance_equipment_records_no_delete",
+      "sql": "CREATE TRIGGER IF NOT EXISTS `compliance_equipment_records_no_delete` BEFORE DELETE ON `compliance_equipment_records` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_EQUIPMENT_NO_DELETE'); END;"
+    },
+    {
+      "registry": "src/lib/creditex-schema-guards.ts",
+      "name": "compliance_evidence_integrity_receipts_no_delete",
+      "sql": "CREATE TRIGGER IF NOT EXISTS `compliance_evidence_integrity_receipts_no_delete` BEFORE DELETE ON `compliance_evidence_integrity_receipts` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_EVIDENCE_INTEGRITY_DELETE_FORBIDDEN'); END;"
+    },
+    {
+      "registry": "src/lib/creditex-schema-guards.ts",
+      "name": "compliance_manual_policy_composition_delete_guard",
+      "sql": "CREATE TRIGGER IF NOT EXISTS compliance_manual_policy_composition_delete_guard BEFORE DELETE ON compliance_manual_policy_composition_locks BEGIN SELECT RAISE( ABORT, 'COMPLIANCE_MANUAL_POLICY_COMPOSITION_DELETE_BLOCKED' ); END;"
+    },
+    {
+      "registry": "src/lib/creditex-schema-guards.ts",
+      "name": "trade_compliance_intent_delete_guard",
+      "sql": "CREATE TRIGGER IF NOT EXISTS trade_compliance_intent_delete_guard BEFORE DELETE ON trade_work_order_compliance_intents FOR EACH ROW BEGIN SELECT RAISE(ABORT, 'TRADE_COMPLIANCE_INTENT_DELETE_BLOCKED'); END;"
+    },
+    {
+      "registry": "src/lib/creditex-work-pack-schema-guards.ts",
+      "name": "compliance_work_pack_browser_upload_delete_guard",
+      "sql": "CREATE TRIGGER IF NOT EXISTS `compliance_work_pack_browser_upload_delete_guard`\nBEFORE DELETE ON `compliance_activity_work_pack_browser_upload_receipts`\nBEGIN\n  SELECT RAISE(ABORT, 'COMPLIANCE_WORK_PACK_BROWSER_UPLOAD_DELETE_BLOCKED');\nEND;"
+    },
+    {
+      "registry": "src/lib/creditex-work-pack-schema-guards.ts",
+      "name": "compliance_work_pack_instance_delete_guard",
+      "sql": "CREATE TRIGGER IF NOT EXISTS `compliance_work_pack_instance_delete_guard`\nBEFORE DELETE ON `compliance_activity_work_pack_instances`\nBEGIN\n  SELECT RAISE(ABORT, 'COMPLIANCE_WORK_PACK_INSTANCE_DELETE_BLOCKED');\nEND;"
+    },
+    {
+      "registry": "src/lib/creditex-work-pack-schema-guards.ts",
+      "name": "compliance_work_pack_artifact_delete_guard",
+      "sql": "CREATE TRIGGER IF NOT EXISTS `compliance_work_pack_artifact_delete_guard`\nBEFORE DELETE ON `compliance_activity_work_pack_artifacts`\nBEGIN\n  SELECT RAISE(ABORT, 'COMPLIANCE_WORK_PACK_ARTIFACT_DELETE_BLOCKED');\nEND;"
+    },
+    {
+      "registry": "src/lib/tlink-schema-guards.ts",
+      "name": "trade_crm_job_media_accepted_lead_delete_guard",
+      "sql": "CREATE TRIGGER IF NOT EXISTS `trade_crm_job_media_accepted_lead_delete_guard` BEFORE DELETE ON `trade_crm_job_media` FOR EACH ROW WHEN OLD.source = 'accepted_public_lead' BEGIN SELECT RAISE(ABORT, 'accepted public lead job file is retained with job history'); END;"
+    },
+    {
+      "registry": "src/lib/trade-rental-schema-guards.ts",
+      "name": "trade_rental_events_append_only_delete",
+      "sql": "CREATE TRIGGER IF NOT EXISTS `trade_rental_events_append_only_delete` BEFORE DELETE ON `trade_rental_inspection_events` FOR EACH ROW BEGIN SELECT RAISE(ABORT, 'rental inspection events are append only'); END;"
+    }
+  ]
+}
