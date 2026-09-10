@@ -11,12 +11,12 @@ test("homepage offers a direct independent upgrade request without replacing pla
   assert.match(homepage, /<QuickUpgradeEnquiry \/>/);
   assert.match(homepage, /Build my home energy plan/);
   assert.match(homepage, /Ask Wattzun AI first/);
-  assert.match(homepage, /Already know what you need\?/);
+  assert.match(component, /I want help with/);
   assert.match(dialog, /do not sell leads or let businesses pay for placement/);
 });
 
 test("quick request uses a short two-step service and contact flow", () => {
-  assert.match(component, /Get independent upgrade options/);
+  assert.match(component, /Find the right help/);
   assert.match(component, /dynamic\(/);
   assert.match(component, /ssr: false/);
   assert.match(dialog, /Step 1 of 2/);
@@ -63,7 +63,22 @@ test("quick request modal has keyboard and mobile safeguards", () => {
   assert.match(dialog, /role="dialog"/);
   assert.match(dialog, /event\.key === "Escape"/);
   assert.match(dialog, /event\.key !== "Tab"/);
+  assert.match(dialog, /\.filter\(\(element\) => element\.tabIndex >= 0\)/);
   assert.match(dialog, /document\.body\.style\.overflow = "hidden"/);
   assert.match(styles, /@media \(max-width: 640px\)/);
   assert.match(styles, /min-height: 2\.75rem/);
+});
+
+
+test("homepage preserves service and postcode while the dialog keeps mandatory address sharing", () => {
+  assert.match(component, /ENERGY_SERVICE_CATALOGUE\.map/);
+  assert.match(component, /name="service"[\s\S]*?required>/);
+  assert.match(component, /name="postcode"[\s\S]*?required \/>/);
+  assert.match(component, /initialPostcode=\{postcode\} initialServices=\{\[service\]\} startAtDetails/);
+  assert.match(dialog, /startAtDetails = false/);
+  assert.match(dialog, /startAtDetails && startingServices\.length > 0 \? 2 : 1/);
+  assert.match(dialog, /label="Street address \*"[^>]*required/);
+  assert.match(dialog, /Your selected services, full property address/);
+  assert.match(dialog, /step === 1 \? firstServiceRef\.current : postcodeRef\.current/);
+  assert.match(dialog, /disabled=\{!dismissible\}[\s\S]*?>Edit or add services/);
 });

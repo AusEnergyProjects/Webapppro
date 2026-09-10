@@ -224,7 +224,7 @@ test("desktop shortcuts, restored copy and centred plan heading meet the request
   assert.match(css,/@media \(min-width: 1181px\) \{\s*\.site-nav-shortcut \{[^}]*display: flex;/);
   assert.match(css,/\.start-hero aside strong \{[^}]*text-align: center;/);
   const home = read("src/components/GettingStarted.tsx");
-  assert.match(home,/<strong>Building your home plan<\/strong>/);
-  assert.match(home,/Already know what you need\?/);
+  assert.match(home,/Build my home energy plan/);
+  assert.match(home,/<QuickUpgradeEnquiry \/>/);
   assert.doesNotMatch(home,/About three minutes/);
 });

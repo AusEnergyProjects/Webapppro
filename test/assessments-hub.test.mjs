@@ -14,7 +14,8 @@ const styles = read("../src/app/globals.css");
 
 test("assessment services are first class routes across the site", () => {
   assert.match(navigation, /\["\/assessments", "Assessment types"\]/);
-  assert.match(home, /Building or designing a new home\? NatHERS assesses the plans/);
+  assert.match(home, /NatHERS<br \/>assessments/);
+  assert.ok(home.indexOf("home-assessments") < home.indexOf("home-tools-title"));
   assert.match(home, /href="\/assessments"/);
   assert.match(guides, /Need a NatHERS or BASIX assessment/);
   assert.match(guides, /href="\/assessments"/);

@@ -8,10 +8,10 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativePath), "utf8");
 const home = read("../src/app/page.tsx");
 const guide = read("../src/components/GettingStarted.tsx");
-const guideStyles = read("../src/components/AssessmentBooking.module.css");
+const homeStyles = read("../src/components/GettingStarted.module.css");
 const quickUpgradeEnquiry = read("../src/components/QuickUpgradeEnquiry.tsx");
-const homepageCalendly = read("../src/components/HomepageCalendlyEmbed.tsx");
-const customerScene = read("../src/components/CustomerJourneyScene.tsx");
+const bookingPage = read("../src/app/book-an-assessment/page.tsx");
+const matchingDialog = read("../src/components/QuickUpgradeEnquiryDialog.tsx");
 const plannerJourneyPath = path.resolve(directory, "../src/components/PlannerHomeJourney.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
 const siteFooter = read("../src/components/SiteFooter.tsx");
@@ -58,7 +58,7 @@ const robots = read("../src/app/robots.ts");
 const sitemap = read("../src/app/sitemap.ts");
 const manifest = read("../src/app/manifest.ts");
 const socialAsset = path.resolve(directory, "../public/aea-home-energy-plan-og-v2.png");
-const surgeHomeAsset = path.resolve(directory, "../public/surge-command-centre-home.webp");
+const surgeHomeAsset = path.resolve(directory, "../public/aea-home-future.webp");
 const rootIcon = fs.readFileSync(path.resolve(directory, "../src/app/icon.png"));
 const rootAppleIcon = fs.readFileSync(path.resolve(directory, "../src/app/apple-icon.png"));
 const rootFavicon = fs.readFileSync(path.resolve(directory, "../src/app/favicon.ico"));
@@ -91,12 +91,11 @@ test("root browser icons use the Australian Energy Assessments mark instead of T
 test("the homepage provides one clear starting journey instead of redirecting", () => {
   assert.match(home, /GettingStarted/);
   assert.doesNotMatch(home, /redirect\(/);
-  assert.match(guide, /Home energy assessments without the confusion/);
+  assert.match(guide, /A better home/);
+  assert.match(guide, /<QuickUpgradeEnquiry \/>/);
+  assert.match(quickUpgradeEnquiry, /I want help with/);
+  assert.match(quickUpgradeEnquiry, /Find the right help/);
   assert.match(guide, /Build my home energy plan/);
-  assert.match(guide, /What do you need today/);
-  assert.match(guide, /Direct Trade Services/);
-  assert.match(guide, /Bring a recent bill/);
-  assert.match(guide, /Check before committing/);
 });
 
 test("shared navigation groups public pages into clear consumer journeys", () => {
@@ -195,7 +194,7 @@ test("the futuristic header links to one dedicated always-present Wattzun AI pag
   assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-surge-core img \{[^}]*height: 31px;[^}]*width: auto;/);
   assert.doesNotMatch(styles, /\.site-header-actions \{[^}]*display: grid;/);
   assert.match(styles, /\.site-surge-core \{ flex-basis: 26px; height: 30px; \}/);
-  assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.site-header::before, \.site-surge-core, \.customer-journey-scene::after \{ animation: none !important; \}/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.site-header::before, \.site-surge-core \{ animation: none !important; \}/);
   assert.match(styles, /@media \(forced-colors: active\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link, \.site-book-link, \.site-call-link \{ border: 1px solid ButtonText;/);
 });
 
@@ -213,8 +212,8 @@ test("public navigation keeps TLink clearly branded", () => {
   assert.match(chrome, /href="\/direct-trade\/dashboard"[\s\S]*?aria-label="Open TLink"/);
   assert.match(chrome, /title="TLink"/);
   assert.match(styles, /\.site-tlink-mark \{[^}]*flex: 0 0 34px;[^}]*object-fit: contain;[^}]*width: 34px;/);
-  assert.match(guide, /quick request without creating an account/);
-  assert.match(guide, /Find matching trades/);
+  assert.match(quickUpgradeEnquiry, /No account needed/);
+  assert.match(quickUpgradeEnquiry, /matching approved businesses/);
   assert.doesNotMatch(guide, /account is optional|Save or ask trades|Create an account after seeing your roadmap/);
 });
 
@@ -254,7 +253,7 @@ test("desktop categories and the mobile page browser use lightweight native disc
   assert.match(styles, /\.site-nav-mobile-panel \{[^}]*max-height: min\(72vh, 640px\);[^}]*overflow-y: auto;/);
   assert.match(styles, /\.site-nav-mobile-groups a \{[^}]*min-height: 44px;/);
   assert.doesNotMatch(styles, /site-nav-scroll-cue|site-nav-shell::after/);
-  assert.match(styles, /\.start-hero-planner \.start-hero-secondary \{[^}]*background: rgba\(2, 18, 34, \.94\);[^}]*padding: 10px 12px;/);
+  assert.match(homeStyles, /@media \(max-width: 560px\)/);
   assert.match(
     styles,
     /\.site-header \{ display: grid; grid-template-columns: auto minmax\(150px, 1fr\) auto;/,
@@ -276,22 +275,21 @@ test("desktop categories and the mobile page browser use lightweight native disc
 });
 
 test("direct trade proposition presents the free verified operating model honestly", () => {
-  assert.match(guide, /Approved trade businesses can use the core TLink workspace free of charge/);
-  assert.match(guide, /Household details stay private, leads are not sold and placement is not auctioned/);
-  assert.doesNotMatch(guide, /sales and administration businesses|Bring verified capability/);
+  assert.match(guide, /href="\/direct-trade\/standards"/);
+  assert.match(guide, /href="\/direct-trade\/partners"/);
+  assert.match(matchingDialog, /We do not sell leads or let businesses pay for placement/);
   assert.doesNotMatch(guide, /Live service, expanding tool|direct-trade-status/);
 });
 
 test("direct trade marketplace includes reputable wholesalers", () => {
-  assert.match(guide, /For trades and suppliers/);
-  assert.match(guide, /Reputable suppliers can show proven products to suitable trades and households/);
+  assert.match(guide, /Approved trades and reputable suppliers/);
+  assert.match(guide, /Trade and supplier participation/);
 });
 
 test("trade workspace approval does not imply government accreditation", () => {
-  assert.match(guide, /Approval is not a licence or government accreditation/);
-  assert.match(guide, /We review the ABN and business information provided by each applicant/);
-  assert.match(guide, /Trades still need the licences, insurance, accreditations and scheme approvals required for each job/);
-  assert.doesNotMatch(guide, /accredited Direct Trade Specialist/i);
+  assert.match(guide, /href="\/direct-trade\/standards">Read the marketplace standards/);
+  assert.match(guide, /Confirm the full quote, credentials and conditions/);
+  assert.doesNotMatch(guide, /accredited Direct Trade Specialist|government.approved trades/i);
   assert.doesNotMatch(guide, /\u2013|\u2014/);
 });
 
@@ -379,29 +377,28 @@ test("number fields avoid browser-specific black stepper controls", () => {
 });
 
 test("homepage uses an accessible static journey without persistent rendering work", () => {
-  assert.match(guide, /CustomerJourneyScene/);
-  assert.match(customerScene, /aria-labelledby="customer-journey-title"/);
-  assert.match(customerScene, /Understand/);
-  assert.match(customerScene, /Prioritise/);
-  assert.match(customerScene, /Take action/);
-  assert.match(customerScene, /priority/);
-  assert.match(customerScene, /width="1920"/);
-  assert.match(customerScene, /height="1080"/);
-  assert.doesNotMatch(customerScene, /use client|HolographicEnergyField|<canvas|pointermove|onPointerMove|Comfort<|Energy<|Action</);
-  assert.doesNotMatch(styles, /\.customer-scene-home::before|customer-hologram-sweep/);
+  assert.match(guide, /aria-labelledby="home-title"/);
+  assert.match(guide, /aria-label="How your request works"/);
+  assert.match(guide, /Tell us what you need/);
+  assert.match(guide, /Reach suitable trades/);
+  assert.match(guide, /Choose your next step/);
+  assert.match(fs.readFileSync(path.resolve(directory, "../src/components/HomeHeroScene.tsx"), "utf8"), /fetchPriority="high"/);
+  assert.doesNotMatch(guide, /use client|<canvas|pointermove|onPointerMove/);
+  assert.match(homeStyles, /prefers-reduced-motion: reduce/);
+  assert.doesNotMatch(homeStyles, /infinite|backdrop-filter/);
 });
 
 test("the optimised whole-home scene is visible and the retired planner scene stays removed", () => {
-  assert.match(customerScene, /src="\/surge-command-centre-home\.webp"/);
-  assert.match(customerScene, /sizes="\(max-width: 720px\) 100vw, \(max-width: 1800px\) 100vw, 1760px"/);
+  const scene = fs.readFileSync(path.resolve(directory, "../src/components/HomeHeroScene.tsx"), "utf8");
+  assert.match(scene, /src="\/aea-home-future\.webp"/);
+  assert.match(scene, /width=\{1536\} height=\{1024\}/);
+  assert.match(scene, /fetchPriority="high"/);
   assert.equal(fs.existsSync(plannerJourneyPath), false);
-  assert.doesNotMatch(styles, /\.planner-home-journey|\.planner-home-render-volume|\.planner-home-question-cue/);
-  assert.equal(fs.existsSync(surgeHomeAsset), true);
-  assert.ok(fs.statSync(surgeHomeAsset).size > 50_000);
-  assert.ok(fs.statSync(surgeHomeAsset).size < 100_000);
-  const surgeHomeImage = fs.readFileSync(surgeHomeAsset);
-  assert.equal(surgeHomeImage.toString("ascii", 0, 4), "RIFF");
-  assert.equal(surgeHomeImage.toString("ascii", 8, 12), "WEBP");
+  assert.equal(fs.existsSync(path.resolve(directory, "../src/components/CustomerJourneyScene.tsx")), false);
+  assert.ok(fs.statSync(surgeHomeAsset).size < 350_000);
+  const bytes = fs.readFileSync(surgeHomeAsset);
+  assert.equal(bytes.toString("ascii", 0, 4), "RIFF");
+  assert.equal(bytes.toString("ascii", 8, 12), "WEBP");
 });
 
 test("social sharing metadata uses one launch-ready AEA energy card", () => {
@@ -453,46 +450,29 @@ test("rebates hub contains no prohibited dash characters", () => {
 });
 
 test("homepage makes the quick upgrade request dominant and keeps guided help secondary", () => {
-  const heroActions = guide.match(/<div className="start-actions">([\s\S]*?)<\/div>/)?.[1] || "";
-  assert.match(heroActions, /<QuickUpgradeEnquiry \/>[\s\S]*?<Link className="btn ghost start-secondary-action" href="\/plan">Build my home energy plan<\/Link>[\s\S]*?<SurgeOpenButton/);
-  assert.match(quickUpgradeEnquiry, /Get independent upgrade options/);
-  assert.doesNotMatch(heroActions, /start-primary-action[\s\S]*Build my home energy plan/);
-  assert.match(guide, /className="start-hero-secondary"/);
+  const hero = guide.slice(guide.indexOf('className={styles.hero}'), guide.indexOf('className={styles.steps}'));
+  assert.match(hero, /<QuickUpgradeEnquiry \/>/);
+  assert.doesNotMatch(hero, /SurgeOpenButton|href="\/plan"|href="\/compare"/);
+  assert.match(quickUpgradeEnquiry, /initialPostcode=\{postcode\} initialServices=\{\[service\]\} startAtDetails/);
+  assert.match(guide, /className=\{styles.tools\}/);
 });
 
-test("homepage keeps booking directly below the hero and loads Calendly only when requested", () => {
-  const sceneIndex = guide.indexOf("<CustomerJourneyScene />");
-  const bookingIndex = guide.indexOf('id="home-booking"');
-  const guidedEntryIndex = guide.indexOf('className="home-entry home-entry-guided"');
-  assert.ok(sceneIndex >= 0 && bookingIndex > sceneIndex && guidedEntryIndex > bookingIndex);
-  assert.equal(guide.match(/<iframe/g)?.length || 0, 0);
-  assert.match(guide, /className=\{bookingStyles\.bookingCard\}[\s\S]*?aria-labelledby="home-booking-title"/);
-  assert.match(guide, /<h2 id="home-booking-title"[^>]*>Book a five-minute call<\/h2>/);
-  assert.match(guide, /<HomepageCalendlyEmbed \/>/);
-  assert.match(homepageCalendly, /^"use client";/);
-  assert.match(homepageCalendly, /const \[opened, setOpened\] = useState\(false\)/);
-  assert.match(homepageCalendly, />Choose a time<\/button>/);
-  assert.equal(homepageCalendly.match(/<iframe/g)?.length, 1);
-  assert.match(homepageCalendly, /title="Choose a five-minute call time with Australian Energy Assessments"/);
-  assert.match(homepageCalendly, /loading="eager"/);
-  assert.match(homepageCalendly, /referrerPolicy="strict-origin-when-cross-origin"/);
-  assert.match(guide, /This call is not the assessment itself/);
-  assert.match(guide, /Calendly adds the call to our calendar and emails the booking details to you/);
-  assert.doesNotMatch(`${guide}${homepageCalendly}`, /CalendlyInlineWidget|Open Calendly separately/);
-  assert.match(homepageCalendly, /minHeight: 112/);
-  assert.match(guideStyles, /\.embed \{[\s\S]*?border: 0;[\s\S]*?height: 720px;[\s\S]*?width: 100%;/);
-  assert.match(guideStyles, /@media \(max-width: 720px\) \{[\s\S]*?\.embed \{[\s\S]*?height: 760px;/);
+test("homepage keeps the five-minute call available through the dedicated booking page", () => {
+  assert.match(guide, /href="\/book-an-assessment">Book a five-minute call/);
+  assert.doesNotMatch(guide, /<iframe|HomepageCalendlyEmbed/);
+  assert.match(bookingPage, /CALENDLY_EMBED_URL/);
+  assert.match(bookingPage, /It is not the assessment itself/);
 });
 
 test("getting-started copy preserves comparison and privacy boundaries", () => {
-  assert.match(guide, /Mains gas plans only, not bottled LPG/);
-  assert.match(guide, /Start privately, without an account/);
-  assert.match(guide, /not added to saved links or trade enquiries/);
+  assert.match(guide, /electricity and mains gas plans/);
+  assert.match(guide, /href="\/compare"/);
+  assert.match(guide, /href="\/gas-compare"/);
+  assert.match(quickUpgradeEnquiry, /request and full property address are shared/);
+  assert.match(quickUpgradeEnquiry, /You choose which contact details they receive/);
   assert.match(guide, /Prices, rebates and rules can change/);
-  assert.match(guide, /detailed meter-data file, called a NEM12 file/);
   assert.doesNotMatch(guide, /household evidence|Charge-level calculation evidence|recorded capability|confirmed NSW approval pathway/i);
-  assert.doesNotMatch(guide, /\bAEA\b/);
-  assert.doesNotMatch(guide, /[–—]/);
+  assert.doesNotMatch(guide, /\u2013|\u2014/);
 });
 
 test("integrated planner is private, ordered and responsive", () => {

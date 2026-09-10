@@ -46,10 +46,12 @@ function serviceLabel(id: string, label: string) {
 export function QuickUpgradeEnquiryDialog({
   initialPostcode = "",
   initialServices = [],
+  startAtDetails = false,
   onClose,
 }: {
   initialPostcode?: string;
   initialServices?: string[];
+  startAtDetails?: boolean;
   onClose: () => void;
 }) {
   const startingPostcode = /^\d{4}$/.test(initialPostcode) ? initialPostcode : "";
@@ -64,7 +66,7 @@ export function QuickUpgradeEnquiryDialog({
   const submissionId = useRef("");
   const consentGrantedAt = useRef("");
   const lastAttemptCore = useRef("");
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2>(startAtDetails && startingServices.length > 0 ? 2 : 1);
   const [services, setServices] = useState<string[]>(startingServices);
   const [postcode, setPostcode] = useState(startingPostcode);
   const [localities, setLocalities] = useState<AddressLocality[]>([]);
@@ -94,7 +96,7 @@ export function QuickUpgradeEnquiryDialog({
     const previousOverflow = document.body.style.overflow;
     const returnTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     document.body.style.overflow = "hidden";
-    const frame = window.requestAnimationFrame(() => firstServiceRef.current?.focus());
+    const frame = window.requestAnimationFrame(() => (firstServiceRef.current || postcodeRef.current)?.focus());
     return () => {
       window.cancelAnimationFrame(frame);
       document.body.style.overflow = previousOverflow;
@@ -109,8 +111,8 @@ export function QuickUpgradeEnquiryDialog({
   }, [submitState.kind]);
 
   useEffect(() => {
-    if (step !== 2 || submitState.kind === "success") return;
-    const frame = window.requestAnimationFrame(() => postcodeRef.current?.focus());
+    if (submitState.kind === "success") return;
+    const frame = window.requestAnimationFrame(() => (step === 1 ? firstServiceRef.current : postcodeRef.current)?.focus());
     return () => window.cancelAnimationFrame(frame);
   }, [step, submitState.kind]);
 
@@ -181,9 +183,9 @@ export function QuickUpgradeEnquiryDialog({
       return;
     }
     if (event.key !== "Tab") return;
-    const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
       'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    );
+    ) ?? []).filter((element) => element.tabIndex >= 0);
     if (!focusable?.length) return;
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
@@ -392,6 +394,7 @@ export function QuickUpgradeEnquiryDialog({
               </div>
             ) : (
               <div className={styles.body}>
+                <div className={styles.requestSummary}><p><strong>Your request:</strong> {ENERGY_SERVICE_CATALOGUE.filter((service) => services.includes(service.id)).map((service) => serviceLabel(service.id, service.label)).join(", ")}</p><button type="button" disabled={!dismissible} onClick={() => setStep(1)}>Edit or add services</button></div>
                 <div className={styles.stepHeading}><span>Step 2 of 2</span><h3>Where is the property?</h3><p>We use the address to find approved businesses that service the right area.</p></div>
                 <div className={styles.addressGrid}>
                   <label><span>Postcode *</span><input ref={postcodeRef} value={postcode} onChange={(event) => changePostcode(event.target.value)} inputMode="numeric" autoComplete="postal-code" pattern="\d{4}" maxLength={4} required /></label>
@@ -421,7 +424,7 @@ export function QuickUpgradeEnquiryDialog({
               </div>
             )}
             <footer className={styles.actions}>
-              {step === 1 ? <button type="button" onClick={onClose}>Not now</button> : <button type="button" onClick={() => { setStep(1); setSubmitState({ kind: "idle", message: "" }); }}>Back</button>}
+              {step === 1 ? <button type="button" onClick={onClose}>Not now</button> : <button type="button" disabled={!dismissible} onClick={() => { setStep(1); setSubmitState({ kind: "idle", message: "" }); }}>Back</button>}
               {step === 1
                 ? <button className={styles.primary} type="button" onClick={continueToDetails}>Continue</button>
                 : <button className={styles.primary} type="submit" disabled={submitState.kind === "sending"}>{submitState.kind === "sending" ? "Sending securely..." : "Send my request"}</button>}

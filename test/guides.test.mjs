@@ -34,11 +34,7 @@ test("solar and battery guides are connected to the shared journey", () => {
   assert.match(overview, /href="\/guides\/cooking"/);
   assert.match(overview, /href="\/guides\/ev-charging"/);
   assert.match(overview, /href="\/plan"/);
-  assert.match(start, /"\/guides\/solar"/);
-  assert.match(start, /"\/guides\/batteries"/);
-  assert.match(start, /"\/guides\/heating"/);
-  assert.match(start, /"\/guides\/hot-water"/);
-  assert.match(start, /"\/guides\/insulation-draught-proofing"/);
+  assert.match(start, /href="\/guides"/);
   assert.match(start, /href="\/rebates"/);
   assert.match(overview, /href="\/rebates"/);
   assert.match(rebates, /href="\/guides"/);

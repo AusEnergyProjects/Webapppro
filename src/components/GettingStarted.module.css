@@ -1,0 +1,105 @@
+.page { --home-mint: #9af3d3; --home-text: #f3f8fa; --home-muted: #b5cbd1; color: var(--home-text); }
+:global(body.aea-platform) main.page a, :global(body.aea-platform) main.page button { -webkit-tap-highlight-color: transparent; }
+:global(body.aea-platform) main.page a:focus-visible, :global(body.aea-platform) main.page button:focus-visible, :global(body.aea-platform) main.page input:focus-visible, :global(body.aea-platform) main.page select:focus-visible { outline: 3px solid #18ba8b; outline-offset: 5px; }
+:global(body.aea-platform) main.page .hero { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(340px, 1fr); gap: 16px; margin-top: 20px; }
+:global(body.aea-platform) main.page .heroScene { background: transparent; border: 1px solid #244151; border-radius: 24px; min-height: 760px; overflow: visible; position: relative; pointer-events: none; z-index: 1; }
+:global(body.aea-platform) main.page .heroCopy { position: relative; z-index: 1; padding: clamp(28px, 3.3vw, 58px); padding-bottom: 430px; animation: home-rise .7s ease-out both; }
+:global(body.aea-platform) main.page .eyebrow { color: var(--home-mint); display: block; font-size: .8125rem; font-weight: 700; letter-spacing: .12em; line-height: 1.5; text-transform: uppercase; }
+:global(body.aea-platform) main.page .heroCopy h1 { font-size: clamp(2.5rem, 3.55vw, 4.3rem); line-height: 1.06; letter-spacing: -.05em; font-weight: 500; margin: 22px 0 22px; text-wrap: balance; }
+:global(body.aea-platform) main.page .heroCopy h1 span { color: var(--home-mint); }
+:global(body.aea-platform) main.page .heroCopy p { color: #e0eaee; font-size: 1.0625rem; line-height: 1.65; max-width: 470px; margin: 0; }
+:global(body.aea-platform) main.page .mobileStart { display: none; }
+:global(body.aea-platform) main.page .enquiry { background: linear-gradient(150deg, #123b46, #071e2d 65%); color: #f0fffa; border: 1px solid #416b69; box-shadow: inset 0 1px 0 #b8ffdc29, 0 18px 50px #0003; border-radius: 24px; padding: clamp(28px, 2.7vw, 46px); display: flex; flex-direction: column; justify-content: center; scroll-margin-top: 24px; animation: home-rise .8s ease-out both; }
+:global(body.aea-platform) main.page .enquiryTop { display: flex; justify-content: space-between; color: #9af3d3; font-size: .8125rem; letter-spacing: .09em; text-transform: uppercase; font-weight: 700; margin-bottom: 22px; }
+:global(body.aea-platform) main.page .enquiryTop span:last-child { color: #9dbcb8; font-variant-numeric: tabular-nums; }
+:global(body.aea-platform) main.page .enquiry h2 { font-size: clamp(1.7rem, 2.2vw, 2.65rem); letter-spacing: -.045em; font-weight: 600; }
+:global(body.aea-platform) main.page .enquiry > p { font-size: 1rem; line-height: 1.55; color: #b8d2d0; margin: 13px 0 24px; }
+:global(body.aea-platform) main.page .field { display: block; margin-bottom: 18px; }
+:global(body.aea-platform) main.page .field > span { display: block; font-size: .875rem; font-weight: 700; color: #daf2e9; margin-bottom: 8px; }
+:global(body.aea-platform) main.page .field select, :global(body.aea-platform) main.page .field input { background: #061c2a; border: 1px solid #52766f; border-radius: 9px; color: #edfff9; font-size: 1rem; line-height: 1.4; min-height: 54px; width: 100%; padding: 13px 14px; }
+:global(body.aea-platform) main.page .field input::placeholder { color: #a7c3ba; opacity: 1; }
+:global(body.aea-platform) main.page .enquiryButton, :global(body.aea-platform) main.page .primaryLink { align-items: center; justify-content: space-between; gap: 24px; display: flex; min-height: 54px; background: #0b5c45; border: 1px solid #0b5c45; border-radius: 9px; padding: 15px 20px; color: #fff; font-size: 1rem; font-weight: 700; text-decoration: none; transition: background .2s, transform .2s; }
+:global(body.aea-platform) main.page .enquiryButton { width: 100%; cursor: pointer; margin-top: 6px; }
+:global(body.aea-platform) main.page .enquiryButton:hover, :global(body.aea-platform) main.page .primaryLink:hover { background: #073f31; transform: translateY(-2px); }
+:global(body.aea-platform) main.page .enquiryButton span, :global(body.aea-platform) main.page .primaryLink span { font-size: 1.35rem; line-height: 1; }
+:global(body.aea-platform) main.page .enquiry > .enquiryNote { font-size: .875rem; margin: 13px 0 22px; }
+:global(body.aea-platform) main.page .enquiryTrust { border-top: 1px solid #315651; padding-top: 20px; display: flex; gap: 24px; font-size: .8125rem; font-weight: 700; color: #c0e4d5; }
+:global(body.aea-platform) main.page .enquiry > .sharingNote { margin: 12px 0 0; font-size: .8125rem; line-height: 1.5; color: #a4c1b7; }
+:global(body.aea-platform) main.page .dialogLoading { position: fixed; inset: auto 24px 24px auto; z-index: 1401; padding: 20px; background: #fff; color: #103b30; border-radius: 12px; box-shadow: 0 10px 60px #0006; }
+:global(body.aea-platform) main.page .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid #23424e; gap: 40px; padding: 38px 8px 42px; }
+:global(body.aea-platform) main.page .steps article { display: flex; gap: 18px; align-items: flex-start; }
+:global(body.aea-platform) main.page .steps article > span { color: #78b09f; font-size: .875rem; line-height: 1.8; font-variant-numeric: tabular-nums; }
+:global(body.aea-platform) main.page .steps h2 { font-size: 1.0625rem; font-weight: 500; letter-spacing: -.01em; line-height: 1.5; }
+:global(body.aea-platform) main.page .steps p { font-size: .9375rem; color: var(--home-muted); line-height: 1.6; margin: 7px 0 0; max-width: 350px; }
+:global(body.aea-platform) main.page .assessments, :global(body.aea-platform) main.page .tools { margin-top: 76px; }
+:global(body.aea-platform) main.page .sectionHeading { display: flex; gap: 30px; justify-content: space-between; align-items: flex-end; margin-bottom: 30px; }
+:global(body.aea-platform) main.page .sectionHeading h2 { font-size: clamp(1.85rem, 2.7vw, 3rem); line-height: 1.17; font-weight: 500; letter-spacing: -.04em; margin-top: 16px; }
+:global(body.aea-platform) main.page .sectionHeading h2 span { color: #aac3ce; }
+:global(body.aea-platform) main.page .sectionHeading > p { max-width: 300px; color: var(--home-muted); font-size: 1rem; margin: 0; }
+:global(body.aea-platform) main.page .textLink { color: var(--home-mint); font-size: .9375rem; text-decoration: none; flex-shrink: 0; display: flex; gap: 20px; padding: 10px 0; }
+:global(body.aea-platform) main.page .textLink:hover { text-decoration: underline; }
+:global(body.aea-platform) main.page .assessmentGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+:global(body.aea-platform) main.page .assessmentGrid article { border-radius: 20px; padding: clamp(26px, 3.1vw, 50px); display: flex; flex-direction: column; min-width: 0; transition: transform .25s, border-color .25s; }
+:global(body.aea-platform) main.page .assessmentGrid article:hover { transform: translateY(-4px); }
+:global(body.aea-platform) main.page .nathersCard { background: linear-gradient(125deg, #153e3e, #092b32); border: 1px solid #39675d; }
+:global(body.aea-platform) main.page .ratingCard { background: linear-gradient(125deg, #112c40, #0b2233); border: 1px solid #304a5e; }
+:global(body.aea-platform) main.page .cardTop { display: flex; justify-content: space-between; gap: 12px; color: #b6d6cc; font-size: .8125rem; letter-spacing: .05em; }
+:global(body.aea-platform) main.page .cardTop span:last-child { color: #83a49e; }
+:global(body.aea-platform) main.page .assessmentGrid h3 { color: #f5fbfc; font-size: clamp(2.15rem, 3.3vw, 3.7rem); font-weight: 500; letter-spacing: -.045em; line-height: 1.1; margin: 35px 0 20px; }
+:global(body.aea-platform) main.page .assessmentGrid p { color: #c4d8da; max-width: 425px; font-size: 1rem; line-height: 1.65; margin: 0 0 30px; }
+:global(body.aea-platform) main.page .cardAction { color: #0c342b; background: var(--home-mint); border: 1px solid var(--home-mint); border-radius: 8px; display: flex; gap: 18px; justify-content: space-between; align-items: center; padding: 14px 18px; min-height: 52px; font-size: .9375rem; font-weight: 700; text-decoration: none; margin-top: auto; width: fit-content; max-width: 100%; }
+:global(body.aea-platform) main.page .ratingCard .cardAction { color: #e2f8f1; border-color: #53726f; background: transparent; }
+:global(body.aea-platform) main.page .cardAction:hover { background: #c4ffe9; color: #083a2d; }
+:global(body.aea-platform) main.page .relatedLinks { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 24px; }
+:global(body.aea-platform) main.page .relatedLinks a { color: #b6d3cf; font-size: .875rem; text-decoration-color: #506d69; }
+:global(body.aea-platform) main.page .relatedLinks a:hover { color: #fff; }
+:global(body.aea-platform) main.page .toolGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid #294450; border-bottom: 1px solid #294450; }
+:global(body.aea-platform) main.page .toolGrid article { padding: 32px 30px; min-width: 0; }
+:global(body.aea-platform) main.page .toolGrid article:first-child { padding-left: 0; }
+:global(body.aea-platform) main.page .toolGrid article + article { border-left: 1px solid #294450; }
+:global(body.aea-platform) main.page .toolNumber { color: #96b8b5; font-size: .8125rem; letter-spacing: .07em; text-transform: uppercase; }
+:global(body.aea-platform) main.page .toolGrid h3 { font-size: 1.5rem; font-weight: 500; line-height: 1.25; letter-spacing: -.025em; margin: 19px 0 14px; max-width: 310px; }
+:global(body.aea-platform) main.page .toolGrid p { font-size: 1rem; color: var(--home-muted); line-height: 1.6; max-width: 340px; margin: 0 0 26px; }
+:global(body.aea-platform) main.page .toolLinks { display: flex; gap: 12px; flex-direction: column; }
+:global(body.aea-platform) main.page .toolLinks a, :global(body.aea-platform) main.page .callLink { color: var(--home-mint); font-size: .9375rem; font-weight: 600; text-decoration: none; width: fit-content; padding: 4px 0; }
+:global(body.aea-platform) main.page .toolLinks a:hover, :global(body.aea-platform) main.page .callLink:hover { text-decoration: underline; }
+:global(body.aea-platform) main.page .toolLinks a span { margin-left: 12px; }
+:global(body.aea-platform) main.page .callLink { display: block; margin-top: 16px; }
+:global(body.aea-platform) main.page .resourceLinks { display: flex; gap: 20px 32px; flex-wrap: wrap; margin-top: 22px; }
+:global(body.aea-platform) main.page .resourceLinks a { color: #aec8cf; font-size: .875rem; text-decoration-color: #496674; }
+:global(body.aea-platform) main.page .finalCta { display: flex; align-items: center; justify-content: space-between; gap: 32px; background: #d8f8e9; color: #103b32; border-radius: 20px; margin-top: 72px; padding: 38px 42px; }
+:global(body.aea-platform) main.page .finalCta .eyebrow { color: #3d7865; }
+:global(body.aea-platform) main.page .finalCta h2 { font-size: clamp(1.7rem, 2.2vw, 2.6rem); font-weight: 500; letter-spacing: -.04em; margin: 13px 0 8px; }
+:global(body.aea-platform) main.page .finalCta p { color: #48705f; font-size: 1rem; margin: 0; }
+:global(body.aea-platform) main.page .primaryLink { flex-shrink: 0; }
+:global(body.aea-platform) main.page .partners { display: flex; justify-content: space-between; align-items: center; gap: 25px; margin: 24px 8px 48px; }
+:global(body.aea-platform) main.page .partners p, :global(body.aea-platform) main.page .partners a { color: #9fbcc6; font-size: .875rem; line-height: 1.6; }
+:global(body.aea-platform) main.page .partners strong { color: #e8f4f6; font-weight: 500; }
+:global(body.aea-platform) main.page .partners a { flex-shrink: 0; }
+@keyframes home-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@media (min-width: 851px) and (max-width: 1100px) { :global(body.aea-platform) main.page .hero { grid-template-columns: minmax(0, 1.2fr) minmax(330px, 1fr); } :global(body.aea-platform) main.page .heroCopy { padding: 32px; } :global(body.aea-platform) main.page .heroCopy h1 { font-size: 2.7rem; } :global(body.aea-platform) main.page .enquiry { padding: 28px; } :global(body.aea-platform) main.page .toolGrid article { padding: 26px 20px; } }
+@media (max-width: 850px) { :global(body.aea-platform) main.page .hero { grid-template-columns: 1fr; gap: 14px; } :global(body.aea-platform) main.page .heroScene { min-height: 640px; } :global(body.aea-platform) main.page .heroCopy { padding: 32px 28px 340px; } :global(body.aea-platform) main.page .heroCopy h1 { font-size: clamp(2.3rem, 6.4vw, 3.5rem); max-width: 580px; } :global(body.aea-platform) main.page .heroCopy p { max-width: 490px; } :global(body.aea-platform) main.page .enquiry { padding: 30px; } :global(body.aea-platform) main.page .enquiry h2 { font-size: 2.1rem; } :global(body.aea-platform) main.page .steps { gap: 20px; } :global(body.aea-platform) main.page .sectionHeading { flex-wrap: wrap; gap: 15px; } :global(body.aea-platform) main.page .toolGrid { grid-template-columns: 1fr; } :global(body.aea-platform) main.page .toolGrid article, :global(body.aea-platform) main.page .toolGrid article:first-child { padding: 28px 0; } :global(body.aea-platform) main.page .toolGrid article + article { border-left: 0; border-top: 1px solid #294450; } :global(body.aea-platform) main.page .toolGrid h3, :global(body.aea-platform) main.page .toolGrid p { max-width: none; } :global(body.aea-platform) main.page .toolLinks { flex-direction: row; flex-wrap: wrap; gap: 18px; } :global(body.aea-platform) main.page .finalCta { align-items: flex-start; flex-direction: column; padding: 32px; } }
+@media (max-width: 560px) { :global(body.aea-platform) main.page .hero { margin-top: 14px; } :global(body.aea-platform) main.page .heroScene { min-height: 520px; border-radius: 18px; } :global(body.aea-platform) main.page .heroCopy { padding: 25px 23px 330px; } :global(body.aea-platform) main.page .heroCopy h1 { margin: 17px 0; font-size: 2.45rem; } :global(body.aea-platform) main.page .heroCopy p { font-size: 1rem; line-height: 1.55; } :global(body.aea-platform) main.page .mobileStart { display: inline-flex; color: #b0ffdf; gap: 22px; padding: 12px 0; font-size: .9375rem; font-weight: 700; margin-top: 10px; text-decoration: none; } :global(body.aea-platform) main.page .enquiry { border-radius: 18px; padding: 26px 23px; } :global(body.aea-platform) main.page .enquiryTop { margin-bottom: 16px; } :global(body.aea-platform) main.page .enquiryTrust { gap: 22px; } :global(body.aea-platform) main.page .steps { grid-template-columns: 1fr; gap: 23px; padding: 28px 5px 32px; } :global(body.aea-platform) main.page .steps article { gap: 18px; } :global(body.aea-platform) main.page .steps p { max-width: none; } :global(body.aea-platform) main.page .assessments, :global(body.aea-platform) main.page .tools { margin-top: 46px; } :global(body.aea-platform) main.page .sectionHeading { margin-bottom: 22px; } :global(body.aea-platform) main.page .sectionHeading h2 { font-size: 1.9rem; } :global(body.aea-platform) main.page .assessmentGrid { grid-template-columns: 1fr; gap: 14px; } :global(body.aea-platform) main.page .assessmentGrid article { padding: 28px 25px; } :global(body.aea-platform) main.page .assessmentGrid h3 { font-size: 2.6rem; margin-top: 28px; } :global(body.aea-platform) main.page .assessmentGrid p { margin-bottom: 24px; } :global(body.aea-platform) main.page .cardTop { font-size: .8125rem; } :global(body.aea-platform) main.page .cardAction { width: 100%; } :global(body.aea-platform) main.page .relatedLinks { gap: 18px; } :global(body.aea-platform) main.page .resourceLinks { flex-direction: column; gap: 14px; } :global(body.aea-platform) main.page .finalCta { margin-top: 44px; padding: 28px 24px; border-radius: 18px; gap: 24px; } :global(body.aea-platform) main.page .primaryLink { width: 100%; } :global(body.aea-platform) main.page .partners { align-items: flex-start; flex-direction: column; gap: 0; margin: 20px 4px 32px; } }
+@media (prefers-reduced-motion: reduce) { :global(body.aea-platform) main.page .heroCopy, :global(body.aea-platform) main.page .enquiry { animation: none; } :global(body.aea-platform) main.page a, :global(body.aea-platform) main.page button, :global(body.aea-platform) main.page .assessmentGrid article { transition: none; } :global(body.aea-platform) main.page .assessmentGrid article:hover, :global(body.aea-platform) main.page .enquiryButton:hover, :global(body.aea-platform) main.page .primaryLink:hover { transform: none; } }
+:global(body.aea-platform) main.page .enquiryButton { background: #9af3d3; border-color: #9af3d3; color: #08392b; box-shadow: 0 6px 28px #66ffd328; }
+:global(body.aea-platform) main.page .enquiryButton:hover { background: #c5ffe9; }
+
+:global(body.aea-platform) main.page .modelBackdrop { position: fixed; z-index: 0; pointer-events: auto; overflow: hidden; }
+:global(body.aea-platform) main.page .modelCanvas, :global(body.aea-platform) main.page .modelFallback { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+:global(body.aea-platform) main.page .modelCanvas { touch-action: pan-y; cursor: grab; opacity: 0; }
+:global(body.aea-platform) main.page .modelCanvas[data-ready="true"] { opacity: 1; }
+:global(body.aea-platform) main.page .modelCanvas[data-dragging="true"] { cursor: grabbing; }
+:global(body.aea-platform) main.page .modelCanvas:focus-visible { outline: 2px solid #9af3d3; outline-offset: -12px; border-radius: 24px; }
+:global(body.aea-platform) main.page .modelFallback { object-fit: contain; pointer-events: none; }
+:global(body.aea-platform) main.page .modelStage { position: absolute; inset: 320px -30px 90px; pointer-events: none; }
+:global(body.aea-platform) main.page .heroCopy { pointer-events: none; }
+:global(body.aea-platform) main.page .heroCopy > * { pointer-events: auto; }
+:global(body.aea-platform) main.page .modelToolbar { position: absolute; bottom: 22px; left: 26px; right: 26px; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; pointer-events: auto; }
+:global(body.aea-platform) main.page .modelToolbar p { margin: 0; font-size: .8125rem; color: #b4d6ce; }
+:global(body.aea-platform) main.page .modelControls { display: flex; gap: 5px; }
+:global(body.aea-platform) main.page .modelControls button { min-height: 44px; min-width: 40px; border: 1px solid #46786c; border-radius: 8px; background: #092d37; color: #d5ffed; padding: 8px 11px; font-size: .8125rem; cursor: pointer; }
+:global(body.aea-platform) main.page .modelControls button:hover, :global(body.aea-platform) main.page .modelControls button[aria-pressed="true"] { background: #12554c; border-color: #9af3d3; }
+:global(body.aea-platform) main.page .steps, :global(body.aea-platform) main.page .assessments, :global(body.aea-platform) main.page .tools, :global(body.aea-platform) main.page .finalCta, :global(body.aea-platform) main.page .partners { position: relative; z-index: 1; }
+:global(body.aea-platform) main.page .steps, :global(body.aea-platform) main.page .toolGrid { background: #041726c9; }
+@media (max-width: 850px) { :global(body.aea-platform) main.page .modelStage { inset: 310px -15px 90px; } }
+@media (max-width: 560px) { :global(body.aea-platform) main.page .modelStage { inset: 335px -18px 100px; } :global(body.aea-platform) main.page .modelToolbar { bottom: 18px; left: 23px; right: 23px; gap: 8px; } }

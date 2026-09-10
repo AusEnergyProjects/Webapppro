@@ -10,6 +10,7 @@ const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativeP
 const route = read("../src/app/direct-trade/page.tsx");
 const brief = read("../src/components/DirectTradeProjectBrief.tsx");
 const homepage = read("../src/components/GettingStarted.tsx");
+const homeRequest = read("../src/components/QuickUpgradeEnquiry.tsx");
 const upgradeModal = read("../src/components/UpgradeEnquiryModal.tsx");
 const customerOpportunityDispatch = read("../src/lib/customer-opportunity-dispatch-server.ts");
 const tradeOpportunitiesRoute = read("../src/app/api/trade-opportunities/route.ts");
@@ -20,8 +21,8 @@ test("Direct Trade uses the account-free consented enquiry while the homepage pr
   assert.match(route, /Direct Trade Project Brief/);
   assert.match(homepage, /href="\/plan">Build my home energy plan/);
   assert.match(homepage, /QuickUpgradeEnquiry/);
-  assert.match(homepage, /Send one quick request without creating an account/);
-  assert.match(homepage, /You choose whether matching businesses receive your email, name or phone/);
+  assert.match(homeRequest, /No account needed/);
+  assert.match(homeRequest, /You choose which contact details they receive/);
   assert.match(brief, /PublicPlanEnquiryForm/);
   assert.match(brief, /No customer account is required/);
   assert.doesNotMatch(homepage, /direct-trade-status|Live service, expanding tool/);

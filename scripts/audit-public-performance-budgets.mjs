@@ -163,8 +163,8 @@ const routeDefinitions = {
     page: "src/app/page.tsx",
     clientEntries: [
       "src/components/SurgeOpenButton.tsx",
-      "src/components/HomepageCalendlyEmbed.tsx",
-      imageKey,
+      "src/components/QuickUpgradeEnquiry.tsx",
+      "src/components/HomeHeroScene.tsx",
     ],
     boundaries: [
       ["src/app/page.tsx", "GettingStarted"],
