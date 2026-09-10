@@ -11,20 +11,34 @@ const landing = read("../src/components/GettingStarted.tsx");
 const plannerJourneyPath = path.resolve(here, "../src/components/PlannerHomeJourney.tsx");
 const styles = read("../src/components/GettingStarted.module.css");
 const scene = read("../src/components/HomeHeroScene.tsx");
-const renderer = read("../src/lib/home-energy-scene.ts");
+const packageJson = JSON.parse(read("../package.json"));
 
-test("the public journey defers real 3D while keeping a lightweight image fallback", () => {
-  assert.match(scene, /aea-home-future\.webp/);
-  assert.match(scene, /import\("@\/lib\/home-energy-scene"\)/);
-  assert.match(renderer, /new WebGLRenderer/);
-  assert.match(renderer, /document\.hidden/);
-  assert.match(renderer, /renderer\.dispose\(\)/);
-  assert.match(renderer, /motion\.matches \? 0 : turn/);
-  assert.match(styles, /touch-action: pan-y/);
-  assert.match(scene, /aria-label="3D cutaway of an all-electric home/);
-  assert.match(scene, /const progress = motion\.matches \? 0/);
+test("the public journey uses a responsive architectural image without a 3D runtime", () => {
+  assert.match(scene, /<picture\b/);
+  assert.match(scene, /<source\b[^>]*media=[^>]*aea-home-architecture-mobile\.webp/);
+  assert.match(scene, /<img\b[^>]*src="\/aea-home-architecture\.webp"/);
+  assert.match(scene, /<img\b[^>]*alt="[^"]+"/);
+  assert.doesNotMatch(scene, /<canvas|home-energy-scene|home-energy-model|WebGLRenderer|pointerdown|pointermove|setPointerCapture|onPointer\w+/);
   assert.doesNotMatch(scene, /<button|modelControls|onKeyDown/);
-  assert.match(renderer, /targetRoofHeight = motion\.matches \? 2\.4 : reveal \* 2\.4/);
+  assert.doesNotMatch(styles, /cursor:\s*(?:grab|grabbing)\b|touch-action:\s*pan-y|\.modelCanvas|\.modelControls/);
+  assert.equal(packageJson.dependencies?.three, undefined);
+  assert.equal(packageJson.devDependencies?.["@types/three"], undefined);
+  assert.equal(fs.existsSync(path.resolve(here, "../src/lib/home-energy-model.ts")), false);
+  assert.equal(fs.existsSync(path.resolve(here, "../src/lib/home-energy-scene.ts")), false);
+});
+
+test("the decorative aurora follows scrolling without intercepting input or ignoring reduced motion", () => {
+  assert.match(scene, /className=\{styles\.auroraBackdrop\}[^>]*aria-hidden="true"|aria-hidden="true"[^>]*className=\{styles\.auroraBackdrop\}/);
+  assert.match(styles, /\.auroraBackdrop\s*\{[^}]*position:\s*fixed/);
+  assert.match(styles, /\.auroraBackdrop\s*\{[^}]*pointer-events:\s*none/);
+  assert.match(scene, /matchMedia\("\(prefers-reduced-motion: reduce\)"\)/);
+  assert.match(scene, /\.matches/);
+  assert.match(scene, /\.style\.setProperty\("--/);
+  assert.match(scene, /addEventListener\("scroll",[^\n]*passive:\s*true/);
+  assert.match(scene, /removeEventListener\("scroll"/);
+  assert.match(scene, /removeEventListener\("resize"/);
+  assert.match(scene, /removeEventListener\("change"/);
+  assert.match(scene, /cancelAnimationFrame/);
   assert.doesNotMatch(landing, /HolographicEnergyField|<canvas|requestAnimationFrame|pointermove|onPointerMove|data-spatial-scene/);
   assert.doesNotMatch(styles, /customer-hologram-sweep|customer-scan-drop|spatial-route-breathe|spatial-nebula-breathe/);
   assert.doesNotMatch(styles, /\.customer-scene-home::before|\.planner-home-scan-plane|\.planner-home-energy-field/);
@@ -34,7 +48,7 @@ test("the public journey defers real 3D while keeping a lightweight image fallba
 
 test("the retired planner scene and its global styles stay removed", () => {
   assert.equal(fs.existsSync(plannerJourneyPath), false);
-  assert.match(styles, /\.modelBackdrop[\s\S]*position: fixed/);
+  assert.doesNotMatch(styles, /\.modelBackdrop/);
   assert.doesNotMatch(styles, /\.planner-home-journey|\.planner-home-render-volume|\.planner-home-question-cue/);
 });
 

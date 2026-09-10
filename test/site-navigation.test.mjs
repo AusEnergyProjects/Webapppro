@@ -58,7 +58,7 @@ const robots = read("../src/app/robots.ts");
 const sitemap = read("../src/app/sitemap.ts");
 const manifest = read("../src/app/manifest.ts");
 const socialAsset = path.resolve(directory, "../public/aea-home-energy-plan-og-v2.png");
-const surgeHomeAsset = path.resolve(directory, "../public/aea-home-future.webp");
+const surgeHomeAsset = path.resolve(directory, "../public/aea-home-architecture.webp");
 const rootIcon = fs.readFileSync(path.resolve(directory, "../src/app/icon.png"));
 const rootAppleIcon = fs.readFileSync(path.resolve(directory, "../src/app/apple-icon.png"));
 const rootFavicon = fs.readFileSync(path.resolve(directory, "../src/app/favicon.ico"));
@@ -390,8 +390,8 @@ test("homepage uses an accessible static journey without persistent rendering wo
 
 test("the optimised whole-home scene is visible and the retired planner scene stays removed", () => {
   const scene = fs.readFileSync(path.resolve(directory, "../src/components/HomeHeroScene.tsx"), "utf8");
-  assert.match(scene, /src="\/aea-home-future\.webp"/);
-  assert.match(scene, /width=\{1536\} height=\{1024\}/);
+  assert.match(scene, /src="\/aea-home-architecture\.webp"/);
+  assert.match(scene, /width=\{1920\} height=\{1081\}/);
   assert.match(scene, /fetchPriority="high"/);
   assert.equal(fs.existsSync(plannerJourneyPath), false);
   assert.equal(fs.existsSync(path.resolve(directory, "../src/components/CustomerJourneyScene.tsx")), false);

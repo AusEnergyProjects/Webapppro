@@ -1,100 +1,77 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { HomeEnergyScene } from "@/lib/home-energy-scene";
+import { useEffect, useRef, type ReactNode } from "react";
 import styles from "./GettingStarted.module.css";
 
-const featureLabels = [
-  ["solar", "Solar generation"], ["ev", "EV + wall charger"],
-  ["hotWater", "Heat-pump hot water"], ["battery", "Home battery"],
-  ["insulation", "Insulated envelope"], ["glazing", "Double glazing"],
-  ["airConditioning", "Reverse-cycle air con"], ["ventilation", "Heat-recovery ventilation"],
-] as const;
-
 export function HomeHeroScene({ children }: { children: ReactNode }) {
-  const canvas = useRef<HTMLCanvasElement>(null);
-  const anchor = useRef<HTMLDivElement>(null);
-  const backdrop = useRef<HTMLDivElement>(null);
-  const hero = useRef<HTMLDivElement>(null);
-  const labels = useRef(new Map<string, HTMLSpanElement>());
-  const controller = useRef<HomeEnergyScene | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "unavailable">("loading");
+  const atmosphere = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const element = canvas.current;
+    const element = atmosphere.current;
     if (!element) return;
-    let disposed = false;
-    let layoutFrame = 0;
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    function updateLayout() {
-      layoutFrame = 0;
-      if (!anchor.current || !backdrop.current || !hero.current) return;
-      const bounds = anchor.current.getBoundingClientRect();
-      const heroBounds = hero.current.getBoundingClientRect();
-      const viewportWidth = document.documentElement.clientWidth;
-      const progress = motion.matches ? 0 : Math.min(1, Math.max(0, -heroBounds.top / (heroBounds.height * .75)));
-      const backgroundWidth = Math.min(viewportWidth, 1600);
-      const backgroundHeight = window.innerHeight * .95;
-      const mix = (from: number, to: number) => from + (to - from) * progress;
-      const width = Math.min(viewportWidth, mix(bounds.width, backgroundWidth));
-      Object.assign(backdrop.current.style, {
-        left: `${Math.max(0, Math.min(viewportWidth - width, mix(bounds.left, (viewportWidth - backgroundWidth) / 2)))}px`,
-        top: `${mix(bounds.top, window.innerHeight * .08)}px`,
-        width: `${width}px`,
-        height: `${mix(bounds.height, backgroundHeight)}px`,
-        opacity: String(1 - progress * .86),
-        pointerEvents: progress < .1 ? "auto" : "none",
-      });
-      controller.current?.setScrollProgress(window.scrollY * .00045, Math.min(1, Math.max(0, (window.scrollY - 40) / 360)));
+    let frame = 0;
+    function update() {
+      frame = 0;
+      if (!element) return;
+      const scrollRange = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      const progress = motion.matches ? 0 : Math.min(1, Math.max(0, window.scrollY / scrollRange));
+      element.style.setProperty("--aurora-shift", `${progress * -180}px`);
+      element.style.setProperty("--aurora-turn", `${progress * 24}deg`);
+      element.style.setProperty("--aurora-bloom", String(.2 + progress * .38));
     }
-    function scheduleLayout() { if (!layoutFrame) layoutFrame = window.requestAnimationFrame(updateLayout); }
-    const sizeObserver = new ResizeObserver(scheduleLayout);
-    if (hero.current) sizeObserver.observe(hero.current);
-    window.addEventListener("scroll", scheduleLayout, { passive: true });
-    window.addEventListener("resize", scheduleLayout, { passive: true });
-    motion.addEventListener("change", scheduleLayout);
-    updateLayout();
-    const observer = new IntersectionObserver((entries) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return;
-      observer.disconnect();
-      void import("@/lib/home-energy-scene").then(({ createHomeEnergyScene }) => {
-        if (disposed) return;
-        controller.current = createHomeEnergyScene(element, () => { controller.current = null; setStatus("unavailable"); }, (positions) => {
-          for (const [key, label] of labels.current) {
-            const position = positions.find((entry) => entry.key === key);
-            label.style.opacity = position ? "1" : "0";
-            if (position) { label.style.left = `${position.x}px`; label.style.top = `${position.y}px`; }
-          }
-        });
-        setStatus("ready");
-        updateLayout();
-      }).catch(() => { if (!disposed) setStatus("unavailable"); });
-    }, { rootMargin: "100px" });
-    observer.observe(element);
+    function schedule() { if (!frame) frame = window.requestAnimationFrame(update); }
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule, { passive: true });
+    motion.addEventListener("change", schedule);
+    update();
     return () => {
-      disposed = true;
-      observer.disconnect();
-      sizeObserver.disconnect();
-      window.cancelAnimationFrame(layoutFrame);
-      window.removeEventListener("scroll", scheduleLayout);
-      window.removeEventListener("resize", scheduleLayout);
-      motion.removeEventListener("change", scheduleLayout);
-      controller.current?.dispose();
-      controller.current = null;
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      motion.removeEventListener("change", schedule);
     };
   }, []);
 
   return <>
-    <div className={styles.modelBackdrop} ref={backdrop}>
-      {/* The fallback is already compressed WebP and stays outside the image runtime. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      {status !== "ready" ? <img className={styles.modelFallback} src="/aea-home-future.webp" alt="Conceptual energy-efficient home with rooftop solar and a home battery" width={1536} height={1024} fetchPriority="high" /> : null}
-      <canvas ref={canvas} className={styles.modelCanvas} data-ready={status === "ready"} role="img" aria-hidden={status !== "ready"} aria-label="3D cutaway of an all-electric home with insulation, double glazing, solar panels, a battery, heat-pump hot water, EV charging, air conditioning and heat-recovery ventilation. The roof opens as you scroll." />
-      {status === "ready" ? featureLabels.map(([key, label]) => <span key={key} ref={(element) => { if (element) labels.current.set(key, element); else labels.current.delete(key); }} className={styles.featureLabel} aria-hidden="true">{label}</span>) : null}
+    <div className={styles.auroraBackdrop} ref={atmosphere} aria-hidden="true">
+      <svg className={styles.auroraVeil} viewBox="0 0 1600 1000" fill="none" preserveAspectRatio="xMidYMid slice" focusable="false">
+        <defs>
+          <linearGradient id="home-aurora-mint" x1="0" y1="900" x2="1400" y2="100" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#078586" stopOpacity="0" />
+            <stop offset=".38" stopColor="#26dfad" stopOpacity=".55" />
+            <stop offset=".66" stopColor="#7bfde1" stopOpacity=".8" />
+            <stop offset="1" stopColor="#2853a4" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="home-aurora-violet" x1="150" y1="100" x2="1300" y2="850" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#24769e" stopOpacity="0" />
+            <stop offset=".45" stopColor="#8471df" stopOpacity=".7" />
+            <stop offset=".8" stopColor="#248fbe" stopOpacity=".45" />
+            <stop offset="1" stopColor="#0a3850" stopOpacity="0" />
+          </linearGradient>
+          <filter id="home-aurora-smoke" x="-20%" y="-30%" width="140%" height="160%" colorInterpolationFilters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency=".005 .012" numOctaves="2" seed="8" result="noise" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="110" xChannelSelector="R" yChannelSelector="G" />
+            <feGaussianBlur stdDeviation="13" />
+          </filter>
+        </defs>
+        <g filter="url(#home-aurora-smoke)">
+          <path d="M-220 970C230 780 340 220 820 270S1250 650 1810-180C1290 470 1140 190 800 180S230 640-220 790Z" fill="url(#home-aurora-mint)" />
+          <path d="M-100 830C300 620 470 100 850 190S1330 490 1770-70" stroke="url(#home-aurora-mint)" strokeWidth="15" />
+          <path className={styles.auroraEcho} d="M-180 50C240 70 410 730 840 720S1280 210 1780 350C1280 160 1190 610 830 590S290-70-180-40Z" fill="url(#home-aurora-violet)" />
+        </g>
+      </svg>
+      <div className={styles.auroraGlow} />
     </div>
-    <div className={styles.heroScene} ref={hero}>
-    {children}
-    <div className={styles.modelStage} ref={anchor} aria-hidden="true" />
+    <div className={styles.heroScene}>
+      {children}
+      <div className={styles.heroImage}>
+        <picture>
+          <source media="(max-width: 560px)" srcSet="/aea-home-architecture-mobile.webp" />
+          {/* Responsive WebP assets are compressed at publication time. */}
+          <img src="/aea-home-architecture.webp" alt="Architectural concept of a contemporary all-electric Australian home with rooftop solar, warm interiors and electric vehicle charging." width={1920} height={1081} fetchPriority="high" draggable={false} />
+        </picture>
+      </div>
     </div>
   </>;
 }
