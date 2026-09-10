@@ -26,6 +26,10 @@ export function GettingStarted() {
       </HomeHeroScene>
       <QuickUpgradeEnquiry />
     </section>
+    <aside className={styles.independence} aria-label="Independent guidance">
+      <div><span className={styles.eyebrow}>On your side</span><strong>Unbiased guidance. No sales pitch.</strong></div>
+      <p>We don&apos;t sell products or leads. No paid placement, and no vested interest in which product or trade you choose.</p>
+    </aside>
     <section className={styles.steps} aria-label="How your request works">
       {steps.map(([number, title, text]) => <article key={number}><span>{number}</span><div><h2>{title}</h2><p>{text}</p></div></article>)}
     </section>
@@ -49,11 +53,21 @@ export function GettingStarted() {
       </div>
     </section>
     <section className={styles.tools} id="compare-energy-plans" aria-labelledby="home-tools-title">
-      <div className={styles.sectionHeading}><div><span className={styles.eyebrow}>A little clarity goes a long way</span><h2 id="home-tools-title">Explore your options.</h2></div><p>Practical tools when you want to look into it first.</p></div>
+      <div className={styles.wattzunFeature}>
+        <picture className={styles.wattzunArtwork}><img src="/surge-ai-command-centre-4k.webp" alt="" width={3840} height={2160} loading="lazy" decoding="async" /></picture>
+        <div className={styles.wattzunCopy}>
+          <span className={styles.eyebrow}>Free guidance, at your pace</span>
+          <h2 id="home-tools-title">Meet Wattzun AI.</h2>
+          <p className={styles.wattzunIntro}>A little guidance.<br />A clearer way forward.</p>
+          <p>Ask about energy bills, rebates, assessments or upgrades. Wattzun helps you understand the options and build a practical plan for your home, without a sales pitch.</p>
+          <ul className={styles.wattzunTopics} aria-label="Ways Wattzun can help"><li>Understand your bills</li><li>Plan home upgrades</li><li>Explore rebates</li></ul>
+          <SurgeOpenButton label="Talk to Wattzun AI" description="Your free home energy guide." draft="Help me understand my home energy options and decide where to start." />
+          <Link className={styles.callLink} href="/book-an-assessment">Prefer a person? Book a five-minute call <span aria-hidden="true">↗</span></Link>
+        </div>
+      </div>
       <div className={styles.toolGrid}>
-        <article><span className={styles.toolNumber}>01 / Compare</span><h3>Could your energy plan fit better?</h3><p>Compare electricity and mains gas plans using your location and usage.</p><div className={styles.toolLinks}><Link href="/compare">Compare electricity <span aria-hidden="true">↗</span></Link><Link href="/gas-compare">Compare gas <span aria-hidden="true">↗</span></Link></div></article>
-        <article><span className={styles.toolNumber}>02 / Plan</span><h3>Put your home upgrades in order.</h3><p>Build a practical plan, explore rebates and understand what to do first.</p><div className={styles.toolLinks}><Link href="/plan">Build my home energy plan</Link><Link href="/calculator">Estimate a rebate <span aria-hidden="true">↗</span></Link></div></article>
-        <article><span className={styles.toolNumber}>03 / Ask</span><h3>Still working it out?</h3><p>Talk through your ideas with our AI energy guide, or speak with our team.</p><SurgeOpenButton label="Ask Wattzun AI first" description="Help with your next decision." draft="Help me decide which home energy assessment or upgrade to start with, and when to request help from a trade." /><Link className={styles.callLink} href="/book-an-assessment">Book a five-minute call <span aria-hidden="true">↗</span></Link></article>
+        <article><span className={styles.toolNumber}>Compare energy plans</span><h3>Find a plan that fits.</h3><p>Compare electricity and mains gas plans using your location and usage.</p><div className={styles.toolLinks}><Link href="/compare">Compare electricity <span aria-hidden="true">↗</span></Link><Link href="/gas-compare">Compare gas <span aria-hidden="true">↗</span></Link></div></article>
+        <article><span className={styles.toolNumber}>Plan your upgrades</span><h3>Make your next move count.</h3><p>Put your home upgrades in order and explore rebates that may apply.</p><div className={styles.toolLinks}><Link href="/plan">Build my home energy plan <span aria-hidden="true">↗</span></Link><Link href="/calculator">Estimate a rebate <span aria-hidden="true">↗</span></Link></div></article>
       </div>
       <div className={styles.resourceLinks}><Link href="/guides">Browse all guides, rebates and examples</Link><Link href="/rebates">Rebates & assistance</Link><Link href="/direct-trade/standards">Read the marketplace standards</Link></div>
     </section>

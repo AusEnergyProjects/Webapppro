@@ -69,6 +69,7 @@ export function createLeadPostHandler({
   isQuickUpgradeEnquiry = () => false,
   isPublicRentalAssessmentRequest = () => false,
   enqueuePublicPlanDelivery,
+  enqueueQuickUpgradeReceiptDelivery,
   createOpportunityFromLead,
   confirmPublicPlanIntakeOpportunity,
   publicPlanDeliveryDispatchHeader = "",
@@ -234,6 +235,27 @@ export function createLeadPostHandler({
             });
           }
         }
+        let receipt;
+        try {
+          if (typeof enqueueQuickUpgradeReceiptDelivery !== "function") {
+            throw new Error("QUICK_UPGRADE_RECEIPT_QUEUE_UNCONFIGURED");
+          }
+          receipt = await enqueueQuickUpgradeReceiptDelivery({
+            opportunityId, reference: payload.reference, fingerprint: payload.submissionFingerprint,
+          });
+          if (!receipt?.id) throw new Error("QUICK_UPGRADE_RECEIPT_QUEUE_UNAVAILABLE");
+        } catch {
+          await recordLeadIncident(
+            "platform.quick_upgrade_receipt_queue_failed",
+            "Customer enquiry receipt was not queued",
+            "The quick upgrade request was saved, but its customer acknowledgement could not be confirmed. Retry using the same request reference.",
+            "high",
+          );
+          return respond({ ok: false, received: true, reference: payload.reference,
+            receiptEmailStatus: "not_queued",
+            error: `Your request was saved, but the confirmation email could not be queued. Please retry with the same details or call 1300 241 149 and quote reference ${payload.reference}.`,
+          }, 502, "quick_upgrade_receipt_queue_failed", metrics);
+        }
         await resolveSystemAdminNotifications({
           eventTypes: [
             "platform.lead_delivery_unconfigured",
@@ -249,13 +271,17 @@ export function createLeadPostHandler({
         return respond({
           ok: true,
           reference: payload.reference,
+          receiptEmailStatus: receipt.status === "delivered" ? "delivered"
+            : receipt.status === "sent" ? "provider_accepted"
+              : ["bounced", "complained", "suppressed"].includes(receipt.status) ? "not_sent" : "queued",
         }, 200, "quick_upgrade_prepared", {
           ...metrics,
           matchedBusinessCount,
-        }, matchedBusinessCount
-          && opportunityNotificationDispatchHeader
-          ? { [opportunityNotificationDispatchHeader]: opportunityId }
-          : {});
+        }, {
+          ...(matchedBusinessCount && opportunityNotificationDispatchHeader
+            ? { [opportunityNotificationDispatchHeader]: opportunityId } : {}),
+          ...(publicPlanDeliveryDispatchHeader ? { [publicPlanDeliveryDispatchHeader]: receipt.id } : {}),
+        });
       }
 
       if (publicPlanEnquiry) {

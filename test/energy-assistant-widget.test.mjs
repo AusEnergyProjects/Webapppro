@@ -238,7 +238,7 @@ test("page Surge actions open the full guide while the floating mascot retains q
   assert.match(planner, /Ask Wattzun AI about the planner/);
   assert.match(planner, /Ask Wattzun AI about this roadmap/);
   assert.equal((gettingStarted.match(/<SurgeOpenButton/g) || []).length, 1);
-  assert.match(gettingStarted, /Ask Wattzun AI first/);
+  assert.match(gettingStarted, /Talk to Wattzun AI/);
 });
 
 test("only bounded local transcript, home profile, continuation, last activity and guide mode are persisted while the panel starts closed", () => {

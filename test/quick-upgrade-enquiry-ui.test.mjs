@@ -10,7 +10,7 @@ const homepage = await readFile(new URL("../src/components/GettingStarted.tsx", 
 test("homepage offers a direct independent upgrade request without replacing planning help", () => {
   assert.match(homepage, /<QuickUpgradeEnquiry \/>/);
   assert.match(homepage, /Build my home energy plan/);
-  assert.match(homepage, /Ask Wattzun AI first/);
+  assert.match(homepage, /Talk to Wattzun AI/);
   assert.match(component, /I want help with/);
   assert.match(dialog, /do not sell leads or let businesses pay for placement/);
 });
@@ -55,7 +55,35 @@ test("quick request makes required and optional sharing explicit", () => {
   assert.match(dialog, /type="checkbox"/);
   assert.doesNotMatch(dialog, /defaultChecked/);
   assert.doesNotMatch(dialog, /matchedBusinessCount|matching \$\{matchedCount\}/);
-  assert.match(dialog, /Your request has been saved for matching\. Australian Energy Assessments will help if no suitable business is available/);
+  assert.match(dialog, /Australian Energy Assessments can help if no suitable business is available/);
+});
+
+test("receipt confirms the saved request without promising responses or email delivery", () => {
+  assert.match(dialog, /if \(!response\.ok \|\| !result\.ok\) throw new Error/);
+  assert.match(dialog, /Thank you\. Your request has been received\./);
+  assert.match(dialog, /Your enquiry is saved with Australian Energy Assessments\./);
+  assert.match(dialog, /reference: result\.reference/);
+  assert.match(dialog, /submitState\.reference \? <div><span>Your reference<\/span><strong>\{submitState\.reference\}/);
+  assert.match(dialog, /based on your selected services and their service areas/);
+  assert.match(dialog, /review the details you agreed to share\. Responses depend on availability/);
+  assert.match(dialog, /import \{ PUBLIC_SITE \} from "@\/lib\/public-site"/);
+  assert.match(dialog, /href=\{PUBLIC_SITE\.phoneHref\}>\{PUBLIC_SITE\.phoneDisplay\}/);
+  assert.match(dialog, /href=\{`mailto:\$\{PUBLIC_SITE\.email\}`\}>\{PUBLIC_SITE\.email\}/);
+  assert.match(dialog, /<span>\{PUBLIC_SITE\.name\}<\/span>/);
+  assert.match(dialog, /src="\/tlink-icon-192\.png"/);
+  assert.doesNotMatch(dialog, /email (?:has been sent|delivered)|confirmation email|quotes (?:will arrive|soon)/i);
+});
+
+test("compact sharing summary retains address, notes, chosen contact details and AEA handling disclosures", () => {
+  const summary = dialog.match(/<div className=\{styles\.sharingSummary\}>([\s\S]*?)<\/div>/)?.[1];
+  assert.ok(summary, "sharing summary must be present");
+  assert.match(summary, /<ul>[\s\S]*<li><strong>Request:<\/strong> Your selected services, full property address and your notes\.<\/li>/);
+  assert.match(summary, /<li><strong>Contact:<\/strong> Your email, name and phone are included only if you tick them\.<\/li>/);
+  assert.match(summary, /approved TLink businesses that match your services and area/);
+  assert.match(summary, /Australian Energy Assessments keeps all contact details to manage your request and help if needed/);
+  assert.match(summary, /do not sell leads or let businesses pay for placement/);
+  assert.match(dialog, /checked=\{consentAccepted\} onChange=\{\(event\) => changeConsent\(event\.target\.checked\)\} required/);
+  assert.match(dialog, /QUICK_UPGRADE_CONSENT_PURPOSE\} This is a request for options, not an agreement to buy or authorise work/);
 });
 
 test("quick request modal has keyboard and mobile safeguards", () => {
@@ -65,6 +93,16 @@ test("quick request modal has keyboard and mobile safeguards", () => {
   assert.match(dialog, /event\.key !== "Tab"/);
   assert.match(dialog, /\.filter\(\(element\) => element\.tabIndex >= 0\)/);
   assert.match(dialog, /document\.body\.style\.overflow = "hidden"/);
+  assert.match(dialog, /returnTarget\?\.isConnected\) returnTarget\.focus\(\)/);
+  assert.match(dialog, /successCloseRef\.current\?\.focus\(\)/);
+  assert.match(dialog, /ref=\{successCloseRef\} type="button" onClick=\{onClose\}>Done/);
+  assert.match(dialog, /const dismissible = submitState\.kind !== "sending"/);
+  assert.match(dialog, /disabled=\{submitState\.kind === "sending"\}/);
+  assert.match(styles, /\.receiptReference strong[^}]*overflow-wrap: anywhere/);
+  assert.match(styles, /\.receiptContacts a[^}]*min-height: 2\.75rem[^}]*overflow-wrap: anywhere/);
+  assert.match(styles, /\.receiptFooter[^}]*margin: 0/);
+  assert.match(styles, /\.consent strong[^}]*font-size: 0\.76rem/);
+  assert.match(styles, /\.consent small[^}]*font-size: 0\.74rem/);
   assert.match(styles, /@media \(max-width: 640px\)/);
   assert.match(styles, /min-height: 2\.75rem/);
 });

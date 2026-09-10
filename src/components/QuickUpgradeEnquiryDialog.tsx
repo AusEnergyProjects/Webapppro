@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   type FormEvent,
   type KeyboardEvent,
@@ -21,6 +22,7 @@ import {
   QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_ENQUIRY_KIND,
 } from "@/lib/quick-upgrade-enquiry.mjs";
+import { PUBLIC_SITE } from "@/lib/public-site";
 import styles from "./QuickUpgradeEnquiry.module.css";
 
 type AddressLocality = { suburb: string; state: string };
@@ -331,7 +333,7 @@ export function QuickUpgradeEnquiryDialog({
       setSubmitState({
         kind: "success",
         reference: result.reference,
-        message: "Your request has been saved for matching. Australian Energy Assessments will help if no suitable business is available.",
+        message: "Your enquiry is saved with Australian Energy Assessments.",
       });
     } catch (caught) {
       setSubmitState({
@@ -352,25 +354,48 @@ export function QuickUpgradeEnquiryDialog({
         aria-describedby={descriptionId}
         aria-labelledby={titleId}
         aria-modal="true"
-        className={styles.dialog}
+        className={`${styles.dialog}${submitState.kind === "success" ? ` ${styles.receiptDialog}` : ""}`}
         onKeyDown={handleKeyDown}
         ref={dialogRef}
         role="dialog"
       >
         <header className={styles.header}>
           <div>
-            <span>Independent service matching</span>
-            <h2 id={titleId}>Get upgrade options without the runaround</h2>
-            <p id={descriptionId}>Choose what you need and send one clear request to approved TLink trade businesses that cover your area.</p>
+            <span>{submitState.kind === "success" ? `${PUBLIC_SITE.name} + TLink` : "Independent service matching"}</span>
+            <h2 id={titleId}>{submitState.kind === "success" ? "Thank you. Your request has been received." : "Get upgrade options without the runaround"}</h2>
+            <p id={descriptionId}>{submitState.kind === "success" ? submitState.message : "Choose what you need and send one clear request to approved TLink trade businesses that cover your area."}</p>
           </div>
           <button className={styles.closeButton} type="button" onClick={onClose} disabled={!dismissible} aria-label="Close upgrade options">Close</button>
         </header>
 
         {submitState.kind === "success" ? (
           <div className={styles.success}>
-            <span aria-hidden="true">✓</span>
-            <div><h3>Request sent</h3><p>{submitState.message}</p>{submitState.reference ? <small>Reference {submitState.reference}</small> : null}</div>
-            <button ref={successCloseRef} type="button" onClick={onClose}>Done</button>
+            <div className={styles.receiptReference} role="status">
+              <span className={styles.receiptCheck} aria-hidden="true">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="m5 12 4.5 4.5L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </span>
+              {submitState.reference ? <div><span>Your reference</span><strong>{submitState.reference}</strong></div> : <strong>Request received</strong>}
+            </div>
+            <div className={styles.receiptNext}>
+              <h3>What happens next</h3>
+              <p>Your request is matched to approved TLink trade businesses based on your selected services and their service areas.</p>
+              <p>Suitable businesses can review the details you agreed to share. Responses depend on availability.</p>
+            </div>
+            <div className={styles.receiptHelp}>
+              <h3>Need a hand?</h3>
+              <p>Australian Energy Assessments can help if no suitable business is available, or if you need to update your request.</p>
+              <div className={styles.receiptContacts}>
+                <a href={PUBLIC_SITE.phoneHref}>{PUBLIC_SITE.phoneDisplay}</a>
+                <a href={`mailto:${PUBLIC_SITE.email}`}>{PUBLIC_SITE.email}</a>
+              </div>
+            </div>
+            <footer className={styles.receiptFooter}>
+              <div className={styles.receiptBrands}>
+                <span>{PUBLIC_SITE.name}</span>
+                <span><i aria-hidden="true">+</i><Image src="/tlink-icon-192.png" width={28} height={28} alt="" aria-hidden="true" unoptimized />TLink</span>
+              </div>
+              <button ref={successCloseRef} type="button" onClick={onClose}>Done</button>
+            </footer>
           </div>
         ) : (
           <form onSubmit={submit}>
@@ -415,7 +440,15 @@ export function QuickUpgradeEnquiryDialog({
                   <label><input type="checkbox" checked={sharePhone} disabled={!phone.trim()} onChange={(event) => setSharePhone(event.target.checked)} /> Share my phone number</label>
                 </div>
                 <label className={styles.notes}><span>Anything useful to add?</span><textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} maxLength={500} placeholder="For example: what you want to improve, when you hope to start, or what you are unsure about." /><small>Do not include account numbers, meter numbers, access codes or payment details.</small></label>
-                <div className={styles.sharingSummary}><strong>What matching businesses will receive</strong><p>Your selected services, full property address and anything you write above go to approved TLink businesses that match the services and area. Your email, name and phone are included only if you tick them.</p><p>Australian Energy Assessments securely keeps all contact details so we can manage the request and help if needed. We do not sell leads or let businesses pay for placement.</p></div>
+                <div className={styles.sharingSummary}>
+                  <h4>What matching businesses will receive</h4>
+                  <ul>
+                    <li><strong>Request:</strong> Your selected services, full property address and your notes.</li>
+                    <li><strong>Contact:</strong> Your email, name and phone are included only if you tick them.</li>
+                  </ul>
+                  <p>Shared with approved TLink businesses that match your services and area.</p>
+                  <p>Australian Energy Assessments keeps all contact details to manage your request and help if needed. We do not sell leads or let businesses pay for placement.</p>
+                </div>
                 <label className={styles.consent}><input type="checkbox" checked={consentAccepted} onChange={(event) => changeConsent(event.target.checked)} required /><span><strong>I agree to send this request *</strong><small>{QUICK_UPGRADE_CONSENT_PURPOSE} This is a request for options, not an agreement to buy or authorise work.</small></span></label>
                 <label className={styles.honeypot} aria-hidden="true"><span>Website</span><input value={website} onChange={(event) => setWebsite(event.target.value)} tabIndex={-1} autoComplete="off" /></label>
                 {submitState.kind === "error" ? <p className={styles.error} role="alert">{submitState.message}</p> : null}

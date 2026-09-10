@@ -11,6 +11,11 @@ import {
 import { publicPlanDeliveryRetryAt } from "@/lib/public-plan-delivery-retry";
 import { cleanupPublicPlanDeliveryObjectsWrite } from "@/lib/public-plan-delivery-cleanup.mjs";
 import { recordPublicPlanCustomerPdfWrite } from "@/lib/public-plan-customer-email-write.mjs";
+import { QUICK_UPGRADE_RECEIPT_PREFIX } from "@/lib/quick-upgrade-receipt.mjs";
+import {
+  enqueueQuickUpgradeReceipt,
+  dispatchQuickUpgradeReceipt,
+} from "@/lib/quick-upgrade-receipt-delivery.mjs";
 import {
   confirmPublicPlanIntakeOpportunityWrite,
   persistPublicPlanDeliveryIntake,
@@ -91,6 +96,16 @@ function payloadObjectKey(reference: string, fingerprint: string) {
 
 function pdfObjectKey(reference: string, fingerprint: string) {
   return `public-plan/customer-email/${reference}/${fingerprint}.pdf`;
+}
+
+export async function enqueueQuickUpgradeReceiptDelivery(
+  input: { opportunityId: string; reference: string; fingerprint: string },
+  dependencies: PublicPlanDeliveryDependencies = {},
+) {
+  return enqueueQuickUpgradeReceipt(input, {
+    db: dependencies.db || getD1(),
+    bucket: dependencies.bucket || getCustomerProjectEvidenceBucket(),
+  });
 }
 
 export async function enqueuePublicPlanDelivery(
@@ -476,9 +491,11 @@ export async function drainPublicPlanDeliveries(
       relay.idempotency_key relay_idempotency_key
     FROM public_plan_lead_intakes intake
     JOIN public_plan_customer_email_deliveries customer ON customer.intake_id = intake.id
-    JOIN public_plan_internal_relay_deliveries relay ON relay.intake_id = intake.id
+    LEFT JOIN public_plan_internal_relay_deliveries relay ON relay.intake_id = intake.id
     WHERE ${clauses.join(" AND ")}
-      AND ((intake.status != 'completed' AND (intake.next_attempt_at = '' OR intake.next_attempt_at <= ?))
+      AND (relay.id IS NOT NULL OR (intake.payload_object_key LIKE '${QUICK_UPGRADE_RECEIPT_PREFIX}%' AND intake.opportunity_id <> ''))
+      AND ((intake.payload_object_key NOT LIKE '${QUICK_UPGRADE_RECEIPT_PREFIX}%'
+          AND intake.status != 'completed' AND (intake.next_attempt_at = '' OR intake.next_attempt_at <= ?))
         OR (customer.status IN ('pending', 'failed', 'provider_failed', 'waiting_for_channel')
           AND (customer.next_attempt_at = '' OR customer.next_attempt_at <= ?))
         OR (relay.status IN ('pending', 'failed', 'waiting_for_channel')
@@ -486,6 +503,21 @@ export async function drainPublicPlanDeliveries(
     ORDER BY intake.created_at LIMIT ?`).bind(...bindings, now, now, now, options.limit || 10).all<IntakeRow>();
   let processed = 0;
   for (const row of rows.results) {
+    if (String(row.payload_object_key).startsWith(QUICK_UPGRADE_RECEIPT_PREFIX)) {
+      try {
+        await dispatchQuickUpgradeReceipt(row, {
+          ...dependencies, db, bucket: dependencies.bucket || getCustomerProjectEvidenceBucket(),
+        });
+      } catch {
+        const failedAt = new Date().toISOString();
+        await db.prepare(`UPDATE public_plan_customer_email_deliveries
+          SET status = 'failed', failed_at = ?, last_error = 'Customer receipt preparation failed.',
+            next_attempt_at = ?, updated_at = ? WHERE id = ? AND status IN ('pending', 'failed', 'provider_failed', 'waiting_for_channel')`)
+          .bind(failedAt, publicPlanDeliveryRetryAt(Number(row.customer_attempts) + 1), failedAt, row.customer_delivery_id).run();
+      }
+      processed += 1;
+      continue;
+    }
     let payload;
     try {
       payload = await readPayload(row, dependencies.bucket || getCustomerProjectEvidenceBucket());

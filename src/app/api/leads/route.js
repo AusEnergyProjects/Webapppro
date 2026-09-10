@@ -15,6 +15,7 @@ import { isPublicRentalAssessmentRequest } from "@/lib/public-rental-assessment-
 import {
   confirmPublicPlanIntakeOpportunity,
   enqueuePublicPlanDelivery,
+  enqueueQuickUpgradeReceiptDelivery,
 } from "@/lib/public-plan-delivery-server";
 import { createOpportunityFromLead } from "@/lib/opportunity-server";
 import {
@@ -74,6 +75,7 @@ export const POST = createLeadPostHandler({
   isQuickUpgradeEnquiry,
   isPublicRentalAssessmentRequest,
   enqueuePublicPlanDelivery,
+  enqueueQuickUpgradeReceiptDelivery,
   createOpportunityFromLead,
   confirmPublicPlanIntakeOpportunity,
   publicPlanDeliveryDispatchHeader: PUBLIC_PLAN_DELIVERY_DISPATCH_HEADER,

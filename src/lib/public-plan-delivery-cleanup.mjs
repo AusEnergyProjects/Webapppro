@@ -50,13 +50,13 @@ export async function cleanupPublicPlanDeliveryObjectsWrite(
       intake.attempts, customer.status customer_status, relay.status relay_status
     FROM public_plan_lead_intakes intake
     JOIN public_plan_customer_email_deliveries customer ON customer.intake_id = intake.id
-    JOIN public_plan_internal_relay_deliveries relay ON relay.intake_id = intake.id
+    LEFT JOIN public_plan_internal_relay_deliveries relay ON relay.intake_id = intake.id
     WHERE intake.payload_deleted_at = '' AND intake.opportunity_id <> ''
       AND (customer.status IN ('delivered', 'bounced', 'complained', 'suppressed')
         OR (customer.status = 'sent'
           AND customer.provider_status LIKE '%_callback_unavailable'
           AND datetime(customer.sent_at) <= datetime(?, '-7 days')))
-      AND relay.status = 'sent'
+      AND (relay.status = 'sent' OR (relay.id IS NULL AND intake.payload_object_key LIKE 'quick-upgrade/receipt/%'))
       AND (intake.next_attempt_at = '' OR intake.next_attempt_at <= ?)
     ORDER BY intake.created_at LIMIT 20`).bind(selectedAt, selectedAt).all();
   let payloadsDeleted = 0;

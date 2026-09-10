@@ -247,6 +247,7 @@ function quickHandler({
   }),
   recordLeadIncident = async () => {},
   recordQuickUpgradeNoMatch = async () => {},
+  enqueueQuickUpgradeReceiptDelivery = async () => ({ id: "receipt-intake-1", status: "pending" }),
   operationRecords = [],
 } = {}) {
   return createLeadPostHandler({
@@ -259,12 +260,14 @@ function quickHandler({
     leadRateLimiter: { async check() { return { allowed: true }; } },
     recordLeadIncident,
     recordQuickUpgradeNoMatch,
+    enqueueQuickUpgradeReceiptDelivery,
     async resolveSystemAdminNotifications() {},
     isPublicPlanEnquiry: () => false,
     isQuickUpgradeEnquiry,
     createOpportunityFromLead,
     opportunityNotificationDispatchHeader:
       "X-AEA-Opportunity-Notification-Dispatch",
+    publicPlanDeliveryDispatchHeader: "X-AEA-Public-Plan-Delivery-Dispatch",
     env: {},
     fetchImpl: async () => {
       throw new Error("The private webhook must not receive a quick upgrade lead.");
@@ -283,7 +286,7 @@ async function submitQuick(handler, payload = validQuickUpgrade()) {
   }));
 }
 
-test("the quick route persists, allocates and queues background trade notifications without webhook or plan delivery", async () => {
+test("the quick route persists, allocates and queues its customer receipt without a webhook or plan PDF", async () => {
   let createdPayload;
   const operationRecords = [];
   const response = await submitQuick(quickHandler({
@@ -298,6 +301,7 @@ test("the quick route persists, allocates and queues background trade notificati
   assert.deepEqual(body, {
     ok: true,
     reference: "AEA-20260903-12345678ABCD4ABC",
+    receiptEmailStatus: "queued",
   });
   assert.equal(operationRecords.at(-1).metrics.matchedBusinessCount, 2);
   assert.equal(createdPayload.sourceJourney, QUICK_UPGRADE_SOURCE_JOURNEY);
@@ -305,6 +309,66 @@ test("the quick route persists, allocates and queues background trade notificati
     response.headers.get("X-AEA-Opportunity-Notification-Dispatch"),
     "opportunity-quick-1",
   );
+  assert.equal(response.headers.get("X-AEA-Public-Plan-Delivery-Dispatch"), "receipt-intake-1");
+});
+
+test("receipt queue failure truthfully retains the saved request and an identical retry queues one acknowledgement", async () => {
+  const payload = validQuickUpgrade();
+  let enqueueCalls = 0;
+  const receivedReferences = new Set();
+  const handler = quickHandler({
+    createOpportunityFromLead: async (input) => {
+      receivedReferences.add(input.reference);
+      return { id: "opportunity-stable", allocation: { activeCount: 1 } };
+    },
+    enqueueQuickUpgradeReceiptDelivery: async (input) => {
+      assert.equal(input.opportunityId, "opportunity-stable");
+      assert.deepEqual(Object.keys(input).sort(), ["fingerprint", "opportunityId", "reference"]);
+      if (++enqueueCalls === 1) throw new Error("queue unavailable");
+      return { id: "receipt-stable", status: "pending" };
+    },
+  });
+  const failed = await submitQuick(handler, payload);
+  const failure = await failed.json();
+  assert.equal(failed.status, 502);
+  assert.equal(failure.ok, false);
+  assert.equal(failure.received, true);
+  assert.equal(failure.receiptEmailStatus, "not_queued");
+  assert.match(failure.error, /saved.*retry with the same details/i);
+  assert.ok(failure.error.includes(failure.reference));
+  assert.equal(failed.headers.has("X-AEA-Public-Plan-Delivery-Dispatch"), false);
+  const retry = await submitQuick(handler, payload);
+  assert.equal(retry.status, 200);
+  assert.equal((await retry.json()).receiptEmailStatus, "queued");
+  assert.equal(receivedReferences.size, 1);
+});
+
+test("receipt replay reports provider acceptance, delivery and terminal failures truthfully", async () => {
+  for (const [status, expected] of [["sent", "provider_accepted"], ["delivered", "delivered"],
+    ["bounced", "not_sent"], ["complained", "not_sent"], ["suppressed", "not_sent"]]) {
+    const response = await submitQuick(quickHandler({
+      enqueueQuickUpgradeReceiptDelivery: async () => ({ id: "existing-receipt", status }),
+    }));
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).receiptEmailStatus, expected);
+  }
+});
+
+test("failed intake, failed no-match review and honeypots never queue a customer receipt", async () => {
+  let receipts = 0;
+  const enqueueQuickUpgradeReceiptDelivery = async () => { receipts++; return { id: "forbidden", status: "pending" }; };
+  const failed = await submitQuick(quickHandler({ enqueueQuickUpgradeReceiptDelivery,
+    createOpportunityFromLead: async () => { throw new Error("intake failed"); },
+  }));
+  assert.equal(failed.status, 502);
+  const noReview = await submitQuick(quickHandler({ enqueueQuickUpgradeReceiptDelivery,
+    createOpportunityFromLead: async () => ({ id: "saved", allocation: { activeCount: 0 } }),
+    recordQuickUpgradeNoMatch: async () => { throw new Error("review failed"); },
+  }));
+  assert.equal(noReview.status, 502);
+  const bot = await submitQuick(quickHandler({ enqueueQuickUpgradeReceiptDelivery }), validQuickUpgrade({ website: "bot.example" }));
+  assert.equal((await bot.json()).filtered, true);
+  assert.equal(receipts, 0);
 });
 
 test("a quick request with no current match queues Australian Energy Assessments follow-up without scheduling an empty trade drain", async () => {

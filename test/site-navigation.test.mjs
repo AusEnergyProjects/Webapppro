@@ -459,7 +459,7 @@ test("homepage makes the quick upgrade request dominant and keeps guided help se
 });
 
 test("homepage keeps the five-minute call available through the dedicated booking page", () => {
-  assert.match(guide, /href="\/book-an-assessment">Book a five-minute call/);
+  assert.match(guide, /href="\/book-an-assessment">Prefer a person\? Book a five-minute call/);
   assert.doesNotMatch(guide, /<iframe|HomepageCalendlyEmbed/);
   assert.match(bookingPage, /CALENDLY_EMBED_URL/);
   assert.match(bookingPage, /It is not the assessment itself/);
