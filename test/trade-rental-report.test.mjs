@@ -177,6 +177,54 @@ test("rental assessment PDF rejects an incomplete report snapshot", async () => 
   await assert.rejects(() => createRentalAssessmentPdfBytes({ schemaVersion: "tlink-rental-report-v1" }), /valid rental assessment report snapshot/);
 });
 
+test("customer report uses occupancy option labels and hides the shower implementation version without changing answers", async () => {
+  const snapshot = reportSnapshot();
+  snapshot.modules[0].answers.occupancyAtAssessment = "occupied_renter_present";
+  snapshot.modules[0].answers.dwellingClass = "townhouse";
+  snapshot.modules[0].sections[0].items[0].response = { showerCaptureVersion: 1, welsRating: "4 stars or above", flowLitresPerMinute: "4" };
+  const original = structuredClone(snapshot);
+  const content = decodedPageContent(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
+  assert.match(content, /Occupied, renter present/);
+  assert.match(content, /Townhouse/);
+  assert.match(content, /4 stars or above/);
+  assert.match(content, /Water flow \(L\/min\)/);
+  assert.doesNotMatch(content, /occupied_renter_present|Shower Capture Version|showerCaptureVersion/);
+  assert.deepEqual(snapshot, original, "Formatting must not change the immutable input snapshot");
+});
+
+test("earlier faults retain their status and evidence in history without entering the current cover counts or work list", async () => {
+  const snapshot = reportSnapshot();
+  const item = snapshot.modules[0].sections[0].items[0];
+  item.historicalObservation = true;
+  item.prompt = "Earlier observation: historical fixture fault";
+  snapshot.findings[0].title = "Earlier observation: historical fixture fault";
+  snapshot.findings[0].status = "non_compliant";
+  snapshot.findings[0].historicalObservation = true;
+  snapshot.findings[0].severity = "urgent";
+  snapshot.evidence = [{ id: "old-photo", itemId: item.id, findingId: "finding-1", caption: "HISTORICAL EVIDENCE RETAINED", contentType: "image/jpeg" }];
+  snapshot.modules[0].sections[0].items.push({ id: "current-item", outcome: "meets", prompt: "Current dwelling condition", response: {} });
+  const original = structuredClone(snapshot);
+  const pdf = await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot));
+  const cover = decodedPageContent({ getPages: () => [pdf.getPage(0)], context: pdf.context });
+  const coverText = [...cover.matchAll(/^(.+) Tj$/gm)].map((match) => match[1]);
+  const workCountLabel = coverText.indexOf("Work items");
+  const issueCountLabel = coverText.indexOf("Current issues");
+  assert.ok(workCountLabel > 0 && issueCountLabel > 0);
+  assert.equal(coverText[workCountLabel - 1], "0");
+  assert.equal(coverText[issueCountLabel - 1], "0");
+  assert.doesNotMatch(cover, /historical fixture fault/);
+  assert.match(cover, /1 earlier finding is/);
+  assert.match(cover, /An earlier urgent finding remains/);
+  assert.doesNotMatch(cover, /No immediate or urgent safety finding/);
+  const content = decodedPageContent(pdf);
+  assert.match(content, /Earlier observations/);
+  assert.match(content, /Recorded status/);
+  assert.match(content, /Non Compliant/);
+  assert.match(content, /Earlier result: Does not meet/);
+  assert.match(content, /HISTORICAL EVIDENCE RETAINED/);
+  assert.deepEqual(snapshot, original);
+});
+
 test("rental assessment PDF embeds Unicode fonts, paginates long scopes and attaches non-image evidence", async () => {
   const snapshot = reportSnapshot();
   snapshot.property.address = "10 Éxample Street, Montréal VIC 3000";
@@ -254,4 +302,55 @@ test("report issue records cleanup manifests before R2 writes and stale recovery
   assert.match(source, /function failedReportEvidenceKeys[\s\S]*parsedObject\(row\.report_snapshot\)\.evidence/);
   assert.match(source, /async function cleanupFailedRentalReportObjects[\s\S]*deleteImmutableIssuedPdf[\s\S]*cleanupCompletedAt/);
   assert.match(source, /async function retryFailedRentalReportCleanup[\s\S]*status = 'failed'[\s\S]*cleanupFailedRentalReportObjects/);
+});
+
+test("online report uses option labels and keeps earlier findings out of current work without losing history", async () => {
+  const [ts, React, jsxRuntime, { renderToStaticMarkup }, quotation, assessment] = await Promise.all([
+    import("typescript").then((value) => value.default), import("react"), import("react/jsx-runtime"), import("react-dom/server"),
+    import("../src/lib/rental-quotation.mjs"), import("../src/lib/trade-rental-assessment.mjs"),
+  ]);
+  const source = await readFile(new URL("../src/components/RentalReportViewer.tsx", import.meta.url), "utf8");
+  const compiled = ts.transpileModule(source, { compilerOptions: {
+    module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
+  } }).outputText;
+  const snapshot = reportSnapshot();
+  snapshot.access = { pdfUrl: "/test.pdf", expiresAt: "2026-11-10" };
+  const reportModule = snapshot.modules[0];
+  reportModule.credential = {};
+  reportModule.answers = { occupancyAtAssessment: "occupied_renter_present" };
+  const item = reportModule.sections[0].items[0];
+  item.historicalObservation = true;
+  item.response = { showerCaptureVersion: 1, measuredFlowLpm: 7.5 };
+  const finding = snapshot.findings[0];
+  finding.itemId = item.id;
+  finding.category = "bathroom";
+  finding.status = "non_compliant";
+  finding.severity = "urgent";
+  const before = structuredClone(snapshot);
+  let stateIndex = 0;
+  const dependencies = {
+    react: { ...React, useState: () => [[{ ok: true, report: snapshot }, false, ""][stateIndex++], () => {}], useEffect: () => {}, useMemo: (callback) => callback() },
+    "react/jsx-runtime": jsxRuntime,
+    "next/link": { __esModule: true, default: ({ children, ...props }) => React.createElement("a", props, children) },
+    "@/lib/rental-quotation.mjs": quotation,
+    "@/lib/trade-rental-assessment.mjs": assessment,
+    "./RentalReportViewer.module.css": { __esModule: true, default: new Proxy({}, { get: (_target, key) => String(key) }) },
+  };
+  const output = { exports: {} };
+  new Function("require", "module", "exports", compiled)((id) => {
+    assert.ok(id in dependencies, `Unexpected dependency ${id}`);
+    return dependencies[id];
+  }, output, output.exports);
+  const html = renderToStaticMarkup(React.createElement(output.exports.RentalReportViewer, { token: "test-token" }));
+  assert.match(html, /Current findings<\/span><strong>0<\/strong>/);
+  assert.match(html, /No current work scopes recorded/);
+  assert.match(html, /Earlier observations are not counted as current or marked resolved/);
+  assert.match(html, /Its resolution is not confirmed in this report/);
+  assert.match(html, /Recorded status<\/dt><dd>Non Compliant/);
+  assert.ok(html.includes(finding.scopeSummary));
+  assert.match(html, /Earlier result:/);
+  assert.match(html, /Occupied, renter present/);
+  assert.doesNotMatch(html, /occupied_renter_present|[Ss]hower ?[Cc]apture ?[Vv]ersion/);
+  assert.match(html, /7\.5/);
+  assert.deepEqual(snapshot, before, "presentation must preserve the issued snapshot");
 });

@@ -1,6 +1,6 @@
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { publicRentalReportValue, rentalCheckIsReadiness } from "./trade-rental-assessment.mjs";
+import { publicRentalReportValue, rentalCheckIsReadiness, VIC_RENTAL_ASSESSMENT_TEMPLATE } from "./trade-rental-assessment.mjs";
 import { RENTAL_QUOTATION_FIELDS, RENTAL_OBSERVATION_NUMBER_FIELDS, rentalQuotation, rentalObservationResponseLabel } from "./rental-quotation.mjs";
 import { rentalImageWithinReportLimit } from "./trade-rental-image-dimensions.mjs";
 
@@ -86,6 +86,16 @@ function objectEntries(value) {
   return Object.entries(value).filter(([, entry]) => entry !== "" && entry !== null && entry !== undefined);
 }
 
+function observationEntries(value) {
+  return objectEntries(value).filter(([key]) => key !== "showerCaptureVersion");
+}
+
+function metadataValue(moduleKey, key, value) {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  const field = VIC_RENTAL_ASSESSMENT_TEMPLATE.modules[moduleKey]?.metadataFields.find((entry) => entry.key === key);
+  return field?.options?.find((option) => option.value === value)?.label || (key === "rentalRegime" ? label(value) : value);
+}
+
 function outcomeLabel(outcome) {
   return ({
     meets: "Meets",
@@ -123,7 +133,9 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   const renderedEvidence = new Map();
   const allItems = (snapshot.modules || []).flatMap((module) => (module.sections || []).flatMap((section) => (section.items || []).map((item) => ({ ...item, sectionTitle: section.title, readiness: rentalCheckIsReadiness(item, module.assessmentScope) }))));
   const workArea = (finding) => allItems.find((item) => item.id === finding.itemId)?.sectionTitle || label(finding.category || "Required work");
-  const reportFindings = (snapshot.findings || []).filter((finding) => finding.status !== "compliant");
+  const isHistoricalFinding = (finding) => finding.historicalObservation === true || allItems.find((item) => item.id === finding.itemId)?.historicalObservation === true;
+  const reportFindings = (snapshot.findings || []).filter((finding) => finding.status !== "compliant" && !isHistoricalFinding(finding));
+  const historicalFindings = (snapshot.findings || []).filter((finding) => finding.status !== "compliant" && isHistoricalFinding(finding));
   const resolvedFindings = (snapshot.findings || []).filter((finding) => finding.status === "compliant");
   const findingEvidence = (finding) => (snapshot.evidence || []).filter((entry) => entry.findingId === finding.id || entry.itemId === finding.itemId
     || (finding.details?.evidenceSourceItemId && entry.itemId === finding.details.evidenceSourceItemId));
@@ -316,11 +328,13 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   heading("At a glance", "Work to arrange");
   for (const finding of reportFindings.slice(0, 3)) keyValue(brief(workArea(finding), 35), brief(finding.title));
   if (reportFindings.length > 3) text(`Plus ${reportFindings.length - 3} further scopes in the work details.`, { size: 8.5, color: palette.muted, after: 6 });
-  if (!reportFindings.length) text("No outstanding work scopes recorded.", { size: 9, after: 6 });
+  if (!reportFindings.length) text("No current work scopes recorded.", { size: 9, after: 6 });
+  if (historicalFindings.length) text(`${historicalFindings.length} earlier ${historicalFindings.length === 1 ? "finding is" : "findings are"} retained in the history. They are not counted as current or marked resolved.`, { size: 8.5, lineHeight: 12, color: palette.muted, after: 6 });
   heading("For owners and agents", "Next steps");
   const urgent = reportFindings.filter((finding) => ["immediate_safety_risk", "urgent"].includes(finding.severity));
-  text(urgent.length ? "Urgent attention: " + urgent.slice(0, 2).map((finding) => brief(finding.title, 90)).join("; ") + ". See the work details for immediate actions." : "No immediate or urgent safety finding was recorded. Review the work details and limitations.", { size: 9.2, lineHeight: 14, after: 9 });
-  text(reportFindings.length ? "Share the observations, measurements and photos with the relevant trades. They use this evidence to define the work and prepare quotes. Future upgrades show their own start date and trigger." : "No outstanding work scopes were recorded. Read the assessment and access limitations before relying on any individual result.", { size: 9.2, lineHeight: 14, after: 10 });
+  const earlierUrgent = historicalFindings.some((finding) => ["immediate_safety_risk", "urgent"].includes(finding.severity));
+  text(urgent.length ? "Urgent attention: " + urgent.slice(0, 2).map((finding) => brief(finding.title, 90)).join("; ") + ". See the work details for immediate actions." : earlierUrgent ? "An earlier urgent finding remains in the history. Its resolution is not confirmed in this report." : "No immediate or urgent safety finding is recorded in the current assessment. Review the work details and limitations.", { size: 9.2, lineHeight: 14, after: 9 });
+  text(reportFindings.length ? "Share the observations, measurements and photos with the relevant trades. They use this evidence to define the work and prepare quotes. Future upgrades show their own start date and trigger." : "No current work scopes were recorded. Read the assessment, history and access limitations before relying on any individual result.", { size: 9.2, lineHeight: 14, after: 10 });
   if (allItems.some((item) => item.readiness)) text("Planning findings do not establish non-compliance today.", { size: 8.5, color: palette.muted, after: 8 });
   const limitation = snapshot.inspection?.applicabilityLimitation;
   if (limitation) { badge("Applicable minimum standards not assessed", "warning"); text(limitation, { size: 8.5, lineHeight: 12, after: 5 }); }
@@ -329,12 +343,19 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   addPage();
   heading("02 / Work details", "Observations for quoting", "Observed conditions, recorded measurements and photos for trades to assess the work and prepare quotes.");
   if (!reportFindings.length) {
-    badge("No outstanding findings recorded");
+    badge("No current work scopes recorded");
   }
-  const orderedFindings = [...reportFindings].sort((a, b) => workArea(a).localeCompare(workArea(b)));
+  const byWorkArea = (a, b) => workArea(a).localeCompare(workArea(b));
+  const orderedFindings = [...reportFindings].sort(byWorkArea).concat([...historicalFindings].sort(byWorkArea));
   let previousArea = "";
   for (let index = 0; index < orderedFindings.length; index += 1) {
     const finding = orderedFindings[index];
+    const historical = isHistoricalFinding(finding);
+    if (historical && index === reportFindings.length) {
+      ensure(150);
+      heading("Assessment history", "Earlier observations", "Retained from earlier item or room checks. These findings are excluded from the current dwelling counts and work list. Their recorded status is preserved; no resolution is implied.");
+      previousArea = "";
+    }
     const area = workArea(finding);
     if (area !== previousArea) {
       ensure(260);
@@ -343,9 +364,9 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     }
     ensure(95);
     const tone = finding.severity === "immediate_safety_risk" ? "danger" : ["urgent", "required"].includes(finding.severity) ? "warning" : "primary";
-    badge(`ITEM ${String(index + 1).padStart(2, "0")} | ${label(finding.severity)}`, tone);
+    badge(historical ? `Earlier observation | Recorded ${label(finding.severity).toLowerCase()}` : `ITEM ${String(index + 1).padStart(2, "0")} | ${label(finding.severity)}`, tone);
     text(finding.title, { bold: true, size: 11, lineHeight: 15, after: 3 });
-    keyValue("Status", label(finding.status));
+    keyValue(historical ? "Recorded status" : "Status", label(finding.status));
     keyValue("Location", finding.locationLabel);
     keyValue("Finding", finding.description);
     if (finding.recommendedAction && finding.recommendedAction !== finding.scopeSummary) keyValue("Recommended action", finding.recommendedAction);
@@ -354,7 +375,7 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     for (const field of RENTAL_QUOTATION_FIELDS) keyValue(field.label, quotation[field.key]);
     const assessedItem = allItems.find((item) => item.id === finding.itemId);
     const legacyValues = new Set(Object.values(quotation).map((value) => safe(value).trim()).filter(Boolean));
-    for (const [key, value] of objectEntries(assessedItem?.response)) {
+    for (const [key, value] of observationEntries(assessedItem?.response)) {
       const printable = typeof value === "boolean" ? (value ? "Yes" : "No") : safe(value);
       if (Object.hasOwn(RENTAL_OBSERVATION_NUMBER_FIELDS, key) || !legacyValues.has(printable.trim())) keyValue(rentalObservationResponseLabel(key), printable);
     }
@@ -397,7 +418,7 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
       keyValue("Supporting record", assessmentModule.credential.supportingFileTitle);
     }
     for (const [key, value] of objectEntries(assessmentModule.answers)) {
-      keyValue(label(key), typeof value === "boolean" ? (value ? "Yes" : "No") : key === "rentalRegime" ? label(value) : value);
+      keyValue(label(key), metadataValue(assessmentModule.key, key, value));
     }
     for (const section of assessmentModule.sections || []) {
       ensure(160);
@@ -413,12 +434,12 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
           : rentalCheckIsReadiness(item, assessmentModule.assessmentScope)
           ? (item.outcome === "meets" ? "Ready for the recorded requirement" : item.outcome === "does_not_meet" ? "Upgrade planning required" : outcomeLabel(item.outcome))
           : outcomeLabel(item.outcome);
-        badge(`${resultLabel}${item.locationLabel ? ` | ${item.locationLabel}` : ""}`, tone);
+        badge(`${item.historicalObservation ? "Earlier result: " : ""}${resultLabel}${item.locationLabel ? ` | ${item.locationLabel}` : ""}`, tone);
         text(item.prompt, { bold: true, size: 9.7, lineHeight: 13, after: 3 });
         if (item.trigger) keyValue("Applies when", item.trigger);
         if (item.locationLabel) keyValue("Location", item.locationLabel);
         if (item.publicNotes) keyValue("Report detail", item.publicNotes);
-        for (const [key, value] of objectEntries(item.response)) {
+        for (const [key, value] of observationEntries(item.response)) {
           keyValue(rentalObservationResponseLabel(key), typeof value === "boolean" ? (value ? "Yes" : "No") : value);
         }
         await evidenceBlock((snapshot.evidence || []).filter((entry) => entry.itemId === item.id));

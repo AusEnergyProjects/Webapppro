@@ -356,14 +356,22 @@ async function processFinish(owner: LocalDataOwner, record: RentalSaveRecord, in
       if (!completion?.complete) throw conflict(completion?.blockers[0]?.label || 'Review the outstanding property checks.');
       result = await request(owner, record.workOrderId, { action: 'complete_module', moduleId: assessmentModule.id, expectedRevision: assessmentModule.revision });
     }
-    if (result.permissions?.canIssue && result.modules?.every((entry) => entry.status === 'complete')) {
-      if (!result.reports?.some((entry) => entry.status === 'issued')) result = await request(owner, record.workOrderId, { action: 'issue_report' });
-      if (finish.email) {
-        const reportId = result.issuedReport?.reportId || result.reports?.find((entry) => entry.status === 'issued')?.id;
-        if (!reportId) throw new Error('The report is still being prepared. Delivery will retry.');
-        result = await request(owner, record.workOrderId, { action: 'email_report', reportId, expectedRecipientEmail: finish.recipientEmail });
-      }
-    } else if (finish.email) throw conflict('The other required assessment modules must be completed before the report can be emailed.');
+    let reportId = result.reports?.find((entry) => entry.status === 'issued')?.id;
+    if (!reportId && result.inspection?.status === 'issuing') {
+      throw new ApiError('Your report is still being prepared. Finishing will retry automatically.', 503, 'RENTAL_REPORT_ISSUING');
+    }
+    if (!reportId && result.permissions?.canIssue && result.modules?.every((entry) => entry.status === 'complete')) {
+      result = await request(owner, record.workOrderId, { action: 'issue_report' });
+      reportId = result.issuedReport?.reportId || result.reports?.find((entry) => entry.status === 'issued')?.id;
+      if (!reportId) throw new Error('The report is still being prepared. Delivery will retry.');
+    }
+    if (finish.email) {
+      if (!reportId) throw conflict('The other required assessment modules must be completed before the report can be emailed.');
+      // Issuance closes canIssue. Existing report-sharing access remains current;
+      // the email endpoint independently checks the report, assessor and recipient.
+      if (!result.permissions?.canRevokeLink) throw new ApiError('Your current Team access does not allow report delivery.', 403, 'REPORT_PERMISSION_REQUIRED');
+      result = await request(owner, record.workOrderId, { action: 'email_report', reportId, expectedRecipientEmail: finish.recipientEmail });
+    }
     await cacheResult(owner, record.workOrderId, result);
   } finally { finalizing.delete(gate); }
 }
@@ -400,7 +408,8 @@ async function request(owner: LocalDataOwner, workOrderId: string, body?: Record
   try {
     const result = await apiRequest<RentalAssessmentResult>(body ? ENDPOINT : `${ENDPOINT}?workOrderId=${encodeURIComponent(workOrderId)}`,
       body ? { method: 'POST', body: JSON.stringify({ ...body, workOrderId }), signal: controller.signal }
-        : { signal: controller.signal });
+        : { signal: controller.signal }, undefined,
+      body && ['issue_report', 'email_report'].includes(String(body.action)) ? { operation: 'report' } : {});
     await checkOwner(owner);
     assertJobAvailable(owner, workOrderId);
     await cacheResult(owner, workOrderId, result);
@@ -638,6 +647,7 @@ async function processJob(owner: LocalDataOwner, workOrderId: string) {
     const record = (await recordsFor(owner, workOrderId)).find((entry) => !attempted.has(entry.id)
       && (['queued', 'syncing', 'retry'].includes(entry.status)
         || (entry.status === 'conflict' && canRetryCredentialSave(entry))
+        || (entry.status === 'conflict' && entry.finish && entry.error === 'The other required assessment modules must be completed before the report can be emailed.')
         || (entry.status === 'conflict' && entry.body.action === 'save_module_answers' && entry.error === 'An assessment detail changed elsewhere. Review it before saving.')
         || (entry.status === 'conflict' && entry.body.action === 'save_module_answers' && !entry.photos.length
           && Object.keys(object(entry.body.answers)).length > 0

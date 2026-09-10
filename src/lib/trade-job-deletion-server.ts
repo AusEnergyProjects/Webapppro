@@ -44,9 +44,12 @@ const additionalProtectedRecords = [
   ["SELECT 1 FROM compliance_parallel_reference_bindings p, target WHERE p.tlink_work_order_id = target.job_id", "This job is linked to a retained compliance reconciliation record."],
   ["SELECT 1 FROM customer_project_arrival_proposals p, target WHERE p.crm_work_order_id = target.job_id AND p.installer_uid = target.owner_uid", "This job is linked to a customer project appointment that must be retained."],
 ] as const;
-const blockersSql = [...protectedRecords.map(([table, ownerColumn, extra], index) =>
-  `SELECT ${index} reason FROM ${table} protected_record, target WHERE protected_record.work_order_id = target.job_id AND protected_record.${ownerColumn} = target.owner_uid ${extra}`,
-), ...additionalProtectedRecords.map(([query], index) => `SELECT ${protectedRecords.length + index} reason WHERE EXISTS (${query})`)].join(" UNION ALL ");
+// Keep the preflight and the atomic deletion guard on the same predicates.
+// D1 allows fewer compound SELECT terms than desktop SQLite, so use scalar
+// EXISTS checks instead of combining every protected table with UNION ALL.
+const blockerReasonSql = `CASE ${[...protectedRecords.map(([table, ownerColumn, extra], index) =>
+  `WHEN EXISTS (SELECT 1 FROM ${table} protected_record, target WHERE protected_record.work_order_id = target.job_id AND protected_record.${ownerColumn} = target.owner_uid ${extra}) THEN ${index}`,
+), ...additionalProtectedRecords.map(([query], index) => `WHEN EXISTS (${query}) THEN ${protectedRecords.length + index}`)].join(" ")} ELSE NULL END`;
 
 function deletionGuard(db: D1Database, access: TeamAccess, job: Job, now: string) {
   return db.prepare(`${target} UPDATE trade_work_orders SET revision = revision + 1, updated_at = ?
@@ -55,7 +58,7 @@ function deletionGuard(db: D1Database, access: TeamAccess, job: Job, now: string
       AND source_type <> 'opportunity' AND stage = ? AND assignee_member_id = ?
       AND EXISTS (SELECT 1 FROM trade_crm_job_details d WHERE d.work_order_id = trade_work_orders.id
         AND d.firebase_uid = trade_work_orders.firebase_uid AND d.customer_source = 'trade_owned')
-      AND NOT EXISTS (${blockersSql})`)
+      AND (${blockerReasonSql}) IS NULL`)
     .bind(job.id, access.ownerUid, now, job.revision, job.stage, job.assignee_member_id);
 }
 
@@ -63,9 +66,9 @@ export async function deleteTradeJob(db: D1Database, access: TeamAccess, job: Jo
   if ((!access.isOwner && !access.canManageJobs) || job.source_type === 'opportunity' || job.customer_source !== 'trade_owned') {
     throw new JobDeletionError('JOB_DELETE_NOT_ALLOWED', 'Only authorised Team members can delete your business-owned jobs.');
   }
-  const blocked = await db.prepare(`${target} SELECT reason FROM (${blockersSql}) LIMIT 1`)
-    .bind(job.id, access.ownerUid).first<{ reason: number }>();
-  if (blocked) throw new JobDeletionError('JOB_DELETE_PROTECTED', blocked.reason < protectedRecords.length
+  const blocked = await db.prepare(`${target} SELECT ${blockerReasonSql} AS reason`)
+    .bind(job.id, access.ownerUid).first<{ reason: number | null }>();
+  if (blocked?.reason != null) throw new JobDeletionError('JOB_DELETE_PROTECTED', blocked.reason < protectedRecords.length
     ? protectedRecords[blocked.reason][3] : additionalProtectedRecords[blocked.reason - protectedRecords.length][1]);
 
   const appointments = await db.prepare(`SELECT id, status FROM trade_crm_appointments

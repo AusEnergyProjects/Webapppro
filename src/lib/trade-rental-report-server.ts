@@ -286,13 +286,28 @@ async function reportSource(access: TeamAccess, workOrderId: string) {
   };
 }
 
+// Bound storage requests and preserve source order. All writes in a batch must
+// settle before an error reaches cleanup, so a late PUT cannot recreate a file.
+async function rentalEvidenceBatches<T, R>(entries: T[], task: (entry: T) => Promise<R>): Promise<R[]> {
+  const output: R[] = [];
+  for (let offset = 0; offset < entries.length; offset += 4) {
+    const settled = await Promise.allSettled(entries.slice(offset, offset + 4).map(task));
+    for (const result of settled) {
+      if (result.status === 'rejected') throw result.reason;
+      output.push(result.value);
+    }
+  }
+  return output;
+}
+
 async function evidenceForSnapshot(rows: Row[], input: { reportId: string; revision: number }) {
   const store = bucket();
   const assets: Record<string, { bytes: Uint8Array; contentType: string }> = {};
-  const evidence = [];
-  const preparedObjects: PreparedRentalEvidenceObject[] = [];
+  if (rows.reduce((total, row) => total + number(row.size_bytes), 0) > MAX_RENTAL_REPORT_EVIDENCE_BYTES) {
+    throw new Error("RENTAL_REPORT_EVIDENCE_TOO_LARGE");
+  }
   let totalEvidenceBytes = 0;
-  for (const row of rows) {
+  const loaded = await rentalEvidenceBatches(rows, async (row) => {
     const objectKey = String(row.object_key || "");
     const object = objectKey ? await store.get(objectKey) : null;
     if (!object) throw new Error("RENTAL_REPORT_EVIDENCE_UNAVAILABLE");
@@ -314,13 +329,13 @@ async function evidenceForSnapshot(rows: Row[], input: { reportId: string; revis
       sha256: actualSha256,
       fileName: cleanFileName(row.file_name),
     });
-    preparedObjects.push({
+    const prepared: PreparedRentalEvidenceObject = {
       objectKey: immutableObjectKey,
       bytes,
       contentType,
       evidenceId: publicEvidenceId,
       sha256: actualSha256,
-    });
+    };
     const entry = {
       id: publicEvidenceId,
       sourceItemId: String(row.item_id || ""),
@@ -337,10 +352,13 @@ async function evidenceForSnapshot(rows: Row[], input: { reportId: string; revis
       objectKey: immutableObjectKey,
       embeddedInPdf: true,
     };
-    assets[entry.id] = { bytes, contentType };
-    evidence.push(entry);
+    return { entry, prepared };
+  });
+  for (const { entry, prepared } of loaded) {
+    assets[entry.id] = { bytes: prepared.bytes, contentType: prepared.contentType };
   }
-  return { evidence, assets, preparedObjects };
+  return { evidence: loaded.map(({ entry }) => entry), assets,
+    preparedObjects: loaded.map(({ prepared }) => prepared) };
 }
 
 async function storePreparedRentalEvidence(
@@ -348,7 +366,7 @@ async function storePreparedRentalEvidence(
   input: { reportId: string; revision: number },
 ) {
   const store = bucket();
-  for (const prepared of preparedObjects) {
+  await rentalEvidenceBatches(preparedObjects, async (prepared) => {
     await store.put(prepared.objectKey, exactArrayBuffer(prepared.bytes), {
       httpMetadata: { contentType: prepared.contentType },
       customMetadata: {
@@ -360,7 +378,7 @@ async function storePreparedRentalEvidence(
         retention: "immutable-issued-document",
       },
     });
-  }
+  });
 }
 
 function propertyProjection(snapshot: Row) {

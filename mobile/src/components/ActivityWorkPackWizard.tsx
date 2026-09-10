@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import {
   Pressable,
   StyleSheet,
@@ -199,11 +200,12 @@ export function ActivityWorkPackWizard({
   ) => Promise<void>;
   onSelectScenario: (dependencyKey: string, scenarioCode: string) => Promise<void>;
   onRunCalculator: (dependencyKey: string) => Promise<void>;
-  onReturnToJob?: () => void;
+  onReturnToJob: () => void;
 }) {
   // Keep the finished record visible on first open. The completed PDF is the
   // technician's useful hand-off, not an implementation detail to hide.
   const [open, setOpen] = useState(true);
+  const [overview, setOverview] = useState(false);
   const [pageIndex, setPageIndex] = useState(() => initialFieldWorkPackPage(pack));
   const [response, setResponse] = useState(pack.response);
   const [repeatSelection, setRepeatSelection] = useState<Record<string, string>>({});
@@ -215,6 +217,22 @@ export function ActivityWorkPackWizard({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mounted = useRef(true);
   const responseSha256 = useRef(pack.instance.responseSha256);
+  const leaving = useRef(false);
+
+  function backToSectionsOrJob() {
+    if (!overview) { setOverview(true); setOpen(true); return; }
+    void run(leave);
+  }
+
+  async function leave() {
+    if (busy || leaving.current) return;
+    leaving.current = true;
+    try {
+      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+      await flushDirty();
+      onReturnToJob();
+    } finally { leaving.current = false; }
+  }
 
   useEffect(() => () => {
     mounted.current = false;
@@ -443,7 +461,9 @@ export function ActivityWorkPackWizard({
                   ? 'Review the details, then prepare the exact version for signatures.'
                   : 'Continue through the guided questions below.');
 
+  usePreventRemove(true, () => backToSectionsOrJob());
   return <View style={styles.shell}>
+    <FieldButton variant="secondary" disabled={overview && Boolean(busy)} onPress={backToSectionsOrJob}>{overview ? 'Job' : 'Sections'}</FieldButton>
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ expanded: open }}
@@ -480,6 +500,11 @@ export function ActivityWorkPackWizard({
         </View>
       </View> : null}
 
+      {overview ? <View style={styles.body}>
+        <Text style={styles.pageTitle}>Sections</Text>
+        {sections.map((item, index) => <FieldButton key={item.sectionKey} variant="secondary" onPress={() => { setPageIndex(index); setOverview(false); }}>{item.title}</FieldButton>)}
+        <FieldButton variant="secondary" onPress={() => { setPageIndex(sections.length); setOverview(false); }}>Review and finish</FieldButton>
+      </View> : <>
       <View style={styles.schemaNotice}>
         <View style={styles.statusRow}>
           <Text style={styles.schemaNoticeTitle}>TLINK FIELD WORK</Text>
@@ -633,11 +658,7 @@ export function ActivityWorkPackWizard({
       />}
 
       <View style={styles.navigation}>
-        {onReturnToJob ? <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => void run(async () => {
-          if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
-          await flushDirty();
-          onReturnToJob();
-        })}>Job</FieldButton> : null}
+        <FieldButton variant="secondary" onPress={backToSectionsOrJob}>Sections</FieldButton>
         <FieldButton
           variant="secondary"
           disabled={pageIndex === 0 || Boolean(busy)}
@@ -676,6 +697,7 @@ export function ActivityWorkPackWizard({
       {reviewPage && pack.instance.status === 'ready_to_sign' && !canFinalize
         ? <Text style={styles.warning}>Capture every required signature against this prepared version before finishing.</Text>
         : null}
+      </>}
     </View> : null}
   </View>;
 }

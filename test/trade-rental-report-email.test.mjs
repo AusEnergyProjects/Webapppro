@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { createHash } from "node:crypto";
 import ts from "typescript";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -14,6 +15,10 @@ class TestD1Statement {
   }
 
   bind(...values) {
+    for (const match of this.sql.matchAll(/\b(?:LIKE|GLOB)\s+\?/gi)) {
+      const index = (this.sql.slice(0, match.index).match(/\?/g) || []).length;
+      if (Buffer.byteLength(String(values[index]), 'utf8') > 50) throw new Error('D1_ERROR: LIKE or GLOB pattern too complex: SQLITE_ERROR');
+    }
     return new TestD1Statement(this.database, this.sql, values);
   }
 
@@ -84,14 +89,14 @@ function fixture({ failSend=false }={}) {
  CREATE TABLE trade_crm_job_details(work_order_id text,firebase_uid text,crm_customer_id text,customer_source text);
  CREATE TABLE trade_crm_customers(id text,firebase_uid text,email text,first_name text,last_name text,business_name text,record_status text);
  CREATE TABLE trade_rental_reports(id text,firebase_uid text,inspection_id text,status text,report_number text,pdf_sha256 text);
- CREATE TABLE trade_rental_inspections(id text,firebase_uid text,work_order_id text,status text,issued_report_id text,assessor_member_id text);
- CREATE TABLE trade_rental_inspection_events(id text, inspection_id text,report_id text,firebase_uid text,actor_type text,actor_uid text,event_type text,
- request_id text,summary text,metadata text,created_at text,UNIQUE(inspection_id,request_id));
+ CREATE TABLE trade_rental_inspections(id text PRIMARY KEY,firebase_uid text,work_order_id text,status text,issued_report_id text,assessor_member_id text);
  INSERT INTO trade_work_orders VALUES('job','owner','installer','active','internal');
  INSERT INTO trade_crm_job_details VALUES('job','owner','customer','trade_owned');
  INSERT INTO trade_crm_customers VALUES('customer','owner','jane@example.test','Jane','Smith','','active');
  INSERT INTO trade_rental_inspections VALUES('inspection','owner','job','issued','report','worker');
  INSERT INTO trade_rental_reports VALUES('report','owner','inspection','issued','RMS-123','hash');`);
+ const migration = read('../drizzle/0160_trade_rental_inspections.sql');
+ database.exec(migration.slice(migration.indexOf('CREATE TABLE `trade_rental_inspection_events`')).replaceAll('--> statement-breakpoint', ''));
  const db=testD1(database);const sent=[];let shouldFail=failSend;
  const api=loadTypescriptModule('../src/lib/trade-rental-report-email-server.ts',{
  '../../db':{getD1:()=>db},'@/lib/trade-team-server':{assignedJob:async()=>({id:'job'})},
@@ -99,8 +104,36 @@ function fixture({ failSend=false }={}) {
  '@/lib/service-reminder-delivery':{serviceReminderProviderConfiguration:()=>({email:{configured:true}}),sendServiceReminderProviderMessage:async(input)=>{sent.push(input);if(shouldFail)throw new Error('network');return{provider:'resend',providerMessageId:'message'};}},
  });
  const input={access:{ownerUid:'owner',actorUid:'actor',memberId:'worker',canRunReports:true,isOwner:false},workOrderId:'job',inspectionId:'inspection',reportId:'report',expectedRecipientEmail:'JANE@EXAMPLE.TEST',origin:'https://example.test'};
- return{database,sent,input,api,send:()=>api.emailRentalAssessmentReport(input),allowSend:()=>{shouldFail=false;}};
+ return{database,db,sent,input,api,send:()=>api.emailRentalAssessmentReport(input),allowSend:()=>{shouldFail=false;}};
 }
+
+test('report email stays within the production 50-byte LIKE pattern limit', async () => {
+ const f=fixture();
+ assert.throws(()=>f.db.prepare('SELECT 1 WHERE ? LIKE ?').bind('value','x'.repeat(51)), /pattern too complex/);
+ assert.equal((await f.send()).status,'accepted');
+ assert.equal(f.sent.length,1);
+});
+
+test('delivery history ignores adjacent prefixes and different owner, inspection or report identities', async () => {
+ const f=fixture();
+ f.database.exec("INSERT INTO trade_rental_inspections VALUES('other-inspection','owner','other-job','issued','report','worker')");
+ const hash=(value)=>createHash('sha256').update(value).digest('hex');
+ const prefix=`report-email:${hash(`rental-report-email|owner|report|hash|${hash('jane@example.test')}`)}`;
+ const insert=f.database.prepare(`INSERT INTO trade_rental_inspection_events
+  (id,inspection_id,report_id,firebase_uid,event_type,request_id,created_at)
+  VALUES(?,?,?,?,'report_email_accepted',?,'2026-09-10T00:00:00.000Z')`);
+ for(const [index,[inspection,report,owner,request]] of [
+  ['inspection','report','owner',`${prefix}9:accepted`],
+  ['inspection','report','owner',`${prefix};accepted`],
+  ['inspection','report','other-owner',`${prefix}:owner-accepted`],
+  ['other-inspection','report','owner',`${prefix}:inspection-accepted`],
+  ['inspection','other-report','owner',`${prefix}:report-accepted`],
+ ].entries()) insert.run(`unrelated-${index}`,inspection,report,owner,request);
+ assert.equal((await f.send()).status,'accepted');
+ assert.equal(f.sent.length,1,'Unrelated acceptance must not suppress this report email');
+ assert.equal((await f.send()).status,'accepted');
+ assert.equal(f.sent.length,1,'The matching acceptance still prevents duplicate email');
+});
 test('issued report email reads immutable PDF and persists acceptance without sending twice',async()=>{
  const f=fixture();assert.equal((await f.send()).status,'accepted');assert.equal((await f.send()).status,'accepted');
  assert.equal(f.sent.length,1);assert.equal(f.sent[0].recipient,'jane@example.test');assert.equal(f.sent[0].attachments[0].contentType,'application/pdf');

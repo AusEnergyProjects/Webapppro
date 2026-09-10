@@ -44,7 +44,13 @@ function fixture(t) {
     runSync() { const result = sql.prepare(this.query).run(...this.values); return { meta: { changes: Number(result.changes) } }; }
     async run() { return this.runSync(); }
   }
-  const db = { prepare: (query) => new Statement(query), async batch(statements) {
+  const db = { prepare(query) {
+    // Sites D1 limits a compound SELECT to five terms. Desktop SQLite accepts
+    // 500, which previously hid the production failure in deletion preflight.
+    const terms = 1 + (query.match(/\bUNION(?:\s+ALL)?\s+SELECT\b/gi) || []).length;
+    if (terms > 5) throw new Error('D1_ERROR: too many terms in compound SELECT: SQLITE_ERROR');
+    return new Statement(query);
+  }, async batch(statements) {
     if (beforeBatch) { const hook = beforeBatch; beforeBatch = null; hook(); }
     sql.exec('BEGIN');
     try { const results = statements.map((statement) => statement.runSync()); sql.exec('COMMIT'); return results; }
@@ -84,6 +90,16 @@ function fixture(t) {
     delete: (value = job()) => service.deleteTradeJob(db, access, value),
     race: (hook) => { beforeBatch = hook; }, calendarFails: (value) => { calendarFails = value; } };
 }
+
+test('an unscheduled test job deletes within production D1 compound SELECT limits', async (t) => {
+  const f = fixture(t);
+  assert.throws(() => f.db.prepare('SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6'), /too many terms in compound SELECT/);
+  f.sql.prepare("UPDATE trade_work_orders SET stage = 'new', assignee_member_id = '' WHERE id = 'job'").run();
+  const response = await f.request();
+  assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM trade_work_orders WHERE id = 'job'").get().n, 0);
+  assert.equal(f.sql.prepare("SELECT first_name FROM trade_crm_customers WHERE id = 'customer'").get().first_name, 'Keep me');
+});
 
 test('hard delete removes own job forms, quote PDFs, photos and child data; retains customer and other owner', async (t) => {
   const f = fixture(t);
@@ -162,6 +178,15 @@ test('concurrent protection or customer-source changes roll back all deletion st
   f.race(() => f.sql.prepare("UPDATE trade_crm_job_details SET customer_source = 'platform_private' WHERE work_order_id = 'job'").run());
   await assert.rejects(f.delete(), /trade_crm_write_guard_verified_check/);
   assert.equal(f.sql.prepare("SELECT revision FROM trade_work_orders WHERE id = 'job'").get().revision, 4);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_crm_job_media_cleanup').get().n, 0);
+});
+
+test('a protected record added after preflight is rejected by the atomic deletion guard', async (t) => {
+  const f = fixture(t);
+  f.race(() => f.insert('trade_crm_quick_invoices', { id: 'late-invoice', work_order_id: 'job', firebase_uid: 'owner', crm_customer_id: 'customer', invoice_number: 'I2', line_items_json: '[]', due_at: '2026-10-01', consent_confirmed_at: timestamp, created_by_uid: 'owner', created_at: timestamp, updated_at: timestamp }));
+  await assert.rejects(f.delete(), /trade_crm_write_guard_verified_check/);
+  assert.equal(f.sql.prepare("SELECT revision FROM trade_work_orders WHERE id = 'job'").get().revision, 4);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM trade_crm_quick_invoices WHERE id = 'late-invoice'").get().n, 1);
   assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_crm_job_media_cleanup').get().n, 0);
 });
 

@@ -6,7 +6,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import * as Linking from 'expo-linking';
-import { useFocusEffect, useLocalSearchParams, useNavigation } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -1580,23 +1580,29 @@ function ComplianceCaseEvidence({
 function JobFieldForm({ form, busy, onSave, onReturnToJob }: { form: FieldForm; busy: boolean; onReturnToJob: () => void; onSave: (form: FieldForm, answers: Record<string, string | boolean>, complete: boolean) => Promise<void> }) {
   const [answers, setAnswers] = useState<Record<string, string | boolean>>(form.answers || {});
   const [questionIndex, setQuestionIndex] = useState(0);
-  const navigation = useNavigation();
+  const [overview, setOverview] = useState(false);
+  const leaving = useRef(false);
   const dirty = form.status !== 'complete' && JSON.stringify(answers) !== JSON.stringify(form.answers || {});
-  usePreventRemove(dirty || busy, ({ data }) => {
-    if (busy) return Alert.alert('Saving form', 'Wait for the form to finish saving before leaving.');
-    Alert.alert('Unsaved answers', 'Save your answers before leaving, or discard the unsaved changes.', [
-      { text: 'Keep editing', style: 'cancel' },
-      { text: 'Discard changes', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
-    ]);
-  });
+  async function leave() {
+    if (busy || leaving.current) return;
+    leaving.current = true;
+    try { if (dirty) await onSave(form, answers, false); onReturnToJob(); }
+    catch (error) { Alert.alert('Form not saved', error instanceof Error ? error.message : 'Try again before leaving this form.'); }
+    finally { leaving.current = false; }
+  }
+  function backToSectionsOrJob() {
+    if (!overview) { setOverview(true); return; }
+    void leave();
+  }
   function change(key: string, value: string | boolean) { setAnswers((current) => ({ ...current, [key]: value })); }
+  usePreventRemove(true, () => backToSectionsOrJob());
   return <View style={styles.formBlock}>
-    <FieldButton variant="secondary" disabled={busy} onPress={() => void (async () => { if (form.status !== 'complete') await onSave(form, answers, false); onReturnToJob(); })().catch((error) => Alert.alert('Form not saved', error instanceof Error ? error.message : 'Try again before leaving this form.'))}>Save and return to job</FieldButton>
+    <FieldButton variant="secondary" disabled={overview && busy} onPress={backToSectionsOrJob}>{overview ? 'Save and return to job' : 'Sections'}</FieldButton>
     <View style={styles.formRow}>
       <MaterialCommunityIcons name={form.status === 'complete' ? 'check-decagram-outline' : 'clipboard-text-outline'} size={25} color={form.status === 'complete' ? colours.green : colours.muted} />
       <View style={styles.flex}><Text style={styles.taskTitle}>{form.name}</Text><Text style={styles.meta}>{form.jurisdiction} | Version {form.templateVersion} | {form.status === 'complete' ? 'Complete and locked' : form.ready ? 'Ready to complete' : `${form.missing.length} required`}</Text></View>
     </View>
-    <View style={styles.formBody}><Text style={styles.meta}>Question {questionIndex + 1} of {form.template.fields.length}</Text>{questionIndex === 0 && form.template.guidance ? <Text style={styles.body}>{form.template.guidance}</Text> : null}{form.template.fields.slice(questionIndex, questionIndex + 1).map((field) => <View key={field.key} style={styles.formField}>
+    {overview ? <View style={styles.formBody}><Text style={styles.taskTitle}>Sections</Text>{form.template.fields.map((field, index) => <FieldButton key={field.key} variant="secondary" onPress={() => { setQuestionIndex(index); setOverview(false); }}>{field.label}</FieldButton>)}</View> : <View style={styles.formBody}><Text style={styles.meta}>Question {questionIndex + 1} of {form.template.fields.length}</Text>{questionIndex === 0 && form.template.guidance ? <Text style={styles.body}>{form.template.guidance}</Text> : null}{form.template.fields.slice(questionIndex, questionIndex + 1).map((field) => <View key={field.key} style={styles.formField}>
       <Text style={styles.inputLabel}>{field.label}{field.required ? ' *' : ''}</Text>
       {field.type === 'checkbox' ? <Pressable disabled={busy || form.status === 'complete'} accessibilityRole="checkbox" accessibilityState={{ checked: answers[field.key] === true }} onPress={() => change(field.key, answers[field.key] !== true)} style={[styles.checkbox, answers[field.key] === true && styles.checkboxSelected]}><MaterialCommunityIcons name={answers[field.key] === true ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={25} color={colours.green} /><Text style={styles.body}>{answers[field.key] === true ? 'Confirmed' : 'Tap to confirm'}</Text></Pressable>
         : field.type === 'select' ? <View style={styles.optionList}>{(field.options || []).map((option) => <Pressable key={option} disabled={busy || form.status === 'complete'} onPress={() => change(field.key, option)} style={[styles.option, answers[field.key] === option && styles.optionSelected]}><Text style={styles.optionText}>{option}</Text></Pressable>)}</View>
@@ -1609,7 +1615,7 @@ function JobFieldForm({ form, busy, onSave, onReturnToJob }: { form: FieldForm; 
         await onSave(form, answers, questionIndex === form.template.fields.length - 1);
       }
       setQuestionIndex((value) => Math.min(form.template.fields.length - 1, value + 1));
-    })().catch((error) => Alert.alert('Form not saved', error instanceof Error ? error.message : 'Try again.'))}>{questionIndex === form.template.fields.length - 1 ? form.status === 'complete' ? 'Complete' : 'Complete form' : 'Next'}</FieldButton></View></View>
+    })().catch((error) => Alert.alert('Form not saved', error instanceof Error ? error.message : 'Try again.'))}>{questionIndex === form.template.fields.length - 1 ? form.status === 'complete' ? 'Complete' : 'Complete form' : 'Next'}</FieldButton></View></View>}
   </View>;
 }
 

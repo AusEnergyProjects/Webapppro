@@ -8,7 +8,10 @@ import { firebaseAuth } from '@/lib/auth';
 import { getFieldSessionToken } from '@/lib/field-session';
 
 const JSON_REQUEST_TIMEOUT_MS = 20_000;
+const REPORT_REQUEST_TIMEOUT_MS = 120_000;
 const MULTIPART_REQUEST_TIMEOUT_MS = 120_000;
+
+type ApiRequestOptions = { operation?: 'report' };
 
 export class ApiError extends Error {
   constructor(
@@ -58,20 +61,23 @@ function bytesToHex(bytes: Uint8Array) {
   return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
 }
 
-async function fetchJson(url: string, init: RequestInit) {
+async function fetchJson(url: string, init: RequestInit, options: ApiRequestOptions = {}) {
   const controller = new AbortController();
   const multipart = init.body instanceof FormData;
   const abort = () => controller.abort();
   init.signal?.addEventListener('abort', abort, { once: true });
   if (init.signal?.aborted) controller.abort();
-  const timeout = setTimeout(() => controller.abort(), multipart ? MULTIPART_REQUEST_TIMEOUT_MS : JSON_REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), multipart ? MULTIPART_REQUEST_TIMEOUT_MS
+    : options.operation === 'report' ? REPORT_REQUEST_TIMEOUT_MS : JSON_REQUEST_TIMEOUT_MS);
   try {
     const request = { ...init, signal: controller.signal };
     return await (multipart ? expoFetch(url, request) : fetch(url, request));
   } catch (error) {
     if (controller.signal.aborted && !init.signal?.aborted) {
       throw new ApiError(
-        'TLink could not reach the secure service. Check reception and try again.',
+        options.operation === 'report'
+          ? 'The report service took too long to respond. Your finish request is saved and will check the result again.'
+          : 'The service took too long to respond. Your work is saved; try again when connected.',
         408,
         'NETWORK_TIMEOUT',
       );
@@ -106,10 +112,10 @@ async function responseBody(response: Response): Promise<Record<string, unknown>
   );
 }
 
-export async function apiRequest<T>(path: string, init: RequestInit = {}, user?: User | null) {
+export async function apiRequest<T>(path: string, init: RequestInit = {}, user?: User | null, options: ApiRequestOptions = {}) {
   const headers = await authenticatedHeaders(init, user);
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
-  const response = await fetchJson(`${API_BASE_URL}${path}`, { ...init, headers });
+  const response = await fetchJson(`${API_BASE_URL}${path}`, { ...init, headers }, options);
   const body = await responseBody(response);
   if (!response.ok) {
     const error = new ApiError(

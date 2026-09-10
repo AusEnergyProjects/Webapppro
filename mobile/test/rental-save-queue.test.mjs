@@ -66,11 +66,13 @@ function harness(shared = {}) {
   }
   class ApiError extends Error { constructor(message, status, code) { super(message); this.status = status; this.code = code; } }
   const advance = (result) => { result.inspection.revision++; result.modules[0].revision++; };
-  async function defaultRequest(path, init = {}) {
+  async function defaultRequest(path, init = {}, _user, options = {}) {
     const body = typeof init.body === 'string' ? JSON.parse(init.body) : init.body;
     const workOrderId = body?.workOrderId || body?.get?.('workOrderId') || new URL(path, 'https://tlink.test').searchParams.get('workOrderId');
     const result = state.results?.[workOrderId] || state.result;
     state.calls.push({ path, body, workOrderId });
+    assert.equal(options.operation, ['issue_report', 'email_report'].includes(body?.action) ? 'report' : undefined,
+      'Only report generation and delivery use the longer request deadline');
     if (!init.method) return clone(result);
     if (path === '/api/trade-field-work') return { uploadedMediaId: `media-${body.get('clientUploadId')}` };
     if (body.action === 'save_item') {
@@ -92,8 +94,11 @@ function harness(shared = {}) {
       assert.equal(body.expectedRevision, result.modules[0].revision);
       result.modules[0].status = 'complete'; advance(result);
     } else if (body.action === 'issue_report') {
+      result.inspection.status = 'issued';
+      result.permissions.canIssue = false;
       result.reports = [{ id: 'report-1', status: 'issued' }];
     } else if (body.action === 'email_report') {
+      assert.equal(result.permissions.canRevokeLink, true, 'Report delivery requires current report-sharing access');
       assert.equal(body.reportId, 'report-1');
       result.reportDelivery = { status: 'sent', recipientEmail: body.expectedRecipientEmail };
     }
@@ -165,7 +170,7 @@ function prepareFinish(h) {
   assessmentModule.template.metadataFields.push({ key: 'coverageConfirmed', type: 'checkbox', phase: 'final' });
   assessmentModule.template.metadataFields.find((field) => field.key === 'assessorDeclaration').type = 'checkbox';
   h.state.result.completion = { 'module-1': { complete: true, blockers: [] } };
-  h.state.result.permissions = { canIssue: true };
+  h.state.result.permissions = { canIssue: true, canRevokeLink: true, isAssignedAssessor: true };
   return { workOrderId: 'job-1', module: clone(assessmentModule), reviewed: clone(h.state.result), email: true, recipientEmail: 'client@example.test' };
 }
 
@@ -240,6 +245,7 @@ test('Finish survives a report timeout and in-progress retry, then emails the co
     if (body?.action === 'issue_report') {
       issueAttempts++;
       h.state.result.inspection.status = 'issuing';
+      h.state.result.permissions.canIssue = false;
       if (issueAttempts === 1) throw new Error('Request timed out');
       throw new h.ApiError('The report is being prepared. Delivery will retry.', 503);
     }
@@ -249,15 +255,53 @@ test('Finish survives a report timeout and in-progress retry, then emails the co
   assert.equal((await h.queue.listPendingRentalSaves())[0].status, 'retry');
   await h.queue.processRentalSaveQueue('job-1');
   assert.equal((await h.queue.listPendingRentalSaves())[0].status, 'retry');
-  assert.equal(issueAttempts, 2);
+  assert.equal(issueAttempts, 1, 'A staged report is polled without starting another issuance');
   assert.equal(h.state.calls.filter((call) => call.body?.action === 'email_report').length, 0);
   h.state.result.inspection.status = 'issued';
+  h.state.result.permissions.canIssue = false;
   h.state.result.reports = [{ id: 'report-1', status: 'issued' }];
   const restarted = h.restart();
   await restarted.queue.processRentalSaveQueue('job-1');
   await restarted.queue.processRentalSaveQueue('job-1');
   assert.equal((await restarted.queue.listPendingRentalSaves()).length, 0);
   assert.equal(h.state.calls.filter((call) => call.body?.action === 'issue_report').length, 0);
+  assert.equal(h.state.calls.filter((call) => call.body?.action === 'email_report').length, 1);
+});
+
+test('an issued report is reused only with current report delivery permission', async () => {
+  const h = harness(), input = prepareFinish(h);
+  h.state.result.modules[0].status = 'complete';
+  h.state.result.inspection.status = 'issued';
+  h.state.result.reports = [{ id: 'report-1', status: 'issued' }];
+  h.state.result.permissions = { canIssue: false, canRevokeLink: false, isAssignedAssessor: true };
+  await h.queue.enqueueRentalFinish(input);
+  await assert.rejects(h.queue.processRentalSaveQueue('job-1'), (error) => error.status === 403 && error.code === 'REPORT_PERMISSION_REQUIRED');
+  assert.equal(h.state.calls.some((call) => ['issue_report', 'email_report'].includes(call.body?.action)), false);
+  assert.equal((await h.queue.listPendingRentalSaves()).length, 1, 'The finish request remains saved');
+  h.state.result.permissions.canRevokeLink = true;
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.listPendingRentalSaves()).length, 0);
+  assert.equal(h.state.calls.filter((call) => call.body?.action === 'issue_report').length, 0);
+  assert.equal(h.state.calls.filter((call) => call.body?.action === 'email_report').length, 1);
+});
+
+test('a saved false incomplete-modules conflict recovers after issuance without recreating the report', async () => {
+  const h = harness(), input = prepareFinish(h);
+  h.state.handler = async () => { throw new Error('Offline'); };
+  await h.queue.enqueueRentalFinish(input); await h.queue.processRentalSaveQueue('job-1');
+  const [key, value] = [...h.store.entries()].find(([key]) => key.startsWith('rental-save:'));
+  const record = JSON.parse(value);
+  record.status = 'conflict';
+  record.error = 'The other required assessment modules must be completed before the report can be emailed.';
+  h.store.set(key, JSON.stringify(record));
+  h.state.result.modules[0].status = 'complete';
+  h.state.result.inspection.status = 'issued';
+  h.state.result.permissions.canIssue = false;
+  h.state.result.reports = [{ id: 'report-1', status: 'issued' }];
+  const restarted = h.restart();
+  await restarted.queue.processRentalSaveQueue('job-1');
+  assert.equal((await restarted.queue.listPendingRentalSaves()).length, 0);
+  assert.equal(h.state.calls.some((call) => ['complete_module', 'issue_report'].includes(call.body?.action)), false);
   assert.equal(h.state.calls.filter((call) => call.body?.action === 'email_report').length, 1);
 });
 

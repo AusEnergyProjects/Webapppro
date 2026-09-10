@@ -5,7 +5,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Image, Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { usePreventRemove } from 'expo-router/react-navigation';
-import { useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from '@/components/keyboard-aware-scroll-view';
 import { FieldButton } from '@/components/field-button';
@@ -27,7 +26,7 @@ import { acknowledgeRentalSave, loadRentalResult, discardRentalSave, enqueueRent
   processRentalSaveQueue, rememberRentalPhotoLocation, requestWhenRentalSynced, subscribeRentalSaves,
   type RentalSaveRecord, type RentalQueuedPhoto } from '@/lib/rental-save-queue';
 
-type Props = { workOrderId: string; summary: FieldRentalInspectionSummary; online: boolean; onChanged: () => Promise<void>; onReturnToJob?: () => void };
+type Props = { workOrderId: string; summary: FieldRentalInspectionSummary; online: boolean; onChanged: () => Promise<void>; onReturnToJob: () => void };
 type Photo = RentalQueuedPhoto;
 type Draft = { outcome: string; locationLabel: string; publicNotes: string; internalNotes: string;
   findingTitle: string; findingDescription: string; scopeSummary: string;
@@ -84,7 +83,6 @@ function findingChoices(outcome: string): string[] {
 }
 export function RentalInspectionWorkflow({ workOrderId, summary, online, onChanged, onReturnToJob }: Props) {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
   const [data, setData] = useState<RentalAssessmentResult>({});
   const [moduleId, setModuleId] = useState('');
   const [cursor, setCursor] = useState<Cursor>({ sectionKey: '', checkIndex: 0, instanceKey: 'property' });
@@ -202,11 +200,6 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   }, [cache, loaded, persist]);
   useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [page, cursor, metadataIndex, detailIndex]);
   const hasDraft = Object.keys(cache.drafts).length > 0 || Object.keys(cache.answers).length > 0;
-  usePreventRemove(Boolean(busy) || hasDraft, ({ data: navigationEvent }) => {
-    if (busy) return Alert.alert('Saving', 'Wait for this action to finish before leaving.');
-    void persist().then(() => navigation.dispatch(navigationEvent.action))
-      .catch(() => setError('The draft could not be saved on this phone. Keep the assessment open and retry.'));
-  });
   const active = data.modules?.find((m) => m.id === moduleId) || data.modules?.[0];
   const sections: RentalAssessmentSection[] = active ? rentalAssessorSections(active.template) : [];
   // A retired page is reachable only to recover its existing draft or queued photos.
@@ -308,7 +301,12 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     finally { busyRef.current = false; if (mounted.current) setBusy(''); }
   }
   async function leave() {
-    await perform('leave', async () => { await persist(); onReturnToJob?.(); });
+    await perform('leave', async () => { await persist(); onReturnToJob(); });
+  }
+  function backToSectionsOrJob() {
+    if (page !== 'categories') { setPage('categories'); return; }
+    if (busyRef.current) return Alert.alert('Saving on phone', 'Your latest change is being saved. Try again in a moment.');
+    void leave();
   }
   function openCheck(s: RentalAssessmentSection, index = 0, instanceKey?: string) {
     const target = s.checks[index];
@@ -609,8 +607,11 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     }
     setPage('categories');
   }
+  // The form is inside the job route. Replaying the native back action would
+  // remove that entire route, skipping both its sections and the job overview.
+  usePreventRemove(true, () => backToSectionsOrJob());
   return <View style={styles.shell}>
-    <View style={styles.header}><Pressable disabled={Boolean(busy)} onPress={() => void leave()} style={styles.job}><MaterialCommunityIcons name="arrow-left" size={22} color={colours.green} /><Text style={styles.link}>Job</Text></Pressable><Text style={styles.reference}>{data.inspection?.inspectionNumber || summary.inspectionNumber}</Text><Text style={styles.status}>{busy ? 'Saving on phone...' : saveStatus || (hasDraft ? 'Draft on phone' : 'Saved')}</Text></View>
+    <View style={styles.header}><Pressable accessibilityRole="button" accessibilityLabel={page === 'categories' ? 'Back to job' : 'Back to assessment sections'} disabled={page === 'categories' && Boolean(busy)} onPress={backToSectionsOrJob} style={styles.job}><MaterialCommunityIcons name="arrow-left" size={22} color={colours.green} /><Text style={styles.link}>{page === 'categories' ? 'Job' : 'Sections'}</Text></Pressable><Text style={styles.reference}>{data.inspection?.inspectionNumber || summary.inspectionNumber}</Text><Text style={styles.status}>{busy ? 'Saving on phone...' : saveStatus || (hasDraft ? 'Draft on phone' : 'Saved')}</Text></View>
     <KeyboardAwareScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.content}
       keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
       {!loaded ? <Text style={styles.body}>Opening assessment...</Text> : !active ? <Text style={styles.body}>{error || (!online ? 'Reconnect once to open this assessment. Your draft is saved on this phone.' : 'This assessment is not available.')}</Text> : <>
@@ -745,7 +746,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     </KeyboardAwareScrollView>
     {page !== 'categories' ? <View style={[styles.footer, { paddingBottom: Math.max(12, insets.bottom) }]}><FieldButton variant="secondary" style={styles.flex} disabled={Boolean(busy)} onPress={previous}>Previous</FieldButton>
-      {page === 'earlier' ? <FieldButton style={styles.flex} variant="secondary" onPress={() => setPage('categories')}>Categories</FieldButton> : page === 'metadata' ? <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'metadata'} onPress={() => { if (editable) void saveMetadata(); else if (metadataIndex + 1 < metadata.length) setMetadataIndex(metadataIndex + 1); else setPage('review'); }}>Next</FieldButton> : page === 'review' ? <FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => setPage('categories')}>Categories</FieldButton> : <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'save'} onPress={() => void next()}>Next</FieldButton>}
+      {page === 'earlier' ? <FieldButton style={styles.flex} variant="secondary" onPress={() => setPage('categories')}>Sections</FieldButton> : page === 'metadata' ? <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'metadata'} onPress={() => { if (editable) void saveMetadata(); else if (metadataIndex + 1 < metadata.length) setMetadataIndex(metadataIndex + 1); else setPage('review'); }}>Next</FieldButton> : page === 'review' ? <FieldButton style={styles.flex} variant="secondary" onPress={() => setPage('categories')}>Sections</FieldButton> : <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'save'} onPress={() => void next()}>Next</FieldButton>}
     </View> : null}
   </View>;
 }

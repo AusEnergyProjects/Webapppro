@@ -60,9 +60,12 @@ export async function emailRentalAssessmentReport(input: Input) {
   const recipientHash = await sha256(recipient.email);
   const key = await sha256(`rental-report-email|${input.access.ownerUid}|${input.reportId}|${report.pdf_sha256}|${recipientHash}`);
   const prefix = `report-email:${key}`;
+  // D1 caps LIKE patterns at 50 bytes. The journal identity is longer, so use
+  // an exact ASCII prefix range without changing existing idempotency keys.
   const events = await db.prepare(`SELECT event_type, request_id, metadata, created_at FROM trade_rental_inspection_events
-    WHERE inspection_id = ? AND firebase_uid = ? AND request_id LIKE ? ORDER BY created_at, request_id`)
-    .bind(input.inspectionId, input.access.ownerUid, `${prefix}:%`).all<Row>();
+    WHERE inspection_id = ? AND firebase_uid = ? AND report_id = ?
+      AND request_id >= ? AND request_id < ? ORDER BY created_at, request_id`)
+    .bind(input.inspectionId, input.access.ownerUid, input.reportId, `${prefix}:`, `${prefix};`).all<Row>();
   if (events.results.some(row => row.event_type === 'report_email_accepted')) return { status: 'accepted', reportId: input.reportId, message: 'The report email was already accepted for delivery.' };
   const requests = events.results.filter(row => row.event_type === 'report_email_requested');
   const last = requests.at(-1);

@@ -4,6 +4,7 @@
 
 import Link from "next/link";
 import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalObservationResponseLabel } from "@/lib/rental-quotation.mjs";
+import { VIC_RENTAL_ASSESSMENT_TEMPLATE } from "@/lib/trade-rental-assessment.mjs";
 import { useEffect, useMemo, useState } from "react";
 import styles from "./RentalReportViewer.module.css";
 
@@ -30,6 +31,7 @@ type Evidence = {
 
 type Finding = {
   id: string;
+  historicalObservation?: boolean;
   itemId: string;
   category: string;
   title: string;
@@ -47,6 +49,7 @@ type Finding = {
 
 type ReportItem = {
   id: string;
+  historicalObservation?: boolean;
   locationLabel: string;
   prompt: string;
   outcome: string;
@@ -135,15 +138,25 @@ function bytesLabel(value: number) {
 }
 
 function visibleEntries(value: Record<string, unknown>) {
-  return Object.entries(value || {}).filter(([, entry]) => entry !== "" && entry !== null && entry !== undefined);
+  return Object.entries(value || {}).filter(([key, entry]) => key !== "showerCaptureVersion" && entry !== "" && entry !== null && entry !== undefined);
 }
 
-function ResultPill({ outcome, readiness = false }: { outcome: string; readiness?: boolean }) {
+function metadataValue(moduleKey: string, key: string, value: unknown) {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  const field = Object.values(VIC_RENTAL_ASSESSMENT_TEMPLATE.modules).find((module) => module.key === moduleKey)?.metadataFields.find((entry) => entry.key === key);
+  return field?.options?.find((option: { value: string; label: string }) => option.value === value)?.label || (key === "rentalRegime" ? displayLabel(String(value)) : String(value));
+}
+
+function isHistoricalFinding(report: RentalReport | undefined, finding: Finding) {
+  return finding.historicalObservation === true || report?.modules.some((module) => module.sections.some((section) => section.items.some((item) => item.id === finding.itemId && item.historicalObservation === true))) === true;
+}
+
+function ResultPill({ outcome, readiness = false, historical = false }: { outcome: string; readiness?: boolean; historical?: boolean }) {
   const tone = outcome === "meets" || outcome === "not_applicable" ? styles.good
     : outcome === "does_not_meet" && !readiness ? styles.bad : styles.caution;
   const label = readiness && outcome === "meets" ? "Ready for the recorded requirement"
     : readiness && outcome === "does_not_meet" ? "Upgrade planning required" : outcomeLabels[outcome] || displayLabel(outcome);
-  return <span className={`${styles.resultPill} ${tone}`}>{label}</span>;
+  return <span className={`${styles.resultPill} ${tone}`}>{historical ? "Earlier result: " : ""}{label}</span>;
 }
 
 function EvidenceGallery({ entries }: { entries: Evidence[] }) {
@@ -187,7 +200,8 @@ export function RentalReportViewer({ token }: { token: string }) {
   }, [token]);
 
   const report = data.report;
-  const openFindings = useMemo(() => (report?.findings || []).filter((finding) => finding.status !== "compliant"), [report]);
+  const openFindings = useMemo(() => (report?.findings || []).filter((finding) => finding.status !== "compliant" && !isHistoricalFinding(report, finding)), [report]);
+  const historicalFindings = useMemo(() => (report?.findings || []).filter((finding) => finding.status !== "compliant" && isHistoricalFinding(report, finding)), [report]);
   const resolvedFindings = useMemo(() => (report?.findings || []).filter((finding) => finding.status === "compliant"), [report]);
   const groupedFindings = useMemo(() => Object.entries(openFindings.reduce<Record<string, Finding[]>>((groups, finding) => {
     const category = report?.modules.flatMap((module) => module.sections).find((section) => section.items.some((item) => item.id === finding.itemId))?.title || displayLabel(finding.category || "Required work");
@@ -245,23 +259,27 @@ export function RentalReportViewer({ token }: { token: string }) {
 
     <section className={styles.summaryCards}>
       <article><span>Selected modules</span><strong>{report.modules.length}</strong><small>{report.modules.map((module) => module.title).join(" | ")}</small></article>
-      <article><span>Outstanding findings</span><strong>{openFindings.length}</strong><small>{groupedFindings.length} work categor{groupedFindings.length === 1 ? "y" : "ies"}</small></article>
+      <article><span>Current findings</span><strong>{openFindings.length}</strong><small>{groupedFindings.length} work categor{groupedFindings.length === 1 ? "y" : "ies"}</small></article>
       <article><span>Evidence files</span><strong>{report.evidence.length}</strong><small>Photos and documents linked to exact checks</small></article>
     </section>
 
     <section className={styles.contentSection} id="findings">
       <header><span>Scope for quoting</span><h2>Findings and work details</h2><p>Grouped by the work required, with measurements, evidence and any information still to confirm.</p></header>
-      {!openFindings.length ? <div className={styles.empty}><strong>No outstanding findings recorded</strong><span>Review the full assessment for every observed result, limitation and evidence file.</span></div>
-        : groupedFindings.map(([trade, findings]) => <section className={styles.tradeGroup} key={trade}>
+      {!openFindings.length && <div className={styles.empty}><strong>No current work scopes recorded</strong><span>Review the full assessment for every observed result, limitation and evidence file.</span></div>}
+      {historicalFindings.length > 0 && <div className={styles.empty}><strong>{historicalFindings.length} earlier finding{historicalFindings.length === 1 ? "" : "s"} retained in the history</strong><span>Earlier observations are not counted as current or marked resolved.</span>{historicalFindings.some((finding) => ["urgent", "immediate_safety_risk"].includes(finding.severity)) && <span>An earlier urgent finding remains in the history. Its resolution is not confirmed in this report.</span>}</div>}
+      {[
+        ...groupedFindings.map(([trade, findings]) => ({ trade, findings, historical: false })),
+        ...(historicalFindings.length ? [{ trade: "Earlier observations", findings: historicalFindings, historical: true }] : []),
+      ].map(({ trade, findings, historical }) => <section className={styles.tradeGroup} key={`${historical}:${trade}`}>
           <header><h3>{trade}</h3><strong>{findings.length} item{findings.length === 1 ? "" : "s"}</strong></header>
           {findings.map((finding, index) => <article className={styles.finding} key={finding.id}>
-            <div className={styles.findingHeading}><span>{String(index + 1).padStart(2, "0")}</span><div><small>{severityLabels[finding.severity] || displayLabel(finding.severity)} | {finding.locationLabel || "Location in assessment"}</small><h4>{finding.title}</h4></div></div>
+            <div className={styles.findingHeading}><span>{String(index + 1).padStart(2, "0")}</span><div><small>{historical ? "Earlier observation | Recorded " : ""}{severityLabels[finding.severity] || displayLabel(finding.severity)} | {finding.locationLabel || "Location in assessment"}</small><h4>{finding.title}</h4></div></div>
             <dl>
-              <div><dt>Status</dt><dd>{displayLabel(finding.status)}</dd></div>
+              <div><dt>{historical ? "Recorded status" : "Status"}</dt><dd>{displayLabel(finding.status)}</dd></div>
               <div><dt>Category</dt><dd>{displayLabel(finding.category)}</dd></div>
               <div><dt>Finding</dt><dd>{finding.description}</dd></div>
               {finding.recommendedAction && finding.recommendedAction !== finding.scopeSummary && <div><dt>Recommended action</dt><dd>{finding.recommendedAction}</dd></div>}
-              <div className={styles.scopeRow}><dt>Work required</dt><dd>{finding.scopeSummary}</dd></div>
+              <div className={styles.scopeRow}><dt>{historical ? "Recorded work scope" : "Work required"}</dt><dd>{finding.scopeSummary}</dd></div>
               {RENTAL_QUOTATION_FIELDS.map((field) => rentalQuotation(finding.details.quotation)[field.key] ? <div key={field.key}><dt>{field.label}</dt><dd>{rentalQuotation(finding.details.quotation)[field.key]}</dd></div> : null)}
               <div><dt>Quantity</dt><dd>{finding.quantityMilli / 1000} {finding.unitLabel}</dd></div>
               {finding.standardReference && <div><dt>Reference</dt><dd>{finding.standardReference}</dd></div>}
@@ -301,11 +319,11 @@ export function RentalReportViewer({ token }: { token: string }) {
             <div><dt>Verification</dt><dd>{module.credential.verificationBasis === "manager_attested_document" ? "Manager-attested credential document" : module.credential.verificationBasis === "assigned_team_profile" ? "Assigned TLink team member and final assessment declaration" : "Assessor declaration"}</dd></div>
             {module.credential.supportingFileTitle && <div><dt>Supporting record</dt><dd>{module.credential.supportingFileTitle}</dd></div>}
           </dl>
-          <dl className={styles.metadata}>{visibleEntries(module.answers).map(([key, value]) => <div key={key}><dt>{displayLabel(key)}</dt><dd>{typeof value === "boolean" ? value ? "Yes" : "No" : String(value)}</dd></div>)}</dl>
+          <dl className={styles.metadata}>{visibleEntries(module.answers).map(([key, value]) => <div key={key}><dt>{displayLabel(key)}</dt><dd>{metadataValue(module.key, key, value)}</dd></div>)}</dl>
           {module.sections.map((section) => <section className={styles.assessmentSection} key={section.key}>
             <header><h3>{section.title}</h3><p>{section.summary}</p></header>
             <div>{section.items.map((item) => <article className={styles.answer} key={item.id}>
-              <div>{report.inspection.applicabilityLimitation && module.key === "minimum_standards" ? <span>{item.outcome === "meets" ? "Observation satisfactory; legal applicability unconfirmed" : outcomeLabels[item.outcome] || displayLabel(item.outcome)}</span> : <ResultPill outcome={item.outcome} readiness={item.assessmentPhase === "energy_readiness_2027" || (!item.assessmentPhase && module.assessmentScope === "energy_readiness_2027")} />}{item.locationLabel && <strong>{item.locationLabel}</strong>}</div>
+              <div>{report.inspection.applicabilityLimitation && module.key === "minimum_standards" ? <span>{item.historicalObservation ? "Earlier result: " : ""}{item.outcome === "meets" ? "Observation satisfactory; legal applicability unconfirmed" : outcomeLabels[item.outcome] || displayLabel(item.outcome)}</span> : <ResultPill outcome={item.outcome} historical={item.historicalObservation} readiness={item.assessmentPhase === "energy_readiness_2027" || (!item.assessmentPhase && module.assessmentScope === "energy_readiness_2027")} />}{item.locationLabel && <strong>{item.locationLabel}</strong>}</div>
               <h4>{item.prompt}</h4>
               {item.trigger && <p>Applies when: {item.trigger}</p>}
               {item.publicNotes && <p>{item.publicNotes}</p>}

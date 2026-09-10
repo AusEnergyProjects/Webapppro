@@ -706,7 +706,11 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       await move(1);
     });
   }
-  async function leave() { await writes.current; await syncs.current; await onChanged(); onReturnToJob(); }
+  async function leave() {
+    await writes.current;
+    onReturnToJob();
+    void onChanged().catch(() => { /* Durable answers continue syncing after leaving the form. */ });
+  }
   function finish() {
     onReturnToJob();
     void onChanged().catch(() => undefined);
