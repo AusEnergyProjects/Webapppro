@@ -6,6 +6,7 @@ import {
   drainTradeTeamDocumentExpiryEmails,
   enqueueTradeTeamDocumentExpiryWarnings,
   listTradeTeamDocumentExpiryWarnings,
+  tradeTeamDocumentExpiryStatus,
 } from "../src/lib/trade-team-document-expiry-server.ts";
 
 const migration = fs.readFileSync(
@@ -322,4 +323,13 @@ test("the minute worker drains durable warnings and the owner or team manager dr
   assert.match(dashboard, /<TradeTeamSettings user=\{user\} navigationTarget=\{commandTarget\}/);
   assert.match(teamSettings, /navigationTarget\.id/);
   assert.match(worker, /Team document expiry notification failed/);
+});
+
+
+test('document renewal status shares the30day reminder window and does not treat a missing expiry as current', () => {
+  const today = new Date('2026-09-10T12:00:00Z');
+  for (const [expiry, status] of [['', 'no_expiry'], ['2026-02-30', 'no_expiry'],
+    ['2026-09-09', 'expired'], ['2026-09-10', 'expiring'], ['2026-10-10', 'expiring'], ['2026-10-11', 'current']]) {
+    assert.equal(tradeTeamDocumentExpiryStatus(expiry, today), status, expiry);
+  }
 });

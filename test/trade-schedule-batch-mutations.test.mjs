@@ -236,7 +236,7 @@ function scheduleRoute(d1, notifications = [], synced = [], access = ownerAccess
       requireInstallerTeamAccess: async () => access,
     },
     "@/lib/trade-team-sync-server": syncHelpers,
-    "@/lib/trade-schedule": scheduleHelpers,
+    "@/lib/trade-schedule": { ...scheduleHelpers, ...(effects.localNow ? { australiaLocalDateTime: () => effects.localNow } : {}) },
     "@/lib/appointment-rescheduling": { parsePreferredWindows: () => [] },
     "@/lib/direct-appointment-invite-server": { sendDirectAppointmentCalendarInvite: async () => { if (effects.email) await effects.email(); return {status: "accepted"}; } },
     "@/lib/appointment-notification-server": {
@@ -517,4 +517,54 @@ test('reschedule starts calendar sync while the customer email is still pending'
   assert.equal(result.customerEmails.length, 2);
   assert.equal(result.customerEmails[0].status, 'accepted');
   assert.equal(result.calendarSync.synced, 2);
+});
+
+
+test('mobile rescheduling preserves every selected weekday and uses its containing Monday for the schedule response', async () => {
+  const cases = [
+    ['2026-09-10', '2026-09-07'], // Thursday: yesterday to today from the reported failure.
+    ['2026-09-11', '2026-09-07'],
+    ['2026-09-12', '2026-09-07'],
+    ['2026-09-13', '2026-09-07'],
+    ['2026-09-14', '2026-09-14'], // Monday crosses into the next calendar week.
+    ['2026-09-15', '2026-09-14'],
+    ['2026-09-16', '2026-09-14'],
+    ['2026-10-01', '2026-09-28'], // Month rollover.
+    ['2027-01-01', '2026-12-28'], // Year rollover.
+  ];
+  for (const [day, monday] of cases) {
+    const { database, d1 } = fixture();
+    try {
+      database.exec(`ALTER TABLE trade_work_orders ADD COLUMN source_reference TEXT NOT NULL DEFAULT '';
+        ALTER TABLE trade_crm_customers ADD COLUMN updated_at TEXT NOT NULL DEFAULT 'before';
+        UPDATE trade_crm_appointments SET starts_at='2026-09-09T09:00',ends_at='2026-09-09T10:00' WHERE id='appointment-a';
+        UPDATE trade_work_orders SET scheduled_start='2026-09-09',scheduled_end='2026-09-09' WHERE id='job-a';`);
+      const access=ownerAccess(); const notifications=[]; const synced=[]; const forwarded=[];
+      const scheduler=scheduleRoute(d1,notifications,synced,access,{localNow:'2026-09-10T09:00'});
+      const teams=loadTypescriptModule('../src/lib/trade-team-server.ts',{'../../db':{getD1:()=>d1}});
+      const route=loadTypescriptModule('../src/app/api/field/appointment-actions/route.ts', {
+        '../../../../../db':{getD1:()=>d1},
+        '@/lib/admin-server':{sameOrigin:()=>true,cleanAdminText:(value,max)=>String(value||'').trim().slice(0,max),adminJson:(body,status=200)=>Response.json(body,{status})},
+        '@/lib/trade-team-server':{requireInstallerTeamAccess:async()=>access,assignedJob:teams.assignedJob},
+        '@/lib/trade-team-permission-policy.mjs':{canRescheduleWithinScope},
+        '@/lib/trade-schedule':loadTypescriptModule('../src/lib/trade-schedule.ts'),
+        '../../trade-schedule/route':{PATCH:async(request)=>{forwarded.push(await request.clone().json());return scheduler.PATCH(request);}},
+      });
+      const response=await route.PATCH(new Request('https://example.test/api/field/appointment-actions',{
+        method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({workOrderId:'job-a',action:'reschedule',
+          expectedRevision:3,appointmentId:'appointment-a',expectedAppointmentRevision:1,startsAt:`${day}T11:00`,durationMinutes:60,memberId:'member-b'})}));
+      const result=await response.json();
+      assert.equal(response.status,200,`${day}: ${JSON.stringify(result)}`);
+      assert.equal(forwarded[0].weekStart,monday);
+      assert.equal(forwarded[0].startsAt,`${day}T11:00`);
+      assert.equal(result.jobPatch.appointmentStartsAt,`${day}T11:00`);
+      assert.equal(result.jobPatch.appointmentEndsAt,`${day}T12:00`);
+      assert.equal(result.jobPatch.assigneeMemberId,'member-b');
+      assert.equal(result.jobPatch.revision,4);
+      const saved=database.prepare("SELECT starts_at,ends_at,assignee_member_id FROM trade_crm_appointments WHERE id='appointment-a'").get();
+      assert.deepEqual({...saved},{starts_at:`${day}T11:00`,ends_at:`${day}T12:00`,assignee_member_id:'member-b'});
+      assert.equal(notifications.length,1);assert.equal(synced.length,1);
+      assert.equal(result.email.status,'accepted');assert.equal(result.calendarSync.synced,1);
+    } finally { database.close(); }
+  }
 });

@@ -198,7 +198,7 @@ function inspectionError(error: unknown) {
   if (code === "FIELD_EVIDENCE_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow assessment records." }, 403);
   if (code === "FIELD_EVIDENCE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow assessment changes." }, 403);
   if (code === "ASSESSOR_REQUIRED") return adminJson({ ok: false, error: "Only the assigned assessor can issue this report." }, 403);
-  if (code === "RENTAL_MODULE_CREDENTIAL_REQUIRED") return adminJson({ ok: false, error: "The assigned assessor needs a current matching credential and supporting team document before this module can be completed." }, 409);
+  if (code === "RENTAL_MODULE_CREDENTIAL_REQUIRED") return adminJson({ ok: false, code, error: "The assigned assessor needs a current matching credential and supporting team document before this module can be completed." }, 409);
   if (code === "RENTAL_MODULE_CREDENTIAL_CHANGED") return adminJson({ ok: false, error: "The saved credential changed or expired. Reopen and complete the module again before issuing." }, 409);
   if (code === "REPORT_PERMISSION_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow issued reports." }, 403);
   if (code === "RENTAL_INSPECTION_LOCKED") return adminJson({ ok: false, error: "This issued assessment is locked and remains in the report history. Start a replacement assessment job if a correction is required." }, 409);

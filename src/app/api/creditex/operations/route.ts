@@ -11,6 +11,7 @@ import {
   parseCreditexOperationsFilters,
 } from "@/lib/creditex-operations-server";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
+import { loadCreditexInstallerRenewals } from "@/lib/creditex-installer-renewals-server";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -128,7 +129,24 @@ export async function GET(request: Request) {
       member,
       filters,
     );
-    return json({ ok: true, dashboard });
+    const renewals = await loadCreditexInstallerRenewals(database, {
+      organisationId: member.organisationId,
+      role: member.role,
+      participantIds: dashboard.queues.participants.map((participant) => String(participant.id)),
+    });
+    return json({
+      ok: true,
+      dashboard: {
+        ...dashboard,
+        queues: {
+          ...dashboard.queues,
+          participants: dashboard.queues.participants.map((participant) => ({
+            ...participant,
+            renewals: renewals[String(participant.id)] || [],
+          })),
+        },
+      },
+    });
   } catch (error) {
     return errorResponse(error);
   }

@@ -117,7 +117,10 @@ test("member files support context, touch and protected inline preview", () => {
   assert.match(settings, /credentialNumber/);
   assert.match(settings, /credentialIssuer/);
   assert.match(settings, /credentialJurisdiction/);
-  assert.match(settings, /required=\{Boolean\(uploadRentalGate\)\}/);
+  assert.match(settings, /required=\{Boolean\(uploadRentalGate\) \|\| uploadCategory === "insurance"\}/);
+  assert.match(settings, /<option value="insurance">Insurance<\/option>/);
+  assert.match(settings, /Renewal due within 30 days/);
+  assert.match(settings, /Expired: renewal needed/);
   assert.match(settings, /Supporting document or photo<input name="file" type="file" required/);
   assert.match(settings, /notified 30 days before a saved expiry/);
   assert.match(settings, /Maximum 12 MB/);
@@ -324,7 +327,7 @@ test("team member changes use the loaded revision and recover from stale edits",
 
 test("team settings are readable and avoid prohibited dash characters", () => {
   assert.doesNotMatch(settings, /[\u2013\u2014]/);
-  assert.doesNotMatch(settings, /[✕↓••]/);
+  assert.doesNotMatch(settings, /[\u2715\u2193\u2022]/);
   assert.doesNotMatch(styles, /font-size:\s*\.(?:[0-7]\d*)rem/);
   assert.match(styles, /min-height: 44px/);
 });

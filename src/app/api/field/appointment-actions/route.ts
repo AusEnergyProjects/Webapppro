@@ -3,6 +3,7 @@ import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, canAssignJob, requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { canRescheduleWithinScope } from "@/lib/trade-team-permission-policy.mjs";
 import { PATCH as changeSchedule } from "../../trade-schedule/route";
+import { scheduleWeekStartForDate } from "@/lib/trade-schedule";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { previousTradeScheduleMutationGuardStatement } from "@/lib/trade-compliance-intent-replan-server";
 import { cancelAppointmentInConnectedCalendars } from "@/lib/trade-calendar-sync-server";
@@ -39,6 +40,7 @@ async function context(request: Request, workOrderId: string) {
 
 function fail(error: unknown) {
   const code = error instanceof Error ? error.message : '';
+  if (code === 'INVALID_DATE') return adminJson({ ok: false, error: 'Choose a valid appointment date.' }, 400);
   if (code === 'AUTH_REQUIRED') return adminJson({ ok: false, error: 'Sign in to continue.' }, 401);
   if (['JOB_NOT_FOUND', 'APPOINTMENT_NOT_FOUND'].includes(code)) return adminJson({ ok: false, error: 'Job or appointment not found.' }, 404);
   if (code === 'REVISION_CONFLICT' || code.includes('trade_crm_write_guard_verified_check')) return adminJson({ ok: false, error: 'This job changed. Reopen its actions and try again.', code: 'REVISION_CONFLICT' }, 409);
@@ -133,7 +135,7 @@ export async function PATCH(request: Request) {
       const response = await changeSchedule(new Request(request.url, { method: 'PATCH', headers: request.headers, body: JSON.stringify({
         action: 'schedule_appointment', appointmentId: appointment.id, expectedRevision: appointment.revision,
         expectedJobRevision: job.revision, startsAt: body.startsAt, durationMinutes: body.durationMinutes,
-        memberId: body.memberId, weekStart: String(body.startsAt || '').slice(0, 10) }) }));
+        memberId: body.memberId, weekStart: scheduleWeekStartForDate(String(body.startsAt || '')) }) }));
       if (!response.ok) return response;
       const result = await response.json() as Row;
       const saved = await db.prepare(`SELECT a.id, a.status, a.starts_at, a.ends_at, w.revision, w.stage, w.scheduled_start, w.scheduled_end,

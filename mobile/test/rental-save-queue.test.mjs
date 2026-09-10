@@ -284,6 +284,96 @@ function photo() {
     location: { permission: { granted: true }, location: { state: 'captured', observedAtUtc: '2026-09-09T04:00:01Z', accuracyMetres: 10, mocked: false, latitude: -37, longitude: 144 } } };
 }
 
+const legacyCredentialMessage = 'The assigned assessor needs a current matching credential and supporting team document before this module can be completed.';
+function seedCredentialSave(h, extra = {}) {
+  const input = fixture().input;
+  const record = { ...input, schemaVersion: 1, id: 'credential-save', ownerKey: 'firebase:alice', createdAt: 1,
+    status: 'conflict', error: legacyCredentialMessage, photos: [{ ...photo(), clientUploadId: '00000000-0000-4000-8000-000000000001', captureSessionId: 'retained-capture' }], ...extra };
+  h.store.set('rental-save:firebase%3Aalice:credential-save', JSON.stringify(record));
+  return record;
+}
+
+test('an old credential rejection recovers after restart and links its retained uploaded photo without uploading it again', async () => {
+  const h = harness();
+  const saved = seedCredentialSave(h);
+  saved.photos[0].mediaId = 'existing-upload';
+  h.store.set('rental-save:firebase%3Aalice:credential-save', JSON.stringify(saved));
+  const restarted = h.restart();
+  await restarted.queue.processRentalSaveQueue('job-1');
+  const state = await restarted.queue.getRentalSaveState('job-1');
+  assert.equal(state.pending, 0);
+  assert.equal(state.conflicts, 0);
+  assert.equal(state.records[0].photos[0].mediaId, 'existing-upload');
+  assert.equal(state.records[0].photos[0].linked, true);
+  assert.equal(state.records[0].photos[0].captureSessionId, 'retained-capture');
+  assert.equal(state.records[0].error, '');
+  assert.equal(state.records[0].errorCode, '');
+  assert.equal(h.state.calls.filter((call) => call.path === '/api/trade-field-work').length, 0);
+  assert.equal(h.state.calls.filter((call) => call.body?.action === 'link_evidence').length, 1);
+});
+
+test('missing credentials are checked once per sync and stable errors recover after the profile is corrected', async () => {
+  for (const code of ['RENTAL_MODULE_CREDENTIAL_REQUIRED', 'RENTAL_ITEM_CREDENTIAL_REQUIRED']) {
+    const h = harness();
+    seedCredentialSave(h, { errorCode: code, error: 'Current qualification is missing.' });
+    let rejected = 0;
+    h.state.handler = async (path, init = {}) => {
+      if (typeof init.body === 'string' && JSON.parse(init.body).action === 'save_item') {
+        rejected++;
+        throw new h.ApiError('Current qualification is missing.', 409, code);
+      }
+      return h.defaultRequest(path, init);
+    };
+    await h.queue.processRentalSaveQueue('job-1');
+    assert.equal(rejected, 1);
+    let pending = (await h.queue.listPendingRentalSaves())[0];
+    assert.equal(pending.errorCode, code);
+    assert.match(pending.error, /Sync to retry.*photos are retained/);
+    assert.equal(pending.photos.length, 1);
+    assert.equal(h.state.prepared, 0);
+    await h.queue.processRentalSaveQueue('job-1');
+    assert.equal(rejected, 2);
+    const restarted = h.restart();
+    await restarted.queue.processRentalSaveQueue('job-1');
+    pending = (await restarted.queue.getRentalSaveState('job-1')).records[0];
+    assert.equal(pending.status, 'succeeded');
+    assert.equal(pending.errorCode, '');
+    assert.equal(pending.photos[0].linked, true);
+    assert.equal(h.files.get('file:///photo.jpg').bytes, 'original');
+    assert.equal(h.state.calls.filter((call) => call.path === '/api/trade-field-work').length, 1);
+  }
+});
+
+test('credential recovery rechecks current answer revisions and stops on a real conflict', async () => {
+  const h = harness();
+  const pending = seedCredentialSave(h, { errorCode: 'RENTAL_ITEM_CREDENTIAL_REQUIRED' });
+  h.state.result.items = [{ ...pending.baseItem, id: 'changed-elsewhere', revision: 2, outcome: 'does_not_meet' }];
+  await h.queue.processRentalSaveQueue('job-1');
+  const record = (await h.queue.listPendingRentalSaves())[0];
+  assert.equal(record.status, 'conflict');
+  assert.equal(record.errorCode, 'RENTAL_SAVE_CONFLICT');
+  assert.equal(record.photos.length, 1);
+  assert.equal(h.state.calls.filter((call) => call.body?.action === 'save_item').length, 0);
+  const calls = h.state.calls.length;
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal(h.state.calls.length, calls);
+});
+
+test('unrelated conflicts and credential-changed certification errors never get automatically replayed', async () => {
+  for (const extra of [
+    { errorCode: 'REVISION_CONFLICT', error: legacyCredentialMessage },
+    { errorCode: 'RENTAL_MODULE_CREDENTIAL_CHANGED', error: 'The saved credential changed or expired.' },
+    { error: 'A credential may have changed elsewhere. Review the saved answer.' },
+    { body: { action: 'finish_report', moduleId: 'module-1' }, errorCode: 'RENTAL_MODULE_CREDENTIAL_REQUIRED' },
+  ]) {
+    const h = harness();
+    seedCredentialSave(h, extra);
+    await h.queue.processRentalSaveQueue('job-1');
+    assert.equal(h.state.calls.length, 0);
+    assert.equal((await h.queue.listPendingRentalSaves())[0].photos.length, 1);
+  }
+});
+
 test('restart after a failed link reuses the durable uploaded media checkpoint and never prepares or uploads twice', async () => {
   const h = harness(); let failed = false;
   h.state.handler = async (path, init = {}) => {

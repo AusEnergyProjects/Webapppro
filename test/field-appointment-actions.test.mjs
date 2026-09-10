@@ -113,6 +113,7 @@ function fixture(overrides = {}, effects = {}) {
     '@/lib/trade-team-server': { requireInstallerTeamAccess: async () => access,
       assignedJob: teams.assignedJob, canAssignJob: canAssignWithinScope },
     '@/lib/trade-team-permission-policy.mjs': { canRescheduleWithinScope },
+    '@/lib/trade-schedule': loadTypescriptModule('../src/lib/trade-schedule.ts'),
     '@/lib/trade-team-sync-server': { nextJobRevision: (value) => Number(value) + 1, jobSyncChangeStatements: () => [] },
     '@/lib/trade-compliance-intent-replan-server': guards,
     '@/lib/trade-calendar-sync-server': { cancelAppointmentInConnectedCalendars: async (...args) => { calendars.push(args); if (effects.calendar) await effects.calendar(...args); return {attempted:1,synced:1,failed:0}; } },
@@ -202,4 +203,15 @@ test('cancellation starts its email while calendar removal is still pending', as
   const result = await (await pending).json();
   assert.equal(result.email.status, 'accepted');
   assert.equal(result.calendarSync.synced, 1);
+});
+
+test('an invalid reschedule date is rejected before delegation or external updates', async () => {
+  const f=fixture();
+  try {
+    const response=await f.patch('reschedule',{startsAt:'2026-02-30T11:00',durationMinutes:60,memberId:'worker'});
+    assert.equal(response.status,400);
+    assert.equal((await response.json()).error,'Choose a valid appointment date.');
+    assert.equal(f.scheduleChanges.length,0);
+    assert.equal(f.messages.length,0);assert.equal(f.calendars.length,0);
+  } finally { f.database.close(); }
 });

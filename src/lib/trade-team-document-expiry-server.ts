@@ -1,3 +1,12 @@
+export function tradeTeamDocumentExpiryStatus(expiresAt: string, now = new Date()) {
+  if (!expiresAt) return "no_expiry";
+  const expiry = Date.parse(`${expiresAt}T00:00:00Z`);
+  if (!Number.isFinite(expiry) || new Date(expiry).toISOString().slice(0, 10) !== expiresAt) return "no_expiry";
+  const today = Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00Z`);
+  const days = Math.round((expiry - today) / 86_400_000);
+  return days < 0 ? "expired" : days <= WARNING_WINDOW_DAYS ? "expiring" : "current";
+}
+
 const WARNING_WINDOW_DAYS = 30;
 const CLAIM_TIMEOUT_MS = 10 * 60 * 1000;
 const TEAM_WORKSPACE_URL =

@@ -169,6 +169,7 @@ type OperationParticipant = {
   status: string;
   effectiveFrom: string;
   effectiveTo: string;
+  renewals: Array<{ type: string; title: string; expiresAt: string; status: string }>;
 };
 
 type OperationEquipment = {
@@ -1096,6 +1097,12 @@ function parseOperations(value: unknown): OperationsSnapshot {
       status: text(item, ["status"]),
       effectiveFrom: text(item, ["effectiveFrom", "effective_from"]),
       effectiveTo: text(item, ["effectiveTo", "effective_to"]),
+      renewals: records(item.renewals).map((renewal) => ({
+        type: text(renewal, ["type"]),
+        title: text(renewal, ["title"]),
+        expiresAt: text(renewal, ["expiresAt"]),
+        status: text(renewal, ["status"]),
+      })),
     })),
     equipment: records(first(actual, [
       "equipment",
@@ -4173,6 +4180,27 @@ export function CreditexOperationsWorkspace({
                           ? participant.contactEmail
                           : "Contact email is not included in this summary response"}
                       </p>
+                      {participant.renewals.length > 0 && (
+                        <section className={styles.documentRenewals} aria-label="Team document renewals">
+                          <strong>Team documents</strong>
+                          <ul>
+                            {participant.renewals.map((renewal, index) => (
+                              <li key={`${renewal.type}:${renewal.title}:${index}`}>
+                                <div>
+                                  <strong>{renewal.title || readable(renewal.type)}</strong>
+                                  <small>
+                                    {readable(renewal.type)} | Recorded expiry: {renewal.expiresAt ? dateOnly(renewal.expiresAt) : "not recorded"}
+                                  </small>
+                                </div>
+                                <span className={styles.statusPill} data-status={renewal.status === "expired" ? "blocked" : renewal.status === "expiring" ? "pending" : "unknown"}>
+                                  {renewal.status === "expired" ? "Expired" : renewal.status === "expiring" ? "Due within 30 days" : renewal.status === "current" ? "Expiry current" : "Expiry not recorded"}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                          <small>Recorded dates supplied by the linked business. Insurance cover and qualifications still require review.</small>
+                        </section>
+                      )}
                     </div>
                     <dl>
                       <div>

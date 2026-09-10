@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import { tradeTeamDocumentExpiryStatus } from "../src/lib/trade-team-document-expiry-server.ts";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import * as scheduleHelpers from "../src/lib/trade-schedule.ts";
@@ -211,6 +212,7 @@ test("member documents allow owner and delegated manager access without crossing
       inspectTeamMemberFile: async () => { throw new Error("not used"); }, safeTeamMemberFileName: (value) => value,
       TEAM_MEMBER_FILE_LIMIT: 20, TeamMemberFileError,
     },
+    "@/lib/trade-team-document-expiry-server": { tradeTeamDocumentExpiryStatus },
     "@/lib/trade-team-member-file-cleanup": { drainTradeTeamMemberFileCleanup: async () => ({ completed: 0, pending: 0 }) },
   });
   const list = (memberId) => route.GET(new Request(`https://test/api/trade-team/member-files?memberId=${memberId}`));
@@ -220,7 +222,8 @@ test("member documents allow owner and delegated manager access without crossing
   const ownerPayload = await owner.json();
   assert.equal(ownerPayload.files[0].title, "Insurance");
   assert.equal(ownerPayload.files[0].expiresAt, "2027-01-31");
-  assert.equal("category" in ownerPayload.files[0], false);
+  assert.equal(ownerPayload.files[0].category, "other");
+  assert.equal(ownerPayload.files[0].expiryStatus, tradeTeamDocumentExpiryStatus("2027-01-31"));
   assert.equal("description" in ownerPayload.files[0], false);
 
   access = { ownerUid: "owner-1", actorUid: "manager-uid", isOwner: false, canManageTeam: true };

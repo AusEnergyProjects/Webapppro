@@ -53,6 +53,7 @@ export type RentalSaveRecord = Omit<RentalSaveInput, 'photos'> & {
   createdAt: number;
   status: 'queued' | 'syncing' | 'retry' | 'conflict' | 'succeeded';
   error: string;
+  errorCode?: string;
   photos: PhotoCheckpoint[];
   savedItem?: RentalAssessmentItem;
   savedFinding?: RentalAssessmentFinding | null;
@@ -346,6 +347,19 @@ function object(value: unknown): Record<string, unknown> {
 function conflict(message = 'This answer changed elsewhere. Review the saved answer before retrying.') {
   return new RentalSaveQueueError(message, 'RENTAL_SAVE_CONFLICT');
 }
+
+function missingCredentialCode(code = '', message = '') {
+  if (['RENTAL_MODULE_CREDENTIAL_REQUIRED', 'RENTAL_ITEM_CREDENTIAL_REQUIRED'].includes(code)) return code;
+  if (code) return '';
+  // Older releases retained only these server messages. Never infer recovery from a general credential/CAS error.
+  if (message === 'The assigned assessor needs a current matching credential and supporting team document before this module can be completed.') return 'RENTAL_MODULE_CREDENTIAL_REQUIRED';
+  if (/^[^\r\n]+: marking this result as meeting the standard needs the assigned assessor's current (?:electrician licence|gasfitting credential|smoke alarm qualification)\. Choose Specialist verification needed to save observations and photos for a professional to check\.$/.test(message)) return 'RENTAL_ITEM_CREDENTIAL_REQUIRED';
+  return '';
+}
+
+function canRetryCredentialSave(record: RentalSaveRecord) {
+  return !record.finish && record.body.action === 'save_item' && Boolean(missingCredentialCode(record.errorCode, record.error));
+}
 function pendingError() {
   return new RentalSaveQueueError('Answers or photos are still saving. Let them sync before completing or changing this assessment.', 'RENTAL_SAVES_PENDING');
 }
@@ -534,7 +548,7 @@ async function uploadPhoto(owner: LocalDataOwner, record: RentalSaveRecord, phot
 }
 
 async function processRecord(owner: LocalDataOwner, record: RentalSaveRecord) {
-  record.status = 'syncing'; record.error = '';
+  record.status = 'syncing'; record.error = ''; record.errorCode = '';
   await persist(owner, record);
   let result = await request(owner, record.workOrderId);
   if (record.finish) {
@@ -573,6 +587,7 @@ async function processJob(owner: LocalDataOwner, workOrderId: string) {
     await checkOwner(owner);
     const record = (await recordsFor(owner, workOrderId)).find((entry) => !attempted.has(entry.id)
       && (['queued', 'syncing', 'retry'].includes(entry.status)
+        || (entry.status === 'conflict' && canRetryCredentialSave(entry))
         || (entry.status === 'conflict' && entry.body.action === 'save_module_answers' && !entry.photos.length
           && Object.keys(object(entry.body.answers)).length > 0
           && Object.entries(object(entry.body.answers)).every(([key, value]) => metadataReplayRule(entry.module, key, value)))));
@@ -584,6 +599,10 @@ async function processJob(owner: LocalDataOwner, workOrderId: string) {
       await checkOwner(owner);
       record.status = error instanceof RentalSaveQueueError || (error instanceof ApiError && [400, 409, 413, 422].includes(error.status)) ? 'conflict' : 'retry';
       record.error = error instanceof Error ? error.message : 'The answer is saved locally. Retry when connected.';
+      const code = error instanceof RentalSaveQueueError || error instanceof ApiError ? error.code : '';
+      const credentialCode = missingCredentialCode(code, record.error);
+      record.errorCode = credentialCode || code;
+      if (credentialCode && record.body.action === 'save_item') record.error += ' Check Team qualifications and supporting documents, then Sync to retry. Your answer and photos are retained.';
       await persist(owner, record);
       if (error instanceof ApiError && [401, 403, 426].includes(error.status)) throw error;
       if (record.status === 'retry') return;

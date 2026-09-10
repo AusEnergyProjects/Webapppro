@@ -6,9 +6,11 @@ import {
   inspectTeamMemberFile,
   safeTeamMemberFileName,
   TEAM_MEMBER_FILE_LIMIT,
+  TEAM_MEMBER_FILE_CATEGORIES,
   TeamMemberFileError,
 } from "@/lib/trade-team-member-files-server";
 import { drainTradeTeamMemberFileCleanup } from "@/lib/trade-team-member-file-cleanup";
+import { tradeTeamDocumentExpiryStatus } from "@/lib/trade-team-document-expiry-server";
 
 export const runtime = "edge";
 
@@ -167,7 +169,9 @@ function filePayload(row: MemberFileRow) {
     id: row.id,
     memberId: row.team_member_id,
     title: row.title,
+    category: row.category,
     expiresAt: row.expires_at,
+    expiryStatus: tradeTeamDocumentExpiryStatus(row.expires_at),
     fileName: row.file_name,
     contentType: row.content_type,
     mimeType: row.content_type,
@@ -296,13 +300,16 @@ export async function POST(request: Request) {
     if (SRES_CREDENTIAL_USES.has(rentalGate) && (credentialType !== "accreditation" || credentialJurisdiction !== "NATIONAL")) {
       return adminJson({ ok: false, error: "An SRES installer or designer credential must be saved as a national accreditation." }, 400);
     }
+    const requestedCategory = cleanAdminText(form.get("category"), 30) || "other";
+    if (!TEAM_MEMBER_FILE_CATEGORIES.has(requestedCategory)) return adminJson({ ok: false, error: "Choose a valid document category." }, 400);
     const category = rentalGate === "suitably_qualified_smoke_alarm_worker" ? "training"
-      : rentalGate ? "licence" : "other";
+      : rentalGate ? "licence" : requestedCategory;
     const title = cleanAdminText(form.get("title"), 180);
     const expiresAt = cleanAdminText(form.get("expiresAt"), 10);
     if (!title) return adminJson({ ok: false, error: "Add a title for this document or photo." }, 400);
     if (!validDocumentExpiry(expiresAt)) return adminJson({ ok: false, error: "Choose a valid expiry date or leave it blank." }, 400);
     if (rentalGate && !expiresAt) return adminJson({ ok: false, error: "Add the credential expiry date so TLink can prevent expired sign-off." }, 400);
+    if (category === "insurance" && !expiresAt) return adminJson({ ok: false, error: "Add the insurance expiry date so its renewal can be tracked." }, 400);
     const description = "";
     const file = form.get("file");
     if (!(file instanceof File)) return adminJson({ ok: false, error: "Choose a team member file." }, 400);
@@ -325,7 +332,7 @@ export async function POST(request: Request) {
           inspected.contentType, inspected.sizeBytes, inspected.sha256, objectKey,
           access.actorUid, now, now),
       auditStatement(access, memberId, id, "file.upload_started", {
-        title, expiresAt, contentType: inspected.contentType, sizeBytes: inspected.sizeBytes,
+        title, category, expiresAt, contentType: inspected.contentType, sizeBytes: inspected.sizeBytes,
       }),
     ]);
     try {
@@ -348,7 +355,7 @@ export async function POST(request: Request) {
             credentialNumber, credentialIssuer, credentialJurisdiction, expiresAt, id, now, now,
             id, access.ownerUid, memberId, now)] : []),
         conditionalFileAuditStatement(access, memberId, id, "file.uploaded", {
-          title, expiresAt, contentType: inspected.contentType, sizeBytes: inspected.sizeBytes,
+          title, category, expiresAt, contentType: inspected.contentType, sizeBytes: inspected.sizeBytes,
           rentalGate: rentalGate || undefined,
         }, "active", now),
       ]);

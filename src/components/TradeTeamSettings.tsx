@@ -77,6 +77,8 @@ type MemberFile = {
   sizeBytes: number;
   title: string;
   expiresAt: string;
+  category: string;
+  expiryStatus: "no_expiry" | "expired" | "expiring" | "current";
   createdAt: string;
   credential: null | {
     id: string;
@@ -271,6 +273,7 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
   const [filesLoading, setFilesLoading] = useState(false);
   const [preview, setPreview] = useState<{ file: MemberFile; url: string } | null>(null);
   const [uploadRentalGate, setUploadRentalGate] = useState("");
+  const [uploadCategory, setUploadCategory] = useState("other");
   const [query, setQuery] = useState("");
   const [appliedQuery, setAppliedQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<RosterStatus>("all");
@@ -354,7 +357,7 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
 
   const openFiles = useCallback(async (member: TradeTeamMember) => {
     if (!restoreFocusRef.current) restoreFocusRef.current = document.activeElement as HTMLElement | null;
-    setMenu(null); setFilesMember(member); setFilesLoading(true); setFiles([]); setUploadRentalGate(""); setError("");
+    setMenu(null); setFilesMember(member); setFilesLoading(true); setFiles([]); setUploadRentalGate(""); setUploadCategory("other"); setError("");
     if (preview) { URL.revokeObjectURL(preview.url); setPreview(null); }
     try {
       const response = await fetch(`/api/trade-team/member-files?memberId=${encodeURIComponent(member.id)}`, { headers: await tokenHeaders(), cache: "no-store" });
@@ -649,7 +652,7 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
       if (!response.ok || !result.ok) throw new Error(result.error || "The file could not be uploaded.");
       if (!result.file) throw new Error("The uploaded file record was not returned.");
       setFiles((current) => [result.file!, ...current]);
-      form.reset(); setUploadRentalGate(""); await load(); setMessage(result.file.credential ? "Credential and supporting file saved." : "Member file saved.");
+      form.reset(); setUploadRentalGate(""); setUploadCategory("other"); await load(); setMessage(result.file.credential ? "Credential and supporting file saved." : "Member file saved.");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "The file could not be uploaded."); }
     finally { setBusy(""); }
   }
@@ -804,7 +807,12 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
             <option value="sres_installer_accreditation">SRES installer accreditation</option>
             <option value="sres_designer_accreditation">SRES designer accreditation</option>
           </select></label>
-          <label>Title<input name="title" required maxLength={180} placeholder={isSresCredential ? "For example, SAA grid-connected installer accreditation" : "For example, Victorian electrical licence"} /></label>
+          {!uploadRentalGate && <label>Document category<select name="category" value={uploadCategory} onChange={(event) => setUploadCategory(event.target.value)}>
+            <option value="other">General document</option><option value="insurance">Insurance</option>
+            <option value="id">Identification</option><option value="licence">Licence</option>
+            <option value="compliance">Compliance document</option><option value="training">Training</option>
+          </select></label>}
+          <label>Title<input name="title" required maxLength={180} placeholder={!uploadRentalGate && uploadCategory === "insurance" ? "Public liability, professional indemnity or workers compensation" : isSresCredential ? "For example, SAA grid-connected installer accreditation" : "For example, Victorian electrical licence"} /></label>
           {uploadRentalGate && <>
             <label>Credential type<select key={uploadRentalGate} name="credentialType" required defaultValue={fixedCredentialType || (uploadRentalGate === "suitably_qualified_smoke_alarm_worker" ? "training" : "licence")}>
               {fixedCredentialType ? <option value={fixedCredentialType}>{fixedCredentialType === "accreditation" ? "Accreditation" : fixedCredentialType === "registration" ? "Registration" : "Licence"}</option> : <><option value="licence">Licence</option><option value="registration">Registration</option>{uploadRentalGate === "suitably_qualified_smoke_alarm_worker" && <option value="training">Training or qualification</option>}</>}
@@ -814,12 +822,12 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
             <label>Issuer<input name="credentialIssuer" required maxLength={180} placeholder={isSresCredential ? "For example, Solar Accreditation Australia" : "Issuing authority or training provider"} /></label>
             <label>Jurisdiction<select key={uploadRentalGate} name="credentialJurisdiction" required defaultValue={isSresCredential ? "NATIONAL" : "VIC"}>{!isSresCredential && <option value="VIC">Victoria</option>}<option value="NATIONAL">National</option></select></label>
           </>}
-          <label>{uploadRentalGate ? "Credential expiry" : "Expiry, optional"}<input type="date" name="expiresAt" required={Boolean(uploadRentalGate)} /></label>
+          <label>{uploadRentalGate ? "Credential expiry" : uploadCategory === "insurance" ? "Insurance expiry" : "Expiry, optional"}<input type="date" name="expiresAt" required={Boolean(uploadRentalGate) || uploadCategory === "insurance"} /></label>
           <label>Supporting document or photo<input name="file" type="file" required accept="image/jpeg,image/png,application/pdf" /></label>
           <small className={styles.hint}>{uploadRentalGate ? "TLink reuses the saved credential details in field forms and prevents sign-off after the credential or supporting file expires. The business owner is notified 30 days before expiry." : "PDF, JPEG or PNG. Maximum 12 MB. The business owner is notified 30 days before a saved expiry."}</small>
           <button className={styles.primary} disabled={busy === "file-upload"}>{busy === "file-upload" ? "Uploading..." : uploadRentalGate ? "Save credential" : "Upload document"}</button>
         </form>
-        {filesLoading ? <p className={styles.status}>Loading documents...</p> : <div className={styles.fileList}>{files.map((file) => <article key={file.id} className={`${styles.fileRow} ${preview?.file.id === file.id ? styles.selected : ""}`}><div><strong>{file.title}</strong><small>{file.credential ? `${file.credential.name} | ${file.credential.number} | ${file.credential.jurisdiction}` : "General document"}</small><small>{bytesLabel(file.sizeBytes)} | {file.expiresAt ? `Expires ${new Date(`${file.expiresAt}T00:00:00`).toLocaleDateString("en-AU")}` : "No expiry"}</small></div><div className={styles.fileRowActions}><button type="button" disabled={busy === `file:${file.id}`} onClick={() => void fetchFile(file)}>View</button><button type="button" aria-label={`Download ${file.title}`} disabled={busy === `file:${file.id}`} onClick={() => void fetchFile(file, true)}>Download</button><button type="button" aria-label={`Delete ${file.title}`} disabled={busy === `delete:${file.id}`} onClick={() => void deleteFile(file)}>Delete</button></div></article>)}{!files.length && <p className={styles.empty}>No documents or credentials saved.</p>}</div>}
+        {filesLoading ? <p className={styles.status}>Loading documents...</p> : <div className={styles.fileList}>{files.map((file) => <article key={file.id} className={`${styles.fileRow} ${preview?.file.id === file.id ? styles.selected : ""}`}><div><strong>{file.title}</strong><small>{file.credential ? `${file.credential.name} | ${file.credential.number} | ${file.credential.jurisdiction}` : file.category === "insurance" ? "Insurance" : file.category === "licence" ? "Licence" : file.category === "training" ? "Training" : file.category === "compliance" ? "Compliance document" : file.category === "id" ? "Identification" : "General document"}</small><small>{bytesLabel(file.sizeBytes)} | {file.expiresAt ? `Expires ${new Date(`${file.expiresAt}T00:00:00`).toLocaleDateString("en-AU")}` : "No expiry"}</small>{file.expiresAt && <span className={`${styles.state} ${file.expiryStatus === "expired" ? styles.expired : file.expiryStatus === "expiring" ? styles.expiring : styles.current}`}>{file.expiryStatus === "expired" ? "Expired: renewal needed" : file.expiryStatus === "expiring" ? "Renewal due within 30 days" : "Current"}</span>}</div><div className={styles.fileRowActions}><button type="button" disabled={busy === `file:${file.id}`} onClick={() => void fetchFile(file)}>View</button><button type="button" aria-label={`Download ${file.title}`} disabled={busy === `file:${file.id}`} onClick={() => void fetchFile(file, true)}>Download</button><button type="button" aria-label={`Delete ${file.title}`} disabled={busy === `delete:${file.id}`} onClick={() => void deleteFile(file)}>Delete</button></div></article>)}{!files.length && <p className={styles.empty}>No documents or credentials saved.</p>}</div>}
       </aside><section className={styles.preview} aria-label="Member document preview">{preview ? preview.file.contentType.startsWith("image/") ? <img src={preview.url} alt={preview.file.title} /> : preview.file.contentType === "application/pdf" ? <iframe src={preview.url} title={preview.file.title} /> : <p className={styles.previewMessage}>This document cannot be previewed here. Use download to open it.</p> : <p className={styles.previewMessage}>Select View to open the image or PDF. Documents remain private to authorised business access.</p>}</section></div>
     </div></div>}
   </div>;
