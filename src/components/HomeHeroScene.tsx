@@ -24,13 +24,14 @@ export function HomeHeroScene({ children }: { children: ReactNode }) {
       if (!anchor.current || !backdrop.current || !hero.current) return;
       const bounds = anchor.current.getBoundingClientRect();
       const heroBounds = hero.current.getBoundingClientRect();
+      const viewportWidth = document.documentElement.clientWidth;
       const progress = motion.matches ? 0 : Math.min(1, Math.max(0, -heroBounds.top / (heroBounds.height * .75)));
-      const backgroundWidth = Math.min(window.innerWidth, 1600);
+      const backgroundWidth = Math.min(viewportWidth, 1600);
       const backgroundHeight = window.innerHeight * .95;
       const mix = (from: number, to: number) => from + (to - from) * progress;
-      const width = Math.min(window.innerWidth, mix(bounds.width, backgroundWidth));
+      const width = Math.min(viewportWidth, mix(bounds.width, backgroundWidth));
       Object.assign(backdrop.current.style, {
-        left: `${Math.max(0, Math.min(window.innerWidth - width, mix(bounds.left, (window.innerWidth - backgroundWidth) / 2)))}px`,
+        left: `${Math.max(0, Math.min(viewportWidth - width, mix(bounds.left, (viewportWidth - backgroundWidth) / 2)))}px`,
         top: `${mix(bounds.top, window.innerHeight * .08)}px`,
         width: `${width}px`,
         height: `${mix(bounds.height, backgroundHeight)}px`,

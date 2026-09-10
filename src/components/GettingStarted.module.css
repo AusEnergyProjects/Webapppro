@@ -102,4 +102,4 @@
 :global(body.aea-platform) main.page .steps, :global(body.aea-platform) main.page .assessments, :global(body.aea-platform) main.page .tools, :global(body.aea-platform) main.page .finalCta, :global(body.aea-platform) main.page .partners { position: relative; z-index: 1; }
 :global(body.aea-platform) main.page .steps, :global(body.aea-platform) main.page .toolGrid { background: #041726c9; }
 @media (max-width: 850px) { :global(body.aea-platform) main.page .modelStage { inset: 310px -15px 90px; } }
-@media (max-width: 560px) { :global(body.aea-platform) main.page .modelStage { inset: 335px -18px 100px; } :global(body.aea-platform) main.page .modelToolbar { bottom: 18px; left: 23px; right: 23px; gap: 8px; } }
+@media (max-width: 560px) { :global(body.aea-platform) main.page .modelStage { inset: 335px 0 100px; } :global(body.aea-platform) main.page .modelToolbar { bottom: 18px; left: 23px; right: 23px; gap: 8px; } }
