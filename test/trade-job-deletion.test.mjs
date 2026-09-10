@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
+import { Miniflare } from 'miniflare';
+import { seedDraftComplianceJob } from './helpers/job-draft-compliance-fixture.mjs';
 import { JOB_DELETION_SCHEMA_GUARDS, upgradeJobDeletionGuards } from '../src/lib/trade-job-deletion-schema-guards.ts';
 import { canonicalTlinkSchemaGuardSql, TLINK_SCHEMA_GUARD_DEFINITIONS } from '../src/lib/tlink-schema-guards.ts';
 import { canonicalCreditexSchemaGuardSql, CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS, CREDITEX_SCHEMA_GUARD_DEFINITIONS } from '../src/lib/creditex-schema-guards.ts';
@@ -20,6 +22,13 @@ const load = (path, dependencies = {}) => {
   return moduleRecord.exports;
 };
 const timestamp = '2026-09-10T01:00:00.000Z';
+
+function installAllRuntimeGuards(sql) {
+  for (const definition of [...TLINK_SCHEMA_GUARD_DEFINITIONS, ...TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS]) {
+    sql.exec(`DROP TRIGGER IF EXISTS \`${definition.name}\``);
+    sql.exec(definition.sql);
+  }
+}
 
 test('file cleanup runs under the worker lifetime without blocking the job action', async () => {
   const pending = []; let finish; let options;
@@ -208,10 +217,7 @@ test('hard delete removes own job forms, quote PDFs, photos and child data; reta
 
 test('partly saved rental answers delete with all live runtime guards installed', async (t) => {
   const f = fixture(t);
-  for (const definition of [...TLINK_SCHEMA_GUARD_DEFINITIONS, ...TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS]) {
-    f.sql.exec(`DROP TRIGGER IF EXISTS \`${definition.name}\``);
-    f.sql.exec(definition.sql);
-  }
+  installAllRuntimeGuards(f.sql);
   f.insert('trade_rental_inspections', { id: 'rental', work_order_id: 'job', firebase_uid: 'owner', inspection_number: 'R1', template_key: 'vic-rental-minimum-standards', template_version: 1, rules_effective_from: '2026-09-10', module_selection_snapshot: '["minimum_standards"]', created_by_uid: 'owner', created_at: timestamp, updated_at: timestamp });
   f.insert('trade_rental_inspection_modules', { id: 'module', inspection_id: 'rental', firebase_uid: 'owner', module_key: 'minimum_standards', required: 1, template_version: 1, template_name: 'Minimum standards', required_capability: 'rental-inspection', template_snapshot: '{"key":"minimum_standards"}', created_at: timestamp, updated_at: timestamp });
   f.sql.prepare("UPDATE trade_rental_inspection_modules SET answers=?,status='draft',revision=2 WHERE id='module'").run('{"occupancy":"vacant"}');
@@ -226,6 +232,63 @@ test('partly saved rental answers delete with all live runtime guards installed'
   assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_rental_inspection_events').get().n, 0);
   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM trade_crm_customers WHERE id='customer'").get().n, 1);
   assert.deepEqual(f.sql.prepare('PRAGMA foreign_key_check').all(), []);
+});
+
+test('D1 upgrades release571 guards and deletes partial rental work within its expression-depth limit', async (t) => {
+  const f = fixture(t);
+  // These are the same persisted draft case/work-pack rows used by the
+  // retention and race tests, seeded before creation governance guards.
+  const migrationGuards = f.sql.prepare("SELECT name,sql FROM sqlite_schema WHERE type='trigger'").all();
+  for (const { name } of migrationGuards) f.sql.exec(`DROP TRIGGER \`${name}\``);
+  seedDraftComplianceJob(f.insert, 'case-job', 'owner');
+  f.sql.prepare("UPDATE trade_crm_job_details SET crm_customer_id='customer' WHERE work_order_id='case-job'").run();
+  for (const { sql } of migrationGuards) f.sql.exec(sql);
+  installAllRuntimeGuards(f.sql);
+  f.insert('trade_rental_inspections', { id: 'rental', work_order_id: 'job', firebase_uid: 'owner', inspection_number: 'R1', template_key: 'vic-rental-minimum-standards', template_version: 1, rules_effective_from: '2026-09-10', module_selection_snapshot: '["minimum_standards"]', created_by_uid: 'owner', created_at: timestamp, updated_at: timestamp });
+  f.insert('trade_rental_inspection_modules', { id: 'module', inspection_id: 'rental', firebase_uid: 'owner', module_key: 'minimum_standards', required: 1, template_version: 1, template_name: 'Minimum standards', required_capability: 'rental-inspection', template_snapshot: '{"key":"minimum_standards"}', answers: '{"occupancy":"vacant"}', status: 'draft', revision: 2, created_at: timestamp, updated_at: timestamp });
+  f.insert('trade_rental_inspection_events', { id: 'draft-event', inspection_id: 'rental', firebase_uid: 'owner', event_type: 'module_details_saved', created_at: timestamp });
+  const previous = JSON.parse(fs.readFileSync(new URL('test/fixtures/job-deletion-guards-571.json', root), 'utf8'));
+  const definitions = [...draftComplianceDeletion.draftComplianceDeletionGuardDefinitions, ...draftComplianceDeletion.draftWorkPackDeletionGuardDefinitions];
+  assert.equal(previous.definitions.length, definitions.length);
+  for (const historical of previous.definitions) {
+    const replacement = definitions.find((definition) => definition.name === historical.name);
+    assert.ok(replacement.legacySqlVariants.some((sql) => canonicalCreditexSchemaGuardSql(sql) === canonicalCreditexSchemaGuardSql(historical.sql)), historical.name);
+    f.sql.exec(`DROP TRIGGER \`${historical.name}\``);
+    f.sql.exec(historical.sql);
+  }
+  const runtime = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok"); } }', compatibilityDate: '2025-04-01', d1Databases: { DB: 'job-deletion-regression' }, port: 0 });
+  t.after(() => runtime.dispose());
+  const db = await runtime.getD1Database('DB');
+  const schema = f.sql.prepare("SELECT name,type,sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'").all();
+  for (const type of ['table', 'index']) {
+    const entries = schema.filter((entry) => entry.type === type);
+    for (let offset = 0; offset < entries.length; offset += 30) await db.batch(entries.slice(offset, offset + 30).map((entry) => db.prepare(entry.sql)));
+  }
+  const inserts = [db.prepare('PRAGMA defer_foreign_keys=ON')];
+  for (const table of schema.filter((entry) => entry.type === 'table')) {
+    for (const row of f.sql.prepare(`SELECT * FROM \`${table.name}\``).all()) {
+      const keys = Object.keys(row);
+      inserts.push(db.prepare(`INSERT INTO \`${table.name}\` (${keys.map((key) => `\`${key}\``).join(',')}) VALUES (${keys.map(() => '?').join(',')})`).bind(...Object.values(row)));
+    }
+  }
+  await db.batch(inserts);
+  const triggers = schema.filter((entry) => entry.type === 'trigger');
+  for (let offset = 0; offset < triggers.length; offset += 30) await db.batch(triggers.slice(offset, offset + 30).map((entry) => db.prepare(entry.sql)));
+  f.db.prepare = (sql) => db.prepare(sql);
+  f.db.batch = (statements) => db.batch(statements);
+  assert.equal((await f.delete()).deletedJobId, 'job');
+  assert.equal((await db.prepare("SELECT count(*) n FROM trade_work_orders WHERE id='job'").first()).n, 0);
+  assert.equal((await db.prepare("SELECT count(*) n FROM trade_work_orders WHERE id='other'").first()).n, 1);
+  assert.equal((await db.prepare("SELECT count(*) n FROM trade_crm_customers WHERE id='customer'").first()).n, 1);
+  assert.equal((await db.prepare('SELECT count(*) n FROM trade_rental_inspection_events').first()).n, 0);
+  const caseJob = await db.prepare("SELECT w.*,d.customer_source FROM trade_work_orders w JOIN trade_crm_job_details d ON d.work_order_id=w.id WHERE w.id='case-job'").first();
+  assert.equal((await f.delete(caseJob)).deletedJobId, 'case-job');
+  for (const table of ['compliance_cases', 'compliance_case_events', 'compliance_case_evidence', 'compliance_evidence_integrity_receipts', 'compliance_manual_policy_composition_locks', 'compliance_activity_work_pack_instances', 'compliance_activity_work_pack_artifacts', 'compliance_activity_work_pack_browser_upload_receipts', 'trade_work_order_compliance_intents']) {
+    assert.equal((await db.prepare(`SELECT count(*) n FROM ${table}`).first()).n, 0, table);
+  }
+  assert.deepEqual((await db.prepare('SELECT object_key FROM trade_crm_job_media_cleanup ORDER BY object_key').all()).results.map((row) => row.object_key), ['case-job/artifact.jpg', 'case-job/evidence.jpg']);
+  assert.equal((await db.prepare("SELECT count(*) n FROM trade_crm_customers WHERE id='customer'").first()).n, 1);
+  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results, []);
 });
 
 test('a permission failure and a stale revision retain the job and evidence', async (t) => {
