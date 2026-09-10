@@ -1,7 +1,7 @@
 import { getD1 } from "../../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
-import { fieldTransitionExpectedStatus } from "@/lib/trade-field-completion-policy";
+import { fieldFinishWithoutActiveAppointment, fieldTransitionExpectedStatus } from "@/lib/trade-field-completion-policy";
 import { activityConsumerDocuments } from "@/lib/trade-activity-forms-library";
 import { nextJobRevision } from "@/lib/trade-team-sync-server";
 import { mobileAppPolicy, mobileErrorResponse, MOBILE_CLIENT_ID_PATTERN, MOBILE_CONTRACT_VERSION,
@@ -2173,9 +2173,16 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
     const appointment = await db.prepare(`SELECT * FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ?
       AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed') ORDER BY CASE status WHEN 'in_progress' THEN 0 WHEN 'arrived' THEN 1 WHEN 'en_route' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, starts_at DESC LIMIT 1`)
       .bind(workOrderId, access.ownerUid).first<Record<string, unknown>>();
-    if (!appointment) return { clientActionId, status: "rejected", code: "APPOINTMENT_REQUIRED", error: "Schedule this job before starting field work." };
-    const expectedAppointmentStatus = fieldTransitionExpectedStatus(transitionName, String(appointment.status), transition.from);
-    if (appointment.status !== expectedAppointmentStatus) return { clientActionId, status: "rejected", code: "OUT_OF_ORDER", error: `This action is out of order. The appointment is ${String(appointment.status).replaceAll("_", " ")}.` };
+    const issuedRental = transitionName === "finish"
+      ? await db.prepare(`SELECT id FROM trade_rental_inspections
+          WHERE work_order_id = ? AND firebase_uid = ? AND status = 'issued' LIMIT 1`)
+          .bind(workOrderId, access.ownerUid).first<{ id: string }>()
+      : null;
+    const finishWithoutAppointment = transitionName === "finish"
+      && fieldFinishWithoutActiveAppointment(capturedJobStage, String(appointment?.status || ""), Boolean(issuedRental));
+    if (!appointment && !finishWithoutAppointment) return { clientActionId, status: "rejected", code: "APPOINTMENT_REQUIRED", error: "Schedule this job before starting field work." };
+    const expectedAppointmentStatus = fieldTransitionExpectedStatus(transitionName, String(appointment?.status || ""), transition.from);
+    if (!finishWithoutAppointment && appointment?.status !== expectedAppointmentStatus) return { clientActionId, status: "rejected", code: "OUT_OF_ORDER", error: `This action is out of order. The appointment is ${String(appointment?.status).replaceAll("_", " ")}.` };
     const finishState = transitionName === "finish"
       ? await fieldFinishState(access.ownerUid, workOrderId)
       : {
@@ -2197,12 +2204,23 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
       : transitionName === "finish"
         ? "completed"
         : capturedJobStage;
-    const appointmentAppliedGuard = `EXISTS (
+    const appointmentAppliedGuard = finishWithoutAppointment ? `EXISTS (
+      SELECT 1 FROM trade_rental_inspections issued_rental
+      WHERE issued_rental.work_order_id = ? AND issued_rental.firebase_uid = ?
+        AND issued_rental.status = 'issued'
+    ) AND NOT EXISTS (
+      SELECT 1 FROM trade_crm_appointments active_appointment
+      WHERE active_appointment.work_order_id = ? AND active_appointment.firebase_uid = ?
+        AND active_appointment.status IN ('scheduled', 'en_route', 'arrived', 'in_progress')
+    )` : `EXISTS (
       SELECT 1 FROM trade_crm_appointments field_appointment
       WHERE field_appointment.id = ? AND field_appointment.firebase_uid = ?
         AND field_appointment.status = ? AND field_appointment.${transition.timestamp} = ?
         AND field_appointment.last_transition_by_uid = ?
     )`;
+    const appointmentAppliedValues = finishWithoutAppointment
+      ? [workOrderId, access.ownerUid, workOrderId, access.ownerUid]
+      : [appointment?.id, access.ownerUid, transition.to, now, access.actorUid];
     const finishBlockerGuard = `(
       ? <> 'finish'
       OR (
@@ -2304,7 +2322,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
       baseRevision,
       resultRevision,
     );
-    const statements = [
+    const appointmentStatements = !finishWithoutAppointment && appointment ? [
       db.prepare(`UPDATE trade_crm_appointments SET status = ?, ${transition.timestamp} = ?, last_transition_by_uid = ?, revision = revision + 1, updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND status = ?
           AND EXISTS (
@@ -2330,14 +2348,18 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
           capturedJobStage,
           ...finishBlockerValues,
         ),
+    ] : [];
+    const statements = [
+      ...appointmentStatements,
       db.prepare(`UPDATE trade_work_orders SET stage = CASE WHEN ? = 'start_work' THEN 'in_progress' WHEN ? = 'finish' THEN 'completed' ELSE stage END,
         revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?
           AND revision = ? AND stage = ?
+          AND record_status = 'active'
           AND stage NOT IN ('completed', 'cancelled')
-          AND ${appointmentAppliedGuard}`)
+          AND ${appointmentAppliedGuard}
+          AND ${finishBlockerGuard}`)
         .bind(transitionName, transitionName, resultRevision, now, workOrderId, access.ownerUid,
-          baseRevision, capturedJobStage, appointment.id, access.ownerUid,
-          transition.to, now, access.actorUid),
+          baseRevision, capturedJobStage, ...appointmentAppliedValues, ...finishBlockerValues),
       actionReceiptStatement(
         db,
         access,
@@ -2360,11 +2382,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
           resultRevision,
           now,
           expectedJobStage,
-          appointment.id,
-          access.ownerUid,
-          transition.to,
-          now,
-          access.actorUid,
+          ...appointmentAppliedValues,
         ],
       ),
       db.prepare(`UPDATE trade_crm_job_details SET pipeline_stage = CASE WHEN ? = 'start_work' THEN 'in_progress' WHEN ? = 'finish' THEN 'complete' ELSE pipeline_stage END,
@@ -2406,9 +2424,9 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
     );
     if (
       !results
-      || !results[0]?.meta.changes
-      || !results[1]?.meta.changes
-      || !results[2]?.meta.changes
+      || (appointmentStatements.length > 0 && !results[0]?.meta.changes)
+      || !results[appointmentStatements.length]?.meta.changes
+      || !results[appointmentStatements.length + 1]?.meta.changes
     ) {
       const current = await assignedJob(access, workOrderId);
       await releaseConflict(access, action, Number(current.revision), now);

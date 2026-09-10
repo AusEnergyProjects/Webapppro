@@ -15,6 +15,9 @@ const jobSource = ts.createSourceFile('job.tsx', readFileSync(new URL('../src/ap
 const blockerCode = ts.transpileModule(jobSource.statements.find((entry) => ts.isFunctionDeclaration(entry) && entry.name?.text === 'jobFinishLocalBlockers').getText(jobSource),
   { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 const finishBlockers = new Function(blockerCode + '; return jobFinishLocalBlockers;')();
+const eligibilityCode = ts.transpileModule(jobSource.statements.find((entry) => ts.isFunctionDeclaration(entry) && entry.name?.text === 'canCompleteFieldJob').getText(jobSource),
+  { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+const canComplete = new Function('completableAppointmentStatuses', eligibilityCode + '; return canCompleteFieldJob;')(new Set(['scheduled', 'en_route', 'arrived', 'in_progress']));
 
 function fixture() {
   const job = { id: 'job-1', fieldLane: 'trade_team', revision: 77, stage: 'scheduled', appointmentStatus: 'scheduled', tasks: [], forms: [], openIssues: 0,
@@ -70,4 +73,17 @@ test('pending or absent rental results retain actual blockers and never manufact
   assert.deepEqual(finishBlockers(await readers(job, pending).getJob(job.id)), ['the issued rental assessment report']);
   job.forms = [{ status: 'draft' }];
   assert.deepEqual(finishBlockers(await readers(job, result).getJob(job.id)), ['required forms']);
+});
+
+test('issued rental jobs can finish after a cancelled or missing appointment without reopening terminal jobs', () => {
+  const { job, result } = fixture();
+  for (const appointmentStatus of ['cancelled', 'completed', 'no_show', '']) {
+    const draft = { ...job, appointmentStatus };
+    assert.equal(canComplete(draft), false);
+    const issued = rental.rentalJobWithResult(draft, result);
+    assert.equal(canComplete(issued), true);
+    assert.deepEqual(finishBlockers(issued), []);
+    assert.equal(canComplete({ ...issued, stage: 'cancelled' }), false);
+    assert.equal(canComplete({ ...issued, stage: 'completed' }), false);
+  }
 });

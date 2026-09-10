@@ -595,7 +595,9 @@ export async function queueAction(action: OfflineAction) {
   if (action.type === 'set_job_stage' && action.stage) job.stage = action.stage;
   if (action.type === 'advance_field_job' && action.transition) {
     const states = { start_travel: 'en_route', arrive: 'arrived', start_work: 'in_progress', finish: 'completed' } as const;
-    job.appointmentStatus = states[action.transition];
+    if (action.transition !== 'finish' || ['scheduled', 'en_route', 'arrived', 'in_progress'].includes(job.appointmentStatus)) {
+      job.appointmentStatus = states[action.transition];
+    }
     if (action.transition === 'start_work') job.stage = 'in_progress';
     if (action.transition === 'finish') {
       job.stage = 'completed';

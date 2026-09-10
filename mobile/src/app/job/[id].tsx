@@ -122,6 +122,11 @@ function lifecycleLabel(job: FieldJob, activityRecords: readonly ActivityFieldSu
     : status;
 }
 
+function canCompleteFieldJob(job: FieldJob) {
+  return !['completed', 'cancelled'].includes(job.stage)
+    && (completableAppointmentStatuses.has(job.appointmentStatus) || job.rentalInspection?.status === 'issued');
+}
+
 function jobFinishLocalBlockers(job: FieldJob) {
   return [
     job.tasks.some((item) => item.status !== 'done') ? 'assigned tasks' : '',
@@ -489,7 +494,7 @@ export default function JobScreen() {
   }, [id, load]);
 
   async function advanceFieldJob() {
-    if (!job || !completableAppointmentStatuses.has(job.appointmentStatus)) return;
+    if (!job || !canCompleteFieldJob(job)) return;
     const action = { transition: 'finish' as const };
     const localBlockers = jobFinishLocalBlockers(job);
     if (localBlockers.length) return Alert.alert('Finish the required work', `Complete ${localBlockers.join(', ')} first.`);
@@ -1293,7 +1298,7 @@ export default function JobScreen() {
   const fieldForms = job.forms || [];
   const complianceIntents = job.complianceIntents || [];
   const complianceCases = complianceCasesForJob(job);
-  const canCompleteJob = completableAppointmentStatuses.has(job.appointmentStatus) && !['completed', 'cancelled'].includes(job.stage);
+  const canCompleteJob = canCompleteFieldJob(job);
   const finishQueued = completionQueue.finish?.status === 'queued' || completionQueue.finish?.status === 'retry';
   const finishProblem = completionQueue.finish && !finishQueued
     ? completionQueue.finish.errorMessage || 'TLink could not complete this job. Check the remaining work and try again.'

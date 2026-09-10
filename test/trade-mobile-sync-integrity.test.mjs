@@ -1526,6 +1526,66 @@ test("bootstrap fails closed when one job exceeds the selected-activity work-pac
   assert.equal(result.payload.code, "SYNC_RESPONSE_CARDINALITY_EXCEEDED");
 });
 
+test("issued rental finish closes only its active parent and preserves ended appointments", async () => {
+  for (const appointmentStatus of ["cancelled", "completed", ""]) {
+    const database = syncDatabase("scheduled", 5);
+    prepareFinishableJob(database);
+    if (appointmentStatus) database.prepare("UPDATE trade_crm_appointments SET status = ?").run(appointmentStatus);
+    else database.exec("DELETE FROM trade_crm_appointments");
+    database.exec(`INSERT INTO trade_rental_inspections (id, work_order_id, firebase_uid, status)
+      VALUES ('rental-1', 'job-1', 'owner-1', 'issued')`);
+    database.exec(`INSERT INTO trade_crm_job_details (id, work_order_id, firebase_uid, pipeline_stage, updated_at)
+      VALUES ('detail-1', 'job-1', 'owner-1', 'scheduled', 'initial')`);
+    const appointmentBefore = database.prepare("SELECT * FROM trade_crm_appointments").all();
+    const { route } = routeHarness(database);
+    const action = {
+      clientActionId: `rental-parent-finish-${appointmentStatus || "absent"}`,
+      type: "advance_field_job", workOrderId: "job-1", baseRevision: 5, transition: "finish",
+    };
+    const finished = await postActions(route, [action]);
+    assert.equal(finished.payload.results[0].status, "applied", appointmentStatus || "absent");
+    assert.deepEqual({ ...database.prepare("SELECT stage, revision FROM trade_work_orders WHERE id = 'job-1'").get() },
+      { stage: "completed", revision: 6 });
+    assert.deepEqual(database.prepare("SELECT * FROM trade_crm_appointments").all(), appointmentBefore);
+    assert.equal(database.prepare("SELECT pipeline_stage FROM trade_crm_job_details WHERE work_order_id = 'job-1'").get().pipeline_stage, "complete");
+    const replay = await postActions(route, [action]);
+    assert.equal(replay.payload.results[0].status, "duplicate");
+    assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events WHERE event_type = 'job_completed'").get().count, 1);
+    database.close();
+  }
+});
+
+test("rental parent finish retains report, terminal-job and atomic appointment guards", async () => {
+  for (const scenario of ["unissued", "cancelled-parent", "new-appointment", "report-changed", "photo-changed"]) {
+    const database = syncDatabase(scenario === "cancelled-parent" ? "cancelled" : "scheduled", 5);
+    prepareFinishableJob(database);
+    database.exec("UPDATE trade_crm_appointments SET status = 'cancelled'");
+    database.prepare(`INSERT INTO trade_rental_inspections (id, work_order_id, firebase_uid, status)
+      VALUES ('rental-1', 'job-1', 'owner-1', ?)`)
+      .run(scenario === "unissued" ? "draft" : "issued");
+    const { route, d1 } = routeHarness(database);
+    if (scenario === "new-appointment") d1.injectBeforeNextBatch(() => {
+      database.exec("UPDATE trade_crm_appointments SET status = 'scheduled'");
+    });
+    if (scenario === "report-changed") d1.injectBeforeNextBatch(() => {
+      database.exec("UPDATE trade_rental_inspections SET status = 'in_progress'");
+    });
+    if (scenario === "photo-changed") d1.injectBeforeNextBatch(() => {
+      database.exec("UPDATE trade_crm_photo_requests SET revision = revision + 1");
+    });
+    const result = await postActions(route, [{
+      clientActionId: `rental-parent-guard-${scenario}`,
+      type: "advance_field_job", workOrderId: "job-1", baseRevision: 5, transition: "finish",
+    }]);
+    assert.equal(result.payload.results[0].code,
+      scenario === "unissued" ? "APPOINTMENT_REQUIRED" : scenario === "cancelled-parent" ? "JOB_TERMINAL" : "REVISION_CONFLICT",
+      scenario);
+    assert.equal(database.prepare("SELECT revision FROM trade_work_orders WHERE id = 'job-1'").get().revision, 5);
+    assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events WHERE event_type = 'job_completed'").get().count, 0);
+    database.close();
+  }
+});
+
 test("field finish does not wait for a Creditex case to be created", async () => {
   const database = syncDatabase("in_progress", 5);
   prepareFinishableJob(database);
