@@ -46,12 +46,10 @@ function serviceLabel(id: string, label: string) {
 export function QuickUpgradeEnquiryDialog({
   initialPostcode = "",
   initialServices = [],
-  startAtDetails = false,
   onClose,
 }: {
   initialPostcode?: string;
   initialServices?: string[];
-  startAtDetails?: boolean;
   onClose: () => void;
 }) {
   const startingPostcode = /^\d{4}$/.test(initialPostcode) ? initialPostcode : "";
@@ -66,7 +64,7 @@ export function QuickUpgradeEnquiryDialog({
   const submissionId = useRef("");
   const consentGrantedAt = useRef("");
   const lastAttemptCore = useRef("");
-  const [step, setStep] = useState<1 | 2>(startAtDetails && startingServices.length > 0 ? 2 : 1);
+  const [step, setStep] = useState<1 | 2>(1);
   const [services, setServices] = useState<string[]>(startingServices);
   const [postcode, setPostcode] = useState(startingPostcode);
   const [localities, setLocalities] = useState<AddressLocality[]>([]);

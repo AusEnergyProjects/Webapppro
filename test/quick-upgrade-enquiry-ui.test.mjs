@@ -74,9 +74,9 @@ test("homepage preserves service and postcode while the dialog keeps mandatory a
   assert.match(component, /ENERGY_SERVICE_CATALOGUE\.map/);
   assert.match(component, /name="service"[\s\S]*?required>/);
   assert.match(component, /name="postcode"[\s\S]*?required \/>/);
-  assert.match(component, /initialPostcode=\{postcode\} initialServices=\{\[service\]\} startAtDetails/);
-  assert.match(dialog, /startAtDetails = false/);
-  assert.match(dialog, /startAtDetails && startingServices\.length > 0 \? 2 : 1/);
+  assert.match(component, /initialPostcode=\{postcode\} initialServices=\{\[service\]\}/);
+  assert.doesNotMatch(component, /startAtDetails/);
+  assert.match(dialog, /const \[step, setStep\] = useState<1 \| 2>\(1\)/);
   assert.match(dialog, /label="Street address \*"[^>]*required/);
   assert.match(dialog, /Your selected services, full property address/);
   assert.match(dialog, /step === 1 \? firstServiceRef\.current : postcodeRef\.current/);

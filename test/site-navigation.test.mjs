@@ -453,7 +453,8 @@ test("homepage makes the quick upgrade request dominant and keeps guided help se
   const hero = guide.slice(guide.indexOf('className={styles.hero}'), guide.indexOf('className={styles.steps}'));
   assert.match(hero, /<QuickUpgradeEnquiry \/>/);
   assert.doesNotMatch(hero, /SurgeOpenButton|href="\/plan"|href="\/compare"/);
-  assert.match(quickUpgradeEnquiry, /initialPostcode=\{postcode\} initialServices=\{\[service\]\} startAtDetails/);
+  assert.match(quickUpgradeEnquiry, /initialPostcode=\{postcode\} initialServices=\{\[service\]\}/);
+  assert.doesNotMatch(quickUpgradeEnquiry, /startAtDetails/);
   assert.match(guide, /className=\{styles.tools\}/);
 });
 

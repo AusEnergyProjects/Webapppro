@@ -21,9 +21,10 @@ test("the public journey defers real 3D while keeping a lightweight image fallba
   assert.match(renderer, /renderer\.dispose\(\)/);
   assert.match(renderer, /motion\.matches \? 0 : turn/);
   assert.match(styles, /touch-action: pan-y/);
-  assert.match(scene, /aria-label="Interactive 3D home/);
+  assert.match(scene, /aria-label="3D cutaway of an all-electric home/);
   assert.match(scene, /const progress = motion\.matches \? 0/);
-  assert.match(scene, /canvas\.current\.tabIndex = progress < \.1 && controller\.current \? 0 : -1/);
+  assert.doesNotMatch(scene, /<button|modelControls|onKeyDown/);
+  assert.match(renderer, /targetRoofHeight = motion\.matches \? 2\.4 : reveal \* 2\.4/);
   assert.doesNotMatch(landing, /HolographicEnergyField|<canvas|requestAnimationFrame|pointermove|onPointerMove|data-spatial-scene/);
   assert.doesNotMatch(styles, /customer-hologram-sweep|customer-scan-drop|spatial-route-breathe|spatial-nebula-breathe/);
   assert.doesNotMatch(styles, /\.customer-scene-home::before|\.planner-home-scan-plane|\.planner-home-energy-field/);

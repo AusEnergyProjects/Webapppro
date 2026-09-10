@@ -4,14 +4,21 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { HomeEnergyScene } from "@/lib/home-energy-scene";
 import styles from "./GettingStarted.module.css";
 
+const featureLabels = [
+  ["solar", "Solar generation"], ["ev", "EV + wall charger"],
+  ["hotWater", "Heat-pump hot water"], ["battery", "Home battery"],
+  ["insulation", "Insulated envelope"], ["glazing", "Double glazing"],
+  ["airConditioning", "Reverse-cycle air con"], ["ventilation", "Heat-recovery ventilation"],
+] as const;
+
 export function HomeHeroScene({ children }: { children: ReactNode }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const anchor = useRef<HTMLDivElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
   const hero = useRef<HTMLDivElement>(null);
+  const labels = useRef(new Map<string, HTMLSpanElement>());
   const controller = useRef<HomeEnergyScene | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "unavailable">("loading");
-  const [roofOpen, setRoofOpen] = useState(false);
 
   useEffect(() => {
     const element = canvas.current;
@@ -38,8 +45,7 @@ export function HomeHeroScene({ children }: { children: ReactNode }) {
         opacity: String(1 - progress * .86),
         pointerEvents: progress < .1 ? "auto" : "none",
       });
-      if (canvas.current) canvas.current.tabIndex = progress < .1 && controller.current ? 0 : -1;
-      controller.current?.setScrollTurn(window.scrollY * .002);
+      controller.current?.setScrollProgress(window.scrollY * .00045, Math.min(1, Math.max(0, (window.scrollY - 40) / 360)));
     }
     function scheduleLayout() { if (!layoutFrame) layoutFrame = window.requestAnimationFrame(updateLayout); }
     const sizeObserver = new ResizeObserver(scheduleLayout);
@@ -53,7 +59,13 @@ export function HomeHeroScene({ children }: { children: ReactNode }) {
       observer.disconnect();
       void import("@/lib/home-energy-scene").then(({ createHomeEnergyScene }) => {
         if (disposed) return;
-        controller.current = createHomeEnergyScene(element, () => { controller.current = null; element.tabIndex = -1; setStatus("unavailable"); });
+        controller.current = createHomeEnergyScene(element, () => { controller.current = null; setStatus("unavailable"); }, (positions) => {
+          for (const [key, label] of labels.current) {
+            const position = positions.find((entry) => entry.key === key);
+            label.style.opacity = position ? "1" : "0";
+            if (position) { label.style.left = `${position.x}px`; label.style.top = `${position.y}px`; }
+          }
+        });
         setStatus("ready");
         updateLayout();
       }).catch(() => { if (!disposed) setStatus("unavailable"); });
@@ -77,28 +89,12 @@ export function HomeHeroScene({ children }: { children: ReactNode }) {
       {/* The fallback is already compressed WebP and stays outside the image runtime. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {status !== "ready" ? <img className={styles.modelFallback} src="/aea-home-future.webp" alt="Conceptual energy-efficient home with rooftop solar and a home battery" width={1536} height={1024} fetchPriority="high" /> : null}
-      <canvas ref={canvas} className={styles.modelCanvas} data-ready={status === "ready"} tabIndex={-1} role="img" aria-label="Interactive 3D home. Drag left or right to turn. Use arrow keys to rotate and tilt, or Home to reset." onKeyDown={(event) => {
-        if (!controller.current || event.currentTarget.tabIndex < 0) return;
-        if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home"].includes(event.key)) event.preventDefault();
-        if (event.key === "ArrowLeft") controller.current.rotate(-.3);
-        if (event.key === "ArrowRight") controller.current.rotate(.3);
-        if (event.key === "ArrowUp") controller.current.tilt(.12);
-        if (event.key === "ArrowDown") controller.current.tilt(-.12);
-        if (event.key === "Home") controller.current.reset();
-      }} />
+      <canvas ref={canvas} className={styles.modelCanvas} data-ready={status === "ready"} role="img" aria-hidden={status !== "ready"} aria-label="3D cutaway of an all-electric home with insulation, double glazing, solar panels, a battery, heat-pump hot water, EV charging, air conditioning and heat-recovery ventilation. The roof opens as you scroll." />
+      {status === "ready" ? featureLabels.map(([key, label]) => <span key={key} ref={(element) => { if (element) labels.current.set(key, element); else labels.current.delete(key); }} className={styles.featureLabel} aria-hidden="true">{label}</span>) : null}
     </div>
     <div className={styles.heroScene} ref={hero}>
     {children}
     <div className={styles.modelStage} ref={anchor} aria-hidden="true" />
-    <div className={styles.modelToolbar}>
-      <p role="status">{status === "ready" ? "Drag to explore in 3D" : status === "loading" ? "Preparing your 3D home…" : "A smarter home, from every angle"}</p>
-      {status === "ready" ? <div className={styles.modelControls}>
-        <button type="button" aria-label="Rotate home left" onClick={() => controller.current?.rotate(-Math.PI / 4)}>↶</button>
-        <button type="button" aria-label="Rotate home right" onClick={() => controller.current?.rotate(Math.PI / 4)}>↷</button>
-        <button type="button" aria-pressed={roofOpen} onClick={() => { controller.current?.setRoofOpen(!roofOpen); setRoofOpen(!roofOpen); }}>{roofOpen ? "Close roof" : "Look inside"}</button>
-        <button type="button" aria-label="Reset home view" onClick={() => controller.current?.reset()}>Reset</button>
-      </div> : null}
-    </div>
     </div>
   </>;
 }

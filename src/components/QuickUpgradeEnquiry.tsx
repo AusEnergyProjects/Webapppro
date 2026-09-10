@@ -31,10 +31,10 @@ export function QuickUpgradeEnquiry() {
         <label className={styles.field}><span>Your postcode</span><input name="postcode" value={postcode} onChange={(event) => setPostcode(event.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" autoComplete="postal-code" placeholder="e.g. 3000" pattern="\d{4}" maxLength={4} required /></label>
         <button className={styles.enquiryButton} id="quick-upgrade-options" type="submit">Find the right help <span aria-hidden="true">↗</span></button>
       </form>
-      <p className={styles.enquiryNote}>Add your property and contact details next. You can edit or add services before sending.</p>
+      <p className={styles.enquiryNote}>Choose any other services next, then add your property and contact details.</p>
       <div className={styles.enquiryTrust}><span>No account needed</span><span>No obligation</span></div>
       <p className={styles.sharingNote}>Your request and full property address are shared with matching approved businesses to help them quote. You choose which contact details they receive.</p>
     </section>
-    {open ? <QuickUpgradeEnquiryDialog initialPostcode={postcode} initialServices={[service]} startAtDetails onClose={() => setOpen(false)} /> : null}
+    {open ? <QuickUpgradeEnquiryDialog initialPostcode={postcode} initialServices={[service]} onClose={() => setOpen(false)} /> : null}
   </>;
 }

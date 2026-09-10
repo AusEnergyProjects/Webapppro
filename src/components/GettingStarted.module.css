@@ -89,17 +89,14 @@
 :global(body.aea-platform) main.page .modelCanvas { touch-action: pan-y; cursor: grab; opacity: 0; }
 :global(body.aea-platform) main.page .modelCanvas[data-ready="true"] { opacity: 1; }
 :global(body.aea-platform) main.page .modelCanvas[data-dragging="true"] { cursor: grabbing; }
-:global(body.aea-platform) main.page .modelCanvas:focus-visible { outline: 2px solid #9af3d3; outline-offset: -12px; border-radius: 24px; }
 :global(body.aea-platform) main.page .modelFallback { object-fit: contain; pointer-events: none; }
-:global(body.aea-platform) main.page .modelStage { position: absolute; inset: 320px -30px 90px; pointer-events: none; }
+:global(body.aea-platform) main.page .featureLabel { position: absolute; opacity: 0; padding: 5px 8px; background: #031522d9; border-left: 1px solid #97efcf; color: #d8ffef; font-size: .7rem; line-height: 1.4; letter-spacing: .02em; pointer-events: none; white-space: nowrap; transition: opacity .3s; }
+:global(body.aea-platform) main.page .featureLabel::after { content: ""; width: 1px; height: 13px; background: #97efcf; position: absolute; left: -1px; top: 100%; }
+@media (prefers-reduced-motion: reduce) { :global(body.aea-platform) main.page .featureLabel { transition: none; } }
+:global(body.aea-platform) main.page .modelStage { position: absolute; inset: 320px -30px 20px; pointer-events: none; }
 :global(body.aea-platform) main.page .heroCopy { pointer-events: none; }
 :global(body.aea-platform) main.page .heroCopy > * { pointer-events: auto; }
-:global(body.aea-platform) main.page .modelToolbar { position: absolute; bottom: 22px; left: 26px; right: 26px; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; pointer-events: auto; }
-:global(body.aea-platform) main.page .modelToolbar p { margin: 0; font-size: .8125rem; color: #b4d6ce; }
-:global(body.aea-platform) main.page .modelControls { display: flex; gap: 5px; }
-:global(body.aea-platform) main.page .modelControls button { min-height: 44px; min-width: 40px; border: 1px solid #46786c; border-radius: 8px; background: #092d37; color: #d5ffed; padding: 8px 11px; font-size: .8125rem; cursor: pointer; }
-:global(body.aea-platform) main.page .modelControls button:hover, :global(body.aea-platform) main.page .modelControls button[aria-pressed="true"] { background: #12554c; border-color: #9af3d3; }
 :global(body.aea-platform) main.page .steps, :global(body.aea-platform) main.page .assessments, :global(body.aea-platform) main.page .tools, :global(body.aea-platform) main.page .finalCta, :global(body.aea-platform) main.page .partners { position: relative; z-index: 1; }
 :global(body.aea-platform) main.page .steps, :global(body.aea-platform) main.page .toolGrid { background: #041726c9; }
-@media (max-width: 850px) { :global(body.aea-platform) main.page .modelStage { inset: 310px -15px 90px; } }
-@media (max-width: 560px) { :global(body.aea-platform) main.page .modelStage { inset: 335px 0 100px; } :global(body.aea-platform) main.page .modelToolbar { bottom: 18px; left: 23px; right: 23px; gap: 8px; } }
+@media (max-width: 850px) { :global(body.aea-platform) main.page .modelStage { inset: 310px -15px 20px; } }
+@media (max-width: 560px) { :global(body.aea-platform) main.page .modelStage { inset: 335px 0 20px; } }
