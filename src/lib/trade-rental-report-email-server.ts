@@ -21,7 +21,7 @@ export async function rentalReportDeliveryRecipient(ownerUid: string, workOrderI
 }
 
 export async function rentalReportDeliveryState(ownerUid: string, inspectionId: string) {
-  const row = await getD1().prepare(`SELECT event.event_type, event.metadata, event.created_at FROM trade_rental_inspection_events event
+  const row = await getD1().prepare(`SELECT event.event_type, event.report_id, event.metadata, event.created_at FROM trade_rental_inspection_events event
     JOIN trade_rental_inspections inspection ON inspection.id = event.inspection_id AND inspection.firebase_uid = event.firebase_uid
       AND inspection.issued_report_id = event.report_id AND inspection.status = 'issued'
     WHERE event.firebase_uid = ? AND event.inspection_id = ? AND event.event_type IN ('report_email_requested', 'report_email_accepted', 'report_email_failed')
@@ -30,7 +30,8 @@ export async function rentalReportDeliveryState(ownerUid: string, inspectionId: 
   if (!row) return null;
   const meta = object(row.metadata);
   const status = row.event_type === 'report_email_accepted' ? 'accepted' : row.event_type === 'report_email_failed' ? 'failed' : 'sending';
-  return { status, reportId: String(meta.reportId || ''), message: status === 'accepted' ? 'The report email was accepted for delivery.'
+  return { status, reportId: String(row.report_id || ''), recipientSha256: /^[a-f0-9]{64}$/.test(String(meta.recipientSha256 || '')) ? String(meta.recipientSha256) : '',
+    message: status === 'accepted' ? 'The report email was accepted for delivery.'
     : status === 'failed' ? String(meta.error || 'The report could not be emailed. Retry from this assessment.') : 'The report email is being sent.', at: row.created_at };
 }
 

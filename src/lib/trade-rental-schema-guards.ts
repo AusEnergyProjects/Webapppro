@@ -1,3 +1,4 @@
+import { JOB_DELETION_SCHEMA_GUARDS, upgradeJobDeletionGuards } from "./trade-job-deletion-schema-guards.ts";
 // Sites splits migration SQL on semicolons, so rental trigger bodies are installed
 // through D1 prepared statements after migration 0160 has created the tables.
 import { canonicalTlinkSchemaGuardSql } from "./tlink-schema-guards.ts";
@@ -215,7 +216,7 @@ for (const table of [
   );
 }
 
-export const TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS: readonly RentalSchemaGuardDefinition[] = definitions;
+export const TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS: readonly RentalSchemaGuardDefinition[] = definitions.map((definition) => JOB_DELETION_SCHEMA_GUARDS.find((replacement) => replacement.name === definition.name) || definition);
 
 const REQUIRED_COLUMNS = {
   trade_work_orders: ["id", "firebase_uid"],
@@ -264,6 +265,7 @@ async function requireRentalSchemaMigration(database: D1Database) {
 
 async function installRentalSchemaGuards(database: D1Database) {
   await requireRentalSchemaMigration(database);
+  await upgradeJobDeletionGuards(database, JOB_DELETION_SCHEMA_GUARDS.filter((definition) => definition.name === "trade_rental_events_append_only_delete"), canonicalTlinkSchemaGuardSql);
   const rows = await database.prepare("SELECT name, sql FROM sqlite_schema WHERE type = 'trigger'")
     .all<{ name: string; sql: string | null }>();
   const installed = new Map(rows.results.map((row) => [String(row.name), String(row.sql || "")]));

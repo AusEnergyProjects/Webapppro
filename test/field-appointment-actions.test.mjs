@@ -122,12 +122,73 @@ function fixture(overrides = {}, effects = {}) {
     '@/lib/direct-appointment-invite-server': { sendDirectAppointmentCalendarInvite: async (args) => { messages.push(args); if (effects.email) await effects.email(args); return {status:'accepted'}; } },
     '@/lib/trade-rental-credentials': loadTypescriptModule('../src/lib/trade-rental-credentials.ts'),
     '@/lib/trade-job-deletion-server': { scheduleJobFileCleanup() {} },
-    '../../trade-schedule/route': { PATCH: async (request) => { scheduleChanges.push(await request.json()); return Response.json({ok:true,customerEmails:[],calendarSync:{failed:0}}); } },
+    '../../trade-schedule/route': { PATCH: async (request) => { const body = await request.json(); scheduleChanges.push(body); if (effects.schedule) await effects.schedule(body, database); return Response.json({ok:true,customerEmails:[],calendarSync:{failed:0}}); } },
   });
   const patch = (action, extra={}) => route.PATCH(new Request('https://example.test/api/field/appointment-actions', {
     method:'PATCH', body:JSON.stringify({workOrderId:'job',action,expectedRevision:4,appointmentId:'appointment',expectedAppointmentRevision:2,...extra}) }));
-  return { database, db, access, messages, calendars, scheduleChanges, patch };
+  return { database, db, access, messages, calendars, scheduleChanges, patch,
+    get: () => route.GET(new Request('https://example.test/api/field/appointment-actions?workOrderId=job')) };
 }
+
+test('an unscheduled job exposes Schedule and Delete and creates its first appointment through the existing scheduler', async () => {
+  const f = fixture({ isOwner: true }, { schedule: (body, database) => {
+    database.prepare(`INSERT INTO trade_crm_appointments VALUES('first-appointment','job','owner',1,'scheduled',?,'2026-10-11T11:00',?,'after','after')`).run(body.startsAt, body.memberId);
+    database.exec("UPDATE trade_work_orders SET stage='scheduled',revision=5,scheduled_start='2026-10-11',scheduled_end='2026-10-11'");
+  } });
+  f.database.exec(`DELETE FROM trade_crm_appointments; UPDATE trade_work_orders SET stage='new',scheduled_start='',scheduled_end='';
+    CREATE TABLE trade_team_members(id text, owner_uid text, display_name text, status text, member_uid text, capabilities text);
+    CREATE TABLE trade_team_member_credentials(owner_uid text,team_member_id text,file_id text,rental_gate text,status text,credential_number text,jurisdiction text,credential_type text,expires_at text);
+    CREATE TABLE trade_team_member_files(id text,owner_uid text,team_member_id text,status text,expires_at text);
+    INSERT INTO trade_team_members VALUES('worker','owner','Worker','active','worker-user','["general"]');`);
+  const context = await (await f.get()).json();
+  assert.equal(context.appointment, null); assert.equal(context.permissions.schedule, true);
+  assert.equal(context.permissions.reschedule, false); assert.equal(context.permissions.deleteJob, true);
+  assert.deepEqual(context.assignees, [{ id: 'worker', displayName: 'Worker' }]);
+  const response = await f.patch('schedule', { appointmentId: '', expectedAppointmentRevision: 0, startsAt: '2026-10-11T10:00', durationMinutes: 60, memberId: 'worker' });
+  assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+  assert.deepEqual(f.scheduleChanges[0], { action: 'schedule_job', workOrderId: 'job', expectedRevision: 4, startsAt: '2026-10-11T10:00', durationMinutes: 60, memberId: 'worker', weekStart: '2026-10-05' });
+  const result = await response.json(); assert.equal(result.jobPatch.appointmentId, 'first-appointment');
+  assert.equal(result.jobPatch.lifecycleStatus, 'scheduled'); assert.equal(f.messages[0].appointmentId, 'first-appointment');
+  assert.equal(f.messages[0].change, undefined, 'the new appointment uses an initial invite');
+});
+
+test('unscheduled scheduling cannot bypass protected jobs, assignment permissions or stale revisions', async () => {
+  for (const kind of ['protected', 'other-worker', 'no-permission', 'stale', 'existing-appointment']) {
+    const f = fixture(kind === 'other-worker' ? { memberId: 'other' } : kind === 'no-permission' ? { canRescheduleJobs: false } : {});
+    if (kind !== 'existing-appointment') f.database.exec("DELETE FROM trade_crm_appointments; UPDATE trade_work_orders SET stage='new'");
+    if (kind === 'protected') f.database.exec("UPDATE trade_crm_job_details SET customer_source='platform_private'");
+    const response = await f.patch('schedule', { appointmentId: '', expectedAppointmentRevision: 0, expectedRevision: kind === 'stale' ? 3 : 4, startsAt: '2026-10-11T10:00', durationMinutes: 60, memberId: 'worker' });
+    assert.equal(response.status, ['stale', 'existing-appointment'].includes(kind) ? 409 : 403, kind);
+    assert.equal(f.scheduleChanges.length, 0); assert.equal(f.messages.length, 0);
+  }
+});
+
+test('released public leads expose scheduling and deletion while private opportunities retain their access boundary', async () => {
+  for (const released of [true, false]) {
+    const f = fixture({ isOwner: true });
+    f.database.exec(`DELETE FROM trade_crm_appointments; UPDATE trade_work_orders SET stage='new';
+      CREATE TABLE trade_team_members(id text, owner_uid text, display_name text, status text, member_uid text, capabilities text);
+      CREATE TABLE trade_team_member_credentials(owner_uid text,team_member_id text,file_id text,rental_gate text,status text,credential_number text,jurisdiction text,credential_type text,expires_at text);
+      CREATE TABLE trade_team_member_files(id text,owner_uid text,team_member_id text,status text,expires_at text);`);
+    f.database.prepare('UPDATE trade_work_orders SET source_type=?').run(released ? 'public_lead' : 'opportunity');
+    f.database.prepare('UPDATE trade_crm_job_details SET customer_source=?').run(released ? 'public_lead_released' : 'platform_private');
+    const response = await f.get(); assert.equal(response.status, 200);
+    const context = await response.json();
+    for (const permission of ['schedule', 'cancel', 'deleteJob', 'editCustomer']) assert.equal(context.permissions[permission], released, permission);
+    assert.equal(Boolean(context.customer), released);
+  }
+});
+
+test('an unscheduled job cancels without an appointment and a concurrent appointment prevents stale cancellation', async () => {
+  for (const race of [false, true]) {
+    const f = fixture(); f.database.exec("DELETE FROM trade_crm_appointments; UPDATE trade_work_orders SET stage='new'");
+    if (race) f.db.setBeforeBatch(() => f.database.exec("INSERT INTO trade_crm_appointments VALUES('new','job','owner',1,'scheduled','2026-10-11T09:00','2026-10-11T10:00','worker','now','now')"));
+    const response = await f.patch('cancel', { appointmentId: '', expectedAppointmentRevision: 0 });
+    assert.equal(response.status, race ? 409 : 200);
+    assert.equal(f.database.prepare('SELECT stage FROM trade_work_orders').get().stage, race ? 'new' : 'cancelled');
+    assert.equal(f.calendars.length, 0); assert.equal(f.messages.length, 0);
+  }
+});
 
 test('no show removes the slot, preserves the job and evidence identity, and updates connected calendar', async () => {
   const f=fixture();const response=await f.patch('no_show');assert.equal(response.status,200);

@@ -1,3 +1,5 @@
+import { JOB_DELETION_SCHEMA_GUARDS, upgradeJobDeletionGuards } from "./trade-job-deletion-schema-guards.ts";
+import { draftComplianceDeletionGuardDefinitions } from "./trade-job-draft-compliance-deletion.ts";
 // Governed Creditex database guards installed through the D1 prepared-statement API.
 // Sites migrations cannot carry CREATE TRIGGER bodies because its migration parser splits on semicolons.
 function currentApprovedOfficialSourceBindingGuardSql(
@@ -508,7 +510,7 @@ export const CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS =
 export const CREDITEX_SCHEMA_GUARD_DEFINITIONS =
   CREDITEX_ALL_SCHEMA_GUARD_DEFINITIONS.slice(
     CREDITEX_PILOT_SCHEMA_GUARD_COUNT,
-  );
+  ).map((definition) => [...JOB_DELETION_SCHEMA_GUARDS, ...draftComplianceDeletionGuardDefinitions].find((replacement) => replacement.name === definition.name) || definition);
 
 const CREDITEX_CALCULATOR_AUTHORING_SCHEMA_GUARD_NAMES = new Set([
   "compliance_calculator_authoring_receipt_insert_guard",
@@ -726,6 +728,7 @@ async function installCreditexSchemaGuards(
     requireCreditexSchemaMigrations,
 ) {
   await requireMigrations(database);
+  await upgradeJobDeletionGuards(database, [...JOB_DELETION_SCHEMA_GUARDS, ...draftComplianceDeletionGuardDefinitions].filter((replacement) => definitions.some((definition) => definition.name === replacement.name)), canonicalCreditexSchemaGuardSql);
   const installed = await installedGuards(database);
   const mismatched = definitions.filter(
     (definition) =>

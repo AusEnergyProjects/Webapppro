@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { installMissingDraftDeletionContext } from "./helpers/job-deletion-guard-fixture.mjs";
 import {
   listCreditexEvidenceIntegrityReceipts,
   verifyCreditexEvidenceIntegrity,
@@ -157,6 +158,7 @@ function fixture() {
     );
   `);
   database.exec(migration);
+  installMissingDraftDeletionContext(database);
   for (const guard of CREDITEX_SCHEMA_GUARD_DEFINITIONS.filter(
     ({ name }) => name.startsWith(
       "compliance_evidence_integrity_receipts_",

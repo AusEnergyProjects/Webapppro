@@ -1054,6 +1054,13 @@ test("multi-activity migration upgrades existing guarded intents and linked case
 function intentDatabase() {
   const database = new DatabaseSync(":memory:");
   database.exec(migration);
+  database.exec(`
+    CREATE TABLE trade_crm_write_guards (firebase_uid text, operation_id text, step_number integer, verified integer, created_at text);
+    CREATE TABLE trade_work_orders (id text, firebase_uid text, revision integer, updated_at text, record_status text, partner_type text, source_type text, stage text);
+    CREATE TABLE trade_crm_job_details (work_order_id text, firebase_uid text, customer_source text);
+    CREATE TABLE compliance_cases (work_order_id text, installer_uid text);
+    CREATE TABLE trade_activity_field_records (intent_id text);
+  `);
   for (const statement of multiActivityMigration
     .split("--> statement-breakpoint")
     .flatMap((part) => part.split(/;\s*(?=(?:ALTER|UPDATE|DROP|CREATE)\s)/i))

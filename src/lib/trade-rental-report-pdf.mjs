@@ -3,6 +3,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { publicRentalReportValue, rentalCheckIsReadiness, VIC_RENTAL_ASSESSMENT_TEMPLATE } from "./trade-rental-assessment.mjs";
 import { RENTAL_QUOTATION_FIELDS, RENTAL_OBSERVATION_NUMBER_FIELDS, rentalQuotation, rentalObservationResponseLabel } from "./rental-quotation.mjs";
 import { rentalImageWithinReportLimit } from "./trade-rental-image-dimensions.mjs";
+import { rentalReportAnswerPresentation } from "./rental-report-answer.mjs";
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
@@ -94,17 +95,6 @@ function metadataValue(moduleKey, key, value) {
   if (typeof value === "boolean") return value ? "Yes" : "No";
   const field = VIC_RENTAL_ASSESSMENT_TEMPLATE.modules[moduleKey]?.metadataFields.find((entry) => entry.key === key);
   return field?.options?.find((option) => option.value === value)?.label || (key === "rentalRegime" ? label(value) : value);
-}
-
-function outcomeLabel(outcome) {
-  return ({
-    meets: "Meets",
-    does_not_meet: "Does not meet",
-    specialist_verification_required: "Specialist verification required",
-    not_accessible: "Not accessible",
-    not_applicable: "Not applicable",
-    exemption_evidence_pending: "Exemption evidence pending",
-  })[outcome] || label(outcome || "Not assessed");
 }
 
 export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = {}, fontBytes = {}, brandBytes) {
@@ -220,15 +210,14 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     const printable = safe(value);
     const fontSize = 7.4;
     const available = CONTENT_WIDTH - 16;
-    let visible = printable;
-    while (visible.length > 1 && bold.widthOfTextAtSize(`${visible}...`, fontSize) > available) visible = visible.slice(0, -1);
-    if (visible !== printable) visible = `${visible.trimEnd()}...`;
-    const width = Math.min(CONTENT_WIDTH, bold.widthOfTextAtSize(visible, fontSize) + 16);
-    ensure(23);
+    const lines = wrap(bold, printable, fontSize, available);
+    const width = Math.min(CONTENT_WIDTH, Math.max(...lines.map((line) => bold.widthOfTextAtSize(line, fontSize))) + 16);
+    const height = 20 + (lines.length - 1) * 11;
+    ensure(height + 3);
     const color = tone === "danger" ? palette.danger : tone === "warning" ? palette.warning : palette.primary;
-    page.drawRectangle({ x: MARGIN, y: y - 20, width, height: 20, color, opacity: 0.12 });
-    page.drawText(visible, { x: MARGIN + 8, y: y - 13, font: bold, size: fontSize, color });
-    y -= 30;
+    page.drawRectangle({ x: MARGIN, y: y - height, width, height, color, opacity: 0.12 });
+    lines.forEach((line, index) => page.drawText(line, { x: MARGIN + 8, y: y - 13 - index * 11, font: bold, size: fontSize, color }));
+    y -= height + 10;
   }
 
   const embeddedEvidence = new Map();
@@ -516,13 +505,11 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
         ensure(72);
         const tone = item.outcome === "meets" || item.outcome === "not_applicable" ? "primary"
           : item.outcome === "does_not_meet" && !rentalCheckIsReadiness(item, assessmentModule.assessmentScope) ? "danger" : "warning";
-        const resultLabel = snapshot.inspection?.applicabilityLimitation && assessmentModule.key === "minimum_standards"
-          ? (item.outcome === "meets" ? "Observation satisfactory; legal applicability unconfirmed" : outcomeLabel(item.outcome))
-          : rentalCheckIsReadiness(item, assessmentModule.assessmentScope)
-          ? (item.outcome === "meets" ? "Ready for the recorded requirement" : item.outcome === "does_not_meet" ? "Upgrade planning required" : outcomeLabel(item.outcome))
-          : outcomeLabel(item.outcome);
-        badge(`${item.historicalObservation ? "Earlier result: " : ""}${resultLabel}${item.locationLabel ? ` | ${item.locationLabel}` : ""}`, tone);
+        const answer = rentalReportAnswerPresentation(item, { moduleKey: assessmentModule.key, assessmentScope: assessmentModule.assessmentScope,
+          applicabilityLimitation: snapshot.inspection?.applicabilityLimitation });
+        badge(`${item.historicalObservation ? "Earlier result: " : ""}${answer.label}${item.locationLabel ? ` | ${item.locationLabel}` : ""}`, tone);
         text(item.prompt, { bold: true, size: 9.7, lineHeight: 13, after: 3 });
+        if (answer.context) keyValue("Assessment context", answer.context);
         if (item.trigger) keyValue("Applies when", item.trigger);
         if (item.locationLabel) keyValue("Location", item.locationLabel);
         if (item.publicNotes) keyValue("Report detail", item.publicNotes);

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import { installMissingDraftDeletionContext } from "./helpers/job-deletion-guard-fixture.mjs";
 import {
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
@@ -261,6 +262,7 @@ function workflowFixture() {
   applyMigration(database, acceptedDisclosureMigration);
   applyMigration(database, acceptedJobFilesMigration);
   applyMigration(database, customerDocumentDeliveryMigration);
+  installMissingDraftDeletionContext(database);
   const now = "2026-08-12T01:00:00.000Z";
   const matchId = "39c16039-4acd-4664-a2e5-3d8ad0dd7dd6";
   const reference = "AEA-20260812-0011223344556677";

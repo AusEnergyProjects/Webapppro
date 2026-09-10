@@ -21,6 +21,7 @@ function service(bucket) {
     '@/lib/trade-rental-report-links': {}, '@/lib/customer-plan-pdf-fonts': {},
     '@/lib/trade-rental-evidence.mjs': evidence, '@/lib/trade-rental-credentials': {},
     '@/lib/rental-assessor-workflow.mjs': {}, '@/lib/trade-rental-schema-guards': {},
+    '@/lib/rental-report-answer.mjs': {},
   };
   const moduleRecord = { exports: {} };
   new Function('require', 'module', 'exports', compiled)((id) => {

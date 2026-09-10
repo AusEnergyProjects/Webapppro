@@ -6,6 +6,7 @@ import * as SQLite from 'expo-sqlite';
 import { ADDRESS_MAX_AGE_MS } from '@/lib/config';
 import { deleteEncryptedBundle, encryptFileForQueue, purgeEncryptedFiles, purgeEncryptionKey } from '@/lib/encrypted-files';
 import { completeEvidenceEnvelope, type EvidenceCaptureEnvelope } from '@/lib/evidence';
+import { rentalJobWithResult, type RentalAssessmentResult } from '@/lib/rental-inspection';
 import type {
   FieldAccessMode,
   FieldJob,
@@ -36,6 +37,10 @@ let localOwnerEpoch = 0;
 const localOwnerListeners = new Set<() => void>();
 
 export type LocalDataOwner = { key: string; epoch: number };
+
+export function rentalResultSettingKey(owner: LocalDataOwner, workOrderId: string) {
+  return `rental-result:${encodeURIComponent(owner.key)}:${workOrderId}`;
+}
 
 export function subscribeLocalDataOwner(listener: () => void) {
   localOwnerListeners.add(listener);
@@ -336,14 +341,23 @@ export async function listJobs() {
         AND COALESCE(json_extract(payload, '$.lifecycleStatus'), '') <> 'cancelled'
       ORDER BY scheduled_start = '', scheduled_start, work_number`,
   );
-  return rows.map((row) => JSON.parse(row.payload) as FieldJob);
+  return Promise.all(rows.map((row) => withCachedRentalResult(JSON.parse(row.payload) as FieldJob)));
+}
+
+async function withCachedRentalResult(job: FieldJob) {
+  if (!job.rentalInspection || job.fieldLane === 'creditex_manual') return job;
+  const owner = await getLocalDataOwner();
+  const raw = await readRentalSetting(owner, rentalResultSettingKey(owner, job.id));
+  assertLocalDataOwner(owner);
+  const result: RentalAssessmentResult | null = raw ? JSON.parse(raw) : null;
+  return rentalJobWithResult(job, result);
 }
 
 export async function getJob(id: string) {
   await purgeExpiredAddresses();
   const db = await getDatabase();
   const row = await db.getFirstAsync<{ payload: string }>('SELECT payload FROM jobs WHERE id = ?', id);
-  return row ? JSON.parse(row.payload) as FieldJob : null;
+  return row ? withCachedRentalResult(JSON.parse(row.payload) as FieldJob) : null;
 }
 
 async function workOrderFieldLane(

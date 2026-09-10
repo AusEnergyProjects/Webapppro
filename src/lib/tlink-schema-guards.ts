@@ -1,3 +1,4 @@
+import { JOB_DELETION_SCHEMA_GUARDS, upgradeJobDeletionGuards } from "./trade-job-deletion-schema-guards.ts";
 // Sites splits migration SQL on semicolons, so trigger bodies are installed
 // through D1 prepared statements after their tables and columns exist.
 type TlinkSchemaGuardDefinition = {
@@ -19,7 +20,7 @@ export const TLINK_SCHEMA_GUARD_DEFINITIONS: readonly TlinkSchemaGuardDefinition
   { name: "trade_activity_customer_document_delivery_update_guard", sql: "CREATE TRIGGER IF NOT EXISTS `trade_activity_customer_document_delivery_update_guard` BEFORE UPDATE ON `trade_activity_customer_document_deliveries` FOR EACH ROW BEGIN SELECT CASE WHEN NEW.work_order_id IS NOT OLD.work_order_id OR NEW.appointment_id IS NOT OLD.appointment_id OR NEW.firebase_uid IS NOT OLD.firebase_uid OR NEW.recipient_email_sha256 IS NOT OLD.recipient_email_sha256 OR NEW.activity_bindings IS NOT OLD.activity_bindings OR NEW.document_ids IS NOT OLD.document_ids OR NEW.document_sha256_set IS NOT OLD.document_sha256_set OR NEW.pack_sha256 IS NOT OLD.pack_sha256 OR NEW.delivery_generation IS NOT OLD.delivery_generation OR NEW.retry_of_delivery_id IS NOT OLD.retry_of_delivery_id OR NEW.provider IS NOT OLD.provider OR NEW.idempotency_key IS NOT OLD.idempotency_key OR NEW.created_at IS NOT OLD.created_at OR (OLD.provider_message_id <> '' AND NEW.provider_message_id IS NOT OLD.provider_message_id) OR (OLD.accepted_at <> '' AND NEW.accepted_at IS NOT OLD.accepted_at) OR (OLD.sent_at <> '' AND NEW.sent_at IS NOT OLD.sent_at) OR (OLD.delivered_at <> '' AND NEW.delivered_at IS NOT OLD.delivered_at) OR (OLD.failed_at <> '' AND NEW.failed_at IS NOT OLD.failed_at) OR (OLD.status IN ('failed','bounced','complained','suppressed') AND NEW.status IS NOT OLD.status) OR (OLD.status = 'delivered' AND NEW.status IN ('queued','sending','provider_accepted','sent')) OR (OLD.status = 'sent' AND NEW.status IN ('queued','sending','provider_accepted')) OR (OLD.status = 'provider_accepted' AND NEW.status IN ('queued','sending')) OR (OLD.status = 'sending' AND NEW.status = 'queued') THEN RAISE(ABORT, 'customer document delivery history is immutable and monotonic') END; END;" },
   { name: "trade_activity_customer_document_delivery_event_no_update", sql: "CREATE TRIGGER IF NOT EXISTS `trade_activity_customer_document_delivery_event_no_update` BEFORE UPDATE ON `trade_activity_customer_document_delivery_events` FOR EACH ROW BEGIN SELECT RAISE(ABORT, 'Customer document delivery events are immutable.'); END;" },
   { name: "trade_activity_customer_document_delivery_event_no_delete", sql: "CREATE TRIGGER IF NOT EXISTS `trade_activity_customer_document_delivery_event_no_delete` BEFORE DELETE ON `trade_activity_customer_document_delivery_events` FOR EACH ROW BEGIN SELECT RAISE(ABORT, 'Customer document delivery event history must be retained.'); END;" },
-];
+].map((definition) => JOB_DELETION_SCHEMA_GUARDS.find((replacement) => replacement.name === definition.name) || definition);
 
 const readinessByDatabase = new WeakMap<object, Promise<void>>();
 
@@ -150,6 +151,7 @@ async function requireTlinkSchemaMigrations(database: D1Database) {
 
 async function installTlinkSchemaGuards(database: D1Database) {
   await requireTlinkSchemaMigrations(database);
+  await upgradeJobDeletionGuards(database, JOB_DELETION_SCHEMA_GUARDS.filter((definition) => definition.name === "trade_crm_job_media_accepted_lead_delete_guard"), canonicalTlinkSchemaGuardSql);
   const rows = await database.prepare("SELECT name, sql FROM sqlite_schema WHERE type = 'trigger'")
     .all<{ name: string; sql: string | null }>();
   const installed = new Map(rows.results.map((row) => [String(row.name), String(row.sql || "")]));

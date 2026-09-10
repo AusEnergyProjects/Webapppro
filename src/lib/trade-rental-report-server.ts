@@ -37,6 +37,7 @@ import { loadCustomerPlanPdfFonts } from "@/lib/customer-plan-pdf-fonts";
 import { rentalEvidenceCapture, rentalEvidencePhotoCapture } from "@/lib/trade-rental-evidence.mjs";
 import { rentalAssessorCheckPresentation, rentalShowerAssessmentProjection } from "@/lib/rental-assessor-workflow.mjs";
 import { assertRentalModuleCredentialCurrent } from "@/lib/trade-rental-credentials";
+import { rentalReportAnswerPresentation } from "@/lib/rental-report-answer.mjs";
 import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
 
 type Row = Record<string, unknown>;
@@ -448,6 +449,9 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
               itemKey: String(item.itemKey), sectionKey: String(item.sectionKey), checkKey: String(item.checkKey),
               instanceKey: String(item.instanceKey), locationLabel: String(item.locationLabel || ""),
               outcome: String(item.outcome), response: parsedObject(item.response), publicNotes: String(item.publicNotes || ""),
+              answerLabel: rentalReportAnswerPresentation({ ...item, historicalObservation }, {
+                moduleKey: module.module_key, check: assessmentCheck, assessmentScope: template.assessmentScope,
+              }).label,
               requiredEvidenceCount: number(item.requiredEvidenceCount), completedAt: String(item.completedAt || ""),
               ...(item.derived ? { derived: true } : {}),
               prompt: historicalObservation ? `Earlier observation: ${String(assessmentCheck?.prompt || item.checkKey)}`

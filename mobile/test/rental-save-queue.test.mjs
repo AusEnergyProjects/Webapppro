@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
+import { createHash } from 'node:crypto';
 import { rentalAssessorMetadataField } from '../../src/lib/rental-assessor-workflow.mjs';
 
 const source = readFileSync(new URL('../src/lib/rental-save-queue.ts', import.meta.url), 'utf8');
@@ -95,6 +96,7 @@ function harness(shared = {}) {
       result.modules[0].status = 'complete'; advance(result);
     } else if (body.action === 'issue_report') {
       result.inspection.status = 'issued';
+      result.inspection.issuedReportId = 'report-1';
       result.permissions.canIssue = false;
       result.reports = [{ id: 'report-1', status: 'issued' }];
     } else if (body.action === 'email_report') {
@@ -107,7 +109,8 @@ function harness(shared = {}) {
   state.handler ||= defaultRequest;
   const modules = {
     '../../../src/lib/rental-assessor-workflow.mjs': { rentalAssessorMetadataField },
-    'expo-crypto': { randomUUID: () => `00000000-0000-4000-8000-${String(++state.uuid).padStart(12, '0')}` },
+    'expo-crypto': { randomUUID: () => `00000000-0000-4000-8000-${String(++state.uuid).padStart(12, '0')}`,
+      CryptoDigestAlgorithm: { SHA256: 'sha256' }, digestStringAsync: async (algorithm, value) => createHash(algorithm).update(value).digest('hex') },
     'expo-file-system': { File, Directory, Paths: { document: 'file:///document' } },
     'expo-image-manipulator': { SaveFormat: { JPEG: 'jpeg' }, ImageManipulator: { manipulate: (sourceUri) => {
       const dimensions = state.imageDimensions || { width: 3000, height: 2000 };
@@ -129,6 +132,7 @@ function harness(shared = {}) {
     '@/lib/api': { ApiError, apiRequest: (...args) => state.handler(...args) },
     '@/lib/auth': { firebaseAuth: { get currentUser() { return state.owner.key.startsWith('firebase:') ? { uid: state.owner.key.slice(9) } : null; } } },
     '@/lib/database': {
+      rentalResultSettingKey: (owner, workOrderId) => `rental-result:${encodeURIComponent(owner.key)}:${workOrderId}`,
       assertLocalDataOwner: assertOwner, getLocalDataOwner: async () => ({ ...state.owner }),
       subscribeLocalDataOwner: (callback) => { ownerListeners.add(callback); return () => ownerListeners.delete(callback); },
       rentalQueueSettings: async (owner) => { assertOwner(owner); return [...store].filter(([key]) => key.startsWith('rental-save:')).map(([key, value]) => ({ key, value })); },
@@ -310,6 +314,56 @@ test('Finish retains the exact recipient and retries a failed delivery without r
   assert.equal((await h.queue.listPendingRentalSaves()).length, 0);
   assert.equal(h.state.calls.filter((call) => call.body?.action === 'issue_report').length, 1);
   assert.equal(h.state.result.reportDelivery.recipientEmail, 'client@example.test');
+});
+
+test('a sent email with a lost response reconciles from its authenticated GET receipt without another email request', async () => {
+  const h = harness(), input = prepareFinish(h);
+  let emailPosts = 0;
+  h.state.handler = async (...args) => {
+    const body = args[1]?.body && JSON.parse(args[1].body);
+    if (body?.action === 'email_report') {
+      emailPosts++;
+      h.state.result.reportDelivery = { status: 'accepted', reportId: 'report-1', recipientSha256: createHash('sha256').update(input.recipientEmail).digest('hex') };
+      throw new Error('UnknownHostException after response was lost');
+    }
+    return h.defaultRequest(...args);
+  };
+  await h.queue.enqueueRentalFinish(input); await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.listPendingRentalSaves()).length, 1);
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.listPendingRentalSaves()).length, 0);
+  assert.equal(emailPosts, 1);
+  assert.equal(h.state.calls.filter((call) => call.body?.action === 'issue_report').length, 1);
+});
+
+test('a previously fetched accepted receipt clears a retained Finish offline after restart', async () => {
+  const h = harness(), input = prepareFinish(h);
+  h.state.handler = async () => { throw new Error('Offline'); };
+  await h.queue.enqueueRentalFinish(input); await h.queue.processRentalSaveQueue('job-1');
+  const receipt = clone(h.state.result);
+  receipt.modules[0].status = 'complete'; receipt.inspection.status = 'issued'; receipt.inspection.issuedReportId = 'report-1';
+  receipt.reports = [{ id: 'report-1', status: 'issued' }];
+  receipt.reportDelivery = { status: 'accepted', reportId: 'report-1', recipientSha256: createHash('sha256').update(input.recipientEmail).digest('hex') };
+  await h.queue.cacheRentalResult('job-1', receipt);
+  const restarted = h.restart();
+  restarted.state.handler = async () => { assert.fail('No network request is needed to reconcile an already stored authenticated receipt'); };
+  await restarted.queue.processRentalSaveQueue('job-1');
+  assert.equal((await restarted.queue.listPendingRentalSaves()).length, 0);
+});
+
+test('a missing, mismatched or unaccepted delivery receipt keeps offline Finish pending', async () => {
+  for (const delivery of [undefined, { status: 'sending' }, { status: 'accepted', reportId: 'another-report' },
+    { status: 'accepted', reportId: 'report-1', recipientSha256: createHash('sha256').update('another@example.test').digest('hex') }]) {
+    const h = harness(), input = prepareFinish(h);
+    h.state.handler = async () => { throw new Error('Offline'); };
+    await h.queue.enqueueRentalFinish(input); await h.queue.processRentalSaveQueue('job-1');
+    const receipt = clone(h.state.result);
+    receipt.modules[0].status = 'complete'; receipt.inspection.status = 'issued'; receipt.inspection.issuedReportId = 'report-1';
+    receipt.reports = [{ id: 'report-1', status: 'issued' }]; receipt.reportDelivery = delivery;
+    await h.queue.cacheRentalResult('job-1', receipt);
+    await h.queue.processRentalSaveQueue('job-1');
+    assert.equal((await h.queue.listPendingRentalSaves()).length, 1);
+  }
 });
 
 test('Finish survives a report timeout and in-progress retry, then emails the completed report once', async () => {

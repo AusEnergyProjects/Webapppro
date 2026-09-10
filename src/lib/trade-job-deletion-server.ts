@@ -4,6 +4,9 @@ import { previousTradeScheduleMutationGuardStatement } from "./trade-compliance-
 import { jobSyncChangeStatements, nextJobRevision } from "./trade-team-sync-server";
 import { cancelAppointmentInConnectedCalendars } from "./trade-calendar-sync-server";
 import { drainTradeCrmJobMediaCleanup, type TradeCrmJobMediaCleanupBucket } from "./trade-crm-job-media-cleanup";
+import { JOB_DELETION_SCHEMA_GUARDS, upgradeJobDeletionGuards } from "./trade-job-deletion-schema-guards.ts";
+import { canonicalTlinkSchemaGuardSql } from "./tlink-schema-guards.ts";
+import { draftComplianceDeletionGuardDefinitions, draftWorkPackDeletionGuardDefinitions, retainedDraftComplianceBlockerSql, draftComplianceDeletionStatements } from "./trade-job-draft-compliance-deletion.ts";
 
 type Job = { id: string; revision: number; stage: string; source_type: string; customer_source: string; assignee_member_id: string };
 
@@ -22,9 +25,7 @@ export function scheduleJobFileCleanup(db: D1Database) {
 // These records have independent retention/immutability contracts. Deletion must
 // never leave their canonical job missing or quietly become an archive operation.
 const protectedRecords = [
-  ["trade_work_order_compliance_intents", "installer_uid", "", "This job has government-program activity history that must be retained."],
-  ["compliance_cases", "installer_uid", "", "This job is linked to a compliance case that must be retained."],
-  ["trade_activity_field_records", "owner_uid", "", "This job has a saved activity assessment with protected audit history."],
+  ["trade_activity_field_records", "owner_uid", "AND (status <> 'draft' OR submitted_at <> '' OR pdf_object_key <> '' OR pdf_sha256 <> '')", "This job has a completed or submitted activity assessment that must be retained."],
   ["trade_activity_customer_document_deliveries", "firebase_uid", "", "This job has customer document delivery history that must be retained."],
   ["trade_handover_packs", "firebase_uid", "", "This job has installed-asset or handover records that must be retained."],
   ["trade_crm_quick_invoices", "firebase_uid", "", "This job has an invoice. Its financial records must be retained."],
@@ -32,11 +33,14 @@ const protectedRecords = [
   ["trade_crm_accounting_documents", "firebase_uid", "", "This job has accounting documents that must be retained."],
   ["trade_installed_assets", "firebase_uid", "", "This job has installed assets and their service history that must be retained."],
   ["trade_rental_inspections", "firebase_uid", "AND (issued_report_id <> '' OR status IN ('submitted', 'issuing', 'issued', 'superseded', 'withdrawn'))", "This job has a submitted or issued rental assessment that must be retained."],
-  ["trade_crm_job_media", "firebase_uid", "AND source = 'accepted_public_lead'", "This job includes protected customer lead evidence that must be retained."],
 ] as const;
 
 const target = "WITH target AS (SELECT ? job_id, ? owner_uid)";
 const additionalProtectedRecords = [
+  [`SELECT 1 FROM target WHERE (${retainedDraftComplianceBlockerSql('target.job_id', 'target.owner_uid')})`, "This job has completed, submitted or audited government-program work that must be retained."],
+  ["SELECT 1 FROM trade_activity_field_report_links link JOIN trade_activity_field_records r ON r.id = link.record_id, target WHERE r.work_order_id = target.job_id AND r.owner_uid = target.owner_uid", "This job has an issued activity report that must be retained."],
+  ["SELECT 1 FROM trade_activity_field_record_versions version JOIN trade_activity_field_records r ON r.id = version.record_id, target WHERE r.work_order_id = target.job_id AND r.owner_uid = target.owner_uid AND json_extract(version.payload, '$.status') IS NOT 'draft'", "This job has submitted activity history that must be retained."],
+  ["SELECT 1 FROM trade_rental_inspection_modules m JOIN trade_rental_inspections i ON i.id = m.inspection_id AND i.firebase_uid = m.firebase_uid, target WHERE i.work_order_id = target.job_id AND i.firebase_uid = target.owner_uid AND m.status = 'complete'", "This job has a completed rental assessment that must be retained."],
   ["SELECT 1 FROM compliance_pilot_jobs p, target WHERE p.work_order_id = target.job_id", "This job is part of a retained compliance pilot record."],
   ["SELECT 1 FROM compliance_parallel_reference_bindings p, target WHERE p.tlink_work_order_id = target.job_id", "This job is linked to a retained compliance reconciliation record."],
   ["SELECT 1 FROM customer_project_arrival_proposals p, target WHERE p.crm_work_order_id = target.job_id AND p.installer_uid = target.owner_uid", "This job is linked to a customer project appointment that must be retained."],
@@ -52,21 +56,23 @@ function deletionGuard(db: D1Database, access: TeamAccess, job: Job, now: string
   return db.prepare(`${target} UPDATE trade_work_orders SET revision = revision + 1, updated_at = ?
     WHERE id = (SELECT job_id FROM target) AND firebase_uid = (SELECT owner_uid FROM target)
       AND revision = ? AND record_status = 'active' AND partner_type = 'installer'
-      AND source_type <> 'opportunity' AND stage = ? AND assignee_member_id = ?
+      AND source_type <> 'opportunity' AND stage <> 'completed' AND stage = ? AND assignee_member_id = ?
       AND EXISTS (SELECT 1 FROM trade_crm_job_details d WHERE d.work_order_id = trade_work_orders.id
-        AND d.firebase_uid = trade_work_orders.firebase_uid AND d.customer_source = 'trade_owned')
+        AND d.firebase_uid = trade_work_orders.firebase_uid AND d.customer_source IN ('trade_owned', 'public_lead_released'))
       AND (${blockerReasonSql}) IS NULL`)
     .bind(job.id, access.ownerUid, now, job.revision, job.stage, job.assignee_member_id);
 }
 
 export async function deleteTradeJob(db: D1Database, access: TeamAccess, job: Job) {
-  if ((!access.isOwner && !access.canManageJobs) || job.source_type === 'opportunity' || job.customer_source !== 'trade_owned') {
+  if ((!access.isOwner && !access.canManageJobs) || job.source_type === 'opportunity' || !['trade_owned', 'public_lead_released'].includes(job.customer_source)) {
     throw new JobDeletionError('JOB_DELETE_NOT_ALLOWED', 'Only authorised Team members can delete your business-owned jobs.');
   }
+  if (job.stage === 'completed') throw new JobDeletionError('JOB_DELETE_PROTECTED', 'Completed jobs must be retained.');
   const blocked = await db.prepare(`${target} SELECT ${blockerReasonSql} AS reason`)
     .bind(job.id, access.ownerUid).first<{ reason: number | null }>();
   if (blocked?.reason != null) throw new JobDeletionError('JOB_DELETE_PROTECTED', blocked.reason < protectedRecords.length
     ? protectedRecords[blocked.reason][3] : additionalProtectedRecords[blocked.reason - protectedRecords.length][1]);
+  await upgradeJobDeletionGuards(db, [...JOB_DELETION_SCHEMA_GUARDS, ...draftComplianceDeletionGuardDefinitions, ...draftWorkPackDeletionGuardDefinitions], canonicalTlinkSchemaGuardSql);
 
   const appointments = await db.prepare(`SELECT id, status FROM trade_crm_appointments
     WHERE work_order_id = ? AND firebase_uid = ?`).bind(job.id, access.ownerUid).all<{ id: string; status: string }>();
@@ -100,6 +106,10 @@ export async function deleteTradeJob(db: D1Database, access: TeamAccess, job: Jo
   const quoteVersionIds = `SELECT id FROM trade_crm_quote_versions WHERE quote_id IN (${quoteIds}) AND firebase_uid = ?`;
   const appointmentIds = `SELECT id FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ?`;
   const statements = [deletionGuard(db, access, job, now), previousTradeScheduleMutationGuardStatement(db, { ownerUid: owner, changedAt: now })];
+  const permitOperation = `job-delete:${id}:${nextJobRevision(job.revision)}`;
+  statements.push(db.prepare(`INSERT INTO trade_crm_write_guards
+    (id, firebase_uid, operation_id, step_number, verified, created_at) VALUES (?, ?, ?, 1, 1, ?)`)
+    .bind(crypto.randomUUID(), owner, permitOperation, now));
   // The object cleanup intent commits in the same transaction as the deletion.
   // Failed object-store operations remain in the existing retry queue.
   statements.push(db.prepare(`INSERT OR IGNORE INTO trade_crm_job_media_cleanup
@@ -120,6 +130,25 @@ export async function deleteTradeJob(db: D1Database, access: TeamAccess, job: Jo
     SELECT issued_pdf_object_key, ?, ?, ?, 'staged', ?, ?, ? FROM trade_crm_quote_versions
     WHERE quote_id IN (${quoteIds}) AND firebase_uid = ? AND issued_pdf_object_key <> ''`)
     .bind(owner, id, crypto.randomUUID(), now, now, now, id, owner, owner));
+  // Include earlier draft versions, whose removed photos are no longer in the
+  // current payload. Only this owner/record's storage prefix is eligible.
+  for (const property of ['objectKey', 'previewObjectKey']) {
+    statements.push(db.prepare(`INSERT OR IGNORE INTO trade_crm_job_media_cleanup
+      (object_key, firebase_uid, work_order_id, attempt_id, status, next_attempt_at, created_at, updated_at)
+      SELECT json_extract(photo.value, '$.${property}'), ?, ?, ?, 'staged', ?, ?, ?
+      FROM trade_activity_field_records r JOIN trade_activity_field_record_versions v ON v.record_id = r.id,
+        json_each(v.payload, '$.evidence') photo
+      WHERE r.work_order_id = ? AND r.owner_uid = ?
+        AND substr(json_extract(photo.value, '$.${property}'), 1, length('activity-field/' || r.owner_uid || '/' || r.id || '/'))
+          = 'activity-field/' || r.owner_uid || '/' || r.id || '/'`)
+      .bind(owner, id, crypto.randomUUID(), now, now, now, id, owner));
+  }
+  statements.push(...draftComplianceDeletionStatements(db, id, owner));
+  statements.push(db.prepare(`DELETE FROM trade_activity_field_record_versions WHERE record_id IN
+    (SELECT id FROM trade_activity_field_records WHERE work_order_id = ? AND owner_uid = ?)`)
+    .bind(id, owner));
+  statements.push(db.prepare(`DELETE FROM trade_activity_field_records WHERE work_order_id = ? AND owner_uid = ?`).bind(id, owner));
+  statements.push(db.prepare(`DELETE FROM trade_work_order_compliance_intents WHERE work_order_id = ? AND installer_uid = ?`).bind(id, owner));
   statements.push(db.prepare(`DELETE FROM trade_offline_actions WHERE owner_uid = ? AND
     (entity_id = ? OR entity_id IN (SELECT id FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ?)
       OR entity_id IN (SELECT id FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ?))`).bind(owner, id, id, owner, id, owner));
@@ -162,6 +191,7 @@ export async function deleteTradeJob(db: D1Database, access: TeamAccess, job: Jo
   statements.push(db.prepare(`DELETE FROM trade_work_orders WHERE id = ? AND firebase_uid = ? AND revision = ?`).bind(id, owner, nextJobRevision(job.revision)));
   statements.push(previousTradeScheduleMutationGuardStatement(db, { ownerUid: owner, changedAt: now }));
   statements.push(...jobSyncChangeStatements(db, { ownerUid: owner, workOrderId: id, revision: nextJobRevision(job.revision), changedAt: now, audienceMemberId: job.assignee_member_id, operation: 'delete' }));
+  statements.push(db.prepare(`DELETE FROM trade_crm_write_guards WHERE firebase_uid = ? AND operation_id = ?`).bind(owner, permitOperation));
   await db.batch(statements);
 
   const remaining = await db.prepare(`SELECT count(*) count FROM trade_crm_job_media_cleanup WHERE work_order_id = ? AND firebase_uid = ?`).bind(id, owner).first<{ count: number }>();

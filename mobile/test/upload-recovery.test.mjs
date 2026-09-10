@@ -114,5 +114,5 @@ test('multipart evidence uses the Expo fetch transport that accepts Expo File pa
   assert.match(api, /const multipart = init\.body instanceof FormData/);
   assert.match(api, /multipart \? expoFetch\(url, request\) : fetch\(url, request\)/);
   assert.match(api, /const MULTIPART_REQUEST_TIMEOUT_MS = 120_000/);
-  assert.match(api, /multipart \? MULTIPART_REQUEST_TIMEOUT_MS : JSON_REQUEST_TIMEOUT_MS/);
+  assert.match(api, /multipart \? MULTIPART_REQUEST_TIMEOUT_MS\s*: options\.operation === 'report' \? REPORT_REQUEST_TIMEOUT_MS : JSON_REQUEST_TIMEOUT_MS/);
 });

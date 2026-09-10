@@ -11,6 +11,7 @@ import {
 } from "pdf-lib";
 import { createRentalAssessmentPdfBytes } from "../src/lib/trade-rental-report-pdf.mjs";
 import { RENTAL_OBSERVATION_NUMBER_FIELDS, rentalObservationResponseLabel } from "../src/lib/rental-quotation.mjs";
+import * as answerPresentation from "../src/lib/rental-report-answer.mjs";
 
 function decodedPageContent(pdf) {
   const output = [];
@@ -352,7 +353,7 @@ test("report issue records cleanup manifests before R2 writes and stale recovery
   assert.match(source, /async function retryFailedRentalReportCleanup[\s\S]*status = 'failed'[\s\S]*cleanupFailedRentalReportObjects/);
 });
 
-test("online report uses option labels and keeps earlier findings out of current work without losing history", async () => {
+async function renderReportSnapshot(snapshot) {
   const [ts, React, jsxRuntime, { renderToStaticMarkup }, quotation, assessment] = await Promise.all([
     import("typescript").then((value) => value.default), import("react"), import("react/jsx-runtime"), import("react-dom/server"),
     import("../src/lib/rental-quotation.mjs"), import("../src/lib/trade-rental-assessment.mjs"),
@@ -361,6 +362,25 @@ test("online report uses option labels and keeps earlier findings out of current
   const compiled = ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
   } }).outputText;
+  let stateIndex = 0;
+  const dependencies = {
+    react: { ...React, useState: () => [[{ ok: true, report: snapshot }, false, ""][stateIndex++], () => {}], useEffect: () => {}, useMemo: (callback) => callback() },
+    "react/jsx-runtime": jsxRuntime,
+    "next/link": { __esModule: true, default: ({ children, ...props }) => React.createElement("a", props, children) },
+    "@/lib/rental-quotation.mjs": quotation,
+    "@/lib/trade-rental-assessment.mjs": assessment,
+    "@/lib/rental-report-answer.mjs": answerPresentation,
+    "./RentalReportViewer.module.css": { __esModule: true, default: new Proxy({}, { get: (_target, key) => String(key) }) },
+  };
+  const output = { exports: {} };
+  new Function("require", "module", "exports", compiled)((id) => {
+    assert.ok(id in dependencies, `Unexpected dependency ${id}`);
+    return dependencies[id];
+  }, output, output.exports);
+  return renderToStaticMarkup(React.createElement(output.exports.RentalReportViewer, { token: "test-token" }));
+}
+
+test("online report uses option labels and keeps earlier findings out of current work without losing history", async () => {
   const snapshot = reportSnapshot();
   snapshot.access = { pdfUrl: "/test.pdf", expiresAt: "2026-11-10" };
   const reportModule = snapshot.modules[0];
@@ -375,21 +395,7 @@ test("online report uses option labels and keeps earlier findings out of current
   finding.status = "non_compliant";
   finding.severity = "urgent";
   const before = structuredClone(snapshot);
-  let stateIndex = 0;
-  const dependencies = {
-    react: { ...React, useState: () => [[{ ok: true, report: snapshot }, false, ""][stateIndex++], () => {}], useEffect: () => {}, useMemo: (callback) => callback() },
-    "react/jsx-runtime": jsxRuntime,
-    "next/link": { __esModule: true, default: ({ children, ...props }) => React.createElement("a", props, children) },
-    "@/lib/rental-quotation.mjs": quotation,
-    "@/lib/trade-rental-assessment.mjs": assessment,
-    "./RentalReportViewer.module.css": { __esModule: true, default: new Proxy({}, { get: (_target, key) => String(key) }) },
-  };
-  const output = { exports: {} };
-  new Function("require", "module", "exports", compiled)((id) => {
-    assert.ok(id in dependencies, `Unexpected dependency ${id}`);
-    return dependencies[id];
-  }, output, output.exports);
-  const html = renderToStaticMarkup(React.createElement(output.exports.RentalReportViewer, { token: "test-token" }));
+  const html = await renderReportSnapshot(snapshot);
   assert.match(html, /Current findings<\/span><strong>0<\/strong>/);
   assert.match(html, /No current work scopes recorded/);
   assert.match(html, /Earlier observations are not counted as current or marked resolved/);
@@ -401,4 +407,72 @@ test("online report uses option labels and keeps earlier findings out of current
   assert.doesNotMatch(html, /occupied_renter_present|[Ss]hower ?[Cc]apture ?[Vv]ersion/);
   assert.match(html, /7\.5/);
   assert.deepEqual(snapshot, before, "presentation must preserve the issued snapshot");
+});
+
+test("PDF and viewer show the selected answers with polarity, ratings, limitations and frozen wording", async () => {
+  const cases = [
+    ["kitchen_preparation", "meets", {}, "Yes, an area is provided"],
+    ["kitchen_sink_water", "meets", {}, "Yes, both work"],
+    ["cooktop_function", "meets", { workingBurners: 2 }, "At least two burners work"],
+    ["oven_function", "meets", {}, "Oven works"],
+    ["mould_damp_observation", "meets", {}, "No mould or damp seen"],
+    ["mould_damp_observation", "does_not_meet", {}, "Mould or damp seen"],
+    ["mould_damp_observation", "specialist_verification_required", {}, "Needs verification"],
+    ["windows_2027_readiness", "meets", {}, "Yes, all edges are sealed"],
+    ["doors_2027_readiness", "does_not_meet", { sealLengthMetres: 14.5 }, "Seals are missing or damaged"],
+    ["vents_2027_readiness", "not_applicable", {}, "No wall vents"],
+    ["showerhead_rating", "meets", { welsRating: "4 stars or above", flowLitresPerMinute: 7.5 }, "4 stars or above"],
+    ["shower_2027_readiness", "does_not_meet", { welsRating: "3 stars", flowLitresPerMinute: 8 }, "3 stars"],
+    ["showerhead_rating", "specialist_verification_required", { welsRating: "4 stars or above" }, "Rating not confirmed"],
+    ["showerhead_rating", "not_applicable", { showerCaptureVersion: 1 }, "No shower"],
+    ["ceiling_2027_readiness", "meets", { insulationRating: "Below R5" }, "Present throughout the accessible ceiling; existing insulation: Below R5"],
+    ["ceiling_2027_readiness", "does_not_meet", { insulationRating: "None", areaSquareMetres: 85 }, "None, or some bare areas; existing insulation: None"],
+    ["ceiling_2027_readiness", "not_accessible", {}, "Could not check"],
+    ["unknown_check", "meets", {}, "Meets"],
+  ];
+  const snapshot = reportSnapshot();
+  snapshot.access = { pdfUrl: "/test.pdf", expiresAt: "2026-11-10" };
+  snapshot.findings = [];
+  snapshot.modules[0].credential = {};
+  const items = cases.map(([checkKey, outcome, response], index) => ({ id: `answer-${index}`, checkKey,
+    prompt: `Recorded check ${index + 1}`, outcome, response, locationLabel: "Property" }));
+  items.push({ id: "frozen", checkKey: "mould_damp_observation", prompt: "Earlier area check", outcome: "meets",
+    answerLabel: "No mould seen in the checked area", historicalObservation: true, response: {} });
+  items.push({ id: "fixed", checkKey: "window_operation_security", prompt: "Fixed glazing check", outcome: "not_applicable",
+    publicNotes: "Fixed glazing; this window is not designed to open.", response: {} });
+  snapshot.modules[0].sections[0].items = items;
+  const before = structuredClone(snapshot);
+  const html = await renderReportSnapshot(snapshot);
+  const pdf = await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot));
+  const content = decodedPageContent(pdf);
+  for (const [index, [, , , expected]] of cases.entries()) {
+    assert.equal(answerPresentation.rentalReportAnswerPresentation(items[index], { moduleKey: "minimum_standards" }).label, expected);
+    const article = [...html.matchAll(/<article class="answer">[\s\S]*?<\/article>/g)]
+      .find(([value]) => value.includes(`<h4>Recorded check ${index + 1}</h4>`))?.[0] || "";
+    assert.ok(article.includes(expected), `Viewer answer ${index + 1}: ${expected}`);
+    assert.ok(content.includes(expected), `PDF answer ${index + 1}: ${expected}`);
+  }
+  for (const text of ["Earlier result: No mould seen in the checked area", "Fixed window; opening check does not apply", "Upgrade planning required", "14.5", "7.5", "85"]) {
+    assert.ok(html.includes(text), text);
+    assert.ok(content.includes(text), text);
+  }
+  assert.deepEqual(snapshot, before, "Neither presentation path rewrites the issued record");
+  assert.equal(answerPresentation.rentalReportAnswerPresentation({ outcome: "meets", prompt: "Is mould present?" }).label, "Meets", "An unknown check must not guess Yes or No from its status");
+  assert.equal(answerPresentation.rentalReportAnswerPresentation({ checkKey: "unknown_check", outcome: "meets" }, {
+    moduleKey: "minimum_standards", check: { key: "unknown_check", prompt: "Is a problem present?" },
+  }).label, "Meets", "A frozen unknown question does not supply its answer choices");
+  assert.equal(answerPresentation.rentalReportAnswerPresentation({ checkKey: "mould_damp_observation", outcome: "meets" }, {
+    check: { key: "mould_damp_observation", outcomeOptions: [{ value: "meets", label: "Frozen original answer" }] },
+  }).label, "Frozen original answer");
+  for (const key of ["kitchen_preparation", "kitchen_sink_water", "cooktop_function", "oven_function"]) {
+    assert.equal(answerPresentation.rentalReportAnswerPresentation({ checkKey: key, outcome: "meets" }, {
+      moduleKey: "minimum_standards", check: { key, outcomeOptions: [{ value: "meets", label: "Yes" }] },
+    }).label, "Yes", "An explicit original Yes choice is preserved exactly");
+    assert.notEqual(answerPresentation.rentalReportAnswerPresentation({ checkKey: key, outcome: "meets" }, {
+      moduleKey: "minimum_standards", check: { key, outcomeOptions: [{ value: "meets", label: "Meets" }] },
+    }).label, "Meets", "A generic status is not the selected semantic answer");
+  }
+  const limited = answerPresentation.rentalReportAnswerPresentation(items.find((item) => item.checkKey === "mould_damp_observation"), { moduleKey: "minimum_standards", applicabilityLimitation: "Tenancy not confirmed" });
+  assert.equal(limited.label, "No mould or damp seen");
+  assert.equal(limited.context, "Legal applicability unconfirmed");
 });

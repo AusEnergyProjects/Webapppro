@@ -1,6 +1,8 @@
 // Work-pack, output-action and SRES guards are installed through D1 prepared
 // statements. Sites migrations split SQL on semicolons and therefore cannot
 // safely carry trigger bodies.
+import { draftWorkPackDeletionGuardDefinitions } from "./trade-job-draft-compliance-deletion.ts";
+import { upgradeJobDeletionGuards } from "./trade-job-deletion-schema-guards.ts";
 
 const CREDITEX_WORK_PACK_SCHEMA_GUARD_BASE_DEFINITIONS = [
   { name: "compliance_work_pack_calculation_review_insert_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_work_pack_calculation_review_insert_guard`\nBEFORE INSERT ON `compliance_activity_work_pack_calculation_reviews`\nBEGIN\n  SELECT CASE WHEN NOT EXISTS (\n    SELECT 1\n    FROM `compliance_activity_work_pack_instances` instance\n    JOIN `compliance_cases` compliance_case\n      ON compliance_case.`id` = instance.`compliance_case_id`\n      AND compliance_case.`organisation_id` = instance.`organisation_id`\n    JOIN `compliance_calculation_runs` calculation\n      ON calculation.`id` = NEW.`calculation_run_id`\n      AND calculation.`organisation_id` = instance.`organisation_id`\n      AND calculation.`case_id` = instance.`compliance_case_id`\n      AND calculation.`case_revision` = compliance_case.`revision`\n      AND calculation.`status` = 'calculated'\n      AND calculation.`run_by_uid` <> NEW.`reviewer_uid`\n    JOIN `compliance_calculator_versions` calculator\n      ON calculator.`id` = NEW.`calculator_version_id`\n      AND calculator.`id` = calculation.`calculator_version_id`\n      AND calculator.`organisation_id` = instance.`organisation_id`\n      AND calculator.`activity_version_id` = compliance_case.`activity_version_id`\n      AND calculator.`approval_state` = 'approved'\n      AND calculator.`official_source_sha256` = NEW.`calculator_source_sha256`\n    JOIN `compliance_calculator_engine_receipts` engine_receipt\n      ON engine_receipt.`id` = NEW.`engine_receipt_id`\n      AND engine_receipt.`organisation_id` = instance.`organisation_id`\n      AND engine_receipt.`calculator_version_id` = calculator.`id`\n      AND engine_receipt.`calculator_version_number` = calculator.`version`\n      AND engine_receipt.`result` = 'passed'\n    JOIN json_each(\n      instance.`response_snapshot`, '$.response.dependencyResolutions'\n    ) dependency\n      ON dependency.`key` = NEW.`dependency_key`\n      AND json_extract(dependency.`value`, '$.referenceIds[0]') =\n        NEW.`calculation_run_id`\n      AND json_array_length(\n        json_extract(dependency.`value`, '$.referenceIds')\n      ) = 1\n    WHERE instance.`id` = NEW.`case_instance_id`\n      AND instance.`instance_key` = NEW.`instance_key`\n      AND instance.`organisation_id` = NEW.`organisation_id`\n      AND NOT EXISTS (\n        SELECT 1 FROM `compliance_activity_work_pack_instances` newer\n        WHERE newer.`organisation_id` = instance.`organisation_id`\n          AND newer.`instance_key` = instance.`instance_key`\n          AND newer.`revision` > instance.`revision`\n      )\n  ) THEN RAISE(ABORT, 'COMPLIANCE_WORK_PACK_CALCULATION_REVIEW_BINDING_INVALID') END;\n  SELECT CASE WHEN NOT EXISTS (\n    SELECT 1\n    FROM `compliance_users` reviewer\n    WHERE reviewer.`organisation_id` = NEW.`organisation_id`\n      AND reviewer.`firebase_uid` = NEW.`reviewer_uid`\n      AND reviewer.`status` = 'active'\n      AND reviewer.`role` IN ('admin', 'reviewer')\n      AND reviewer.`governance_identity_verified` = 1\n      AND trim(reviewer.`governance_identity_verified_by_uid`) <> ''\n      AND reviewer.`governance_identity_verified_by_uid` <> reviewer.`firebase_uid`\n    UNION ALL\n    SELECT 1\n    FROM `admin_users` reviewer\n    JOIN `compliance_organisations` organisation\n      ON organisation.`id` = NEW.`organisation_id`\n      AND organisation.`organisation_code` = 'CREDITEX-AU'\n      AND organisation.`status` = 'active'\n    WHERE reviewer.`firebase_uid` = NEW.`reviewer_uid`\n      AND reviewer.`status` = 'active'\n      AND reviewer.`role` IN ('owner', 'admin', 'reviewer')\n  ) THEN RAISE(ABORT, 'COMPLIANCE_WORK_PACK_CALCULATION_REVIEWER_INVALID') END;\nEND;" },
@@ -634,7 +636,7 @@ export const CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS =
   CREDITEX_WORK_PACK_SCHEMA_GUARD_BASE_DEFINITIONS.flatMap((definition) =>
     SRES_D1_EXPRESSION_DEPTH_GUARD_DEFINITIONS.get(definition.name)
       ?? [authorSaveGuard(definition)],
-  );
+  ).map((definition) => draftWorkPackDeletionGuardDefinitions.find((replacement) => replacement.name === definition.name) ?? definition);
 
 export const CREDITEX_WORK_PACK_REQUIRED_SCHEMA_TABLES = [
   "compliance_master_save_schema",
@@ -768,6 +770,8 @@ async function installCreditexSchemaGuards(
     ));
     installed = await installedGuards(database);
   }
+  await upgradeJobDeletionGuards(database, draftWorkPackDeletionGuardDefinitions, canonicalCreditexWorkPackSchemaGuardSql);
+  installed = await installedGuards(database);
   const mismatched = definitions.filter(
     (definition) => installed.has(definition.name)
       && canonicalCreditexWorkPackSchemaGuardSql(

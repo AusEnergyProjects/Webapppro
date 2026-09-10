@@ -7,6 +7,7 @@ import ts from "typescript";
 import * as assessment from "../src/lib/trade-rental-assessment.mjs";
 import * as evidence from "../src/lib/trade-rental-evidence.mjs";
 import * as workflow from "../src/lib/rental-assessor-workflow.mjs";
+import * as answerPresentation from "../src/lib/rental-report-answer.mjs";
 import {
   assertRentalModuleCredentialCurrent,
   currentRentalModuleCredentialSnapshot,
@@ -165,6 +166,7 @@ function reportBuilder(objects) {
     "@/lib/trade-rental-report-links": {}, "@/lib/customer-plan-pdf-fonts": {},
     "@/lib/trade-rental-evidence.mjs": evidence, "@/lib/trade-rental-credentials": {},
     "@/lib/rental-assessor-workflow.mjs": workflow, "@/lib/trade-rental-schema-guards": {},
+    "@/lib/rental-report-answer.mjs": answerPresentation,
   };
   const moduleRecord = { exports: {} };
   new Function("require", "module", "exports", compiled)((id) => {

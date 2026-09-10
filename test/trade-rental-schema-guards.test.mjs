@@ -14,9 +14,10 @@ async function fixture() {
   database.exec(`
     PRAGMA foreign_keys = ON;
     CREATE TABLE trade_team_member_credentials (id text PRIMARY KEY, file_id text NOT NULL DEFAULT '');
-    CREATE TABLE trade_work_orders (id text PRIMARY KEY, firebase_uid text NOT NULL);
+    CREATE TABLE trade_work_orders (id text PRIMARY KEY, firebase_uid text NOT NULL, revision integer, updated_at text, record_status text, partner_type text, source_type text, stage text);
+    CREATE TABLE trade_crm_write_guards (firebase_uid text, operation_id text, step_number integer, verified integer, created_at text);
     CREATE TABLE trade_crm_job_details (
-      id text PRIMARY KEY, work_order_id text NOT NULL, firebase_uid text NOT NULL, service_site_id text NOT NULL
+      id text PRIMARY KEY, work_order_id text NOT NULL, firebase_uid text NOT NULL, service_site_id text NOT NULL, customer_source text
     );
     CREATE TABLE trade_crm_job_media (
       id text PRIMARY KEY, work_order_id text NOT NULL, firebase_uid text NOT NULL

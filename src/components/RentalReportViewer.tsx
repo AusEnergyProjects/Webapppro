@@ -5,6 +5,7 @@
 import Link from "next/link";
 import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalObservationResponseLabel } from "@/lib/rental-quotation.mjs";
 import { VIC_RENTAL_ASSESSMENT_TEMPLATE } from "@/lib/trade-rental-assessment.mjs";
+import { rentalReportAnswerPresentation } from "@/lib/rental-report-answer.mjs";
 import { useEffect, useMemo, useState } from "react";
 import styles from "./RentalReportViewer.module.css";
 
@@ -49,6 +50,8 @@ type Finding = {
 
 type ReportItem = {
   id: string;
+  checkKey?: string;
+  answerLabel?: string;
   historicalObservation?: boolean;
   locationLabel: string;
   prompt: string;
@@ -101,15 +104,6 @@ type RentalReport = {
 
 type Result = { ok?: boolean; report?: RentalReport; error?: string };
 
-const outcomeLabels: Record<string, string> = {
-  meets: "Meets",
-  does_not_meet: "Does not meet",
-  specialist_verification_required: "Specialist verification required",
-  not_accessible: "Not accessible",
-  not_applicable: "Not applicable",
-  exemption_evidence_pending: "Exemption evidence pending",
-};
-
 const severityLabels: Record<string, string> = {
   immediate_safety_risk: "Immediate safety risk",
   urgent: "Urgent",
@@ -151,11 +145,9 @@ function isHistoricalFinding(report: RentalReport | undefined, finding: Finding)
   return finding.historicalObservation === true || report?.modules.some((module) => module.sections.some((section) => section.items.some((item) => item.id === finding.itemId && item.historicalObservation === true))) === true;
 }
 
-function ResultPill({ outcome, readiness = false, historical = false }: { outcome: string; readiness?: boolean; historical?: boolean }) {
+function ResultPill({ outcome, label, readiness = false, historical = false }: { outcome: string; label: string; readiness?: boolean; historical?: boolean }) {
   const tone = outcome === "meets" || outcome === "not_applicable" ? styles.good
     : outcome === "does_not_meet" && !readiness ? styles.bad : styles.caution;
-  const label = readiness && outcome === "meets" ? "Ready for the recorded requirement"
-    : readiness && outcome === "does_not_meet" ? "Upgrade planning required" : outcomeLabels[outcome] || displayLabel(outcome);
   return <span className={`${styles.resultPill} ${tone}`}>{historical ? "Earlier result: " : ""}{label}</span>;
 }
 
@@ -322,14 +314,18 @@ export function RentalReportViewer({ token }: { token: string }) {
           <dl className={styles.metadata}>{visibleEntries(module.answers).map(([key, value]) => <div key={key}><dt>{displayLabel(key)}</dt><dd>{metadataValue(module.key, key, value)}</dd></div>)}</dl>
           {module.sections.map((section) => <section className={styles.assessmentSection} key={section.key}>
             <header><h3>{section.title}</h3><p>{section.summary}</p></header>
-            <div>{section.items.map((item) => <article className={styles.answer} key={item.id}>
-              <div>{report.inspection.applicabilityLimitation && module.key === "minimum_standards" ? <span>{item.historicalObservation ? "Earlier result: " : ""}{item.outcome === "meets" ? "Observation satisfactory; legal applicability unconfirmed" : outcomeLabels[item.outcome] || displayLabel(item.outcome)}</span> : <ResultPill outcome={item.outcome} historical={item.historicalObservation} readiness={item.assessmentPhase === "energy_readiness_2027" || (!item.assessmentPhase && module.assessmentScope === "energy_readiness_2027")} />}{item.locationLabel && <strong>{item.locationLabel}</strong>}</div>
+            <div>{section.items.map((item) => {
+              const answer = rentalReportAnswerPresentation(item, { moduleKey: module.key, assessmentScope: module.assessmentScope,
+                applicabilityLimitation: report.inspection.applicabilityLimitation });
+              return <article className={styles.answer} key={item.id}>
+              <div><ResultPill outcome={item.outcome} label={answer.label} historical={item.historicalObservation} readiness={item.assessmentPhase === "energy_readiness_2027" || (!item.assessmentPhase && module.assessmentScope === "energy_readiness_2027")} />{item.locationLabel && <strong>{item.locationLabel}</strong>}</div>
               <h4>{item.prompt}</h4>
+              {answer.context && <p>{answer.context}</p>}
               {item.trigger && <p>Applies when: {item.trigger}</p>}
               {item.publicNotes && <p>{item.publicNotes}</p>}
               {visibleEntries(item.response).length > 0 && <dl>{visibleEntries(item.response).map(([key, value]) => <div key={key}><dt>{rentalObservationResponseLabel(key)}</dt><dd>{typeof value === "boolean" ? value ? "Yes" : "No" : String(value)}</dd></div>)}</dl>}
               <EvidenceGallery entries={report.evidence.filter((entry) => entry.itemId === item.id)} />
-            </article>)}</div>
+            </article>; })}</div>
           </section>)}
         </div>
       </details>)}

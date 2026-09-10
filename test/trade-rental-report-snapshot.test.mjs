@@ -5,6 +5,7 @@ import ts from "typescript";
 import * as assessment from "../src/lib/trade-rental-assessment.mjs";
 import * as evidence from "../src/lib/trade-rental-evidence.mjs";
 import * as workflow from "../src/lib/rental-assessor-workflow.mjs";
+import * as answerPresentation from "../src/lib/rental-report-answer.mjs";
 
 test("dwelling report preserves earlier faults and evidence without treating them as current dwelling answers", async () => {
   const sourceText = fs.readFileSync(new URL("../src/lib/trade-rental-report-server.ts", import.meta.url), "utf8");
@@ -19,6 +20,7 @@ test("dwelling report preserves earlier faults and evidence without treating the
     "@/lib/trade-rental-report-links": {}, "@/lib/customer-plan-pdf-fonts": {},
     "@/lib/trade-rental-evidence.mjs": evidence, "@/lib/trade-rental-credentials": {},
     "@/lib/rental-assessor-workflow.mjs": workflow,
+    "@/lib/rental-report-answer.mjs": answerPresentation,
     "@/lib/trade-rental-schema-guards": {},
   };
   const moduleRecord = { exports: {} };
@@ -77,6 +79,7 @@ test("one shower observation renders a current pass, future recommendation and s
     "@/lib/trade-rental-report-links": {}, "@/lib/customer-plan-pdf-fonts": {},
     "@/lib/trade-rental-evidence.mjs": evidence, "@/lib/trade-rental-credentials": {},
     "@/lib/rental-assessor-workflow.mjs": workflow, "@/lib/trade-rental-schema-guards": {},
+    "@/lib/rental-report-answer.mjs": answerPresentation,
   };
   const moduleRecord = { exports: {} };
   new Function("require", "module", "exports", compiled)((id) => {
@@ -101,7 +104,9 @@ test("one shower observation renders a current pass, future recommendation and s
   const current = items.find((item) => item.checkKey === "showerhead_rating");
   const future = items.find((item) => item.checkKey === "shower_2027_readiness");
   assert.equal(current.outcome, "meets");
+  assert.equal(current.answerLabel, "3 stars");
   assert.equal(future.outcome, "does_not_meet");
+  assert.equal(future.answerLabel, "3 stars", "Both standards retain the one selected rating");
   assert.equal(future.assessmentPhase, "energy_readiness_2027");
   assert.equal(snapshot.findings[0].status, "recommendation");
   assert.equal(snapshot.findings[0].details.evidenceSourceItemId, current.id);

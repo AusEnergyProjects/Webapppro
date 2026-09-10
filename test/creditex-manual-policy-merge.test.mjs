@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { installMissingDraftDeletionContext } from "./helpers/job-deletion-guard-fixture.mjs";
 import {
   GOVERNMENT_ACTIVITY_TEMPLATES,
   GOVERNMENT_PROGRAM_TEMPLATES,
@@ -270,6 +271,7 @@ function setupDatabase({ governed = true } = {}) {
     );
   `);
   database.exec(migration);
+  installMissingDraftDeletionContext(database);
   for (const definition of manualPolicyGuardDefinitions) {
     database.exec(definition.sql);
   }

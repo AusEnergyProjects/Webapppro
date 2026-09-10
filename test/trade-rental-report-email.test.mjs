@@ -185,3 +185,16 @@ test('delivery state never presents an earlier report acceptance for a new curre
  f.database.exec("UPDATE trade_rental_inspections SET issued_report_id='new-report'");
  assert.equal(await f.api.rentalReportDeliveryState('owner','inspection'),null);
 });
+
+test('delivery receipt identifies the current report and normalized recipient after a lost send response', async () => {
+ const f=fixture();await f.send();
+ const receipt=await f.api.rentalReportDeliveryState('owner','inspection');
+ assert.equal(receipt.status,'accepted');assert.equal(receipt.reportId,'report');
+ assert.equal(receipt.recipientSha256,createHash('sha256').update('jane@example.test').digest('hex'));
+ assert.equal(f.sent.length,1);
+ assert.equal(await f.api.rentalReportDeliveryState('other-owner','inspection'),null);
+ // Report identity comes from the issued-report relation, never untrusted metadata.
+ f.database.exec("UPDATE trade_rental_inspection_events SET metadata='{}' WHERE event_type='report_email_accepted'");
+ const legacy=await f.api.rentalReportDeliveryState('owner','inspection');
+ assert.equal(legacy.reportId,'report');assert.equal(legacy.recipientSha256,'');
+});

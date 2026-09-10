@@ -1,11 +1,11 @@
 import type { FieldJob } from './types';
 
-export type AppointmentAction = 'reschedule' | 'no_show' | 'cancel' | 'update_customer' | 'delete';
+export type AppointmentAction = 'schedule' | 'reschedule' | 'no_show' | 'cancel' | 'update_customer' | 'delete';
 export type AppointmentActionContext = {
   job: { id: string; revision: number; stage: string };
   appointment: { id: string; revision: number; status: string; startsAt: string; endsAt: string; memberId: string } | null;
   assignees: { id: string; displayName: string }[];
-  permissions: { reschedule: boolean; noShow: boolean; cancel: boolean; editCustomer: boolean; deleteJob?: boolean };
+  permissions: { schedule?: boolean; reschedule: boolean; noShow: boolean; cancel: boolean; editCustomer: boolean; deleteJob?: boolean };
   customer: { id: string; updatedAt: string; firstName: string; lastName: string; businessName: string; phone: string; email: string } | null;
 };
 export type AppointmentActionResult = {
@@ -53,7 +53,7 @@ export function appointmentContactLinks(job: Pick<FieldJob, 'protectedJob' | 'cu
 }
 
 export function appointmentSavedMessage(action: AppointmentAction, result: AppointmentActionResult) {
-  const saved = { reschedule: 'Appointment rescheduled.', no_show: 'No show recorded. Ready to reschedule.', cancel: 'Job cancelled and removed from the schedule.', update_customer: 'Customer details updated.', delete: 'Job deleted. Customer details kept.' }[action];
+  const saved = { schedule: 'Appointment scheduled.', reschedule: 'Appointment rescheduled.', no_show: 'No show recorded. Ready to reschedule.', cancel: 'Job cancelled and removed from the schedule.', update_customer: 'Customer details updated.', delete: 'Job deleted. Customer details kept.' }[action];
   return [saved, result.deviceCleanupPending ? 'Device cleanup will retry on Sync.' : '', result.email?.message, result.calendarSync?.failed
     ? result.calendarSync.message || 'Google Calendar could not be updated. Retry calendar sync in TLink.' : ''].filter(Boolean).join(' ');
 }

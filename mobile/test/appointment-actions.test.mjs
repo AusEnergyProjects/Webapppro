@@ -46,6 +46,7 @@ test('appointment success keeps email and calendar failures visible instead of c
   assert.match(message, /Google Calendar could not be updated/);
   assert.doesNotMatch(message, /email sent|calendar updated/i);
   assert.match(appointmentSavedMessage('no_show', { ok: true, jobPatch: {} }), /Ready to reschedule/);
+  assert.equal(appointmentSavedMessage('schedule', { ok: true, jobPatch: {} }), 'Appointment scheduled.');
 });
 
 test('confirmed deletion remains successful when device cleanup needs a sync retry', () => {

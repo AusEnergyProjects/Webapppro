@@ -21,6 +21,7 @@ import { FieldButton } from '@/components/field-button';
 import { FieldCommercialWorkspace } from '@/components/field-commercial-workspace';
 import { FieldFormLibrary } from '@/components/field-form-library';
 import { RentalInspectionWorkflow } from '@/components/rental-inspection-workflow';
+import { subscribeRentalSaves } from '@/lib/rental-save-queue';
 import { Screen } from '@/components/screen';
 import { firebaseAuth } from '@/lib/auth';
 import {
@@ -477,6 +478,15 @@ export default function JobScreen() {
     const reload = setTimeout(() => void load(), 0);
     return () => clearTimeout(reload);
   }, [load, sync.conflicts, sync.queuedActions, sync.queuedUploads, sync.running]);
+
+  useEffect(() => {
+    let refresh: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = subscribeRentalSaves(String(id), () => {
+      if (refresh) clearTimeout(refresh);
+      refresh = setTimeout(() => { void load(false); }, 100);
+    });
+    return () => { unsubscribe(); if (refresh) clearTimeout(refresh); };
+  }, [id, load]);
 
   async function advanceFieldJob() {
     if (!job || !completableAppointmentStatuses.has(job.appointmentStatus)) return;
@@ -1295,7 +1305,7 @@ export default function JobScreen() {
   if (!creditexManual && complianceIntents.some((intent) => intent.id === activeFormId)) return <Screen scroll={false} style={{ padding: 0 }}><ActivityFieldFormWizard key={activeFormId} workOrderId={job.id} intentId={activeFormId!} variantId={complianceIntents.find((intent) => intent.id === activeFormId)?.variantId || ''} online={sync.online} onReturnToJob={() => { setActiveFormId(null); void load(); }} onChanged={async () => { await syncNow(); await load(); }} /></Screen>;
   const selectedBusinessForm = fieldForms.find((form) => form.id === activeFormId);
   if (selectedBusinessForm) return <Screen><JobFieldForm key={selectedBusinessForm.id} form={selectedBusinessForm} busy={busy === 'form:' + selectedBusinessForm.id} onSave={saveForm} onReturnToJob={() => setActiveFormId(null)} /></Screen>;
-  if (job.rentalInspection && activeFormId === 'rental') return <Screen scroll={false} style={{ padding: 0 }}><RentalInspectionWorkflow workOrderId={job.id} summary={job.rentalInspection} online={sync.online} onReturnToJob={() => setActiveFormId(null)} onChanged={async () => { await syncNow(); await load(); }} /></Screen>;
+  if (job.rentalInspection && activeFormId === 'rental') return <Screen scroll={false} style={{ padding: 0 }}><RentalInspectionWorkflow workOrderId={job.id} summary={job.rentalInspection} online={sync.online} onReturnToJob={() => { setActiveFormId(null); void load(false); }} onChanged={async () => { await load(false); await syncNow(); await load(false); }} /></Screen>;
   return (
     <Screen scrollKey={activeFormId || 'overview'}>
       <View style={styles.hero}>

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import { installMissingDraftDeletionContext } from "./helpers/job-deletion-guard-fixture.mjs";
 import {
   CREDITEX_FOUNDATION_SCHEMA_GUARD_DEFINITIONS,
 } from "../src/lib/creditex-schema-guards.ts";
@@ -732,6 +733,7 @@ test("case creation derives the organisation, snapshots the exact rule date, and
   const database = new DatabaseSync(":memory:");
   applyFoundation(database);
   applyEvidencePolicyFixtureSchema(database);
+  installMissingDraftDeletionContext(database);
   insertOrganisation(database);
   const d1 = testD1(database);
   const domain = loadTypescriptModule(

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import { installMissingDraftDeletionContext } from "./helpers/job-deletion-guard-fixture.mjs";
 import {
   canonicalCreditexSchemaGuardSql,
   CREDITEX_SCHEMA_GUARD_DEFINITIONS,
@@ -295,6 +296,7 @@ function databaseWithComplianceOperations({ installGuards = true } = {}) {
   applyStatements(database, custodyMigration);
   applyStatements(database, tradeComplianceMigration);
   database.exec(multiActivitySchemaColumnsMigration);
+  installMissingDraftDeletionContext(database);
   if (installGuards) {
     for (const definition of CREDITEX_SCHEMA_GUARD_DEFINITIONS) {
       database.exec(definition.sql);
@@ -316,7 +318,8 @@ test("runtime schema bootstrap installs every governed trigger before compliance
     database.prepare("SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'").get().count,
     preinstalled,
   );
-  let installed = preinstalled;
+  // Deletion guards are upgraded atomically before the normal 40-guard batch.
+  let installed = preinstalled + CREDITEX_SCHEMA_GUARD_DEFINITIONS.filter((definition) => definition.legacySql).length;
   while (expectedRemaining(installed) > 40) {
     installed += 40;
     await assert.rejects(
@@ -355,7 +358,7 @@ test("runtime schema bootstrap accepts legacy multiline guards across stateless 
     "SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'",
   ).get().count;
   assert.equal(preinstalled, 1);
-  let installed = preinstalled;
+  let installed = preinstalled + CREDITEX_SCHEMA_GUARD_DEFINITIONS.filter((definition) => definition.legacySql).length;
   while (expectedRemaining(installed) > 40) {
     installed += 40;
     await assert.rejects(

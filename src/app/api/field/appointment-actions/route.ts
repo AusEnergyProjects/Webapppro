@@ -33,10 +33,11 @@ async function context(request: Request, workOrderId: string) {
   const mutable = !protectedJob && !['completed', 'cancelled'].includes(job.stage);
   const canReschedule = mutable && canRescheduleWithinScope(access, job.assignee_member_id);
   const active = Boolean(appointment && ['scheduled', 'en_route', 'arrived', 'in_progress'].includes(String(appointment.status)));
-  const permissions = { reschedule: canReschedule && Boolean(appointment && (active || appointment.status === 'no_show')),
-    noShow: canReschedule && active, cancel: mutable && Boolean(active || appointment?.status === 'no_show') && (access.isOwner || access.canManageJobs) && canReschedule,
+  const permissions = { schedule: canReschedule && !active && appointment?.status !== 'no_show',
+    reschedule: canReschedule && Boolean(appointment && (active || appointment.status === 'no_show')),
+    noShow: canReschedule && active, cancel: mutable && (access.isOwner || access.canManageJobs) && canReschedule,
     editCustomer: !protectedJob && Boolean(customer) && (access.isOwner || access.canManageCustomers),
-    deleteJob: job.customer_source === 'trade_owned' && !protectedJob && (access.isOwner || access.canManageJobs) };
+    deleteJob: !protectedJob && job.stage !== 'completed' && (access.isOwner || access.canManageJobs) };
   return { access, job, appointment, customer: protectedJob ? null : customer, permissions };
 }
 
@@ -66,7 +67,7 @@ export async function GET(request: Request) {
       JOIN trade_rental_inspections i ON i.id = m.inspection_id AND i.firebase_uid = m.firebase_uid
       WHERE i.work_order_id = ? AND i.firebase_uid = ? AND m.status <> 'superseded'`).bind(job.id, access.ownerUid).all<Row>();
     const gates = rentalAssignmentRequiredGates(modules.results.map(row => String(row.module_key)));
-    const members = permissions.reschedule ? await getD1().prepare(`SELECT id, display_name FROM trade_team_members
+    const members = permissions.schedule || permissions.reschedule ? await getD1().prepare(`SELECT id, display_name FROM trade_team_members
       WHERE owner_uid = ? AND status = 'active'
         AND (member_uid = ? OR EXISTS (SELECT 1 FROM json_each(capabilities) WHERE value = ?))
         AND (member_uid = ? OR ? = 0 OR EXISTS (SELECT 1 FROM json_each(capabilities) WHERE value = 'rental-inspection'))
@@ -125,10 +126,11 @@ export async function PATCH(request: Request) {
       await db.batch(statements);
       return adminJson({ ok: true, jobPatch: { revision: nextJobRevision(job.revision), customerName: customer.business_name || [firstName, lastName].filter(Boolean).join(' '), customerPhone: phone, customerEmail: email } });
     }
-    if (!['reschedule', 'no_show', 'cancel'].includes(action)) return adminJson({ ok: false, error: 'Unsupported appointment action.' }, 400);
-    if (!appointment || String(body.appointmentId) !== appointment.id || Number(body.expectedAppointmentRevision) !== Number(appointment.revision)) throw new Error('REVISION_CONFLICT');
-    if (action === 'reschedule') {
-      if (!permissions.reschedule) throw new Error('ACTION_NOT_ALLOWED');
+    if (!['schedule', 'reschedule', 'no_show', 'cancel'].includes(action)) return adminJson({ ok: false, error: 'Unsupported appointment action.' }, 400);
+    if (appointment ? String(body.appointmentId) !== appointment.id || Number(body.expectedAppointmentRevision) !== Number(appointment.revision)
+      : Boolean(body.appointmentId) || Number(body.expectedAppointmentRevision || 0) !== 0) throw new Error('REVISION_CONFLICT');
+    if (action === 'schedule' || action === 'reschedule') {
+      if (action === 'schedule' ? !permissions.schedule : !permissions.reschedule || !appointment) throw new Error('ACTION_NOT_ALLOWED');
       {
         const modules = await db.prepare(`SELECT module_key FROM trade_rental_inspection_modules m
           JOIN trade_rental_inspections i ON i.id = m.inspection_id AND i.firebase_uid = m.firebase_uid
@@ -145,24 +147,48 @@ export async function PATCH(request: Request) {
         if (!eligible) return adminJson({ ok: false, code: 'RENTAL_ASSIGNEE_CREDENTIAL_REQUIRED',
           error: 'Choose a team member with the required current licence and supporting Team document for that appointment date.' }, 409);
       }
+      const scheduleChange = action === 'schedule' ? { action: 'schedule_job', workOrderId: job.id, expectedRevision: job.revision }
+        : appointment ? { action: 'schedule_appointment', appointmentId: appointment.id, expectedRevision: appointment.revision, expectedJobRevision: job.revision } : null;
+      if (!scheduleChange) throw new Error('ACTION_NOT_ALLOWED');
       const response = await changeSchedule(new Request(request.url, { method: 'PATCH', headers: request.headers, body: JSON.stringify({
-        action: 'schedule_appointment', appointmentId: appointment.id, expectedRevision: appointment.revision,
-        expectedJobRevision: job.revision, startsAt: body.startsAt, durationMinutes: body.durationMinutes,
+        ...scheduleChange,
+        startsAt: body.startsAt, durationMinutes: body.durationMinutes,
         memberId: body.memberId, weekStart: scheduleWeekStartForDate(String(body.startsAt || '')) }) }));
       if (!response.ok) return response;
       const result = await response.json() as Row;
       const saved = await db.prepare(`SELECT a.id, a.status, a.starts_at, a.ends_at, w.revision, w.stage, w.scheduled_start, w.scheduled_end,
         w.assignee_member_id, w.assignee_label FROM trade_crm_appointments a
         JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
-        WHERE a.id = ? AND a.firebase_uid = ?`).bind(appointment.id, access.ownerUid).first<Row>();
+        WHERE a.work_order_id = ? AND a.firebase_uid = ? AND a.status = 'scheduled' AND (? = '' OR a.id = ?)
+        ORDER BY a.updated_at DESC, a.created_at DESC LIMIT 1`).bind(job.id, access.ownerUid,
+          action === 'reschedule' ? appointment?.id : '', action === 'reschedule' ? appointment?.id : '').first<Row>();
+      const email = action === 'schedule' && saved ? await sendDirectAppointmentCalendarInvite({
+        ownerUid: access.ownerUid, appointmentId: String(saved.id), origin: new URL(request.url).origin,
+      }) : Array.isArray(result.customerEmails) ? result.customerEmails[0] : null;
       return adminJson({ ok: true, jobPatch: saved ? { revision: Number(saved.revision), stage: saved.stage,
         lifecycleStatus: 'scheduled', appointmentId: saved.id, appointmentStatus: saved.status, appointmentStartsAt: saved.starts_at,
         appointmentEndsAt: saved.ends_at, scheduledStart: saved.scheduled_start, scheduledEnd: saved.scheduled_end,
         assigneeMemberId: saved.assignee_member_id, assigneeLabel: saved.assignee_label } : {},
-        calendarSync: result.calendarSync, email: Array.isArray(result.customerEmails) ? result.customerEmails[0] : null });
+        calendarSync: result.calendarSync, email });
     }
     if (action === 'no_show' ? !permissions.noShow : !permissions.cancel) throw new Error('ACTION_NOT_ALLOWED');
     const status = action === 'no_show' ? 'no_show' : 'cancelled';
+    if (!appointment) {
+      const revision = nextJobRevision(job.revision);
+      await db.batch([
+        db.prepare(`UPDATE trade_work_orders SET stage = 'cancelled', scheduled_start = '', scheduled_end = '', revision = ?, updated_at = ?
+          WHERE id = ? AND firebase_uid = ? AND revision = ? AND assignee_member_id = ? AND stage = ?
+            AND NOT EXISTS (SELECT 1 FROM trade_crm_appointments a WHERE a.work_order_id = trade_work_orders.id AND a.firebase_uid = trade_work_orders.firebase_uid)`)
+          .bind(revision, now, job.id, access.ownerUid, job.revision, job.assignee_member_id, job.stage),
+        previousTradeScheduleMutationGuardStatement(db, { ownerUid: access.ownerUid, changedAt: now }),
+        db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
+          VALUES (?, ?, ?, 'job_cancelled', 'Unscheduled job cancelled.', ?)`)
+          .bind(crypto.randomUUID(), job.id, access.ownerUid, now),
+        ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId: job.id, revision, changedAt: now, audienceMemberId: job.assignee_member_id }),
+      ]);
+      return adminJson({ ok: true, jobPatch: { revision, stage: status, lifecycleStatus: status,
+        scheduledStart: '', scheduledEnd: '', appointmentStartsAt: '', appointmentEndsAt: '' } });
+    }
     const otherAppointments = action === 'cancel' ? await db.prepare(`SELECT id, revision FROM trade_crm_appointments
       WHERE work_order_id = ? AND firebase_uid = ? AND id <> ? AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'no_show')`)
       .bind(job.id, access.ownerUid, appointment.id).all<Row>() : { results: [] };

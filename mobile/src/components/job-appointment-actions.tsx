@@ -53,7 +53,7 @@ export function JobAppointmentActions({ job, online, onClose, onSaved }: {
   }, [job.id, job.assigneeMemberId, online, requestKey]);
 
   useEffect(() => {
-    if (!online || screen !== 'reschedule' || !context || date === assigneeDate) return;
+    if (!online || !['schedule', 'reschedule'].includes(screen) || !context || date === assigneeDate) return;
     const controller = new AbortController();
     void apiRequest<AppointmentActionContext>(`/api/field/appointment-actions?workOrderId=${encodeURIComponent(job.id)}&appointmentDate=${encodeURIComponent(date)}`, { signal: controller.signal })
       .then((result) => {
@@ -89,7 +89,7 @@ export function JobAppointmentActions({ job, online, onClose, onSaved }: {
         method: 'PATCH',
         body: JSON.stringify({ workOrderId: job.id, action, expectedRevision: context.job.revision,
           appointmentId: context.appointment?.id || '', expectedAppointmentRevision: context.appointment?.revision || 0,
-          ...(action === 'reschedule' ? { startsAt: `${date}T${time}`, durationMinutes, memberId } : {}),
+          ...(['schedule', 'reschedule'].includes(action) ? { startsAt: `${date}T${time}`, durationMinutes, memberId } : {}),
           ...(action === 'update_customer' ? { customer: { ...customer, expectedUpdatedAt: context.customer?.updatedAt } } : {}),
           ...(action === 'delete' ? { confirmDelete: true } : {}),
         }),
@@ -104,7 +104,7 @@ export function JobAppointmentActions({ job, online, onClose, onSaved }: {
     } finally { setBusy(false); }
   }
 
-  const title = { menu: 'Job actions', reschedule: 'Reschedule', no_show: 'Mark as no show', cancel: 'Cancel job', update_customer: 'Edit customer details', delete: 'Delete job' }[screen];
+  const title = { menu: 'Job actions', schedule: 'Schedule job', reschedule: 'Reschedule', no_show: 'Mark as no show', cancel: 'Cancel job', update_customer: 'Edit customer details', delete: 'Delete job' }[screen];
   return <Modal visible transparent animationType="slide" onRequestClose={close}>
     <View style={styles.backdrop}>
       <Pressable accessibilityRole="button" accessibilityLabel="Close job actions" disabled={busy} onPress={close} style={StyleSheet.absoluteFill} />
@@ -114,6 +114,7 @@ export function JobAppointmentActions({ job, online, onClose, onSaved }: {
           {screen === 'menu' ? <>
             {loading ? <Text accessibilityLiveRegion="polite" style={styles.help}>Loading appointment actions...</Text> : null}
             {!online ? <Text style={styles.help}>Reconnect to change the appointment or customer details.</Text> : null}
+            {context?.permissions.schedule ? <ActionRow label="Schedule job" icon="calendar-plus" onPress={() => choose('schedule')} /> : null}
             {context?.permissions.reschedule ? <ActionRow label="Reschedule" icon="calendar-clock" onPress={() => choose('reschedule')} /> : null}
             {context?.permissions.noShow ? <ActionRow label="Mark as no show" icon="account-clock-outline" onPress={() => choose('no_show')} /> : null}
             {context?.permissions.cancel ? <ActionRow label="Cancel job" icon="calendar-remove-outline" onPress={() => choose('cancel')} /> : null}
@@ -122,10 +123,10 @@ export function JobAppointmentActions({ job, online, onClose, onSaved }: {
             {links.email ? <ActionRow label="Email customer" icon="email-outline" onPress={() => void openLink(links.email)} /> : null}
             {context?.permissions.editCustomer && context.customer && !job.protectedJob ? <ActionRow label="Edit customer details" icon="account-edit-outline" onPress={() => choose('update_customer')} /> : null}
             {context?.permissions.deleteJob ? <ActionRow label="Delete job" icon="delete-outline" onPress={() => choose('delete')} /> : null}
-            {job.protectedJob ? <Text style={styles.help}>Customer contact details are managed by Australian Energy Assessments.</Text> : null}
-            {context && !context.permissions.reschedule && !context.permissions.noShow && !context.permissions.cancel ? <Text style={styles.help}>Appointment changes are controlled by your Team permissions.</Text> : null}
+            {job.protectedJob ? <Text style={styles.help}>This is an AEA-managed opportunity. Contact Australian Energy Assessments to arrange or cancel the work.</Text> : null}
+            {context && !job.protectedJob && !context.permissions.schedule && !context.permissions.reschedule && !context.permissions.noShow && !context.permissions.cancel ? <Text style={styles.help}>Appointment changes are controlled by your Team permissions.</Text> : null}
           </> : null}
-          {screen === 'reschedule' && context ? <>
+          {['schedule', 'reschedule'].includes(screen) && context ? <>
             <FieldDatePicker label="Day" value={date} minimum={localWorkDate()} disabled={busy} onChange={setDate} />
             <Text style={styles.label}>Start time</Text>
             <View style={styles.timeRow}>
@@ -137,11 +138,11 @@ export function JobAppointmentActions({ job, online, onClose, onSaved }: {
             {assigneeDate !== date ? <Text style={styles.help}>Checking team members for this date...</Text> : null}
             {assigneeError ? <Text accessibilityLiveRegion="polite" style={styles.error}>{assigneeError}</Text> : null}
             <Text style={styles.help}>{durationMinutes} minutes reserved. The customer will receive the schedule change by email when an email address is saved. Connected Google calendars are updated.</Text>
-            <FieldButton loading={busy} disabled={loading || !online || !date || assigneeDate !== date || Boolean(assigneeError) || !context.permissions.reschedule || !context.assignees.some((person) => person.id === memberId)} onPress={() => void save('reschedule')}>Save appointment</FieldButton>
+            <FieldButton loading={busy} disabled={loading || !online || !date || assigneeDate !== date || Boolean(assigneeError) || !(screen === 'schedule' ? context.permissions.schedule : context.permissions.reschedule) || !context.assignees.some((person) => person.id === memberId)} onPress={() => void save(screen === 'schedule' ? 'schedule' : 'reschedule')}>Save appointment</FieldButton>
           </> : null}
           {screen === 'no_show' ? <><Text style={styles.help}>Remove this appointment from the schedule and keep the job ready to reschedule once you speak to the customer.</Text><FieldButton loading={busy} disabled={!online} onPress={() => void save('no_show')}>Mark as no show</FieldButton></> : null}
           {screen === 'cancel' ? <><Text style={styles.help}>Cancel this job and remove the appointment from the schedule and connected Google calendars. Existing assessment records are retained.</Text><FieldButton loading={busy} disabled={!online} onPress={() => void save('cancel')}>Confirm cancellation</FieldButton></> : null}
-          {screen === 'delete' ? <><Text style={styles.help}>Permanently delete this job, its forms, notes, photos and quotes, including accepted quotes. The customer stays in your customer list. This cannot be undone.</Text><Text style={styles.help}>Jobs with protected financial, issued report or government-program history cannot be deleted.</Text><FieldButton loading={busy} disabled={!online || loading} onPress={() => void save('delete')}>Permanently delete job</FieldButton></> : null}
+          {screen === 'delete' ? <><Text style={styles.help}>Permanently delete this job, its forms, notes, photos and quotes, including accepted quotes. The customer stays in your customer list. This cannot be undone.</Text><Text style={styles.help}>Partly completed forms can be deleted. Completed work, issued reports, financial records and submitted or audited activity records must be retained.</Text><FieldButton loading={busy} disabled={!online || loading} onPress={() => void save('delete')}>Permanently delete job</FieldButton></> : null}
           {screen === 'update_customer' ? <>
             <ContactField label="First name" value={customer.firstName} editable={!busy} onChangeText={(value) => setCustomer((current) => ({ ...current, firstName: value }))} />
             <ContactField label="Last name" value={customer.lastName} editable={!busy} onChangeText={(value) => setCustomer((current) => ({ ...current, lastName: value }))} />

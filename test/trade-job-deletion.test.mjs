@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
+import { JOB_DELETION_SCHEMA_GUARDS, upgradeJobDeletionGuards } from '../src/lib/trade-job-deletion-schema-guards.ts';
+import { canonicalTlinkSchemaGuardSql } from '../src/lib/tlink-schema-guards.ts';
+import * as draftComplianceDeletion from '../src/lib/trade-job-draft-compliance-deletion.ts';
 
 const root = new URL('../', import.meta.url);
 const load = (path, dependencies = {}) => {
@@ -20,6 +23,7 @@ test('file cleanup runs under the worker lifetime without blocking the job actio
   const drain = new Promise((resolve) => { finish = resolve; });
   const service = load('src/lib/trade-job-deletion-server.ts', {
     'cloudflare:workers': { env: { EVIDENCE: {} }, waitUntil: (promise) => pending.push(promise) },
+    './trade-job-draft-compliance-deletion.ts': draftComplianceDeletion,
     './trade-crm-job-media-cleanup': { drainTradeCrmJobMediaCleanup: (input) => { options = input; return drain; } },
   });
   const db = {};
@@ -51,7 +55,7 @@ function fixture(t) {
     if (terms > 5) throw new Error('D1_ERROR: too many terms in compound SELECT: SQLITE_ERROR');
     return new Statement(query);
   }, async batch(statements) {
-    if (beforeBatch) { const hook = beforeBatch; beforeBatch = null; hook(); }
+    if (beforeBatch && statements.some((statement) => statement.query.includes('UPDATE trade_work_orders'))) { const hook = beforeBatch; beforeBatch = null; hook(); }
     sql.exec('BEGIN');
     try { const results = statements.map((statement) => statement.runSync()); sql.exec('COMMIT'); return results; }
     catch (error) { sql.exec('ROLLBACK'); throw error; }
@@ -64,13 +68,16 @@ function fixture(t) {
   insert('trade_crm_customers', { id: 'customer', firebase_uid: 'owner', customer_number: 'C1', first_name: 'Keep me', created_at: timestamp, updated_at: timestamp });
   addJob('job'); addJob('other', 'other-owner');
   const access = { ownerUid: 'owner', memberId: 'worker', isOwner: true, canManageJobs: true, jobScope: 'team' };
-  const job = () => ({ ...sql.prepare('SELECT * FROM trade_work_orders WHERE id = ?').get('job'), customer_source: 'trade_owned' });
+  const job = () => sql.prepare('SELECT w.*, d.customer_source FROM trade_work_orders w JOIN trade_crm_job_details d ON d.work_order_id=w.id AND d.firebase_uid=w.firebase_uid WHERE w.id = ?').get('job');
   let calendarFails = false;
   const calendarCalls = [];
   const service = load('src/lib/trade-job-deletion-server.ts', {
     'cloudflare:workers': { env: {} },
     './trade-compliance-intent-replan-server': load('src/lib/trade-compliance-intent-replan-server.ts'),
     './trade-team-sync-server': load('src/lib/trade-team-sync-server.ts'),
+    './trade-job-deletion-schema-guards.ts': { JOB_DELETION_SCHEMA_GUARDS, upgradeJobDeletionGuards },
+    './tlink-schema-guards.ts': { canonicalTlinkSchemaGuardSql },
+    './trade-job-draft-compliance-deletion.ts': draftComplianceDeletion,
     './trade-calendar-sync-server': { async cancelAppointmentInConnectedCalendars(ownerUid, id) {
       calendarCalls.push([ownerUid, id]);
       if (!calendarFails) sql.prepare("UPDATE trade_crm_calendar_events SET status = 'cancelled' WHERE appointment_id = ? AND firebase_uid = ?").run(id, ownerUid);
@@ -148,6 +155,29 @@ test('an unscheduled test job deletes within production D1 compound SELECT limit
   assert.equal(f.sql.prepare("SELECT first_name FROM trade_crm_customers WHERE id = 'customer'").get().first_name, 'Keep me');
 });
 
+test('a released public lead job deletes its private copy while preserving the customer and canonical source evidence', async (t) => {
+  const f = fixture(t);
+  f.sql.exec("UPDATE trade_work_orders SET source_type='public_lead' WHERE id='job'; UPDATE trade_crm_job_details SET customer_source='public_lead_released' WHERE work_order_id='job';");
+  f.insert('public_trade_lead_quote_photos', { id: 'source-photo', opportunity_id: 'source-opportunity', client_upload_id: 'source-upload', prompt_id: 'property', prompt_label: 'Property', content_type: 'image/jpeg', size_bytes: 20, object_key: 'lead-canonical/source.jpg', sha256: 'a'.repeat(64), created_at: timestamp, updated_at: timestamp });
+  f.insert('trade_crm_job_media', { id: 'lead-copy', work_order_id: 'job', firebase_uid: 'owner', category: 'before', file_name: 'source.jpg', content_type: 'image/jpeg', size_bytes: 20, object_key: 'job-copy/lead.jpg', source: 'accepted_public_lead', customer_acknowledged_at: timestamp, evidence_envelope: '{"contract":"tlink-accepted-public-lead-job-file-v1"}', original_sha256: 'a'.repeat(64), accepted_lead_source_photo_id: 'source-photo', accepted_lead_source_opportunity_id: 'source-opportunity', accepted_lead_source_preparation_id: 'preparation', accepted_lead_source_release_id: 'release', accepted_lead_prompt_id: 'property', accepted_lead_service_categories: '["general"]', accepted_disclosure_sha256: 'b'.repeat(64), created_at: timestamp, updated_at: timestamp });
+  const response = await f.request();
+  assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM trade_crm_customers WHERE id='customer'").get().n, 1);
+  assert.equal(f.sql.prepare("SELECT object_key FROM public_trade_lead_quote_photos WHERE id='source-photo'").get().object_key, 'lead-canonical/source.jpg');
+  assert.deepEqual(f.sql.prepare('SELECT object_key FROM trade_crm_job_media_cleanup').all().map((r) => r.object_key), ['job-copy/lead.jpg']);
+});
+
+test('completed jobs and completed rental modules remain protected even before report issue', async (t) => {
+  const f = fixture(t);
+  f.sql.exec("UPDATE trade_work_orders SET stage='completed' WHERE id='job'");
+  await assert.rejects(f.delete(), (error) => error.code === 'JOB_DELETE_PROTECTED');
+  f.sql.exec("UPDATE trade_work_orders SET stage='no_show' WHERE id='job'");
+  f.insert('trade_rental_inspections', { id: 'rental', work_order_id: 'job', firebase_uid: 'owner', inspection_number: 'R1', template_key: 'vic-rental-minimum-standards', template_version: 1, rules_effective_from: '2026-09-10', module_selection_snapshot: '["minimum_standards"]', created_by_uid: 'owner', created_at: timestamp, updated_at: timestamp });
+  f.insert('trade_rental_inspection_modules', { id: 'module', inspection_id: 'rental', firebase_uid: 'owner', module_key: 'minimum_standards', required: 1, template_version: 1, template_name: 'Minimum standards', required_capability: 'rental-inspection', template_snapshot: '{"key":"minimum_standards"}', status: 'complete', completed_by_uid: 'owner', completed_at: timestamp, created_at: timestamp, updated_at: timestamp });
+  await assert.rejects(f.delete(), (error) => error.code === 'JOB_DELETE_PROTECTED' && /completed rental/.test(error.message));
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM trade_work_orders WHERE id='job'").get().n, 1);
+});
+
 test('hard delete removes own job forms, quote PDFs, photos and child data; retains customer and other owner', async (t) => {
   const f = fixture(t);
   const common = { work_order_id: 'job', firebase_uid: 'owner', created_at: timestamp, updated_at: timestamp };
@@ -178,6 +208,9 @@ test('draft rental children are removed in foreign-key order', async (t) => {
   f.insert('trade_rental_inspections', { id: 'rental', work_order_id: 'job', firebase_uid: 'owner', inspection_number: 'R1', template_key: 'vic-rental-minimum-standards', template_version: 1, rules_effective_from: '2026-09-10', module_selection_snapshot: '["minimum_standards"]', created_by_uid: 'owner', created_at: timestamp, updated_at: timestamp });
   f.insert('trade_rental_inspection_modules', { id: 'module', inspection_id: 'rental', firebase_uid: 'owner', module_key: 'minimum_standards', required: 1, template_version: 1, template_name: 'Minimum standards', required_capability: 'rental-inspection', template_snapshot: '{"key":"minimum_standards"}', created_at: timestamp, updated_at: timestamp });
   f.insert('trade_rental_inspection_items', { id: 'item', inspection_id: 'rental', module_id: 'module', firebase_uid: 'owner', item_key: 'mould', section_key: 'condition', check_key: 'mould', created_at: timestamp, updated_at: timestamp });
+  f.insert('trade_rental_inspection_events', { id: 'draft-event', inspection_id: 'rental', firebase_uid: 'owner', event_type: 'answer_saved', created_at: timestamp });
+  await upgradeJobDeletionGuards(f.db, JOB_DELETION_SCHEMA_GUARDS, canonicalTlinkSchemaGuardSql);
+  assert.throws(() => f.sql.exec('DELETE FROM trade_rental_inspection_events'), /append only/);
   await f.delete();
   assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_rental_inspections').get().n, 0);
   assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_rental_inspection_items').get().n, 0);
@@ -205,12 +238,49 @@ test('delete API enforces confirmation, owner isolation, assignment scope and re
   assert.equal((await response.json()).deletedJobId, 'job');
 });
 
-test('planned government program history blocks hard deletion without weakening its immutable contract', async (t) => {
-  const f = fixture(t);
+function addActivity(f, jobId = 'job', owner = 'owner', status = 'draft') {
   const snapshot = { contract: 'tlink-creditex-job-intent-v1', program: { templateId: 'program', programCode: 'VEU' }, activity: { templateId: 'activity', serviceCategory: 'general' }, siteJurisdiction: 'VIC', catalogueReviewedOn: '2026-09-10' };
-  f.insert('trade_work_order_compliance_intents', { id: 'intent', work_order_id: 'job', installer_uid: 'owner', compliance_organisation_id: 'org', program_template_id: 'program', activity_template_id: 'activity', program_code: 'VEU', service_category: 'general', site_jurisdiction: 'VIC', catalogue_reviewed_on: '2026-09-10', intent_snapshot: JSON.stringify(snapshot), intent_snapshot_sha256: 'a'.repeat(64), created_by_uid: 'owner', created_at: timestamp, updated_at: timestamp });
-  await assert.rejects(f.delete(), (error) => error.code === 'JOB_DELETE_PROTECTED' && /government-program/.test(error.message));
-  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_work_order_compliance_intents').get().n, 1);
+  const intentId = `${jobId}-intent`, recordId = `${jobId}-record`;
+  f.insert('trade_work_order_compliance_intents', { id: intentId, work_order_id: jobId, installer_uid: owner, compliance_organisation_id: 'org', program_template_id: 'program', activity_template_id: 'activity', program_code: 'VEU', service_category: 'general', site_jurisdiction: 'VIC', catalogue_reviewed_on: '2026-09-10', intent_snapshot: JSON.stringify(snapshot), intent_snapshot_sha256: 'a'.repeat(64), created_by_uid: owner, created_at: timestamp, updated_at: timestamp });
+  const prefix = `activity-field/${owner}/${recordId}/`;
+  const payload = { id: recordId, intentId, workOrderId: jobId, ownerUid: owner, organisationId: 'org', revision: 1, status, form: { activityTemplateId: 'activity' }, answers: { customerName: 'Partly filled' }, evidence: [{ objectKey: `${prefix}original/photo/1`, previewObjectKey: `${prefix}preview/photo/1.jpg` }, { objectKey: 'activity-field/other-owner/other-record/original/private/1' }] };
+  f.insert('trade_activity_field_records', { id: recordId, intent_id: intentId, work_order_id: jobId, owner_uid: owner, organisation_id: 'org', activity_template_id: 'activity', revision: 1, status, payload: JSON.stringify(payload), actor_uid: owner, created_at: timestamp, updated_at: timestamp, ...(status === 'draft' ? {} : { pdf_object_key: `${prefix}final/report.pdf`, pdf_sha256: 'a'.repeat(64), submitted_at: timestamp }) });
+  return { prefix, payload, recordId };
+}
+
+test('partly filled activity drafts delete their versions and owned evidence, retaining other jobs and source templates', async (t) => {
+  const f = fixture(t); const activity = addActivity(f); addActivity(f, 'other', 'other-owner');
+  f.addJob('same-owner'); addActivity(f, 'same-owner');
+  await upgradeJobDeletionGuards(f.db, JOB_DELETION_SCHEMA_GUARDS, canonicalTlinkSchemaGuardSql);
+  assert.throws(() => f.sql.exec("DELETE FROM trade_activity_field_records WHERE id='job-record'"), /must be retained/);
+  assert.throws(() => f.sql.exec("DELETE FROM trade_work_order_compliance_intents WHERE id='job-intent'"), /DELETE_BLOCKED/);
+  const next = { ...activity.payload, revision: 2, evidence: [] };
+  f.sql.prepare("UPDATE trade_activity_field_records SET revision=2,payload=? WHERE id='job-record'").run(JSON.stringify(next));
+  await f.delete();
+  for (const table of ['trade_activity_field_records', 'trade_work_order_compliance_intents']) assert.equal(f.sql.prepare(`SELECT count(*) n FROM ${table}`).get().n, 2);
+  assert.equal(f.sql.prepare("SELECT count(*) n FROM trade_activity_field_record_versions WHERE record_id='job-record'").get().n, 0);
+  assert.deepEqual(f.sql.prepare('SELECT object_key FROM trade_crm_job_media_cleanup ORDER BY object_key').all().map((r) => r.object_key), [`${activity.prefix}original/photo/1`, `${activity.prefix}preview/photo/1.jpg`]);
+  assert.equal(f.sql.prepare("SELECT count(*) n FROM trade_crm_write_guards WHERE operation_id GLOB 'job-delete:*'").get().n, 0);
+  assert.deepEqual(f.sql.prepare('PRAGMA foreign_key_check').all(), []);
+});
+
+test('submitted activity records and a concurrent submission retain all job data', async (t) => {
+  const submitted = fixture(t); addActivity(submitted, 'job', 'owner', 'submitted_for_creditex_review');
+  await assert.rejects(submitted.delete(), (error) => error.code === 'JOB_DELETE_PROTECTED');
+  const f = fixture(t); const a = addActivity(f);
+  f.race(() => f.sql.prepare("UPDATE trade_activity_field_records SET revision=2,status='submitted_for_creditex_review',payload=?,pdf_object_key='report.pdf',pdf_sha256=?,submitted_at=? WHERE id='job-record'").run(JSON.stringify({ ...a.payload, revision: 2, status: 'submitted_for_creditex_review' }), 'a'.repeat(64), timestamp));
+  await assert.rejects(f.delete(), /trade_crm_write_guard_verified_check/);
+  assert.equal(f.sql.prepare("SELECT revision FROM trade_work_orders WHERE id='job'").get().revision, 4);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM trade_crm_job_media_cleanup').get().n, 0);
+});
+
+test('known old triggers upgrade without weakening unrelated or unknown schema definitions', async (t) => {
+  const f = fixture(t);
+  await upgradeJobDeletionGuards(f.db, JOB_DELETION_SCHEMA_GUARDS, canonicalTlinkSchemaGuardSql);
+  await upgradeJobDeletionGuards(f.db, JOB_DELETION_SCHEMA_GUARDS, canonicalTlinkSchemaGuardSql);
+  assert.equal(canonicalTlinkSchemaGuardSql(f.sql.prepare("SELECT sql FROM sqlite_schema WHERE name='trade_activity_field_record_no_delete'").get().sql), canonicalTlinkSchemaGuardSql(JOB_DELETION_SCHEMA_GUARDS.find((d) => d.name === 'trade_activity_field_record_no_delete').sql));
+  f.sql.exec("DROP TRIGGER trade_activity_field_record_no_delete; CREATE TRIGGER trade_activity_field_record_no_delete BEFORE DELETE ON trade_activity_field_records BEGIN SELECT RAISE(ABORT, 'Unexpected contract'); END;");
+  await assert.rejects(upgradeJobDeletionGuards(f.db, JOB_DELETION_SCHEMA_GUARDS, canonicalTlinkSchemaGuardSql), /JOB_DELETION_SCHEMA_GUARD_MISMATCH/);
 });
 
 test('existing financial history blocks deletion explicitly before any mutation', async (t) => {

@@ -6,7 +6,7 @@ import { rentalAssessorMetadataField } from '../../../src/lib/rental-assessor-wo
 
 import { ApiError, apiRequest } from '@/lib/api';
 import { firebaseAuth } from '@/lib/auth';
-import { assertLocalDataOwner, getLocalDataOwner, readRentalSetting, rentalQueueSettings,
+import { assertLocalDataOwner, getLocalDataOwner, readRentalSetting, rentalQueueSettings, rentalResultSettingKey,
   subscribeLocalDataOwner, writeRentalSetting, type LocalDataOwner } from '@/lib/database';
 import { captureSessionId, type observeLocation, type observedTime } from '@/lib/evidence';
 import { getFieldPrincipal } from '@/lib/field-session';
@@ -93,7 +93,6 @@ subscribeLocalDataOwner(() => {
 
 function copy<T>(value: T): T { return JSON.parse(JSON.stringify(value)); }
 function jobKey(owner: LocalDataOwner, workOrderId: string) { return `${owner.epoch}:${owner.key}:${workOrderId}`; }
-function resultKey(owner: LocalDataOwner, workOrderId: string) { return `rental-result:${encodeURIComponent(owner.key)}:${workOrderId}`; }
 function recordKey(record: RentalSaveRecord) { return `${PREFIX}${encodeURIComponent(record.ownerKey)}:${record.id}`; }
 function photoLocationKey(workOrderId: string, uri: string) { return `rental-photo-location:${workOrderId}:${encodeURIComponent(uri)}`; }
 function assertJobAvailable(owner: LocalDataOwner, workOrderId: string) {
@@ -179,7 +178,7 @@ async function persist(owner: LocalDataOwner, record: RentalSaveRecord) {
 }
 
 async function cachedResult(owner: LocalDataOwner, workOrderId: string) {
-  const raw = await readRentalSetting(owner, resultKey(owner, workOrderId));
+  const raw = await readRentalSetting(owner, rentalResultSettingKey(owner, workOrderId));
   return raw ? JSON.parse(raw) as RentalAssessmentResult : null;
 }
 
@@ -191,7 +190,7 @@ async function cacheResult(owner: LocalDataOwner, workOrderId: string, result: R
     const previous = await cachedResult(owner, workOrderId);
     if (previous?.inspection && previous.inspection.id === result.inspection!.id
       && previous.inspection.revision > result.inspection!.revision) return;
-    await writeRentalSetting(owner, resultKey(owner, workOrderId), JSON.stringify(result));
+    await writeRentalSetting(owner, rentalResultSettingKey(owner, workOrderId), JSON.stringify(result));
   });
   emit(workOrderId);
 }
@@ -347,6 +346,7 @@ async function processFinish(owner: LocalDataOwner, record: RentalSaveRecord, in
   finalizing.add(gate);
   try {
     let result = initial;
+    if (await finishAlreadyConfirmed(record, result)) return;
     const dependencies = (await recordsFor(owner, record.workOrderId)).filter((entry) => finish.dependencyIds.includes(entry.id));
     assertReviewedFinish(record, result, dependencies);
     let assessmentModule = result.modules?.find((entry) => entry.id === record.module.id);
@@ -382,6 +382,21 @@ async function processFinish(owner: LocalDataOwner, record: RentalSaveRecord, in
     }
     await cacheResult(owner, record.workOrderId, result);
   } finally { finalizing.delete(gate); }
+}
+
+async function finishAlreadyConfirmed(record: RentalSaveRecord, result: RentalAssessmentResult) {
+  const finish = record.finish;
+  if (!finish || !result.inspection || result.inspection.id !== finish.reviewed.inspection?.id
+    || result.inspection.revision < (finish.reviewed.inspection?.revision || 0)
+    || !result.modules?.some((entry) => entry.id === record.module.id && entry.status === 'complete')) return false;
+  if (finish.issueReport === false && !finish.email) return true;
+  const reportId = result.inspection.issuedReportId;
+  if (result.inspection.status !== 'issued' || !reportId || !result.reports?.some((entry) => entry.id === reportId && entry.status === 'issued')) return false;
+  if (!finish.email) return true;
+  const delivery = result.reportDelivery;
+  if (delivery?.status !== 'accepted' || delivery.reportId !== reportId || !delivery.recipientSha256) return false;
+  const recipientHash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, finish.recipientEmail.trim().toLowerCase());
+  return delivery.recipientSha256 === recipientHash;
 }
 
 function object(value: unknown): Record<string, unknown> {
@@ -615,6 +630,12 @@ async function uploadPhoto(owner: LocalDataOwner, record: RentalSaveRecord, phot
 }
 
 async function processRecord(owner: LocalDataOwner, record: RentalSaveRecord) {
+  const confirmed = record.finish ? await cachedResult(owner, record.workOrderId) : null;
+  if (confirmed && await finishAlreadyConfirmed(record, confirmed)) {
+    record.status = 'succeeded'; record.error = ''; record.errorCode = '';
+    await persist(owner, record);
+    return;
+  }
   record.status = 'syncing'; record.error = ''; record.errorCode = '';
   await persist(owner, record);
   let result = await request(owner, record.workOrderId);
@@ -716,7 +737,7 @@ export async function purgeDeletedRentalJob(workOrderId: string) {
       await writeRentalSetting(owner, photoLocationKey(workOrderId, uri), null);
     }
     for (const record of records) await writeRentalSetting(owner, recordKey(record), null);
-    await writeRentalSetting(owner, resultKey(owner, workOrderId), null);
+    await writeRentalSetting(owner, rentalResultSettingKey(owner, workOrderId), null);
     await writeRentalSetting(owner, wizardKey, null);
   }));
   emit(workOrderId);

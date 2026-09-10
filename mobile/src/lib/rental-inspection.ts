@@ -1,3 +1,5 @@
+import type { FieldJob, FieldRentalInspectionSummary } from '@/lib/types';
+
 export type RentalMetadataField = {
   key: string;
   label: string;
@@ -116,13 +118,15 @@ export type RentalAssessmentEvidence = {
 export type RentalAssessmentResult = {
   ok?: boolean;
   deliveryRecipient?: { email: string; name: string } | null;
-  reportDelivery?: { status: string; recipientEmail?: string; sentAt?: string };
+  reportDelivery?: { status: string; reportId?: string; recipientSha256?: string; recipientEmail?: string; sentAt?: string };
   inspection?: {
     id: string;
     inspectionNumber: string;
-    status: string;
+    status: FieldRentalInspectionSummary['status'];
     rulesEffectiveFrom: string;
     revision: number;
+    issuedReportId?: string;
+    issuedAt?: string;
   };
   modules?: RentalAssessmentModule[];
   items?: RentalAssessmentItem[];
@@ -165,6 +169,22 @@ export type RentalAssessmentResult = {
   blockers?: Array<{ key: string; label: string }>;
   error?: string;
 };
+
+/** Project only a newer authenticated assessment result, never a queued intent. */
+export function rentalJobWithResult(job: FieldJob, result: RentalAssessmentResult | null): FieldJob {
+  const summary = job.rentalInspection;
+  const inspection = result?.inspection;
+  if (!summary || !inspection || inspection.id !== summary.id || inspection.revision < summary.revision || !result.modules) return job;
+  return { ...job, rentalInspection: { ...summary,
+    inspectionNumber: inspection.inspectionNumber, status: inspection.status, revision: inspection.revision,
+    rulesEffectiveFrom: inspection.rulesEffectiveFrom, selectedModules: result.modules.map((entry) => entry.key),
+    issuedReportId: inspection.issuedReportId ?? summary.issuedReportId, issuedAt: inspection.issuedAt ?? summary.issuedAt,
+    progress: { completeModules: result.modules.filter((entry) => entry.status === 'complete').length, moduleTotal: result.modules.length,
+      savedItems: result.items?.length ?? summary.progress.savedItems,
+      evidenceFiles: result.evidence?.filter((entry) => entry.status === 'active').length ?? summary.progress.evidenceFiles },
+    permissions: result.permissions ? { canEdit: result.permissions.canEdit, canIssue: result.permissions.canIssue } : summary.permissions,
+  } };
+}
 
 export const RENTAL_OUTCOMES = [
   { value: 'meets', label: 'Meets the standard' },
