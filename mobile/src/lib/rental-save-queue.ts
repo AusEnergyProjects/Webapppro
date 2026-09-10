@@ -44,6 +44,7 @@ export type RentalSaveInput = {
   baseFinding?: RentalAssessmentFinding | null;
   draftKey: string;
   draftSnapshot: unknown;
+  sourceDraftSnapshot?: unknown;
   photos?: RentalQueuedPhoto[];
   purpose?: string;
 };
@@ -59,7 +60,7 @@ export type RentalSaveRecord = Omit<RentalSaveInput, 'photos'> & {
   savedItem?: RentalAssessmentItem;
   savedFinding?: RentalAssessmentFinding | null;
   answerSaved?: boolean;
-  finish?: { reviewed: RentalAssessmentResult; dependencyIds: string[]; email: boolean; recipientEmail: string };
+  finish?: { reviewed: RentalAssessmentResult; dependencyIds: string[]; email: boolean; recipientEmail: string; issueReport?: boolean; confirmCredential?: boolean };
 };
 export type RentalSaveState = {
   records: RentalSaveRecord[];
@@ -255,6 +256,7 @@ export async function enqueueRentalSave(input: RentalSaveInput): Promise<RentalS
     if (finalizing.has(jobKey(owner, snapshot.workOrderId))) throw pendingError();
     const existing = await recordsFor(owner, snapshot.workOrderId);
     for (const finish of existing.filter((entry) => entry.finish && entry.status !== 'succeeded')) {
+      if (finish.finish?.issueReport === false && finish.module.id !== snapshot.module.id) continue;
       finish.status = 'conflict';
       finish.error = 'The assessment was edited after Finish was requested. Review it and finish again.';
       await persist(owner, finish);
@@ -276,24 +278,27 @@ export async function enqueueRentalSave(input: RentalSaveInput): Promise<RentalS
 
 /** The assessor authorises completion of this snapshot, not any later office edits. */
 export async function enqueueRentalFinish(input: { workOrderId: string; module: RentalAssessmentModule;
-  reviewed: RentalAssessmentResult; email: boolean; recipientEmail: string }) {
+  reviewed: RentalAssessmentResult; email: boolean; recipientEmail: string; issueReport?: boolean; confirmCredential?: boolean }) {
   const snapshot = copy(input);
   const owner = await ownerNow();
   const record = await serial(localGates, jobKey(owner, input.workOrderId), async () => {
     await checkOwner(owner);
     if (finalizing.has(jobKey(owner, input.workOrderId))) throw pendingError();
     const existing = await recordsFor(owner, input.workOrderId);
-    const prior = existing.find((entry) => entry.finish && entry.status !== 'succeeded');
+    const prior = existing.find((entry) => entry.finish && entry.status !== 'succeeded'
+      && (entry.module.id === snapshot.module.id || entry.finish.issueReport !== false));
     if (prior && prior.status !== 'conflict') return prior;
-    if (existing.some((entry) => !entry.finish && entry.status === 'conflict')) throw conflict('Open the saved answer that needs review before finishing. Your photos are retained.');
+    if (existing.some((entry) => !entry.finish && entry.status === 'conflict'
+      && (snapshot.issueReport !== false || entry.module.id === snapshot.module.id))) throw conflict('Open the saved answer that needs review before finishing. Your photos are retained.');
     if (prior) await writeRentalSetting(owner, recordKey(prior), null);
     const created: RentalSaveRecord = { schemaVersion: 1, id: Crypto.randomUUID(), ownerKey: owner.key,
       workOrderId: snapshot.workOrderId, module: snapshot.module,
       body: { action: 'finish_report', moduleId: snapshot.module.id }, draftKey: `finish:${snapshot.module.id}`,
       draftSnapshot: null, createdAt: Math.max(Date.now(), ...existing.map((entry) => entry.createdAt + 1)),
       status: 'queued', error: '', photos: [],
-      finish: { reviewed: snapshot.reviewed, dependencyIds: existing.filter((entry) => !entry.finish).map((entry) => entry.id),
-        email: snapshot.email, recipientEmail: snapshot.recipientEmail } };
+      finish: { reviewed: snapshot.reviewed, dependencyIds: existing.filter((entry) => !entry.finish
+        && (snapshot.issueReport !== false || entry.module.id === snapshot.module.id)).map((entry) => entry.id),
+        email: snapshot.email, recipientEmail: snapshot.recipientEmail, issueReport: snapshot.issueReport !== false, confirmCredential: snapshot.confirmCredential === true } };
     await persist(owner, created);
     return created;
   });
@@ -303,25 +308,28 @@ export async function enqueueRentalFinish(input: { workOrderId: string; module: 
 
 function assertReviewedFinish(record: RentalSaveRecord, current: RentalAssessmentResult, dependencies: RentalSaveRecord[]) {
   const reviewed = record.finish!.reviewed;
-  const expectedItems = new Map((reviewed.items || []).map((item) => [item.id, item.revision]));
-  const expectedFindings = new Map((reviewed.findings || []).map((finding) => [finding.id, finding.revision]));
-  for (const dependency of dependencies) {
+  const inScope = (entry: { moduleId: string }) => record.finish!.issueReport !== false || entry.moduleId === record.module.id;
+  const expectedItems = new Map((reviewed.items || []).filter(inScope).map((item) => [item.id, item.revision]));
+  const expectedFindings = new Map((reviewed.findings || []).filter(inScope).map((finding) => [finding.id, finding.revision]));
+  const scopedDependencies = dependencies.filter((entry) => record.finish!.issueReport !== false || entry.module.id === record.module.id);
+  for (const dependency of scopedDependencies) {
     if (dependency.savedItem) expectedItems.set(dependency.savedItem.id, dependency.savedItem.revision);
     if (dependency.savedFinding) expectedFindings.set(dependency.savedFinding.id, dependency.savedFinding.revision);
   }
-  if ((current.items || []).length !== expectedItems.size || (current.items || []).some((item) => expectedItems.get(item.id) !== item.revision)
-    || (current.findings || []).length !== expectedFindings.size || (current.findings || []).some((finding) => expectedFindings.get(finding.id) !== finding.revision)) {
+  if ((current.items || []).filter(inScope).length !== expectedItems.size || (current.items || []).filter(inScope).some((item) => expectedItems.get(item.id) !== item.revision)
+    || (current.findings || []).filter(inScope).length !== expectedFindings.size || (current.findings || []).filter(inScope).some((finding) => expectedFindings.get(finding.id) !== finding.revision)) {
     throw conflict('An answer changed after you requested Finish. Review the assessment and finish again.');
   }
-  const expectedEvidence = new Set((reviewed.evidence || []).filter((entry) => entry.status === 'active').map((entry) => entry.jobMediaId + ':' + entry.itemId));
-  for (const dependency of dependencies) for (const photo of dependency.photos) {
+  const expectedEvidence = new Set((reviewed.evidence || []).filter((entry) => inScope(entry) && entry.status === 'active').map((entry) => entry.jobMediaId + ':' + entry.itemId));
+  for (const dependency of scopedDependencies) for (const photo of dependency.photos) {
     if (photo.linked && dependency.savedItem) expectedEvidence.add(photo.mediaId + ':' + dependency.savedItem.id);
   }
-  const activeEvidence = (current.evidence || []).filter((entry) => entry.status === 'active');
+  const activeEvidence = (current.evidence || []).filter((entry) => inScope(entry) && entry.status === 'active');
   if (activeEvidence.length !== expectedEvidence.size || activeEvidence.some((entry) => !expectedEvidence.has(entry.jobMediaId + ':' + entry.itemId))) {
     throw conflict('The report evidence changed after Finish was requested. Review it and finish again.');
   }
   for (const original of reviewed.modules || []) {
+    if (record.finish!.issueReport === false && original.id !== record.module.id) continue;
     const latest = current.modules?.find((entry) => entry.id === original.id);
     if (!latest || !equal(original.template, latest.template)) throw conflict('The assessment scope changed. Review it and finish again.');
     const expected = { ...original.answers };
@@ -344,9 +352,9 @@ async function processFinish(owner: LocalDataOwner, record: RentalSaveRecord, in
     let assessmentModule = result.modules?.find((entry) => entry.id === record.module.id);
     if (!assessmentModule) throw conflict('The assessment is no longer available.');
     if (assessmentModule.status !== 'complete') {
-      // Only these two explicit review confirmations are authorised by the Finish dialog.
+      // Only declarations explicitly authorised in the Finish dialog may be saved.
       const answers = Object.fromEntries(assessmentModule.template.metadataFields.filter((field) =>
-        ['coverageConfirmed', 'assessorDeclaration'].includes(field.key) && field.type === 'checkbox').map((field) => [field.key, true]));
+        (['coverageConfirmed', 'assessorDeclaration'].includes(field.key) || finish.confirmCredential === true && field.key === 'credentialConfirmed') && field.type === 'checkbox').map((field) => [field.key, true]));
       if (Object.entries(answers).some(([key, value]) => assessmentModule!.answers[key] !== value)) {
         result = await request(owner, record.workOrderId, { action: 'save_module_answers', moduleId: assessmentModule.id,
           expectedRevision: assessmentModule.revision, answers });
@@ -357,10 +365,10 @@ async function processFinish(owner: LocalDataOwner, record: RentalSaveRecord, in
       result = await request(owner, record.workOrderId, { action: 'complete_module', moduleId: assessmentModule.id, expectedRevision: assessmentModule.revision });
     }
     let reportId = result.reports?.find((entry) => entry.status === 'issued')?.id;
-    if (!reportId && result.inspection?.status === 'issuing') {
+    if (finish.issueReport !== false && !reportId && result.inspection?.status === 'issuing') {
       throw new ApiError('Your report is still being prepared. Finishing will retry automatically.', 503, 'RENTAL_REPORT_ISSUING');
     }
-    if (!reportId && result.permissions?.canIssue && result.modules?.every((entry) => entry.status === 'complete')) {
+    if (finish.issueReport !== false && !reportId && result.permissions?.canIssue && result.modules?.every((entry) => entry.status === 'complete')) {
       result = await request(owner, record.workOrderId, { action: 'issue_report' });
       reportId = result.issuedReport?.reportId || result.reports?.find((entry) => entry.status === 'issued')?.id;
       if (!reportId) throw new Error('The report is still being prepared. Delivery will retry.');
@@ -644,16 +652,19 @@ async function processJob(owner: LocalDataOwner, workOrderId: string) {
   const attempted = new Set<string>();
   while (true) {
     await checkOwner(owner);
-    const record = (await recordsFor(owner, workOrderId)).find((entry) => !attempted.has(entry.id)
+    const records = await recordsFor(owner, workOrderId);
+    const record = records.find((entry) => !attempted.has(entry.id)
       && (['queued', 'syncing', 'retry'].includes(entry.status)
         || (entry.status === 'conflict' && canRetryCredentialSave(entry))
         || (entry.status === 'conflict' && entry.finish && entry.error === 'The other required assessment modules must be completed before the report can be emailed.')
         || (entry.status === 'conflict' && entry.body.action === 'save_module_answers' && entry.error === 'An assessment detail changed elsewhere. Review it before saving.')
         || (entry.status === 'conflict' && entry.body.action === 'save_module_answers' && !entry.photos.length
           && Object.keys(object(entry.body.answers)).length > 0
-          && Object.entries(object(entry.body.answers)).every(([key, value]) => metadataReplayRule(entry.module, key, value)))));
+          && Object.entries(object(entry.body.answers)).every(([key, value]) => metadataReplayRule(entry.module, key, value))))
+      && (!entry.finish || !records.some((other) => other.id !== entry.id && other.status !== 'succeeded'
+        && (entry.finish!.issueReport !== false ? !other.finish || other.finish.issueReport === false
+          : !other.finish && other.module.id === entry.module.id))));
     if (!record) return;
-    if (record.finish && (await recordsFor(owner, workOrderId)).some((entry) => entry.id !== record.id && entry.status !== 'succeeded')) return;
     attempted.add(record.id);
     try { await processRecord(owner, record); }
     catch (error) {

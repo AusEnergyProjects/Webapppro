@@ -31,9 +31,6 @@ const protectedRecords = [
   ["trade_crm_accepted_invoices", "firebase_uid", "", "This job has an accepted invoice. Its financial records must be retained."],
   ["trade_crm_accounting_documents", "firebase_uid", "", "This job has accounting documents that must be retained."],
   ["trade_installed_assets", "firebase_uid", "", "This job has installed assets and their service history that must be retained."],
-  ["trade_crm_commercial_handovers", "firebase_uid", "", "This job has an accepted quote or agreed scope that must be retained."],
-  ["trade_crm_quotes", "firebase_uid", "AND status = 'accepted'", "This job has an accepted quote that must be retained."],
-  ["trade_crm_quote_acceptances", "firebase_uid", "AND decision = 'accepted'", "This job has an accepted quote that must be retained."],
   ["trade_rental_inspections", "firebase_uid", "AND (issued_report_id <> '' OR status IN ('submitted', 'issuing', 'issued', 'superseded', 'withdrawn'))", "This job has a submitted or issued rental assessment that must be retained."],
   ["trade_crm_job_media", "firebase_uid", "AND source = 'accepted_public_lead'", "This job includes protected customer lead evidence that must be retained."],
 ] as const;
@@ -131,25 +128,32 @@ export async function deleteTradeJob(db: D1Database, access: TeamAccess, job: Jo
     'trade_rental_findings', 'trade_rental_inspection_items', 'trade_rental_inspection_modules', 'trade_rental_reports']) {
     statements.push(db.prepare(`DELETE FROM ${table} WHERE inspection_id IN (${inspectionIds}) AND firebase_uid = ?`).bind(id, owner, owner));
   }
+  // Acceptance alone does not retain a cancelled job. Remove its execution plan
+  // and agreed scope before deleting the acceptance and quote versions.
+  statements.push(db.prepare(`DELETE FROM trade_crm_job_actuals WHERE work_order_id = ? AND firebase_uid = ?`).bind(id, owner));
+  for (const table of ['trade_crm_job_plan_requirements', 'trade_crm_job_plan_phases']) {
+    statements.push(db.prepare(`DELETE FROM ${table} WHERE job_plan_id IN (SELECT id FROM trade_crm_job_plans WHERE work_order_id = ? AND firebase_uid = ?) AND firebase_uid = ?`).bind(id, owner, owner));
+  }
+  for (const table of ['trade_crm_job_plans', 'trade_crm_commercial_handovers', 'trade_crm_quote_acceptances',
+    'trade_crm_quote_events', 'trade_crm_quote_questions', 'trade_crm_quote_deliveries', 'trade_crm_quote_links']) {
+    statements.push(db.prepare(`DELETE FROM ${table} WHERE work_order_id = ? AND firebase_uid = ?`).bind(id, owner));
+  }
   for (const table of ['trade_crm_quote_items', 'trade_crm_quote_choices', 'trade_crm_quote_execution_snapshots']) {
     statements.push(db.prepare(`DELETE FROM ${table} WHERE quote_version_id IN (${quoteVersionIds}) AND firebase_uid = ?`).bind(id, owner, owner, owner));
   }
   statements.push(db.prepare(`DELETE FROM trade_crm_quote_versions WHERE quote_id IN (${quoteIds}) AND firebase_uid = ?`).bind(id, owner, owner));
-  for (const table of ['trade_crm_job_plan_requirements', 'trade_crm_job_plan_phases']) {
-    statements.push(db.prepare(`DELETE FROM ${table} WHERE job_plan_id IN (SELECT id FROM trade_crm_job_plans WHERE work_order_id = ? AND firebase_uid = ?) AND firebase_uid = ?`).bind(id, owner, owner));
-  }
+  statements.push(db.prepare(`DELETE FROM trade_crm_quotes WHERE work_order_id = ? AND firebase_uid = ?`).bind(id, owner));
   statements.push(db.prepare(`DELETE FROM trade_crm_calendar_events WHERE appointment_id IN (${appointmentIds}) AND firebase_uid = ?`).bind(id, owner, owner));
   statements.push(db.prepare(`DELETE FROM appointment_notification_deliveries WHERE appointment_id IN (${appointmentIds})`).bind(id, owner));
   statements.push(db.prepare(`DELETE FROM appointment_notification_events WHERE work_order_id = ? AND installer_uid = ?`).bind(id, owner));
   statements.push(db.prepare(`DELETE FROM trade_mobile_upload_parts WHERE session_id IN (SELECT id FROM trade_mobile_upload_sessions WHERE work_order_id = ? AND owner_uid = ?)`).bind(id, owner));
   statements.push(db.prepare(`DELETE FROM trade_mobile_upload_sessions WHERE work_order_id = ? AND owner_uid = ?`).bind(id, owner));
-  for (const table of ['trade_crm_quote_acceptances', 'trade_crm_quote_links', 'trade_crm_quote_events', 'trade_crm_quote_questions',
-    'trade_crm_quote_deliveries', 'trade_crm_quotes', 'trade_crm_appointment_reschedule_events', 'trade_crm_appointment_reschedule_requests',
+  for (const table of ['trade_crm_appointment_reschedule_events', 'trade_crm_appointment_reschedule_requests',
     'trade_crm_appointment_revisions', 'trade_crm_photo_request_events', 'trade_crm_photo_request_deliveries',
     'trade_crm_photo_request_completions', 'trade_crm_photo_requirement_reviews', 'trade_crm_photo_requests',
     'trade_crm_job_media_events', 'trade_rental_inspections', 'trade_crm_job_media', 'trade_job_forms', 'trade_work_order_tasks',
     'trade_crm_job_notes', 'trade_crm_signoffs', 'trade_crm_time_entries', 'trade_crm_appointments',
-    'trade_crm_job_actuals', 'trade_crm_job_plans', 'trade_service_follow_ups',
+    'trade_service_follow_ups',
     'trade_crm_job_details', 'trade_work_order_events']) {
     statements.push(db.prepare(`DELETE FROM ${table} WHERE work_order_id = ? AND firebase_uid = ?`).bind(id, owner));
   }

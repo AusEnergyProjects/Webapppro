@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
-import { rentalAssessorFields, rentalObservationNumberIsValid, rentalObservationBlockers } from '../../src/lib/rental-quotation.mjs';
+import { rentalAssessorFields, rentalObservationNumberIsValid, rentalObservationBlockers, rentalSharedObservationResponse } from '../../src/lib/rental-quotation.mjs';
 import { rentalAssessorEvidenceRequirement, rentalAssessorMetadataField, rentalAssessorOutcomePatch } from '../../src/lib/rental-assessor-workflow.mjs';
 
 const code = ts.transpileModule(readFileSync(new URL('../src/lib/rental-inspection.ts', import.meta.url), 'utf8'), {
@@ -227,7 +227,8 @@ function mountedHandler(name, nextName, environment) {
   const start = source.search(new RegExp('  (?:async )?function ' + name + '\\('));
   const end = nextName === '$render' ? source.indexOf('  return <View style={styles.shell}>') : source.search(new RegExp('  (?:async )?function ' + nextName + '\\('));
   assert.ok(start >= 0 && end > start);
-  const compiled = ts.transpileModule('export ' + source.slice(start, end).trim(), {
+  const helpers = source.slice(source.indexOf('const emptyCache'), source.indexOf('function RentalTextField'));
+  const compiled = ts.transpileModule(helpers + '\nexport ' + source.slice(start, end).trim(), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText;
   return new Function('environment', 'with (environment) { const exports = {}; ' + compiled + '; return exports.' + name + '; }')(environment);
@@ -341,9 +342,10 @@ test('old metadata snapshots hide automatic date and profile details and save on
 });
 
 test('finish confirms once, queues delivery without waiting for evidence and stays on the result screen', async () => {
-  const env = { active: { id: 'module', status: 'draft', revision: 3 }, pendingSaves: [{ id: 'fifty-photos' }], activeHasDraft: false,
+  const env = { active: { id: 'module', status: 'draft', revision: 3, answers: {} }, pendingSaves: [{ id: 'fifty-photos' }], saves: [], activeHasDraft: false,
+    canEmailReport: false, issueReport: true, credentialConfirmation: undefined,
     data: { items: [], completion: { module: { complete: false, blockers: [{ key: 'metadata:assessorDeclaration', label: 'Confirm assessment' }] } } },
-    cache: { answers: {} }, completionBlockers: [], rentalCompletionTarget, calls: [], finishRequest: undefined, earlierDrafts: [], sections: [], workOrderId: 'job',
+    cache: { answers: { module: { coverageConfirmed: true, assessorDeclaration: true, credentialConfirmed: false } } }, completionBlockers: [], rentalCompletionTarget, calls: [], finishRequest: undefined, earlierDrafts: [], sections: [], workOrderId: 'job',
     setError(message) { env.message = message; }, perform: async (_name, action) => action(), persist: async () => {},
     onChanged: async () => {}, onReturnToJob() { env.left = true; }, enqueueRentalFinish: async (value) => { env.queued = value; return { id: 'finish' }; },
     setSaves() {}, setPage(value) { env.page = value; },
@@ -363,13 +365,137 @@ test('an older future-shower blocker opens the single visible shower check', () 
   assert.deepEqual(rentalCompletionTarget(assessmentModule, [], 'check:showers:shower_2027_readiness'), { kind: 'check', sectionKey: 'bathroom', checkIndex: 1 });
 });
 
-test('a retained draft on the removed shower page opens recovery before finishing', async () => {
+test('a retained draft on the removed shower page explains recovery without leaving review', async () => {
   const env = { active: { id: 'module' }, finishRequest: undefined,
     earlierDrafts: [['module:scope:3:showers:0:property', { photos: [{ uri: 'retained.jpg' }] }]],
     setPage(value) { env.page = value; }, setError(value) { env.message = value; },
     Alert: { alert() { assert.fail('Do not authorise a report while earlier photos need recovery'); } } };
   await mountedHandler('finishAssessment', 'previous', env)();
-  assert.equal(env.page, 'earlier'); assert.match(env.message, /photos saved on the earlier shower/);
+  assert.equal(env.page, undefined); assert.match(env.message, /earlier saved answer needs review/i);
+});
+
+test('submitted drafts reconcile after GPS completes, but real later edits and new photos remain unfinished', () => {
+  const helpers = source.slice(source.indexOf('const emptyCache'), source.indexOf('function RentalTextField'))
+    .replace('function unfinishedDrafts(', 'export function unfinishedDrafts(');
+  const compiled = ts.transpileModule(helpers, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  const assessDrafts = new Function('rentalQuotation', 'RENTAL_ADVERSE_OUTCOMES', 'rentalSharedObservationResponse', 'const exports = {}; ' + compiled + '; return exports.unfinishedDrafts;')(
+    () => ({}), new Set(['does_not_meet']), rentalSharedObservationResponse);
+  const assessmentModule = { id: 'module', key: 'minimum_standards', template: { assessmentScope: 'current_minimum_standards', templateVersion: 3,
+    sections: [{ key: 'bathroom', title: 'Bathroom', checks: [{ key: 'working' }] }] } };
+  const key = 'module:current_minimum_standards:3:bathroom:0:property';
+  const draft = { outcome: 'meets', locationLabel: 'Property', publicNotes: '', internalNotes: '', response: {},
+    findingTitle: '', findingDescription: '', scopeSummary: '', quantity: '', unitLabel: 'each', quotation: {}, severity: 'required', immediateAction: '', notified: false,
+    photos: [{ uri: 'photo.jpg', width: 1200, height: 1600, capture: { captureObservedAtUtc: '2026-09-10T00:00:00Z' }, location: null, locationPending: true }] };
+  const retained = structuredClone(draft);
+  retained.photos[0].location = { location: { state: 'captured' } }; retained.photos[0].locationPending = false;
+  const cache = { drafts: { [key]: retained }, answers: {} };
+  const save = { draftKey: key, draftSnapshot: { ...draft, response: { sharedEquipmentType: 'Existing' } }, sourceDraftSnapshot: draft, status: 'succeeded' };
+  assert.deepEqual(assessDrafts(assessmentModule, {}, cache, [save]), [], 'Queued source snapshot owns this retained draft, even after shared response/GPS enrichment');
+  retained.publicNotes = 'An actual later edit';
+  assert.equal(assessDrafts(assessmentModule, {}, cache, [save]).length, 1);
+  retained.publicNotes = ''; retained.photos.push({ ...retained.photos[0], uri: 'new-photo.jpg' });
+  assert.equal(assessDrafts(assessmentModule, {}, cache, [save]).length, 1);
+  retained.photos = [];
+  const item = { id: 'saved', moduleId: 'module', sectionKey: 'bathroom', checkKey: 'working', instanceKey: 'property',
+    outcome: 'meets', locationLabel: 'Property', publicNotes: '', internalNotes: '', response: {} };
+  assert.deepEqual(assessDrafts(assessmentModule, { items: [item] }, cache, []), [], 'An unchanged saved answer is not an unfinished draft');
+  retained.outcome = 'does_not_meet';
+  assert.equal(assessDrafts(assessmentModule, { items: [item] }, cache, []).length, 1);
+  const legacyLocal = structuredClone(draft);
+  legacyLocal.photos[0].locationPending = false;
+  const heaterKey = 'module:current_minimum_standards:3:heating:0:property';
+  const candidate = { moduleId: 'module', checkKey: 'main_living_heater', instanceKey: 'property', locationLabel: 'Property', outcome: 'meets', response: { applianceType: 'Ducted' } };
+  const legacySave = { module: assessmentModule, draftKey: heaterKey, status: 'succeeded', body: { action: 'save_item', checkKey: 'heater_operation', instanceKey: 'property' },
+    draftSnapshot: { ...draft, response: { applianceType: 'Ducted' } } };
+  const legacyCache = { drafts: { [heaterKey]: legacyLocal }, answers: {} };
+  assert.deepEqual(assessDrafts(assessmentModule, { items: [candidate] }, legacyCache, [legacySave]), [], '568 queue snapshots recover only when saved equipment observations reproduce their inherited fields');
+  legacyLocal.response.applianceType = 'Split system';
+  assert.equal(assessDrafts(assessmentModule, { items: [candidate] }, legacyCache, [legacySave]).length, 1, 'Different equipment entered later remains unsaved');
+  delete legacyLocal.response.applianceType;
+  assert.equal(assessDrafts(assessmentModule, { items: [] }, legacyCache, [legacySave]).length, 1, 'No inherited value is guessed without its recorded source');
+});
+
+test('last offline module offers report delivery when earlier module finishes are authorised, while conflicts and later drafts still block it', () => {
+  const helpers = source.slice(source.indexOf('const emptyCache'), source.indexOf('function RentalTextField'));
+  const declaration = source.slice(source.indexOf('  const remainingModules ='), source.indexOf('  const canEmailReport ='));
+  const compiled = ts.transpileModule(helpers + declaration + '\nreturn {remainingModules, issueReport};', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const evaluate = new Function('data', 'active', 'cache', 'saves', 'rentalQuotation', 'RENTAL_ADVERSE_OUTCOMES', 'rentalSharedObservationResponse', compiled);
+  const modules = ['minimum_standards', 'electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check'].map((key, index) => ({ id: `module-${index}`, key, status: 'draft', answers: {}, template: { assessmentScope: 'test', templateVersion: 3, sections: [] } }));
+  const saves = modules.slice(0, 3).map((module) => ({ module, status: 'queued', finish: { issueReport: false }, body: {} }));
+  const cache = { drafts: {}, answers: {} };
+  const run = () => evaluate({ modules }, modules[3], cache, saves, () => ({}), new Set(), rentalSharedObservationResponse);
+  assert.equal(run().issueReport, true);
+  saves[0].status = 'conflict'; assert.equal(run().issueReport, false);
+  saves[0].status = 'queued';
+  cache.drafts['module-0:test:3:heating:0:property'] = { photos: [], response: {}, outcome: 'meets', findingDescription: '' };
+  assert.equal(run().issueReport, false);
+  cache.drafts = {}; cache.answers['module-0'] = { occupancy: 'vacant' };
+  assert.equal(run().issueReport, false);
+  cache.answers['module-0'] = { coverageConfirmed: true, assessorDeclaration: true };
+  assert.equal(run().issueReport, true, 'Legacy final values do not strand an already explicit Finish request');
+});
+
+test('unfinished metadata ignores saved values and legacy signoff caches, but retains edits and conflicts', () => {
+  const helpers = source.slice(source.indexOf('const emptyCache'), source.indexOf('function RentalTextField'));
+  const compiled = ts.transpileModule(helpers + '\nreturn unfinishedMetadata;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const inspect = new Function(compiled)();
+  const assessmentModule = { id: 'module', answers: { occupancyAtAssessment: 'vacant' } };
+  const cache = { answers: { module: { occupancyAtAssessment: 'vacant', coverageConfirmed: true, assessorDeclaration: true, credentialConfirmed: true } } };
+  assert.deepEqual(inspect(assessmentModule, cache, []), []);
+  cache.answers.module.occupancyAtAssessment = 'occupied';
+  assert.deepEqual(inspect(assessmentModule, cache, []).map(([key]) => key), ['occupancyAtAssessment']);
+  const save = { module: assessmentModule, status: 'queued', body: { action: 'save_module_answers', answers: { occupancyAtAssessment: 'occupied' } } };
+  assert.deepEqual(inspect(assessmentModule, cache, [save]), []);
+  save.status = 'conflict'; assert.equal(inspect(assessmentModule, cache, [save]).length, 1);
+  assert.equal(assessmentModule.answers.assessorDeclaration, undefined, 'Discarding an obsolete local signoff never certifies the server answer');
+});
+
+test('a real unsaved answer stays on review with an actionable message instead of bouncing to sections', async () => {
+  const env = { active: { id: 'module' }, finishRequest: undefined, earlierDrafts: [], pendingSaves: [], completionBlockers: [], activeHasDraft: true,
+    setError(message) { env.message = message; }, setPage() { assert.fail('Finish must not navigate away from review'); } };
+  await mountedHandler('finishAssessment', 'previous', env)();
+  assert.match(env.message, /unsaved changes/);
+  assert.match(env.message, /press Next to save/);
+});
+
+test('each optional module confirms its own credential and finishes without promising the whole report', async () => {
+  for (const key of ['electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check']) {
+    const env = { active: { id: key, key, title: key, answers: {} }, pendingSaves: [], saves: [], activeHasDraft: false, canEmailReport: false, issueReport: false,
+      credentialConfirmation: { label: 'I confirm my qualification details are current and accurate' },
+      data: {}, cache: { answers: {} }, completionBlockers: [], finishRequest: undefined, earlierDrafts: [], workOrderId: 'job',
+      setError() {}, perform: async (_name, action) => action(), persist: async () => {}, onChanged: async () => {},
+      enqueueRentalFinish: async (input) => { env.queued = input; return { id: 'finish' }; }, setSaves() {}, setPage(page) { env.page = page; },
+      Alert: { alert(title, message, buttons) { env.title = title; env.message = message; env.confirm = buttons[1].onPress; } } };
+    await mountedHandler('finishAssessment', 'previous', env)();
+    assert.match(env.title, /^Finish /); assert.match(env.message, /qualification details are current and accurate/);
+    assert.match(env.message, /selected assessment only/);
+    await env.confirm(); await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(env.queued.email, false); assert.equal(env.queued.issueReport, false); assert.equal(env.queued.confirmCredential, true);
+    assert.equal(env.page, 'review');
+  }
+});
+
+test('issued report email uses current sharing access after issuance closes canIssue', () => {
+  const declaration = source.slice(source.indexOf('  const canEmailReport ='), source.indexOf('  const evidence ='));
+  const compiled = ts.transpileModule(declaration + '\nreturn canEmailReport;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const evaluate = new Function('data', 'report', 'issueReport', compiled);
+  assert.equal(evaluate({ deliveryRecipient: { email: 'client@example.test' }, permissions: { canIssue: false, canRevokeLink: true } }, { id: 'issued' }, true), true);
+  assert.equal(evaluate({ deliveryRecipient: { email: 'client@example.test' }, permissions: { canIssue: false, canRevokeLink: false } }, { id: 'issued' }, true), false);
+  assert.equal(evaluate({ deliveryRecipient: { email: 'client@example.test' }, permissions: { canIssue: true } }, undefined, false), false);
+});
+
+test('unverified or inaccessible optional checks record limitations without requiring invented test readings', async () => {
+  for (const outcome of ['meets', 'does_not_meet', 'not_accessible', 'specialist_verification_required', 'exemption_evidence_pending']) {
+    const env = { draft: { outcome, response: {}, findingDescription: 'Could not access the test point', quotation: {}, quantity: '', unitLabel: 'each' },
+      check: { responseType: 'test_result' }, editable: true, page: 'details', detailField: { key: 'testReading', required: true },
+      detailIndex: 0, responseFields: [{ key: 'testReading' }], RENTAL_ADVERSE_OUTCOMES: new Set(['does_not_meet', 'not_accessible', 'specialist_verification_required', 'exemption_evidence_pending']),
+      rentalQuotation: (value) => value, data: { findings: [] }, item: undefined,
+      setError(message) { env.message = message; }, setPage(page) { env.page = page; }, change(values) { Object.assign(env.draft, values); },
+      perform() { assert.fail('Limitations must still be reviewed before saving'); } };
+    await mountedHandler('next', 'saveMetadata', env)();
+    if (['meets', 'does_not_meet'].includes(outcome)) assert.match(env.message, /Record this result/);
+    else { assert.equal(env.message, undefined); assert.equal(env.page, 'finding'); assert.equal(env.draft.response.testReading, undefined); }
+  }
 });
 
 test('an untouched optional metadata field advances without queueing an empty answer', async () => {

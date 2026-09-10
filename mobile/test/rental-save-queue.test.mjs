@@ -174,6 +174,81 @@ function prepareFinish(h) {
   return { workOrderId: 'job-1', module: clone(assessmentModule), reviewed: clone(h.state.result), email: true, recipientEmail: 'client@example.test' };
 }
 
+function prepareModuleFinishes(h) {
+  prepareFinish(h);
+  const base = clone(h.state.result.modules[0]);
+  h.state.result.modules = ['minimum_standards', 'electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check'].map((key, index) => {
+    const entry = { ...clone(base), id: `module-${index + 1}`, key, answers: { ...base.answers } };
+    if (index) entry.template.metadataFields.push({ key: 'credentialConfirmed', type: 'checkbox', phase: 'final' });
+    return entry;
+  });
+  const updateCompletion = () => {
+    h.state.result.completion = Object.fromEntries(h.state.result.modules.map((entry) => {
+      const blockers = entry.template.metadataFields.filter((field) => field.type === 'checkbox' && entry.answers[field.key] !== true)
+        .map((field) => ({ key: `metadata:${field.key}`, label: `${field.key} needs explicit confirmation` }));
+      return [entry.id, { complete: blockers.length === 0, blockers }];
+    }));
+  };
+  updateCompletion();
+  return async (path, init = {}, ...args) => {
+    const body = typeof init.body === 'string' ? JSON.parse(init.body) : init.body;
+    if (!['save_module_answers', 'complete_module'].includes(body?.action)) {
+      if (body?.action === 'issue_report') assert.ok(h.state.result.modules.every((entry) => entry.status === 'complete'));
+      return h.defaultRequest(path, init, ...args);
+    }
+    h.state.calls.push({ path, body });
+    const entry = h.state.result.modules.find((candidate) => candidate.id === body.moduleId);
+    assert.equal(body.expectedRevision, entry.revision);
+    if (body.action === 'save_module_answers') Object.assign(entry.answers, body.answers);
+    else {
+      assert.equal(h.state.result.completion[entry.id].complete, true);
+      entry.status = 'complete';
+    }
+    entry.revision++; h.state.result.inspection.revision++; updateCompletion();
+    return clone(h.state.result);
+  };
+}
+
+test('four module finishes saved offline process later module saves and issue and email only after every signed module completes', async () => {
+  const h = harness(), gate = deferred(), connected = prepareModuleFinishes(h);
+  h.state.handler = async () => { await gate.promise; throw new Error('Offline'); };
+  const finishes = [];
+  for (const [index, assessmentModule] of h.state.result.modules.entries()) {
+    await h.queue.enqueueRentalSave({ workOrderId: 'job-1', module: clone(assessmentModule),
+      body: { action: 'save_module_answers', moduleId: assessmentModule.id, answers: { addressNotes: `Observed for ${assessmentModule.key}` } },
+      draftKey: `metadata:${assessmentModule.id}:addressNotes`, draftSnapshot: {}, photos: [], purpose: 'Property details' });
+    finishes.push(await h.queue.enqueueRentalFinish({ workOrderId: 'job-1', module: clone(assessmentModule), reviewed: clone(h.state.result),
+      issueReport: index === 3, email: index === 3, confirmCredential: index > 0, recipientEmail: 'client@example.test' }));
+  }
+  assert.equal(new Set(finishes.map((entry) => entry.id)).size, 4, 'Every module has its own durable Finish request');
+  gate.resolve(); await h.queue.processRentalSaveQueue('job-1');
+  const restarted = h.restart(); restarted.state.handler = connected;
+  await restarted.queue.processRentalSaveQueue('job-1');
+  const saved = await restarted.queue.getRentalSaveState('job-1');
+  assert.equal(saved.pending, 0, JSON.stringify(saved.records.map((entry) => ({ id: entry.id, status: entry.status, error: entry.error }))));
+  assert.deepEqual(h.state.calls.filter((entry) => entry.body?.action === 'complete_module').map((entry) => entry.body.moduleId), ['module-1', 'module-2', 'module-3', 'module-4']);
+  assert.ok(h.state.result.modules.every((entry) => entry.answers.coverageConfirmed && entry.answers.assessorDeclaration));
+  assert.equal(h.state.result.modules[0].answers.credentialConfirmed, undefined);
+  assert.ok(h.state.result.modules.slice(1).every((entry) => entry.answers.credentialConfirmed === true));
+  await restarted.queue.processRentalSaveQueue('job-1');
+  assert.equal(h.state.calls.filter((entry) => entry.body?.action === 'issue_report').length, 1);
+  assert.equal(h.state.calls.filter((entry) => entry.body?.action === 'email_report').length, 1);
+});
+
+test('optional module Finish cannot infer credential confirmation or certify sibling modules', async () => {
+  const h = harness(); h.state.handler = prepareModuleFinishes(h);
+  const assessmentModule = h.state.result.modules[1];
+  await h.queue.enqueueRentalFinish({ workOrderId: 'job-1', module: clone(assessmentModule), reviewed: clone(h.state.result),
+    issueReport: false, email: false, recipientEmail: '' });
+  await h.queue.processRentalSaveQueue('job-1');
+  const saved = await h.queue.getRentalSaveState('job-1');
+  assert.match(saved.records.find((entry) => entry.finish).error, /credentialConfirmed needs explicit confirmation/);
+  assert.equal(assessmentModule.answers.credentialConfirmed, undefined);
+  assert.ok(h.state.result.modules.every((entry) => entry.status === 'draft'));
+  assert.equal(h.state.calls.filter((entry) => ['complete_module', 'issue_report', 'email_report'].includes(entry.body?.action)).length, 0);
+  assert.equal(h.state.result.modules[0].answers.coverageConfirmed, undefined);
+});
+
 test('durable Finish returns while 50 photos wait and completes and emails once after restart', async () => {
   const h = harness(), gate = deferred();
   const finishInput = prepareFinish(h);

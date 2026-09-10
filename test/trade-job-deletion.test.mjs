@@ -91,6 +91,53 @@ function fixture(t) {
     race: (hook) => { beforeBatch = hook; }, calendarFails: (value) => { calendarFails = value; } };
 }
 
+function addAcceptedQuote(f, jobId = 'job', owner = 'owner') {
+  const key = (name) => `${jobId}-${name}`;
+  const dated = { firebase_uid: owner, created_at: timestamp, updated_at: timestamp };
+  const jobFields = { work_order_id: jobId, firebase_uid: owner };
+  const quoteFields = { ...jobFields, quote_id: key('quote'), quote_version_id: key('version') };
+  f.insert('trade_crm_quotes', { id: key('quote'), ...dated, work_order_id: jobId, crm_customer_id: 'customer', service_site_id: '', quote_number: key('Q1'), status: 'accepted' });
+  f.insert('trade_crm_quote_versions', { id: key('version'), ...dated, quote_id: key('quote'), version_number: 1, status: 'accepted', issued_pdf_object_key: `quotes/${jobId}.pdf` });
+  f.insert('trade_crm_quote_choices', { id: key('choice'), firebase_uid: owner, quote_version_id: key('version'), position: 1, choice_key: 'base', choice_kind: 'required', group_key: '', name: 'Agreed work', created_at: timestamp });
+  f.insert('trade_crm_quote_items', { id: key('item'), firebase_uid: owner, quote_version_id: key('version'), quote_choice_id: key('choice'), position: 1, line_type: 'service', description: 'Accepted work', quantity_milli: 1000, unit_price_cents: 100, tax_code: 'GST', subtotal_cents: 100, tax_cents: 10, total_cents: 110, created_at: timestamp });
+  f.insert('trade_crm_quote_execution_snapshots', { id: key('execution'), firebase_uid: owner, quote_version_id: key('version'), packets_json: '[{"title":"Agreed work"}]', created_at: timestamp });
+  f.insert('trade_crm_quote_links', { id: key('link'), ...dated, ...quoteFields, crm_customer_id: 'customer', token_hash: key('token'), expires_at: '2026-10-01T00:00:00Z' });
+  f.insert('trade_crm_quote_acceptances', { id: key('acceptance'), ...quoteFields, quote_link_id: key('link'), crm_customer_id: 'customer', customer_firebase_uid: 'customer-user', actor_email: 'customer@example.test', decision: 'accepted', consent_statement: 'I accept this quote.', decided_at: timestamp, created_at: timestamp });
+  f.insert('trade_crm_commercial_handovers', { id: key('handover'), ...dated, ...quoteFields, acceptance_id: key('acceptance'), crm_customer_id: 'customer', commercial_reference: key('accepted'), scope_snapshot_json: '[{"description":"Accepted work"}]', subtotal_cents: 100, tax_cents: 10, total_cents: 110, accepted_at: timestamp });
+  f.insert('trade_crm_quote_events', { id: key('event'), ...quoteFields, quote_link_id: key('link'), event_type: 'accepted', evidence_key: key('evidence'), occurred_at: timestamp });
+  f.insert('trade_crm_quote_questions', { id: key('question'), ...quoteFields, quote_link_id: key('link'), question: 'Can you attend Friday?', asked_at: timestamp });
+  f.insert('trade_crm_quote_deliveries', { id: key('delivery'), ...dated, ...jobFields, quote_version_id: key('version'), quote_link_id: key('link'), crm_customer_id: 'customer', channel: 'email', provider: 'resend', status: 'sent', idempotency_key: key('delivery') });
+  f.insert('trade_crm_job_plans', { id: key('plan'), ...dated, ...jobFields, commercial_handoff_id: key('handover'), quote_version_id: key('version'), commercial_reference: key('accepted'), accepted_subtotal_cents: 100, accepted_tax_cents: 10, accepted_total_cents: 110 });
+  f.insert('trade_crm_job_plan_phases', { id: key('phase'), firebase_uid: owner, job_plan_id: key('plan'), position: 1, title: 'Installation', customer_description: 'Agreed work', created_at: timestamp });
+  f.insert('trade_crm_job_plan_requirements', { id: key('requirement'), firebase_uid: owner, job_plan_id: key('plan'), job_plan_phase_id: key('phase'), position: 1, requirement_type: 'labour', description: 'Installer', created_at: timestamp });
+  f.insert('trade_crm_job_actuals', { id: key('actual'), ...dated, ...jobFields, job_plan_id: key('plan'), job_plan_phase_id: key('phase'), job_plan_requirement_id: key('requirement'), actual_type: 'labour', recorded_by_uid: owner });
+  return key;
+}
+
+test('an accepted then cancelled quote job deletes its agreement and execution data, retaining customers and other jobs', async (t) => {
+  const f = fixture(t);
+  addAcceptedQuote(f);
+  addAcceptedQuote(f, 'other', 'other-owner');
+  f.addJob('same-owner'); addAcceptedQuote(f, 'same-owner');
+  f.sql.prepare("UPDATE trade_work_orders SET stage = 'cancelled' WHERE id = 'job'").run();
+  f.sql.prepare("UPDATE trade_crm_job_details SET quote_status = 'accepted' WHERE work_order_id = 'job'").run();
+  const response = await f.request();
+  assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+  for (const table of ['trade_crm_quotes', 'trade_crm_quote_versions', 'trade_crm_quote_choices', 'trade_crm_quote_items',
+    'trade_crm_quote_execution_snapshots', 'trade_crm_quote_links', 'trade_crm_quote_acceptances', 'trade_crm_commercial_handovers',
+    'trade_crm_quote_events', 'trade_crm_quote_questions', 'trade_crm_quote_deliveries', 'trade_crm_job_plans',
+    'trade_crm_job_plan_phases', 'trade_crm_job_plan_requirements', 'trade_crm_job_actuals']) {
+    assert.deepEqual(f.sql.prepare(`SELECT id FROM ${table} ORDER BY id`).all().map((row) => row.id),
+      f.sql.prepare(`SELECT id FROM ${table} WHERE id LIKE 'other-%' OR id LIKE 'same-owner-%' ORDER BY id`).all().map((row) => row.id), table);
+    assert.equal(f.sql.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n, 2, table);
+  }
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM trade_crm_customers WHERE id = 'customer'").get().n, 1);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM trade_work_orders WHERE id = 'job'").get().n, 0);
+  assert.deepEqual(f.sql.prepare('SELECT object_key FROM trade_crm_job_media_cleanup').all().map((row) => row.object_key), ['quotes/job.pdf']);
+  assert.equal(f.sql.prepare("SELECT operation FROM trade_team_sync_changes WHERE entity_id = 'job' ORDER BY sequence DESC LIMIT 1").get().operation, 'delete');
+  assert.deepEqual(f.sql.prepare('PRAGMA foreign_key_check').all(), []);
+});
+
 test('an unscheduled test job deletes within production D1 compound SELECT limits', async (t) => {
   const f = fixture(t);
   assert.throws(() => f.db.prepare('SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6'), /too many terms in compound SELECT/);
@@ -168,9 +215,12 @@ test('planned government program history blocks hard deletion without weakening 
 
 test('existing financial history blocks deletion explicitly before any mutation', async (t) => {
   const f = fixture(t);
+  addAcceptedQuote(f);
   f.insert('trade_crm_quick_invoices', { id: 'invoice', work_order_id: 'job', firebase_uid: 'owner', crm_customer_id: 'customer', invoice_number: 'I1', line_items_json: '[]', due_at: '2026-10-01', consent_confirmed_at: timestamp, created_by_uid: 'owner', created_at: timestamp, updated_at: timestamp });
   await assert.rejects(f.delete(), (error) => error.code === 'JOB_DELETE_PROTECTED' && /invoice/.test(error.message));
   assert.equal(f.sql.prepare("SELECT revision FROM trade_work_orders WHERE id = 'job'").get().revision, 4);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_crm_commercial_handovers').get().n, 1);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_crm_job_media_cleanup').get().n, 0);
 });
 
 test('concurrent protection or customer-source changes roll back all deletion statements', async (t) => {
@@ -183,6 +233,7 @@ test('concurrent protection or customer-source changes roll back all deletion st
 
 test('a protected record added after preflight is rejected by the atomic deletion guard', async (t) => {
   const f = fixture(t);
+  addAcceptedQuote(f);
   f.race(() => f.insert('trade_crm_quick_invoices', { id: 'late-invoice', work_order_id: 'job', firebase_uid: 'owner', crm_customer_id: 'customer', invoice_number: 'I2', line_items_json: '[]', due_at: '2026-10-01', consent_confirmed_at: timestamp, created_by_uid: 'owner', created_at: timestamp, updated_at: timestamp }));
   await assert.rejects(f.delete(), /trade_crm_write_guard_verified_check/);
   assert.equal(f.sql.prepare("SELECT revision FROM trade_work_orders WHERE id = 'job'").get().revision, 4);
