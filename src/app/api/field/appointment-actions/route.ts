@@ -51,6 +51,7 @@ function fail(error: unknown) {
   if (['JOB_NOT_FOUND', 'APPOINTMENT_NOT_FOUND'].includes(code)) return adminJson({ ok: false, error: 'Job or appointment not found.' }, 404);
   if (code === 'REVISION_CONFLICT' || code.includes('trade_crm_write_guard_verified_check')) return adminJson({ ok: false, error: 'This job changed. Reopen its actions and try again.', code: 'REVISION_CONFLICT' }, 409);
   if (['JOB_NOT_ASSIGNED', 'ACTION_NOT_ALLOWED', 'ABN_REVIEW_REQUIRED', 'TEAM_ACCESS_RECORD_REQUIRED', 'FIELD_ACCESS_REQUIRED', 'ACCOUNT_INACTIVE', 'EMAIL_VERIFICATION_REQUIRED'].includes(code)) return adminJson({ ok: false, error: 'Your current Team access does not allow this action.' }, 403);
+  console.error('FIELD_APPOINTMENT_ACTION_FAILED', error instanceof Error ? error.message : 'Unknown error');
   return adminJson({ ok: false, error: 'The appointment action could not be saved. Try again.' }, 500);
 }
 

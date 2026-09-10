@@ -4,8 +4,10 @@ import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
 import { JOB_DELETION_SCHEMA_GUARDS, upgradeJobDeletionGuards } from '../src/lib/trade-job-deletion-schema-guards.ts';
-import { canonicalTlinkSchemaGuardSql } from '../src/lib/tlink-schema-guards.ts';
-import { canonicalCreditexSchemaGuardSql } from '../src/lib/creditex-schema-guards.ts';
+import { canonicalTlinkSchemaGuardSql, TLINK_SCHEMA_GUARD_DEFINITIONS } from '../src/lib/tlink-schema-guards.ts';
+import { canonicalCreditexSchemaGuardSql, CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS, CREDITEX_SCHEMA_GUARD_DEFINITIONS } from '../src/lib/creditex-schema-guards.ts';
+import { CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS } from '../src/lib/creditex-work-pack-schema-guards.ts';
+import { TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS } from '../src/lib/trade-rental-schema-guards.ts';
 import * as draftComplianceDeletion from '../src/lib/trade-job-draft-compliance-deletion.ts';
 
 const root = new URL('../', import.meta.url);
@@ -204,17 +206,26 @@ test('hard delete removes own job forms, quote PDFs, photos and child data; reta
   assert.deepEqual(f.sql.prepare('PRAGMA foreign_key_check').all(), []);
 });
 
-test('draft rental children are removed in foreign-key order', async (t) => {
+test('partly saved rental answers delete with all live runtime guards installed', async (t) => {
   const f = fixture(t);
+  for (const definition of [...TLINK_SCHEMA_GUARD_DEFINITIONS, ...TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS]) {
+    f.sql.exec(`DROP TRIGGER IF EXISTS \`${definition.name}\``);
+    f.sql.exec(definition.sql);
+  }
   f.insert('trade_rental_inspections', { id: 'rental', work_order_id: 'job', firebase_uid: 'owner', inspection_number: 'R1', template_key: 'vic-rental-minimum-standards', template_version: 1, rules_effective_from: '2026-09-10', module_selection_snapshot: '["minimum_standards"]', created_by_uid: 'owner', created_at: timestamp, updated_at: timestamp });
   f.insert('trade_rental_inspection_modules', { id: 'module', inspection_id: 'rental', firebase_uid: 'owner', module_key: 'minimum_standards', required: 1, template_version: 1, template_name: 'Minimum standards', required_capability: 'rental-inspection', template_snapshot: '{"key":"minimum_standards"}', created_at: timestamp, updated_at: timestamp });
+  f.sql.prepare("UPDATE trade_rental_inspection_modules SET answers=?,status='draft',revision=2 WHERE id='module'").run('{"occupancy":"vacant"}');
+  f.sql.prepare("UPDATE trade_rental_inspections SET status='in_progress',revision=2 WHERE id='rental'").run();
   f.insert('trade_rental_inspection_items', { id: 'item', inspection_id: 'rental', module_id: 'module', firebase_uid: 'owner', item_key: 'mould', section_key: 'condition', check_key: 'mould', created_at: timestamp, updated_at: timestamp });
-  f.insert('trade_rental_inspection_events', { id: 'draft-event', inspection_id: 'rental', firebase_uid: 'owner', event_type: 'answer_saved', created_at: timestamp });
+  f.insert('trade_rental_inspection_events', { id: 'draft-event', inspection_id: 'rental', firebase_uid: 'owner', event_type: 'module_details_saved', created_at: timestamp });
   await upgradeJobDeletionGuards(f.db, JOB_DELETION_SCHEMA_GUARDS, canonicalTlinkSchemaGuardSql);
   assert.throws(() => f.sql.exec('DELETE FROM trade_rental_inspection_events'), /append only/);
   await f.delete();
   assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_rental_inspections').get().n, 0);
   assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_rental_inspection_items').get().n, 0);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_rental_inspection_events').get().n, 0);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM trade_crm_customers WHERE id='customer'").get().n, 1);
+  assert.deepEqual(f.sql.prepare('PRAGMA foreign_key_check').all(), []);
 });
 
 test('a permission failure and a stale revision retain the job and evidence', async (t) => {
