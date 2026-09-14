@@ -464,6 +464,8 @@ function legacyPathRedirect(request: Request) {
 function isCacheablePageRequest(request: Request) {
   if (request.method !== "GET") return false;
   const url = new URL(request.url);
+  // Cached development HTML can reference client modules replaced by hot reload.
+  if (["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return false;
   if (url.pathname.startsWith("/api/")) return false;
   if (url.pathname === "/account" || url.pathname.startsWith("/account/")) {
     return false;

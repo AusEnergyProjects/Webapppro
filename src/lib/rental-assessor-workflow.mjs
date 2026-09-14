@@ -148,6 +148,7 @@ const equipmentChecks = new Set([
 export function rentalAssessorEvidenceRequirement(check, outcome) {
   const definition = record(check);
   const key = checkKey(check);
+  if (Number(definition.requiredPdfCount || 0) > 0 && ["meets", "does_not_meet"].includes(outcome)) return { minimumFiles: Number(definition.requiredPdfCount), minimumPhotos: 0, reason: "Attach the complete authenticated professional PDF. A photo or a repair certificate alone does not replace this record." };
   const requested = Number(definition.requiredEvidenceCount);
   const requiredFiles = Number.isInteger(requested) && requested >= 0 ? requested : 1;
   const credential = String(definition.credentialGate || "assigned_assessor");
@@ -215,6 +216,16 @@ const presentation = {
  */
 export function rentalAssessorCheckPresentation(check, options = {}) {
   const definition = record(check);
+  if (definition.presentationStyle === "safety-summary") return {
+    prompt: String(definition.prompt), help: String(definition.help || ""), phaseLabel: "This visit",
+    outcomeOptions: [
+      { value: "meets", label: "Checked, satisfactory" }, { value: "does_not_meet", label: "Fault found" },
+      { value: "specialist_verification_required", label: "Needs further verification" },
+      { value: "not_accessible", label: "Could not inspect safely / no access" },
+      { value: "not_applicable", label: "Does not apply" },
+      ...(options.outcome === "exemption_evidence_pending" ? [{ value: "exemption_evidence_pending", label: "Exception evidence pending" }] : []),
+    ],
+  };
   const wording = presentation[checkKey(check)];
   const future = definition.assessmentPhase === "energy_readiness_2027" || checkKey(check).includes("_2027_readiness");
   const observationsOnly = options.assessmentScope === "observations_only";

@@ -1,5 +1,6 @@
 "use client";
 
+import { requiresAeaDelivery } from "@/lib/aea-service-identity.mjs";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type QuoteAnswer = { questionId: string; label: string; answer: string };
@@ -285,7 +286,7 @@ export function AdminEnergyAssistantLeads({
               <dt>Australian Energy Assessments updates</dt><dd>{selected.marketingConsent ? "Opted in separately" : "Not requested"}</dd>
               <dt>Trade sharing</dt>
               <dd>
-                {selected.tradeSharing.accepted
+                {requiresAeaDelivery(selected.services) ? "AEA-delivered services. This entire enquiry stays with Australian Energy Assessments, including any additional services. It is not available to other businesses." : selected.tradeSharing.accepted
                   ? selected.opportunityId
                     ? `Explicitly accepted and released at ${dateTime(selected.tradeSharing.grantedAt)}. Snapshot ${selected.tradeSharing.snapshotSha256}.`
                     : `Explicitly accepted at ${dateTime(selected.tradeSharing.grantedAt)}, but held by Australian Energy Assessments because the brief needs information. No trade visibility exists. Snapshot ${selected.tradeSharing.snapshotSha256}.`

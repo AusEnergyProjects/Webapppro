@@ -13,6 +13,8 @@ import { getFieldPrincipal } from '@/lib/field-session';
 import { RENTAL_ADVERSE_OUTCOMES, type RentalAssessmentFinding, type RentalAssessmentItem,
   type RentalAssessmentModule, type RentalAssessmentResult } from '@/lib/rental-inspection';
 
+import { purgeRentalDocuments, restoreRentalDocumentAccess } from '@/lib/rental-document-attachments';
+
 const ENDPOINT = '/api/trade-rental-inspections';
 const PREFIX = 'rental-save:';
 const PHOTO_DIRECTORY = new Directory(Paths.document, 'rental-save-photos');
@@ -708,8 +710,10 @@ async function processJob(owner: LocalDataOwner, workOrderId: string) {
 export async function purgeDeletedRentalJob(workOrderId: string) {
   const owner = await ownerNow();
   const key = jobKey(owner, workOrderId);
-  deletedJobs.set(key, Symbol(workOrderId));
+  const deletion = Symbol(workOrderId);
+  deletedJobs.set(key, deletion);
   for (const [controller, requestJob] of requests) if (requestJob === key) controller.abort();
+  await purgeRentalDocuments(owner, workOrderId, deletion);
   await serial(localGates, key, () => serial(recordWriteGates, key, async () => {
     await checkOwner(owner);
     const records = await recordsFor(owner, workOrderId);
@@ -749,7 +753,10 @@ export async function restoreRentalJobAccess(workOrderId: string) {
   const key = jobKey(owner, workOrderId);
   const deletion = deletedJobs.get(key);
   if (!deletion) return;
-  const restore = () => {
+  const restore = async () => {
+    assertLocalDataOwner(owner);
+    if (deletedJobs.get(key) !== deletion) return;
+    await restoreRentalDocumentAccess(owner, workOrderId, deletion);
     assertLocalDataOwner(owner);
     if (deletedJobs.get(key) !== deletion) return;
     deletedJobs.delete(key);
@@ -757,7 +764,7 @@ export async function restoreRentalJobAccess(workOrderId: string) {
   };
   const worker = workers.get(key);
   if (worker) void worker.catch(() => undefined).then(restore).catch(() => undefined);
-  else restore();
+  else await restore();
 }
 
 export async function processRentalSaveQueue(workOrderId?: string): Promise<void> {

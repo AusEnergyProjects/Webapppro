@@ -1,5 +1,12 @@
+import { AEA_SERVICE_IDENTITIES, AEA_BUNDLE_IDENTITIES, isAeaReservedService } from "./aea-service-identity.mjs";
+
+/** @type {Readonly<Record<string, string>>} */
+export const LEGACY_ENERGY_SERVICE_ALIASES = Object.freeze({ "rental-inspection": "minimum-rental-standards" });
+
 export const ENERGY_SERVICE_CATALOGUE = Object.freeze([
   Object.freeze({ id: "assessment", label: "Energy assessment" }),
+  ...Object.values(AEA_SERVICE_IDENTITIES).map((service) => Object.freeze({ id: service.id, label: service.name })),
+  ...Object.values(AEA_BUNDLE_IDENTITIES).map((bundle) => Object.freeze({ id: bundle.id, label: `${bundle.name} (2 years)` })),
   Object.freeze({ id: "blower-door-testing", label: "Blower door testing" }),
   Object.freeze({ id: "thermal-imaging", label: "Thermal imaging inspection" }),
   Object.freeze({ id: "electrical", label: "General electrical work" }),
@@ -30,6 +37,15 @@ export const ENERGY_SERVICE_LABELS = Object.freeze(
 );
 
 const energyServiceIdSet = new Set(ENERGY_SERVICE_IDS);
+
+export const TRADE_SERVICE_CATALOGUE = ENERGY_SERVICE_CATALOGUE.filter(({ id }) => !isAeaReservedService(id));
+export const TRADE_SERVICE_OPTIONS = TRADE_SERVICE_CATALOGUE.map(({ id, label }) => [id, label]);
+export const TRADE_SERVICE_IDS = Object.freeze(TRADE_SERVICE_OPTIONS.map(([id]) => id));
+
+export function normalizeTradeServiceIds(value) {
+  const normalized = normalizeEnergyServiceIds(value);
+  return normalized && !normalized.some(isAeaReservedService) ? normalized : null;
+}
 
 export function isEnergyServiceId(value) {
   return typeof value === "string" && energyServiceIdSet.has(value);

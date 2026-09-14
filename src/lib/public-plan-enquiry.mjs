@@ -8,6 +8,8 @@ import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
 import {
   LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
+  PREVIOUS_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  PREVIOUS_QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   QUICK_UPGRADE_CONSENT_PURPOSE,
 } from "./quick-upgrade-enquiry.mjs";
@@ -15,10 +17,15 @@ import {
 export const PUBLIC_PLAN_ENQUIRY_KIND = "home-plan-upgrade";
 
 export const PUBLIC_PLAN_CONSENT_PURPOSE =
-  "Email my private plan and share my email, postcode, services, message, quote answers and selected photos with approved trades matched to my area";
+  "Email my private plan. Australian Energy Assessments handles safety and assessments. Other requests and selected quote details go to approved matching trades.";
 
 export const PUBLIC_PLAN_CONSENT_NOTICE_VERSION =
+  "2026-09-14-aea-services-and-upgrade-sharing-v9";
+
+const PREVIOUS_PUBLIC_PLAN_CONSENT_NOTICE_VERSION =
   "2026-08-21-quote-preparation-sharing-notice-v8";
+const PREVIOUS_PUBLIC_PLAN_CONSENT_PURPOSE =
+  "Email my private plan and share my email, postcode, services, message, quote answers and selected photos with approved trades matched to my area";
 
 const LEGACY_PUBLIC_PLAN_CONSENT_NOTICE_VERSION =
   "2026-08-11-quote-preparation-sharing-notice-v7";
@@ -45,6 +52,18 @@ const quickUpgradeContactReleaseRequiredFields = Object.freeze([
 ]);
 
 const publicPlanContactReleasePolicies = Object.freeze([
+  Object.freeze({
+    noticeVersion: PREVIOUS_PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+    purpose: PREVIOUS_PUBLIC_PLAN_CONSENT_PURPOSE,
+    requiredDisclosedFields: publicPlanContactReleaseRequiredFields,
+    allowedDisclosedFields: Object.freeze([...publicPlanContactReleaseRequiredFields, "customer_name", "customer_phone", "customer_address", "customer_message"]),
+  }),
+  Object.freeze({
+    noticeVersion: PREVIOUS_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+    purpose: PREVIOUS_QUICK_UPGRADE_CONSENT_PURPOSE,
+    requiredDisclosedFields: quickUpgradeContactReleaseRequiredFields,
+    allowedDisclosedFields: Object.freeze([...quickUpgradeContactReleaseRequiredFields, "customer_email", "customer_name", "customer_phone", "customer_message"]),
+  }),
   Object.freeze({
     noticeVersion: QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
     purpose: QUICK_UPGRADE_CONSENT_PURPOSE,

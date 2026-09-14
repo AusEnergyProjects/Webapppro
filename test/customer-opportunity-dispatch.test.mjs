@@ -1,9 +1,11 @@
+import { tradeOpportunityServiceScopeSql } from "../src/lib/aea-trade-routing.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
-const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
+const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8")
+  .replaceAll(/\$\{tradeOpportunityServiceScopeSql\("([^"]+)"\)\}/g, (_, alias) => tradeOpportunityServiceScopeSql(alias));
 const migration = read("../drizzle/0088_customer_opportunity_dispatch_jobs.sql");
 const schema = read("../db/schema.ts");
 const dispatchServer = read("../src/lib/customer-opportunity-dispatch-server.ts");
@@ -90,6 +92,8 @@ test("a future-due exact notification remains outstanding and prevents false com
     id text PRIMARY KEY,
     opportunity_id text NOT NULL
   );
+  CREATE TABLE trade_opportunities (id text PRIMARY KEY, service_categories text NOT NULL);
+  INSERT INTO trade_opportunities VALUES ('opportunity-1', '["solar"]');
   CREATE TABLE trade_opportunity_notification_deliveries (
     match_id text NOT NULL,
     status text NOT NULL,

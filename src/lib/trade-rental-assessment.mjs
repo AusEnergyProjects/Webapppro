@@ -1,6 +1,8 @@
 import { rentalObservationBlockers, rentalObservationFields } from "./rental-quotation.mjs";
 import { rentalAssessorEvidenceRequirement, rentalAssessorMetadataField, rentalAssessorCheckPresentation, rentalShowerAssessmentProjection } from "./rental-assessor-workflow.mjs";
 
+import { RENTAL_SAFETY_TEMPLATE_VERSION, rentalSafetyVisitTemplate, rentalSafetyVisitBlockers } from "./rental-safety-visit.mjs";
+
 export const RENTAL_INSPECTION_SERVICE_CATEGORY = "rental-inspection";
 
 export const RENTAL_ASSESSMENT_TEMPLATE_KEY = "vic-rental-minimum-standards";
@@ -103,6 +105,14 @@ const currentSources = Object.freeze([
     effectiveFrom: "2026-06-30",
     url: "https://www.consumer.vic.gov.au/housing/renting/repairs-alterations-safety-and-pets/minimum-standards/checklist-rental-properties-minimum-standards",
   }),
+]);
+
+const safetySources = Object.freeze([
+  ...currentSources,
+  { title: "Energy Safe Victoria residential tenancy electrical safety checks", version: "retrieved-2026-09-14", effectiveFrom: "", url: "https://www.energysafe.vic.gov.au/industry-guidance/electrical/electricians-toolkit/residential-tenancy" },
+  { title: "BPC AS 4575 servicing Type A gas appliances", version: "updated-2026-08-28", effectiveFrom: "2026-02-01", url: "https://www.bpc.vic.gov.au/plumbers/delivering-safe-and-compliant-plumbing/as-4575-servicing-type-a-gas-appliances" },
+  { title: "Consumer Affairs Victoria smoke alarms and fire safety", version: "updated-2026-02-26", effectiveFrom: "2025-11-25", url: "https://www.consumer.vic.gov.au/housing/renting/repairs-alterations-safety-and-pets/keeping-the-property-safe/smoke-alarms-and-fire-safety" },
+  { title: "ACCC blind and curtain fittings mandatory standard", version: "retrieved-2026-09-14", effectiveFrom: "", url: "https://www.productsafety.gov.au/business/search-mandatory-standards/blinds-curtains-and-window-fittings-mandatory-standard" },
 ]);
 
 function check(key, prompt, options = {}) {
@@ -648,15 +658,16 @@ export function rentalAssessmentTemplateSnapshot(value, assessmentScope) {
     selectedModules: moduleKeys,
     modules: Object.fromEntries(moduleKeys.map((key) => [key, {
       ...template.modules[key],
+      ...(key !== "minimum_standards" ? rentalSafetyVisitTemplate(template.modules[key], minimumStandardsSections.find((section) => section.key === "window_covering_cords").checks[0]) : {}),
       ...(key === "minimum_standards" ? { sections: template.modules[key].sections.map((section) => ({ ...section,
         checks: section.checks.map((assessmentCheck) => ({ ...assessmentCheck, repeatBy: "property", prompt: rentalAssessorCheckPresentation(assessmentCheck).prompt })),
       })) } : {}),
       assessmentScope: key === "minimum_standards" ? scope : "statutory_safety_check",
       templateKey: template.key,
-      templateVersion: template.version,
+      templateVersion: key === "minimum_standards" ? template.version : RENTAL_SAFETY_TEMPLATE_VERSION,
       effectiveFrom: key === "minimum_standards" ? template.effectiveFrom : RENTAL_ASSESSMENT_TEMPLATE_EFFECTIVE_FROM,
       reviewedOn: template.reviewedOn,
-      sources: key === "minimum_standards" ? template.sources : currentSources,
+      sources: key === "minimum_standards" ? template.sources : safetySources,
     }])),
   });
 }
@@ -711,6 +722,7 @@ export function rentalAssessmentCompletion(input) {
   const findings = projected.findings;
   const evidenceCounts = parsedObject(input?.evidenceCounts);
   const photoCounts = parsedObject(input?.photoCounts);
+  const pdfCounts = parsedObject(input?.pdfCounts);
   const answers = parsedObject(input?.answers);
   const blockers = [...requiredMetadataBlockers(moduleTemplate, answers)];
   const dwellingAssessment = moduleTemplate.key === "minimum_standards";
@@ -753,6 +765,8 @@ export function rentalAssessmentCompletion(input) {
         if (suppliedPhotoCount < evidenceRequirement.minimumPhotos) {
           blockers.push({ key: `photo:${item.itemKey}`, label: `${itemLabel}: ${evidenceRequirement.reason}` });
         }
+        if (Number(assessmentCheck.requiredPdfCount || 0) > 0 && ["meets", "does_not_meet"].includes(outcome)
+          && Number(pdfCounts[item.id] || 0) < assessmentCheck.requiredPdfCount) blockers.push({ key: `document:${item.itemKey}`, label: `${itemLabel}: attach the complete professional PDF.` });
         const response = parsedObject(item.responseJson);
         for (const responseField of assessmentCheck.responseFields || []) {
           if (responseField.required && ["meets", "does_not_meet"].includes(outcome) && !String(response[responseField.key] || "").trim()) {
@@ -784,6 +798,7 @@ export function rentalAssessmentCompletion(input) {
       }
     }
   }
+  blockers.push(...rentalSafetyVisitBlockers({ moduleTemplate, items, pdfCounts }));
   return { complete: blockers.length === 0, blockers };
 }
 

@@ -10,7 +10,7 @@ type Choice = { id: string; title: string; added: boolean; unavailableReason: st
 type Activity = Choice & { programCode: string; programTemplateId: string; code: string };
 type Catalogue = {
   revision: number; buildingType: string; canAdd: boolean; unavailableReason: string;
-  programs: { id: string; code: string; label: string }[]; activities: Activity[]; rentalModules: Choice[];
+  programs: { id: string; code: string; label: string }[]; activities: Activity[]; rentalModules: Choice[]; rentalVisits?: Choice[];
 };
 
 export function FieldJobActivityPicker({ workOrderId, online, onChanged }: {
@@ -35,9 +35,9 @@ export function FieldJobActivityPicker({ workOrderId, online, onChanged }: {
       .finally(() => { if (!signal?.aborted) setLoadedFor(loadKey); });
   }, [online, workOrderId, loadKey]);
   useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [load]);
-  const choices = group === 'rental' ? catalogue?.rentalModules || [] : catalogue?.activities.filter((item) => item.programTemplateId === group) || [];
+  const choices = group === 'rental_visit' ? catalogue?.rentalVisits || [] : group === 'rental' ? catalogue?.rentalModules || [] : catalogue?.activities.filter((item) => item.programTemplateId === group) || [];
   const selected = choices.find((item) => item.id === selection);
-  const activity = group === 'rental' ? null : catalogue?.activities.find((item) => item.id === selection);
+  const activity = ['rental', 'rental_visit'].includes(group) ? null : catalogue?.activities.find((item) => item.id === selection);
   const variant = activity ? fieldActivityPremisesVariantId(activity.id, premises || catalogue?.buildingType || '') : '';
   const needsPremises = Boolean(activity && fieldActivityRequiresPremisesVariant(activity.id) && !variant);
 
@@ -48,7 +48,7 @@ export function FieldJobActivityPicker({ workOrderId, online, onChanged }: {
       const next = await apiRequest<Catalogue & { message: string }>('/api/field/job-activities', { method: 'POST', body: JSON.stringify({
         workOrderId, expectedRevision: catalogue.revision,
         ...(activity ? { kind: 'program', activityTemplateId: activity.id, programTemplateId: activity.programTemplateId, ...(variant ? { variantId: variant } : {}) }
-          : { kind: 'rental', moduleKey: selected.id }),
+          : group === 'rental_visit' ? { kind: 'rental_visit', presetKey: selected.id } : { kind: 'rental', moduleKey: selected.id }),
       }) });
       setCatalogue(next); setSelection(''); setMessage(next.message);
       try { await onChanged(); }
@@ -64,10 +64,11 @@ export function FieldJobActivityPicker({ workOrderId, online, onChanged }: {
     {loading ? <Text style={styles.help}>Loading available activities...</Text> : null}
     {catalogue ? <>
       <FieldSelect label="Form or program" value={group} disabled={busy || !online} options={[
+        ...(catalogue.rentalVisits?.length ? [{ value: 'rental_visit', label: 'Safety visit bundles, one report' }] : []),
         { value: 'rental', label: 'Rental inspections and safety checks' },
         ...catalogue.programs.map((program) => ({ value: program.id, label: program.label })),
       ]} onChange={(value) => { setGroup(value); setSelection(''); setPremises(''); setMessage(''); }} />
-      <FieldSelect label={group === 'rental' ? 'Assessment' : 'Activity'} placeholder="Choose the form to add" value={selection} disabled={busy || !online}
+      <FieldSelect label={group === 'rental_visit' ? 'Visit bundle' : group === 'rental' ? 'Assessment' : 'Activity'} placeholder="Choose the form to add" value={selection} disabled={busy || !online}
         options={choices.map((choice) => ({ value: choice.id, label: `${choice.title}${choice.added ? ' (already added)' : choice.unavailableReason ? ' (unavailable)' : ''}` }))}
         onChange={(value) => { setSelection(value); setMessage(''); }} />
       {catalogue.unavailableReason ? <Text style={styles.error}>{catalogue.unavailableReason}</Text> : null}

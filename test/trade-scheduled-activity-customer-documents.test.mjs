@@ -148,6 +148,8 @@ function fixture({ validPdf = true, providerFailure = false, providerIndetermina
   const { database, db } = deliveryDatabase({ failAcceptanceBatch });
   const messages = [];
   let releaseProvider;
+  let notifyProviderStarted;
+  const providerStarted = new Promise((resolve) => { notifyProviderStarted = resolve; });
   const providerGate = deferProvider
     ? new Promise((resolve) => { releaseProvider = resolve; })
     : Promise.resolve();
@@ -170,6 +172,7 @@ function fixture({ validPdf = true, providerFailure = false, providerIndetermina
       reminderProviderFailureOutcome: (error) => error?.providerOutcome === "indeterminate" ? "indeterminate" : "definite_failure",
       sendServiceReminderProviderMessage: async (message) => {
         messages.push(message);
+        notifyProviderStarted();
         await providerGate;
         if (providerFailure) {
           const error = new Error("provider rejected");
@@ -199,6 +202,7 @@ function fixture({ validPdf = true, providerFailure = false, providerIndetermina
     server,
     messages,
     fetchImpl,
+    providerStarted,
     releaseProvider: () => releaseProvider?.(),
   };
 }
@@ -335,7 +339,7 @@ test("booking persists the exact Resend binding, variant, hashes and immutable r
 });
 
 test("a queued delivery is claimed once before contacting Resend", async () => {
-  const { server, database, messages, fetchImpl, releaseProvider } = fixture({ deferProvider: true });
+  const { server, database, messages, fetchImpl, releaseProvider, providerStarted } = fixture({ deferProvider: true });
   const firstPromise = server.sendScheduledActivityCustomerDocuments({
     appointmentId: "appointment-1",
     workOrderId: "job-1",
@@ -344,9 +348,7 @@ test("a queued delivery is claimed once before contacting Resend", async () => {
     activities: [residentialActivity],
     fetchImpl,
   });
-  for (let attempt = 0; attempt < 50 && messages.length === 0; attempt += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
+  await Promise.race([providerStarted, firstPromise.then(() => assert.fail("Delivery ended before entering the provider"))]);
   assert.equal(messages.length, 1);
   assert.equal(database.prepare(`SELECT status FROM trade_activity_customer_document_deliveries`).get().status, "sending");
 

@@ -8,6 +8,8 @@ import { rentalAssessorMetadataField } from '../../src/lib/rental-assessor-workf
 
 const source = readFileSync(new URL('../src/lib/rental-save-queue.ts', import.meta.url), 'utf8');
 const output = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+const documentSource = readFileSync(new URL('../src/lib/rental-document-attachments.ts', import.meta.url), 'utf8');
+const documentOutput = ts.transpileModule(documentSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
 const databaseSource = ts.createSourceFile('database.ts', readFileSync(new URL('../src/lib/database.ts', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true);
 const purgeFunction = databaseSource.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'purgeRentalLocalPhotos');
 assert.ok(purgeFunction);
@@ -107,7 +109,9 @@ function harness(shared = {}) {
     return clone(result);
   }
   state.handler ||= defaultRequest;
+  const documentExports = {};
   const modules = {
+    '@/lib/rental-document-attachments': documentExports,
     '../../../src/lib/rental-assessor-workflow.mjs': { rentalAssessorMetadataField },
     'expo-crypto': { randomUUID: () => `00000000-0000-4000-8000-${String(++state.uuid).padStart(12, '0')}`,
       CryptoDigestAlgorithm: { SHA256: 'sha256' }, digestStringAsync: async (algorithm, value) => createHash(algorithm).update(value).digest('hex') },
@@ -143,10 +147,11 @@ function harness(shared = {}) {
     '@/lib/field-session': { getFieldPrincipal: async () => null },
     '@/lib/rental-inspection': { RENTAL_ADVERSE_OUTCOMES: new Set(['does_not_meet', 'not_accessible', 'specialist_verification_required', 'exemption_evidence_pending']) },
   };
+  new Function('require', 'exports', 'FormData', documentOutput)((id) => { assert.ok(modules[id], id); return modules[id]; }, documentExports, FormDataMock);
   const exports = {};
   new Function('require', 'exports', 'FormData', output)((id) => { assert.ok(modules[id], id); return modules[id]; }, exports, FormDataMock);
   const purgePhotos = new Function('Directory', 'File', 'Paths', `${purgeOutput}; return purgeRentalLocalPhotos;`)(Directory, File, { document: 'file:///document' });
-  return { queue: exports, state, store, files, ApiError, defaultRequest, purgePhotos,
+  return { queue: exports, documents: documentExports, state, store, files, ApiError, defaultRequest, purgePhotos,
     changeOwner() { state.owner = { key: 'firebase:bob', epoch: state.owner.epoch + 1 }; store.clear(); for (const listener of ownerListeners) listener(); purgePhotos(); },
     restart() { state.handler = defaultRequest; return harness({ store, files, state }); } };
 }
@@ -784,6 +789,11 @@ test('authoritative deletion purges only that job and aborts a late request with
   const original = 'file:///document/rental-original-photos/deleted.jpg';
   const prepared = 'file:///document/rental-save-photos/deleted.jpg';
   const other = 'file:///document/rental-original-photos/other.jpg';
+  const retainedPdfId = '00000000-0000-4000-8000-000000009999';
+  const retainedPdf = 'file:///document/rental-professional-documents/' + retainedPdfId + '.pdf';
+  h.files.set(retainedPdf, { size: 12, bytes: 'Private professional PDF' });
+  h.store.set('rental-documents:job-1', JSON.stringify([{ id: retainedPdfId, ownerKey: h.state.owner.key,
+    workOrderId: 'job-1', itemId: 'item', itemRevision: 1, name: 'record.pdf', mediaId: '', envelope: '{}' }]));
   for (const uri of [original, prepared, other]) h.files.set(uri, { size: 12, bytes: uri });
   input.photos = [{ ...photo(), uri: original, prepared: { uri: prepared, name: 'deleted.jpg', size: 12, envelope: '{}' } }];
   let signal;
@@ -798,6 +808,8 @@ test('authoritative deletion purges only that job and aborts a late request with
   await h.queue.purgeDeletedRentalJob('job-1');
   assert.equal(signal.aborted, true);
   assert.equal(h.files.has(original), false); assert.equal(h.files.has(prepared), false);
+  assert.equal(h.files.has(retainedPdf), false); assert.equal(h.store.has('rental-documents:job-1'), false);
+  await assert.rejects(h.documents.pendingRentalDocuments('job-1'), /no longer available/);
   assert.equal(h.files.has(other), true); assert.ok(h.store.has('rental-wizard:job-2'));
   assert.equal((await h.queue.getRentalSaveState('job-1')).records.length, 0);
   assert.equal((await h.queue.getRentalSaveState('job-2')).records.length, 1);
@@ -811,6 +823,7 @@ test('authoritative deletion purges only that job and aborts a late request with
   h.state.handler = h.defaultRequest;
   await h.queue.restoreRentalJobAccess('job-1');
   await h.queue.enqueueRentalSave(fixture().input); await h.queue.processRentalSaveQueue('job-1');
+  assert.deepEqual(await h.documents.pendingRentalDocuments('job-1'), []);
   assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0, 'A genuine reassignment can save again');
 });
 

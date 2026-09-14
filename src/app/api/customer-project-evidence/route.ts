@@ -1,3 +1,4 @@
+import { tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
 import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import {
@@ -36,7 +37,9 @@ async function installerCanAccess(installerUid: string, record: EvidenceRecord) 
     JOIN trade_accounts a ON a.firebase_uid = m.firebase_uid
     WHERE p.id = ? AND p.firebase_uid = ? AND m.firebase_uid = ?
       AND m.status IN ('offered', 'viewed', 'interested', 'connected')
-      AND o.status IN ('open', 'paused') AND a.partner_type = 'installer'
+      AND o.status IN ('open', 'paused')
+      AND ${tradeOpportunityServiceScopeSql("o")}
+      AND a.partner_type = 'installer'
       AND EXISTS (
         SELECT 1 FROM customer_consent_receipts consent
         WHERE consent.project_id = p.id AND consent.firebase_uid = p.firebase_uid

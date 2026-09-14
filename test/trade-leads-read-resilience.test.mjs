@@ -1,3 +1,4 @@
+import { tradeOpportunityServiceScopeSql } from "../src/lib/aea-trade-routing.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -11,6 +12,8 @@ import {
   publicPlanContactReleaseConsentSql,
 } from "../src/lib/public-plan-enquiry.mjs";
 import {
+  PREVIOUS_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  PREVIOUS_QUICK_UPGRADE_CONSENT_PURPOSE,
   LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
@@ -30,6 +33,8 @@ const V4_PURPOSE =
 const V6_NOTICE = "2026-08-10-structured-service-address-sharing-v6";
 const V6_PURPOSE =
   "Share my email, postcode, services and message with all approved TLink trades in my area, plus name, phone or full service address, and email my private plan";
+const V8_NOTICE = "2026-08-21-quote-preparation-sharing-notice-v8";
+const V8_PURPOSE = "Email my private plan and share my email, postcode, services, message, quote answers and selected photos with approved trades matched to my area";
 const V7_NOTICE = "2026-08-11-quote-preparation-sharing-notice-v7";
 const V7_PURPOSE =
   "Email my private plan and share my email, postcode, services, message, quote answers and selected photos with approved matched TLink trades";
@@ -46,7 +51,7 @@ function sqlTemplateContaining(source, marker) {
   const start = source.lastIndexOf("`", markerIndex);
   const end = source.indexOf("`", markerIndex);
   assert.ok(start >= 0 && end > markerIndex, `SQL template was not found: ${marker}`);
-  return source.slice(start + 1, end);
+  return source.slice(start + 1, end).replace(/\$\{tradeOpportunityServiceScopeSql\("([A-Za-z_][A-Za-z0-9_]*)"\)\}/g, (_match, alias) => tradeOpportunityServiceScopeSql(alias));
 }
 
 function projectionCountAt(sql, selectStart) {
@@ -113,6 +118,7 @@ function releaseRow(overrides = {}) {
     opportunity_postcode: "3000",
     public_contact_granted_at: "2026-08-11T01:02:03.000Z",
     public_contact_notice_version: PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+    opportunity_service_categories: JSON.stringify(["solar"]),
     public_contact_consent_purpose: PUBLIC_PLAN_CONSENT_PURPOSE,
     public_contact_disclosed_fields: JSON.stringify(requiredFields),
     public_customer_email: "CUSTOMER@example.com",
@@ -131,8 +137,10 @@ function releaseRow(overrides = {}) {
 
 test("trade lead reads split base rows from any-release context and validate before serialization", () => {
   const consentGuard = publicPlanContactReleaseConsentSql("public_contact");
-  assert.ok(consentGuard.length < 1_600, "lead read consent guard must stay shallow for D1");
-  assert.equal((consentGuard.match(/\bWHEN\b/g) || []).length, 7);
+  // Nine exact policy pairs retain the single shallow CASE used by the previous seven.
+  assert.ok(consentGuard.length < 2_000, "lead read consent guard must stay shallow for D1");
+  assert.equal((consentGuard.match(/\bWHEN\b/g) || []).length, 9);
+  assert.equal((consentGuard.match(/\bCASE\b/g) || []).length, 1, "Additional exact notice versions must not add nested CASE expressions");
   assert.equal((consentGuard.match(/\bELSE\b/g) || []).length, 1);
 
   const database = new DatabaseSync(":memory:");
@@ -141,6 +149,8 @@ test("trade lead reads split base rows from any-release context and validate bef
   insert.run("v4", V4_NOTICE, V4_PURPOSE);
   insert.run("v6", V6_NOTICE, V6_PURPOSE);
   insert.run("v7", V7_NOTICE, V7_PURPOSE);
+  insert.run("v8", V8_NOTICE, V8_PURPOSE);
+  insert.run("quick-previous", PREVIOUS_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, PREVIOUS_QUICK_UPGRADE_CONSENT_PURPOSE);
   insert.run(
     "current",
     PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
@@ -167,7 +177,7 @@ test("trade lead reads split base rows from any-release context and validate bef
     database.prepare(`SELECT id FROM public_contact WHERE ${consentGuard} ORDER BY id`)
       .all()
       .map((row) => row.id),
-    ["assistant", "current", "quick", "quick-legacy", "v4", "v6", "v7"],
+    ["assistant", "current", "quick", "quick-legacy", "quick-previous", "v4", "v6", "v7", "v8"],
   );
   database.close();
 
@@ -344,7 +354,7 @@ test("the authoritative base read supports broad and exact loads, caps at 100, a
       submission_revision INTEGER DEFAULT 0
     );`);
   const insertOpportunity = database.prepare(`INSERT INTO trade_opportunities
-    (id, title, postcode, state, status, source_reference) VALUES (?, ?, '3000', 'VIC', 'open', ?)`);
+    (id, title, postcode, state, status, source_reference, service_categories) VALUES (?, ?, '3000', 'VIC', 'open', ?, '["solar"]')`);
   const insertMatch = database.prepare(`INSERT INTO trade_opportunity_matches
     (id, firebase_uid, opportunity_id, status, matched_at, updated_at) VALUES (?, 'installer-1', ?, 'offered', ?, ?)`);
   const insertQuote = database.prepare(`INSERT INTO customer_project_quotes
@@ -362,6 +372,12 @@ test("the authoritative base read supports broad and exact loads, caps at 100, a
   assert.equal(broadBaseRows[0].match_id, "match-000");
   assert.equal(broadBaseRows.at(-1).match_id, "match-099");
   assert.equal(database.prepare(baseRead).all("installer-1", "match-000", "match-000").length, 1);
+  for (const scope of [null, "[]", "not-json", '["solar","assessment"]']) {
+    database.prepare("UPDATE trade_opportunities SET service_categories = ? WHERE id = 'opportunity-000'").run(scope);
+    assert.equal(database.prepare(baseRead).all("installer-1", "match-000", "match-000").length, 0);
+    assert.equal(database.prepare(quoteRead).all("installer-1", "match-000", "match-000").length, 0);
+  }
+  database.prepare("UPDATE trade_opportunities SET service_categories = '[\"solar\"]' WHERE id = 'opportunity-000'").run();
   const broadQuoteRows = database.prepare(quoteRead).all("installer-1", "", "");
   assert.equal(broadQuoteRows.length, 100);
   assert.deepEqual(
@@ -484,7 +500,7 @@ test("customer-project status mutation rechecks matching consent at mutation tim
       partner_note TEXT DEFAULT '', updated_at TEXT DEFAULT ''
     );
     CREATE TABLE trade_opportunities (
-      id TEXT PRIMARY KEY, status TEXT, expires_at TEXT, source_reference TEXT
+      id TEXT PRIMARY KEY, status TEXT, expires_at TEXT, source_reference TEXT, service_categories TEXT
     );
     CREATE TABLE customer_projects (
       id TEXT PRIMARY KEY, firebase_uid TEXT, opportunity_id TEXT
@@ -497,7 +513,7 @@ test("customer-project status mutation rechecks matching consent at mutation tim
       opportunity_match_id TEXT, installer_uid TEXT, customer_decision TEXT
     );
     INSERT INTO trade_opportunities VALUES
-      ('opportunity-1', 'open', '2026-08-13T00:00:00.000Z', 'customer-project:project-1');
+      ('opportunity-1', 'open', '2026-08-13T00:00:00.000Z', 'customer-project:project-1', '["solar"]');
     INSERT INTO trade_opportunity_matches VALUES
       ('match-1', 'installer-1', 'opportunity-1', 'offered', '', '2026-08-12T00:00:00.000Z');
     INSERT INTO customer_projects VALUES ('project-1', 'customer-1', 'opportunity-1');

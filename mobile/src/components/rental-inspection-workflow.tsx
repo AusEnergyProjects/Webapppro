@@ -2,6 +2,8 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Crypto from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import { pendingRentalDocuments, retainRentalDocument, uploadRentalDocument, discardRentalDocument, type PendingRentalDocument } from '@/lib/rental-document-attachments';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Image, Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { usePreventRemove } from 'expo-router/react-navigation';
@@ -147,6 +149,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const [guidanceOpen, setGuidanceOpen] = useState(false);
   const [editEquipmentKey, setEditEquipmentKey] = useState('');
   const [saves, setSaves] = useState<RentalSaveRecord[]>([]);
+  const [documents, setDocuments] = useState<PendingRentalDocument[]>([]);
   const busyRef = useRef(false);
   const mounted = useRef(true);
   const scroll = useRef<ScrollView>(null);
@@ -184,6 +187,8 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
           }
           if (live) loadedCacheKey.current = cacheKey;
         }
+        const pendingDocuments = await pendingRentalDocuments(workOrderId);
+        if (live) setDocuments(pendingDocuments);
         const saved = await getRentalSaveState(workOrderId);
         if (live) { setSaves(saved.records); if (saved.result) { applyResult(saved.result); setLoaded(true); } }
         if (!online) return;
@@ -491,7 +496,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       await updatePhoto(photo.uri, { location, locationPending: false });
     });
   }
-  async function saveAnswer() {
+  async function saveAnswer(advance = true) {
     if (!active || !item || !draft || !section || !check) return;
     if (!draft.outcome) throw new Error('Choose an answer.');
     if (active.key !== 'minimum_standards' && check.repeatBy !== 'property' && !draft.locationLabel.trim()) throw new Error('Add the appliance, circuit or alarm location.');
@@ -515,7 +520,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
         details: { ...existingFinding?.details, quotation: draft.quotation, immediateAction: draft.immediateAction.trim(), responsiblePeopleNotified: draft.notified } } : undefined };
     const photoCount = evidence.filter((entry) => entry.contentType.startsWith('image/')).length + draft.photos.length;
     const requirement = rentalAssessorEvidenceRequirement(check, draft.outcome);
-    if (evidence.length + draft.photos.length < requirement.minimumFiles || photoCount < requirement.minimumPhotos) {
+    if (!check.requiredPdfCount && (evidence.length + draft.photos.length < requirement.minimumFiles || photoCount < requirement.minimumPhotos)) {
       throw new Error(requirement.reason);
     }
     if (adverse) {
@@ -531,7 +536,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     delete nextCache.drafts[key];
     await persist(nextCache);
     cacheRef.current = nextCache; setCache(nextCache);
-    advanceQuestion();
+    if (advance) advanceQuestion();
   }
   async function next() {
     if (!draft || !check) return;
@@ -554,6 +559,27 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       if (draft.severity === 'immediate_safety_risk') { setPage('safety'); return; }
     }
     if (editable) await perform('save', saveAnswer); else advanceQuestion();
+  }
+  async function attachProfessionalPdf() {
+    if (!online || !active || !item || !check || !section) throw new Error('Connect before attaching a professional PDF.');
+    await saveAnswer(false);
+    await processRentalSaveQueue(workOrderId);
+    if ((await getRentalSaveState(workOrderId)).pending) throw new Error('Resolve the pending answers in Sync before attaching the professional PDF.');
+    const current = await loadRentalResult(workOrderId);
+    const saved = current.items?.find((entry) => entry.moduleId === active.id && entry.sectionKey === section.key && entry.checkKey === check.key && entry.instanceKey === item.instanceKey);
+    if (!saved) throw new Error('Sync the saved answer before attaching its PDF.');
+    applyResult(current);
+    const selected = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', multiple: false, copyToCacheDirectory: true });
+    if (selected.canceled) { applyResult(current); return; }
+    const pending = await retainRentalDocument(workOrderId, saved, selected.assets[0]);
+    setDocuments(await pendingRentalDocuments(workOrderId));
+    try { applyResult(await uploadRentalDocument(workOrderId, pending.id)); }
+    finally { setDocuments(await pendingRentalDocuments(workOrderId)); }
+  }
+  async function retryProfessionalPdf(document: PendingRentalDocument) {
+    if (!online) throw new Error('Connect to upload the retained PDF.');
+    try { applyResult(await uploadRentalDocument(workOrderId, document.id)); }
+    finally { setDocuments(await pendingRentalDocuments(workOrderId)); }
   }
   async function saveMetadata() {
     if (!active || !field) return;
@@ -762,9 +788,12 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
         {presentation?.help ? <Text style={styles.small}>{presentation.help}</Text> : null}
         {page === 'answer' ? <>
           {active.key !== 'minimum_standards' && check.repeatBy !== 'property' ? <>
+            {active.template.safetyVisitVersion === 1 && check.repeatBy !== 'property' ? <Text style={styles.small}>Use the same distinct location name in every check for this alarm or appliance.</Text> : null}
             {repeatInstances(section, cursor.checkIndex).length > 1 ? <FieldSelect label="Recorded appliances or items" value={cursor.instanceKey} disabled={Boolean(busy)} options={repeatInstances(section, cursor.checkIndex)} onChange={(instance) => openCheck(section, cursor.checkIndex, instance)} /> : null}
             <RentalTextField label="Appliance, circuit or alarm location" value={draft.locationLabel} editable={editable && !busy} onChange={(value) => change({ locationLabel: value })} />
           </> : null}
+          {check.requiredPdfCount && editable ? <FieldButton disabled={Boolean(busy) || !online} onPress={() => void perform('professional-pdf', attachProfessionalPdf)}>Save answer and attach professional PDF</FieldButton> : null}
+          {documents.filter((entry) => entry.itemId === item?.id).map((entry) => <View key={entry.id}><Text style={styles.small}>PDF retained: {entry.name}</Text><FieldButton disabled={Boolean(busy) || !online} onPress={() => void perform('professional-pdf', () => retryProfessionalPdf(entry))}>Retry retained PDF</FieldButton><FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => void perform('remove-pdf', async () => { await discardRentalDocument(workOrderId, entry.id); setDocuments(await pendingRentalDocuments(workOrderId)); })}>Remove retained PDF</FieldButton></View>)}
           {check.assessmentPhase === 'energy_readiness_2027' ? <Text style={styles.small}>2027 energy readiness · {check.trigger}</Text> : null}
           <View style={styles.options}>{(showerCheck ? RENTAL_SHOWER_CHOICES : presentation?.outcomeOptions || []).map((option) => <Pressable key={option.value} disabled={!editable || Boolean(busy)} onPress={() => change(showerCheck ? rentalShowerChoicePatch(check, option.value, draft.response, draft.publicNotes) : { ...rentalAssessorOutcomePatch(check, option.value, draft.publicNotes), ...(option.value === 'specialist_verification_required' && check.key === 'room_ventilation' ? { findingDescription: 'Ventilation requirement not verified during this assessment.' } : {}) })} style={[styles.option, (showerCheck ? rentalShowerChoiceValue(draft) : draft.outcome) === option.value && styles.selected]}><Text style={styles.categoryTitle}>{option.label}</Text></Pressable>)}</View>
           {draft.outcome === 'not_applicable' && check.key !== 'vents_2027_readiness' && !(check.key === 'window_operation_security' && rentalWindowIsFixed(draft.outcome, draft.publicNotes)) ? <RentalTextField label="Why does this not apply?" value={draft.publicNotes} editable={editable && !busy} onChange={(v) => change({ publicNotes: v })} /> : null}

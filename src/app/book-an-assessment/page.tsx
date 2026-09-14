@@ -10,7 +10,7 @@ import styles from "./page.module.css";
 const path = "/book-an-assessment";
 const canonical = `${PUBLIC_SITE.apexUrl}${path}`;
 const title = "Book a 5-Minute Call | Australian Energy Assessments";
-const description = "Choose a time for a five-minute call to confirm your property, assessment needs and next step with Australian Energy Assessments.";
+const description = "Choose a time for a five-minute call to confirm your property, energy assessment or rental safety needs and next step with Australian Energy Assessments.";
 const image = `${PUBLIC_SITE.apexUrl}/aea-home-energy-plan-og-v2.png`;
 
 export const metadata: Metadata = {
@@ -45,7 +45,7 @@ const structuredData = {
     {
       "@type": "Service",
       "@id": `${canonical}#service`,
-      name: "Five-minute assessment enquiry call",
+      name: "Five-minute assessment and rental safety enquiry call",
       serviceType: "Customer enquiry and booking support",
       description,
       url: canonical,
@@ -78,7 +78,7 @@ const structuredData = {
         },
         result: {
           "@type": "Reservation",
-          name: "Five-minute assessment call",
+          name: "Five-minute service planning call",
         },
       },
     },
@@ -106,7 +106,7 @@ export default function BookAnAssessmentPage() {
         <div className={styles.heroContent}>
           <span className={styles.eyebrow}>Australian Energy Assessments</span>
           <h1>Book a five-minute call</h1>
-          <p>Choose a time that suits you. We will confirm the property, what you need and the next step. This short call is for planning only. It is not the assessment itself.</p>
+          <p>Choose a time that suits you. We will confirm the property, what you need and the next step. Choose an energy assessment, rental safety check or two-year bundle in the booking form. This short call is for planning only; the assessment or safety visit is arranged separately.</p>
         </div>
       </header>
 
@@ -142,13 +142,13 @@ export default function BookAnAssessmentPage() {
       <aside className={styles.help} aria-label="Alternative contact options">
         <div>
           <strong>Would you rather speak now?</strong>
-          <span>Call or email the assessment team during business hours.</span>
+          <span>Call or email the Australian Energy Assessments team during business hours.</span>
         </div>
         <a className="btn" href={PUBLIC_SITE.phoneHref}>Call {PUBLIC_SITE.phoneDisplay}</a>
         <a className="btn ghost" href={`mailto:${PUBLIC_SITE.email}`}>Email us</a>
       </aside>
 
-      <SiteFooter>Book a five-minute planning call before an assessment. We will confirm the property, what you need and the next step. It is not the assessment itself.</SiteFooter>
+      <SiteFooter>Book a five-minute planning call about an energy assessment, rental safety service or bundle. We confirm the property and next step; the site visit is arranged separately.</SiteFooter>
     </main>
   );
 }

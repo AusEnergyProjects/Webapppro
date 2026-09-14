@@ -1,20 +1,24 @@
 import Link from "next/link";
+import { AeaServicePricePanel } from "@/components/AeaServices";
 import { GuideSection, GuideShell } from "@/components/GuideShell";
 import { JsonLd } from "@/components/JsonLd";
 import { PublicFaqList, type PublicFaq } from "@/components/PublicFaqList";
 import { PUBLIC_SITE, buildApexMetadata } from "@/lib/public-site";
+import { getAeaService, gstInclusiveCents } from "@/lib/aea-services.mjs";
 
 const path = "/minimum-rental-standards";
 const canonical = `${PUBLIC_SITE.apexUrl}${path}`;
 const officialStandardsUrl = "https://www.consumer.vic.gov.au/resources-and-tools/legislation/public-consultations-and-reviews/new-minimum-energy-efficiency-standards";
 const existingStandardsUrl = "https://www.consumer.vic.gov.au/housing/renting/repairs-alterations-safety-and-pets/minimum-standards/minimum-standards-for-rental-properties";
-const regulationsUrl = "https://www.legislation.vic.gov.au/in-force/statutory-rules/residential-tenancies-regulations-2021/006";
-const title = "Victorian Rental Minimum Energy Standards 2027 to 2030 | Australian Energy Assessments";
-const description = "A plain-language guide to Victoria's rental heating, cooling, hot water, showerhead, ceiling insulation and draughtproofing rules from 2027 to 2030.";
+const regulationsUrl = "https://www.legislation.vic.gov.au/in-force/statutory-rules/residential-tenancies-regulations-2021/009";
+const title = "Rental Minimum Standards Assessment Victoria | Australian Energy Assessments";
+const description = "Onsite Victorian rental minimum standards assessments for $170 + GST ($187 including GST), with photo evidence and clear findings. Understand current standards and the 2027 to 2030 energy changes.";
 
 export const metadata = buildApexMetadata({ path, title, description });
 
+const service = getAeaService("minimum-rental-standards")!;
 const faqs: readonly PublicFaq[] = [
+  ...service.faqs.map(([question, answer]) => ({ question, answer })),
   {
     question: "Do all six new requirements start on 1 March 2027?",
     answer: "No. They have different triggers. Heating and hot water changes apply when an existing system fails and cannot be repaired. Cooling, showerhead and ceiling-insulation requirements can be triggered by a new rental agreement or conversion to month-to-month. Draughtproofing begins from 1 July 2027, and cooling reaches all rentals from 1 July 2030.",
@@ -47,15 +51,17 @@ const schema = {
     {
       "@type": "Service",
       "@id": `${canonical}#service`,
-      name: "Victorian rental minimum energy standards assessment planning",
-      serviceType: "Rental property energy assessment and upgrade planning",
-      description: "Property review and planning support for Victoria's rental minimum energy standards. A rating or assessment does not itself prove legal compliance.",
+      name: service.name,
+      serviceType: "Victorian rental minimum standards assessment",
+      description: service.summary,
       url: canonical,
       provider: { "@id": PUBLIC_SITE.organizationId },
+      offers: { "@type": "Offer", price: (gstInclusiveCents(service.priceExGstCents) / 100).toFixed(2), priceCurrency: "AUD", url: canonical,
+        priceSpecification: { "@type": "UnitPriceSpecification", price: (gstInclusiveCents(service.priceExGstCents) / 100).toFixed(2), priceCurrency: "AUD", valueAddedTaxIncluded: true } },
       areaServed: { "@type": "AdministrativeArea", name: "Victoria" },
       availableChannel: {
         "@type": "ServiceChannel",
-        serviceUrl: `${PUBLIC_SITE.apexUrl}/rental-assessment/request`,
+        serviceUrl: canonical,
       },
     },
     {
@@ -65,7 +71,7 @@ const schema = {
       name: title,
       description,
       inLanguage: "en-AU",
-      dateModified: "2026-09-02",
+      dateModified: "2026-09-14",
       isPartOf: { "@id": PUBLIC_SITE.apexWebsiteId },
       about: { "@id": `${canonical}#service` },
       citation: [officialStandardsUrl, existingStandardsUrl, regulationsUrl],
@@ -76,8 +82,8 @@ const schema = {
       "@id": `${canonical}#breadcrumb`,
       itemListElement: [
         { "@type": "ListItem", position: 1, name: "Home", item: `${PUBLIC_SITE.apexUrl}/` },
-        { "@type": "ListItem", position: 2, name: "Assessments", item: `${PUBLIC_SITE.apexUrl}/assessments` },
-        { "@type": "ListItem", position: 3, name: "Victorian rental minimum energy standards", item: canonical },
+        { "@type": "ListItem", position: 2, name: "Services", item: `${PUBLIC_SITE.apexUrl}/services` },
+        { "@type": "ListItem", position: 3, name: "Rental minimum standards assessment", item: canonical },
       ],
     },
     {
@@ -96,10 +102,15 @@ export default function MinimumRentalStandardsPage() {
   return <GuideShell
     active="assessments"
     label="Victorian rental homes"
-    title="The new energy standards do not all start at once"
-    introduction="Victoria's rental energy rules begin in stages from 1 March 2027. The trigger changes depending on the item, so a working heater, an empty ceiling space and a new rental agreement are treated differently. This guide turns the timeline into a practical checklist."
+    title="Rental minimum standards assessments"
+    introduction="Understand what your Victorian rental property needs to meet today's minimum standards. Get an onsite assessment with photo evidence and clear findings, then prepare for the energy requirements that begin in stages from 2027."
   >
     <JsonLd data={schema} />
+    <AeaServicePricePanel serviceId="minimum-rental-standards" />
+    <GuideSection eyebrow="Your onsite assessment" title="The current minimum standards we review">
+      <p>We review the applicable requirements across locks, vermin-proof bins, toilets, bathrooms, kitchens, laundry facilities, structural soundness, mould and damp, electrical safety, window coverings, windows, lighting, ventilation, heating and window-covering cord anchors.</p>
+      <p>Findings identify what meets the inspected requirement, what needs attention and what could not be verified. Photographs and limitations are kept with the report. Licensed testing and specialist investigations remain separate where needed.</p>
+    </GuideSection>
     <div className="assessment-asat">
       <strong>Official Consumer Affairs Victoria guidance checked 2 September 2026</strong>
       <span>The government page was last updated 17 August 2026. Check it again before ordering work because technical details and compliance guidance can change.</span>

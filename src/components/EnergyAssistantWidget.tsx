@@ -13,6 +13,7 @@ import {
   useState,
 } from "react";
 import Image from "next/image";
+import { requiresAeaDelivery } from "@/lib/aea-service-identity.mjs";
 import { usePathname, useRouter } from "next/navigation";
 import type { SurgeConversationState } from "@/lib/energy-assistant-conversation";
 import {
@@ -1025,6 +1026,8 @@ export function EnergyAssistantWidget({
   const [leadStage, setLeadStage] = useState<LeadStage>("destination");
   const [leadQuestionPage, setLeadQuestionPage] = useState(0);
   const [lead, setLead] = useState<LeadDraft>(EMPTY_LEAD);
+  const aeaServiceRequest = requiresAeaDelivery(lead.services);
+  const leadMatchesTrades = lead.destination === "matched-trades" && !aeaServiceRequest;
   const [leadBusy, setLeadBusy] = useState(false);
   const [leadError, setLeadError] = useState("");
   const [leadStatus, setLeadStatus] = useState("");
@@ -1779,7 +1782,7 @@ export function EnergyAssistantWidget({
       return;
     }
     setLeadError("");
-    setLeadStage(lead.destination === "matched-trades" && quoteQuestions.length ? "questions" : "contact");
+    setLeadStage(leadMatchesTrades && quoteQuestions.length ? "questions" : "contact");
   };
 
   const answerCurrentQuoteQuestionsAsUnknown = () => {
@@ -1805,7 +1808,7 @@ export function EnergyAssistantWidget({
   };
 
   const advanceLeadContact = () => {
-    if (lead.destination === "matched-trades") {
+    if (leadMatchesTrades) {
       if (!lead.firstName.trim() || !lead.lastName.trim()) {
         setLeadError("Add your first and last name for the private plan record.");
         return;
@@ -1844,7 +1847,7 @@ export function EnergyAssistantWidget({
       setLeadError("Choose a suburb listed for this residential postcode.");
       return;
     }
-    if (lead.destination === "matched-trades") {
+    if (leadMatchesTrades) {
       if (!lead.firstName.trim() || !lead.lastName.trim() || !lead.email.trim() || !lead.phone.trim() || !lead.streetAddress.trim()) {
         setLeadError("Complete the private plan contact and property address fields.");
         setLeadStage("contact");
@@ -1875,7 +1878,7 @@ export function EnergyAssistantWidget({
         "@/lib/energy-assistant-enquiry-adapter.mjs"
       );
       const submission = buildEnergyAssistantEnquirySubmission(
-        lead.destination === "matched-trades"
+        leadMatchesTrades
           ? {
               destination: "matched-trades",
               tradeEnquiry: {
@@ -1928,7 +1931,7 @@ export function EnergyAssistantWidget({
         throw new Error(parseApiError(payload, "Australian Energy Assessments could not receive your request."));
       }
       setLeadStatus(
-        lead.destination === "matched-trades"
+        leadMatchesTrades
           ? "Your matched-trade enquiry was sent. Your private home plan is being prepared for your email; trades receive only the structured details you chose to share."
           : "Your request has been sent to Australian Energy Assessments only.",
       );
@@ -2358,7 +2361,7 @@ export function EnergyAssistantWidget({
                     <p>{lead.suburb}, {lead.state} {lead.postcode}. {lead.services.length} service{lead.services.length === 1 ? "" : "s"}. {answeredQuoteQuestionCount} of {quoteQuestions.length} service details recorded.</p>
                     <div>
                       <button className={styles.leadSecondary} type="button" onClick={() => setLeadStage("scope")}>Edit location or services</button>
-                      {lead.destination === "matched-trades" && quoteQuestions.length > 0 && <button className={styles.leadSecondary} type="button" onClick={() => { setLeadQuestionPage(0); setLeadStage("questions"); }}>Edit service details</button>}
+                      {leadMatchesTrades && quoteQuestions.length > 0 && <button className={styles.leadSecondary} type="button" onClick={() => { setLeadQuestionPage(0); setLeadStage("questions"); }}>Edit service details</button>}
                     </div>
                   </section>
                 )}
@@ -2393,6 +2396,7 @@ export function EnergyAssistantWidget({
                     )}
                     <fieldset>
                       <legend>What would you like help with?</legend>
+                      {aeaServiceRequest ? <p>Assessment and safety requests go directly to Australian Energy Assessments, including any additional services in this enquiry. Other businesses will not receive this request.</p> : null}
                       <div className={styles.services}>
                         {ENERGY_SERVICE_OPTIONS.map(([value, label]) => (
                           <label key={value}>
@@ -2430,7 +2434,7 @@ export function EnergyAssistantWidget({
                 {leadStage === "contact" && (
                   <section className={styles.leadStep} aria-labelledby="aea-lead-contact">
                     <h4 id="aea-lead-contact">Contact details</h4>
-                    {lead.destination === "matched-trades" ? (
+                    {leadMatchesTrades ? (
                       <>
                         <p>These details are required for the private plan record. Only the fields you select on the next screen are shared with approved matched trades; email and postcode are always included so they can reply and match the service area.</p>
                         <div className={styles.leadColumns}>
@@ -2450,14 +2454,14 @@ export function EnergyAssistantWidget({
                         <label><span>Phone <small>Email or phone required</small></span><input type="tel" maxLength={32} autoComplete="tel" inputMode="tel" value={lead.phone} onChange={(event) => updateLead((current) => ({ ...current, phone: event.target.value }))} /></label>
                       </>
                     )}
-                    <div className={styles.leadNav}><button className={styles.leadSecondary} type="button" onClick={() => setLeadStage(lead.destination === "matched-trades" && quoteQuestions.length ? "questions" : "scope")}>Back</button><button className={styles.leadPrimary} type="button" onClick={advanceLeadContact}>Continue</button></div>
+                    <div className={styles.leadNav}><button className={styles.leadSecondary} type="button" onClick={() => setLeadStage(leadMatchesTrades && quoteQuestions.length ? "questions" : "scope")}>Back</button><button className={styles.leadPrimary} type="button" onClick={advanceLeadContact}>Continue</button></div>
                   </section>
                 )}
 
                 {leadStage === "preferences" && (
                   <section className={styles.leadStep} aria-labelledby="aea-lead-preferences">
-                    <h4 id="aea-lead-preferences">{lead.destination === "matched-trades" ? "Choose exactly what trades may see" : "Response preferences"}</h4>
-                    {lead.destination === "matched-trades" ? (
+                    <h4 id="aea-lead-preferences">{leadMatchesTrades ? "Choose exactly what trades may see" : "Response preferences"}</h4>
+                    {leadMatchesTrades ? (
                       <>
                         <p>Email, postcode, selected services, your message and any quote answers are included. The following details remain private unless you select them:</p>
                         <label className={styles.consent}><input type="checkbox" checked={lead.shareName} onChange={(event) => updateLead((current) => ({ ...current, shareName: event.target.checked }))} /><span>Also share my first and last name.</span></label>
@@ -2479,7 +2483,7 @@ export function EnergyAssistantWidget({
                 {leadStage === "consent" && (
                   <section className={styles.leadStep} aria-labelledby="aea-lead-consent">
                     <h4 id="aea-lead-consent">Confirm this one destination</h4>
-                    {lead.destination === "matched-trades" ? (
+                    {leadMatchesTrades ? (
                       <>
                         <p>{ENERGY_ASSISTANT_MATCHING_PRIVACY_EXPLANATION}</p>
                         <ul className={styles.sharingReceipt} aria-label="Details selected for matched trades">

@@ -1,3 +1,4 @@
+import { aeaDeliveredServiceScopeSql, tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
 import { getD1 } from "../../../../db";
 import { getCustomerProjectEvidenceBucket as getEvidenceBucket } from "@/lib/customer-project-evidence-bucket";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
@@ -53,7 +54,8 @@ const CURRENT_QUOTE_ACCESS_EXISTS_SQL = `EXISTS (
   JOIN trade_opportunities current_opportunity
     ON current_opportunity.id = current_preparation.opportunity_id
     AND current_opportunity.source_reference = current_preparation.source_reference
-    AND current_opportunity.status IN ('open', 'paused')
+    AND (current_opportunity.status IN ('open', 'paused')
+      OR (current_opportunity.status = 'draft' AND ${aeaDeliveredServiceScopeSql("current_opportunity")}))
   JOIN public_trade_lead_contact_releases current_contact
     ON current_contact.opportunity_id = current_opportunity.id
     AND current_contact.source_reference = current_opportunity.source_reference
@@ -70,6 +72,7 @@ const CURRENT_QUOTE_ACCESS_EXISTS_SQL = `EXISTS (
     AND current_preparation.notice_version = ?
     AND current_preparation.consent_purpose = ?
     AND datetime(current_preparation.granted_at) IS NOT NULL
+    AND current_preparation.withdrawn_at = ''
 )`;
 
 type PreparationRow = {
@@ -429,7 +432,9 @@ async function activePreparation(sourceReference: string) {
       AND preparation.notice_version = ?
       AND preparation.consent_purpose = ?
       AND datetime(preparation.granted_at) IS NOT NULL
-      AND opportunity.status IN ('open', 'paused')
+      AND preparation.withdrawn_at = ''
+      AND (opportunity.status IN ('open', 'paused')
+        OR (opportunity.status = 'draft' AND ${aeaDeliveredServiceScopeSql("opportunity")}))
     LIMIT 1`)
     .bind(
       PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
@@ -941,6 +946,7 @@ export async function GET(request: Request) {
       ON opportunity.id = photo.opportunity_id
       AND opportunity.source_reference = preparation.source_reference
       AND opportunity.status = 'open'
+      AND ${tradeOpportunityServiceScopeSql("opportunity")}
       AND datetime(opportunity.expires_at) > datetime('now')
     JOIN trade_opportunity_matches match
       ON match.opportunity_id = opportunity.id

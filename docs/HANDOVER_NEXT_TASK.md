@@ -1,5 +1,30 @@
 # Next task handover
 
+Status: AEA services expansion validated for the authorised website and Android preview release. Calendly is updated and Google Business Profile services and the expanded description are saved for Google review. The smoke-service inclusions are confirmed.
+Prepared: 14 September 2026
+
+## Active contract: AEA services expansion, 14 September 2026
+
+Outcome: customers can compare and enquire about AEA's fixed-price assessment and Victorian rental-safety services, while TLink captures a simple evidenced visit and produces one combined report.
+
+Owner: coordinating task, `codex/aea-services-expansion-20260914`, `C:\Webproject\aea-energy-services-expansion`. Base is verified live Sites 577 source `5777148362db4c3a2fe2e374d328f58f7556a6d6`; starting worktree was clean.
+
+Scope: sourced competitor/regulatory research; canonical service/pricing catalogue; Services and Offers pages, service landing pages, navigation, FAQs/schema; customer enquiry and server-enforced AEA-only lead handling; guided safety visit presets, required evidence, combined reports; existing Calendly service question and Google Business Profile service entries when account access permits. A two-year offer covers two annual smoke/blind visits and one electrical check, plus one gas check for the gas bundle. Each completed visit has its own report; future checks must not be represented as performed.
+
+Acceptance: exact user ex-GST prices with equally prominent consumer GST-inclusive totals; no per-appliance gas surcharge; all service CTAs work on desktop/mobile; reserved services cannot be self-selected by outside trades or leak through matching; report finalisation retains qualification/evidence requirements; one report/link for all modules in a completed visit. Preserve existing service URLs, privacy boundaries and unrelated work.
+
+Validation: service/pricing, lead routing and inspection regression tests; typecheck, lint, full existing validation for permission/shared-contract changes; build and responsive interaction checks. Validate signed-in and external account actions separately. No live customer test messages.
+
+Verified locally: `npm.cmd run validate` passed with 4,489 main-suite passes, 11 skips and no failures; fresh D1 replay, PDF audit, Worker bundle audit and unchanged public performance budgets passed. Mobile typecheck, all 241 tests, and Android/iOS exports passed. Built-site browser checks covered service navigation, offer prices, FAQ expansion, preselected bundle enquiry and private mixed-service routing. Physical-device and signed-in production checks remain unverified.
+
+Confirmed commercial scope: the $100 + GST smoke and blind service includes batteries, standard replacement alarms, cord anchors and labels, and between-visit fault callouts. The same inclusions apply to both two-year bundles. Expanded pages provide 68 service FAQs and 10 bundle FAQs, preparation and inspection guidance, completed-record email/link/PDF details, and original branded receipt/report emails. Same-day delivery concerns completed records; NatHERS documents follow completed modelling and certification.
+
+Release authority: the user explicitly authorised pushing and publishing on 14 September 2026. The release task records the exact subsequent GitHub, Sites and Android preview identities and live verification. A committed implementation record is not itself deployment evidence.
+
+Stop conditions: unsupported statutory claims, unavailable external account access, conflicting live source, or destructive action outside the authorised release. Do not send live customer test messages. Physical-device installation and actual recipient inbox rendering remain separate checks.
+
+The older handover below is historical context, not the status of this milestone.
+
 Status: system audit and polish implemented for publication. Customer self-service accounts are retired.
 Prepared: 9 September 2026
 

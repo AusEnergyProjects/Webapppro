@@ -22,7 +22,7 @@ import {
   type TradeBrandThemeKey,
 } from "@/lib/trade-business-branding";
 import {
-  ENERGY_SERVICE_CATALOGUE,
+  TRADE_SERVICE_CATALOGUE,
   isEnergyServiceId,
 } from "@/lib/energy-service-catalogue.mjs";
 
@@ -1736,7 +1736,7 @@ export function TradeBusinessSettingsWorkspace({
                   verification do not automatically add services.
                 </p>
                 <div className="dashboard-choice-grid">
-                  {ENERGY_SERVICE_CATALOGUE.map((service) => {
+                  {TRADE_SERVICE_CATALOGUE.map((service) => {
                     const selected = capabilities.includes(service.id);
                     return (
                       <label
@@ -1763,7 +1763,7 @@ export function TradeBusinessSettingsWorkspace({
                     margin: "12px 0 0",
                   }}
                 >
-                  {capabilities.length} of {ENERGY_SERVICE_CATALOGUE.length} services selected
+                  {capabilities.length} of {TRADE_SERVICE_CATALOGUE.length} services selected
                 </p>
               </fieldset>
             )}

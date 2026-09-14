@@ -1,3 +1,4 @@
+import { getAeaService, audPrice, gstInclusiveCents } from "@/lib/aea-services.mjs";
 import {
   AssessmentServicePage,
   buildAssessmentMetadata,
@@ -9,7 +10,8 @@ import {
 
 const path = "/nathers-for-new-homes";
 const title = "NatHERS Assessment Australia | Australian Energy Assessments";
-const description = "Plan-based NatHERS assessments for new homes and major renovations Australia-wide, including thermal Star Rating and Whole of Home support.";
+const price = audPrice(gstInclusiveCents(getAeaService("nathers-new")!.priceExGstCents));
+const description = `${price} incl. GST NatHERS assessments for new homes. Plan-based thermal and Whole of Home modelling, accredited assessment and certificate guidance Australia-wide.`;
 
 export const metadata = buildAssessmentMetadata({ path, title, description });
 
@@ -97,13 +99,14 @@ const faqs: readonly AssessmentServiceFaq[] = [
   },
   {
     question: "How is a NatHERS assessment quoted?",
-    answer: "The quote depends on the project type, design stage, number of dwellings, quality of the plans and specifications, certificate requirements and any option testing or later revisions. Australian Energy Assessments confirms the scope and price before modelling starts.",
+    answer: "The NatHERS new-home assessment is $300 + GST ($330 including GST). Supply the plans and specifications so we can confirm the assessment pathway and required documents before modelling starts. Separate services and additional design revisions are agreed before work proceeds.",
   },
 ];
 
 export default function NathersForNewHomesPage() {
   return (
     <AssessmentServicePage
+      pricedServiceId="nathers-new"
       path={path}
       breadcrumbLabel="NatHERS for new homes"
       eyebrow="New homes and major renovations"

@@ -7,6 +7,7 @@ import ts from 'typescript';
 import * as catalogue from '../src/lib/australian-government-program-catalogue.ts';
 import * as forms from '../src/lib/trade-activity-forms-library.ts';
 import * as rental from '../src/lib/trade-rental-assessment.mjs';
+import * as safety from '../src/lib/rental-safety-visit.mjs';
 import * as rentalGuards from '../src/lib/trade-rental-schema-guards.ts';
 import * as credentials from '../src/lib/trade-rental-credentials.ts';
 import * as sync from '../src/lib/trade-team-sync-server.ts';
@@ -85,7 +86,7 @@ function fixture(accessOverrides = {}) {
     '@/lib/trade-team-server': { requireInstallerTeamAccess: async () => access, canManageJobs: teams.canManageJobs, assignedJob: teams.assignedJob },
     '@/lib/trade-team-sync-server': sync, '@/lib/australian-government-program-catalogue': catalogue,
     '@/lib/trade-activity-forms-library': forms, '@/lib/trade-compliance-intent': intent,
-    '@/lib/trade-rental-assessment.mjs': rental, '@/lib/trade-rental-schema-guards': rentalGuards,
+    '@/lib/rental-safety-visit.mjs': safety, '@/lib/trade-rental-assessment.mjs': rental, '@/lib/trade-rental-schema-guards': rentalGuards,
     '@/lib/trade-rental-credentials': credentials, '@/lib/bounded-json-request': bounded,
   });
   const get = () => route.GET(new Request('https://example.test/api/field/job-activities?workOrderId=job'));
@@ -190,4 +191,58 @@ test('native entry exposes activities before supporting forms and uses the exist
   assert.match(job, /job\.rentalInspection && activeFormId === 'rental'/);
   assert.match(job, /job\.rentalInspection && job\.rentalInspection\.status !== 'issued'/);
   assert.match(job, /Add work or a form/);
+});
+
+function qualifyVisit(f, gate = 'licensed_electrician') {
+  f.database.exec(`INSERT INTO trade_team_member_files VALUES('file','owner','worker','active','2099-01-01'), ('smoke-file','owner','worker','active','2099-01-01');
+    INSERT INTO trade_team_member_credentials VALUES('professional','owner','worker','file','licence','TEST-1','VIC','active','2099-01-01','${gate}');
+    INSERT INTO trade_team_member_credentials VALUES('smoke','owner','worker','smoke-file','training','TEST-2','VIC','active','2099-01-01','suitably_qualified_smoke_alarm_worker');`);
+}
+for (const [presetKey, gate, expectedKeys] of [
+  ['electrical_smoke_blinds_visit', 'licensed_electrician', ['electrical_safety_check', 'smoke_alarm_check']],
+  ['gas_smoke_blinds_visit', 'licensed_gasfitter', ['gas_safety_check', 'smoke_alarm_check']],
+]) {
+  test(`${presetKey} atomically attaches exactly this visit and replays without duplicates`, async () => {
+    const f = fixture(); qualifyVisit(f, gate);
+    const result = await f.post({ kind: 'rental_visit', presetKey });
+    assert.equal(result.status, 200, JSON.stringify(await result.clone().json()));
+    assert.deepEqual(JSON.parse(f.database.prepare('SELECT selected_modules_snapshot FROM trade_rental_inspections').get().selected_modules_snapshot), expectedKeys);
+    const modules = f.database.prepare('SELECT template_version, template_snapshot FROM trade_rental_inspection_modules').all();
+    assert.equal(modules.length, 2); assert.ok(modules.every((entry) => entry.template_version === 4));
+    assert.ok(JSON.parse(modules.find((entry) => JSON.parse(entry.template_snapshot).key === 'smoke_alarm_check').template_snapshot).sections.some((section) => section.key === 'window_covering_cords'));
+    assert.equal((await f.post({ kind: 'rental_visit', presetKey })).status, 200);
+    assert.equal(f.database.prepare('SELECT revision FROM trade_work_orders').get().revision, 5);
+    assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspections').get().n, 1);
+  });
+}
+test('a missing or concurrently revoked discipline prevents every module in the visit', async () => {
+  for (const concurrent of [false, true]) {
+    const f = fixture(); qualifyVisit(f); await rentalGuards.ensureTradeRentalSchemaGuards(f.db);
+    const revoke = () => f.database.exec("UPDATE trade_team_member_credentials SET status='revoked' WHERE id='smoke'");
+    if (concurrent) f.beforeBatch(revoke); else revoke();
+    assert.equal((await f.post({ kind: 'rental_visit', presetKey: 'electrical_smoke_blinds_visit' })).status, 409);
+    assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspections').get().n, 0);
+    assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspection_modules').get().n, 0);
+    assert.equal(f.database.prepare('SELECT revision FROM trade_work_orders').get().revision, 4);
+  }
+});
+test('adding a visit retains existing answers and rejects an earlier frozen smoke scope', async () => {
+  const f = fixture(); qualifyVisit(f);
+  assert.equal((await f.post({ kind: 'rental', moduleKey: 'smoke_alarm_check' })).status, 200);
+  f.database.exec(`UPDATE trade_rental_inspection_modules SET answers='{"workerName":"Saved worker"}'`);
+  const frozen = f.database.prepare('SELECT template_snapshot FROM trade_rental_inspection_modules').get().template_snapshot;
+  assert.equal((await f.post({ kind: 'rental_visit', presetKey: 'electrical_smoke_blinds_visit', expectedRevision: 5 })).status, 200);
+  const saved = f.database.prepare("SELECT * FROM trade_rental_inspection_modules WHERE module_key='smoke_alarm_check'").get();
+  assert.equal(saved.template_snapshot, frozen); assert.equal(saved.answers, '{"workerName":"Saved worker"}');
+  f.database.exec("UPDATE trade_rental_inspection_modules SET template_version=3 WHERE module_key='smoke_alarm_check'");
+  assert.equal((await f.post({ kind: 'rental_visit', presetKey: 'electrical_smoke_blinds_visit', expectedRevision: 6 })).status, 409);
+  assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspection_modules').get().n, 2);
+});
+test('a concurrent inspection edit prevents partially attaching a bundle', async () => {
+  const f = fixture(); qualifyVisit(f);
+  assert.equal((await f.post({ kind: 'rental', moduleKey: 'minimum_standards' })).status, 200);
+  f.beforeBatch(() => f.database.exec('UPDATE trade_rental_inspections SET revision=revision+1'));
+  assert.equal((await f.post({ kind: 'rental_visit', presetKey: 'electrical_smoke_blinds_visit', expectedRevision: 5 })).status, 409);
+  assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspection_modules').get().n, 1);
+  assert.equal(f.database.prepare('SELECT revision FROM trade_work_orders').get().revision, 5);
 });

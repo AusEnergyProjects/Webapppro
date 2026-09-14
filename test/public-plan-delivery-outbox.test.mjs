@@ -292,7 +292,7 @@ test("intake opportunity confirmation requires the active contact and selected q
   database.exec(`CREATE TABLE trade_opportunities (
     id text PRIMARY KEY, source_reference text NOT NULL, status text NOT NULL,
     expires_at text NOT NULL, postcode text NOT NULL, state text NOT NULL,
-    created_by_uid text NOT NULL
+    created_by_uid text NOT NULL, service_categories text NOT NULL DEFAULT '["solar"]'
   );
   CREATE TABLE public_trade_lead_contact_releases (
     id text PRIMARY KEY, opportunity_id text NOT NULL, source_reference text NOT NULL, status text NOT NULL,
@@ -305,7 +305,7 @@ test("intake opportunity confirmation requires the active contact and selected q
     version text NOT NULL, notice_version text NOT NULL, consent_purpose text NOT NULL,
     granted_at text NOT NULL, withdrawn_at text NOT NULL
   );`);
-  database.prepare("INSERT INTO trade_opportunities VALUES (?, ?, 'open', ?, '3000', 'VIC', 'lead-intake')")
+  database.prepare("INSERT INTO trade_opportunities VALUES (?, ?, 'open', ?, '3000', 'VIC', 'lead-intake', '[\"solar\"]')")
     .run("opportunity-1", value.sourceReference, "2026-09-12T00:00:00.000Z");
   database.prepare("INSERT INTO public_trade_lead_contact_releases VALUES (?, ?, ?, 'active', ?, ?, ?, ?, '', '3000', 'VIC', 'customer@example.com')")
     .run("contact-1", "opportunity-1", value.sourceReference,
@@ -340,6 +340,42 @@ test("intake opportunity confirmation requires the active contact and selected q
     ...consent,
   }), { opportunityId: "opportunity-1" });
   assert.equal(database.prepare("SELECT opportunity_id FROM public_plan_lead_intakes").get().opportunity_id, "opportunity-1");
+  const confirm = () => confirmPublicPlanIntakeOpportunityWrite(db, {
+    intakeId: value.intakeId, opportunityId: "opportunity-1", expectedQuotePreparation: true,
+    now: value.now, ...consent,
+  });
+  for (const [status, services, allowed] of [
+    ["draft", '["assessment"]', true], ["draft", '["solar","assessment"]', true],
+    ["draft", '["solar"]', false], ["draft", '["assessment",null]', false],
+    ["draft", '["assessment",""]', false], ["draft", '[]', false],
+    ["draft", '{}', false], ["draft", 'broken', false],
+    ["closed", '["assessment"]', false], ["paused", '["assessment"]', false],
+  ]) {
+    database.exec("UPDATE public_plan_lead_intakes SET opportunity_id = ''");
+    database.prepare("UPDATE trade_opportunities SET status = ?, service_categories = ?").run(status, services);
+    if (allowed) assert.deepEqual(await confirm(), { opportunityId: "opportunity-1" });
+    else await assert.rejects(confirm, /PUBLIC_PLAN_OPPORTUNITY_INTAKE_INCOMPLETE/);
+    assert.equal(database.prepare("SELECT opportunity_id FROM public_plan_lead_intakes").get().opportunity_id,
+      allowed ? "opportunity-1" : "", `${status}: ${services}`);
+    assert.equal(database.prepare("SELECT status FROM trade_opportunities").get().status, status);
+  }
+  database.exec("UPDATE trade_opportunities SET status = 'draft', service_categories = '[\"assessment\"]'");
+  for (const [mutation, restore, error] of [
+    ["UPDATE public_trade_lead_contact_releases SET status = 'withdrawn'",
+      "UPDATE public_trade_lead_contact_releases SET status = 'active'", /PUBLIC_PLAN_OPPORTUNITY_INTAKE_INCOMPLETE/],
+    ["UPDATE public_trade_lead_contact_releases SET withdrawn_at = '2026-08-12T00:01:00.000Z'",
+      "UPDATE public_trade_lead_contact_releases SET withdrawn_at = ''", /PUBLIC_PLAN_OPPORTUNITY_INTAKE_INCOMPLETE/],
+    ["UPDATE public_trade_lead_quote_preparations SET withdrawn_at = '2026-08-12T00:01:00.000Z'",
+      "UPDATE public_trade_lead_quote_preparations SET withdrawn_at = ''", /PUBLIC_PLAN_QUOTE_PREPARATION_INCOMPLETE/],
+    ["UPDATE trade_opportunities SET expires_at = '2020-01-01T00:00:00.000Z'",
+      "UPDATE trade_opportunities SET expires_at = '2026-09-12T00:00:00.000Z'", /PUBLIC_PLAN_OPPORTUNITY_INTAKE_INCOMPLETE/],
+  ]) {
+    database.exec(mutation);
+    await assert.rejects(confirm, error);
+    database.exec(restore);
+    assert.equal(database.prepare("SELECT opportunity_id FROM public_plan_lead_intakes").get().opportunity_id, "");
+  }
+  assert.deepEqual(await confirm(), { opportunityId: "opportunity-1" });
 });
 
 test("delivered PDF and intake cleanup retry until the private objects are verifiably absent", async () => {

@@ -6,6 +6,12 @@ import { PUBLIC_SITE } from "@/lib/public-site";
 // entry during the DNS move.
 const routes = [
   "",
+  "/services",
+  "/offers",
+  "/services/smoke-alarm-blind-safety",
+  "/services/gas-safety-check",
+  "/services/electrical-safety-check",
+  "/services/onsite-energy-assessment",
   "/assessments",
   "/basix-nsw",
   "/book-an-assessment",
@@ -57,14 +63,21 @@ const routes = [
 ] as const;
 
 const lastModifiedByRoute = new Map<(typeof routes)[number], string>([
-  ["", "2026-09-03"],
+  ["/services", "2026-09-14"],
+  ["/minimum-rental-standards", "2026-09-14"],
+  ["/offers", "2026-09-14"],
+  ["/services/smoke-alarm-blind-safety", "2026-09-14"],
+  ["/services/gas-safety-check", "2026-09-14"],
+  ["/services/electrical-safety-check", "2026-09-14"],
+  ["/services/onsite-energy-assessment", "2026-09-14"],
+  ["", "2026-09-14"],
   ["/wholesale-electricity", "2026-09-04"],
   ["/assessments", "2026-09-04"],
-  ["/book-an-assessment", "2026-09-03"],
+  ["/book-an-assessment", "2026-09-14"],
   ["/blower-door-thermal-imaging", "2026-09-04"],
   ["/guides/home-energy-upgrades", "2026-09-04"],
-  ["/home-energy-rating-for-existing-homes", "2026-09-03"],
-  ["/nathers-for-new-homes", "2026-09-03"],
+  ["/home-energy-rating-for-existing-homes", "2026-09-14"],
+  ["/nathers-for-new-homes", "2026-09-14"],
   ["/guides/prepare-for-home-energy-assessment", "2026-09-03"],
   ["/guides/free-home-energy-assessments", "2026-09-03"],
   ["/guides/ncc-nathers-basix", "2026-09-03"],

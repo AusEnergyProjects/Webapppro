@@ -16,9 +16,9 @@ import {
 
 const completedAt = "2026-09-10T02:00:00.000Z";
 const cases = [
-  { key: "electrical_safety_check", gate: "licensed_electrician", nameKey: "electricianName", numberKey: "licenceNumber", type: "licence", checks: 7 },
+  { key: "electrical_safety_check", gate: "licensed_electrician", nameKey: "electricianName", numberKey: "licenceNumber", type: "licence", checks: 8 },
   { key: "gas_safety_check", gate: "licensed_gasfitter", nameKey: "gasfitterName", numberKey: "licenceNumber", type: "registration", checks: 6 },
-  { key: "smoke_alarm_check", gate: "suitably_qualified_smoke_alarm_worker", nameKey: "workerName", numberKey: "qualificationNumber", type: "training", checks: 4 },
+  { key: "smoke_alarm_check", gate: "suitably_qualified_smoke_alarm_worker", nameKey: "workerName", numberKey: "qualificationNumber", type: "training", checks: 5 },
 ];
 
 function completeFixture(entry) {
@@ -27,7 +27,8 @@ function completeFixture(entry) {
     inspectionDate: "2026-09-10", [entry.nameKey]: "Alex Assessor", [entry.numberKey]: "TEST-100",
     ...(entry.key === "electrical_safety_check" ? { standardEdition: "AS/NZS 3019:2022" } : {}),
     ...(entry.key === "smoke_alarm_check" ? { qualificationType: "Smoke alarm service training" } : {}),
-    credentialConfirmed: true, coverageConfirmed: true, assessorDeclaration: true,
+    credentialConfirmed: true, coverageConfirmed: true, assessorDeclaration: true, areasExcluded: "None",
+    licensedIssuerDetails: "Alex Assessor LIC-TEST", recordDutiesConfirmed: true,
   };
   const items = moduleTemplate.sections.flatMap((section) => section.checks.map((check) => {
     const instanceKey = check.repeatBy === "property" ? "property" : "equipment-1";
@@ -36,12 +37,13 @@ function completeFixture(entry) {
       id: itemKey, itemKey, sectionKey: section.key, checkKey: check.key, instanceKey,
       locationLabel: "Equipment 1", outcome: "meets", requiredEvidenceCount: check.requiredEvidenceCount,
       responseJson: check.responseType === "test_result"
-        ? { testMethod: "Recorded test method", testInstrument: "Test instrument 100", testResult: "Measured result and acceptance decision" }
-        : check.responseType === "action_record" ? { actionTaken: "No repair required following the recorded check" } : {},
+        ? { testMethod: "Recorded test method", testInstrument: "Test instrument 100", testResult: "Measured result and acceptance decision", circuitIdentifier: "C1", rcdButtonResult: "Pass", tripTime: "Test record: 20 ms" }
+        : check.responseType === "action_record" ? { actionTaken: "No repair required following the recorded check" } : { make: "Fixture maker", model: "Fixture model", modelNumber: "M-1", gasType: "natural gas", certificationNumber: "CERT-1", serialNumber: "SER-1", powerSource: "240V", manufactureDate: "2025-01-01" },
     };
   }));
   return { moduleTemplate, answers, items, findings: [],
-    evidenceCounts: Object.fromEntries(items.map((item) => [item.id, 1])), photoCounts: {} };
+    evidenceCounts: Object.fromEntries(items.map((item) => [item.id, 1])), photoCounts: {},
+    pdfCounts: Object.fromEntries(items.filter((item) => ["electrical_professional_record", "appliance_service_record"].includes(item.checkKey)).map((item) => [item.id, 1])) };
 }
 
 // Execute production credential SQL, including owner/member joins and expiry predicates.
@@ -69,6 +71,51 @@ function credentialDatabase(entry, t) {
     requiredCapability: entry.gate, answers: completeFixture(entry).answers, confirmedAt: completedAt };
   return { sqlite, db, input };
 }
+
+test('professional evidence requires actual PDFs and cannot be bypassed using not applicable', () => {
+  for (const entry of cases.slice(0, 2)) {
+    const input = completeFixture(entry);
+    const checkKey = entry.key === 'electrical_safety_check' ? 'electrical_professional_record' : 'appliance_service_record';
+    const record = input.items.find((item) => item.checkKey === checkKey);
+    input.pdfCounts = {};
+    assert.equal(assessment.rentalAssessmentCompletion(input).complete, false, 'Photo or generic evidence counts must not substitute for a professional record');
+    record.outcome = 'not_applicable'; record.responseJson = { applicabilityReason: 'Claimed no record needed' };
+    assert.ok(assessment.rentalAssessmentCompletion(input).blockers.some((entry) => entry.key.startsWith('professional:')));
+  }
+});
+test('gas inventory has no appliance cap and requires matching complete records for every appliance', () => {
+  const input = completeFixture(cases[1]);
+  const applianceChecks = new Set(['appliance_identity_condition', 'appliance_combustion_flue', 'appliance_service_record']);
+  const originals = input.items.filter((item) => applianceChecks.has(item.checkKey));
+  for (let number = 2; number <= 6; number++) for (const item of originals) {
+    const extra = { ...structuredClone(item), id: item.id + number, itemKey: item.itemKey + number, instanceKey: 'equipment-' + number, locationLabel: 'Equipment ' + number };
+    input.items.push(extra); input.evidenceCounts[extra.id] = 1; input.pdfCounts[extra.id] = item.checkKey === 'appliance_service_record' ? 1 : 0;
+  }
+  assert.deepEqual(assessment.rentalAssessmentCompletion(input), { complete: true, blockers: [] });
+  const last = input.items.at(-1); input.pdfCounts[last.id] = 0;
+  assert.ok(assessment.rentalAssessmentCompletion(input).blockers.some((entry) => entry.key.startsWith('professional:')));
+  last.locationLabel = 'Wrong appliance';
+  assert.ok(assessment.rentalAssessmentCompletion(input).blockers.some((entry) => entry.key.startsWith('inventory:')));
+});
+test('short-form electrical results retain circuit and both RCD test requirements', () => {
+  const input = completeFixture(cases[0]); const rcd = input.items.find((item) => item.checkKey === 'rcd_testing');
+  for (const key of ['circuitIdentifier', 'rcdButtonResult', 'tripTime']) {
+    const missing = structuredClone(input); delete missing.items.find((item) => item.id === rcd.id).responseJson[key];
+    assert.ok(assessment.rentalAssessmentCompletion(missing).blockers.some((entry) => entry.key === `response:${rcd.itemKey}:${key}`));
+  }
+});
+test('new snapshots version the safety extension and do not upgrade a saved earlier template', () => {
+  const fresh = completeFixture(cases[2]);
+  assert.equal(fresh.moduleTemplate.templateVersion, 4);
+  assert.ok(fresh.moduleTemplate.sections.some((section) => section.key === 'window_covering_cords'));
+  const frozen = structuredClone(fresh); delete frozen.moduleTemplate.safetyVisitVersion; frozen.moduleTemplate.templateVersion = 3;
+  frozen.moduleTemplate.sections = frozen.moduleTemplate.sections.filter((section) => section.key !== 'window_covering_cords');
+  frozen.items = frozen.items.filter((item) => item.checkKey !== 'cord_anchor');
+  const identity = frozen.items.find((item) => item.checkKey === 'alarm_identity_location'); identity.responseJson = {};
+  const before = JSON.stringify(frozen.moduleTemplate);
+  assert.equal(assessment.rentalAssessmentCompletion(frozen).complete, true);
+  assert.equal(JSON.stringify(frozen.moduleTemplate), before);
+});
 
 for (const entry of cases) {
   test(`${entry.key}: complete checks need evidence, test results, locations and explicit signoff`, () => {

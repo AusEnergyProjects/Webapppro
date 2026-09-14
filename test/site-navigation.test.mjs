@@ -380,7 +380,9 @@ test("homepage uses an accessible static journey without persistent rendering wo
   assert.match(guide, /aria-labelledby="home-title"/);
   assert.match(guide, /aria-label="How your request works"/);
   assert.match(guide, /Tell us what you need/);
-  assert.match(guide, /Reach suitable trades/);
+  assert.match(guide, /Connect with the right team/);
+  assert.match(guide, /Australian Energy Assessments handles assessments and safety checks directly/);
+  assert.match(guide, /Upgrade requests can reach approved trades in your area/);
   assert.match(guide, /Choose your next step/);
   assert.match(fs.readFileSync(path.resolve(directory, "../src/components/HomeHeroScene.tsx"), "utf8"), /fetchPriority="high"/);
   assert.doesNotMatch(guide, /use client|<canvas|pointermove|onPointerMove/);
@@ -462,15 +464,20 @@ test("homepage keeps the five-minute call available through the dedicated bookin
   assert.match(guide, /href="\/book-an-assessment">Prefer a person\? Book a five-minute call/);
   assert.doesNotMatch(guide, /<iframe|HomepageCalendlyEmbed/);
   assert.match(bookingPage, /CALENDLY_EMBED_URL/);
-  assert.match(bookingPage, /It is not the assessment itself/);
+  assert.match(bookingPage, /This short call is for planning only; the assessment or safety visit is arranged separately/);
+  assert.match(bookingPage, /Choose an energy assessment, rental safety check or two-year bundle in the booking form/);
 });
 
 test("getting-started copy preserves comparison and privacy boundaries", () => {
   assert.match(guide, /electricity and mains gas plans/);
   assert.match(guide, /href="\/compare"/);
   assert.match(guide, /href="\/gas-compare"/);
-  assert.match(quickUpgradeEnquiry, /request and full property address are shared/);
-  assert.match(quickUpgradeEnquiry, /You choose which contact details they receive/);
+  assert.match(quickUpgradeEnquiry, /For upgrade requests, you choose the contact details shared with matching approved businesses/);
+  assert.match(quickUpgradeEnquiry, /requiresAeaDelivery\(\[service\]\) \?/);
+  assert.match(quickUpgradeEnquiry, /This enquiry goes to Australian Energy Assessments\. It is not distributed to other TLink businesses/);
+  assert.match(matchingDialog, /Your selected services, full property address and your notes/);
+  assert.match(matchingDialog, /Your email, name and phone are included only if you tick them/);
+  assert.match(matchingDialog, /including any additional services, is not distributed to other TLink businesses/);
   assert.match(guide, /Prices, rebates and rules can change/);
   assert.doesNotMatch(guide, /household evidence|Charge-level calculation evidence|recorded capability|confirmed NSW approval pathway/i);
   assert.doesNotMatch(guide, /\u2013|\u2014/);

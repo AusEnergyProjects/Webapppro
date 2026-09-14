@@ -1,3 +1,4 @@
+import { AEA_RESERVED_SERVICE_IDS } from "../src/lib/aea-services.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -18,6 +19,7 @@ import {
 } from "../src/lib/private-image-evidence.ts";
 import {
   ENERGY_SERVICE_IDS,
+  TRADE_SERVICE_CATALOGUE,
   normalizeEnergyServiceIds,
 } from "../src/lib/energy-service-catalogue.mjs";
 import { matchedServiceCategories } from "../src/lib/trade-service-matching.mjs";
@@ -193,7 +195,9 @@ test("approved installers can save canonical lead services for future exact matc
   assert.match(settingsUi, /TLink uses these saved services for future lead matching/);
   assert.match(settingsUi, /Changes do not remove leads already assigned/);
   assert.match(settingsUi, /Licences and[\s\S]*do not automatically add services/);
-  assert.match(settingsUi, /ENERGY_SERVICE_CATALOGUE\.map/);
+  assert.match(settingsUi, /TRADE_SERVICE_CATALOGUE\.map/);
+  assert.ok(TRADE_SERVICE_CATALOGUE.some((service) => service.id === "solar"));
+  assert.ok(TRADE_SERVICE_CATALOGUE.every((service) => !AEA_RESERVED_SERVICE_IDS.includes(service.id)));
   assert.match(settingsUi, /capabilities,/);
   assert.match(dashboard, /\.\.\.ENERGY_SERVICE_LABELS/);
   assert.match(dashboard, /fetch\("\/api\/trade-opportunities"/);

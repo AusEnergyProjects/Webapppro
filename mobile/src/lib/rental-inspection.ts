@@ -18,6 +18,7 @@ export type RentalAssessmentCheck = {
   required: boolean;
   requiredEvidenceCount: number;
   responseType: string;
+  requiredPdfCount?: number;
   responseFields?: Array<{ key: string; label: string; required: boolean }>;
   repeatBy: string;
   photoGuidance: string;
@@ -52,6 +53,7 @@ export type RentalAssessmentModule = {
     sections: RentalAssessmentSection[];
     assessmentScope?: 'energy_readiness_2027' | 'current_minimum_standards';
     templateVersion?: number;
+    safetyVisitVersion?: number;
   };
   answers: Record<string, unknown>;
   revision: number;

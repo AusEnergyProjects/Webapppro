@@ -302,7 +302,7 @@ test("job setup and field workspace attach one frozen rental workflow with guard
   assert.match(assessmentRoute, /jobMediaId/);
   assert.match(assessmentRoute, /media\.work_order_id|work_order_id = \?/);
   assert.match(assessmentRoute, /rentalAssessmentCompletion/);
-  assert.match(assessmentPanel, /capture="environment"/);
+  assert.match(assessmentPanel, /capture=\{check.requiredPdfCount \? undefined : "environment"\}/);
   assert.match(assessmentPanel, /fresh device-reported GPS position within 100 metres/);
   assert.match(assessmentPanel, /Location access is off\. Allow location for TLink in your browser settings/);
   assert.match(assessmentPanel, /GPS took too long\. Move to an open area/);

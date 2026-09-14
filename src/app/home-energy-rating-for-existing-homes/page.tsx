@@ -1,3 +1,4 @@
+import { getAeaService, audPrice, gstInclusiveCents } from "@/lib/aea-services.mjs";
 import {
   AssessmentServicePage,
   buildAssessmentMetadata,
@@ -9,7 +10,8 @@ import {
 
 const path = "/home-energy-rating-for-existing-homes";
 const title = "Home Energy Rating for Existing Homes | Australian Energy Assessments";
-const description = "Book an existing-home Home Energy Rating with two ratings, estimated energy use and practical upgrade guidance. On-site visits are mainly in NSW and Victoria.";
+const price = audPrice(gstInclusiveCents(getAeaService("nathers-existing")!.priceExGstCents));
+const description = `${price} incl. GST Home Energy Rating for existing homes in NSW and Victoria. Accredited assessment, two ratings, estimated energy use and practical upgrade guidance.`;
 
 export const metadata = buildAssessmentMetadata({ path, title, description });
 
@@ -96,7 +98,7 @@ const faqs: readonly AssessmentServiceFaq[] = [
   },
   {
     question: "How much does a Home Energy Rating cost?",
-    answer: "The price depends on the home, location, travel, access and the agreed scope. Australian Energy Assessments confirms the service and quote before paid work starts. Some households may qualify for a current funded program, but eligibility must be checked with that program.",
+    answer: "The existing-home assessment is $300 + GST ($330 including GST). Australian Energy Assessments confirms location, access and the service before booking. Funding eligibility is checked separately and is not assumed in this price.",
   },
   {
     question: "Is a Home Energy Rating worth getting?",
@@ -111,6 +113,7 @@ const faqs: readonly AssessmentServiceFaq[] = [
 export default function HomeEnergyRatingForExistingHomesPage() {
   return (
     <AssessmentServicePage
+      pricedServiceId="nathers-existing"
       path={path}
       breadcrumbLabel="Existing-home rating"
       eyebrow="Homes that are already built"
@@ -136,7 +139,7 @@ export default function HomeEnergyRatingForExistingHomesPage() {
       ]}
       serviceName="Home Energy Rating for existing homes"
       serviceType="On-site existing-home energy assessment"
-      areaServed="Australia"
+      areaServed="NSW and Victoria"
       reviewedIso="2026-09-03"
       coverageTitle="On-site availability by location"
       coverageDescription="Existing-home assessments require a property visit. Current field delivery is primarily in New South Wales and Victoria; availability, travel and timing for other Australian locations are confirmed before booking."

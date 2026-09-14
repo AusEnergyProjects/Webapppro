@@ -75,7 +75,12 @@ test("receipt confirms the saved request without promising responses or email de
 });
 
 test("compact sharing summary retains address, notes, chosen contact details and AEA handling disclosures", () => {
-  const summary = dialog.match(/<div className=\{styles\.sharingSummary\}>([\s\S]*?)<\/div>/)?.[1];
+  const summaries = [...dialog.matchAll(/<div className=\{styles\.sharingSummary\}>([\s\S]*?)<\/div>/g)].map((match) => match[1]);
+  const summary = summaries.find((item) => item.includes("What matching businesses will receive"));
+  const aeaSummary = summaries.find((item) => item.includes("Sent directly to Australian Energy Assessments"));
+  assert.ok(aeaSummary, "AEA-only enquiry disclosure must be present");
+  assert.match(aeaSummary, /not distributed to other TLink businesses/);
+  assert.match(dialog, /aeaOnly \? <div className=\{styles\.sharingSummary\}/);
   assert.ok(summary, "sharing summary must be present");
   assert.match(summary, /<ul>[\s\S]*<li><strong>Request:<\/strong> Your selected services, full property address and your notes\.<\/li>/);
   assert.match(summary, /<li><strong>Contact:<\/strong> Your email, name and phone are included only if you tick them\.<\/li>/);

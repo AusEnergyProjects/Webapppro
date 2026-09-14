@@ -1,10 +1,12 @@
+import { tradeOpportunityServiceScopeAllowed, tradeOpportunityServiceScopeSql } from "./aea-trade-routing.mjs";
 export async function persistLeadOpportunity(
   database,
   record,
   contactRelease,
   currentConsent,
 ) {
-  const initialStatus = record.publicPlanEnquiry ? "draft" : record.requestedStatus;
+  const tradeScopeAllowed = tradeOpportunityServiceScopeAllowed(record.serviceCategories);
+  const initialStatus = record.publicPlanEnquiry || !tradeScopeAllowed ? "draft" : record.requestedStatus;
   await database.prepare(`INSERT INTO trade_opportunities
     (id, title, project_type, postcode, state, service_categories, priority, timing, summary, status,
      source_reference, contact_limit, maximum_connected_installers, expires_at, expired_at,
@@ -141,13 +143,16 @@ export async function persistLeadOpportunity(
   }
   if (
     record.requestedStatus === "open"
+    && tradeScopeAllowed
+    && tradeOpportunityServiceScopeAllowed(canonical.service_categories)
     && contactIsCurrent
     && canonical.status === "draft"
   ) {
     const updatedAt = new Date().toISOString();
     await database.prepare(`UPDATE trade_opportunities
       SET status = 'open', updated_at = ?
-      WHERE id = ? AND status = 'draft'`)
+      WHERE id = ? AND status = 'draft'
+        AND ${tradeOpportunityServiceScopeSql("trade_opportunities")}`)
       .bind(updatedAt, canonicalId)
       .run();
   }

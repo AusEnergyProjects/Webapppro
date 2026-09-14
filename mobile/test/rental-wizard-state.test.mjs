@@ -62,12 +62,40 @@ test('camera is available before an answer exists and metadata mutations use the
 });
 
 function mountedSaveAnswer(environment) {
-  const implementation = source.slice(source.indexOf('  async function saveAnswer()'), source.indexOf('  async function next()'));
+  const implementation = source.slice(source.indexOf('  async function saveAnswer('), source.indexOf('  async function next()'));
   const compiled = ts.transpileModule(`export ${implementation.trim()}`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText;
   return new Function('environment', `with (environment) { const exports = {}; ${compiled}; return exports.saveAnswer; }`)(environment);
 }
+
+test('actual rendered answer branches expose professional PDF actions for property and appliance records', () => {
+  const ast = ts.createSourceFile('rental-inspection-workflow.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let answer;
+  function visit(node) {
+    if (ts.isConditionalExpression(node) && node.condition.getText(ast) === "page === 'answer'" && ts.isJsxFragment(node.whenTrue)) answer = node.whenTrue;
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); assert.ok(answer, 'Render the real answer-page JSX conditionals');
+  const branches = answer.children.filter((node) => /Save answer and attach professional PDF|Retry retained PDF/.test(node.getText(ast)));
+  assert.ok(branches.length);
+  const output = ts.transpileModule(`export function render() { return <>${branches.map((node) => node.getText(ast)).join('')}</>; }`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const jsx = (_type, props) => props.children;
+  for (const repeatBy of ['property', 'appliance']) {
+    const environment = { check: { repeatBy, requiredPdfCount: 1 }, active: { key: 'electrical_safety_check', template: { safetyVisitVersion: 1 } },
+      editable: true, busy: '', online: true, item: { id: 'record-item' }, documents: [{ id: 'retained-pdf', itemId: 'record-item', name: 'report.pdf' }],
+      styles: {}, cursor: { checkIndex: 0 }, section: {}, repeatInstances: () => [], draft: { locationLabel: 'Appliance 1' },
+      FieldButton: 'button', View: 'view', Text: 'text', RentalTextField: 'input', FieldSelect: 'select' };
+    const render = new Function('environment', 'require', `with(environment) { const exports = {}; ${output}; return exports.render; }`)(environment,
+      (name) => { assert.equal(name, 'react/jsx-runtime'); return { jsx, jsxs: jsx, Fragment: 'fragment' }; });
+    const rendered = render().flat(Infinity).filter((value) => typeof value === 'string').join(' ');
+    assert.match(rendered, /Save answer and attach professional PDF/, repeatBy);
+    assert.match(rendered, /Retry retained PDF/, repeatBy);
+    assert.match(rendered, /Remove retained PDF/, repeatBy);
+  }
+});
 
 function saveEnvironment() {
   const captured = new Date().toISOString();

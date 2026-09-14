@@ -8,7 +8,7 @@ import styles from "./GettingStarted.module.css";
 
 const steps = [
   ["01", "Tell us what you need", "Choose your service and tell us a little about your property."],
-  ["02", "Reach suitable trades", "Your request goes to approved businesses that match the work and your area."],
+  ["02", "Connect with the right team", "Australian Energy Assessments handles assessments and safety checks directly. Upgrade requests can reach approved trades in your area."],
   ["03", "Choose your next step", "Discuss your options. You decide who to work with and when to go ahead."],
 ] as const;
 
@@ -20,7 +20,8 @@ export function GettingStarted() {
         <div className={styles.heroCopy}>
           <span className={styles.eyebrow}>Australian Energy Assessments</span>
           <h1 id="home-title">A better home.<br /><span>A clearer next step.</span></h1>
-          <p>From NatHERS assessments to everyday energy upgrades. Find the right help, connect with suitable trades and move forward with confidence.</p>
+          <p>From rental safety checks and NatHERS assessments to everyday energy upgrades. Choose a service, see the price and find your next step.</p>
+          <div className={styles.serviceActions}><Link href="/services" className={styles.cardAction}>Services + prices</Link><Link href="/offers" className={styles.cardAction}>Two-year safety offers</Link></div>
           <a className={styles.mobileStart} href="#home-enquiry">Start your request <span aria-hidden="true">↗</span></a>
         </div>
       </HomeHeroScene>
@@ -71,7 +72,7 @@ export function GettingStarted() {
       </div>
       <div className={styles.resourceLinks}><Link href="/guides">Browse all guides, rebates and examples</Link><Link href="/rebates">Rebates & assistance</Link><Link href="/direct-trade/standards">Read the marketplace standards</Link></div>
     </section>
-    <section className={styles.finalCta} aria-labelledby="home-next-title"><div><span className={styles.eyebrow}>Your next step starts here</span><h2 id="home-next-title">Let&apos;s get your home moving forward.</h2><p>One request. Suitable trades. Your choice.</p></div><a className={styles.primaryLink} href="#home-enquiry">Tell us what you need <span aria-hidden="true">↗</span></a></section>
+    <section className={styles.finalCta} aria-labelledby="home-next-title"><div><span className={styles.eyebrow}>Your next step starts here</span><h2 id="home-next-title">Let&apos;s get your home moving forward.</h2><p>One request. The right service. Your choice.</p></div><a className={styles.primaryLink} href="#home-enquiry">Tell us what you need <span aria-hidden="true">↗</span></a></section>
     <aside className={styles.partners}><p><strong>Good at what you do?</strong> Approved trades and reputable suppliers can connect through TLink.</p><Link href="/direct-trade/partners">Trade and supplier participation</Link></aside>
     <SiteFooter>Prices, rebates and rules can change. Confirm the full quote, credentials and conditions before you commit. Need help? <a href={PUBLIC_SITE.phoneHref}>{PUBLIC_SITE.phoneDisplay}</a>.</SiteFooter>
   </main>;

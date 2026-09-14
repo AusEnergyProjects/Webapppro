@@ -39,7 +39,9 @@ test("service routes keep the established apex paths canonical during the parall
 test("every route has distinct search, Open Graph and Twitter metadata", () => {
   const sources = [...Object.values(routes), booking];
   const titles = sources.map((source) => source.match(/const title = "([^"]+)"/)?.[1]);
-  const descriptions = sources.map((source) => source.match(/const description = "([^"]+)"/)?.[1]);
+  const descriptions = sources.map((source) => source.match(/const description = (["`])([\s\S]*?)\1;/)?.[2]);
+  assert.ok(titles.every(Boolean), "Every route must provide a title");
+  assert.ok(descriptions.every(Boolean), "Every route must provide a description");
   assert.equal(new Set(titles).size, 5);
   assert.equal(new Set(descriptions).size, 5);
   assert.match(shared, /openGraph: \{/);
@@ -68,7 +70,7 @@ test("service and FAQ structured data are derived from visible page copy", () =>
   assert.match(routes.newHome, /areaServed="Australia"/);
   assert.match(routes.wholeOfHome, /areaServed="Australia"/);
   assert.match(routes.basix, /areaServed="New South Wales"/);
-  assert.match(routes.existingHome, /areaServed="Australia"/);
+  assert.match(routes.existingHome, /areaServed="NSW and Victoria"/);
   assert.match(shared, /coverageTitle && coverageDescription/);
   assert.match(routes.newHome, /Desktop assessment across Australia/);
   assert.match(routes.wholeOfHome, /Desktop assessment across Australia/);
@@ -77,7 +79,11 @@ test("service and FAQ structured data are derived from visible page copy", () =>
   assert.match(shared, /emailIsVisible/);
   assert.match(shared, /"@type": "FAQPage"/);
   assert.match(shared, /mainEntity: faqs\.map/);
-  assert.match(shared, /\{faqs\.map\(\(faq\) => \(/);
+  assert.match(shared, /<PublicFaqList faqs=\{faqs\} \/>/);
+  const accordion = fs.readFileSync(new URL("../src/components/PublicFaqList.tsx", import.meta.url), "utf8");
+  assert.match(accordion, /faqs\.map\(\(faq\) => <details/);
+  assert.match(accordion, /<summary[^>]*>\{faq\.question\}<\/summary>/);
+  assert.match(accordion, /\{faq\.answer\}/);
 });
 
 test("existing-home terminology matches the 2026 Home Energy Rating service", () => {
@@ -116,7 +122,8 @@ test("booking is a focused five-minute Calendly call with truthful calendar and 
   assert.match(booking, /CALENDLY_EMBED_URL/);
   assert.doesNotMatch(bookingConfig, /aea_website/);
   assert.match(booking, /Book a five-minute call/);
-  assert.match(booking, /It is not the assessment itself/);
+  assert.match(booking, /This short call is for planning only; the assessment or safety visit is arranged separately/);
+  assert.match(booking, /Choose an energy assessment, rental safety check or two-year bundle in the booking form/);
   assert.match(booking, /Your booking updates the Australian Energy Assessments calendar/);
   assert.match(booking, /Calendly adds the call to the connected Australian Energy Assessments calendar/);
   assert.match(booking, /emails the booking details to the address you enter/);

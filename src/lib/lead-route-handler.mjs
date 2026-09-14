@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { requiresAeaDelivery } from "./aea-service-identity.mjs";
 import { readBoundedRequestText, RequestBodyTooLargeError } from "./bounded-request-body.mjs";
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -217,7 +218,7 @@ export function createLeadPostHandler({
             if (typeof recordQuickUpgradeNoMatch !== "function") {
               throw new Error("QUICK_UPGRADE_NO_MATCH_REVIEW_UNCONFIGURED");
             }
-            await recordQuickUpgradeNoMatch(opportunityId);
+            await recordQuickUpgradeNoMatch(opportunityId, { aeaOnly: requiresAeaDelivery(payload.projectCategories) });
           } catch (error) {
             await recordLeadIncident(
               "platform.quick_upgrade_review_queue_failed",

@@ -1,3 +1,4 @@
+import { tradeOpportunityServiceScopeAllowed } from "./aea-trade-routing.mjs";
 import { publicPlanContactReleaseDisclosedFieldsAreValid } from "./public-plan-enquiry.mjs";
 
 function exactStoredDisclosedFields(value) {
@@ -10,7 +11,8 @@ function exactStoredDisclosedFields(value) {
 }
 
 export function publicTradeContactForMatchedLead(row) {
-  if (!row?.public_contact_release_id) return null;
+  if (!row?.public_contact_release_id
+    || !tradeOpportunityServiceScopeAllowed(row.opportunity_service_categories)) return null;
   const disclosedFields = exactStoredDisclosedFields(
     row.public_contact_disclosed_fields,
   );

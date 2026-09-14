@@ -1,3 +1,5 @@
+import { requiresAeaDelivery } from "./aea-service-identity.mjs";
+import { tradeOpportunityServiceScopeSql } from "./aea-trade-routing.mjs";
 import { addressLocalitiesForPostcode } from "./address-localities.mjs";
 import {
   ENERGY_ASSISTANT_QUOTE_BRIEF_VERSION,
@@ -781,6 +783,7 @@ async function reconcileAssistantTradeDispatch(
   opportunityId: string,
   dependencies: CreateLeadDependencies,
 ) {
+  if (requiresAeaDelivery(input.services)) throw new Error("ENERGY_ASSISTANT_AEA_DELIVERY_REQUIRED");
   const now = (dependencies.now ? dependencies.now() : new Date()).toISOString();
   const dueAt = new Date(Date.parse(now) + 8 * 60 * 60 * 1000).toISOString();
   const ids = assistantDispatchIds(row.id);
@@ -793,13 +796,16 @@ async function reconcileAssistantTradeDispatch(
     JOIN public_trade_lead_contact_releases release
       ON release.opportunity_id = opportunity.id
     WHERE opportunity.id = ? AND opportunity.source_reference = ?
+      AND ${tradeOpportunityServiceScopeSql("opportunity")}
       AND release.source_reference = opportunity.source_reference
       AND release.status = 'active' AND release.withdrawn_at = ''
       AND release.notice_version = ? AND release.consent_purpose = ?
   )`;
   const linkedLeadExistsSql = `EXISTS (
     SELECT 1 FROM energy_assistant_leads linked
-    WHERE linked.id = ? AND linked.opportunity_id = ?
+    JOIN trade_opportunities linked_opportunity ON linked_opportunity.id = linked.opportunity_id
+    WHERE ${tradeOpportunityServiceScopeSql("linked_opportunity")}
+      AND linked.id = ? AND linked.opportunity_id = ?
       AND linked.trade_sharing_consent = 1
   )`;
   const notificationMetadata = JSON.stringify({
@@ -876,6 +882,7 @@ async function reconcileAssistantTradeDispatch(
         AND EXISTS (
           SELECT 1 FROM trade_opportunities opportunity
           WHERE opportunity.id = ? AND opportunity.status = 'open'
+            AND ${tradeOpportunityServiceScopeSql("opportunity")}
         )
       ON CONFLICT(event_key) DO NOTHING`)
       .bind(
@@ -901,6 +908,7 @@ async function reconcileAssistantTradeDispatch(
         AND EXISTS (
           SELECT 1 FROM trade_opportunities opportunity
           WHERE opportunity.id = ? AND opportunity.status = 'open'
+            AND ${tradeOpportunityServiceScopeSql("opportunity")}
         )
       ON CONFLICT(opportunity_id) DO UPDATE SET
         admin_notification_id = excluded.admin_notification_id,
@@ -924,7 +932,8 @@ async function reconcileAssistantTradeDispatch(
       FROM trade_opportunities opportunity
       JOIN customer_opportunity_dispatch_jobs job
         ON job.opportunity_id = opportunity.id
-      WHERE opportunity.id = ? AND opportunity.source_reference = ? LIMIT 1`)
+      WHERE opportunity.id = ? AND opportunity.source_reference = ?
+        AND ${tradeOpportunityServiceScopeSql("opportunity")} LIMIT 1`)
       .bind(opportunityId, ids.sourceReference)
       .first<{
         opportunity_status: string;
@@ -953,7 +962,7 @@ async function ensureTradeOpportunity(
   createdAt: string,
   dependencies: CreateLeadDependencies,
 ) {
-  if (!input.tradeSharingConsent) {
+  if (requiresAeaDelivery(input.services) || !input.tradeSharingConsent) {
     return { opportunityId: "", allocation: null, dispatchJobId: "" };
   }
   if (input.quoteBrief.readiness.state !== "quote_ready") {
@@ -1002,7 +1011,7 @@ export async function createEnergyAssistantLead(raw: unknown, dependencies: Crea
       status: canonical?.status || existing.status,
       opportunityId: canonical?.opportunity_id || opportunity.opportunityId,
       dispatchJobId: opportunity.dispatchJobId,
-      tradeSharing: input.tradeSharingConsent
+      tradeSharing: requiresAeaDelivery(input.services) ? "aea_delivery" : input.tradeSharingConsent
         ? (canonical?.opportunity_id ? "shared" : "pending_information")
         : "not_requested",
     };
@@ -1016,7 +1025,7 @@ export async function createEnergyAssistantLead(raw: unknown, dependencies: Crea
   const nowIso = now.toISOString();
   const initialStatus = input.quoteBrief.readiness.state;
   const statements = [
-    dependencies.database.prepare(`INSERT OR IGNORE INTO energy_assistant_leads (
+    dependencies.database.prepare(`INSERT INTO energy_assistant_leads (
       id, request_id, submission_key_sha256, source_request_id, name, email, phone,
       postcode, suburb, residential_state, service_categories_json, quote_brief_version,
       quote_brief_json, interest_confirmed, source_journey, service_consent_version,
@@ -1026,7 +1035,8 @@ export async function createEnergyAssistantLead(raw: unknown, dependencies: Crea
       trade_disclosed_snapshot_json, trade_disclosed_snapshot_sha256, opportunity_id,
       status, assigned_to_uid, due_at, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1,
-      'energy-assistant-explicit-follow-up', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, '', '', ?, ?)`)
+      'energy-assistant-explicit-follow-up', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, '', '', ?, ?)
+      ON CONFLICT(request_id) DO NOTHING`)
       .bind(
         leadId, input.requestId, input.submissionKeySha256, input.sourceRequestId,
         input.name, input.email, input.phone, input.postcode, input.suburb, input.state,
@@ -1072,7 +1082,7 @@ export async function createEnergyAssistantLead(raw: unknown, dependencies: Crea
     status: stored?.status || canonical.status,
     opportunityId: stored?.opportunity_id || opportunity.opportunityId,
     dispatchJobId: opportunity.dispatchJobId,
-    tradeSharing: input.tradeSharingConsent
+    tradeSharing: requiresAeaDelivery(input.services) ? "aea_delivery" : input.tradeSharingConsent
       ? (stored?.opportunity_id ? "shared" : "pending_information")
       : "not_requested",
   };

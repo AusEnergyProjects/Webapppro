@@ -26,7 +26,7 @@ import {
   QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   QUICK_UPGRADE_CONSENT_PURPOSE,
 } from "./quick-upgrade-enquiry.mjs";
-import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
+import { ENERGY_SERVICE_IDS, LEGACY_ENERGY_SERVICE_ALIASES } from "./energy-service-catalogue.mjs";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const PUBLIC_PLAN_PHONE_RE = /^[+\d()\s.-]+$/;
@@ -83,7 +83,8 @@ function cleanStringArray(value, allowed, maximum = 8) {
 function cleanDirectTradeCategories(value) {
   if (!Array.isArray(value)) return [];
   const normalized = value.flatMap((item) => {
-    const text = typeof item === "string" ? item.trim() : "";
+    const raw = typeof item === "string" ? item.trim().toLowerCase() : "";
+    const text = LEGACY_ENERGY_SERVICE_ALIASES[raw] || raw;
     return LEGACY_DIRECT_TRADE_CATEGORY_ALIASES[text] || [text];
   });
   return [...new Set(normalized.filter((item) => DIRECT_TRADE_CATEGORIES.has(item)))].slice(

@@ -10,6 +10,8 @@ import { RENTAL_ASSESSMENT_MODULES, normalizeRentalAssessmentModules, rentalAsse
 import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
 import { rentalAssignmentCredentialSql, rentalAssignmentRequiredGates } from "@/lib/trade-rental-credentials";
 
+import { RENTAL_VISIT_PRESETS, RENTAL_SAFETY_TEMPLATE_VERSION, rentalVisitPreset } from "@/lib/rental-safety-visit.mjs";
+
 export const runtime = "edge";
 type Row = Record<string, unknown>;
 const text = (value: unknown) => String(value || "");
@@ -18,7 +20,7 @@ const editableInspection = new Set(["draft", "scheduled", "in_progress"]);
 async function context(access: TeamAccess, workOrderId: string) {
   const job = await assignedJob(access, workOrderId);
   const db = getD1();
-  const [details, inspection, intents] = await Promise.all([
+  const [details, inspection, intents, attachedModules] = await Promise.all([
     db.prepare(`SELECT w.work_number, w.scheduled_start, w.scheduled_end, d.building_type,
         d.service_site_id, d.crm_customer_id, c.first_name, c.last_name, c.business_name, c.email, c.phone,
         s.address_line_1, s.address_line_2, s.suburb, s.address_state, s.postcode,
@@ -35,8 +37,13 @@ async function context(access: TeamAccess, workOrderId: string) {
       .bind(workOrderId, access.ownerUid).first<Row>(),
     db.prepare("SELECT activity_template_id FROM trade_work_order_compliance_intents WHERE work_order_id = ? AND installer_uid = ? AND status IN ('planned', 'case_linked')")
       .bind(workOrderId, access.ownerUid).all<{ activity_template_id: string }>(),
+    db.prepare(`SELECT module.module_key, module.template_name, module.template_version
+      FROM trade_rental_inspection_modules module JOIN trade_rental_inspections inspection
+        ON inspection.id = module.inspection_id AND inspection.firebase_uid = module.firebase_uid
+      WHERE inspection.work_order_id = ? AND inspection.firebase_uid = ?`)
+      .bind(workOrderId, access.ownerUid).all<Row>(),
   ]);
-  return { access, job, details, inspection, intents: intents.results, workOrderId };
+  return { access, job, details, inspection, intents: intents.results, attachedModules: attachedModules.results, workOrderId };
 }
 type Context = Awaited<ReturnType<typeof context>>;
 
@@ -92,15 +99,25 @@ async function options(context: Context) {
         || await reasonFor(activity.serviceCategory),
     })));
   const rentalModules = await Promise.all(RENTAL_ASSESSMENT_MODULES.map(async (module) => ({
-    id: module.key, title: module.key === "minimum_standards" ? "Rental assessment + 2027 standards" : module.label,
+    id: module.key, title: text(context.attachedModules.find((entry) => entry.module_key === module.key)?.template_name)
+      || (module.key === "minimum_standards" ? "Rental assessment + 2027 standards" : module.key === "smoke_alarm_check" ? "Smoke alarm and blind cord safety check" : module.label),
     added: selectedModules.includes(module.key),
     unavailableReason: blocked || (state !== "VIC" ? "Rental assessment forms currently cover Victorian properties." : "")
       || (context.inspection && !editableInspection.has(text(context.inspection.status)) ? "The rental report is already being issued or has been issued." : "")
       || await workerReason(context, "rental-inspection", module.key),
   })));
+  const rentalVisits = RENTAL_VISIT_PRESETS.map((preset) => {
+    const entries = preset.moduleKeys.map((key) => rentalModules.find((entry) => entry.id === key)!);
+    const oldSmoke = context.attachedModules.some((entry) => entry.module_key === "smoke_alarm_check"
+      && Number(entry.template_version) < RENTAL_SAFETY_TEMPLATE_VERSION);
+    return { id: preset.key, title: preset.label,
+      added: !oldSmoke && entries.every((entry) => entry.added),
+      unavailableReason: oldSmoke ? "This visit contains an earlier smoke form. Start a new visit for the smoke and blind bundle."
+        : entries.find((entry) => entry.unavailableReason)?.unavailableReason || "" };
+  });
   return { ok: true, revision: context.job.revision, buildingType: text(context.details?.building_type), canAdd: !blocked,
     unavailableReason: blocked, programs: programs.map((program) => ({ id: program.templateId, code: program.programCode, label: `${program.claimOutputCode} | ${program.name}` })),
-    activities, rentalModules };
+    activities, rentalModules, rentalVisits };
 }
 
 function failure(error: unknown) {
@@ -136,7 +153,9 @@ export async function POST(request: Request) {
     if (blocked) return adminJson({ ok: false, error: blocked }, 409);
     const catalogue = await options(current);
     const kind = body.kind;
-    const selected = kind === "rental" ? catalogue.rentalModules.find((item) => item.id === body.moduleKey)
+    const visit = kind === "rental_visit" ? rentalVisitPreset(body.presetKey) : null;
+    const selected = kind === "rental_visit" ? catalogue.rentalVisits.find((item) => item.id === visit?.key)
+      : kind === "rental" ? catalogue.rentalModules.find((item) => item.id === body.moduleKey)
       : kind === "program" ? catalogue.activities.find((item) => item.id === body.activityTemplateId && item.programTemplateId === body.programTemplateId) : null;
     if (!selected) return adminJson({ ok: false, error: "Choose an available activity from the library." }, 400);
     // An acknowledged or timed-out add can be replayed without creating duplicate modules.
@@ -148,7 +167,8 @@ export async function POST(request: Request) {
     const revision = nextJobRevision(current.job.revision);
     const details = current.details!;
     const activityCategory = kind === "program" ? GOVERNMENT_ACTIVITY_TEMPLATES.find((activity) => activity.templateId === selected.id)!.serviceCategory : "rental-inspection";
-    const gates = rentalAssignmentRequiredGates(kind === "rental" ? [selected.id] : []);
+    const wantedModuleKeys = visit ? [...visit.moduleKeys] : kind === "rental" ? [selected.id] : [];
+    const gates = rentalAssignmentRequiredGates(wantedModuleKeys);
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Melbourne" }).format(new Date());
     const credentialDate = [today, text(details.scheduled_start).slice(0, 10)].sort().at(-1)!;
     const statements: D1PreparedStatement[] = [db.prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
@@ -186,12 +206,17 @@ export async function POST(request: Request) {
           intent.snapshot.plannedStart, intent.snapshot.catalogueReviewedOn, snapshot, hash, access.actorUid, now, now));
     } else {
       await ensureTradeRentalSchemaGuards(db);
-      const moduleKey = selected.id;
       const previous = current.inspection;
-      const moduleKeys = [...new Set([...(previous ? normalizeRentalAssessmentModules(previous.selected_modules_snapshot || previous.module_selection_snapshot) : []), moduleKey])];
+      const previousKeys = previous ? normalizeRentalAssessmentModules(previous.selected_modules_snapshot || previous.module_selection_snapshot) : [];
+      const moduleKeys = normalizeRentalAssessmentModules([...previousKeys, ...wantedModuleKeys]);
+      const missingKeys = moduleKeys.filter((key) => !previousKeys.includes(key));
       const template = rentalAssessmentTemplateSnapshot(moduleKeys, previous?.assessment_scope || "current_minimum_standards");
       const inspectionId = text(previous?.id) || crypto.randomUUID();
       if (previous) {
+        statements.push(db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
+          SELECT ?, ?, ?, 'online_mutation_guard', NULL, ? WHERE NOT EXISTS (
+            SELECT 1 FROM trade_rental_inspections WHERE id = ? AND firebase_uid = ? AND revision = ? AND status = ?)`)
+          .bind(crypto.randomUUID(), current.workOrderId, access.ownerUid, now, previous.id, access.ownerUid, previous.revision, previous.status));
         statements.push(db.prepare(`UPDATE trade_rental_inspections SET selected_modules_snapshot = ?, module_selection_snapshot = ?,
           status = 'in_progress', revision = revision + 1, updated_at = ? WHERE id = ? AND firebase_uid = ? AND revision = ?`)
           .bind(JSON.stringify(moduleKeys), JSON.stringify([...new Set(["minimum_standards", ...moduleKeys])]), now, inspectionId, access.ownerUid, previous.revision));
@@ -211,18 +236,20 @@ export async function POST(request: Request) {
             text(details.member_uid), current.job.assignee_member_id, JSON.stringify({ memberId: current.job.assignee_member_id, uid: text(details.member_uid), displayName: current.job.assignee_label }),
             current.workOrderId, access.actorUid, now, now));
       }
-      const moduleTemplate = template.modules[moduleKey];
-      statements.push(db.prepare(`INSERT INTO trade_rental_inspection_modules
+      for (const moduleKey of missingKeys) {
+        const moduleTemplate = template.modules[moduleKey];
+        statements.push(db.prepare(`INSERT INTO trade_rental_inspection_modules
         (id, inspection_id, firebase_uid, module_key, required, selected_required, status, template_version, template_name,
          required_capability, template_snapshot, answers, revision, completed_by_uid, completed_at, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, 1, 'not_started', ?, ?, ?, ?, '{}', 1, '', '', ?, ?)`)
         .bind(crypto.randomUUID(), inspectionId, access.ownerUid, moduleKey, moduleKey === "minimum_standards" ? 1 : 0,
           moduleTemplate.templateVersion, moduleTemplate.title, moduleTemplate.credentialGate || "qualified_assessor", JSON.stringify(moduleTemplate), now, now));
+      }
       statements.push(db.prepare(`INSERT INTO trade_rental_inspection_events
         (id, inspection_id, report_id, report_link_id, firebase_uid, actor_type, actor_uid, event_type, request_id, summary, metadata, source_ip_sha256, user_agent_sha256, created_at)
         VALUES (?, ?, '', '', ?, ?, ?, 'inspection_module_attached', ?, ?, ?, '', '', ?)`)
         .bind(crypto.randomUUID(), inspectionId, access.ownerUid, access.isOwner ? "owner" : "assessor", access.actorUid,
-          crypto.randomUUID(), `${selected.title} added to this job.`, JSON.stringify({ moduleKey }), now));
+          crypto.randomUUID(), `${selected.title} added to this job.`, JSON.stringify({ moduleKeys: wantedModuleKeys, ...(visit ? { presetKey: visit.key } : {}) }), now));
     }
     statements.push(db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
       VALUES (?, ?, ?, 'activity_form_attached', ?, ?)`).bind(crypto.randomUUID(), current.workOrderId, access.ownerUid, `${selected.title} added to this job.`, now),

@@ -1,3 +1,4 @@
+import * as aeaTradeRouting from "../src/lib/aea-trade-routing.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -99,6 +100,7 @@ function loadTypescriptModule(path, mocks) {
   }).outputText;
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
+    if (specifier === "@/lib/aea-trade-routing.mjs") return aeaTradeRouting;
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
@@ -128,7 +130,7 @@ function workflowFixture() {
     CREATE TABLE trade_opportunities (
       id text PRIMARY KEY, title text NOT NULL, summary text NOT NULL,
       priority text NOT NULL, source_reference text NOT NULL, postcode text NOT NULL,
-      state text NOT NULL, status text NOT NULL, expires_at text NOT NULL
+      state text NOT NULL, status text NOT NULL, expires_at text NOT NULL, service_categories text NOT NULL
     );
     CREATE TABLE public_trade_lead_contact_releases (
       id text PRIMARY KEY, opportunity_id text NOT NULL, source_reference text NOT NULL,
@@ -276,7 +278,7 @@ function workflowFixture() {
   ]);
   database.prepare(`INSERT INTO trade_opportunities VALUES
     ('opportunity-1', 'Heat-pump hot-water quote', 'Replace the existing hot-water unit.',
-     'standard', ?, '3000', 'VIC', 'open', '2099-08-12T00:00:00.000Z')`).run(reference);
+     'standard', ?, '3000', 'VIC', 'open', '2099-08-12T00:00:00.000Z', '["hot-water"]')`).run(reference);
   database.prepare(`INSERT INTO trade_opportunity_matches
     (id, opportunity_id, firebase_uid, status, matched_categories, updated_at) VALUES
     (?, 'opportunity-1', 'trade-a', 'interested', '["hot-water"]', ?)`).run(matchId, now);

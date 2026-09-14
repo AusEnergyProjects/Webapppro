@@ -2,6 +2,7 @@ import { getD1 } from '../../db';
 import { assignedJob, type TeamAccess } from '@/lib/trade-team-server';
 import { authenticatedRentalReportPdf, ownerRentalReportPresentation } from '@/lib/trade-rental-report-server';
 import { sendServiceReminderProviderMessage, serviceReminderProviderConfiguration } from '@/lib/service-reminder-delivery';
+import { rentalReportEmailDraft } from './rental-report-email-template.mjs';
 
 type Row = Record<string, unknown>;
 type Input = { access: TeamAccess; workOrderId: string; inspectionId: string; reportId: string; expectedRecipientEmail: string; origin: string };
@@ -78,11 +79,10 @@ export async function emailRentalAssessmentReport(input: Input) {
   if (!serviceReminderProviderConfiguration().email.configured) return { status: 'failed', reportId: input.reportId, message: 'Email delivery is not configured. The completed report is saved.' };
   const pdf = await authenticatedRentalReportPdf({ access: input.access, workOrderId: input.workOrderId, reportId: input.reportId });
   // Large evidence reports travel by their existing secure report link rather than exceeding email attachment limits.
-  const presentation = pdf.bytes.length > 18 * 1024 * 1024
-    ? await ownerRentalReportPresentation({ ownerUid: input.access.ownerUid, inspectionId: input.inspectionId, origin: input.origin, includeSecret: true }) : [];
+  const presentation = await ownerRentalReportPresentation({ ownerUid: input.access.ownerUid, inspectionId: input.inspectionId, origin: input.origin, includeSecret: true });
   const publicReport = presentation.find(row => row.id === input.reportId);
   const link = publicReport?.link;
-  if (pdf.bytes.length > 18 * 1024 * 1024 && (!link || link.status !== 'active' || !link.shareUrl)) return { status: 'failed', reportId: input.reportId, message: 'Renew the report sharing link before emailing this large report.' };
+  if (!link || link.status !== 'active' || !link.shareUrl) return { status: 'failed', reportId: input.reportId, message: 'Renew the report sharing link before emailing this report.' };
   const currentRecipient = await rentalReportDeliveryRecipient(input.access.ownerUid, input.workOrderId);
   if (!currentRecipient || currentRecipient.email !== recipient.email) throw new Error('REPORT_RECIPIENT_CHANGED');
   const attempt = `${prefix}:${requests.length + 1}`;
@@ -94,10 +94,10 @@ export async function emailRentalAssessmentReport(input: Input) {
       let binary = ''; for (const byte of pdf.bytes) binary += String.fromCharCode(byte);
       attachments.push({ filename: `${pdf.reportNumber.replace(/[^a-zA-Z0-9-]/g, '-')}.pdf`, content: btoa(binary), contentType: 'application/pdf' });
     }
-    const greeting = recipient.name === 'Client' ? 'Hello,' : `Hi ${recipient.name},`;
-    const body = `${greeting}\n\nYour rental assessment report ${pdf.reportNumber} is ready for you to review.\n\n${attachments.length ? 'A PDF copy is attached for your records.' : `You can view and download your report using the secure link below:\n${link?.shareUrl}`}\n\nIf you have any questions or would like to talk through the report, please get in touch.\n\nKind regards,\nTLink`;
+    const draft = rentalReportEmailDraft({ recipientName: recipient.name, reportNumber: pdf.reportNumber,
+      shareUrl: link.shareUrl, hasAttachment: attachments.length > 0 });
     const result = await sendServiceReminderProviderMessage({ channel: 'email', recipient: recipient.email,
-      subject: `Rental assessment report | ${pdf.reportNumber}`, body, attachments, idempotencyKey: key,
+      ...draft, attachments, idempotencyKey: key,
       messageType: 'tlink_rental_report', callbackUrl: new URL('/api/service-reminder-provider-events/twilio', input.origin).toString(),
     }, { fetchImpl: (resource, init) => fetch(resource, { ...init, signal: AbortSignal.timeout(15_000) }) });
     await event(input, 'report_email_accepted', `${prefix}:accepted`, { recipientSha256: recipientHash, provider: result.provider, providerMessageId: result.providerMessageId });

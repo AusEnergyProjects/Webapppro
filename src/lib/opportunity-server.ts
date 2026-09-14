@@ -1,3 +1,4 @@
+import { tradeOpportunityServiceScopeAllowed, tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
 import { getD1 } from "../../db";
 import { parseJsonList } from "@/lib/admin-server";
 import { postcodeDistanceKm } from "@/lib/postcode-distance";
@@ -8,7 +9,8 @@ import { selectEveryQualifiedTradeRecipient } from "@/lib/direct-trade-matching.
 import { closestQualifyingTradeServiceArea } from "@/lib/trade-service-area-matching.mjs";
 import { persistLeadOpportunity } from "@/lib/opportunity-source-write.mjs";
 import { ensureOpportunityNotificationDeliveries } from "@/lib/opportunity-notification-server";
-import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
+import { ENERGY_SERVICE_LABELS, LEGACY_ENERGY_SERVICE_ALIASES } from "@/lib/energy-service-catalogue.mjs";
+import { requiresAeaDelivery } from "@/lib/aea-service-identity.mjs";
 import {
   ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
   ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
@@ -80,6 +82,7 @@ export async function syncMarketplaceEnquiries(db: D1Database, opportunityId: st
             AND ${verifiedTradeAccountPredicate("current_trade_account")}
         )
     WHERE m.opportunity_id = ? AND (? = '' OR m.firebase_uid = ?)
+      AND ${tradeOpportunityServiceScopeSql("o")}
     ON CONFLICT(firebase_uid, source_type, source_reference) DO UPDATE SET
       status = excluded.status, service_category = excluded.service_category,
       service_categories = excluded.service_categories, description = excluded.description,
@@ -463,7 +466,10 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
   const postcode = String(payload.postcode || "");
   const state = canonicalMarketplaceState(payload.state);
   const categories = Array.isArray(payload.projectCategories)
-    ? payload.projectCategories.filter((item) => CATEGORY_LABELS[item])
+    ? [...new Set(payload.projectCategories.map((item) => {
+      const id = item.trim().toLowerCase();
+      return LEGACY_ENERGY_SERVICE_ALIASES[id] || id;
+    }).filter((item) => CATEGORY_LABELS[item]))]
     : [];
   if (!/^\d{4}$/.test(postcode) || !state || !categories.length) return null;
 
@@ -506,7 +512,8 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
     || payload.sourceJourney === QUICK_UPGRADE_SOURCE_JOURNEY;
   const assistantDurableDispatch = payload.sourceJourney === "energy-assistant";
   const opportunityStatus =
-    assistantDurableDispatch
+    requiresAeaDelivery(categories)
+    || assistantDurableDispatch
     || payload.directTradeTriage?.autoSend === false
     || (protectedPublicLead && !contactRelease)
       ? "draft"
@@ -553,7 +560,7 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
       createdAt,
     );
   }
-  const allocation = assistantDurableDispatch
+  const allocation = assistantDurableDispatch && !requiresAeaDelivery(categories)
     ? {
         allocated: [],
         activeCount: 0,
@@ -642,6 +649,9 @@ export async function allocateNearestInstallers(
     .bind(opportunityId)
     .first<Record<string, unknown>>();
   if (!opportunity) throw new Error("OPPORTUNITY_NOT_FOUND");
+  if (!tradeOpportunityServiceScopeAllowed(opportunity.service_categories)) {
+    return { allocated: [], activeCount: 0, eligibleCount: 0, alreadyAllocatedCount: 0 };
+  }
   if (opportunity.status !== "open") throw new Error("OPPORTUNITY_NOT_OPEN");
   if (
     postcodeDistanceKm(
@@ -723,7 +733,10 @@ export async function allocateNearestInstallers(
     (id, opportunity_id, firebase_uid, status, admin_note, partner_note, matched_categories,
      distance_metres, allocation_rank, match_source, contact_attempt_count, last_contact_at, connected_at,
      matched_by_uid, matched_at, updated_at)
-    VALUES (?, ?, ?, 'offered', '', '', ?, ?, ?, 'automatic', 0, '', '', ?, ?, ?)
+    SELECT ?, ?, ?, 'offered', '', '', ?, ?, ?, 'automatic', 0, '', '', ?, ?, ?
+    WHERE EXISTS (SELECT 1 FROM trade_opportunities current_opportunity
+      WHERE current_opportunity.id = ? AND current_opportunity.status = 'open'
+        AND ${tradeOpportunityServiceScopeSql("current_opportunity")})
     ON CONFLICT(opportunity_id, firebase_uid) DO NOTHING`,
           )
           .bind(
@@ -736,6 +749,7 @@ export async function allocateNearestInstallers(
             matchedByUid,
             now,
             now,
+            opportunityId,
           ),
       ),
     );

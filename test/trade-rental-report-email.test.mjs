@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
 import ts from "typescript";
+import { rentalReportEmailDraft } from "../src/lib/rental-report-email-template.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -83,7 +84,7 @@ function loadTypescriptModule(path, mocks = {}) {
 
 
 
-function fixture({ failSend=false, largeReport=false }={}) {
+function fixture({ failSend=false, largeReport=false, linkStatus="active" }={}) {
  const database=new DatabaseSync(':memory:');
  database.exec(`CREATE TABLE trade_work_orders(id text,firebase_uid text,partner_type text,record_status text,source_type text);
  CREATE TABLE trade_crm_job_details(work_order_id text,firebase_uid text,crm_customer_id text,customer_source text);
@@ -99,8 +100,9 @@ function fixture({ failSend=false, largeReport=false }={}) {
  database.exec(migration.slice(migration.indexOf('CREATE TABLE `trade_rental_inspection_events`')).replaceAll('--> statement-breakpoint', ''));
  const db=testD1(database);const sent=[];let shouldFail=failSend;
  const api=loadTypescriptModule('../src/lib/trade-rental-report-email-server.ts',{
+ './rental-report-email-template.mjs':{rentalReportEmailDraft},
  '../../db':{getD1:()=>db},'@/lib/trade-team-server':{assignedJob:async()=>({id:'job'})},
- '@/lib/trade-rental-report-server':{authenticatedRentalReportPdf:async()=>({bytes:largeReport ? new Uint8Array(18 * 1024 * 1024 + 1) : new Uint8Array([37,80,68,70,45]),reportNumber:'RMS-123'}),ownerRentalReportPresentation:async()=>largeReport ? [{id:'report',link:{status:'active',shareUrl:'https://example.test/rental-report/secure-test-link'}}] : []},
+ '@/lib/trade-rental-report-server':{authenticatedRentalReportPdf:async()=>({bytes:largeReport ? new Uint8Array(18 * 1024 * 1024 + 1) : new Uint8Array([37,80,68,70,45]),reportNumber:'RMS-123'}),ownerRentalReportPresentation:async()=>[{id:'report',link:linkStatus ? {status:linkStatus,shareUrl:'https://example.test/rental-report/secure-test-link'} : null}]},
  '@/lib/service-reminder-delivery':{serviceReminderProviderConfiguration:()=>({email:{configured:true}}),sendServiceReminderProviderMessage:async(input)=>{sent.push(input);if(shouldFail)throw new Error('network');return{provider:'resend',providerMessageId:'message'};}},
  });
  const input={access:{ownerUid:'owner',actorUid:'actor',memberId:'worker',canRunReports:true,isOwner:false},workOrderId:'job',inspectionId:'inspection',reportId:'report',expectedRecipientEmail:'JANE@EXAMPLE.TEST',origin:'https://example.test'};
@@ -145,8 +147,12 @@ test('report email greets the client, describes its attachment and offers help w
  assert.match(f.sent[0].body,/^Hi Jane Smith,\n\n/);
  assert.match(f.sent[0].body,/report RMS-123 is ready for you to review/);
  assert.match(f.sent[0].body,/A PDF copy is attached for your records/);
+ assert.match(f.sent[0].body,/secure link below:\nhttps:\/\/example\.test\/rental-report\/secure-test-link/);
  assert.match(f.sent[0].body,/If you have any questions or would like to talk through the report, please get in touch/);
  assert.match(f.sent[0].body,/Kind regards,\nTLink$/);
+ assert.match(f.sent[0].html,/View report &amp; download PDF/);
+ assert.match(f.sent[0].html,/A PDF copy is attached for your records/);
+ assert.match(f.sent[0].html,/An issued report does not mean that every check passed/);
  assert.doesNotMatch(f.sent[0].body,/quoting|property findings, evidence and measured work/);
 });
 
@@ -157,6 +163,8 @@ test('large report email uses the secure link without claiming an attachment and
  assert.match(f.sent[0].body,/secure link below:\nhttps:\/\/example\.test\/rental-report\/secure-test-link/);
  assert.doesNotMatch(f.sent[0].body,/attached|quoting|Hi Client/);
  assert.equal(f.sent[0].attachments.length,0);
+ assert.match(f.sent[0].html,/available to download as a PDF/);
+ assert.doesNotMatch(f.sent[0].html,/attached|Hi Client/);
 });
 test('recipient changes, protected records, wrong assessor and missing report permission never send',async()=>{
  for(const kind of ['email','protected','assessor','permission']){const f=fixture();
@@ -197,4 +205,10 @@ test('delivery receipt identifies the current report and normalized recipient af
  f.database.exec("UPDATE trade_rental_inspection_events SET metadata='{}' WHERE event_type='report_email_accepted'");
  const legacy=await f.api.rentalReportDeliveryState('owner','inspection');
  assert.equal(legacy.reportId,'report');assert.equal(legacy.recipientSha256,'');
+});
+
+for (const linkStatus of ['', 'revoked', 'expired']) test(`report email requires active link even with a small PDF: ${linkStatus || 'missing'}`, async () => {
+  const f = fixture({ linkStatus }); assert.equal((await f.send()).status, 'failed');
+  assert.equal(f.sent.length, 0);
+  assert.equal(f.database.prepare("SELECT count(*) n FROM trade_rental_inspection_events WHERE event_type='report_email_requested'").get().n, 0);
 });

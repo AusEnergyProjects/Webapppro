@@ -104,7 +104,7 @@ function databaseFixture() {
       scope_summary TEXT,quantity_milli INTEGER,unit_label TEXT,details TEXT,internal_notes TEXT,sort_order INTEGER,revision INTEGER,created_at TEXT,updated_at TEXT);
     CREATE TABLE trade_rental_evidence_links (id TEXT,inspection_id TEXT,module_id TEXT,item_id TEXT,finding_id TEXT,job_media_id TEXT,firebase_uid TEXT,
       requirement_key TEXT,evidence_type TEXT,purpose TEXT,caption_snapshot TEXT,status TEXT,sort_order INTEGER,created_at TEXT,updated_at TEXT);
-    CREATE TABLE trade_crm_job_media (id TEXT, firebase_uid TEXT,file_name TEXT,content_type TEXT,size_bytes INTEGER,evidence_envelope TEXT);
+    CREATE TABLE trade_crm_job_media (id TEXT, work_order_id TEXT, firebase_uid TEXT,file_name TEXT,content_type TEXT,size_bytes INTEGER,evidence_envelope TEXT);
     CREATE TABLE trade_rental_inspection_events (id TEXT,inspection_id TEXT,report_id TEXT,report_link_id TEXT,firebase_uid TEXT,actor_type TEXT,actor_uid TEXT,
       event_type TEXT,request_id TEXT,summary TEXT,metadata TEXT,source_ip_sha256 TEXT,user_agent_sha256 TEXT,created_at TEXT);
   `);

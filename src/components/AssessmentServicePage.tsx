@@ -3,6 +3,9 @@ import Link from "next/link";
 import { JsonLd } from "@/components/JsonLd";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 import { PUBLIC_SITE } from "@/lib/public-site";
+import { AeaServicePricePanel } from "./AeaServices";
+import { getAeaService, gstInclusiveCents, AEA_SERVICE_REVIEW_DATE } from "@/lib/aea-services.mjs";
+import { PublicFaqList } from "./PublicFaqList";
 
 export type AssessmentServiceCard = {
   label: string;
@@ -41,6 +44,7 @@ export type AssessmentServiceAction = {
 };
 
 type AssessmentServicePageProps = {
+  pricedServiceId?: string;
   path: string;
   breadcrumbLabel: string;
   eyebrow: string;
@@ -125,6 +129,7 @@ function AssessmentLink({ href, children }: { href: string; children: string }) 
 }
 
 export function AssessmentServicePage({
+  pricedServiceId,
   path,
   breadcrumbLabel,
   eyebrow,
@@ -140,7 +145,7 @@ export function AssessmentServicePage({
   steps,
   sources,
   faqTitle,
-  faqs,
+  faqs: guideFaqs,
   ctaEyebrow,
   ctaTitle,
   ctaDescription,
@@ -155,6 +160,9 @@ export function AssessmentServicePage({
   footer,
 }: AssessmentServicePageProps) {
   const canonical = canonicalUrl(path);
+  const pricedService = pricedServiceId ? getAeaService(pricedServiceId) : undefined;
+  const serviceFaqs = pricedService?.faqs.map(([question, answer]) => ({ question, answer })) || [];
+  const faqs = [...serviceFaqs, ...guideFaqs.filter((faq) => !serviceFaqs.some((item) => item.question === faq.question))];
   const telephoneIsVisible = ctaActions.some((action) => action.href === PUBLIC_SITE.phoneHref);
   const emailIsVisible = ctaActions.some((action) => action.href === `mailto:${PUBLIC_SITE.email}`);
   const availableChannel = [
@@ -184,6 +192,10 @@ export function AssessmentServicePage({
         url: canonical,
         mainEntityOfPage: { "@id": `${canonical}#webpage` },
         provider: { "@id": PUBLIC_SITE.organizationId },
+        ...(pricedService ? { offers: {
+          "@type": "Offer", price: (gstInclusiveCents(pricedService.priceExGstCents) / 100).toFixed(2), priceCurrency: "AUD", url: canonical,
+          priceSpecification: { "@type": "UnitPriceSpecification", price: (gstInclusiveCents(pricedService.priceExGstCents) / 100).toFixed(2), priceCurrency: "AUD", valueAddedTaxIncluded: true },
+        } } : {}),
         ...(areaServed ? {
           areaServed: areaServed === "Australia"
             ? { "@type": "Country", name: areaServed }
@@ -198,7 +210,7 @@ export function AssessmentServicePage({
         name: title,
         description: introduction,
         inLanguage: "en-AU",
-        dateModified: reviewedIso,
+        dateModified: pricedService ? AEA_SERVICE_REVIEW_DATE : reviewedIso,
         isPartOf: { "@id": PUBLIC_SITE.apexWebsiteId },
         publisher: { "@id": PUBLIC_SITE.organizationId },
         about: { "@id": `${canonical}#service` },
@@ -244,6 +256,7 @@ export function AssessmentServicePage({
         <h1>{title}</h1>
         <p>{introduction}</p>
       </header>
+      {pricedServiceId ? <AeaServicePricePanel serviceId={pricedServiceId} /> : null}
 
       <div className="assessment-asat">
         <strong>Official guidance reviewed {reviewed}</strong>
@@ -320,15 +333,7 @@ export function AssessmentServicePage({
           <span>Clear answers</span>
           <h2 id="assessment-service-faq">{faqTitle}</h2>
         </div>
-        <div className="assessment-two-column">
-          {faqs.map((faq) => (
-            <article key={faq.question}>
-              <span>Question</span>
-              <h2>{faq.question}</h2>
-              <p>{faq.answer}</p>
-            </article>
-          ))}
-        </div>
+        <PublicFaqList faqs={faqs} />
       </section>
 
       <section className="assessment-upload-boundary">

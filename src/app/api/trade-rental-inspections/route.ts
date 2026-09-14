@@ -122,6 +122,7 @@ function responseObject(value: unknown) {
     "certificateNumber", "credentialNumber", "credentialType", "limitationReason", "exemptionBasis",
     "notificationRecipient", "notificationTime", "applianceType", "gasType", "manufactureDate",
     "certificationNumber", "ratedCurrent", "testCurrent", "tripTime", "circuitIdentifier",
+    "modelNumber", "powerSource", "rcdButtonResult",
   ];
   for (const key of textFields) {
     const text = cleanAdminText(source[key], 500);
@@ -413,6 +414,7 @@ async function assessmentPayload(context: InspectionContext, origin = "") {
   const photoCounts = Object.fromEntries(items.map((item) => [item.id,
     evidence.filter((entry) => entry.itemId === item.id && entry.status === "active" && entry.evidenceType === "photo" && entry.contentType.startsWith("image/")).length,
   ]));
+  const pdfCounts = Object.fromEntries(items.map((item) => [item.id, evidence.filter((entry) => entry.itemId === item.id && entry.status === "active" && entry.contentType === "application/pdf").length]));
   const usedEvidenceBytes = evidenceRows.results
     .filter((entry) => entry.status === "active")
     .reduce((total, entry) => total + integer(entry.size_bytes), 0);
@@ -422,7 +424,7 @@ async function assessmentPayload(context: InspectionContext, origin = "") {
     items: items.filter((item) => item.moduleId === module.id).map((item) => ({ ...item, responseJson: item.response })),
     findings: findings.filter((finding) => finding.moduleId === module.id),
     evidenceCounts,
-    photoCounts,
+    photoCounts, pdfCounts,
   })]));
   return {
     inspection: presentInspection(context.inspection),
@@ -966,14 +968,18 @@ async function completeModule(context: InspectionContext, body: Row) {
       .bind(context.inspection.id, moduleId, context.access.ownerUid).all<Row>(),
     getD1().prepare(`SELECT * FROM trade_rental_findings WHERE inspection_id = ? AND module_id = ? AND firebase_uid = ?`)
       .bind(context.inspection.id, moduleId, context.access.ownerUid).all<Row>(),
-    getD1().prepare(`SELECT item_id, COUNT(*) count,
-        SUM(CASE WHEN evidence_type = 'photo' THEN 1 ELSE 0 END) photo_count FROM trade_rental_evidence_links
-      WHERE inspection_id = ? AND module_id = ? AND firebase_uid = ? AND status = 'active'
-      GROUP BY item_id`)
-      .bind(context.inspection.id, moduleId, context.access.ownerUid).all<Row>(),
+    getD1().prepare(`SELECT evidence.item_id, COUNT(*) count,
+        SUM(CASE WHEN evidence.evidence_type = 'photo' AND media.content_type LIKE 'image/%' THEN 1 ELSE 0 END) photo_count,
+        SUM(CASE WHEN media.content_type = 'application/pdf' THEN 1 ELSE 0 END) pdf_count
+      FROM trade_rental_evidence_links evidence JOIN trade_crm_job_media media ON media.id = evidence.job_media_id
+        AND media.firebase_uid = evidence.firebase_uid AND media.work_order_id = ?
+      WHERE evidence.inspection_id = ? AND evidence.module_id = ? AND evidence.firebase_uid = ? AND evidence.status = 'active'
+      GROUP BY evidence.item_id`)
+      .bind(context.workOrderId, context.inspection.id, moduleId, context.access.ownerUid).all<Row>(),
   ]);
   const evidenceCounts = Object.fromEntries(evidenceRows.results.map((row) => [String(row.item_id), integer(row.count)]));
   const photoCounts = Object.fromEntries(evidenceRows.results.map((row) => [String(row.item_id), integer(row.photo_count)]));
+  const pdfCounts = Object.fromEntries(evidenceRows.results.map((row) => [String(row.item_id), integer(row.pdf_count)]));
   const now = new Date().toISOString();
   const savedAnswers = parsedObject(assessmentModule.answers);
   const profileAnswers = await rentalModuleProfileAnswers({ db: getD1(), ownerUid: context.access.ownerUid,
@@ -987,7 +993,7 @@ async function completeModule(context: InspectionContext, body: Row) {
     items: itemRows.results.map((row) => ({ ...presentItem(row), responseJson: parsedObject(row.response_json) })),
     findings: findingRows.results.map(presentFinding),
     evidenceCounts,
-    photoCounts,
+    photoCounts, pdfCounts,
   });
   if (!completion.complete) return adminJson({ ok: false, error: "Finish the highlighted assessment items before completing this module.", blockers: completion.blockers }, 409);
   const credential = await currentRentalModuleCredentialSnapshot({

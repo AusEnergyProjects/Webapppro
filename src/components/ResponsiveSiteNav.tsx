@@ -17,6 +17,21 @@ const DESKTOP_SHORTCUTS = [
 
 const NAVIGATION_CATEGORIES: readonly NavigationCategory[] = [
   {
+    label: "Services",
+    activeFor: ["services"],
+    links: [
+      ["/services", "All services and prices"],
+      ["/offers", "Two-year bundle offers"],
+      ["/services/smoke-alarm-blind-safety", "Smoke alarm + blind safety"],
+      ["/services/gas-safety-check", "Gas safety checks"],
+      ["/services/electrical-safety-check", "Electrical safety checks"],
+      ["/minimum-rental-standards", "Rental minimum standards"],
+      ["/nathers-for-new-homes", "NatHERS for new homes"],
+      ["/home-energy-rating-for-existing-homes", "Existing-home energy ratings"],
+      ["/services/onsite-energy-assessment", "Onsite energy advice"],
+    ],
+  },
+  {
     label: "Assessments",
     activeFor: ["assessments", "direct-trade-request"],
     links: [

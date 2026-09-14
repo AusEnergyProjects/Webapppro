@@ -40,9 +40,21 @@ import {
   publicPlanQuoteQuestionsForSnapshot,
 } from "@/lib/public-plan-quote-preparation.mjs";
 import styles from "./PublicPlanEnquiryForm.module.css";
+import { requiresAeaDelivery } from "@/lib/aea-service-identity.mjs";
 
 export type PublicPlanUpgradeInterest =
   | "assessment"
+  | "smoke-alarm-blind-safety"
+  | "gas-safety-check"
+  | "electrical-safety-check"
+  | "minimum-rental-standards"
+  | "nathers-new"
+  | "nathers-existing"
+  | "onsite-energy-assessment"
+  | "rental-electrical-bundle"
+  | "rental-gas-electrical-bundle"
+  | "electrical"
+  | "plumbing"
   | "blower-door-testing"
   | "thermal-imaging"
   | "solar"
@@ -318,6 +330,7 @@ export function PublicPlanEnquiryForm({
   const [localityLookupRequest, setLocalityLookupRequest] = useState(0);
   const [interests, setInterests] = useState<PublicPlanUpgradeInterest[]>(() =>
     initialAllowedInterests(suggestedInterests));
+  const aeaOnly = requiresAeaDelivery(interests);
   const [message, setMessage] = useState("");
   const [quoteAnswers, setQuoteAnswers] = useState<Record<string, string>>({});
   const [includeKnownPlanAnswers, setIncludeKnownPlanAnswers] = useState(false);
@@ -658,7 +671,7 @@ export function PublicPlanEnquiryForm({
     }
     setStatus({
       kind: "uploading",
-      message: `Your enquiry is received. Securely preparing ${remaining.length} selected ${remaining.length === 1 ? "photo" : "photos"} for matched trades...`,
+      message: `Your enquiry is received. Securely preparing ${remaining.length} selected ${remaining.length === 1 ? "photo" : "photos"} for ${aeaOnly ? "Australian Energy Assessments" : "matched trades"}...`,
       reference,
       uploadedCount: uploadedQuotePhotoIds.current.size,
     });
@@ -691,7 +704,7 @@ export function PublicPlanEnquiryForm({
           kind: "uploading",
           message: remainingCount > 0
             ? `${uploadedQuotePhotoIds.current.size} of ${quotePhotos.length} selected photos are ready. Uploading ${remainingCount} more...`
-            : "All selected quote photos are ready for matched trades.",
+            : (aeaOnly ? "All selected photos are ready for Australian Energy Assessments to review." : "All selected quote photos are ready for matched trades."),
           reference,
           uploadedCount: uploadedQuotePhotoIds.current.size,
         });
@@ -759,7 +772,7 @@ export function PublicPlanEnquiryForm({
     if (
       confirmRemoval
       && !window.confirm(
-        "Remove the optional quote answers and photos from matched trades? Your enquiry and contact details will remain sent.",
+        aeaOnly ? "Remove the optional answers and photos from this enquiry? Your enquiry and contact details will remain with Australian Energy Assessments." : "Remove the optional quote answers and photos from matched trades? Your enquiry and contact details will remain sent.",
       )
     ) {
       return;
@@ -796,7 +809,7 @@ export function PublicPlanEnquiryForm({
       setQuotePhotoError("");
       setStatus({
         kind: "success",
-        message: "Your enquiry remains sent. Optional quote details and photos are no longer available to matched trades.",
+        message: aeaOnly ? "Your enquiry remains with Australian Energy Assessments. The optional answers and photos have been removed." : "Your enquiry remains sent. Optional quote details and photos are no longer available to matched trades.",
         reference,
       });
       setGatewayOpen(false);
@@ -874,7 +887,7 @@ export function PublicPlanEnquiryForm({
       return;
     }
     if (!email.trim()) {
-      setStatus({ kind: "error", message: "Enter your email address so we can send your private plan and matching trades can reply." });
+      setStatus({ kind: "error", message: "Enter your email address so we can send your private plan and respond to your request." });
       return;
     }
     if (!phone.trim()) {
@@ -899,7 +912,7 @@ export function PublicPlanEnquiryForm({
       return;
     }
     if (interests.length === 0) {
-      setStatus({ kind: "error", message: "Choose at least one service so we can notify the right trades." });
+      setStatus({ kind: "error", message: "Choose at least one service so we can arrange the right next step." });
       return;
     }
     if (!consent || !consentGrantedAt.current) {
@@ -1033,7 +1046,7 @@ export function PublicPlanEnquiryForm({
         if (result.received) {
           setStatus({
             kind: "received",
-            message: result.planEmailSent
+            message: aeaOnly ? "Your enquiry was received by Australian Energy Assessments, but preparation is not complete. Retry this same request to finish preparation." : result.planEmailSent
               ? "Your enquiry and private plan PDF email were safely received, but trade matching is not prepared yet. Retry trade matching with this same request."
               : "Your enquiry was safely received, but trade matching is not prepared yet. Retry trade matching with this same request.",
             reference: result.reference || "",
@@ -1045,7 +1058,9 @@ export function PublicPlanEnquiryForm({
       const reference = result.reference || "";
       acceptedLeadReference.current = reference;
       setSharedQuotePackPrepared(preparedQuoteAnswers.length > 0 || quotePhotos.length > 0);
-      acceptedLeadSuccessMessage.current = result.planEmailStatus === "queued"
+      acceptedLeadSuccessMessage.current = aeaOnly
+        ? "Australian Energy Assessments has your service enquiry and will contact you about the next step. It has not been distributed to other businesses. You can download your private plan here. This did not create an account."
+        : result.planEmailStatus === "queued"
         ? "Your enquiry is safely queued for matching trades. Your personalised home plan PDF email is also queued and should arrive shortly. This did not create an account."
         : result.planEmailSent
           ? "Your enquiry is ready for matching trades and your personalised home plan PDF email has been accepted for delivery. This did not create an account."
@@ -1228,7 +1243,7 @@ export function PublicPlanEnquiryForm({
             <input className={styles.control} required autoComplete="family-name" maxLength={60} value={customerLastName} onChange={(event) => setCustomerLastName(event.target.value)} />
           </label>
           <label className={styles.field}>
-            <span className={styles.labelRow}>Email <span className={styles.optional}>shared so trades can reply</span></span>
+            <span className={styles.labelRow}>Email <span className={styles.optional}>{aeaOnly ? "for Australian Energy Assessments to contact you" : "shared so trades can reply"}</span></span>
             <input className={styles.control} required type="email" autoComplete="email" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} aria-describedby="public-plan-contact-hint" />
           </label>
           <label className={styles.field}>
@@ -1318,7 +1333,7 @@ export function PublicPlanEnquiryForm({
                   : localityLookupError}
             </p>
           </fieldset>
-          <p className={`${styles.hint} ${styles.full}`} id="public-plan-contact-hint">Matching trades always receive your email, postcode and selected services. Your first and last name, phone, unit, street, suburb and state stay private unless you choose to share them.</p>
+          <p className={`${styles.hint} ${styles.full}`} id="public-plan-contact-hint">{aeaOnly ? "Your assessment or safety enquiry, including any additional services, stays with Australian Energy Assessments. We use your contact and property details to arrange the next step." : "Matching trades always receive your email, postcode and selected services. Your first and last name, phone, unit, street, suburb and state stay private unless you choose to share them."}</p>
           <fieldset
             aria-describedby={serviceSelectionInvalid
               ? "public-plan-service-hint public-plan-service-error"
@@ -1328,7 +1343,7 @@ export function PublicPlanEnquiryForm({
             className={`${styles.serviceChoices} ${styles.full}`}
           >
             <legend>Which services would you like help with?</legend>
-            <p id="public-plan-service-hint">Choose one, several or all. Every approved trade that covers your area and offers at least one selected service can receive the lead.</p>
+            <p id="public-plan-service-hint">Choose one or several. Assessment and safety enquiries stay with Australian Energy Assessments, including any other services in the same request. Other upgrade enquiries can reach approved matching trades in your area.</p>
             <label className={`${styles.serviceChoice} ${styles.selectAll} ${allInterestsSelected ? styles.serviceChoiceSelected : ""}`}>
               <input
                 checked={allInterestsSelected}
@@ -1364,7 +1379,7 @@ export function PublicPlanEnquiryForm({
           <details className={`${styles.quotePreparation} ${styles.full}`} open>
             <summary>
               <span>
-                <strong>Help trades prepare a desktop quote</strong>
+                <strong>{aeaOnly ? "Help Australian Energy Assessments prepare for your service" : "Help trades prepare a desktop quote"}</strong>
                 <small>Optional. We only ask for details that are not already in your plan.</small>
               </span>
               <span className={styles.quotePreparationCount}>
@@ -1375,7 +1390,7 @@ export function PublicPlanEnquiryForm({
               <header className={styles.quotePreparationHeader}>
                 <div>
                   <span className={styles.eyebrow}>Quote preparation</span>
-                  <h4>A short head start for matching trades</h4>
+                  <h4>{aeaOnly ? "Useful details for the Australian Energy Assessments team" : "A short head start for matching trades"}</h4>
                 </div>
                 <span>{quoteQuestions.length} short optional {quoteQuestions.length === 1 ? "question" : "questions"}</span>
               </header>
@@ -1436,7 +1451,7 @@ export function PublicPlanEnquiryForm({
                 <summary>
                   <span>
                     <strong id="public-plan-quote-photos-title">Useful wide photos</strong>
-                    <small>Optional. Open this section if photos would help a trade understand the site.</small>
+                    <small>Optional. Add photos that help explain the property and your request.</small>
                   </span>
                   <span>{quotePhotos.length} selected</span>
                 </summary>
@@ -1492,7 +1507,7 @@ export function PublicPlanEnquiryForm({
                   </div>
                   {quotePhotoError ? <p className={styles.serviceError} role="alert">{quotePhotoError}</p> : null}
                   <p className={styles.quotePhotoPrivacy}>
-                    Selected photos are stripped of location metadata before private storage. They are never attached to email and only approved trades matched to this enquiry can open them after signing in.
+                    {aeaOnly ? "Selected photos have location metadata removed and are stored privately for Australian Energy Assessments to review. They are not distributed to other businesses." : "Selected photos are stripped of location metadata before private storage. They are never attached to email and only approved trades matched to this enquiry can open them after signing in."}
                   </p>
                 </div>
               </details>
@@ -1500,7 +1515,7 @@ export function PublicPlanEnquiryForm({
           </details>
         </div>
 
-        <fieldset className={styles.shareChoices}>
+        {!aeaOnly ? <fieldset className={styles.shareChoices}>
           <legend>Choose what matching trades can see</legend>
           <p>Your email, postcode, selected services, message and any optional quote details or photos are included so trades can reply and understand what you need. Relevant facts from your plan are included only when you choose to share the read-only summary above.</p>
           <label>
@@ -1515,7 +1530,7 @@ export function PublicPlanEnquiryForm({
             <input type="checkbox" checked={shareAddress} onChange={(event) => setShareAddress(event.target.checked)} />
             <span>Also share my full property address</span>
           </label>
-        </fieldset>
+        </fieldset> : null}
 
         <div className={styles.honeypot} aria-hidden="true">
           <label>Website<input tabIndex={-1} autoComplete="off" value={website} onChange={(event) => setWebsite(event.target.value)} /></label>
@@ -1523,12 +1538,12 @@ export function PublicPlanEnquiryForm({
 
         <label className={styles.consent}>
           <input className={styles.consentBox} type="checkbox" checked={consent} onChange={(event) => changeConsent(event.target.checked)} />
-          <span>I agree that Australian Energy Assessments may send this enquiry to approved trades that service my area and offer at least one selected service. Trades receive my email, postcode, selected services, message and any quote details or photos I chose to add. Relevant home plan facts are included only when I selected the read-only summary above. My name, phone or full property address is shared only if I selected it above. My full plan and PDF stay private and are emailed only to me.</span>
+          <span>{aeaOnly ? "I agree that Australian Energy Assessments may use my contact and property details, selected services, message and any optional details or photos to handle this enquiry directly. It will not be distributed to other businesses. My private plan PDF is emailed only to me. The separate Home Energy Rating assessment consent will be arranged if required." : "I agree that Australian Energy Assessments may send this enquiry to approved trades that service my area and offer at least one selected service. Trades receive my email, postcode, selected services, message and any quote details or photos I chose to add. Relevant home plan facts are included only when I selected the read-only summary above. My name, phone or full property address is shared only if I selected it above. My full plan and PDF stay private and are emailed only to me."}</span>
         </label>
 
         <details className={styles.privacy}>
           <summary>What is sent with this enquiry?</summary>
-          <p>Australian Energy Assessments keeps the full enquiry, including your first and last name, unit, street, suburb and state, for its records. Matching trades receive your email, postcode, selected services, message and any optional quote details or photos you deliberately added. Relevant facts from your private plan are included as a read-only summary only when you select that sharing control. Your first and last name, phone and full property address are included only when you choose to share them. Quote photos have location metadata removed, stay in private storage and are not attached to email. Your full plan, PDF, bills, energy usage, meter identifiers and account data are not shared with trades.</p>
+          <p>{aeaOnly ? "Australian Energy Assessments keeps your enquiry and any optional information you selected so our team can arrange your services. Other businesses do not receive the request or its photos. Your complete private plan PDF is emailed only to you." : "Australian Energy Assessments keeps the full enquiry, including your first and last name, unit, street, suburb and state, for its records. Matching trades receive your email, postcode, selected services, message and any optional quote details or photos you deliberately added. Relevant facts from your private plan are included as a read-only summary only when you select that sharing control. Your first and last name, phone and full property address are included only when you choose to share them. Quote photos have location metadata removed, stay in private storage and are not attached to email. Your full plan, PDF, bills, energy usage, meter identifiers and account data are not shared with trades."}</p>
         </details>
 
         <div className={styles.actions}>
@@ -1536,7 +1551,7 @@ export function PublicPlanEnquiryForm({
             {status.kind === "sending"
               ? "Sending..."
               : status.kind === "received"
-                ? "Retry trade matching"
+                ? (aeaOnly ? "Retry enquiry preparation" : "Retry trade matching")
                 : "Send my enquiry"}
           </button>
           {status.message && (
@@ -1636,7 +1651,7 @@ export function PublicPlanEnquiryForm({
               </div>
             ) : null}
             <p className={styles.uploadPrivacyNote}>
-              Photo retry never sends the enquiry again. Photos have location metadata removed, stay out of email and remain private to approved matched trades after sign-in.
+              {aeaOnly ? "Photo retry does not send the enquiry again. Photos are stored privately for Australian Energy Assessments and are not distributed to other businesses." : "Photo retry never sends the enquiry again. Photos have location metadata removed, stay out of email and remain private to approved matched trades after sign-in."}
             </p>
           </div>
         </dialog>

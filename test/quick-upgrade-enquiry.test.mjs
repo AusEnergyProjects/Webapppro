@@ -185,6 +185,7 @@ test("quick contact releases require address and reveal only customer-selected c
     requiredFields.filter((field) => field !== "customer_address"),
   ), false);
   const baseRow = {
+    opportunity_service_categories: JSON.stringify(["solar"]),
     public_contact_release_id: "contact-1",
     public_contact_status: "active",
     public_contact_source_reference: "AEA-20260903-1234",
@@ -207,6 +208,9 @@ test("quick contact releases require address and reveal only customer-selected c
     public_customer_message: "Please help me compare practical options.",
     state: "VIC",
   };
+  for (const scope of [undefined, "[]", "not-json", '["solar","assessment"]']) {
+    assert.equal(publicTradeContactForMatchedLead({ ...baseRow, opportunity_service_categories: scope }), null);
+  }
   const requiredOnly = publicTradeContactForMatchedLead(baseRow);
   assert.deepEqual({
     name: requiredOnly.name,
@@ -520,6 +524,7 @@ test("quick retries converge on one durable opportunity and reject a changed add
   assert.equal(stored.customer_email, "jamie@example.test");
   assert.equal(stored.customer_phone, "0400 000 000");
   const shared = publicTradeContactForMatchedLead({
+    opportunity_service_categories: database.prepare("SELECT service_categories FROM trade_opportunities WHERE id = ?").get(first.id).service_categories,
     source_reference: stored.source_reference, opportunity_postcode: "3000", state: "VIC",
     public_contact_release_id: stored.id, public_contact_source_reference: stored.source_reference,
     public_contact_status: stored.status, public_contact_withdrawn_at: stored.withdrawn_at,

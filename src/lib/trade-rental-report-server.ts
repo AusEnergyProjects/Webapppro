@@ -244,6 +244,7 @@ async function reportSource(access: TeamAccess, workOrderId: string) {
     .map((itemId) => [itemId, activeEvidence.filter((evidence) => String(evidence.item_id) === itemId).length]));
   const photoCounts = Object.fromEntries(activeItems.map((item) => [String(item.id), activeEvidence.filter((evidence) =>
     String(evidence.item_id) === String(item.id) && evidence.evidence_type === "photo" && String(evidence.content_type).startsWith("image/")).length]));
+  const pdfCounts = Object.fromEntries(activeItems.map((item) => [String(item.id), activeEvidence.filter((entry) => entry.item_id === item.id && entry.content_type === "application/pdf").length]));
   const presentedFindings = findingRows.results.filter((finding) => activeItemIds.has(String(finding.item_id))).map(findingPresentation);
   for (const assessmentModule of moduleRows.results) {
     const moduleItems = itemRows.results.filter((item) => item.module_id === assessmentModule.id);
@@ -259,7 +260,7 @@ async function reportSource(access: TeamAccess, workOrderId: string) {
       })),
       findings: presentedFindings.filter((finding) => finding.moduleId === assessmentModule.id),
       evidenceCounts,
-      photoCounts,
+      photoCounts, pdfCounts,
     });
     if (!completion.complete) throw new Error("RENTAL_MODULES_INCOMPLETE");
   }

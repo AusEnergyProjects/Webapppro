@@ -48,14 +48,14 @@ async function recordLeadIncident(eventType, title, summary, priority = "urgent"
   }).catch(() => null);
 }
 
-async function recordQuickUpgradeNoMatch(opportunityId) {
+async function recordQuickUpgradeNoMatch(opportunityId, { aeaOnly = false } = {}) {
   await createAdminNotification({
     eventKey: `quick-upgrade-no-match:${opportunityId}`,
     eventType: "customer.quick_upgrade_no_match",
     category: "customer",
     priority: "high",
-    title: "Quick upgrade request needs matching",
-    summary: "No approved TLink trade business matched this request. Review the saved opportunity and arrange follow-up.",
+    title: aeaOnly ? "New Australian Energy Assessments service enquiry" : "Quick upgrade request needs matching",
+    summary: aeaOnly ? "This enquiry contains an AEA-delivered assessment or safety service. Contact the customer directly from the protected enquiry record. Do not distribute it to other TLink businesses." : "No approved TLink trade business matched this request. Review the saved opportunity and arrange follow-up.",
     entityType: "trade_opportunity",
     entityId: opportunityId,
     actorType: "system",

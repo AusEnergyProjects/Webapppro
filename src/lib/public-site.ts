@@ -40,7 +40,7 @@ export const publicOrganizationSchema = {
       name: PUBLIC_SITE.name,
       legalName: PUBLIC_SITE.legalName,
       description:
-        "Independent home energy assessment, NatHERS, Home Energy Rating and residential energy guidance services.",
+        "Independent home energy assessments, NatHERS and Home Energy Rating services, Victorian rental safety checks and rental minimum standards assessments.",
       url: `${PUBLIC_SITE.apexUrl}/`,
       logo: {
         "@type": "ImageObject",

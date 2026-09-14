@@ -6,6 +6,7 @@ import { ResponsiveSiteNav } from "@/components/ResponsiveSiteNav";
 import { PublicSiteSearch } from "@/components/PublicSiteSearch";
 import { SurgeHeaderButton } from "@/components/SurgeHeaderButton";
 import { PUBLIC_SITE } from "@/lib/public-site";
+import { ServicesHeaderLink } from "./ServicesHeaderLink";
 
 export function BrandBar() {
   return (
@@ -19,7 +20,7 @@ export function BrandBar() {
   );
 }
 
-export type SiteActive = "start" | "plan" | "calculator" | "account" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-dashboard" | "direct-trade-verification" | "direct-trade-access" | "direct-trade-standards" | "assessments" | "electricity" | "gas" | "certificates" | "guides" | "rebates" | "case-studies" | "surge" | "wholesale";
+export type SiteActive = "services" | "start" | "plan" | "calculator" | "account" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-dashboard" | "direct-trade-verification" | "direct-trade-access" | "direct-trade-standards" | "assessments" | "electricity" | "gas" | "certificates" | "guides" | "rebates" | "case-studies" | "surge" | "wholesale";
 
 export function SiteNav({ active }: { active: SiteActive }) {
   return <ResponsiveSiteNav active={active} />;
@@ -33,6 +34,7 @@ export function SiteHeader({ active }: { active: SiteActive }) {
         <PublicSiteSearch />
         <SiteNav active={active} />
         <div className="site-header-actions">
+          <ServicesHeaderLink active={active === "services"} />
           <Link
             className="site-book-link"
             href="/book-an-assessment"

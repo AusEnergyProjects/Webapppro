@@ -1,3 +1,4 @@
+import * as aeaTradeRouting from "../src/lib/aea-trade-routing.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs";
@@ -14,8 +15,9 @@ function loadRoute(state) {
     constructor(sql) { this.sql = sql; }
     bind() { return this; }
     async first() {
+      if (this.sql.includes("SELECT o.service_categories")) return { service_categories: Object.hasOwn(state, "serviceCategories") ? state.serviceCategories : JSON.stringify(["solar"]) };
       if (this.sql.includes("SELECT m.status, m.opportunity_id")) return {
-        status: state.status, opportunity_id: "opportunity-1", title: "Heat-pump lead", source_reference: "public-plan:lead-1",
+        opportunity_service_categories: JSON.stringify(["solar"]), status: state.status, opportunity_id: "opportunity-1", title: "Heat-pump lead", source_reference: "public-plan:lead-1",
       };
       if (this.sql.includes("public_contact.id public_contact_release_id")) return {
         public_contact_release_id: "release-1", source_reference: "public-plan:lead-1",
@@ -40,6 +42,7 @@ function loadRoute(state) {
   };
   class TradeAccessError extends Error { constructor(code) { super(code); this.code = code; } }
   const mocks = {
+    "@/lib/aea-trade-routing.mjs": aeaTradeRouting,
     "../../../../db": { getD1: () => db },
     "@/lib/admin-server": { parseJsonList: () => [] },
     "@/lib/opportunity-server": { allocateNearestInstallers: async () => {}, expireStaleOpportunities: async () => {},
@@ -116,4 +119,14 @@ test("customer photo failures return an actionable retry without recording inter
   assert.equal(body.error,
     "One or more customer photos are temporarily unavailable. No interest was recorded. Try again.");
   assert.equal(state.status, "offered"); assert.equal(state.handoffCommits, 0);
+});
+
+
+test("reserved or malformed complete opportunity scopes never reach the interest workflow", async () => {
+  for (const serviceCategories of [null, "[]", "not-json", '["solar","assessment"]']) {
+    const state = { serviceCategories, status: "offered", workflowCalls: 0, handoffCommits: 0, notificationCalls: 0, syncCalls: 0 };
+    assert.equal((await interested(loadRoute(state))).status, 404);
+    assert.equal(state.workflowCalls, 0);
+    assert.equal(state.handoffCommits, 0);
+  }
 });

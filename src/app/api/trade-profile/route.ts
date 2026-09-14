@@ -22,7 +22,7 @@ import {
   TRADE_BRAND_BORDER_STYLES,
   TRADE_BRAND_THEME_KEYS,
 } from "@/lib/trade-business-branding";
-import { normalizeEnergyServiceIds } from "@/lib/energy-service-catalogue.mjs";
+import { normalizeTradeServiceIds } from "@/lib/energy-service-catalogue.mjs";
 
 export const runtime = "edge";
 
@@ -460,7 +460,7 @@ export async function PATCH(request: Request) {
   const storedCapabilities = parseStringList(account.capabilities);
   const capabilities = raw.capabilities === undefined
     ? storedCapabilities
-    : normalizeEnergyServiceIds(raw.capabilities);
+    : normalizeTradeServiceIds(raw.capabilities);
   if (!capabilities || (account.partner_type === "installer" && !capabilities.length)) {
     return json({
       ok: false,
@@ -748,7 +748,7 @@ export async function POST(request: Request) {
   const serviceStates = [...new Set(Array.isArray(raw.serviceStates)
     ? raw.serviceStates.map(canonicalAustralianState).filter((value): value is string => Boolean(value))
     : [])];
-  const capabilities = normalizeEnergyServiceIds(raw.capabilities) || [];
+  const capabilities = normalizeTradeServiceIds(raw.capabilities) || [];
   const summary = cleanText(raw.summary, 800);
   const consent = raw.consent === true;
   const db = getD1();

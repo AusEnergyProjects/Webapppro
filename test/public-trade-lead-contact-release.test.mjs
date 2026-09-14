@@ -1,3 +1,4 @@
+import { tradeOpportunityServiceScopeSql } from "../src/lib/aea-trade-routing.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -25,7 +26,8 @@ const LEGACY_V6_NOTICE = "2026-08-10-structured-service-address-sharing-v6";
 const LEGACY_V6_PURPOSE =
   "Share my email, postcode, services and message with all approved TLink trades in my area, plus name, phone or full service address, and email my private plan";
 
-const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
+const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8")
+  .replaceAll(/\$\{tradeOpportunityServiceScopeSql\("([^"]+)"\)\}/g, (_, alias) => tradeOpportunityServiceScopeSql(alias));
 const baseMigration = read("../drizzle/0126_public_trade_lead_contact_release.sql");
 const addressMigration = read("../drizzle/0127_public_trade_lead_customer_address.sql");
 const schema = read("../db/schema.ts");
@@ -410,6 +412,7 @@ test("public CRM lead storage stays pseudonymous while reads project only the cu
   database.exec(`CREATE TABLE trade_opportunities (
       id text PRIMARY KEY, source_reference text NOT NULL DEFAULT '', postcode text NOT NULL,
       state text NOT NULL, summary text NOT NULL, priority text NOT NULL,
+      service_categories text NOT NULL DEFAULT '["solar","battery"]',
       status text NOT NULL, expires_at text NOT NULL
     );
     CREATE TABLE trade_opportunity_matches (
@@ -551,6 +554,13 @@ test("public CRM lead storage stays pseudonymous while reads project only the cu
     suburb: "MELBOURNE",
     state: "VIC",
   });
+  database.prepare("UPDATE trade_opportunities SET service_categories = ?")
+    .run(JSON.stringify(["assessment", "solar"]));
+  assert.equal(readCurrentLead.get(), undefined, "a legacy mixed scope cannot expose a cached CRM lead");
+  assert.equal(sync.run("opportunity-1", "", "").changes, 0, "mixed enquiries cannot sync into trade CRM");
+  database.prepare("UPDATE trade_opportunities SET service_categories = ?")
+    .run(JSON.stringify(["solar", "battery"]));
+  assert.equal(projectPublicMarketplaceEnquiry(readCurrentLead.get()).email, "jamie@example.test");
   const oldReleaseProjection = projectPublicMarketplaceEnquiry({
     ...readCurrentLead.get(),
     public_contact_status: "withdrawn",

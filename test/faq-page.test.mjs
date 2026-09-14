@@ -45,7 +45,8 @@ test("FAQ states nationwide desktop delivery and honest on-site coverage", () =>
 });
 
 test("service schema carries current review, publisher and legacy search names", () => {
-  assert.match(serviceTemplate, /dateModified: reviewedIso/);
+  assert.match(serviceTemplate, /getAeaService, gstInclusiveCents, AEA_SERVICE_REVIEW_DATE/);
+  assert.match(serviceTemplate, /dateModified: pricedService \? AEA_SERVICE_REVIEW_DATE : reviewedIso/);
   assert.match(serviceTemplate, /publisher: \{ "@id": PUBLIC_SITE\.organizationId \}/);
   assert.match(serviceTemplate, /alternateName: alternateNames/);
 });

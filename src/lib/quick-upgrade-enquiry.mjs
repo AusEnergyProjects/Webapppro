@@ -9,9 +9,13 @@ export const LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE =
   "I agree Australian Energy Assessments may share this request and the contact details shown above with every approved TLink trade matching my services and area.";
 
 export const QUICK_UPGRADE_CONSENT_NOTICE_VERSION =
-  "2026-09-04-quick-upgrade-options-v2";
+  "2026-09-14-aea-services-and-upgrades-v3";
 
 export const QUICK_UPGRADE_CONSENT_PURPOSE =
+  "Australian Energy Assessments handles safety and assessment requests directly. Other requests and chosen contact details may be shared with matching trades.";
+
+export const PREVIOUS_QUICK_UPGRADE_CONSENT_NOTICE_VERSION = "2026-09-04-quick-upgrade-options-v2";
+export const PREVIOUS_QUICK_UPGRADE_CONSENT_PURPOSE =
   "I agree Australian Energy Assessments may keep my contact details and share this request, address and chosen contact details with matching TLink trades.";
 
 export const QUICK_UPGRADE_SUBMISSION_ID_PATTERN =

@@ -1,3 +1,4 @@
+import { aeaDeliveredServiceScopeSql, tradeOpportunityServiceScopeSql } from "../src/lib/aea-trade-routing.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -44,7 +45,9 @@ import {
 
 const SERVICES = [...ENERGY_SERVICE_IDS];
 
-const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
+const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8")
+  .replaceAll(/\$\{tradeOpportunityServiceScopeSql\("([^"]+)"\)\}/g, (_, alias) => tradeOpportunityServiceScopeSql(alias))
+  .replaceAll(/\$\{aeaDeliveredServiceScopeSql\("([^"]+)"\)\}/g, (_, alias) => aeaDeliveredServiceScopeSql(alias));
 
 function tradePhotoAccessSql() {
   const route = read("../src/app/api/public-plan-quote-preparation/route.ts");
@@ -705,7 +708,8 @@ test("the public form progressively renders mobile capture, explicit sharing con
   assert.match(form, /Useful wide photos/);
   assert.match(form, /<details className=\{styles\.quotePhotos\}>/);
   assert.doesNotMatch(form, /<details className=\{styles\.quotePhotos\} open>/);
-  assert.match(form, /Optional\. Open this section if photos would help a trade understand the site/);
+  assert.match(form, /Optional\. Add photos that help explain the property and your request/);
+  assert.match(form, /aeaOnly \? "Help Australian Energy Assessments prepare for your service" : "Help trades prepare a desktop quote"/);
   assert.match(form, /Close-up labels are secondary/);
   assert.match(form, /accept="image\/jpeg,image\/png"/);
   assert.doesNotMatch(form, /image\/webp|WebP/);
@@ -827,6 +831,85 @@ test("the private upload boundary rate-limits before multipart parsing and valid
   assert.doesNotMatch(route, /image\/webp|WebP/);
 });
 
+test("customer photo intake and atomic activation allow only well-formed AEA drafts with current consent", (t) => {
+  const database = new DatabaseSync(":memory:");
+  t.after(() => database.close());
+  database.exec(`CREATE TABLE trade_opportunities (
+      id text PRIMARY KEY, source_reference text, status text, service_categories text
+    );
+    CREATE TABLE public_trade_lead_quote_preparations (
+      id text PRIMARY KEY, opportunity_id text, source_reference text, upload_key_hash text,
+      status text, notice_version text, consent_purpose text, granted_at text, withdrawn_at text
+    );
+    CREATE TABLE public_trade_lead_contact_releases (
+      opportunity_id text, source_reference text, status text, notice_version text,
+      consent_purpose text, granted_at text, withdrawn_at text
+    );
+    CREATE TABLE public_trade_lead_quote_photos (id text PRIMARY KEY, status text);
+    INSERT INTO trade_opportunities VALUES ('opportunity-1', 'AEA-TEST', 'draft', '["assessment"]');
+    INSERT INTO public_trade_lead_quote_photos VALUES ('photo-1', 'pending');`);
+  database.prepare("INSERT INTO public_trade_lead_quote_preparations VALUES (?, ?, ?, ?, 'active', ?, ?, ?, '')")
+    .run("preparation-1", "opportunity-1", "AEA-TEST", "private-key-hash",
+      PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION, PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE, "2026-09-14T00:00:00.000Z");
+  database.prepare("INSERT INTO public_trade_lead_contact_releases VALUES (?, ?, 'active', ?, ?, ?, '')")
+    .run("opportunity-1", "AEA-TEST", PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+      PUBLIC_PLAN_CONSENT_PURPOSE, "2026-09-14T00:00:00.000Z");
+  const route = read("../src/app/api/public-plan-quote-preparation/route.ts");
+  const activeSource = route.slice(route.indexOf("async function activePreparation("), route.indexOf("async function preparationForWithdrawal("));
+  const activeSql = activeSource.match(/getD1\(\)\.prepare\(`([\s\S]*?)`\)/)?.[1];
+  const accessSql = route.match(/const CURRENT_QUOTE_ACCESS_EXISTS_SQL = `([\s\S]*?)`;/)?.[1];
+  assert.ok(activeSql, "the customer intake query must be executable");
+  assert.ok(accessSql, "the same atomic activation guard used by the upload route must be executable");
+  const intakeQuery = database.prepare(activeSql);
+  const activation = database.prepare(`UPDATE public_trade_lead_quote_photos SET status = 'active'
+    WHERE id = 'photo-1' AND status = 'pending' AND ${accessSql}`);
+  const intakeBindings = [PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE,
+    "AEA-TEST", PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION, PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE];
+  const accessBindings = [PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE,
+    "preparation-1", "opportunity-1", "AEA-TEST", "private-key-hash",
+    PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION, PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE];
+  const check = (allowed, label) => {
+    assert.equal(Boolean(intakeQuery.get(...intakeBindings)), allowed, `intake: ${label}`);
+    database.exec("UPDATE public_trade_lead_quote_photos SET status = 'pending'");
+    assert.equal(Number(activation.run(...accessBindings).changes), allowed ? 1 : 0, `activation: ${label}`);
+  };
+  for (const [status, services, allowed] of [
+    ["draft", '["assessment"]', true], ["draft", '["solar","smoke-alarm-blind-safety"]', true],
+    ["open", '["solar"]', true], ["paused", '["solar"]', true],
+    ["draft", '["solar"]', false], ["draft", '["assessment",null]', false],
+    ["draft", '["assessment",""]', false], ["draft", '{}', false],
+    ["draft", '[]', false], ["draft", 'broken', false],
+    ["closed", '["assessment"]', false], ["withdrawn", '["assessment"]', false],
+  ]) {
+    database.prepare("UPDATE trade_opportunities SET status = ?, service_categories = ?").run(status, services);
+    check(allowed, `${status}: ${services}`);
+    assert.equal(database.prepare("SELECT status FROM trade_opportunities").get().status, status);
+  }
+  database.exec("UPDATE trade_opportunities SET status = 'draft', service_categories = '[\"assessment\"]'");
+  for (const [table, column, deniedValue] of [
+    ["public_trade_lead_contact_releases", "status", "withdrawn"],
+    ["public_trade_lead_contact_releases", "withdrawn_at", "2026-09-14T00:01:00.000Z"],
+    ["public_trade_lead_contact_releases", "notice_version", "wrong-policy"],
+    ["public_trade_lead_contact_releases", "consent_purpose", "wrong-purpose"],
+    ["public_trade_lead_contact_releases", "granted_at", "not-a-date"],
+    ["public_trade_lead_contact_releases", "source_reference", "different-enquiry"],
+    ["public_trade_lead_quote_preparations", "status", "withdrawn"],
+    ["public_trade_lead_quote_preparations", "withdrawn_at", "2026-09-14T00:01:00.000Z"],
+    ["public_trade_lead_quote_preparations", "notice_version", "wrong-policy"],
+    ["public_trade_lead_quote_preparations", "consent_purpose", "wrong-purpose"],
+    ["public_trade_lead_quote_preparations", "granted_at", "not-a-date"],
+    ["public_trade_lead_quote_preparations", "source_reference", "different-enquiry"],
+  ]) {
+    const previous = database.prepare(`SELECT ${column} value FROM ${table}`).get().value;
+    database.prepare(`UPDATE ${table} SET ${column} = ?`).run(deniedValue);
+    check(false, `${table}.${column}`);
+    database.prepare(`UPDATE ${table} SET ${column} = ?`).run(previous);
+    check(true, `${table}.${column} restored`);
+  }
+  database.exec("UPDATE public_trade_lead_quote_photos SET status = 'pending'");
+  assert.equal(Number(activation.run(...accessBindings.map((value, index) => index === 5 ? "wrong-key" : value)).changes), 0);
+});
+
 test("matched trade photo reads fail closed after preparation withdrawal or lead lifecycle expiry", () => {
   const database = new DatabaseSync(":memory:");
   database.exec(`CREATE TABLE public_trade_lead_quote_photos (
@@ -840,7 +923,7 @@ test("matched trade photo reads fail closed after preparation withdrawal or lead
     );
     CREATE TABLE trade_opportunities (
       id text PRIMARY KEY, source_reference text NOT NULL, status text NOT NULL,
-      expires_at text NOT NULL
+      expires_at text NOT NULL, service_categories text NOT NULL
     );
     CREATE TABLE trade_opportunity_matches (
       id text PRIMARY KEY, opportunity_id text NOT NULL, firebase_uid text NOT NULL,
@@ -855,7 +938,7 @@ test("matched trade photo reads fail closed after preparation withdrawal or lead
       granted_at text NOT NULL, withdrawn_at text NOT NULL, updated_at text NOT NULL
     );
     INSERT INTO trade_opportunities VALUES
-      ('opportunity-1', 'AEA-TEST', 'open', '2099-08-12T00:00:00.000Z');
+      ('opportunity-1', 'AEA-TEST', 'open', '2099-08-12T00:00:00.000Z', '["hot-water"]');
     INSERT INTO trade_opportunity_matches VALUES
       ('match-1', 'opportunity-1', 'trade-a', 'interested', '["hot-water"]');
     INSERT INTO trade_accounts VALUES ('trade-a', 'installer', 'approved');
@@ -879,6 +962,11 @@ test("matched trade photo reads fail closed after preparation withdrawal or lead
     PUBLIC_PLAN_CONSENT_PURPOSE,
     "39c16039-4acd-4664-a2e5-3d8ad0dd7dd6",
   ];
+  assert.equal(query.get(...bindings)?.match_id, "match-1");
+  database.prepare("UPDATE trade_opportunities SET service_categories = ?")
+    .run('["assessment","hot-water"]');
+  assert.equal(query.get(...bindings), undefined, "an original AEA scope blocks a matching upgrade photo subset");
+  database.prepare("UPDATE trade_opportunities SET service_categories = ?").run('["hot-water"]');
   assert.equal(query.get(...bindings)?.match_id, "match-1");
   database.exec(`INSERT INTO public_trade_lead_contact_releases VALUES
     ('release-2', 'opportunity-1', 'AEA-TEST', 'withdrawn',

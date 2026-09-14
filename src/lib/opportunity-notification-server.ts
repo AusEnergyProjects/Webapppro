@@ -1,3 +1,4 @@
+import { tradeOpportunityServiceScopeAllowed, tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
 import { getD1 } from "../../db";
 import {
   opportunityNotificationDraft,
@@ -84,6 +85,7 @@ async function deliveryContext(deliveryId: string) {
       delivery.subject, delivery.body,
       assignment.firebase_uid, assignment.status match_status, assignment.matched_categories,
       opportunity.suburb opportunity_suburb, opportunity.postcode opportunity_postcode,
+      opportunity.service_categories opportunity_service_categories,
       opportunity.state, opportunity.timing, opportunity.expires_at,
       opportunity.created_at opportunity_created_at, opportunity.status opportunity_status,
       CASE
@@ -163,6 +165,9 @@ async function deliveryContext(deliveryId: string) {
 }
 
 function ineligibility(context: DeliveryRow) {
+  if (!tradeOpportunityServiceScopeAllowed(context.opportunity_service_categories)) {
+    return "This service enquiry is reserved for Australian Energy Assessments.";
+  }
   if (Number(context.installer_access_approved || 0) !== 1) {
     return "The installer no longer has active verified access.";
   }
@@ -261,6 +266,7 @@ async function recoverLegacyPublicOptionalEmailSkips(now: string) {
         WHERE recovery_match.id = trade_opportunity_notification_deliveries.match_id
           AND recovery_match.status IN ('offered', 'viewed', 'interested', 'connected')
           AND recovery_opportunity.status = 'open'
+          AND ${tradeOpportunityServiceScopeSql("recovery_opportunity")}
           AND (
             (recovery_opportunity.expires_at <> '' AND recovery_opportunity.expires_at > ?)
             OR (
@@ -302,9 +308,11 @@ export async function ensureOpportunityNotificationDeliveries(
   const coverage = await db.prepare(`SELECT COUNT(*) active_match_count,
       COUNT(delivery.id) delivery_count
     FROM trade_opportunity_matches assignment
+    JOIN trade_opportunities opportunity ON opportunity.id = assignment.opportunity_id
     LEFT JOIN trade_opportunity_notification_deliveries delivery
       ON delivery.match_id = assignment.id
     WHERE assignment.opportunity_id = ?
+      AND ${tradeOpportunityServiceScopeSql("opportunity")}
       AND assignment.status IN ('offered', 'viewed', 'interested', 'connected')`)
     .bind(exactOpportunityId)
     .first<{ active_match_count: number; delivery_count: number }>();
@@ -331,7 +339,9 @@ export async function prepareOpportunityNotificationDeliveriesForManualRetry(
         'An owner or administrator requested an immediate retry.', ?, ?
       FROM trade_opportunity_notification_deliveries delivery
       JOIN trade_opportunity_matches assignment ON assignment.id = delivery.match_id
+      JOIN trade_opportunities opportunity ON opportunity.id = assignment.opportunity_id
       WHERE assignment.opportunity_id = ?
+        AND ${tradeOpportunityServiceScopeSql("opportunity")}
         AND delivery.status IN (${OPPORTUNITY_NOTIFICATION_MANUAL_RETRY_STATUS_SQL})`)
       .bind(now, now, now, exactOpportunityId),
     db.prepare(`UPDATE trade_opportunity_notification_deliveries
@@ -339,7 +349,9 @@ export async function prepareOpportunityNotificationDeliveriesForManualRetry(
       WHERE status IN (${OPPORTUNITY_NOTIFICATION_MANUAL_RETRY_STATUS_SQL})
         AND EXISTS (
           SELECT 1 FROM trade_opportunity_matches assignment
+          JOIN trade_opportunities opportunity ON opportunity.id = assignment.opportunity_id
           WHERE assignment.id = trade_opportunity_notification_deliveries.match_id
+            AND ${tradeOpportunityServiceScopeSql("opportunity")}
             AND assignment.opportunity_id = ?
         )`)
       .bind(now, exactOpportunityId),
@@ -461,6 +473,7 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
         WHERE current_match.id = trade_opportunity_notification_deliveries.match_id
           AND current_match.status IN ('offered', 'viewed', 'interested', 'connected')
           AND current_opportunity.status = 'open'
+          AND ${tradeOpportunityServiceScopeSql("current_opportunity")}
           AND (
             (current_opportunity.expires_at <> '' AND current_opportunity.expires_at > ?)
             OR (

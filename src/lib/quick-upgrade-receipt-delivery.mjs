@@ -1,4 +1,5 @@
 import { normalizeEnergyServiceIds } from "./energy-service-catalogue.mjs";
+import { aeaDeliveredServiceScopeSql } from "./aea-trade-routing.mjs";
 import { QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE } from "./quick-upgrade-enquiry.mjs";
 import { QUICK_UPGRADE_RECEIPT_KIND, QUICK_UPGRADE_RECEIPT_PREFIX, quickUpgradeReceiptDraft } from "./quick-upgrade-receipt.mjs";
 import { publicPlanDeliveryRetryAt } from "./public-plan-delivery-retry.ts";
@@ -33,7 +34,9 @@ async function currentContact(db, opportunityId, reference) {
     JOIN public_trade_lead_contact_releases contact ON contact.opportunity_id = opportunity.id
       AND contact.source_reference = opportunity.source_reference
     WHERE opportunity.id = ? AND opportunity.source_reference = ? AND opportunity.created_by_uid = 'lead-intake'
-      AND opportunity.status = 'open' AND contact.status = 'active'
+      AND (opportunity.status = 'open'
+        OR (opportunity.status = 'draft' AND ${aeaDeliveredServiceScopeSql("opportunity")}))
+      AND contact.status = 'active'
       AND contact.notice_version = ? AND contact.consent_purpose = ?
       AND datetime(contact.granted_at) IS NOT NULL AND contact.withdrawn_at = '' LIMIT 1`)
     .bind(opportunityId, reference, QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE).first();

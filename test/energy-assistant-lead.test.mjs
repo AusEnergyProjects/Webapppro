@@ -29,6 +29,9 @@ const serviceCategoryExpansionMigration = fs.readFileSync(
 const tradeServiceExpansionMigration = fs.readFileSync(
   new URL("../drizzle/0174_expand_trade_service_enquiries.sql", import.meta.url), "utf8",
 );
+const aeaServiceExpansionMigration = fs.readFileSync(
+  new URL("../drizzle/0175_expand_aea_service_enquiries.sql", import.meta.url), "utf8",
+);
 const NOW = new Date("2026-08-20T02:00:00.000Z");
 const leadId = "22222222-2222-4222-8222-222222222222";
 const createdEventId = "33333333-3333-4333-8333-333333333333";
@@ -55,9 +58,11 @@ function fixture() {
   database.exec(migration);
   database.exec(serviceCategoryExpansionMigration);
   database.exec(tradeServiceExpansionMigration);
+  database.exec(aeaServiceExpansionMigration);
   database.exec(`CREATE TABLE trade_opportunities (
     id text PRIMARY KEY NOT NULL,
     source_reference text NOT NULL UNIQUE,
+    service_categories text NOT NULL DEFAULT '["hot-water"]',
     status text NOT NULL,
     updated_at text NOT NULL
   );
@@ -247,6 +252,32 @@ function shareablePayload(overrides = {}) {
     ...overrides,
   });
 }
+
+test("reserved and mixed assistant requests stay with AEA on creation and replay", async (t) => {
+  for (const services of [["assessment"], ["assessment", "hot-water"], ["minimum-rental-standards", "solar"]]) {
+    const { database, d1 } = fixture();
+    t.after(() => database.close());
+    const input = shareablePayload({ services, quoteBrief: {
+      ...shareablePayload().quoteBrief,
+      answers: quoteAnswersForServices(services),
+      knownFacts: [], siteConstraints: [], explicitUnknowns: [],
+    } });
+    let createCalls = 0;
+    const createOpportunity = async () => { createCalls += 1; throw new Error("Reserved enquiry reached matching"); };
+    const created = await createEnergyAssistantLead(input, dependencies(d1, { createOpportunity }));
+    const replay = await createEnergyAssistantLead(input, dependencies(d1, { createOpportunity }));
+    for (const result of [created, replay]) {
+      assert.equal(result.tradeSharing, "aea_delivery");
+      assert.equal(result.dispatchJobId, "");
+      assert.equal(result.opportunityId, "");
+      assert.notEqual(result.status, "shared_with_trades");
+    }
+    assert.equal(createCalls, 0);
+    assert.equal(database.prepare("SELECT COUNT(*) total FROM energy_assistant_leads").get().total, 1);
+    assert.equal(database.prepare("SELECT COUNT(*) total FROM customer_opportunity_dispatch_jobs").get().total, 0);
+    assert.equal(database.prepare("SELECT COUNT(*) total FROM energy_assistant_lead_events WHERE action = 'trade_opportunity_created'").get().total, 0);
+  }
+});
 
 test("quote preparation exposes bounded service-specific triage questions with an explicit unknown option", () => {
   const requiredByService = {
@@ -547,7 +578,7 @@ test("a fully unknown all-service brief stays AEA-only even after every question
     status: "needs_information",
     opportunityId: "",
     dispatchJobId: "",
-    tradeSharing: "pending_information",
+    tradeSharing: "aea_delivery",
   });
   const row = database.prepare("SELECT quote_brief_json, opportunity_id FROM energy_assistant_leads").get();
   const brief = JSON.parse(row.quote_brief_json);
@@ -565,7 +596,7 @@ test("a fully unknown all-service brief stays AEA-only even after every question
   );
 });
 
-test("the bounded all-service brief remains storable and shareable with a known-information floor plus site-dependent unknowns", async (t) => {
+test("the bounded all-service brief preserves known upgrade facts and identifies new AEA services needing triage", async (t) => {
   const { database, d1 } = fixture();
   t.after(() => database.close());
   const services = [...ENERGY_SERVICE_IDS];
@@ -608,18 +639,22 @@ test("the bounded all-service brief remains storable and shareable with a known-
     },
   });
   const result = await createEnergyAssistantLead(allServicePayload, dependencies(d1, {
-    createOpportunity: async () => ({
-      id: stageAssistantOpportunity(database, "opportunity-all-services"),
-      allocation: { allocated: [] },
-    }),
+    createOpportunity: async () => { throw new Error("Mixed AEA services must not reach trade dispatch"); },
   }));
-  assert.equal(result.status, "shared_with_trades");
+  assert.equal(result.status, "needs_information");
+  assert.equal(result.tradeSharing, "aea_delivery");
+  assert.equal(result.opportunityId, "");
+  assert.equal(result.dispatchJobId, "");
   const row = database.prepare("SELECT quote_brief_json, trade_disclosed_snapshot_json FROM energy_assistant_leads").get();
   const brief = JSON.parse(row.quote_brief_json);
   assert.equal(brief.readiness.requiredQuestionIds.length, questions.length);
   assert.equal(brief.readiness.missingQuestionIds.length, 0);
   assert.ok(brief.readiness.capturedUnknownQuestionIds.length >= 12);
-  assert.deepEqual(brief.readiness.insufficientKnownServiceIds, []);
+  assert.deepEqual(brief.readiness.insufficientKnownServiceIds, [
+    "smoke-alarm-blind-safety", "gas-safety-check", "electrical-safety-check",
+    "minimum-rental-standards", "nathers-new", "nathers-existing", "onsite-energy-assessment",
+    "rental-electrical-bundle", "rental-gas-electrical-bundle",
+  ]);
   assert.ok(row.quote_brief_json.length <= 32_768);
   assert.ok(row.trade_disclosed_snapshot_json.length <= 40_000);
 });

@@ -627,10 +627,11 @@ async function upload(request: Request, access: TeamAccess) {
       WHERE work_order_id = ? AND firebase_uid = ? LIMIT 1`)
       .bind(workOrderId, access.ownerUid).first()));
   if (form.has("clientUploadId") && (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(clientUploadId)
-    || !rentalPhoto || !file.type.startsWith("image/"))) {
-    return adminJson({ ok: false, code: "UPLOAD_IDENTITY_INVALID", error: "Use a valid photo upload ID for a rental assessment image." }, 400);
+    || !rentalPhoto || (!file.type.startsWith("image/") && file.type !== "application/pdf"))) {
+    return adminJson({ ok: false, code: "UPLOAD_IDENTITY_INVALID", error: "Use a valid upload ID for a rental assessment photo or PDF." }, 400);
   }
   const fileBytes = new Uint8Array(await file.arrayBuffer());
+  if (rentalPhoto && file.type === "application/pdf" && new TextDecoder().decode(fileBytes.slice(0, 5)) !== "%PDF-") return adminJson({ ok: false, error: "Choose a valid professional PDF document." }, 400);
   const originalSha256 = await sha256(fileBytes);
   const id = clientUploadId ? await rentalUploadIdentity(access.ownerUid, workOrderId, clientUploadId) : crypto.randomUUID();
   const uploadIdentity = { sha256: originalSha256, category, contentType: file.type, sizeBytes: file.size,

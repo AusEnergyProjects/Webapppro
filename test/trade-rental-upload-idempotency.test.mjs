@@ -192,12 +192,30 @@ test('identities are isolated by owner and job and replay still requires live as
   assert.deepEqual(f.counts(), [3, 3, 3]);
 });
 
-test('invalid client IDs and non-rental or non-image identity requests fail before storage', async (t) => {
+test('invalid client IDs and non-rental identity requests fail before storage', async (t) => {
   const f = fixture(t);
-  for (const options of [{ id: '' }, { id: 'not-a-uuid' }, { job: 'electrical' }, { type: 'application/pdf' }]) {
+  for (const options of [{ id: '' }, { id: 'not-a-uuid' }, { job: 'electrical' }]) {
     const response = await f.upload(options); assert.equal(response.status, 400);
     assert.equal((await response.json()).code, 'UPLOAD_IDENTITY_INVALID');
   }
+  assert.deepEqual(f.counts(), [0, 0, 0]);
+});
+
+test('professional PDF retry returns the same owned document without camera metadata', async (t) => {
+  const f = fixture(t);
+  const options = { bytes: new TextEncoder().encode('%PDF-1.7\nTest authenticated record\n%%EOF'), type: 'application/pdf', name: 'record.pdf', category: 'document',
+    envelope: { schemaVersion: 1, kind: 'tlink-rental-inspection-document', source: 'native_file_upload', location: { state: 'not_required' } } };
+  const first = await f.upload(options); assert.equal(first.status, 201);
+  const created = await first.json();
+  const retry = await f.upload(options); assert.equal(retry.status, 200);
+  assert.deepEqual(await retry.json(), created);
+  assert.deepEqual(f.counts(), [1, 1, 1]);
+  assert.equal(f.sql.prepare('SELECT content_type FROM trade_crm_job_media').get().content_type, 'application/pdf');
+  assert.equal((await f.upload({ ...options, bytes: new TextEncoder().encode('%PDF-1.7\nChanged\n%%EOF') })).status, 409);
+});
+test('a renamed image does not become a professional PDF', async (t) => {
+  const f = fixture(t);
+  assert.equal((await f.upload({ type: 'application/pdf', name: 'pretend.pdf', category: 'document' })).status, 400);
   assert.deepEqual(f.counts(), [0, 0, 0]);
 });
 

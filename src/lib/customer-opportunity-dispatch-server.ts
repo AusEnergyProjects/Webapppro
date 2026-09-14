@@ -1,3 +1,4 @@
+import { tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
 import { getD1 } from "../../db";
 import { dispatchAdminNotificationDeliveries } from "@/lib/admin-notification-delivery";
 import { drainOpportunityNotificationDeliveries } from "@/lib/opportunity-notification-server";
@@ -50,7 +51,9 @@ async function outstandingNotificationCounts(row: DispatchJobRow) {
       WHERE delivery.status IN ('pending', 'failed', 'waiting_for_channel', 'sending')
         AND EXISTS (
           SELECT 1 FROM trade_opportunity_matches assignment
+          JOIN trade_opportunities opportunity ON opportunity.id = assignment.opportunity_id
           WHERE assignment.id = delivery.match_id
+            AND ${tradeOpportunityServiceScopeSql("opportunity")}
             AND assignment.opportunity_id = ?
         )`)
       .bind(row.opportunity_id)

@@ -1,3 +1,5 @@
+import { requiresAeaDelivery } from "./aea-service-identity.mjs";
+
 function uniqueStrings(value) {
   return Array.isArray(value)
     ? [...new Set(value.filter((item) => typeof item === "string" && item))]
@@ -5,6 +7,7 @@ function uniqueStrings(value) {
 }
 
 export function matchedServiceCategories(categories, capabilities) {
+  if (requiresAeaDelivery(categories)) return [];
   const capabilitySet = new Set(uniqueStrings(capabilities));
   return uniqueStrings(categories).filter((category) => capabilitySet.has(category));
 }

@@ -32,6 +32,7 @@ type AssessmentCheck = {
   required: boolean;
   requiredEvidenceCount: number;
   responseType: string;
+  requiredPdfCount?: number;
   repeatBy: string;
   photoGuidance: string;
   help: string;
@@ -689,10 +690,10 @@ function AssessmentItemCard({
       {evidence.length > 0 && <ul>{evidence.map((entry) => <li key={entry.id}><div><strong>{entry.fileName}</strong><small>{entry.caption || entry.purpose} | {bytesLabel(entry.sizeBytes)}</small>{entry.capture && <small>{entry.capture.source === "in_app_camera" ? "Captured" : "Added"} {dateLabel(entry.capture.capturedAtUtc)}{entry.capture.locationCaptured && entry.capture.latitude !== null && entry.capture.longitude !== null && entry.capture.accuracyMetres !== null ? ` | device-reported GPS ${entry.capture.latitude.toFixed(6)}, ${entry.capture.longitude.toFixed(6)} | accuracy ${Math.round(entry.capture.accuracyMetres)} m` : ""}</small>}</div>{!readOnly && <button type="button" disabled={busy === `unlink:${entry.id}`} onClick={() => void onUnlink(item, entry.id)}>{busy === `unlink:${entry.id}` ? "Removing..." : "Remove link"}</button>}</li>)}</ul>}
       {!item.id ? <p className={styles.saveFirst}>{evidenceRequirement.minimumFiles === 0 ? "Save this answer. You can add a photo later if it helps explain the observation." : "Save the answer first, then attach the required photo or document."}</p>
         : !readOnly && <form className={styles.uploadForm} onSubmit={upload}>
-          <label><span>Photo or PDF</span><input name="file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" required /></label>
+          <label><span>{check.requiredPdfCount ? "Professional report PDF" : "Photo or PDF"}</span><input name="file" type="file" accept={check.requiredPdfCount ? "application/pdf" : "image/jpeg,image/png,image/webp,application/pdf"} capture={check.requiredPdfCount ? undefined : "environment"} required /></label>
           <p>A fresh device-reported GPS position within 100 metres is required for every assessment photo. TLink records the time, coordinates and accuracy in the issued report. PDFs record the time they were added.</p>
           <label><span>What this evidence shows</span><input name="purpose" defaultValue={check.prompt} maxLength={300} /></label>
-          <button type="submit" disabled={uploadBusy}>{uploadBusy ? "Uploading..." : "Take photo or add file"}</button>
+          <button type="submit" disabled={uploadBusy}>{uploadBusy ? "Uploading..." : check.requiredPdfCount ? "Attach professional PDF" : "Take photo or add file"}</button>
         </form>}
     </section>
   </article>;

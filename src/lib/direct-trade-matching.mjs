@@ -1,6 +1,7 @@
 import { assessParticipantRecord } from "./direct-trade-participants.mjs";
 import { canonicalAustralianState } from "./australian-postcodes.mjs";
 import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
+import { requiresAeaDelivery } from "./aea-service-identity.mjs";
 
 const CATEGORY_REQUIREMENTS = Object.fromEntries(
   ENERGY_SERVICE_IDS.map((service) => [service, [service]]),
@@ -218,6 +219,7 @@ export function selectEveryQualifiedTradeRecipient(candidates) {
 }
 
 function participantRejection(project, participant, options) {
+  if (requiresAeaDelivery(project?.projectCategories)) return "aea_delivered_service";
   const assessment = assessParticipantRecord(participant, options);
   if (!assessment.matchingEligible) return assessment.matchingFlags[0];
   if (

@@ -1,3 +1,4 @@
+import { tradeOpportunityServiceScopeAllowed, tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
 import { getD1 } from "../../../../db";
 import { parseJsonList } from "@/lib/admin-server";
 import {
@@ -261,6 +262,7 @@ export async function GET(request: Request) {
       WHERE bounded_match.firebase_uid = ?
         AND (? = '' OR bounded_match.id = ?)
         AND bounded_opportunity.status IN ('open', 'paused')
+        AND ${tradeOpportunityServiceScopeSql("bounded_opportunity")}
         AND bounded_match.status IN ('offered', 'viewed', 'interested', 'connected')
         AND (
           bounded_project.id IS NULL OR EXISTS (
@@ -271,8 +273,8 @@ export async function GET(request: Request) {
               AND bounded_matching_consent.withdrawn_at = ''
           )
         )
-      ORDER BY CASE bounded_match.status WHEN 'offered' THEN 0 WHEN 'viewed' THEN 1
-        WHEN 'interested' THEN 2 WHEN 'connected' THEN 3 ELSE 4 END,
+      ORDER BY (bounded_match.status = 'offered') DESC, (bounded_match.status = 'viewed') DESC,
+        (bounded_match.status = 'interested') DESC,
         bounded_match.updated_at DESC, bounded_match.id ASC
       LIMIT 100
     )`;
@@ -292,6 +294,7 @@ export async function GET(request: Request) {
       AND o.source_reference = 'customer-project:' || p.id
     WHERE m.firebase_uid = ? AND (? = '' OR m.id = ?)
       AND o.status IN ('open', 'paused')
+      AND ${tradeOpportunityServiceScopeSql("o")}
       AND m.status IN ('offered', 'viewed', 'interested', 'connected')
       AND (
         p.id IS NULL OR EXISTS (
@@ -302,8 +305,8 @@ export async function GET(request: Request) {
             AND matching_consent.withdrawn_at = ''
         )
       )
-    ORDER BY CASE m.status WHEN 'offered' THEN 0 WHEN 'viewed' THEN 1
-      WHEN 'interested' THEN 2 WHEN 'connected' THEN 3 ELSE 4 END,
+    ORDER BY (m.status = 'offered') DESC, (m.status = 'viewed') DESC,
+      (m.status = 'interested') DESC,
       m.updated_at DESC, m.id ASC
     LIMIT 100`).bind(user.uid, requestedMatchId, requestedMatchId);
   const projectContextStatement = db.prepare(`SELECT
@@ -324,6 +327,7 @@ export async function GET(request: Request) {
     JOIN trade_opportunities o ON o.id = p.opportunity_id
       AND o.source_reference = 'customer-project:' || p.id
     WHERE o.status IN ('open', 'paused')
+    AND ${tradeOpportunityServiceScopeSql("o")}
       AND m.status IN ('offered', 'viewed', 'interested', 'connected')
       AND EXISTS (
         SELECT 1 FROM customer_consent_receipts matching_consent
@@ -429,6 +433,7 @@ export async function GET(request: Request) {
     SELECT
       authorized_match.match_id opportunity_match_id, o.source_reference,
       o.postcode opportunity_postcode, o.state,
+      o.service_categories opportunity_service_categories,
       public_contact.id public_contact_release_id,
       public_contact.status public_contact_status,
       public_contact.source_reference public_contact_source_reference,
@@ -776,6 +781,14 @@ export async function PATCH(request: Request) {
     );
   await expireStaleOpportunities();
   const now = new Date().toISOString();
+  const serviceScope = await db.prepare(`SELECT o.service_categories
+    FROM trade_opportunity_matches m
+    JOIN trade_opportunities o ON o.id = m.opportunity_id
+    WHERE m.id = ? AND m.firebase_uid = ? LIMIT 1`)
+    .bind(matchId, user.uid).first<{ service_categories: string }>();
+  if (!serviceScope || !tradeOpportunityServiceScopeAllowed(serviceScope.service_categories)) {
+    return json({ ok: false, error: "The opportunity could not be updated." }, 404);
+  }
   if (action === "record_contact") {
     return json({ ok: false, error: "Contact attempts cannot be self-recorded. Customer details appear only after that customer releases them to this exact match." }, 409);
   }
@@ -969,6 +982,7 @@ export async function PATCH(request: Request) {
               AND guarded_match.opportunity_id = ?
               AND guarded_match.status IN ('interested', 'connected')
               AND guarded_opportunity.status = 'open'
+              AND ${tradeOpportunityServiceScopeSql("guarded_opportunity")}
               AND guarded_opportunity.expires_at > ?
               AND EXISTS (
                 SELECT 1 FROM customer_consent_receipts guarded_consent
@@ -1129,6 +1143,7 @@ export async function PATCH(request: Request) {
         (? = 'open_public_quote' AND o.status IN ('open', 'paused'))
         OR (? != 'open_public_quote' AND o.status = 'open')
       )
+      AND ${tradeOpportunityServiceScopeSql("o")}
       AND o.expires_at > ?`)
     .bind(matchId, user.uid, action, action, now).first<Record<string, unknown>>();
   if (!current) return json({ ok: false, error: "The opportunity could not be updated." }, 404);
@@ -1152,7 +1167,8 @@ export async function PATCH(request: Request) {
       public_contact.consent_purpose public_contact_consent_purpose,
       public_contact.granted_at public_contact_granted_at,
       public_contact.updated_at public_contact_updated_at,
-      o.source_reference, o.postcode opportunity_postcode, o.state
+      o.source_reference, o.postcode opportunity_postcode, o.state,
+      o.service_categories opportunity_service_categories
     FROM trade_opportunity_matches m
     JOIN trade_opportunities o ON o.id = m.opportunity_id
     JOIN public_trade_lead_contact_releases public_contact
@@ -1282,6 +1298,7 @@ export async function PATCH(request: Request) {
               ON active_public_contact.opportunity_id = available_opportunity.id
             WHERE available_opportunity.id = ?
               AND available_opportunity.status = 'open'
+              AND ${tradeOpportunityServiceScopeSql("available_opportunity")}
               AND available_opportunity.expires_at > ?
               AND available_opportunity.source_reference = ?
               AND available_opportunity.postcode = ?
@@ -1323,6 +1340,7 @@ export async function PATCH(request: Request) {
                 AND current_matching_consent.firebase_uid = current_project.firebase_uid
               WHERE available_opportunity.id = ?
                 AND available_opportunity.status = 'open'
+                AND ${tradeOpportunityServiceScopeSql("available_opportunity")}
                 AND available_opportunity.expires_at > ?
                 AND available_opportunity.source_reference = ?
                 AND current_project.id = ?
@@ -1363,6 +1381,7 @@ export async function PATCH(request: Request) {
             SELECT 1 FROM trade_opportunities available_opportunity
             WHERE available_opportunity.id = ?
               AND available_opportunity.status = 'open'
+              AND ${tradeOpportunityServiceScopeSql("available_opportunity")}
               AND available_opportunity.expires_at > ?
           )
           AND NOT EXISTS (

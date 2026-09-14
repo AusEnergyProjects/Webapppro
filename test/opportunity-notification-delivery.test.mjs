@@ -1,3 +1,4 @@
+import { tradeOpportunityServiceScopeSql } from "../src/lib/aea-trade-routing.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -28,7 +29,8 @@ import {
   takeOpportunityNotificationDispatch,
 } from "../src/lib/opportunity-notification-retry.ts";
 
-const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
+const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8")
+  .replaceAll(/\$\{tradeOpportunityServiceScopeSql\("([^"]+)"\)\}/g, (_, alias) => tradeOpportunityServiceScopeSql(alias));
 const migration = read("../drizzle/0087_trade_opportunity_notifications.sql");
 const schema = read("../db/schema.ts");
 const deliveryServer = read("../src/lib/opportunity-notification-server.ts");
@@ -406,7 +408,7 @@ test("a zero-attempt v6 consent-version skip is requeued while invalid or withdr
     );
     CREATE TABLE trade_opportunities (
       id text PRIMARY KEY, status text NOT NULL, expires_at text NOT NULL,
-      created_at text NOT NULL, postcode text NOT NULL
+      created_at text NOT NULL, postcode text NOT NULL, service_categories text NOT NULL
     );
     CREATE TABLE trade_accounts (
       firebase_uid text PRIMARY KEY, partner_type text NOT NULL, consent_at text NOT NULL,
@@ -422,7 +424,7 @@ test("a zero-attempt v6 consent-version skip is requeued while invalid or withdr
   database.prepare(`INSERT INTO trade_accounts
     VALUES ('installer', 'installer', ?, 'open', 'trade@example.test', 'approved')`).run(now);
   const insertOpportunity = database.prepare(
-    "INSERT INTO trade_opportunities VALUES (?, 'open', '2026-09-11T12:00:00.000Z', ?, '3000')",
+    `INSERT INTO trade_opportunities VALUES (?, 'open', '2026-09-11T12:00:00.000Z', ?, '3000', '["solar"]')`,
   );
   const insertMatch = database.prepare(
     "INSERT INTO trade_opportunity_matches VALUES (?, ?, 'installer', 'offered')",
@@ -512,6 +514,8 @@ test("new automatic or manual match inserts atomically enqueue exactly once and 
 
 test("coverage repair dynamically inserts only a missing active-match delivery", () => {
   const db = notificationDatabase();
+  db.exec(`CREATE TABLE trade_opportunities (id text PRIMARY KEY, service_categories text NOT NULL);
+    INSERT INTO trade_opportunities VALUES ('opportunity-repair', '["solar"]');`);
   const now = "2026-08-11T00:00:00.000Z";
   const insertMatch = db.prepare(`INSERT INTO trade_opportunity_matches
     (id, opportunity_id, firebase_uid, status, matched_at, updated_at)

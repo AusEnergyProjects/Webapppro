@@ -1,3 +1,4 @@
+import { tradeOpportunityServiceScopeAllowed, tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
 import { getD1 } from "../../../../../db";
 import { adminError, adminJson, cleanAdminText, parseJsonList, requireAdminIdentity, sameOrigin, writeAdminAudit } from "@/lib/admin-server";
 import { DEFAULT_CONNECTED_INSTALLERS, DEFAULT_CONTACT_LIMIT, expireStaleOpportunities, opportunityExpiry } from "@/lib/opportunity-server";
@@ -179,6 +180,9 @@ export async function POST(request: Request) {
     if (!title || !projectType || !summary || !STATES.has(state) || (postcode && !/^\d{4}$/.test(postcode)) || !serviceCategories.length || !PRIORITIES.has(priority) || !TIMINGS.has(timing) || !STATUSES.has(status)) {
       return adminJson({ ok: false, error: "Complete the title, region, service category, timing and privacy-safe project summary." }, 400);
     }
+    if (["open", "paused"].includes(status) && !tradeOpportunityServiceScopeAllowed(serviceCategories)) {
+      return adminJson({ ok: false, error: "This enquiry is reserved for Australian Energy Assessments." }, 409);
+    }
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await getD1().prepare(`INSERT INTO trade_opportunities
@@ -204,14 +208,18 @@ export async function PATCH(request: Request) {
     if (!id || !STATUSES.has(status)) return adminJson({ ok: false, error: "Choose a valid opportunity and status." }, 400);
     if (status === "expired") return adminJson({ ok: false, error: "Expiry is automatic and cannot be applied manually." }, 400);
     const db = getD1();
-    const current = await db.prepare("SELECT status, expires_at FROM trade_opportunities WHERE id = ?").bind(id).first<Record<string, unknown>>();
+    const current = await db.prepare("SELECT status, expires_at, service_categories FROM trade_opportunities WHERE id = ?").bind(id).first<Record<string, unknown>>();
     if (!current) return adminJson({ ok: false, error: "Opportunity not found." }, 404);
+    if (["open", "paused"].includes(status) && !tradeOpportunityServiceScopeAllowed(current.service_categories)) {
+      return adminJson({ ok: false, error: "This enquiry is reserved for Australian Energy Assessments." }, 409);
+    }
     if (status === "open" && current.expires_at && new Date(String(current.expires_at)).getTime() <= Date.now()) {
       await expireStaleOpportunities();
       return adminJson({ ok: false, error: "This opportunity has reached its 30 day limit and cannot be reopened." }, 409);
     }
     const now = new Date().toISOString();
-    const statements = [db.prepare("UPDATE trade_opportunities SET status = ?, updated_at = ? WHERE id = ?").bind(status, now, id)];
+    const statements = [db.prepare(`UPDATE trade_opportunities SET status = ?, updated_at = ? WHERE id = ?
+      AND (? NOT IN ('open', 'paused') OR ${tradeOpportunityServiceScopeSql("trade_opportunities")})`).bind(status, now, id, status)];
     if (status === "closed") statements.push(db.prepare(`UPDATE trade_opportunity_matches SET status = 'closed', updated_at = ?
       WHERE opportunity_id = ? AND status IN ('offered', 'viewed', 'interested', 'connected')`).bind(now, id));
     const [result] = await db.batch(statements);

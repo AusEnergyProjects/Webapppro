@@ -83,7 +83,9 @@ export async function POST(request: Request) {
         category: "customer",
         priority: "high",
         title: "Energy Guide follow-up requested",
-        summary: result.tradeSharing === "pending_information"
+        summary: result.tradeSharing === "aea_delivery"
+          ? "A visitor requested services delivered by Australian Energy Assessments. This enquiry stays with Australian Energy Assessments and is not released to other TLink businesses."
+          : result.tradeSharing === "pending_information"
           ? "A visitor separately consented to trade sharing, but the brief still needs information. No trade opportunity or trade visibility was created."
           : "A visitor explicitly requested Australian Energy Assessments follow-up. Their information request was not gated and no trade sharing was requested.",
         entityType: "energy_assistant_lead",

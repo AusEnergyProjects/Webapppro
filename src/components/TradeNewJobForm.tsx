@@ -19,6 +19,7 @@ import {
   type ComplianceClaimOutputCode,
 } from "@/lib/australian-government-program-catalogue";
 import { GOVERNMENT_ACTIVITY_CALCULATION_METHODS } from "@/lib/australian-certificate-calculation-catalogue";
+import { RENTAL_VISIT_PRESETS } from "@/lib/rental-safety-visit.mjs";
 import { ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
 import {
   activityPremisesVariantId,
@@ -81,7 +82,7 @@ const rentalInspectionModules: ReadonlyArray<{ key: RentalInspectionModule; labe
   { key: "minimum_standards", label: "Rental minimum standards assessment", help: "Selected by default. Untick it when this job is only for separate safety checks." },
   { key: "electrical_safety_check", label: "Electrical safety check", help: "Adds the separate licensed electrical safety workflow." },
   { key: "gas_safety_check", label: "Gas safety check", help: "Adds the separate licensed gas safety workflow." },
-  { key: "smoke_alarm_check", label: "Smoke alarm service and check", help: "Adds a separate optional smoke alarm assessment workflow." },
+  { key: "smoke_alarm_check", label: "Smoke alarm and blind cord safety check", help: "Annual smoke alarm service with the included blind cord safety check on this visit." },
 ];
 const MAX_PLANNED_COMPLIANCE_ACTIVITIES = 12;
 
@@ -817,6 +818,9 @@ export function TradeNewJobForm({
 
     <section data-step="3" hidden={step !== 3} className="crm-wizard-panel"><header><span>3 of 5</span><h3 tabIndex={-1}>{serviceCategory === "rental-inspection" ? "Choose the inspection modules" : "Choose the program, if relevant"}</h3><p>{serviceCategory === "rental-inspection" ? "Minimum standards are selected by default. Select or unselect any module, with at least one service required for the job." : "Add every government certificate, rebate or support activity planned for this job. The exact published rules remain authoritative."}</p></header>
       {serviceCategory === "rental-inspection" ? <div className="crm-planned-activity-list" aria-label="Rental inspection modules">
+        <div className="crm-compliance-notice wide"><strong>One report for this visit</strong><p>Choose a visit bundle or select individual services below. Future annual visits remain separate.</p>
+          {RENTAL_VISIT_PRESETS.map((preset) => <button key={preset.key} type="button" className="btn btn-secondary" onClick={() => setSelectedRentalInspectionModules([...preset.moduleKeys])}>{preset.label}</button>)}
+        </div>
         {rentalInspectionModules.map((module) => <label className="crm-compliance-notice crm-planned-activity-card" key={module.key}>
           <span className="crm-inline-heading"><strong>{module.label}</strong><input type="checkbox" checked={selectedRentalInspectionModules.includes(module.key)} onChange={() => toggleRentalInspectionModule(module.key)} /></span>
           <small>{module.help}</small>

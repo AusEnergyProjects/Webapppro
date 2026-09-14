@@ -3,6 +3,7 @@ import { publicTradeContactForMatchedLead } from "./public-trade-lead-access.mjs
 const PRIVATE_PROJECTION_KEYS = [
   "public_opportunity_source_reference",
   "opportunity_postcode",
+  "opportunity_service_categories",
   "opportunity_state",
   "public_contact_release_id",
   "public_contact_status",

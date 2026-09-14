@@ -1,3 +1,4 @@
+import { tradeOpportunityServiceScopeAllowed, tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
 import { getD1 } from "../../../../../../db";
 import {
   adminError,
@@ -85,6 +86,9 @@ export async function POST(request: Request) {
         { ok: false, error: "The opportunity or business could not be found." },
         404,
       );
+    if (!tradeOpportunityServiceScopeAllowed(opportunity.service_categories)) {
+      return adminJson({ ok: false, error: "This enquiry is reserved for Australian Energy Assessments." }, 409);
+    }
     if (opportunity.status !== "open")
       return adminJson(
         { ok: false, error: "Only open opportunities can be assigned." },
@@ -160,12 +164,15 @@ export async function POST(request: Request) {
       .bind(opportunityId)
       .first<{ count: number }>();
     const now = new Date().toISOString();
-    await db
+    const inserted = await db
       .prepare(
         `INSERT INTO trade_opportunity_matches
       (id, opportunity_id, firebase_uid, status, admin_note, partner_note, matched_categories, distance_metres,
        allocation_rank, match_source, contact_attempt_count, last_contact_at, connected_at, matched_by_uid, matched_at, updated_at)
-      VALUES (?, ?, ?, 'offered', ?, '', ?, ?, ?, 'manual', 0, '', '', ?, ?, ?)
+      SELECT ?, ?, ?, 'offered', ?, '', ?, ?, ?, 'manual', 0, '', '', ?, ?, ?
+      WHERE EXISTS (SELECT 1 FROM trade_opportunities current_opportunity
+        WHERE current_opportunity.id = ? AND current_opportunity.status = 'open'
+          AND ${tradeOpportunityServiceScopeSql("current_opportunity")})
       ON CONFLICT(opportunity_id, firebase_uid) DO UPDATE SET admin_note = excluded.admin_note, updated_at = excluded.updated_at`,
       )
       .bind(
@@ -179,8 +186,10 @@ export async function POST(request: Request) {
         admin.uid,
         now,
         now,
+        opportunityId,
       )
       .run();
+    if (!inserted.meta.changes) return adminJson({ ok: false, error: "The opportunity could not be assigned." }, 409);
     await syncMarketplaceEnquiries(db, opportunityId, firebaseUid);
     await writeAdminAudit(
       admin,
@@ -222,6 +231,7 @@ export async function PATCH(request: Request) {
     const current = await db
       .prepare(
         `SELECT m.status, m.firebase_uid, m.opportunity_id, o.status opportunity_status, o.maximum_connected_installers,
+        o.service_categories opportunity_service_categories,
         CASE WHEN ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'installer'
           THEN 1 ELSE 0 END installer_access_approved
       FROM trade_opportunity_matches m
@@ -233,6 +243,10 @@ export async function PATCH(request: Request) {
       .first<Record<string, unknown>>();
     if (!current)
       return adminJson({ ok: false, error: "Assignment not found." }, 404);
+    if (ACCESS_REQUIRED_MATCH_STATUSES.has(status)
+      && !tradeOpportunityServiceScopeAllowed(current.opportunity_service_categories)) {
+      return adminJson({ ok: false, error: "This enquiry is reserved for Australian Energy Assessments." }, 409);
+    }
     if (
       ACCESS_REQUIRED_MATCH_STATUSES.has(status) &&
       Number(current.installer_access_approved || 0) !== 1
@@ -285,7 +299,10 @@ export async function PATCH(request: Request) {
         ? IN ('declined', 'closed')
         OR EXISTS (
           SELECT 1 FROM trade_accounts a
+          JOIN trade_opportunities current_opportunity
+            ON current_opportunity.id = trade_opportunity_matches.opportunity_id
           WHERE a.firebase_uid = trade_opportunity_matches.firebase_uid
+            AND ${tradeOpportunityServiceScopeSql("current_opportunity")}
             AND ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'installer'
         )
       )`,

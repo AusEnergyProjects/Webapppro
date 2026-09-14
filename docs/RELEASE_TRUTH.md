@@ -4,13 +4,23 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 9 September 2026
+Last reconciled locally: 14 September 2026
 
-Deployment evidence last verified: 9 September 2026
+Deployment baseline verified: 14 September 2026, Sites 577 and GitHub main at `5777148362db4c3a2fe2e374d328f58f7556a6d6` before this release.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: system audit and polish
+## Current implementation: AEA services expansion
+
+The authorised services expansion on `codex/aea-services-expansion-20260914` adds seven priced AEA services, two two-year rental bundles, detailed service guides and FAQs, enquiry selections and private AEA-only routing, simplified evidenced safety visits, one combined report per completed visit and clearer customer emails. The new catalogue migration is `0175_expand_aea_service_enquiries.sql`. Existing indexed assessment routes and issued inspection versions remain intact.
+
+Smoke and blind services include the user-confirmed batteries, standard replacement alarms, cord anchors/labels and between-visit fault callouts. Gas pricing has no additional appliance charge. Annual bundle equivalents remain $225/$350 excluding GST, with complete two-year totals of $450/$700 excluding GST ($495/$770 including GST). Completed records are emailed with a secure sharing link and downloadable PDF; formal energy certificates follow completion of their assessment requirements.
+
+The full pre-polish release validation passed, including 4,489 main-suite tests, 37 integration tests, all 175 migrations, typecheck, lint, PDF and production-build audits. Android/iOS exports, mobile typecheck and 241 mobile tests passed. The final page/email polish has additional focused checks, independent content/schema review and the unchanged public performance gates. Service-specific styles are isolated from unrelated route graphs.
+
+This committed record is prepared before publication. The coordinating release task supplies the exact subsequent pushed source, Sites version, deployment and Android preview update evidence. Device installation and real recipient inbox rendering are not inferred from a successful release. The current preview account/project is `@ausenergy/aea-field`, runtime `1.0.1`; older EAS update identifiers below are historical.
+
+## Previous implementation: system audit and polish
 
 The [system audit](./audit/2026-09-09-system-polish.md) records the implemented changes, competitor benchmark, program-coverage boundary and next product priorities. Branch `codex/system-polish` starts from exact live source `23464a47b5349f6f3316dbc52253c8dc55578fdd`, verified as GitHub main and Sites version 554 on 9 September. This source supersedes the older version 499 release narrative below.
 

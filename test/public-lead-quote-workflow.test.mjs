@@ -1,3 +1,4 @@
+import { tradeOpportunityServiceScopeSql } from "../src/lib/aea-trade-routing.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -25,7 +26,8 @@ import {
   publicLeadQuoteWorkflowSnapshot,
 } from "../src/lib/public-lead-quote-workflow.mjs";
 
-const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
+const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8")
+  .replaceAll(/\$\{tradeOpportunityServiceScopeSql\("([^"]+)"\)\}/g, (_, alias) => tradeOpportunityServiceScopeSql(alias));
 const server = read("../src/lib/public-lead-quote-workflow-server.ts");
 const opportunityRoute = read("../src/app/api/trade-opportunities/route.ts");
 const quoteRoute = read("../src/app/api/trade-quotes/route.ts");
@@ -55,6 +57,7 @@ function workflowAccessSql() {
 function publicLeadRow(disclosedFields, overrides = {}) {
   return {
     public_contact_release_id: "release-1",
+    opportunity_service_categories: JSON.stringify(["hot-water", "battery"]),
     public_contact_status: "active",
     public_contact_source_reference: "AEA-20260812-0011223344556677",
     source_reference: "AEA-20260812-0011223344556677",
@@ -232,7 +235,8 @@ test("workflow start validates only the latest exact contact release", () => {
     CREATE TABLE trade_opportunities (
       id text PRIMARY KEY, title text NOT NULL, summary text NOT NULL,
       priority text NOT NULL, source_reference text NOT NULL, postcode text NOT NULL,
-      state text NOT NULL, status text NOT NULL, expires_at text NOT NULL
+      state text NOT NULL, status text NOT NULL, expires_at text NOT NULL,
+      service_categories text NOT NULL
     );
     CREATE TABLE public_trade_lead_contact_releases (
       id text PRIMARY KEY, opportunity_id text NOT NULL, source_reference text NOT NULL,
@@ -252,7 +256,7 @@ test("workflow start validates only the latest exact contact release", () => {
     INSERT INTO trade_opportunities VALUES (
       'opportunity-1', 'Hot-water quote', 'Replace hot water.', 'standard',
       'AEA-20260812-0011223344556677', '3000', 'VIC', 'open',
-      '2099-08-12T00:00:00.000Z'
+      '2099-08-12T00:00:00.000Z', '["hot-water"]'
     );
     INSERT INTO trade_opportunity_matches VALUES (
       '${matchId}', 'opportunity-1', 'trade-a', 'interested', '["hot-water"]'

@@ -159,9 +159,12 @@ test("customer consent describes approved matched trades without internal produc
     PUBLIC_PLAN_CONSENT_PURPOSE,
     PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
   ]) {
-    assert.match(purpose, /approved trades matched/);
     assert.doesNotMatch(purpose, /TLink|Creditex/);
   }
+  assert.match(PUBLIC_PLAN_CONSENT_PURPOSE, /Australian Energy Assessments handles safety and assessments/);
+  assert.match(PUBLIC_PLAN_CONSENT_PURPOSE, /Other requests .*approved matching trades/);
+  assert.ok(PUBLIC_PLAN_CONSENT_PURPOSE.length <= 160);
+  assert.match(PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE, /approved trades matched/);
 });
 
 test("the retry key binds the exact address tuple and keeps plan state separate", () => {

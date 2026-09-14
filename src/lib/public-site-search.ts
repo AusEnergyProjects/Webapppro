@@ -1,3 +1,5 @@
+import { AEA_SERVICE_IDENTITIES } from "./aea-service-identity.mjs";
+
 export type PublicSiteSearchEntry = {
   path: string;
   title: string;
@@ -10,6 +12,9 @@ export type PublicSiteSearchResult = PublicSiteSearchEntry & {
 };
 
 export const PUBLIC_SITE_SEARCH_ENTRIES: readonly PublicSiteSearchEntry[] = [
+  { path: "/services", title: "Services and prices", description: "Australian Energy Assessments rental safety checks, NatHERS ratings and onsite energy assessments.", keywords: ["services", "prices", "checks", "smoke", "blinds", "gas", "electrical"] },
+  { path: "/offers", title: "Two-year rental safety offers", description: "$225 or $350 + GST per year equivalent. See total two-year prices and included checks.", keywords: ["offers", "bundles", "safety", "two years", "landlord", "rental"] },
+  ...Object.values(AEA_SERVICE_IDENTITIES).filter((service) => service.path.startsWith("/services/")).map((service) => ({ path: service.path, title: service.name, description: service.summary, keywords: [service.id, service.category, service.area, "price", "inspection", "assessment"] })),
   {
     path: "/wholesale-electricity",
     title: "Live wholesale energy prices",

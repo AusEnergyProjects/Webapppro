@@ -1,3 +1,5 @@
+import { aeaDeliveredServiceScopeSql } from "./aea-trade-routing.mjs";
+
 function clean(value, maximum = 180) {
   return String(value || "").trim().slice(0, maximum);
 }
@@ -118,7 +120,8 @@ export async function confirmPublicPlanIntakeOpportunityWrite(database, input) {
     FROM public_plan_lead_intakes intake
     LEFT JOIN trade_opportunities opportunity ON opportunity.id = ?
       AND opportunity.source_reference = intake.source_reference
-      AND opportunity.status = 'open'
+      AND (opportunity.status = 'open'
+        OR (opportunity.status = 'draft' AND ${aeaDeliveredServiceScopeSql("opportunity")}))
       AND opportunity.created_by_uid = 'lead-intake'
       AND datetime(opportunity.expires_at) > datetime(?)
     LEFT JOIN public_trade_lead_contact_releases contact

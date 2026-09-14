@@ -106,6 +106,68 @@ test("a receipt cannot be queued without durable intake and required no-match re
   await assert.rejects(enqueueQuickUpgradeReceipt({ ...input, opportunityId: "not-saved" }, f), /INTAKE_INCOMPLETE/);
 });
 
+test("AEA-only and mixed drafts enqueue and send one private customer receipt", async (t) => {
+  for (const services of [["assessment"], ["solar", "smoke-alarm-blind-safety"]]) {
+    const f = fixture(t, { matched: false });
+    f.sqlite.prepare("UPDATE trade_opportunities SET status = 'draft', service_categories = ?")
+      .run(JSON.stringify(services));
+    const saved = await enqueueQuickUpgradeReceipt(input, f);
+    assert.deepEqual(await enqueueQuickUpgradeReceipt(input, f), saved);
+    const calls = [];
+    await dispatchQuickUpgradeReceipt(f.row(), { ...f, fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return Response.json({ id: "provider-private-receipt" });
+    } });
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].to, ["jamie@example.test"]);
+    assert.match(calls[0].text, /Australian Energy Assessments will handle your service enquiry directly/);
+    assert.match(calls[0].text, /not distributed to other TLink businesses/);
+    assert.doesNotMatch(calls[0].text, /available to suitable approved TLink businesses/);
+    assert.equal(f.delivery().status, "sent");
+    assert.equal(f.sqlite.prepare("SELECT status FROM trade_opportunities").get().status, "draft");
+    assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM trade_opportunity_matches").get().n, 0);
+    assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM public_plan_internal_relay_deliveries").get().n, 0);
+  }
+});
+
+test("non-AEA drafts, invalid reserved scopes and closed or withdrawn requests cannot queue receipts", async (t) => {
+  for (const [status, services, withdrawn] of [
+    ["draft", '["solar"]', false], ["draft", '["assessment",null]', false],
+    ["draft", '["assessment",""]', false], ["draft", '[]', false],
+    ["draft", '{}', false], ["draft", 'broken', false],
+    ["closed", '["assessment"]', false], ["draft", '["assessment"]', true],
+  ]) {
+    const f = fixture(t, { matched: false });
+    f.sqlite.prepare("UPDATE trade_opportunities SET status = ?, service_categories = ?").run(status, services);
+    if (withdrawn) f.sqlite.exec("UPDATE public_trade_lead_contact_releases SET withdrawn_at = '2026-09-11T00:01:00.000Z'");
+    await assert.rejects(enqueueQuickUpgradeReceipt(input, f), /INTAKE_INCOMPLETE/);
+    assert.equal(f.objects.size, 0);
+    assert.equal(f.delivery(), undefined);
+  }
+});
+
+test("a queued AEA draft receipt rechecks customer access before any provider send", async (t) => {
+  for (const mutation of [
+    "UPDATE trade_opportunities SET status = 'closed'",
+    "UPDATE trade_opportunities SET service_categories = '[\"solar\"]'",
+    "UPDATE trade_opportunities SET service_categories = '[\"assessment\",null]'",
+    "UPDATE public_trade_lead_contact_releases SET status = 'withdrawn'",
+    "UPDATE public_trade_lead_contact_releases SET withdrawn_at = '2026-09-11T00:01:00.000Z'",
+  ]) {
+    const f = fixture(t, { matched: false });
+    f.sqlite.exec("UPDATE trade_opportunities SET status = 'draft', service_categories = '[\"assessment\"]'");
+    await enqueueQuickUpgradeReceipt(input, f);
+    f.sqlite.exec(mutation);
+    let calls = 0;
+    await dispatchQuickUpgradeReceipt(f.row(), { ...f, sendProvider: async () => {
+      calls += 1;
+      throw new Error("denied requests must not reach the provider");
+    } });
+    assert.equal(calls, 0);
+    assert.equal(f.delivery().status, "suppressed");
+  }
+});
+
 test("queue rollback leaves no receipt and a post-commit transport failure resolves idempotently", async (t) => {
   const f = fixture(t);
   await assert.rejects(enqueueQuickUpgradeReceipt(input, { ...f, db: { ...f.db, batch: async () => { throw new Error("queue rollback"); } } }), /queue rollback/);

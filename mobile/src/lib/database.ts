@@ -1267,7 +1267,7 @@ export async function prepareLocalDataOwner(firebaseUid: string) {
 
 function purgeRentalLocalPhotos() {
   const documents = new Directory(Paths.document);
-  for (const name of ['rental-save-photos', 'rental-original-photos']) {
+  for (const name of ['rental-save-photos', 'rental-original-photos', 'rental-professional-documents']) {
     const directory = new Directory(documents, name);
     if (directory.exists) directory.delete();
   }

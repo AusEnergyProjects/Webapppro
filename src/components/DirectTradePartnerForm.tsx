@@ -19,14 +19,14 @@ import { firebaseAuth } from "@/lib/firebase-client";
 import { Field, SiteFooter } from "./ComparatorChrome";
 import { TLinkHeader } from "./TLinkChrome";
 import { AUSTRALIAN_STATE_CODES } from "@/lib/australian-postcodes.mjs";
-import { ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
+import { TRADE_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
 import {
   AustralianAddressLookup,
   type AustralianAddressSuggestion,
 } from "./AustralianAddressLookup";
 
 const states = AUSTRALIAN_STATE_CODES;
-const categories = ENERGY_SERVICE_OPTIONS;
+const categories = TRADE_SERVICE_OPTIONS;
 
 type PartnerType = "installer" | "supplier";
 type AuthMode = "create" | "signin";

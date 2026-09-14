@@ -1,3 +1,4 @@
+import { tradeOpportunityServiceScopeSql } from "./aea-trade-routing.mjs";
 const RETRY_DELAYS_MINUTES = [5, 30, 120, 240, 480, 960, 1_440] as const;
 
 export const OPPORTUNITY_NOTIFICATION_RETRYABLE_STATUS_SQL =
@@ -18,9 +19,11 @@ export const OPPORTUNITY_NOTIFICATION_ENSURE_DELIVERIES_SQL = `INSERT OR IGNORE 
     'resend', '', '', '', '', '', '', assignment.matched_at, '', '', '', '', '',
     assignment.matched_at, ?
   FROM trade_opportunity_matches assignment
+  JOIN trade_opportunities opportunity ON opportunity.id = assignment.opportunity_id
   LEFT JOIN trade_opportunity_notification_deliveries delivery
     ON delivery.match_id = assignment.id
   WHERE assignment.opportunity_id = ?
+    AND ${tradeOpportunityServiceScopeSql("opportunity")}
     AND assignment.status IN ('offered', 'viewed', 'interested', 'connected')
     AND delivery.id IS NULL`;
 

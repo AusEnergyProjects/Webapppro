@@ -6,6 +6,7 @@ import {
   PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "../src/lib/public-plan-enquiry.mjs";
 import { persistLeadOpportunity } from "../src/lib/opportunity-source-write.mjs";
+import { AEA_RESERVED_SERVICE_IDS } from "../src/lib/aea-services.mjs";
 
 function databaseAdapter(database, { failContactWrite = false } = {}) {
   return {
@@ -136,6 +137,22 @@ const currentConsent = {
   noticeVersion: PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   purpose: PUBLIC_PLAN_CONSENT_PURPOSE,
 };
+
+test("every AEA service and mixed source stays draft through an open-request replay", async () => {
+  for (const reserved of AEA_RESERVED_SERVICE_IDS) {
+    for (const services of [[reserved], [reserved, "solar"]]) {
+      const database = sourceDatabase();
+      const record = opportunity("reserved-opportunity", { serviceCategories: JSON.stringify(services) });
+      for (const id of ["contact-first", "contact-replay"]) {
+        const stored = await persistLeadOpportunity(databaseAdapter(database), record, contact(id), currentConsent);
+        assert.equal(stored.status, "draft", JSON.stringify(services));
+      }
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_opportunities").get().count, 1);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM public_trade_lead_contact_releases").get().count, 1);
+      database.close();
+    }
+  }
+});
 
 test("the exact current notice creates one open opportunity and current contact release", async () => {
   assert.ok(PUBLIC_PLAN_CONSENT_NOTICE_VERSION.length > 40);

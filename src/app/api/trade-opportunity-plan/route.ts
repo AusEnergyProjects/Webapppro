@@ -1,3 +1,4 @@
+import { tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
 import { getD1 } from "../../../../db";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 import {
@@ -99,6 +100,7 @@ export async function GET(request: Request) {
     WHERE m.id = ? AND m.firebase_uid = ?
       AND m.status IN ('offered', 'viewed', 'interested', 'connected')
       AND o.status IN ('open', 'paused')
+      AND ${tradeOpportunityServiceScopeSql("o")}
       AND o.source_reference LIKE 'customer-project:%'
       AND EXISTS (
         SELECT 1 FROM customer_consent_receipts consent

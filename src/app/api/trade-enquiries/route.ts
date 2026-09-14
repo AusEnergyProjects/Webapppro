@@ -1,3 +1,4 @@
+import { tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
@@ -38,6 +39,7 @@ const currentPublicMarketplaceAccessSql = (enquiryAlias: string) => `(
   OR (
     current_public_match.status IN ('interested', 'connected')
     AND current_public_opportunity.status = 'open'
+    AND ${tradeOpportunityServiceScopeSql("current_public_opportunity")}
     AND datetime(current_public_opportunity.expires_at) > datetime('now')
     AND current_public_release.status = 'active'
     AND ${publicPlanContactReleaseAccessSql("current_public_release")}
@@ -56,6 +58,7 @@ const currentPublicMarketplaceAccessSql = (enquiryAlias: string) => `(
 const publicMarketplaceProjectionSql = `
   current_public_opportunity.source_reference public_opportunity_source_reference,
   current_public_opportunity.postcode opportunity_postcode,
+  current_public_opportunity.service_categories opportunity_service_categories,
   current_public_opportunity.state opportunity_state,
   current_public_release.id public_contact_release_id,
   current_public_release.status public_contact_status,
