@@ -10,6 +10,8 @@ Follow-up checks include real SQLite scope/identity tests, business service roun
 
 The final follow-up full suite ran 4,637 tests: 4,625 passed, 11 skipped and the one unchanged brand-copy failure. Whole-project typecheck and lint passed. Focused backend checks passed 46 tests, including actual member service saves before business enablement, legacy alias study scope, individual assessment identity and continued booking denial. Final UI integration review found no release blocker.
 
+Live verification of Sites version 579 confirmed training tasks, Activity 6 learning material, member to-dos and the 25-service list. It identified an initial sign-in reset that replaced a direct training URL with Work. The follow-up preserves the validated requested workspace after initial private-state clearing; account switches and sign-out still reset and scrub protected navigation. All 37 focused dashboard/calculator/privacy tests, typecheck and scoped lint passed for this correction. The Android preview update was published from `d0dd32b37c0ab9bce1f38c4d9f7aacfb24aaaf5c` on runtime `1.0.1`; the subsequent navigation correction changes web code only.
+
 ## Outcome and acceptance boundary
 
 The software now includes Creditex business onboarding, individual activity training, a reviewer workspace, mandatory programme evidence and server-enforced booking/lead eligibility. Every one of the **217 defined catalogue activities** has a distinct module with **25 questions**, giving **5,425 questions** across **33 programmes with activity definitions**. The catalogue has 35 programme records; HEUF and SHEPI are funding/umbrella records without standalone installer activity definitions. No artificial activity codes were invented for them. The full programme/activity inventory is in `creditex-training-source-review.md`.
@@ -177,6 +179,7 @@ test/trade-activity-master-publication.test.mjs
 test/trade-activity-report-route.test.mjs
 test/trade-business-profile-settings.test.mjs
 test/trade-business-service-selection.test.mjs
+test/trade-dashboard-training-deep-link.test.mjs
 test/trade-certificate-leads.test.mjs
 test/trade-creditex-job-intent.test.mjs
 test/trade-crm-appointment-assignment.test.mjs

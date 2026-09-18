@@ -1155,6 +1155,10 @@ export function DirectTradeDashboard() {
           nextUid,
           clearProtectedInstallerState,
         )) {
+          if (!previousUid && nextUid) {
+            // Initial sign-in must retain the requested workspace after clearing private state.
+            setWorkspace(dashboardWorkspaceFromSearch(window.location.search));
+          }
           if (shouldClearOpportunityDeepLink(
             previousUid || "",
             nextUid || "",
