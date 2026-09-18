@@ -45,8 +45,14 @@ export function installCreditexTrainingFixture(database, { qualified = true } = 
   const memberColumns = new Set(database.prepare('PRAGMA table_info(trade_team_members)').all().map(row => row.name));
   if (!memberColumns.has('member_uid')) database.exec("ALTER TABLE trade_team_members ADD COLUMN member_uid TEXT NOT NULL DEFAULT ''");
   if (!memberColumns.has('capabilities')) database.exec(`ALTER TABLE trade_team_members ADD COLUMN capabilities TEXT NOT NULL DEFAULT '${categories}'`);
+  const fileColumns = new Set(database.prepare('PRAGMA table_info(trade_team_member_files)').all().map(row => row.name));
+  if (!fileColumns.has('expires_at')) database.exec("ALTER TABLE trade_team_member_files ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''");
   if (!database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='creditex_business_onboarding'").get()) {
     database.exec(read('drizzle/0176_creditex_onboarding_training.sql'));
+  }
+  database.exec(read('drizzle/0177_autonomous_activity_training.sql'));
+  if (!database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='creditex_onboarding_completions'").get()) {
+    database.exec(read('drizzle/0178_autonomous_business_onboarding.sql'));
   }
   if (!qualified) return;
   const now = new Date().toISOString();

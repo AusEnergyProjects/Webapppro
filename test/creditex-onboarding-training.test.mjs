@@ -35,6 +35,8 @@ function fixture() {
     INSERT INTO trade_team_members VALUES ('owner-member','owner','active','Owner','owner','[]'),('installer-member','owner','active','Installer','installer','["heating-cooling","insulation","hot-water"]');`);
   sql.exec(fs.readFileSync('drizzle/0116_trade_crm_write_guard.sql', 'utf8'));
   sql.exec(fs.readFileSync('drizzle/0176_creditex_onboarding_training.sql', 'utf8'));
+  sql.exec(fs.readFileSync('drizzle/0177_autonomous_activity_training.sql', 'utf8'));
+  sql.exec(fs.readFileSync('drizzle/0178_autonomous_business_onboarding.sql', 'utf8'));
   const db = { prepare: query => new Statement(sql, query), batch: async statements => {
     sql.exec('BEGIN'); try { const results = []; for (const statement of statements) results.push(await statement.run()); sql.exec('COMMIT'); return results; } catch (error) { sql.exec('ROLLBACK'); throw error; }
   } };
@@ -62,16 +64,18 @@ const today = () => new Date().toISOString().slice(0,10);
 const yearLater = () => new Date(Date.now() + 365 * 86_400_000).toISOString().slice(0,10);
 function application() {
   const director = { name: 'Director Test', address: '1 Business St, Melbourne VIC 3000', email: 'director@testbusiness.example', mobile: '0400000000', idDocumentId: 'director-id', selfieDocumentId: 'director-selfie' };
-  return { legalName: 'Test Pty Ltd', acn: '004085616', hasWebsite: true, website: 'https://testbusiness.example', address: director.address, insuranceDocumentId: 'insurance', insuranceExpiresOn: yearLater(), priorProposalDocumentId: '', doesNswWork: false, contractorLicenceDocumentId: '', director, directorIsGuarantor: true, guarantor: { name: '',address:'',email:'',mobile:'',idDocumentId:'',selfieDocumentId:'',position:'' }, witness: { name: 'Witness Test',position:'Manager',email:'witness@testbusiness.example' }, acceptedPrivacy: true };
+  return { legalName: 'Test Pty Ltd', acn: '004085616', hasWebsite: true, website: 'https://testbusiness.example', address: director.address, insuranceDocumentId: 'insurance', insuranceExpiresOn: yearLater(), priorProposalDocumentId: '', doesNswWork: false, contractorLicenceDocumentId: '', director, directorIsGuarantor: true, guarantor: { name: '',address:'',email:'',mobile:'',idDocumentId:'',selfieDocumentId:'',position:'' }, witness: { name: 'Witness Test',position:'Manager',email:'witness@testbusiness.example' }, acceptedPrivacy: true, agreementDocumentId: 'signed-agreement', acceptedCompliance: true };
 }
 function seedDocuments(sql) {
-  for (const [id, kind] of [['director-id','director_id'],['director-selfie','director_selfie'],['insurance','insurance']]) sql.prepare('INSERT INTO creditex_onboarding_documents VALUES (?,?,?,?,?,?,?,?,?,?)').run(id,'owner',kind,`${id}.pdf`,'application/pdf',10,'a'.repeat(64),id,'owner',new Date().toISOString());
+  for (const [id, kind] of [['director-id','director_id'],['director-selfie','director_selfie'],['insurance','insurance'],['signed-agreement','partnership_agreement']]) sql.prepare('INSERT INTO creditex_onboarding_documents VALUES (?,?,?,?,?,?,?,?,?,?)').run(id,'owner',kind,`${id}.pdf`,'application/pdf',10,'a'.repeat(64),id,'owner',new Date().toISOString());
 }
 async function approveBusiness(f) {
   seedDocuments(f.sql);
   await onboarding.saveCreditexApplication(f.db,'owner','owner',0,application());
-  await onboarding.submitCreditexApplication(f.db,'owner','owner',1);
-  await onboarding.reviewCreditexApplication(f.db,'owner','reviewer',{ expectedRevision:2,status:'approved',agreementReference:'signed-agreement-001',reviewNote:'Verified insurance and executed partnership agreement.' });
+  // This fixture explicitly represents readable private objects. R2 integrity
+  // and absence are exercised separately by the onboarding upload route tests.
+  const completed = await onboarding.submitCreditexApplication(f.db,'owner','owner',1,async () => {});
+  assert.equal(completed.status, 'completed');
 }
 async function activate(f, moduleId='veu-6') {
   const course = TRAINING_MODULES.find(value => value.id === moduleId);
@@ -97,23 +101,27 @@ const booking = {ownerUid:'owner',actorMemberId:'owner-member',assignedMemberId:
 
 test('submission mirrors conditional Jotform fields and validates company, personal data and consent', () => {
   assert.doesNotThrow(() => onboarding.validateCreditexSubmission(application()));
-  for (const altered of [ {...application(),doesNswWork:true}, {...application(),legalName:'Test Sole Trader'}, {...application(),acn:'123456789'}, {...application(),acceptedPrivacy:false}, {...application(),directorIsGuarantor:false}, {...application(),hasWebsite:true,website:'javascript:alert(1)'}, {...application(),director:{...application().director,email:'director@gmail.com'}} ]) assert.throws(() => onboarding.validateCreditexSubmission(altered), error => error.code==='ONBOARDING_INCOMPLETE');
+  for (const altered of [ {...application(),doesNswWork:true}, {...application(),legalName:'Test Sole Trader'}, {...application(),acn:'123456789'}, {...application(),acceptedPrivacy:false}, {...application(),acceptedCompliance:false}, {...application(),agreementDocumentId:''}, {...application(),directorIsGuarantor:false}, {...application(),hasWebsite:true,website:'javascript:alert(1)'}, {...application(),director:{...application().director,email:'director@gmail.com'}} ]) assert.throws(() => onboarding.validateCreditexSubmission(altered), error => error.code==='ONBOARDING_INCOMPLETE');
 });
 test('business revisions invalidate approval and concurrent saves are rejected with retained audit history', async () => {
   const f = fixture(); await approveBusiness(f);
   assert.equal((await onboarding.getCreditexBusinessStatus(f.db,'owner')).approved,true);
-  await onboarding.saveCreditexApplication(f.db,'owner','owner',3,application());
+  await onboarding.saveCreditexApplication(f.db,'owner','owner',2,application());
   assert.equal((await onboarding.getCreditexBusinessStatus(f.db,'owner')).approved,false);
-  await assert.rejects(onboarding.saveCreditexApplication(f.db,'owner','owner',3,application()), error=>error.code==='REVISION_CONFLICT');
-  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM creditex_onboarding_events').get().n,4);
+  await assert.rejects(onboarding.saveCreditexApplication(f.db,'owner','owner',2,application()), error=>error.code==='REVISION_CONFLICT');
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM creditex_onboarding_events').get().n,3);
   assert.equal(f.sql.prepare('SELECT agreement_reference FROM creditex_business_onboarding').get().agreement_reference,'');
 });
 test('cross-business document reuse and unsigned agreement approval fail closed', async () => {
   const f=fixture(); seedDocuments(f.sql); f.sql.prepare("UPDATE creditex_onboarding_documents SET owner_uid='other' WHERE id='insurance'").run();
   await assert.rejects(onboarding.saveCreditexApplication(f.db,'owner','owner',0,application()),error=>error.code==='DOCUMENT_INVALID');
   f.sql.prepare("UPDATE creditex_onboarding_documents SET owner_uid='owner'").run();
-  await onboarding.saveCreditexApplication(f.db,'owner','owner',0,application()); await onboarding.submitCreditexApplication(f.db,'owner','owner',1);
-  await assert.rejects(onboarding.reviewCreditexApplication(f.db,'owner','reviewer',{expectedRevision:2,status:'approved',reviewNote:'Checked'}),error=>error.code==='SIGNED_AGREEMENT_REQUIRED');
+  await onboarding.saveCreditexApplication(f.db,'owner','owner',0,{...application(),agreementDocumentId:''});
+  await assert.rejects(onboarding.submitCreditexApplication(f.db,'owner','owner',1,async () => {}),error=>error.code==='ONBOARDING_INCOMPLETE');
+  // A pre-migration submitted application still cannot acquire a legacy approval
+  // without an executed agreement reference, or an autonomous completion receipt.
+  f.sql.exec("UPDATE creditex_business_onboarding SET status='submitted'");
+  await assert.rejects(onboarding.reviewCreditexApplication(f.db,'owner','reviewer',{expectedRevision:1,status:'approved',reviewNote:'Checked'}),error=>error.code==='SIGNED_AGREEMENT_REQUIRED');
   assert.equal((await onboarding.getCreditexBusinessStatus(f.db,'owner')).approved,false);
 });
 test('approval stops when current business identity or insurance changes', async () => {
@@ -122,9 +130,11 @@ test('approval stops when current business identity or insurance changes', async
   f.sql.prepare("UPDATE trade_accounts SET abn='53004085616'").run();
   f.sql.prepare("UPDATE creditex_business_onboarding SET insurance_expires_on='2020-01-01'").run(); assert.equal((await onboarding.getCreditexBusinessStatus(f.db,'owner')).approved,false);
 });
-test('draft modules cannot start and reviewer must bind exact version/hash and review revision', async () => {
+test('source-complete courses allow learning while optional governance binds exact version/hash and revision', async () => {
   const f=fixture(); const course=TRAINING_MODULES.find(item=>item.id==='veu-6');
-  await assert.rejects(training.startTrainingAttempt(f.db,{ownerUid:'owner',memberId:'owner-member',actorUid:'owner-member',moduleId:course.id}),error=>error.code==='TRAINING_REVIEW_REQUIRED');
+  const attempt = await training.startTrainingAttempt(f.db,{ownerUid:'owner',memberId:'owner-member',actorUid:'owner-member',moduleId:course.id});
+  assert.equal(attempt.questions.length, 25);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_module_reviews').get().n, 0);
   await assert.rejects(training.reviewTrainingModule(f.db,'reviewer',{action:'activate_module',moduleId:course.id,expectedVersion:course.version,expectedHash:'wrong'}),error=>error.code==='TRAINING_VERSION_CHANGED');
   await activate(f);
   await assert.rejects(training.reviewTrainingModule(f.db,'reviewer',{action:'withdraw_module',moduleId:course.id,expectedVersion:course.version,expectedHash:training.getTrainingModuleHash(course),expectedReviewUpdatedAt:'',reviewNote:'Old tab'}),error=>error.code==='TRAINING_REVIEW_CONFLICT');
@@ -299,6 +309,11 @@ test('Activity 48 needs quiz passes for everyone and reviewed EEC/ESC credential
   assert.equal((await training.getCertificateActivityEligibility(f.db,input)).eligible,true);
   assert.equal((await training.getCertificateActivityEligibility(f.db,{...input,assignedMemberId:'owner-member'})).eligible,false,'an office owner cannot assign themselves as installer without external credentials');
   assert.equal((await training.getBusinessCertificateLeadEligibility(f.db,{ownerUid:'owner',activityTemplateIds:['veu-48']})).eligible,true,'a qualified installer can service leads for a trained non-installing owner');
+  f.sql.exec("DELETE FROM trade_training_module_reviews WHERE module_id='veu-48'");
+  assert.equal((await training.getCertificateActivityEligibility(f.db,input)).eligible,false,'automatic quiz completion cannot replace Activity 48 scheme authority');
+  const learning = (await training.getTrainingModulesForMember(f.db,'owner','owner-member')).find(course => course.id === 'veu-48');
+  assert.equal(learning.status,'passed'); assert.equal(learning.assessmentAvailable,true,'scheme authority is separate from course access');
+  await activate(f,'veu-48');
   f.sql.prepare("UPDATE trade_training_completions SET revoked_at='2026-09-18' WHERE member_id='owner-member'").run();
   assert.equal((await training.getCertificateActivityEligibility(f.db,input)).eligible,false,'office owners still need a current quiz pass');
   f.sql.prepare("UPDATE trade_training_completions SET revoked_at='' WHERE member_id='owner-member'").run();
@@ -306,14 +321,15 @@ test('Activity 48 needs quiz passes for everyone and reviewed EEC/ESC credential
   f.sql.prepare("UPDATE trade_team_member_files SET status='active'").run();
   f.sql.prepare("UPDATE trade_training_external_credentials SET scheme_participant_reference=''").run(); assert.equal((await training.getCertificateActivityEligibility(f.db,input)).eligible,false);
 });
-test('learner catalogue never contains questions or answer keys and inactive curriculum marks previous completion unavailable', async () => {
+test('learner catalogue conceals answer keys and remains current independently of optional review metadata', async () => {
   const f=fixture(); await activate(f); await pass(f);
   const catalogue=await training.getTrainingModulesForMember(f.db,'owner','owner-member');
   assert.equal(JSON.stringify(catalogue).includes('correctOptionId'),false); assert.equal(catalogue.find(item=>item.id==='veu-6').status,'passed');
   for (const course of TRAINING_MODULES) assert.equal(catalogue.find(item=>item.id===course.id)?.programCode,course.programCode);
   assert.ok(catalogue.some(item=>item.programCode==='ACT-SHS')); assert.ok(catalogue.some(item=>item.programCode==='ACT-HES'));
   f.sql.prepare("UPDATE trade_training_module_reviews SET content_hash=?").run('b'.repeat(64));
-  assert.equal((await training.getTrainingModulesForMember(f.db,'owner','owner-member')).find(item=>item.id==='veu-6').status,'awaiting_review');
+  const outdated = (await training.getTrainingModulesForMember(f.db,'owner','owner-member')).find(item=>item.id==='veu-6');
+  assert.equal(outdated.status,'passed'); assert.equal(outdated.availability,'active'); assert.equal(outdated.assessmentAvailable,true);
 });
 
 test('saved personal services immediately add and remove learner todos independently of business services', async () => {
@@ -327,7 +343,7 @@ test('saved personal services immediately add and remove learner todos independe
   const selected = await read();
   assert.ok(selected.modules.some(module => module.id === 'veu-6'));
   assert.ok(selected.modules.every(module => module.serviceCategory === 'heating-cooling' && module.businessServiceEnabled === false));
-  assert.ok(selected.modules.every(module => module.status === 'awaiting_review' && module.completion === null));
+  assert.ok(selected.modules.every(module => module.status === (module.assessmentAvailable ? 'required' : 'unavailable') && module.completion === null));
   assert.equal(selected.canTakeTraining, true); assert.equal(selected.selectedMember.isSelf, true);
   assert.deepEqual(selected.team, []);
   assert.ok(!JSON.stringify(selected).includes('correctOptionId')); assert.ok(selected.modules.every(module => !('questions' in module)));
@@ -426,4 +442,142 @@ test('legacy combined service aliases project canonical training and use the sam
   assert.equal(f.sql.prepare("SELECT capabilities FROM trade_accounts WHERE firebase_uid='owner'").get().capabilities, '["insulation-draughts"]', 'projection does not rewrite or approve the business');
   assert.equal(f.sql.prepare("SELECT capabilities FROM trade_team_members WHERE id='installer-member'").get().capabilities, '["insulation-draughts"]');
   assert.equal((await training.getCertificateActivityEligibility(f.db, { ...booking, activityTemplateIds: ['veu-48'] })).eligible, false);
+});
+
+test('autonomous training rejects 96%, permits an immediate 100% retry and enables jobs without fabricated review rows', async () => {
+  const f = fixture(); await approveBusiness(f);
+  const course = TRAINING_MODULES.find(course => course.id === 'veu-6');
+  const actor = { ownerUid: 'owner', memberId: 'owner-member', actorUid: 'owner', moduleId: course.id };
+  const first = await training.startTrainingAttempt(f.db, actor);
+  const question = course.questions.find(question => !question.critical);
+  const failed = await training.submitTrainingAttempt(f.db, { ...actor, attemptId: first.id, answers: answerTokens(first, course, { [question.id]: question.options.find(option => option.id !== question.correctOptionId).id }) });
+  assert.equal(failed.scorePercent, 96); assert.equal(failed.passed, false); assert.equal(failed.reference, '');
+  assert.match(failed.meaning, /not passed/);
+  const retry = await training.startTrainingAttempt(f.db, actor);
+  const result = await training.submitTrainingAttempt(f.db, { ...actor, attemptId: retry.id, answers: answerTokens(retry, course) });
+  assert.equal(result.scorePercent, 100); assert.equal(result.passed, true); assert.ok(!('programmeApprovalPending' in result));
+  assert.match(result.meaning, /TLink learning completion/);
+  assert.doesNotMatch(result.meaning, /pending/i);
+  await pass(f, 'installer-member');
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_module_reviews').get().n, 0, 'autonomous training must not fabricate manual decisions');
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_completions').get().n, 2);
+  const projected = (await training.getTrainingModulesForMember(f.db, 'owner', 'owner-member')).find(module => module.id === course.id);
+  assert.equal(projected.status, 'passed'); assert.equal(projected.availability, 'active'); assert.equal(projected.assessmentAvailable, true);
+  assert.equal(projected.completion.reference, result.reference);
+  assert.equal((await training.getCertificateActivityEligibility(f.db, booking)).eligible, true);
+  assert.equal((await training.getBusinessCertificateLeadEligibility(f.db, { ownerUid: 'owner', activityTemplateIds: ['veu-6'] })).eligible, true);
+});
+
+test('partial source coverage blocks assessment and learner projection removes internal review notes without changing source hashes', async () => {
+  const f = fixture();
+  const { GOVERNMENT_ACTIVITY_TEMPLATES } = load('src/lib/australian-government-program-catalogue.ts');
+  const partial = TRAINING_MODULES.find(course => course.sourceCoverage.status === 'partial');
+  const category = GOVERNMENT_ACTIVITY_TEMPLATES.find(activity => partial.activityTemplateIds.includes(activity.templateId)).serviceCategory;
+  f.sql.prepare('UPDATE trade_accounts SET capabilities=?,service_states=?').run(JSON.stringify([category, 'heating-cooling']), '["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"]');
+  const originalHashes = TRAINING_MODULES.map(training.getTrainingModuleHash);
+  const projected = await training.getTrainingModulesForMember(f.db, 'owner', 'owner-member');
+  assert.equal(projected.find(module => module.id === partial.id).assessmentAvailable, false);
+  assert.match(projected.find(module => module.id === partial.id).assessmentUnavailableReason, /source requirements are incomplete/);
+  await assert.rejects(training.startTrainingAttempt(f.db, { ownerUid: 'owner', memberId: 'owner-member', actorUid: 'owner', moduleId: partial.id }), error => error.code === 'TRAINING_ASSESSMENT_UNAVAILABLE');
+  const response = await trainingRoute(f).GET(new Request('https://example.test/api/trade-training'));
+  const body = await response.json();
+  assert.ok(!JSON.stringify(body).includes('creditex-review'));
+  assert.ok(!JSON.stringify(body).includes('creditex-source-review.md'));
+  const result = await pass(f);
+  assert.ok(result.feedback.every(item => !item.sourceIds.includes('creditex-review')));
+  assert.deepEqual(TRAINING_MODULES.map(training.getTrainingModuleHash), originalHashes);
+  assert.ok(TRAINING_MODULES.some(course => course.sources.some(source => source.id === 'creditex-review')), 'internal provenance remains retained server-side');
+});
+
+test('current source-backed assessments and recorded passes require an exact valid 25-question 100% result', async () => {
+  const course = TRAINING_MODULES.find(course => course.id === 'veu-6');
+  assert.equal(training.isTrainingModuleReady(course), true);
+  for (const change of [value => { value.questions.pop(); }, value => { value.passPercent = 96; }, value => { value.questions[0].options[1].id = value.questions[0].options[0].id; }, value => { value.sourceCoverage.status = 'partial'; }]) {
+    const invalid = structuredClone(course); change(invalid);
+    assert.equal(training.isTrainingModuleReady(invalid), false);
+  }
+  for (const [column, value] of [['score_percent', 96], ['critical_passed', 0], ['assessment_json', '[]'], ['member_id', 'someone-else']]) {
+    const f = fixture(); await approveBusiness(f); await pass(f); await pass(f, 'installer-member');
+    assert.equal((await training.getCertificateActivityEligibility(f.db, booking)).eligible, true);
+    f.sql.prepare(`UPDATE trade_training_attempts SET ${column}=? WHERE member_id='owner-member'`).run(value);
+    assert.equal((await training.getCertificateActivityEligibility(f.db, booking)).eligible, false);
+    const projected = (await training.getTrainingModulesForMember(f.db, 'owner', 'owner-member')).find(module => module.id === course.id);
+    assert.equal(projected.status, 'required'); assert.equal(projected.completion, null);
+  }
+});
+
+test('explicit withdrawal blocks assessment but optional expired or old review metadata does not disable current content', async () => {
+  for (const [column, value] of [['status', 'withdrawn'], ['review_expires_on', '2000-01-01'], ['content_hash', '0'.repeat(64)], ['version', 'old-version']]) {
+    const f = fixture(); const course = await activate(f);
+    const actor = { ownerUid: 'owner', memberId: 'owner-member', actorUid: 'owner', moduleId: course.id };
+    const attempt = await training.startTrainingAttempt(f.db, actor);
+    f.sql.prepare(`UPDATE trade_training_module_reviews SET ${column}=?`).run(value);
+    if (column === 'status') {
+      await assert.rejects(training.submitTrainingAttempt(f.db, { ...actor, attemptId: attempt.id, answers: answerTokens(attempt, course) }), error => error.code === 'TRAINING_ASSESSMENT_UNAVAILABLE');
+      await assert.rejects(training.startTrainingAttempt(f.db, actor), error => error.code === 'TRAINING_ASSESSMENT_UNAVAILABLE');
+      assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_completions').get().n, 0);
+    } else {
+      const result = await training.submitTrainingAttempt(f.db, { ...actor, attemptId: attempt.id, answers: answerTokens(attempt, course) });
+      assert.equal(result.passed, true);
+      assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_completions').get().n, 1);
+    }
+  }
+  const f = fixture(); const course = TRAINING_MODULES.find(course => course.id === 'veu-6');
+  const actor = { ownerUid: 'owner', memberId: 'owner-member', actorUid: 'owner', moduleId: course.id };
+  const attempt = await training.startTrainingAttempt(f.db, actor);
+  f.sql.prepare('UPDATE trade_training_attempts SET content_hash=?').run('1'.repeat(64));
+  await assert.rejects(training.submitTrainingAttempt(f.db, { ...actor, attemptId: attempt.id, answers: answerTokens(attempt, course) }), error => error.code === 'TRAINING_VERSION_CHANGED');
+});
+
+test('new withdrawal or changed review between read and commit rolls back pending assessment writes', async () => {
+  for (const stage of ['start', 'submit']) {
+    for (const reviewed of [false, true]) {
+      const f = fixture(); const course = reviewed ? await activate(f) : TRAINING_MODULES.find(course => course.id === 'veu-6');
+      const actor = { ownerUid: 'owner', memberId: 'owner-member', actorUid: 'owner', moduleId: course.id };
+      const attempt = stage === 'submit' ? await training.startTrainingAttempt(f.db, actor) : null;
+      const commit = f.db.batch;
+      f.db.batch = async statements => {
+        if (reviewed) f.sql.prepare("UPDATE trade_training_module_reviews SET updated_at=updated_at||'-changed'").run();
+        else f.sql.prepare("INSERT INTO trade_training_module_reviews(module_id,version,content_hash,status,source_reviewed_on,review_expires_on,reviewed_by_uid,review_note,updated_at) VALUES (?,?,?,'withdrawn',?,?,?,'New withdrawal',?)").run(course.id, course.version, training.getTrainingModuleHash(course), today(), yearLater(), 'reviewer', new Date().toISOString());
+        return commit(statements);
+      };
+      const operation = stage === 'start' ? training.startTrainingAttempt(f.db, actor) : training.submitTrainingAttempt(f.db, { ...actor, attemptId: attempt.id, answers: answerTokens(attempt, course) });
+      await assert.rejects(operation, /CHECK constraint failed/);
+      assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_completions').get().n, 0);
+      assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_attempts').get().n, stage === 'submit' ? 1 : 0);
+      if (attempt) assert.equal(f.sql.prepare('SELECT status FROM trade_training_attempts WHERE id=?').get(attempt.id).status, 'in_progress');
+    }
+  }
+});
+
+test('served jurisdictions are authoritative for projection and API scope, with address used only as a legacy fallback', async () => {
+  const f = fixture();
+  const { GOVERNMENT_PROGRAM_TEMPLATES } = load('src/lib/australian-government-program-catalogue.ts');
+  const jurisdictions = new Map(GOVERNMENT_PROGRAM_TEMPLATES.map(program => [program.programCode, program.jurisdiction]));
+  const cases = [[['VIC'], 'NSW', ['VIC']], [['NSW'], 'VIC', ['NSW']], [['NSW', 'VIC'], 'SA', ['NSW', 'VIC']], [[' vic ', 'VIC', 'invalid'], 'NSW', ['VIC']], [[], 'NSW', ['NSW']], [['invalid'], 'unknown', []]];
+  for (const [saved, address, expected] of cases) {
+    f.sql.prepare('UPDATE trade_accounts SET service_states=?,address_state=?').run(JSON.stringify(saved), address);
+    const scope = await training.getMemberTrainingScope(f.db, 'owner', 'owner-member');
+    assert.deepEqual(scope.serviceStates, expected);
+    assert.ok(scope.activities.every(activity => jurisdictions.get(activity.programCode) === 'AU' || expected.includes(jurisdictions.get(activity.programCode))));
+    assert.ok(scope.activities.some(activity => jurisdictions.get(activity.programCode) === 'AU'));
+    assert.equal(scope.activities.some(activity => activity.programCode === 'VEU'), expected.includes('VIC'));
+    assert.equal(scope.activities.some(activity => activity.programCode === 'NSW-ESS'), expected.includes('NSW'));
+    const response = await trainingRoute(f).GET(new Request('https://example.test/api/trade-training'));
+    assert.deepEqual((await response.json()).trainingServiceStates, expected);
+  }
+});
+
+test('jurisdiction removal wins against assessment submission and blocks jobs despite a different address state', async () => {
+  const f = fixture(); await approveBusiness(f); const course = await activate(f); await pass(f); await pass(f, 'installer-member');
+  const actor = { ownerUid: 'owner', memberId: 'installer-member', actorUid: 'installer', moduleId: course.id };
+  const attempt = await training.startTrainingAttempt(f.db, actor); const commit = f.db.batch;
+  f.db.batch = async statements => { f.sql.prepare("UPDATE trade_accounts SET service_states='[\"NSW\"]',address_state='VIC'").run(); return commit(statements); };
+  await assert.rejects(training.submitTrainingAttempt(f.db, { ...actor, attemptId: attempt.id, answers: answerTokens(attempt, course) }), /CHECK constraint failed/);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_completions').get().n, 2);
+  assert.equal((await training.getCertificateActivityEligibility(f.db, booking)).eligible, false);
+  await assert.rejects(training.startTrainingAttempt(f.db, actor), error => error.code === 'ACTIVITY_CAPABILITY_REQUIRED');
+  f.db.batch = commit;
+  f.sql.prepare("UPDATE trade_accounts SET service_states='[\"VIC\"]',address_state='NSW'").run();
+  assert.equal((await training.getCertificateActivityEligibility(f.db, booking)).eligible, true);
 });

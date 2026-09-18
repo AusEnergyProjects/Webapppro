@@ -18,7 +18,7 @@ function nodes(node, predicate) {
 const button = (tree, label) => nodes(tree, node => node.type === 'FieldButton' && text(node) === label)[0];
 const role = (tree, value) => nodes(tree, node => node.props.accessibilityRole === value);
 const flush = () => new Promise(resolve => setImmediate(resolve));
-const course = (overrides = {}) => ({ id: 'veu-6', programCode: 'VEU', version: 'exact-v1', title: 'Activity 6 heating and cooling', activityTemplateIds: ['veu-6'], estimatedMinutes: 25, passPercent: 100, availability: 'active', status: 'required', completion: null,
+const course = (overrides = {}) => ({ id: 'veu-6', programCode: 'VEU', version: 'exact-v1', title: 'Activity 6 heating and cooling', activityTemplateIds: ['veu-6'], estimatedMinutes: 25, passPercent: 100, assessmentAvailable: true, assessmentUnavailableReason: '', availability: 'active', status: 'required', completion: null,
   lessons: [{ title: 'Exact activity requirements', body: 'Retain actual customer consent.', sourceIds: ['official'] }],
   sources: [{ id: 'official', title: 'Official activity guidance', url: 'https://www.esc.vic.gov.au/activity-guidance' }], ...overrides });
 const overview = (modules = [course()]) => ({ ok: true, memberId: 'pin-member', business: { approved: false, status: 'agreement_pending', blockedReasons: ['An executed agreement is required.'] }, modules, unavailableActivities: [] });
@@ -88,11 +88,14 @@ test('217 activity catalogue is paged, searchable and filtered by exact programm
   assert.match(text(tree), /business owner completes the private Creditex application/);
 });
 
-test('lessons show official sources, require reading, and a pending curriculum cannot start', async () => {
-  const h = harness({ modules: [course({ availability: 'awaiting_review', status: 'awaiting_review' })] });
-  const tree = await learn(h); assert.equal(button(tree, 'Start assessment').props.disabled, true);
+test('complete curriculum permits assessment without a manual review gate and shows official sources', async () => {
+  const h = harness({ modules: [course({ availability: 'awaiting_review', status: 'required' })] });
+  let tree = await learn(h); assert.equal(button(tree, 'Start assessment').props.disabled, false);
   role(tree, 'link')[0].props.onPress(); await flush(); assert.deepEqual(h.opened, ['https://www.esc.vic.gov.au/activity-guidance']);
-  assert.match(text(tree), /review and activate this exact curriculum/); assert.equal(h.requests.filter(r => r.action === 'start').length, 0);
+  assert.match(text(tree), /Lessons complete. Continue to the assessment below/); assert.equal(button(tree, 'Next lesson'), undefined);
+  assert.doesNotMatch(text(tree), /Programme approval pending|review and activate this exact curriculum/);
+  button(tree, 'Start assessment').props.onPress(); await flush(); tree = h.render();
+  assert.match(text(tree), /Question 1 of 25/); assert.equal(h.requests.filter(r => r.action === 'start').length, 1);
 });
 
 test('all 25 answers are submitted; navigation and disconnect retain in-memory answers, then immediate retries reset them', async () => {
@@ -115,6 +118,24 @@ test('only a server-confirmed 100% pass displays a personal learning reference',
   let tree = await answerAll(h); button(tree, 'Submit assessment').props.onPress(); await flush(); tree = h.render();
   assert.match(text(tree), /100%/); assert.match(text(tree), /Assessment passed/); assert.match(text(tree), /TL-CX-TRAIN-PRIVATE-REF/);
   assert.match(text(tree), /not a government certificate, licence or external accreditation/); assert.equal(button(tree, 'Try the assessment again'), undefined);
+});
+
+test('partial curriculum gives a specific reason after reading without a start request', async () => {
+  const h = harness({ modules: [course({ availability: 'awaiting_review', status: 'awaiting_review', assessmentAvailable: false, assessmentUnavailableReason: 'Current official installation requirements are incomplete.' })] });
+  const tree = await learn(h); assert.equal(button(tree, 'Start assessment').props.disabled, true);
+  assert.match(text(tree), /Current official installation requirements are incomplete/);
+  button(tree, 'Start assessment').props.onPress(); await flush(); assert.equal(h.requests.filter(item => item.action === 'start').length, 0);
+});
+
+test('learning completion retains personal references, filters internal notes and does not await manual approval', async () => {
+  const learned = course({ availability: 'awaiting_review', status: 'passed', completion: { reference: 'NATIVE-PENDING-REF', expiresAt: '2027-01-01' } });
+  learned.sources.push({ id: 'creditex-review', title: 'Internal review notes', url: '/creditex-resources/creditex-source-review.md' });
+  learned.lessons[0].sourceIds.push('creditex-review');
+  const h = harness({ modules: [learned] }); let tree = await h.mount();
+  assert.match(text(tree), /NATIVE-PENDING-REF/); assert.doesNotMatch(text(tree), /Programme approval pending/);
+  button(tree, 'Open learning material').props.onPress(); tree = h.render();
+  assert.equal(role(tree, 'link').length, 1); assert.doesNotMatch(text(tree), /Internal review notes/);
+  assert.match(text(tree), /Your learning pass is recorded/); assert.equal(button(tree, 'Start assessment').props.disabled, true);
 });
 
 test('locked or unavailable profiles do not fabricate a pass; expired attempts can be left with confirmation', async () => {

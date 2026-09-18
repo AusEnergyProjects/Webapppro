@@ -28,6 +28,7 @@ import {
   ENERGY_SERVICE_CATALOGUE,
   savedEnergyServiceIds,
 } from "@/lib/energy-service-catalogue.mjs";
+import { AUSTRALIAN_STATE_OPTIONS, canonicalAustralianState } from "@/lib/australian-postcodes.mjs";
 
 type AvailabilityStatus = "open" | "limited" | "paused";
 
@@ -527,6 +528,12 @@ function CustomerDocumentPreview({
   );
 }
 
+function visibleServiceStates(profile: Pick<TradeBusinessSettingsProfile, "serviceStates" | "addressState">) {
+  const declared = [...new Set(profile.serviceStates.map(canonicalAustralianState).filter((state): state is string => Boolean(state)))];
+  const addressState = canonicalAustralianState(profile.addressState);
+  return declared.length ? declared : addressState ? [addressState] : [];
+}
+
 function initialServiceAreas(profile: TradeBusinessSettingsProfile) {
   if (profile.serviceAreas?.length) {
     return profile.serviceAreas.slice(0, 6).map((area) => ({
@@ -600,6 +607,7 @@ export function TradeBusinessSettingsWorkspace({
   const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>(() =>
     initialServiceAreas(profile),
   );
+  const [serviceStates, setServiceStates] = useState<string[]>(() => visibleServiceStates(profile));
   const [capabilities, setCapabilities] = useState<string[]>(() =>
     savedEnergyServiceIds(profile.capabilities),
   );
@@ -877,6 +885,9 @@ export function TradeBusinessSettingsWorkspace({
       if (profile.partnerType === "installer" && !capabilities.length) {
         return "Choose at least one business service.";
       }
+      if (profile.partnerType === "installer" && !serviceStates.length) {
+        return "Choose at least one state or territory served by this business.";
+      }
       if (!serviceAreas.length || serviceAreas.length > 6) {
         return "Keep between one and six service areas.";
       }
@@ -963,6 +974,7 @@ export function TradeBusinessSettingsWorkspace({
         : targetSection === "service"
           ? {
               capabilities,
+              serviceStates,
               serviceBasePostcode: serviceAreas[0]?.postcode || "",
               serviceRadiusKm: serviceAreas[0]?.radiusKm || 50,
               serviceAreas: serviceAreas.map((area) => ({
@@ -1012,6 +1024,9 @@ export function TradeBusinessSettingsWorkspace({
       onProfileChange(savedSettings || payload);
       if (savedSettings?.capabilities) {
         setCapabilities(savedEnergyServiceIds(savedSettings.capabilities));
+      }
+      if (savedSettings?.serviceStates) {
+        setServiceStates(visibleServiceStates({ serviceStates: savedSettings.serviceStates, addressState: profile.addressState }));
       }
       if (savedSettings?.invoicePaymentBsb !== undefined) {
         setInvoicePaymentBsb(savedSettings.invoicePaymentBsb);
@@ -1774,6 +1789,37 @@ export function TradeBusinessSettingsWorkspace({
                 </p>
               </fieldset>
             )}
+            <fieldset
+              style={{ border: "1px solid var(--trade-line)", borderRadius: 12, padding: 14 }}
+            >
+              <legend style={{ padding: "0 5px" }}>States and territories served</legend>
+              <p style={{ color: "var(--trade-muted)", fontSize: ".82rem", lineHeight: 1.55, margin: "0 0 12px" }}>
+                Choose where your business performs work. These states determine
+                the state programmes shown in your team&apos;s training, alongside
+                national programmes for their services. Lead matching also requires
+                a customer to be within a saved travel area. Changing a postcode
+                or radius does not change these selections. If you work across a
+                state border, select both states.
+              </p>
+              <div className="dashboard-choice-grid">
+                {AUSTRALIAN_STATE_OPTIONS.map(([state, label]) => (
+                  <label className={serviceStates.includes(state) ? "selected" : ""} key={state}>
+                    <input
+                      type="checkbox"
+                      value={state}
+                      checked={serviceStates.includes(state)}
+                      onChange={(event) => setServiceStates((current) => event.target.checked
+                        ? [...new Set([...current, state])]
+                        : current.filter((item) => item !== state))}
+                    />
+                    <span><strong>{label}</strong></span>
+                  </label>
+                ))}
+              </div>
+              <p style={{ color: "var(--trade-accent-readable)", fontSize: ".82rem", fontWeight: 800, margin: "12px 0 0" }}>
+                Selected: {serviceStates.length ? serviceStates.join(", ") : "No states selected"}
+              </p>
+            </fieldset>
             <div>
               <strong style={{ color: "var(--trade-ink)", fontSize: ".82rem" }}>
                 Serviceability

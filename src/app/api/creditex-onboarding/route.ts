@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     const access = await owner(request); const db = getD1();
     if ((request.headers.get('content-type') || '').startsWith('multipart/form-data')) {
       const data = await boundedMultipart(request); const kind = textField(data.get('kind'), 40); const file = data.get('file');
-      if (data.get('action') !== 'upload' || !['insurance','contractor_licence','director_id','director_selfie','guarantor_id','guarantor_selfie','prior_proposal'].includes(kind) || !(file instanceof File)) throw new CreditexComplianceError('FILE_INVALID', 'Choose a valid onboarding document type and file.', 400);
+      if (data.get('action') !== 'upload' || !['insurance','contractor_licence','director_id','director_selfie','guarantor_id','guarantor_selfie','prior_proposal','partnership_agreement'].includes(kind) || !(file instanceof File)) throw new CreditexComplianceError('FILE_INVALID', 'Choose a valid onboarding document type and file.', 400);
       const checked = await inspectTeamMemberFile(file); const id = crypto.randomUUID(); const key = `creditex-onboarding/${access.ownerUid}/${id}`; const now = new Date().toISOString();
       const count = await db.prepare('SELECT COUNT(*) AS count FROM creditex_onboarding_documents WHERE owner_uid=?').bind(access.ownerUid).first<{ count: number }>();
       if ((count?.count || 0) >= 60) throw new CreditexComplianceError('DOCUMENT_LIMIT', 'Contact Creditex to review the retained documents before adding more.', 409);
@@ -92,6 +92,12 @@ export async function POST(request: Request) {
     }
     const body = record(await readBoundedJsonRequest(request));
     if (body.action !== 'submit') throw new CreditexComplianceError('ACTION_INVALID', 'Choose a supported onboarding action.', 400);
-    return creditexJson({ ok: true, business: await submitCreditexApplication(db, access.ownerUid, access.actorUid, revisionInput(body.expectedRevision)) });
+    return creditexJson({ ok: true, business: await submitCreditexApplication(db, access.ownerUid, access.actorUid, revisionInput(body.expectedRevision), async document => {
+      const object = await bucket().get(document.object_key);
+      if (!object) throw new CreditexComplianceError('DOCUMENT_UNAVAILABLE', 'A required private document is unavailable. Upload it again before completing onboarding.', 409);
+      const hash = await crypto.subtle.digest('SHA-256', await new Response(object.body).arrayBuffer());
+      const actual = Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('');
+      if (actual !== document.sha256) throw new CreditexComplianceError('DOCUMENT_INTEGRITY_FAILED', 'A private document does not match its uploaded record. Upload it again before completing onboarding.', 409);
+    }) });
   } catch (error) { return creditexApiError(error); }
 }

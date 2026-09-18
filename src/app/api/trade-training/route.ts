@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     const [business, data] = await Promise.all([getCreditexBusinessStatus(db, access.ownerUid), getTrainingProjectionData(db, access.ownerUid)]);
     const declared = scope.activities;
     const modules = (await getTrainingModulesForMember(db, access.ownerUid, memberId, data, scope)).filter(module => module.activityTemplateIds.some(id => declared.some(activity => activity.templateId === id)));
-    const unavailableActivities = declared.filter(activity => !modules.some(module => module.activityTemplateIds.includes(activity.templateId))).map(activity => ({ id: activity.templateId, title: activity.title, programCode: activity.programCode, serviceCategory: activity.serviceCategory, businessServiceEnabled: activity.businessServiceEnabled, status: 'unavailable', message: 'No reviewed activity-specific curriculum is available. Certificate jobs for this activity remain blocked.' }));
+    const unavailableActivities = declared.filter(activity => !modules.some(module => module.activityTemplateIds.includes(activity.templateId))).map(activity => ({ id: activity.templateId, title: activity.title, programCode: activity.programCode, serviceCategory: activity.serviceCategory, businessServiceEnabled: activity.businessServiceEnabled, status: 'unavailable', message: 'No complete activity-specific curriculum is available. Certificate jobs for this activity remain blocked.' }));
     const team = [];
     if (access.isOwner || access.canManageTeam) {
       const members = await db.prepare("SELECT id,display_name FROM trade_team_members WHERE owner_uid=? AND status='active' ORDER BY display_name LIMIT 100").bind(access.ownerUid).all<{ id: string; display_name: string }>();
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
         team.push({ memberId: member.id, displayName: member.display_name, modules: (await getTrainingModulesForMember(db, access.ownerUid, member.id, data, memberScope)).filter(module => module.activityTemplateIds.some(id => memberScope.activities.some(activity => activity.templateId === id))).map(module => ({ id: module.id, title: module.title, serviceCategory: module.serviceCategory, businessServiceEnabled: module.businessServiceEnabled, status: module.status, reference: module.completion?.reference || '', expiresAt: module.completion?.expiresAt || '' })) });
       }
     }
-    return creditexJson({ ok: true, business, memberId, actor: { isOwner: access.isOwner, displayName: access.displayName, memberId: access.memberId }, selectedMember: { memberId, displayName: scope.displayName, isOwner: scope.isOwner, isSelf: memberId === access.memberId }, canTakeTraining: memberId === access.memberId, modules, unavailableActivities, team });
+    return creditexJson({ ok: true, business, memberId, trainingServiceStates: scope.serviceStates, actor: { isOwner: access.isOwner, displayName: access.displayName, memberId: access.memberId }, selectedMember: { memberId, displayName: scope.displayName, isOwner: scope.isOwner, isSelf: memberId === access.memberId }, canTakeTraining: memberId === access.memberId, modules, unavailableActivities, team });
   } catch (error) { return creditexApiError(error); }
 }
 export async function POST(request: Request) {

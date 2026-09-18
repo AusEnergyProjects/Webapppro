@@ -25,6 +25,7 @@
 .passed { color: var(--trade-success, #66d5b2); }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 15px; }
 .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 245px), 1fr)); gap: 15px; }
+.formFields { display: grid; gap: 20px; min-width: 0; margin: 0; padding: 0; border: 0; }
 .field { display: grid; gap: 7px; font-size: .8rem; font-weight: 700; align-content: start; min-width: 0; }
 .field input, .field select, .field textarea, .shell select { width: 100%; min-width: 0; color: var(--trade-field-ink, #f1f7f8); background: var(--trade-field, #0d2029); border: 1px solid var(--learn-line); border-radius: 10px; min-height: 46px; padding: 11px 12px; font: inherit; }
 .field textarea { resize: vertical; }

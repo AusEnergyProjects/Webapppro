@@ -13,11 +13,11 @@ const moduleById = (id) => {
   return trainingCourse;
 };
 
-test("every catalogue activity has its own exact programme-bound draft course; unknown activities fail closed", () => {
+test("every catalogue activity has its own exact programme-bound course with automatic publication only for complete sources", () => {
   assert.deepEqual(TRAINING_MODULES.map((trainingCourse) => trainingCourse.id).sort(), [...expectedIds].sort());
   const catalogueIds = new Set(GOVERNMENT_ACTIVITY_TEMPLATES.map((activity) => activity.templateId));
   for (const trainingCourse of TRAINING_MODULES) {
-    assert.equal(trainingCourse.reviewStatus, "draft");
+    assert.equal(trainingCourse.reviewStatus, trainingCourse.sourceCoverage.status === "source_transcribed" ? "published" : "incomplete");
     assert.ok(trainingCourse.scope.length > 50);
     assert.deepEqual(trainingCourse.activityTemplateIds, [trainingCourse.id]);
     assert.ok(catalogueIds.has(trainingCourse.id));

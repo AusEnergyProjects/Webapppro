@@ -6473,7 +6473,18 @@ export const creditexOnboardingDocuments = sqliteTable("creditex_onboarding_docu
   id: text("id").primaryKey(), ownerUid: text("owner_uid").notNull(), kind: text("kind").notNull(), fileName: text("file_name").notNull(),
   contentType: text("content_type").notNull(), sizeBytes: integer("size_bytes").notNull(), sha256: text("sha256").notNull(),
   objectKey: text("object_key").notNull().unique(), uploadedByUid: text("uploaded_by_uid").notNull(), createdAt: text("created_at").notNull(),
-}, (t) => [index("creditex_onboarding_documents_owner_idx").on(t.ownerUid,t.createdAt), check("creditex_onboarding_document_kind_check", sql`${t.kind} IN ('insurance','contractor_licence','director_id','director_selfie','guarantor_id','guarantor_selfie','prior_proposal')`), check("creditex_onboarding_document_size_check", sql`${t.sizeBytes} BETWEEN 1 AND 12582912`), check("creditex_onboarding_document_hash_check", sql`length(${t.sha256})=64`)]);
+}, (t) => [index("creditex_onboarding_documents_owner_idx").on(t.ownerUid,t.createdAt), check("creditex_onboarding_document_kind_check", sql`${t.kind} IN ('insurance','contractor_licence','director_id','director_selfie','guarantor_id','guarantor_selfie','prior_proposal','partnership_agreement')`), check("creditex_onboarding_document_size_check", sql`${t.sizeBytes} BETWEEN 1 AND 12582912`), check("creditex_onboarding_document_hash_check", sql`length(${t.sha256})=64`)]);
+
+export const creditexOnboardingCompletions = sqliteTable("creditex_onboarding_completions", {
+  id: text("id").primaryKey(), ownerUid: text("owner_uid").notNull(), revision: integer("revision").notNull(),
+  businessAbn: text("business_abn").notNull(), businessName: text("business_name").notNull(),
+  agreementDocumentId: text("agreement_document_id").notNull(), agreementSha256: text("agreement_sha256").notNull(),
+  actorUid: text("actor_uid").notNull(), reference: text("reference").notNull().unique(), completedAt: text("completed_at").notNull(),
+}, (t) => [uniqueIndex("creditex_onboarding_completions_revision_idx").on(t.ownerUid,t.revision),
+  check("creditex_onboarding_completion_identity_check", sql`length(${t.ownerUid})>0 AND length(${t.businessAbn})>0 AND length(${t.businessName})>0 AND length(${t.agreementDocumentId})>0 AND length(${t.actorUid})>0 AND length(${t.reference})>0`),
+  check("creditex_onboarding_completion_revision_check", sql`${t.revision}>0`),
+  check("creditex_onboarding_completion_hash_check", sql`length(${t.agreementSha256})=64 AND ${t.agreementSha256} NOT GLOB '*[^0-9a-f]*'`),
+  check("creditex_onboarding_completion_time_check", sql`datetime(${t.completedAt}) IS NOT NULL`)]);
 
 export const creditexOnboardingEvents = sqliteTable("creditex_onboarding_events", {
   id: text("id").primaryKey(), ownerUid: text("owner_uid").notNull(), actorUid: text("actor_uid").notNull(), eventType: text("event_type").notNull(),
@@ -6506,7 +6517,7 @@ export const tradeTrainingEvents = sqliteTable("trade_training_events", {
   id: text("id").primaryKey(), ownerUid: text("owner_uid").notNull().default(""), memberId: text("member_id").notNull().default(""), actorUid: text("actor_uid").notNull(), moduleId: text("module_id").notNull().default(""), eventType: text("event_type").notNull(), metadataJson: text("metadata_json").notNull(), createdAt: text("created_at").notNull(),
 }, (t) => [index("trade_training_events_member_idx").on(t.ownerUid,t.memberId,t.createdAt), check("trade_training_events_json_check", sql`json_valid(${t.metadataJson})`)]);
 
-// Definitions live in migration 0176. These are recomputed views, never stored
+// Definitions live in migrations 0176-0178. These are recomputed views, never stored
 // qualifications; deployed curriculum hashes remain an application input.
 export const creditexCurrentBusinessApprovals = sqliteView("creditex_current_business_approvals", {
   ownerUid: text("owner_uid").notNull(),

@@ -90,16 +90,16 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-71/);
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-70/);
   assert.match(roadmap, /## Previous released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79/);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 14 September 2026/);
+  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 19 September 2026/);
   assert.match(
     handover,
     /Status: system audit and polish[^\n]*Customer self-service accounts[^\n]*\r?\nPrepared: 9 September 2026/,
   );
   assert.match(handover, /Current production: Sites version 499/);
-  assert.match(releaseTruth, /Last reconciled locally: 14 September 2026/);
-  assert.match(releaseTruth, /## Current implementation: AEA services expansion/);
+  assert.match(releaseTruth, /Last reconciled locally: 19 September 2026/);
+  assert.match(releaseTruth, /## Current implementation: self-service Creditex training and intake/);
   assert.match(releaseTruth, /## Historical public production release: predictive navigation and exact provenance/);
-  assert.match(releaseTruth, /Deployment baseline verified: 14 September 2026, Sites 577/);
+  assert.match(releaseTruth, /Deployment baseline verified: 19 September 2026, Sites 580/);
   assert.match(releaseTruth, /4908a1467d90b2fff57b70517fad5e41e18e12b0/);
   assert.match(releaseTruth, /Sites version 499/);
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_a43c371ac43c8191ad99a0f4189e7508/);
@@ -1071,7 +1071,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /focused 22 of 22 checks/);
   assert.match(roadmap, /3d36c715-4904-4a1b-bde3-aa3e8253c74b/);
   assert.match(roadmap, /Live v307 QA confirmed the compact header shows Account\s+then TLink with no separator dot and no horizontal overflow/);
-  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*AEA services expansion/);
+  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*Self-service Creditex training and intake/);
   assert.match(currentHandover, /Milestone ID: `PUBLIC-MEASUREMENT-PROVENANCE-86`/);
   assert.match(currentHandover, /Working branch: `codex\/surge-durability-release`/);
   assert.match(currentHandover, /Released application source: `4908a1467d90b2fff57b70517fad5e41e18e12b0`/);

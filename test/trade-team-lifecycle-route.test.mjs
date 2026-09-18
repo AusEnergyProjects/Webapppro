@@ -166,7 +166,7 @@ async function post(route, body) {
 
 test("saving canonical personal services independently creates exact training todos without business approval", async () => {
   const database = fixture(); installCreditexTrainingFixture(database, { qualified: false });
-  database.exec("ALTER TABLE trade_team_member_files ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''; ALTER TABLE trade_team_member_files ADD COLUMN category TEXT NOT NULL DEFAULT 'licence'");
+  database.exec("ALTER TABLE trade_team_member_files ADD COLUMN category TEXT NOT NULL DEFAULT 'licence'");
   const route = loadRoute(database, []);
   const response = await patch(route, { action: "update_member", memberId: "target-1", capabilities: ["heating-cooling"], expectedUpdatedAt: "2026-08-12T00:00:00.000Z" });
   const saved = await response.json(); assert.equal(response.status, 200, saved.error);
@@ -183,7 +183,7 @@ test("saving canonical personal services independently creates exact training to
   new Function('require', 'module', 'exports', output)(name => { assert.ok(dependencies[name], name); return dependencies[name]; }, loaded, loaded.exports);
   const trainingResponse = await loaded.exports.GET(new Request('https://test/api/trade-training?memberId=target-1'));
   const todo = await trainingResponse.json(); assert.equal(trainingResponse.status, 200);
-  assert.ok(todo.modules.some(module => module.id === 'veu-6' && module.serviceCategory === 'heating-cooling' && module.businessServiceEnabled === false && module.status === 'awaiting_review'));
+  assert.ok(todo.modules.some(module => module.id === 'veu-6' && module.serviceCategory === 'heating-cooling' && module.businessServiceEnabled === false && module.status === 'required' && module.assessmentAvailable === true));
   const eligibility = await training.getCertificateActivityEligibility(d1(database), { ownerUid: 'owner-1', actorMemberId: 'manager-1', assignedMemberId: 'target-1', activityTemplateIds: ['veu-6'] });
   assert.equal(eligibility.eligible, false);
   const updatedAt = database.prepare("SELECT updated_at FROM trade_team_members WHERE id='target-1'").get().updated_at;

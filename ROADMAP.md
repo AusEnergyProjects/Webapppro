@@ -16,7 +16,11 @@ The dated audit is the immutable evidence baseline. [Release truth](./docs/RELEA
 
 Sequence is dependency based, not a calendar promise. A source change is not a release. A roadmap item is complete only when its required tests, release identity and runtime evidence are recorded.
 
-## Current system-polish direction
+## Current onboarding priority
+
+Complete the user-requested autonomous Creditex onboarding with the actual partnership agreement and authoritative registry/e-sign integrations when supplied. The current implementation replaces routine course activation with automatic current-version 100% passes and adds self-service business completion receipts. Signed agreement, external qualifications and statutory job evidence remain genuine requirements. Agreement placeholders cannot grant certificate-work eligibility. See [implementation details](./docs/creditex-onboarding-implementation.md).
+
+## Previous system-polish direction
 
 The [9 September system audit](./docs/audit/2026-09-09-system-polish.md) supersedes earlier customer-account plans. Household self-service accounts are retired; public enquiries, trade CRM customer/site records, secure quote acceptance and trade evidence remain. The implementation removes obsolete code and fixes lead body limits, electricity ranking, search, notification polling and field schedule visibility.
 

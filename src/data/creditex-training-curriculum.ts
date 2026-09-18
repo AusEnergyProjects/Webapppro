@@ -11,7 +11,7 @@ export interface TradeTrainingModule {
   passPercent: number;
   validityDays: number;
   retakeCooldownMinutes: number;
-  reviewStatus: "draft";
+  reviewStatus: "published" | "incomplete";
   scope: string;
   sourceCoverage: { status: "source_transcribed" | "partial"; gaps: string[] };
   questions: {
@@ -22,8 +22,8 @@ export interface TradeTrainingModule {
   lessons: { title: string; body: string; sourceIds: string[] }[];
 }
 
-export const CREDITEX_TRAINING_CONTENT_VERSION = "2026-09-18.2";
-export const CREDITEX_TRAINING_DISCLAIMER = "This is an internal Creditex compliance knowledge assessment. Passing does not grant a trade licence, EEC certification, government accreditation or permission to create certificates. Creditex must approve the business, each relevant person and activity before certificate work is enabled.";
+export const CREDITEX_TRAINING_CONTENT_VERSION = "2026-09-19.1";
+export const CREDITEX_TRAINING_DISCLAIMER = "A 100% pass automatically completes this person's activity training and issues a completion reference. This internal knowledge assessment does not grant a trade licence, EEC certification, government accreditation or permission to create certificates. Business setup, current insurance, the signed agreement, required credentials and each job's evidence must also be complete.";
 
 const sources: TradeTrainingModule["sources"] = [
   { id: "spec25", title: "DEECA VEU Specifications v25, Parts 1, 3, 6 and 48 (installation-date rules)", url: "https://www.energy.vic.gov.au/__data/assets/pdf_file/0041/795488/Victorian-Energy-Upgrades-Specifications-2018-Version-25.pdf", reviewedAt: "2026-09-18" },
@@ -57,7 +57,7 @@ function course(id: string, title: string, scope: string, lessons: TradeTraining
   const sourceIds = new Set([...lessons.flatMap((lesson) => lesson.sourceIds), ...moduleQuestions.flatMap((question) => question.sourceIds)]);
   return { id, title, scope, version: CREDITEX_TRAINING_CONTENT_VERSION, activityTemplateIds: [id],
     programCode: id.startsWith("veu-") ? "VEU" : "SRES", sourceCoverage: { status: "source_transcribed", gaps: [] },
-    estimatedMinutes: 30, passPercent: 100, validityDays: 365, retakeCooldownMinutes: 0, reviewStatus: "draft",
+    estimatedMinutes: 30, passPercent: 100, validityDays: 365, retakeCooldownMinutes: 0, reviewStatus: "published",
     questions: moduleQuestions, lessons, sources: sources.filter((source) => sourceIds.has(source.id)) };
 }
 
@@ -93,7 +93,7 @@ const veu1 = course("veu-1", "VEU Activity 1: replacing electric resistance wate
   ["What should the proposal disclose about Creditex?", "Its accredited-provider role and the actual benefit and job scope", "That the installer is a Victorian Government employee", "That certificates are guaranteed regardless of evidence", "That no complaint rights apply to discounted work", "The proposal must accurately identify the provider and explain the customer's terms and protections.", ["creditex-review", "rights-statement"]],
   ["A compliance plate photo is unreadable after submission. What is appropriate?", "Obtain authentic replacement evidence or escalate the gap to Creditex", "Edit a serial number into the photo", "Use a plate from a matching model at another home", "Delete the requirement", "Claim evidence must be genuine and traceable to this installation.", ["creditex-review"], true],
   ["Does omitting a recycling certificate from an individual upload remove disposal obligations?", "No; dispose lawfully and retain the records Creditex may audit", "Yes, all disposal evidence is optional", "Yes, the old tank can be sold for reuse", "Yes, the assignment replaces disposal", "Creditex distinguishes per-job upload requirements from record retention and lawful disposal obligations.", ["creditex-review"]],
-  ["What does passing this Activity 1 assessment establish?", "An internal knowledge result, subject to business, worker and activity approval", "Government installer accreditation", "Permission to create VEECs in your own name", "Automatic qualification for all hot-water schemes", "Training completion is one control. It cannot replace licences, Creditex approval or job-level evidence.", ["creditex-review"], true],
+  ["What does passing this Activity 1 assessment establish?", "Completion of this person's Activity 1 knowledge assessment", "Government installer accreditation", "Permission to create VEECs in your own name", "Automatic qualification for all hot-water schemes", "A 100% result automatically completes this person's training. Business setup, required licences and job-level evidence remain separate requirements.", ["creditex-review"], true],
 ]);
 
 const veu3 = course("veu-3", "VEU Activity 3: replacing gas or LPG water heating", "Activity 3C heat-pump and 3D electric-boosted solar replacements, including separate gas decommissioning responsibilities.", [
@@ -323,14 +323,14 @@ function catalogueCourse(profile: ActivityLearningProfile): TradeTrainingModule 
     ]);
   }
   const operatingCases: [string, string, string, string, string, string][] = [
-    ["business-authority", "The business has ticked this activity in its profile. What else establishes its authority to accept programme work?", "Creditex approval of the business, programme scope, insurance and executed agreement", "The capability selection alone", "A customer's request for the discount", "A supplier's product advertisement"],
+    ["business-authority", "The business has ticked this activity in its profile. What else establishes its readiness to accept programme work?", "Completed business setup, applicable programme scope, current insurance, signed agreement and required credentials", "The capability selection alone", "A customer's request for the discount", "A supplier's product advertisement"],
     ["individual-authority", "The director passed this module, but the newly assigned worker has not. Who may rely on that pass?", "Only the named person who passed; the assigned worker needs their own current training and external credentials", "Every employee of the director's business", "Any subcontractor named on the invoice", "Everyone working at the same premises"],
     ["source-version", "The implementation date changes across a rule commencement date. Which review is needed?", "Check and retain the source version effective on the actual implementation date", "Keep the rule used for the first sales estimate regardless of date", "Choose whichever version produces the larger benefit", "Use the most recently published rule even if it has not commenced"],
     ["signed-facts", "A required signer is absent when the declaration is prepared. What is the correct response?", "Obtain that person's genuine, authorised signature with true dates and completed facts", "Have a colleague copy the absent person's signature", "Leave the material facts blank and obtain a signature now", "Backdate the form to the date originally planned"],
     ["original-proof", "A discrepancy is found in the evidence for this activity. How should it be corrected?", "Preserve the original and add a traceable correction linked to the exact installation", "Replace the original file with a photograph from a similar job", "Edit the original capture date so the files agree", "Delete the inconsistent evidence after the claim is paid"],
     ["changed-scope", "The actual site or equipment differs from the approved scope. What happens before a programme commitment?", "Pause and obtain a revised eligibility and evidence decision for the actual scope", "Proceed on the original approval because the trade category is unchanged", "Ask the customer to accept all compliance risk instead of reassessing", "Select another activity code solely to bypass the discrepancy"],
     ["separate-claims", "A second government incentive is proposed for this job. What is required?", "Separate eligibility, assignment, payment and duplicate-claim checks for each programme", "Automatic approval because the first programme accepted the customer", "One assignment covering every programme without checking its wording", "Removal of the first programme from the evidence record"],
-    ["revocation", "A worker's pass has expired or been revoked after an earlier successful job. What applies to a new booking?", "Recheck current person, activity and business approval; the old job does not restore the pass", "The old successful job permanently qualifies the worker", "A colleague's current pass replaces the expired pass", "The customer can waive the training requirement"],
+    ["revocation", "A worker's pass has expired or been revoked after an earlier successful job. What applies to a new booking?", "Recheck current personal training, activity eligibility and business setup; the old job does not restore the pass", "The old successful job permanently qualifies the worker", "A colleague's current pass replaces the expired pass", "The customer can waive the training requirement"],
   ];
   for (const [key, prompt, answer, b, c, d] of operatingCases) {
     const fact = procedure.find((entry) => entry.key === key);
@@ -342,13 +342,13 @@ function catalogueCourse(profile: ActivityLearningProfile): TradeTrainingModule 
   return {
     id, programCode: profile.activity.programCode, title: `${label}: ${profile.activity.title}${profile.activity.programCode === "NSW-HES" ? " (loan only)" : ""}`, version: CREDITEX_TRAINING_CONTENT_VERSION,
     activityTemplateIds: [id], estimatedMinutes: 30, passPercent: 100, validityDays: 365, retakeCooldownMinutes: 0,
-    reviewStatus: "draft", sourceCoverage: { status: gaps.length ? "partial" : "source_transcribed", gaps },
-    scope: `${profile.programmeName}: ${profile.activity.title}. Outcome: ${profile.outcome}. ${profile.activity.catalogueState === "current" || profile.activity.catalogueState === "limited" ? "Independent Creditex approval and all external programme eligibility conditions remain required." : `The ${profile.activity.catalogueState} pathway retains its separate operating restrictions; training cannot override them.`}`,
+    reviewStatus: gaps.length ? "incomplete" : "published", sourceCoverage: { status: gaps.length ? "partial" : "source_transcribed", gaps },
+    scope: `${profile.programmeName}: ${profile.activity.title}. Outcome: ${profile.outcome}. ${profile.activity.catalogueState === "current" || profile.activity.catalogueState === "limited" ? "A 100% pass completes personal training automatically. Business setup and all external programme eligibility conditions remain required." : `The ${profile.activity.catalogueState} pathway retains its separate operating restrictions; training cannot override them.`}`,
     questions: questions(id, inputs), lessons, sources: profile.sources,
   };
 }
 
-/** All entries remain drafts until an authorised reviewer activates their exact content digest. */
+/** Complete source-bound courses are published for automatic individual assessment. */
 const detailedCourses = [veu1, veu3, veu6, veu48, ashp, swh];
 export const TRAINING_MODULES: readonly TradeTrainingModule[] = [
   ...detailedCourses,

@@ -50,16 +50,57 @@ test('unrelated jurisdictions and unrelated workers do not unlock or block an ac
     assert.equal(f.eligible(), false);
   } finally { f.sql.close(); }
 });
-test('review expiry, content drift and latest completion revocation block lead disclosure', () => {
+
+test('lead disclosure always requires an active business owner, including categories without a course requirement', () => {
+  const f = fixture();
+  try {
+    const categories = [['heating-cooling'], ['non-certificate-service']];
+    for (const category of categories) assert.equal(f.eligible(category), true);
+    f.sql.exec("UPDATE trade_team_members SET status='inactive' WHERE id='owner-member'");
+    for (const category of categories) assert.equal(f.eligible(category), false);
+    f.sql.exec("DELETE FROM trade_team_members WHERE id='owner-member'");
+    for (const category of categories) assert.equal(f.eligible(category), false);
+  } finally { f.sql.close(); }
+});
+
+test('current served states govern pending lead disclosure and allocation with legacy address fallback only', () => {
+  const f = fixture();
+  try {
+    f.sql.exec("UPDATE trade_accounts SET service_states='[\"VIC\"]',address_state='NSW'");
+    assert.equal(f.eligible(), true);
+    assert.equal(f.eligible(['heating-cooling'], 'NSW'), false, 'the address cannot add an undeclared service state');
+    f.sql.exec("UPDATE trade_accounts SET service_states='[\"NSW\"]',address_state='VIC'");
+    assert.equal(f.eligible(), false, 'saved completions cannot preserve disclosure after VIC is removed');
+    f.sql.exec('CREATE TABLE state_allocations(owner_uid TEXT)');
+    const inserted = f.sql.prepare(`INSERT INTO state_allocations SELECT lead.owner_uid
+      FROM (SELECT ? owner_uid, ? categories, ? state) lead WHERE ${f.predicate}`)
+      .run('owner', '["heating-cooling"]', 'VIC');
+    assert.equal(Number(inserted.changes), 0, 'the same state rule is checked at the allocation mutation');
+    f.sql.exec("UPDATE trade_accounts SET service_states='[\" vic \",\"VIC\",\"NSW\"]'");
+    assert.equal(f.eligible(), true);
+    assert.equal(f.eligible(['heating-cooling'], 'NSW'), true);
+    f.sql.exec("UPDATE trade_accounts SET service_states='[]'");
+    assert.equal(f.eligible(), true, 'only undeclared legacy accounts use their address state');
+    assert.equal(f.eligible(['heating-cooling'], 'NSW'), false);
+  } finally { f.sql.close(); }
+});
+test('autonomous current passes allow leads without reviews while withdrawals, source drift and revocations block disclosure', () => {
   const f = fixture();
   try {
     f.sql.exec("UPDATE trade_training_module_reviews SET review_expires_on='2000-01-01' WHERE module_id='veu-6'");
-    assert.equal(f.eligible(), false);
+    assert.equal(f.eligible(), true, 'optional curriculum review expiry does not expire an actual current pass');
     f.sql.prepare("UPDATE trade_training_module_reviews SET review_expires_on='2099-12-31',content_hash=? WHERE module_id='veu-6'").run('f'.repeat(64));
-    assert.equal(f.eligible(), false);
+    assert.equal(f.eligible(), true, 'optional review content cannot override deployed source-backed curriculum');
+    f.sql.exec("DELETE FROM trade_training_module_reviews");
+    assert.equal(f.eligible(), true, 'no curriculum review records are required');
     const completion = f.sql.prepare("SELECT * FROM trade_training_completions WHERE module_id='veu-6' AND member_id='worker'").get();
-    f.sql.prepare("UPDATE trade_training_module_reviews SET content_hash=? WHERE module_id='veu-6'").run(completion.content_hash);
+    f.sql.prepare("UPDATE trade_training_completions SET content_hash=? WHERE id=?").run('e'.repeat(64), completion.id);
+    assert.equal(f.eligible(), false, 'the completion must match actual attempt and deployed course content');
+    f.sql.prepare("UPDATE trade_training_completions SET content_hash=? WHERE id=?").run(completion.content_hash, completion.id);
     installCreditexTrainingFixture(f.sql);
+    f.sql.exec("UPDATE trade_training_module_reviews SET status='withdrawn' WHERE module_id='veu-6'");
+    assert.equal(f.eligible(), false, 'an explicit withdrawal blocks even current 100% passes');
+    f.sql.exec("UPDATE trade_training_module_reviews SET status='active'");
     f.sql.exec(`UPDATE trade_training_completions SET passed_at='2098-01-01',revoked_at='2098-01-02'
       WHERE id=(SELECT id FROM trade_training_completions WHERE module_id='veu-6' AND member_id='worker' ORDER BY rowid DESC LIMIT 1)`);
     assert.equal(f.eligible(), false, 'an earlier unrevoked pass must not replace a later revoked completion');

@@ -4,13 +4,19 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 14 September 2026
+Last reconciled locally: 19 September 2026
 
-Deployment baseline verified: 14 September 2026, Sites 577 and GitHub main at `5777148362db4c3a2fe2e374d328f58f7556a6d6` before this release.
+Deployment baseline verified: 19 September 2026, Sites 580 and GitHub main at `d18192b5eb6bb6249b003c44279b2aab4112ca2a` before this release.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: AEA services expansion
+## Current implementation: self-service Creditex training and intake
+
+The 19 September follow-up on `codex/creditex-activity-onboarding` makes complete activity courses assessable without manual curriculum approval, records a 100% personal pass automatically, removes the internal source-review notebook from learner links and scopes training/lead eligibility to declared served states. Business intake adds revision-bound automatic completion receipts, private signed-agreement evidence and actionable missing requirements. Forward migrations 0177 and 0178 preserve applied 0176. See [the implementation record](./creditex-onboarding-implementation.md) for controls, source gaps and validation.
+
+The actual agreement and authoritative ABN/e-sign integration details are still to be supplied. Their UI placeholder does not create a contract or replace the existing identity gate. This record is prepared before publication; the coordinating task records the exact pushed source and hosted verification. The preceding verified live baseline is Sites 580 at `d18192b5eb6bb6249b003c44279b2aab4112ca2a`.
+
+## Previous implementation: AEA services expansion
 
 The authorised services expansion on `codex/aea-services-expansion-20260914` adds seven priced AEA services, two two-year rental bundles, detailed service guides and FAQs, enquiry selections and private AEA-only routing, simplified evidenced safety visits, one combined report per completed visit and clearer customer emails. The new catalogue migration is `0175_expand_aea_service_enquiries.sql`. Existing indexed assessment routes and issued inspection versions remain intact.
 

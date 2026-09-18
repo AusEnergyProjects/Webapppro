@@ -102,6 +102,18 @@ function parseStringList(value: unknown) {
   }
 }
 
+function parseServiceStates(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const states: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") return null;
+    const state = canonicalAustralianState(item);
+    if (!state) return null;
+    if (!states.includes(state)) states.push(state);
+  }
+  return states;
+}
+
 type ServiceArea = {
   postcode: string;
   radiusKm: number;
@@ -377,6 +389,7 @@ export async function GET(request: Request) {
 
 type SettingsPayload = {
   capabilities?: unknown;
+  serviceStates?: unknown;
   availabilityStatus?: unknown;
   serviceBasePostcode?: unknown;
   serviceRadiusKm?: unknown;
@@ -424,7 +437,7 @@ export async function PATCH(request: Request) {
   }
 
   const db = getD1();
-  const account = await db.prepare(`SELECT email, business_name, phone, partner_type, postcode, capabilities, service_base_postcode,
+  const account = await db.prepare(`SELECT email, business_name, phone, partner_type, postcode, capabilities, service_states, service_base_postcode,
       service_radius_km, availability_status, email_opportunities,
       email_weekly_summary, brand_theme_key, brand_border_style,
       quote_email_subject_template, quote_email_intro, quote_default_terms,
@@ -465,6 +478,15 @@ export async function PATCH(request: Request) {
     return json({
       ok: false,
       error: "Choose at least one valid business service.",
+    }, 400);
+  }
+  const serviceStates = raw.serviceStates === undefined
+    ? parseStringList(account.service_states)
+    : parseServiceStates(raw.serviceStates);
+  if (!serviceStates || (raw.serviceStates !== undefined && account.partner_type === "installer" && !serviceStates.length)) {
+    return json({
+      ok: false,
+      error: "Choose at least one valid state or territory served by this business.",
     }, 400);
   }
 
@@ -629,7 +651,7 @@ export async function PATCH(request: Request) {
         invoice_payment_account_name = ?, invoice_payment_bsb = ?,
         invoice_payment_account_number = ?, invoice_payment_reference = ?,
         invoice_default_terms = ?,
-        settings_updated_at = ?, updated_at = ?
+        service_states = ?, settings_updated_at = ?, updated_at = ?
     WHERE firebase_uid = ?
   `).bind(
     JSON.stringify(capabilities),
@@ -655,6 +677,7 @@ export async function PATCH(request: Request) {
     invoicePaymentAccountNumber,
     invoicePaymentReference,
     invoiceDefaultTerms,
+    raw.serviceStates === undefined ? String(account.service_states || "[]") : JSON.stringify(serviceStates),
     now,
     now,
     identity.uid,
@@ -688,6 +711,7 @@ export async function PATCH(request: Request) {
     ok: true,
     settings: {
       capabilities,
+      serviceStates,
       availabilityStatus,
       serviceBasePostcode,
       serviceRadiusKm,
@@ -745,9 +769,7 @@ export async function POST(request: Request) {
       ? "installer"
       : "";
   const businessWebsite = canonicalHttpsWebsite(raw.businessWebsite);
-  const serviceStates = [...new Set(Array.isArray(raw.serviceStates)
-    ? raw.serviceStates.map(canonicalAustralianState).filter((value): value is string => Boolean(value))
-    : [])];
+  const serviceStates = parseServiceStates(raw.serviceStates);
   const capabilities = normalizeEnergyServiceIds(raw.capabilities) || [];
   const summary = cleanText(raw.summary, 800);
   const consent = raw.consent === true;
@@ -801,7 +823,7 @@ export async function POST(request: Request) {
   if (!contactName) return json({ ok: false, error: "Enter the contact name." }, 400);
   if (phone.replace(/\D/g, "").length < 8) return json({ ok: false, error: "Enter the business contact number." }, 400);
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(identity.email)) return json({ ok: false, error: "A valid business account email is required." }, 400);
-  if (!serviceStates.length) return json({ ok: false, error: "Choose at least one service area." }, 400);
+  if (!serviceStates?.length) return json({ ok: false, error: "Choose at least one valid state or territory served by this business." }, 400);
   if (!capabilities.length) return json({ ok: false, error: "Choose at least one capability." }, 400);
   if (!consent) return json({ ok: false, error: "Confirm the account and contact consent." }, 400);
 

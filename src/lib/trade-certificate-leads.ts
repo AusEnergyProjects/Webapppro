@@ -1,6 +1,6 @@
 import { TRAINING_MODULES } from "../data/creditex-training-curriculum.ts";
 import { GOVERNMENT_ACTIVITY_TEMPLATES, GOVERNMENT_PROGRAM_TEMPLATES } from "./australian-government-program-catalogue.ts";
-import { getTrainingModuleHash } from "./trade-training-server.ts";
+import { getTrainingModuleHash, isTrainingModuleReady } from "./trade-training-server.ts";
 
 function expression(value: string) {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*$/.test(value)) throw new Error("A static qualified SQL column is required.");
@@ -17,7 +17,7 @@ const requiredCourses = GOVERNMENT_ACTIVITY_TEMPLATES.flatMap((activity) => {
   const course = TRAINING_MODULES.find((item) => item.activityTemplateIds.includes(activity.templateId));
   return [{ moduleId: course?.id || activity.templateId, version: course?.version || "",
     hash: course ? getTrainingModuleHash(course) : "", category: activity.serviceCategory,
-    jurisdiction: program.jurisdiction, complete: course && course.sourceCoverage.status !== "partial" ? 1 : 0,
+    jurisdiction: program.jurisdiction, complete: course && isTrainingModuleReady(course) ? 1 : 0,
     external: activity.templateId === "veu-48" ? 1 : 0 }];
 });
 // Missing, incomplete and non-applicable courses remain blocking rows. The
@@ -40,10 +40,10 @@ export function certificateLeadEligibilitySql(ownerColumn: string, categoriesCol
   const owner = expression(ownerColumn); const categories = expression(categoriesColumn); const state = expression(stateColumn);
   return `(EXISTS (WITH required_course(module_id,version,content_hash,category,jurisdiction,source_complete,external_required)
     AS (VALUES ${requiredCourseRows})
-    SELECT 1 FROM creditex_current_business_approvals approved_business
+    SELECT 1 FROM creditex_current_business_jurisdictions approved_business
     WHERE approved_business.owner_uid = ${owner}
       AND json_valid(${categories}) AND json_type(${categories}) = 'array' AND json_array_length(${categories}) > 0
-      AND ${state} IN (${states.map(literal).join(",")})
+      AND approved_business.state = ${state}
       AND NOT EXISTS (SELECT 1 FROM required_course
         JOIN json_each(${categories}) training_category ON training_category.value = required_course.category
         WHERE required_course.jurisdiction IN ('AU', ${state})

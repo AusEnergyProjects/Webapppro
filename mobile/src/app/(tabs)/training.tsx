@@ -10,6 +10,9 @@ import { useApp } from '@/providers/app-provider';
 
 const readable = (value: string) => value.replaceAll('_', ' ').replace(/^./, letter => letter.toUpperCase());
 const date = (value: string) => new Date(value).toLocaleDateString('en-AU');
+const learnerSource = (source: TrainingSource) => source.id !== 'creditex-review' && !source.url.includes('creditex-source-review.md');
+const learningStatus = (status: string) => ['awaiting_review', 'unavailable'].includes(status) ? 'Assessment unavailable' : readable(status);
+const assessmentReason = (module: TrainingModule) => module.assessmentUnavailableReason || 'Assessment is unavailable. Refresh the module status for the current requirements.';
 
 export default function TrainingScreen() {
   const { user, sync } = useApp();
@@ -59,7 +62,7 @@ function TrainingWorkspace({ online }: { online: boolean }) {
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'The source could not be opened.'); }
   }
   async function start() {
-    if (!selected || selected.availability !== 'active' || !online || busy) return;
+    if (!selected || !allRead || !selected.assessmentAvailable || selected.status === 'passed' || !online || busy) return;
     setBusy('start'); setError('');
     try {
       setAttempt(await startTrainingAssessment(selected.id)); setQuestionIndex(0); setAnswers({}); setResult(null); setShowFeedback(false);
@@ -93,22 +96,27 @@ function TrainingWorkspace({ online }: { online: boolean }) {
   const lesson = selected?.lessons[lessonIndex];
   const question = attempt?.questions[questionIndex];
   const allRead = Boolean(selected?.lessons.length && selected.lessons.every((_, index) => readLessons.includes(index)));
-  const sources = (ids: string[]) => selected?.sources.filter(source => ids.includes(source.id)) || [];
+  const startReason = selected && !selected.assessmentAvailable ? assessmentReason(selected)
+    : selected?.status === 'passed' ? 'Your learning pass is recorded. You can review the lessons at any time.'
+    : !online ? 'Reconnect to start the assessment.'
+    : !allRead ? 'Read and mark every lesson before starting the assessment.' : 'All lessons are marked read. You are ready to start the assessment.';
+  const sources = (ids: string[]) => selected?.sources.filter(source => ids.includes(source.id) && learnerSource(source)) || [];
   const sourceLinks = (ids: string[]) => sources(ids).map(source => <Pressable key={source.id} accessibilityRole="link" onPress={() => void openSource(source)} style={styles.source}><Text style={styles.link}>{source.title} ↗</Text></Pressable>);
 
   return <Screen scrollKey={`${selected?.id || 'list'}:${attempt ? `question-${questionIndex}` : result ? 'result' : `lesson-${lessonIndex}`}`}>
-    <View style={styles.hero}><Text style={styles.eyebrow}>YOUR COMPLIANCE TO-DO LIST</Text><Text accessibilityRole="header" style={styles.heading}>Activity training</Text><Text style={styles.body}>Your own current activity pass is required before government program work. Business approval, licences and job evidence also remain required.</Text></View>
+    <View style={styles.hero}><Text style={styles.eyebrow}>YOUR COMPLIANCE TO-DO LIST</Text><Text accessibilityRole="header" style={styles.heading}>Activity training</Text><Text style={styles.body}>Your own current activity pass is required before government program work. Business setup, current insurance, licences and job evidence also remain required.</Text></View>
+    {data?.trainingServiceStates?.length ? <Text style={styles.note}>Training for {data.trainingServiceStates.join(', ')}, plus relevant national programs. The business owner manages service states in Business settings on TLink.</Text> : null}
     <Text style={styles.note}>Training and assessment require internet access. Answers stay on this screen until submitted; closing the app clears unsent answers.</Text>
     {!online && <Text accessibilityLiveRegion="polite" style={styles.warning}>You are offline. Reconnect to load training, open sources or submit your assessment.</Text>}
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     {!selected && <>
-      <View style={styles.card}><View style={styles.row}><Text accessibilityRole="header" style={styles.title}>{modules.filter(module => module.status === 'passed').length} of {modules.length} modules current</Text><FieldButton variant="secondary" loading={busy === 'load'} disabled={!online || Boolean(busy)} onPress={() => void refresh()}>Refresh</FieldButton></View>
-        {data && <><Text style={styles.badge}>Business: {readable(data.business.status)}</Text>{data.business.blockedReasons.map(reason => <Text key={reason} style={styles.body}>{reason}</Text>)}{!data.business.approved && <Text style={styles.note}>The business owner completes the private Creditex application and agreement in business setup.</Text>}</>}
+      <View style={styles.card}><View style={styles.row}><Text accessibilityRole="header" style={styles.title}>{modules.filter(module => module.status === 'passed').length} of {modules.length} modules passed</Text><FieldButton variant="secondary" loading={busy === 'load'} disabled={!online || Boolean(busy)} onPress={() => void refresh()}>Refresh</FieldButton></View>
+        {data && <><Text style={styles.badge}>Business: {data.business.approved ? 'Setup complete' : data.business.status === 'suspended' ? 'Setup suspended' : 'Finish setup'}</Text>{data.business.blockedReasons.map(reason => <Text key={reason} style={styles.body}>{reason}</Text>)}{!data.business.approved && <Text style={styles.note}>The business owner completes the private Creditex application and agreement in business setup.</Text>}</>}
       </View>
       <Text style={styles.label}>Find an activity</Text><TextInput style={styles.input} accessibilityLabel="Find an activity" placeholder="Activity number, program or work type" placeholderTextColor={colours.muted} value={search} onChangeText={value => { setSearch(value); setVisible(12); }} autoCorrect={false} />
       <Text style={styles.label}>Program</Text><ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.programs} accessibilityLabel="Filter by exact program">{['', ...programs].map(value => <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: value === program }} style={[styles.chip, value === program && styles.selected]} onPress={() => { setProgram(value); setVisible(12); }}><Text style={styles.chipText}>{value || 'All programs'}</Text></Pressable>)}</ScrollView>
       <Text style={styles.note}>Showing {Math.min(visible, matching.length)} of {matching.length} matching activities.</Text>
-      {matching.slice(0, visible).map(module => <View key={module.id} style={styles.card}><Text style={styles.eyebrow}>{module.programCode} · {module.activityTemplateIds.join(', ')}</Text><Text accessibilityRole="header" style={styles.title}>{module.title}</Text><Text style={module.status === 'passed' ? styles.success : styles.badge}>{module.status === 'passed' ? '✓ Passed' : readable(module.status)}</Text><Text style={styles.body}>{module.estimatedMinutes} minutes · Pass mark {module.passPercent}% · Version {module.version}</Text>{module.status === 'passed' && module.completion && <><Text style={styles.label}>Learning completion reference</Text><Text selectable style={styles.reference}>{module.completion.reference}</Text><Text style={styles.note}>Valid until {date(module.completion.expiresAt)}</Text></>}{module.availability !== 'active' && <Text style={styles.warning}>Assessment is locked until Creditex reviews and activates the exact current curriculum.</Text>}<FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => openModule(module)}>Open learning material</FieldButton></View>)}
+      {matching.slice(0, visible).map(module => <View key={module.id} style={styles.card}><Text style={styles.eyebrow}>{module.programCode} · {module.activityTemplateIds.join(', ')}</Text><Text accessibilityRole="header" style={styles.title}>{module.title}</Text><Text style={module.status === 'passed' ? styles.success : styles.badge}>{module.status === 'passed' ? '✓ Passed' : learningStatus(module.status)}</Text><Text style={styles.body}>{module.estimatedMinutes} minutes · Pass mark {module.passPercent}% · Version {module.version}</Text>{module.status === 'passed' && module.completion && <><Text style={styles.label}>Learning completion reference</Text><Text selectable style={styles.reference}>{module.completion.reference}</Text><Text style={styles.note}>Valid until {date(module.completion.expiresAt)}</Text></>}{!module.assessmentAvailable && <Text style={styles.warning}>{assessmentReason(module)}</Text>}<FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => openModule(module)}>Open learning material</FieldButton></View>)}
       {matching.length > visible && <FieldButton variant="secondary" onPress={() => setVisible(value => value + 12)}>Show 12 more activities</FieldButton>}
       {data && !modules.length && <Text style={styles.body}>No modules are assigned to your work types and service locations. Ask the business owner to check business service selections and your Team capabilities. An empty list does not approve program work.</Text>}
       {modules.length > 0 && !matching.length && <Text style={styles.body}>No activity matches. Change the search or program.</Text>}
@@ -119,10 +127,11 @@ function TrainingWorkspace({ online }: { online: boolean }) {
       {!attempt && !result && lesson && <View style={styles.card}>
         <Text style={styles.badge}>Lesson {lessonIndex + 1} of {selected.lessons.length}</Text><Text accessibilityRole="header" style={styles.title}>{lesson.title}</Text><Text style={styles.body}>{lesson.body}</Text>{sourceLinks(lesson.sourceIds)}
         <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: readLessons.includes(lessonIndex) }} onPress={() => setReadLessons(current => current.includes(lessonIndex) ? current.filter(index => index !== lessonIndex) : [...current, lessonIndex])} style={styles.option}><Text style={styles.body}>{readLessons.includes(lessonIndex) ? '☑' : '☐'} I have read this lesson and its relevant source guidance.</Text></Pressable>
-        <View style={styles.row}><FieldButton variant="secondary" disabled={lessonIndex === 0} onPress={() => setLessonIndex(value => value - 1)}>Previous lesson</FieldButton><FieldButton variant="secondary" disabled={lessonIndex === selected.lessons.length - 1} onPress={() => setLessonIndex(value => value + 1)}>Next lesson</FieldButton></View>
+        <View style={styles.row}><FieldButton variant="secondary" disabled={lessonIndex === 0} onPress={() => setLessonIndex(value => value - 1)}>Previous lesson</FieldButton>{lessonIndex < selected.lessons.length - 1 ? <FieldButton variant="secondary" onPress={() => setLessonIndex(value => value + 1)}>Next lesson</FieldButton> : <Text accessibilityLiveRegion="polite" style={styles.label}>{allRead ? selected.status === 'passed' ? 'Lessons complete. Your learning pass is recorded.' : selected.assessmentAvailable ? 'Lessons complete. Continue to the assessment below.' : 'Lessons complete. Assessment is unavailable; see the reason below.' : 'Final lesson. Mark every lesson read to continue.'}</Text>}</View>
         <Text style={styles.body}>Pass mark: 100%. Every answer must be correct. You can retry immediately as often as needed.</Text>
-        {selected.availability !== 'active' && <Text style={styles.warning}>Creditex must review and activate this exact curriculum before assessment is available.</Text>}
-        <FieldButton loading={busy === 'start'} disabled={!allRead || selected.availability !== 'active' || !online || Boolean(busy)} onPress={() => void start()}>Start assessment</FieldButton>
+
+        <Text accessibilityLiveRegion="polite" style={styles.note}>{startReason}</Text>
+        <FieldButton loading={busy === 'start'} disabled={!allRead || !selected.assessmentAvailable || selected.status === 'passed' || !online || Boolean(busy)} onPress={() => void start()}>Start assessment</FieldButton>
       </View>}
       {attempt && question && <View style={styles.card}>
         <Text style={styles.badge}>Question {questionIndex + 1} of {attempt.questions.length} · {Object.keys(answers).length} answered</Text><Text accessibilityRole="header" style={styles.title}>{question.prompt}</Text>

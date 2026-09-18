@@ -1,6 +1,6 @@
 # Creditex training and programme work controls
 
-Draft for authorised Creditex approval. Version 2026-09-18.2.
+TLink activity training controls. Version 2026-09-19.1.
 
 This is an internal operating policy. It does not replace an Act, regulation, scheme rule, prescribed form, trade licence, external accreditation or administrator decision. Official programme sources linked in each lesson govern the actual activity. A Creditex assessment reference records the named individual's knowledge assessment against an exact course version; it is not a government certificate or an approval of a job's entitlement.
 
@@ -8,11 +8,11 @@ This is an internal operating policy. It does not replace an Act, regulation, sc
 
 Each programme activity has a separate course. Read its lessons and linked official requirements, then answer 25 multiple-choice questions. The intended duration is 20–30 minutes including source reading. All answers must be correct. Immediate retakes are unlimited. A person cannot rely on a director's, colleague's or subcontractor's pass.
 
-Course content remains a draft until an authorised Creditex reviewer approves its exact content version and source review. A material content change requires fresh approval. An unresolved source conflict or absent activity requirements prevents activation. A completed module cannot open a closed programme or override a specialist project approval.
+Complete activity courses are available without a manual curriculum approval step. A 100% pass automatically completes the named person's training and issues a completion reference. A material content change requires training against the new version. Unresolved source conflicts, absent activity requirements and explicit safety withdrawals prevent assessment. A completed module cannot open a closed programme or override a specialist project approval.
 
 ## Before committing programme work
 
-Creditex must approve the business, its actual programme scope, insurance and executed agreement. Selecting a trade capability does not establish that authority. Every assigned person must hold current training for the exact activity and all separately required licences, accreditations or specialist credentials. Check again when booking, accepting a programme lead or changing the assigned team. Earlier work does not keep an expired or revoked approval valid.
+Complete business setup with accurate details, current insurance, the signed Creditex agreement and the actual programme scope. Required documents and declarations are checked automatically when setup is completed. File checks establish that evidence has been supplied; they do not certify the authenticity or legal validity of a signature. Selecting a trade capability does not complete these requirements. Every assigned person must hold current training for the exact activity and all separately required licences, accreditations or specialist credentials. Check again when booking, accepting a programme lead or changing the assigned team. Earlier work does not keep expired or revoked eligibility valid.
 
 Establish the actual site, customer, equipment, baseline, implementation date and applicable source version. Resolve commencement and transition dates before promising eligibility. Describe the actual programme outcome: certificates, rebates, grants, loans, bill credits and tariff arrangements are different outcomes. A pass does not prove eligibility for any of them.
 

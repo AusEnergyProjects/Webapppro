@@ -4,6 +4,7 @@ export type TrainingSource = { id: string; title: string; url: string };
 export type TrainingModule = {
   id: string; programCode: string; version: string | number; title: string; activityTemplateIds: string[];
   estimatedMinutes: number; passPercent: number; availability: string; status: string;
+  assessmentAvailable: boolean; assessmentUnavailableReason: string;
   lessons: { title: string; body: string; sourceIds: string[] }[]; sources: TrainingSource[];
   completion: null | { reference: string; passedAt: string; expiresAt: string; revokedAt: string };
 };
@@ -11,6 +12,7 @@ export type TrainingOverview = {
   ok: boolean;
   business: { approved: boolean; status: string; blockedReasons: string[] };
   memberId: string;
+  trainingServiceStates?: string[];
   modules: TrainingModule[];
   unavailableActivities: { id: string; title: string; programCode: string; message: string }[];
 };

@@ -13,7 +13,7 @@ import { CREDITEX_TRAINING_NSW_TECHNICAL_FACTS } from "./creditex-training-nsw-t
 
 /** Source-derived learning points, kept bound to one exact programme activity.
  * Retained source hashes identify historical evidence; they are not a fresh fetch
- * or Creditex approval. Course activation still requires independent review.
+ * or Creditex approval. Complete courses support automatic individual assessment.
  */
 export interface ActivityTrainingSource {
   id: string; title: string; url: string; reviewedAt?: string;
@@ -37,8 +37,8 @@ interface RetainedSource {
   version?: string; sourceVersion?: string; citation?: string; expectedSha256?: string; observedOn?: string;
 }
 const policySource: ActivityTrainingSource = {
-  id: "creditex-training-policy", title: "Creditex training, evidence and exception handling policy (draft for approval)",
-  url: "/creditex-resources/creditex-training-operating-policy.md", reviewedAt: "2026-09-18",
+  id: "creditex-training-policy", title: "Creditex training, evidence and exception handling policy",
+  url: "/creditex-resources/creditex-training-operating-policy.md", reviewedAt: "2026-09-19",
 };
 const sentence = (value: string) => /[.!?]$/.test(value.trim()) ? value.trim() : `${value.trim()}.`;
 const words = (value: string) => value.replaceAll("_", " ");
@@ -157,7 +157,7 @@ function createProfile(activity: GovernmentActivityTemplate): ActivityLearningPr
     ["programme-output", "Correct programme outcome", `${programme.name} produces ${programme.claimOutputLabel}. Describe that outcome accurately to the customer; an internal assessment pass is not that outcome`],
     ["activity-boundary", "Exact scope of work", `This module is confined to ${activity.title} (${activity.registryActivityCode}) under ${programme.name}. A similar trade category or a pass in a different programme does not establish this activity's eligibility`],
     ["source-version", "Installation-date source control", `Before committing ${activity.title} to a programme claim, resolve the official rules effective on the implementation date and retain the source version. Stop if the applicable version or commencement date is uncertain`],
-    ["business-authority", "Business authority", `Creditex must approve the business's declared programme scope, insurance and executed agreement for ${programme.name}; a capability tick box cannot grant that approval`],
+    ["business-authority", "Business readiness", `Before accepting ${programme.name} work, complete business setup with current insurance, the signed Creditex agreement, the applicable programme scope and required credentials. A capability tick box alone does not meet these requirements`],
     ["individual-authority", "Each assigned person's authority", `Every person assigned programme work needs their own current activity training and any separately required licence, accreditation or specialist credential. A director's pass does not qualify the rest of the team`],
     ["signed-facts", "Declarations reflect completed facts", `For ${activity.title}, signatures must identify the actual authorised signer and true dates and facts. Never reuse a customer's signature, sign for an absent installer or backdate a declaration`],
     ["original-proof", "Evidence custody", `Preserve the original ${activity.title} evidence, capture time and device metadata where collected. Link the record to the exact premises and retain corrections as traceable revisions rather than overwriting original evidence`],
@@ -165,7 +165,7 @@ function createProfile(activity: GovernmentActivityTemplate): ActivityLearningPr
     ["separate-claims", "Multiple programme claims", `Any other incentive linked to this ${activity.title} job needs its own eligibility, assignment, payment and duplication checks. Approval under ${programme.name} does not automatically approve another scheme`],
     ["completion-boundary", "Job completion and external acceptance", `A completed TLink job or passed quiz does not prove that ${programme.claimOutputLabel} has been accepted. Record the external administrator or provider outcome separately from local work completion`],
     ["complaint", "Complaints and incorrect records", `Escalate complaints, suspected false ${activity.title} evidence, unsafe work and missing authority to Creditex. Preserve relevant records and correct errors through the controlled review process`],
-    ["revocation", "Approval after a pass", `Recheck business, activity and individual approval when booking or assigning ${activity.title}. An expired or revoked pass is not made valid by an earlier successful job`],
+    ["revocation", "Current eligibility after a pass", `Recheck business setup, activity eligibility and each person's current training when booking or assigning ${activity.title}. A 100% pass completes that person's training automatically. An expired or revoked pass is not made valid by an earlier successful job`],
   ];
   for (const [key, topic, requirement] of policies) add(key, topic, requirement, [policySource.id], "procedure");
   if (activity.catalogueState === "closed") add("closed-activity", "Closed activity boundary", `The retained catalogue identifies ${activity.title} as closed. This learning module supports understanding and legacy review only; do not book new programme claims without a separately verified lawful pathway`, [policySource.id], "authority");
