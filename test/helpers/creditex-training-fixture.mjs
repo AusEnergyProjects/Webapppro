@@ -4,10 +4,11 @@ import * as crypto from 'node:crypto';
 import * as curriculum from '../../src/data/creditex-training-curriculum.ts';
 import * as catalogue from '../../src/lib/australian-government-program-catalogue.ts';
 import * as onboarding from '../../src/lib/creditex-onboarding-server.ts';
+import * as energyServices from '../../src/lib/energy-service-catalogue.mjs';
 
 const read = (path) => fs.readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 const modules = { 'node:crypto': crypto, 'creditex-training-curriculum': curriculum,
-  'australian-government-program-catalogue': catalogue, 'creditex-onboarding-server': onboarding };
+  'australian-government-program-catalogue': catalogue, 'creditex-onboarding-server': onboarding, 'energy-service-catalogue.mjs': energyServices };
 export function certificateTestDependency(specifier) {
   return modules[specifier] || modules[specifier.split('/').at(-1).replace(/\.ts$/, '')];
 }

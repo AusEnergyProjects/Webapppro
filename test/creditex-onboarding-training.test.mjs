@@ -11,8 +11,8 @@ const modules = new Map();
 function load(relative) {
   const file = path.resolve(relative); if (modules.has(file)) return modules.get(file);
   const record = { exports: {} }; modules.set(file, record.exports);
-  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }, fileName: file }).outputText;
-  new Function('require', 'module', 'exports', code)((name) => name.startsWith('node:') ? nodeRequire(name) : load(path.resolve(path.dirname(file), name.endsWith('.ts') ? name : `${name}.ts`)), record, record.exports);
+  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }, fileName: file.replace(/\.mjs$/, '.js') }).outputText;
+  new Function('require', 'module', 'exports', code)((name) => name.startsWith('node:') ? nodeRequire(name) : load(path.resolve(path.dirname(file), /\.(?:ts|mjs)$/.test(name) ? name : `${name}.ts`)), record, record.exports);
   return record.exports;
 }
 const onboarding = load('src/lib/creditex-onboarding-server.ts');
@@ -39,6 +39,23 @@ function fixture() {
     sql.exec('BEGIN'); try { const results = []; for (const statement of statements) results.push(await statement.run()); sql.exec('COMMIT'); return results; } catch (error) { sql.exec('ROLLBACK'); throw error; }
   } };
   return { sql, db };
+}
+function trainingRoute(f, access = {}) {
+  const actor = { ownerUid: 'owner', memberId: 'owner-member', actorUid: 'owner', displayName: 'Owner', isOwner: true, canManageTeam: true, ...access };
+  const dependencies = {
+    '../../../../db': { getD1: () => f.db },
+    '@/lib/admin-server': { sameOrigin: request => !request.headers.get('origin') || request.headers.get('origin') === new URL(request.url).origin },
+    '@/lib/bounded-json-request': { readBoundedJsonRequest: request => request.json() },
+    '@/lib/creditex-onboarding-api': { creditexJson: (body, status = 200) => Response.json(body, { status }), creditexApiError: error => Response.json({ ok: false, code: error.code || 'FAILED' }, { status: error.status || 503 }) },
+    '@/lib/creditex-onboarding-server': onboarding,
+    '@/lib/trade-team-server': { requireInstallerTeamAccess: async () => actor },
+    '@/lib/trade-training-server': training,
+  };
+  const file = 'src/app/api/trade-training/route.ts';
+  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }, fileName: file }).outputText;
+  const loaded = { exports: {} };
+  new Function('require', 'module', 'exports', code)(name => { assert.ok(dependencies[name], name); return dependencies[name]; }, loaded, loaded.exports);
+  return loaded.exports;
 }
 const tomorrow = () => new Date(Date.now() + 86_400_000).toISOString().slice(0,10);
 const today = () => new Date().toISOString().slice(0,10);
@@ -297,4 +314,116 @@ test('learner catalogue never contains questions or answer keys and inactive cur
   assert.ok(catalogue.some(item=>item.programCode==='ACT-SHS')); assert.ok(catalogue.some(item=>item.programCode==='ACT-HES'));
   f.sql.prepare("UPDATE trade_training_module_reviews SET content_hash=?").run('b'.repeat(64));
   assert.equal((await training.getTrainingModulesForMember(f.db,'owner','owner-member')).find(item=>item.id==='veu-6').status,'awaiting_review');
+});
+
+test('saved personal services immediately add and remove learner todos independently of business services', async () => {
+  const f = fixture();
+  f.sql.prepare("UPDATE trade_accounts SET capabilities='[]'").run();
+  f.sql.prepare("UPDATE trade_team_members SET capabilities='[]' WHERE id='installer-member'").run();
+  const route = trainingRoute(f, { memberId: 'installer-member', actorUid: 'installer', isOwner: false, canManageTeam: false });
+  const read = async () => (await route.GET(new Request('https://example.test/api/trade-training'))).json();
+  assert.equal((await read()).modules.length, 0);
+  f.sql.prepare("UPDATE trade_team_members SET capabilities='[\"heating-cooling\"]' WHERE id='installer-member'").run();
+  const selected = await read();
+  assert.ok(selected.modules.some(module => module.id === 'veu-6'));
+  assert.ok(selected.modules.every(module => module.serviceCategory === 'heating-cooling' && module.businessServiceEnabled === false));
+  assert.ok(selected.modules.every(module => module.status === 'awaiting_review' && module.completion === null));
+  assert.equal(selected.canTakeTraining, true); assert.equal(selected.selectedMember.isSelf, true);
+  assert.deepEqual(selected.team, []);
+  assert.ok(!JSON.stringify(selected).includes('correctOptionId')); assert.ok(selected.modules.every(module => !('questions' in module)));
+  assert.equal((await training.getDeclaredTrainingActivities(f.db, 'owner', 'owner-member')).length, 0, 'owner training continues to follow business services');
+  f.sql.prepare("UPDATE trade_team_members SET capabilities='[\"painting\"]' WHERE id='installer-member'").run();
+  const ordinary = await read();
+  assert.deepEqual(ordinary.modules, []); assert.deepEqual(ordinary.unavailableActivities, []);
+  assert.equal(ordinary.business.approved, false, 'an ordinary service is not an approval or training completion');
+});
+
+test('owner and authorised manager can view an active roster member without taking over their identity', async () => {
+  const f = fixture();
+  f.sql.prepare("INSERT INTO trade_team_members VALUES ('roster-only','owner','active','New colleague','','[\"hot-water\"]')").run();
+  for (const access of [{}, { memberId: 'installer-member', actorUid: 'installer', displayName: 'Manager', isOwner: false, canManageTeam: true }]) {
+    const response = await trainingRoute(f, access).GET(new Request('https://example.test/api/trade-training?memberId=roster-only'));
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.memberId, 'roster-only'); assert.equal(body.selectedMember.displayName, 'New colleague');
+    assert.equal(body.selectedMember.isSelf, false); assert.equal(body.canTakeTraining, false);
+    assert.equal(body.actor.memberId, access.memberId || 'owner-member');
+    assert.ok(body.modules.some(module => module.id === 'sres-ashp'));
+    assert.ok(body.modules.every(module => module.serviceCategory === 'hot-water' && module.businessServiceEnabled));
+  }
+});
+
+test('member projection rejects unauthorised, inactive and cross-business targets without data disclosure', async () => {
+  const f = fixture();
+  f.sql.prepare("INSERT INTO trade_team_members VALUES ('foreign','other-owner','active','Private person','private-uid','[\"hot-water\"]'),('inactive','owner','suspended','Suspended person','suspended-uid','[\"hot-water\"]')").run();
+  const staff = trainingRoute(f, { memberId: 'installer-member', actorUid: 'installer', isOwner: false, canManageTeam: false });
+  const denied = await staff.GET(new Request('https://example.test/api/trade-training?memberId=owner-member'));
+  assert.equal(denied.status, 403); assert.equal((await denied.json()).code, 'TRAINING_MEMBER_ACCESS_DENIED');
+  for (const id of ['foreign', 'inactive', 'missing']) {
+    const response = await trainingRoute(f).GET(new Request(`https://example.test/api/trade-training?memberId=${id}`));
+    assert.equal(response.status, 404); assert.deepEqual(await response.json(), { ok: false, code: 'TRAINING_MEMBER_NOT_FOUND' });
+  }
+});
+
+test('owner and manager training POST cannot act for another member through query or body', async () => {
+  const f = fixture(); await activate(f);
+  for (const access of [{}, { memberId: 'installer-member', actorUid: 'installer', isOwner: false, canManageTeam: true }]) {
+    const route = trainingRoute(f, access);
+    const other = access.memberId ? 'owner-member' : 'installer-member';
+    for (const action of ['start', 'submit']) {
+      for (const query of [false, true]) {
+        const response = await route.POST(new Request(`https://example.test/api/trade-training${query ? `?memberId=${other}` : ''}`, { method: 'POST', body: JSON.stringify({ action, moduleId: 'veu-6', attemptId: 'unused', ...(query ? {} : { memberId: other }) }) }));
+        assert.equal(response.status, 403); assert.equal((await response.json()).code, 'TRAINING_SELF_ONLY');
+      }
+    }
+  }
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_attempts').get().n, 0);
+  const own = await trainingRoute(f).POST(new Request('https://example.test/api/trade-training?memberId=owner-member', { method: 'POST', body: JSON.stringify({ action: 'start', memberId: 'owner-member', moduleId: 'veu-6' }) }));
+  assert.equal(own.status, 200);
+  const created = f.sql.prepare('SELECT member_id,actor_uid FROM trade_training_attempts').get();
+  assert.equal(created.member_id, 'owner-member'); assert.equal(created.actor_uid, 'owner');
+});
+
+test('personal service allows reviewed training without enabling business booking or lead eligibility', async () => {
+  const f = fixture(); await approveBusiness(f); await activate(f); await pass(f);
+  f.sql.prepare("UPDATE trade_accounts SET capabilities='[]'").run();
+  const learned = await pass(f, 'installer-member');
+  assert.equal(learned.passed, true);
+  const modules = await training.getTrainingModulesForMember(f.db, 'owner', 'installer-member');
+  assert.equal(modules.find(module => module.id === 'veu-6').businessServiceEnabled, false);
+  assert.equal((await training.getCertificateActivityEligibility(f.db, booking)).eligible, false);
+  assert.equal((await training.getBusinessCertificateLeadEligibility(f.db, { ownerUid: 'owner', activityTemplateIds: ['veu-6'] })).eligible, false);
+});
+
+test('removing saved personal service before an attempt write or submission fails the atomic scope guard', async () => {
+  const f = fixture(); const course = await activate(f);
+  const actor = { ownerUid: 'owner', memberId: 'installer-member', actorUid: 'installer', moduleId: course.id };
+  const commit = f.db.batch;
+  f.db.batch = async statements => { f.sql.prepare("UPDATE trade_team_members SET capabilities='[]' WHERE id='installer-member'").run(); return commit(statements); };
+  await assert.rejects(training.startTrainingAttempt(f.db, actor), /CHECK constraint failed/);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_attempts').get().n, 0);
+  f.db.batch = commit;
+  f.sql.prepare("UPDATE trade_team_members SET capabilities='[\"heating-cooling\"]' WHERE id='installer-member'").run();
+  const attempt = await training.startTrainingAttempt(f.db, actor);
+  f.sql.prepare("UPDATE trade_team_members SET capabilities='[]' WHERE id='installer-member'").run();
+  await assert.rejects(training.submitTrainingAttempt(f.db, { ...actor, attemptId: attempt.id, answers: answerTokens(attempt, course) }), /CHECK constraint failed/);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_completions').get().n, 0);
+  assert.equal(f.sql.prepare('SELECT status FROM trade_training_attempts WHERE id=?').get(attempt.id).status, 'in_progress');
+});
+
+test('legacy combined service aliases project canonical training and use the same atomic assessment scope', async () => {
+  const f = fixture(); await activate(f, 'veu-48');
+  f.sql.prepare("UPDATE trade_accounts SET capabilities='[\"insulation-draughts\"]'").run();
+  f.sql.prepare("UPDATE trade_team_members SET capabilities='[\"insulation-draughts\"]' WHERE id='installer-member'").run();
+  for (const memberId of ['owner-member', 'installer-member']) {
+    const scope = await training.getMemberTrainingScope(f.db, 'owner', memberId);
+    assert.deepEqual(scope.capabilities, ['insulation', 'draught-proofing']);
+    assert.ok(scope.activities.some(activity => activity.templateId === 'veu-48' && activity.businessServiceEnabled));
+    assert.ok(scope.activities.some(activity => activity.serviceCategory === 'draught-proofing'));
+    const result = await pass(f, memberId, 'veu-48');
+    assert.equal(result.passed, true);
+  }
+  assert.equal(f.sql.prepare("SELECT capabilities FROM trade_accounts WHERE firebase_uid='owner'").get().capabilities, '["insulation-draughts"]', 'projection does not rewrite or approve the business');
+  assert.equal(f.sql.prepare("SELECT capabilities FROM trade_team_members WHERE id='installer-member'").get().capabilities, '["insulation-draughts"]');
+  assert.equal((await training.getCertificateActivityEligibility(f.db, { ...booking, activityTemplateIds: ['veu-48'] })).eligible, false);
 });

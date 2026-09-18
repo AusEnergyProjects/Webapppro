@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { certificateTestDependency } from "./helpers/creditex-training-fixture.mjs";
+import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
@@ -163,6 +163,35 @@ async function post(route, body) {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
   }));
 }
+
+test("saving canonical personal services independently creates exact training todos without business approval", async () => {
+  const database = fixture(); installCreditexTrainingFixture(database, { qualified: false });
+  database.exec("ALTER TABLE trade_team_member_files ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''; ALTER TABLE trade_team_member_files ADD COLUMN category TEXT NOT NULL DEFAULT 'licence'");
+  const route = loadRoute(database, []);
+  const response = await patch(route, { action: "update_member", memberId: "target-1", capabilities: ["heating-cooling"], expectedUpdatedAt: "2026-08-12T00:00:00.000Z" });
+  const saved = await response.json(); assert.equal(response.status, 200, saved.error);
+  assert.equal(database.prepare("SELECT capabilities FROM trade_team_members WHERE id='target-1'").get().capabilities, '["heating-cooling"]');
+  assert.equal(database.prepare("SELECT capabilities FROM trade_accounts WHERE firebase_uid='owner-1'").get().capabilities, '[]');
+  const training = certificateTestDependency('trade-training-server');
+  const onboarding = certificateTestDependency('creditex-onboarding-server');
+  const loaded = { exports: {} };
+  const output = ts.transpileModule(fs.readFileSync('src/app/api/trade-training/route.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const dependencies = { '../../../../db': { getD1: () => d1(database) }, '@/lib/admin-server': {}, '@/lib/bounded-json-request': {},
+    '@/lib/creditex-onboarding-api': { creditexJson: (body, status = 200) => Response.json(body, { status }), creditexApiError: error => Response.json({ code: error.code }, { status: error.status || 503 }) },
+    '@/lib/creditex-onboarding-server': onboarding, '@/lib/trade-training-server': training,
+    '@/lib/trade-team-server': { requireInstallerTeamAccess: async () => managerAccess } };
+  new Function('require', 'module', 'exports', output)(name => { assert.ok(dependencies[name], name); return dependencies[name]; }, loaded, loaded.exports);
+  const trainingResponse = await loaded.exports.GET(new Request('https://test/api/trade-training?memberId=target-1'));
+  const todo = await trainingResponse.json(); assert.equal(trainingResponse.status, 200);
+  assert.ok(todo.modules.some(module => module.id === 'veu-6' && module.serviceCategory === 'heating-cooling' && module.businessServiceEnabled === false && module.status === 'awaiting_review'));
+  const eligibility = await training.getCertificateActivityEligibility(d1(database), { ownerUid: 'owner-1', actorMemberId: 'manager-1', assignedMemberId: 'target-1', activityTemplateIds: ['veu-6'] });
+  assert.equal(eligibility.eligible, false);
+  const updatedAt = database.prepare("SELECT updated_at FROM trade_team_members WHERE id='target-1'").get().updated_at;
+  const invalid = await patch(route, { action: 'update_member', memberId: 'target-1', capabilities: ['invented-service'], expectedUpdatedAt: updatedAt });
+  assert.equal(invalid.status, 400);
+  assert.equal(database.prepare("SELECT capabilities FROM trade_team_members WHERE id='target-1'").get().capabilities, '["heating-cooling"]');
+  database.close();
+});
 
 test("delegated Team add creates an editable unique TLink username without requiring an office login", async () => {
   const database = fixture(); const route = loadRoute(database, []);

@@ -101,6 +101,32 @@ test("large programme catalogues page activity cards and filter by exact program
   assert.ok(!text(tree).includes("Specific module 21"));
 });
 
+test("to-do list shows unfinished training first and keeps passed references available by status", async () => {
+  const completed = { ...course(), id: "sres-ashp", title: "Completed heat-pump learning", status: "passed",
+    completion: { reference: "TL-CX-TRAIN-PASSED", passedAt: "2026-09-18", expiresAt: "2027-01-01", revokedAt: "" } };
+  const h = harness(async () => ({ ok: true, business, memberId: "member-a", modules: [completed, course("awaiting_review")] }));
+  let tree = await h.mount();
+  assert.match(text(tree), /1\s+training\s+task\s+to do/);
+  assert.ok(text(tree).includes("Activity 6 heating and cooling"));
+  assert.ok(!text(tree).includes("Completed heat-pump learning"));
+  const statusSelect = () => nodes(tree, (node) => node.type === "select" && node.props["aria-label"] === "Training status")[0];
+  statusSelect().props.onChange({ target: { value: "passed" } }); tree = h.render();
+  assert.ok(text(tree).includes("Completed heat-pump learning"));
+  assert.ok(text(tree).includes("TL-CX-TRAIN-PASSED"));
+  assert.ok(!text(tree).includes("Activity 6 heating and cooling"));
+  statusSelect().props.onChange({ target: { value: "all" } }); tree = h.render();
+  assert.ok(text(tree).includes("Completed heat-pump learning"));
+  assert.ok(text(tree).includes("Activity 6 heating and cooling"));
+});
+
+test("personal training remains visible when the business has not enabled the service", async () => {
+  const h = harness(async () => ({ ok: true, business, memberId: "member-a", modules: [{ ...course(), businessServiceEnabled: false }] }));
+  const tree = await h.mount();
+  assert.ok(text(tree).includes("You can study this activity now"));
+  assert.ok(text(tree).includes("before programme work can be booked"));
+  assert.ok(button(tree, "Open learning material"));
+});
+
 test("declared activities without a curriculum stay visible as locked with no assessment action", async () => {
   const h = harness(async () => ({ ok: true, business, memberId: "member-a", modules: [], unavailableActivities: [{ id: "special-one", title: "Special work", programCode: "NSW-ESS", serviceCategory: "other", status: "unavailable", message: "Current training is not reviewed." }] }));
   const tree = await h.mount();
@@ -143,6 +169,8 @@ test("training is reachable for owners and staff and learner bundles never impor
   const read = (name) => fs.readFileSync(new URL(`../src/components/${name}`, import.meta.url), "utf8");
   assert.match(read("DirectTradeDashboard.tsx"), /workspace === "training" && <TradeTrainingWorkspace/);
   assert.match(read("TradeTeamPortal.tsx"), /portalView === "training" && <TradeTrainingWorkspace/);
+  assert.match(read("TradeTeamPortal.tsx"), /onOpenOwnTraining=\{\(\) => setPortalView\("training"\)\}/);
+  assert.match(read("DirectTradeDashboard.tsx"), /onOpenOwnTraining=\{\(\) => setWorkspace\("training"\)\}/);
   assert.match(read("DirectTradePartnerForm.tsx"), /<TradeCreditexOnboarding user=\{user\} initialExpanded/);
   assert.doesNotMatch(source, /correctOptionId|TRAINING_MODULES|creditex-training-curriculum|localStorage/);
   assert.match(source, /result\?\.feedback/);

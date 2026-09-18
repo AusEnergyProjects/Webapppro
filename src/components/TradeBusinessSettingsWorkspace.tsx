@@ -25,8 +25,8 @@ import {
   type TradeBrandThemeKey,
 } from "@/lib/trade-business-branding";
 import {
-  TRADE_SERVICE_CATALOGUE,
-  isEnergyServiceId,
+  ENERGY_SERVICE_CATALOGUE,
+  savedEnergyServiceIds,
 } from "@/lib/energy-service-catalogue.mjs";
 
 type AvailabilityStatus = "open" | "limited" | "paused";
@@ -113,7 +113,7 @@ const sectionOptions: Array<{
   { id: "team", label: "Team", detail: "People, access and files" },
   { id: "appearance", label: "Appearance", detail: "Logo, banner and colours" },
   { id: "documents", label: "Customer documents", detail: "Identity and payment" },
-  { id: "service", label: "Service areas", detail: "Lead types and coverage" },
+  { id: "service", label: "Services and areas", detail: "Business services and coverage" },
   { id: "quotes", label: "Quote defaults", detail: "Email and standard terms" },
   { id: "notifications", label: "Notifications", detail: "Capacity and account emails" },
   { id: "templates", label: "Templates", detail: "Quote and invoice preview" },
@@ -601,7 +601,7 @@ export function TradeBusinessSettingsWorkspace({
     initialServiceAreas(profile),
   );
   const [capabilities, setCapabilities] = useState<string[]>(() =>
-    profile.capabilities.filter(isEnergyServiceId),
+    savedEnergyServiceIds(profile.capabilities),
   );
   const [brandThemeKey, setBrandThemeKey] = useState<TradeBrandThemeKey>(
     profile.brandThemeKey || DEFAULT_TRADE_BRAND_THEME,
@@ -875,7 +875,7 @@ export function TradeBusinessSettingsWorkspace({
   function validateSettings(targetSection: string) {
     if (targetSection === "service") {
       if (profile.partnerType === "installer" && !capabilities.length) {
-        return "Choose at least one lead service.";
+        return "Choose at least one business service.";
       }
       if (!serviceAreas.length || serviceAreas.length > 6) {
         return "Keep between one and six service areas.";
@@ -1011,7 +1011,7 @@ export function TradeBusinessSettingsWorkspace({
         | undefined;
       onProfileChange(savedSettings || payload);
       if (savedSettings?.capabilities) {
-        setCapabilities(savedSettings.capabilities);
+        setCapabilities(savedEnergyServiceIds(savedSettings.capabilities));
       }
       if (savedSettings?.invoicePaymentBsb !== undefined) {
         setInvoicePaymentBsb(savedSettings.invoicePaymentBsb);
@@ -1707,7 +1707,7 @@ export function TradeBusinessSettingsWorkspace({
           <header className="business-settings-section-heading">
             <span>Services and areas</span>
             <h3 id="business-settings-service-title">
-              Lead services and travel coverage
+              Business services and travel coverage
             </h3>
             <p>
               Choose the work and locations this business can actually service.
@@ -1726,7 +1726,7 @@ export function TradeBusinessSettingsWorkspace({
                   padding: 14,
                 }}
               >
-                <legend style={{ padding: "0 5px" }}>Lead services</legend>
+                <legend style={{ padding: "0 5px" }}>Business services</legend>
                 <p
                   style={{
                     color: "var(--trade-muted)",
@@ -1735,12 +1735,15 @@ export function TradeBusinessSettingsWorkspace({
                     margin: "0 0 12px",
                   }}
                 >
-                  TLink uses these saved services for future lead matching.
+                  Choose the services your business performs. Team uses the same
+                  list for each person. Eligible services can be used for future
+                  lead matching, subject to approval, training and coverage.
+                  AEA-managed enquiries remain with Australian Energy Assessments.
                   Changes do not remove leads already assigned. Licences and
                   verification do not automatically add services.
                 </p>
                 <div className="dashboard-choice-grid">
-                  {TRADE_SERVICE_CATALOGUE.map((service) => {
+                  {ENERGY_SERVICE_CATALOGUE.map((service) => {
                     const selected = capabilities.includes(service.id);
                     return (
                       <label
@@ -1767,7 +1770,7 @@ export function TradeBusinessSettingsWorkspace({
                     margin: "12px 0 0",
                   }}
                 >
-                  {capabilities.length} of {TRADE_SERVICE_CATALOGUE.length} services selected
+                  {capabilities.length} of {ENERGY_SERVICE_CATALOGUE.length} services selected
                 </p>
               </fieldset>
             )}

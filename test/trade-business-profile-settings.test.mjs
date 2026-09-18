@@ -148,7 +148,7 @@ test("service areas are bounded, authoritative and saved atomically", () => {
   );
 });
 
-test("approved installers can save canonical lead services for future exact matching", () => {
+test("approved installers can save business services with protected future lead matching", () => {
   assert.equal(ENERGY_SERVICE_IDS.includes("electric-cooking"), true);
   assert.deepEqual(
     normalizeEnergyServiceIds(["solar", "electric-cooking", "solar"]),
@@ -192,10 +192,12 @@ test("approved installers can save canonical lead services for future exact matc
   assert.match(profileRoute, /capabilities = \?, availability_status/);
   assert.match(profileRoute, /JSON\.stringify\(capabilities\)/);
   assert.match(profileRoute, /settings_updated_at = \?, updated_at = \?/);
-  assert.match(settingsUi, /TLink uses these saved services for future lead matching/);
+  assert.match(settingsUi, /Choose the services your business performs/);
+  assert.match(settingsUi, /subject to approval, training and coverage/);
+  assert.match(settingsUi, /AEA-managed enquiries remain with Australian Energy Assessments/);
   assert.match(settingsUi, /Changes do not remove leads already assigned/);
   assert.match(settingsUi, /Licences and[\s\S]*do not automatically add services/);
-  assert.match(settingsUi, /TRADE_SERVICE_CATALOGUE\.map/);
+  assert.match(settingsUi, /ENERGY_SERVICE_CATALOGUE\.map/);
   assert.ok(TRADE_SERVICE_CATALOGUE.some((service) => service.id === "solar"));
   assert.ok(TRADE_SERVICE_CATALOGUE.every((service) => !AEA_RESERVED_SERVICE_IDS.includes(service.id)));
   assert.match(settingsUi, /capabilities,/);

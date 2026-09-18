@@ -3,6 +3,10 @@
   gap: 18px;
 }
 
+.trainingPlaceholder { background: var(--trade-surface-soft, #f4faf7); border: 1px solid var(--trade-line, #cfe2da); border-radius: 13px; color: var(--trade-ink, #123d35); display: grid; gap: 8px; padding: 14px; }
+.trainingPlaceholder h4, .trainingPlaceholder p { margin: 0; }
+.trainingPlaceholder p { color: var(--trade-muted, #60766f); font-size: .84rem; line-height: 1.5; }
+
 .heading,
 .listHeader,
 .memberHeader,

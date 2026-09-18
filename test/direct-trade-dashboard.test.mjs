@@ -65,7 +65,7 @@ test("Business settings expose bounded branding, service, template and closure c
   for (const section of [
     "Account",
     "Appearance",
-    "Service areas",
+    "Services and areas",
     "Quote defaults",
     "Notifications",
     "Templates",
@@ -78,6 +78,9 @@ test("Business settings expose bounded branding, service, template and closure c
   assert.match(businessSettings, /uploadMedia\("logo"/);
   assert.match(businessSettings, /uploadMedia\("banner"/);
   assert.match(businessSettings, /serviceAreas\.length >= 6/);
+  assert.match(businessSettings, /Business services and travel coverage/);
+  assert.match(businessSettings, /ENERGY_SERVICE_CATALOGUE\.map/);
+  assert.match(businessSettings, /AEA-managed enquiries remain with Australian Energy Assessments/);
   assert.match(businessSettings, /Quote and invoice preview/);
   assert.match(businessSettings, /business-settings-document-preview-grid/);
   assert.match(businessSettings, /\["quote", "invoice"\]/);

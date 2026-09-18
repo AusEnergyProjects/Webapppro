@@ -12,9 +12,12 @@ import {
   useState,
 } from "react";
 import type { User } from "firebase/auth";
+import dynamic from "next/dynamic";
 import { ENERGY_SERVICE_CATALOGUE } from "@/lib/energy-service-catalogue.mjs";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import styles from "./TradeTeamSettings.module.css";
+
+const TeamTrainingTodos = dynamic(() => import("./TeamTrainingTodos").then(module => module.TeamTrainingTodos), { loading: () => <p role="status">Loading training to-dos...</p> });
 
 type Scope = "own" | "team";
 type MemberStatus = "active" | "suspended";
@@ -256,7 +259,7 @@ function trapDialogKey(event: KeyboardEvent<HTMLElement>, close: () => void) {
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
 
-export function TradeTeamSettings({ user, navigationTarget }: { user: User; navigationTarget?: TLinkCommandTarget | null }) {
+export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }: { user: User; navigationTarget?: TLinkCommandTarget | null; onOpenOwnTraining?: () => void }) {
   const [members, setMembers] = useState<TradeTeamMember[]>([]);
   const [teamAccess, setTeamAccess] = useState<TeamResult["access"]>(undefined);
   const [loading, setLoading] = useState(true);
@@ -267,6 +270,7 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
   const [formPreset, setFormPreset] = useState<AccessPreset | "custom">("field");
   const [formPermissions, setFormPermissions] = useState(fieldPermissions);
   const [memberServices, setMemberServices] = useState<string[]>([]);
+  const [trainingRevision, setTrainingRevision] = useState(0);
   const [menu, setMenu] = useState<{ member: TradeTeamMember; x: number; y: number } | null>(null);
   const [filesMember, setFilesMember] = useState<TradeTeamMember | null>(null);
   const [files, setFiles] = useState<MemberFile[]>([]);
@@ -502,11 +506,19 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
       if (result.invite?.inviteUrl) setInviteUrl(result.invite.inviteUrl);
       const refreshed = await load();
       const savedId = isNew ? result.createdMemberId : editedMember?.id;
-      const savedMember = refreshed.members?.find((member) => member.id === savedId);
+      let savedMember = refreshed.members?.find((member) => member.id === savedId);
+      if (!savedMember && savedId) {
+        const detailResponse = await fetch(`/api/trade-team?memberId=${encodeURIComponent(savedId)}`, { headers: await tokenHeaders(), cache: "no-store" });
+        const details = await detailResponse.json() as TeamResult;
+        if (!detailResponse.ok || !details.ok) throw new Error("The member was saved, but their details could not be refreshed. Reopen the member to view current training.");
+        savedMember = details.members?.find(member => member.id === savedId);
+      }
       if (savedMember) {
         setEditing(savedMember);
         setFieldUsernameDraft(savedMember.fieldUsername);
         setFieldUsernameDirty(false);
+        setMemberServices(savedMember.capabilities || []);
+        setTrainingRevision(value => value + 1);
       } else setEditing(null);
       setMessage(isNew ? "Team member added. Their TLink username is ready for a PIN." : "Team member updated.");
     } catch (caught) { setMessage(""); setError(caught instanceof Error ? caught.message : "The team member could not be saved."); }
@@ -705,6 +717,13 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
     : "Former or inactive";
   const editingOwnAccess = editing !== null && editing !== "new" && isCurrentMember(editing);
   const editingOwner = editing !== null && editing !== "new" && editing.isOwner;
+  const unsavedServices = Boolean(editing && editing !== "new" && !editing.isOwner
+    && JSON.stringify([...memberServices].sort()) !== JSON.stringify([...(editing.capabilities || [])].sort()));
+  const trainingTodos = editing === "new" ? <section className={styles.trainingPlaceholder} aria-label="Training to-dos"><h4>Training to-dos</h4><p>Save this person and their services to create their activity training to-do list. Each person must complete their own modules.</p></section>
+    : editing && <TeamTrainingTodos key={`${user.uid}:${editing.id}:${trainingRevision}`} user={user} memberId={editing.id} displayName={memberLabel(editing)}
+      hasOfficeLogin={editing.hasLogin} active={editing.status === "active"} unsavedServices={unsavedServices} saving={Boolean(busy)}
+      onSave={() => dialogRef.current?.querySelector<HTMLFormElement>("form")?.requestSubmit()} onOpenOwnTraining={onOpenOwnTraining}
+      ownTrainingHref={isOwner ? "/direct-trade/dashboard?workspace=training" : "/direct-trade/team?workspace=training"} />;
   const showAccessEditor = Boolean(editing && canEditPermissions && !editingOwnAccess);
   const isSresCredential = uploadRentalGate === "sres_installer_accreditation" || uploadRentalGate === "sres_designer_accreditation";
   const fixedCredentialType = isSresCredential ? "accreditation"
@@ -775,14 +794,16 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
             </>}
           </div>
         </section>
+        {editingOwner && trainingTodos}
         {!editingOwner && <>{editing !== "new" && editing.status === "suspended" && <p className={styles.status}>This person is inactive. Their job history and documents remain saved. Reactivation does not restore revoked devices or old invitation links.</p>}
         <fieldset className={styles.colourPicker}><legend>Schedule colour</legend><p className={styles.hint}>This colour identifies the team member throughout the schedule.</p><div>{scheduleColours.map((colour) => <label key={colour.id} className={`${styles.colourChoice} ${styles[colour.id]}`}><input type="radio" name="scheduleColour" value={colour.id} defaultChecked={(editing === "new" ? "emerald" : editing.scheduleColour || "emerald") === colour.id} /><span aria-hidden="true" /><strong>{colour.label}</strong></label>)}</div></fieldset>
         <fieldset className={styles.permissionGroup}><legend>Services</legend><p className={styles.hint}>Choose the work this person performs. This does not change the services your business offers.</p><div className={styles.grid}>{ENERGY_SERVICE_CATALOGUE.map((service) => <label className={styles.check} key={service.id}><input type="checkbox" checked={memberServices.includes(service.id)} onChange={(event) => setMemberServices((current) => event.target.checked ? [...new Set([...current, service.id])] : current.filter((id) => id !== service.id))} /><span>{service.label}</span></label>)}</div></fieldset>
+        {trainingTodos}
         {showAccessEditor ? <>
-          <label>Quick access preset<select value={formPreset} onChange={(event) => applyPreset(event.target.value as AccessPreset)}><option value="custom" disabled>Custom access</option>{accessPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select><small className={styles.hint}>{editing === "new" ? accessPresets.find((item) => item.id === formPreset)?.description : "This person&apos;s saved switches are shown below."} Applying a preset only fills the switches below. You can then change any permission for this person.</small></label>
+          <label>Quick access preset<select value={formPreset} onChange={(event) => applyPreset(event.target.value as AccessPreset)}><option value="custom" disabled>Custom access</option>{accessPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select><small className={styles.hint}>{editing === "new" ? accessPresets.find((item) => item.id === formPreset)?.description : "This person's saved switches are shown below."} Applying a preset only fills the switches below. You can then change any permission for this person.</small></label>
           <fieldset className={styles.permissionGroup}><legend>Work visibility</legend><div className={styles.grid}><label>Jobs<select value={formPermissions.jobScope} onChange={(event) => setPermission("jobScope", event.target.value as Scope)}><option value="own">Assigned jobs only</option><option value="team" disabled={!isOwner && actorPermissions.jobScope !== "team"}>All team jobs</option></select><small className={styles.hint}>Own scope means this person cannot view, edit, assign or reassign another person&apos;s work.</small></label><label>Schedule<select value={formPermissions.scheduleScope} onChange={(event) => setPermission("scheduleScope", event.target.value as Scope)}><option value="own">Own schedule only</option><option value="team" disabled={!isOwner && actorPermissions.scheduleScope !== "team"}>Whole team schedule</option></select><small className={styles.hint}>Own scope means this person cannot view, schedule or reschedule another person&apos;s work.</small></label></div></fieldset>
           {permissionGroups.map((group) => <fieldset className={styles.permissionGroup} key={group.label}><legend>{group.label}</legend>{group.items.map((item) => <label className={styles.check} key={item.key}><input type="checkbox" disabled={!isOwner && !actorPermissions[item.key]} checked={Boolean(formPermissions[item.key])} onChange={(event) => setPermission(item.key, event.target.checked)} /><span>{item.label}<small>{!isOwner && !actorPermissions[item.key] ? "You cannot grant access you do not have." : item.detail}</small></span></label>)}</fieldset>)}
-        </> : <p className={styles.status}>{editingOwnAccess ? "You cannot edit your own access permissions." : "You can update this person&apos;s contact details and status. Only the owner or a delegated access manager can change permissions."}</p>}</>}
+        </> : <p className={styles.status}>{editingOwnAccess ? "You cannot edit your own access permissions." : "You can update this person's contact details and status. Only the owner or a delegated access manager can change permissions."}</p>}</>}
         <div className={styles.actions}><button type="submit" className={styles.primary} disabled={busy === "member"}>{busy === "member" ? "Saving..." : editing === "new" ? "Add team member" : editingOwner ? "Save my details" : "Save changes"}</button><button type="button" className={styles.secondary} disabled={Boolean(busy)} onClick={closeMemberDialog}>{editing === "new" ? "Cancel" : "Done"}</button></div>
       </form></div></div>}
 

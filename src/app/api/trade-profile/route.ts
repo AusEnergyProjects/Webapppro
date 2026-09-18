@@ -22,7 +22,7 @@ import {
   TRADE_BRAND_BORDER_STYLES,
   TRADE_BRAND_THEME_KEYS,
 } from "@/lib/trade-business-branding";
-import { normalizeTradeServiceIds } from "@/lib/energy-service-catalogue.mjs";
+import { normalizeEnergyServiceIds, savedEnergyServiceIds } from "@/lib/energy-service-catalogue.mjs";
 
 export const runtime = "edge";
 
@@ -326,7 +326,7 @@ export async function GET(request: Request) {
       partnerType: record.partner_type,
       businessWebsite,
       serviceStates: parseStringList(record.service_states),
-      capabilities: parseStringList(record.capabilities),
+      capabilities: savedEnergyServiceIds(parseStringList(record.capabilities)),
       summary: record.summary,
       accountStatus: record.account_status,
       verificationStatus: record.verification_status,
@@ -457,14 +457,14 @@ export async function PATCH(request: Request) {
   const emailWeeklySummary = raw.emailWeeklySummary === undefined
     ? Boolean(account.email_weekly_summary)
     : raw.emailWeeklySummary;
-  const storedCapabilities = parseStringList(account.capabilities);
+  const storedCapabilities = savedEnergyServiceIds(parseStringList(account.capabilities));
   const capabilities = raw.capabilities === undefined
     ? storedCapabilities
-    : normalizeTradeServiceIds(raw.capabilities);
+    : normalizeEnergyServiceIds(raw.capabilities);
   if (!capabilities || (account.partner_type === "installer" && !capabilities.length)) {
     return json({
       ok: false,
-      error: "Choose at least one valid lead service for this business.",
+      error: "Choose at least one valid business service.",
     }, 400);
   }
 
@@ -748,7 +748,7 @@ export async function POST(request: Request) {
   const serviceStates = [...new Set(Array.isArray(raw.serviceStates)
     ? raw.serviceStates.map(canonicalAustralianState).filter((value): value is string => Boolean(value))
     : [])];
-  const capabilities = normalizeTradeServiceIds(raw.capabilities) || [];
+  const capabilities = normalizeEnergyServiceIds(raw.capabilities) || [];
   const summary = cleanText(raw.summary, 800);
   const consent = raw.consent === true;
   const db = getD1();

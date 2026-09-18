@@ -1,0 +1,17 @@
+.panel { background: var(--trade-surface-soft, #f4faf7); border: 1px solid var(--trade-line, #cfe2da); border-radius: 13px; color: var(--trade-ink, #123d35); display: grid; gap: 12px; min-width: 0; padding: 14px; }
+.panel h4, .panel h5, .panel p { margin: 0; }
+.panel h4 { font-size: 1rem; }.panel h5 { font-size: .9rem; line-height: 1.4; margin-top: 4px; }
+.panel p, .panel small { font-size: .82rem; line-height: 1.5; }
+.header, .row { display: flex; align-items: flex-start; gap: 12px; justify-content: space-between; }
+.header > div, .row > div { min-width: 0; }.header p, .note, .module small, .summary span { color: var(--trade-muted, #60766f); }
+.button { align-items: center; background: var(--trade-field, #fff); border: 1px solid var(--trade-line, #afc9c0); border-radius: 9px; color: var(--trade-link, #17483d); cursor: pointer; display: inline-flex; font: inherit; font-size: .82rem; font-weight: 800; justify-content: center; min-height: 44px; padding: 8px 11px; text-align: center; text-decoration: none; width: fit-content; }
+.button:disabled { cursor: default; opacity: .55; }.button:focus-visible { outline: 2px solid var(--trade-link, #08795f); outline-offset: 2px; }
+.notice { background: var(--trade-accent-soft, #e7f4ee); border: 1px solid var(--trade-line, #bddace); border-radius: 9px; color: var(--trade-ink, #214d40); display: grid; gap: 8px; padding: 10px; }
+.error { color: var(--trade-error, #a3222c); }.summary { display: grid; gap: 2px; }
+.filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(140px, .55fr); gap: 10px; }
+.filters label { display: grid; gap: 5px; font-size: .82rem; font-weight: 700; min-width: 0; }
+.filters input, .filters select { background: var(--trade-field, #fff); border: 1px solid var(--trade-line, #bdd2ca); border-radius: 8px; color: var(--trade-field-ink, #153d35); font: inherit; min-height: 44px; padding: 8px; width: 100%; min-width: 0; box-sizing: border-box; }
+.list { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }.module { background: var(--trade-surface, #fff); border: 1px solid var(--trade-line, #d6e5df); border-radius: 9px; display: grid; gap: 8px; padding: 11px; min-width: 0; }
+.badge, .passed { border: 1px solid var(--trade-line, #bddace); border-radius: 7px; flex: 0 0 auto; font-size: .74rem; font-weight: 800; line-height: 1.4; max-width: 45%; padding: 5px 7px; }
+.passed { color: var(--trade-success, #08795f); }.reference { display: grid; gap: 3px; }.reference code { font-size: .75rem; overflow-wrap: anywhere; }.pagination { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: .82rem; }
+@media(max-width: 540px) { .header, .row { flex-wrap: wrap; }.filters { grid-template-columns: minmax(0, 1fr); }.badge, .passed { max-width: 100%; }.panel { padding: 11px; } }

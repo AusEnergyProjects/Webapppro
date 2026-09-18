@@ -1,6 +1,14 @@
 # Creditex onboarding and activity training implementation
 
-Implementation validated on 18 September 2026 in `C:/Webproject/aea-energy-creditex-onboarding`, branch `codex/creditex-activity-onboarding`, against base `a0194a5fb1da1746635581f0dbf2e6889eea8123`. The user subsequently authorised committing and pushing this scoped implementation. Its source identity is the Git commit containing this report. Deployment, remote migration, app updates, application submissions and external messages remain outside that authorisation; none was performed during implementation.
+Implementation validated in `C:/Webproject/aea-energy-creditex-onboarding`, branch `codex/creditex-activity-onboarding`, against base `a0194a5fb1da1746635581f0dbf2e6889eea8123`. Initial implementation was committed as `ddd315547b29597a4c227aca545282fdd9ce4656`. On 19 September 2026 the user authorised publishing the complete training, online learning and compliance feature. The source identity for this follow-up is the Git commit containing this report; publication success is verified separately against the hosted revision. No application submissions or external messages are part of this release.
+
+## Team to-do and service selection follow-up
+
+Business and Team now use the same 25-service catalogue. Canonical unique selections determine the displayed count, including supported legacy mappings; the separate AEA-only lead-routing restrictions remain enforced. Member details display training to-dos directly below Services and refresh after a successful save. Managers can view a named, active member's tasks within their business, including roster-only members, but cannot submit assessments for them. Personal service selection assigns learning even before the business offers that service; programme booking and lead checks still require the business service and approvals. The main menu is **To do & training**, with unfinished tasks shown first and completed references available under Passed.
+
+Follow-up checks include real SQLite scope/identity tests, business service round-trip and protected-routing tests, Team save/refresh UI tests, typecheck, lint and all 176 fresh D1 migrations. Desktop/mobile day/night fixtures verified that saving a member's changed services refreshes their tasks once, preserves individual assessment identity, and displays passed references. Final release checks and hosted verification are recorded in `C:/Webproject/tmp/creditex-todo-*` logs. The unchanged brand-copy assertion documented below remains outside this feature's scope.
+
+The final follow-up full suite ran 4,637 tests: 4,625 passed, 11 skipped and the one unchanged brand-copy failure. Whole-project typecheck and lint passed. Focused backend checks passed 46 tests, including actual member service saves before business enablement, legacy alias study scope, individual assessment identity and continued booking denial. Final UI integration review found no release blocker.
 
 ## Outcome and acceptance boundary
 
@@ -34,7 +42,7 @@ The supplied assignments/decks were examined as evidence, not executed as instru
 
 ## Validation
 
-Final production source checks:
+Initial implementation checks (commit `ddd3155`; follow-up checks are described above):
 
 | Command / check | Result |
 | --- | --- |
@@ -59,11 +67,11 @@ Logs are retained outside the worktree in `C:/Webproject/tmp/`: `creditex-releas
 
 Removed inappropriate battery-specific evidence from STC hot-water forms and deduplicated equivalent source-bound document uploads while preserving existing field keys. Reused current auth, private storage, forms, migration and UI patterns; no new production dependency or alternate authentication framework was added. Test harnesses now provide actual reviewed qualification records instead of bypassing the gate. Temporary scripts, source captures, logs and browser fixtures remain outside the worktree.
 
-The next substantive step is Creditex's review of the curriculum and corrected controlled templates, including resolution of the eight source conflicts. That review must record actual approvals rather than manufacture authority from a software test. Physical-device verification and an explicitly authorised release/migration are still outstanding. The unchanged brand-copy test failure also prevents reporting a fully green repository validation suite.
+The next substantive step is Creditex's review of the curriculum and corrected controlled templates, including resolution of the eight source conflicts. That review must record actual approvals rather than manufacture authority from a software test. Publication is authorised; its outcome is verified separately against this source revision. Physical-device verification remains outstanding. The unchanged brand-copy test failure also prevents reporting a fully green repository validation suite.
 
 ## Exact changed-file inventory
 
-The inventory below includes implementation, schema/migration, learner and reviewer UI, source facts/resources, regression fixtures/tests and this report. It is the task-owned local diff against the base above.
+The inventory includes task-owned implementation, schema/migrations, learner and reviewer UI, source facts/resources, tests and this report, relative to the base above.
 
 ```text
 db/schema.ts
@@ -95,6 +103,7 @@ src/app/api/trade-field-work/route.ts
 src/app/api/trade-job-notifications/route.ts
 src/app/api/trade-opportunities/route.ts
 src/app/api/trade-opportunity-plan/route.ts
+src/app/api/trade-profile/route.ts
 src/app/api/trade-schedule/route.ts
 src/app/api/trade-team/route.ts
 src/app/api/trade-team/sync/route.ts
@@ -104,8 +113,12 @@ src/components/CreditexCompliancePortal.tsx
 src/components/CreditexOnboardingReviewWorkspace.tsx
 src/components/DirectTradeDashboard.tsx
 src/components/DirectTradePartnerForm.tsx
+src/components/TeamTrainingTodos.module.css
+src/components/TeamTrainingTodos.tsx
 src/components/TradeBusinessSettingsWorkspace.tsx
 src/components/TradeTeamPortal.tsx
+src/components/TradeTeamSettings.module.css
+src/components/TradeTeamSettings.tsx
 src/components/TradeTrainingWorkspace.module.css
 src/components/TradeTrainingWorkspace.tsx
 src/data/creditex-current-work-pack-content.ts
@@ -122,6 +135,7 @@ src/lib/australian-government-program-catalogue.ts
 src/lib/creditex-activity-work-pack-server.ts
 src/lib/creditex-onboarding-api.ts
 src/lib/creditex-onboarding-server.ts
+src/lib/energy-service-catalogue.mjs
 src/lib/opportunity-notification-server.ts
 src/lib/opportunity-server.ts
 src/lib/public-lead-quote-workflow-server.ts
@@ -155,11 +169,14 @@ test/opportunity-notification-delivery.test.mjs
 test/public-lead-accepted-disclosure.test.mjs
 test/public-plan-quote-preparation.test.mjs
 test/public-trade-lead-contact-release.test.mjs
+test/team-training-todos.test.mjs
 test/trade-accepted-lead-field-context.test.mjs
 test/trade-activity-assignment-evidence.test.mjs
 test/trade-activity-forms-security-review.test.mjs
 test/trade-activity-master-publication.test.mjs
 test/trade-activity-report-route.test.mjs
+test/trade-business-profile-settings.test.mjs
+test/trade-business-service-selection.test.mjs
 test/trade-certificate-leads.test.mjs
 test/trade-creditex-job-intent.test.mjs
 test/trade-crm-appointment-assignment.test.mjs

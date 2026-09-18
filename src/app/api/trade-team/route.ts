@@ -18,6 +18,7 @@ import {
   rentalInspectionAssignmentStatements,
 } from "@/lib/trade-rental-assignment-server";
 import { normalizeFieldAccessName } from "@/lib/trade-field-access-policy.mjs";
+import { normalizeEnergyServiceIds } from "@/lib/energy-service-catalogue.mjs";
 
 export const runtime = "edge";
 
@@ -37,12 +38,9 @@ function parsedList(value: unknown) {
   } catch { return []; }
 }
 
-async function memberCapabilities(ownerUid: string, value: unknown) {
-  const account = await getD1().prepare("SELECT capabilities FROM trade_accounts WHERE firebase_uid = ?")
-    .bind(ownerUid).first<Record<string, unknown>>();
-  const allowed = new Set(parsedList(account?.capabilities));
-  const requested = [...new Set(parsedList(value))].slice(0, 30);
-  if (requested.some((item) => !allowed.has(item))) throw new Error("CAPABILITY_NOT_ALLOWED");
+function memberCapabilities(value: unknown) {
+  const requested = normalizeEnergyServiceIds(parsedList(value));
+  if (!requested || requested.length > 30) throw new Error("CAPABILITY_NOT_ALLOWED");
   return requested;
 }
 
@@ -699,7 +697,7 @@ export async function POST(request: Request) {
     const requestedPermissions = permissionInput(body);
     let permissions = memberPermissions(requestedPermissions);
     if (hasPermissionMutation(body)) assertPermissionGrant(access, permissions);
-    let capabilities = await memberCapabilities(access.ownerUid, body.capabilities);
+    let capabilities = memberCapabilities(body.capabilities);
     if (action === "add_member") {
       if (!displayName || (email && !EMAIL_PATTERN.test(email))) {
         return adminJson({ ok: false, error: "Add a valid name, optional login email and phone number." }, 400);
@@ -934,7 +932,7 @@ export async function PATCH(request: Request) {
       if (permissionsChanged) assertPermissionGrant(access, permissions, beforePermissions);
       const capabilities = body.capabilities === undefined
         ? parsedList(current.capabilities)
-        : await memberCapabilities(access.ownerUid, body.capabilities);
+        : memberCapabilities(body.capabilities);
       const actorGuard = memberMutationActorGuard(access, beforePermissions, permissions, permissionsChanged);
       const results = await db.batch([
         db.prepare(`UPDATE trade_team_members SET email = ?, display_name = ?, first_name = ?, last_name = ?,

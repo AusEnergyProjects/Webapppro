@@ -2,6 +2,11 @@ import { AEA_SERVICE_IDENTITIES, AEA_BUNDLE_IDENTITIES, isAeaReservedService } f
 
 /** @type {Readonly<Record<string, string>>} */
 export const LEGACY_ENERGY_SERVICE_ALIASES = Object.freeze({ "rental-inspection": "minimum-rental-standards" });
+/** One authority for persisted aliases, including legacy combined services. */
+export const ENERGY_SERVICE_ID_EXPANSIONS = Object.freeze({
+  ...Object.fromEntries(Object.entries(LEGACY_ENERGY_SERVICE_ALIASES).map(([alias, canonical]) => [alias, Object.freeze([canonical])])),
+  "insulation-draughts": Object.freeze(["insulation", "draught-proofing"]),
+});
 
 export const ENERGY_SERVICE_CATALOGUE = Object.freeze([
   Object.freeze({ id: "assessment", label: "Energy assessment" }),
@@ -38,6 +43,8 @@ export const ENERGY_SERVICE_LABELS = Object.freeze(
 
 const energyServiceIdSet = new Set(ENERGY_SERVICE_IDS);
 
+// Public lead distribution excludes AEA-managed services. Business and team
+// capabilities use ENERGY_SERVICE_CATALOGUE; selecting work does not grant leads.
 export const TRADE_SERVICE_CATALOGUE = ENERGY_SERVICE_CATALOGUE.filter(({ id }) => !isAeaReservedService(id));
 export const TRADE_SERVICE_OPTIONS = TRADE_SERVICE_CATALOGUE.map(({ id, label }) => [id, label]);
 export const TRADE_SERVICE_IDS = Object.freeze(TRADE_SERVICE_OPTIONS.map(([id]) => id));
@@ -53,6 +60,16 @@ export function isEnergyServiceId(value) {
 
 export function normalizeEnergyServiceIds(value) {
   if (!Array.isArray(value)) return null;
-  if (!value.every((item) => isEnergyServiceId(item))) return null;
-  return [...new Set(value)];
+  const canonical = value.flatMap((item) => {
+    if (typeof item !== "string") return [item];
+    return ENERGY_SERVICE_ID_EXPANSIONS[item] || [item];
+  });
+  if (!canonical.every(isEnergyServiceId)) return null;
+  return [...new Set(canonical)];
+}
+
+/** Read persisted selections without counting duplicates or unsupported legacy values. */
+export function savedEnergyServiceIds(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.flatMap((item) => normalizeEnergyServiceIds([item]) || []))];
 }

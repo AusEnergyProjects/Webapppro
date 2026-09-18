@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { TRAINING_MODULES, type TradeTrainingModule } from '../data/creditex-training-curriculum';
 import { GOVERNMENT_ACTIVITY_TEMPLATES, GOVERNMENT_PROGRAM_TEMPLATES } from './australian-government-program-catalogue';
+import { ENERGY_SERVICE_ID_EXPANSIONS, savedEnergyServiceIds } from './energy-service-catalogue.mjs';
 import { businessApprovalSql, CreditexComplianceError, creditexWriteGuard, getCreditexBusinessStatus, isValidDate, record, textField } from './creditex-onboarding-server';
 
 export { CreditexComplianceError } from './creditex-onboarding-server';
@@ -13,22 +14,34 @@ function stringList(value: string) {
   const parsed: unknown = JSON.parse(value);
   return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
 }
-export async function getDeclaredTrainingActivities(db: D1Database, ownerUid: string, memberId: string) {
-  const row = await db.prepare(`SELECT a.capabilities AS business_capabilities,a.service_states,a.address_state,m.capabilities AS member_capabilities,m.member_uid FROM trade_accounts a JOIN trade_team_members m ON m.owner_uid=a.firebase_uid AND m.id=? AND m.status='active' WHERE a.firebase_uid=?`).bind(memberId, ownerUid).first<{ business_capabilities: string; service_states: string; address_state: string; member_capabilities: string; member_uid: string }>();
-  if (!row) return [];
-  const capabilities = stringList(row.business_capabilities).filter(category => row.member_uid === ownerUid || stringList(row.member_capabilities).includes(category));
+function trainingCapabilitiesSql(member: string, account: string) {
+  // Studying follows the person's saved services. Booking and lead predicates
+  // independently continue to require the business's enabled service scope.
+  return `CASE WHEN ${member}.member_uid=${member}.owner_uid THEN ${account}.capabilities ELSE ${member}.capabilities END`;
+}
+export async function getMemberTrainingScope(db: D1Database, ownerUid: string, memberId: string) {
+  const row = await db.prepare(`SELECT a.capabilities AS business_capabilities,a.service_states,a.address_state,m.display_name,m.member_uid,${trainingCapabilitiesSql('m', 'a')} AS training_capabilities FROM trade_accounts a JOIN trade_team_members m ON m.owner_uid=a.firebase_uid AND m.id=? AND m.status='active' WHERE a.firebase_uid=?`).bind(memberId, ownerUid).first<{ business_capabilities: string; service_states: string; address_state: string; display_name: string; member_uid: string; training_capabilities: string }>();
+  if (!row) return null;
+  const capabilities = savedEnergyServiceIds(stringList(row.training_capabilities));
+  const businessCapabilities = savedEnergyServiceIds(stringList(row.business_capabilities));
   const states = [...new Set([...stringList(row.service_states), row.address_state].filter(Boolean))];
-  return GOVERNMENT_ACTIVITY_TEMPLATES.filter(activity => {
+  const activities = GOVERNMENT_ACTIVITY_TEMPLATES.filter(activity => {
     const program = trainingPrograms.get(activity.programCode);
     return program && capabilities.includes(activity.serviceCategory) && (program.jurisdiction === 'AU' || states.includes(program.jurisdiction));
-  });
+  }).map(activity => ({ ...activity, businessServiceEnabled: businessCapabilities.includes(activity.serviceCategory) }));
+  return { memberId, displayName: row.display_name, isOwner: row.member_uid === ownerUid, capabilities, businessCapabilities, activities };
+}
+export async function getDeclaredTrainingActivities(db: D1Database, ownerUid: string, memberId: string) {
+  return (await getMemberTrainingScope(db, ownerUid, memberId))?.activities || [];
 }
 function memberActivityScopeSql() {
-  return `EXISTS(SELECT 1 FROM trade_team_members scoped_member JOIN trade_accounts scoped_account ON scoped_account.firebase_uid=scoped_member.owner_uid WHERE scoped_member.owner_uid=? AND scoped_member.id=? AND scoped_member.status='active' AND EXISTS(SELECT 1 FROM json_each(scoped_account.capabilities) WHERE value=?) AND (scoped_member.member_uid=scoped_member.owner_uid OR EXISTS(SELECT 1 FROM json_each(scoped_member.capabilities) WHERE value=?))) AND EXISTS(SELECT 1 FROM trade_accounts scoped_jurisdiction WHERE scoped_jurisdiction.firebase_uid=? AND (?='AU' OR scoped_jurisdiction.address_state=? OR EXISTS(SELECT 1 FROM json_each(scoped_jurisdiction.service_states) WHERE value=?)))`;
+  const literal = (value: string) => `'${value.replaceAll("'", "''")}'`;
+  const expanded = `CASE saved_service.value ${Object.entries(ENERGY_SERVICE_ID_EXPANSIONS).map(([alias, categories]) => `WHEN ${literal(alias)} THEN ${literal(JSON.stringify(categories))}`).join(' ')} ELSE json_array(saved_service.value) END`;
+  return `EXISTS(SELECT 1 FROM trade_team_members scoped_member JOIN trade_accounts scoped_account ON scoped_account.firebase_uid=scoped_member.owner_uid WHERE scoped_member.owner_uid=? AND scoped_member.id=? AND scoped_member.status='active' AND EXISTS(SELECT 1 FROM json_each(${trainingCapabilitiesSql('scoped_member', 'scoped_account')}) saved_service CROSS JOIN json_each(${expanded}) canonical_service WHERE canonical_service.value=?)) AND EXISTS(SELECT 1 FROM trade_accounts scoped_jurisdiction WHERE scoped_jurisdiction.firebase_uid=? AND (?='AU' OR scoped_jurisdiction.address_state=? OR EXISTS(SELECT 1 FROM json_each(scoped_jurisdiction.service_states) WHERE value=?)))`;
 }
 function memberActivityScopeBindings(ownerUid: string, memberId: string, activity: { serviceCategory: string; programCode: string }) {
   const jurisdiction = trainingPrograms.get(activity.programCode)?.jurisdiction || '';
-  return [ownerUid, memberId, activity.serviceCategory, activity.serviceCategory, ownerUid, jurisdiction, jurisdiction, jurisdiction];
+  return [ownerUid, memberId, activity.serviceCategory, ownerUid, jurisdiction, jurisdiction, jurisdiction];
 }
 export type CertificateEligibilityInput = { ownerUid: string; actorMemberId: string; assignedMemberId: string; activityTemplateIds: readonly string[] };
 export type CertificateEligibilityReason = { code: string; message: string; activityTemplateId?: string; memberId?: string };
@@ -148,15 +161,17 @@ export async function getTrainingProjectionData(db: D1Database, ownerUid: string
   const moduleReviews = new Map(await Promise.all(TRAINING_MODULES.map(async course => [course.id, await moduleReview(db, course, reviews.results)] as const)));
   return { reviews: reviews.results, completions: completions.results, moduleReviews };
 }
-export async function getTrainingModulesForMember(db: D1Database, ownerUid: string, memberId: string, cached?: Awaited<ReturnType<typeof getTrainingProjectionData>>) {
+export async function getTrainingModulesForMember(db: D1Database, ownerUid: string, memberId: string, cached?: Awaited<ReturnType<typeof getTrainingProjectionData>>, scope?: Awaited<ReturnType<typeof getMemberTrainingScope>>) {
   const data = cached || await getTrainingProjectionData(db, ownerUid);
+  const memberScope = scope === undefined ? await getMemberTrainingScope(db, ownerUid, memberId) : scope;
   const modules = [];
   for (const course of TRAINING_MODULES) {
     const { availability, hash } = data.moduleReviews.get(course.id)!;
     const completion = data.completions.find(row => row.owner_uid === ownerUid && row.member_id === memberId && row.module_id === course.id);
     const current = Boolean(completion && completion.version === course.version && completion.content_hash === hash);
     const status = availability !== 'active' ? 'awaiting_review' : !current ? 'required' : completion?.revoked_at ? 'revoked' : Date.parse(completion?.expires_at || '') <= Date.now() ? 'expired' : 'passed';
-    modules.push({ id: course.id, version: course.version, title: course.title, programCode: course.programCode, activityTemplateIds: course.activityTemplateIds, estimatedMinutes: course.estimatedMinutes, passPercent: 100, validityDays: course.validityDays, lessons: course.lessons, sources: course.sources, availability, status,
+    const serviceCategory = GOVERNMENT_ACTIVITY_TEMPLATES.find(activity => course.activityTemplateIds.includes(activity.templateId))?.serviceCategory || '';
+    modules.push({ id: course.id, version: course.version, title: course.title, programCode: course.programCode, serviceCategory, businessServiceEnabled: Boolean(memberScope?.businessCapabilities.includes(serviceCategory)), activityTemplateIds: course.activityTemplateIds, estimatedMinutes: course.estimatedMinutes, passPercent: 100, validityDays: course.validityDays, lessons: course.lessons, sources: course.sources, availability, status,
       completion: completion ? { id: completion.id, reference: completion.reference, passedAt: completion.passed_at, expiresAt: completion.expires_at, revokedAt: completion.revoked_at } : null });
   }
   return modules;
@@ -180,7 +195,7 @@ function publicAttempt(attempt: Attempt, course: TradeTrainingModule) {
 export async function startTrainingAttempt(db: D1Database, input: { ownerUid: string; memberId: string; actorUid: string; moduleId: string }) {
   const course = findTrainingModule(input.moduleId); const { availability, hash } = await moduleReview(db, course);
   const declared = await getDeclaredTrainingActivities(db, input.ownerUid, input.memberId);
-  if (!declared.some(activity => course.activityTemplateIds.includes(activity.templateId))) throw new CreditexComplianceError('ACTIVITY_CAPABILITY_REQUIRED', 'This activity must be within your declared business and personal service capabilities before training.');
+  if (!declared.some(activity => course.activityTemplateIds.includes(activity.templateId))) throw new CreditexComplianceError('ACTIVITY_CAPABILITY_REQUIRED', 'Select the relevant service in your saved profile before training. Business owners train for the services saved for their business.');
   const activity = declared.find(candidate => course.activityTemplateIds.includes(candidate.templateId))!;
   if (availability !== 'active') throw new CreditexComplianceError('TRAINING_REVIEW_REQUIRED', 'Creditex must review and activate this course before an attempt can begin.', 409);
   const now = new Date().toISOString();

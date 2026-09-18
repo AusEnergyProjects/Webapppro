@@ -2345,7 +2345,7 @@ export function DirectTradeDashboard() {
                   }}><span>{label}</span></button>)}
                 </div>
                 <button type="button" aria-current={workspace === "team" ? "page" : undefined} className={workspace === "team" ? "active" : ""} onClick={() => setWorkspace("team")}><b aria-hidden="true">02</b><span>Team</span><small>People, access and files</small></button>
-                <button type="button" aria-current={workspace === "training" ? "page" : undefined} className={workspace === "training" ? "active" : ""} onClick={() => setWorkspace("training")}><b aria-hidden="true">✓</b><span>Training &amp; onboarding</span><small>Activity modules and compliance to-do list</small></button>
+                <button type="button" aria-current={workspace === "training" ? "page" : undefined} className={workspace === "training" ? "active" : ""} onClick={() => setWorkspace("training")}><b aria-hidden="true">✓</b><span>To do &amp; training</span><small>Activity modules and Creditex onboarding</small></button>
                 <button type="button" aria-current={workspace === "work" && activeWorkView === "schedule" ? "page" : undefined} className={workspace === "work" && activeWorkView === "schedule" ? "active" : ""} onClick={() => {
                   setCommandTarget({ workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() });
                   setActiveWorkView("schedule");
@@ -2401,7 +2401,7 @@ export function DirectTradeDashboard() {
                     <h2 id="team-workspace-title">People, access and member records</h2>
                     <p>Add staff, set practical access, availability, schedule colours and private documents.</p>
                   </div>
-                  <TradeTeamSettings user={user} navigationTarget={commandTarget} />
+                  <TradeTeamSettings user={user} navigationTarget={commandTarget} onOpenOwnTraining={() => setWorkspace("training")} />
                 </section>
               ) : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before team management is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
 
