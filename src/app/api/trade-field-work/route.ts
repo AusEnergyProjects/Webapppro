@@ -1,5 +1,7 @@
+import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard } from "@/lib/creditex-onboarding-server";
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
+import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { fieldTransitionExpectedStatus } from "@/lib/trade-field-completion-policy";
@@ -256,6 +258,9 @@ function rentalUploadReplay(record: RentalUploadRecord, input: {
 }
 
 function fieldError(error: unknown) {
+  const conflict = creditexMutationConflict(error);
+  if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
+  if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   if (error instanceof BoundedJsonRequestError) {
     return adminJson({
       ok: false,
@@ -505,6 +510,8 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
     )
   )`;
   const photoGuard = photoFinish.guard;
+  const trainingGuards = await certificateJobEligibilityGuards(db, { ownerUid: access.ownerUid,
+    actorMemberId: access.memberId, assignedMemberId: String(job.assignee_member_id || ""), workOrderId });
   const finishGuardValues = [
     action,
     workOrderId,
@@ -570,6 +577,7 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
       SELECT ?, ?, ?, 'job_completed', 'Required work, forms, proof and blockers cleared. Invoice and handover preparation are ready.', ?
       WHERE ? = 'finish' AND EXISTS (SELECT 1 FROM trade_offline_actions WHERE id = ?)`)
       .bind(crypto.randomUUID(), workOrderId, access.ownerUid, now, action, receiptId),
+    ...trainingGuards,
   ]);
   if (!results[0]?.meta.changes) throw new Error("FIELD_TRANSITION_CONFLICT");
   await db.batch(jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now, audienceMemberId: String(job.assignee_member_id || "") }));
@@ -709,6 +717,10 @@ export async function POST(request: Request) {
     const workOrderId = cleanAdminText(body.workOrderId, 180);
     const job = await assignedJob(access, workOrderId);
     const action = cleanAdminText(body.action, 30);
+    if (action === "field_transition" || action === "add_signoff") {
+      await assertCertificateJobEligibility(getD1(), { ownerUid: access.ownerUid, actorMemberId: access.memberId,
+        assignedMemberId: String(job.assignee_member_id || ""), workOrderId });
+    }
     if (action === "field_transition") return await advanceFieldJob(access, job, workOrderId, body);
     const now = new Date().toISOString();
     let recordStatement: D1PreparedStatement;
@@ -739,7 +751,16 @@ export async function POST(request: Request) {
         .bind(crypto.randomUUID(), workOrderId, access.ownerUid, signerRole, signerName, confirmation, now, now);
     } else return adminJson({ ok: false, error: "Unsupported field-work action." }, 400);
     const revision = nextJobRevision(job.revision);
+    const trainingGuards = action === "add_signoff" ? await certificateJobEligibilityGuards(getD1(), {
+      ownerUid: access.ownerUid, actorMemberId: access.memberId,
+      assignedMemberId: String(job.assignee_member_id || ""), workOrderId,
+    }) : [];
+    if (action === "add_signoff") trainingGuards.push(creditexWriteGuard(getD1(), access.ownerUid,
+      `EXISTS (SELECT 1 FROM trade_work_orders WHERE id = ? AND firebase_uid = ?
+        AND assignee_member_id = ? AND revision = ? AND record_status = 'active')`,
+      [workOrderId, access.ownerUid, String(job.assignee_member_id || ""), Number(job.revision)]));
     await getD1().batch([
+      ...trainingGuards,
       recordStatement,
       getD1().prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
         .bind(revision, now, workOrderId, access.ownerUid),

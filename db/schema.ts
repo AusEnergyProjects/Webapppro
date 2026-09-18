@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, index, integer, sqliteTable, sqliteView, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const tradeAccounts = sqliteTable("trade_accounts", {
   firebaseUid: text("firebase_uid").primaryKey(),
@@ -6460,3 +6460,64 @@ export const tradeRentalInspectionEvents = sqliteTable("trade_rental_inspection_
   check("trade_rental_events_hash_check", sql`(${table.sourceIpSha256} = '' OR (length(${table.sourceIpSha256}) = 64 AND ${table.sourceIpSha256} = lower(${table.sourceIpSha256}) AND ${table.sourceIpSha256} NOT GLOB '*[^0-9a-f]*')) AND (${table.userAgentSha256} = '' OR (length(${table.userAgentSha256}) = 64 AND ${table.userAgentSha256} = lower(${table.userAgentSha256}) AND ${table.userAgentSha256} NOT GLOB '*[^0-9a-f]*'))`),
   check("trade_rental_events_time_check", sql`datetime(${table.createdAt}) IS NOT NULL`),
 ]);
+
+export const creditexBusinessOnboarding = sqliteTable("creditex_business_onboarding", {
+  ownerUid: text("owner_uid").primaryKey(), businessAbn: text("business_abn").notNull().default(""), businessName: text("business_name").notNull().default(""),
+  status: text("status").notNull().default("draft"), revision: integer("revision").notNull().default(1),
+  applicationJson: text("application_json").notNull(), insuranceExpiresOn: text("insurance_expires_on").notNull().default(""),
+  agreementReference: text("agreement_reference").notNull().default(""), reviewNote: text("review_note").notNull().default(""),
+  reviewedByUid: text("reviewed_by_uid").notNull().default(""), reviewedAt: text("reviewed_at").notNull().default(""), updatedAt: text("updated_at").notNull(),
+}, (t) => [check("creditex_business_status_check", sql`${t.status} IN ('draft','submitted','agreement_pending','approved','rejected','suspended')`), check("creditex_business_revision_check", sql`${t.revision}>0`), check("creditex_business_json_check", sql`json_valid(${t.applicationJson})`), check("creditex_business_approved_check", sql`${t.status}<>'approved' OR (length(${t.agreementReference})>0 AND length(${t.reviewedByUid})>0 AND date(${t.insuranceExpiresOn}) IS NOT NULL)`) ]);
+
+export const creditexOnboardingDocuments = sqliteTable("creditex_onboarding_documents", {
+  id: text("id").primaryKey(), ownerUid: text("owner_uid").notNull(), kind: text("kind").notNull(), fileName: text("file_name").notNull(),
+  contentType: text("content_type").notNull(), sizeBytes: integer("size_bytes").notNull(), sha256: text("sha256").notNull(),
+  objectKey: text("object_key").notNull().unique(), uploadedByUid: text("uploaded_by_uid").notNull(), createdAt: text("created_at").notNull(),
+}, (t) => [index("creditex_onboarding_documents_owner_idx").on(t.ownerUid,t.createdAt), check("creditex_onboarding_document_kind_check", sql`${t.kind} IN ('insurance','contractor_licence','director_id','director_selfie','guarantor_id','guarantor_selfie','prior_proposal')`), check("creditex_onboarding_document_size_check", sql`${t.sizeBytes} BETWEEN 1 AND 12582912`), check("creditex_onboarding_document_hash_check", sql`length(${t.sha256})=64`)]);
+
+export const creditexOnboardingEvents = sqliteTable("creditex_onboarding_events", {
+  id: text("id").primaryKey(), ownerUid: text("owner_uid").notNull(), actorUid: text("actor_uid").notNull(), eventType: text("event_type").notNull(),
+  revision: integer("revision").notNull(), metadataJson: text("metadata_json").notNull(), createdAt: text("created_at").notNull(),
+}, (t) => [index("creditex_onboarding_events_owner_idx").on(t.ownerUid,t.createdAt), check("creditex_onboarding_events_json_check", sql`json_valid(${t.metadataJson})`)]);
+
+export const tradeTrainingModuleReviews = sqliteTable("trade_training_module_reviews", {
+  moduleId: text("module_id").primaryKey(), version: text("version").notNull(), contentHash: text("content_hash").notNull(), status: text("status").notNull(),
+  sourceReviewedOn: text("source_reviewed_on").notNull(), reviewExpiresOn: text("review_expires_on").notNull(), schemeAuthorityReference: text("scheme_authority_reference").notNull().default(""),
+  reviewedByUid: text("reviewed_by_uid").notNull(), reviewNote: text("review_note").notNull(), updatedAt: text("updated_at").notNull(),
+}, (t) => [check("trade_training_review_hash_check", sql`length(${t.contentHash})=64`), check("trade_training_review_status_check", sql`${t.status} IN ('active','withdrawn')`)]);
+
+export const tradeTrainingAttempts = sqliteTable("trade_training_attempts", {
+  id: text("id").primaryKey(), ownerUid: text("owner_uid").notNull(), memberId: text("member_id").notNull(), actorUid: text("actor_uid").notNull(),
+  moduleId: text("module_id").notNull(), version: text("version").notNull(), contentHash: text("content_hash").notNull(), status: text("status").notNull(),
+  startedAt: text("started_at").notNull(), expiresAt: text("expires_at").notNull(), submittedAt: text("submitted_at").notNull().default(""),
+  assessmentJson: text("assessment_json").notNull(),
+  answersJson: text("answers_json").notNull().default("{}"), scorePercent: integer("score_percent").notNull().default(0), criticalPassed: integer("critical_passed").notNull().default(0),
+}, (t) => [uniqueIndex("trade_training_attempts_open_idx").on(t.ownerUid,t.memberId,t.moduleId).where(sql`${t.status}='in_progress'`), index("trade_training_attempts_member_idx").on(t.ownerUid,t.memberId,t.moduleId,t.startedAt), check("trade_training_attempt_hash_check", sql`length(${t.contentHash})=64`), check("trade_training_attempt_status_check", sql`${t.status} IN ('in_progress','passed','failed','expired')`), check("trade_training_attempt_score_check", sql`${t.scorePercent} BETWEEN 0 AND 100 AND ${t.criticalPassed} IN (0,1)`), check("trade_training_attempt_json_check", sql`json_valid(${t.answersJson}) AND json_valid(${t.assessmentJson})`)]);
+
+export const tradeTrainingCompletions = sqliteTable("trade_training_completions", {
+  id: text("id").primaryKey(), attemptId: text("attempt_id").notNull().unique().references(() => tradeTrainingAttempts.id), ownerUid: text("owner_uid").notNull(), memberId: text("member_id").notNull(), moduleId: text("module_id").notNull(), version: text("version").notNull(), contentHash: text("content_hash").notNull(), reference: text("reference").notNull().unique(), passedAt: text("passed_at").notNull(), expiresAt: text("expires_at").notNull(), revokedAt: text("revoked_at").notNull().default(""), revocationNote: text("revocation_note").notNull().default(""),
+}, (t) => [index("trade_training_completions_member_idx").on(t.ownerUid,t.memberId,t.moduleId,t.passedAt), check("trade_training_completion_hash_check", sql`length(${t.contentHash})=64`)]);
+
+export const tradeTrainingExternalCredentials = sqliteTable("trade_training_external_credentials", {
+  id: text("id").primaryKey(), ownerUid: text("owner_uid").notNull(), memberId: text("member_id").notNull(), moduleId: text("module_id").notNull(), documentId: text("document_id").notNull(), credentialReference: text("credential_reference").notNull(), schemeParticipantReference: text("scheme_participant_reference").notNull(), expiresOn: text("expires_on").notNull(), reviewedByUid: text("reviewed_by_uid").notNull(), reviewNote: text("review_note").notNull(), revokedAt: text("revoked_at").notNull().default(""), createdAt: text("created_at").notNull(),
+}, (t) => [index("trade_training_external_credentials_member_idx").on(t.ownerUid,t.memberId,t.moduleId,t.expiresOn)]);
+
+export const tradeTrainingEvents = sqliteTable("trade_training_events", {
+  id: text("id").primaryKey(), ownerUid: text("owner_uid").notNull().default(""), memberId: text("member_id").notNull().default(""), actorUid: text("actor_uid").notNull(), moduleId: text("module_id").notNull().default(""), eventType: text("event_type").notNull(), metadataJson: text("metadata_json").notNull(), createdAt: text("created_at").notNull(),
+}, (t) => [index("trade_training_events_member_idx").on(t.ownerUid,t.memberId,t.createdAt), check("trade_training_events_json_check", sql`json_valid(${t.metadataJson})`)]);
+
+// Definitions live in migration 0176. These are recomputed views, never stored
+// qualifications; deployed curriculum hashes remain an application input.
+export const creditexCurrentBusinessApprovals = sqliteView("creditex_current_business_approvals", {
+  ownerUid: text("owner_uid").notNull(),
+}).existing();
+
+export const tradeTrainingCurrentCompletions = sqliteView("trade_training_current_completions", {
+  ownerUid: text("owner_uid").notNull(), memberId: text("member_id").notNull(), moduleId: text("module_id").notNull(),
+  version: text("version").notNull(), contentHash: text("content_hash").notNull(), externalRequired: integer("external_required").notNull(),
+}).existing();
+
+export const tradeTrainingCurrentCategoryQualifications = sqliteView("trade_training_current_category_qualifications", {
+  ownerUid: text("owner_uid").notNull(), category: text("category").notNull(), moduleId: text("module_id").notNull(),
+  version: text("version").notNull(), contentHash: text("content_hash").notNull(), externalRequired: integer("external_required").notNull(),
+}).existing();

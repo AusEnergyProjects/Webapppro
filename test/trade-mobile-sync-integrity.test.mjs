@@ -1,3 +1,4 @@
+import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import * as activityCompletion from "../src/lib/trade-activity-forms-completion.ts";
 import * as fieldCompletionPolicy from "../src/lib/trade-field-completion-policy.ts";
 import * as tradeJobLifecycle from "../src/lib/trade-job-lifecycle.ts";
@@ -104,6 +105,7 @@ function loadRoute(mocks) {
     if (specifier === "@/lib/bounded-json-request") {
       return boundedJsonRequest;
     }
+    if (certificateTestDependency(specifier)) return certificateTestDependency(specifier);
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
   new Function("require", "module", "exports", output)(
@@ -524,6 +526,9 @@ function syncDatabase(stage = "in_progress", revision = 5) {
     VALUES ('form-1', 'job-1', 'owner-1', 'field-form',
       '{"name":"Field form","fields":[]}', 'draft', 1, '{}', '', '', 'initial')`)
     .run();
+  installCreditexTrainingFixture(database, { qualified: false });
+  database.exec("INSERT INTO trade_accounts(firebase_uid,abn,business_name) VALUES ('owner-1','53004085616','Training fixture Pty Ltd'); INSERT INTO trade_team_members(id,owner_uid,member_uid,status) VALUES ('member-1','owner-1','actor-1','active')");
+  installCreditexTrainingFixture(database);
   return database;
 }
 
@@ -762,7 +767,7 @@ function seedComplianceIntent(database, {
   programTemplateId = "program-veu",
   programCode = "VEU",
   programName = "Victorian Energy Upgrades",
-  activityTemplateId = "activity-template-1",
+  activityTemplateId = "veu-6",
   activityCode = "6",
   activityTitle = "High-efficiency space conditioning",
   plannedStart = "2026-08-20T00:00:00.000Z",

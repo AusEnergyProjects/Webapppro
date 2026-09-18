@@ -1,3 +1,4 @@
+import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -18,6 +19,7 @@ function loadModule(source, dependencies) {
   const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   const moduleRecord = { exports: {} };
   new Function("require", "module", "exports", code)((name) => {
+    if (certificateTestDependency(name)) return certificateTestDependency(name);
     assert.ok(Object.hasOwn(dependencies, name), `Unexpected dependency ${name}`);
     return dependencies[name];
   }, moduleRecord, moduleRecord.exports);
@@ -31,7 +33,7 @@ function sourceFunction(source, name, dependencies) {
   return new Function(...Object.keys(dependencies), `${output}; return ${name};`)(...Object.values(dependencies));
 }
 const field = (key, phase, type = "text", required = true) => ({ key, phase, type, required, section: "Test section", label: key, help: "", options: [] });
-const form = () => ({ id: "form-a", title: "Test activity", version: 1, activityTemplateId: "activity-a", programCode: "TEST", variantId: "", variantOptions: [],
+const form = () => ({ id: "form-a", title: "Test activity", version: 1, activityTemplateId: "sres-ashp", programCode: "TEST", variantId: "", variantOptions: [],
   fields: [field("before_name", "before"), field("after_model", "after"), field("photo", "after", "photo", false), field("document", "after", "document", false)],
   declarations: [
     { key: "before_customer", title: "Before work", phase: "before", role: "customer", required: true, text: "Customer confirms this before-work record.", sourceUrl: "", sourceTextSha256: "" },
@@ -53,7 +55,7 @@ function fixture(fieldForm = form(), options = {}) {
     CREATE TABLE trade_activity_customer_document_deliveries (id TEXT, work_order_id TEXT, appointment_id TEXT, firebase_uid TEXT,
       recipient_email_sha256 TEXT, activity_bindings TEXT, document_ids TEXT, document_sha256_set TEXT, pack_sha256 TEXT,
       provider TEXT, provider_message_id TEXT, status TEXT, accepted_at TEXT);
-    CREATE TABLE trade_team_members (id TEXT, owner_uid TEXT, status TEXT, display_name TEXT, first_name TEXT, last_name TEXT);
+    CREATE TABLE trade_team_members (id TEXT, owner_uid TEXT, status TEXT, display_name TEXT, first_name TEXT, last_name TEXT, member_uid TEXT DEFAULT 'worker-a');
     CREATE TABLE trade_team_member_credentials (id TEXT, owner_uid TEXT, team_member_id TEXT, file_id TEXT, credential_number TEXT, name TEXT,
       rental_gate TEXT, credential_type TEXT, jurisdiction TEXT, expires_at TEXT, status TEXT, updated_at TEXT);
     CREATE TABLE trade_team_member_files (id TEXT, owner_uid TEXT, team_member_id TEXT, status TEXT, expires_at TEXT);
@@ -63,10 +65,13 @@ function fixture(fieldForm = form(), options = {}) {
       ('job-a','owner-a','installer','active','direct','','worker-a','Worker A','scheduled','hot-water','2026-09-08T09:00:00.000Z',1),
       ('job-b','owner-b','installer','active','direct','','worker-b','Worker B','scheduled','hot-water','2026-09-08T09:00:00.000Z',1);
     INSERT INTO trade_work_order_compliance_intents VALUES
-      ('intent-a','job-a','owner-a','creditex-a','activity-a','planned','TEST','{}','2026-09-07'),
-      ('intent-b','job-b','owner-b','creditex-b','activity-a','planned','TEST','{}','2026-09-07');
-    INSERT INTO trade_team_members VALUES ('worker-a','owner-a','active','Worker A','Worker','A');`);
+      ('intent-a','job-a','owner-a','creditex-a','sres-ashp','planned','TEST','{}','2026-09-07'),
+      ('intent-b','job-b','owner-b','creditex-b','sres-ashp','planned','TEST','{}','2026-09-07');
+    INSERT INTO trade_team_members (id,owner_uid,status,display_name,first_name,last_name) VALUES ('worker-a','owner-a','active','Worker A','Worker','A');`);
   database.exec(read("../drizzle/0170_trade_activity_forms.sql"));
+  database.exec("INSERT INTO trade_accounts(firebase_uid) VALUES ('owner-a')");
+  database.exec("INSERT INTO trade_team_members(id,owner_uid,status,display_name,first_name,last_name,member_uid) VALUES ('manager','owner-a','active','Manager','Business','Manager','manager')");
+  installCreditexTrainingFixture(database);
   const d1 = { prepare(sql) { return { bind(...values) { return {
     async first() { return database.prepare(sql).get(...values) || null; },
     async all() { return { results: database.prepare(sql).all(...values) }; },
@@ -128,7 +133,7 @@ function fixture(fieldForm = form(), options = {}) {
 function acceptedCustomerDocumentDelivery(database, {
   id = "delivery-a", providerMessageId = "email-a", recipient = "pat@example.com", appointmentId = "appointment-a",
   documentIds = ["factsheet"], documentSha256Set = ["a".repeat(64)], acceptedAt = "2026-09-08T01:02:03.000Z",
-  activityBindings = [{ activityTemplateId: "activity-a", variantId: "" }], packSha256 = "b".repeat(64),
+  activityBindings = [{ activityTemplateId: "sres-ashp", variantId: "" }], packSha256 = "b".repeat(64),
 } = {}) {
   database.prepare(`INSERT INTO trade_activity_customer_document_deliveries
     (id, work_order_id, appointment_id, firebase_uid, recipient_email_sha256, activity_bindings, document_ids, document_sha256_set,
@@ -561,7 +566,7 @@ test("reassigning an unsigned draft refreshes assigned technician identity and s
       .map((item) => [item.key, context.technician])),
   });
   try {
-    database.prepare("INSERT INTO trade_team_members VALUES (?, ?, ?, ?, ?, ?)").run("worker-c", "owner-a", "active", "Worker C", "Worker", "C");
+    database.prepare("INSERT INTO trade_team_members (id,owner_uid,status,display_name,first_name,last_name) VALUES (?, ?, ?, ?, ?, ?)").run("worker-c", "owner-a", "active", "Worker C", "Worker", "C");
     const opened = await server.openActivityRecord(access, "job-a", "intent-a");
     assert.equal(opened.answers["installer.full_name"], "Worker A");
     database.prepare("UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ? WHERE id = ?").run("worker-c", "Worker C", "job-a");
@@ -582,9 +587,8 @@ test("trade profile email prefills required system-owned business email fields",
       .map((item) => [item.key, context.businessEmail || ""])),
   });
   try {
-    database.prepare(`INSERT INTO trade_accounts
-      (firebase_uid, address_line_1, suburb, address_state, postcode, document_phone, phone, document_email, email)
-      VALUES (?, '', '', '', '', '', '', ?, ?)`).run("owner-a", "documents@example.com", "login@example.com");
+    database.prepare(`UPDATE trade_accounts SET document_email=?,email=? WHERE firebase_uid=?`)
+      .run("documents@example.com", "login@example.com", "owner-a");
     const opened = await server.openActivityRecord(access, "job-a", "intent-a");
     assert.equal(opened.answers["installer.email"], "documents@example.com");
   } finally { database.close(); }
@@ -735,7 +739,7 @@ test("a corrupted stored master cannot open a field record", async () => {
     const fieldForm = form(); fieldForm.version = 2;
     database.prepare(`INSERT INTO trade_activity_field_masters
       (id, organisation_id, activity_template_id, variant_id, version, form_json, form_sha256, published_by_uid, published_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run("master", "creditex-a", "activity-a", "", 2,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run("master", "creditex-a", "sres-ashp", "", 2,
         core.activityCanonical(fieldForm), "b".repeat(64), "creditex", "2026-09-08T00:00:00.000Z");
     await assert.rejects(server.openActivityRecord(access, "job-a", "intent-a"), /ACTIVITY_MASTER_INTEGRITY_FAILED/);
   } finally { database.close(); }
@@ -824,7 +828,7 @@ test("a customer-document delivery bound to a different activity or variant cann
       .run("event-wrong-binding", "job-a", "owner-a", "customer_documents_provider_accepted",
         acceptedCustomerDocumentDelivery(database, {
           activityBindings: [
-            { activityTemplateId: "activity-a", variantId: "variant-b" },
+            { activityTemplateId: "sres-ashp", variantId: "variant-b" },
             { activityTemplateId: "activity-b", variantId: "variant-a" },
           ],
         }), "2026-09-08T01:02:03.000Z");
@@ -1059,6 +1063,31 @@ test("opening an existing unsigned draft applies the current shared form policy 
   } finally { database.close(); }
 });
 
+test("a retained signed draft cannot submit or sign past a newly mandatory assignment requirement", async () => {
+  let baseline = form();
+  const { database, server, access } = fixture(baseline, {
+    defaultFormFactory: () => structuredClone(baseline),
+    applyPolicy: (_saved, current) => structuredClone(current),
+  });
+  try {
+    let record = await server.openActivityRecord(access, "job-a", "intent-a");
+    record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Pat", after_model: "Installed unit" });
+    record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "before_customer", signerName: "Pat", acknowledged: true, strokes });
+    const signedSnapshot = record.formSha256;
+    baseline = { ...baseline, version: baseline.version + 1, fields: [...baseline.fields,
+      { key: "evidence.signed-assignment", label: "Signed programme assignment", section: "Assignment", type: "document",
+        phase: "after", required: true, sourceRequirementId: "signed-assignment", help: "Provide the signed controlled form.", options: [] }] };
+    await assert.rejects(server.submitActivityRecord(access, record.id, record.revision), /ACTIVITY_POLICY_REVIEW_REQUIRED/);
+    await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
+      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes }), /ACTIVITY_POLICY_REVIEW_REQUIRED/);
+    const retained = await server.loadActivityRecord(access, record.id);
+    assert.equal(retained.formSha256, signedSnapshot);
+    assert.equal(retained.signatures.length, 1, "the original signed evidence remains immutable");
+    assert.equal(retained.status, "draft");
+  } finally { database.close(); }
+});
+
 test("an unsigned master upgrade drops evidence that no longer meets the field type or location policy", async () => {
   const currentForm = form();
   currentForm.fields = currentForm.fields.map((item) => item.key === "document"
@@ -1096,7 +1125,7 @@ test("database payload identity guards reject missing identity keys rather than 
   try {
     assert.throws(() => database.prepare(`INSERT INTO trade_activity_field_records
       (id, intent_id, work_order_id, owner_uid, organisation_id, activity_template_id, revision, status, payload, actor_uid, created_at, updated_at)
-      VALUES ('malformed', 'intent-a', 'job-a', 'owner-a', 'creditex-a', 'activity-a', 1, 'draft', '{}', 'actor', 'now', 'now')`).run(), /CHECK constraint failed/);
+      VALUES ('malformed', 'intent-a', 'job-a', 'owner-a', 'creditex-a', 'sres-ashp', 1, 'draft', '{}', 'actor', 'now', 'now')`).run(), /CHECK constraint failed/);
   } finally { database.close(); }
 });
 
@@ -1146,7 +1175,7 @@ test("technician signing atomically rejects a reassignment made at the write bou
     },
   });
   try {
-    database.prepare("INSERT INTO trade_team_members VALUES (?, ?, ?, ?, ?, ?)").run("worker-c", "owner-a", "active", "Worker C", "Worker", "C");
+    database.prepare("INSERT INTO trade_team_members (id,owner_uid,status,display_name,first_name,last_name) VALUES (?, ?, ?, ?, ?, ?)").run("worker-c", "owner-a", "active", "Worker C", "Worker", "C");
     let record = await server.openActivityRecord(access, "job-a", "intent-a");
     record = await server.saveActivityAnswers(access, record.id, record.revision, { before_name: "Customer", after_model: "Installed unit" });
     record = await server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
@@ -1160,6 +1189,31 @@ test("technician signing atomically rejects a reassignment made at the write bou
   } finally { database.close(); }
 });
 
+test("team-scoped form saves cannot reuse training checked before reassignment or revision changes", async () => {
+  for (const mutation of ["assignee_member_id = 'untrained-worker'", "revision = revision + 1"]) {
+    let armed = false;
+    const { database, server, access } = fixture(form(), {
+      beforeRun: ({ sql, database: db }) => {
+        if (armed && /UPDATE trade_activity_field_records SET revision/.test(sql)) {
+          armed = false;
+          db.exec(`UPDATE trade_work_orders SET ${mutation} WHERE id = 'job-a'`);
+        }
+      },
+    });
+    try {
+      const record = await server.openActivityRecord(access, "job-a", "intent-a");
+      const original = database.prepare("SELECT payload FROM trade_activity_field_records WHERE id = ?").get(record.id).payload;
+      const manager = { ...access, memberId: "manager", actorUid: "manager", jobScope: "team" };
+      armed = true;
+      await assert.rejects(server.saveActivityAnswers(manager, record.id, record.revision,
+        { before_name: "Should not save" }), (error) => mutation.startsWith("assignee")
+        ? error.code === "ACTIVITY_TRAINING_REQUIRED" : error.message === "ACTIVITY_SAVE_FAILED");
+      assert.equal(armed, false);
+      assert.equal(database.prepare("SELECT payload FROM trade_activity_field_records WHERE id = ?").get(record.id).payload, original);
+    } finally { database.close(); }
+  }
+});
+
 test("an inactive assigned member cannot supply a technician declaration identity", async () => {
   const { database, server, access } = fixture();
   try {
@@ -1169,7 +1223,7 @@ test("an inactive assigned member cannot supply a technician declaration identit
       declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
     database.prepare("UPDATE trade_team_members SET status = 'inactive' WHERE id = ?").run("worker-a");
     await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
-      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes }), /ACTIVITY_TECHNICIAN_IDENTITY_REQUIRED/);
+      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes }), (error) => error.code === "ACTIVITY_TRAINING_REQUIRED");
   } finally { database.close(); }
 });
 
@@ -1515,7 +1569,7 @@ test("signature content binding accepts a harmless later revision but rejects ch
 
 function signingProfileFixture(options = {}) {
   const context = fixture(form(), options);
-  context.database.exec(`ALTER TABLE trade_team_members ADD COLUMN member_uid TEXT DEFAULT '';
+  context.database.exec(`
     ALTER TABLE trade_team_members ADD COLUMN updated_at TEXT DEFAULT '';
     ALTER TABLE trade_accounts ADD COLUMN contact_name TEXT DEFAULT '';
     CREATE TABLE trade_team_member_events (id TEXT, owner_uid TEXT, team_member_id TEXT, actor_uid TEXT,
@@ -1527,7 +1581,7 @@ test("an owner contact is suggested but becomes signing identity only after pers
   const { database, server, access } = signingProfileFixture();
   try {
     database.exec(`UPDATE trade_team_members SET first_name = '', last_name = '', member_uid = 'owner-a', display_name = 'Business Pty Ltd';
-      INSERT INTO trade_accounts (firebase_uid, contact_name) VALUES ('owner-a', 'Pat Owner');`);
+      UPDATE trade_accounts SET contact_name = 'Pat Owner' WHERE firebase_uid = 'owner-a';`);
     const ownerAccess = { ...access, isOwner: true, actorUid: "owner-a" };
     const record = await server.openActivityRecord(ownerAccess, "job-a", "intent-a");
     assert.equal(record.signerDefaults.technician, "");
@@ -1551,7 +1605,7 @@ test("staff name setup fills missing parts only and never suggests the business 
   const { database, server, access } = signingProfileFixture();
   try {
     database.exec(`UPDATE trade_team_members SET first_name = 'Existing', last_name = '', display_name = 'Business Pty Ltd';
-      INSERT INTO trade_accounts (firebase_uid, contact_name) VALUES ('owner-a', 'Somebody Else');`);
+      UPDATE trade_accounts SET contact_name = 'Somebody Else' WHERE firebase_uid = 'owner-a';`);
     const record = await server.openActivityRecord(access, "job-a", "intent-a");
     assert.deepEqual(await server.activitySigningProfileSetup(access, record), {
       firstName: "Existing", lastName: "", firstNameLocked: true, lastNameLocked: false, canSave: true,
@@ -1573,7 +1627,7 @@ test("signing profile setup refuses another assigned worker, inactive member and
     await assert.rejects(server.saveActivitySigningProfile(manager, record.id, { firstName: "Wrong", lastName: "Person" }), /ACTIVITY_TECHNICIAN_SIGNER_NOT_ASSIGNED/);
     await assert.rejects(server.saveActivitySigningProfile({ ...access, ownerUid: "owner-b" }, record.id, { firstName: "Wrong", lastName: "Person" }), /ACTIVITY_RECORD_NOT_FOUND/);
     database.exec("UPDATE trade_team_members SET status = 'inactive'");
-    await assert.rejects(server.saveActivitySigningProfile(access, record.id, { firstName: "Wrong", lastName: "Person" }), /ACTIVITY_TECHNICIAN_SIGNER_NOT_ASSIGNED/);
+    await assert.rejects(server.saveActivitySigningProfile(access, record.id, { firstName: "Wrong", lastName: "Person" }), (error) => error.code === "ACTIVITY_TRAINING_REQUIRED");
     assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_member_events").get().count, 0);
   } finally { database.close(); }
 });

@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import { certificateTestDependency, installCreditexTrainingFixture } from './helpers/creditex-training-fixture.mjs';
 
 const source = fs.readFileSync(
   new URL("../src/app/api/trade-field-work/route.ts", import.meta.url),
@@ -133,6 +134,8 @@ function loadRoute(db) {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
     if (specifier === "@/lib/trade-field-completion-policy") return fieldCompletionPolicy;
     if (specifier === "@/lib/trade-activity-forms-completion") return activityCompletion;
+    const dependency = certificateTestDependency(specifier);
+    if (dependency) return dependency;
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
   new Function("require", "module", "exports", output)(
@@ -264,7 +267,8 @@ function fixture() {
       signer_name text NOT NULL,
       confirmation_text text NOT NULL,
       method text NOT NULL,
-      signed_at text NOT NULL
+      signed_at text NOT NULL,
+      created_at text NOT NULL
     );
     CREATE TABLE trade_crm_photo_requests (
       id text PRIMARY KEY NOT NULL,
@@ -467,6 +471,7 @@ CREATE TABLE compliance_activity_work_pack_final_records (
       case_instance_id text NOT NULL,
       work_pack_version_id text NOT NULL
     );`);
+  installCreditexTrainingFixture(database);
   const db = testD1(database);
   return { database, db, route: loadRoute(db) };
 }
@@ -498,6 +503,23 @@ function jobState(database) {
     events: database.prepare("SELECT COUNT(*) count FROM trade_work_order_events").get().count,
   };
 }
+
+test("field signoff binds the exact assignment and job revision checked for training", async () => {
+  for (const change of ["assignee_member_id = 'untrained-worker'", "revision = revision + 1", "record_status = 'archived'"]) {
+    const { database, db, route } = fixture();
+    try {
+      db.setBeforeBatch(() => database.exec(`UPDATE trade_work_orders SET ${change} WHERE id = 'job-1'`));
+      const response = await route.POST(new Request("https://example.test/api/trade-field-work", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "add_signoff", workOrderId: "job-1", signerRole: "technician",
+          signerName: "Field Technician", confirmed: true }),
+      }));
+      assert.equal(response.status, 409);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_signoffs").get().count, 0);
+      assert.equal(database.prepare("SELECT updated_at FROM trade_work_orders WHERE id = 'job-1'").get().updated_at, "initial");
+    } finally { database.close(); }
+  }
+});
 
 test("two governed cases block completion until every required requirement has submitted evidence", async () => {
   const { database, route } = fixture();

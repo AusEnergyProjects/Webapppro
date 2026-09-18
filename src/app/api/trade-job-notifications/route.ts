@@ -1,4 +1,5 @@
 import { getD1 } from "../../../../db";
+import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { listTradeTeamDocumentExpiryWarnings } from "@/lib/trade-team-document-expiry-server";
@@ -159,10 +160,14 @@ async function notifications(access: TeamAccess) {
       WHERE assignment.firebase_uid = ?
         AND assignment.status IN ('offered', 'viewed', 'interested', 'connected')
         AND opportunity.status IN ('open', 'paused')
+        AND ${certificateLeadEligibilitySql("assignment.firebase_uid", "assignment.matched_categories", "opportunity.state")}
       ORDER BY assignment.matched_at DESC LIMIT 80`)
       .bind(access.ownerUid).all<Row>() : none(),
     access.canViewQuotes && scope.scope === "team" ? db.prepare(`SELECT event.id, event.opportunity_match_id, event.occurred_at
       FROM customer_project_activity_events event
+      JOIN trade_opportunity_matches accepted_match ON accepted_match.id = event.opportunity_match_id
+        AND accepted_match.firebase_uid = event.installer_uid
+      JOIN trade_opportunities accepted_opportunity ON accepted_opportunity.id = accepted_match.opportunity_id
       JOIN customer_project_quotes quote ON quote.id = event.quote_id
         AND quote.installer_uid = event.installer_uid
         AND quote.customer_decision = 'accepted'
@@ -174,6 +179,7 @@ async function notifications(access: TeamAccess) {
         AND release.status = 'active'
       WHERE event.installer_uid = ?
         AND event.event_type = 'customer_installer_accepted'
+        AND ${certificateLeadEligibilitySql("accepted_match.firebase_uid", "accepted_match.matched_categories", "accepted_opportunity.state")}
       ORDER BY event.occurred_at DESC LIMIT 80`)
       .bind(access.ownerUid).all<Row>() : none(),
     access.canSendQuotes ? db.prepare(`SELECT delivery.id, delivery.work_order_id,

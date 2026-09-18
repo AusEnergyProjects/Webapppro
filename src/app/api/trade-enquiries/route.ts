@@ -1,4 +1,5 @@
 import { tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
+import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
@@ -40,6 +41,7 @@ const currentPublicMarketplaceAccessSql = (enquiryAlias: string) => `(
     current_public_match.status IN ('interested', 'connected')
     AND current_public_opportunity.status = 'open'
     AND ${tradeOpportunityServiceScopeSql("current_public_opportunity")}
+    AND ${certificateLeadEligibilitySql("current_public_match.firebase_uid", "current_public_match.matched_categories", "current_public_opportunity.state")}
     AND datetime(current_public_opportunity.expires_at) > datetime('now')
     AND current_public_release.status = 'active'
     AND ${publicPlanContactReleaseAccessSql("current_public_release")}

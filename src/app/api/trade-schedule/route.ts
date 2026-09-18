@@ -1,4 +1,6 @@
+import { CreditexComplianceError, creditexMutationConflict } from "@/lib/creditex-onboarding-server";
 import { getD1 } from "../../../../db";
+import { assertCertificateJobEligibility } from "@/lib/trade-certificate-eligibility";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { canAssignJob, canViewSchedule, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
@@ -29,6 +31,9 @@ import {
 export const runtime = "edge";
 
 function errorResponse(error: unknown) {
+  const conflict = creditexMutationConflict(error);
+  if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
+  if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   const code = error instanceof Error ? error.message : "";
   if (code === "JOB_SCHEDULE_ACCEPTANCE_REQUIRED" || isTradeJobScheduleEligibilityConflict(error)) {
     return adminJson({ ok: false, error: "Wait for the customer to accept the current Australian Energy Assessments quote before scheduling this job." }, 409);
@@ -380,6 +385,8 @@ export async function PATCH(request: Request) {
         } else {
           const appointmentRevision = Number(current.appointment_revision) + 1; const jobRevision = nextJobRevision(current.job_revision);
           await assertTradeJobReadyForScheduling(access.ownerUid, String(current.work_order_id));
+          await assertCertificateJobEligibility(db, { ownerUid: access.ownerUid, actorMemberId: access.memberId,
+            assignedMemberId: memberId, workOrderId: String(current.work_order_id) });
           const complianceIntentStatements = await plannedComplianceIntentReplanStatements(db, {
             actorUid: access.actorUid,
             changedAt: now,
@@ -444,8 +451,8 @@ export async function PATCH(request: Request) {
               previousAssigneeMemberId: String(current.current_assignee_member_id || ""),
               workOrderId: String(current.work_order_id),
             }),
-            tradeJobScheduleEligibilityGuardStatement(db, {
-              ownerUid: access.ownerUid,
+            await tradeJobScheduleEligibilityGuardStatement(db, {
+              ownerUid: access.ownerUid, actorMemberId: access.memberId, assignedMemberId: memberId,
               workOrderId: String(current.work_order_id),
               changedAt: now,
             }),
@@ -542,6 +549,8 @@ export async function PATCH(request: Request) {
         }
         assertMemberCapability(member, String(current.service_category || ""), access.ownerUid);
         await assertTradeJobReadyForScheduling(access.ownerUid, String(current.work_order_id));
+        await assertCertificateJobEligibility(db, { ownerUid: access.ownerUid, actorMemberId: access.memberId,
+          assignedMemberId: change.memberId, workOrderId: String(current.work_order_id) });
         prepared.push({
           ...change,
           current,
@@ -653,8 +662,8 @@ export async function PATCH(request: Request) {
             serviceCategory: String(item.current.service_category || ""),
             changedAt: now,
           }),
-          tradeJobScheduleEligibilityGuardStatement(db, {
-            ownerUid: access.ownerUid,
+          await tradeJobScheduleEligibilityGuardStatement(db, {
+            ownerUid: access.ownerUid, actorMemberId: access.memberId, assignedMemberId: item.memberId,
             workOrderId: String(item.current.work_order_id),
             changedAt: now,
           }),
@@ -708,6 +717,8 @@ export async function PATCH(request: Request) {
       if (["completed", "cancelled"].includes(String(current.job_stage))) throw new Error("TERMINAL_JOB_LOCKED");
       if ((body.expectedJobRevision !== undefined && Number(body.expectedJobRevision) !== Number(current.job_revision)) || Number(body.expectedRevision) !== Number(current.revision)) throw new Error("REVISION_CONFLICT");
       await assertTradeJobReadyForScheduling(access.ownerUid, String(current.work_order_id));
+      await assertCertificateJobEligibility(db, { ownerUid: access.ownerUid, actorMemberId: access.memberId,
+        assignedMemberId: memberId, workOrderId: String(current.work_order_id) });
       assertCurrentScheduleAssignment(access, String(current.assignee_member_id || ""));
       assertAssignmentChange(access, String(current.assignee_member_id || ""), memberId);
       assertMemberCapability(member, String(current.service_category || ""), access.ownerUid);
@@ -766,8 +777,8 @@ export async function PATCH(request: Request) {
         }),
         scheduleMemberGuardStatement(db, { ownerUid: access.ownerUid, memberId,
           serviceCategory: String(current.service_category || ''), changedAt: now }),
-        tradeJobScheduleEligibilityGuardStatement(db, {
-          ownerUid: access.ownerUid,
+        await tradeJobScheduleEligibilityGuardStatement(db, {
+          ownerUid: access.ownerUid, actorMemberId: access.memberId, assignedMemberId: memberId,
           workOrderId: String(current.work_order_id),
           changedAt: now,
         }),
@@ -813,6 +824,8 @@ export async function PATCH(request: Request) {
         if (activeAppointment) throw new Error("RENTAL_ACTIVE_APPOINTMENT");
       }
       await assertTradeJobReadyForScheduling(access.ownerUid, workOrderId);
+      await assertCertificateJobEligibility(db, { ownerUid: access.ownerUid, actorMemberId: access.memberId,
+        assignedMemberId: memberId, workOrderId });
       assertCurrentScheduleAssignment(access, String(job.assignee_member_id || ""));
       assertAssignmentChange(access, String(job.assignee_member_id || ""), memberId);
       assertMemberCapability(member, String(job.service_category || ""), access.ownerUid);
@@ -851,8 +864,8 @@ export async function PATCH(request: Request) {
           previousAssigneeMemberId: String(job.assignee_member_id || ""),
           workOrderId,
         }),
-        tradeJobScheduleEligibilityGuardStatement(db, {
-          ownerUid: access.ownerUid,
+        await tradeJobScheduleEligibilityGuardStatement(db, {
+          ownerUid: access.ownerUid, actorMemberId: access.memberId, assignedMemberId: memberId,
           workOrderId,
           changedAt: now,
         }),

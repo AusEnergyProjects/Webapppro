@@ -1,5 +1,6 @@
 import { tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
 import { getD1 } from "../../../../db";
+import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import {
   getCustomerProjectEvidenceBucket as getEvidenceBucket,
@@ -38,6 +39,7 @@ async function installerCanAccess(installerUid: string, record: EvidenceRecord) 
     WHERE p.id = ? AND p.firebase_uid = ? AND m.firebase_uid = ?
       AND m.status IN ('offered', 'viewed', 'interested', 'connected')
       AND o.status IN ('open', 'paused')
+      AND ${certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
       AND ${tradeOpportunityServiceScopeSql("o")}
       AND a.partner_type = 'installer'
       AND EXISTS (

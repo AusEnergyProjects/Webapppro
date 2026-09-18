@@ -12,14 +12,17 @@ import * as rentalGuards from '../src/lib/trade-rental-schema-guards.ts';
 import * as credentials from '../src/lib/trade-rental-credentials.ts';
 import * as sync from '../src/lib/trade-team-sync-server.ts';
 import * as bounded from '../src/lib/bounded-json-request.ts';
+import { certificateTestDependency, installCreditexTrainingFixture } from './helpers/creditex-training-fixture.mjs';
 
 const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 function load(path, mocks) {
   const output = ts.transpileModule(read(path), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const record = { exports: {} };
   new Function('require', 'module', 'exports', output)((name) => {
-    if (!(name in mocks)) throw new Error(`Unmocked import ${name}`);
-    return mocks[name];
+    if (name in mocks) return mocks[name];
+    const dependency = certificateTestDependency(name);
+    if (dependency) return dependency;
+    throw new Error(`Unmocked import ${name}`);
   }, record, record.exports);
   return record.exports;
 }
@@ -57,6 +60,9 @@ function fixture(accessOverrides = {}) {
   database.exec(read('drizzle/0171_trade_rental_assessment_scope.sql'));
   database.exec(read('drizzle/0115_trade_creditex_job_intent.sql'));
   database.exec(read('drizzle/0119_trade_multi_activity_jobs.sql').split('ALTER TABLE `compliance_cases`')[0]);
+  database.exec(`CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY, abn TEXT, business_name TEXT);
+    INSERT INTO trade_accounts VALUES('owner','53004085616','Training fixture Pty Ltd');`);
+  installCreditexTrainingFixture(database);
   let beforeBatch = null;
   const db = {
     prepare(sql) {
@@ -142,6 +148,26 @@ test('activity attachment persists the controlled variant and hash without manuf
   assert.equal((await f.post({ kind: 'program', activityTemplateId: choice.id, programTemplateId: choice.programTemplateId })).status, 200);
   assert.equal(f.database.prepare('SELECT count(*) n FROM trade_work_order_compliance_intents').get().n, 1);
 });
+
+for (const qualification of ['revoked', 'wrong_activity', 'revoked_during_save']) {
+  test(`certificate activity attachment rejects ${qualification} training without partial writes`, async () => {
+    const f = fixture();
+    const options = await (await f.get()).json();
+    const choice = options.activities.find((item) => item.id === 'veu-1');
+    assert.ok(choice && !choice.unavailableReason, 'The real approved Activity 1 fixture starts eligible');
+    const revoke = () => f.database.exec("UPDATE trade_training_completions SET revoked_at='2026-09-18T01:00:00Z', revocation_note='Revoked by reviewer' WHERE module_id='veu-1'");
+    if (qualification === 'wrong_activity') {
+      f.database.exec("DELETE FROM trade_training_completions WHERE module_id<>'veu-6'");
+    } else if (qualification === 'revoked_during_save') f.beforeBatch(revoke);
+    else revoke();
+    const result = await f.post({ kind: 'program', activityTemplateId: choice.id, programTemplateId: choice.programTemplateId });
+    assert.equal(result.status, 409, JSON.stringify(await result.clone().json()));
+    assert.equal(f.database.prepare('SELECT count(*) n FROM trade_work_order_compliance_intents').get().n, 0);
+    assert.equal(f.database.prepare('SELECT count(*) n FROM trade_work_order_events').get().n, 0);
+    assert.equal(f.database.prepare('SELECT count(*) n FROM trade_team_sync_changes').get().n, 0);
+    assert.equal(f.database.prepare('SELECT revision FROM trade_work_orders').get().revision, 4);
+  });
+}
 
 test('scope, terminal jobs, jurisdiction, stale revision and invalid choices fail without attaching data', async () => {
   for (const scenario of ['permission', 'assignment', 'protected', 'cancelled', 'state', 'revision', 'choice', 'origin']) {

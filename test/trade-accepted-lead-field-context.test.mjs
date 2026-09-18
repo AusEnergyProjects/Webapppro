@@ -1,3 +1,4 @@
+import { certificateTestDependency } from "./helpers/creditex-training-fixture.mjs";
 import * as activityCompletion from "../src/lib/trade-activity-forms-completion.ts";
 import * as fieldCompletionPolicy from "../src/lib/trade-field-completion-policy.ts";
 import * as tradeJobLifecycle from "../src/lib/trade-job-lifecycle.ts";
@@ -20,6 +21,7 @@ function compile(source, fileName, mocks) {
     if (specifier === "@/lib/trade-field-completion-policy") return fieldCompletionPolicy;
     if (specifier === "@/lib/trade-activity-forms-completion") return activityCompletion;
     if (specifier === "@/lib/trade-job-lifecycle") return tradeJobLifecycle;
+    if (certificateTestDependency(specifier)) return certificateTestDependency(specifier);
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
   new Function("require", "module", "exports", output)(require, moduleRecord, moduleRecord.exports);

@@ -699,7 +699,7 @@ export function validateCreditexCurrentWorkPackContent(
   const errors: string[] = [];
   const expectedIds = CURRENT_OR_LIMITED_TEMPLATES.map((template) => template.templateId);
   const actualIds = candidates.map((candidate) => candidate.templateId);
-  if (candidates.length !== 195) errors.push(`Expected 195 candidates, received ${candidates.length}.`);
+  if (candidates.length !== 196) errors.push(`Expected 196 candidates, received ${candidates.length}.`);
   if (new Set(actualIds).size !== actualIds.length) errors.push("Candidate template IDs must be unique.");
   if (expectedIds.some((id, index) => actualIds[index] !== id)) errors.push("Candidates must exactly match the ordered current and limited catalogue.");
   for (const candidate of candidates) {

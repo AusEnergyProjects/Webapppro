@@ -1,4 +1,7 @@
+import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard } from "@/lib/creditex-onboarding-server";
 import { getD1 } from "../../../../db";
+import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
+import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import {
   appendLiveComplianceCaseStatements,
@@ -57,6 +60,9 @@ type ComplianceOrganisationRef = {
 };
 
 function errorResponse(error: unknown) {
+  const conflict = creditexMutationConflict(error);
+  if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
+  if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   if (error instanceof TradeAccessError) {
     return adminJson(
       { ok: false, code: error.code, error: error.message },
@@ -602,6 +608,11 @@ export async function POST(request: Request) {
     );
     const optionalHandoff = optionalCommercialHandoff(body);
     const database = getD1();
+    const teamAccess = await requireInstallerTeamAccess(request);
+    const jobAssignment = await database.prepare("SELECT assignee_member_id, revision FROM trade_work_orders WHERE id = ? AND firebase_uid = ?")
+      .bind(workOrderId, access.identity.uid).first<{ assignee_member_id: string; revision: number }>();
+    await assertCertificateJobEligibility(database, { ownerUid: access.identity.uid, actorMemberId: teamAccess.memberId,
+      assignedMemberId: jobAssignment?.assignee_member_id || "", workOrderId });
     await ensureCreditexSchemaGuards(database);
     const creditexOrganisation = await activeCreditexOrganisation(database);
     const context = await ownedJobContext(
@@ -639,7 +650,14 @@ export async function POST(request: Request) {
       ].join("\n"),
     );
     const now = new Date().toISOString();
-    const statements: D1PreparedStatement[] = [];
+    const statements: D1PreparedStatement[] = await certificateJobEligibilityGuards(database, {
+      ownerUid: access.identity.uid, actorMemberId: teamAccess.memberId,
+      assignedMemberId: jobAssignment?.assignee_member_id || "", workOrderId,
+    });
+    statements.push(creditexWriteGuard(database, access.identity.uid,
+      `EXISTS (SELECT 1 FROM trade_work_orders WHERE id=? AND firebase_uid=?
+        AND assignee_member_id=? AND revision=? AND record_status='active')`,
+      [workOrderId, access.identity.uid, jobAssignment?.assignee_member_id || "", jobAssignment?.revision ?? -1]));
     const prepared = await appendLiveComplianceCaseStatements(
       database,
       statements,

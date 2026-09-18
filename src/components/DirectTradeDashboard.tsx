@@ -53,6 +53,7 @@ const TradeInvoiceWorkspace = dynamic(() => import("./TradeInvoiceWorkspace").th
 const TradeServiceFollowUpWorkspace = dynamic(() => import("./TradeServiceFollowUpWorkspace").then((module) => module.TradeServiceFollowUpWorkspace));
 const TradeRebateCalculatorWorkspace = dynamic(() => import("./TradeRebateCalculatorWorkspace").then((module) => module.TradeRebateCalculatorWorkspace));
 const TradeTeamSettings = dynamic(() => import("./TradeTeamSettings").then((module) => module.TradeTeamSettings));
+const TradeTrainingWorkspace = dynamic(() => import("./TradeTrainingWorkspace").then((module) => module.TradeTrainingWorkspace), { loading: () => <p role="status">Loading training and onboarding...</p> });
 
 type DashboardProfile = TradeBusinessSettingsProfile & {
   entitlements: {
@@ -219,10 +220,11 @@ const publicLeadHandoffStages = [
     detail: "The quote will open automatically as soon as the handoff is confirmed.",
   },
 ] as const;
-type DashboardWorkspace = "work" | "team" | "invoices" | "follow-ups" | "products" | "calculator" | "orders" | "import" | "account";
+type DashboardWorkspace = "work" | "team" | "training" | "invoices" | "follow-ups" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
   "team",
+  "training",
   "invoices",
   "follow-ups",
   "products",
@@ -2343,6 +2345,7 @@ export function DirectTradeDashboard() {
                   }}><span>{label}</span></button>)}
                 </div>
                 <button type="button" aria-current={workspace === "team" ? "page" : undefined} className={workspace === "team" ? "active" : ""} onClick={() => setWorkspace("team")}><b aria-hidden="true">02</b><span>Team</span><small>People, access and files</small></button>
+                <button type="button" aria-current={workspace === "training" ? "page" : undefined} className={workspace === "training" ? "active" : ""} onClick={() => setWorkspace("training")}><b aria-hidden="true">✓</b><span>Training &amp; onboarding</span><small>Activity modules and compliance to-do list</small></button>
                 <button type="button" aria-current={workspace === "work" && activeWorkView === "schedule" ? "page" : undefined} className={workspace === "work" && activeWorkView === "schedule" ? "active" : ""} onClick={() => {
                   setCommandTarget({ workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() });
                   setActiveWorkView("schedule");
@@ -2388,6 +2391,8 @@ export function DirectTradeDashboard() {
                   ? { workspace: "work", kind: "crm-view", id: "jobs", query: "", nonce: Date.now() }
                   : current)}
               />}
+
+              {workspace === "training" && <TradeTrainingWorkspace key={user.uid} user={user} />}
 
               {workspace === "team" && (hasBusinessOperations && hasTeamAccess ? (
                 <section className="dashboard-panel" aria-labelledby="team-workspace-title">

@@ -1,4 +1,7 @@
+import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard } from "@/lib/creditex-onboarding-server";
 import { getD1 } from "../../../../db";
+import { assertCertificateActivityEligibility, certificateActivityEligibilityGuardStatement } from "@/lib/trade-training-server";
+import { certificateActivityIds, assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { TradeAccessError } from "@/lib/trade-access-server";
 import { nextTlinkJobNumber } from "@/lib/trade-job-number-server";
@@ -360,6 +363,9 @@ async function crmIdentity(request: Request): Promise<CrmIdentity> {
 }
 
 function errorResponse(error: unknown) {
+  const conflict = creditexMutationConflict(error);
+  if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
+  if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   if (error instanceof TradeAddressVerificationError) {
     return adminJson({ ok: false, code: error.code, error: error.message }, 400);
   }
@@ -2178,6 +2184,11 @@ export async function POST(request: Request) {
       const requestedAssigneeMemberId = quickQuote ? "" : cleanAdminText(body.assigneeMemberId, 180);
       const assigneeMemberId = requestedAssigneeMemberId;
       const requiredServiceCategories = [...new Set([serviceCategory, ...complianceIntents.map((intent) => intent.activity.serviceCategory)])];
+      const trainingActivities = certificateActivityIds(complianceIntents.map((intent) => intent.activity.templateId));
+      if (trainingActivities.length) await assertCertificateActivityEligibility(db, {
+        ownerUid: identity.uid, actorMemberId: identity.memberId, assignedMemberId: assigneeMemberId,
+        activityTemplateIds: trainingActivities,
+      });
       let assignee = "";
       let assigneeUid = "";
       if (assigneeMemberId) {
@@ -2336,8 +2347,8 @@ export async function POST(request: Request) {
             rentalGates,
             credentialDate,
           })),
-          tradeJobScheduleEligibilityGuardStatement(db, {
-            ownerUid: identity.uid,
+          await tradeJobScheduleEligibilityGuardStatement(db, {
+            ownerUid: identity.uid, actorMemberId: identity.memberId, assignedMemberId: assigneeMemberId,
             workOrderId,
             changedAt: now,
           }),
@@ -2449,7 +2460,13 @@ export async function POST(request: Request) {
         ...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision: 1, changedAt: now }),
       ];
       try {
-        await db.batch(batchStatements);
+        await db.batch([
+          ...(trainingActivities.length ? [await certificateActivityEligibilityGuardStatement(db, {
+            ownerUid: identity.uid, actorMemberId: identity.memberId, assignedMemberId: assigneeMemberId,
+            activityTemplateIds: trainingActivities,
+          })] : []),
+          ...batchStatements,
+        ]);
       } catch (error) {
         if (quickQuoteWorkOrderId) {
           const replay = await quickQuoteReplay(db, identity.uid, quickQuoteWorkOrderId);
@@ -2651,6 +2668,8 @@ export async function POST(request: Request) {
       const assigneeMemberId = requestedAssigneeMemberId;
       if (!identity.access.isOwner && identity.access.scheduleScope === "own"
         && assigneeMemberId !== identity.memberId) throw new Error("JOB_RESCHEDULE_REQUIRED");
+      await assertCertificateJobEligibility(db, { ownerUid: identity.uid, actorMemberId: identity.memberId,
+        assignedMemberId: assigneeMemberId, workOrderId });
       const assignmentChanged = currentAssigneeMemberId !== assigneeMemberId;
       if (assignmentChanged && !canAssignJob(identity.access, currentAssigneeMemberId, assigneeMemberId)) {
         throw new Error("JOB_ASSIGN_REQUIRED");
@@ -2761,8 +2780,8 @@ export async function POST(request: Request) {
         );
       }
       statements.push(
-        tradeJobScheduleEligibilityGuardStatement(db, {
-          ownerUid: identity.uid,
+        await tradeJobScheduleEligibilityGuardStatement(db, {
+            ownerUid: identity.uid, actorMemberId: identity.memberId, assignedMemberId: assigneeMemberId,
           workOrderId,
           changedAt: now,
         }),
@@ -3082,7 +3101,9 @@ export async function PATCH(request: Request) {
 
     if (action === "update_appointment") {
       const appointmentId = cleanAdminText(body.appointmentId, 180);
-      const current = await db.prepare(`SELECT a.* FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id
+      const current = await db.prepare(`SELECT a.*, w.revision job_revision, w.stage job_stage,
+          w.assignee_member_id job_assignee_member_id
+        FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id
         WHERE a.id = ? AND a.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'`)
         .bind(appointmentId, identity.uid, identity.uid).first<Record<string, unknown>>();
       if (!current) throw new Error("APPOINTMENT_NOT_FOUND");
@@ -3094,8 +3115,31 @@ export async function PATCH(request: Request) {
       }
       const status = body.status === undefined ? String(current.status) : cleanAdminText(body.status, 20);
       if (!APPOINTMENT_STATUSES.has(status)) return adminJson({ ok: false, error: "Choose a valid appointment status." }, 400);
-      await db.prepare("UPDATE trade_crm_appointments SET status = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
-        .bind(status, now, appointmentId, identity.uid).run();
+      const trainingGuards: D1PreparedStatement[] = [];
+      if (status === "scheduled" || status === "completed") {
+        if (["completed", "cancelled"].includes(String(current.job_stage))) throw new Error("TERMINAL_JOB_LOCKED");
+        // An appointment and its job can retain different workers. Each actual
+        // assignee must qualify; the booking person's completion is not inherited.
+        for (const assignedMemberId of new Set([String(current.assignee_member_id || ""), String(current.job_assignee_member_id || "")])) {
+          const certificateAccess = { ownerUid: identity.uid, actorMemberId: identity.memberId,
+            assignedMemberId, workOrderId: String(current.work_order_id) };
+          await assertCertificateJobEligibility(db, certificateAccess);
+          trainingGuards.push(...await certificateJobEligibilityGuards(db, certificateAccess));
+        }
+      }
+      await db.batch([
+        creditexWriteGuard(db, identity.uid, `EXISTS (
+          SELECT 1 FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id=a.work_order_id AND w.firebase_uid=a.firebase_uid
+          WHERE a.id=? AND a.firebase_uid=? AND a.work_order_id=? AND a.revision=? AND a.status=?
+            AND a.assignee_member_id=? AND a.starts_at=? AND a.ends_at=?
+            AND w.revision=? AND w.stage=? AND w.assignee_member_id=? AND w.record_status='active')`,
+          [appointmentId, identity.uid, String(current.work_order_id), Number(current.revision), String(current.status),
+            String(current.assignee_member_id || ""), String(current.starts_at), String(current.ends_at),
+            Number(current.job_revision), String(current.job_stage), String(current.job_assignee_member_id || "")]),
+        ...trainingGuards,
+        db.prepare("UPDATE trade_crm_appointments SET status = ?, revision = revision + 1, updated_at = ? WHERE id = ? AND firebase_uid = ?")
+          .bind(status, now, appointmentId, identity.uid),
+      ]);
       return adminJson({ ok: true });
     }
 

@@ -1,4 +1,5 @@
 import { tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
+import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import {
   publicPlanContactReleaseAccessSql,
 } from "@/lib/public-plan-enquiry.mjs";
@@ -318,6 +319,7 @@ export async function startPublicLeadQuoteWorkflow(
   const scope = await db.prepare(`SELECT m.id FROM trade_opportunity_matches m
     JOIN trade_opportunities o ON o.id = m.opportunity_id
     WHERE m.id = ? AND m.firebase_uid = ?
+    AND ${certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
     AND ${tradeOpportunityServiceScopeSql("o")} LIMIT 1`)
     .bind(matchId, installerUid).first();
   if (!scope) throw new Error("PUBLIC_LEAD_QUOTE_WORKFLOW_UNAVAILABLE");
@@ -526,6 +528,7 @@ export async function startPublicLeadQuoteWorkflow(
         WHERE guarded_match.id = ? AND guarded_match.firebase_uid = ?
           AND guarded_match.status = ? AND guarded_match.opportunity_id = ?
           AND guarded_opportunity.status = 'open'
+          AND ${certificateLeadEligibilitySql("guarded_match.firebase_uid", "guarded_match.matched_categories", "guarded_opportunity.state")}
           AND ${tradeOpportunityServiceScopeSql("guarded_opportunity")}
           AND guarded_opportunity.expires_at > ?
       ) THEN 1 ELSE json_extract('PUBLIC_LEAD_QUOTE_STATE_CHANGED', '$') END workflow_guard`)

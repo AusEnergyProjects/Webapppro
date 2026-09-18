@@ -1277,8 +1277,8 @@ export function validateCreditexNonCertificateWorkPackContent(
     )
     .map((program) => program.programCode);
 
-  if (candidates.length !== 107) {
-    errors.push(`Expected 107 non-certificate candidates, received ${candidates.length}.`);
+  if (candidates.length !== 108) {
+    errors.push(`Expected 108 non-certificate candidates, received ${candidates.length}.`);
   }
   if (new Set(actualIds).size !== candidates.length) {
     errors.push("Non-certificate candidate template IDs must be unique.");
@@ -1296,9 +1296,9 @@ export function validateCreditexNonCertificateWorkPackContent(
       "Non-certificate candidates do not exactly match the ordered current or limited catalogue.",
     );
   }
-  if (retailerObligationCount !== 50 || otherOutcomeCount !== 57) {
+  if (retailerObligationCount !== 51 || otherOutcomeCount !== 57) {
     errors.push(
-      "Non-certificate outcome coverage must be 50 retailer-obligation rows and 57 other rows.",
+      "Non-certificate outcome coverage must be 51 retailer-obligation rows and 57 other rows.",
     );
   }
   if (CREDITEX_NON_CERTIFICATE_TRACKED_SOURCE_LIBRARY.length !== 94) {
@@ -1496,7 +1496,7 @@ export function canonicalCreditexNonCertificateWorkPackContent(
 }
 
 export const CREDITEX_NON_CERTIFICATE_WORK_PACK_CONTENT_CANONICAL_SHA256 =
-  "c69396cbbd8fbda313d8a6c0be237849deebaa49dbaa9911a30bdd54204a2ba0" as const;
+  "18c91f65271e6aa8530ee9695e6e1d471a72ed0996ac04fb13dddbd1abb205cc" as const;
 
 export const CREDITEX_NON_CERTIFICATE_WORK_PACK_CONTENT_VALIDATION =
   validateCreditexNonCertificateWorkPackContent();
@@ -1508,8 +1508,8 @@ if (!CREDITEX_NON_CERTIFICATE_WORK_PACK_CONTENT_VALIDATION.valid) {
 }
 
 export const CREDITEX_NON_CERTIFICATE_WORK_PACK_CONTENT_COMPLETENESS = {
-  expectedCurrentOrLimitedTemplates: 107,
-  expectedRetailerObligationTemplates: 50,
+  expectedCurrentOrLimitedTemplates: 108,
+  expectedRetailerObligationTemplates: 51,
   expectedOtherOutcomeTemplates: 57,
   machineReadableCandidateTemplates:
     CREDITEX_NON_CERTIFICATE_WORK_PACK_CONTENT_VALIDATION

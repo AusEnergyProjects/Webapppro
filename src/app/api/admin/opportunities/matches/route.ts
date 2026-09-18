@@ -16,6 +16,7 @@ import {
 } from "@/lib/opportunity-server";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
+import { certificateLeadEligible, certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 
 export const runtime = "edge";
 const MATCH_STATUSES = new Set([
@@ -147,6 +148,9 @@ export async function POST(request: Request) {
         409,
       );
     const serviceArea = qualifyingServiceArea(account, String(opportunity.postcode));
+    if (!await certificateLeadEligible(db, firebaseUid, matchedCategories, String(opportunity.state))) {
+      return adminJson({ ok: false, code: "CREDITEX_ELIGIBILITY_REQUIRED", error: "Complete Creditex onboarding and the team's required activity training before receiving this lead." }, 403);
+    }
     if (!serviceArea)
       return adminJson(
         {
@@ -170,7 +174,9 @@ export async function POST(request: Request) {
       (id, opportunity_id, firebase_uid, status, admin_note, partner_note, matched_categories, distance_metres,
        allocation_rank, match_source, contact_attempt_count, last_contact_at, connected_at, matched_by_uid, matched_at, updated_at)
       SELECT ?, ?, ?, 'offered', ?, '', ?, ?, ?, 'manual', 0, '', '', ?, ?, ?
-      WHERE EXISTS (SELECT 1 FROM trade_opportunities current_opportunity
+      FROM (SELECT ? owner_uid, ? categories, ? state) certificate_candidate
+      WHERE ${await certificateLeadEligibilitySql("certificate_candidate.owner_uid", "certificate_candidate.categories", "certificate_candidate.state")}
+      AND EXISTS (SELECT 1 FROM trade_opportunities current_opportunity
         WHERE current_opportunity.id = ? AND current_opportunity.status = 'open'
           AND ${tradeOpportunityServiceScopeSql("current_opportunity")})
       ON CONFLICT(opportunity_id, firebase_uid) DO UPDATE SET admin_note = excluded.admin_note, updated_at = excluded.updated_at`,
@@ -186,6 +192,9 @@ export async function POST(request: Request) {
         admin.uid,
         now,
         now,
+        firebaseUid,
+        JSON.stringify(matchedCategories),
+        String(opportunity.state),
         opportunityId,
       )
       .run();
@@ -233,6 +242,7 @@ export async function PATCH(request: Request) {
         `SELECT m.status, m.firebase_uid, m.opportunity_id, o.status opportunity_status, o.maximum_connected_installers,
         o.service_categories opportunity_service_categories,
         CASE WHEN ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'installer'
+          AND ${await certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
           THEN 1 ELSE 0 END installer_access_approved
       FROM trade_opportunity_matches m
       JOIN trade_opportunities o ON o.id = m.opportunity_id
@@ -304,6 +314,7 @@ export async function PATCH(request: Request) {
           WHERE a.firebase_uid = trade_opportunity_matches.firebase_uid
             AND ${tradeOpportunityServiceScopeSql("current_opportunity")}
             AND ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'installer'
+            AND ${await certificateLeadEligibilitySql("a.firebase_uid", "trade_opportunity_matches.matched_categories", "current_opportunity.state")}
         )
       )`,
       )

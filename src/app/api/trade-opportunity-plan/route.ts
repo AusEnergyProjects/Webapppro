@@ -1,5 +1,6 @@
 import { tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
 import { getD1 } from "../../../../db";
+import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 import {
   createInstallerPlanReportView,
@@ -100,6 +101,7 @@ export async function GET(request: Request) {
     WHERE m.id = ? AND m.firebase_uid = ?
       AND m.status IN ('offered', 'viewed', 'interested', 'connected')
       AND o.status IN ('open', 'paused')
+      AND ${certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
       AND ${tradeOpportunityServiceScopeSql("o")}
       AND o.source_reference LIKE 'customer-project:%'
       AND EXISTS (

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { certificateTestDependency } from "./helpers/creditex-training-fixture.mjs";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
@@ -80,6 +81,7 @@ function loadRoute(database, aborted, currentAccess = managerAccess) {
   };
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+    const dependency = certificateTestDependency(specifier); if (dependency) return dependency;
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
   new Function("require", "module", "exports", output)(require, moduleRecord, moduleRecord.exports);

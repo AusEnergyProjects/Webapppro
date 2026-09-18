@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
+import { expandCreditexLeadSql, qualifyLeadFixture } from "./helpers/creditex-training-sql.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../drizzle/0077_trade_job_notification_reads.sql");
@@ -99,7 +100,9 @@ test("newly allocated leads enter the owner scoped unread work queue without hou
   insert.run("other-owner-match", "open-lead", "owner-b", "offered", "2026-07-31T00:02:00.000Z");
   insert.run("closed-match", "closed-lead", "owner-a", "offered", "2026-07-31T00:01:00.000Z");
 
-  assert.deepEqual(db.prepare(queryMatch[1]).all("owner-a").map((row) => ({ ...row })), [{
+  db.exec("CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY,abn TEXT,business_name TEXT); INSERT INTO trade_accounts VALUES ('owner-a','53004085616','Fixture Pty Ltd')");
+  qualifyLeadFixture(db);
+  assert.deepEqual(db.prepare(expandCreditexLeadSql(queryMatch[1])).all("owner-a").map((row) => ({ ...row })), [{
     opportunity_match_id: "owner-match",
     matched_at: "2026-07-31T00:03:00.000Z",
   }]);

@@ -139,7 +139,7 @@ test("mobile bookings bind premises-specific activity variants through sync and 
 test("optional TLink invite is requested only after the job and appointment commit", () => {
   assert.match(mobile, /Email the customer a calendar invite/);
   assert.match(mobile, /emailCalendarInvite/);
-  const commit = crmRoute.indexOf("await db.batch(batchStatements)");
+  const commit = crmRoute.lastIndexOf("await db.batch([", crmRoute.indexOf("...batchStatements"));
   const invite = crmRoute.indexOf("await sendDirectAppointmentCalendarInvite", commit);
   assert.ok(commit > 0 && invite > commit);
   assert.match(inviteServer, /messageType: "tlink_direct_appointment_invite"/);

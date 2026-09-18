@@ -1,4 +1,5 @@
 import { getD1 } from "../../db";
+import { certificateJobEligibilityPredicate } from "./trade-certificate-eligibility";
 
 export function tradeJobScheduleEligibilitySql(workOrderAlias: string, jobDetailAlias: string) {
   return `${workOrderAlias}.source_type <> 'opportunity'
@@ -36,10 +37,13 @@ export async function assertTradeJobReadyForScheduling(ownerUid: string, workOrd
   if (!row) throw new Error("JOB_SCHEDULE_ACCEPTANCE_REQUIRED");
 }
 
-export function tradeJobScheduleEligibilityGuardStatement(
+export async function tradeJobScheduleEligibilityGuardStatement(
   db: D1Database,
-  { ownerUid, workOrderId, changedAt }: { ownerUid: string; workOrderId: string; changedAt: string },
+  { ownerUid, workOrderId, changedAt, actorMemberId, assignedMemberId }: {
+    ownerUid: string; workOrderId: string; changedAt: string; actorMemberId: string; assignedMemberId: string;
+  },
 ) {
+  const training = await certificateJobEligibilityPredicate(db, { ownerUid, workOrderId, actorMemberId, assignedMemberId });
   return db.prepare(`INSERT INTO trade_work_order_events
     (id, work_order_id, firebase_uid, event_type, summary, created_at)
     SELECT ?, ?, ?, NULL, 'Schedule eligibility changed during booking.', ? WHERE NOT EXISTS (
@@ -48,7 +52,8 @@ export function tradeJobScheduleEligibilityGuardStatement(
         ON job_detail.work_order_id = work_order.id AND job_detail.firebase_uid = work_order.firebase_uid
       WHERE work_order.id = ? AND work_order.firebase_uid = ? AND work_order.partner_type = 'installer'
         AND work_order.record_status = 'active' AND ${tradeJobScheduleEligibilitySql("work_order", "job_detail")}
-    )`).bind(crypto.randomUUID(), workOrderId, ownerUid, changedAt, workOrderId, ownerUid);
+        AND (${training.sql})
+    )`).bind(crypto.randomUUID(), workOrderId, ownerUid, changedAt, workOrderId, ownerUid, ...training.bindings);
 }
 
 export function isTradeJobScheduleEligibilityConflict(error: unknown) {

@@ -1,3 +1,4 @@
+import { expandCreditexLeadSql, qualifyLeadFixture } from "./helpers/creditex-training-sql.mjs";
 import { tradeOpportunityServiceScopeSql } from "../src/lib/aea-trade-routing.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -26,7 +27,7 @@ const LEGACY_V6_NOTICE = "2026-08-10-structured-service-address-sharing-v6";
 const LEGACY_V6_PURPOSE =
   "Share my email, postcode, services and message with all approved TLink trades in my area, plus name, phone or full service address, and email my private plan";
 
-const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8")
+const read = (path) => expandCreditexLeadSql(fs.readFileSync(new URL(path, import.meta.url), "utf8"))
   .replaceAll(/\$\{tradeOpportunityServiceScopeSql\("([^"]+)"\)\}/g, (_, alias) => tradeOpportunityServiceScopeSql(alias));
 const baseMigration = read("../drizzle/0126_public_trade_lead_contact_release.sql");
 const addressMigration = read("../drizzle/0127_public_trade_lead_customer_address.sql");
@@ -462,6 +463,7 @@ test("public CRM lead storage stays pseudonymous while reads project only the cu
       LEGACY_V6_PURPOSE,
       JSON.stringify(["customer_email", "postcode", "service_categories", "customer_message"]),
     );
+  qualifyLeadFixture(database);
   const sync = database.prepare(marketplaceSyncSql());
   sync.run("opportunity-1", "", "");
   assert.deepEqual({ ...database.prepare(`SELECT first_name, last_name, email, phone, address_line_1, address_line_2, suburb, address_state, postcode,

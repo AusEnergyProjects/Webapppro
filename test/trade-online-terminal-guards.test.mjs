@@ -1,3 +1,4 @@
+import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -75,6 +76,7 @@ function loadTypescriptModule(path, mocks) {
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+    if (certificateTestDependency(specifier)) return certificateTestDependency(specifier);
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
   new Function("require", "module", "exports", output)(
@@ -253,6 +255,9 @@ function fixture(stage = "in_progress", revision = 5) {
      completed_at, created_at, updated_at)
     VALUES ('form-1', 'job-1', 'owner-1', 'field-form', 1, 'Field form',
       'AU', '{"name":"Field form","fields":[]}', '{}', 'draft', 3, '', '', 'initial', 'initial')`).run();
+  installCreditexTrainingFixture(database, { qualified: false });
+  database.exec("INSERT INTO trade_accounts(firebase_uid,abn,business_name) VALUES ('owner-1','53004085616','Fixture Pty Ltd')");
+  installCreditexTrainingFixture(database);
   return { database, db: testD1(database) };
 }
 

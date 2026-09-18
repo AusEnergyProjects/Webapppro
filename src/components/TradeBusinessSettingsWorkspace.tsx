@@ -10,6 +10,9 @@ import {
   useState,
 } from "react";
 import type { User } from "firebase/auth";
+import dynamic from "next/dynamic";
+
+const TradeCreditexOnboarding = dynamic(() => import("./TradeTrainingWorkspace").then((module) => module.TradeCreditexOnboarding), { loading: () => <p role="status">Loading Creditex onboarding...</p> });
 import {
   DEFAULT_QUOTE_EMAIL_INTRO,
   DEFAULT_QUOTE_EMAIL_SUBJECT,
@@ -1191,6 +1194,7 @@ export function TradeBusinessSettingsWorkspace({
       </div>
 
       <div style={settingsShellStyle}>
+        {profile.partnerType === "installer" && <><TradeCreditexOnboarding user={user} businessName={profile.businessName} businessAddress={[profile.addressLine1, profile.suburb, profile.addressState, profile.postcode].filter(Boolean).join(", ")} /><p><a href="/direct-trade/dashboard?workspace=training">Open activity training and team completion status</a></p></>}
         <nav
           className="business-settings-jump-nav"
           aria-label="Jump to business settings section"

@@ -1,4 +1,7 @@
+import { CreditexComplianceError, creditexMutationConflict } from "@/lib/creditex-onboarding-server";
 import { getD1 } from "../../../../../db";
+import { assertCertificateActivityEligibility, certificateActivityEligibilityGuardStatement } from "@/lib/trade-training-server";
+import { certificateActivityIds, certificateActivityBlockReason } from "@/lib/trade-certificate-eligibility";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
 import { assignedJob, canManageJobs, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
@@ -96,7 +99,10 @@ async function options(context: Context) {
       added: context.intents.some((intent) => intent.activity_template_id === activity.templateId),
       unavailableReason: blocked || (!fieldForms.has(activity.templateId) ? "The activity form is not available in the field app yet." : "")
         || (context.intents.length >= MAX_TRADE_COMPLIANCE_ACTIVITIES ? `This job already has ${MAX_TRADE_COMPLIANCE_ACTIVITIES} program activities.` : "")
-        || await reasonFor(activity.serviceCategory),
+        || await reasonFor(activity.serviceCategory)
+        || await certificateActivityBlockReason(getD1(), { ownerUid: context.access.ownerUid,
+          actorMemberId: context.access.memberId, assignedMemberId: text(context.job.assignee_member_id),
+          activityTemplateId: activity.templateId }),
     })));
   const rentalModules = await Promise.all(RENTAL_ASSESSMENT_MODULES.map(async (module) => ({
     id: module.key, title: text(context.attachedModules.find((entry) => entry.module_key === module.key)?.template_name)
@@ -121,6 +127,9 @@ async function options(context: Context) {
 }
 
 function failure(error: unknown) {
+  const conflict = creditexMutationConflict(error);
+  if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
+  if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   if (error instanceof BoundedJsonRequestError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   if (error instanceof TradeComplianceIntentError) return adminJson({ ok: false, code: error.code, error: error.message }, 400);
   const code = error instanceof Error ? error.message : "";
@@ -188,6 +197,12 @@ export async function POST(request: Request) {
         activityTemplateId: body.activityTemplateId, variantId: body.variantId, buildingType: details.building_type,
         siteJurisdiction: details.address_state, plannedStart: details.scheduled_start });
       if (!intent) throw new Error("ACTIVITY_SELECTION_REQUIRED");
+      const activityTemplateIds = certificateActivityIds([intent.activity.templateId]);
+      if (activityTemplateIds.length) await assertCertificateActivityEligibility(db, { ownerUid: access.ownerUid,
+        actorMemberId: access.memberId, assignedMemberId: text(current.job.assignee_member_id), activityTemplateIds });
+      if (activityTemplateIds.length) statements.push(await certificateActivityEligibilityGuardStatement(db, {
+        ownerUid: access.ownerUid, actorMemberId: access.memberId, assignedMemberId: text(current.job.assignee_member_id), activityTemplateIds,
+      }));
       defaultActivityFieldForm(intent.activity.templateId, intent.snapshot.activity.variantId || "");
       const organisation = await db.prepare("SELECT id FROM compliance_organisations WHERE organisation_code = ? AND status = 'active' LIMIT 1")
         .bind(CREDITEX_PARTNER_ORGANISATION_CODE).first<{ id: string }>();

@@ -423,7 +423,7 @@ test("a complaint recorded while documents load suppresses the queued request be
 });
 
 test("provider acceptance racing recipient suppression cannot issue a compliance receipt", async () => {
-  const { server, database, messages, fetchImpl, releaseProvider } = fixture({ deferProvider: true });
+  const { server, database, messages, fetchImpl, releaseProvider, providerStarted } = fixture({ deferProvider: true });
   const pending = server.sendScheduledActivityCustomerDocuments({
     appointmentId: "appointment-1",
     workOrderId: "job-1",
@@ -432,9 +432,7 @@ test("provider acceptance racing recipient suppression cannot issue a compliance
     activities: [residentialActivity],
     fetchImpl,
   });
-  for (let attempt = 0; attempt < 50 && messages.length === 0; attempt += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
+  await Promise.race([providerStarted, pending.then(() => assert.fail("Delivery ended before entering the provider"))]);
   assert.equal(messages.length, 1);
   const delivery = database.prepare(`SELECT id FROM trade_activity_customer_document_deliveries`).get();
   const suppressedAt = new Date().toISOString();
@@ -764,7 +762,7 @@ test("job creation commits before mail while delivery recovery stays in the desk
   const mobileJob = fs.readFileSync(new URL("../mobile/src/app/job/[id].tsx", import.meta.url), "utf8");
   const mobileTypes = fs.readFileSync(new URL("../mobile/src/lib/types.ts", import.meta.url), "utf8");
   const syncRoute = fs.readFileSync(new URL("../src/app/api/trade-team/sync/route.ts", import.meta.url), "utf8");
-  const commit = route.indexOf("await db.batch(batchStatements)");
+  const commit = route.lastIndexOf("await db.batch([", route.indexOf("...batchStatements"));
   const send = route.indexOf("customerDocuments = await sendScheduledActivityCustomerDocuments", commit);
   const openPacks = route.indexOf("complianceWorkPacks = await autoOpenReadyPlannedComplianceWorkPacks", send);
   assert.ok(commit >= 0 && commit < send && send < openPacks);

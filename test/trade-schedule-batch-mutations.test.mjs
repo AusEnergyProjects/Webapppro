@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import { canAssignWithinScope, canRescheduleWithinScope } from "../src/lib/trade-team-permission-policy.mjs";
+import { certificateTestDependency, installCreditexTrainingFixture } from './helpers/creditex-training-fixture.mjs';
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -72,7 +73,7 @@ function loadTypescriptModule(path, mocks = {}) {
     fileName: path,
   }).outputText;
   const moduleRecord = { exports: {} };
-  const require = (specifier) => Object.hasOwn(mocks, specifier) ? mocks[specifier] : {};
+  const require = (specifier) => Object.hasOwn(mocks, specifier) ? mocks[specifier] : certificateTestDependency(specifier) || {};
   new Function("require", "module", "exports", output)(require, moduleRecord, moduleRecord.exports);
   return moduleRecord.exports;
 }
@@ -206,6 +207,7 @@ function fixture() {
       ('appointment-b', 'job-b', 'owner-1', 'site_visit', 'Job B visit', '2099-01-05T11:00', '2099-01-05T12:00',
         'member-a', 'Worker A', 'scheduled', 'Call on arrival', 1, '2026-01-01', '2026-01-01');
   `);
+  installCreditexTrainingFixture(database);
   return { database, d1: testD1(database) };
 }
 
@@ -296,6 +298,51 @@ const swappedChanges = [
   { appointmentId: "appointment-a", expectedRevision: 1, memberId: "member-a", startsAt: "2099-01-05T11:00", durationMinutes: 60 },
   { appointmentId: "appointment-b", expectedRevision: 1, memberId: "member-a", startsAt: "2099-01-05T10:00", durationMinutes: 60 },
 ];
+
+function attachCertificateIntent(database, activityTemplateId = 'veu-1') {
+  database.prepare(`INSERT INTO trade_work_order_compliance_intents
+    (id, installer_uid, work_order_id, activity_template_id, status) VALUES ('certificate-intent','owner-1','job-a',?,'planned')`)
+    .run(activityTemplateId);
+}
+
+test('certificate appointment moves accept the exact approved business and individual activity passes', async () => {
+  const { database, d1 } = fixture();
+  attachCertificateIntent(database);
+  const response = await scheduleRoute(d1).PATCH(batchRequest(swappedChanges));
+  assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+  assert.equal(database.prepare("SELECT starts_at FROM trade_crm_appointments WHERE id='appointment-a'").get().starts_at, '2099-01-05T11:00');
+});
+
+for (const qualification of ['revoked', 'wrong_activity', 'revoked_during_save']) {
+  test(`certificate batch rescheduling rejects ${qualification} training and preserves every appointment`, async () => {
+    const { database, d1 } = fixture();
+    attachCertificateIntent(database);
+    const appointments = database.prepare('SELECT * FROM trade_crm_appointments ORDER BY id').all();
+    const jobs = database.prepare('SELECT * FROM trade_work_orders ORDER BY id').all();
+    const revoke = () => database.exec("UPDATE trade_training_completions SET revoked_at='2026-09-18T01:00:00Z', revocation_note='Revoked by reviewer' WHERE member_id='member-a' AND module_id='veu-1'");
+    if (qualification === 'wrong_activity') database.exec("DELETE FROM trade_training_completions WHERE member_id='member-a' AND module_id<>'veu-6'");
+    else if (qualification === 'revoked_during_save') d1.setBeforeBatch(revoke);
+    else revoke();
+    const notifications = []; const synced = [];
+    const response = await scheduleRoute(d1, notifications, synced).PATCH(batchRequest(swappedChanges));
+    assert.equal(response.status, qualification === "revoked_during_save" ? 409 : 403, JSON.stringify(await response.clone().json()));
+    assert.deepEqual(database.prepare('SELECT * FROM trade_crm_appointments ORDER BY id').all(), appointments);
+    assert.deepEqual(database.prepare('SELECT * FROM trade_work_orders ORDER BY id').all(), jobs);
+    assert.equal(database.prepare('SELECT COUNT(*) count FROM trade_crm_appointment_revisions').get().count, 0);
+    assert.equal(database.prepare('SELECT COUNT(*) count FROM trade_work_order_events').get().count, 0);
+    assert.equal(database.prepare('SELECT COUNT(*) count FROM trade_team_sync_changes').get().count, 0);
+    assert.deepEqual(notifications, []); assert.deepEqual(synced, []);
+  });
+}
+
+test('certificate reassignment checks the proposed worker separately from the qualified dispatcher', async () => {
+  const { database, d1 } = fixture();
+  attachCertificateIntent(database);
+  database.exec("UPDATE trade_training_completions SET revoked_at='2026-09-18T01:00:00Z' WHERE member_id='member-b' AND module_id='veu-1'");
+  const response = await scheduleRoute(d1).PATCH(batchRequest([{ ...swappedChanges[0], memberId: 'member-b' }]));
+  assert.equal(response.status, 403, JSON.stringify(await response.clone().json()));
+  assert.equal(database.prepare("SELECT assignee_member_id FROM trade_crm_appointments WHERE id='appointment-a'").get().assignee_member_id, 'member-a');
+});
 
 test("save_schedule_changes atomically swaps two appointments and records every revision", async () => {
   const { database, d1 } = fixture();

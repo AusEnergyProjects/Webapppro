@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
+import { certificateTestDependency } from './helpers/creditex-training-fixture.mjs';
 import * as rental from '../src/lib/trade-rental-assessment.mjs';
 import * as tradeJobLifecycle from '../src/lib/trade-job-lifecycle.ts';
 
@@ -21,7 +22,7 @@ const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 function moduleAt(path, mocks = {}) {
   const output = ts.transpileModule(read(path), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const moduleRecord = { exports: {} };
-  new Function('require', 'module', 'exports', output)(name => mocks[name] || {}, moduleRecord, moduleRecord.exports);
+  new Function('require', 'module', 'exports', output)(name => mocks[name] || certificateTestDependency(name) || {}, moduleRecord, moduleRecord.exports);
   return moduleRecord.exports;
 }
 const clean = (value, limit) => typeof value === 'string' ? value.trim().slice(0, limit) : '';

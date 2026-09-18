@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import { certificateTestDependency } from "./helpers/creditex-training-fixture.mjs";
+import { qualifyLeadFixture } from "./helpers/creditex-training-sql.mjs";
 import { installMissingDraftDeletionContext } from "./helpers/job-deletion-guard-fixture.mjs";
 import {
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
@@ -102,6 +104,7 @@ function loadTypescriptModule(path, mocks) {
   const require = (specifier) => {
     if (specifier === "@/lib/aea-trade-routing.mjs") return aeaTradeRouting;
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+    if (certificateTestDependency(specifier)) return certificateTestDependency(specifier);
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
   new Function("require", "module", "exports", output)(
@@ -312,6 +315,7 @@ function workflowFixture() {
     matchId,
     now,
   );
+  qualifyLeadFixture(database);
   return { database, db: testD1(database), matchId, now };
 }
 
@@ -636,10 +640,10 @@ test("pictured multi-service lead with three photos stays within production D1 c
     UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6`),
   /D1_ERROR: too many terms in compound SELECT/,
   "the fixture must reproduce the production limit that rejected the former seven-term preflight");
-  const categories = [
-    "assessment", "draught-proofing", "insulation", "glazing", "window-coverings",
-    "hot-water", "heating-cooling", "solar", "ev-charging",
-  ];
+  // Exercise a multi-service handoff using active Victorian programme routes.
+  // Reserved assessments and services without an applicable module cannot be
+  // smuggled into an otherwise qualified marketplace match.
+  const categories = ["hot-water", "heating-cooling", "solar"];
   database.prepare("UPDATE trade_opportunity_matches SET matched_categories = ? WHERE id = ?")
     .run(JSON.stringify(categories), matchId);
   const prompts = ["switchboard", "roof", "heating-cooling"];
@@ -682,7 +686,8 @@ test("the same lead creates independent tenant-owned jobs and files for each int
     (id, opportunity_id, firebase_uid, status, matched_categories, updated_at)
     VALUES (?, 'opportunity-1', 'trade-b', 'interested', '["hot-water"]', ?)`)
     .run(secondMatchId, now);
-  database.prepare("INSERT INTO trade_accounts VALUES ('trade-b', 'installer', 'Hello.', 'Terms.')").run();
+  database.prepare("INSERT INTO trade_accounts(firebase_uid,partner_type,quote_email_intro,quote_default_terms) VALUES ('trade-b', 'installer', 'Hello.', 'Terms.')").run();
+  qualifyLeadFixture(database);
   database.prepare(`INSERT INTO trade_crm_enquiries
     (id, firebase_uid, source_type, source_reference, opportunity_match_id, status, record_status, updated_at)
     VALUES (?, 'trade-b', 'tlink_marketplace', ?, ?, 'new', 'active', ?)`)

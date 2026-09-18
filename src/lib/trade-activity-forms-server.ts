@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../db";
+import { assertCertificateJobEligibility, certificateJobEligibilityPredicate } from "./trade-certificate-eligibility";
 import { assignedJob, type TeamAccess } from "./trade-team-server";
 import {
   activityPrefill,
@@ -485,6 +486,21 @@ async function upgradeDraftActivityPolicy(
   }
 }
 
+function assertCurrentActivityRequirements(record: ActivityRecord) {
+  const baseline = defaultActivityFieldForm(record.form.activityTemplateId, record.form.variantId);
+  const governed = applyDefaultActivityFormPolicy(record.form, baseline);
+  // Historical signed snapshots remain immutable, but cannot omit a newly
+  // mandatory assignment or declaration when signing/submitting new work.
+  const fields = new Map(record.form.fields.map((field) => [field.key, field]));
+  const declarations = new Map(record.form.declarations.map((item) => [item.key, item]));
+  if (governed.fields.some((field) => field.required && field.sourceRequirementId
+    && activityHash(fields.get(field.key) || null) !== activityHash(field))
+    || governed.declarations.some((item) => item.required && (item.sourceUrl || item.sourceTextSha256)
+      && activityHash(declarations.get(item.key) || null) !== activityHash(item))) {
+    throw new Error("ACTIVITY_POLICY_REVIEW_REQUIRED");
+  }
+}
+
 export async function loadActivityRecord(access: TeamAccess, id: string, mutate = false): Promise<ActivityRecord> {
   assertActivityFieldAccess(access, mutate);
   const row = await getD1().prepare("SELECT payload FROM trade_activity_field_records WHERE id = ? AND owner_uid = ?")
@@ -492,6 +508,8 @@ export async function loadActivityRecord(access: TeamAccess, id: string, mutate 
   if (!row) throw new Error("ACTIVITY_RECORD_NOT_FOUND");
   const record: ActivityRecord = JSON.parse(row.payload);
   const job = await assignedJob(access, record.workOrderId);
+  if (mutate) await assertCertificateJobEligibility(getD1(), { ownerUid: access.ownerUid,
+    actorMemberId: access.memberId, assignedMemberId: String(job.assignee_member_id || ""), workOrderId: record.workOrderId });
   const intent = await getD1().prepare(`SELECT id FROM trade_work_order_compliance_intents
     WHERE id = ? AND installer_uid = ? AND work_order_id = ? AND compliance_organisation_id = ? AND status IN ('planned', 'case_linked')`)
     .bind(record.intentId, access.ownerUid, record.workOrderId, record.organisationId).first();
@@ -640,6 +658,8 @@ export async function listActivityRecords(access: TeamAccess, workOrderId: strin
 export async function openActivityRecord(access: TeamAccess, workOrderId: string, intentId: string, variantId = "") {
   assertActivityFieldAccess(access, true);
   const job = await assignedJob(access, workOrderId);
+  await assertCertificateJobEligibility(getD1(), { ownerUid: access.ownerUid, actorMemberId: access.memberId,
+    assignedMemberId: String(job.assignee_member_id || ""), workOrderId });
   const current = await getD1().prepare("SELECT id FROM trade_activity_field_records WHERE intent_id = ? AND owner_uid = ? AND work_order_id = ?")
     .bind(intentId, access.ownerUid, workOrderId).first<{ id: string }>();
   if (current) return upgradeDraftActivityPolicy(access, job, await loadActivityRecord(access, current.id));
@@ -675,17 +695,22 @@ export async function openActivityRecord(access: TeamAccess, workOrderId: string
 
 async function saveRecord(access: TeamAccess, previous: ActivityRecord, next: ActivityRecord, pdf?: { key: string; hash: string }, expectedAssigneeMemberId = "") {
   // Re-check the current worker assignment at the mutation boundary.
-  await assignedJob(access, previous.workOrderId);
+  const job = await assignedJob(access, previous.workOrderId);
+  const training = await certificateJobEligibilityPredicate(getD1(), { ownerUid: access.ownerUid,
+    actorMemberId: access.memberId, assignedMemberId: String(job.assignee_member_id || ""), workOrderId: previous.workOrderId });
   next.revision = previous.revision + 1; next.updatedAt = iso();
   const result = await getD1().prepare(`UPDATE trade_activity_field_records SET revision = ?, status = ?, payload = ?, actor_uid = ?, updated_at = ?, submitted_at = ?, pdf_object_key = ?, pdf_sha256 = ?
     WHERE id = ? AND owner_uid = ? AND revision = ? AND status = 'draft'
       AND EXISTS (SELECT 1 FROM trade_work_orders w WHERE w.id = work_order_id AND w.firebase_uid = owner_uid
         AND w.record_status = 'active' AND (? = 1 OR w.assignee_member_id = ?)
+        AND w.assignee_member_id = ? AND w.revision = ?
         AND (? = '' OR w.assignee_member_id = ?))
-      AND EXISTS (SELECT 1 FROM trade_work_order_compliance_intents i WHERE i.id = intent_id AND i.status IN ('planned', 'case_linked'))`)
+      AND EXISTS (SELECT 1 FROM trade_work_order_compliance_intents i WHERE i.id = intent_id AND i.status IN ('planned', 'case_linked'))
+      AND (${training.sql})`)
     .bind(next.revision, next.status, activityCanonical(next), access.actorUid, next.updatedAt, next.submittedAt, pdf?.key || "", pdf?.hash || "",
       previous.id, access.ownerUid, previous.revision, access.isOwner || access.jobScope === "team" ? 1 : 0, access.memberId,
-      expectedAssigneeMemberId, expectedAssigneeMemberId).run();
+      String(job.assignee_member_id || ""), Number(job.revision),
+      expectedAssigneeMemberId, expectedAssigneeMemberId, ...training.bindings).run();
   if (result.meta.changes !== 1) {
     // Zero writes can mean a changed assignment or withdrawn intent, not just
     // another editor. Reload with the same access checks to identify it.
@@ -750,6 +775,7 @@ export async function changeActivityVariant(access: TeamAccess, id: string, expe
 
 export async function signActivityDeclaration(access: TeamAccess, id: string, body: Row) {
   const previous = await loadActivityRecord(access, id, true);
+  assertCurrentActivityRequirements(previous);
   const declaration = previous.form.declarations.find((item) => item.key === body.declarationKey);
   if (!declaration || !activityConditionMet(declaration.condition, previous.answers)) {
     throw Object.assign(new Error("ACTIVITY_DECLARATION_INVALID"), {
@@ -1005,6 +1031,7 @@ async function assertApprovedActivityProducts(record: ActivityRecord) {
 
 export async function submitActivityRecord(access: TeamAccess, id: string, expectedRevision: unknown) {
   const previous = await loadActivityRecord(access, id, true); assertActivityEditable(previous, expectedRevision);
+  assertCurrentActivityRequirements(previous);
   if (activityUserActionableMissing(previous).length) throw new Error("ACTIVITY_FORM_INCOMPLETE");
   await assertApprovedActivityProducts(previous);
   const assets = await activityReportAssets(previous);

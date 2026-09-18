@@ -36,6 +36,7 @@ import {
   opportunityNotificationRetryAt,
 } from "@/lib/opportunity-notification-retry";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
+import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 
 type DeliveryRow = Record<string, unknown>;
 
@@ -122,6 +123,7 @@ async function deliveryContext(deliveryId: string) {
       account.email, account.business_name, account.consent_at, account.email_opportunities,
       account.availability_status,
       CASE WHEN ${verifiedTradeAccountPredicate("account")} AND account.partner_type = 'installer'
+        AND ${await certificateLeadEligibilitySql("assignment.firebase_uid", "assignment.matched_categories", "opportunity.state")}
         THEN 1 ELSE 0 END installer_access_approved,
       COALESCE((
         SELECT COUNT(*)
@@ -279,6 +281,7 @@ async function recoverLegacyPublicOptionalEmailSkips(now: string) {
           AND recovery_account.availability_status IN ('open', 'limited')
           AND recovery_account.email <> ''
           AND ${verifiedTradeAccountPredicate("recovery_account")}
+          AND ${await certificateLeadEligibilitySql("recovery_match.firebase_uid", "recovery_match.matched_categories", "recovery_opportunity.state")}
           AND recovery_public_contact.status = 'active'
           AND ${publicPlanContactReleaseAccessSql("recovery_public_contact")}
           AND datetime(recovery_public_contact.granted_at) IS NOT NULL
@@ -499,6 +502,7 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
           AND current_account.availability_status IN ('open', 'limited')
           AND current_account.partner_type = 'installer'
           AND ${verifiedTradeAccountPredicate("current_account")}
+          AND ${await certificateLeadEligibilitySql("current_match.firebase_uid", "current_match.matched_categories", "current_opportunity.state")}
           AND (
             NOT EXISTS (
               SELECT 1

@@ -87,7 +87,9 @@ test("Business settings expose bounded branding, service, template and closure c
   assert.doesNotMatch(businessSettings, /Closing removes sign-in access/);
   assert.match(businessSettings, /compliance records/);
   assert.match(businessSettings, /authorised TLink administrator/);
-  assert.doesNotMatch(businessSettings, /Creditex/);
+  assert.match(businessSettings, /profile\.partnerType === "installer" && <><TradeCreditexOnboarding user=\{user\}/);
+  assert.match(businessSettings, /href="\/direct-trade\/dashboard\?workspace=training"/);
+  assert.doesNotMatch(businessSettings, /CreditexOnboardingReviewWorkspace|creditex-training-governance/);
 });
 
 test("closed accounts receive a terminal dashboard state without profile recreation", () => {

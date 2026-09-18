@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import { normalisePreferredWindows, parsePreferredWindows } from "../src/lib/appointment-rescheduling.ts";
 import * as scheduleHelpers from "../src/lib/trade-schedule.ts";
 
@@ -15,6 +16,7 @@ function loadTypescriptModule(path, mocks) {
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+    if (certificateTestDependency(specifier)) return certificateTestDependency(specifier);
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
   new Function("require", "module", "exports", output)(require, moduleRecord, moduleRecord.exports);
@@ -34,6 +36,7 @@ function sqliteD1(database) {
         bind(...values) {
           return {
             first: async () => database.prepare(sql).get(...values),
+            all: async () => ({ results: database.prepare(sql).all(...values) }),
             run: async () => database.prepare(sql).run(...values),
           };
         },
@@ -43,6 +46,7 @@ function sqliteD1(database) {
 }
 
 function scheduleServerHarness(database) {
+  installCreditexTrainingFixture(database, { qualified: false });
   const d1 = sqliteD1(database);
   return {
     d1,
@@ -108,6 +112,10 @@ function conflictDispatchRoute(conflictCode) {
           assignee_member_id: "member-a", service_category: "hot-water" };
       }
       throw new Error(`Unexpected first SQL: ${this.sql}`);
+    }
+    async all() {
+      if (this.sql.includes("FROM trade_work_order_compliance_intents")) return { results: [] };
+      throw new Error(`Unexpected all SQL: ${this.sql}`);
     }
   }
   const database = {
@@ -256,9 +264,10 @@ test("AEA lead scheduling requires an accepted current quote while direct jobs r
 
   let atomicError;
   try {
-    await server.tradeJobScheduleEligibilityGuardStatement(d1, {
-      ownerUid: "owner-1", workOrderId: "aea-job", changedAt: "2026-08-14T10:00:00.000Z",
-    }).run();
+    await (await server.tradeJobScheduleEligibilityGuardStatement(d1, {
+      ownerUid: "owner-1", actorMemberId: "owner-member", assignedMemberId: "owner-member",
+      workOrderId: "aea-job", changedAt: "2026-08-14T10:00:00.000Z",
+    })).run();
   } catch (error) {
     atomicError = error;
   }
@@ -270,9 +279,10 @@ test("AEA lead scheduling requires an accepted current quote while direct jobs r
     INSERT INTO trade_crm_quote_acceptances VALUES ('quote-aea', 'version-current', 'aea-job', 'owner-1', 'customer-aea', 'accepted');
   `);
   await assert.doesNotReject(() => server.assertTradeJobReadyForScheduling("owner-1", "aea-job"));
-  const acceptedGuard = await server.tradeJobScheduleEligibilityGuardStatement(d1, {
-    ownerUid: "owner-1", workOrderId: "aea-job", changedAt: "2026-08-14T10:01:00.000Z",
-  }).run();
+  const acceptedGuard = await (await server.tradeJobScheduleEligibilityGuardStatement(d1, {
+    ownerUid: "owner-1", actorMemberId: "owner-member", assignedMemberId: "owner-member",
+    workOrderId: "aea-job", changedAt: "2026-08-14T10:01:00.000Z",
+  })).run();
   assert.equal(Number(acceptedGuard.changes), 0, "an accepted current quote keeps the atomic guard non-mutating");
 });
 

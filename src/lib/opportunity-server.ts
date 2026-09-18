@@ -5,6 +5,7 @@ import { postcodeDistanceKm } from "@/lib/postcode-distance";
 import { canonicalAustralianState } from "@/lib/australian-postcodes.mjs";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 import { matchedServiceCategories } from "@/lib/trade-service-matching.mjs";
+import { certificateLeadEligibleOwners, certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { selectEveryQualifiedTradeRecipient } from "@/lib/direct-trade-matching.mjs";
 import { closestQualifyingTradeServiceArea } from "@/lib/trade-service-area-matching.mjs";
 import { persistLeadOpportunity } from "@/lib/opportunity-source-write.mjs";
@@ -83,6 +84,7 @@ export async function syncMarketplaceEnquiries(db: D1Database, opportunityId: st
         )
     WHERE m.opportunity_id = ? AND (? = '' OR m.firebase_uid = ?)
       AND ${tradeOpportunityServiceScopeSql("o")}
+      AND ${await certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
     ON CONFLICT(firebase_uid, source_type, source_reference) DO UPDATE SET
       status = excluded.status, service_category = excluded.service_category,
       service_categories = excluded.service_categories, description = excluded.description,
@@ -702,9 +704,11 @@ export async function allocateNearestInstallers(
     .bind(cutoff, Number(opportunity.is_synthetic || 0))
     .all<Record<string, unknown>>();
 
-  const qualifiedCandidates = rows.results
+  const categoryCandidates = rows.results
     .map((row: Record<string, unknown>) => candidateFromRow(row, opportunity))
     .filter((item: InstallerCandidate | null): item is InstallerCandidate => Boolean(item));
+  const eligibleOwners = await certificateLeadEligibleOwners(db, categoryCandidates, String(opportunity.state));
+  const qualifiedCandidates = categoryCandidates.filter((candidate) => eligibleOwners.has(candidate.firebaseUid));
   const candidates = qualifiedCandidates
     .filter((candidate: InstallerCandidate) => !previouslyMatched.has(candidate.firebaseUid))
     .sort(
@@ -719,6 +723,7 @@ export async function allocateNearestInstallers(
     candidates,
   ) as InstallerCandidate[];
   const allocated: InstallerCandidate[] = [];
+  const trainingPredicate = await certificateLeadEligibilitySql("certificate_candidate.owner_uid", "certificate_candidate.categories", "certificate_candidate.state");
   for (
     let offset = 0;
     offset < selected.length;
@@ -734,7 +739,8 @@ export async function allocateNearestInstallers(
      distance_metres, allocation_rank, match_source, contact_attempt_count, last_contact_at, connected_at,
      matched_by_uid, matched_at, updated_at)
     SELECT ?, ?, ?, 'offered', '', '', ?, ?, ?, 'automatic', 0, '', '', ?, ?, ?
-    WHERE EXISTS (SELECT 1 FROM trade_opportunities current_opportunity
+    FROM (SELECT ? owner_uid, ? categories, ? state) certificate_candidate
+    WHERE ${trainingPredicate} AND EXISTS (SELECT 1 FROM trade_opportunities current_opportunity
       WHERE current_opportunity.id = ? AND current_opportunity.status = 'open'
         AND ${tradeOpportunityServiceScopeSql("current_opportunity")})
     ON CONFLICT(opportunity_id, firebase_uid) DO NOTHING`,
@@ -749,6 +755,9 @@ export async function allocateNearestInstallers(
             matchedByUid,
             now,
             now,
+            candidate.firebaseUid,
+            JSON.stringify(candidate.matchedCategories),
+            String(opportunity.state),
             opportunityId,
           ),
       ),

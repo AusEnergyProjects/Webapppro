@@ -27,28 +27,28 @@ const expected = GOVERNMENT_ACTIVITY_TEMPLATES.filter(
     template.catalogueState === "current" || template.catalogueState === "limited",
 );
 
-test("aggregates the exact 195 current or limited activities once", () => {
-  assert.equal(CREDITEX_CURRENT_WORK_PACK_CONTENT_CANDIDATES.length, 195);
-  assert.equal(CREDITEX_CURRENT_WORK_PACK_CONTENT_BY_TEMPLATE_ID.size, 195);
+test("aggregates the exact 196 current or limited activities once", () => {
+  assert.equal(CREDITEX_CURRENT_WORK_PACK_CONTENT_CANDIDATES.length, 196);
+  assert.equal(CREDITEX_CURRENT_WORK_PACK_CONTENT_BY_TEMPLATE_ID.size, 196);
   assert.deepEqual(
     CREDITEX_CURRENT_WORK_PACK_CONTENT_CANDIDATES.map((item) => item.templateId),
     expected.map((template) => template.templateId),
   );
   assert.equal(
     new Set(CREDITEX_CURRENT_WORK_PACK_CONTENT_CANDIDATES.map((item) => item.templateId)).size,
-    195,
+    196,
   );
   assert.deepEqual(CREDITEX_CURRENT_WORK_PACK_CONTENT_VALIDATION.sourceCatalogueCounts, {
     VEU: 31,
     NSW_CERTIFICATE: 51,
     SRES: 6,
-    NON_CERTIFICATE: 107,
+    NON_CERTIFICATE: 108,
   });
   assert.deepEqual(CREDITEX_CURRENT_WORK_PACK_CONTENT_VALIDATION.contentStateCounts, {
     guidedCapturePublishable: 31,
     sourceBackedReviewCandidate: 26,
     sourceOnlyNotPublishable: 22,
-    candidateOnly: 116,
+    candidateOnly: 117,
     activationReady: 0,
   });
 });
@@ -309,7 +309,7 @@ test("fails aggregate validation closed for missing rows, false activation and r
     CREDITEX_CURRENT_WORK_PACK_CONTENT_CANDIDATES.slice(1),
   );
   assert.equal(missing.valid, false);
-  assert.ok(missing.errors.some((error) => error.includes("Expected 195")));
+  assert.ok(missing.errors.some((error) => error.includes("Expected 196")));
 
   const activated = CREDITEX_CURRENT_WORK_PACK_CONTENT_CANDIDATES.map((item, index) =>
     index === 0 ? { ...item, activationReady: true } : item

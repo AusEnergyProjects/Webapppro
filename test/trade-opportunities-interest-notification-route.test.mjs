@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs";
 import ts from "typescript";
+import { certificateTestDependency } from "./helpers/creditex-training-fixture.mjs";
 
 const source = fs.readFileSync(new URL("../src/app/api/trade-opportunities/route.ts", import.meta.url), "utf8");
 
@@ -72,6 +73,7 @@ function loadRoute(state) {
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+    if (certificateTestDependency(specifier)) return certificateTestDependency(specifier);
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
   new Function("require", "module", "exports", output)(require, moduleRecord, moduleRecord.exports);

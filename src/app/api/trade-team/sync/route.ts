@@ -1,4 +1,6 @@
 import { getD1 } from "../../../../../db";
+import { CreditexComplianceError, creditexMutationConflict } from "@/lib/creditex-onboarding-server";
+import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { fieldFinishWithoutActiveAppointment, fieldTransitionExpectedStatus } from "@/lib/trade-field-completion-policy";
@@ -1496,9 +1498,15 @@ async function atomicActionBatch(
   db: D1Database,
   statements: D1PreparedStatement[],
   finalGuard: D1PreparedStatement,
+  access: TeamAccess,
+  workOrderId: string,
 ) {
+  const job = await assignedJob(access, workOrderId);
+  const trainingGuards = await certificateJobEligibilityGuards(db, { ownerUid: access.ownerUid,
+    actorMemberId: access.memberId, assignedMemberId: String(job.assignee_member_id || ""), workOrderId });
   try {
-    return await db.batch([...statements, finalGuard]);
+    const results = await db.batch([...statements, finalGuard, ...trainingGuards]);
+    return results.slice(0, statements.length + 1);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (
@@ -1809,6 +1817,12 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
   }
   const db = getD1();
   const now = new Date().toISOString();
+  const certificateWorkOrderId = cleanAdminText(action.workOrderId, 180);
+  if (certificateWorkOrderId) {
+    const certificateJob = await assignedJob(access, certificateWorkOrderId);
+    await assertCertificateJobEligibility(db, { ownerUid: access.ownerUid, actorMemberId: access.memberId,
+      assignedMemberId: String(certificateJob.assignee_member_id || ""), workOrderId: certificateWorkOrderId });
+  }
 
   if (actionType === "work_pack_commit" || actionType === "work_pack_prepare_signing") {
     const workOrderId = cleanAdminText(action.workOrderId, 180);
@@ -2421,6 +2435,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
       db,
       statements,
       failClosedActionGuardStatement(db, access, workOrderId, receiptGuardValues),
+      access, workOrderId,
     );
     if (
       !results
@@ -2568,6 +2583,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
       db,
       statements,
       failClosedActionGuardStatement(db, access, workOrderId, receiptGuardValues),
+      access, workOrderId,
     );
     if (!results || !results[0]?.meta.changes || !results[1]?.meta.changes) {
       const latest = await assignedJob(access, workOrderId);
@@ -2705,6 +2721,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
       db,
       statements,
       failClosedActionGuardStatement(db, access, workOrderId, receiptGuardValues),
+      access, workOrderId,
     );
     if (
       !results
@@ -2896,6 +2913,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
       db,
       statements,
       failClosedActionGuardStatement(db, access, workOrderId, receiptGuardValues),
+      access, workOrderId,
     );
     if (
       !results
@@ -3053,6 +3071,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
       db,
       statements,
       failClosedActionGuardStatement(db, access, workOrderId, receiptGuardValues),
+      access, workOrderId,
     );
     if (
       !results
@@ -3121,6 +3140,17 @@ export async function POST(request: Request) {
         results.push(await applyAction(access, deviceId, action));
       }
       catch (error) {
+        const conflict = creditexMutationConflict(error);
+        if (conflict) {
+          results.push({ clientActionId: cleanAdminText(action.clientActionId, 120), status: "rejected",
+            code: conflict.code, error: conflict.message });
+          continue;
+        }
+        if (error instanceof CreditexComplianceError) {
+          results.push({ clientActionId: cleanAdminText(action.clientActionId, 120), status: "rejected",
+            code: error.code, error: error.message });
+          continue;
+        }
         const code = error instanceof Error ? error.message : "ACTION_FAILED";
         results.push({ clientActionId: cleanAdminText(action.clientActionId, 120), status: "rejected", code,
           error: code === "JOB_NOT_ASSIGNED" ? "This job is no longer assigned to this team account." : "The action could not be applied." });

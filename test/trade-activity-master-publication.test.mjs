@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import { canEditCreditexFieldMasters } from "../src/lib/creditex-field-master-access.ts";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -54,8 +55,8 @@ test("the master editor supports safe routing, ordering and Creditex declaration
 
 function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
   const database = new DatabaseSync(":memory:");
-  database.exec(`CREATE TABLE trade_work_orders (id TEXT, firebase_uid TEXT, record_status TEXT, assignee_member_id TEXT, scheduled_start TEXT);
-    INSERT INTO trade_work_orders VALUES ('job','owner','active','worker','2026-09-08T09:00:00.000Z');
+  database.exec(`CREATE TABLE trade_work_orders (id TEXT, firebase_uid TEXT, record_status TEXT, assignee_member_id TEXT, scheduled_start TEXT, revision INTEGER);
+    INSERT INTO trade_work_orders VALUES ('job','owner','active','worker','2026-09-08T09:00:00.000Z',1);
     CREATE TABLE trade_work_order_compliance_intents (id TEXT PRIMARY KEY, work_order_id TEXT, installer_uid TEXT, compliance_organisation_id TEXT, activity_template_id TEXT, status TEXT, intent_snapshot TEXT);
     CREATE TABLE trade_crm_job_details (work_order_id TEXT, firebase_uid TEXT, customer_source TEXT, crm_customer_id TEXT, service_site_id TEXT);
     CREATE TABLE trade_crm_customers (id TEXT, firebase_uid TEXT, first_name TEXT, last_name TEXT, email TEXT, phone TEXT, business_name TEXT, business_number TEXT);
@@ -66,15 +67,18 @@ function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
     CREATE TABLE trade_team_member_credentials (id TEXT, owner_uid TEXT, team_member_id TEXT, file_id TEXT, credential_number TEXT, name TEXT, rental_gate TEXT, credential_type TEXT, jurisdiction TEXT, expires_at TEXT, status TEXT, updated_at TEXT);
     CREATE TABLE trade_team_member_files (id TEXT, owner_uid TEXT, team_member_id TEXT, status TEXT, expires_at TEXT);`);
   database.exec(fs.readFileSync(new URL("../drizzle/0170_trade_activity_forms.sql", import.meta.url), "utf8"));
+  database.exec("INSERT INTO trade_accounts(firebase_uid,address_state) VALUES ('owner','VIC'); INSERT INTO trade_team_members(id,owner_uid,member_uid,status,display_name) VALUES ('worker','owner','owner','active','Fixture owner')");
+  installCreditexTrainingFixture(database);
   const d1 = { prepare(sql) { return { bind(...values) { return {
     async first() { return database.prepare(sql).get(...values) || null; },
     async all() { return { results: database.prepare(sql).all(...values) }; },
     async run() { const result = database.prepare(sql).run(...values); return { meta: { changes: Number(result.changes) } }; },
   }; } }; } };
+  d1.batch = async (statements) => { database.exec('BEGIN'); try { const results=[]; for (const statement of statements) results.push(await statement.run()); database.exec('COMMIT'); return results; } catch (error) { database.exec('ROLLBACK'); throw error; } };
   const load = (text, imports) => {
     const compiled = ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
     const moduleRecord = { exports: {} };
-    new Function("require", "module", "exports", compiled)((name) => { assert.ok(name in imports, name); return imports[name]; }, moduleRecord, moduleRecord.exports);
+    new Function("require", "module", "exports", compiled)((name) => { if (name in imports) return imports[name]; const dependency = certificateTestDependency(name); assert.ok(dependency, name); return dependency; }, moduleRecord, moduleRecord.exports);
     return moduleRecord.exports;
   };
   const access = { ownerUid: "owner", actorUid: "owner", isOwner: true, memberId: "worker", jobScope: "team", displayName: "Owner", businessName: "Trade business" };
@@ -83,7 +87,7 @@ function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
     async get(key) { const bytes = objects.get(key); return bytes ? { arrayBuffer: async () => new Uint8Array(bytes).buffer } : null; } };
   const server = load(fs.readFileSync(new URL("../src/lib/trade-activity-forms-server.ts", import.meta.url), "utf8"), {
     "cloudflare:workers": { env: { EVIDENCE: bucket } }, "../../db": { getD1: () => d1 },
-    "./trade-team-server": { assignedJob: async (_access, id) => { assert.equal(id, "job"); return { assignee_member_id: "worker", assignee_label: "Worker" }; } },
+    "./trade-team-server": { assignedJob: async (_access, id) => { assert.equal(id, "job"); return { assignee_member_id: "worker", assignee_label: "Worker", revision: 1 }; } },
     "./trade-activity-forms-library.ts": library, "./trade-activity-forms.ts": core, "./trade-activity-form-flow.ts": flow,
     "./scheduled-activity-customer-document-receipt.ts": { parseScheduledActivityCustomerDocumentReceipt: () => null },
     "./creditex-official-product-registry-server.ts": { searchOfficialProducts: async () => ({ items: [], matchCount: 0 }) },
@@ -121,7 +125,7 @@ test("every unmodified current activity master and premises variant publishes th
         else {
           const retained = database.prepare("SELECT form_json, form_sha256 FROM trade_activity_field_masters WHERE activity_template_id = ? AND variant_id = ?").get(item.activityTemplateId, variant);
           assert.equal(core.activityHash(JSON.parse(retained.form_json)), retained.form_sha256);
-          assert.equal(result.body.expectedVersion, 2); published++;
+          assert.equal(result.body.expectedVersion, form.version + 1); published++;
         }
       }
     }

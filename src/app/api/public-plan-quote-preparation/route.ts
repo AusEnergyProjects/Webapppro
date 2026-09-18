@@ -1,5 +1,6 @@
 import { aeaDeliveredServiceScopeSql, tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
 import { getD1 } from "../../../../db";
+import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { getCustomerProjectEvidenceBucket as getEvidenceBucket } from "@/lib/customer-project-evidence-bucket";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 import {
@@ -952,6 +953,7 @@ export async function GET(request: Request) {
       ON match.opportunity_id = opportunity.id
       AND match.firebase_uid = ?
       AND match.status IN ('offered', 'viewed', 'interested', 'connected')
+      AND ${certificateLeadEligibilitySql("match.firebase_uid", "match.matched_categories", "opportunity.state")}
     JOIN trade_accounts account
       ON account.firebase_uid = match.firebase_uid
       AND account.partner_type = 'installer'

@@ -177,9 +177,9 @@ function applyMigrationChain(database, names) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 175);
+  assert.equal(completeMigrationChain.length, 176);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0175_/);
+  assert.match(completeMigrationChain.at(-1), /^0176_/);
   assert.ok(
     completeMigrationChain.includes("0160_trade_rental_inspections.sql"),
     "the complete migration chain must include the rental inspection schema",
@@ -719,7 +719,7 @@ test("new work order and controlled intent share one atomic batch after enquiry 
     workOrderInsert,
   );
   const batchExecution = crmRoute.indexOf(
-    "await db.batch(batchStatements)",
+    "await db.batch([",
     intentInsert,
   );
   assert.ok(batchStart >= 0, "Missing creation batch");
@@ -729,6 +729,7 @@ test("new work order and controlled intent share one atomic batch after enquiry 
     batchExecution > intentInsert,
     "Work order and intent are not committed by one D1 batch",
   );
+  assert.match(crmRoute.slice(batchExecution, crmRoute.indexOf(']);', batchExecution)), /certificateActivityEligibilityGuardStatement[\s\S]*\.\.\.batchStatements/);
 });
 
 test("converted-enquiry site adoption has a transactional write guard", () => {

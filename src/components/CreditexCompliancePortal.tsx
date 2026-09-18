@@ -33,6 +33,7 @@ import { requestWithCreditexTokenRecovery } from "@/lib/creditex-auth-token";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { CreditexEvidencePolicyGovernance } from "./CreditexEvidencePolicyGovernance";
 const CreditexActivityWorkPackGovernance = dynamic(() => import("./CreditexActivityWorkPackGovernance").then((module) => module.CreditexActivityWorkPackGovernance), { loading: () => <p role="status">Loading master forms...</p> });
+const CreditexOnboardingReviewWorkspace = dynamic(() => import("./CreditexOnboardingReviewWorkspace").then((module) => module.CreditexOnboardingReviewWorkspace), { loading: () => <p role="status">Loading onboarding reviews...</p> });
 import { CreditexOutputActions } from "./CreditexOutputActions";
 import { CreditexOfficialSourceWorkbench } from "./CreditexOfficialSourceWorkbench";
 import { CreditexOperationsWorkspace } from "./CreditexOperationsWorkspace";
@@ -319,7 +320,7 @@ export function CreditexCompliancePortal() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tab, setTab] =
-    useState<"cases" | "pilot" | "sources" | "forms" | "governance">("cases");
+    useState<"cases" | "pilot" | "sources" | "forms" | "onboarding" | "governance">("cases");
   const [cases, setCases] = useState<CaseQueueItem[]>([]);
   const [caseQuery, setCaseQuery] = useState("");
   const [caseStatus, setCaseStatus] =
@@ -340,6 +341,7 @@ export function CreditexCompliancePortal() {
   const [governanceProgramId, setGovernanceProgramId] = useState("");
   const [governanceActivityId, setGovernanceActivityId] = useState("");
   const canRequestPublication = canControlPublication(session);
+  const canReviewTraining = Boolean(session?.governanceIdentityVerified && ["admin", "reviewer"].includes(session.role));
 
   const api = useCallback(async (
     path: string,
@@ -1002,11 +1004,10 @@ export function CreditexCompliancePortal() {
     }
     event.preventDefault();
     const visibleTabs: Array<
-      "cases" | "pilot" | "sources" | "forms" | "governance"
-    > =
-      session?.role === "admin"
-        ? ["cases", "pilot", "sources", "forms", "governance"]
-        : ["cases", "pilot", "sources", "forms"];
+      "cases" | "pilot" | "sources" | "forms" | "onboarding" | "governance"
+    > = ["cases", "pilot", "sources", "forms"];
+    if (canReviewTraining) visibleTabs.push("onboarding");
+    if (session?.role === "admin") visibleTabs.push("governance");
     const currentIndex = visibleTabs.indexOf(tab);
     const nextIndex = event.key === "Home"
       ? 0
@@ -1259,6 +1260,7 @@ export function CreditexCompliancePortal() {
           >
             Activity forms
           </button>
+          {canReviewTraining && <button className={styles.tab} type="button" role="tab" id="creditex-tab-onboarding" aria-controls="creditex-panel-onboarding" aria-selected={tab === "onboarding"} tabIndex={tab === "onboarding" ? 0 : -1} onClick={() => setTab("onboarding")} onKeyDown={handleWorkspaceTabKeyDown}>Onboarding &amp; training</button>}
           {session.role === "admin" && (
             <button
               className={styles.tab}
@@ -1285,6 +1287,8 @@ export function CreditexCompliancePortal() {
                   ? "Official source custody"
                   : tab === "forms"
                     ? "Activity form control"
+                  : tab === "onboarding"
+                    ? "Business and training review"
                   : tab === "governance"
                     ? "Government rule control"
                     : "Compliance case control"}
@@ -1294,6 +1298,8 @@ export function CreditexCompliancePortal() {
                   ? "Authorised Creditex staff can compare current government links with exact retained bytes and immutable source-review records."
                   : tab === "forms"
                     ? "Build, review and publish the exact technician workflow for each effective activity. Trade accounts can complete a pinned published version but cannot alter its definition."
+                  : tab === "onboarding"
+                    ? "Review business applications, executed agreements and exact activity curricula. Every learner has an individual, revocable completion record."
                   : tab === "governance"
                     ? "Named administrators create and govern effective-dated program, activity and evidence records without turning Creditex instructions into government rules."
                     : "Queue lists minimise private data. Authorised Creditex staff can open the audited case workspace for the customer, installer, site, appointments, evidence originals and captured metadata needed to review, correct and submit that exact job."}
@@ -1403,6 +1409,8 @@ export function CreditexCompliancePortal() {
             />
           </section>
         )}
+
+        {tab === "onboarding" && user && canReviewTraining && <section className={`${styles.panel} ${styles.governancePanel}`} id="creditex-panel-onboarding" role="tabpanel" aria-labelledby="creditex-tab-onboarding"><CreditexOnboardingReviewWorkspace api={api} user={user} canReview={canReviewTraining} /></section>}
 
         {tab === "governance" && session.role === "admin" && (
           <section

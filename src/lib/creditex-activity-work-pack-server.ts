@@ -1,3 +1,5 @@
+import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "./trade-certificate-eligibility";
+import { creditexMutationConflict, creditexWriteGuard } from "./creditex-onboarding-server";
 import {
   CREDITEX_ACTIVITY_WORK_PACK_CUSTOMER_CONTEXT_CONTRACT,
   CREDITEX_ACTIVITY_WORK_PACK_DEVICE_ATTESTATION_CONTRACT,
@@ -5206,7 +5208,14 @@ async function runWorkPackMutation(
     );
   }
   const receiptId = existing?.id || `work-pack-action:${crypto.randomUUID()}`;
-  const statements: D1PreparedStatement[] = [];
+  const certificateAccess = { ownerUid: input.scope.ownerUid, actorMemberId: input.scope.actorMemberId,
+    assignedMemberId: String(input.row.assignee_member_id || ""), workOrderId: input.row.work_order_id };
+  await assertCertificateJobEligibility(database, certificateAccess);
+  const statements: D1PreparedStatement[] = await certificateJobEligibilityGuards(database, certificateAccess);
+  statements.push(creditexWriteGuard(database, input.scope.ownerUid,
+    `EXISTS (SELECT 1 FROM trade_work_orders WHERE id = ? AND firebase_uid = ?
+      AND assignee_member_id = ? AND revision = ? AND record_status = 'active')`,
+    [input.row.work_order_id, input.scope.ownerUid, String(input.row.assignee_member_id || ""), Number(input.row.work_order_revision)]));
   if (!existing) {
     statements.push(database.prepare(`INSERT INTO trade_offline_actions
       (id, owner_uid, actor_uid, member_id, device_id, client_action_id,
@@ -5307,6 +5316,8 @@ async function runWorkPackMutation(
   try {
     await database.batch(statements);
   } catch (error) {
+    if (creditexMutationConflict(error)) return fail("WORK_PACK_TRAINING_CHANGED", 409,
+      "The job assignment, revision or training approval changed. Refresh the job before saving the work pack.");
     const replay = await mutationReceipt(database, input.scope, idempotency);
     if (
       replay?.status === "applied"

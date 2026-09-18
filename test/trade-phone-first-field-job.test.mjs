@@ -87,7 +87,7 @@ test("guided creation mirrors its saved appointment to every connected calendar"
   assert.match(crmRoute, /syncCreatedAppointmentToConnectedCalendars\(identity\.uid, appointmentId\)/);
   assert.match(crmRoute, /await db\.batch[\s\S]*syncCreatedAppointmentToConnectedCalendars/);
   assert.match(crmRoute, /catch \{[\s\S]*calendarFailed = 1/);
-  const creationBatch = crmRoute.indexOf("await db.batch(batchStatements)");
+  const creationBatch = crmRoute.lastIndexOf("await db.batch([", crmRoute.indexOf("...batchStatements"));
   const calendarDelivery = crmRoute.indexOf("await syncCreatedAppointmentToConnectedCalendars");
   assert.ok(creationBatch > 0 && creationBatch < calendarDelivery, "job and appointment must commit before calendar network sync");
   assert.doesNotMatch(crmRoute, /sendPhotoRequestDelivery|sendQuickInvoiceDelivery/);

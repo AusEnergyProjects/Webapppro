@@ -1,4 +1,6 @@
+import { CreditexComplianceError, creditexMutationConflict } from "@/lib/creditex-onboarding-server";
 import { getD1 } from "../../../../db";
+import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { assignedJob, canAssignJob, canManageTeam, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
@@ -321,6 +323,9 @@ function inviteReplacementStatements(db: D1Database, access: TeamAccess, memberI
 }
 
 function errorResponse(error: unknown) {
+  const conflict = creditexMutationConflict(error);
+  if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
+  if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "TEAM_ACCESS_RECORD_REQUIRED") return adminJson({ ok: false, error: "No active team access was found for this account." }, 404);
@@ -997,6 +1002,8 @@ export async function PATCH(request: Request) {
       const workOrderId = cleanAdminText(body.workOrderId, 180); const memberId = cleanAdminText(body.memberId, 180);
       const job = await mutableAssignableJobState(db, access, workOrderId);
       if (!canAssignJob(access, String(job.assignee_member_id || ""), memberId)) throw new Error("ASSIGN_REQUIRED");
+      await assertCertificateJobEligibility(db, { ownerUid: access.ownerUid, actorMemberId: access.memberId,
+        assignedMemberId: memberId, workOrderId });
       let label = "";
       if (memberId) {
         const member = await db.prepare(`SELECT display_name, member_uid, capabilities FROM trade_team_members
@@ -1025,6 +1032,8 @@ export async function PATCH(request: Request) {
         await ensureTradeRentalSchemaGuards(db);
       }
       await guardedOnlineJobMutationBatch(db, [
+        ...await certificateJobEligibilityGuards(db, { ownerUid: access.ownerUid, actorMemberId: access.memberId,
+          assignedMemberId: memberId, workOrderId }),
         db.prepare(`UPDATE trade_work_orders
           SET assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND record_status = 'active'

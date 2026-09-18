@@ -1,3 +1,4 @@
+import { CreditexComplianceError, creditexMutationConflict } from "@/lib/creditex-onboarding-server";
 import { getD1 } from "../../../../db";
 import { adminJson, requireAdminIdentity, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
@@ -38,6 +39,7 @@ const errorMessages: Record<string, [number, string]> = {
   ACTIVITY_DECLARATION_ALREADY_SIGNED: [409, "This declaration has already been signed."],
   ACTIVITY_DECLARATION_DETAILS_REQUIRED: [409, "Complete the declaration details before signing."],
   ACTIVITY_FORM_INCOMPLETE: [409, "Complete the required answers, evidence and signatures before providing this record to Creditex."],
+  ACTIVITY_POLICY_REVIEW_REQUIRED: [409, "This form is missing current mandatory requirements. Reopen an unsigned draft to update it. If it already has signatures, ask Creditex to review the retained signed record before proceeding."],
   ACTIVITY_APPROVED_PRODUCT_REQUIRED: [409, "Choose an approved brand and model for the installation date before providing this record to Creditex."],
   ACTIVITY_REPORT_LINK_UNAVAILABLE: [404, "This report link has expired or been revoked."],
   ACTIVITY_REPORT_NOT_READY: [409, "This completed report is not ready yet."],
@@ -52,6 +54,9 @@ const errorMessages: Record<string, [number, string]> = {
   ACTIVITY_VARIANT_ALREADY_STARTED: [409, "The premises form cannot change after work has been saved. Choose the premises type when first opening the form."],
 };
 function failure(error: unknown) {
+  const conflict = creditexMutationConflict(error);
+  if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
+  if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   if (error instanceof BoundedJsonRequestError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   const code = error instanceof Error ? error.message : "ACTIVITY_REQUEST_FAILED";
   const detail = error && typeof error === "object" ? error as Row : {};

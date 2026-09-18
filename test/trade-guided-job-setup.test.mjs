@@ -112,7 +112,7 @@ test("guided job creation rechecks the selected worker inside its atomic batch w
   const appointmentInsert = guidedCreate.indexOf("INSERT INTO trade_crm_appointments", batch);
   const memberGuard = guidedCreate.indexOf("tradeCrmScheduleMemberGuardStatement", appointmentInsert);
   const eligibilityGuard = guidedCreate.indexOf("tradeJobScheduleEligibilityGuardStatement", appointmentInsert);
-  const commit = guidedCreate.indexOf("await db.batch(batchStatements)");
+  const commit = guidedCreate.lastIndexOf("await db.batch([", guidedCreate.indexOf("...batchStatements"));
 
   assert.ok(appointmentInsert > batch, "the first appointment must be part of the creation batch");
   assert.ok(memberGuard > appointmentInsert && memberGuard < commit, "member capability must be guarded inside the batch");
@@ -125,7 +125,7 @@ test("guided activity forms auto-open only after the job and intent commit", () 
     crm.indexOf('if (action === "create_job" || action === "create_scheduled_job")'),
     crm.indexOf('const workOrderId = cleanAdminText(body.workOrderId', crm.indexOf('if (action === "create_job" || action === "create_scheduled_job")')),
   );
-  const commit = guidedCreate.indexOf("await db.batch(batchStatements)");
+  const commit = guidedCreate.lastIndexOf("await db.batch([", guidedCreate.indexOf("...batchStatements"));
   const autoOpen = guidedCreate.indexOf("await autoOpenReadyPlannedComplianceWorkPacks", commit);
   const calendarSync = guidedCreate.indexOf("syncCreatedAppointmentToConnectedCalendars", autoOpen);
 

@@ -1,4 +1,4 @@
-import { CREDITEX_CURRENT_WORK_PACK_CONTENT_CANDIDATES } from "../data/creditex-current-work-pack-content.ts";
+import { CREDITEX_CURRENT_WORK_PACK_CONTENT_CANDIDATES, type CreditexCurrentWorkPackContentCandidate } from "../data/creditex-current-work-pack-content.ts";
 import veu from "../data/creditex-veu-statutory-forms.json" with { type: "json" };
 import national from "../data/creditex-national-statutory-forms.json" with { type: "json" };
 import { creditexStatutorySourceLibrary, creditexDeclarationProvider } from "./creditex-statutory-form-library.ts";
@@ -844,6 +844,178 @@ function orderByPhaseAndSection(fields: readonly ActivityField[]) {
   return ordered;
 }
 
+const VEU_ASSIGNMENT_SOURCES = [{ title: "VEET Guidelines v16: written assignments and signed declarations, sections 8.1–8.5",
+  url: "https://www.esc.vic.gov.au/sites/default/files/documents/PBL%20-%20VEET%20guidelines%20v16%20-%2020260416.pdf" }];
+const ACT_ACTIVITY_RECORD_SOURCES = [{ title: "ACT EEIS Code of Practice 2025: signed activity records, sections 5.3–5.21",
+  url: "https://www.legislation.act.gov.au/DownloadFile/ni/2025-254/current/PDF/2025-254.PDF" }];
+const ACT_ACTIVITY_CODE_SOURCES = [{ title: "ACT EEIS Eligible Activities Code of Practice 2025",
+  url: "https://www.legislation.act.gov.au/DownloadFile/ni/2025-184/current/PDF/2025-184.PDF" }];
+const SA_ACTIVITY_RECORD_SOURCES = [{ title: "ESCOSA REPS Technical Bulletin 8: activity records and signatures",
+  url: "https://www.escosa.sa.gov.au/industry/reps/bulletins/technical-bulletins" }];
+const NSW_CAPACITY_NOMINATION_SOURCES = [{ title: "NSW PDRS capacity holder nomination and BESS2 exception",
+  url: "https://www.energysustainabilityschemes.nsw.gov.au/pdrs/nomination-capacity-holder" }];
+const WATER_HEATER_ASSIGNMENT_SOURCES = [{
+  title: "CER required documents before creating water-heater STCs",
+  url: "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/create-small-scale-technology-certificates",
+}];
+const INSULATION_ASSIGNMENT_SOURCES = [{
+  title: "VEU ceiling insulation industry pack: accredited person contract and assignment",
+  url: "https://www.energy.vic.gov.au/__data/assets/pdf_file/0026/800945/VEU-Ceiling-Insulation-Industry-Pack.pdf",
+}];
+
+function requireSignedArtifact(fields: ActivityField[], input: {
+  requirementId: string; label: string; phase: ActivityPhase; help: string;
+  sources: readonly { title: string; url: string }[]; condition?: ActivityCondition;
+}) {
+  const existing = fields.find(item => item.sourceRequirementId === input.requirementId && item.type === "document");
+  const key = existing?.key || `evidence.${input.requirementId}`;
+  const field: ActivityField = { ...blankField(key, input.label, "Signed programme documents", input.phase),
+    type: "document", sourceRequirementId: input.requirementId, referenceDocuments: [...input.sources], help: input.help,
+    ...(input.condition ? { condition: input.condition } : {}) };
+  const index = fields.findIndex(item => item.key === key);
+  if (index < 0) fields.push(field); else fields[index] = field;
+}
+
+function applyProgrammeSignedArtifactPolicy(fields: ActivityField[], declarations: ActivityDeclaration[], candidate: CreditexCurrentWorkPackContentCandidate,
+  exact: ReturnType<typeof sourceFormVariant>["exact"], reviewNotes: string[]) {
+  let applies = false;
+  const requireArtifact = (input: Parameters<typeof requireSignedArtifact>[1]) => {
+    requireSignedArtifact(fields, input); applies = true;
+  };
+  // These are exact source requirements, not a universal assignment inferred
+  // from a finance or administration programme's service category.
+  for (const evidence of candidate.evidenceRequirements) {
+    const assignment = /assignment|nomination/i.test(`${evidence.requirementId} ${evidence.label}`);
+    const signedStatement = /signed_statement|signed_declaration/.test(evidence.kind);
+    const originalHolderAlternative = /original capacity-holder evidence or/i.test(evidence.label);
+    const heerDeclaration = candidate.programCode === "NSW-ESS" && ["site-assessor-declaration", "post-implementation-declaration"].includes(evidence.requirementId);
+    const installerDeclaration = candidate.programCode === "NSW-ESS" && evidence.requirementId === "installer-declaration";
+    if (!assignment && !signedStatement && !heerDeclaration && !installerDeclaration) continue;
+    const before = evidence.requirementId === "site-assessor-declaration" || (assignment && (candidate.programCode === "NSW-ESS" || (candidate.programCode === "NSW-PDRS" && candidate.activityCode !== "BESS2")));
+    // Preserve the source's CCEW/commissioning-report alternatives in the
+    // required installer-evidence field, instead of leaving an optional copy.
+    if (installerDeclaration) {
+      const supportingIndex = fields.findIndex(field => field.key === "evidence.installer-declaration.supporting");
+      if (supportingIndex >= 0) fields.splice(supportingIndex, 1);
+    }
+    const timing = evidence.requirementId === "site-assessor-declaration" ? "Retain the completed site-assessor declaration signed before or at the start of work."
+      : before ? originalHolderAlternative ? "Before work, retain evidence that the ACP is the original capacity holder, or the applicable nomination signed on or before implementation. The original-holder evidence is an alternative, not a requirement for an additional signed nomination."
+        : "Retain the completed signed nomination on or before implementation; capture it before work starts."
+      : candidate.templateId === "nsw-pdrs-bess2" ? "Use the specific BESS2 nomination incorporated in the demand-response aggregator contract. Complete within 90 days of onboarding and before certificate creation; retain the customer copy. Do not substitute the general pre-installation nomination."
+        : "Retain the completed signed document after the relevant activity facts are known and before certificate creation.";
+    requireArtifact({ requirementId: evidence.requirementId, label: evidence.label,
+      ...(evidence.requirementId === "pv_retailer_statement" ? { condition: { fieldKey: "scope.solar_retailer_involved", equals: true } } : {}),
+      phase: before ? "before" : "after", sources: [{ title: evidence.source.title, url: evidence.source.officialUrl },
+        ...(candidate.programCode === "NSW-PDRS" ? NSW_CAPACITY_NOMINATION_SOURCES : [])],
+      help: `${evidence.guidance.join(" ")} ${timing} ${originalHolderAlternative ? "For the nomination pathway, use" : "Use"} the current activity-specific template approved by Creditex with verified legal parties, actual activity details and every required signature/date or witness. Where the source permits original-holder evidence instead of a nomination, retain that evidence for Creditex review. A general TLink field-authorisation signature does not replace this artifact. Do not use unverified legacy supplied PDFs. Creditex must verify any certificate quantity, benefit and final assignment before certificate creation.` });
+  }
+  if (candidate.templateId === "sres-pv") {
+    const condition: ActivityCondition = { fieldKey: "scope.solar_retailer_involved", equals: true };
+    fields.push({ ...blankField("scope.solar_retailer_involved", "Was a solar retailer involved?", "Work scope", "before"), type: "boolean",
+      sourceRequirementId: "pv_retailer_applicability", help: "Record whether a solar retailer was involved. Its details and signed statement are required when applicable." });
+    for (const field of fields) if (/^(?:binding\.)?retailer\.|^retailer_disclosures$/.test(field.key)) {
+      field.condition = condition;
+      field.sourceRequirementId ||= `pv_retailer_applicability:${field.key}`;
+    }
+    for (const declaration of declarations) if (declaration.key.startsWith("sres_pv_retailer_statement:")) declaration.condition = condition;
+  }
+  if (candidate.programCode === "VEU") {
+    const sources = [...(exact?.sources || []).map(source => ({ title: source.title, url: source.url })), ...VEU_ASSIGNMENT_SOURCES];
+    // Activity 48 already has its own contract and exact assignment field below.
+    if (candidate.templateId !== "veu-48") requireArtifact({ requirementId: "veu-signed-assignment",
+      label: `Completed and signed Activity ${candidate.activityCode} VEEC assignment`, phase: "after", sources,
+      help: "Upload the completed current Creditex-approved assignment for this exact activity and residential/business premises. Include every prescribed field, actual parties, activity details, benefit and required signature/date. Complete the relevant activity facts before signing and follow the exact template's timing; this upload occurs after field capture and must precede VEEC creation. Changes require every signer's initials and date. Provide the required consumer copy. The electronic field declarations do not remove this controlled artifact requirement; unverified legacy supplied PDFs are not active templates." });
+    applies = true;
+  }
+  if (candidate.programCode === "NSW-ESS" || candidate.programCode === "NSW-PDRS") {
+    const exactNomination = exact?.declarations.some(item => /nomination/i.test(`${item.key} ${item.title}`));
+    const alreadyCaptured = candidate.evidenceRequirements.some(item => /nomination/i.test(`${item.requirementId} ${item.label}`));
+    if (exactNomination && !alreadyCaptured) {
+      const bess2 = candidate.templateId === "nsw-pdrs-bess2";
+      requireArtifact({ requirementId: "signed-programme-nomination", label: bess2 ? "Completed signed BESS2 capacity-holder nomination" : "Completed signed original energy-saver/capacity-holder nomination",
+        phase: bess2 ? "after" : "before", sources: [...(exact?.sources || []).map(source => ({ title: source.title, url: source.url })),
+          ...(candidate.programCode === "NSW-PDRS" ? NSW_CAPACITY_NOMINATION_SOURCES : [])],
+        help: bess2 ? "Retain the specific BESS2 nomination in the demand-response aggregator contract, completed within 90 days of onboarding and before certificate creation, with the correct customer, aggregator, ACP and battery/VPP details. Provide the completed customer copy. The general nomination template and field-authorisation signature do not replace it."
+          : "Before implementation, retain the completed current Creditex-approved nomination signed by the original energy saver/capacity holder on or before implementation. It must identify the exact activity, site, nominated ACP, parties and required declarations. Give the customer their copy. A field-authorisation signature does not replace the nomination." });
+    }
+  }
+  if (candidate.programCode === "ACT-EEIS") requireArtifact({ requirementId: "act-eeis-signed-activity-record",
+    label: "Completed and signed ACT EEIS activity record", phase: "after", sources: ACT_ACTIVITY_RECORD_SOURCES,
+    help: "Use the current ACT EEIS activity record with the prescribed declarations for this exact installation or purchase. Complete the facts before signature. Obtain the consumer's signature and every authorised installer's signature, including the primary-installer declaration when there are multiple installers; purchase-only activities require the authorised seller instead. Provide the consumer a copy immediately after both parties sign. This is an ACT activity record, not a VEEC or NSW assignment, and generic TLink field authority does not replace it. Retain later disposal or certification attachments required by the activity." });
+  if (["act-eeis-1-8", "act-eeis-1-9"].includes(candidate.templateId)) {
+    const ceiling = candidate.templateId === "act-eeis-1-8";
+    requireArtifact({ requirementId: "act-insulation-electrical-safety-report", label: "Electrician-signed pre-installation electrical safety report", phase: "before", sources: ACT_ACTIVITY_CODE_SOURCES,
+      help: "Before insulation, retain the licensed electrician's signed report confirming all required checks and remediation under the current Code and electricity retailer's safe work method statement." });
+    requireArtifact({ requirementId: "act-insulation-term-of-responsibility", label: "Occupant and owner signed term of responsibility", phase: "before", sources: ACT_ACTIVITY_CODE_SOURCES,
+      help: `After the electrician's work and before insulation, obtain the occupant's signature and, if different, the owner's signature. They acknowledge the work and safety issues and agree not to enter or permit access to the ${ceiling ? "roof space" : "underfloor cavity"} during that interval.` });
+    fields.push({ ...blankField("scope.act_insulation_electrical_work", "Did the electrician perform electrical work?", "Insulation safety", "before"), type: "boolean", sourceRequirementId: "act-insulation-electrical-work-applicability" });
+    requireArtifact({ requirementId: "act-insulation-electrical-safety-certificate", label: "Certificate of Electrical Safety for completed electrical work", phase: "before", sources: ACT_ACTIVITY_CODE_SOURCES,
+      condition: { fieldKey: "scope.act_insulation_electrical_work", equals: true },
+      help: "Where electrical work was performed, retain the relevant CES with the specific remedial work identified. This does not replace the signed pre-installation safety report." });
+    if (ceiling) {
+      fields.push({ ...blankField("scope.act_insulation_downlights_present", "Were downlights present?", "Insulation safety", "before"), type: "boolean", sourceRequirementId: "act-insulation-downlight-applicability" });
+      requireArtifact({ requirementId: "act-insulation-no-downlights-statement", label: "Signed statement confirming no downlights were present", phase: "before", sources: ACT_ACTIVITY_CODE_SOURCES,
+        condition: { fieldKey: "scope.act_insulation_downlights_present", equals: false },
+        help: "If no downlights were present, retain the signed statement required by section 1.8.6(b)(vi). Where downlights exist, retain the applicable clearance/barrier and installation evidence instead." });
+    }
+  }
+  if (candidate.templateId === "act-eeis-4-2") requireArtifact({ requirementId: "act-lighting-compliance-declaration", label: "Signed installed-lighting compliance declaration", phase: "after", sources: ACT_ACTIVITY_CODE_SOURCES,
+    help: "Retain the signed declaration that installed lighting complies with the applicable AS/NZS 1680 and NCC F4.4 requirements under section 4.2.7(g), in addition to the signed ACT activity record." });
+  if (candidate.programCode === "SA-REPS") requireArtifact({ requirementId: "sa-reps-signed-activity-record",
+    label: "Completed and signed SA REPS activity record", phase: "after", sources: SA_ACTIVITY_RECORD_SOURCES,
+    help: "Retain the current obligated retailer-approved activity record completed with the exact REPS activity facts before the customer signs. Use a handwritten or equivalent signature, not a tick box. Obtain express approval and customer/installer initials for changes; provide the required Information Statement and record, and a signed copy on request. Attach any applicable Address, Occupant or Compliance Declaration for retailer approval before reporting; these are conditional, not universally required. This record is not a certificate assignment and generic TLink field authority does not replace it." });
+  if (["sa-reps-bs1a", "sa-reps-bs1b"].includes(candidate.templateId)) requireArtifact({ requirementId: "sa-insulation-installer-acknowledgement", label: "Signed ceiling-insulation Installer Acknowledgement Form", phase: "after",
+    sources: [{ title: `SA REPS ${candidate.activityCode} insulation activity specification`, url: candidate.templateId === "sa-reps-bs1a"
+      ? "https://www.energymining.sa.gov.au/__data/assets/pdf_file/0011/1235567/Install-Insulation-in-an-Uninsulated-Ceiling-Space-BS1A.pdf"
+      : "https://www.energymining.sa.gov.au/__data/assets/pdf_file/0003/1235568/Install-Top-up-Insulation-in-a-Ceiling-Space-BS1B.pdf" }],
+    help: "Retain the completed signed Installer Acknowledgement Form for this insulation installation and give the customer a copy. This supplements the REPS activity record; complete the required self-assessment and hazard assessment before installation." });
+  if (applies) reviewNotes.push("Required signed programme artifacts must be completed using current controlled templates and verified by Creditex/the responsible scheme provider. A file upload or general field-authorisation signature does not establish statutory validity or certificate entitlement. Supplied legacy PDFs remain reference material until their legal identity, current wording and applicability are approved.");
+  return applies;
+}
+
+function applySignedAssignmentEvidencePolicy(fields: ActivityField[], templateId: string, reviewNotes: string[]) {
+  if (templateId === "sres-ashp" || templateId === "sres-swh") {
+    const kind = templateId === "sres-ashp" ? "ashp" : "swh";
+    const technology = kind === "ashp" ? "air-source heat pump" : "solar water heater";
+    fields.push({ ...blankField(`evidence.${kind}_stc_assignment`, `Signed ${technology} owner STC assignment`, "Certificate assignment", "after"),
+      type: "document", sourceRequirementId: `${kind}_stc_assignment`, referenceDocuments: WATER_HEATER_ASSIGNMENT_SOURCES,
+      help: `Upload the completed current Creditex-approved ${technology} assignment. It must identify the system owner, installation address and date, registered agent, actual system brand/model/quantity and tank serial numbers; state the verified eligible STCs, applicable deeming period, incentive type and amount and retailer name/ABN; and include the owner declaration, signature/date and required witness details. Do not reuse obsolete solar-PV deeming options. Creditex must review the signed document before certificate creation.` });
+    const statement = fields.find((field) => field.key === `evidence.${kind}_installer_compliance_certificate`);
+    if (statement) {
+      statement.label = `Signed ${technology} installer compliance statement`;
+      statement.type = "document"; statement.required = true; statement.phase = "after";
+      statement.sourceRequirementId = `${kind}_installer_compliance_certificate`;
+      statement.referenceDocuments = WATER_HEATER_ASSIGNMENT_SOURCES;
+      statement.help = "Upload the installer's signed and completed compliance statement for the actual water-heater installation, with installer identity, applicable licence details and installation compliance information. A generic TLink field-record signature does not replace this document. Retain any separate state or territory compliance certificates required for the work.";
+    }
+    const reference = fields.find((field) => field.key === "assignment");
+    if (reference) {
+      reference.label = "Current Creditex-approved water-heater assignment template reference";
+      reference.help = "Record the template reference and revision supplied or approved by Creditex for this technology. Upload its completed signed copy below. This reference is for Creditex review and does not approve the template or calculate certificate entitlement.";
+      reference.sourceRequirementId = `${kind}_assignment_template_reference`;
+      reference.referenceDocuments = WATER_HEATER_ASSIGNMENT_SOURCES;
+    }
+    // These broad national-form fields concern electricity-account nominations and batteries,
+    // not ownership and assignment of water-heater STCs.
+    for (let index = fields.length - 1; index >= 0; index--) {
+      if (["account_holder", "nmi", "scope.bess2_or_differs_from_owner", "scope.nsw_certificate_or_grid_connected_sres_battery"].includes(fields[index].key)) fields.splice(index, 1);
+    }
+    reviewNotes.push("Before creating water-heater STCs, Creditex must verify the current technology-specific signed owner assignment and signed installer compliance statement. The supplied legacy combined STC assignment is reference material only: its historical PV deeming options are not an approved current template. Field authorisation and completion signatures do not replace these documents.");
+  }
+  if (templateId === "veu-48") {
+    fields.push({ ...blankField("evidence.insulation-ap-consumer-contract", "Signed Activity 48 contract between the accredited person and consumer", "Consumer contract", "before"),
+      type: "document", sourceRequirementId: "insulation-ap-consumer-contract", referenceDocuments: INSULATION_ASSIGNMENT_SOURCES,
+      help: "Before installation, retain the signed contract between the consumer and the Activity 48 accredited person using the current approved contract model. A subcontractor agreement or general authority to send TLink records does not replace that contract. Creditex must verify its accreditation and contract arrangements." },
+    { ...blankField("assignment.insulation_template_reference", "Current Creditex-approved Activity 48 assignment template reference", "Certificate assignment", "after"),
+      sourceRequirementId: "insulation-assignment-template-reference", referenceDocuments: INSULATION_ASSIGNMENT_SOURCES,
+      help: "Record the approved Activity 48 template reference and revision supplied by Creditex. Do not use an Activity 1, 3 or 6 assignment. If no current approved Activity 48 template is available, refer the job to Creditex; the assignment requirement remains incomplete." },
+    { ...blankField("evidence.insulation-veec-assignment", "Completed and signed Activity 48 VEEC assignment", "Certificate assignment", "after"),
+      type: "document", sourceRequirementId: "insulation-veec-assignment", referenceDocuments: INSULATION_ASSIGNMENT_SOURCES,
+      help: "Upload the completed and signed current Activity 48 assignment approved by Creditex, including the prescribed consumer and accredited-person declarations and actual activity details. Do not use an Activity 1, 3 or 6 assignment. Creditex must verify the correct template, parties, signatures and completed particulars before certificate creation. A general field-record signature does not assign VEEC rights." });
+    reviewNotes.push("No current downloadable prescribed Activity 48 assignment template was verified for this release. Require the current Creditex-approved Activity 48 contract and signed assignment artifacts and review them before certificate creation; never substitute another activity's assignment or treat this capture form as the prescribed assignment.");
+  }
+}
+
 export function defaultActivityFieldForm(templateId: string, variantId = ""): ActivityForm {
   const { candidate, exactForms, exact } = sourceFormVariant(templateId, variantId);
   const documents = activityConsumerDocuments(templateId, exact?.id || "");
@@ -1002,6 +1174,8 @@ export function defaultActivityFieldForm(templateId: string, variantId = ""): Ac
     text: "I confirm that this field record describes the work I completed and the observations and evidence I collected. I have recorded any limitations and outstanding matters accurately. I authorise this record to be provided to CREDITEX PTY LTD for review.",
     sourceUrl: "", sourceTextSha256: "",
   });
+  const signedArtifactPolicy = applyProgrammeSignedArtifactPolicy(fields, declarations, candidate, exact, reviewNotes);
+  applySignedAssignmentEvidencePolicy(fields, templateId, reviewNotes);
   applySystemDerivedFieldPolicy(fields, candidate.programCode, candidate.activityCode, true);
   applyFieldWorkerPolicy(fields, templateId);
   const deduped = [...new Map(fields.filter((field) => !isSignatureTimestamp(field.key, field.autofill)).map((field) => [field.key, field])).values()];
@@ -1024,7 +1198,7 @@ export function defaultActivityFieldForm(templateId: string, variantId = ""): Ac
   for (const declaration of declarations) resolveDependencies(declaration.condition, declaration.phase);
   const completedFields = ensureInstallerIdSelfie([...dependencyFields, ...deduped]);
   normaliseActivityFormConditions(completedFields, declarations);
-  return { id: `field:${templateId}:${exact?.id || "source"}`, title: candidate.title, version: 1,
+  return { id: `field:${templateId}:${exact?.id || "source"}`, title: candidate.title, version: signedArtifactPolicy ? 3 : 1,
     activityTemplateId: templateId, programCode: candidate.programCode,
     variantId: exact?.id || "", variantOptions: exactForms.map((item) => ({ id: item.id, label: item.id.endsWith("business") ? "Business premises" : item.id.endsWith("residential") ? "Residential premises" : item.title })),
     fields: orderByPhaseAndSection(completedFields), declarations,
@@ -1043,6 +1217,7 @@ export function applyDefaultActivityFormPolicy(form: ActivityForm, baseline: Act
   const governedCustomerDocuments = baseline.fields.some((field) => field.key === ACTIVITY_BOOKING_DOCUMENT_RECEIPT_KEYS.providerAccepted);
   const stripUnsupportedGenericCustomerDocuments = NO_GENERIC_CUSTOMER_DOCUMENT_GATE_TEMPLATES.has(baseline.activityTemplateId);
   const current = form.fields.filter((field) => !((governedCustomerDocuments || stripUnsupportedGenericCustomerDocuments) && isRedundantManualCustomerDocumentField(field))
+    && !(["sres-ashp", "sres-swh"].includes(baseline.activityTemplateId) && ["account_holder", "nmi", "scope.bess2_or_differs_from_owner", "scope.nsw_certificate_or_grid_connected_sres_battery"].includes(field.key))
     && !isSignatureTimestamp(field.key, field.autofill)
     && !isRetiredFieldWorkerField(baseline.activityTemplateId, field)
     && (!isInstallerIdSelfieField(field) || field.key === baselineInstallerSelfieKey)
@@ -1110,7 +1285,8 @@ export function applyDefaultActivityFormPolicy(form: ActivityForm, baseline: Act
   const sources = [...baseline.sources.map((source) => structuredClone(source)),
     ...new Map(addedSources.map((source) => [source.url, source])).values()];
   normaliseActivityFormConditions(fields, declarations);
-  return JSON.parse(JSON.stringify({ ...form, fields: orderByPhaseAndSection(ensureInstallerIdSelfie(fields)), declarations, sources })) as ActivityForm;
+  return JSON.parse(JSON.stringify({ ...form, version: Math.max(form.version, baseline.version), fields: orderByPhaseAndSection(ensureInstallerIdSelfie(fields)), declarations, sources,
+    reviewNotes: [...new Set([...form.reviewNotes, ...baseline.reviewNotes])] })) as ActivityForm;
 }
 
 export function activityFieldCatalogue() {

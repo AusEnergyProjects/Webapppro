@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import { canAssignWithinScope } from "../src/lib/trade-team-permission-policy.mjs";
 import * as tradeJobLifecycle from "../src/lib/trade-job-lifecycle.ts";
+import { certificateTestDependency, installCreditexTrainingFixture } from './helpers/creditex-training-fixture.mjs';
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -78,7 +79,7 @@ function loadTypescriptModule(path, mocks) {
     fileName: path,
   }).outputText;
   const moduleRecord = { exports: {} };
-  const require = (specifier) => Object.hasOwn(mocks, specifier) ? mocks[specifier] : {};
+  const require = (specifier) => Object.hasOwn(mocks, specifier) ? mocks[specifier] : certificateTestDependency(specifier) || {};
   new Function("require", "module", "exports", output)(require, moduleRecord, moduleRecord.exports);
   return moduleRecord.exports;
 }
@@ -290,6 +291,7 @@ function fixture() {
     );
     CREATE TABLE trade_work_order_compliance_intents (
       id text PRIMARY KEY NOT NULL,
+      activity_template_id text NOT NULL DEFAULT '',
       work_order_id text NOT NULL,
       installer_uid text NOT NULL,
       status text NOT NULL,
@@ -352,6 +354,7 @@ function fixture() {
       'member-b', 'owner-1', 'actor-2', 'Other worker', '["hot-water"]', 'active'
     );
   `);
+  installCreditexTrainingFixture(database);
   return { database, d1: testD1(database) };
 }
 
@@ -872,5 +875,90 @@ for (const terminalStage of ["completed", "cancelled"]) {
     );
     assert.equal(response.status, 409);
     assert.deepEqual(crmMutationState(database), before);
+  });
+}
+
+function programmeAppointmentFixture() {
+  const value = fixture();
+  value.database.exec(`ALTER TABLE trade_crm_appointments ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
+    INSERT INTO trade_crm_appointments
+      (id,work_order_id,firebase_uid,appointment_type,title,starts_at,ends_at,assignee_member_id,assignee_label,status,notes,created_at,updated_at)
+    VALUES ('appointment-1','job-1','owner-1','installation','Programme installation',
+      '2099-01-02T10:00:00.000Z','2099-01-02T11:00:00.000Z','member-b','Other worker','cancelled','','2026-01-01','2026-01-01');
+    INSERT INTO trade_work_order_compliance_intents
+      (id,activity_template_id,work_order_id,installer_uid,status,intent_key,revision,created_at)
+    VALUES ('intent-1','veu-3','job-1','owner-1','planned','veu-3',1,'2026-01-01');`);
+  return value;
+}
+function appointmentStatusRequest(status) {
+  return new Request('https://example.test/api/trade-crm', { method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'update_appointment', appointmentId: 'appointment-1', status }) });
+}
+function appointmentStatusState(database) {
+  return { ...database.prepare("SELECT status,revision,assignee_member_id FROM trade_crm_appointments WHERE id='appointment-1'").get() };
+}
+for (const status of ['scheduled', 'completed']) {
+  for (const memberId of ['member-a', 'member-b', 'training-owner-owner-1']) {
+    test(`appointment ${status} requires the actual job worker, appointment worker and owner: ${memberId}`, async () => {
+      const { database, d1 } = programmeAppointmentFixture();
+      database.prepare("UPDATE trade_training_completions SET revoked_at='2026-09-18' WHERE module_id='veu-3' AND member_id=?").run(memberId);
+      const before = appointmentStatusState(database);
+      const response = await crmRoute(d1, access()).PATCH(appointmentStatusRequest(status));
+      assert.equal(response.status, 403);
+      assert.equal((await response.json()).code, 'ACTIVITY_TRAINING_REQUIRED');
+      assert.deepEqual(appointmentStatusState(database), before);
+    });
+  }
+}
+test('current completions for both actual workers allow appointment status reactivation', async () => {
+  const { database, d1 } = programmeAppointmentFixture();
+  const response = await crmRoute(d1, access()).PATCH(appointmentStatusRequest('scheduled'));
+  assert.equal(response.status, 200);
+  assert.deepEqual(appointmentStatusState(database), { status: 'scheduled', revision: 2, assignee_member_id: 'member-b' });
+});
+for (const status of ['cancelled', 'no_show']) {
+  test(`appointment ${status} remains available after training revocation`, async () => {
+    const { database, d1 } = programmeAppointmentFixture();
+    database.exec("UPDATE trade_training_completions SET revoked_at='2026-09-18'");
+    const response = await crmRoute(d1, access()).PATCH(appointmentStatusRequest(status));
+    assert.equal(response.status, 200);
+    assert.equal(appointmentStatusState(database).status, status);
+  });
+}
+for (const [name, mutate] of [
+  ['completion revoked', "UPDATE trade_training_completions SET revoked_at='2026-09-18' WHERE module_id='veu-3' AND member_id='member-b'"],
+  ['course withdrawn', "UPDATE trade_training_module_reviews SET status='withdrawn' WHERE module_id='veu-3'"],
+  ['job reassigned', "UPDATE trade_work_orders SET assignee_member_id='member-b',revision=revision+1 WHERE id='job-1'"],
+  ['appointment reassigned', "UPDATE trade_crm_appointments SET assignee_member_id='member-a',revision=revision+1 WHERE id='appointment-1'"],
+  ['appointment became active', "UPDATE trade_crm_appointments SET status='in_progress',revision=revision+1 WHERE id='appointment-1'"],
+]) {
+  test(`appointment status mutation rolls back when ${name} before its batch`, async () => {
+    const { database, d1 } = programmeAppointmentFixture();
+    let concurrent;
+    d1.setBeforeBatch(() => { database.exec(mutate); concurrent = appointmentStatusState(database); });
+    const response = await crmRoute(d1, access()).PATCH(appointmentStatusRequest('scheduled'));
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).code, 'CREDITEX_ELIGIBILITY_CHANGED');
+    assert.deepEqual(appointmentStatusState(database), concurrent);
+  });
+}
+
+test('appointment reactivation requires the separate booking person to complete training', async () => {
+  const { database, d1 } = programmeAppointmentFixture();
+  database.exec("INSERT INTO trade_team_members VALUES ('member-c','owner-1','actor-3','Booking staff','[\"hot-water\"]','active')");
+  const response = await crmRoute(d1, access({ memberId: 'member-c', actorUid: 'actor-3', jobScope: 'team' }))
+    .PATCH(appointmentStatusRequest('scheduled'));
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).code, 'ACTIVITY_TRAINING_REQUIRED');
+  assert.equal(appointmentStatusState(database).status, 'cancelled');
+});
+for (const jobStage of ['completed','cancelled']) {
+  test(`appointment status cannot reactivate an already ${jobStage} job`, async () => {
+    const { database, d1 } = programmeAppointmentFixture();
+    database.prepare("UPDATE trade_work_orders SET stage=? WHERE id='job-1'").run(jobStage);
+    const response = await crmRoute(d1, access()).PATCH(appointmentStatusRequest('scheduled'));
+    assert.equal(response.status, 409);
+    assert.equal(appointmentStatusState(database).status, 'cancelled');
   });
 }

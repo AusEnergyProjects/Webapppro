@@ -82,7 +82,7 @@ function withoutBindingFields(source) {
   );
 }
 
-test("publishes exactly 107 unique current or limited non-certificate candidates", () => {
+test("publishes exactly 108 unique current or limited non-certificate candidates", () => {
   const programs = expectedPrograms();
   const expected = programs.flatMap((item) =>
     expectedTemplates(item.programCode)
@@ -96,8 +96,8 @@ test("publishes exactly 107 unique current or limited non-certificate candidates
     programs.map((item) => item.programCode),
   );
   assert.equal(programs.length, 26);
-  assert.equal(CREDITEX_NON_CERTIFICATE_WORK_PACK_CONTENT_CANDIDATES.length, 107);
-  assert.equal(new Set(actualIds).size, 107);
+  assert.equal(CREDITEX_NON_CERTIFICATE_WORK_PACK_CONTENT_CANDIDATES.length, 108);
+  assert.equal(new Set(actualIds).size, 108);
   assert.deepEqual(actualIds, expected.map((template) => template.templateId));
   assert.ok(
     CREDITEX_NON_CERTIFICATE_WORK_PACK_CONTENT_CANDIDATES.every(
@@ -106,7 +106,7 @@ test("publishes exactly 107 unique current or limited non-certificate candidates
   );
 });
 
-test("preserves the exact 50 retailer-obligation and 57 other output split", () => {
+test("preserves the exact 51 retailer-obligation and 57 other output split", () => {
   const outcomeCounts = Object.fromEntries(
     [
       "retailer_obligation_credit",
@@ -123,7 +123,7 @@ test("preserves the exact 50 retailer-obligation and 57 other output split", () 
     ]),
   );
   assert.deepEqual(outcomeCounts, {
-    retailer_obligation_credit: 50,
+    retailer_obligation_credit: 51,
     rebate: 10,
     grant: 24,
     loan: 15,
@@ -312,7 +312,7 @@ test("provides activity-specific prompts, evidence, identities, signatures and f
   }
 });
 
-test("reconciles all 30 local method signals and marks the other 77 exact gaps", () => {
+test("reconciles all 30 local method signals and marks the other 78 exact gaps", () => {
   const withLocalMethod = [];
   const withoutLocalMethod = [];
   for (const candidate of CREDITEX_NON_CERTIFICATE_WORK_PACK_CONTENT_CANDIDATES) {
@@ -367,7 +367,12 @@ test("reconciles all 30 local method signals and marks the other 77 exact gaps",
     );
   }
   assert.equal(withLocalMethod.length, 30);
-  assert.equal(withoutLocalMethod.length, 77);
+  assert.equal(withoutLocalMethod.length, 78);
+  const newActActivity = withoutLocalMethod.find((candidate) => candidate.templateId === "act-eeis-1-9");
+  assert.ok(newActActivity);
+  assert.equal(newActActivity.calculator.executionState, "blocked");
+  assert.equal(newActActivity.independentlyApproved, false);
+  assert.equal(newActActivity.activationReady, false);
 });
 
 test("keeps product and scenario signals local while all official decisions remain unresolved", () => {
@@ -467,20 +472,20 @@ test("reports exact candidate completeness and zero approved activation coverage
   const validation = validateCreditexNonCertificateWorkPackContent();
   assert.equal(validation.valid, true);
   assert.deepEqual(validation.errors, []);
-  assert.equal(validation.total, 107);
-  assert.equal(validation.retailerObligationCount, 50);
+  assert.equal(validation.total, 108);
+  assert.equal(validation.retailerObligationCount, 51);
   assert.equal(validation.otherOutcomeCount, 57);
   assert.equal(validation.localMethodSignalCount, 30);
-  assert.equal(validation.missingLocalMethodSignalCount, 77);
-  assert.equal(validation.candidateContentCompleteCount, 107);
+  assert.equal(validation.missingLocalMethodSignalCount, 78);
+  assert.equal(validation.candidateContentCompleteCount, 108);
   assert.equal(validation.activationReadyCount, 0);
   assert.deepEqual(CREDITEX_NON_CERTIFICATE_WORK_PACK_CONTENT_COMPLETENESS, {
-    expectedCurrentOrLimitedTemplates: 107,
-    expectedRetailerObligationTemplates: 50,
+    expectedCurrentOrLimitedTemplates: 108,
+    expectedRetailerObligationTemplates: 51,
     expectedOtherOutcomeTemplates: 57,
-    machineReadableCandidateTemplates: 107,
+    machineReadableCandidateTemplates: 108,
     localMethodSignalTemplates: 30,
-    missingLocalMethodSignalTemplates: 77,
+    missingLocalMethodSignalTemplates: 78,
     independentlyApprovedActivationTemplates: 0,
     publicationState: "candidate_not_approved",
   });
@@ -491,7 +496,7 @@ test("validation fails closed for missing rows, false activation and source or m
     CREDITEX_NON_CERTIFICATE_WORK_PACK_CONTENT_CANDIDATES.slice(1),
   );
   assert.equal(missing.valid, false);
-  assert.ok(missing.errors.some((error) => error.includes("Expected 107")));
+  assert.ok(missing.errors.some((error) => error.includes("Expected 108")));
   assert.ok(missing.errors.some((error) => error.includes("ordered")));
 
   const falseActivation = CREDITEX_NON_CERTIFICATE_WORK_PACK_CONTENT_CANDIDATES.map(

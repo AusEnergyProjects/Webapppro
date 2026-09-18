@@ -2,6 +2,7 @@ import { aeaDeliveredServiceScopeSql, tradeOpportunityServiceScopeSql } from "..
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { expandCreditexLeadSql, qualifyLeadFixture } from "./helpers/creditex-training-sql.mjs";
 import test from "node:test";
 import sharp from "sharp";
 
@@ -54,7 +55,7 @@ function tradePhotoAccessSql() {
   const getRoute = route.slice(route.indexOf("export async function GET"));
   const sql = getRoute.match(/const row = await getD1\(\)\.prepare\(`([\s\S]*?)`\)/)?.[1];
   assert.ok(sql, "trade photo access SQL must be extractable for execution");
-  return sql.replace(
+  return expandCreditexLeadSql(sql).replace(
     '${verifiedTradeAccountPredicate("account")}',
     "account.status = 'approved'",
   );
@@ -953,6 +954,7 @@ test("matched trade photo reads fail closed after preparation withdrawal or lead
     INSERT INTO public_trade_lead_quote_photos VALUES
       ('39c16039-4acd-4664-a2e5-3d8ad0dd7dd6', 'opportunity-1', 'active',
        '["hot-water"]', 'private/object.jpg');`);
+  qualifyLeadFixture(database);
   const query = database.prepare(tradePhotoAccessSql());
   const bindings = [
     PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,
@@ -1012,7 +1014,7 @@ test("quote preparation persists once per source and is exposed only through sig
   assert.match(tradeRoute, /publicPlanQuoteCategoryIntersection/);
   assert.match(tradeRoute, /m\.matched_categories/);
   assert.match(tradeRoute, /public_quote_preparation_id/);
-  assert.match(tradeRoute, /public_quote_preparation\.notice_version = '\$\{PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION\}'[\s\S]*public_contact\.notice_version = '\$\{PUBLIC_PLAN_CONSENT_NOTICE_VERSION\}'/);
+  assert.match(tradeRoute, /public_quote_preparation\.status, public_quote_preparation\.notice_version,[\s\S]*public_contact\.notice_version, public_contact\.consent_purpose\) =[\s\S]*'\$\{PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION\}'[\s\S]*'\$\{PUBLIC_PLAN_CONSENT_NOTICE_VERSION\}'/);
   assert.match(dashboard, /PublicQuotePreparation/);
   assert.match(dashboard, /item\.downloadHref/);
   assert.match(migration, /public_trade_lead_quote_preparations/);

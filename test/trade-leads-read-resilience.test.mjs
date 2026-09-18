@@ -1,3 +1,4 @@
+import { expandCreditexLeadSql, qualifyLeadFixture } from "./helpers/creditex-training-sql.mjs";
 import { tradeOpportunityServiceScopeSql } from "../src/lib/aea-trade-routing.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -51,7 +52,7 @@ function sqlTemplateContaining(source, marker) {
   const start = source.lastIndexOf("`", markerIndex);
   const end = source.indexOf("`", markerIndex);
   assert.ok(start >= 0 && end > markerIndex, `SQL template was not found: ${marker}`);
-  return source.slice(start + 1, end).replace(/\$\{tradeOpportunityServiceScopeSql\("([A-Za-z_][A-Za-z0-9_]*)"\)\}/g, (_match, alias) => tradeOpportunityServiceScopeSql(alias));
+  return expandCreditexLeadSql(source.slice(start + 1, end).replace(/\$\{tradeOpportunityServiceScopeSql\("([A-Za-z_][A-Za-z0-9_]*)"\)\}/g, (_match, alias) => tradeOpportunityServiceScopeSql(alias)));
 }
 
 function projectionCountAt(sql, selectStart) {
@@ -225,11 +226,11 @@ test("trade lead reads split base rows from any-release context and validate bef
   assert.match(publicContextRead, /JOIN public_trade_lead_contact_releases public_contact/);
   assert.match(
     publicContextRead,
-    /ON public_contact\.id = \([\s\S]*WHERE current_release\.opportunity_id = o\.id[\s\S]*current_release\.source_reference = o\.source_reference[\s\S]*ORDER BY datetime\(current_release\.updated_at\) DESC[\s\S]*LIMIT 1/,
+    /ON public_contact\.id = \([\s\S]*WHERE \(current_release\.opportunity_id, current_release\.source_reference\) = \(o\.id, o\.source_reference\)[\s\S]*ORDER BY datetime\(current_release\.updated_at\) DESC[\s\S]*LIMIT 1/,
   );
   assert.doesNotMatch(publicContextRead, /public_contact\.status = 'active'/);
-  assert.match(publicContextRead, /public_quote_preparation\.withdrawn_at = ''/);
-  assert.match(publicPhotoRead, /preparation\.withdrawn_at = ''/);
+  assert.match(publicContextRead, /public_quote_preparation\.consent_purpose, public_quote_preparation\.withdrawn_at,[\s\S]*public_contact\.notice_version, public_contact\.consent_purpose\) =[\s\S]*'\$\{PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE\}', '',[\s\S]*'\$\{PUBLIC_PLAN_CONSENT_NOTICE_VERSION\}', '\$\{PUBLIC_PLAN_CONSENT_PURPOSE\}'\)/);
+  assert.match(publicPhotoRead, /preparation\.consent_purpose, preparation\.withdrawn_at\) =[\s\S]*'\$\{PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE\}', ''\)/);
   assert.match(route, /publicReleaseMatches\.add\(matchId\)/);
   assert.match(
     route,
@@ -356,7 +357,7 @@ test("the authoritative base read supports broad and exact loads, caps at 100, a
   const insertOpportunity = database.prepare(`INSERT INTO trade_opportunities
     (id, title, postcode, state, status, source_reference, service_categories) VALUES (?, ?, '3000', 'VIC', 'open', ?, '["solar"]')`);
   const insertMatch = database.prepare(`INSERT INTO trade_opportunity_matches
-    (id, firebase_uid, opportunity_id, status, matched_at, updated_at) VALUES (?, 'installer-1', ?, 'offered', ?, ?)`);
+    (id, firebase_uid, opportunity_id, status, matched_categories, matched_at, updated_at) VALUES (?, 'installer-1', ?, 'offered', '["solar"]', ?, ?)`);
   const insertQuote = database.prepare(`INSERT INTO customer_project_quotes
     (id, opportunity_id, opportunity_match_id, installer_uid) VALUES (?, ?, ?, 'installer-1')`);
   for (let index = 0; index < 101; index += 1) {
@@ -367,6 +368,8 @@ test("the authoritative base read supports broad and exact loads, caps at 100, a
     insertMatch.run(matchId, id, updatedAt, updatedAt);
     insertQuote.run(`quote-${String(index).padStart(3, "0")}`, id, matchId);
   }
+  database.exec("CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY, abn TEXT, business_name TEXT); INSERT INTO trade_accounts VALUES ('installer-1','53004085616','Fixture Pty Ltd')");
+  qualifyLeadFixture(database);
   const broadBaseRows = database.prepare(baseRead).all("installer-1", "", "");
   assert.equal(broadBaseRows.length, 100);
   assert.equal(broadBaseRows[0].match_id, "match-000");
@@ -519,6 +522,8 @@ test("customer-project status mutation rechecks matching consent at mutation tim
     INSERT INTO customer_projects VALUES ('project-1', 'customer-1', 'opportunity-1');
     INSERT INTO customer_consent_receipts VALUES
       ('consent-1', 'project-1', 'customer-1', 'anonymized_installer_matching', '2026-08-12T01:00:00.000Z');`);
+  database.exec("CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY, abn TEXT, business_name TEXT); INSERT INTO trade_accounts VALUES ('installer-1','53004085616','Fixture Pty Ltd')");
+  qualifyLeadFixture(database);
   const values = [
     "viewed",
     "2026-08-12T02:00:00.000Z",

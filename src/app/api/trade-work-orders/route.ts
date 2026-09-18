@@ -1,4 +1,7 @@
+import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard } from "@/lib/creditex-onboarding-server";
+import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { getD1 } from "../../../../db";
+import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
 import { adminJson, cleanAdminText, parseJsonList, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
@@ -138,6 +141,9 @@ async function mutationIdentity(request: Request, action: string): Promise<{
 }
 
 function errorResponse(error: unknown) {
+  const conflict = creditexMutationConflict(error);
+  if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
+  if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
   if (code === "JOB_SCHEDULE_ACCEPTANCE_REQUIRED" || isTradeJobScheduleEligibilityConflict(error)) {
     return adminJson({ ok: false, error: "Wait for the customer to accept the current Australian Energy Assessments quote before scheduling this job." }, 409);
@@ -178,6 +184,7 @@ async function sourceOptions(identity: TradeIdentity) {
       FROM trade_opportunity_matches m
       JOIN trade_opportunities o ON o.id = m.opportunity_id
       WHERE m.firebase_uid = ? AND m.status IN ('interested', 'connected')
+        AND ${certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
         AND (o.source_reference NOT LIKE 'customer-project:%' OR EXISTS (
           SELECT 1 FROM customer_project_quotes q
           JOIN customer_project_contact_releases r ON r.opportunity_match_id = q.opportunity_match_id
@@ -437,6 +444,7 @@ export async function POST(request: Request) {
         LEFT JOIN customer_project_arrival_proposals ap ON ap.opportunity_match_id = m.id
           AND ap.installer_uid = m.firebase_uid AND ap.status = 'selected'
         WHERE m.id = ? AND m.firebase_uid = ? AND m.status IN ('interested', 'connected')
+          AND ${certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
           AND (o.source_reference NOT LIKE 'customer-project:%' OR EXISTS (
             SELECT 1 FROM customer_project_quotes q
             JOIN customer_project_contact_releases r ON r.opportunity_match_id = q.opportunity_match_id
@@ -501,6 +509,10 @@ export async function POST(request: Request) {
     const workType = identity.partnerType === "supplier" ? "fulfilment" : "job";
     const appointmentId = selectedArrival ? crypto.randomUUID() : "";
     const createStatements = [
+      ...(sourceType === "opportunity" ? [creditexWriteGuard(db, identity.uid,
+        `EXISTS (SELECT 1 FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id=m.opportunity_id
+          WHERE m.id=? AND m.firebase_uid=? AND ${certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")})`,
+        [sourceReference, identity.uid])] : []),
       db.prepare(`INSERT INTO trade_work_orders
         (id, firebase_uid, partner_type, work_type, source_type, source_reference, work_number, title,
          service_category, service_categories, site_area, stage, priority, scheduled_start, scheduled_end, assignee_label,
@@ -653,6 +665,10 @@ export async function PATCH(request: Request) {
     }
     const assigneeLabel = body.assigneeLabel === undefined ? String(current.assignee_label) : cleanAdminText(body.assigneeLabel, 80);
     const assigneeMemberId = body.assigneeLabel === undefined ? String(current.assignee_member_id) : "";
+    const certificateTeamAccess = identity.partnerType === "installer" ? teamAccess || await requireInstallerTeamAccess(request) : null;
+    const certificateAccess = { ownerUid: identity.uid, actorMemberId: certificateTeamAccess?.memberId || "",
+      assignedMemberId: assigneeMemberId, workOrderId };
+    if (identity.partnerType === "installer") await assertCertificateJobEligibility(db, certificateAccess);
     if (assigneeLabel && !identity.teamAccess) throw new Error("TEAM_ACCESS_REQUIRED");
     if (privateDataDetected(assigneeLabel)) throw new Error("PRIVATE_DATA");
     const changes: string[] = [];
@@ -672,6 +688,7 @@ export async function PATCH(request: Request) {
       : [];
     await guardedOnlineJobMutationBatch(db, [
       ...complianceIntentStatements,
+      ...(identity.partnerType === "installer" ? await certificateJobEligibilityGuards(db, certificateAccess) : []),
       db.prepare(`UPDATE trade_work_orders SET stage = ?, priority = ?, scheduled_start = ?, scheduled_end = ?,
         assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
@@ -681,7 +698,7 @@ export async function PATCH(request: Request) {
           String(current.stage), Number(current.revision)),
       eventStatement(db, identity.uid, workOrderId, "work_updated", changes.join(" ") || "Work record reviewed.", now),
       ...(scheduleChanged && identity.partnerType === "installer"
-        ? [tradeJobScheduleEligibilityGuardStatement(db, { ownerUid: identity.uid, workOrderId, changedAt: now })]
+        ? [await tradeJobScheduleEligibilityGuardStatement(db, { ...certificateAccess, changedAt: now })]
         : []),
       ...offlineSyncStatements(db, identity, workOrderId, revision, now, assigneeMemberId,
         String(current.assignee_member_id || "")),

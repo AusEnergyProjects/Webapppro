@@ -5,6 +5,7 @@ import path from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
+import { installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 
 import { PDFDocument } from "pdf-lib";
 import { createServer } from "vite";
@@ -1051,6 +1052,9 @@ async function seededRuntime() {
   bucket.deleted.length = 0;
   const runtime = runtimeDatabase();
   seedOperationalRecords(runtime.sqlite);
+  runtime.sqlite.prepare('UPDATE trade_accounts SET capabilities=? WHERE firebase_uid=?').run(JSON.stringify([ACTIVITY.serviceCategory]), OWNER_UID);
+  runtime.sqlite.prepare('UPDATE trade_team_members SET capabilities=? WHERE owner_uid=?').run(JSON.stringify([ACTIVITY.serviceCategory]), OWNER_UID);
+  installCreditexTrainingFixture(runtime.sqlite);
   const templateBytes = await pdfTemplate();
   const governance = await seedGovernance(runtime.sqlite, templateBytes);
   await installSchemaGuards(runtime.database);
@@ -1065,7 +1069,7 @@ function ownerScope() {
   return {
     ownerUid: OWNER_UID,
     actorUid: OWNER_UID,
-    actorMemberId: "",
+    actorMemberId: `training-owner-${OWNER_UID}`,
     scope: "team",
   };
 }

@@ -19,21 +19,21 @@ test("coverage accounts deterministically for all programs and activities", () =
     "creditex-calculation-coverage/v1",
   );
   assert.equal(GOVERNMENT_PROGRAM_TEMPLATES.length, 35);
-  assert.equal(GOVERNMENT_ACTIVITY_TEMPLATES.length, 216);
-  assert.equal(CREDITEX_CALCULATION_COVERAGE.length, 216);
+  assert.equal(GOVERNMENT_ACTIVITY_TEMPLATES.length, 217);
+  assert.equal(CREDITEX_CALCULATION_COVERAGE.length, 217);
   assert.equal(
     new Set(
       CREDITEX_CALCULATION_COVERAGE.map(
         (row) => row.activityTemplateId,
       ),
     ).size,
-    216,
+    217,
   );
   assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.programs, 35);
-  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.activities, 216);
+  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.activities, 217);
   assert.equal(
     CREDITEX_CALCULATION_COVERAGE_SUMMARY.coverageSha256,
-    "sha256:30d21e7a71d84f658ee928e2dbb1be10e38bde2f7c651de867c0a0acf7c94408",
+    "sha256:6cba95c96a4dd3e198bb3cb0dcfb899befccac6a83f43cd77ff66bdaf5cd2e15",
   );
 });
 
@@ -45,7 +45,7 @@ test("source-complete SRES, local, VEU and NSW formulas are executable", () => {
   assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.estimateExecutable, 56);
   assert.equal(
     CREDITEX_CALCULATION_COVERAGE_SUMMARY.blockedOrNonExecutable,
-    160,
+    161,
   );
   const localProgramCodes = new Set(
     CREDITEX_LOCAL_PROGRAM_DEFINITIONS.map((program) => program.programCode),
@@ -92,7 +92,7 @@ test("coverage never enables certificate action for any activity", () => {
       { state: "activity_closed", count: 9 },
       { state: "activity_not_commenced", count: 5 },
       { state: "estimate_available", count: 50 },
-      { state: "governed_formula_required", count: 91 },
+      { state: "governed_formula_required", count: 92 },
       { state: "not_applicable", count: 27 },
       { state: "official_registry_required", count: 26 },
       { state: "partial_estimate_available", count: 6 },

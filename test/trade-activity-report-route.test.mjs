@@ -1,3 +1,4 @@
+import { certificateTestDependency } from "./helpers/creditex-training-fixture.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -71,6 +72,7 @@ function loadRoute({ originAccepted, readPdf = async () => reportBytes() }) {
     },
   };
   new Function("require", "module", "exports", output)((specifier) => {
+    if (certificateTestDependency(specifier)) return certificateTestDependency(specifier);
     assert.ok(Object.hasOwn(mocks, specifier), `Unexpected module dependency: ${specifier}`);
     return mocks[specifier];
   }, moduleRecord, moduleRecord.exports);

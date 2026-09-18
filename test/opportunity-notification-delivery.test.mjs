@@ -3,6 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { expandCreditexLeadSql, qualifyLeadFixture } from "./helpers/creditex-training-sql.mjs";
 import {
   OPPORTUNITY_INBOX_URL,
   opportunityNotificationDraft,
@@ -387,7 +388,7 @@ test("a zero-attempt v6 consent-version skip is requeued while invalid or withdr
     /async function recoverLegacyPublicOptionalEmailSkips[\s\S]*?prepare\(`([\s\S]*?)`\)\s*\.bind/,
   )?.[1];
   assert.ok(recoverySql, "legacy public skip recovery SQL must be extractable");
-  const executableSql = recoverySql
+  const executableSql = expandCreditexLeadSql(recoverySql)
     .replace(
       '${verifiedTradeAccountPredicate("recovery_account")}',
       "recovery_account.status = 'approved'",
@@ -452,6 +453,7 @@ test("a zero-attempt v6 consent-version skip is requeued while invalid or withdr
   addCase({ id: "unknown-pair", version: "2026-08-10-unknown-v5" });
   addCase({ id: "withdrawn-v6", withdrawnAt: now });
   addCase({ id: "attempted-v6", attempts: 1 });
+  qualifyLeadFixture(database);
 
   const result = database.prepare(executableSql).run(
     now,

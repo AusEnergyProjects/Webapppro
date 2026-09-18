@@ -225,7 +225,7 @@ function readyPayload() {
   };
 }
 
-test("activation gate accepts exactly 195 fully evidenced current or limited activities", () => {
+test("activation gate accepts exactly 196 fully evidenced current or limited activities", () => {
   const payload = readyPayload();
   assert.equal(
     CREDITEX_WORK_PACK_COVERAGE.length,
@@ -237,13 +237,13 @@ test("activation gate accepts exactly 195 fully evidenced current or limited act
   );
   assert.equal(
     payload.coverage.filter((row) => row.outputActionReady).length,
-    107,
+    108,
   );
   assert.deepEqual(
     validateCreditexCertificateActivationPayload(payload, {
       asAtDate: AS_AT_DATE,
     }),
-    { activityCount: 195, asAtDate: AS_AT_DATE },
+    { activityCount: 196, asAtDate: AS_AT_DATE },
   );
 });
 
@@ -254,11 +254,11 @@ test("activation gate fails when one catalogue activity is missing", () => {
     () => validateCreditexCertificateActivationPayload(payload, {
       asAtDate: AS_AT_DATE,
     }),
-    new RegExp(`exactly 195 rows.*missing activity ${missing.activityTemplateId}`, "s"),
+    new RegExp(`exactly 196 rows.*missing activity ${missing.activityTemplateId}`, "s"),
   );
 });
 
-test("activation gate fails on a duplicate activity even when row count stays 195", () => {
+test("activation gate fails on a duplicate activity even when row count stays 196", () => {
   const payload = readyPayload();
   const duplicateId = payload.coverage[0].activityTemplateId;
   payload.coverage[payload.coverage.length - 1] = structuredClone(

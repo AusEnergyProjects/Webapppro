@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
+import { expandCreditexLeadSql, qualifyLeadFixture } from "./helpers/creditex-training-sql.mjs";
 import { AEA_RESERVED_SERVICE_IDS } from "../src/lib/aea-services.mjs";
 import { aeaDeliveredServiceScopeSql, tradeOpportunityServiceScopeAllowed, tradeOpportunityServiceScopeSql } from "../src/lib/aea-trade-routing.mjs";
 import { publicTradeContactForMatchedLead } from "../src/lib/public-trade-lead-access.mjs";
@@ -10,7 +11,7 @@ import { PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE, public
 import { OPPORTUNITY_NOTIFICATION_CLAIM_GUARD_SQL, OPPORTUNITY_NOTIFICATION_ENSURE_DELIVERIES_SQL } from "../src/lib/opportunity-notification-retry.ts";
 
 const source = (file) => fs.readFileSync(new URL(file, import.meta.url), "utf8");
-const scopeSql = (sql) => sql.replaceAll(/\$\{tradeOpportunityServiceScopeSql\("([^"]+)"\)\}/g, (_, alias) => tradeOpportunityServiceScopeSql(alias));
+const scopeSql = (sql) => expandCreditexLeadSql(sql).replaceAll(/\$\{tradeOpportunityServiceScopeSql\("([^"]+)"\)\}/g, (_, alias) => tradeOpportunityServiceScopeSql(alias));
 
 test("complete stored scope rejects every AEA service and mixed enquiries in JS and SQLite", () => {
   const db = new DatabaseSync(":memory:");
@@ -119,6 +120,7 @@ test("actual notification enqueue and final claim deny legacy mixed scope and a 
     .replace("${OPPORTUNITY_NOTIFICATION_CLAIM_GUARD_SQL}", OPPORTUNITY_NOTIFICATION_CLAIM_GUARD_SQL)
     .replace('${verifiedTradeAccountPredicate("current_account")}', "current_account.approved = 1")
     .replaceAll(/\$\{publicPlanContactReleaseConsentSql\("([^"]+)"\)\}/g, (_, alias) => publicPlanContactReleaseConsentSql(alias));
+  qualifyLeadFixture(db);
   const claim = db.prepare(sql);
   const bindings = [1, "email-hash", "idempotency", "Bounded subject", "Bounded body", now, now,
     row.id, row.status, row.attempts, "email-hash", now, now, "trade@example.test"];
@@ -149,11 +151,13 @@ test("actual manual assignment writes reject mixed scope while terminal cleanup 
     INSERT INTO trade_opportunities VALUES ('opportunity-1','["assessment","solar"]','open');
     INSERT INTO trade_accounts VALUES ('trade-1','installer',1);`);
   const code = source("../src/app/api/admin/opportunities/matches/route.ts");
+  qualifyLeadFixture(db);
   const insertSql = code.match(/`(INSERT INTO trade_opportunity_matches[\s\S]*?)`,/)?.[1];
   assert.ok(insertSql);
   const insert = db.prepare(scopeSql(insertSql));
   const now = "2026-09-14T00:00:00.000Z";
-  const bindings = ["match-1", "opportunity-1", "trade-1", "", '["solar"]', 500, 1, "owner", now, now, "opportunity-1"];
+  const bindings = ["match-1", "opportunity-1", "trade-1", "", '["solar"]', 500, 1, "owner", now, now,
+    "trade-1", '["solar"]', "VIC", "opportunity-1"];
   assert.equal(insert.run(...bindings).changes, 0);
   db.prepare("UPDATE trade_opportunities SET service_categories = ?").run('["solar"]');
   assert.equal(insert.run(...bindings).changes, 1);

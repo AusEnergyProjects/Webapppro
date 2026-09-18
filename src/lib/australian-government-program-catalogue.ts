@@ -755,6 +755,7 @@ const ACT_EEIS_ACTIVITY_ROWS: Array<[
   ["1.6", "Window coverings", "window-coverings"],
   ["1.7", "Pelmets", "window-coverings"],
   ["1.8", "Ceiling insulation", "insulation"],
+  ["1.9", "Install underfloor insulation", "insulation"],
   ["2.1", "Central heat-pump air conditioning", "heating-cooling"],
   ["2.2", "Ducted gas replacement", "heating-cooling", "closed"],
   ["2.3", "Room heat-pump air conditioning", "heating-cooling"],
