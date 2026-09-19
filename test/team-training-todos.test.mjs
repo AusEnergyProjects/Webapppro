@@ -87,3 +87,37 @@ test('member save refreshes to-dos only after success and selected services use 
   const checkLiteral=node=>{if(ts.isStringLiteral(node))assert.ok(!node.text.includes('&apos;'),'JS strings must contain a real apostrophe');ts.forEachChild(node,checkLiteral);};
   checkLiteral(parsed);
 });
+
+
+test('office-only members have no installation warning, module count or own assessment link',async()=>{
+  const h=harness(()=>payload({officeOnly:true,canTakeTraining:true,selectedMember:{memberId:'member-a',displayName:'Office Scheduler',isOwner:false,isSelf:true},modules:[]}));
+  const tree=await h.settle();
+  assert.match(text(tree),/Office only: no installation training needed/);
+  assert.match(text(tree),/book and manage eligible work within their access permissions/);
+  assert.match(text(tree),/technician assigned to carry out the work must meet the activity requirements/);
+  assert.doesNotMatch(text(tree),/0 of 0 modules passed|An empty list does not approve|Select and save the relevant services/);
+  assert.equal(button(tree,'Open my training'),undefined);
+  assert.equal(nodes(tree,node=>node.type==='a'&&text(node)==='Open my training').length,0);
+});
+
+test('owner training reuses their personal pass and never grants another field worker that pass',async()=>{
+  const owner=harness(()=>payload({officeOnly:false,selectedMember:{memberId:'member-a',displayName:'Owner',isOwner:true,isSelf:true},modules:[makeModule(0,{status:'passed',completion:{reference:'OWNER-PASS',expiresAt:'2027-01-01'}})]}));
+  const tree=await owner.settle();
+  assert.match(text(tree),/pass counts for both the business training requirement and their own on-site work/);
+  assert.match(text(tree),/Each current module is completed once/);
+  assert.match(text(tree),/Other on-site team members must earn their own passes/);
+  assert.match(text(tree),/1 of 1 modules passed/);assert.match(text(tree),/OWNER-PASS/);
+  const worker=harness(()=>payload({officeOnly:false}),{hasOfficeLogin:true});
+  const workerTree=await worker.settle();assert.match(text(workerTree),/0 of 1 modules passed/);
+  assert.doesNotMatch(text(workerTree),/no installation training needed|OWNER-PASS/);
+});
+
+test('office-only setup clears only on-site service selections and waits for an explicit save',()=>{
+  const team=fs.readFileSync(new URL('../src/components/TradeTeamSettings.tsx',import.meta.url),'utf8');
+  assert.match(team,/Services performed on site/);
+  assert.match(team,/Leave all services unchecked for office-only staff/);
+  assert.match(team,/onClick=\{\(\) => setMemberServices\(\[\]\)\}>Office only: no on-site services/);
+  assert.match(team,/Save changes to apply, or tick services again/);
+  const preset=team.slice(team.indexOf('function applyPreset('),team.indexOf('function setPermission('));
+  assert.doesNotMatch(preset,/setMemberServices/);
+});

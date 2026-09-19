@@ -25,7 +25,7 @@ const course = (overrides = {}) => ({ id: 'veu-6', programCode: 'VEU', version: 
 const overview = (modules = [course()]) => ({ ok: true, memberId: 'pin-member', business: { approved: false, status: 'agreement_pending', blockedReasons: ['An executed agreement is required.'] }, modules, unavailableActivities: [] });
 const attempt = { id: 'attempt-25', moduleId: 'veu-6', version: 'exact-v1', expiresAt: '2099-01-01T12:00:00Z', questions: Array.from({ length: 25 }, (_, index) => ({ id: `question-${index}`, prompt: `Activity-specific question ${index + 1}`, critical: true, options: [{ id: `opaque-${index}-a`, text: 'First choice' }, { id: `opaque-${index}-b`, text: 'Second choice' }] })) };
 
-function harness({ modules = [course()], marked, startError } = {}) {
+function harness({ modules = [course()], marked, startError, officeOnly = false } = {}) {
   const state = []; const effects = []; const requests = []; const opened = []; const alerts = [];
   const app = { user: { localOwnerKey: 'field:business:pin-member', authMode: 'field_pin' }, sync: { online: true } };
   let cursor = 0; let initial = true;
@@ -34,7 +34,7 @@ function harness({ modules = [course()], marked, startError } = {}) {
     useCallback(callback) { return callback; },
     useEffect(callback) { if (initial) effects.push(callback); },
   };
-  const api = { async loadTrainingOverview() { requests.push({ action: 'load' }); return overview(modules); },
+  const api = { async loadTrainingOverview() { requests.push({ action: 'load' }); return { ...overview(modules), officeOnly }; },
     async startTrainingAssessment(moduleId) { requests.push({ action: 'start', moduleId }); if (startError) throw new Error(startError); return structuredClone(attempt); },
     async checkTrainingAnswer(attemptId, questionId, answer) { requests.push({ action: 'check', attemptId, questionId, answer }); return { questionId, correct: answer.endsWith('-a'), explanation: 'Use genuine records from this job.', correctAnswer: 'First choice', sourceIds: ['official'] }; },
     async submitTrainingAssessment(attemptId, answers) { requests.push({ action: 'submit', attemptId, answers: { ...answers } }); return marked || { passed: false, scorePercent: 96, criticalPassed: false, reference: '', expiresAt: '', feedback: [{ questionId: 'question-0', prompt: 'Activity-specific question 1', correct: false, explanation: 'Keep the exact required evidence.', correctAnswer: 'Verified official requirement', sourceIds: ['official'] }] }; } };
@@ -119,6 +119,23 @@ test('search finds the canonical service even when a new questionnaire title omi
   nodes(tree, node => node.type === 'TextInput')[0].props.onChangeText('Heating and cooling'); tree = h.render();
   assert.match(text(tree), /Additional installer checks/);
   assert.match(text(tree), /Showing 1 of 1 matching activities/);
+});
+
+test('server-assigned office-only roles have no installation training without implying booking permission', async () => {
+  const h = harness({ modules: [], officeOnly: true }); const tree = await h.mount();
+  assert.match(text(tree), /Office-only team member/);
+  assert.match(text(tree), /No installation training is required for your office-only role/);
+  assert.match(text(tree), /book qualified technicians if your existing account permissions allow it/);
+  assert.match(text(tree), /business owner must select your services in Team/);
+  assert.doesNotMatch(text(tree), /0 of 0 modules passed|empty list does not approve program work/);
+  assert.equal(button(tree, 'Start assessment'), undefined);
+  assert.equal(h.requests.filter(item => item.action === 'start').length, 0);
+});
+
+test('owners and sole traders are told that a personal pass also serves the business', async () => {
+  const tree = await harness().mount();
+  assert.match(text(tree), /owner or sole trader completes each module once: that pass covers the business and their own field work/);
+  assert.match(text(tree), /Each field technician passes the modules for the government program activities they carry out/);
 });
 
 test('complete curriculum permits assessment without a manual review gate and shows official sources', async () => {

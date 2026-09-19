@@ -431,3 +431,39 @@ test("training uses canonical service groups and keeps activity requirements and
   nodes(tree, node => node.type === "input" && node.props.type === "search")[0].props.onChange({ target: { value: "Heating and cooling" } }); tree = h.render();
   assert.equal(groups().length, 1); assert.match(text(groups()[0]), /Activity 6/);
 });
+
+
+test("office-only staff receive a clear booking explanation without installation modules or empty-list warnings", async () => {
+  const h = harness(async () => ({ ok: true, business, memberId: "office-a", officeOnly: true, selectedMember: { isOwner: false }, modules: [], trainingServiceStates: ["VIC"] }));
+  const tree = await h.mount();
+  assert.match(text(tree), /No installation training needed/);
+  assert.match(text(tree), /book and manage work within your access permissions/);
+  assert.match(text(tree), /technician assigned to carry out the work must have their own current training/);
+  assert.doesNotMatch(text(tree), /An empty list does not approve|0\s+of\s+0\s+activity modules passed|No activity modules are assigned/);
+  assert.equal(nodes(tree, node => node.type === 'section' && node.props['aria-label'] === 'Your activity modules').length, 0);
+  assert.equal(button(tree, 'Start assessment'), undefined);
+});
+
+test("owners reuse their own current pass while on-site staff retain their own training requirement", async () => {
+  const passedCourse = { ...course(), status: "passed", completion: { reference: "OWNER-CURRENT-PASS", expiresAt: "2027-01-01" } };
+  const owner = harness(async () => ({ ok: true, business, memberId: "owner", officeOnly: false, selectedMember: { isOwner: true }, modules: [passedCourse] }));
+  let tree = await owner.mount();
+  assert.match(text(tree), /pass counts for both the business training requirement and your own on-site work/);
+  assert.match(text(tree), /complete each current module once/);
+  assert.match(text(tree), /Any other on-site team member must earn their own pass/);
+  assert.match(text(tree), /1\s+of\s+1\s+activity modules passed/);
+  nodes(tree, node => node.type === 'select' && node.props['aria-label'] === 'Training status')[0].props.onChange({ target: { value: 'passed' } }); tree = owner.render();
+  assert.match(text(tree), /OWNER-CURRENT-PASS/); assert.equal(button(tree, 'Open learning material'), undefined);
+  const worker = harness(async () => ({ ok: true, business, memberId: "worker", officeOnly: false, selectedMember: { isOwner: false }, modules: [course()] }));
+  const workerTree = await worker.mount(); assert.ok(button(workerTree, 'Open learning material'));
+  assert.doesNotMatch(text(workerTree), /No installation training needed|Your current activity pass counts/);
+});
+
+test("team overview labels office-only members without a misleading zero-of-zero pass count", async () => {
+  const h = harness(async () => ({ ok: true, business, memberId: "owner", modules: [], team: [{ memberId: "office", displayName: "Office Scheduler", officeOnly: true, modules: [] }, { memberId: "field", displayName: "Installer", officeOnly: false, modules: [{ id: "veu-6", title: "Activity 6", status: "required" }] }] }));
+  let tree = await h.mount();
+  assert.match(text(tree), /Office Scheduler\s+·\s+Office only · no installation training required/);
+  assert.doesNotMatch(text(tree), /Office Scheduler\s+·\s+0\/0/);
+  button(tree, 'Office Scheduler').props.onClick(); tree = h.render();
+  assert.match(text(tree), /business and assigned technician must meet the activity requirements/);
+});

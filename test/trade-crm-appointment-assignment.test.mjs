@@ -944,9 +944,19 @@ for (const [name, mutate] of [
   });
 }
 
-test('appointment reactivation requires the separate booking person to complete training', async () => {
+test('office staff can reactivate an appointment for a trained technician without taking installation training', async () => {
   const { database, d1 } = programmeAppointmentFixture();
-  database.exec("INSERT INTO trade_team_members VALUES ('member-c','owner-1','actor-3','Booking staff','[\"hot-water\"]','active')");
+  database.exec("INSERT INTO trade_team_members VALUES ('member-c','owner-1','actor-3','Booking staff','[]','active')");
+  const response = await crmRoute(d1, access({ memberId: 'member-c', actorUid: 'actor-3', jobScope: 'team' }))
+    .PATCH(appointmentStatusRequest('scheduled'));
+  assert.equal(response.status, 200);
+  assert.equal(appointmentStatusState(database).status, 'scheduled');
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_training_completions WHERE member_id='member-c'").get().count, 0);
+});
+test('office staff cannot reactivate an appointment when the assigned technician lacks a current pass', async () => {
+  const { database, d1 } = programmeAppointmentFixture();
+  database.exec("INSERT INTO trade_team_members VALUES ('member-c','owner-1','actor-3','Booking staff','[]','active')");
+  database.exec("UPDATE trade_training_completions SET revoked_at='2026-09-19' WHERE module_id='veu-3' AND member_id='member-b'");
   const response = await crmRoute(d1, access({ memberId: 'member-c', actorUid: 'actor-3', jobScope: 'team' }))
     .PATCH(appointmentStatusRequest('scheduled'));
   assert.equal(response.status, 403);

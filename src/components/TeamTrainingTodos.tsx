@@ -7,7 +7,7 @@ import styles from "./TeamTrainingTodos.module.css";
 
 type Module = { id: string; title: string; programCode: string; activityTemplateIds: string[]; serviceCategory: string; businessServiceEnabled: boolean;
   status: string; availability: string; assessmentAvailable: boolean; assessmentUnavailableReason: string; completion: null | { reference: string; expiresAt: string } };
-type Result = { ok: boolean; error?: string; memberId: string; canTakeTraining: boolean;
+type Result = { ok: boolean; error?: string; memberId: string; canTakeTraining: boolean; officeOnly?: boolean;
   selectedMember: { memberId: string; displayName: string; isOwner: boolean; isSelf: boolean };
   modules: Module[]; unavailableActivities: { id: string; title: string; programCode: string; message: string }[] };
 type Props = { user: User; memberId: string; displayName: string; hasOfficeLogin: boolean; active: boolean; unsavedServices: boolean; saving: boolean;
@@ -56,14 +56,16 @@ export function TeamTrainingTodos({ user, memberId, displayName, hasOfficeLogin,
   const passed = modules.filter(module => module.status === "passed").length;
   const serviceLabel = (id: string) => ENERGY_SERVICE_CATALOGUE.find(service => service.id === id)?.label || id;
   return <section className={styles.panel} aria-label={`Training to-dos for ${displayName}`}>
-    <header className={styles.header}><div><h4>Training to-dos</h4><p>{displayName}&apos;s saved services determine this list.</p></div>{active && <button type="button" className={styles.button} disabled={loading || saving} onClick={() => { setLoading(true); setError(""); setRefresh(value => value + 1); }}>Refresh training</button>}</header>
+    <header className={styles.header}><div><h4>Training to-dos</h4><p>{displayName}&apos;s saved on-site services determine this list.</p></div>{active && <button type="button" className={styles.button} disabled={loading || saving} onClick={() => { setLoading(true); setError(""); setRefresh(value => value + 1); }}>Refresh training</button>}</header>
     {unsavedServices && <div className={styles.notice} role="status"><p>Service changes are not saved. The to-dos below still reflect the saved services.</p><button type="button" className={styles.button} disabled={saving} onClick={onSave}>Save services and update to-dos</button></div>}
     {!active ? <p className={styles.notice}>This member is inactive. Reactivate access before they can complete training or take program work.</p> : <>
-      {!hasOfficeLogin && <p className={styles.note}>Office login is not linked. Use the app PIN setup above if this person has not signed in to the app.</p>}
-      <p className={styles.note}>Each person completes their own modules in Training on the app or To do &amp; training in TLink. A manager cannot complete another person&apos;s assessment.</p>
+      {!data?.officeOnly && !hasOfficeLogin && <p className={styles.note}>Office login is not linked. Use the app PIN setup above if this person has not signed in to the app.</p>}
+      {!data?.officeOnly && <p className={styles.note}>Each person carrying out on-site work completes their own modules in Training on the app or To do &amp; training in TLink. A manager cannot complete another person&apos;s assessment.</p>}
       {loading && <p role="status" className={styles.note}>Loading saved training to-dos...</p>}
       {error && <p role="alert" className={styles.error}>{error}</p>}
-      {data && !loading && !error && <>
+      {data && !loading && !error && data.officeOnly && <div className={styles.notice}><strong>Office only: no installation training needed</strong><p>No on-site services are selected. This person can book and manage eligible work within their access permissions. The business and the technician assigned to carry out the work must meet the activity requirements.</p><p>Select and save on-site services if this person will also carry out that work. Their required modules will then appear here.</p></div>}
+      {data && !loading && !error && !data.officeOnly && <>
+        {data.selectedMember.isOwner && <p className={styles.notice}>The owner&apos;s current activity pass counts for both the business training requirement and their own on-site work. Each current module is completed once, including when the owner works alone. Other on-site team members must earn their own passes.</p>}
         <p className={styles.summary}><strong>{passed} of {modules.length} modules passed</strong><span>100% required. Unlimited immediate retakes.</span></p>
         {data.canTakeTraining && data.selectedMember.isSelf && (onOpenOwnTraining
           ? <button type="button" className={styles.button} disabled={saving} onClick={onOpenOwnTraining}>Open my training</button>

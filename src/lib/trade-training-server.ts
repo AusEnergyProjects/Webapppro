@@ -36,7 +36,8 @@ export async function getMemberTrainingScope(db: D1Database, ownerUid: string, m
   }).map(activity => ({ ...activity, businessServiceEnabled: businessCapabilities.includes(activity.serviceCategory) }));
   const assignments = await listTrainingAssignments(db);
   const assignedModuleIds = assignments.filter(({ assignment }) => capabilities.includes(assignment.serviceCategory) && assignment.jurisdictions.some(state => state === 'AU' || serviceStates.includes(state))).map(item => item.moduleId);
-  return { memberId, displayName: row.display_name, isOwner: row.member_uid === ownerUid, capabilities, businessCapabilities, serviceStates, activities, assignedModuleIds };
+  const isOwner = row.member_uid === ownerUid;
+  return { memberId, displayName: row.display_name, isOwner, officeOnly: !isOwner && capabilities.length === 0, capabilities, businessCapabilities, serviceStates, activities, assignedModuleIds };
 }
 export async function getDeclaredTrainingActivities(db: D1Database, ownerUid: string, memberId: string) {
   return (await getMemberTrainingScope(db, ownerUid, memberId))?.activities || [];
@@ -134,10 +135,11 @@ export async function certificateActivityEligibilityPredicate(input: Certificate
           AND (additional.jurisdiction='AU' OR additional.jurisdiction=requested.jurisdiction OR (requested.jurisdiction='AU'
             AND EXISTS(SELECT 1 FROM trade_training_served_jurisdictions served JOIN training_input ON served.owner_uid=training_input.owner_uid WHERE served.state=additional.jurisdiction))))),
     required_person(member_id) AS (
-      SELECT actor_member_id FROM training_input UNION SELECT assigned_member_id FROM training_input
+      SELECT assigned_member_id FROM training_input
       UNION SELECT owner_member.id FROM trade_team_members owner_member JOIN training_input ON owner_member.owner_uid=training_input.owner_uid WHERE owner_member.member_uid=training_input.owner_uid AND owner_member.status='active'
     )
     SELECT 1 FROM training_input WHERE ${businessApprovalSql('training_input.owner_uid')}
+      AND EXISTS(SELECT 1 FROM trade_team_members booking_actor WHERE booking_actor.owner_uid=training_input.owner_uid AND booking_actor.id=training_input.actor_member_id AND booking_actor.status='active')
       AND EXISTS(SELECT 1 FROM trade_team_members owner_member WHERE owner_member.owner_uid=training_input.owner_uid AND owner_member.member_uid=training_input.owner_uid AND owner_member.status='active')
       AND NOT EXISTS(SELECT 1 FROM required_course WHERE
         required_course.source_complete=0 OR NOT EXISTS(SELECT 1 FROM trade_accounts scoped_account WHERE scoped_account.firebase_uid=training_input.owner_uid
@@ -175,7 +177,7 @@ export async function getCertificateActivityEligibility(db: D1Database, input: C
     const assessment = assessmentAvailability(course, review);
     if (!assessment.assessmentAvailable) reasons.push({ code: 'TRAINING_CONTENT_UNAVAILABLE', message: assessment.assessmentUnavailableReason, activityTemplateId });
     const predicate = await certificateActivityEligibilityPredicate({ ...input, activityTemplateIds: [activityTemplateId] });
-    if (!await db.prepare(`SELECT 1 AS eligible WHERE ${predicate.sql}`).bind(...predicate.bindings).first()) reasons.push({ code: 'ACTIVITY_TRAINING_REQUIRED', message: `The business owner, booking person and assigned installer each require a current ${course.title} completion within their declared service scope. The assigned installer also needs any required reviewed external credentials.`, activityTemplateId });
+    if (!await db.prepare(`SELECT 1 AS eligible WHERE ${predicate.sql}`).bind(...predicate.bindings).first()) reasons.push({ code: 'ACTIVITY_TRAINING_REQUIRED', message: `The business owner and assigned installer need a current ${course.title} pass for this service. One pass covers both when the owner does the work. Office staff can book without taking the course. The assigned installer also needs any required external credentials.`, activityTemplateId });
   }
   return { eligible: reasons.length === 0, reasons };
 }

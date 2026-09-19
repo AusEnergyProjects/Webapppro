@@ -290,6 +290,40 @@ test('staff bookings still require the owner and current jurisdiction, capabilit
   assert.equal((await training.certificateActivityEligibilityPredicate({...booking,activityTemplateIds:['act-eeis-2-2']})).sql,'0=1');
 });
 
+test('an office booker needs no course pass when the owner and assigned technician have passed', async () => {
+  const f = fixture(); await approveBusiness(f); await activate(f); await pass(f); await pass(f, 'installer-member');
+  f.sql.exec("INSERT INTO trade_team_members VALUES ('office-member','owner','active','Office colleague','office-user','[]')");
+  const input = { ...booking, actorMemberId: 'office-member' };
+  assert.equal((await training.getCertificateActivityEligibility(f.db, input)).eligible, true);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) count FROM trade_training_completions WHERE member_id='office-member'").get().count, 0);
+  await (await training.certificateActivityEligibilityGuardStatement(f.db, input)).run();
+  f.sql.exec("UPDATE trade_training_completions SET revoked_at='2026-09-19' WHERE member_id='installer-member'");
+  assert.equal((await training.getCertificateActivityEligibility(f.db, input)).eligible, false, 'the office exemption cannot qualify the assigned technician');
+});
+
+test('office booking retains active same-business actor checks at the atomic write', async () => {
+  const f = fixture(); await approveBusiness(f); await activate(f); await pass(f); await pass(f, 'installer-member');
+  f.sql.exec("INSERT INTO trade_team_members VALUES ('office-member','owner','active','Office colleague','office-user','[]'),('foreign-member','another-owner','active','Other office','other-user','[]')");
+  const input = { ...booking, actorMemberId: 'office-member' };
+  const guard = await training.certificateActivityEligibilityGuardStatement(f.db, input);
+  f.sql.exec("UPDATE trade_team_members SET status='inactive' WHERE id='office-member'");
+  await assert.rejects(guard.run(), /CHECK constraint failed/i);
+  for (const actorMemberId of ['office-member', 'foreign-member', 'missing-member']) {
+    assert.equal((await training.getCertificateActivityEligibility(f.db, { ...input, actorMemberId })).eligible, false);
+  }
+});
+
+test('a sole trader reuses one personal pass for the business and their own onsite work', async () => {
+  const f = fixture(); await approveBusiness(f); await activate(f);
+  f.sql.exec("DELETE FROM trade_team_members WHERE id='installer-member'");
+  const input = { ...booking, assignedMemberId: 'owner-member' };
+  assert.equal((await training.getCertificateActivityEligibility(f.db, input)).eligible, false);
+  await pass(f);
+  assert.equal((await training.getCertificateActivityEligibility(f.db, input)).eligible, true);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_training_completions').get().count, 1);
+  await (await training.certificateActivityEligibilityGuardStatement(f.db, input)).run();
+});
+
 test('twenty-activity atomic guard uses a bounded relation with three identity parameters', async () => {
   const { GOVERNMENT_ACTIVITY_TEMPLATES, GOVERNMENT_PROGRAM_TEMPLATES }=load('src/lib/australian-government-program-catalogue.ts');
   const ids=GOVERNMENT_ACTIVITY_TEMPLATES.filter(activity=>!['closed','future'].includes(activity.catalogueState) && !['closed','future'].includes(GOVERNMENT_PROGRAM_TEMPLATES.find(program=>program.programCode===activity.programCode).catalogueState) && TRAINING_MODULES.some(course=>course.activityTemplateIds.includes(activity.templateId) && course.sourceCoverage.status!=='partial')).slice(0,20).map(activity=>activity.templateId);
@@ -386,6 +420,23 @@ test('owner and authorised manager can view an active roster member without taki
     assert.ok(body.modules.some(module => module.id === 'sres-ashp'));
     assert.ok(body.modules.every(module => module.serviceCategory === 'hot-water' && module.businessServiceEnabled));
   }
+});
+
+test('training API identifies office-only members from personal services and keeps the owner requirement', async () => {
+  const f = fixture();
+  f.sql.exec("INSERT INTO trade_team_members VALUES ('office-member','owner','active','Office colleague','office-user','[]')");
+  const officeRoute = trainingRoute(f, { memberId: 'office-member', actorUid: 'office-user', isOwner: false, canManageTeam: false });
+  const office = await (await officeRoute.GET(new Request('https://example.test/api/trade-training'))).json();
+  assert.equal(office.officeOnly, true); assert.equal(office.selectedMember.officeOnly, true);
+  assert.deepEqual(office.modules, []); assert.deepEqual(office.unavailableActivities, []);
+  const owner = await (await trainingRoute(f).GET(new Request('https://example.test/api/trade-training'))).json();
+  assert.equal(owner.officeOnly, false); assert.equal(owner.selectedMember.officeOnly, false);
+  assert.ok(owner.modules.some(module => module.id === 'veu-6'));
+  assert.equal(owner.team.find(member => member.memberId === 'office-member').officeOnly, true);
+  assert.equal(owner.team.find(member => member.memberId === 'installer-member').officeOnly, false);
+  f.sql.exec('UPDATE trade_team_members SET capabilities=\'["heating-cooling"]\' WHERE id=\'office-member\'');
+  const field = await (await officeRoute.GET(new Request('https://example.test/api/trade-training'))).json();
+  assert.equal(field.officeOnly, false); assert.ok(field.modules.some(module => module.id === 'veu-6'));
 });
 
 test('member projection rejects unauthorised, inactive and cross-business targets without data disclosure', async () => {

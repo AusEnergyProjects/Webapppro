@@ -13,6 +13,7 @@ export type TrainingOverview = {
   ok: boolean;
   business: { approved: boolean; status: string; blockedReasons: string[] };
   memberId: string;
+  officeOnly?: boolean;
   trainingServiceStates?: string[];
   modules: TrainingModule[];
   unavailableActivities: { id: string; title: string; programCode: string; serviceCategory: string; message: string }[];

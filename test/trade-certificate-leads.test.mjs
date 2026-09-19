@@ -25,6 +25,20 @@ test('full catalogue lead predicate executes and requires every applicable progr
     assert.equal(f.eligible(), false, 'other passed heating courses cannot replace activity 6');
   } finally { f.sql.close(); }
 });
+test('office-only staff do not block leads but selecting onsite services requires their own current passes', () => {
+  const f = fixture();
+  try {
+    f.sql.exec("INSERT INTO trade_team_members(id,owner_uid,member_uid,status,capabilities) VALUES ('office','owner','office-user','active','[]')");
+    assert.equal(f.eligible(), true, 'an office-only member has no installation training requirement');
+    f.sql.exec("UPDATE trade_team_members SET capabilities='[\"heating-cooling\"]' WHERE id='office'");
+    assert.equal(f.eligible(), false, 'declaring onsite heating work requires that person to qualify');
+    f.sql.exec("UPDATE trade_team_members SET capabilities='[]' WHERE id='office'");
+    assert.equal(f.eligible(), true, 'returning to office-only work removes the installation requirement');
+    f.sql.exec("DELETE FROM trade_training_completions WHERE member_id='worker' AND module_id='veu-6'");
+    assert.equal(f.eligible(), false, 'office-only status cannot bypass an actual technician training requirement');
+  } finally { f.sql.close(); }
+});
+
 test('business approval, owner completion and current declared capability remain mandatory', () => {
   const f = fixture();
   try {
