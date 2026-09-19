@@ -55,6 +55,7 @@
 .sourceLink { color: var(--portal-green-dark, #087a70); overflow-wrap: anywhere; }
 .saveBar { display: grid; gap: 13px; border-top: 1px solid var(--editor-line); padding-top: 18px; }
 .recordButton { width: 100%; text-align: left; display: grid; gap: 6px; }
+.assignment { display: grid; gap: 7px; padding: 15px; background: var(--editor-soft); border-left: 3px solid #087f78; border-radius: 0 9px 9px 0; }
 @media (max-width: 760px) {
   .questionLayout { grid-template-columns: 1fr; }
   .questionList { grid-template-columns: repeat(auto-fill, minmax(45px, 1fr)); max-height: 150px; }

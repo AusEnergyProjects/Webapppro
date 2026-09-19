@@ -730,6 +730,40 @@ test('the check API binds the authenticated person and saves only their exact qu
   assert.equal(foreign.status, 403);
 });
 
+test('a wrong answer late in VEU 15 returns feedback, keeps earlier progress and allows correction in the same attempt', async () => {
+  const f = fixture(); const route = trainingRoute(f);
+  f.sql.prepare('UPDATE trade_accounts SET capabilities=?').run('["draught-proofing"]');
+  const course = TRAINING_MODULES.find(course => course.id === 'veu-15');
+  const post = body => route.POST(new Request('https://example.test/api/trade-training', { method: 'POST', body: JSON.stringify(body) }));
+  const start = await post({ action: 'start', moduleId: course.id });
+  assert.equal(start.status, 200);
+  const attempt = (await start.json()).attempt; const answers = answerTokens(attempt, course);
+  for (const question of attempt.questions.slice(0, 21)) {
+    const response = await post({ action: 'check', attemptId: attempt.id, questionId: question.id, answer: answers[question.id] });
+    assert.equal(response.status, 200); assert.equal((await response.json()).feedback.correct, true);
+  }
+  const question = attempt.questions[21]; const next = attempt.questions[22];
+  const wrong = question.options.find(option => option.id !== answers[question.id]).id;
+  const input = { action: 'check', attemptId: attempt.id, questionId: question.id, answer: wrong };
+  const response = await post(input); assert.equal(response.status, 200);
+  const feedback = (await response.json()).feedback;
+  assert.equal(feedback.correct, false); assert.ok(feedback.explanation); assert.ok(feedback.correctAnswer);
+  assert.deepEqual((await (await post(input)).json()).feedback, feedback, 'retrying a lost wrong-answer response gives the same feedback');
+  const blocked = await post({ action: 'check', attemptId: attempt.id, questionId: next.id, answer: answers[next.id] });
+  assert.equal(blocked.status, 409); assert.equal((await blocked.json()).code, 'PREVIOUS_QUESTION_REQUIRED');
+  const resumed = (await (await post({ action: 'start', moduleId: course.id })).json()).attempt;
+  assert.equal(resumed.id, attempt.id); assert.equal(Object.keys(resumed.answers).length, 22);
+  assert.equal(resumed.feedback[question.id].correct, false);
+  const corrected = await post({ ...input, answer: answers[question.id] });
+  assert.equal((await corrected.json()).feedback.correct, true);
+  for (const remaining of attempt.questions.slice(22)) await post({ action: 'check', attemptId: attempt.id, questionId: remaining.id, answer: answers[remaining.id] });
+  const submitted = await post({ action: 'submit', attemptId: attempt.id, answers });
+  assert.equal(submitted.status, 200);
+  const result = (await submitted.json()).result;
+  assert.equal(result.passed, true); assert.equal(result.scorePercent, 100); assert.equal(result.firstTryScorePercent, 96);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_attempts').get().n, 1);
+});
+
 test('saved answers belong to the learner and team status never discloses another persons completed form', async () => {
   const f = fixture(); await pass(f); await pass(f, 'installer-member');
   const rows = f.sql.prepare('SELECT id,member_id FROM trade_training_submissions ORDER BY member_id').all();

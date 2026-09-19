@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
+import { ENERGY_SERVICE_CATALOGUE } from "../src/lib/energy-service-catalogue.mjs";
 
 const source = fs.readFileSync(new URL("../src/components/TradeTrainingWorkspace.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -10,7 +11,7 @@ const reviewSource = fs.readFileSync(new URL("../src/components/CreditexOnboardi
 const reviewCompiled = ts.transpileModule(reviewSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
 const user = { uid: "learner-a", getIdToken: async () => "test-token" };
 const business = { status: "approved", revision: 1, insuranceExpiresOn: "2027-01-01", approved: true, blockedReasons: [] };
-const course = (availability = "active") => ({ id: "veu-6", version: "reviewed-v1", title: "Activity 6 heating and cooling", activityTemplateIds: ["veu-6"], estimatedMinutes: 25,
+const course = (availability = "active") => ({ id: "veu-6", version: "reviewed-v1", title: "Activity 6 heating and cooling", serviceCategory: "heating-cooling", activityTemplateIds: ["veu-6"], estimatedMinutes: 25,
   passPercent: 100, validityDays: 365, assessmentAvailable: true, assessmentUnavailableReason: "", availability, status: "required", completion: null,
   lessons: [{ title: "Consumer protection", body: "Check the activity 6 requirements.", sourceIds: ["esc"] }, { title: "Commissioning", body: "Retain actual commissioning evidence.", sourceIds: ["esc"] }],
   sources: [{ id: "esc", title: "Official Activity 6 guidance", url: "https://www.esc.vic.gov.au/activity-6" }] });
@@ -36,7 +37,7 @@ function harness(responder, component = "TradeTrainingWorkspace", props = {}, ru
   };
   const exports = {};
   const fetch = async (url, init = {}) => { requests.push({ url, ...init }); const result = await responder(url, init); return result.response || { ok: result.ok !== false, headers: new Headers({ "content-type": "application/json" }), json: async () => result }; };
-  const require = (id) => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : (() => { throw new Error(`Unexpected client runtime import: ${id}`); })();
+  const require = (id) => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "@/lib/energy-service-catalogue.mjs" ? { ENERGY_SERVICE_CATALOGUE } : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : (() => { throw new Error(`Unexpected client runtime import: ${id}`); })();
   Function("require", "exports", "fetch", "setTimeout", "clearTimeout", component === "CreditexOnboardingReviewWorkspace" ? reviewCompiled : compiled)(require, exports, fetch, runtime.setTimeout || setTimeout, runtime.clearTimeout || clearTimeout);
   const render = () => { cursor = 0; const tree = exports[component]({ user, api: responder, canReview: true, ...props }); initial = false; return tree; };
   return { requests, render, async mount() { render(); for (const effect of effects) effect(); await flush(); return render(); } };
@@ -124,7 +125,7 @@ test("large programme catalogues page activity cards and filter by exact program
   const openButtons = () => nodes(tree, (node) => node.type === "button" && text(node) === "Open learning material");
   assert.equal(openButtons().length, 12);
   button(tree, "Show 12 more").props.onClick(); tree = h.render(); assert.equal(openButtons().length, 24);
-  nodes(tree, (node) => node.type === "select")[0].props.onChange({ target: { value: "ACT SHS" } }); tree = h.render();
+  nodes(tree, (node) => node.type === "select" && node.props["aria-label"] === "Program")[0].props.onChange({ target: { value: "ACT SHS" } }); tree = h.render();
   assert.equal(openButtons().length, 12); assert.match(text(tree), /15\s+matching activities/);
   nodes(tree, (node) => node.type === "input" && node.props.type === "search")[0].props.onChange({ target: { value: "module 22" } }); tree = h.render();
   assert.equal(openButtons().length, 1); assert.ok(text(tree).includes("Specific module 22"));
@@ -410,4 +411,23 @@ test("a non-JSON response releases answer checking and keeps the selected answer
   assert.equal(nodes(tree, node => node.type === 'input' && node.props.value === 'before')[0].props.checked, true);
   button(tree, 'Check selected answer').props.onClick(); await flush(); tree = h.render();
   assert.equal(button(tree, 'Next question').props.disabled, false); assert.equal(checks, 2);
+});
+
+
+test("training uses canonical service groups and keeps activity requirements and completion counts distinct", async () => {
+  const modules = [course(), { ...course(), id: "veu-48", title: "Activity 48 ceiling insulation", serviceCategory: "insulation", activityTemplateIds: ["veu-48"] },
+    { ...course(), id: "veu-6-done", title: "Previous heating activity", status: "passed" }];
+  const h = harness(async () => ({ ok: true, business, memberId: "member-a", trainingServiceStates: ["VIC"], modules }));
+  let tree = await h.mount();
+  const groups = () => nodes(tree, node => node.type === "details" && node.props.className === "serviceGroup");
+  assert.equal(groups().length, 2);
+  assert.match(text(groups()[0]), /Heating and cooling/); assert.match(text(groups()[0]), /1\s+of\s+2\s+modules passed/);
+  assert.match(text(groups()[0]), /Required for\s+Heating and cooling\s+jobs using this activity under\s+VEU/);
+  assert.match(text(groups()[1]), /Insulation/); assert.doesNotMatch(text(groups()[1]), /Activity 6 heating/);
+  assert.match(text(tree), /Training for\s+VIC/); assert.doesNotMatch(text(tree), /NSW ESS/);
+  nodes(tree, node => node.type === "select" && node.props["aria-label"] === "Service category")[0].props.onChange({ target: { value: "insulation" } }); tree = h.render();
+  assert.equal(groups().length, 1); assert.equal(groups()[0].props.open, true); assert.match(text(groups()[0]), /Activity 48/);
+  nodes(tree, node => node.type === "select" && node.props["aria-label"] === "Service category")[0].props.onChange({ target: { value: "" } }); tree = h.render();
+  nodes(tree, node => node.type === "input" && node.props.type === "search")[0].props.onChange({ target: { value: "Heating and cooling" } }); tree = h.render();
+  assert.equal(groups().length, 1); assert.match(text(groups()[0]), /Activity 6/);
 });

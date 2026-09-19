@@ -289,6 +289,65 @@ test("runtime installer creates and verifies every TLink integrity guard", async
   assert.equal(TLINK_SCHEMA_GUARD_DEFINITIONS.length, 13);
 });
 
+test("TLink guard verification survives another request's stalled and then cancelled I/O", async () => {
+  const database = schemaDatabase();
+  const base = testD1(database);
+  const parked = Promise.withResolvers();
+  let reads = 0;
+  const d1 = {
+    ...base,
+    prepare(sql) {
+      const statement = base.prepare(sql);
+      return {
+        ...statement,
+        async all() {
+          reads += 1;
+          if (reads === 1) await parked.promise;
+          return statement.all();
+        },
+        run: () => statement.run(),
+      };
+    },
+  };
+  const interrupted = ensureTlinkSchemaGuards(d1).catch((error) => error);
+  let timer;
+  try {
+    await Promise.race([
+      ensureTlinkSchemaGuards(d1),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('The new request inherited stalled I/O')), 1000); }),
+    ]);
+    const completedReads = reads;
+    parked.reject(new Error('Original request disconnected'));
+    assert.match((await interrupted).message, /Original request disconnected/);
+    await ensureTlinkSchemaGuards(d1);
+    assert.equal(reads, completedReads);
+    assert.equal(database.prepare("SELECT COUNT(*) AS total FROM sqlite_schema WHERE type = 'trigger'").get().total, TLINK_SCHEMA_GUARD_DEFINITIONS.length);
+  } finally {
+    clearTimeout(timer);
+    parked.reject(new Error('Fixture cleanup'));
+    await interrupted;
+    database.close();
+  }
+});
+
+test("TLink retries a failed schema verification without caching the failure", async () => {
+  const database = schemaDatabase();
+  const base = testD1(database);
+  let fail = true;
+  const d1 = {
+    ...base,
+    prepare(sql) {
+      if (fail) { fail = false; throw new Error('D1 unavailable'); }
+      return base.prepare(sql);
+    },
+  };
+  try {
+    await assert.rejects(ensureTlinkSchemaGuards(d1), /D1 unavailable/);
+    await ensureTlinkSchemaGuards(d1);
+    assert.equal(database.prepare("SELECT COUNT(*) AS total FROM sqlite_schema WHERE type = 'trigger'").get().total, TLINK_SCHEMA_GUARD_DEFINITIONS.length);
+  } finally { database.close(); }
+});
+
 test("runtime installer accepts equivalent persisted SQLite trigger formatting", () => {
   const compact = "CREATE TRIGGER example BEFORE UPDATE ON records BEGIN SELECT CASE WHEN (NEW.value = 'keep  two  spaces') THEN RAISE(ABORT, 'no change') END; END;";
   const formatted = `CREATE TRIGGER IF NOT EXISTS example BEFORE UPDATE ON records

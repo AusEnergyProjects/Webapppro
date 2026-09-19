@@ -4,12 +4,77 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import {
   CREDITEX_CALCULATOR_AUTHORING_SCHEMA_GUARD_DEFINITIONS,
+  CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS,
   CREDITEX_SCHEMA_GUARD_DEFINITIONS,
   canonicalCreditexSchemaGuardSql,
+  ensureCreditexSchemaGuards,
+  ensureCreditexPilotSchemaGuards,
+  ensureCreditexOfficialSourceCustodySchemaGuards,
 } from "../src/lib/creditex-schema-guards.ts";
 
 const HASH = "a".repeat(64);
 const NOW = "2026-08-01T00:00:00.000Z";
+
+// The SQL guard contracts are exercised below. This fixture isolates request
+// lifetime behaviour while presenting an already installed, valid schema.
+function installedSchemaD1(firstRead) {
+  let reads = 0;
+  const guards = [...CREDITEX_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS];
+  return {
+    get reads() { return reads; },
+    prepare(sql) {
+      return {
+        async all() {
+          reads += 1;
+          if (reads === 1) await firstRead();
+          if (sql.includes("type = 'trigger'")) return { results: guards };
+          if (sql.includes("type = 'table'")) return { results: [...sql.matchAll(/'([^']+)'/g)].map((match) => ({ name: match[1] })) };
+          if (sql === "PRAGMA table_xinfo(`compliance_cases`)") return { results: ['commercial_handoff_id', 'accepted_quote_version_id', 'accepted_scope_sha256', 'compliance_intent_id'].map((name) => ({ name })) };
+          if (sql === "PRAGMA table_xinfo(`trade_work_order_compliance_intents`)") return { results: [{ name: 'intent_key' }] };
+          throw new Error(`Unexpected schema read: ${sql}`);
+        },
+      };
+    },
+    async batch() { throw new Error('The complete schema must not need an installation'); },
+  };
+}
+
+for (const [label, ensure] of [
+  ['Creditex', ensureCreditexSchemaGuards],
+  ['Creditex pilot', ensureCreditexPilotSchemaGuards],
+  ['Creditex source custody', ensureCreditexOfficialSourceCustodySchemaGuards],
+]) {
+  test(`${label} guard verification cannot inherit another request's stalled I/O`, async () => {
+    const parked = Promise.withResolvers();
+    const database = installedSchemaD1(() => parked.promise);
+    const interrupted = ensure(database).catch((error) => error);
+    let timer;
+    try {
+      await Promise.race([
+        ensure(database),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('The new request inherited stalled I/O')), 1000); }),
+      ]);
+      const completedReads = database.reads;
+      parked.reject(new Error('Original request disconnected'));
+      assert.match((await interrupted).message, /Original request disconnected/);
+      await ensure(database);
+      assert.equal(database.reads, completedReads, 'A completed check stays cached even if an earlier request fails');
+    } finally {
+      clearTimeout(timer);
+      parked.reject(new Error('Fixture cleanup'));
+      await interrupted;
+    }
+  });
+
+  test(`${label} guard verification retries failures and caches only success`, async () => {
+    const database = installedSchemaD1(() => { throw new Error('D1 unavailable'); });
+    await assert.rejects(ensure(database), /D1 unavailable/);
+    await ensure(database);
+    const completedReads = database.reads;
+    await ensure(database);
+    assert.equal(database.reads, completedReads);
+  });
+}
 const MANUAL_FIELD_SCHEMA_GUARD_NAMES = [
   "compliance_manual_field_acceptance_insert_guard",
   "compliance_manual_field_acceptance_review_guard",

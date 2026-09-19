@@ -22,7 +22,9 @@ export const TLINK_SCHEMA_GUARD_DEFINITIONS: readonly TlinkSchemaGuardDefinition
   { name: "trade_activity_customer_document_delivery_event_no_delete", sql: "CREATE TRIGGER IF NOT EXISTS `trade_activity_customer_document_delivery_event_no_delete` BEFORE DELETE ON `trade_activity_customer_document_delivery_events` FOR EACH ROW BEGIN SELECT RAISE(ABORT, 'Customer document delivery event history must be retained.'); END;" },
 ].map((definition) => JOB_DELETION_SCHEMA_GUARDS.find((replacement) => replacement.name === definition.name) || definition);
 
-const readinessByDatabase = new WeakMap<object, Promise<void>>();
+// Pending D1 I/O belongs to its request. Only a completed verification is safe
+// to reuse after that request ends or disconnects in Workers.
+const readinessByDatabase = new WeakSet<object>();
 
 const REQUIRED_COLUMNS = {
   trade_team_members: [
@@ -173,15 +175,7 @@ async function installTlinkSchemaGuards(database: D1Database) {
 
 export async function ensureTlinkSchemaGuards(database: D1Database) {
   const key = database as object;
-  let readiness = readinessByDatabase.get(key);
-  if (!readiness) {
-    readiness = installTlinkSchemaGuards(database);
-    readinessByDatabase.set(key, readiness);
-  }
-  try {
-    await readiness;
-  } catch (error) {
-    readinessByDatabase.delete(key);
-    throw error;
-  }
+  if (readinessByDatabase.has(key)) return;
+  await installTlinkSchemaGuards(database);
+  readinessByDatabase.add(key);
 }

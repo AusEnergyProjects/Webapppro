@@ -12,8 +12,8 @@ function nodes(node, predicate) { return !node || typeof node !== 'object' ? [] 
 const button = (tree, name) => nodes(tree, node => node.type === 'button' && text(node) === name)[0];
 const field = (tree, name) => { const caption = node => [node.props.children].flat().filter(child => typeof child === 'string' || typeof child === 'number').join('').trim(); const label = nodes(tree, node => node.type === 'label' && (caption(node) === name || caption(node).startsWith(name + ' ')))[0]; assert.ok(label, `Missing field ${name}`); return nodes(label, node => ['input', 'textarea', 'select'].includes(node.type))[0]; };
 const flush = () => new Promise(resolve => setImmediate(resolve));
-const original = () => ({ module: { id: 'veu-6', title: 'Activity 6 heating and cooling', programCode: 'VEU', version: 'original-v1', activityTemplateIds: ['veu-6'], estimatedMinutes: 25, passPercent: 100, validityDays: 365, retakeCooldownMinutes: 0, reviewStatus: 'published', scope: 'Check the actual installation.', sourceCoverage: { status: 'source_transcribed', gaps: [] }, lessons: [{ title: 'Keep job evidence', body: 'Keep photos of the actual installation.', sourceIds: ['esc'] }], sources: [{ id: 'esc', title: 'ESC installation guidance', url: 'https://www.esc.vic.gov.au/installers' }], questions: [{ id: 'q1', prompt: 'Which photo should you keep?', options: [{ id: 'a', text: 'A photo of this installation' }, { id: 'b', text: 'A supplier photo' }], correctOptionId: 'a', explanation: 'The photo must show the actual work.', sourceIds: ['esc'], critical: true }] }, assignment: { kind: 'catalogue', serviceCategory: 'heating_cooling', jurisdictions: ['VIC'], activityLabel: 'Activity 6' }, revision: 0, publishedVersion: 'original-v1', publishedAt: '', updatedAt: '', hasDraft: false });
-function catalogue(questionnaire = original()) { return { modules: [{ id: questionnaire.module.id, title: questionnaire.module.title, programCode: 'VEU', questionCount: questionnaire.module.questions.length, revision: questionnaire.revision, publishedVersion: questionnaire.publishedVersion, hasDraft: questionnaire.hasDraft, assignment: questionnaire.assignment }], programs: [{ programCode: 'VEU', name: 'Victorian Energy Upgrades', jurisdiction: 'VIC' }, { programCode: 'SRES', name: 'Small-scale Renewable Energy Scheme', jurisdiction: 'AU' }], services: [{ id: 'heating_cooling', label: 'Heating and cooling' }, { id: 'insulation', label: 'Insulation' }] }; }
+const original = () => ({ module: { id: 'veu-6', title: 'Activity 6 heating and cooling', programCode: 'VEU', version: 'original-v1', activityTemplateIds: ['veu-6'], estimatedMinutes: 25, passPercent: 100, validityDays: 365, retakeCooldownMinutes: 0, reviewStatus: 'published', scope: 'Check the actual installation.', sourceCoverage: { status: 'source_transcribed', gaps: [] }, lessons: [{ title: 'Keep job evidence', body: 'Keep photos of the actual installation.', sourceIds: ['esc'] }], sources: [{ id: 'esc', title: 'ESC installation guidance', url: 'https://www.esc.vic.gov.au/installers' }], questions: [{ id: 'q1', prompt: 'Which photo should you keep?', options: [{ id: 'a', text: 'A photo of this installation' }, { id: 'b', text: 'A supplier photo' }], correctOptionId: 'a', explanation: 'The photo must show the actual work.', sourceIds: ['esc'], critical: true }] }, assignment: { kind: 'catalogue', serviceCategory: 'heating-cooling', jurisdictions: ['VIC'], activityLabel: 'Activity 6' }, revision: 0, publishedVersion: 'original-v1', publishedAt: '', updatedAt: '', hasDraft: false });
+function catalogue(questionnaire = original()) { return { modules: [{ id: questionnaire.module.id, title: questionnaire.module.title, programCode: 'VEU', questionCount: questionnaire.module.questions.length, revision: questionnaire.revision, publishedVersion: questionnaire.publishedVersion, hasDraft: questionnaire.hasDraft, assignment: questionnaire.assignment }], programs: [{ programCode: 'VEU', name: 'Victorian Energy Upgrades', jurisdiction: 'VIC' }, { programCode: 'SRES', name: 'Small-scale Renewable Energy Scheme', jurisdiction: 'AU' }], services: [{ id: 'heating-cooling', label: 'Heating and cooling' }, { id: 'insulation', label: 'Insulation' }] }; }
 function responder() { let saved = original(); const versions = []; return async (url, init = {}) => {
   if (init.method === 'POST') { const body = JSON.parse(init.body); if (body.action === 'save_draft') { assert.equal(body.expectedRevision, saved.revision); saved = { ...saved, module: { ...body.module, id: body.moduleId || 'custom-one' }, assignment: body.assignment, revision: saved.revision + 1, hasDraft: true }; } else { assert.equal(body.action, 'publish'); assert.equal(body.expectedRevision, saved.revision); assert.equal(body.sourcesChecked, true); saved = { ...saved, module: { ...saved.module, version: 'published-v2' }, publishedVersion: 'published-v2', hasDraft: false }; versions.push({ version: 'published-v2', publishedAt: '2026-09-19T10:00:00Z' }); } return { questionnaire: structuredClone(saved) }; }
   return url === endpoint ? catalogue(saved) : { questionnaire: structuredClone(saved), versions };
@@ -81,7 +81,7 @@ test('unsaved changes survive cancelled activity changes and switching to submit
 
 test('new activity form selects program, service and relevant state without codes or JSON editing', async () => {
   const h = harness(); let tree = await h.mount(); button(tree, 'Create questionnaire').props.onClick(); tree = h.render();
-  tree = edit(h, tree, 'Activity name', 'Ceiling insulation checks'); tree = edit(h, tree, 'Program', 'VEU'); tree = edit(h, tree, 'Service that needs', 'insulation');
+  tree = edit(h, tree, 'Activity name', 'Ceiling insulation checks'); tree = edit(h, tree, 'Program', 'VEU'); tree = edit(h, tree, 'Service category for this training', 'insulation');
   assert.equal(field(tree, 'VIC').props.checked, true); assert.equal(field(tree, 'NSW').props.disabled, true);
   tree = edit(h, tree, 'Activity label', 'New insulation activity');
   button(tree, 'Add question').props.onClick(); tree = h.render(); assert.match(text(tree), /Question\s+2\s+of\s+2/);
@@ -138,4 +138,24 @@ test('people index finds older learners and loads more submissions within the sa
   assert.match(text(tree), /OLD-FIRST/); assert.doesNotMatch(text(tree), /NEW\s*$/); assert.ok(button(tree, 'Load older submissions'));
   button(tree, 'Load older submissions').props.onClick(); await flush(); tree = h.render();
   assert.match(text(tree), /OLD-FIRST/); assert.match(text(tree), /OLD-LAST/); assert.equal(button(tree, 'Load older submissions'), undefined);
+});
+
+
+test('editor groups and filters questionnaires by service, then creates in the chosen category', async () => {
+  const normal = responder(); const h = harness((url, init) => url === endpoint ? { ...catalogue(), modules: [...catalogue().modules, { ...catalogue().modules[0], id: 'veu-48', title: 'Activity 48 ceiling insulation', assignment: { kind: 'catalogue', serviceCategory: 'insulation', jurisdictions: ['VIC'], activityLabel: 'Activity 48' } }] } : normal(url, init));
+  let tree = await h.mount();
+  const grouped = nodes(field(tree, 'Questionnaire'), node => node.type === 'optgroup');
+  assert.deepEqual(grouped.map(node => node.props.label), ['Heating and cooling', 'Insulation']);
+  tree = edit(h, tree, 'Filter by service category', 'insulation');
+  assert.match(text(field(tree, 'Questionnaire')), /Activity 48/); assert.doesNotMatch(text(field(tree, 'Questionnaire')), /Activity 6 heating/);
+  button(tree, 'Create questionnaire').props.onClick(); tree = h.render();
+  assert.equal(field(tree, 'Service category for this training').props.value, 'insulation');
+  assert.equal(field(tree, 'Service category for this training').props.disabled, false);
+  assert.match(text(tree), /Required training for\s+Insulation/);
+});
+
+test('existing questionnaires show the precise service and state assignment', async () => {
+  const h = harness(); const tree = await open(h);
+  assert.match(text(tree), /Required training for\s+Heating and cooling/);
+  assert.match(text(tree), /Activity 6\s+·\s+VIC/);
 });

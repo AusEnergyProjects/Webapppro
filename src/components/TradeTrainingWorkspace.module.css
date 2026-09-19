@@ -24,6 +24,12 @@
 .badge { background: var(--learn-soft); border: 1px solid var(--learn-line); border-radius: 30px; font-size: .73rem; font-weight: 800; padding: 6px 11px; white-space: normal; }
 .passed { color: var(--trade-success, #66d5b2); }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 15px; }
+.serviceGroup { border: 1px solid var(--learn-line); border-radius: 14px; min-width: 0; overflow: clip; }
+.serviceGroup > summary { cursor: pointer; padding: 18px; background: var(--learn-soft); line-height: 1.5; }
+.serviceGroup > summary > span:first-child { display: inline-grid; gap: 4px; vertical-align: middle; margin-right: 18px; }
+.serviceGroup > summary > .badge { display: inline-block; vertical-align: middle; }
+.serviceContent { display: grid; gap: 16px; padding: 18px; }
+.requirement { padding-left: 12px; border-left: 3px solid #2695a0; font-size: .83rem; }
 .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 245px), 1fr)); gap: 15px; }
 .formFields { display: grid; gap: 20px; min-width: 0; margin: 0; padding: 0; border: 0; }
 .field { display: grid; gap: 7px; font-size: .8rem; font-weight: 700; align-content: start; min-width: 0; }

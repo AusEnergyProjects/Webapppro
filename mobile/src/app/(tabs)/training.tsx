@@ -2,17 +2,20 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { FieldButton } from '@/components/field-button';
+import { FieldSelect } from '@/components/field-select';
 import { Screen } from '@/components/screen';
 import { API_BASE_URL } from '@/lib/config';
 import { colours, radius, spacing } from '@/lib/theme';
 import { loadTrainingOverview, startTrainingAssessment, submitTrainingAssessment, checkTrainingAnswer, type TrainingAnswerFeedback, type TrainingAttempt, type TrainingModule, type TrainingOverview, type TrainingResult, type TrainingSource } from '@/lib/training';
 import { useApp } from '@/providers/app-provider';
+import { ENERGY_SERVICE_CATALOGUE, ENERGY_SERVICE_LABELS } from '../../../../src/lib/energy-service-catalogue.mjs';
 
 const readable = (value: string) => value.replaceAll('_', ' ').replace(/^./, letter => letter.toUpperCase());
 const date = (value: string) => new Date(value).toLocaleDateString('en-AU');
 const learnerSource = (source: TrainingSource) => source.id !== 'creditex-review' && !source.url.includes('creditex-source-review.md');
 const learningStatus = (status: string) => ['awaiting_review', 'unavailable'].includes(status) ? 'Assessment unavailable' : readable(status);
 const assessmentReason = (module: TrainingModule) => module.assessmentUnavailableReason || 'Assessment is unavailable. Refresh the module status for the current requirements.';
+const serviceLabel = (category: string) => ENERGY_SERVICE_LABELS[category] || 'Other training';
 
 export default function TrainingScreen() {
   const { user, sync } = useApp();
@@ -26,6 +29,7 @@ function TrainingWorkspace({ online }: { online: boolean }) {
   const [busy, setBusy] = useState('load');
   const [search, setSearch] = useState('');
   const [program, setProgram] = useState('');
+  const [service, setService] = useState('');
   const [visible, setVisible] = useState(12);
   const [selected, setSelected] = useState<TrainingModule | null>(null);
   const [lessonIndex, setLessonIndex] = useState(0);
@@ -97,10 +101,23 @@ function TrainingWorkspace({ online }: { online: boolean }) {
   }
   const modules = data?.modules || [];
   const programs = [...new Set([...modules.map(module => module.programCode), ...(data?.unavailableActivities || []).map(module => module.programCode)])].sort();
-  const matches = (module: { title: string; id: string; programCode: string }) => (!program || module.programCode === program)
-    && `${module.title} ${module.id} ${module.programCode}`.toLowerCase().includes(search.trim().toLowerCase());
-  const matching = modules.filter(matches);
+  const serviceCategories = [...new Set([...modules, ...(data?.unavailableActivities || [])].map(module => module.serviceCategory))];
+  const services = ENERGY_SERVICE_CATALOGUE.filter(item => serviceCategories.includes(item.id));
+  const matches = (module: { title: string; id: string; programCode: string; serviceCategory: string }) => (!program || module.programCode === program)
+    && (!service || module.serviceCategory === service)
+    && `${module.title} ${module.id} ${module.programCode} ${serviceLabel(module.serviceCategory)}`.toLowerCase().includes(search.trim().toLowerCase());
+  const matching = modules.filter(matches).sort((left, right) => {
+    const index = (category: string) => { const found = ENERGY_SERVICE_CATALOGUE.findIndex(item => item.id === category); return found < 0 ? ENERGY_SERVICE_CATALOGUE.length : found; };
+    return index(left.serviceCategory) - index(right.serviceCategory);
+  });
   const unavailable = (data?.unavailableActivities || []).filter(matches);
+  const shown = matching.slice(0, visible);
+  const groups = [...services, ...(serviceCategories.some(category => !ENERGY_SERVICE_LABELS[category]) ? [{ id: '', label: 'Other training' }] : [])]
+    .map(item => {
+      const inGroup = (module: { serviceCategory: string }) => (ENERGY_SERVICE_LABELS[module.serviceCategory] ? module.serviceCategory : '') === item.id;
+      return { ...item, total: matching.filter(inGroup).length, passed: matching.filter(module => inGroup(module) && module.status === 'passed').length, modules: shown.filter(inGroup), unavailable: unavailable.filter(inGroup) };
+    })
+    .filter(group => group.modules.length || group.unavailable.length);
   const lesson = selected?.lessons[lessonIndex];
   const question = attempt?.questions[questionIndex];
   const allRead = Boolean(selected?.lessons.length && selected.lessons.every((_, index) => readLessons.includes(index)));
@@ -122,16 +139,23 @@ function TrainingWorkspace({ online }: { online: boolean }) {
         {data && <><Text style={styles.badge}>Business: {data.business.approved ? 'Setup complete' : data.business.status === 'suspended' ? 'Setup suspended' : 'Finish setup'}</Text>{data.business.blockedReasons.map(reason => <Text key={reason} style={styles.body}>{reason}</Text>)}{!data.business.approved && <Text style={styles.note}>The business owner completes the private Creditex application and agreement in business setup.</Text>}</>}
       </View>
       <Text style={styles.label}>Find an activity</Text><TextInput style={styles.input} accessibilityLabel="Find an activity" placeholder="Activity number, program or work type" placeholderTextColor={colours.muted} value={search} onChangeText={value => { setSearch(value); setVisible(12); }} autoCorrect={false} />
+      <FieldSelect label="Service category" value={service} placeholder="All services" options={[{ value: '', label: 'All services' }, ...services.map(item => ({ value: item.id, label: item.label }))]} onChange={value => { setService(value); setVisible(12); }} />
       <Text style={styles.label}>Program</Text><ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.programs} accessibilityLabel="Filter by exact program">{['', ...programs].map(value => <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: value === program }} style={[styles.chip, value === program && styles.selected]} onPress={() => { setProgram(value); setVisible(12); }}><Text style={styles.chipText}>{value || 'All programs'}</Text></Pressable>)}</ScrollView>
       <Text style={styles.note}>Showing {Math.min(visible, matching.length)} of {matching.length} matching activities.</Text>
-      {matching.slice(0, visible).map(module => <View key={module.id} style={styles.card}><Text style={styles.eyebrow}>{module.programCode} · {module.activityTemplateIds.join(', ')}</Text><Text accessibilityRole="header" style={styles.title}>{module.title}</Text><Text style={module.status === 'passed' ? styles.success : styles.badge}>{module.status === 'passed' ? '✓ Passed' : learningStatus(module.status)}</Text><Text style={styles.body}>{module.estimatedMinutes} minutes · Pass mark {module.passPercent}% · Version {module.version}</Text>{module.status === 'passed' && module.completion && <><Text style={styles.label}>Learning completion reference</Text><Text selectable style={styles.reference}>{module.completion.reference}</Text><Text style={styles.note}>Valid until {date(module.completion.expiresAt)}</Text></>}{!module.assessmentAvailable && <Text style={styles.warning}>{assessmentReason(module)}</Text>}<FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => openModule(module)}>Open learning material</FieldButton></View>)}
+      <Text style={styles.body}>Training is grouped by the service you provide. Complete the training for each activity before doing that government program activity. Only training for your assigned services and service states is shown.</Text>
+      {groups.map(group => <View key={group.id} style={styles.serviceGroup}>
+        <Text accessibilityRole="header" style={styles.serviceTitle}>{group.label}</Text>
+        <Text style={styles.note}>{group.passed} of {group.total} matching modules passed</Text>
+        {group.modules.map(module => <View key={module.id} style={styles.card}><Text style={styles.eyebrow}>{module.programCode} · {module.activityTemplateIds.join(', ')}</Text><Text accessibilityRole="header" style={styles.title}>{module.title}</Text><Text style={styles.note}>Required before {serviceLabel(module.serviceCategory).toLowerCase()} work under this activity.</Text><Text style={module.status === 'passed' ? styles.success : styles.badge}>{module.status === 'passed' ? '✓ Passed' : learningStatus(module.status)}</Text><Text style={styles.body}>{module.estimatedMinutes} minutes · Pass mark {module.passPercent}% · Version {module.version}</Text>{module.status === 'passed' && module.completion && <><Text style={styles.label}>Learning completion reference</Text><Text selectable style={styles.reference}>{module.completion.reference}</Text><Text style={styles.note}>Valid until {date(module.completion.expiresAt)}</Text></>}{module.businessServiceEnabled === false && <Text style={styles.note}>You can complete this training now. The business owner also needs to select this service in Business settings before related jobs and leads are available.</Text>}{!module.assessmentAvailable && <Text style={styles.warning}>{assessmentReason(module)}</Text>}<FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => openModule(module)}>Open learning material</FieldButton></View>)}
+        {group.unavailable.map(module => <View key={module.id} style={styles.card}><Text style={styles.title}>{module.programCode} · {module.title}</Text><Text style={styles.warning}>{module.message}</Text></View>)}
+      </View>)}
       {matching.length > visible && <FieldButton variant="secondary" onPress={() => setVisible(value => value + 12)}>Show 12 more activities</FieldButton>}
       {data && !modules.length && <Text style={styles.body}>No modules are assigned to your work types and service locations. Ask the business owner to check business service selections and your Team capabilities. An empty list does not approve program work.</Text>}
-      {modules.length > 0 && !matching.length && <Text style={styles.body}>No activity matches. Change the search or program.</Text>}
-      {unavailable.map(module => <View key={module.id} style={styles.card}><Text style={styles.title}>{module.programCode} · {module.title}</Text><Text style={styles.warning}>{module.message}</Text></View>)}
+      {modules.length > 0 && !matching.length && !unavailable.length && <Text style={styles.body}>No activity matches. Change the search, service or program.</Text>}
     </>}
     {selected && <>
       <Text style={styles.eyebrow}>{selected.programCode} · {selected.activityTemplateIds.join(', ')}</Text><Text accessibilityRole="header" style={styles.title}>{selected.title}</Text>
+      <Text style={styles.note}>Service: {serviceLabel(selected.serviceCategory)}. Required before work under this government program activity.</Text>
       {!attempt && !result && lesson && <View style={styles.card}>
         <Text style={styles.badge}>Lesson {lessonIndex + 1} of {selected.lessons.length}</Text><Text accessibilityRole="header" style={styles.title}>{lesson.title}</Text><Text style={styles.body}>{lesson.body}</Text>{sourceLinks(lesson.sourceIds)}
         <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: readLessons.includes(lessonIndex) }} onPress={() => setReadLessons(current => current.includes(lessonIndex) ? current.filter(index => index !== lessonIndex) : [...current, lessonIndex])} style={styles.option}><Text style={styles.body}>{readLessons.includes(lessonIndex) ? '☑' : '☐'} I have read this lesson and its relevant source guidance.</Text></Pressable>
@@ -159,6 +183,7 @@ function TrainingWorkspace({ online }: { online: boolean }) {
 
 const styles = StyleSheet.create({
   hero: { gap: spacing.sm }, heading: { color: colours.ink, fontSize: 28, fontWeight: '800' },
+  serviceGroup: { gap: spacing.md, paddingTop: spacing.md }, serviceTitle: { color: colours.ink, fontSize: 23, lineHeight: 30, fontWeight: '800' },
   eyebrow: { color: colours.green, fontSize: 12, fontWeight: '800', letterSpacing: 1 },
   title: { color: colours.ink, fontSize: 19, lineHeight: 26, fontWeight: '800', flexShrink: 1 },
   body: { color: colours.ink, fontSize: 16, lineHeight: 24 }, note: { color: colours.muted, fontSize: 14, lineHeight: 21 },

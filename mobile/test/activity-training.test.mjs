@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 import * as jsx from 'react/jsx-runtime';
+import * as serviceCatalogue from '../../src/lib/energy-service-catalogue.mjs';
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 const compile = (source) => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -18,7 +19,7 @@ function nodes(node, predicate) {
 const button = (tree, label) => nodes(tree, node => node.type === 'FieldButton' && text(node) === label)[0];
 const role = (tree, value) => nodes(tree, node => node.props.accessibilityRole === value);
 const flush = () => new Promise(resolve => setImmediate(resolve));
-const course = (overrides = {}) => ({ id: 'veu-6', programCode: 'VEU', version: 'exact-v1', title: 'Activity 6 heating and cooling', activityTemplateIds: ['veu-6'], estimatedMinutes: 25, passPercent: 100, assessmentAvailable: true, assessmentUnavailableReason: '', availability: 'active', status: 'required', completion: null,
+const course = (overrides = {}) => ({ id: 'veu-6', programCode: 'VEU', version: 'exact-v1', title: 'Activity 6 heating and cooling', activityTemplateIds: ['veu-6'], serviceCategory: 'heating-cooling', estimatedMinutes: 25, passPercent: 100, assessmentAvailable: true, assessmentUnavailableReason: '', availability: 'active', status: 'required', completion: null,
   lessons: [{ title: 'Exact activity requirements', body: 'Retain actual customer consent.', sourceIds: ['official'] }],
   sources: [{ id: 'official', title: 'Official activity guidance', url: 'https://www.esc.vic.gov.au/activity-guidance' }], ...overrides });
 const overview = (modules = [course()]) => ({ ok: true, memberId: 'pin-member', business: { approved: false, status: 'agreement_pending', blockedReasons: ['An executed agreement is required.'] }, modules, unavailableActivities: [] });
@@ -38,7 +39,7 @@ function harness({ modules = [course()], marked, startError } = {}) {
     async checkTrainingAnswer(attemptId, questionId, answer) { requests.push({ action: 'check', attemptId, questionId, answer }); return { questionId, correct: answer.endsWith('-a'), explanation: 'Use genuine records from this job.', correctAnswer: 'First choice', sourceIds: ['official'] }; },
     async submitTrainingAssessment(attemptId, answers) { requests.push({ action: 'submit', attemptId, answers: { ...answers } }); return marked || { passed: false, scorePercent: 96, criticalPassed: false, reference: '', expiresAt: '', feedback: [{ questionId: 'question-0', prompt: 'Activity-specific question 1', correct: false, explanation: 'Keep the exact required evidence.', correctAnswer: 'Verified official requirement', sourceIds: ['official'] }] }; } };
   const require = id => ({ react: hooks, 'react/jsx-runtime': jsx, 'react-native': { Alert: { alert: (...args) => alerts.push(args) }, Linking: { openURL: async url => opened.push(url) }, Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', TextInput: 'TextInput', View: 'View', StyleSheet: { create: value => value } },
-    '@/components/field-button': { FieldButton: 'FieldButton' }, '@/components/screen': { Screen: 'Screen' }, '@/lib/config': { API_BASE_URL: 'https://tlink.energy' }, '@/lib/theme': { colours: {}, radius: {}, spacing: {} }, '@/lib/training': api, '@/providers/app-provider': { useApp: () => app } })[id] || (() => { throw new Error(`Unexpected runtime dependency: ${id}`); })();
+    '@/components/field-button': { FieldButton: 'FieldButton' }, '@/components/field-select': { FieldSelect: 'FieldSelect' }, '@/components/screen': { Screen: 'Screen' }, '@/lib/config': { API_BASE_URL: 'https://tlink.energy' }, '@/lib/theme': { colours: {}, radius: {}, spacing: {} }, '@/lib/training': api, '@/providers/app-provider': { useApp: () => app }, '../../../../src/lib/energy-service-catalogue.mjs': serviceCatalogue })[id] || (() => { throw new Error(`Unexpected runtime dependency: ${id}`); })();
   const exports = {}; Function('require', 'exports', screenCode)(require, exports);
   const render = () => { cursor = 0; const wrapper = exports.default(); const tree = typeof wrapper.type === 'function' ? wrapper.type(wrapper.props) : wrapper; initial = false; return tree; };
   return { render, requests, opened, alerts, app, async mount() { render(); for (const effect of effects) effect(); await flush(); return render(); } };
@@ -87,6 +88,37 @@ test('217 activity catalogue is paged, searchable and filtered by exact programm
   nodes(tree, node => node.type === 'TextInput')[0].props.onChangeText('activity 120'); tree = h.render();
   assert.equal(cards().length, 1); assert.match(text(tree), /Specific activity 120/);
   assert.match(text(tree), /business owner completes the private Creditex application/);
+});
+
+test('training groups and filters by canonical service with clear activity requirements', async () => {
+  const h = harness({ modules: [
+    course({ id: 'veu-48', title: 'Activity 48 ceiling insulation', activityTemplateIds: ['veu-48'], serviceCategory: 'insulation' }),
+    course(),
+    course({ id: 'extra-ac', title: 'Additional installer checks', activityTemplateIds: ['extra-ac'], serviceCategory: 'heating-cooling', status: 'passed', businessServiceEnabled: false }),
+  ] });
+  let tree = await h.mount();
+  const groupTitles = nodes(tree, node => node.type === 'Text' && node.props.accessibilityRole === 'header').map(text);
+  assert.ok(groupTitles.indexOf('Heating and cooling') < groupTitles.indexOf('Activity 6 heating and cooling'));
+  assert.ok(groupTitles.indexOf('Insulation') < groupTitles.indexOf('Activity 48 ceiling insulation'));
+  assert.match(text(tree), /1 of 2 matching modules passed/);
+  assert.match(text(tree), /Required before heating and cooling work under this activity/);
+  assert.match(text(tree), /Required before insulation work under this activity/);
+  assert.match(text(tree), /business owner also needs to select this service/);
+  const selector = nodes(tree, node => node.type === 'FieldSelect')[0];
+  assert.deepEqual(selector.props.options, [{ value: '', label: 'All services' }, ...serviceCatalogue.ENERGY_SERVICE_CATALOGUE.filter(item => ['heating-cooling', 'insulation'].includes(item.id)).map(item => ({ value: item.id, label: item.label }))]);
+  selector.props.onChange('heating-cooling'); tree = h.render();
+  assert.doesNotMatch(text(tree), /Activity 48 ceiling insulation/);
+  assert.match(text(tree), /Additional installer checks/);
+  button(tree, 'Open learning material').props.onPress(); tree = h.render();
+  assert.match(text(tree), /Service: Heating and cooling. Required before work under this government program activity/);
+});
+
+test('search finds the canonical service even when a new questionnaire title omits it', async () => {
+  const h = harness({ modules: [course({ title: 'Additional installer checks' })] });
+  let tree = await h.mount();
+  nodes(tree, node => node.type === 'TextInput')[0].props.onChangeText('Heating and cooling'); tree = h.render();
+  assert.match(text(tree), /Additional installer checks/);
+  assert.match(text(tree), /Showing 1 of 1 matching activities/);
 });
 
 test('complete curriculum permits assessment without a manual review gate and shows official sources', async () => {

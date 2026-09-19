@@ -550,10 +550,12 @@ export const CREDITEX_OFFICIAL_SOURCE_CUSTODY_SCHEMA_GUARD_DEFINITIONS =
   );
 
 const SCHEMA_INSTALL_BATCH_SIZE = 40;
-const readinessByDatabase = new WeakMap<object, Promise<void>>();
-const pilotReadinessByDatabase = new WeakMap<object, Promise<void>>();
+// Cache only completed checks. A pending D1 promise belongs to the request that
+// created it and can be abandoned when that request disconnects in Workers.
+const readinessByDatabase = new WeakSet<object>();
+const pilotReadinessByDatabase = new WeakSet<object>();
 const officialSourceCustodyReadinessByDatabase =
-  new WeakMap<object, Promise<void>>();
+  new WeakSet<object>();
 const CREDITEX_REQUIRED_SCHEMA_TABLES = [
   "compliance_legacy_import_batches",
   "compliance_legacy_import_rows",
@@ -796,59 +798,29 @@ async function installCreditexSchemaGuards(
 
 export async function ensureCreditexSchemaGuards(database: D1Database) {
   const databaseKey = database as object;
-  let readiness = readinessByDatabase.get(databaseKey);
-  if (!readiness) {
-    readiness = installCreditexSchemaGuards(
-      database,
-      CREDITEX_SCHEMA_GUARD_DEFINITIONS,
-    );
-    readinessByDatabase.set(databaseKey, readiness);
-  }
-  try {
-    await readiness;
-  } catch (error) {
-    readinessByDatabase.delete(databaseKey);
-    throw error;
-  }
+  if (readinessByDatabase.has(databaseKey)) return;
+  await installCreditexSchemaGuards(database, CREDITEX_SCHEMA_GUARD_DEFINITIONS);
+  readinessByDatabase.add(databaseKey);
 }
 
 export async function ensureCreditexPilotSchemaGuards(
   database: D1Database,
 ) {
   const databaseKey = database as object;
-  let readiness = pilotReadinessByDatabase.get(databaseKey);
-  if (!readiness) {
-    readiness = installCreditexSchemaGuards(
-      database,
-      CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS,
-    );
-    pilotReadinessByDatabase.set(databaseKey, readiness);
-  }
-  try {
-    await readiness;
-  } catch (error) {
-    pilotReadinessByDatabase.delete(databaseKey);
-    throw error;
-  }
+  if (pilotReadinessByDatabase.has(databaseKey)) return;
+  await installCreditexSchemaGuards(database, CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS);
+  pilotReadinessByDatabase.add(databaseKey);
 }
 
 export async function ensureCreditexOfficialSourceCustodySchemaGuards(
   database: D1Database,
 ) {
   const databaseKey = database as object;
-  let readiness = officialSourceCustodyReadinessByDatabase.get(databaseKey);
-  if (!readiness) {
-    readiness = installCreditexSchemaGuards(
-      database,
-      CREDITEX_OFFICIAL_SOURCE_CUSTODY_SCHEMA_GUARD_DEFINITIONS,
-      requireCreditexOfficialSourceCustodySchema,
-    );
-    officialSourceCustodyReadinessByDatabase.set(databaseKey, readiness);
-  }
-  try {
-    await readiness;
-  } catch (error) {
-    officialSourceCustodyReadinessByDatabase.delete(databaseKey);
-    throw error;
-  }
+  if (officialSourceCustodyReadinessByDatabase.has(databaseKey)) return;
+  await installCreditexSchemaGuards(
+    database,
+    CREDITEX_OFFICIAL_SOURCE_CUSTODY_SCHEMA_GUARD_DEFINITIONS,
+    requireCreditexOfficialSourceCustodySchema,
+  );
+  officialSourceCustodyReadinessByDatabase.add(databaseKey);
 }
