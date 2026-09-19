@@ -75,6 +75,7 @@ export function SiteDatePicker() {
   const [draftRangeStart, setDraftRangeStart] = useState("");
   const [draftRangeEnd, setDraftRangeEnd] = useState("");
   const [rangeSelectingEnd, setRangeSelectingEnd] = useState(false);
+  const [jumpYear, setJumpYear] = useState<string | null>(null);
   const [view, setView] = useState(() => {
     const today = parseIsoDate(todayIso())!;
     return { year: today.getUTCFullYear(), month: today.getUTCMonth() };
@@ -119,6 +120,7 @@ export function SiteDatePicker() {
     setDraftRangeEnd(datePart(range.end?.value || ""));
     setRangeSelectingEnd(Boolean(range.start && range.end && !range.end.value && range.start.value));
     setView({ year: initialDate.getUTCFullYear(), month: initialDate.getUTCMonth() });
+    setJumpYear(null);
     input.setAttribute("aria-haspopup", "dialog");
     input.setAttribute("aria-expanded", "true");
     updatePosition(input);
@@ -265,7 +267,7 @@ export function SiteDatePicker() {
       style={{ left: position.left, top: position.top }}
       onKeyDown={(event) => {
         if (event.key === "Escape") { event.preventDefault(); close(); }
-        if (event.target instanceof HTMLSelectElement) return;
+        if (event.target instanceof HTMLSelectElement || event.target instanceof HTMLInputElement) return;
         if (event.key === "ArrowLeft") { event.preventDefault(); moveSelection(-1); }
         if (event.key === "ArrowRight") { event.preventDefault(); moveSelection(1); }
         if (event.key === "ArrowUp") { event.preventDefault(); moveSelection(-7); }
@@ -278,6 +280,13 @@ export function SiteDatePicker() {
         <button type="button" aria-label="Previous month" onClick={() => setView((current) => current.month === 0 ? { year: current.year - 1, month: 11 } : { ...current, month: current.month - 1 })}>‹</button>
         <strong>{monthHeading(view.year, view.month)}</strong>
         <button type="button" aria-label="Next month" onClick={() => setView((current) => current.month === 11 ? { year: current.year + 1, month: 0 } : { ...current, month: current.month + 1 })}>›</button>
+      </div>
+      <div className="site-date-jump">
+        <label>Month<select aria-label="Calendar month" value={view.month} onChange={event => setView(current => ({ ...current, month: Number(event.target.value) }))}>{Array.from({ length: 12 }, (_, month) => <option key={month} value={month}>{monthHeading(2026, month).replace(" 2026", "")}</option>)}</select></label>
+        <label>Year<input aria-label="Calendar year" type="text" inputMode="numeric" maxLength={4} value={jumpYear ?? String(view.year)} onChange={event => {
+          const value = event.target.value; setJumpYear(value);
+          if (/^\d{4}$/.test(value) && Number(value) >= 100) setView(current => ({ ...current, year: Number(value) }));
+        }} onBlur={() => setJumpYear(null)} /></label>
       </div>
       {isRange && <div className="site-date-range-readout" aria-live="polite">
         <span>{draftRangeStart ? formatDateForDisplay(draftRangeStart) : "Start date"}</span>
