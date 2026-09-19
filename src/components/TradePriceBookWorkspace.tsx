@@ -7,6 +7,7 @@ import { dollarsToCents } from "@/lib/trade-quote";
 import { calculatePriceBookRates, priceBookItemAllowsNegativeSellPrice, priceBookItemRequiresZeroSupplierCost,
   PRICE_BOOK_ITEM_TYPES, PRICE_BOOK_TYPE_LABELS, PRICE_BOOK_UNITS, type PriceBookItemType } from "@/lib/trade-price-book";
 import { TradeJobPacketWorkspace } from "./TradeJobPacketWorkspace";
+import { TradePriceBookImport } from "./TradePriceBookImport";
 import styles from "./TradePriceBookWorkspace.module.css";
 
 type PriceBookItem = {
@@ -41,6 +42,7 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
   const [editing, setEditing] = useState<PriceBookItem | "new" | null>(null); const [draft, setDraft] = useState<Draft>(blankDraft());
   const [history, setHistory] = useState<PriceHistory[]>([]); const [busy, setBusy] = useState(""); const [message, setMessage] = useState("");
   const [canManage, setCanManage] = useState(() => !permissions || permissions.canManagePriceBook);
+  const [importing, setImporting] = useState(false);
 
   const request = useCallback(async (path = "", init: RequestInit = {}) => {
     const token = await user.getIdToken(); const headers = new Headers(init.headers); headers.set("Authorization", `Bearer ${token}`);
@@ -92,7 +94,7 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
     if (preset === "stc") Object.assign(next, { itemType: "certificate", unitLabel: "each", name: "STC" });
     if (preset === "veec") Object.assign(next, { itemType: "certificate", unitLabel: "each", name: "VEEC" });
     if (preset === "esc") Object.assign(next, { itemType: "certificate", unitLabel: "each", name: "ESC" });
-    setEditing("new"); setDraft(next); setHistory([]); setMessage("");
+    setEditing("new"); setImporting(false); setDraft(next); setHistory([]); setMessage("");
   }
 
   async function edit(item: PriceBookItem) {
@@ -134,10 +136,10 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
       {canManage && <button type="button" className={libraryView === "packets" ? styles.libraryActive : ""} onClick={() => setLibraryView("packets")}>Common jobs</button>}
     </nav>
     {libraryView === "packets" ? <TradeJobPacketWorkspace user={user} onOpenItems={() => setLibraryView("items")} /> : <>
-    <header className={styles.hero}><div><span>Commercial source of truth</span><h3 id="price-book-title">Price book</h3><p>{canManage ? "Save common work once, then add it to a quote in one choice with the right price and GST." : "View the business products and rates available for quoting."}</p></div>{canManage && <button type="button" onClick={() => startNew()}>New item</button>}</header>
+    <header className={styles.hero}><div><span>Your products, costs and prices</span><h3 id="price-book-title">Price book</h3><p>{canManage ? "Save common work once, then add it to a quote in one choice with the right price and GST." : "View the business products and rates available for quoting."}</p></div>{canManage && <div className={styles.heroActions}><button type="button" onClick={() => { setImporting(true); setEditing(null); setMessage(""); }}>Upload Excel / CSV</button><button type="button" onClick={() => startNew()}>New item</button></div>}</header>
     <div className={styles.metrics}><article><span>Ready to quote</span><strong>{counts.active}</strong></article><article><span>Archived</span><strong>{counts.archived}</strong></article><article><span>Total history</span><strong>{counts.total}</strong></article></div>
 
-    {editing ? <form className={styles.editor} onSubmit={save}>
+    {importing && canManage ? <TradePriceBookImport user={user} onClose={() => setImporting(false)} onImported={async () => { await load(); }} /> : editing ? <form className={styles.editor} onSubmit={save}>
       <header><div><span>{editing === "new" ? "Add once, reuse everywhere" : editing.itemCode}</span><h4>{editing === "new" ? "New price-book item" : `Edit ${editing.name}`}</h4><p>Only the name, type and sell price are essential. Open more details when they help the team.</p></div><button type="button" className={styles.secondary} onClick={() => setEditing(null)}>Back to price book</button></header>
       {editing === "new" && <div className={styles.presets}><span>Quick start</span><button type="button" onClick={() => startNew("labour")}>Labour hour</button><button type="button" onClick={() => startNew("material")}>Material</button><button type="button" onClick={() => startNew("call_out")}>Call-out</button><button type="button" onClick={() => startNew("stc")}>STC credit</button><button type="button" onClick={() => startNew("veec")}>VEEC credit</button><button type="button" onClick={() => startNew("esc")}>ESC credit</button></div>}
       {editing !== "new" && editing.recordStatus === "archived" && <p className={styles.archived}>Archived items are read only and stay available in price history.</p>}
@@ -165,6 +167,7 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
       <div className={styles.toolbar}><label><span>Find an item</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, code, supplier or SKU" /></label><div role="group" aria-label="Price-book status">{[["active", "Ready"], ["archived", "Archived"], ["all", "All"]].map(([value, label]) => <button type="button" key={value} className={status === value ? styles.active : ""} onClick={() => setStatus(value)}>{label}</button>)}</div></div>
       {canManage && !loading && !search && status === "active" && counts.active === 0 && <section className={styles.firstRun}><span>Start in under a minute</span><h4>Save the work you price most often</h4><p>Choose a quick start, enter the sell price, and it becomes available inside every direct-job quote.</p><div><button type="button" onClick={() => startNew("labour")}>Add labour hour</button><button type="button" onClick={() => startNew("material")}>Add material</button><button type="button" onClick={() => startNew("call_out")}>Add call-out</button><button type="button" onClick={() => startNew("stc")}>Add certificate credit</button></div></section>}
       <div className={styles.list}>{items.map((item) => <article key={item.id}><button type="button" onClick={() => void edit(item)}><div><span>{item.itemCode} | {PRICE_BOOK_TYPE_LABELS[item.itemType]}</span><strong>{item.name}</strong><small>{item.supplierName ? `${item.supplierName}${item.supplierSku ? ` | ${item.supplierSku}` : ""}` : item.description || "No extra details needed"}</small></div><div className={styles.price}><span>Sell ex GST</span><strong>{money(item.sellPriceCentsExGst)}</strong><small>{item.unitLabel} | {item.taxCode === "gst" ? "GST 10%" : "No GST"}</small></div><div className={styles.margin}><span>Margin</span><strong>{percentage(item.marginBasisPoints)}</strong><small>Cost {money(item.supplierCostCentsExGst)}</small></div><em>{item.recordStatus === "active" ? "Edit" : "View"}</em></button></article>)}</div>
+      {items.length === 500 && <p className={styles.listLimit}>Showing the first 500 matches. Search by name or SKU to find another item.</p>}
       {!items.length && !loading && (search || counts.total > 0) && <div className={styles.empty}><strong>No matching items</strong><span>Change the search or status filter.</span></div>}
       {loading && <p className={styles.loading}>Loading the price book...</p>}
     </>}

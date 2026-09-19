@@ -40,7 +40,7 @@ export async function priceBookItemsForQuote(ownerUid: string) {
   const rows = await getD1().prepare(`SELECT id, item_code, name, description, item_type, unit_label, supplier_cost_cents_ex_gst,
       sell_price_cents_ex_gst, tax_code, markup_basis_points, margin_basis_points
     FROM trade_price_book_items WHERE firebase_uid = ? AND record_status = 'active'
-    ORDER BY name COLLATE NOCASE, item_code LIMIT 500`).bind(ownerUid).all<Row>();
+    ORDER BY name COLLATE NOCASE, item_code LIMIT 5000`).bind(ownerUid).all<Row>();
   return rows.results.map(quoteItem);
 }
 

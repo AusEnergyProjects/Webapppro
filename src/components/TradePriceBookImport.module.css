@@ -1,0 +1,40 @@
+.panel { background: var(--trade-surface-raised, #fff); border: 1px solid var(--color-aea-line, #d7e5df); border-radius: 14px; color: var(--color-aea-ink, #062c32); display: grid; gap: 16px; min-width: 0; padding: clamp(16px, 3vw, 24px); }
+.panel header { align-items: start; display: flex; gap: 16px; justify-content: space-between; }
+.panel h4 { font-size: 1.15rem; margin: 0 0 6px; }
+.panel p { font-size: .78rem; line-height: 1.55; margin: 0; }
+.panel button { background: var(--trade-field, #fff); border: 1px solid var(--color-aea-line, #b9d4c9); border-radius: 9px; color: var(--color-aea-green, #12664f); cursor: pointer; font: inherit; font-size: .75rem; font-weight: 800; min-height: 42px; padding: 10px 14px; }
+.panel button:disabled { cursor: default; opacity: .55; }
+.panel button:focus-visible, .panel input:focus-visible, .panel select:focus-visible, .panel summary:focus-visible { outline: 3px solid var(--trade-accent, #139b79); outline-offset: 3px; }
+.hint, .fileName { color: var(--color-aea-muted, #5d7068); }
+.fileName { overflow-wrap: anywhere; }
+.upload { align-items: center; background: var(--trade-surface-soft, #f4f9f7); border: 1px dashed var(--color-aea-line, #a7caba); border-radius: 11px; display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; padding: 16px; }
+.upload label { flex: 1 1 280px; }
+.panel label { display: grid; font-size: .75rem; font-weight: 800; gap: 7px; min-width: 0; }
+.panel label small { color: var(--color-aea-muted, #5d7068); font-size: .7rem; font-weight: 500; line-height: 1.45; }
+.panel input, .panel select { background: var(--trade-field, #fff); border: 1px solid var(--color-aea-line, #d7e5df); border-radius: 8px; color: var(--trade-field-ink, #15241f); font: inherit; min-height: 42px; min-width: 0; padding: 9px; width: 100%; }
+.settings { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.mapping { border: 1px solid var(--color-aea-line, #d7e5df); border-radius: 10px; padding: 13px; }
+.mapping summary { cursor: pointer; font-size: .75rem; font-weight: 850; }
+.mapping p { margin-top: 12px; }
+.mapping > div { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 14px; }
+.counts { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.counts > div { background: var(--trade-surface-soft, #f4f9f7); border-radius: 10px; padding: 14px; }
+.counts strong { display: block; font-size: 1.45rem; }
+.counts span { color: var(--color-aea-muted, #5d7068); font-size: .7rem; }
+.tableHeading { font-weight: 800; }
+.tableScroll { border: 1px solid var(--color-aea-line, #d7e5df); border-radius: 10px; max-height: 500px; overflow: auto; }
+.panel table { border-collapse: collapse; font-size: .72rem; text-align: left; width: 100%; }
+.panel th, .panel td { border-bottom: 1px solid var(--color-aea-line, #d7e5df); padding: 11px; vertical-align: top; }
+.panel thead th { background: var(--trade-surface-soft, #f4f9f7); position: sticky; top: 0; }
+.panel tbody th { min-width: 160px; font-weight: 750; }
+.panel td { min-width: 90px; }
+.panel th small, .panel del { color: var(--color-aea-muted, #5d7068); display: block; font-size: .65rem; font-weight: 500; margin-top: 3px; }
+.panel del { margin: 0 0 3px; }
+.error, .success { border: 1px solid #dfb1a7; border-radius: 9px; font-size: .78rem; line-height: 1.5; padding: 13px; }
+.error { background: #fff3ef; color: #842d1c; overflow-wrap: anywhere; }
+.error ul { margin-bottom: 0; max-height: 240px; overflow: auto; padding-left: 20px; }
+.success { background: var(--trade-accent-soft, #e8f5f0); border-color: var(--color-aea-line, #a7caba); color: var(--trade-accent-soft-ink, #12664f); }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.actions .primary { background: var(--trade-accent, #12664f); border-color: transparent; color: white; }
+@media (max-width: 650px) { .mapping > div { grid-template-columns: 1fr; } .panel header { flex-wrap: wrap; } .settings { grid-template-columns: 1fr; } .counts > div { padding: 10px; } .counts strong { font-size: 1.2rem; } .actions button { width: 100%; } }
+:global(html[data-tlink-colour-mode="night"]) .error { background: #3a201d; border-color: #75423a; color: #ffb8ad; }

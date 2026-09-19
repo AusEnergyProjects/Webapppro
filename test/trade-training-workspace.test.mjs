@@ -47,10 +47,8 @@ const button = (tree, name) => nodes(tree, (node) => node.type === "button" && t
 
 async function learn(h) {
   let tree = await h.mount(); button(tree, "Open learning material").props.onClick(); tree = h.render();
-  assert.equal(button(tree, "Start assessment").props.disabled, true);
-  const first = nodes(tree, (node) => node.type === "input" && node.props.type === "checkbox")[0]; first.props.onChange({ target: { checked: true } });
-  tree = h.render(); button(tree, "Next lesson").props.onClick(); tree = h.render();
-  nodes(tree, (node) => node.type === "input" && node.props.type === "checkbox")[0].props.onChange({ target: { checked: true } });
+  assert.equal(button(tree, "Start assessment"), undefined);
+  button(tree, "I have read this. Continue").props.onClick({ detail: 1 });
   return h.render();
 }
 
@@ -59,12 +57,86 @@ test("learner reads exact source-linked lessons before an active assessment can 
   let tree = await learn(h);
   assert.equal(button(tree, "Start assessment").props.disabled, false);
   assert.ok(nodes(tree, (node) => node.type === "a" && node.props.href === "https://www.esc.vic.gov.au/activity-6").length);
-  button(tree, "Start assessment").props.onClick(); await flush(); tree = h.render();
+  button(tree, "Start assessment").props.onClick({ detail: 1 }); await flush(); tree = h.render();
   assert.deepEqual(JSON.parse(h.requests.at(-1).body), { action: "start", moduleId: "veu-6" });
   assert.equal(nodes(tree, (node) => node.type === "legend").length, 1);
   assert.ok(text(tree).includes("When is customer consent needed?"));
   assert.ok(!text(tree).includes("Which commissioning evidence is retained?"));
   assert.equal(button(tree, "Next question").props.disabled, true);
+});
+
+test("six lessons require six explicit acknowledgements and the final action starts the assessment", async () => {
+  const lessonCourse = { ...course(), lessons: Array.from({ length: 6 }, (_, index) => ({ ...course().lessons[0], title: `Installation lesson ${index + 1}` })) };
+  const h = harness(async (_url, init) => init.method ? { ok: true, attempt } : { ok: true, business, memberId: "member-a", modules: [lessonCourse] });
+  let tree = await h.mount(); button(tree, "Open learning material").props.onClick(); tree = h.render();
+  for (let index = 0; index < 6; index++) {
+    assert.match(text(tree), new RegExp(`Lesson\\s+${index + 1}\\s+of\\s+6`));
+    assert.equal(h.requests.filter(item => item.method).length, 0, "no assessment starts before every lesson is acknowledged");
+    assert.equal(nodes(tree, node => node.type === "input" && node.props.type === "checkbox").length, 0);
+    assert.equal(button(tree, "Next lesson"), undefined, "unread lessons cannot be skipped");
+    const action = button(tree, index === 5 ? "I have read this. Start assessment" : "I have read this. Continue");
+    assert.equal(action.props.disabled, false); action.props.onClick({ detail: 1 }); await flush(); tree = h.render();
+  }
+  assert.equal(h.requests.filter(item => item.method).length, 1);
+  assert.match(text(tree), /Question\s+1\s+of\s+2/);
+});
+
+test("rapid lesson clicks cannot skip an unread lesson and earlier lessons remain reviewable", async () => {
+  const lessonCourse = { ...course(), lessons: [...course().lessons, { title: "Final checks", body: "Check everything.", sourceIds: [] }] };
+  const h = harness(async () => ({ ok: true, business, memberId: "member-a", modules: [lessonCourse] }));
+  let tree = await h.mount(); button(tree, "Open learning material").props.onClick(); tree = h.render();
+  const firstAction = button(tree, "I have read this. Continue");
+  firstAction.props.onClick({ detail: 1 }); firstAction.props.onClick({ detail: 1 }); tree = h.render();
+  assert.match(text(tree), /Lesson\s+2\s+of\s+3/); assert.match(text(tree), /1\s+marked read/);
+  button(tree, "I have read this. Continue").props.onClick({ detail: 2 }); tree = h.render();
+  assert.match(text(tree), /Lesson\s+2\s+of\s+3/, "the second click of a double click cannot acknowledge the next lesson");
+  button(tree, "Previous lesson").props.onClick(); tree = h.render();
+  assert.match(text(tree), /Lesson\s+1\s+of\s+3/);
+  button(tree, "I have read this. Continue").props.onClick({ detail: 0 }); tree = h.render();
+  assert.match(text(tree), /Lesson\s+2\s+of\s+3/, "keyboard activation still advances after reviewing a lesson");
+  assert.equal(h.requests.filter(item => item.method).length, 0);
+});
+
+test("a failed assessment start keeps acknowledgements and retries once without rereading", async () => {
+  let rejectStart; let starts = 0;
+  const h = harness(async (_url, init) => {
+    if (!init.method) return { ok: true, business, memberId: "member-a", modules: [course()] };
+    starts++;
+    if (starts === 1) return new Promise((_resolve, reject) => { rejectStart = reject; });
+    return { ok: true, attempt };
+  });
+  let tree = await learn(h); const action = button(tree, "I have read this. Start assessment");
+  action.props.onClick({ detail: 1 }); action.props.onClick({ detail: 1 }); await flush(); tree = h.render();
+  assert.equal(starts, 1); assert.equal(button(tree, "Starting...").props.disabled, true);
+  rejectStart(new Error("Temporary connection interruption.")); await flush(); tree = h.render();
+  assert.match(text(tree), /Temporary connection interruption/); assert.match(text(tree), /2\s+marked read/);
+  assert.equal(button(tree, "Start assessment").props.disabled, false);
+  button(tree, "Start assessment").props.onClick({ detail: 1 }); await flush(); tree = h.render();
+  assert.equal(starts, 2); assert.match(text(tree), /Question\s+1\s+of\s+2/);
+});
+
+test("a changed curriculum cannot reuse acknowledgements from its previous version", async () => {
+  let lessonCourse = course();
+  const h = harness(async (_url, init) => init.method ? { ok: true, attempt } : { ok: true, business, memberId: "member-a", modules: [lessonCourse] });
+  let tree = await learn(h);
+  lessonCourse = { ...lessonCourse, version: "reviewed-v2" };
+  button(tree, "Refresh status").props.onClick(); await flush(); tree = h.render();
+  button(tree, "I have read this. Start assessment").props.onClick({ detail: 1 }); await flush(); tree = h.render();
+  assert.equal(h.requests.filter(item => item.method).length, 0);
+  assert.match(text(tree), /Lesson\s+1\s+of\s+2/); assert.match(text(tree), /1\s+marked read/);
+  assert.equal(button(tree, "Start assessment"), undefined);
+});
+
+test("passed modules remain reviewable without acknowledgements or another assessment", async () => {
+  const h = harness(async () => ({ ok: true, business, memberId: "member-a", modules: [{ ...course(), status: "passed" }] }));
+  let tree = await h.mount();
+  nodes(tree, node => node.type === "select" && node.props["aria-label"] === "Training status")[0].props.onChange({ target: { value: "passed" } }); tree = h.render();
+  button(tree, "Review learning material").props.onClick(); tree = h.render();
+  assert.equal(button(tree, "I have read"), undefined); assert.equal(button(tree, "Start assessment"), undefined);
+  button(tree, "Next lesson").props.onClick(); tree = h.render();
+  assert.match(text(tree), /Lesson\s+2\s+of\s+2/); assert.match(text(tree), /Your learning pass is recorded/);
+  button(tree, "Previous lesson").props.onClick(); tree = h.render();
+  assert.match(text(tree), /Lesson\s+1\s+of\s+2/); assert.equal(h.requests.filter(item => item.method).length, 0);
 });
 
 test("wrong answers explain the correct choice and prevent progression until corrected", async () => {
@@ -75,7 +147,7 @@ test("wrong answers explain the correct choice and prevent progression until cor
     assert.equal(body.action, "check"); checks.push(body);
     return { ok: true, feedback: { questionId: body.questionId, correct: body.answer === "before", correctAnswer: "Before the relevant agreement", explanation: "Get informed permission before the agreement, so the customer knows what they are accepting.", sourceIds: ["esc"] } };
   });
-  let tree = await learn(h); button(tree, "Start assessment").props.onClick(); await flush(); tree = h.render();
+  let tree = await learn(h); button(tree, "Start assessment").props.onClick({ detail: 1 }); await flush(); tree = h.render();
   nodes(tree, node => node.type === "input" && node.props.value === "after")[0].props.onChange(); await flush(); tree = h.render();
   assert.deepEqual(checks[0], { action: "check", attemptId: "attempt-1", questionId: "q-consent", answer: "after" });
   assert.match(text(tree), /Incorrect answer/); assert.match(text(tree), /Get informed permission before the agreement/);
@@ -103,7 +175,7 @@ test("all 25 answers are checked before completion and the first-answer percenta
     courseModule.status = "passed"; courseModule.completion = { reference: "TL-CX-TRAIN-CURRENT-PASS", passedAt: "2026-09-19", expiresAt: "2027-09-19", revokedAt: "" };
     return { ok: true, result: { passed: true, scorePercent: 100, firstTryScorePercent: 96, criticalPassed: true, reference: courseModule.completion.reference, expiresAt: courseModule.completion.expiresAt } };
   });
-  let tree = await learn(h); button(tree, "Start assessment").props.onClick(); await flush(); tree = h.render();
+  let tree = await learn(h); button(tree, "Start assessment").props.onClick({ detail: 1 }); await flush(); tree = h.render();
   nodes(tree, node => node.type === "input" && node.props.value === "other-0")[0].props.onChange(); await flush(); tree = h.render();
   assert.equal(button(tree, "Next question").props.disabled, true);
   for (let index = 0; index < 25; index++) {
@@ -116,7 +188,7 @@ test("all 25 answers are checked before completion and the first-answer percenta
   assert.equal(checks, 26); assert.equal(submissions, 1);
   assert.match(text(tree), /Your score:\s+100\s*%/); assert.match(text(tree), /First answers:\s+96\s*%/);
   assert.match(text(tree), /TL-CX-TRAIN-CURRENT-PASS/); assert.match(text(tree), /1\s+of\s+1\s+activity modules passed/);
-  assert.equal(button(tree, "Start assessment").props.disabled, true);
+  assert.equal(button(tree, "Start assessment"), undefined);
 });
 
 test("large programme catalogues page activity cards and filter by exact programme and search", async () => {
@@ -171,10 +243,10 @@ test("complete courses permit assessment after all lessons without a manual revi
   let tree = await learn(h);
   assert.equal(button(tree, "Start assessment").props.disabled, false);
   assert.equal(button(tree, "Next lesson"), undefined);
-  assert.match(text(tree), /Lessons complete. Continue to the assessment below/);
-  assert.match(text(tree), /ready to start the assessment/);
+  assert.match(text(tree), /I have read this. Start assessment/);
+  assert.match(text(tree), /final lesson opens your assessment/);
   assert.doesNotMatch(text(tree), /Programme approval pending|review and activate this exact curriculum/);
-  button(tree, "Start assessment").props.onClick(); await flush(); tree = h.render();
+  button(tree, "Start assessment").props.onClick({ detail: 1 }); await flush(); tree = h.render();
   assert.match(text(tree), /Question\s+1\s+of\s+2/);
   assert.equal(h.requests.filter(request => request.method === "POST").length, 1);
 });
@@ -186,7 +258,7 @@ test("a server-confirmed pass displays the returned completion reference and lea
     if (body.action === "check") return { ok: true, feedback: { questionId: body.questionId, correct: true, correctAnswer: "The current requirement", explanation: "Retain informed customer consent before the agreement.", sourceIds: ["esc"] } };
     return { ok: true, result: { passed: true, scorePercent: 100, criticalPassed: true, reference: "TL-CX-TRAIN-SERVER-REFERENCE", expiresAt: "2027-01-01", feedback: [{ questionId: "q-consent", prompt: "When is customer consent needed?", correct: true, correctAnswer: "Before the relevant agreement", explanation: "Retain informed customer consent before the agreement.", sourceIds: ["esc"] }] } };
   });
-  let tree = await learn(h); button(tree, "Start assessment").props.onClick(); await flush(); tree = h.render();
+  let tree = await learn(h); button(tree, "Start assessment").props.onClick({ detail: 1 }); await flush(); tree = h.render();
   nodes(tree, (node) => node.type === "input" && node.props.value === "before")[0].props.onChange(); await flush(); tree = h.render();
   button(tree, "Next question").props.onClick(); tree = h.render();
   nodes(tree, (node) => node.type === "input" && node.props.value === "actual")[0].props.onChange(); await flush(); tree = h.render();
@@ -198,10 +270,12 @@ test("a server-confirmed pass displays the returned completion reference and lea
 
 test("partial curriculum explains the assessment block after every lesson is read", async () => {
   const h = harness(async () => ({ ok: true, business, memberId: "member-a", modules: [{ ...course("awaiting_review"), status: "awaiting_review", assessmentAvailable: false, assessmentUnavailableReason: "Current official installation requirements are incomplete." }] }));
-  const tree = await learn(h);
-  assert.equal(button(tree, "Start assessment").props.disabled, true);
+  let tree = await learn(h);
+  assert.equal(button(tree, "Start assessment"), undefined);
   assert.match(text(tree), /Current official installation requirements are incomplete/);
-  button(tree, "Start assessment").props.onClick(); await flush();
+  button(tree, "I have read this lesson").props.onClick({ detail: 1 }); await flush(); tree = h.render();
+  assert.match(text(tree), /Lessons complete/);
+  assert.equal(button(tree, "Start assessment"), undefined);
   assert.equal(h.requests.filter(request => request.method === "POST").length, 0);
 });
 
@@ -360,7 +434,7 @@ test("reopening a module resumes at its saved unfinished question with earlier f
   const h = harness(async (_url, init) => init.method
     ? { ok: true, attempt: { ...attempt, answers: { 'q-consent': 'before', 'q-photo': 'stock' }, feedback: { 'q-consent': prior, 'q-photo': pending } } }
     : { ok: true, business, memberId: 'member-a', modules: [course()] });
-  let tree = await learn(h); button(tree, 'Start assessment').props.onClick(); await flush(); tree = h.render();
+  let tree = await learn(h); button(tree, 'Start assessment').props.onClick({ detail: 1 }); await flush(); tree = h.render();
   assert.match(text(tree), /Question\s+2\s+of\s+2/);
   assert.match(text(tree), /The photo must show the work at this property/);
   assert.equal(nodes(tree, node => node.type === 'input' && node.props.value === 'stock')[0].props.checked, true);
@@ -382,7 +456,7 @@ test("a stalled submit times out, keeps checked answers, and retries the same at
     if (submissions === 1) return new Promise(() => {});
     return { ok: true, result: { passed: true, scorePercent: 100, firstTryScorePercent: 100, criticalPassed: true, reference: 'SAVED-AFTER-RETRY', expiresAt: '2027-01-01' } };
   }, 'TradeTrainingWorkspace', {}, runtime);
-  let tree = await learn(h); button(tree, 'Start assessment').props.onClick(); await flush(); tree = h.render();
+  let tree = await learn(h); button(tree, 'Start assessment').props.onClick({ detail: 1 }); await flush(); tree = h.render();
   nodes(tree, node => node.type === 'input' && node.props.value === 'before')[0].props.onChange(); await flush(); tree = h.render();
   button(tree, 'Next question').props.onClick(); tree = h.render();
   nodes(tree, node => node.type === 'input' && node.props.value === 'actual')[0].props.onChange(); await flush(); tree = h.render();
@@ -405,7 +479,7 @@ test("a non-JSON response releases answer checking and keeps the selected answer
     if (checks === 1) return { response: new Response('<html>Temporary proxy error</html>', { headers: { 'content-type': 'text/html' }, status: 503 }) };
     return { ok: true, feedback: { questionId: body.questionId, correct: true, correctAnswer: 'Before the relevant agreement', explanation: 'Get consent first.', sourceIds: ['esc'] } };
   });
-  let tree = await learn(h); button(tree, 'Start assessment').props.onClick(); await flush(); tree = h.render();
+  let tree = await learn(h); button(tree, 'Start assessment').props.onClick({ detail: 1 }); await flush(); tree = h.render();
   nodes(tree, node => node.type === 'input' && node.props.value === 'before')[0].props.onChange(); await flush(); tree = h.render();
   assert.match(text(tree), /service did not return a result/);
   assert.equal(button(tree, 'Next question').props.disabled, true);
@@ -454,7 +528,7 @@ test('module links open only assigned learning material once and never start ass
   const h = harness(async () => ({ ok: true, business, memberId: 'member-a', modules }), 'TradeTrainingWorkspace', {}, { window: { location: { search: '?workspace=training&module=veu-48' } } });
   let tree = await h.mount();
   assert.ok(nodes(tree, node => node.type === 'section' && node.props['aria-label'] === 'Activity 48 learning and assessment').length);
-  assert.equal(button(tree, 'Start assessment').props.disabled, true);
+  assert.equal(button(tree, 'Start assessment'), undefined);
   button(tree, 'Open learning material').props.onClick(); tree = h.render();
   button(tree, 'Refresh status').props.onClick(); await flush(); tree = h.render();
   assert.ok(nodes(tree, node => node.type === 'section' && node.props['aria-label'] === 'Activity 6 heating and cooling learning and assessment').length);

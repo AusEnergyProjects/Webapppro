@@ -6,7 +6,11 @@
 .hero span, .editor header span, .firstRun > span { color: var(--color-aea-green); display: block; font-size: .68rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
 .hero h3, .editor h4, .firstRun h4 { color: var(--color-aea-ink); font-family: var(--font-aea-heading, Arial, Helvetica, sans-serif); font-size: clamp(1.35rem, 3vw, 2rem); font-weight: 500; margin: 4px 0; }
 .hero p, .editor header p, .firstRun p { color: var(--color-aea-muted); font-size: .78rem; line-height: 1.5; margin: 0; max-width: 720px; }
-.hero > button, .actions > button:first-child { background: var(--color-aea-green); border: 0; border-radius: 10px; color: white; cursor: pointer; font-weight: 850; padding: 12px 17px; }
+.actions > button:first-child { background: var(--color-aea-green); border: 0; border-radius: 10px; color: white; cursor: pointer; font-weight: 850; padding: 12px 17px; }
+.heroActions { display: flex; flex-wrap: wrap; gap: 9px; }
+.heroActions button { background: var(--trade-accent, #12664f); border: 0; border-radius: 10px; color: white; cursor: pointer; font-size: .75rem; font-weight: 850; min-height: 44px; padding: 12px 17px; }
+.heroActions button + button { background: var(--trade-field, #fff); border: 1px solid var(--color-aea-line); color: var(--color-aea-green); }
+.listLimit { color: var(--color-aea-muted); font-size: .72rem; margin: 0; }
 .metrics { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .metrics article { background: #f5faf8; border: 1px solid var(--color-aea-line); border-radius: 12px; padding: 14px; }
 .metrics span, .preview span, .price span, .margin span { color: var(--color-aea-muted); display: block; font-size: .62rem; font-weight: 800; text-transform: uppercase; }

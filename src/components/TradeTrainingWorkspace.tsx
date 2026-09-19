@@ -216,6 +216,8 @@ export function TradeTrainingWorkspace({ user }: { user: User }) {
   const questionHeading = useRef<HTMLLegendElement | null>(null);
   const lessonHeading = useRef<HTMLHeadingElement | null>(null);
   const initialModuleOpened = useRef(false);
+  const acknowledgedLesson = useRef("");
+  const startingAssessment = useRef(false);
   const load = useCallback(async () => { const next = await request<TrainingResult>(user, "/api/trade-training"); setData(next); }, [user]);
   useEffect(() => { let active = true; void request<TrainingResult>(user, "/api/trade-training").then((next) => {
     if (!active) return;
@@ -227,15 +229,37 @@ export function TradeTrainingWorkspace({ user }: { user: User }) {
     }
   }).catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Training could not be loaded."); }); return () => { active = false; }; }, [user]);
   useEffect(() => { if (attempt) questionHeading.current?.focus(); }, [questionIndex, attempt]);
-  useEffect(() => { if (selectedId) lessonHeading.current?.focus(); }, [selectedId]);
+  useEffect(() => { lessonHeading.current?.focus(); }, [selectedId, lessonIndex]);
   const selected = data?.modules.find((module) => module.id === selectedId);
   const lesson = selected?.lessons[lessonIndex]; const question = attempt?.questions[questionIndex];
+  const reviewingPassedModule = selected?.status === "passed" || result?.passed === true;
   const allRead = Boolean(selected && selected.lessons.length && selected.lessons.every((_, index) => readLessons.includes(`${selected.id}:${selected.version}:${index}`)));
-  function openModule(module: Module) { setSelectedId(module.id); setLessonIndex(0); setAttempt(null); setResult(null); setAnswers({}); setAnswerFeedback({}); setError(""); }
-  async function start() {
-    if (!selected || !allRead || !selected.assessmentAvailable || selected.status === "passed" || busy) return; setBusy("start"); setError("");
+  function openModule(module: Module) { acknowledgedLesson.current = ""; setSelectedId(module.id); setLessonIndex(0); setAttempt(null); setResult(null); setAnswers({}); setAnswerFeedback({}); setError(""); }
+  async function start(completedLessons: string[]) {
+    if (!selected || !selected.lessons.length || !selected.lessons.every((_, index) => completedLessons.includes(`${selected.id}:${selected.version}:${index}`)) || !selected.assessmentAvailable || reviewingPassedModule || busy || startingAssessment.current) return;
+    startingAssessment.current = true; setBusy("start"); setError("");
     try { const next = await request<ApiResult & { attempt: Attempt }>(user, "/api/trade-training", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "start", moduleId: selected.id }) }); setAttempt(next.attempt); setQuestionIndex(Math.min(next.attempt.questions.length - 1, next.attempt.questions.filter(item => next.attempt.feedback?.[item.id]?.correct).length)); setAnswers(next.attempt.answers || {}); setAnswerFeedback(next.attempt.feedback || {}); setResult(null); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "The assessment could not be started."); } finally { setBusy(""); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "The assessment could not be started."); } finally { startingAssessment.current = false; setBusy(""); }
+  }
+  function acknowledgeAndContinue(clickCount: number) {
+    if (!selected || !lesson || busy || attempt || reviewingPassedModule || clickCount > 1) return;
+    const key = `${selected.id}:${selected.version}:${lessonIndex}`;
+    const finalLesson = lessonIndex === selected.lessons.length - 1;
+    if (!finalLesson && acknowledgedLesson.current === key) return;
+    acknowledgedLesson.current = key;
+    const completedLessons = [...new Set([...readLessons, key])];
+    setReadLessons(completedLessons);
+    const firstUnread = selected.lessons.findIndex((_, index) => !completedLessons.includes(`${selected.id}:${selected.version}:${index}`));
+    if (firstUnread >= 0 && firstUnread < lessonIndex) {
+      acknowledgedLesson.current = ""; setLessonIndex(firstUnread); return;
+    }
+    if (finalLesson) { void start(completedLessons); return; }
+    setLessonIndex(lessonIndex + 1);
+  }
+  function previousLesson() {
+    if (busy || lessonIndex === 0) return;
+    acknowledgedLesson.current = "";
+    setLessonIndex(lessonIndex - 1);
   }
   async function checkAnswer(answer: string) {
     if (!attempt || !question || busy || answerFeedback[question.id]?.correct) return;
@@ -260,8 +284,8 @@ export function TradeTrainingWorkspace({ user }: { user: User }) {
   const passed = data?.modules.filter((module) => module.status === "passed").length || 0;
   const pending = (data?.modules.length || 0) - passed + (data?.unavailableActivities?.length || 0);
   const startReason = selected && !selected.assessmentAvailable ? assessmentReason(selected)
-    : selected?.status === "passed" ? "Your learning pass is recorded. You can review the lessons at any time."
-    : !allRead ? "Read and mark every lesson before starting the assessment." : "All lessons are marked read. You are ready to start the assessment.";
+    : reviewingPassedModule ? "Your learning pass is recorded. You can review the lessons at any time."
+    : !allRead ? "Each button confirms you have read the lesson and its relevant source guidance. The final lesson opens your assessment." : "All lessons are marked read. You are ready to start the assessment.";
   const programs = [...new Set([...(data?.modules || []).map(moduleProgram), ...(data?.unavailableActivities || []).map((item) => item.programCode.replaceAll("-", " "))])].sort();
   const matchingModules = (data?.modules || []).filter((module) => (statusFilter === "all" || (statusFilter === "passed" ? module.status === "passed" : module.status !== "passed")) && (!programFilter || moduleProgram(module) === programFilter)
     && (!serviceFilter || trainingServiceSection(module).id === serviceFilter)
@@ -300,9 +324,24 @@ export function TradeTrainingWorkspace({ user }: { user: User }) {
       {(data.modules.length > 0 || Boolean(data.unavailableActivities?.length)) && !serviceGroups.length && <p>No activity matches these filters. Change the search, service, program or status.</p>}
       {!data.modules.length && !data.unavailableActivities?.length && <p>No activity modules are assigned to your current work types and service locations. The business owner should check service selections in Business settings and each person&apos;s capabilities in Team. An empty list does not approve government program work.</p>}
     </section>}
-    {selected && !data?.officeOnly && <section className={styles.panel} aria-label={`${selected.title} learning and assessment`}><header><div><span className={styles.eyebrow}>{selected.activityTemplateIds.join(" · ")}</span><h3 ref={lessonHeading} tabIndex={-1}>{selected.title}</h3><p className={styles.muted}>Service: {trainingServiceSection(selected).label} · Required for this activity under {moduleProgram(selected)}</p></div><span className={styles.badge}>Version {selected.version}</span></header>
-      {!attempt && <>{lesson && <div className={styles.lesson}><div className={styles.row}><strong>Lesson {lessonIndex + 1} of {selected.lessons.length}</strong><small>{readLessons.filter((key) => key.startsWith(`${selected.id}:${selected.version}:`)).length} marked read</small></div><progress className={styles.progress} value={lessonIndex + 1} max={selected.lessons.length} aria-label="Lesson progress" /><h4>{lesson.title}</h4><p className={styles.lessonBody}>{lesson.body}</p><ul className={styles.sources}>{lesson.sourceIds.map((id) => selected.sources.find((source) => source.id === id)).filter((source): source is Source => Boolean(source && learnerSource(source))).map((source) => <li key={source.id}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a></li>)}</ul><label className={styles.check}><input type="checkbox" checked={readLessons.includes(`${selected.id}:${selected.version}:${lessonIndex}`)} onChange={(event) => { const key = `${selected.id}:${selected.version}:${lessonIndex}`; setReadLessons((current) => event.target.checked ? [...new Set([...current, key])] : current.filter((item) => item !== key)); }} />I have read this lesson and its relevant source guidance.</label><div className={styles.actions}><button className={styles.secondary} type="button" disabled={lessonIndex === 0} onClick={() => setLessonIndex((value) => value - 1)}>Previous lesson</button>{lessonIndex < selected.lessons.length - 1 ? <button className={styles.secondary} type="button" onClick={() => setLessonIndex((value) => value + 1)}>Next lesson</button> : <strong role="status">{allRead ? selected.status === "passed" ? "Lessons complete. Your learning pass is recorded." : selected.assessmentAvailable ? "Lessons complete. Continue to the assessment below." : "Lessons complete. Assessment is unavailable; see the reason below." : "Final lesson. Mark every lesson read to continue."}</strong>}</div></div>}
-        <div className={styles.notice}><p>Choose an answer to check it straight away. If it is incorrect, read the explanation and try another answer. Complete every question correctly to pass. There is no limit on corrections.</p></div><div className={styles.actions}><button className={styles.button} type="button" disabled={!allRead || !selected.assessmentAvailable || Boolean(busy) || selected.status === "passed"} aria-describedby="training-assessment-readiness" onClick={() => void start()}>{busy === "start" ? "Starting..." : result && !result.passed ? "Try the assessment again" : "Start assessment"}</button><small id="training-assessment-readiness" role="status">{startReason}</small></div>
+    {selected && !data?.officeOnly && <section className={styles.panel} aria-label={`${selected.title} learning and assessment`}><header><div><span className={styles.eyebrow}>{selected.activityTemplateIds.join(" · ")}</span><h3>{selected.title}</h3><p className={styles.muted}>Service: {trainingServiceSection(selected).label} · Required for this activity under {moduleProgram(selected)}</p></div><span className={styles.badge}>Version {selected.version}</span></header>
+      {!attempt && <>{lesson && <div className={styles.lesson}>
+        <div className={styles.row}><strong>Lesson {lessonIndex + 1} of {selected.lessons.length}</strong>{!reviewingPassedModule && <small>{readLessons.filter((key) => key.startsWith(`${selected.id}:${selected.version}:`)).length} marked read</small>}</div>
+        <progress className={styles.progress} value={lessonIndex + 1} max={selected.lessons.length} aria-label="Lesson progress" />
+        <h4 ref={lessonHeading} tabIndex={-1}>{lesson.title}</h4><p className={styles.lessonBody}>{lesson.body}</p>
+        <ul className={styles.sources}>{lesson.sourceIds.map((id) => selected.sources.find((source) => source.id === id)).filter((source): source is Source => Boolean(source && learnerSource(source))).map((source) => <li key={source.id}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a></li>)}</ul>
+        {error && <p className={`${styles.notice} ${styles.error}`} role="alert">{error}</p>}
+        <div className={styles.actions}>
+          <button className={styles.secondary} type="button" disabled={lessonIndex === 0 || Boolean(busy)} onClick={previousLesson}>Previous lesson</button>
+          {reviewingPassedModule ? lessonIndex < selected.lessons.length - 1 && <button className={styles.secondary} type="button" onClick={() => setLessonIndex(lessonIndex + 1)}>Next lesson</button>
+            : lessonIndex === selected.lessons.length - 1 && allRead && !selected.assessmentAvailable ? <strong role="status">Lessons complete</strong>
+              : <button key={`${selected.id}:${selected.version}:${lessonIndex}`} className={styles.button} type="button" disabled={Boolean(busy)} aria-describedby="training-assessment-readiness" onClick={(event) => acknowledgeAndContinue(event.detail)}>
+                {busy === "start" ? "Starting..." : lessonIndex < selected.lessons.length - 1 ? "I have read this. Continue" : !selected.assessmentAvailable ? "I have read this lesson" : allRead ? "Start assessment" : "I have read this. Start assessment"}
+              </button>}
+        </div>
+        <small id="training-assessment-readiness" role="status">{startReason}</small>
+      </div>}
+        {!reviewingPassedModule && <div className={styles.notice}><p>Choose an answer to check it straight away. If it is incorrect, read the explanation and try another answer. Complete every question correctly to pass. There is no limit on corrections.</p></div>}
       </>}
       {attempt && question && <><div className={styles.row}><strong>Question {questionIndex + 1} of {attempt.questions.length}</strong><small>{Object.keys(answers).length} answered</small></div><progress className={styles.progress} value={questionIndex + 1} max={attempt.questions.length} aria-label="Assessment progress" /><fieldset className={styles.question} disabled={Boolean(busy) || answerFeedback[question.id]?.correct}><legend ref={questionHeading} tabIndex={-1}>{question.prompt}</legend>{question.options.map((option) => <label key={option.id} className={styles.option}><input type="radio" name={`question-${question.id}`} value={option.id} checked={answers[question.id] === option.id} onChange={() => void checkAnswer(option.id)} /><span>{option.text}</span></label>)}</fieldset>{busy === "check" && <p role="status">Checking your answer...</p>}{answerFeedback[question.id] && <div className={answerFeedback[question.id].correct ? styles.completion : styles.notice} role="status"><strong>{answerFeedback[question.id].correct ? "Correct" : "Incorrect answer. Read this explanation, then choose again."}</strong><p>{answerFeedback[question.id].correctAnswer}</p><p>{answerFeedback[question.id].explanation}</p></div>}{error && <p className={`${styles.notice} ${styles.error}`} role="alert">{error}</p>}{answers[question.id] && !answerFeedback[question.id]?.correct && !busy && <button className={styles.secondary} type="button" onClick={() => void checkAnswer(answers[question.id])}>Check selected answer</button>}<div className={styles.actions}><button className={styles.secondary} type="button" disabled={questionIndex === 0 || Boolean(busy)} onClick={() => setQuestionIndex((value) => value - 1)}>Previous question</button>{questionIndex < attempt.questions.length - 1 ? <button className={styles.button} type="button" disabled={!answerFeedback[question.id]?.correct || Boolean(busy)} onClick={() => setQuestionIndex((value) => value + 1)}>Next question</button> : <button className={styles.button} type="button" disabled={attempt.questions.some((item) => !answerFeedback[item.id]?.correct) || Boolean(busy)} onClick={() => void submitQuiz()}>{busy === "submit" ? "Submitting..." : "Submit assessment"}</button>}</div><small>Checked answers are saved as you go. Reopen this module to resume before the attempt expires on {date(attempt.expiresAt)}.</small></>}
       {result && <div className={result.passed ? styles.completion : styles.notice} role="status"><h4>{result.passed ? "✓ Assessment passed" : "More learning is needed"}</h4><p>Your score: {result.scorePercent}%. {result.firstTryScorePercent !== undefined && <>First answers: {result.firstTryScorePercent}% correct before corrections. </>} {result.criticalPassed ? "Mandatory compliance questions passed." : "One or more mandatory compliance questions need review."}</p>{result.passed ? <><strong>Learning completion reference</strong><code>{result.reference}</code><small>Valid until {date(result.expiresAt)}. This is a training record, not a government certificate, licence or accreditation.</small></> : <p>Review the activity lessons and official sources before starting a new assessment.</p>}</div>}

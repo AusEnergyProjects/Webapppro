@@ -38,7 +38,7 @@ async function priceItems(ownerUid: string) {
   const rows = await getD1().prepare(`SELECT id, item_code, name, item_type, unit_label, supplier_cost_cents_ex_gst,
       sell_price_cents_ex_gst, tax_code, expected_duration_minutes, required_skill
     FROM trade_price_book_items WHERE firebase_uid = ? AND record_status = 'active'
-    ORDER BY name COLLATE NOCASE, item_code LIMIT 500`).bind(ownerUid).all<Row>();
+    ORDER BY name COLLATE NOCASE, item_code LIMIT 5000`).bind(ownerUid).all<Row>();
   return rows.results.map((row) => ({ id: String(row.id), itemCode: String(row.item_code), name: String(row.name),
     itemType: String(row.item_type), unitLabel: String(row.unit_label), supplierCostCentsExGst: Number(row.supplier_cost_cents_ex_gst),
     sellPriceCentsExGst: Number(row.sell_price_cents_ex_gst), taxCode: String(row.tax_code) as "gst" | "none",
