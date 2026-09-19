@@ -423,10 +423,11 @@ test("installer dashboard and reports use compact server-owned read models", () 
   assert.match(route, /async function crmSummary/);
   assert.match(route, /async function crmReports/);
   assert.match(route, /SUM\(CASE WHEN stage NOT IN/);
-  assert.match(route, /GROUP BY COALESCE\(d\.pipeline_stage/);
+  assert.match(route, /loadBusinessReport\(getD1\(\), identity\.uid/);
   assert.match(crm, /trade-crm\?mode=bootstrap/);
   assert.match(crm, /trade-crm\?mode=summary/);
-  assert.match(crm, /trade-crm\?mode=reports/);
+  assert.match(crm, /<TradeBusinessReports user=\{user\}/);
+  assert.match(read("../src/components/TradeBusinessReports.tsx"), /trade-crm\?mode=reports/);
   for (const legacyState of ["CrmScheduleResult", "scheduleItems", "schedulePage", "schedulePagination", "scheduleCursors", 'mode: "schedule"']) {
     assert.doesNotMatch(crm, new RegExp(legacyState));
   }

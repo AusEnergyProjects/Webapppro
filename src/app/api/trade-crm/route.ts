@@ -1,5 +1,7 @@
 import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard } from "@/lib/creditex-onboarding-server";
 import { getD1 } from "../../../../db";
+import { loadBusinessReport } from "@/lib/trade-business-reports-server";
+import { ReportInputError } from "@/lib/trade-business-reports";
 import { assertCertificateActivityEligibility, certificateActivityEligibilityGuardStatement } from "@/lib/trade-training-server";
 import { certificateActivityIds, assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
@@ -1462,17 +1464,8 @@ async function crmSchedule(identity: CrmIdentity, url: URL) {
   };
 }
 
-async function crmReports(identity: CrmIdentity) {
-  const db = getD1();
-  const [summary, pipelineRows] = await Promise.all([
-    crmSummary(identity),
-    db.prepare(`SELECT COALESCE(d.pipeline_stage, CASE WHEN w.source_type = 'opportunity' THEN 'qualifying' ELSE 'enquiry' END) stage, COUNT(*) total
-      FROM trade_work_orders w LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
-      WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
-      GROUP BY COALESCE(d.pipeline_stage, CASE WHEN w.source_type = 'opportunity' THEN 'qualifying' ELSE 'enquiry' END)`)
-      .bind(identity.uid).all<Record<string, unknown>>(),
-  ]);
-  return { metrics: summary.metrics, pipeline: Object.fromEntries(pipelineRows.results.map((row: Record<string, unknown>) => [String(row.stage), Number(row.total || 0)])) };
+async function crmReports(identity: CrmIdentity, url: URL) {
+  return loadBusinessReport(getD1(), identity.uid, { ...identity.access, memberId: identity.memberId }, url.searchParams, identity.addressState);
 }
 
 async function ownedJob(db: D1Database, identity: CrmIdentity, workOrderId: string) {
@@ -1622,7 +1615,8 @@ export async function GET(request: Request) {
     }
     if (mode === "reports") {
       if (!identity.access.canRunReports) throw new Error("REPORTS_REQUIRED");
-      return adminJson({ ok: true, access: accessPayload, ...(await crmReports(identity)) });
+      try { return adminJson({ ok: true, report: await crmReports(identity, url) }); }
+      catch (error) { if (error instanceof ReportInputError) return adminJson({ ok: false, error: error.message }, 400); throw error; }
     }
     if (mode === "index" && ["jobs", "customers"].includes(resource)) {
       if (resource === "customers" && (!identity.access.canViewCustomers

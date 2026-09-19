@@ -776,15 +776,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-payment-boundary s
   color: #b9d7ff;
 }
 
-html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-pipeline-report span,
-html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-report-list dt {
-  color: var(--trade-muted);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-report-list div {
-  border-color: var(--trade-line);
-}
-
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.crm-record-table, .tlink-data-table, .purchasing-order-list) {
   --tlink-table-head: #172d34;
   --tlink-table-line: #294248;

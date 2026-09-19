@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import { canAssignWithinScope } from "../src/lib/trade-team-permission-policy.mjs";
 import * as tradeJobLifecycle from "../src/lib/trade-job-lifecycle.ts";
+import { ReportInputError } from "../src/lib/trade-business-reports.ts";
 import { certificateTestDependency, installCreditexTrainingFixture } from './helpers/creditex-training-fixture.mjs';
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -393,7 +394,7 @@ function access(overrides = {}) {
   };
 }
 
-function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1, synced: 1, failed: 0 })) {
+function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1, synced: 1, failed: 0 }), reportLoader = async () => ({})) {
   class TradeAccessError extends Error {
     constructor(code) {
       super(code);
@@ -412,6 +413,8 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
   });
   const rentalCredentialHelpers = loadTypescriptModule("../src/lib/trade-rental-credentials.ts", {});
   return loadTypescriptModule("../src/app/api/trade-crm/route.ts", {
+    "@/lib/trade-business-reports-server": { loadBusinessReport: reportLoader },
+    "@/lib/trade-business-reports": { ReportInputError },
     "../../../../db": { getD1: () => d1 },
     "@/lib/admin-server": {
       adminJson,
@@ -497,6 +500,28 @@ function appointmentRequest(assigneeMemberId, expectedRevision = 3) {
     }),
   });
 }
+
+test("business reports reject staff without reporting permission before querying metrics", async () => {
+  const { d1 } = fixture(); let calls = 0;
+  const { GET } = crmRoute(d1, access(), undefined, async () => { calls++; return {}; });
+  const response = await GET(new Request("https://example.test/api/trade-crm?mode=reports"));
+  assert.equal(response.status, 403); assert.equal(calls, 0);
+});
+
+test("business reports use authenticated owner and independent finance permissions", async () => {
+  const { d1 } = fixture(); let received;
+  const { GET } = crmRoute(d1, access({ canRunReports: true }), undefined, async (_db, uid, permissions, params, state) => { received = { uid, permissions, period: params.get('period'), state }; return { checked: true }; });
+  const response = await GET(new Request("https://example.test/api/trade-crm?mode=reports&period=quarterly&ownerUid=foreign"));
+  assert.equal(response.status, 200); assert.equal(received.uid, "owner-1"); assert.equal(received.permissions.canViewInvoices, false); assert.equal(received.permissions.canViewQuotes, false); assert.equal(received.period, "quarterly");
+  assert.deepEqual((await response.json()).report, { checked: true });
+});
+
+test("report date validation is an actionable 400 rather than a server failure", async () => {
+  const { d1 } = fixture();
+  const { GET } = crmRoute(d1, access({ canRunReports: true }), undefined, async () => { throw new ReportInputError("Choose valid report dates."); });
+  const response = await GET(new Request("https://example.test/api/trade-crm?mode=reports"));
+  assert.equal(response.status, 400); assert.match((await response.json()).error, /valid report dates/);
+});
 
 test("create_appointment POST requires assignment permission when the draft assignee differs", async () => {
   const { database, d1 } = fixture();

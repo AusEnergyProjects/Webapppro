@@ -49,6 +49,7 @@ const TradeQuotePanel = dynamic(() => import("./TradeQuotePanel").then((module) 
 const TradePhotoRequestPanel = dynamic(() => import("./TradePhotoRequestPanel").then((module) => module.TradePhotoRequestPanel));
 const TradePhotoTemplateLibrary = dynamic(() => import("./TradePhotoTemplateLibrary").then((module) => module.TradePhotoTemplateLibrary));
 const TradePriceBookWorkspace = dynamic(() => import("./TradePriceBookWorkspace").then((module) => module.TradePriceBookWorkspace));
+const TradeBusinessReports = dynamic(() => import("./TradeBusinessReports").then((module) => module.TradeBusinessReports));
 const TradeJobReadinessPanel = dynamic(() => import("./TradeJobReadinessPanel").then((module) => module.TradeJobReadinessPanel));
 const TradeNewJobForm = recoverableTradeWorkspace(() => import("./TradeNewJobForm").then((module) => module.TradeNewJobForm));
 const TradeQuickInvoicePanel = dynamic(() => import("./TradeQuickInvoicePanel").then((module) => module.TradeQuickInvoicePanel));
@@ -133,7 +134,6 @@ type CrmMetrics = {
 };
 type WorkloadBucket = { weekStart: string; weekEnd: string; visits: number; bookedMinutes: number };
 type CrmSummaryResult = { ok?: boolean; metrics?: CrmMetrics; workload?: WorkloadBucket[]; workStages?: Record<string, number>; upcomingAppointments?: ActivityAppointment[]; overdueTasks?: ActivityTask[]; openIssues?: ActivityNote[]; error?: string };
-type CrmReportResult = { ok?: boolean; metrics?: CrmMetrics; pipeline?: Record<string, number>; error?: string };
 type View = "today" | "leads" | "jobs" | "schedule" | "customers" | "pricebook" | "assets" | "templates" | "reports" | "import" | "integrations";
 type JobTab = "summary" | "schedule" | "quote" | "field" | "invoice";
 type JobDetailTab = JobTab | "files" | "forms" | "tasks" | "notes" | "handover";
@@ -422,7 +422,6 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   const jobCursors = useRef<string[]>([""]); const jobTotalReady = useRef(false);
   const customerCursors = useRef<string[]>([""]); const customerTotalReady = useRef(false);
   const [summary, setSummary] = useState<CrmSummaryResult>({});
-  const [report, setReport] = useState<CrmReportResult>({});
   const [boardJobs, setBoardJobs] = useState<Record<string, Job[]>>({});
   const [boardCounts, setBoardCounts] = useState<Record<string, number>>({});
   const [selectedJobDetail, setSelectedJobDetail] = useState<Job | null>(null);
@@ -847,19 +846,6 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   }, [refreshNonce, user, view]);
 
   useEffect(() => {
-    if (view !== "reports") return;
-    let active = true;
-    void user.getIdToken().then((token) => fetch("/api/trade-crm?mode=reports", {
-      headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
-    })).then(async (response) => {
-      const result = await response.json().catch(() => ({})) as CrmReportResult;
-      if (!response.ok || !result.ok) throw new Error(result.error || "The business report could not be loaded.");
-      if (active) setReport(result);
-    }).catch((error) => active && setStatus(error instanceof Error ? error.message : "The business report could not be loaded."));
-    return () => { active = false; };
-  }, [refreshNonce, user, view]);
-
-  useEffect(() => {
     if (view !== "jobs" || jobLayout !== "board") return;
     let active = true;
     const stages = ["enquiry", "qualifying", "quoting", "approved", "scheduled", "in_progress"];
@@ -1005,9 +991,6 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   const upcomingAppointments = summary.upcomingAppointments || [];
   const overdueTasks = summary.overdueTasks || [];
   const openIssues = summary.openIssues || [];
-  const reportMetrics = report.metrics || metrics;
-  const pipelineCounts = report.pipeline || {};
-  const pipelineTotal = Object.values(pipelineCounts).reduce((total, count) => total + count, 0);
   const jobGridStyle = indexGridStyle(jobColumns, jobIndexColumns);
   const customerGridStyle = indexGridStyle(customerColumns, customerIndexColumns);
   const customerRecordStyle: CSSProperties = {
@@ -1452,11 +1435,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       <TradePhotoTemplateLibrary user={user} />
     </div>}
 
-    {view === "reports" && <div className="crm-view">
-      <div className="crm-page-heading"><div><span>Business snapshot</span><h3>Reports</h3><p>A simple operational view using the records in this workspace.</p></div></div>
-      <section className="crm-metrics crm-report-metrics"><article><span>Quoted</span><strong>{money(reportMetrics.quotedCents)}</strong><small>Current job records</small></article><article><span>Invoiced</span><strong>{money(reportMetrics.invoicedCents)}</strong><small>Including paid invoices</small></article><article><span>Paid</span><strong>{money(reportMetrics.paidCents)}</strong><small>Recorded receipts</small></article><article className={reportMetrics.outstandingCents ? "attention" : ""}><span>Outstanding</span><strong>{money(reportMetrics.outstandingCents)}</strong><small>Still to collect</small></article></section>
-      <div className="crm-report-grid"><section className="crm-card"><header><div><span>Sales flow</span><h3>Jobs by stage</h3></div></header><div className="crm-pipeline-report">{Object.entries(pipelineLabels).map(([stage, label]) => { const count = pipelineCounts[stage] || 0; return <div key={stage}><span>{label}</span><meter min="0" max={Math.max(1, pipelineTotal)} value={count} /><strong>{count}</strong></div>; })}</div></section><section className="crm-card"><header><div><span>Work health</span><h3>Operational checks</h3></div></header><dl className="crm-report-list"><div><dt>Open jobs</dt><dd>{reportMetrics.openJobs}</dd></div><div><dt>Jobs waiting</dt><dd>{reportMetrics.waitingJobs}</dd></div><div><dt>Open issues</dt><dd>{reportMetrics.openIssues}</dd></div><div><dt>Overdue tasks</dt><dd>{reportMetrics.overdueTasks}</dd></div><div><dt>Completed jobs</dt><dd>{reportMetrics.completedJobs}</dd></div></dl></section></div>
-    </div>}
+    {view === "reports" && <div className="crm-view"><TradeBusinessReports user={user} onOpenJobs={() => setView("jobs")} onOpenSchedule={() => openVisualSchedule()} onOpenInvoices={(!staffPermissions || staffPermissions.canViewInvoices) ? onOpenInvoices : undefined} /></div>}
     {view === "import" && <div className="crm-view"><TradeDataImportWorkspace user={user} partnerType="installer" onImported={async () => { await load(); setRefreshNonce((value) => value + 1); }} /></div>}
     {view === "pricebook" && <div className="crm-view"><TradePriceBookWorkspace key={priceBookView} user={user} initialView={priceBookView} permissions={staffPermissions} /></div>}
     {view === "assets" && <div className="crm-view"><TradeAssetWorkspace user={user} /></div>}
