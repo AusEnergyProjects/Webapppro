@@ -42,8 +42,10 @@ test("local midnight follows DST and half-hour Australian time zones", () => {
   assert.equal(reportMidnight("2026-07-01", "SA"), "2026-06-30T14:30:00.000Z");
   assert.equal(reportMidnight("2026-07-01", "WA"), "2026-06-30T16:00:00.000Z");
 });
-test("invalid, future, reversed and oversized reporting windows reject", () => {
-  for (const input of [{period:"other"},{anchor:"2026-02-30"},{anchor:"2027-01-01"},{period:"custom",from:"2026-09-20",to:"2026-09-10"},{period:"custom",from:"2024-01-01",to:"2026-09-20"}]) assert.throws(() => resolveReportPeriod(params(input), "VIC", now));
+test("invalid, future and reversed reporting windows reject while multi-decade history is allowed", () => {
+  for (const input of [{period:"other"},{anchor:"2026-02-30"},{anchor:"2027-01-01"},{period:"custom",from:"2026-09-20",to:"2026-09-10"}]) assert.throws(() => resolveReportPeriod(params(input), "VIC", now));
+  assert.equal(resolveReportPeriod(params({period:"custom",from:"1990-01-01",to:"2026-09-20"}),"VIC",now).start,"1990-01-01");
+  assert.equal(resolveReportPeriod(params({anchor:"1990-01-01"}),"VIC",now).start,"1990-01-01");
   const custom = resolveReportPeriod(params({period:"custom",from:"2026-09-01",to:"2026-09-03"}),"VIC",now); assert.equal(custom.previous.start,"2026-08-29"); assert.equal(custom.previous.end,"2026-08-31");
   assert.equal(reportChange(10,0), "No prior value"); assert.equal(reportChange(0,0),"No change");
 });
@@ -118,6 +120,31 @@ test("large business reports aggregate all records rather than a display page ca
   const report=await f.report(); assert.equal(report.current.newJobs,1200); assert.equal(report.current.invoiceCount,1200); assert.equal(report.current.invoicedCents,12000000); assert.equal(report.receivables.outstandingCents,13200000);
 });
 
+test("all time includes decades of scoped history with complete trends and no artificial comparison", async () => {
+  const f=fixture(); f.job("old",{created_at:"1990-01-01T00:00:00Z"}); f.invoice("old",{sent_at:"1990-01-01T00:00:00Z"});
+  f.job("new"); f.invoice("new"); f.job("foreign",{firebase_uid:"other",created_at:"1970-01-01T00:00:00Z"});
+  const report=await f.report({period:"all"});
+  assert.equal(report.period.start,"1990-01-01"); assert.equal(report.period.previous,null); assert.equal(report.previous,null);
+  assert.equal(report.current.newJobs,2); assert.equal(report.current.invoicedCents,20000); assert.ok(report.trend.length<=38);
+  assert.equal(report.trend[0].start,report.period.start); assert.equal(report.trend.at(-1).end,report.period.end);
+  const windows=reportTrendWindows(report.period,"VIC"); for(let i=1;i<windows.length;i++) assert.equal(windows[i-1].endUtc,windows[i].startUtc);
+  assert.equal(report.trend.reduce((total,row)=>total+row.newJobs,0),report.current.newJobs);
+  assert.equal(report.trend.reduce((total,row)=>total+row.invoicedCents,0),report.current.invoicedCents);
+  assert.equal(reportCsvRows(report).find(row=>row.metric==="Net TLink invoicing").value,"200.00");
+  assert.ok(reportCsvRows(report).every(row=>row.comparison===""));
+});
+
+test("all time derives earliest eligible event and visit, respecting filters and staff access", async () => {
+  const f=fixture(); f.job("one",{assignee_member_id:"me"}); f.invoice("one",{sent_at:"1995-06-01T15:00:00Z"});
+  f.job("other-service",{service_category:"insulation",created_at:"1980-01-01T00:00:00Z"});
+  f.insert("trade_crm_appointments",{id:"a",work_order_id:"one",firebase_uid:"owner",assignee_member_id:"them",starts_at:"1992-01-01T09:00",ends_at:"1992-01-01T10:00",status:"completed"});
+  assert.equal((await f.report({period:"all",service:"hot-water"})).period.start,"1992-01-01");
+  const own={isOwner:false,memberId:"me",jobScope:"own",scheduleScope:"own"};
+  assert.equal((await f.report({period:"all"},own)).period.start,"1995-06-02");
+  assert.equal((await f.report({period:"all"},{...own,canViewInvoices:false})).period.start,"2026-09-10");
+  const empty=await f.report({period:"all",state:"WA"}); assert.equal(empty.period.start,empty.period.today); assert.equal(empty.current.newJobs,0);
+});
+
 test("reports execute within Cloudflare D1 query limits with the same aggregates as SQLite", async () => {
   const { Miniflare } = await import("miniflare");
   const runtime = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok"); } }', compatibilityDate: "2025-04-01", d1Databases: { DB: "business-reports-regression" }, port: 0 });
@@ -132,7 +159,7 @@ test("reports execute within Cloudflare D1 query limits with the same aggregates
         await db.prepare(`INSERT INTO ${table.name} (${Object.keys(row).join(",")}) VALUES (${Object.keys(row).map(() => "?").join(",")})`).bind(...Object.values(row)).run();
       }
     }
-    for (const query of [{}, { period: "weekly" }, { period: "quarterly" }, { period: "fytd" }, { period: "custom", from: "2026-09-01", to: "2026-09-10" }]) {
+    for (const query of [{}, { period: "weekly" }, { period: "quarterly" }, { period: "fytd" }, { period: "all" }, { period: "custom", from: "1990-01-01", to: "2026-09-10" }]) {
       const actual = await loadBusinessReport(db, "owner", access, params(query), "VIC", now);
       assert.deepEqual(actual, await f.report(query));
     }

@@ -42,3 +42,12 @@ test("a late response cannot replace the newly selected reporting period",async(
   let tree=h.render();await flush();button(tree,"Weekly").props.onClick();h.render();await flush();tree=h.render();assert.equal(h.requests[0].init.signal.aborted,true);
   release(response(report()));await flush();tree=h.render();const cards=nodes(tree,node=>typeof node.type==="function"&&node.props.label==="New jobs");assert.equal(cards[0].props.value,"99");h.cleanup();
 });
+
+test("all time stays visible and exportable without comparison, with years on historical trends",async()=>{
+  const value={...report(),period:reporting.resolveReportPeriod(new URLSearchParams({period:"all"}),"VIC",new Date("2026-09-20T03:00Z"),"1990-01-01"),previous:null,trend:[{start:"1990-01-01",end:"1990-12-31",newJobs:4,completedJobs:2,invoicedCents:10000}]};
+  const h=harness(async()=>response(value));let tree=await h.mount();button(tree,"All time").props.onClick();h.render();await flush();tree=h.render();
+  assert.match(h.requests.at(-1).url,/period=all/); assert.match(text(tree),/All recorded history/); assert.match(text(tree),/1990/);
+  assert.equal(button(tree,"Previous"),undefined); assert.equal(button(tree,"Next"),undefined);
+  const metrics=nodes(tree,node=>typeof node.type==="function"&&typeof node.props.label==="string");assert.equal(metrics.length,6);assert.ok(metrics.every(node=>node.props.comparison===null));
+  button(tree,"Export report").props.onClick();assert.equal(h.downloads.length,1);h.cleanup();
+});

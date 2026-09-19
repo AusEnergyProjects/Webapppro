@@ -1,4 +1,5 @@
 import { addReportDays, ReportInputError, reportTrendWindows, resolveReportPeriod, type BusinessReport, type ReportMeasures } from "./trade-business-reports.ts";
+import { australiaLocalDateTime } from "./trade-schedule.ts";
 
 type ReportAccess = { isOwner: boolean; memberId: string; jobScope: string; scheduleScope: string; canViewInvoices: boolean; canViewQuotes: boolean };
 type Row = Record<string, unknown>;
@@ -59,14 +60,23 @@ const finance = `${native}, balances AS (
 
 /** Aggregate at the database, never a capped customer/job list. No contact details are selected. */
 export async function loadBusinessReport(db: Pick<D1Database, "prepare" | "batch">, uid: string, access: ReportAccess, params: URLSearchParams, state = "NSW", now = new Date()): Promise<BusinessReport> {
-  const period = resolveReportPeriod(params, state, now);
+  let period = resolveReportPeriod(params, state, now);
   const service = params.get("service") || ""; const region = params.get("state") || "";
   if (!/^[a-zA-Z0-9_-]{0,80}$/.test(service) || !["", "unknown", "ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"].includes(region)) throw new ReportInputError("Choose a valid service and region.");
   const args = [uid, access.isOwner || access.jobScope === "team" ? 1 : 0, access.memberId, service, service, region, region];
+  const teamSchedule = access.isOwner || access.scheduleScope === "team" ? 1 : 0;
+  if (period.preset === "all") {
+    const history = await db.prepare(`${base}${events} SELECT
+      (SELECT datetime(MIN(julianday(at))) FROM events WHERE julianday(at)<=julianday(?) AND (kind NOT IN ('invoicedCents','invoiceCount','creditCents') OR ?=1) AND (kind NOT IN ('quoteIssues','wonQuotes','declinedQuotes','wonCents') OR ?=1)) first_utc,
+      (SELECT MIN(substr(a.starts_at,1,10)) FROM trade_crm_appointments a JOIN jobs j ON j.id=a.work_order_id AND j.firebase_uid=a.firebase_uid WHERE j.stage<>'cancelled' AND a.status IN ('scheduled','en_route','arrived','in_progress','completed') AND date(a.starts_at) IS NOT NULL AND substr(a.starts_at,1,10)<=? AND (?=1 OR a.assignee_member_id=?)) first_visit`).bind(...args, now.toISOString(), access.canViewInvoices ? 1 : 0, access.canViewQuotes ? 1 : 0, period.today, teamSchedule, access.memberId).first<Row>();
+    const firstUtc = history?.first_utc ? australiaLocalDateTime(state, new Date(`${String(history.first_utc).replace(" ", "T")}Z`)).slice(0, 10) : period.today;
+    const firstDay = [firstUtc, String(history?.first_visit || period.today)].sort()[0];
+    period = resolveReportPeriod(params, state, now, firstDay);
+  }
   const timeline = reportTrendWindows(period, state);
-  const windows = [{ id: "current", ...period }, { id: "previous", ...period.previous }, ...timeline.map((window, index) => ({ id: `trend${index}`, ...window }))];
+  const windows = [{ id: "current", ...period }, ...(period.previous ? [{ id: "previous", ...period.previous }] : []), ...timeline.map((window, index) => ({ id: `trend${index}`, ...window }))];
   const upcomingEnd = addReportDays(period.today, 28);
-  const scheduleRanges = JSON.stringify([{ id: "current", start: period.start, end: addReportDays(period.end, 1) }, { id: "previous", start: period.previous.start, end: addReportDays(period.previous.end, 1) }, { id: "upcoming", start: period.today, end: upcomingEnd }]);
+  const scheduleRanges = JSON.stringify([{ id: "current", start: period.start, end: addReportDays(period.end, 1) }, ...(period.previous ? [{ id: "previous", start: period.previous.start, end: addReportDays(period.previous.end, 1) }] : []), { id: "upcoming", start: period.today, end: upcomingEnd }]);
   const results = await db.batch<Row>([
     db.prepare(`${base}${events}${rangeCte}
       SELECT r.id, e.kind, COALESCE(SUM(e.value),0) value FROM ranges r JOIN events e ON julianday(e.at)>=julianday(r.start_utc) AND julianday(e.at)<julianday(r.end_utc) GROUP BY r.id,e.kind`).bind(...args, JSON.stringify(windows)),
@@ -125,7 +135,7 @@ export async function loadBusinessReport(db: Pick<D1Database, "prepare" | "batch
   const sumBalance = (key: string) => balances.reduce((total, row) => total + number(row[key]), 0);
   return { generatedAt: now.toISOString(), period, service, state: region, permissions: { invoices: access.canViewInvoices, quotes: access.canViewQuotes },
     options: { services: [...new Set(results[6].results.map(row => String(row.service)))], states: [...new Set(results[6].results.map(row => String(row.region)))].sort() },
-    current: values("current"), previous: values("previous"), trend: timeline.map((window, index) => ({ start: window.start, end: window.end, newJobs: values(`trend${index}`).newJobs, completedJobs: values(`trend${index}`).completedJobs, invoicedCents: values(`trend${index}`).invoicedCents })),
+    current: values("current"), previous: period.previous ? values("previous") : null, trend: timeline.map((window, index) => ({ start: window.start, end: window.end, newJobs: values(`trend${index}`).newJobs, completedJobs: values(`trend${index}`).completedJobs, invoicedCents: values(`trend${index}`).invoicedCents })),
     services: breakdown("service"), regions: breakdown("region"), team: [...members.values()].sort((a, b) => b.bookedMinutes - a.bookedMinutes || a.label.localeCompare(b.label)),
     work: { openJobs: number(work.open_jobs), waitingJobs: number(work.waiting), unassignedJobs: number(work.unassigned), awaitingSchedule: number(work.awaiting), overdueTasks: number(work.overdue_tasks), openIssues: number(work.issues), completedUninvoiced: access.canViewInvoices ? number(work.uninvoiced) : null, stages: results[5].results.map(row => ({ key: String(row.stage), count: number(row.count) })) },
     receivables: access.canViewInvoices ? { outstandingCents: sumBalance("cents"), paidCents: sumBalance("paid"), undatedInvoiceCount: sumBalance("undated_count"), undatedInvoiceCents: sumBalance("undated_cents"), buckets: ["Not overdue","1 to 30 days","31 to 60 days","61 to 90 days","Over 90 days","No due date"].map(key => { const row = balances.find(row => row.bucket === key); return { key, count: number(row?.count), cents: number(row?.cents) }; }) } : null };

@@ -1,16 +1,16 @@
 import { australiaLocalDateTime } from "./trade-schedule.ts";
 
-export const REPORT_PERIODS = ["weekly", "monthly", "quarterly", "fytd", "custom"] as const;
+export const REPORT_PERIODS = ["weekly", "monthly", "quarterly", "fytd", "all", "custom"] as const;
 export type ReportPreset = typeof REPORT_PERIODS[number];
 export type ReportWindow = { start: string; end: string; startUtc: string; endUtc: string };
-export type ReportPeriod = ReportWindow & { preset: ReportPreset; today: string; timeZone: string; previous: ReportWindow; previousAnchor: string; nextAnchor: string | null };
+export type ReportPeriod = ReportWindow & { preset: ReportPreset; today: string; timeZone: string; previous: ReportWindow | null; previousAnchor: string | null; nextAnchor: string | null };
 export type ReportMeasures = { newJobs: number; completedJobs: number; quoteIssues: number | null; wonQuotes: number | null; declinedQuotes: number | null; wonCents: number | null; invoicedCents: number | null; creditCents: number | null; invoiceCount: number | null; bookedMinutes: number; visits: number; completedVisits: number; missingDurations: number };
 export type ReportBreakdown = { key: string; newJobs: number; completedJobs: number; invoicedCents: number | null };
 export type BusinessReport = {
   generatedAt: string; period: ReportPeriod; service: string; state: string;
   permissions: { invoices: boolean; quotes: boolean };
   options: { services: string[]; states: string[] };
-  current: ReportMeasures; previous: ReportMeasures;
+  current: ReportMeasures; previous: ReportMeasures | null;
   trend: Array<{ start: string; end: string; newJobs: number; completedJobs: number; invoicedCents: number | null }>;
   services: ReportBreakdown[]; regions: ReportBreakdown[];
   work: { openJobs: number; waitingJobs: number; unassignedJobs: number; awaitingSchedule: number; overdueTasks: number; openIssues: number; completedUninvoiced: number | null; stages: Array<{ key: string; count: number }> };
@@ -42,17 +42,21 @@ export function reportMidnight(day: string, state: string) {
 export function reportWindow(start: string, end: string, state: string): ReportWindow {
   return { start, end, startUtc: reportMidnight(start, state), endUtc: reportMidnight(addReportDays(end, 1), state) };
 }
-export function resolveReportPeriod(params: URLSearchParams, addressState = "NSW", now = new Date()): ReportPeriod {
+export function resolveReportPeriod(params: URLSearchParams, addressState = "NSW", now = new Date(), firstRecordedDay?: string): ReportPeriod {
   const input = params.get("period") || "monthly";
-  if (!REPORT_PERIODS.some(value => value === input)) throw new ReportInputError("Choose a weekly, monthly, quarterly, financial year or custom report.");
+  if (!REPORT_PERIODS.some(value => value === input)) throw new ReportInputError("Choose a weekly, monthly, quarterly, financial year, all time or custom report.");
   const preset = input as ReportPreset;
   const today = australiaLocalDateTime(addressState, now).slice(0, 10);
   const anchor = reportDay(params.get("anchor") || today);
-  if (anchor > today || anchor < "2000-01-01") throw new ReportInputError("Choose a report date between 2000 and today.");
+  if (anchor > today) throw new ReportInputError("Choose a report date no later than today.");
+  if (preset === "all") {
+    const start = firstRecordedDay ? reportDay(firstRecordedDay) : today;
+    return { ...reportWindow(start, today, addressState), preset, today, timeZone: zones[addressState] || zones.NSW, previous: null, previousAnchor: null, nextAnchor: null };
+  }
   let start = anchor; let fullEnd = anchor; let previousStart = anchor; let previousFullEnd = anchor;
   if (preset === "custom") {
     start = reportDay(params.get("from") || ""); fullEnd = reportDay(params.get("to") || "");
-    if (start < "2000-01-01" || fullEnd < start || fullEnd > today || daysBetween(start, fullEnd) > 365) throw new ReportInputError("Choose a date range of up to 366 days ending no later than today.");
+    if (fullEnd < start || fullEnd > today) throw new ReportInputError("Choose a date range ending no later than today, with the start before the end.");
     previousFullEnd = addReportDays(start, -1); previousStart = addReportDays(start, -daysBetween(start, fullEnd) - 1);
   } else if (preset === "weekly") {
     start = addReportDays(anchor, -((new Date(`${anchor}T00:00:00Z`).getUTCDay() + 6) % 7));
@@ -69,13 +73,14 @@ export function resolveReportPeriod(params: URLSearchParams, addressState = "NSW
   const elapsedEnd = addReportDays(previousStart, daysBetween(start, end));
   const previousEnd = fullEnd <= today ? previousFullEnd : elapsedEnd < previousFullEnd ? elapsedEnd : previousFullEnd;
   return { ...reportWindow(start, end, addressState), preset, today, timeZone: zones[addressState] || zones.NSW,
-    previous: reportWindow(previousStart, previousEnd, addressState), previousAnchor: addReportDays(start, -1),
+    previous: /^\d{4}-\d{2}-\d{2}$/.test(previousStart) ? reportWindow(previousStart, previousEnd, addressState) : null, previousAnchor: /^\d{4}-\d{2}-\d{2}$/.test(addReportDays(start, -1)) ? addReportDays(start, -1) : null,
     nextAnchor: fullEnd < today ? addReportDays(fullEnd, 1) : null };
 }
 export function reportTrendWindows(period: ReportPeriod, state: string) {
   const length = daysBetween(period.start, period.end) + 1; const result: ReportWindow[] = [];
   for (let start = period.start; start <= period.end;) {
-    const next = length <= 31 ? addReportDays(start, 1) : length <= 100 ? addReportDays(start, 7) : shiftMonth(start, 1);
+    // Larger spans use wider buckets, retaining every record without an enormous chart.
+    const next = length <= 31 ? addReportDays(start, 1) : length <= 100 ? addReportDays(start, 7) : shiftMonth(start, Math.max(1, Math.ceil(length / 1095)));
     const end = addReportDays(next, -1) < period.end ? addReportDays(next, -1) : period.end;
     result.push(reportWindow(start, end, state)); start = next;
   }
@@ -89,19 +94,23 @@ export function reportChange(current: number, previous: number) {
 export function reportCsvRows(report: BusinessReport) {
   const rows: Array<Record<string, string | number>> = [];
   const put = (section: string, metric: string, value: string | number, comparison: string | number = "", basis = "Selected period") => rows.push({ section, metric, value, comparison, basis });
-  put("Report", "Dates", `${report.period.start} to ${report.period.end}`, `${report.period.previous.start} to ${report.period.previous.end}`);
+  put("Report", "Dates", `${report.period.start} to ${report.period.end}`, report.period.previous ? `${report.period.previous.start} to ${report.period.previous.end}` : "");
   put("Report", "Time zone", report.period.timeZone); put("Report", "Service", report.service || "All services"); put("Report", "Region", report.state || "All regions");
   const moneyKeys = new Set(["wonCents", "invoicedCents", "creditCents"]);
   const labels: Record<keyof ReportMeasures, string> = { newJobs: "Jobs created", completedJobs: "Jobs completed", quoteIssues: "Quotes first issued", wonQuotes: "Accepted quote decisions", declinedQuotes: "Declined quote decisions", wonCents: "Work won", invoicedCents: "Net TLink invoicing", creditCents: "Credits issued", invoiceCount: "TLink invoices issued", bookedMinutes: "Booked minutes", visits: "Visits", completedVisits: "Completed visits", missingDurations: "Visits missing duration" };
   for (const key of Object.keys(report.current) as Array<keyof ReportMeasures>) {
-    const value = report.current[key]; const previous = report.previous[key]; if (value === null || previous === null) continue;
-    put("Period", labels[key], moneyKeys.has(key) ? (value / 100).toFixed(2) : value, moneyKeys.has(key) ? (previous / 100).toFixed(2) : previous, moneyKeys.has(key) ? "AUD excluding GST" : "Selected period");
+    const value = report.current[key]; const previous = report.previous?.[key]; if (value === null) continue;
+    put("Period", labels[key], moneyKeys.has(key) ? (value / 100).toFixed(2) : value, previous != null ? moneyKeys.has(key) ? (previous / 100).toFixed(2) : previous : "", moneyKeys.has(key) ? "AUD excluding GST" : "Selected period");
   }
   for (const [section, groups] of [["Services", report.services], ["Regions", report.regions]] as const) for (const group of groups) {
     put(section, `${group.key} / jobs created`, group.newJobs); put(section, `${group.key} / jobs completed`, group.completedJobs);
     if (group.invoicedCents !== null) put(section, `${group.key} / net TLink invoicing`, (group.invoicedCents / 100).toFixed(2), "", "AUD excluding GST");
   }
-  for (const bucket of report.trend) { put("Trend", `${bucket.start} / jobs created`, bucket.newJobs); if (bucket.invoicedCents !== null) put("Trend", `${bucket.start} / net TLink invoicing`, (bucket.invoicedCents / 100).toFixed(2), "", "AUD excluding GST"); }
+  for (const bucket of report.trend) {
+    const range = `${bucket.start} to ${bucket.end}`;
+    put("Trend", `${range} / jobs created`, bucket.newJobs); put("Trend", `${range} / jobs completed`, bucket.completedJobs);
+    if (bucket.invoicedCents !== null) put("Trend", `${range} / net TLink invoicing`, (bucket.invoicedCents / 100).toFixed(2), "", "AUD excluding GST");
+  }
   for (const member of report.team) { put("Team", `${member.label} / booked hours`, (member.bookedMinutes / 60).toFixed(2)); put("Team", `${member.label} / next 28 days hours`, (member.upcomingMinutes / 60).toFixed(2), "", "Current schedule"); }
   if (report.receivables) {
     put("Receivables", "Outstanding", (report.receivables.outstandingCents / 100).toFixed(2), "", "Today, AUD including GST");
