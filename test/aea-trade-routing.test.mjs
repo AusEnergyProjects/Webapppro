@@ -121,6 +121,7 @@ test("actual notification enqueue and final claim deny legacy mixed scope and a 
     .replace('${verifiedTradeAccountPredicate("current_account")}', "current_account.approved = 1")
     .replaceAll(/\$\{publicPlanContactReleaseConsentSql\("([^"]+)"\)\}/g, (_, alias) => publicPlanContactReleaseConsentSql(alias));
   qualifyLeadFixture(db);
+  db.exec("DELETE FROM trade_training_completions; DELETE FROM trade_training_attempts"); // Lead receipt does not require completed training.
   const claim = db.prepare(sql);
   const bindings = [1, "email-hash", "idempotency", "Bounded subject", "Bounded body", now, now,
     row.id, row.status, row.attempts, "email-hash", now, now, "trade@example.test"];
@@ -152,6 +153,7 @@ test("actual manual assignment writes reject mixed scope while terminal cleanup 
     INSERT INTO trade_accounts VALUES ('trade-1','installer',1);`);
   const code = source("../src/app/api/admin/opportunities/matches/route.ts");
   qualifyLeadFixture(db);
+  db.exec("DELETE FROM trade_training_completions; DELETE FROM trade_training_attempts"); // Lead receipt does not require completed training.
   const insertSql = code.match(/`(INSERT INTO trade_opportunity_matches[\s\S]*?)`,/)?.[1];
   assert.ok(insertSql);
   const insert = db.prepare(scopeSql(insertSql));

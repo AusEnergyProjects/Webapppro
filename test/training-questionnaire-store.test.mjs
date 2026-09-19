@@ -8,6 +8,7 @@ import * as curriculum from '../src/data/creditex-training-curriculum.ts';
 import * as catalogue from '../src/lib/australian-government-program-catalogue.ts';
 import * as onboarding from '../src/lib/creditex-onboarding-server.ts';
 import * as services from '../src/lib/energy-service-catalogue.mjs';
+import * as trainingSections from '../src/lib/training-service-sections.mjs';
 
 function load(file, dependencies) {
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -19,6 +20,7 @@ const store = load('src/lib/training-questionnaire-store.ts', {
   'node:crypto': crypto, '../data/creditex-training-curriculum': curriculum,
   './australian-government-program-catalogue': catalogue, './creditex-onboarding-server': onboarding,
   './energy-service-catalogue.mjs': services,
+  './training-service-sections.mjs': trainingSections,
 });
 const hash = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 class Statement {
@@ -35,8 +37,8 @@ function fixture() {
     CREATE TABLE trade_team_members(id TEXT PRIMARY KEY,owner_uid TEXT,status TEXT,display_name TEXT,member_uid TEXT,capabilities TEXT);
     CREATE TABLE trade_team_member_files(id TEXT PRIMARY KEY,owner_uid TEXT,team_member_id TEXT,status TEXT,expires_at TEXT,category TEXT);
     INSERT INTO trade_accounts VALUES('owner','53004085616','Example Pty Ltd','["hot-water"]','["VIC"]','VIC');
-    INSERT INTO trade_team_members VALUES('person','owner','active','Installer','actor','["hot-water"]');`);
-  for (const file of ['0116_trade_crm_write_guard.sql', '0176_creditex_onboarding_training.sql', '0177_autonomous_activity_training.sql', '0178_autonomous_business_onboarding.sql', '0179_training_questionnaires.sql']) sql.exec(fs.readFileSync(`drizzle/${file}`, 'utf8'));
+    INSERT INTO trade_team_members(id,owner_uid,status,display_name,member_uid,capabilities) VALUES('person','owner','active','Installer','actor','["hot-water"]');`);
+  for (const file of ['0116_trade_crm_write_guard.sql', '0176_creditex_onboarding_training.sql', '0177_autonomous_activity_training.sql', '0178_autonomous_business_onboarding.sql', '0179_training_questionnaires.sql', '0180_team_member_service_states.sql']) sql.exec(fs.readFileSync(`drizzle/${file}`, 'utf8'));
   const db = { prepare: query => new Statement(sql, query), beforeBatch: null, batch: async statements => {
     const before = db.beforeBatch; db.beforeBatch = null; before?.();
     sql.exec('BEGIN');
@@ -69,6 +71,22 @@ test('catalogue forms remain available and editable without a database copy or i
   assert.ok(read.module.sources.every(source => source.id !== 'creditex-review' && !source.url.endsWith('.md')));
   assert.deepEqual(await store.listCurrentTrainingModules(f.db), curriculum.TRAINING_MODULES);
   assert.equal(await store.loadTrainingModule(f.db, 'veu-6'), curriculum.TRAINING_MODULES.find(course => course.id === 'veu-6'));
+});
+
+test('Other questionnaire sections persist as display metadata without changing service or state scope', async () => {
+  const f = fixture();
+  const saved = await create(f, form(), { ...assignment(), serviceCategory: 'other', trainingSection: 'pool-pumps' });
+  assert.equal(saved.assignment.trainingSection, 'pool-pumps');
+  await publish(f, saved);
+  const current = (await store.listTrainingAssignments(f.db)).find(item => item.moduleId === saved.module.id);
+  assert.equal(current.assignment.trainingSection, 'pool-pumps');
+  assert.equal(current.assignment.serviceCategory, 'other');
+  assert.deepEqual(current.assignment.jurisdictions, ['VIC']);
+  assert.equal((await store.getTrainingQuestionnaire(f.db, 'veu-26')).assignment.trainingSection, 'pool-pumps');
+  const legacy = await create(f, form(), { ...assignment(), serviceCategory: 'other' });
+  assert.equal(legacy.assignment.trainingSection, 'other-training');
+  await assert.rejects(create(f, form(), { ...assignment(), serviceCategory: 'other', trainingSection: 'invented' }), invalid);
+  await assert.rejects(create(f, form(), { ...assignment(), trainingSection: 'pool-pumps' }), invalid);
 });
 
 test('saving and publishing a custom form preserves assignment, source evidence and immutable versions', async () => {
@@ -245,7 +263,7 @@ test('authorised form and submission reads return private no-mutation records', 
 
 test('people index and person filters retain older compliance profiles after two hundred newer submissions', async () => {
   const f = fixture(); const published = await publish(f, await create(f));
-  f.sql.exec("INSERT INTO trade_team_members VALUES('earlier-person','owner','active','Earlier installer','earlier-actor','[]')");
+  f.sql.exec("INSERT INTO trade_team_members(id,owner_uid,status,display_name,member_uid,capabilities) VALUES('earlier-person','owner','active','Earlier installer','earlier-actor','[]')");
   await store.trainingSubmissionSnapshotStatement(f.db, { ...seedAttempt(f, published.module, { id: 'earlier-attempt', memberId: 'earlier-person', actorUid: 'earlier-actor' }), completedAt: '2026-01-01T00:00:00.000Z' }).run();
   for (let index = 0; index < 201; index++) await store.trainingSubmissionSnapshotStatement(f.db, { ...seedAttempt(f, published.module, { id: `new-${String(index).padStart(3, '0')}` }), completedAt: '2026-02-01T00:00:00.000Z' }).run();
   const people = await store.listTrainingSubmissionPeople(f.db); assert.equal(people.length, 2); assert.equal(people.find(person => person.memberId === 'earlier-person').submissionCount, 1);

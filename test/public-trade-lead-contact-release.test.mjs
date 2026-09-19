@@ -464,6 +464,7 @@ test("public CRM lead storage stays pseudonymous while reads project only the cu
       JSON.stringify(["customer_email", "postcode", "service_categories", "customer_message"]),
     );
   qualifyLeadFixture(database);
+  database.exec("DELETE FROM trade_training_completions; DELETE FROM trade_training_attempts"); // Consent and disclosure still apply before training is complete.
   const sync = database.prepare(marketplaceSyncSql());
   sync.run("opportunity-1", "", "");
   assert.deepEqual({ ...database.prepare(`SELECT first_name, last_name, email, phone, address_line_1, address_line_2, suburb, address_state, postcode,

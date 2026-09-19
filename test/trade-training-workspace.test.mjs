@@ -4,6 +4,7 @@ import fs from "node:fs";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
 import { ENERGY_SERVICE_CATALOGUE } from "../src/lib/energy-service-catalogue.mjs";
+import * as trainingSections from "../src/lib/training-service-sections.mjs";
 
 const source = fs.readFileSync(new URL("../src/components/TradeTrainingWorkspace.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -37,8 +38,8 @@ function harness(responder, component = "TradeTrainingWorkspace", props = {}, ru
   };
   const exports = {};
   const fetch = async (url, init = {}) => { requests.push({ url, ...init }); const result = await responder(url, init); return result.response || { ok: result.ok !== false, headers: new Headers({ "content-type": "application/json" }), json: async () => result }; };
-  const require = (id) => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "@/lib/energy-service-catalogue.mjs" ? { ENERGY_SERVICE_CATALOGUE } : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : (() => { throw new Error(`Unexpected client runtime import: ${id}`); })();
-  Function("require", "exports", "fetch", "setTimeout", "clearTimeout", component === "CreditexOnboardingReviewWorkspace" ? reviewCompiled : compiled)(require, exports, fetch, runtime.setTimeout || setTimeout, runtime.clearTimeout || clearTimeout);
+  const require = (id) => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "@/lib/energy-service-catalogue.mjs" ? { ENERGY_SERVICE_CATALOGUE } : id === "@/lib/training-service-sections.mjs" ? trainingSections : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : (() => { throw new Error(`Unexpected client runtime import: ${id}`); })();
+  Function("require", "exports", "fetch", "setTimeout", "clearTimeout", "window", component === "CreditexOnboardingReviewWorkspace" ? reviewCompiled : compiled)(require, exports, fetch, runtime.setTimeout || setTimeout, runtime.clearTimeout || clearTimeout, runtime.window);
   const render = () => { cursor = 0; const tree = exports[component]({ user, api: responder, canReview: true, ...props }); initial = false; return tree; };
   return { requests, render, async mount() { render(); for (const effect of effects) effect(); await flush(); return render(); } };
 }
@@ -432,6 +433,36 @@ test("training uses canonical service groups and keeps activity requirements and
   assert.equal(groups().length, 1); assert.match(text(groups()[0]), /Activity 6/);
 });
 
+test('Other activities are separate named sections with precise filtering and custom form membership', async () => {
+  const modules = [
+    { ...course(), id: 'veu-26', title: 'Activity 26', serviceCategory: 'other', activityTemplateIds: ['veu-26'] },
+    { ...course(), id: 'veu-32', title: 'Activity 32', serviceCategory: 'other', activityTemplateIds: ['veu-32'] },
+    { ...course(), id: 'custom-one', title: 'Extra checks', serviceCategory: 'other', trainingSection: 'pool-pumps', activityTemplateIds: [] },
+  ];
+  const h = harness(async () => ({ ok: true, business, memberId: 'member-a', modules }));
+  let tree = await h.mount();
+  const groups = nodes(tree, node => node.type === 'details' && node.props.className === 'serviceGroup');
+  assert.equal(groups.length, 2);
+  assert.match(text(groups[0]), /Commercial refrigeration/); assert.match(text(groups[0]), /Activity 32/);
+  assert.match(text(groups[1]), /Pool and spa pumps/); assert.match(text(groups[1]), /Activity 26/); assert.match(text(groups[1]), /Extra checks/);
+  nodes(tree, node => node.type === 'select' && node.props['aria-label'] === 'Service category')[0].props.onChange({ target: { value: 'other:pool-pumps' } }); tree = h.render();
+  assert.doesNotMatch(text(tree), /Activity 32/); assert.match(text(tree), /Activity 26/);
+});
+
+test('module links open only assigned learning material once and never start assessments automatically', async () => {
+  const modules = [course(), { ...course(), id: 'veu-48', title: 'Activity 48', serviceCategory: 'insulation', activityTemplateIds: ['veu-48'] }];
+  const h = harness(async () => ({ ok: true, business, memberId: 'member-a', modules }), 'TradeTrainingWorkspace', {}, { window: { location: { search: '?workspace=training&module=veu-48' } } });
+  let tree = await h.mount();
+  assert.ok(nodes(tree, node => node.type === 'section' && node.props['aria-label'] === 'Activity 48 learning and assessment').length);
+  assert.equal(button(tree, 'Start assessment').props.disabled, true);
+  button(tree, 'Open learning material').props.onClick(); tree = h.render();
+  button(tree, 'Refresh status').props.onClick(); await flush(); tree = h.render();
+  assert.ok(nodes(tree, node => node.type === 'section' && node.props['aria-label'] === 'Activity 6 heating and cooling learning and assessment').length);
+  assert.equal(h.requests.filter(item => item.method).length, 0);
+  const unknown = harness(async () => ({ ok: true, business, memberId: 'member-a', modules: [course()] }), 'TradeTrainingWorkspace', {}, { window: { location: { search: '?module=not-assigned' } } });
+  assert.equal(button(await unknown.mount(), 'Start assessment'), undefined);
+});
+
 
 test("office-only staff receive a clear booking explanation without installation modules or empty-list warnings", async () => {
   const h = harness(async () => ({ ok: true, business, memberId: "office-a", officeOnly: true, selectedMember: { isOwner: false }, modules: [], trainingServiceStates: ["VIC"] }));
@@ -457,6 +488,16 @@ test("owners reuse their own current pass while on-site staff retain their own t
   const worker = harness(async () => ({ ok: true, business, memberId: "worker", officeOnly: false, selectedMember: { isOwner: false }, modules: [course()] }));
   const workerTree = await worker.mount(); assert.ok(button(workerTree, 'Open learning material'));
   assert.doesNotMatch(text(workerTree), /No installation training needed|Your current activity pass counts/);
+});
+
+test('service region guidance directs owners to Business and technicians to their Team profile', async () => {
+  const overview = { ok: true, business, memberId: 'member-a', modules: [course()], trainingServiceStates: ['VIC'] };
+  const owner = await harness(async () => ({ ...overview, selectedMember: { isOwner: true } })).mount();
+  assert.match(text(owner), /Change your business regions in Business > Services and areas/);
+  assert.doesNotMatch(text(owner), /change your regions in Team/);
+  const worker = await harness(async () => ({ ...overview, selectedMember: { isOwner: false } })).mount();
+  assert.match(text(worker), /Team > your profile > Service regions/);
+  assert.match(text(worker), /Only regions the business also serves apply/);
 });
 
 test("team overview labels office-only members without a misleading zero-of-zero pass count", async () => {

@@ -33,7 +33,7 @@ export const runtime = "edge";
 function errorResponse(error: unknown) {
   const conflict = creditexMutationConflict(error);
   if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
-  if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
+  if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message, trainingModules: error.trainingModules }, error.status);
   const code = error instanceof Error ? error.message : "";
   if (code === "JOB_SCHEDULE_ACCEPTANCE_REQUIRED" || isTradeJobScheduleEligibilityConflict(error)) {
     return adminJson({ ok: false, error: "Wait for the customer to accept the current Australian Energy Assessments quote before scheduling this job." }, 409);

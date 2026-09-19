@@ -55,12 +55,19 @@ async function pass(f, course, memberId) {
   return result;
 }
 
-test('a published extra form blocks certificate booking and lead matching until each required person passes', async () => {
+test('a published extra form blocks certificate booking until each required person passes while leads remain available', async () => {
   const f = fixture(); assert.equal(await bookable(f), true); assert.equal(await leadable(f), true);
   const saved = await additional(f, { draftOnly: true }); assert.equal(await bookable(f), true); assert.equal(await leadable(f), true);
   const published = await forms.publishTrainingQuestionnaire(f.db, 'editor', { moduleId: saved.module.id, expectedRevision: saved.revision, sourcesChecked: true });
-  assert.equal(await bookable(f), false); assert.equal(await leadable(f), false);
-  await pass(f, published.module, 'owner-person'); assert.equal(await bookable(f), false); assert.equal(await leadable(f), false);
+  assert.equal(await bookable(f), false); assert.equal(await leadable(f), true);
+  const blocked = await training.getCertificateActivityEligibility(f.db, { ownerUid: 'owner', actorMemberId: 'owner-person', assignedMemberId: 'installer', activityTemplateIds: ['veu-1'], serviceState: 'VIC' });
+  assert.equal(blocked.eligible, false);
+  assert.deepEqual(blocked.reasons.map(({ code, moduleId, moduleTitle, trainingHref }) => ({ code, moduleId, moduleTitle, trainingHref })), [{
+    code: 'ACTIVITY_TRAINING_REQUIRED', moduleId: published.module.id, moduleTitle: published.module.title,
+    trainingHref: `/direct-trade/dashboard?workspace=training&module=${encodeURIComponent(published.module.id)}`,
+  }]);
+  assert.ok(blocked.reasons[0].message.includes(published.module.title), 'the booking names the extra form that must be completed');
+  await pass(f, published.module, 'owner-person'); assert.equal(await bookable(f), false); assert.equal(await leadable(f), true);
   await pass(f, published.module, 'installer'); assert.equal(await bookable(f), true); assert.equal(await leadable(f), true);
   assert.equal(await bookable(f, [published.module.id]), false, 'a custom learning form never invents a government certificate pathway');
 });
@@ -73,29 +80,33 @@ test('extra training is scoped to the actual service and states, including natio
   assert.equal(await bookable(f, ['sres-ashp']), false, 'national work includes the business declared service states');
   assert.equal(await leadable(f), true, 'VIC leads do not impose NSW-only training');
   const nationwide = await additional(f, { jurisdictions: ['AU'] });
-  assert.equal(await bookable(f), false); assert.equal(await leadable(f), false);
+  assert.equal(await bookable(f), false); assert.equal(await leadable(f), true);
   await pass(f, nationwide.module, 'owner-person'); await pass(f, nationwide.module, 'installer');
   assert.equal(await bookable(f), true); assert.equal(await leadable(f), true);
 });
 
-test('publishing an updated extra form immediately invalidates previous training for booking and leads', async () => {
+test('publishing an updated extra form invalidates previous training for booking without restricting leads', async () => {
   const f = fixture(); const original = await additional(f); await pass(f, original.module, 'owner-person'); await pass(f, original.module, 'installer');
   assert.equal(await bookable(f), true); assert.equal(await leadable(f), true);
   const saved = await forms.saveTrainingQuestionnaire(f.db, 'editor', { moduleId: original.module.id, expectedRevision: original.revision, module: { ...original.module, title: 'Updated installation checks' } });
   assert.equal(await bookable(f), true); assert.equal(await leadable(f), true, 'unpublished edits leave current eligibility alone');
   const next = await forms.publishTrainingQuestionnaire(f.db, 'editor', { moduleId: saved.module.id, expectedRevision: saved.revision, sourcesChecked: true });
-  assert.equal(await bookable(f), false); assert.equal(await leadable(f), false);
+  assert.equal(await bookable(f), false); assert.equal(await leadable(f), true);
   await pass(f, next.module, 'owner-person'); await pass(f, next.module, 'installer');
   assert.equal(await bookable(f), true); assert.equal(await leadable(f), true);
 });
 
-test('withdrawal or personal revocation of an extra form blocks certificate booking and leads', async () => {
+test('withdrawal or personal revocation of an extra form blocks certificate booking while leads remain available', async () => {
   for (const kind of ['withdrawal', 'revocation']) {
     const f = fixture(); const published = await additional(f); await pass(f, published.module, 'owner-person'); await pass(f, published.module, 'installer');
     assert.equal(await bookable(f), true); assert.equal(await leadable(f), true);
     if (kind === 'withdrawal') await training.reviewTrainingModule(f.db, 'editor', { action: 'withdraw_module', moduleId: published.module.id, expectedVersion: published.module.version, expectedHash: training.getTrainingModuleHash(published.module), expectedReviewUpdatedAt: '', reviewNote: 'The installation rule changed.' });
     else { const completion = f.sql.prepare('SELECT id FROM trade_training_completions WHERE module_id=? AND member_id=?').get(published.module.id, 'installer'); await training.revokeTrainingCompletion(f.db, 'editor', completion.id, 'This completion was recorded for the wrong person.'); }
-    assert.equal(await bookable(f), false); assert.equal(await leadable(f), false);
+    assert.equal(await bookable(f), false); assert.equal(await leadable(f), true);
+    const blocked = await training.getCertificateActivityEligibility(f.db, { ownerUid: 'owner', actorMemberId: 'owner-person', assignedMemberId: 'installer', activityTemplateIds: ['veu-1'], serviceState: 'VIC' });
+    assert.equal(blocked.eligible, false);
+    assert.deepEqual(blocked.reasons.map(reason => reason.code), [kind === 'withdrawal' ? 'TRAINING_CONTENT_UNAVAILABLE' : 'ACTIVITY_TRAINING_REQUIRED']);
+    assert.ok(blocked.reasons[0].message.includes(published.module.title), 'the booking identifies the withdrawn or revoked extra form');
   }
 });
 

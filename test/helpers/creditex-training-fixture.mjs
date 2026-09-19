@@ -5,10 +5,12 @@ import * as curriculum from '../../src/data/creditex-training-curriculum.ts';
 import * as catalogue from '../../src/lib/australian-government-program-catalogue.ts';
 import * as onboarding from '../../src/lib/creditex-onboarding-server.ts';
 import * as energyServices from '../../src/lib/energy-service-catalogue.mjs';
+import * as teamServiceStates from '../../src/lib/trade-team-service-states.ts';
+import * as trainingSections from '../../src/lib/training-service-sections.mjs';
 
 const read = (path) => fs.readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 const modules = { 'node:crypto': crypto, 'creditex-training-curriculum': curriculum,
-  'australian-government-program-catalogue': catalogue, 'creditex-onboarding-server': onboarding, 'energy-service-catalogue.mjs': energyServices };
+  'australian-government-program-catalogue': catalogue, 'creditex-onboarding-server': onboarding, 'energy-service-catalogue.mjs': energyServices, 'trade-team-service-states': teamServiceStates, 'training-service-sections.mjs': trainingSections };
 export function certificateTestDependency(specifier) {
   return modules[specifier] || modules[specifier.split('/').at(-1).replace(/\.ts$/, '')];
 }
@@ -44,8 +46,11 @@ export function installCreditexTrainingFixture(database, { qualified = true } = 
   if (!columns.has('address_state')) database.exec("ALTER TABLE trade_accounts ADD COLUMN address_state TEXT NOT NULL DEFAULT 'VIC'");
   const memberColumns = new Set(database.prepare('PRAGMA table_info(trade_team_members)').all().map(row => row.name));
   if (!memberColumns.has('member_uid')) database.exec("ALTER TABLE trade_team_members ADD COLUMN member_uid TEXT NOT NULL DEFAULT ''");
+  if (!memberColumns.has('display_name')) database.exec("ALTER TABLE trade_team_members ADD COLUMN display_name TEXT NOT NULL DEFAULT 'Fixture technician'");
   if (!memberColumns.has('capabilities')) database.exec(`ALTER TABLE trade_team_members ADD COLUMN capabilities TEXT NOT NULL DEFAULT '${categories}'`);
   const fileColumns = new Set(database.prepare('PRAGMA table_info(trade_team_member_files)').all().map(row => row.name));
+  const intentColumns = new Set(database.prepare('PRAGMA table_info(trade_work_order_compliance_intents)').all().map(row => row.name));
+  if (!intentColumns.has('site_jurisdiction')) database.exec("ALTER TABLE trade_work_order_compliance_intents ADD COLUMN site_jurisdiction TEXT NOT NULL DEFAULT 'VIC'");
   if (!fileColumns.has('expires_at')) database.exec("ALTER TABLE trade_team_member_files ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''");
   if (!database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='creditex_business_onboarding'").get()) {
     database.exec(read('drizzle/0176_creditex_onboarding_training.sql'));
@@ -57,6 +62,7 @@ export function installCreditexTrainingFixture(database, { qualified = true } = 
   if (!database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='trade_training_questionnaires'").get()) {
     database.exec(read('drizzle/0179_training_questionnaires.sql'));
   }
+  if (!memberColumns.has('service_states')) database.exec(read('drizzle/0180_team_member_service_states.sql'));
   if (!qualified) return;
   const now = new Date().toISOString();
   const accounts = database.prepare('SELECT firebase_uid, abn, business_name FROM trade_accounts').all();

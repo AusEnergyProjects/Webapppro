@@ -33,13 +33,23 @@ test('roster-only member receives saved training to-dos without a manager assess
   assert.equal(nodes(tree,node=>node.type==='form'||node.props.onSubmit).length,0);assert.doesNotMatch(source,/action:\s*['"](?:start|submit)|correctOptionId|TRAINING_MODULES/);
 });
 
+test('training to-dos show the selected member region rather than the whole business footprint',async()=>{
+  const h=harness(()=>payload({trainingServiceStates:['VIC'], businessServiceStates:['VIC','NSW']}));
+  const tree=await h.settle();
+  assert.match(text(tree),/Training regions: VIC\. National modules/);
+  assert.doesNotMatch(text(tree),/Training regions: VIC, NSW/);
+  h.props.unsavedServices=true;
+  assert.match(text(h.render()),/Service or region changes are not saved/);
+  assert.equal(h.requests.length,1);
+});
+
 test('unsaved service selections do not fetch or replace assigned training before save',async()=>{
   let current=payload();const h=harness(()=>current);await h.settle();h.props.unsavedServices=true;
   let tree=await h.settle();assert.equal(h.requests.length,1);assert.match(text(tree),/still reflect the saved services/);
-  button(tree,'Save services and update to-dos').props.onClick();assert.equal(h.saved.length,1);assert.equal(h.requests.length,1);
+  button(tree,'Save services and regions').props.onClick();assert.equal(h.saved.length,1);assert.equal(h.requests.length,1);
   current=payload({modules:[makeModule(1),makeModule(2)]});h.props.unsavedServices=false;
   button(h.render(),'Refresh training').props.onClick();tree=await h.settle();
-  assert.equal(h.requests.length,2);assert.match(text(tree),/0 of 2 modules passed/);assert.doesNotMatch(text(tree),/Service changes are not saved/);
+  assert.equal(h.requests.length,2);assert.match(text(tree),/0 of 2 modules passed/);assert.doesNotMatch(text(tree),/Service or region changes are not saved/);
 });
 
 test('217 modules are paginated and exact programme filters preserve passed and pending review state',async()=>{

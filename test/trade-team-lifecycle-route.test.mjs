@@ -149,6 +149,7 @@ function fixture() {
     INSERT INTO trade_team_member_credentials VALUES ('credential-1', 'owner-1', 'target-1', 'licence', 'Licence', 'L1', 'Issuer', 'VIC', '', 'active', 'file-1', '2026-08-12T00:00:00.000Z', '2026-08-12T00:00:00.000Z');
     INSERT INTO trade_work_orders VALUES ('job-1', 'owner-1', 'target-1');
   `);
+  installCreditexTrainingFixture(database, { qualified: false });
   return database;
 }
 
@@ -207,6 +208,36 @@ test("delegated Team add creates an editable unique TLink username without requi
   assert.equal(created.field_username, "Jane Field");
   assert.equal(created.field_username_normalized, "jane field");
   assert.equal(created.status, "active");
+});
+
+test('team service regions validate explicit subsets, preserve omitted values and allow inheritance', async () => {
+  const database = fixture(); const route = loadRoute(database, []);
+  database.exec(`UPDATE trade_accounts SET service_states='["VIC","NSW"]' WHERE firebase_uid='owner-1'`);
+  const currentRevision = () => database.prepare("SELECT updated_at FROM trade_team_members WHERE id='target-1'").get().updated_at;
+  const update = serviceStates => patch(route, { action: 'update_member', memberId: 'target-1', serviceStates, expectedUpdatedAt: currentRevision() });
+  for (const invalid of [[], ['WA'], ['invalid'], ['VIC', 'vic'], ['VIC', 1], 'VIC']) {
+    const response = await update(invalid); assert.equal(response.status, 400);
+    assert.equal((await response.json()).code, 'MEMBER_SERVICE_STATES_INVALID');
+    assert.equal(database.prepare("SELECT service_states FROM trade_team_members WHERE id='target-1'").get().service_states, null);
+  }
+  let response = await update(['VIC']); let body = await response.json();
+  assert.equal(response.status, 200, body.error); assert.deepEqual(body.businessServiceStates, ['NSW', 'VIC']);
+  let member = body.members.find(person => person.id === 'target-1');
+  assert.deepEqual(member.assignedServiceStates, ['VIC']); assert.deepEqual(member.serviceStates, ['VIC']);
+  response = await patch(route, { action: 'update_member', memberId: 'target-1', firstName: 'Updated', expectedUpdatedAt: currentRevision() });
+  assert.equal(response.status, 200); assert.equal(database.prepare("SELECT service_states FROM trade_team_members WHERE id='target-1'").get().service_states, '["VIC"]');
+  response = await update(null); body = await response.json(); assert.equal(response.status, 200, body.error);
+  member = body.members.find(person => person.id === 'target-1');
+  assert.equal(member.assignedServiceStates, null); assert.deepEqual(member.serviceStates, ['NSW', 'VIC']);
+  const created = await post(route, { action: 'add_member', firstName: 'Vic', lastName: 'Installer', fieldUsername: 'Vic Installer', serviceStates: ['VIC'] });
+  const added = await created.json(); assert.equal(created.status, 201, added.error);
+  assert.equal(database.prepare('SELECT service_states FROM trade_team_members WHERE id=?').get(added.createdMemberId).service_states, '["VIC"]');
+  const owner = body.members.find(person => person.isOwner);
+  assert.equal(owner.assignedServiceStates, null); assert.deepEqual(owner.serviceStates, ['NSW', 'VIC']);
+  const ownerAttempt = await patch(route, { action: 'update_member', memberId: 'owner-member', serviceStates: ['VIC'], expectedUpdatedAt: owner.updatedAt });
+  assert.equal(ownerAttempt.status, 400); assert.equal((await ownerAttempt.json()).code, 'OWNER_SERVICE_STATES_INHERIT');
+  assert.throws(() => database.exec(`UPDATE trade_team_members SET service_states='[]' WHERE id='target-1'`), /CHECK constraint failed/);
+  database.close();
 });
 
 test("delegated Team PATCH lifecycle is stale-safe, bounded, destructive only on suspension, and retains history", async () => {

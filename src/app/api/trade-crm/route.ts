@@ -365,7 +365,7 @@ async function crmIdentity(request: Request): Promise<CrmIdentity> {
 function errorResponse(error: unknown) {
   const conflict = creditexMutationConflict(error);
   if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
-  if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
+  if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message, trainingModules: error.trainingModules }, error.status);
   if (error instanceof TradeAddressVerificationError) {
     return adminJson({ ok: false, code: error.code, error: error.message }, 400);
   }
@@ -2188,6 +2188,7 @@ export async function POST(request: Request) {
       if (trainingActivities.length) await assertCertificateActivityEligibility(db, {
         ownerUid: identity.uid, actorMemberId: identity.memberId, assignedMemberId: assigneeMemberId,
         activityTemplateIds: trainingActivities,
+        serviceState: String(serviceSite?.address_state || ""),
       });
       let assignee = "";
       let assigneeUid = "";
@@ -2464,6 +2465,7 @@ export async function POST(request: Request) {
           ...(trainingActivities.length ? [await certificateActivityEligibilityGuardStatement(db, {
             ownerUid: identity.uid, actorMemberId: identity.memberId, assignedMemberId: assigneeMemberId,
             activityTemplateIds: trainingActivities,
+            serviceState: String(serviceSite?.address_state || ""),
           })] : []),
           ...batchStatements,
         ]);

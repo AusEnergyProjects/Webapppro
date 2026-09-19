@@ -17,6 +17,14 @@ const quote = read("../src/components/TradeQuotePanel.tsx");
 const invoice = read("../src/components/TradeQuickInvoicePanel.tsx");
 const memberFilesRoute = read("../src/app/api/trade-team/member-files/route.ts");
 
+test("member service regions save explicitly and show failures inside the editing dialog", () => {
+  assert.match(settings, /serviceStates: memberServiceStates/);
+  assert.match(settings, /setMemberServiceStates\(savedMember\.assignedServiceStates \?\? null\)/);
+  assert.match(settings, /fieldset className=\{styles.permissionGroup\} disabled=\{Boolean\(busy\)\}><legend>Service regions/);
+  assert.match(settings, /fieldset className=\{styles.permissionGroup\} disabled=\{Boolean\(busy\)\}><legend>Services performed on site/);
+  assert.match(settings, /onSubmit=\{saveMember\}>\s*\{error && <p className=\{styles.error\} role="alert"/);
+});
+
 test("Team is a routed first-class workspace and Business links to it", () => {
   assert.match(dashboard, /DashboardWorkspace = "work" \| "team"/);
   assert.match(dashboard, /workspace === "team"/);

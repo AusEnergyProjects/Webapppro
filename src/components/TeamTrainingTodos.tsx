@@ -8,6 +8,7 @@ import styles from "./TeamTrainingTodos.module.css";
 type Module = { id: string; title: string; programCode: string; activityTemplateIds: string[]; serviceCategory: string; businessServiceEnabled: boolean;
   status: string; availability: string; assessmentAvailable: boolean; assessmentUnavailableReason: string; completion: null | { reference: string; expiresAt: string } };
 type Result = { ok: boolean; error?: string; memberId: string; canTakeTraining: boolean; officeOnly?: boolean;
+  trainingServiceStates?: string[];
   selectedMember: { memberId: string; displayName: string; isOwner: boolean; isSelf: boolean };
   modules: Module[]; unavailableActivities: { id: string; title: string; programCode: string; message: string }[] };
 type Props = { user: User; memberId: string; displayName: string; hasOfficeLogin: boolean; active: boolean; unsavedServices: boolean; saving: boolean;
@@ -56,8 +57,8 @@ export function TeamTrainingTodos({ user, memberId, displayName, hasOfficeLogin,
   const passed = modules.filter(module => module.status === "passed").length;
   const serviceLabel = (id: string) => ENERGY_SERVICE_CATALOGUE.find(service => service.id === id)?.label || id;
   return <section className={styles.panel} aria-label={`Training to-dos for ${displayName}`}>
-    <header className={styles.header}><div><h4>Training to-dos</h4><p>{displayName}&apos;s saved on-site services determine this list.</p></div>{active && <button type="button" className={styles.button} disabled={loading || saving} onClick={() => { setLoading(true); setError(""); setRefresh(value => value + 1); }}>Refresh training</button>}</header>
-    {unsavedServices && <div className={styles.notice} role="status"><p>Service changes are not saved. The to-dos below still reflect the saved services.</p><button type="button" className={styles.button} disabled={saving} onClick={onSave}>Save services and update to-dos</button></div>}
+    <header className={styles.header}><div><h4>Training to-dos</h4><p>{displayName}&apos;s saved on-site services and service regions determine this list.</p></div>{active && <button type="button" className={styles.button} disabled={loading || saving} onClick={() => { setLoading(true); setError(""); setRefresh(value => value + 1); }}>Refresh training</button>}</header>
+    {unsavedServices && <div className={styles.notice} role="status"><p>Service or region changes are not saved. The to-dos below still reflect the saved services and regions.</p><button type="button" className={styles.button} disabled={saving} onClick={onSave}>Save services and regions</button></div>}
     {!active ? <p className={styles.notice}>This member is inactive. Reactivate access before they can complete training or take program work.</p> : <>
       {!data?.officeOnly && !hasOfficeLogin && <p className={styles.note}>Office login is not linked. Use the app PIN setup above if this person has not signed in to the app.</p>}
       {!data?.officeOnly && <p className={styles.note}>Each person carrying out on-site work completes their own modules in Training on the app or To do &amp; training in TLink. A manager cannot complete another person&apos;s assessment.</p>}
@@ -65,6 +66,7 @@ export function TeamTrainingTodos({ user, memberId, displayName, hasOfficeLogin,
       {error && <p role="alert" className={styles.error}>{error}</p>}
       {data && !loading && !error && data.officeOnly && <div className={styles.notice}><strong>Office only: no installation training needed</strong><p>No on-site services are selected. This person can book and manage eligible work within their access permissions. The business and the technician assigned to carry out the work must meet the activity requirements.</p><p>Select and save on-site services if this person will also carry out that work. Their required modules will then appear here.</p></div>}
       {data && !loading && !error && !data.officeOnly && <>
+        {data.trainingServiceStates && <p className={styles.note}>Training regions: {data.trainingServiceStates.join(", ") || "No current business service regions"}. National modules are included where relevant.</p>}
         {data.selectedMember.isOwner && <p className={styles.notice}>The owner&apos;s current activity pass counts for both the business training requirement and their own on-site work. Each current module is completed once, including when the owner works alone. Other on-site team members must earn their own passes.</p>}
         <p className={styles.summary}><strong>{passed} of {modules.length} modules passed</strong><span>100% required. Unlimited immediate retakes.</span></p>
         {data.canTakeTraining && data.selectedMember.isSelf && (onOpenOwnTraining
@@ -80,7 +82,7 @@ export function TeamTrainingTodos({ user, memberId, displayName, hasOfficeLogin,
             </li>;
           })}</ul>{!matching.length && <p className={styles.note}>No activity matches. Change the search or program.</p>}
           {totalPages > 1 && <nav className={styles.pagination} aria-label="Training to-do pages"><button type="button" className={styles.button} disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button><span>Page {currentPage} of {totalPages}</span><button type="button" className={styles.button} disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)}>Next</button></nav>}</>}
-        {!modules.length && !unavailable.length && <p className={styles.note}>No government activity modules match the saved services and business service locations. Select and save the relevant services. An empty list does not approve government program work.</p>}
+        {!modules.length && !unavailable.length && <p className={styles.note}>No government activity modules match the saved services and this person&apos;s service regions. Select and save the relevant services and regions. An empty list does not approve government program work.</p>}
         {unavailable.filter(matches).map(item => <div key={item.id} className={styles.notice}><strong>{item.programCode} · {item.title}</strong><p>{item.message}</p></div>)}
         <p className={styles.note}>A training pass records learning only. Business setup, current insurance, licences and job evidence remain separate requirements.</p>
       </>}

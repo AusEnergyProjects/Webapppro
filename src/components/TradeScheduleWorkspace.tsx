@@ -1,5 +1,7 @@
 "use client";
 
+import { BookingTrainingLinks, type BookingTrainingModule } from "./BookingTrainingLinks";
+
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, TouchEvent as ReactTouchEvent } from "react";
 import type { User } from "firebase/auth";
@@ -54,7 +56,7 @@ type RescheduleRequest = { id: string; appointmentId: string; workOrderId: strin
   currentAssigneeMemberId: string; currentAssigneeLabel: string; appointmentRevision: number };
 type Job = { id: string; workNumber: string; title: string; serviceCategory: string; customerDisplayName: string; suburbLabel: string; siteLabel: string; siteSummary: string; priority: string; stage: string; revision: number; assigneeMemberId: string; assigneeLabel: string };
 type AppointmentCalendarSync = { connected: number; attempted: number; created: number; updated: number; unchanged: number; synced: number; failed: number };
-type ScheduleResult = { ok?: boolean; error?: string; weekStart?: string; weekEnd?: string; rangeStart?: string; rangeEnd?: string; rangeWeeks?: number; calendarSync?: AppointmentCalendarSync; access?: { memberId: string; isOwner: boolean; permissions?: Pick<TradeTeamPermissions, "canAssignJobs" | "canRescheduleJobs" | "canManageTeam" | "jobScope" | "scheduleScope"> }; members?: Member[]; availabilityMembers?: Member[]; workingHours?: WorkingHours[]; unavailability?: Unavailability[]; appointments?: Appointment[]; rescheduleRequests?: RescheduleRequest[]; unassignedJobs?: Job[] };
+type ScheduleResult = { trainingModules?: BookingTrainingModule[]; ok?: boolean; error?: string; weekStart?: string; weekEnd?: string; rangeStart?: string; rangeEnd?: string; rangeWeeks?: number; calendarSync?: AppointmentCalendarSync; access?: { memberId: string; isOwner: boolean; permissions?: Pick<TradeTeamPermissions, "canAssignJobs" | "canRescheduleJobs" | "canManageTeam" | "jobScope" | "scheduleScope"> }; members?: Member[]; availabilityMembers?: Member[]; workingHours?: WorkingHours[]; unavailability?: Unavailability[]; appointments?: Appointment[]; rescheduleRequests?: RescheduleRequest[]; unassignedJobs?: Job[] };
 type Edit = { memberId: string; date: string; time: string; durationMinutes: number };
 type CalendarConnection = { provider: "google_calendar" | "microsoft_calendar"; label: string; configured: boolean; status: "connected" | "not_connected"; lastSyncAt: string; lastError: string };
 type CalendarResult = { ok?: boolean; error?: string; providers?: CalendarConnection[]; attempted?: number; created?: number; updated?: number; unchanged?: number; synced?: number; failed?: number };
@@ -152,7 +154,7 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
   const [data, setData] = useState<ScheduleResult>({});
   const [focusRequestVersion, setFocusRequestVersion] = useState(0);
   const [calendars, setCalendars] = useState<CalendarConnection[]>([]);
-  const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(""); const [status, setStatus] = useState(""); const [loadError, setLoadError] = useState(""); const [failedWeekStart, setFailedWeekStart] = useState(""); const [loadAttemptNonce, setLoadAttemptNonce] = useState(0);
+  const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(""); const [status, setStatus] = useState(""); const [bookingTraining, setBookingTraining] = useState<BookingTrainingModule[]>([]); const [loadError, setLoadError] = useState(""); const [failedWeekStart, setFailedWeekStart] = useState(""); const [loadAttemptNonce, setLoadAttemptNonce] = useState(0);
   const [memberFilter, setMemberFilter] = useState(() => jobCalendar ? focusedMemberId || proposal?.assigneeMemberId || "" : ""); const [jobFilter, setJobFilter] = useState(""); const [serviceFilter, setServiceFilter] = useState(""); const [siteFilter, setSiteFilter] = useState(""); const [statusFilter, setStatusFilter] = useState("");
   const [hoursMember, setHoursMember] = useState(""); const [hourEdits, setHourEdits] = useState<Record<number, WorkingHours>>({});
   const [edits, setEdits] = useState<Record<string, Edit>>({}); const [selectedAppointmentId, setSelectedAppointmentId] = useState("");
@@ -332,13 +334,13 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
     if (["schedule_appointment", "schedule_job", "save_schedule_changes", "review_reschedule_request"].includes(action) && !canRescheduleJobs) {
       setStatus("Your access allows viewing this schedule, not rescheduling jobs."); return false;
     }
-    setBusy(key); setStatus("");
+    setBusy(key); setStatus(""); setBookingTraining([]);
     try {
       const token = await user.getIdToken();
       const responseRangeStart = addDays(responseWeekStart, -SCHEDULE_BUFFER_LEADING_WEEKS * 7);
       const response = await fetch("/api/trade-schedule", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ...body, rangeStart: responseRangeStart, rangeWeeks: SCHEDULE_BUFFER_WEEKS }) });
       const result = await response.json().catch(() => ({})) as ScheduleResult;
-      if (!response.ok || !result.ok) throw new Error(result.error || "The schedule change could not be saved.");
+      if (!response.ok || !result.ok) { setBookingTraining(result.trainingModules || []); throw new Error(result.error || "The schedule change could not be saved."); }
       const loadedRangeStart = result.rangeStart || responseRangeStart;
       setData(result); setRangeStart(loadedRangeStart); setActiveWeekStart(responseWeekStart); setEdits({}); setDecisionNotes({});
       if (body.action === "schedule_appointment") closeAppointment();
@@ -1046,6 +1048,7 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
             {selectedAppointment.notes && <p className="schedule-appointment-notes"><strong>Visit notes</strong><span>{selectedAppointment.notes}</span></p>}
             <div className="schedule-quote-summary"><span><small>Quote</small><strong>{readable(selectedAppointment.quoteStatus || "not_started")}</strong></span><b>{money(selectedAppointment.quotedValueCents || 0)}</b></div>
             {calendarCanReschedule && selectedAppointment.status !== "completed" && <div className="schedule-selection-fields">{canAssignJobs ? <label><span>Person</span><select value={edit.memberId} onChange={(event) => setEdits((current) => ({ ...current, [selectedAppointment.id]: { ...edit, memberId: event.target.value } }))}><option value="">Choose person</option>{members.map((member) => <option key={member.id} value={member.id}>{memberLabel(member)}</option>)}</select></label> : <span>{selectedAppointment.assigneeLabel || "Assigned worker"}</span>}<label><span>Day</span><input type="date" min={minimumStart.slice(0, 10)} value={edit.date} onChange={(event) => setEdits((current) => ({ ...current, [selectedAppointment.id]: { ...edit, date: event.target.value } }))} /></label><label><span>Start</span><select value={edit.time} onChange={(event) => setEdits((current) => ({ ...current, [selectedAppointment.id]: { ...edit, time: event.target.value } }))}>{timeChoices.map((time) => <option key={time}>{time}</option>)}</select></label><DurationControl id={`appointment-duration-${selectedAppointment.id}`} value={edit.durationMinutes} onChange={(durationMinutes) => setEdits((current) => ({ ...current, [selectedAppointment.id]: { ...edit, durationMinutes } }))} /></div>}
+            <BookingTrainingLinks modules={bookingTraining} teamPortal={data?.access?.isOwner === false} />
             {status && <p className="crm-status schedule-dialog-status" role="status">{status}</p>}
           </div>
           <footer><button type="button" onClick={() => leaveSchedule(() => onOpenJob(selectedAppointment.workOrderId))}>Open full job</button>{onOpenQuote && !selectedAppointment.protectedJob && <button className="schedule-secondary" type="button" onClick={() => leaveSchedule(() => onOpenQuote(selectedAppointment.workOrderId))}>Open quote</button>}{calendarCanReschedule && selectedAppointment.status !== "completed" && <button className="primary" type="button" disabled={!edit.memberId || startsAt <= minimumStart || busy === "schedule-batch"} onClick={() => { stageScheduleChange(selectedAppointment, edit.date, minuteValue(edit.time), edit.memberId, edit.durationMinutes); closeAppointment(); }}>Stage schedule change</button>}</footer>
@@ -1059,6 +1062,7 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
         {hoursMember && <form className="schedule-unavailable-form" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void update({ action: "add_unavailability", memberId: hoursMember, startsAt: form.get("startsAt"), endsAt: form.get("endsAt"), reason: form.get("reason") }, "unavailable", "Unavailable time recorded."); event.currentTarget.reset(); }}><strong>Add unavailable time</strong><input name="startsAt" type="datetime-local" required /><input name="endsAt" type="datetime-local" required /><input name="reason" maxLength={200} placeholder="Leave, training or other reason" /><button disabled={busy === "unavailable"}>Add</button></form>}
         <div className="schedule-unavailable-list">{(data.unavailability || []).filter((item) => !hoursMember || item.teamMemberId === hoursMember).map((item) => <article key={item.id}><div><strong>{item.reason}</strong><span>{item.startsAt} to {item.endsAt}</span></div><button type="button" onClick={() => void update({ action: "remove_unavailability", id: item.id }, `remove:${item.id}`, "Unavailable time removed.")}>Remove</button></article>)}</div></div></details>}</div>}
     {loadError && <p className="crm-status schedule-load-error" role="alert"><span>{loadError}</span>{!(jobCalendar && proposalValidation.status === "load_error") && <button type="button" disabled={loading} onClick={() => setLoadAttemptNonce((value) => value + 1)}>{loading ? "Retrying..." : "Retry calendar"}</button>}</p>}
+    {!selectedAppointmentId && <BookingTrainingLinks modules={bookingTraining} teamPortal={data?.access?.isOwner === false} />}
     {status && <p className="crm-status" role="status">{status}</p>}
   </section>;
 }

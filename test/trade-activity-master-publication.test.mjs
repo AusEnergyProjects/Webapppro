@@ -69,7 +69,7 @@ function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
   database.exec(fs.readFileSync(new URL("../drizzle/0170_trade_activity_forms.sql", import.meta.url), "utf8"));
   database.exec("INSERT INTO trade_accounts(firebase_uid,address_state) VALUES ('owner','VIC'); INSERT INTO trade_team_members(id,owner_uid,member_uid,status,display_name) VALUES ('worker','owner','owner','active','Fixture owner')");
   installCreditexTrainingFixture(database);
-  const d1 = { prepare(sql) { return { bind(...values) { return {
+  const d1 = { prepare(sql) { return { async all() { return { results: database.prepare(sql).all() }; }, bind(...values) { return {
     async first() { return database.prepare(sql).get(...values) || null; },
     async all() { return { results: database.prepare(sql).all(...values) }; },
     async run() { const result = database.prepare(sql).run(...values); return { meta: { changes: Number(result.changes) } }; },
@@ -291,7 +291,7 @@ test("saving and reloading a default master changes newly opened field records w
     const published = await save(form); assert.equal(published.status, 200);
     const reloadedResponse = await route.GET(new Request("https://test.invalid/api/trade-activity-forms?view=masters&actorMode=creditex&activityTemplateId=veu-44"));
     const reloaded = await reloadedResponse.json(); assert.equal(reloaded.form.title, form.title); assert.equal(reloaded.form.version, published.body.form.version);
-    database.prepare("INSERT INTO trade_work_order_compliance_intents VALUES ('intent','job','owner','creditex','veu-44','planned','{}')").run();
+    database.prepare("INSERT INTO trade_work_order_compliance_intents (id,work_order_id,installer_uid,compliance_organisation_id,activity_template_id,status,intent_snapshot) VALUES ('intent','job','owner','creditex','veu-44','planned','{}')").run();
     let { record } = await jsonPost({ action: "open", workOrderId: "job", intentId: "intent" });
     assert.equal(record.form.version, published.body.form.version); assert.equal(record.form.title, form.title);
     assert.equal(record.formSha256, core.activityHash(published.body.form));

@@ -505,6 +505,7 @@ export const tradeTeamMembers = sqliteTable("trade_team_members", {
   scheduleColour: text("schedule_colour").notNull().default("emerald"),
   capabilities: text("capabilities").notNull().default("[]"),
   role: text("role").notNull().default("technician"),
+  serviceStates: text("service_states"),
   canCreateJobs: integer("can_create_jobs", { mode: "boolean" }).notNull().default(false),
   canManageJobs: integer("can_manage_jobs", { mode: "boolean" }).notNull().default(false),
   canAssignJobs: integer("can_assign_jobs", { mode: "boolean" }).notNull().default(false),
@@ -541,6 +542,7 @@ export const tradeTeamMembers = sqliteTable("trade_team_members", {
   index("trade_team_members_owner_status_idx").on(table.ownerUid, table.status, table.updatedAt),
   check("trade_team_members_permissions_check", sql`${table.canCreateJobs} IN (0, 1) AND ${table.canManageJobs} IN (0, 1) AND ${table.canAssignJobs} IN (0, 1) AND ${table.jobScope} IN ('own', 'team') AND ${table.canViewCustomers} IN (0, 1) AND ${table.canManageCustomers} IN (0, 1) AND ${table.canViewQuotes} IN (0, 1) AND ${table.canManageQuotes} IN (0, 1) AND ${table.canSendQuotes} IN (0, 1) AND ${table.canViewInvoices} IN (0, 1) AND ${table.canManageInvoices} IN (0, 1) AND ${table.canViewPriceBook} IN (0, 1) AND ${table.canManagePriceBook} IN (0, 1) AND ${table.canApplyDiscounts} IN (0, 1) AND ${table.scheduleScope} IN ('own', 'team') AND ${table.canRescheduleJobs} IN (0, 1) AND ${table.canManageTeam} IN (0, 1) AND ${table.canEditTeamPermissions} IN (0, 1) AND ${table.canViewFieldEvidence} IN (0, 1) AND ${table.canManageFieldEvidence} IN (0, 1) AND ${table.canRunReports} IN (0, 1) AND ${table.canSearchCustomers} IN (0, 1) AND (${table.canManageCustomers} = 0 OR ${table.canViewCustomers} = 1) AND (${table.canManageQuotes} = 0 OR ${table.canViewQuotes} = 1) AND (${table.canSendQuotes} = 0 OR ${table.canManageQuotes} = 1) AND (${table.canManageInvoices} = 0 OR ${table.canViewInvoices} = 1) AND (${table.canManagePriceBook} = 0 OR ${table.canViewPriceBook} = 1) AND (${table.canManageFieldEvidence} = 0 OR ${table.canViewFieldEvidence} = 1) AND (${table.canEditTeamPermissions} = 0 OR ${table.canManageTeam} = 1)`),
   check("trade_team_members_capabilities_check", sql`json_valid(${table.capabilities}) AND json_type(${table.capabilities}) = 'array'`),
+  check("trade_team_members_service_states_check", sql`${table.serviceStates} IS NULL OR (json_valid(${table.serviceStates}) AND json_type(${table.serviceStates}) = 'array' AND json_array_length(${table.serviceStates}) BETWEEN 1 AND 8)`),
   check("trade_team_members_schedule_colour_check", sql`${table.scheduleColour} IN ('emerald', 'teal', 'blue', 'violet', 'amber', 'rose')`),
   check("trade_team_members_permission_editor_check", sql`${table.canEditTeamPermissions} = 0 OR ${table.canManageTeam} = 1`),
 ]);

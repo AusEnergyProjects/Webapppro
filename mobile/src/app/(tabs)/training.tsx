@@ -8,14 +8,13 @@ import { API_BASE_URL } from '@/lib/config';
 import { colours, radius, spacing } from '@/lib/theme';
 import { loadTrainingOverview, startTrainingAssessment, submitTrainingAssessment, checkTrainingAnswer, type TrainingAnswerFeedback, type TrainingAttempt, type TrainingModule, type TrainingOverview, type TrainingResult, type TrainingSource } from '@/lib/training';
 import { useApp } from '@/providers/app-provider';
-import { ENERGY_SERVICE_CATALOGUE, ENERGY_SERVICE_LABELS } from '../../../../src/lib/energy-service-catalogue.mjs';
+import { TRAINING_SERVICE_SECTIONS, trainingServiceSection } from '../../../../src/lib/training-service-sections.mjs';
 
 const readable = (value: string) => value.replaceAll('_', ' ').replace(/^./, letter => letter.toUpperCase());
 const date = (value: string) => new Date(value).toLocaleDateString('en-AU');
 const learnerSource = (source: TrainingSource) => source.id !== 'creditex-review' && !source.url.includes('creditex-source-review.md');
 const learningStatus = (status: string) => ['awaiting_review', 'unavailable'].includes(status) ? 'Assessment unavailable' : readable(status);
 const assessmentReason = (module: TrainingModule) => module.assessmentUnavailableReason || 'Assessment is unavailable. Refresh the module status for the current requirements.';
-const serviceLabel = (category: string) => ENERGY_SERVICE_LABELS[category] || 'Other training';
 
 export default function TrainingScreen() {
   const { user, sync } = useApp();
@@ -101,20 +100,20 @@ function TrainingWorkspace({ online }: { online: boolean }) {
   }
   const modules = data?.modules || [];
   const programs = [...new Set([...modules.map(module => module.programCode), ...(data?.unavailableActivities || []).map(module => module.programCode)])].sort();
-  const serviceCategories = [...new Set([...modules, ...(data?.unavailableActivities || [])].map(module => module.serviceCategory))];
-  const services = ENERGY_SERVICE_CATALOGUE.filter(item => serviceCategories.includes(item.id));
-  const matches = (module: { title: string; id: string; programCode: string; serviceCategory: string }) => (!program || module.programCode === program)
-    && (!service || module.serviceCategory === service)
-    && `${module.title} ${module.id} ${module.programCode} ${serviceLabel(module.serviceCategory)}`.toLowerCase().includes(search.trim().toLowerCase());
+  const assignedSections = new Set([...modules, ...(data?.unavailableActivities || [])].map(module => trainingServiceSection(module).id));
+  const services = TRAINING_SERVICE_SECTIONS.filter(item => assignedSections.has(item.id));
+  const matches = (module: { title: string; id: string; programCode: string; serviceCategory: string; trainingSection?: string }) => (!program || module.programCode === program)
+    && (!service || trainingServiceSection(module).id === service)
+    && `${module.title} ${module.id} ${module.programCode} ${trainingServiceSection(module).label}`.toLowerCase().includes(search.trim().toLowerCase());
   const matching = modules.filter(matches).sort((left, right) => {
-    const index = (category: string) => { const found = ENERGY_SERVICE_CATALOGUE.findIndex(item => item.id === category); return found < 0 ? ENERGY_SERVICE_CATALOGUE.length : found; };
-    return index(left.serviceCategory) - index(right.serviceCategory);
+    const index = (module: TrainingModule) => TRAINING_SERVICE_SECTIONS.findIndex(item => item.id === trainingServiceSection(module).id);
+    return index(left) - index(right);
   });
   const unavailable = (data?.unavailableActivities || []).filter(matches);
   const shown = matching.slice(0, visible);
-  const groups = [...services, ...(serviceCategories.some(category => !ENERGY_SERVICE_LABELS[category]) ? [{ id: '', label: 'Other training' }] : [])]
+  const groups = services
     .map(item => {
-      const inGroup = (module: { serviceCategory: string }) => (ENERGY_SERVICE_LABELS[module.serviceCategory] ? module.serviceCategory : '') === item.id;
+      const inGroup = (module: { id: string; serviceCategory: string; trainingSection?: string }) => trainingServiceSection(module).id === item.id;
       return { ...item, total: matching.filter(inGroup).length, passed: matching.filter(module => inGroup(module) && module.status === 'passed').length, modules: shown.filter(inGroup), unavailable: unavailable.filter(inGroup) };
     })
     .filter(group => group.modules.length || group.unavailable.length);
@@ -130,7 +129,7 @@ function TrainingWorkspace({ online }: { online: boolean }) {
 
   return <Screen scrollKey={`${selected?.id || 'list'}:${attempt ? `question-${questionIndex}` : result ? 'result' : `lesson-${lessonIndex}`}`}>
     <View style={styles.hero}><Text style={styles.eyebrow}>YOUR COMPLIANCE TO-DO LIST</Text><Text accessibilityRole="header" style={styles.heading}>Activity training</Text><Text style={styles.body}>Each field technician passes the modules for the government program activities they carry out. The owner or sole trader completes each module once: that pass covers the business and their own field work. Business setup, current insurance, licences and job evidence also remain required.</Text></View>
-    {data?.trainingServiceStates?.length ? <Text style={styles.note}>Training for {data.trainingServiceStates.join(', ')}, plus relevant national programs. The business owner manages service states in Business settings on TLink.</Text> : null}
+    {!data?.officeOnly && data?.trainingServiceStates?.length ? <Text style={styles.note}>Training for {data.trainingServiceStates.join(', ')}, plus relevant national programs. {data.selectedMember?.isOwner ? 'Change your business regions in Business > Services and areas on TLink.' : 'Your business owner or team manager can change your regions in Team > your profile > Service regions on TLink. Only regions the business also serves apply.'}</Text> : null}
     <Text style={styles.note}>Training and assessment require internet access. Checked answers are saved as you go. Reopen the module to resume your current attempt.</Text>
     {!online && <Text accessibilityLiveRegion="polite" style={styles.warning}>You are offline. Reconnect to load training, open sources or submit your assessment.</Text>}
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
@@ -146,7 +145,7 @@ function TrainingWorkspace({ online }: { online: boolean }) {
       {groups.map(group => <View key={group.id} style={styles.serviceGroup}>
         <Text accessibilityRole="header" style={styles.serviceTitle}>{group.label}</Text>
         <Text style={styles.note}>{group.passed} of {group.total} matching modules passed</Text>
-        {group.modules.map(module => <View key={module.id} style={styles.card}><Text style={styles.eyebrow}>{module.programCode} · {module.activityTemplateIds.join(', ')}</Text><Text accessibilityRole="header" style={styles.title}>{module.title}</Text><Text style={styles.note}>Required before {serviceLabel(module.serviceCategory).toLowerCase()} work under this activity.</Text><Text style={module.status === 'passed' ? styles.success : styles.badge}>{module.status === 'passed' ? '✓ Passed' : learningStatus(module.status)}</Text><Text style={styles.body}>{module.estimatedMinutes} minutes · Pass mark {module.passPercent}% · Version {module.version}</Text>{module.status === 'passed' && module.completion && <><Text style={styles.label}>Learning completion reference</Text><Text selectable style={styles.reference}>{module.completion.reference}</Text><Text style={styles.note}>Valid until {date(module.completion.expiresAt)}</Text></>}{module.businessServiceEnabled === false && <Text style={styles.note}>You can complete this training now. The business owner also needs to select this service in Business settings before related jobs and leads are available.</Text>}{!module.assessmentAvailable && <Text style={styles.warning}>{assessmentReason(module)}</Text>}<FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => openModule(module)}>Open learning material</FieldButton></View>)}
+        {group.modules.map(module => <View key={module.id} style={styles.card}><Text style={styles.eyebrow}>{module.programCode} · {module.activityTemplateIds.join(', ')}</Text><Text accessibilityRole="header" style={styles.title}>{module.title}</Text><Text style={styles.note}>Required before {trainingServiceSection(module).label.toLowerCase()} work under this activity.</Text><Text style={module.status === 'passed' ? styles.success : styles.badge}>{module.status === 'passed' ? '✓ Passed' : learningStatus(module.status)}</Text><Text style={styles.body}>{module.estimatedMinutes} minutes · Pass mark {module.passPercent}% · Version {module.version}</Text>{module.status === 'passed' && module.completion && <><Text style={styles.label}>Learning completion reference</Text><Text selectable style={styles.reference}>{module.completion.reference}</Text><Text style={styles.note}>Valid until {date(module.completion.expiresAt)}</Text></>}{module.businessServiceEnabled === false && <Text style={styles.note}>You can complete this training now. The business owner also needs to select this service in Business settings before related government program work can be booked.</Text>}{!module.assessmentAvailable && <Text style={styles.warning}>{assessmentReason(module)}</Text>}<FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => openModule(module)}>Open learning material</FieldButton></View>)}
         {group.unavailable.map(module => <View key={module.id} style={styles.card}><Text style={styles.title}>{module.programCode} · {module.title}</Text><Text style={styles.warning}>{module.message}</Text></View>)}
       </View>)}
       {matching.length > visible && <FieldButton variant="secondary" onPress={() => setVisible(value => value + 12)}>Show 12 more activities</FieldButton>}
@@ -155,7 +154,7 @@ function TrainingWorkspace({ online }: { online: boolean }) {
     </>}
     {selected && <>
       <Text style={styles.eyebrow}>{selected.programCode} · {selected.activityTemplateIds.join(', ')}</Text><Text accessibilityRole="header" style={styles.title}>{selected.title}</Text>
-      <Text style={styles.note}>Service: {serviceLabel(selected.serviceCategory)}. Required before work under this government program activity.</Text>
+      <Text style={styles.note}>Service: {trainingServiceSection(selected).label}. Required before work under this government program activity.</Text>
       {!attempt && !result && lesson && <View style={styles.card}>
         <Text style={styles.badge}>Lesson {lessonIndex + 1} of {selected.lessons.length}</Text><Text accessibilityRole="header" style={styles.title}>{lesson.title}</Text><Text style={styles.body}>{lesson.body}</Text>{sourceLinks(lesson.sourceIds)}
         <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: readLessons.includes(lessonIndex) }} onPress={() => setReadLessons(current => current.includes(lessonIndex) ? current.filter(index => index !== lessonIndex) : [...current, lessonIndex])} style={styles.option}><Text style={styles.body}>{readLessons.includes(lessonIndex) ? '☑' : '☐'} I have read this lesson and its relevant source guidance.</Text></Pressable>

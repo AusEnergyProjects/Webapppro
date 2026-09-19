@@ -1,11 +1,13 @@
 # Next task handover
 
-Status: Editable compliance questionnaires and guided assessments prepared for publication; real agreement and verification integrations remain to be supplied.
-Prepared: 19 September 2026
+Status: Lead access, technician service regions (migration 0180), specific training sections and named booking blockers prepared for publication; real agreement and verification integrations remain to be supplied.
+Prepared: 20 September 2026
 
 ## Current follow-up: complete external onboarding integrations
 
 The user requires autonomous TLink/Creditex onboarding. Both portals now provide Compliance questions with immutable published versions and saved personal answer records; learners correct each question as they go. Complete activity training now uses automatic 100% assessment completion, served-state scope and individual records. Business intake completes automatically when actual required evidence and declarations are supplied. The user will provide the real partnership agreement and ABN verification/e-sign service details later; the agreement placeholder must never count as signed. Once supplied, integrate those actual services using the existing private evidence and audit boundaries, and test one complete onboarding path. Do not reintroduce routine manual curriculum or business-intake approval.
+
+Current training contract: leads remain available before training; certificate bookings require the business owner and assigned field technician to pass applicable modules. Office-only users do not take installation courses. Team members inherit business regions until specific regions are assigned in Team. Never broaden a technician beyond the current business footprint. Keep the 100% guided assessment and saved personal answers intact.
 
 Current source worktree: `C:/Webproject/aea-energy-creditex-onboarding`, branch `codex/creditex-activity-onboarding`. The coordinating release response carries publication evidence. Older milestone sections below are historical.
 

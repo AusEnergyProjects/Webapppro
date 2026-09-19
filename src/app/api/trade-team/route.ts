@@ -19,6 +19,7 @@ import {
 } from "@/lib/trade-rental-assignment-server";
 import { normalizeFieldAccessName } from "@/lib/trade-field-access-policy.mjs";
 import { normalizeEnergyServiceIds } from "@/lib/energy-service-catalogue.mjs";
+import { getBusinessServiceStates, memberServiceStateProjection, validateMemberServiceStates } from "@/lib/trade-team-service-states";
 
 export const runtime = "edge";
 
@@ -42,6 +43,16 @@ function memberCapabilities(value: unknown) {
   const requested = normalizeEnergyServiceIds(parsedList(value));
   if (!requested || requested.length > 30) throw new Error("CAPABILITY_NOT_ALLOWED");
   return requested;
+}
+
+async function memberServiceStates(db: D1Database, ownerUid: string, value: unknown, current: unknown = null, isOwner = false) {
+  if (isOwner) {
+    if (value !== undefined && value !== null) throw new Error('OWNER_SERVICE_STATES_INHERIT');
+    return null;
+  }
+  if (value === undefined) return current == null ? null : String(current);
+  const requested = validateMemberServiceStates(value, await getBusinessServiceStates(db, ownerUid));
+  return requested === null ? null : JSON.stringify(requested);
 }
 
 function normalisePhone(value: unknown) {
@@ -323,7 +334,7 @@ function inviteReplacementStatements(db: D1Database, access: TeamAccess, memberI
 function errorResponse(error: unknown) {
   const conflict = creditexMutationConflict(error);
   if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
-  if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
+  if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message, trainingModules: error.trainingModules }, error.status);
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "TEAM_ACCESS_RECORD_REQUIRED") return adminJson({ ok: false, error: "No active team access was found for this account." }, 404);
@@ -346,6 +357,8 @@ function errorResponse(error: unknown) {
   if (code === "MEMBER_NOT_FOUND") return adminJson({ ok: false, error: "Team member not found." }, 404);
   if (code === "PERMISSIONS_INVALID") return adminJson({ ok: false, error: "Check the saved permission values and access scopes." }, 400);
   if (code === "CAPABILITY_NOT_ALLOWED") return adminJson({ ok: false, error: "Choose only services saved on this business profile." }, 400);
+  if (code === "MEMBER_SERVICE_STATES_INVALID") return adminJson({ ok: false, code, error: "Choose at least one of the business's service states, without duplicates, or use all business regions." }, 400);
+  if (code === "OWNER_SERVICE_STATES_INHERIT") return adminJson({ ok: false, code, error: "The business owner's training covers all business service regions. Edit those regions in the business profile." }, 400);
   if (code === "MEMBER_CAPABILITY_REQUIRED") return adminJson({ ok: false, error: "This team member is not enabled for the job's service category." }, 409);
   if (code === "PHONE_INVALID") return adminJson({ ok: false, error: "Enter a valid phone number using digits and standard phone symbols." }, 400);
   if (code === "FIELD_USERNAME_INVALID") return adminJson({ ok: false, error: "Enter a TLink username with at least two characters." }, 400);
@@ -383,6 +396,7 @@ type RosterOptions = {
 
 async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
   const db = getD1();
+  const businessServiceStates = await getBusinessServiceStates(db, access.ownerUid);
   const page = Math.max(1, Math.floor(Number(options.page) || 1));
   const pageSize = Math.min(ROSTER_PAGE_SIZE_MAX, Math.max(1, Math.floor(Number(options.pageSize) || ROSTER_PAGE_SIZE)));
   const rosterSearch = cleanAdminText(options.search, 120).toLowerCase();
@@ -432,7 +446,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
   const rosterTotal = Number(rosterTotalRow?.count || 0);
   const offset = (page - 1) * pageSize;
   const memberRows = !canManageTeam(access) ? { results: [] as Record<string, unknown>[] } : await db.prepare(`SELECT id, member_uid, email, display_name,
-      first_name, last_name, phone, field_username, schedule_colour, capabilities, status,
+      first_name, last_name, phone, field_username, schedule_colour, capabilities, service_states, status,
       can_create_jobs, can_manage_jobs, can_assign_jobs, job_scope, can_view_customers, can_manage_customers,
       can_view_quotes, can_manage_quotes, can_send_quotes, can_view_invoices, can_manage_invoices,
       can_view_price_book, can_manage_price_book, can_apply_discounts, schedule_scope,
@@ -461,7 +475,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
   const assigneeWhere = assigneeConditions.join(" AND ");
   const assigneeTotal = !canListAssignees ? 0 : Number((await db.prepare(`SELECT COUNT(*) count
     FROM trade_team_members WHERE ${assigneeWhere}`).bind(...assigneeBindings).first<Record<string, unknown>>())?.count || 0);
-  const assigneeRows = !canListAssignees ? { results: [] as Record<string, unknown>[] } : await db.prepare(`SELECT id, member_uid, display_name, status, capabilities
+  const assigneeRows = !canListAssignees ? { results: [] as Record<string, unknown>[] } : await db.prepare(`SELECT id, member_uid, display_name, status, capabilities, service_states
       FROM trade_team_members WHERE ${assigneeWhere}
       ORDER BY display_name COLLATE NOCASE, id
       LIMIT ? OFFSET ?`).bind(...assigneeBindings, assigneePageSize, (assigneePage - 1) * assigneePageSize)
@@ -490,6 +504,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
     ORDER BY t.status = 'done', t.due_at = '', t.due_at, t.created_at`)
     .bind(access.ownerUid, access.ownerUid, ...jobIds).all<Record<string, unknown>>();
   return {
+    businessServiceStates,
     access: { businessName: access.businessName, displayName: access.displayName,
       memberId: access.memberId,
       isOwner: access.isOwner, canManageTeam: canManageTeam(access),
@@ -512,6 +527,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
       firstName: row.first_name, lastName: row.last_name, phone: row.phone, fieldUsername: row.field_username,
       scheduleColour: row.schedule_colour,
       capabilities: parsedList(row.capabilities), staffCode: String(row.id).slice(0, 8).toUpperCase(),
+      ...memberServiceStateProjection(row.service_states, businessServiceStates, row.member_uid === access.ownerUid),
       status: row.status,
       invitedAt: row.invited_at, acceptedAt: row.accepted_at,
       lastActiveAt: row.last_active_at, updatedAt: row.updated_at, hasLogin: Boolean(row.member_uid),
@@ -536,6 +552,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
       } })),
     assignees: assigneeRows.results.map((row) => ({ id: row.id, displayName: row.display_name,
       status: row.status, capabilities: parsedList(row.capabilities), isSelf: row.id === access.memberId,
+      ...memberServiceStateProjection(row.service_states, businessServiceStates, row.member_uid === access.ownerUid),
       isOwner: row.member_uid === access.ownerUid })),
     assigneeRoster: { page: assigneePage, pageSize: assigneePageSize, total: assigneeTotal,
       totalPages: Math.max(1, Math.ceil(assigneeTotal / assigneePageSize)), search: assigneeSearch,
@@ -698,6 +715,7 @@ export async function POST(request: Request) {
     let permissions = memberPermissions(requestedPermissions);
     if (hasPermissionMutation(body)) assertPermissionGrant(access, permissions);
     let capabilities = memberCapabilities(body.capabilities);
+    let serviceStates = await memberServiceStates(db, access.ownerUid, body.serviceStates);
     if (action === "add_member") {
       if (!displayName || (email && !EMAIL_PATTERN.test(email))) {
         return adminJson({ ok: false, error: "Add a valid name, optional login email and phone number." }, 400);
@@ -721,17 +739,17 @@ export async function POST(request: Request) {
            schedule_scope, can_reschedule_jobs, can_manage_team, can_edit_team_permissions,
            can_view_field_evidence,
            can_manage_field_evidence, can_run_reports, can_search_customers, status, invited_at,
-           accepted_at, last_active_at, created_at, updated_at)
+           accepted_at, last_active_at, created_at, updated_at, service_states)
            SELECT ?, ?, '',
              ?, ?, ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?, ?, ?,
-             'active', '', '', '', ?, ? WHERE ${createGuard.sql}`)
+             'active', '', '', '', ?, ?, ? WHERE ${createGuard.sql}`)
           .bind(memberId, access.ownerUid, email, displayName, firstName, lastName, phone, appUsername.username, appUsername.normalized, scheduleColour, JSON.stringify(capabilities), "field",
-            ...permissionBindings(permissions), now, now, ...createGuard.bindings),
+            ...permissionBindings(permissions), now, now, serviceStates, ...createGuard.bindings),
         conditionalMemberAuditStatement(db, access, memberId, "member.created", {
-          hasLoginEmail: Boolean(email), permissions,
+          hasLoginEmail: Boolean(email), permissions, serviceStates: serviceStates === null ? null : JSON.parse(serviceStates),
         }, now),
         ...(email ? inviteReplacementStatements(db, access, memberId, inviteId,
           inviteTokenHash, inviteExpiresAt, now) : []),
@@ -778,7 +796,7 @@ export async function POST(request: Request) {
         return adminJson({ ok: false, error: "Add a valid name, email and phone number." }, 400);
       }
       if (memberId) {
-        const current = await db.prepare(`SELECT id, member_uid, updated_at, field_username, field_username_normalized, schedule_colour,
+        const current = await db.prepare(`SELECT id, member_uid, updated_at, field_username, field_username_normalized, schedule_colour, service_states,
             can_create_jobs, can_manage_jobs, can_assign_jobs, job_scope, can_view_customers, can_manage_customers,
             can_view_quotes, can_manage_quotes, can_send_quotes, can_view_invoices, can_manage_invoices,
             can_view_price_book, can_manage_price_book, can_apply_discounts, schedule_scope,
@@ -787,6 +805,7 @@ export async function POST(request: Request) {
           FROM trade_team_members WHERE id = ? AND owner_uid = ?`)
           .bind(memberId, access.ownerUid).first<Record<string, unknown>>();
         if (!current) throw new Error("MEMBER_NOT_FOUND");
+        serviceStates = await memberServiceStates(db, access.ownerUid, body.serviceStates, current.service_states, current.member_uid === access.ownerUid);
         const expectedUpdatedAt = cleanAdminText(body.expectedUpdatedAt, 80);
         if (!expectedUpdatedAt || expectedUpdatedAt !== String(current.updated_at || "")) {
           throw new Error("MEMBER_CONFLICT");
@@ -808,15 +827,15 @@ export async function POST(request: Request) {
         const actorGuard = memberMutationActorGuard(access, beforePermissions, permissions, permissionsChanged);
         const invited = await db.batch([
           db.prepare(`UPDATE trade_team_members SET email = ?, display_name = ?, first_name = ?, last_name = ?,
-            phone = ?, field_username = ?, field_username_normalized = ?, schedule_colour = ?, capabilities = ?, can_create_jobs = ?, can_manage_jobs = ?, can_assign_jobs = ?, job_scope = ?, can_view_customers = ?,
+            phone = ?, field_username = ?, field_username_normalized = ?, schedule_colour = ?, capabilities = ?, service_states = ?, can_create_jobs = ?, can_manage_jobs = ?, can_assign_jobs = ?, job_scope = ?, can_view_customers = ?,
             can_manage_customers = ?, can_view_quotes = ?, can_manage_quotes = ?, can_send_quotes = ?,
             can_view_invoices = ?, can_manage_invoices = ?, can_view_price_book = ?, can_manage_price_book = ?, can_apply_discounts = ?,
             schedule_scope = ?, can_reschedule_jobs = ?, can_manage_team = ?, can_edit_team_permissions = ?, can_view_field_evidence = ?,
             can_manage_field_evidence = ?, can_run_reports = ?, can_search_customers = ?, invited_at = ?, updated_at = ?
             WHERE id = ? AND owner_uid = ? AND updated_at = ?${actorGuard.sql}`).bind(email, displayName, firstName, lastName, phone, appUsername.username, appUsername.normalized, scheduleColour,
-              JSON.stringify(capabilities), ...permissionBindings(permissions),
+              JSON.stringify(capabilities), serviceStates, ...permissionBindings(permissions),
               now, now, memberId, access.ownerUid, current.updated_at, ...actorGuard.bindings),
-          conditionalMemberAuditStatement(db, access, memberId, "member.invitation_updated", { permissions }, now),
+          conditionalMemberAuditStatement(db, access, memberId, "member.invitation_updated", { permissions, serviceStates: serviceStates === null ? null : JSON.parse(serviceStates) }, now),
           ...inviteReplacementStatements(db, access, memberId, inviteId, inviteTokenHash, inviteExpiresAt, now),
         ]);
         if (!invited[0]?.meta.changes || !invited[3]?.meta.changes) throw new Error("MEMBER_CONFLICT");
@@ -837,17 +856,17 @@ export async function POST(request: Request) {
            schedule_scope, can_reschedule_jobs, can_manage_team, can_edit_team_permissions,
            can_view_field_evidence,
            can_manage_field_evidence, can_run_reports, can_search_customers, status, invited_at,
-           accepted_at, last_active_at, created_at, updated_at)
+           accepted_at, last_active_at, created_at, updated_at, service_states)
           SELECT ?, ?, '',
             ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?, ?,
-            'active', ?, '', '', ?, ? WHERE ${createGuard.sql}`)
+            'active', ?, '', '', ?, ?, ? WHERE ${createGuard.sql}`)
           .bind(memberId, access.ownerUid, email, displayName, firstName, lastName, phone, appUsername.username, appUsername.normalized, scheduleColour,
             JSON.stringify(capabilities), "field",
-            ...permissionBindings(permissions), now, now, now, ...createGuard.bindings),
-        conditionalMemberAuditStatement(db, access, memberId, "member.invited", { permissions }, now),
+            ...permissionBindings(permissions), now, now, now, serviceStates, ...createGuard.bindings),
+        conditionalMemberAuditStatement(db, access, memberId, "member.invited", { permissions, serviceStates: serviceStates === null ? null : JSON.parse(serviceStates) }, now),
         ...inviteReplacementStatements(db, access, memberId, inviteId, inviteTokenHash, inviteExpiresAt, now),
       ]);
       if (!invited[0]?.meta.changes) throw new Error("PERMISSION_ESCALATION");
@@ -874,7 +893,7 @@ export async function PATCH(request: Request) {
       if (!canManageTeam(access)) throw new Error("OWNER_REQUIRED");
       const memberId = cleanAdminText(body.memberId, 180);
       const current = await db.prepare(`SELECT member_uid, email, display_name, first_name, last_name, phone, field_username, field_username_normalized, schedule_colour,
-          capabilities, status, updated_at,
+          capabilities, service_states, status, updated_at,
           can_create_jobs, can_manage_jobs, can_assign_jobs, job_scope, can_view_customers, can_manage_customers,
           can_view_quotes, can_manage_quotes, can_send_quotes, can_view_invoices, can_manage_invoices,
           can_view_price_book, can_manage_price_book, can_apply_discounts, schedule_scope,
@@ -933,10 +952,11 @@ export async function PATCH(request: Request) {
       const capabilities = body.capabilities === undefined
         ? parsedList(current.capabilities)
         : memberCapabilities(body.capabilities);
+      const serviceStates = await memberServiceStates(db, access.ownerUid, body.serviceStates, current.service_states, current.member_uid === access.ownerUid);
       const actorGuard = memberMutationActorGuard(access, beforePermissions, permissions, permissionsChanged);
       const results = await db.batch([
         db.prepare(`UPDATE trade_team_members SET email = ?, display_name = ?, first_name = ?, last_name = ?,
-          phone = ?, field_username = ?, field_username_normalized = ?, schedule_colour = ?, capabilities = ?, status = ?,
+          phone = ?, field_username = ?, field_username_normalized = ?, schedule_colour = ?, capabilities = ?, service_states = ?, status = ?,
           can_create_jobs = ?, can_manage_jobs = ?, can_assign_jobs = ?, job_scope = ?, can_view_customers = ?,
           can_manage_customers = ?, can_view_quotes = ?, can_manage_quotes = ?, can_send_quotes = ?,
           can_view_invoices = ?, can_manage_invoices = ?, can_view_price_book = ?, can_manage_price_book = ?,
@@ -944,10 +964,10 @@ export async function PATCH(request: Request) {
           can_manage_team = ?, can_edit_team_permissions = ?, can_view_field_evidence = ?,
           can_manage_field_evidence = ?, can_run_reports = ?, can_search_customers = ?, updated_at = ?
           WHERE id = ? AND owner_uid = ? AND updated_at = ?${actorGuard.sql}`).bind(email, displayName, firstName, lastName, phone, appUsername.username, appUsername.normalized, scheduleColour,
-            JSON.stringify(capabilities), status,
+            JSON.stringify(capabilities), serviceStates, status,
             ...permissionBindings(permissions), now, memberId, access.ownerUid, current.updated_at, ...actorGuard.bindings),
         conditionalMemberAuditStatement(db, access, memberId, "member.updated", {
-          status, capabilities, permissionsBefore: beforePermissions, permissionsAfter: permissions,
+          status, capabilities, serviceStates: serviceStates === null ? null : JSON.parse(serviceStates), permissionsBefore: beforePermissions, permissionsAfter: permissions,
           permissionsChanged, fieldUsernameChanged: usernameChanged,
         }, now),
         ...(usernameChanged ? [

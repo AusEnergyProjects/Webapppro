@@ -1,6 +1,7 @@
 export class CreditexComplianceError extends Error {
   readonly code: string;
   readonly status: number;
+  trainingModules: { id: string; title: string }[] = [];
   constructor(code: string, message: string, status = 403) {
     super(message); this.code = code; this.status = status;
   }

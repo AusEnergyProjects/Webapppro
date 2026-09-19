@@ -2,9 +2,10 @@ import { createHash } from 'node:crypto';
 import { TRAINING_MODULES, type TradeTrainingModule } from '../data/creditex-training-curriculum';
 import { GOVERNMENT_ACTIVITY_TEMPLATES, GOVERNMENT_PROGRAM_TEMPLATES } from './australian-government-program-catalogue';
 import { ENERGY_SERVICE_CATALOGUE } from './energy-service-catalogue.mjs';
+import { OTHER_TRAINING_SECTIONS, trainingServiceSection } from './training-service-sections.mjs';
 import { CreditexComplianceError, creditexWriteGuard, record } from './creditex-onboarding-server';
 
-export type TrainingAssignment = { kind: 'catalogue' | 'additional'; serviceCategory: string; jurisdictions: string[]; activityLabel: string };
+export type TrainingAssignment = { kind: 'catalogue' | 'additional'; serviceCategory: string; trainingSection?: string; jurisdictions: string[]; activityLabel: string };
 export type TrainingQuestionnaire = { module: TradeTrainingModule; assignment: TrainingAssignment; revision: number; hasDraft: boolean; publishedVersion: string; publishedAt: string; updatedAt: string };
 export type TrainingQuestionnaireSummary = { id: string; title: string; programCode: string; questionCount: number; revision: number; publishedVersion: string; hasDraft: boolean; assignment: TrainingAssignment };
 export type TrainingQuestionnaireVersion = { version: string; contentHash: string; publishedAt: string; publishedByUid: string };
@@ -44,17 +45,20 @@ function sourceIds(value: unknown, available: Set<string>) {
 export function questionnaireAssignment(course: TradeTrainingModule): TrainingAssignment {
   const activity = GOVERNMENT_ACTIVITY_TEMPLATES.find(item => course.activityTemplateIds.includes(item.templateId));
   const program = GOVERNMENT_PROGRAM_TEMPLATES.find(item => item.programCode === course.programCode);
-  return { kind: 'catalogue', serviceCategory: activity?.serviceCategory || 'other', jurisdictions: [program?.jurisdiction || 'AU'], activityLabel: activity?.title || course.title };
+  const serviceCategory = activity?.serviceCategory || 'other';
+  return { kind: 'catalogue', serviceCategory, ...(serviceCategory === 'other' ? { trainingSection: trainingServiceSection({ ...course, serviceCategory }).trainingSection } : {}), jurisdictions: [program?.jurisdiction || 'AU'], activityLabel: activity?.title || course.title };
 }
 function cleanAdditionalAssignment(value: unknown, programCode: string): TrainingAssignment {
   const input = record(value); const program = GOVERNMENT_PROGRAM_TEMPLATES.find(item => item.programCode === programCode);
   if (!program) return invalid('Choose an existing government programme.');
   const serviceCategory = requiredText(input.serviceCategory, 'Service', 80);
   if (!ENERGY_SERVICE_CATALOGUE.some(service => service.id === serviceCategory)) return invalid('Choose a service from the service list.');
+  const trainingSection = input.trainingSection === undefined || input.trainingSection === '' ? 'other-training' : requiredText(input.trainingSection, 'Training section', 80);
+  if (!OTHER_TRAINING_SECTIONS.some(section => section.id === trainingSection) || (serviceCategory !== 'other' && input.trainingSection)) return invalid('Choose a valid training section for this service.');
   const jurisdictions = [...new Set(list(input.jurisdictions, 'Service states', 8).map(state => requiredText(state, 'State', 3)))];
   if (!jurisdictions.length || jurisdictions.some(state => state !== 'AU' && !states.has(state)) || (jurisdictions.includes('AU') && jurisdictions.length !== 1)) return invalid('Choose the states where this training applies, or Australia for a national programme.');
   if (program.jurisdiction !== 'AU' && (jurisdictions.length !== 1 || jurisdictions[0] !== program.jurisdiction)) return invalid(`This programme applies in ${program.jurisdiction}.`);
-  return { kind: 'additional', serviceCategory, jurisdictions, activityLabel: requiredText(input.activityLabel, 'Activity name', 240) };
+  return { kind: 'additional', serviceCategory, ...(serviceCategory === 'other' ? { trainingSection } : {}), jurisdictions, activityLabel: requiredText(input.activityLabel, 'Activity name', 240) };
 }
 /** Only authorised editor input reaches here. Binding fields come from the catalogue or the stored assignment. */
 export function validateQuestionnaireModule(value: unknown, original: TradeTrainingModule | null, moduleId: string, publish = false): TradeTrainingModule {

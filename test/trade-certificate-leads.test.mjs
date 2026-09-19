@@ -17,42 +17,42 @@ function fixture() {
       .get('owner', JSON.stringify(categories), state));
   } };
 }
-test('full catalogue lead predicate executes and requires every applicable programme course', () => {
+test('untrained owners and field members can receive leads before passing activity training', () => {
   const f = fixture();
   try {
     assert.equal(f.eligible(), true);
-    f.sql.prepare("DELETE FROM trade_training_completions WHERE member_id='worker' AND module_id='veu-6'").run();
-    assert.equal(f.eligible(), false, 'other passed heating courses cannot replace activity 6');
+    f.sql.exec('DELETE FROM trade_training_completions; DELETE FROM trade_training_attempts; DELETE FROM trade_training_module_reviews');
+    assert.equal(f.eligible(), true, 'learning completion is required for booking, not lead receipt');
   } finally { f.sql.close(); }
 });
-test('office-only staff do not block leads but selecting onsite services requires their own current passes', () => {
+test('staff service selections and missing personal training do not prevent business lead receipt', () => {
   const f = fixture();
   try {
     f.sql.exec("INSERT INTO trade_team_members(id,owner_uid,member_uid,status,capabilities) VALUES ('office','owner','office-user','active','[]')");
     assert.equal(f.eligible(), true, 'an office-only member has no installation training requirement');
     f.sql.exec("UPDATE trade_team_members SET capabilities='[\"heating-cooling\"]' WHERE id='office'");
-    assert.equal(f.eligible(), false, 'declaring onsite heating work requires that person to qualify');
+    assert.equal(f.eligible(), true, 'declaring on-site work does not withhold incoming leads while training is unfinished');
     f.sql.exec("UPDATE trade_team_members SET capabilities='[]' WHERE id='office'");
     assert.equal(f.eligible(), true, 'returning to office-only work removes the installation requirement');
     f.sql.exec("DELETE FROM trade_training_completions WHERE member_id='worker' AND module_id='veu-6'");
-    assert.equal(f.eligible(), false, 'office-only status cannot bypass an actual technician training requirement');
+    assert.equal(f.eligible(), true, 'an untrained technician is checked separately before booking');
   } finally { f.sql.close(); }
 });
 
-test('business approval, owner completion and current declared capability remain mandatory', () => {
+test('business approval and current declared services remain mandatory regardless of owner training', () => {
   const f = fixture();
   try {
     f.sql.exec("UPDATE creditex_business_onboarding SET status='submitted'");
     assert.equal(f.eligible(), false);
     f.sql.exec("UPDATE creditex_business_onboarding SET status='approved'");
     f.sql.exec("UPDATE trade_training_completions SET revoked_at='2026-09-18' WHERE member_id='owner-member' AND module_id='veu-6'");
-    assert.equal(f.eligible(), false);
+    assert.equal(f.eligible(), true, 'a revoked quiz pass does not suspend incoming leads');
     f.sql.exec("UPDATE trade_training_completions SET revoked_at='' WHERE member_id='owner-member'");
     f.sql.exec("UPDATE trade_accounts SET capabilities='[\"hot-water\"]'");
     assert.equal(f.eligible(), false);
   } finally { f.sql.close(); }
 });
-test('unrelated jurisdictions and unrelated workers do not unlock or block an activity category', () => {
+test('staff training and capabilities do not change the business service scope for leads', () => {
   const f = fixture();
   try {
     f.sql.exec("UPDATE trade_training_completions SET revoked_at='2026-09-18' WHERE module_id LIKE 'act-%' OR module_id LIKE 'sa-%'");
@@ -61,14 +61,15 @@ test('unrelated jurisdictions and unrelated workers do not unlock or block an ac
     f.sql.exec("DELETE FROM trade_training_completions WHERE member_id='worker' AND module_id='veu-6'");
     assert.equal(f.eligible(), true);
     f.sql.exec("UPDATE trade_team_members SET capabilities='[\"heating-cooling\"]' WHERE id='worker'");
-    assert.equal(f.eligible(), false);
+    assert.equal(f.eligible(), true);
   } finally { f.sql.close(); }
 });
 
 test('lead disclosure always requires an active business owner, including categories without a course requirement', () => {
   const f = fixture();
   try {
-    const categories = [['heating-cooling'], ['non-certificate-service']];
+    f.sql.exec("UPDATE trade_accounts SET capabilities='[\"heating-cooling\",\"plumbing\"]'");
+    const categories = [['heating-cooling'], ['plumbing']];
     for (const category of categories) assert.equal(f.eligible(category), true);
     f.sql.exec("UPDATE trade_team_members SET status='inactive' WHERE id='owner-member'");
     for (const category of categories) assert.equal(f.eligible(category), false);
@@ -98,7 +99,7 @@ test('current served states govern pending lead disclosure and allocation with l
     assert.equal(f.eligible(['heating-cooling'], 'NSW'), false);
   } finally { f.sql.close(); }
 });
-test('autonomous current passes allow leads without reviews while withdrawals, source drift and revocations block disclosure', () => {
+test('course withdrawals, source changes and training revocations do not block lead disclosure', () => {
   const f = fixture();
   try {
     f.sql.exec("UPDATE trade_training_module_reviews SET review_expires_on='2000-01-01' WHERE module_id='veu-6'");
@@ -109,22 +110,22 @@ test('autonomous current passes allow leads without reviews while withdrawals, s
     assert.equal(f.eligible(), true, 'no curriculum review records are required');
     const completion = f.sql.prepare("SELECT * FROM trade_training_completions WHERE module_id='veu-6' AND member_id='worker'").get();
     f.sql.prepare("UPDATE trade_training_completions SET content_hash=? WHERE id=?").run('e'.repeat(64), completion.id);
-    assert.equal(f.eligible(), false, 'the completion must match actual attempt and deployed course content');
+    assert.equal(f.eligible(), true, 'a stale course completion is not a lead restriction');
     f.sql.prepare("UPDATE trade_training_completions SET content_hash=? WHERE id=?").run(completion.content_hash, completion.id);
     installCreditexTrainingFixture(f.sql);
     f.sql.exec("UPDATE trade_training_module_reviews SET status='withdrawn' WHERE module_id='veu-6'");
-    assert.equal(f.eligible(), false, 'an explicit withdrawal blocks even current 100% passes');
+    assert.equal(f.eligible(), true, 'withdrawn training remains a booking restriction');
     f.sql.exec("UPDATE trade_training_module_reviews SET status='active'");
     f.sql.exec(`UPDATE trade_training_completions SET passed_at='2098-01-01',revoked_at='2098-01-02'
       WHERE id=(SELECT id FROM trade_training_completions WHERE module_id='veu-6' AND member_id='worker' ORDER BY rowid DESC LIMIT 1)`);
-    assert.equal(f.eligible(), false, 'an earlier unrevoked pass must not replace a later revoked completion');
+    assert.equal(f.eligible(), true, 'revoked training remains a booking restriction');
   } finally { f.sql.close(); }
 });
 test('allocation predicate rechecks eligibility at the database mutation', () => {
   const f = fixture();
   try {
     assert.equal(f.eligible(), true);
-    f.sql.exec("CREATE TABLE allocations(owner_uid TEXT); UPDATE trade_training_completions SET revoked_at='2026-09-18' WHERE module_id='veu-6'");
+    f.sql.exec("CREATE TABLE allocations(owner_uid TEXT); UPDATE creditex_business_onboarding SET status='suspended'");
     const result = f.sql.prepare(`INSERT INTO allocations SELECT lead.owner_uid
       FROM (SELECT ? owner_uid, ? categories, ? state) lead WHERE ${f.predicate}`)
       .run('owner', '["heating-cooling"]', 'VIC');
@@ -136,25 +137,25 @@ test('SQL identifiers must be static qualified columns', () => {
   assert.throws(() => certificateLeadEligibilitySql('owner OR 1=1', 'lead.categories', 'lead.state'));
 });
 
-test('insulation leads require a qualified installer without treating a trained office owner as an onsite installer', () => {
+test('insulation leads are received before training and credential completion with booking checks separate', () => {
   const f = fixture();
   try {
-    assert.equal(f.eligible(['insulation']), false);
+    assert.equal(f.eligible(['insulation']), true, 'lead receipt does not require an installer credential');
     f.sql.prepare('INSERT INTO trade_team_member_files VALUES (?,?,?,?,?,?)').run('credential-file','owner','worker','active','2099-12-31','training');
     f.sql.prepare('INSERT INTO trade_training_external_credentials VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run('credential','owner','worker','veu-48','credential-file','EEC-CII','ESC-registration','2099-12-31','reviewer','Registers verified','','2026-09-18');
     assert.equal(f.eligible(['insulation']), true);
     f.sql.exec("UPDATE trade_training_completions SET revoked_at='2026-09-18' WHERE member_id='owner-member' AND module_id='veu-48'");
-    assert.equal(f.eligible(['insulation']), false, 'the office owner still needs their quiz pass');
+    assert.equal(f.eligible(['insulation']), true, 'the office owner can receive leads before their quiz pass');
     f.sql.exec("UPDATE trade_training_completions SET revoked_at='' WHERE member_id='owner-member'");
     f.sql.exec("UPDATE trade_team_members SET capabilities='[\"hot-water\"]' WHERE id='worker'");
-    assert.equal(f.eligible(['insulation']), false, 'the credential holder must be within the insulation team');
+    assert.equal(f.eligible(['insulation']), true, 'assignment eligibility is checked when selecting the installer');
     f.sql.exec("UPDATE trade_team_members SET capabilities='[\"insulation\"]' WHERE id='worker'");
     f.sql.exec("UPDATE trade_team_member_files SET status='deleted'");
-    assert.equal(f.eligible(['insulation']), false, 'the credential evidence must remain current');
+    assert.equal(f.eligible(['insulation']), true, 'credential validity is checked before the installation is booked');
   } finally { f.sql.close(); }
 });
 
-test('bulk allocation checks are bounded and preserve live activity qualification', async () => {
+test('bulk allocation remains bounded and excludes unapproved businesses without requiring training', async () => {
   const f = fixture(); let queries = 0;
   try {
     const db = { prepare(query) { return { bind(state, rows) {
@@ -167,6 +168,36 @@ test('bulk allocation checks are bounded and preserve live activity qualificatio
     assert.deepEqual([...await certificateLeadEligibleOwners(db, candidates, 'VIC')], ['owner']);
     assert.equal(queries, 3);
     f.sql.exec("UPDATE trade_training_completions SET revoked_at='2026-09-18' WHERE module_id='veu-6'");
+    assert.deepEqual([...await certificateLeadEligibleOwners(db, candidates.slice(0, 1), 'VIC')], ['owner']);
+    f.sql.exec("UPDATE creditex_business_onboarding SET status='suspended'");
     assert.equal((await certificateLeadEligibleOwners(db, candidates.slice(0, 1), 'VIC')).size, 0);
+  } finally { f.sql.close(); }
+});
+
+
+test('lead categories must be nonempty saved service arrays and malformed account services fail closed', () => {
+  const f = fixture();
+  try {
+    assert.equal(f.eligible(['made-up-service']), false);
+    assert.equal(f.eligible(['heating-cooling', 'made-up-service']), false);
+    assert.equal(f.eligible([null]), false); assert.equal(f.eligible([1]), false);
+    for (const capabilities of ['not-json', 'null', '{}', '"heating-cooling"', '[]']) {
+      f.sql.prepare('UPDATE trade_accounts SET capabilities=?').run(capabilities);
+      assert.equal(f.eligible(), false, capabilities);
+    }
+  } finally { f.sql.close(); }
+});
+
+
+test('removing the training prerequisite does not bypass business insurance or signed agreement requirements', () => {
+  const f = fixture();
+  try {
+    f.sql.exec('DELETE FROM trade_training_completions; DELETE FROM trade_training_attempts');
+    assert.equal(f.eligible(), true);
+    f.sql.exec("UPDATE creditex_business_onboarding SET insurance_expires_on='2000-01-01'");
+    assert.equal(f.eligible(), false);
+    assert.throws(() => f.sql.exec("UPDATE creditex_business_onboarding SET insurance_expires_on='2099-12-31',agreement_reference=''"), /CHECK constraint failed/);
+    f.sql.exec("UPDATE creditex_business_onboarding SET status='draft',insurance_expires_on='2099-12-31',agreement_reference=''");
+    assert.equal(f.eligible(), false);
   } finally { f.sql.close(); }
 });

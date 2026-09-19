@@ -723,7 +723,7 @@ export async function allocateNearestInstallers(
     candidates,
   ) as InstallerCandidate[];
   const allocated: InstallerCandidate[] = [];
-  const trainingPredicate = await certificateLeadEligibilitySql("certificate_candidate.owner_uid", "certificate_candidate.categories", "certificate_candidate.state");
+  const businessLeadPredicate = await certificateLeadEligibilitySql("certificate_candidate.owner_uid", "certificate_candidate.categories", "certificate_candidate.state");
   for (
     let offset = 0;
     offset < selected.length;
@@ -740,7 +740,7 @@ export async function allocateNearestInstallers(
      matched_by_uid, matched_at, updated_at)
     SELECT ?, ?, ?, 'offered', '', '', ?, ?, ?, 'automatic', 0, '', '', ?, ?, ?
     FROM (SELECT ? owner_uid, ? categories, ? state) certificate_candidate
-    WHERE ${trainingPredicate} AND EXISTS (SELECT 1 FROM trade_opportunities current_opportunity
+    WHERE ${businessLeadPredicate} AND EXISTS (SELECT 1 FROM trade_opportunities current_opportunity
       WHERE current_opportunity.id = ? AND current_opportunity.status = 'open'
         AND ${tradeOpportunityServiceScopeSql("current_opportunity")})
     ON CONFLICT(opportunity_id, firebase_uid) DO NOTHING`,

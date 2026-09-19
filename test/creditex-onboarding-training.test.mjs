@@ -32,12 +32,13 @@ function fixture() {
     CREATE TABLE trade_team_members(id TEXT PRIMARY KEY,owner_uid TEXT,status TEXT,display_name TEXT,member_uid TEXT,capabilities TEXT);
     CREATE TABLE trade_team_member_files(id TEXT PRIMARY KEY,owner_uid TEXT,team_member_id TEXT,status TEXT,expires_at TEXT,category TEXT);
     INSERT INTO trade_accounts VALUES ('owner','53004085616','Test Pty Ltd','["heating-cooling","insulation","hot-water"]','["VIC"]','VIC');
-    INSERT INTO trade_team_members VALUES ('owner-member','owner','active','Owner','owner','[]'),('installer-member','owner','active','Installer','installer','["heating-cooling","insulation","hot-water"]');`);
+    INSERT INTO trade_team_members(id,owner_uid,status,display_name,member_uid,capabilities) VALUES ('owner-member','owner','active','Owner','owner','[]'),('installer-member','owner','active','Installer','installer','["heating-cooling","insulation","hot-water"]');`);
   sql.exec(fs.readFileSync('drizzle/0116_trade_crm_write_guard.sql', 'utf8'));
   sql.exec(fs.readFileSync('drizzle/0176_creditex_onboarding_training.sql', 'utf8'));
   sql.exec(fs.readFileSync('drizzle/0177_autonomous_activity_training.sql', 'utf8'));
   sql.exec(fs.readFileSync('drizzle/0178_autonomous_business_onboarding.sql', 'utf8'));
   sql.exec(fs.readFileSync('drizzle/0179_training_questionnaires.sql', 'utf8'));
+  sql.exec(fs.readFileSync('drizzle/0180_team_member_service_states.sql', 'utf8'));
   const db = { prepare: query => new Statement(sql, query), batch: async statements => {
     sql.exec('BEGIN'); try { const results = []; for (const statement of statements) results.push(await statement.run()); sql.exec('COMMIT'); return results; } catch (error) { sql.exec('ROLLBACK'); throw error; }
   } };
@@ -71,9 +72,10 @@ function application() {
 function seedDocuments(sql) {
   for (const [id, kind] of [['director-id','director_id'],['director-selfie','director_selfie'],['insurance','insurance'],['signed-agreement','partnership_agreement']]) sql.prepare('INSERT INTO creditex_onboarding_documents VALUES (?,?,?,?,?,?,?,?,?,?)').run(id,'owner',kind,`${id}.pdf`,'application/pdf',10,'a'.repeat(64),id,'owner',new Date().toISOString());
 }
-async function approveBusiness(f) {
+async function approveBusiness(f, details = application()) {
   seedDocuments(f.sql);
-  await onboarding.saveCreditexApplication(f.db,'owner','owner',0,application());
+  if (details.contractorLicenceDocumentId) f.sql.prepare('INSERT INTO creditex_onboarding_documents VALUES (?,?,?,?,?,?,?,?,?,?)').run(details.contractorLicenceDocumentId,'owner','contractor_licence','licence.pdf','application/pdf',10,'b'.repeat(64),'licence','owner',new Date().toISOString());
+  await onboarding.saveCreditexApplication(f.db,'owner','owner',0,details);
   // This fixture explicitly represents readable private objects. R2 integrity
   // and absence are exercised separately by the onboarding upload route tests.
   const completed = await onboarding.submitCreditexApplication(f.db,'owner','owner',1,async () => {});
@@ -292,7 +294,7 @@ test('staff bookings still require the owner and current jurisdiction, capabilit
 
 test('an office booker needs no course pass when the owner and assigned technician have passed', async () => {
   const f = fixture(); await approveBusiness(f); await activate(f); await pass(f); await pass(f, 'installer-member');
-  f.sql.exec("INSERT INTO trade_team_members VALUES ('office-member','owner','active','Office colleague','office-user','[]')");
+  f.sql.exec("INSERT INTO trade_team_members(id,owner_uid,status,display_name,member_uid,capabilities) VALUES ('office-member','owner','active','Office colleague','office-user','[]')");
   const input = { ...booking, actorMemberId: 'office-member' };
   assert.equal((await training.getCertificateActivityEligibility(f.db, input)).eligible, true);
   assert.equal(f.sql.prepare("SELECT COUNT(*) count FROM trade_training_completions WHERE member_id='office-member'").get().count, 0);
@@ -303,7 +305,7 @@ test('an office booker needs no course pass when the owner and assigned technici
 
 test('office booking retains active same-business actor checks at the atomic write', async () => {
   const f = fixture(); await approveBusiness(f); await activate(f); await pass(f); await pass(f, 'installer-member');
-  f.sql.exec("INSERT INTO trade_team_members VALUES ('office-member','owner','active','Office colleague','office-user','[]'),('foreign-member','another-owner','active','Other office','other-user','[]')");
+  f.sql.exec("INSERT INTO trade_team_members(id,owner_uid,status,display_name,member_uid,capabilities) VALUES ('office-member','owner','active','Office colleague','office-user','[]'),('foreign-member','another-owner','active','Other office','other-user','[]')");
   const input = { ...booking, actorMemberId: 'office-member' };
   const guard = await training.certificateActivityEligibilityGuardStatement(f.db, input);
   f.sql.exec("UPDATE trade_team_members SET status='inactive' WHERE id='office-member'");
@@ -341,11 +343,11 @@ test('revocation between read and booking batch atomically rolls back job creati
   await assert.rejects(f.db.batch([f.db.prepare("INSERT INTO bookings VALUES('booking')"),guard]),/creditex|trade_crm_write_guard/i);
   assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM bookings').get().n,0);
 });
-test('new team members block certificate leads and suspended/expired/withdrawn evidence blocks existing passes', async () => {
+test('new team members can receive leads while training withdrawal still blocks bookings and business suspension blocks leads', async () => {
   const f=fixture(); await approveBusiness(f); await activate(f); await pass(f); await pass(f,'installer-member');
   assert.equal((await training.getBusinessCertificateLeadEligibility(f.db,{ownerUid:'owner',activityTemplateIds:['veu-6']})).eligible,true);
-  f.sql.prepare("INSERT INTO trade_team_members VALUES ('new','owner','active','New member','new','[\"heating-cooling\"]')").run();
-  assert.equal((await training.getBusinessCertificateLeadEligibility(f.db,{ownerUid:'owner',activityTemplateIds:['veu-6']})).eligible,false);
+  f.sql.prepare("INSERT INTO trade_team_members(id,owner_uid,status,display_name,member_uid,capabilities) VALUES ('new','owner','active','New member','new','[\"heating-cooling\"]')").run();
+  assert.equal((await training.getBusinessCertificateLeadEligibility(f.db,{ownerUid:'owner',activityTemplateIds:['veu-6']})).eligible,true);
   f.sql.prepare("UPDATE trade_training_module_reviews SET status='withdrawn'").run();
   assert.equal((await training.getCertificateActivityEligibility(f.db,booking)).eligible,false);
   assert.equal((await training.getBusinessCertificateLeadEligibility(f.db,{ownerUid:'owner',activityTemplateIds:[]})).eligible,true);
@@ -409,7 +411,7 @@ test('saved personal services immediately add and remove learner todos independe
 
 test('owner and authorised manager can view an active roster member without taking over their identity', async () => {
   const f = fixture();
-  f.sql.prepare("INSERT INTO trade_team_members VALUES ('roster-only','owner','active','New colleague','','[\"hot-water\"]')").run();
+  f.sql.prepare("INSERT INTO trade_team_members(id,owner_uid,status,display_name,member_uid,capabilities) VALUES ('roster-only','owner','active','New colleague','','[\"hot-water\"]')").run();
   for (const access of [{}, { memberId: 'installer-member', actorUid: 'installer', displayName: 'Manager', isOwner: false, canManageTeam: true }]) {
     const response = await trainingRoute(f, access).GET(new Request('https://example.test/api/trade-training?memberId=roster-only'));
     assert.equal(response.status, 200);
@@ -424,7 +426,7 @@ test('owner and authorised manager can view an active roster member without taki
 
 test('training API identifies office-only members from personal services and keeps the owner requirement', async () => {
   const f = fixture();
-  f.sql.exec("INSERT INTO trade_team_members VALUES ('office-member','owner','active','Office colleague','office-user','[]')");
+  f.sql.exec("INSERT INTO trade_team_members(id,owner_uid,status,display_name,member_uid,capabilities) VALUES ('office-member','owner','active','Office colleague','office-user','[]')");
   const officeRoute = trainingRoute(f, { memberId: 'office-member', actorUid: 'office-user', isOwner: false, canManageTeam: false });
   const office = await (await officeRoute.GET(new Request('https://example.test/api/trade-training'))).json();
   assert.equal(office.officeOnly, true); assert.equal(office.selectedMember.officeOnly, true);
@@ -441,7 +443,7 @@ test('training API identifies office-only members from personal services and kee
 
 test('member projection rejects unauthorised, inactive and cross-business targets without data disclosure', async () => {
   const f = fixture();
-  f.sql.prepare("INSERT INTO trade_team_members VALUES ('foreign','other-owner','active','Private person','private-uid','[\"hot-water\"]'),('inactive','owner','suspended','Suspended person','suspended-uid','[\"hot-water\"]')").run();
+  f.sql.prepare("INSERT INTO trade_team_members(id,owner_uid,status,display_name,member_uid,capabilities) VALUES ('foreign','other-owner','active','Private person','private-uid','[\"hot-water\"]'),('inactive','owner','suspended','Suspended person','suspended-uid','[\"hot-water\"]')").run();
   const staff = trainingRoute(f, { memberId: 'installer-member', actorUid: 'installer', isOwner: false, canManageTeam: false });
   const denied = await staff.GET(new Request('https://example.test/api/trade-training?memberId=owner-member'));
   assert.equal(denied.status, 403); assert.equal((await denied.json()).code, 'TRAINING_MEMBER_ACCESS_DENIED');
@@ -630,7 +632,7 @@ test('served jurisdictions are authoritative for projection and API scope, with 
     const scope = await training.getMemberTrainingScope(f.db, 'owner', 'owner-member');
     assert.deepEqual(scope.serviceStates, expected);
     assert.ok(scope.activities.every(activity => jurisdictions.get(activity.programCode) === 'AU' || expected.includes(jurisdictions.get(activity.programCode))));
-    assert.ok(scope.activities.some(activity => jurisdictions.get(activity.programCode) === 'AU'));
+    assert.equal(scope.activities.some(activity => jurisdictions.get(activity.programCode) === 'AU'), expected.length > 0);
     assert.equal(scope.activities.some(activity => activity.programCode === 'VEU'), expected.includes('VIC'));
     assert.equal(scope.activities.some(activity => activity.programCode === 'NSW-ESS'), expected.includes('NSW'));
     const response = await trainingRoute(f).GET(new Request('https://example.test/api/trade-training'));
@@ -650,6 +652,80 @@ test('jurisdiction removal wins against assessment submission and blocks jobs de
   f.db.batch = commit;
   f.sql.prepare("UPDATE trade_accounts SET service_states='[\"VIC\"]',address_state='NSW'").run();
   assert.equal((await training.getCertificateActivityEligibility(f.db, booking)).eligible, true);
+});
+
+test('personal regions narrow multi-state business training while owners retain all business prerequisites', async () => {
+  const f = fixture();
+  f.sql.exec(`UPDATE trade_accounts SET service_states='["VIC","NSW"]';
+    UPDATE trade_team_members SET service_states='["VIC"]' WHERE id='installer-member';`);
+  let scope = await training.getMemberTrainingScope(f.db, 'owner', 'installer-member');
+  assert.deepEqual(scope.serviceStates, ['VIC']); assert.deepEqual(scope.assignedServiceStates, ['VIC']);
+  assert.deepEqual(scope.businessServiceStates, ['NSW', 'VIC']);
+  assert.ok(scope.activities.some(activity => activity.programCode === 'VEU'));
+  assert.equal(scope.activities.some(activity => activity.programCode === 'NSW-ESS'), false);
+  assert.ok(scope.assignedModuleIds.includes('sres-ashp'), 'national hot water training remains applicable');
+  const ownerScope = await training.getMemberTrainingScope(f.db, 'owner', 'owner-member');
+  assert.deepEqual(ownerScope.serviceStates, ['NSW', 'VIC']); assert.equal(ownerScope.assignedServiceStates, null);
+  f.sql.exec(`UPDATE trade_team_members SET service_states='["NSW","VIC"]' WHERE id='installer-member'`);
+  scope = await training.getMemberTrainingScope(f.db, 'owner', 'installer-member');
+  assert.ok(scope.activities.some(activity => activity.programCode === 'NSW-ESS'));
+  const response = await trainingRoute(f).GET(new Request('https://example.test/api/trade-training?memberId=installer-member'));
+  const body = await response.json(); assert.deepEqual(body.trainingServiceStates, ['NSW', 'VIC']);
+  assert.deepEqual(body.assignedServiceStates, ['NSW', 'VIC']); assert.deepEqual(body.businessServiceStates, ['NSW', 'VIC']);
+  f.sql.exec(`UPDATE trade_accounts SET service_states='["VIC"]'; UPDATE trade_team_members SET service_states='["NSW"]' WHERE id='installer-member'`);
+  scope = await training.getMemberTrainingScope(f.db, 'owner', 'installer-member');
+  assert.deepEqual(scope.serviceStates, []); assert.deepEqual(scope.assignedModuleIds, []);
+});
+
+test('passed technicians must still cover the activity and actual national-program job state', async () => {
+  const f = fixture();
+  f.sql.exec(`UPDATE trade_accounts SET service_states='["VIC","NSW"]'`);
+  await approveBusiness(f, { ...application(), doesNswWork: true, contractorLicenceDocumentId: 'nsw-licence' }); await pass(f); await pass(f, 'installer-member');
+  await pass(f, 'owner-member', 'sres-ashp'); await pass(f, 'installer-member', 'sres-ashp');
+  f.sql.exec(`UPDATE trade_accounts SET service_states='["VIC","NSW"]'; UPDATE trade_team_members SET service_states='["VIC"]' WHERE id='installer-member'`);
+  const national = { ...booking, activityTemplateIds: ['sres-ashp'], serviceState: 'VIC' };
+  assert.equal((await training.getCertificateActivityEligibility(f.db, national)).eligible, true);
+  const outside = await training.getCertificateActivityEligibility(f.db, { ...national, serviceState: 'NSW' });
+  assert.equal(outside.eligible, false); assert.equal(outside.reasons[0].code, 'MEMBER_SERVICE_REGION_REQUIRED');
+  const guard = await training.certificateActivityEligibilityGuardStatement(f.db, { ...booking, serviceState: 'VIC' });
+  f.sql.exec(`UPDATE trade_team_members SET service_states='["NSW"]' WHERE id='installer-member'`);
+  await assert.rejects(guard.run(), /CHECK constraint failed/);
+  assert.equal((await training.getCertificateActivityEligibility(f.db, booking)).eligible, false);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_training_completions').get().count, 4, 'changing regions retains immutable earned passes');
+  f.sql.exec(`UPDATE trade_accounts SET service_states='["VIC"]'`);
+  const empty = await training.certificateActivityEligibilityPredicate({ ...national, serviceState: undefined });
+  assert.equal(await f.db.prepare(`SELECT 1 WHERE ${empty.sql}`).bind(...empty.bindings).first(), null, 'national work cannot bypass an empty region intersection');
+});
+
+test('a concurrent personal region change blocks start, checked answer and submission writes', async () => {
+  for (const action of ['start', 'check', 'submit']) {
+    const f = fixture(); const course = TRAINING_MODULES.find(item => item.id === 'veu-6');
+    f.sql.exec(`UPDATE trade_accounts SET service_states='["VIC","NSW"]'; UPDATE trade_team_members SET service_states='["VIC"]' WHERE id='installer-member'`);
+    const actor = { ownerUid: 'owner', memberId: 'installer-member', actorUid: 'installer', moduleId: course.id };
+    const attempt = action === 'start' ? null : await startLegacyAttempt(f.db, actor);
+    const commit = f.db.batch;
+    f.db.batch = async statements => { f.sql.exec(`UPDATE trade_team_members SET service_states='["NSW"]' WHERE id='installer-member'`); return commit(statements); };
+    if (action === 'start') await assert.rejects(training.startTrainingAttempt(f.db, actor), /CHECK constraint failed/);
+    else if (action === 'check') await assert.rejects(training.checkTrainingAnswer(f.db, { ...actor, attemptId: attempt.id, questionId: attempt.questions[0].id, answer: answerTokens(attempt, course)[attempt.questions[0].id] }), /CHECK constraint failed/);
+    else await assert.rejects(training.submitTrainingAttempt(f.db, { ...actor, attemptId: attempt.id, answers: answerTokens(attempt, course) }), /CHECK constraint failed/);
+    assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_training_completions').get().count, 0);
+  }
+});
+
+test('booking training errors name the missing module without disguising region or onboarding restrictions', async () => {
+  const f = fixture(); await approveBusiness(f);
+  await assert.rejects(training.assertCertificateActivityEligibility(f.db, booking), error => error.code === 'ACTIVITY_TRAINING_REQUIRED'
+    && error.message.includes('This booking can be made once the required training module is complete.')
+    && error.message.includes('To be completed by: Business owner, Installer.')
+    && error.trainingModules.some(module => module.id === 'veu-6' && module.title.includes('space heating')));
+  const soleTrader = await training.getCertificateActivityEligibility(f.db, { ...booking, assignedMemberId: 'owner-member' });
+  assert.equal(soleTrader.reasons.filter(reason => reason.moduleId === 'veu-6').length, 1);
+  assert.match(soleTrader.reasons[0].message, /To be completed by: Business owner\.$/);
+  await pass(f);
+  await assert.rejects(training.assertCertificateActivityEligibility(f.db, booking), error => error.code === 'ACTIVITY_TRAINING_REQUIRED'
+    && error.message.includes('To be completed by: Installer.') && !error.message.includes('Business owner'));
+  f.sql.exec(`UPDATE trade_team_members SET service_states='["NSW"]' WHERE id='installer-member'`);
+  await assert.rejects(training.assertCertificateActivityEligibility(f.db, booking), error => error.code === 'MEMBER_SERVICE_REGION_REQUIRED' && error.trainingModules.length === 0);
 });
 
 const questionnaires = load('src/lib/training-questionnaire-store.ts');

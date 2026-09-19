@@ -149,7 +149,7 @@ export async function POST(request: Request) {
       );
     const serviceArea = qualifyingServiceArea(account, String(opportunity.postcode));
     if (!await certificateLeadEligible(db, firebaseUid, matchedCategories, String(opportunity.state))) {
-      return adminJson({ ok: false, code: "CREDITEX_ELIGIBILITY_REQUIRED", error: "Complete Creditex onboarding and the team's required activity training before receiving this lead." }, 403);
+      return adminJson({ ok: false, code: "CREDITEX_ELIGIBILITY_REQUIRED", error: "Complete Creditex business onboarding and confirm the saved services and service area before receiving this lead." }, 403);
     }
     if (!serviceArea)
       return adminJson(

@@ -4,15 +4,19 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 19 September 2026
+Last reconciled locally: 20 September 2026
 
-Deployment baseline verified: 19 September 2026, Sites 581 and GitHub main at `0db8ca5f301f96c1c1af234688dacdae3a2d7710` before this release.
+Deployment baseline verified: Sites 585 and GitHub main at `fe3f687270949d20ce1d69720bab487bcb2934d0` before this release.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: editable compliance questionnaires and guided assessments
+## Current implementation: lead access and technician service regions
 
-Both internal and Creditex portals now provide Compliance questions and saved Trade compliance profiles. Personal answers are checked and saved as learners progress, with immediate explanations and correction before continuing. Final 100% passes are replay-safe; request failures time out visibly. Migration 0179 adds immutable published questionnaire versions and completed answer snapshots. Service/state and current-version requirements apply to additional questionnaires in learning, bookings and lead release. See [implementation and validation](./creditex-onboarding-implementation.md). This source record precedes publication; the coordinating task records the exact subsequent release.
+Migration 0180 adds nullable team-member service states: null follows business regions; explicit selections are restricted to business regions and intersect them on every training and booking check. The owner covers the business footprint; each field technician receives modules for their own services and regions, including relevant national activities. Office-only staff need no installation assessments. Training does not block TLink lead allocation, disclosure or notification; business onboarding, active owner, service/location and consent checks remain. Certificate bookings retain current owner/assigned-technician training and credential checks, use the actual job state for national programs, and name missing modules with learning links. The broad Other training group now has nine curated sections, also available for new custom forms in both editors and native. This source record precedes publication; the coordinating response records the matching commit, Sites version and Android update.
+
+## Previous implementation: editable compliance questionnaires and guided assessments
+
+Both internal and Creditex portals now provide Compliance questions and saved Trade compliance profiles. Personal answers are checked and saved as learners progress, with immediate explanations and correction before continuing. Final 100% passes are replay-safe; request failures time out visibly. Migration 0179 adds immutable published questionnaire versions and completed answer snapshots. Service/state and current-version requirements apply to additional questionnaires in learning and bookings. Training no longer restricts lead release, as described above. See [implementation and validation](./creditex-onboarding-implementation.md). This source record precedes publication; the coordinating task records the exact subsequent release.
 
 ## Previous implementation: self-service Creditex training and intake
 

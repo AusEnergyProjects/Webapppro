@@ -4,6 +4,7 @@ import test from 'node:test';
 import ts from 'typescript';
 import * as jsx from 'react/jsx-runtime';
 import * as serviceCatalogue from '../../src/lib/energy-service-catalogue.mjs';
+import * as trainingSections from '../../src/lib/training-service-sections.mjs';
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 const compile = (source) => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -25,7 +26,7 @@ const course = (overrides = {}) => ({ id: 'veu-6', programCode: 'VEU', version: 
 const overview = (modules = [course()]) => ({ ok: true, memberId: 'pin-member', business: { approved: false, status: 'agreement_pending', blockedReasons: ['An executed agreement is required.'] }, modules, unavailableActivities: [] });
 const attempt = { id: 'attempt-25', moduleId: 'veu-6', version: 'exact-v1', expiresAt: '2099-01-01T12:00:00Z', questions: Array.from({ length: 25 }, (_, index) => ({ id: `question-${index}`, prompt: `Activity-specific question ${index + 1}`, critical: true, options: [{ id: `opaque-${index}-a`, text: 'First choice' }, { id: `opaque-${index}-b`, text: 'Second choice' }] })) };
 
-function harness({ modules = [course()], marked, startError, officeOnly = false } = {}) {
+function harness({ modules = [course()], marked, startError, officeOnly = false, selectedMember, trainingServiceStates } = {}) {
   const state = []; const effects = []; const requests = []; const opened = []; const alerts = [];
   const app = { user: { localOwnerKey: 'field:business:pin-member', authMode: 'field_pin' }, sync: { online: true } };
   let cursor = 0; let initial = true;
@@ -34,12 +35,12 @@ function harness({ modules = [course()], marked, startError, officeOnly = false 
     useCallback(callback) { return callback; },
     useEffect(callback) { if (initial) effects.push(callback); },
   };
-  const api = { async loadTrainingOverview() { requests.push({ action: 'load' }); return { ...overview(modules), officeOnly }; },
+  const api = { async loadTrainingOverview() { requests.push({ action: 'load' }); return { ...overview(modules), officeOnly, selectedMember, trainingServiceStates }; },
     async startTrainingAssessment(moduleId) { requests.push({ action: 'start', moduleId }); if (startError) throw new Error(startError); return structuredClone(attempt); },
     async checkTrainingAnswer(attemptId, questionId, answer) { requests.push({ action: 'check', attemptId, questionId, answer }); return { questionId, correct: answer.endsWith('-a'), explanation: 'Use genuine records from this job.', correctAnswer: 'First choice', sourceIds: ['official'] }; },
     async submitTrainingAssessment(attemptId, answers) { requests.push({ action: 'submit', attemptId, answers: { ...answers } }); return marked || { passed: false, scorePercent: 96, criticalPassed: false, reference: '', expiresAt: '', feedback: [{ questionId: 'question-0', prompt: 'Activity-specific question 1', correct: false, explanation: 'Keep the exact required evidence.', correctAnswer: 'Verified official requirement', sourceIds: ['official'] }] }; } };
   const require = id => ({ react: hooks, 'react/jsx-runtime': jsx, 'react-native': { Alert: { alert: (...args) => alerts.push(args) }, Linking: { openURL: async url => opened.push(url) }, Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', TextInput: 'TextInput', View: 'View', StyleSheet: { create: value => value } },
-    '@/components/field-button': { FieldButton: 'FieldButton' }, '@/components/field-select': { FieldSelect: 'FieldSelect' }, '@/components/screen': { Screen: 'Screen' }, '@/lib/config': { API_BASE_URL: 'https://tlink.energy' }, '@/lib/theme': { colours: {}, radius: {}, spacing: {} }, '@/lib/training': api, '@/providers/app-provider': { useApp: () => app }, '../../../../src/lib/energy-service-catalogue.mjs': serviceCatalogue })[id] || (() => { throw new Error(`Unexpected runtime dependency: ${id}`); })();
+    '@/components/field-button': { FieldButton: 'FieldButton' }, '@/components/field-select': { FieldSelect: 'FieldSelect' }, '@/components/screen': { Screen: 'Screen' }, '@/lib/config': { API_BASE_URL: 'https://tlink.energy' }, '@/lib/theme': { colours: {}, radius: {}, spacing: {} }, '@/lib/training': api, '@/providers/app-provider': { useApp: () => app }, '../../../../src/lib/training-service-sections.mjs': trainingSections })[id] || (() => { throw new Error(`Unexpected runtime dependency: ${id}`); })();
   const exports = {}; Function('require', 'exports', screenCode)(require, exports);
   const render = () => { cursor = 0; const wrapper = exports.default(); const tree = typeof wrapper.type === 'function' ? wrapper.type(wrapper.props) : wrapper; initial = false; return tree; };
   return { render, requests, opened, alerts, app, async mount() { render(); for (const effect of effects) effect(); await flush(); return render(); } };
@@ -121,6 +122,22 @@ test('search finds the canonical service even when a new questionnaire title omi
   assert.match(text(tree), /Showing 1 of 1 matching activities/);
 });
 
+test('native Other activities use specific sections and retain custom questionnaire categories', async () => {
+  const h = harness({ modules: [
+    course({ id: 'veu-26', title: 'Activity 26', activityTemplateIds: ['veu-26'], serviceCategory: 'other' }),
+    course({ id: 'veu-32', title: 'Activity 32', activityTemplateIds: ['veu-32'], serviceCategory: 'other' }),
+    course({ id: 'custom-pool', title: 'Additional pump checks', activityTemplateIds: [], serviceCategory: 'other', trainingSection: 'pool-pumps' }),
+  ] });
+  let tree = await h.mount();
+  const selector = nodes(tree, node => node.type === 'FieldSelect')[0];
+  assert.deepEqual(selector.props.options.map(option => option.label), ['All services', 'Commercial refrigeration', 'Pool and spa pumps']);
+  assert.match(text(tree), /Required before pool and spa pumps work under this activity/);
+  selector.props.onChange('other:pool-pumps'); tree = h.render();
+  assert.doesNotMatch(text(tree), /Activity 32/); assert.match(text(tree), /Additional pump checks/);
+  assert.match(text(tree), /0 of 2 matching modules passed/);
+  assert.doesNotMatch(text(tree), /training.*before.*leads/i);
+});
+
 test('server-assigned office-only roles have no installation training without implying booking permission', async () => {
   const h = harness({ modules: [], officeOnly: true }); const tree = await h.mount();
   assert.match(text(tree), /Office-only team member/);
@@ -136,6 +153,15 @@ test('owners and sole traders are told that a personal pass also serves the busi
   const tree = await harness().mount();
   assert.match(text(tree), /owner or sole trader completes each module once: that pass covers the business and their own field work/);
   assert.match(text(tree), /Each field technician passes the modules for the government program activities they carry out/);
+});
+
+test('native region guidance identifies the owner and technician settings correctly', async () => {
+  const owner = await harness({ trainingServiceStates: ['VIC'], selectedMember: { isOwner: true } }).mount();
+  assert.match(text(owner), /Change your business regions in Business > Services and areas/);
+  assert.doesNotMatch(text(owner), /change your regions in Team/);
+  const worker = await harness({ trainingServiceStates: ['VIC'], selectedMember: { isOwner: false } }).mount();
+  assert.match(text(worker), /Team > your profile > Service regions/);
+  assert.match(text(worker), /Only regions the business also serves apply/);
 });
 
 test('complete curriculum permits assessment without a manual review gate and shows official sources', async () => {

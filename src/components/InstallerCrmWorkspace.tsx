@@ -1,5 +1,7 @@
 "use client";
 
+import { BookingTrainingLinks, type BookingTrainingModule } from "./BookingTrainingLinks";
+
 import { type CSSProperties, FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
@@ -110,6 +112,7 @@ type Job = {
 type CrmResult = { ok?: boolean; customers?: Customer[]; jobs?: Job[]; templates?: JobTemplate[]; teamMembers?: TeamMember[]; teamAccess?: boolean; error?: string };
 type DuplicateCandidate = { customerId: string; customerNumber: string; displayName: string; serviceSiteId: string; siteLabel: string; reasons: string[] };
 type CreateJobResult = {
+  trainingModules?: BookingTrainingModule[];
   ok?: boolean; id?: string; workNumber?: string; customerId?: string; serviceSiteId?: string;
   complianceIntentPlanned?: boolean; complianceIntentCount?: number; workPackReady?: boolean;
   workPackBlockers?: Array<{ code: string; message: string }>;
@@ -451,6 +454,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   const customerPreferencesReady = Boolean(staffPermissions) || savedCustomerPreferencesReady;
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState("");
+  const [bookingTraining, setBookingTraining] = useState<BookingTrainingModule[]>([]);
   const newJobHeadingRef = useRef<HTMLHeadingElement>(null);
   const bootstrapStarted = useRef(false);
   const jobPreferencesLoaded = useRef(false);
@@ -959,14 +963,16 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       const response = await fetch("/api/trade-crm", {
         method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body),
       });
-      const result = await response.json().catch(() => ({})) as { ok?: boolean; code?: string; error?: string; calendarSync?: AppointmentCalendarSync };
+      const result = await response.json().catch(() => ({})) as { ok?: boolean; code?: string; error?: string; trainingModules?: BookingTrainingModule[]; calendarSync?: AppointmentCalendarSync };
       if (!response.ok || !result.ok) {
+        setBookingTraining(result.trainingModules || []);
         if (result.code === "REVISION_CONFLICT" && body.workOrderId === focusedJobId) {
           setFocusedJobRefreshing(true);
           setRefreshNonce((value) => value + 1);
         }
         throw new Error(result.error || "The CRM update could not be saved.");
       }
+      setBookingTraining([]);
       const calendarFailed = Number(result.calendarSync?.failed || 0);
       await load(); setRefreshNonce((value) => value + 1);
       setStatus(calendarFailed
@@ -1234,6 +1240,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
 
   async function createJob(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
+    setBookingTraining([]);
     setBusy("create-job"); setStatus("Creating the customer, service site and job together...");
     try {
       const token = await user.getIdToken();
@@ -1241,6 +1248,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       const response = await fetch("/api/trade-crm", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: "create_scheduled_job", ...body }) });
       const result = await response.json().catch(() => ({})) as CreateJobResult;
       if (!response.ok || !result.ok) {
+        setBookingTraining(result.trainingModules || []);
         const matches = result.duplicateCandidates?.map((item) => `${item.displayName} (${item.customerNumber}: ${item.reasons.join(", ")})`).join("; ");
         throw new Error(matches ? `${result.error} Matches: ${matches}.` : result.error || "The customer, service site and job were not created.");
       }
@@ -1453,6 +1461,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     {view === "pricebook" && <div className="crm-view"><TradePriceBookWorkspace key={priceBookView} user={user} initialView={priceBookView} permissions={staffPermissions} /></div>}
     {view === "assets" && <div className="crm-view"><TradeAssetWorkspace user={user} /></div>}
     {view === "integrations" && <div className="crm-view"><TradeIntegrationCentre user={user} /></div>}
+    <BookingTrainingLinks modules={bookingTraining} teamPortal={Boolean(staffPermissions)} />
     {status && <p className="crm-status" role="status">{status}{status.includes("Calendar sync needs another try.") && <> <a href="/direct-trade/dashboard?workspace=schedule">Open Schedule and retry calendar sync</a>.</>}</p>}
   </section>;
 }

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ts from 'typescript';
 import * as jsx from 'react/jsx-runtime';
+import * as trainingSections from '../src/lib/training-service-sections.mjs';
 
 const source = fs.readFileSync(new URL('../src/components/TrainingQuestionnaireEditor.tsx', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -29,7 +30,7 @@ function harness(respond = responder(), options = {}) {
   let allowDiscard = true; const confirmations = [];
   const window = { confirm(message) { confirmations.push(message); return allowDiscard; }, addEventListener(name, callback) { listeners.set(name, callback); }, removeEventListener(name, callback) { if (listeners.get(name) === callback) listeners.delete(name); } };
   const api = async (url, init = {}) => { requests.push({ url, ...init }); return respond(url, init); };
-  const exports = {}; const require = id => id === 'react' ? hooks : id === 'react/jsx-runtime' ? jsx : id.endsWith('.module.css') ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : (() => { throw Error(`Unexpected runtime import ${id}`); })();
+  const exports = {}; const require = id => id === 'react' ? hooks : id === 'react/jsx-runtime' ? jsx : id === '@/lib/training-service-sections.mjs' ? trainingSections : id.endsWith('.module.css') ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : (() => { throw Error(`Unexpected runtime import ${id}`); })();
   Function('require', 'exports', 'window', 'setTimeout', 'clearTimeout', compiled)(require, exports, window, callback => { timers.set(++timerId, callback); return timerId; }, id => timers.delete(id));
   const onDirtyChange = value => dirty.push(value);
   const render = () => { cursor = 0; const tree = exports.TrainingQuestionnaireEditor({ api, canEdit: true, onDirtyChange, ...options }); for (const effect of effects.splice(0)) effect(); return tree; };
@@ -158,4 +159,22 @@ test('existing questionnaires show the precise service and state assignment', as
   const h = harness(); const tree = await open(h);
   assert.match(text(tree), /Required training for\s+Heating and cooling/);
   assert.match(text(tree), /Activity 6\s+·\s+VIC/);
+});
+
+test('Other forms are browsed in specific sections and new custom forms save a chosen section', async () => {
+  const normal = responder();
+  const pool = { ...catalogue().modules[0], id: 'veu-26', title: 'Pool pump installation', assignment: { kind: 'catalogue', serviceCategory: 'other', jurisdictions: ['VIC'], activityLabel: 'Activity 26' } };
+  const fridge = { ...pool, id: 'veu-22', title: 'Fridge installation' };
+  const h = harness((url, init) => url === endpoint && !init.method ? { ...catalogue(), modules: [pool, fridge], services: [...catalogue().services, { id: 'other', label: 'Other energy upgrade' }] } : normal(url, init));
+  let tree = await h.mount();
+  assert.deepEqual(nodes(field(tree, 'Questionnaire'), node => node.type === 'optgroup').map(node => node.props.label), ['Fridges and freezers', 'Pool and spa pumps']);
+  tree = edit(h, tree, 'Filter by service category', 'other:pool-pumps');
+  assert.doesNotMatch(text(field(tree, 'Questionnaire')), /Fridge installation/);
+  button(tree, 'Create questionnaire').props.onClick(); tree = h.render();
+  assert.equal(field(tree, 'Service category for this training').props.value, 'other');
+  assert.equal(field(tree, 'Training section').props.value, 'pool-pumps');
+  tree = edit(h, tree, 'Training section', 'commercial-refrigeration');
+  button(tree, 'Save draft').props.onClick(); await flush();
+  const body = JSON.parse(h.requests.find(item => item.method === 'POST').body);
+  assert.equal(body.assignment.serviceCategory, 'other'); assert.equal(body.assignment.trainingSection, 'commercial-refrigeration');
 });

@@ -946,7 +946,7 @@ for (const [name, mutate] of [
 
 test('office staff can reactivate an appointment for a trained technician without taking installation training', async () => {
   const { database, d1 } = programmeAppointmentFixture();
-  database.exec("INSERT INTO trade_team_members VALUES ('member-c','owner-1','actor-3','Booking staff','[]','active')");
+  database.exec("INSERT INTO trade_team_members (id,owner_uid,member_uid,display_name,capabilities,status) VALUES ('member-c','owner-1','actor-3','Booking staff','[]','active')");
   const response = await crmRoute(d1, access({ memberId: 'member-c', actorUid: 'actor-3', jobScope: 'team' }))
     .PATCH(appointmentStatusRequest('scheduled'));
   assert.equal(response.status, 200);
@@ -955,7 +955,7 @@ test('office staff can reactivate an appointment for a trained technician withou
 });
 test('office staff cannot reactivate an appointment when the assigned technician lacks a current pass', async () => {
   const { database, d1 } = programmeAppointmentFixture();
-  database.exec("INSERT INTO trade_team_members VALUES ('member-c','owner-1','actor-3','Booking staff','[]','active')");
+  database.exec("INSERT INTO trade_team_members (id,owner_uid,member_uid,display_name,capabilities,status) VALUES ('member-c','owner-1','actor-3','Booking staff','[]','active')");
   database.exec("UPDATE trade_training_completions SET revoked_at='2026-09-19' WHERE module_id='veu-3' AND member_id='member-b'");
   const response = await crmRoute(d1, access({ memberId: 'member-c', actorUid: 'actor-3', jobScope: 'team' }))
     .PATCH(appointmentStatusRequest('scheduled'));
@@ -972,3 +972,79 @@ for (const jobStage of ['completed','cancelled']) {
     assert.equal(appointmentStatusState(database).status, 'cancelled');
   });
 }
+
+
+function nationalCertificateBookingFixture(siteState = 'VIC') {
+  const f = fixture();
+  f.database.exec(`UPDATE trade_accounts SET service_states='["VIC","NSW"]',capabilities='["hot-water"]';
+    UPDATE trade_team_members SET service_states='["VIC"]' WHERE id='member-a';`);
+  f.database.prepare(`INSERT INTO trade_work_order_compliance_intents
+    (id,activity_template_id,work_order_id,installer_uid,status,intent_key,revision,created_at,site_jurisdiction)
+    VALUES ('national-intent','sres-ashp','job-1','owner-1','planned','sres-ashp',1,'2026-01-01',?)`).run(siteState);
+  return f;
+}
+function certificateBookingMutationState(database) {
+  return {
+    job: { ...database.prepare("SELECT * FROM trade_work_orders WHERE id='job-1'").get() },
+    appointments: database.prepare('SELECT * FROM trade_crm_appointments ORDER BY id').all().map(row => ({ ...row })),
+    events: database.prepare('SELECT * FROM trade_work_order_events ORDER BY id').all().map(row => ({ ...row })),
+    sync: database.prepare('SELECT * FROM trade_team_sync_changes ORDER BY sequence').all().map(row => ({ ...row })),
+    pushes: database.prepare('SELECT * FROM trade_mobile_push_outbox ORDER BY id').all().map(row => ({ ...row })),
+  };
+}
+
+test('national certificate appointment cannot book a VIC-only technician at an NSW site in a multi-state business', async () => {
+  const { database, d1 } = nationalCertificateBookingFixture('NSW');
+  try {
+    const before = certificateBookingMutationState(database);
+    const response = await crmRoute(d1, access()).POST(appointmentRequest('member-a'));
+    const result = await response.json();
+    assert.equal(response.status, 403);
+    assert.equal(result.code, 'MEMBER_SERVICE_REGION_REQUIRED');
+    assert.match(result.error, /technician who works in the job location/);
+    assert.equal(d1.batchCalls, 0, 'the wrong-region booking is rejected before any mutation batch');
+    assert.deepEqual(certificateBookingMutationState(database), before);
+  } finally { database.close(); }
+});
+
+test('the same trained VIC-only technician can book a national certificate appointment at a VIC site', async () => {
+  const { database, d1 } = nationalCertificateBookingFixture('VIC');
+  try {
+    const response = await crmRoute(d1, access()).POST(appointmentRequest('member-a'));
+    const result = await response.json();
+    assert.equal(response.status, 201, JSON.stringify(result));
+    assert.equal(result.ok, true);
+    assert.equal(database.prepare('SELECT COUNT(*) count FROM trade_crm_appointments').get().count, 1);
+    assert.equal(database.prepare("SELECT assignee_member_id FROM trade_crm_appointments").get().assignee_member_id, 'member-a');
+  } finally { database.close(); }
+});
+
+test('a missing national-activity pass names the required module and returns training navigation data without saving the booking', async () => {
+  const { database, d1 } = nationalCertificateBookingFixture('VIC');
+  try {
+    database.exec("DELETE FROM trade_training_completions WHERE member_id='member-a' AND module_id='sres-ashp'");
+    const before = certificateBookingMutationState(database);
+    const response = await crmRoute(d1, access()).POST(appointmentRequest('member-a'));
+    const result = await response.json();
+    const course = certificateTestDependency('creditex-training-curriculum').TRAINING_MODULES.find(item => item.id === 'sres-ashp');
+    assert.equal(response.status, 403);
+    assert.equal(result.code, 'ACTIVITY_TRAINING_REQUIRED');
+    assert.ok(result.error.includes(course.title));
+    assert.match(result.error, /booking can be made once the required training module is complete/);
+    assert.deepEqual(result.trainingModules, [{ id: course.id, title: course.title }]);
+    assert.equal(d1.batchCalls, 0);
+    assert.deepEqual(certificateBookingMutationState(database), before);
+  } finally { database.close(); }
+});
+
+test('national certificate booking rolls back when technician coverage changes after the initial check', async () => {
+  const { database, d1 } = nationalCertificateBookingFixture('VIC');
+  try {
+    const before = certificateBookingMutationState(database);
+    d1.setBeforeBatch(() => database.exec(`UPDATE trade_team_members SET service_states='["NSW"]' WHERE id='member-a'`));
+    const response = await crmRoute(d1, access()).POST(appointmentRequest('member-a'));
+    assert.equal(response.status, 409);
+    assert.deepEqual(certificateBookingMutationState(database), before);
+    assert.equal(database.prepare("SELECT service_states FROM trade_team_members WHERE id='member-a'").get().service_states, '["NSW"]', 'the concurrent region update remains saved');
+  } finally { database.close(); }
+});

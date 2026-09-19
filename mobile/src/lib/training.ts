@@ -3,7 +3,7 @@ import { apiRequest } from '@/lib/api';
 export type TrainingSource = { id: string; title: string; url: string };
 export type TrainingModule = {
   id: string; programCode: string; version: string | number; title: string; activityTemplateIds: string[];
-  serviceCategory: string; businessServiceEnabled?: boolean;
+  serviceCategory: string; trainingSection?: string; businessServiceEnabled?: boolean;
   estimatedMinutes: number; passPercent: number; availability: string; status: string;
   assessmentAvailable: boolean; assessmentUnavailableReason: string;
   lessons: { title: string; body: string; sourceIds: string[] }[]; sources: TrainingSource[];
@@ -14,9 +14,10 @@ export type TrainingOverview = {
   business: { approved: boolean; status: string; blockedReasons: string[] };
   memberId: string;
   officeOnly?: boolean;
+  selectedMember?: { isOwner: boolean };
   trainingServiceStates?: string[];
   modules: TrainingModule[];
-  unavailableActivities: { id: string; title: string; programCode: string; serviceCategory: string; message: string }[];
+  unavailableActivities: { id: string; title: string; programCode: string; serviceCategory: string; trainingSection?: string; message: string }[];
 };
 export type TrainingAttempt = {
   id: string; moduleId: string; version: string | number; expiresAt: string;

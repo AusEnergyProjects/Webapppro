@@ -1,60 +1,26 @@
-import { TRAINING_MODULES } from "../data/creditex-training-curriculum.ts";
-import { GOVERNMENT_ACTIVITY_TEMPLATES, GOVERNMENT_PROGRAM_TEMPLATES } from "./australian-government-program-catalogue.ts";
-import { getTrainingModuleHash, isTrainingModuleReady } from "./trade-training-server.ts";
-
 function expression(value: string) {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*$/.test(value)) throw new Error("A static qualified SQL column is required.");
   return value;
 }
-function literal(value: string) { return `'${value.replaceAll("'", "''")}'`; }
-const programs = new Map(GOVERNMENT_PROGRAM_TEMPLATES.map((program) => [program.programCode, program]));
-const governmentCategories = [...new Set(GOVERNMENT_ACTIVITY_TEMPLATES.map((activity) => activity.serviceCategory))];
-const states = ["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"];
-const requiredCourses = GOVERNMENT_ACTIVITY_TEMPLATES.flatMap((activity) => {
-  const program = programs.get(activity.programCode);
-  if (!program || !["current", "limited"].includes(program.catalogueState)
-    || !["current", "limited"].includes(activity.catalogueState)) return [];
-  const course = TRAINING_MODULES.find((item) => item.activityTemplateIds.includes(activity.templateId));
-  return [{ moduleId: course?.id || activity.templateId, version: course?.version || "",
-    hash: course ? getTrainingModuleHash(course) : "", category: activity.serviceCategory,
-    jurisdiction: program.jurisdiction, complete: course && isTrainingModuleReady(course) ? 1 : 0,
-    external: activity.templateId === "veu-48" ? 1 : 0 }];
-});
-// Missing, incomplete and non-applicable courses remain blocking rows. The
-// immutable deployed catalogue is supplied at runtime, never copied into SQL
-// migrations or cached as mutable business eligibility.
-const requiredCourseRows = [
-  ...requiredCourses,
-  ...governmentCategories.flatMap((category) => states.flatMap((state) =>
-    requiredCourses.some((course) => course.category === category && ["AU", state].includes(course.jurisdiction)) ? []
-      : [{ moduleId: "", version: "", hash: "", category, jurisdiction: state, complete: 0, external: 0 }])),
-].map((course) => `(${[course.moduleId, course.version, course.hash, course.category, course.jurisdiction].map(literal).join(",")},${course.complete},${course.external})`).join(",\n");
-
-/** Enforced at allocation, disclosure and notification claim, including old matches.
- * Every current applicable course is required for the owner and active staff
- * declaring that category. Live views recheck approvals, expiry, revocations,
- * external credentials and current service checkboxes on the same SQL statement.
- * Closed, future and specialist routes cannot enable automatic matching.
+/** Rechecked at allocation, disclosure and notification claim, including old matches.
+ * Receiving an opportunity requires current business onboarding and service/location
+ * coverage. Training and installer credentials are enforced when booking the work.
+ * Consent and customer-contact disclosure remain separate checks at each caller.
  */
 export function certificateLeadEligibilitySql(ownerColumn: string, categoriesColumn: string, stateColumn: string) {
   const owner = expression(ownerColumn); const categories = expression(categoriesColumn); const state = expression(stateColumn);
-  return `(EXISTS (WITH deployed_course(module_id,version,content_hash,category,jurisdiction,source_complete,external_required)
-    AS (VALUES ${requiredCourseRows}), required_course AS (
-      SELECT deployed.module_id,COALESCE(published.version,deployed.version) version,COALESCE(published.content_hash,deployed.content_hash) content_hash,
-        deployed.category,deployed.jurisdiction,COALESCE(published.source_complete,deployed.source_complete) source_complete,deployed.external_required
-      FROM deployed_course deployed LEFT JOIN trade_training_published_questionnaires published ON published.module_id=deployed.module_id)
-    SELECT 1 FROM creditex_current_business_jurisdictions approved_business
+  return `(EXISTS (SELECT 1 FROM creditex_current_business_jurisdictions approved_business
     WHERE (approved_business.owner_uid,approved_business.state) = (${owner},${state})
-      AND json_valid(${categories}) AND json_array_length(${categories}) > 0
-      AND NOT EXISTS (SELECT 1 FROM required_course
-        WHERE required_course.category IN (SELECT value FROM json_each(${categories}))
-          AND required_course.jurisdiction IN ('AU', ${state})
-          AND NOT EXISTS (
-            SELECT 1 FROM trade_training_current_scoped_category_qualifications qualification
-            WHERE (qualification.owner_uid, qualification.category, qualification.module_id,
-              qualification.version, qualification.content_hash, qualification.external_required,qualification.state,required_course.source_complete) =
-              (${owner}, required_course.category, required_course.module_id,
-                required_course.version, required_course.content_hash, required_course.external_required,${state},1)))))`;
+      AND EXISTS (SELECT 1 FROM trade_accounts offered_business
+        WHERE offered_business.firebase_uid = ${owner}
+          AND CASE WHEN (json_valid(${categories}),json_valid(offered_business.capabilities)) = (1,1) THEN
+            (json_type(${categories}),json_type(offered_business.capabilities)) = ('array','array')
+            AND json_array_length(${categories}) > 0
+            AND NOT EXISTS (SELECT 1 FROM json_each(${categories}) matched_category
+              WHERE NOT EXISTS (
+                SELECT 1 FROM json_each(offered_business.capabilities) offered_category
+                WHERE (offered_category.type,offered_category.value,matched_category.type) = ('text',matched_category.value,'text')))
+          ELSE 0 END)))`;
 }
 
 export async function certificateLeadEligible(db: D1Database, ownerUid: string, categories: readonly string[], state: string) {

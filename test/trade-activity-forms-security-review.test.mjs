@@ -72,7 +72,8 @@ function fixture(fieldForm = form(), options = {}) {
   database.exec("INSERT INTO trade_accounts(firebase_uid) VALUES ('owner-a')");
   database.exec("INSERT INTO trade_team_members(id,owner_uid,status,display_name,first_name,last_name,member_uid) VALUES ('manager','owner-a','active','Manager','Business','Manager','manager')");
   installCreditexTrainingFixture(database);
-  const d1 = { prepare(sql) { return { bind(...values) { return {
+  const d1 = { prepare(sql) { const statement = (values = []) => ({
+    bind(...boundValues) { return statement(boundValues); },
     async first() { return database.prepare(sql).get(...values) || null; },
     async all() { return { results: database.prepare(sql).all(...values) }; },
     async run() {
@@ -81,7 +82,7 @@ function fixture(fieldForm = form(), options = {}) {
       await options.afterRun?.({ sql, values, database, result });
       return { success: true, meta: { changes: Number(result.changes) } };
     },
-  }; } }; } };
+  }); return statement(); } };
   d1.batch = async (statements) => {
     database.exec("BEGIN");
     try { const results = []; for (const statement of statements) results.push(await statement.run()); database.exec("COMMIT"); return results; }
@@ -1207,7 +1208,7 @@ test("team-scoped form saves cannot reuse training checked before reassignment o
       armed = true;
       await assert.rejects(server.saveActivityAnswers(manager, record.id, record.revision,
         { before_name: "Should not save" }), (error) => mutation.startsWith("assignee")
-        ? error.code === "ACTIVITY_TRAINING_REQUIRED" : error.message === "ACTIVITY_SAVE_FAILED");
+        ? error.code === "ACTIVE_TEAM_REQUIRED" : error.message === "ACTIVITY_SAVE_FAILED");
       assert.equal(armed, false);
       assert.equal(database.prepare("SELECT payload FROM trade_activity_field_records WHERE id = ?").get(record.id).payload, original);
     } finally { database.close(); }
@@ -1223,7 +1224,7 @@ test("an inactive assigned member cannot supply a technician declaration identit
       declarationKey: "before_customer", signerName: "Customer", acknowledged: true, strokes });
     database.prepare("UPDATE trade_team_members SET status = 'inactive' WHERE id = ?").run("worker-a");
     await assert.rejects(server.signActivityDeclaration(access, record.id, { expectedRevision: record.revision,
-      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes }), (error) => error.code === "ACTIVITY_TRAINING_REQUIRED");
+      declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes }), (error) => error.code === "ACTIVE_BOOKING_MEMBER_REQUIRED");
   } finally { database.close(); }
 });
 
@@ -1627,7 +1628,7 @@ test("signing profile setup refuses another assigned worker, inactive member and
     await assert.rejects(server.saveActivitySigningProfile(manager, record.id, { firstName: "Wrong", lastName: "Person" }), /ACTIVITY_TECHNICIAN_SIGNER_NOT_ASSIGNED/);
     await assert.rejects(server.saveActivitySigningProfile({ ...access, ownerUid: "owner-b" }, record.id, { firstName: "Wrong", lastName: "Person" }), /ACTIVITY_RECORD_NOT_FOUND/);
     database.exec("UPDATE trade_team_members SET status = 'inactive'");
-    await assert.rejects(server.saveActivitySigningProfile(access, record.id, { firstName: "Wrong", lastName: "Person" }), (error) => error.code === "ACTIVITY_TRAINING_REQUIRED");
+    await assert.rejects(server.saveActivitySigningProfile(access, record.id, { firstName: "Wrong", lastName: "Person" }), (error) => error.code === "ACTIVE_BOOKING_MEMBER_REQUIRED");
     assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_member_events").get().count, 0);
   } finally { database.close(); }
 });
