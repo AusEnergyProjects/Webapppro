@@ -15,7 +15,7 @@ const base = `WITH all_jobs AS (
   WHERE w.firebase_uid=? AND w.partner_type='installer' AND w.record_status='active'
     AND (?=1 OR w.assignee_member_id=?)
 ), jobs AS (SELECT * FROM all_jobs WHERE (?='' OR service_category=?) AND (?='' OR region=?))`;
-const native = `, native_invoices AS (
+const native = `, native_invoices AS MATERIALIZED (
   SELECT q.id, q.work_order_id, q.firebase_uid, q.sent_at issued_at, q.total_cents-q.tax_cents net_cents,
     q.total_cents, q.due_at, 'quick' source
   FROM trade_crm_quick_invoices q JOIN jobs j ON j.id=q.work_order_id AND j.firebase_uid=q.firebase_uid
@@ -29,15 +29,21 @@ const native = `, native_invoices AS (
   SELECT c.* FROM trade_crm_quick_invoice_credits c JOIN native_invoices n ON n.id=c.invoice_id AND n.firebase_uid=c.firebase_uid AND n.work_order_id=c.work_order_id
   WHERE n.source='quick' AND c.status='issued'
 )`;
-const events = `${native}, events AS (
+// D1 allows five terms per compound SELECT. Materialize each event family so
+// SQLite cannot flatten the nested unions back into one oversized compound.
+const events = `${native}, job_events AS MATERIALIZED (
   SELECT id job_id, 'newJobs' kind, created_at at, 1 value FROM jobs
   UNION ALL SELECT j.id, 'completedJobs', MIN(e.created_at), 1 FROM jobs j JOIN trade_work_order_events e ON e.work_order_id=j.id AND e.firebase_uid=j.firebase_uid WHERE e.event_type='job_completed' GROUP BY j.id
-  UNION ALL SELECT work_order_id, 'invoicedCents', issued_at, net_cents FROM native_invoices
+), invoice_events AS MATERIALIZED (
+  SELECT work_order_id job_id, 'invoicedCents' kind, issued_at at, net_cents value FROM native_invoices
   UNION ALL SELECT work_order_id, 'invoiceCount', issued_at, 1 FROM native_invoices
   UNION ALL SELECT work_order_id, 'creditCents', created_at, total_cents-tax_cents FROM credits
-  UNION ALL SELECT q.work_order_id, 'quoteIssues', MIN(v.issued_at), 1 FROM trade_crm_quotes q JOIN jobs j ON j.id=q.work_order_id AND j.firebase_uid=q.firebase_uid JOIN trade_crm_quote_versions v ON v.quote_id=q.id AND v.firebase_uid=q.firebase_uid WHERE v.issued_at<>'' GROUP BY q.id
+), quote_events AS MATERIALIZED (
+  SELECT q.work_order_id job_id, 'quoteIssues' kind, MIN(v.issued_at) at, 1 value FROM trade_crm_quotes q JOIN jobs j ON j.id=q.work_order_id AND j.firebase_uid=q.firebase_uid JOIN trade_crm_quote_versions v ON v.quote_id=q.id AND v.firebase_uid=q.firebase_uid WHERE v.issued_at<>'' GROUP BY q.id
   UNION ALL SELECT a.work_order_id, CASE WHEN a.decision='accepted' THEN 'wonQuotes' ELSE 'declinedQuotes' END, a.decided_at, 1 FROM trade_crm_quote_acceptances a JOIN jobs j ON j.id=a.work_order_id AND j.firebase_uid=a.firebase_uid WHERE a.decision IN ('accepted','declined')
   UNION ALL SELECT a.work_order_id, 'wonCents', a.decided_at, a.selected_subtotal_cents FROM trade_crm_quote_acceptances a JOIN jobs j ON j.id=a.work_order_id AND j.firebase_uid=a.firebase_uid WHERE a.decision='accepted' AND a.currency='AUD'
+), events AS MATERIALIZED (
+  SELECT * FROM job_events UNION ALL SELECT * FROM invoice_events UNION ALL SELECT * FROM quote_events
 )`;
 const rangeCte = `, ranges AS (SELECT json_extract(value,'$.id') id, json_extract(value,'$.startUtc') start_utc, json_extract(value,'$.endUtc') end_utc FROM json_each(?))`;
 const finance = `${native}, balances AS (

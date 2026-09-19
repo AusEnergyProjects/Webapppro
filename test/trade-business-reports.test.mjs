@@ -117,3 +117,24 @@ test("large business reports aggregate all records rather than a display page ca
   const f=fixture(); f.db.exec("BEGIN"); for(let i=0;i<1200;i++) { f.job(`job-${i}`); f.invoice(`job-${i}`); } f.db.exec("COMMIT");
   const report=await f.report(); assert.equal(report.current.newJobs,1200); assert.equal(report.current.invoiceCount,1200); assert.equal(report.current.invoicedCents,12000000); assert.equal(report.receivables.outstandingCents,13200000);
 });
+
+test("reports execute within Cloudflare D1 query limits with the same aggregates as SQLite", async () => {
+  const { Miniflare } = await import("miniflare");
+  const runtime = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok"); } }', compatibilityDate: "2025-04-01", d1Databases: { DB: "business-reports-regression" }, port: 0 });
+  const f = fixture();
+  try {
+    f.job("one", {}, { paid_value_cents: 3000 }); f.invoice("one");
+    f.job("foreign", { firebase_uid: "other" }); f.invoice("foreign", { firebase_uid: "other", total_cents: 900000 });
+    const db = await runtime.getD1Database("DB");
+    for (const table of f.db.prepare("SELECT name,sql FROM sqlite_master WHERE type='table'").all()) {
+      await db.prepare(table.sql).run();
+      for (const row of f.db.prepare(`SELECT * FROM ${table.name}`).all()) {
+        await db.prepare(`INSERT INTO ${table.name} (${Object.keys(row).join(",")}) VALUES (${Object.keys(row).map(() => "?").join(",")})`).bind(...Object.values(row)).run();
+      }
+    }
+    for (const query of [{}, { period: "weekly" }, { period: "quarterly" }, { period: "fytd" }, { period: "custom", from: "2026-09-01", to: "2026-09-10" }]) {
+      const actual = await loadBusinessReport(db, "owner", access, params(query), "VIC", now);
+      assert.deepEqual(actual, await f.report(query));
+    }
+  } finally { f.db.close(); await runtime.dispose(); }
+});
