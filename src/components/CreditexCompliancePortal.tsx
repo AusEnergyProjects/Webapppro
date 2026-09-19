@@ -34,6 +34,7 @@ import { firebaseAuth } from "@/lib/firebase-client";
 import { CreditexEvidencePolicyGovernance } from "./CreditexEvidencePolicyGovernance";
 const CreditexActivityWorkPackGovernance = dynamic(() => import("./CreditexActivityWorkPackGovernance").then((module) => module.CreditexActivityWorkPackGovernance), { loading: () => <p role="status">Loading master forms...</p> });
 const CreditexOnboardingReviewWorkspace = dynamic(() => import("./CreditexOnboardingReviewWorkspace").then((module) => module.CreditexOnboardingReviewWorkspace), { loading: () => <p role="status">Loading onboarding reviews...</p> });
+const TrainingQuestionnaireEditor = dynamic(() => import("./TrainingQuestionnaireEditor").then((module) => module.TrainingQuestionnaireEditor), { loading: () => <p role="status">Loading compliance questions...</p> });
 import { CreditexOutputActions } from "./CreditexOutputActions";
 import { CreditexOfficialSourceWorkbench } from "./CreditexOfficialSourceWorkbench";
 import { CreditexOperationsWorkspace } from "./CreditexOperationsWorkspace";
@@ -320,7 +321,16 @@ export function CreditexCompliancePortal() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tab, setTab] =
-    useState<"cases" | "pilot" | "sources" | "forms" | "onboarding" | "governance">("cases");
+    useState<"cases" | "pilot" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance">("cases");
+  const questionnaireDirty = useRef(false);
+  const reportQuestionnaireDirty = useCallback((dirty: boolean) => { questionnaireDirty.current = dirty; }, []);
+  function selectTab(next: typeof tab) {
+    if (next === tab) return true;
+    if (questionnaireDirty.current && !window.confirm("Discard the unsaved changes to this questionnaire?")) return false;
+    questionnaireDirty.current = false;
+    setTab(next);
+    return true;
+  }
   const [cases, setCases] = useState<CaseQueueItem[]>([]);
   const [caseQuery, setCaseQuery] = useState("");
   const [caseStatus, setCaseStatus] =
@@ -1004,9 +1014,9 @@ export function CreditexCompliancePortal() {
     }
     event.preventDefault();
     const visibleTabs: Array<
-      "cases" | "pilot" | "sources" | "forms" | "onboarding" | "governance"
+      "cases" | "pilot" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance"
     > = ["cases", "pilot", "sources", "forms"];
-    if (canReviewTraining) visibleTabs.push("onboarding");
+    if (canReviewTraining) visibleTabs.push("onboarding", "compliance-questions");
     if (session?.role === "admin") visibleTabs.push("governance");
     const currentIndex = visibleTabs.indexOf(tab);
     const nextIndex = event.key === "Home"
@@ -1017,7 +1027,7 @@ export function CreditexCompliancePortal() {
           ? (currentIndex + 1) % visibleTabs.length
           : (currentIndex - 1 + visibleTabs.length) % visibleTabs.length;
     const nextTab = visibleTabs[nextIndex];
-    setTab(nextTab);
+    if (!selectTab(nextTab)) return;
     window.requestAnimationFrame(() => {
       document.getElementById(`creditex-tab-${nextTab}`)?.focus();
     });
@@ -1216,7 +1226,7 @@ export function CreditexCompliancePortal() {
             aria-controls="creditex-panel-cases"
             aria-selected={tab === "cases"}
             tabIndex={tab === "cases" ? 0 : -1}
-            onClick={() => setTab("cases")}
+            onClick={() => selectTab("cases")}
             onKeyDown={handleWorkspaceTabKeyDown}
           >
             Operations
@@ -1229,7 +1239,7 @@ export function CreditexCompliancePortal() {
             aria-controls="creditex-panel-pilot"
             aria-selected={tab === "pilot"}
             tabIndex={tab === "pilot" ? 0 : -1}
-            onClick={() => setTab("pilot")}
+            onClick={() => selectTab("pilot")}
             onKeyDown={handleWorkspaceTabKeyDown}
           >
             VEU test pilot
@@ -1242,7 +1252,7 @@ export function CreditexCompliancePortal() {
             aria-controls="creditex-panel-sources"
             aria-selected={tab === "sources"}
             tabIndex={tab === "sources" ? 0 : -1}
-            onClick={() => setTab("sources")}
+            onClick={() => selectTab("sources")}
             onKeyDown={handleWorkspaceTabKeyDown}
           >
             Official sources
@@ -1255,12 +1265,13 @@ export function CreditexCompliancePortal() {
             aria-controls="creditex-panel-forms"
             aria-selected={tab === "forms"}
             tabIndex={tab === "forms" ? 0 : -1}
-            onClick={() => setTab("forms")}
+            onClick={() => selectTab("forms")}
             onKeyDown={handleWorkspaceTabKeyDown}
           >
             Activity forms
           </button>
-          {canReviewTraining && <button className={styles.tab} type="button" role="tab" id="creditex-tab-onboarding" aria-controls="creditex-panel-onboarding" aria-selected={tab === "onboarding"} tabIndex={tab === "onboarding" ? 0 : -1} onClick={() => setTab("onboarding")} onKeyDown={handleWorkspaceTabKeyDown}>Onboarding &amp; training</button>}
+          {canReviewTraining && <button className={styles.tab} type="button" role="tab" id="creditex-tab-onboarding" aria-controls="creditex-panel-onboarding" aria-selected={tab === "onboarding"} tabIndex={tab === "onboarding" ? 0 : -1} onClick={() => selectTab("onboarding")} onKeyDown={handleWorkspaceTabKeyDown}>Onboarding &amp; training</button>}
+          {canReviewTraining && <button className={styles.tab} type="button" role="tab" id="creditex-tab-compliance-questions" aria-controls="creditex-panel-compliance-questions" aria-selected={tab === "compliance-questions"} tabIndex={tab === "compliance-questions" ? 0 : -1} onClick={() => selectTab("compliance-questions")} onKeyDown={handleWorkspaceTabKeyDown}>Compliance questions</button>}
           {session.role === "admin" && (
             <button
               className={styles.tab}
@@ -1270,7 +1281,7 @@ export function CreditexCompliancePortal() {
               aria-controls="creditex-panel-governance"
               aria-selected={tab === "governance"}
               tabIndex={tab === "governance" ? 0 : -1}
-              onClick={() => setTab("governance")}
+              onClick={() => selectTab("governance")}
               onKeyDown={handleWorkspaceTabKeyDown}
             >
               Government rules
@@ -1289,6 +1300,8 @@ export function CreditexCompliancePortal() {
                     ? "Activity form control"
                   : tab === "onboarding"
                     ? "Business and training review"
+                  : tab === "compliance-questions"
+                    ? "Compliance questions"
                   : tab === "governance"
                     ? "Government rule control"
                     : "Compliance case control"}
@@ -1300,6 +1313,8 @@ export function CreditexCompliancePortal() {
                     ? "Build, review and publish the exact technician workflow for each effective activity. Trade accounts can complete a pinned published version but cannot alter its definition."
                   : tab === "onboarding"
                     ? "Review business applications, executed agreements and exact activity curricula. Every learner has an individual, revocable completion record."
+                  : tab === "compliance-questions"
+                    ? "Write clear questions, explain the correct answers and publish training for the people who carry out each activity."
                   : tab === "governance"
                     ? "Named administrators create and govern effective-dated program, activity and evidence records without turning Creditex instructions into government rules."
                     : "Queue lists minimise private data. Authorised Creditex staff can open the audited case workspace for the customer, installer, site, appointments, evidence originals and captured metadata needed to review, correct and submit that exact job."}
@@ -1411,6 +1426,7 @@ export function CreditexCompliancePortal() {
         )}
 
         {tab === "onboarding" && user && canReviewTraining && <section className={`${styles.panel} ${styles.governancePanel}`} id="creditex-panel-onboarding" role="tabpanel" aria-labelledby="creditex-tab-onboarding"><CreditexOnboardingReviewWorkspace api={api} user={user} canReview={canReviewTraining} /></section>}
+        {tab === "compliance-questions" && canReviewTraining && <section className={`${styles.panel} ${styles.governancePanel}`} id="creditex-panel-compliance-questions" role="tabpanel" aria-labelledby="creditex-tab-compliance-questions"><TrainingQuestionnaireEditor api={api} canEdit={canReviewTraining} onDirtyChange={reportQuestionnaireDirty} /></section>}
 
         {tab === "governance" && session.role === "admin" && (
           <section

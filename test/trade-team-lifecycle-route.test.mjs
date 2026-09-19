@@ -179,6 +179,7 @@ test("saving canonical personal services independently creates exact training to
   const dependencies = { '../../../../db': { getD1: () => d1(database) }, '@/lib/admin-server': {}, '@/lib/bounded-json-request': {},
     '@/lib/creditex-onboarding-api': { creditexJson: (body, status = 200) => Response.json(body, { status }), creditexApiError: error => Response.json({ code: error.code }, { status: error.status || 503 }) },
     '@/lib/creditex-onboarding-server': onboarding, '@/lib/trade-training-server': training,
+    '@/lib/training-questionnaire-store': certificateTestDependency('training-questionnaire-store'),
     '@/lib/trade-team-server': { requireInstallerTeamAccess: async () => managerAccess } };
   new Function('require', 'module', 'exports', output)(name => { assert.ok(dependencies[name], name); return dependencies[name]; }, loaded, loaded.exports);
   const trainingResponse = await loaded.exports.GET(new Request('https://test/api/trade-training?memberId=target-1'));

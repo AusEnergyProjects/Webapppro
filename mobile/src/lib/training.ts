@@ -18,15 +18,18 @@ export type TrainingOverview = {
 };
 export type TrainingAttempt = {
   id: string; moduleId: string; version: string | number; expiresAt: string;
+  answers?: Record<string, string>; feedback?: Record<string, TrainingAnswerFeedback>;
   questions: { id: string; prompt: string; options: { id: string; text: string }[]; critical: boolean }[];
 };
 export type TrainingResult = {
   passed: boolean; scorePercent: number; criticalPassed: boolean; reference: string; expiresAt: string;
+  firstTryScorePercent?: number;
   feedback: { questionId: string; prompt: string; correct: boolean; explanation: string; sourceIds: string[]; correctAnswer: string }[];
 };
+export type TrainingAnswerFeedback = { questionId: string; correct: boolean; explanation: string; correctAnswer: string; sourceIds: string[] };
 
 // apiRequest uses the existing device-bound TLinkField session, including for PIN-only workers.
-// Training is online and held in memory; it is never placed in the offline job or upload queue.
+// Checked progress is saved online; training is never put in the offline job queue.
 export function loadTrainingOverview() {
   return apiRequest<TrainingOverview>('/api/trade-training', { cache: 'no-store' });
 }
@@ -41,4 +44,10 @@ export async function submitTrainingAssessment(attemptId: string, answers: Recor
     method: 'POST', body: JSON.stringify({ action: 'submit', attemptId, answers }),
   });
   return result.result;
+}
+export async function checkTrainingAnswer(attemptId: string, questionId: string, answer: string) {
+  const result = await apiRequest<{ ok: boolean; feedback: TrainingAnswerFeedback }>('/api/trade-training', {
+    method: 'POST', body: JSON.stringify({ action: 'check', attemptId, questionId, answer }),
+  });
+  return result.feedback;
 }

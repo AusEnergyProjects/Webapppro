@@ -12,7 +12,7 @@ const modules = { 'node:crypto': crypto, 'creditex-training-curriculum': curricu
 export function certificateTestDependency(specifier) {
   return modules[specifier] || modules[specifier.split('/').at(-1).replace(/\.ts$/, '')];
 }
-for (const name of ['trade-training-server', 'trade-certificate-eligibility', 'trade-certificate-leads']) {
+for (const name of ['training-questionnaire-store', 'trade-training-server', 'trade-certificate-eligibility', 'trade-certificate-leads']) {
   const output = ts.transpileModule(read(`src/lib/${name}.ts`), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -53,6 +53,9 @@ export function installCreditexTrainingFixture(database, { qualified = true } = 
   database.exec(read('drizzle/0177_autonomous_activity_training.sql'));
   if (!database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='creditex_onboarding_completions'").get()) {
     database.exec(read('drizzle/0178_autonomous_business_onboarding.sql'));
+  }
+  if (!database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='trade_training_questionnaires'").get()) {
+    database.exec(read('drizzle/0179_training_questionnaires.sql'));
   }
   if (!qualified) return;
   const now = new Date().toISOString();

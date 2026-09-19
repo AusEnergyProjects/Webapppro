@@ -37,6 +37,7 @@ function fixture() {
   sql.exec(fs.readFileSync('drizzle/0176_creditex_onboarding_training.sql', 'utf8'));
   sql.exec(fs.readFileSync('drizzle/0177_autonomous_activity_training.sql', 'utf8'));
   sql.exec(fs.readFileSync('drizzle/0178_autonomous_business_onboarding.sql', 'utf8'));
+  sql.exec(fs.readFileSync('drizzle/0179_training_questionnaires.sql', 'utf8'));
   const db = { prepare: query => new Statement(sql, query), batch: async statements => {
     sql.exec('BEGIN'); try { const results = []; for (const statement of statements) results.push(await statement.run()); sql.exec('COMMIT'); return results; } catch (error) { sql.exec('ROLLBACK'); throw error; }
   } };
@@ -52,6 +53,7 @@ function trainingRoute(f, access = {}) {
     '@/lib/creditex-onboarding-server': onboarding,
     '@/lib/trade-team-server': { requireInstallerTeamAccess: async () => actor },
     '@/lib/trade-training-server': training,
+    '@/lib/training-questionnaire-store': load('src/lib/training-questionnaire-store.ts'),
   };
   const file = 'src/app/api/trade-training/route.ts';
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }, fileName: file }).outputText;
@@ -91,11 +93,27 @@ function answerTokens(attempt, course, override = {}) {
     return [question.id, question.options.find(option => option.text === text).id];
   }));
 }
+// Keep the existing bulk-submission compatibility and security regressions tied
+// explicitly to attempts opened before guided checking was introduced.
+async function startLegacyAttempt(db, input) {
+  const attempt = await training.startTrainingAttempt(db, input);
+  await db.prepare("UPDATE trade_training_attempts SET course_json='{}' WHERE id=?").bind(attempt.id).run();
+  return attempt;
+}
+async function checkAll(f, actor, attempt, course) {
+  const answers = answerTokens(attempt, course);
+  for (const question of attempt.questions) {
+    const feedback = await training.checkTrainingAnswer(f.db, { ...actor, attemptId: attempt.id, questionId: question.id, answer: answers[question.id] });
+    assert.equal(feedback.correct, true);
+  }
+  return answers;
+}
 async function pass(f, memberId='owner-member', moduleId='veu-6') {
   const course = TRAINING_MODULES.find(item => item.id === moduleId);
   const actor = {ownerUid:'owner',memberId,actorUid:memberId,moduleId};
   const attempt = await training.startTrainingAttempt(f.db,actor);
-  return training.submitTrainingAttempt(f.db,{...actor,attemptId:attempt.id,answers:answerTokens(attempt,course)});
+  const answers = await checkAll(f, actor, attempt, course);
+  return training.submitTrainingAttempt(f.db,{...actor,attemptId:attempt.id,answers});
 }
 const booking = {ownerUid:'owner',actorMemberId:'owner-member',assignedMemberId:'installer-member',activityTemplateIds:['veu-6']};
 
@@ -132,37 +150,38 @@ test('approval stops when current business identity or insurance changes', async
 });
 test('source-complete courses allow learning while optional governance binds exact version/hash and revision', async () => {
   const f=fixture(); const course=TRAINING_MODULES.find(item=>item.id==='veu-6');
-  const attempt = await training.startTrainingAttempt(f.db,{ownerUid:'owner',memberId:'owner-member',actorUid:'owner-member',moduleId:course.id});
+  const attempt = await startLegacyAttempt(f.db,{ownerUid:'owner',memberId:'owner-member',actorUid:'owner-member',moduleId:course.id});
   assert.equal(attempt.questions.length, 25);
   assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_module_reviews').get().n, 0);
   await assert.rejects(training.reviewTrainingModule(f.db,'reviewer',{action:'activate_module',moduleId:course.id,expectedVersion:course.version,expectedHash:'wrong'}),error=>error.code==='TRAINING_VERSION_CHANGED');
   await activate(f);
   await assert.rejects(training.reviewTrainingModule(f.db,'reviewer',{action:'withdraw_module',moduleId:course.id,expectedVersion:course.version,expectedHash:training.getTrainingModuleHash(course),expectedReviewUpdatedAt:'',reviewNote:'Old tab'}),error=>error.code==='TRAINING_REVIEW_CONFLICT');
 });
-test('attempt projection conceals answer keys, persists opaque options, rejects cross-attempt/person/question tokens and replay', async () => {
+test('attempt projection conceals answer keys, persists opaque options, rejects cross-attempt/person/question tokens and returns its saved result on replay', async () => {
   const f=fixture(); const course=await activate(f);
   const actor={ownerUid:'owner',memberId:'owner-member',actorUid:'owner-member',moduleId:course.id};
-  const attempt=await training.startTrainingAttempt(f.db,actor);
+  const attempt=await startLegacyAttempt(f.db,actor);
   assert.equal(attempt.questions.length,25); assert.equal(JSON.stringify(attempt).includes('correctOptionId'),false); assert.equal(JSON.stringify(attempt).includes('explanation'),false);
   assert.ok(attempt.questions.every(question=>question.options.every(option=>/^[0-9a-f-]{36}$/.test(option.id))));
-  assert.deepEqual(await training.startTrainingAttempt(f.db,actor),attempt);
+  assert.deepEqual(await startLegacyAttempt(f.db,actor),attempt);
   const answers=answerTokens(attempt,course);
   await assert.rejects(training.submitTrainingAttempt(f.db,{...actor,memberId:'installer-member',attemptId:attempt.id,answers}),error=>error.code==='ATTEMPT_UNAVAILABLE');
   await assert.rejects(training.submitTrainingAttempt(f.db,{...actor,attemptId:attempt.id,answers:{...answers,[attempt.questions[0].id]:attempt.questions[1].options[0].id}}),error=>error.code==='ANSWER_TOKEN_INVALID');
   await assert.rejects(training.submitTrainingAttempt(f.db,{...actor,attemptId:attempt.id,answers:Object.fromEntries(course.questions.map(q=>[q.id,q.correctOptionId]))}),error=>error.code==='ANSWER_TOKEN_INVALID');
   const passed=await training.submitTrainingAttempt(f.db,{...actor,attemptId:attempt.id,answers});
   assert.equal(passed.passed,true); assert.equal(passed.scorePercent,100); assert.equal(passed.feedback.length,25); assert.match(passed.reference,/^TL-CX-TRAIN-/);
-  await assert.rejects(training.submitTrainingAttempt(f.db,{...actor,attemptId:attempt.id,answers}),error=>error.code==='ATTEMPT_UNAVAILABLE');
+  assert.deepEqual(await training.submitTrainingAttempt(f.db,{...actor,attemptId:attempt.id,answers}), passed);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_completions').get().n, 1);
 });
-test('every question must be correct and unlimited immediate retakes remain available', async () => {
+test('legacy bulk attempts still require every correct answer and permit unlimited immediate retakes', async () => {
   const f=fixture(); const course=await activate(f); const critical=course.questions.find(q=>q.critical);
-  const actor={ownerUid:'owner',memberId:'owner-member',actorUid:'owner-member',moduleId:course.id}; const attempt=await training.startTrainingAttempt(f.db,actor);
+  const actor={ownerUid:'owner',memberId:'owner-member',actorUid:'owner-member',moduleId:course.id}; const attempt=await startLegacyAttempt(f.db,actor);
   const wrong=critical.options.find(option=>option.id!==critical.correctOptionId).id;
   const result=await training.submitTrainingAttempt(f.db,{...actor,attemptId:attempt.id,answers:answerTokens(attempt,course,{[critical.id]:wrong})});
   assert.equal(result.scorePercent,96); assert.equal(result.criticalPassed,false); assert.equal(result.passed,false);
   assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM trade_training_completions').get().n,0);
   for (let i=0;i<5;i++) {
-    const retake=await training.startTrainingAttempt(f.db,actor);
+    const retake=await startLegacyAttempt(f.db,actor);
     assert.notEqual(retake.id,attempt.id);
     const failed=await training.submitTrainingAttempt(f.db,{...actor,attemptId:retake.id,answers:answerTokens(retake,course,{[critical.id]:wrong})});
     assert.equal(failed.passed,false);
@@ -176,20 +195,20 @@ test('the same member can switch between web and PIN without transferring anothe
   const f=fixture(); const course=await activate(f);
   const web={ownerUid:'owner',memberId:'installer-member',actorUid:'installer',moduleId:course.id};
   const pin={...web,actorUid:'field-member:installer-member'};
-  const original=await training.startTrainingAttempt(f.db,web);
-  const other=await training.startTrainingAttempt(f.db,{...web,memberId:'owner-member',actorUid:'owner'});
-  await assert.rejects(training.startTrainingAttempt(f.db,{...pin,ownerUid:'another-business'}),error=>error.code==='ACTIVITY_CAPABILITY_REQUIRED');
+  const original=await startLegacyAttempt(f.db,web);
+  const other=await startLegacyAttempt(f.db,{...web,memberId:'owner-member',actorUid:'owner'});
+  await assert.rejects(startLegacyAttempt(f.db,{...pin,ownerUid:'another-business'}),error=>error.code==='ACTIVITY_CAPABILITY_REQUIRED');
   assert.equal(f.sql.prepare('SELECT status FROM trade_training_attempts WHERE id=?').get(original.id).status,'in_progress');
-  const replacement=await training.startTrainingAttempt(f.db,pin);
+  const replacement=await startLegacyAttempt(f.db,pin);
   assert.notEqual(replacement.id,original.id);
   assert.equal(f.sql.prepare('SELECT status FROM trade_training_attempts WHERE id=?').get(original.id).status,'expired');
   assert.equal(f.sql.prepare('SELECT status FROM trade_training_attempts WHERE id=?').get(other.id).status,'in_progress');
   await assert.rejects(training.submitTrainingAttempt(f.db,{...web,attemptId:original.id,answers:answerTokens(original,course)}),error=>error.code==='ATTEMPT_UNAVAILABLE');
   await assert.rejects(training.submitTrainingAttempt(f.db,{...web,attemptId:replacement.id,answers:answerTokens(replacement,course)}),error=>error.code==='ATTEMPT_UNAVAILABLE');
   await assert.rejects(training.submitTrainingAttempt(f.db,{...pin,attemptId:replacement.id,answers:answerTokens(original,course)}),error=>error.code==='ANSWER_TOKEN_INVALID');
-  const returnedToWeb=await training.startTrainingAttempt(f.db,web);
+  const returnedToWeb=await startLegacyAttempt(f.db,web);
   assert.notEqual(returnedToWeb.id,replacement.id);
-  assert.deepEqual(await training.startTrainingAttempt(f.db,web),returnedToWeb);
+  assert.deepEqual(await startLegacyAttempt(f.db,web),returnedToWeb);
   assert.equal((await training.submitTrainingAttempt(f.db,{...web,attemptId:returnedToWeb.id,answers:answerTokens(returnedToWeb,course)})).passed,true);
   const event=f.sql.prepare("SELECT metadata_json FROM trade_training_events WHERE event_type='attempt_started' AND actor_uid='installer' ORDER BY rowid DESC LIMIT 1").get();
   assert.equal(JSON.parse(event.metadata_json).supersededAttemptId,replacement.id);
@@ -199,10 +218,10 @@ test('concurrent handoffs replace only the observed attempt and create one activ
   const f=fixture(); const course=await activate(f);
   const web={ownerUid:'owner',memberId:'installer-member',actorUid:'installer',moduleId:course.id};
   const pin={...web,actorUid:'field-member:installer-member'};
-  const original=await training.startTrainingAttempt(f.db,web); const commit=f.db.batch;
+  const original=await startLegacyAttempt(f.db,web); const commit=f.db.batch;
   let ready; const waiting=new Promise(resolve=>{ready=resolve;}); const queued=[];
   f.db.batch=statements=>new Promise((resolve,reject)=>{queued.push({statements,resolve,reject});if(queued.length===2)ready();});
-  const outcomes=Promise.allSettled([training.startTrainingAttempt(f.db,pin),training.startTrainingAttempt(f.db,pin)]);
+  const outcomes=Promise.allSettled([startLegacyAttempt(f.db,pin),startLegacyAttempt(f.db,pin)]);
   await waiting; f.db.batch=commit;
   for(const request of queued) { try { request.resolve(await commit(request.statements)); } catch(error) { request.reject(error); } }
   const results=await outcomes; assert.equal(results.filter(result=>result.status==='fulfilled').length,1);
@@ -210,19 +229,19 @@ test('concurrent handoffs replace only the observed attempt and create one activ
   assert.match(results.find(result=>result.status==='rejected').reason.message,/CHECK constraint failed/i);
   assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM trade_training_attempts WHERE member_id='installer-member' AND status='in_progress'").get().n,1);
   assert.equal(f.sql.prepare('SELECT status FROM trade_training_attempts WHERE id=?').get(original.id).status,'expired');
-  assert.deepEqual(await training.startTrainingAttempt(f.db,pin),results.find(result=>result.status==='fulfilled').value);
+  assert.deepEqual(await startLegacyAttempt(f.db,pin),results.find(result=>result.status==='fulfilled').value);
 });
 
 test('a handoff winning the commit race rejects the original already-read submission without creating completion', async () => {
   const f=fixture(); const course=await activate(f);
   const web={ownerUid:'owner',memberId:'installer-member',actorUid:'installer',moduleId:course.id};
   const pin={...web,actorUid:'field-member:installer-member'};
-  const original=await training.startTrainingAttempt(f.db,web); const commit=f.db.batch;
+  const original=await startLegacyAttempt(f.db,web); const commit=f.db.batch;
   let ready; const waiting=new Promise(resolve=>{ready=resolve;}); let held;
   f.db.batch=statements=>new Promise((resolve,reject)=>{held={statements,resolve,reject};ready();});
   const pending=training.submitTrainingAttempt(f.db,{...web,attemptId:original.id,answers:answerTokens(original,course)});
   const rejected=assert.rejects(pending,/CHECK constraint failed/i);
-  await waiting; f.db.batch=commit; const replacement=await training.startTrainingAttempt(f.db,pin);
+  await waiting; f.db.batch=commit; const replacement=await startLegacyAttempt(f.db,pin);
   try { held.resolve(await commit(held.statements)); } catch(error) { held.reject(error); }
   await rejected;
   assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM trade_training_completions').get().n,0);
@@ -233,10 +252,10 @@ test('an original submission winning the commit race preserves its pass and reje
   const f=fixture(); const course=await activate(f);
   const web={ownerUid:'owner',memberId:'installer-member',actorUid:'installer',moduleId:course.id};
   const pin={...web,actorUid:'field-member:installer-member'};
-  const original=await training.startTrainingAttempt(f.db,web); const commit=f.db.batch;
+  const original=await startLegacyAttempt(f.db,web); const commit=f.db.batch;
   let ready; const waiting=new Promise(resolve=>{ready=resolve;}); let held;
   f.db.batch=statements=>new Promise((resolve,reject)=>{held={statements,resolve,reject};ready();});
-  const pending=training.startTrainingAttempt(f.db,pin); const rejected=assert.rejects(pending,/CHECK constraint failed/i);
+  const pending=startLegacyAttempt(f.db,pin); const rejected=assert.rejects(pending,/CHECK constraint failed/i);
   await waiting; f.db.batch=commit;
   const result=await training.submitTrainingAttempt(f.db,{...web,attemptId:original.id,answers:answerTokens(original,course)});
   try { held.resolve(await commit(held.statements)); } catch(error) { held.reject(error); }
@@ -386,7 +405,7 @@ test('owner and manager training POST cannot act for another member through quer
   for (const access of [{}, { memberId: 'installer-member', actorUid: 'installer', isOwner: false, canManageTeam: true }]) {
     const route = trainingRoute(f, access);
     const other = access.memberId ? 'owner-member' : 'installer-member';
-    for (const action of ['start', 'submit']) {
+    for (const action of ['start', 'check', 'submit']) {
       for (const query of [false, true]) {
         const response = await route.POST(new Request(`https://example.test/api/trade-training${query ? `?memberId=${other}` : ''}`, { method: 'POST', body: JSON.stringify({ action, moduleId: 'veu-6', attemptId: 'unused', ...(query ? {} : { memberId: other }) }) }));
         assert.equal(response.status, 403); assert.equal((await response.json()).code, 'TRAINING_SELF_ONLY');
@@ -416,11 +435,11 @@ test('removing saved personal service before an attempt write or submission fail
   const actor = { ownerUid: 'owner', memberId: 'installer-member', actorUid: 'installer', moduleId: course.id };
   const commit = f.db.batch;
   f.db.batch = async statements => { f.sql.prepare("UPDATE trade_team_members SET capabilities='[]' WHERE id='installer-member'").run(); return commit(statements); };
-  await assert.rejects(training.startTrainingAttempt(f.db, actor), /CHECK constraint failed/);
+  await assert.rejects(startLegacyAttempt(f.db, actor), /CHECK constraint failed/);
   assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_attempts').get().n, 0);
   f.db.batch = commit;
   f.sql.prepare("UPDATE trade_team_members SET capabilities='[\"heating-cooling\"]' WHERE id='installer-member'").run();
-  const attempt = await training.startTrainingAttempt(f.db, actor);
+  const attempt = await startLegacyAttempt(f.db, actor);
   f.sql.prepare("UPDATE trade_team_members SET capabilities='[]' WHERE id='installer-member'").run();
   await assert.rejects(training.submitTrainingAttempt(f.db, { ...actor, attemptId: attempt.id, answers: answerTokens(attempt, course) }), /CHECK constraint failed/);
   assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_completions').get().n, 0);
@@ -444,19 +463,19 @@ test('legacy combined service aliases project canonical training and use the sam
   assert.equal((await training.getCertificateActivityEligibility(f.db, { ...booking, activityTemplateIds: ['veu-48'] })).eligible, false);
 });
 
-test('autonomous training rejects 96%, permits an immediate 100% retry and enables jobs without fabricated review rows', async () => {
+test('legacy bulk training rejects 96%, permits an immediate 100% retry and enables jobs without fabricated review rows', async () => {
   const f = fixture(); await approveBusiness(f);
   const course = TRAINING_MODULES.find(course => course.id === 'veu-6');
   const actor = { ownerUid: 'owner', memberId: 'owner-member', actorUid: 'owner', moduleId: course.id };
-  const first = await training.startTrainingAttempt(f.db, actor);
+  const first = await startLegacyAttempt(f.db, actor);
   const question = course.questions.find(question => !question.critical);
   const failed = await training.submitTrainingAttempt(f.db, { ...actor, attemptId: first.id, answers: answerTokens(first, course, { [question.id]: question.options.find(option => option.id !== question.correctOptionId).id }) });
   assert.equal(failed.scorePercent, 96); assert.equal(failed.passed, false); assert.equal(failed.reference, '');
-  assert.match(failed.meaning, /not passed/);
-  const retry = await training.startTrainingAttempt(f.db, actor);
+  assert.match(failed.meaning, /Correct the remaining answers/);
+  const retry = await startLegacyAttempt(f.db, actor);
   const result = await training.submitTrainingAttempt(f.db, { ...actor, attemptId: retry.id, answers: answerTokens(retry, course) });
   assert.equal(result.scorePercent, 100); assert.equal(result.passed, true); assert.ok(!('programmeApprovalPending' in result));
-  assert.match(result.meaning, /TLink learning completion/);
+  assert.match(result.meaning, /activity learning is complete/);
   assert.doesNotMatch(result.meaning, /pending/i);
   await pass(f, 'installer-member');
   assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_module_reviews').get().n, 0, 'autonomous training must not fabricate manual decisions');
@@ -478,7 +497,7 @@ test('partial source coverage blocks assessment and learner projection removes i
   const projected = await training.getTrainingModulesForMember(f.db, 'owner', 'owner-member');
   assert.equal(projected.find(module => module.id === partial.id).assessmentAvailable, false);
   assert.match(projected.find(module => module.id === partial.id).assessmentUnavailableReason, /source requirements are incomplete/);
-  await assert.rejects(training.startTrainingAttempt(f.db, { ownerUid: 'owner', memberId: 'owner-member', actorUid: 'owner', moduleId: partial.id }), error => error.code === 'TRAINING_ASSESSMENT_UNAVAILABLE');
+  await assert.rejects(startLegacyAttempt(f.db, { ownerUid: 'owner', memberId: 'owner-member', actorUid: 'owner', moduleId: partial.id }), error => error.code === 'TRAINING_ASSESSMENT_UNAVAILABLE');
   const response = await trainingRoute(f).GET(new Request('https://example.test/api/trade-training'));
   const body = await response.json();
   assert.ok(!JSON.stringify(body).includes('creditex-review'));
@@ -489,10 +508,10 @@ test('partial source coverage blocks assessment and learner projection removes i
   assert.ok(TRAINING_MODULES.some(course => course.sources.some(source => source.id === 'creditex-review')), 'internal provenance remains retained server-side');
 });
 
-test('current source-backed assessments and recorded passes require an exact valid 25-question 100% result', async () => {
+test('current source-backed assessments and recorded passes require the full saved question count and 100%', async () => {
   const course = TRAINING_MODULES.find(course => course.id === 'veu-6');
   assert.equal(training.isTrainingModuleReady(course), true);
-  for (const change of [value => { value.questions.pop(); }, value => { value.passPercent = 96; }, value => { value.questions[0].options[1].id = value.questions[0].options[0].id; }, value => { value.sourceCoverage.status = 'partial'; }]) {
+  for (const change of [value => { value.questions = []; }, value => { value.passPercent = 96; }, value => { value.questions[0].options[1].id = value.questions[0].options[0].id; }, value => { value.sourceCoverage.status = 'partial'; }]) {
     const invalid = structuredClone(course); change(invalid);
     assert.equal(training.isTrainingModuleReady(invalid), false);
   }
@@ -510,11 +529,11 @@ test('explicit withdrawal blocks assessment but optional expired or old review m
   for (const [column, value] of [['status', 'withdrawn'], ['review_expires_on', '2000-01-01'], ['content_hash', '0'.repeat(64)], ['version', 'old-version']]) {
     const f = fixture(); const course = await activate(f);
     const actor = { ownerUid: 'owner', memberId: 'owner-member', actorUid: 'owner', moduleId: course.id };
-    const attempt = await training.startTrainingAttempt(f.db, actor);
+    const attempt = await startLegacyAttempt(f.db, actor);
     f.sql.prepare(`UPDATE trade_training_module_reviews SET ${column}=?`).run(value);
     if (column === 'status') {
       await assert.rejects(training.submitTrainingAttempt(f.db, { ...actor, attemptId: attempt.id, answers: answerTokens(attempt, course) }), error => error.code === 'TRAINING_ASSESSMENT_UNAVAILABLE');
-      await assert.rejects(training.startTrainingAttempt(f.db, actor), error => error.code === 'TRAINING_ASSESSMENT_UNAVAILABLE');
+      await assert.rejects(startLegacyAttempt(f.db, actor), error => error.code === 'TRAINING_ASSESSMENT_UNAVAILABLE');
       assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_completions').get().n, 0);
     } else {
       const result = await training.submitTrainingAttempt(f.db, { ...actor, attemptId: attempt.id, answers: answerTokens(attempt, course) });
@@ -524,7 +543,7 @@ test('explicit withdrawal blocks assessment but optional expired or old review m
   }
   const f = fixture(); const course = TRAINING_MODULES.find(course => course.id === 'veu-6');
   const actor = { ownerUid: 'owner', memberId: 'owner-member', actorUid: 'owner', moduleId: course.id };
-  const attempt = await training.startTrainingAttempt(f.db, actor);
+  const attempt = await startLegacyAttempt(f.db, actor);
   f.sql.prepare('UPDATE trade_training_attempts SET content_hash=?').run('1'.repeat(64));
   await assert.rejects(training.submitTrainingAttempt(f.db, { ...actor, attemptId: attempt.id, answers: answerTokens(attempt, course) }), error => error.code === 'TRAINING_VERSION_CHANGED');
 });
@@ -534,14 +553,14 @@ test('new withdrawal or changed review between read and commit rolls back pendin
     for (const reviewed of [false, true]) {
       const f = fixture(); const course = reviewed ? await activate(f) : TRAINING_MODULES.find(course => course.id === 'veu-6');
       const actor = { ownerUid: 'owner', memberId: 'owner-member', actorUid: 'owner', moduleId: course.id };
-      const attempt = stage === 'submit' ? await training.startTrainingAttempt(f.db, actor) : null;
+      const attempt = stage === 'submit' ? await startLegacyAttempt(f.db, actor) : null;
       const commit = f.db.batch;
       f.db.batch = async statements => {
         if (reviewed) f.sql.prepare("UPDATE trade_training_module_reviews SET updated_at=updated_at||'-changed'").run();
         else f.sql.prepare("INSERT INTO trade_training_module_reviews(module_id,version,content_hash,status,source_reviewed_on,review_expires_on,reviewed_by_uid,review_note,updated_at) VALUES (?,?,?,'withdrawn',?,?,?,'New withdrawal',?)").run(course.id, course.version, training.getTrainingModuleHash(course), today(), yearLater(), 'reviewer', new Date().toISOString());
         return commit(statements);
       };
-      const operation = stage === 'start' ? training.startTrainingAttempt(f.db, actor) : training.submitTrainingAttempt(f.db, { ...actor, attemptId: attempt.id, answers: answerTokens(attempt, course) });
+      const operation = stage === 'start' ? startLegacyAttempt(f.db, actor) : training.submitTrainingAttempt(f.db, { ...actor, attemptId: attempt.id, answers: answerTokens(attempt, course) });
       await assert.rejects(operation, /CHECK constraint failed/);
       assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_completions').get().n, 0);
       assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_attempts').get().n, stage === 'submit' ? 1 : 0);
@@ -571,13 +590,160 @@ test('served jurisdictions are authoritative for projection and API scope, with 
 test('jurisdiction removal wins against assessment submission and blocks jobs despite a different address state', async () => {
   const f = fixture(); await approveBusiness(f); const course = await activate(f); await pass(f); await pass(f, 'installer-member');
   const actor = { ownerUid: 'owner', memberId: 'installer-member', actorUid: 'installer', moduleId: course.id };
-  const attempt = await training.startTrainingAttempt(f.db, actor); const commit = f.db.batch;
+  const attempt = await startLegacyAttempt(f.db, actor); const commit = f.db.batch;
   f.db.batch = async statements => { f.sql.prepare("UPDATE trade_accounts SET service_states='[\"NSW\"]',address_state='VIC'").run(); return commit(statements); };
   await assert.rejects(training.submitTrainingAttempt(f.db, { ...actor, attemptId: attempt.id, answers: answerTokens(attempt, course) }), /CHECK constraint failed/);
   assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_completions').get().n, 2);
   assert.equal((await training.getCertificateActivityEligibility(f.db, booking)).eligible, false);
-  await assert.rejects(training.startTrainingAttempt(f.db, actor), error => error.code === 'ACTIVITY_CAPABILITY_REQUIRED');
+  await assert.rejects(startLegacyAttempt(f.db, actor), error => error.code === 'ACTIVITY_CAPABILITY_REQUIRED');
   f.db.batch = commit;
   f.sql.prepare("UPDATE trade_accounts SET service_states='[\"VIC\"]',address_state='NSW'").run();
   assert.equal((await training.getCertificateActivityEligibility(f.db, booking)).eligible, true);
+});
+
+const questionnaires = load('src/lib/training-questionnaire-store.ts');
+const guidedActor = { ownerUid: 'owner', memberId: 'owner-member', actorUid: 'owner', moduleId: 'veu-6' };
+async function publishEditedCourse(f, questionCount = 25) {
+  const editable = await questionnaires.getTrainingQuestionnaire(f.db, 'veu-6');
+  const course = structuredClone(editable.module);
+  course.questions = course.questions.slice(0, questionCount);
+  for (const item of [...course.questions, ...course.lessons]) if (!item.sourceIds.length) item.sourceIds = [course.sources[0].id];
+  course.questions[0].prompt += ' Check the current form.';
+  const saved = await questionnaires.saveTrainingQuestionnaire(f.db, 'editor', { moduleId: course.id, expectedRevision: editable.revision, module: course });
+  const published = await questionnaires.publishTrainingQuestionnaire(f.db, 'editor', { moduleId: course.id, expectedRevision: saved.revision, sourcesChecked: true });
+  return published.module;
+}
+
+test('guided checking saves a wrong answer, explains it, blocks skipping, and resumes the same corrected attempt', async () => {
+  const f = fixture(); const course = TRAINING_MODULES.find(course => course.id === guidedActor.moduleId);
+  const attempt = await training.startTrainingAttempt(f.db, guidedActor);
+  const answers = answerTokens(attempt, course); const [first, second] = attempt.questions;
+  const wrong = first.options.find(option => option.id !== answers[first.id]).id;
+  await assert.rejects(training.submitTrainingAttempt(f.db, { ...guidedActor, attemptId: attempt.id, answers }), error => error.code === 'CHECK_ANSWERS_REQUIRED');
+  await assert.rejects(training.checkTrainingAnswer(f.db, { ...guidedActor, attemptId: attempt.id, questionId: second.id, answer: answers[second.id] }), error => error.code === 'PREVIOUS_QUESTION_REQUIRED');
+  const incorrect = await training.checkTrainingAnswer(f.db, { ...guidedActor, attemptId: attempt.id, questionId: first.id, answer: wrong });
+  const canonical = course.questions.find(question => question.id === first.id);
+  assert.equal(incorrect.correct, false); assert.equal(incorrect.explanation, canonical.explanation);
+  assert.equal(incorrect.correctAnswer, canonical.options.find(option => option.id === canonical.correctOptionId).text);
+  const resumed = await training.startTrainingAttempt(f.db, guidedActor);
+  assert.equal(resumed.id, attempt.id); assert.equal(resumed.answers[first.id], wrong); assert.deepEqual(resumed.feedback[first.id], incorrect);
+  assert.deepEqual(Object.keys(resumed.feedback), [first.id], 'untouched questions must not reveal answers');
+  await assert.rejects(training.checkTrainingAnswer(f.db, { ...guidedActor, attemptId: attempt.id, questionId: second.id, answer: answers[second.id] }), error => error.code === 'PREVIOUS_QUESTION_REQUIRED');
+  const corrected = await training.checkTrainingAnswer(f.db, { ...guidedActor, attemptId: attempt.id, questionId: first.id, answer: answers[first.id] });
+  assert.equal(corrected.correct, true);
+  assert.deepEqual(await training.checkTrainingAnswer(f.db, { ...guidedActor, attemptId: attempt.id, questionId: first.id, answer: answers[first.id] }), corrected, 'retry of a checked answer is idempotent');
+  await checkAll(f, guidedActor, attempt, course);
+  const result = await training.submitTrainingAttempt(f.db, { ...guidedActor, attemptId: attempt.id, answers });
+  assert.equal(result.scorePercent, 100); assert.equal(result.firstTryScorePercent, 96); assert.equal(result.passed, true);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_attempts').get().n, 1);
+  const stored = f.sql.prepare('SELECT * FROM trade_training_submissions').get(); const snapshot = JSON.parse(stored.snapshot_json);
+  assert.equal(stored.owner_uid, guidedActor.ownerUid); assert.equal(stored.member_id, guidedActor.memberId);
+  assert.equal(stored.score_percent, 100); assert.equal(stored.first_try_score_percent, 96);
+  assert.equal(snapshot.questions.find(question => question.id === first.id).incorrectOptionIds.length, 1);
+  assert.equal(snapshot.questions.find(question => question.id === first.id).prompt, canonical.prompt);
+  assert.throws(() => f.sql.prepare("UPDATE trade_training_submissions SET reference='altered'").run(), /append-only/);
+  assert.throws(() => f.sql.prepare('DELETE FROM trade_training_submissions').run(), /append-only/);
+});
+
+test('guided check rejects other businesses, people, sessions and question tokens without storing progress', async () => {
+  const f = fixture(); const course = TRAINING_MODULES.find(course => course.id === guidedActor.moduleId);
+  const attempt = await training.startTrainingAttempt(f.db, guidedActor); const answers = answerTokens(attempt, course);
+  const first = attempt.questions[0];
+  for (const altered of [{ ownerUid: 'another-business' }, { memberId: 'installer-member' }, { actorUid: 'installer' }]) {
+    await assert.rejects(training.checkTrainingAnswer(f.db, { ...guidedActor, ...altered, attemptId: attempt.id, questionId: first.id, answer: answers[first.id] }), error => error.code === 'ATTEMPT_UNAVAILABLE');
+  }
+  await assert.rejects(training.checkTrainingAnswer(f.db, { ...guidedActor, attemptId: attempt.id, questionId: first.id, answer: attempt.questions[1].options[0].id }), error => error.code === 'ANSWER_TOKEN_INVALID');
+  await assert.rejects(training.checkTrainingAnswer(f.db, { ...guidedActor, attemptId: attempt.id, questionId: 'unknown', answer: answers[first.id] }), error => error.code === 'QUESTION_INVALID');
+  assert.equal(f.sql.prepare('SELECT progress_json FROM trade_training_attempts').get().progress_json, '{}');
+  f.sql.prepare("UPDATE trade_accounts SET service_states='[\"NSW\"]'").run();
+  await assert.rejects(training.checkTrainingAnswer(f.db, { ...guidedActor, attemptId: attempt.id, questionId: first.id, answer: answers[first.id] }), /CHECK constraint failed|service/i);
+  assert.equal(f.sql.prepare('SELECT progress_json FROM trade_training_attempts').get().progress_json, '{}');
+});
+
+test('simultaneous completion retries return one immutable saved result and one completion', async () => {
+  const f = fixture(); const course = TRAINING_MODULES.find(course => course.id === guidedActor.moduleId);
+  const attempt = await training.startTrainingAttempt(f.db, guidedActor); const answers = await checkAll(f, guidedActor, attempt, course);
+  const commit = f.db.batch; const queued = []; let ready;
+  const waiting = new Promise(resolve => { ready = resolve; });
+  f.db.batch = statements => new Promise((resolve, reject) => { queued.push({ statements, resolve, reject }); if (queued.length === 2) ready(); });
+  const request = { ...guidedActor, attemptId: attempt.id, answers };
+  const pending = Promise.all([training.submitTrainingAttempt(f.db, request), training.submitTrainingAttempt(f.db, request)]);
+  await waiting; f.db.batch = commit;
+  for (const item of queued) { try { item.resolve(await commit(item.statements)); } catch (error) { item.reject(error); } }
+  const [first, second] = await pending;
+  assert.deepEqual(second, first);
+  assert.deepEqual(await training.submitTrainingAttempt(f.db, request), first, 'a lost response can be safely fetched by resubmitting');
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_completions').get().n, 1);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_submissions').get().n, 1);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM trade_training_events WHERE event_type='training_completed'").get().n, 1);
+  await assert.rejects(training.submitTrainingAttempt(f.db, { ...request, actorUid: 'someone-else' }), error => error.code === 'ATTEMPT_UNAVAILABLE');
+});
+
+test('a published form change wins against a pending guided check or submit without awarding an old-version pass', async () => {
+  for (const stage of ['check', 'submit']) {
+    const f = fixture(); const course = TRAINING_MODULES.find(course => course.id === guidedActor.moduleId);
+    const attempt = await training.startTrainingAttempt(f.db, guidedActor); const answers = stage === 'submit' ? await checkAll(f, guidedActor, attempt, course) : answerTokens(attempt, course);
+    const before = f.sql.prepare('SELECT progress_json FROM trade_training_attempts').get().progress_json;
+    const commit = f.db.batch; let held; let ready; const waiting = new Promise(resolve => { ready = resolve; });
+    f.db.batch = statements => new Promise((resolve, reject) => { held = { statements, resolve, reject }; ready(); });
+    const pending = stage === 'check'
+      ? training.checkTrainingAnswer(f.db, { ...guidedActor, attemptId: attempt.id, questionId: attempt.questions[0].id, answer: answers[attempt.questions[0].id] })
+      : training.submitTrainingAttempt(f.db, { ...guidedActor, attemptId: attempt.id, answers });
+    const rejected = assert.rejects(pending, /CHECK constraint failed/);
+    await waiting; f.db.batch = commit; await publishEditedCourse(f);
+    try { held.resolve(await commit(held.statements)); } catch (error) { held.reject(error); }
+    await rejected;
+    assert.equal(f.sql.prepare('SELECT progress_json FROM trade_training_attempts').get().progress_json, before);
+    assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_completions').get().n, 0);
+    assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_training_submissions').get().n, 0);
+    await assert.rejects(training.checkTrainingAnswer(f.db, { ...guidedActor, attemptId: attempt.id, questionId: attempt.questions[0].id, answer: answers[attempt.questions[0].id] }), error => error.code === 'TRAINING_VERSION_CHANGED');
+  }
+});
+
+test('variable-length published forms retain first-answer percentage and exact questions in the personal record', async () => {
+  const f = fixture(); const course = await publishEditedCourse(f, 3);
+  const attempt = await training.startTrainingAttempt(f.db, guidedActor); assert.equal(attempt.questions.length, 3);
+  const answers = answerTokens(attempt, course); const first = attempt.questions[0];
+  await training.checkTrainingAnswer(f.db, { ...guidedActor, attemptId: attempt.id, questionId: first.id, answer: first.options.find(option => option.id !== answers[first.id]).id });
+  await checkAll(f, guidedActor, attempt, course);
+  const result = await training.submitTrainingAttempt(f.db, { ...guidedActor, attemptId: attempt.id, answers });
+  const stored = f.sql.prepare('SELECT first_try_score_percent,snapshot_json,result_json FROM trade_training_submissions').get();
+  assert.equal(result.scorePercent, 100); assert.equal(result.firstTryScorePercent, 66);
+  assert.equal(stored.first_try_score_percent, result.firstTryScorePercent);
+  assert.equal(JSON.parse(stored.snapshot_json).firstTryScorePercent, result.firstTryScorePercent);
+  assert.equal(JSON.parse(stored.snapshot_json).questions.length, 3);
+  assert.deepEqual(JSON.parse(stored.result_json), result);
+  await publishEditedCourse(f, 2);
+  assert.equal(JSON.parse(f.sql.prepare('SELECT snapshot_json FROM trade_training_submissions').get().snapshot_json).questions.length, 3, 'publishing must not rewrite a submitted form');
+});
+
+test('the check API binds the authenticated person and saves only their exact question response', async () => {
+  const f = fixture(); const route = trainingRoute(f); const course = TRAINING_MODULES.find(course => course.id === 'veu-6');
+  const start = await route.POST(new Request('https://example.test/api/trade-training', { method: 'POST', body: JSON.stringify({ action: 'start', moduleId: course.id }) }));
+  assert.equal(start.status, 200); const attempt = (await start.json()).attempt;
+  const question = attempt.questions[0]; const answers = answerTokens(attempt, course);
+  const response = await route.POST(new Request('https://example.test/api/trade-training', { method: 'POST', body: JSON.stringify({ action: 'check', attemptId: attempt.id, questionId: question.id, answer: answers[question.id] }) }));
+  assert.equal(response.status, 200); assert.equal((await response.json()).feedback.correct, true);
+  const progress = JSON.parse(f.sql.prepare('SELECT progress_json FROM trade_training_attempts').get().progress_json);
+  assert.deepEqual(Object.keys(progress), [question.id]); assert.equal(progress[question.id].answer, answers[question.id]);
+  const foreign = await route.POST(new Request('https://example.test/api/trade-training', { method: 'POST', headers: { Origin: 'https://untrusted.test' }, body: JSON.stringify({ action: 'check', attemptId: attempt.id, questionId: question.id, answer: answers[question.id] }) }));
+  assert.equal(foreign.status, 403);
+});
+
+test('saved answers belong to the learner and team status never discloses another persons completed form', async () => {
+  const f = fixture(); await pass(f); await pass(f, 'installer-member');
+  const rows = f.sql.prepare('SELECT id,member_id FROM trade_training_submissions ORDER BY member_id').all();
+  const own = rows.find(row => row.member_id === 'owner-member'); const staff = rows.find(row => row.member_id === 'installer-member');
+  const ownerRoute = trainingRoute(f); const staffRoute = trainingRoute(f, { memberId: 'installer-member', actorUid: 'installer', isOwner: false, canManageTeam: true });
+  const ownList = await ownerRoute.GET(new Request('https://example.test/api/trade-training'));
+  const data = await ownList.json(); assert.deepEqual(data.submissions.map(row => row.id), [own.id]);
+  assert.ok(data.submissions.every(row => !('snapshot' in row)));
+  const status = await ownerRoute.GET(new Request('https://example.test/api/trade-training?memberId=installer-member'));
+  assert.deepEqual((await status.json()).submissions, []);
+  for (const [route, submissionId] of [[ownerRoute, staff.id], [staffRoute, own.id], [trainingRoute(f, { ownerUid: 'another-business' }), own.id]]) {
+    const denied = await route.GET(new Request(`https://example.test/api/trade-training?submissionId=${submissionId}`));
+    assert.equal(denied.status, 403); assert.deepEqual(await denied.json(), { ok: false, code: 'TRAINING_SELF_ONLY' });
+  }
+  const ownDetail = await ownerRoute.GET(new Request(`https://example.test/api/trade-training?submissionId=${own.id}`));
+  assert.equal(ownDetail.status, 200); assert.equal((await ownDetail.json()).submission.snapshot.questions.length, 25);
 });

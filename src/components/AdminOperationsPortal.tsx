@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 /* eslint-disable @next/next/no-img-element */
 
 import "./AdminOperationsPortal.css";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -27,6 +27,7 @@ import { AdminAssetSafety } from "@/components/AdminAssetSafety";
 import { AdminAssetGovernance } from "@/components/AdminAssetGovernance";
 import { AdminFormTemplates } from "@/components/AdminFormTemplates";
 const CreditexActivityWorkPackGovernance = dynamic(() => import("./CreditexActivityWorkPackGovernance").then((module) => module.CreditexActivityWorkPackGovernance), { loading: () => <p role="status">Loading master forms...</p> });
+const TrainingQuestionnaireEditor = dynamic(() => import("./TrainingQuestionnaireEditor").then((module) => module.TrainingQuestionnaireEditor), { loading: () => <p role="status">Loading compliance questions...</p> });
 import { CreditexOutputActions } from "@/components/CreditexOutputActions";
 import { AdminUsabilityPilot } from "@/components/AdminUsabilityPilot";
 import { AdminPerformancePanel } from "@/components/AdminPerformancePanel";
@@ -147,8 +148,17 @@ export function AdminOperationsPortal() {
   const [password, setPassword] = useState("");
   const [bootstrapCode, setBootstrapCode] = useState("");
   const [tab, setTab] = useState<
-    "inbox" | "overview" | "directory" | "jobs" | "customers" | "partners" | "assistant-leads" | "assistant-reviews" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "field-pilot" | "database" | "access"
+    "inbox" | "overview" | "directory" | "jobs" | "customers" | "partners" | "assistant-leads" | "assistant-reviews" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "compliance-questions" | "field-pilot" | "database" | "access"
   >("inbox");
+  const questionnaireDirty = useRef(false);
+  const reportQuestionnaireDirty = useCallback((dirty: boolean) => { questionnaireDirty.current = dirty; }, []);
+  function selectTab(next: typeof tab) {
+    if (next === tab) return true;
+    if (questionnaireDirty.current && !window.confirm("Discard the unsaved changes to this questionnaire?")) return false;
+    questionnaireDirty.current = false;
+    setTab(next);
+    return true;
+  }
   const [metrics, setMetrics] = useState<Metrics>({});
   const [audit, setAudit] = useState<AuditItem[]>([]);
   const [admins, setAdmins] = useState<AdminUser[]>([]);
@@ -702,112 +712,118 @@ export function AdminOperationsPortal() {
         <nav className="admin-sidebar" aria-label="Operations sections">
           <button
             className={tab === "inbox" ? "active" : ""}
-            onClick={() => setTab("inbox")}
+            onClick={() => selectTab("inbox")}
           >
             <span>01</span>Inbox
             {notificationCounts.unread > 0 && <strong className="admin-nav-count">{notificationCounts.unread}</strong>}
           </button>
           <button
             className={tab === "overview" ? "active" : ""}
-            onClick={() => setTab("overview")}
+            onClick={() => selectTab("overview")}
           >
             <span>02</span>Overview
           </button>
           <button
             className={tab === "directory" ? "active" : ""}
-            onClick={() => setTab("directory")}
+            onClick={() => selectTab("directory")}
           >
             <span>03</span>All accounts
           </button>
           <button
             className={tab === "jobs" ? "active" : ""}
-            onClick={() => setTab("jobs")}
+            onClick={() => selectTab("jobs")}
           >
             <span>04</span>Jobs
           </button>
           <button
             className={tab === "customers" ? "active" : ""}
-            onClick={() => setTab("customers")}
+            onClick={() => selectTab("customers")}
           >
             <span>05</span>Customers ({customerCounts.total || 0})
           </button>
           <button
             className={tab === "partners" ? "active" : ""}
-            onClick={() => setTab("partners")}
+            onClick={() => selectTab("partners")}
           >
             <span>06</span>Partners ({accountCounts.total || 0})
           </button>
           <button
             className={tab === "assistant-leads" ? "active" : ""}
-            onClick={() => setTab("assistant-leads")}
+            onClick={() => selectTab("assistant-leads")}
           >
             <span>G</span>Guide follow-ups
           </button>
           {session.role !== "support" && <button
             className={tab === "assistant-reviews" ? "active" : ""}
-            onClick={() => setTab("assistant-reviews")}
+            onClick={() => selectTab("assistant-reviews")}
           >
             <span>R</span>Wattzun AI answer reviews
           </button>}
           <button
             className={tab === "opportunities" ? "active" : ""}
-            onClick={() => setTab("opportunities")}
+            onClick={() => selectTab("opportunities")}
           >
             <span>07</span>Leads ({opportunityCounts.total || 0})
           </button>
           <button
             className={tab === "catalogue" ? "active" : ""}
-            onClick={() => setTab("catalogue")}
+            onClick={() => selectTab("catalogue")}
           >
             <span>08</span>Products ({productCounts.total || 0})
           </button>
           <button
             className={tab === "enquiries" ? "active" : ""}
-            onClick={() => setTab("enquiries")}
+            onClick={() => selectTab("enquiries")}
           >
             <span>09</span>Product enquiries
           </button>
           <button
             className={tab === "handovers" ? "active" : ""}
-            onClick={() => setTab("handovers")}
+            onClick={() => selectTab("handovers")}
           >
             <span>10</span>Handovers
           </button>
           <button
             className={tab === "asset-safety" ? "active" : ""}
-            onClick={() => setTab("asset-safety")}
+            onClick={() => selectTab("asset-safety")}
           >
             <span>11</span>Asset safety
           </button>
           <button
             className={tab === "asset-governance" ? "active" : ""}
-            onClick={() => setTab("asset-governance")}
+            onClick={() => selectTab("asset-governance")}
           >
             <span>12</span>Asset governance
           </button>
           <button
             className={tab === "form-governance" ? "active" : ""}
-            onClick={() => setTab("form-governance")}
+            onClick={() => selectTab("form-governance")}
           >
             <span>13</span>Field forms
           </button>
           <button
             className={tab === "field-pilot" ? "active" : ""}
-            onClick={() => setTab("field-pilot")}
+            onClick={() => selectTab("field-pilot")}
           >
             <span>14</span>Field pilot
           </button>
+          {session.role !== "support" && <button
+            className={tab === "compliance-questions" ? "active" : ""}
+            onClick={() => selectTab("compliance-questions")}
+          >
+            <span>✓</span>Compliance questions
+          </button>}
           {session.role === "owner" && (
             <>
               <button
                 className={tab === "database" ? "active" : ""}
-                onClick={() => setTab("database")}
+                onClick={() => selectTab("database")}
               >
                 <span>15</span>Database
               </button>
               <button
                 className={tab === "access" ? "active" : ""}
-                onClick={() => setTab("access")}
+                onClick={() => selectTab("access")}
               >
                 <span>16</span>Access & audit
               </button>
@@ -897,6 +913,7 @@ export function AdminOperationsPortal() {
             </>
           )}
           {tab === "field-pilot" && <AdminUsabilityPilot api={api} role={session.role} />}
+          {tab === "compliance-questions" && session.role !== "support" && <TrainingQuestionnaireEditor api={api} canEdit={true} onDirtyChange={reportQuestionnaireDirty} />}
           {tab === "overview" && (
             <>
               <header className="admin-page-heading">
@@ -1007,15 +1024,15 @@ export function AdminOperationsPortal() {
                     <h2>What needs attention</h2>
                   </div>
                   <div className="admin-queue-list">
-                    <button onClick={() => setTab("inbox")}>
+                    <button onClick={() => selectTab("inbox")}>
                       <strong>{notificationCounts.overdue || 0}</strong>
                       <span>Operations cases past their response target</span>
                     </button>
-                    <button onClick={() => setTab("inbox")}>
+                    <button onClick={() => selectTab("inbox")}>
                       <strong>{notificationCounts.unassigned || 0}</strong>
                       <span>Actionable cases without a responsible administrator</span>
                     </button>
-                    <button onClick={() => setTab("inbox")}>
+                    <button onClick={() => selectTab("inbox")}>
                       <strong>{notificationCounts.action_required || 0}</strong>
                       <span>Inbox items requiring action or approval</span>
                     </button>
@@ -1028,15 +1045,15 @@ export function AdminOperationsPortal() {
                       <strong>{verificationCounts.awaiting || 0}</strong>
                       <span>Verification submissions awaiting review</span>
                     </button>
-                    <button onClick={() => setTab("opportunities")}>
+                    <button onClick={() => selectTab("opportunities")}>
                       <strong>{opportunityCounts.draft || 0}</strong>
                       <span>Draft opportunities requiring scope review</span>
                     </button>
-                    <button onClick={() => setTab("catalogue")}>
+                    <button onClick={() => selectTab("catalogue")}>
                       <strong>{productCounts.pending || 0}</strong>
                       <span>Wholesaler products awaiting catalogue review</span>
                     </button>
-                    <button onClick={() => setTab("enquiries")}>
+                    <button onClick={() => selectTab("enquiries")}>
                       <strong>{openProductEnquiries}</strong>
                       <span>Product enquiries awaiting wholesaler response</span>
                     </button>

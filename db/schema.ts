@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, sqliteView, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, index, integer, primaryKey, sqliteTable, sqliteView, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const tradeAccounts = sqliteTable("trade_accounts", {
   firebaseUid: text("firebase_uid").primaryKey(),
@@ -6502,6 +6502,7 @@ export const tradeTrainingAttempts = sqliteTable("trade_training_attempts", {
   moduleId: text("module_id").notNull(), version: text("version").notNull(), contentHash: text("content_hash").notNull(), status: text("status").notNull(),
   startedAt: text("started_at").notNull(), expiresAt: text("expires_at").notNull(), submittedAt: text("submitted_at").notNull().default(""),
   assessmentJson: text("assessment_json").notNull(),
+  progressJson: text("progress_json").notNull().default("{}"), courseJson: text("course_json").notNull().default("{}"),
   answersJson: text("answers_json").notNull().default("{}"), scorePercent: integer("score_percent").notNull().default(0), criticalPassed: integer("critical_passed").notNull().default(0),
 }, (t) => [uniqueIndex("trade_training_attempts_open_idx").on(t.ownerUid,t.memberId,t.moduleId).where(sql`${t.status}='in_progress'`), index("trade_training_attempts_member_idx").on(t.ownerUid,t.memberId,t.moduleId,t.startedAt), check("trade_training_attempt_hash_check", sql`length(${t.contentHash})=64`), check("trade_training_attempt_status_check", sql`${t.status} IN ('in_progress','passed','failed','expired')`), check("trade_training_attempt_score_check", sql`${t.scorePercent} BETWEEN 0 AND 100 AND ${t.criticalPassed} IN (0,1)`), check("trade_training_attempt_json_check", sql`json_valid(${t.answersJson}) AND json_valid(${t.assessmentJson})`)]);
 
@@ -6532,3 +6533,45 @@ export const tradeTrainingCurrentCategoryQualifications = sqliteView("trade_trai
   ownerUid: text("owner_uid").notNull(), category: text("category").notNull(), moduleId: text("module_id").notNull(),
   version: text("version").notNull(), contentHash: text("content_hash").notNull(), externalRequired: integer("external_required").notNull(),
 }).existing();
+
+export const tradeTrainingQuestionnaires = sqliteTable("trade_training_questionnaires", {
+  moduleId: text("module_id").primaryKey(), revision: integer("revision").notNull(),
+  draftJson: text("draft_json").notNull(), assignmentJson: text("assignment_json").notNull(),
+  publishedVersion: text("published_version").notNull().default(""), publishedRevision: integer("published_revision").notNull().default(0),
+  publishedAt: text("published_at").notNull().default(""), updatedAt: text("updated_at").notNull(), updatedByUid: text("updated_by_uid").notNull(),
+}, (t) => [check("training_questionnaire_revision_check", sql`${t.revision}>0 AND ${t.publishedRevision} BETWEEN 0 AND ${t.revision}`), check("training_questionnaire_json_check", sql`json_valid(${t.draftJson}) AND json_valid(${t.assignmentJson})`)]);
+
+export const tradeTrainingQuestionnaireVersions = sqliteTable("trade_training_questionnaire_versions", {
+  moduleId: text("module_id").notNull().references(() => tradeTrainingQuestionnaires.moduleId), version: text("version").notNull(),
+  contentHash: text("content_hash").notNull(), courseJson: text("course_json").notNull(), assignmentJson: text("assignment_json").notNull(),
+  publishedByUid: text("published_by_uid").notNull(), publishedAt: text("published_at").notNull(),
+}, (t) => [primaryKey({columns: [t.moduleId,t.version]}), check("training_questionnaire_version_hash_check", sql`length(${t.contentHash})=64`), check("training_questionnaire_version_json_check", sql`json_valid(${t.courseJson}) AND json_valid(${t.assignmentJson})`)]);
+
+export const tradeTrainingPublishedQuestionnaires = sqliteView("trade_training_published_questionnaires", {
+  moduleId: text("module_id").notNull(), version: text("version").notNull(), contentHash: text("content_hash").notNull(),
+  courseJson: text("course_json").notNull(), assignmentJson: text("assignment_json").notNull(),
+  sourceComplete: integer("source_complete").notNull(),
+}).existing();
+
+export const tradeTrainingAdditionalRequirements = sqliteView("trade_training_additional_requirements", {
+  moduleId: text("module_id").notNull(), version: text("version").notNull(), contentHash: text("content_hash").notNull(),
+  category: text("category").notNull(), jurisdiction: text("jurisdiction").notNull(),
+}).existing();
+
+export const tradeTrainingCurrentScopedCategoryQualifications = sqliteView("trade_training_current_scoped_category_qualifications", {
+  ownerUid: text("owner_uid").notNull(), category: text("category").notNull(), moduleId: text("module_id").notNull(),
+  version: text("version").notNull(), contentHash: text("content_hash").notNull(), externalRequired: integer("external_required").notNull(), state: text("state").notNull(),
+}).existing();
+
+export const tradeTrainingQuestionnaireEvents = sqliteTable("trade_training_questionnaire_events", {
+  id: text("id").primaryKey(), moduleId: text("module_id").notNull(), actorUid: text("actor_uid").notNull(), eventType: text("event_type").notNull(),
+  revision: integer("revision").notNull(), metadataJson: text("metadata_json").notNull(), createdAt: text("created_at").notNull(),
+}, (t) => [index("trade_training_questionnaire_events_module_idx").on(t.moduleId,t.createdAt), check("training_questionnaire_event_check", sql`${t.eventType} IN ('draft_saved','published') AND ${t.revision}>0 AND json_valid(${t.metadataJson})`)]);
+
+export const tradeTrainingSubmissions = sqliteTable("trade_training_submissions", {
+  id: text("id").primaryKey(), attemptId: text("attempt_id").notNull().unique().references(() => tradeTrainingAttempts.id),
+  ownerUid: text("owner_uid").notNull(), memberId: text("member_id").notNull(), actorUid: text("actor_uid").notNull(),
+  moduleId: text("module_id").notNull(), version: text("version").notNull(), contentHash: text("content_hash").notNull(),
+  scorePercent: integer("score_percent").notNull(), firstTryScorePercent: integer("first_try_score_percent").notNull(),
+  reference: text("reference").notNull(), completedAt: text("completed_at").notNull(), snapshotJson: text("snapshot_json").notNull(), resultJson: text("result_json").notNull().default("{}"),
+}, (t) => [index("trade_training_submissions_person_idx").on(t.ownerUid,t.memberId,t.completedAt), index("trade_training_submissions_module_idx").on(t.moduleId,t.completedAt), check("training_submission_score_check", sql`${t.scorePercent} BETWEEN 0 AND 100 AND ${t.firstTryScorePercent} BETWEEN 0 AND 100`), check("training_submission_json_check", sql`json_valid(${t.snapshotJson}) AND json_valid(${t.resultJson})`)]);

@@ -41,7 +41,25 @@ const policySource: ActivityTrainingSource = {
   url: "/creditex-resources/creditex-training-operating-policy.md", reviewedAt: "2026-09-19",
 };
 const sentence = (value: string) => /[.!?]$/.test(value.trim()) ? value.trim() : `${value.trim()}.`;
-const words = (value: string) => value.replaceAll("_", " ");
+const words = (value: string) => value.replaceAll("_", " ").replace(/\b(?:abn|acn|stc|pv|nmi|nem|rec|sgu)\b/gi, (term) => term.toUpperCase());
+
+/** Copy-only substitutions. Keep technical names, limits, dates and conditions intact. */
+export function plainTrainingText(value: string): string {
+  return value
+    .replace(/\bpremises\b/g, "property")
+    .replace(/\bRetain\b/g, "Keep")
+    .replace(/\bretain\b/g, "keep")
+    .replace(/\bObtain\b/g, "Get")
+    .replace(/\bobtain\b/g, "get")
+    .replace(/\bVerify\b/g, "Check")
+    .replace(/\bverify\b/g, "check")
+    .replace(/\bdiscrepancy\b/g, "difference")
+    .replace(/\bdiscrepancies\b/g, "differences")
+    .replace(/\bcommencement date\b/g, "start date")
+    .replace(/\bcommences\b/g, "starts")
+    .replace(/\bprogramme\b/g, "program")
+    .replace(/\bprogrammes\b/g, "programs");
+}
 
 function createProfile(activity: GovernmentActivityTemplate): ActivityLearningProfile {
   const programme = GOVERNMENT_PROGRAM_TEMPLATES.find((entry) => entry.programCode === activity.programCode);
@@ -61,8 +79,9 @@ function createProfile(activity: GovernmentActivityTemplate): ActivityLearningPr
     return id;
   };
   const add = (key: string, topic: string, requirement: string, sourceIds: string[], kind: ActivityLearningFact["kind"] = "activity") => {
-    if (!requirement.trim() || profile.facts.some((entry) => entry.key === key || entry.requirement === sentence(requirement))) return;
-    profile.facts.push({ key, topic: words(topic), requirement: sentence(requirement), sourceIds, kind });
+    const description = sentence(plainTrainingText(requirement));
+    if (!requirement.trim() || profile.facts.some((entry) => entry.key === key || entry.requirement === description)) return;
+    profile.facts.push({ key, topic: plainTrainingText(words(topic)), requirement: description, sourceIds, kind });
   };
 
   const veu = CREDITEX_VEU_PUBLISHABLE_WORK_PACK_CONTENT.find((entry) => entry.templateId === activity.templateId);
@@ -79,28 +98,28 @@ function createProfile(activity: GovernmentActivityTemplate): ActivityLearningPr
     for (const item of veu.evidenceRequirements) {
       const id = source(item.source);
       add(`evidence-${item.requirementId}`, item.label,
-        `Retain ${item.label.toLowerCase()}: ${item.details.join("; ")}. Applies ${item.when}`, [id], "evidence");
+        `Keep ${item.label}: ${item.details.join("; ")}. When required: ${item.when}`, [id], "evidence");
     }
     for (const item of veu.prompts.filter((entry) => entry.kind === "assignment" || entry.kind === "identity")) {
       add(`declaration-${item.key}`, item.label.replace(" from the applicable activity assignment form template", ""),
-        `Capture ${item.label.toLowerCase()}. This applies ${item.when}; the declared details must match the actual activity and authorised people`, [source(item.source)], "authority");
+        `Record ${item.label}. When required: ${item.when}. Use the real job details and the people authorised to sign`, [source(item.source)], "authority");
     }
     for (const signature of veu.signatures) add(`signature-${signature.signatureId}`, `${words(signature.signerRole)} signature`,
-      `The ${signature.documentType} needs the ${words(signature.signerRole)} signature ${signature.when}. A different worker or account owner cannot substitute their signature without the required authority`, [source(signature.source)], "authority");
+      `The ${words(signature.documentType)} needs the ${words(signature.signerRole)} signature ${signature.when}. Another worker or account owner cannot sign for them without the required permission`, [source(signature.source)], "authority");
   }
 
   const sres = CREDITEX_SRES_WORK_PACK_CONTENT_CANDIDATES.find((entry) => entry.templateId === activity.templateId);
   if (sres) {
     for (const entry of sres.sourceBindings) source(entry);
     for (const prompt of sres.prompts) {
-      add(`sres-${prompt.key}`, prompt.label, `${prompt.label} must identify ${prompt.fields.map(words).join(", ")}. Applies ${prompt.when}`, [source(prompt.source)], ["identity", "assignment", "declaration"].includes(prompt.kind) ? "authority" : "activity");
+      add(`sres-${prompt.key}`, prompt.label, `For ${prompt.label}, record: ${prompt.fields.map(words).join(", ")}. When required: ${prompt.when}`, [source(prompt.source)], ["identity", "assignment", "declaration"].includes(prompt.kind) ? "authority" : "activity");
     }
     for (const evidence of sres.evidenceRequirements) {
       add(`evidence-${evidence.requirementId}`, evidence.label,
-        `Retain ${evidence.label.toLowerCase()}: ${evidence.details.join("; ")}. Applies ${evidence.when}`, [source(evidence.source)], "evidence");
+        `Keep ${evidence.label}: ${evidence.details.join("; ")}. When required: ${evidence.when}`, [source(evidence.source)], "evidence");
     }
     add("sres-calculation", "Entitlement calculation", sres.calculator.formulaSummary.replace("multiplied by 2031 minus installation year", "multiplied by (2031 minus installation year)"), [source(sres.calculator.source)]);
-    add("sres-scenario", "Installation history", `Resolve the actual installation as ${sres.scenarioRules.sourceOptions.map(words).join("; ")}; these options determine which history and eligibility checks apply`, [source(sres.scenarioRules.source)]);
+    add("sres-scenario", "Installation history", `Check which description matches the real installation: ${sres.scenarioRules.sourceOptions.map(words).join("; ")}. This decides which history and eligibility checks are needed`, [source(sres.scenarioRules.source)]);
     for (const [index, limitation] of sres.statusDecision.sourceBackedLimitations.entries()) {
       const topic = limitation.startsWith("rated capacity") ? "Maximum rated generating capacity"
         : limitation.startsWith("annual electricity") ? "Annual generation limit"
@@ -114,7 +133,7 @@ function createProfile(activity: GovernmentActivityTemplate): ActivityLearningPr
     }
     for (const signature of sres.signatures) {
       add(`signature-${signature.signatureId}`, `${words(signature.signerRole)} statement`,
-        `The ${words(signature.signerRole)} supplies their own signature on the ${words(signature.documentType)}. Applies ${signature.when}`, [source(signature.source)], "authority");
+        `The ${words(signature.signerRole)} signs the ${words(signature.documentType)} themselves. When required: ${signature.when}`, [source(signature.source)], "authority");
     }
   }
 
@@ -128,15 +147,15 @@ function createProfile(activity: GovernmentActivityTemplate): ActivityLearningPr
     for (const input of definition.inputDefinitions) add(`technical-${input.key}`, input.label, input.help, ids);
     for (const [index, requirement] of definition.productRegistryRequirements.entries()) add(`registry-${index}`, `Approved equipment evidence ${index + 1}`, requirement, ids, "evidence");
     add("nsw-defined-scenario", "Defined activity scenario", definition.supportedScenario, ids);
-    add("nsw-rule-period", "Applicable implementation period", `Apply the ${definition.effectiveDateLabel || "Installation date"} rules from ${definition.effectiveFrom}${definition.effectiveTo ? ` through ${definition.effectiveTo}` : ""}; source-version changes need a fresh review`, ids, "authority");
+    add("nsw-rule-period", "Dates these rules apply", `Apply the ${definition.effectiveDateLabel || "Installation date"} rules from ${definition.effectiveFrom}${definition.effectiveTo ? ` through ${definition.effectiveTo}` : ""}. Check again if the rules change`, ids, "authority");
   }
   if (nsw) {
     for (const entry of nsw.sources) source(entry);
     for (const evidence of nsw.evidenceRequirements) add(`evidence-${evidence.key}`, evidence.label,
-      `The activity evidence packet must include ${evidence.label.toLowerCase()}. Keep original files and source metadata linked to this implementation`, [source(evidence.source)], "evidence");
+      `Include ${evidence.label} in the job file. Keep the originals and their recorded date and file details linked to this job`, [source(evidence.source)], "evidence");
     for (const section of nsw.formSections.filter((entry) => entry.sectionKey === "job-and-nomination")) {
       for (const field of section.fields) add(`authority-${field.key}`, field.label,
-        `The nomination record must establish ${field.label.toLowerCase()} for this implementation. Use the actual customer, provider and site records`, [source(field.source)], "authority");
+        `Record ${field.label} on this job's nomination form. Use the actual customer, provider and site records`, [source(field.source)], "authority");
     }
     for (const signature of nsw.signatures) add(`signature-${signature.role}`, `${words(signature.role)} declaration`,
       `Obtain the ${words(signature.role)} signature using the exact applicable official declaration and retain its completed record`, [source(signature.source)], "authority");
@@ -154,23 +173,23 @@ function createProfile(activity: GovernmentActivityTemplate): ActivityLearningPr
   // They supplement the distinct technical/evidence facts above, never substitute
   // for an absent statutory activity definition or confer external qualifications.
   const policies: [string, string, string][] = [
-    ["programme-output", "Correct programme outcome", `${programme.name} produces ${programme.claimOutputLabel}. Describe that outcome accurately to the customer; an internal assessment pass is not that outcome`],
-    ["activity-boundary", "Exact scope of work", `This module is confined to ${activity.title} (${activity.registryActivityCode}) under ${programme.name}. A similar trade category or a pass in a different programme does not establish this activity's eligibility`],
-    ["source-version", "Installation-date source control", `Before committing ${activity.title} to a programme claim, resolve the official rules effective on the implementation date and retain the source version. Stop if the applicable version or commencement date is uncertain`],
-    ["business-authority", "Business readiness", `Before accepting ${programme.name} work, complete business setup with current insurance, the signed Creditex agreement, the applicable programme scope and required credentials. A capability tick box alone does not meet these requirements`],
-    ["individual-authority", "Each assigned person's authority", `Every person assigned programme work needs their own current activity training and any separately required licence, accreditation or specialist credential. A director's pass does not qualify the rest of the team`],
-    ["signed-facts", "Declarations reflect completed facts", `For ${activity.title}, signatures must identify the actual authorised signer and true dates and facts. Never reuse a customer's signature, sign for an absent installer or backdate a declaration`],
-    ["original-proof", "Evidence custody", `Preserve the original ${activity.title} evidence, capture time and device metadata where collected. Link the record to the exact premises and retain corrections as traceable revisions rather than overwriting original evidence`],
-    ["changed-scope", "Changes at the site", `If site conditions or the equipment differ from the approved ${activity.title} scope, pause the programme work and obtain a revised eligibility and evidence decision before continuing`],
-    ["separate-claims", "Multiple programme claims", `Any other incentive linked to this ${activity.title} job needs its own eligibility, assignment, payment and duplication checks. Approval under ${programme.name} does not automatically approve another scheme`],
-    ["completion-boundary", "Job completion and external acceptance", `A completed TLink job or passed quiz does not prove that ${programme.claimOutputLabel} has been accepted. Record the external administrator or provider outcome separately from local work completion`],
-    ["complaint", "Complaints and incorrect records", `Escalate complaints, suspected false ${activity.title} evidence, unsafe work and missing authority to Creditex. Preserve relevant records and correct errors through the controlled review process`],
-    ["revocation", "Current eligibility after a pass", `Recheck business setup, activity eligibility and each person's current training when booking or assigning ${activity.title}. A 100% pass completes that person's training automatically. An expired or revoked pass is not made valid by an earlier successful job`],
+    ["programme-output", "What the program provides", `${programme.name} provides ${programme.claimOutputLabel}. Explain this accurately to the customer. Passing this quiz records your training; it does not mean the customer's application or claim has been accepted`],
+    ["activity-boundary", "Which work this module covers", `This module covers ${activity.title} (${activity.registryActivityCode}) under ${programme.name}. Check the activity for the actual job. A similar service or a pass for another program does not prove this job qualifies`],
+    ["source-version", "Use the rules for the job date", `Before promising a program benefit for ${activity.title}, check which official rules apply on the actual job date. Keep a record of that version with the job. A new date can change the rules, so check again if the job moves. If the start date or rule is unclear, resolve it before going ahead`],
+    ["business-authority", "Get the business ready", `Before accepting ${programme.name} work, complete business setup with current insurance, the signed Creditex agreement, the correct program and required licences or credentials. Selecting a service in TLink only tells us what work you want to offer. It does not replace these checks`],
+    ["individual-authority", "Each person completes their own training", `Every person assigned program work needs their own current activity training and any required licence, accreditation or specialist credential. The business owner's pass belongs to that person. It does not qualify employees or subcontractors, even when they work on the same job`],
+    ["signed-facts", "Get the right person to sign", `For ${activity.title}, use the real authorised signer's signature and the correct dates and job details. Complete the form before it is signed so the person can check what they are agreeing to. Never copy a customer's signature, sign for an absent installer or put an earlier date on a form`],
+    ["original-proof", "Keep originals when fixing mistakes", `Keep the original ${activity.title} records, including the photo capture time and device details where collected. Add a correction linked to the same job and property, showing what changed and when. Keep the original alongside it so the change can be followed. Do not change photo dates, use another job's photos or delete the original to hide a mistake`],
+    ["changed-scope", "Check changes before going ahead", `If the site or equipment differs from the approved ${activity.title} job details, pause the program work. Get the changed job checked for eligibility and the evidence now required before continuing. The original decision covered the original details; it cannot prove the changed job qualifies`],
+    ["separate-claims", "Check each program separately", `Any other incentive for this ${activity.title} job needs its own eligibility, any required signed assignment forms, payment and duplicate-claim checks. The assignment form records who receives the right to claim the certificates or benefit. Approval under ${programme.name} does not automatically approve another program, and one signed form may not cover both`],
+    ["completion-boundary", "Record the actual claim result", `A completed TLink job or passed quiz does not prove that the claim for ${programme.claimOutputLabel} has been accepted. Keep the result from the program administrator or provider as a separate record. Only tell the customer a claim has been accepted when you have that result`],
+    ["complaint", "Report problems and keep the records", `Tell Creditex about complaints, suspected false ${activity.title} records, unsafe work or missing permission to do the work. Keep the records that show the problem. Correct mistakes through the job's review process so the original and the correction can both be checked`],
+    ["revocation", "Check training before the next booking", `When booking or assigning ${activity.title}, check the business setup, this activity's eligibility and each person's current training. A 100% pass completes that person's training automatically. If a pass expires or is cancelled, resolve that before booking. A successful past job or a colleague's pass cannot make it current again`],
   ];
   for (const [key, topic, requirement] of policies) add(key, topic, requirement, [policySource.id], "procedure");
-  if (activity.catalogueState === "closed") add("closed-activity", "Closed activity boundary", `The retained catalogue identifies ${activity.title} as closed. This learning module supports understanding and legacy review only; do not book new programme claims without a separately verified lawful pathway`, [policySource.id], "authority");
-  if (activity.catalogueState === "future") add("future-activity", "Future activity boundary", `The retained catalogue identifies ${activity.title} as future. Announcements alone do not establish an active claim pathway; verify commencement, rules and provider authority before any programme booking`, [policySource.id], "authority");
-  if (activity.catalogueState === "specialist") add("specialist-activity", "Specialist approval boundary", `${activity.title} needs the applicable specialist project or facility approval, method and qualified professionals. This operational knowledge assessment cannot replace those approvals or specialist competence`, [policySource.id], "authority");
+  if (activity.catalogueState === "closed") add("closed-activity", "This activity is closed", `${activity.title} is listed as closed. Use this module to understand its rules and review older jobs. Do not book new claims unless a current, lawful option has been separately checked and confirmed`, [policySource.id], "authority");
+  if (activity.catalogueState === "future") add("future-activity", "This activity has not started", `${activity.title} is listed as a future activity. An announcement does not mean claims are open. Check its start date, rules and the provider's permission before booking work under the program`, [policySource.id], "authority");
+  if (activity.catalogueState === "specialist") add("specialist-activity", "Specialist work needs separate checks", `${activity.title} needs the required specialist project or facility approval, method and qualified professionals. This quiz teaches the checks you must follow. It cannot replace those approvals or the specialist skills needed to do the work`, [policySource.id], "authority");
   const substantive = profile.facts.filter((entry) => entry.kind !== "procedure").length;
   if (substantive < 8) profile.gaps.push(`Only ${substantive} activity-specific source learning points have been transcribed; complete the exact activity technical, eligibility and evidence review before activation.`);
   return profile;

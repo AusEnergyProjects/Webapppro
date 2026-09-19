@@ -1,4 +1,4 @@
-import { CREDITEX_ACTIVITY_TRAINING_PROFILES, type ActivityLearningProfile } from "./creditex-training-activity-profiles.ts";
+import { CREDITEX_ACTIVITY_TRAINING_PROFILES, plainTrainingText, type ActivityLearningProfile } from "./creditex-training-activity-profiles.ts";
 
 /** Server-side assessment bank. Do not import into a client component or return answer keys before marking. */
 export interface TradeTrainingModule {
@@ -22,8 +22,8 @@ export interface TradeTrainingModule {
   lessons: { title: string; body: string; sourceIds: string[] }[];
 }
 
-export const CREDITEX_TRAINING_CONTENT_VERSION = "2026-09-19.1";
-export const CREDITEX_TRAINING_DISCLAIMER = "A 100% pass automatically completes this person's activity training and issues a completion reference. This internal knowledge assessment does not grant a trade licence, EEC certification, government accreditation or permission to create certificates. Business setup, current insurance, the signed agreement, required credentials and each job's evidence must also be complete.";
+export const CREDITEX_TRAINING_CONTENT_VERSION = "2026-09-19.2";
+export const CREDITEX_TRAINING_DISCLAIMER = "Answer every question correctly to complete your activity training and receive a completion reference. This quiz does not grant a trade licence, EEC certification, government accreditation or permission to create certificates. You still need completed business setup, current insurance, the signed agreement, any required licences or credentials, and the records for each job.";
 
 const sources: TradeTrainingModule["sources"] = [
   { id: "spec25", title: "DEECA VEU Specifications v25, Parts 1, 3, 6 and 48 (installation-date rules)", url: "https://www.energy.vic.gov.au/__data/assets/pdf_file/0041/795488/Victorian-Energy-Upgrades-Specifications-2018-Version-25.pdf", reviewedAt: "2026-09-18" },
@@ -44,11 +44,11 @@ type QuestionInput = [prompt: string, answer: string, distractor1: string, distr
 function questions(moduleId: string, inputs: QuestionInput[]): TradeTrainingModule["questions"] {
   return inputs.map(([prompt, answer, d1, d2, d3, explanation, sourceIds, critical = false], index) => {
     const position = index % 4;
-    const texts = [d1, d2, d3];
-    texts.splice(position, 0, answer);
-    return { id: `${moduleId}-q${String(index + 1).padStart(2, "0")}`, prompt,
+    const texts = [d1, d2, d3].map(plainTrainingText);
+    texts.splice(position, 0, plainTrainingText(answer));
+    return { id: `${moduleId}-q${String(index + 1).padStart(2, "0")}`, prompt: plainTrainingText(prompt),
       options: texts.map((text, option) => ({ id: String.fromCharCode(97 + option), text })),
-      correctOptionId: String.fromCharCode(97 + position), critical, explanation, sourceIds };
+      correctOptionId: String.fromCharCode(97 + position), critical, explanation: plainTrainingText(explanation), sourceIds };
   });
 }
 
@@ -58,7 +58,7 @@ function course(id: string, title: string, scope: string, lessons: TradeTraining
   return { id, title, scope, version: CREDITEX_TRAINING_CONTENT_VERSION, activityTemplateIds: [id],
     programCode: id.startsWith("veu-") ? "VEU" : "SRES", sourceCoverage: { status: "source_transcribed", gaps: [] },
     estimatedMinutes: 30, passPercent: 100, validityDays: 365, retakeCooldownMinutes: 0, reviewStatus: "published",
-    questions: moduleQuestions, lessons, sources: sources.filter((source) => sourceIds.has(source.id)) };
+    questions: moduleQuestions, lessons: lessons.map((lesson) => ({ ...lesson, title: plainTrainingText(lesson.title), body: plainTrainingText(lesson.body) })), sources: sources.filter((source) => sourceIds.has(source.id)) };
 }
 
 const veu1 = course("veu-1", "VEU Activity 1: replacing electric resistance water heating", "Activity 1C electric-boosted solar and 1D heat-pump replacements. Government eligibility, product approval, correct premises forms and individual licences remain separate checks.", [
@@ -294,17 +294,27 @@ function catalogueCourse(profile: ActivityLearningProfile): TradeTrainingModule 
     procedure.slice(0, 6), procedure.slice(6),
   ];
   const lessons = groups.filter((group) => group.length).map((group, index) => ({
-    title: index < 4 ? `${index + 1}. ${group[0].topic}` : index === 4 ? "5. Creditex authority and declarations" : "6. Creditex evidence, changes and external outcomes",
+    title: index < 4 ? `${index + 1}. ${group[0].topic}` : index === 4 ? "5. Who can do the work and sign the forms" : "6. Job records, changes and claim results",
     body: group.map((fact) => `${fact.topic}: ${fact.requirement}`).join("\n\n"),
     sourceIds: [...new Set(group.flatMap((fact) => fact.sourceIds))],
   }));
-  const inputs: QuestionInput[] = selected.map((fact, index) => {
-    const alternatives = specific.filter((other) => other.key !== fact.key && other.topic !== fact.topic);
-    const choices = [0, 1, 2].map((offset) => alternatives[(index + offset) % alternatives.length]?.requirement || "The required activity evidence has not been established.");
+  const inputs: QuestionInput[] = selected.map((fact) => {
+    // Do not use other true requirements as wrong answers. Test this requirement
+    // against clearly different actions, while keeping its exact source details.
+    const choices = fact.kind === "evidence"
+      ? ["Copy the records from a similar job and change the address.", "Leave this evidence out if the customer is happy with the work.", "Mark this evidence as complete without collecting it."]
+      : fact.kind === "authority"
+        ? ["Let any team member sign or confirm this on someone else's behalf without permission.", "Treat a pass in this quiz as a replacement for this requirement.", "Skip this check because the business has done similar work before."]
+        : ["Skip this requirement if the customer has signed the quote.", "Use the details from a previous job without checking this job.", "Choose the details that give the largest benefit, even if they do not match the job."];
+    const why = fact.kind === "evidence"
+      ? "The records must show what happened on this job. Another job's records, a happy customer or a tick in a box cannot replace the required evidence. Collect it and keep it with this job's file."
+      : fact.kind === "authority"
+        ? "The required person, permission or qualification must be checked for this job. Someone else's signature, a quiz pass or previous work cannot replace that check."
+        : "This rule is part of checking whether the work qualifies. Check it against the actual job and keep the supporting records. A signed quote or a similar past job does not prove it has been met.";
     return [
-      `${label}: which rule specifically addresses “${fact.topic}”? Choose the requirement for that topic, rather than another requirement in the same activity.`,
+      `${fact.topic}: which instruction is correct for this activity?`,
       fact.requirement, choices[0], choices[1], choices[2],
-      `${fact.topic}: ${fact.requirement} The other options concern different checks; meeting one of them does not satisfy this particular requirement.`,
+      `${fact.requirement}\n\n${why}`,
       fact.sourceIds, true,
     ];
   });
@@ -313,29 +323,31 @@ function catalogueCourse(profile: ActivityLearningProfile): TradeTrainingModule 
   for (let index = 0; inputs.length < 17 && specific.length >= 8; index++) {
     const fact = specific[index % specific.length];
     inputs.push([
-      `${label} review case ${index + 1}: the job record does not establish “${fact.topic}”. The requirement is: ${fact.requirement} Which next step is justified?`,
-      `Resolve this specific requirement using evidence for the actual ${profile.activity.title.toLowerCase()} job before recording it as satisfied.`,
-      "Mark it satisfied because the customer has signed a general acceptance of the quotation.",
-      "Mark it satisfied because the same business completed a similar installation last month.",
-      "Replace the missing check with the worker's internal assessment result.",
-      `${fact.requirement} The quoted requirement is job-specific; a general signature, another installation or a training result does not establish it.`,
+      index < specific.length
+        ? `The job file is missing the check for “${fact.topic}”. What should you do?`
+        : `A new job has no check for “${fact.topic}”. A previous job passed. What should you do for the new job?`,
+      "Complete this check using the real job details before marking it as done.",
+      "Mark it as done because the customer signed the quote.",
+      "Mark it as done because a similar job passed last month.",
+      "Use the worker's quiz pass instead of doing the missing check.",
+      `${fact.requirement}\n\nCheck this requirement against this job and save the proof. A quote, another job's result or a training pass cannot fill the gap. If the proof is missing, leave the check incomplete and resolve it before proceeding.`,
       [...new Set([...fact.sourceIds, "creditex-training-policy"])], true,
     ]);
   }
   const operatingCases: [string, string, string, string, string, string][] = [
-    ["business-authority", "The business has ticked this activity in its profile. What else establishes its readiness to accept programme work?", "Completed business setup, applicable programme scope, current insurance, signed agreement and required credentials", "The capability selection alone", "A customer's request for the discount", "A supplier's product advertisement"],
-    ["individual-authority", "The director passed this module, but the newly assigned worker has not. Who may rely on that pass?", "Only the named person who passed; the assigned worker needs their own current training and external credentials", "Every employee of the director's business", "Any subcontractor named on the invoice", "Everyone working at the same premises"],
-    ["source-version", "The implementation date changes across a rule commencement date. Which review is needed?", "Check and retain the source version effective on the actual implementation date", "Keep the rule used for the first sales estimate regardless of date", "Choose whichever version produces the larger benefit", "Use the most recently published rule even if it has not commenced"],
-    ["signed-facts", "A required signer is absent when the declaration is prepared. What is the correct response?", "Obtain that person's genuine, authorised signature with true dates and completed facts", "Have a colleague copy the absent person's signature", "Leave the material facts blank and obtain a signature now", "Backdate the form to the date originally planned"],
-    ["original-proof", "A discrepancy is found in the evidence for this activity. How should it be corrected?", "Preserve the original and add a traceable correction linked to the exact installation", "Replace the original file with a photograph from a similar job", "Edit the original capture date so the files agree", "Delete the inconsistent evidence after the claim is paid"],
-    ["changed-scope", "The actual site or equipment differs from the approved scope. What happens before a programme commitment?", "Pause and obtain a revised eligibility and evidence decision for the actual scope", "Proceed on the original approval because the trade category is unchanged", "Ask the customer to accept all compliance risk instead of reassessing", "Select another activity code solely to bypass the discrepancy"],
-    ["separate-claims", "A second government incentive is proposed for this job. What is required?", "Separate eligibility, assignment, payment and duplicate-claim checks for each programme", "Automatic approval because the first programme accepted the customer", "One assignment covering every programme without checking its wording", "Removal of the first programme from the evidence record"],
-    ["revocation", "A worker's pass has expired or been revoked after an earlier successful job. What applies to a new booking?", "Recheck current personal training, activity eligibility and business setup; the old job does not restore the pass", "The old successful job permanently qualifies the worker", "A colleague's current pass replaces the expired pass", "The customer can waive the training requirement"],
+    ["business-authority", "The business selected this service in TLink. What else must be ready before it accepts program work?", "Completed business setup, the correct program, current insurance, the signed agreement and required licences or credentials", "Selecting the service is all that is needed", "The customer only needs to ask for a discount", "The supplier only needs to advertise the product"],
+    ["individual-authority", "The business owner passed this module. Does that also qualify a team member who has not done it?", "No. Each person needs their own current training and any required licences or credentials", "Yes. The owner's pass covers all employees", "Yes. The pass covers any subcontractor on the invoice", "Yes. One pass covers everyone at the job"],
+    ["source-version", "The job moves to a new date and the rules change between the two dates. Which rules do you use?", "Check the rules that apply on the actual job date and keep a record of that version", "Always use the rules from the first quote", "Use whichever rules give the bigger benefit", "Use future rules before their start date"],
+    ["signed-facts", "The person who must sign a form is not there. What should you do?", "Get their real, authorised signature on a completed form with the correct facts and dates", "Ask a colleague to copy their signature", "Get a signature now and leave important details blank", "Put an earlier date on the form to match the original plan"],
+    ["original-proof", "You find a mistake in the job records. How should you fix it?", "Keep the original and add a dated correction that explains what changed for this job", "Replace the original with a photo from a similar job", "Change the original photo date so the records appear to match", "Delete the incorrect records after the claim is paid"],
+    ["changed-scope", "The equipment or site is different from the approved job details. What should you do before going ahead?", "Pause the program work and get the changed job checked for eligibility and required evidence", "Go ahead because it is still the same type of trade work", "Ask the customer to accept the risk instead of checking the change", "Pick a different activity code just to get around the problem"],
+    ["separate-claims", "The customer wants to use a second government program for this job. What must you check?", "Check each program's eligibility, signed forms, payment rules and limits on claiming the same work twice", "Assume the second program accepts whatever the first one approved", "Use one form for both programs without checking what it covers", "Remove all mention of the first program from the job file"],
+    ["revocation", "Your training pass has expired or been cancelled. Can a successful past job qualify you for a new booking?", "No. Check your current training, the business setup and this activity's eligibility before booking", "Yes. One successful job qualifies you permanently", "Yes. You can use a colleague's current pass", "Yes. The customer can waive the training requirement"],
   ];
   for (const [key, prompt, answer, b, c, d] of operatingCases) {
     const fact = procedure.find((entry) => entry.key === key);
     if (!fact) throw new Error(`Missing Creditex operating control ${key} for ${id}`);
-    inputs.push([`${label}: ${prompt}`, answer, b, c, d, fact.requirement, fact.sourceIds, true]);
+    inputs.push([prompt, answer, b, c, d, fact.requirement, fact.sourceIds, true]);
   }
   const gaps = [...profile.gaps];
   if (inputs.length !== 25) gaps.push(`The assessment currently contains ${inputs.length} source-bound questions; 25 reviewed questions are required before activation.`);

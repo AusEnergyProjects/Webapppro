@@ -103,7 +103,7 @@ test("SA secondary glazing uses the gazetted 2026 specification while unresolved
 
 test("current and future dates remain distinct across programme-specific modules", () => {
   const text = (id) => moduleById(id).lessons.map((lesson) => lesson.body).join(" ");
-  assert.match(text("veu-pba-mv"), /Version 8 applies before 1 October 2026; version 9 commences on that date/);
+  assert.match(text("veu-pba-mv"), /Version 8 applies before 1 October 2026; version 9 starts on that date/);
   assert.match(text("veu-45"), /closed on 23 June 2026/);
   assert.match(text("nsw-ess-d6"), /Gazette commencement/);
   assert.match(text("nsw-ess-d11"), /expired at the end of 30 June 2026/);

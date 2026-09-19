@@ -35,6 +35,7 @@ function harness({ modules = [course()], marked, startError } = {}) {
   };
   const api = { async loadTrainingOverview() { requests.push({ action: 'load' }); return overview(modules); },
     async startTrainingAssessment(moduleId) { requests.push({ action: 'start', moduleId }); if (startError) throw new Error(startError); return structuredClone(attempt); },
+    async checkTrainingAnswer(attemptId, questionId, answer) { requests.push({ action: 'check', attemptId, questionId, answer }); return { questionId, correct: answer.endsWith('-a'), explanation: 'Use genuine records from this job.', correctAnswer: 'First choice', sourceIds: ['official'] }; },
     async submitTrainingAssessment(attemptId, answers) { requests.push({ action: 'submit', attemptId, answers: { ...answers } }); return marked || { passed: false, scorePercent: 96, criticalPassed: false, reference: '', expiresAt: '', feedback: [{ questionId: 'question-0', prompt: 'Activity-specific question 1', correct: false, explanation: 'Keep the exact required evidence.', correctAnswer: 'Verified official requirement', sourceIds: ['official'] }] }; } };
   const require = id => ({ react: hooks, 'react/jsx-runtime': jsx, 'react-native': { Alert: { alert: (...args) => alerts.push(args) }, Linking: { openURL: async url => opened.push(url) }, Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', TextInput: 'TextInput', View: 'View', StyleSheet: { create: value => value } },
     '@/components/field-button': { FieldButton: 'FieldButton' }, '@/components/screen': { Screen: 'Screen' }, '@/lib/config': { API_BASE_URL: 'https://tlink.energy' }, '@/lib/theme': { colours: {}, radius: {}, spacing: {} }, '@/lib/training': api, '@/providers/app-provider': { useApp: () => app } })[id] || (() => { throw new Error(`Unexpected runtime dependency: ${id}`); })();
@@ -55,7 +56,7 @@ async function answerAll(h) {
   for (let index = 0; index < 25; index++) {
     assert.match(text(tree), new RegExp(`Question ${index + 1} of 25`));
     assert.equal(role(tree, 'radiogroup').length, 1);
-    role(tree, 'radio')[0].props.onPress(); tree = h.render();
+    role(tree, 'radio')[0].props.onPress(); await flush(); tree = h.render();
     if (index < 24) { button(tree, 'Next question').props.onPress(); tree = h.render(); }
   }
   return tree;
@@ -140,7 +141,7 @@ test('learning completion retains personal references, filters internal notes an
 
 test('locked or unavailable profiles do not fabricate a pass; expired attempts can be left with confirmation', async () => {
   const empty = await harness({ modules: [] }).mount(); assert.match(text(empty), /empty list does not approve program work/); assert.equal(button(empty, 'Start assessment'), undefined);
-  const h = harness(); let tree = await start(h); role(tree, 'radio')[0].props.onPress(); tree = h.render();
+  const h = harness(); let tree = await start(h); role(tree, 'radio')[0].props.onPress(); await flush(); tree = h.render();
   button(tree, 'Leave assessment').props.onPress(); assert.equal(h.alerts.length, 1); assert.match(text(h.render()), /Question 1 of 25/);
   h.alerts[0][2].find(item => item.style === 'destructive').onPress(); tree = h.render();
   assert.ok(button(tree, 'Start assessment')); assert.equal(role(tree, 'radiogroup').length, 0);
@@ -149,4 +150,16 @@ test('locked or unavailable profiles do not fabricate a pass; expired attempts c
 test('training is reachable in the field tabs without client answer bank or offline persistence', () => {
   assert.match(read('../src/app/(tabs)/_layout.tsx'), /Tabs\.Screen name="training"/);
   assert.doesNotMatch(screenSource + read('../src/lib/training.ts'), /correctOptionId|creditex-training-curriculum|TRAINING_MODULES|AsyncStorage|SecureStore|queueMutation|localStorage/);
+});
+
+test('wrong answers explain the rule and block the next question until corrected', async () => {
+  const h = harness(); let tree = await start(h);
+  role(tree, 'radio')[1].props.onPress(); await flush(); tree = h.render();
+  assert.match(text(tree), /Incorrect answer/); assert.match(text(tree), /Use genuine records from this job/);
+  assert.equal(button(tree, 'Next question').props.disabled, true);
+  role(tree, 'radio')[0].props.onPress(); await flush(); tree = h.render();
+  assert.equal(button(tree, 'Next question').props.disabled, false);
+  assert.equal(role(tree, 'radio')[0].props.disabled, true);
+  button(tree, 'Next question').props.onPress(); tree = h.render();
+  assert.match(text(tree), /Question 2 of 25/);
 });

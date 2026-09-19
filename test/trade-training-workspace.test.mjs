@@ -26,7 +26,7 @@ function nodes(node, predicate) {
 }
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-function harness(responder, component = "TradeTrainingWorkspace", props = {}) {
+function harness(responder, component = "TradeTrainingWorkspace", props = {}, runtime = {}) {
   const state = []; const effects = []; const requests = []; let cursor = 0; let initial = true;
   const hooks = {
     useState(value) { const index = cursor++; if (!(index in state)) state[index] = typeof value === "function" ? value() : value; return [state[index], (next) => { state[index] = typeof next === "function" ? next(state[index]) : next; }]; },
@@ -35,9 +35,9 @@ function harness(responder, component = "TradeTrainingWorkspace", props = {}) {
     useEffect(callback) { if (initial) effects.push(callback); },
   };
   const exports = {};
-  const fetch = async (url, init = {}) => { requests.push({ url, ...init }); const result = await responder(url, init); return { ok: result.ok !== false, json: async () => result }; };
+  const fetch = async (url, init = {}) => { requests.push({ url, ...init }); const result = await responder(url, init); return result.response || { ok: result.ok !== false, headers: new Headers({ "content-type": "application/json" }), json: async () => result }; };
   const require = (id) => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : (() => { throw new Error(`Unexpected client runtime import: ${id}`); })();
-  Function("require", "exports", "fetch", component === "CreditexOnboardingReviewWorkspace" ? reviewCompiled : compiled)(require, exports, fetch);
+  Function("require", "exports", "fetch", "setTimeout", "clearTimeout", component === "CreditexOnboardingReviewWorkspace" ? reviewCompiled : compiled)(require, exports, fetch, runtime.setTimeout || setTimeout, runtime.clearTimeout || clearTimeout);
   const render = () => { cursor = 0; const tree = exports[component]({ user, api: responder, canReview: true, ...props }); initial = false; return tree; };
   return { requests, render, async mount() { render(); for (const effect of effects) effect(); await flush(); return render(); } };
 }
@@ -65,59 +65,55 @@ test("learner reads exact source-linked lessons before an active assessment can 
   assert.equal(button(tree, "Next question").props.disabled, true);
 });
 
-test("assessment preserves answers when navigating and uses only the server result", async () => {
-  let submission;
+test("wrong answers explain the correct choice and prevent progression until corrected", async () => {
+  const checks = [];
   const h = harness(async (_url, init) => {
     if (!init.method) return { ok: true, business, memberId: "member-a", modules: [course()] };
     const body = JSON.parse(init.body); if (body.action === "start") return { ok: true, attempt };
-    submission = body; return { ok: true, result: { passed: false, scorePercent: 90, criticalPassed: false, reference: "", expiresAt: "" } };
+    assert.equal(body.action, "check"); checks.push(body);
+    return { ok: true, feedback: { questionId: body.questionId, correct: body.answer === "before", correctAnswer: "Before the relevant agreement", explanation: "Get informed permission before the agreement, so the customer knows what they are accepting.", sourceIds: ["esc"] } };
   });
   let tree = await learn(h); button(tree, "Start assessment").props.onClick(); await flush(); tree = h.render();
-  nodes(tree, (node) => node.type === "input" && node.props.value === "before")[0].props.onChange();
-  tree = h.render(); button(tree, "Next question").props.onClick(); tree = h.render();
-  nodes(tree, (node) => node.type === "input" && node.props.value === "actual")[0].props.onChange();
-  tree = h.render(); button(tree, "Previous question").props.onClick(); tree = h.render();
-  assert.equal(nodes(tree, (node) => node.type === "input" && node.props.value === "before")[0].props.checked, true);
-  button(tree, "Next question").props.onClick(); tree = h.render(); button(tree, "Submit assessment").props.onClick(); await flush(); tree = h.render();
-  assert.deepEqual(submission, { action: "submit", attemptId: "attempt-1", answers: { "q-consent": "before", "q-photo": "actual" } });
-  assert.ok(text(tree).includes("More learning is needed"));
-  assert.ok(!text(tree).includes("Assessment passed"));
-  assert.ok(text(tree).includes("mandatory compliance questions need review"));
-  assert.equal(button(tree, "Try the assessment again").props.disabled, false);
-  assert.ok(text(tree).includes("retry immediately as often as needed"));
+  nodes(tree, node => node.type === "input" && node.props.value === "after")[0].props.onChange(); await flush(); tree = h.render();
+  assert.deepEqual(checks[0], { action: "check", attemptId: "attempt-1", questionId: "q-consent", answer: "after" });
+  assert.match(text(tree), /Incorrect answer/); assert.match(text(tree), /Get informed permission before the agreement/);
+  assert.equal(button(tree, "Next question").props.disabled, true);
+  nodes(tree, node => node.type === "input" && node.props.value === "before")[0].props.onChange(); await flush(); tree = h.render();
+  assert.equal(button(tree, "Next question").props.disabled, false);
+  assert.equal(nodes(tree, node => node.type === "fieldset")[0].props.disabled, true, "server-confirmed answers cannot be changed");
+  button(tree, "Next question").props.onClick(); tree = h.render();
+  assert.match(text(tree), /Which commissioning evidence is retained/);
+  button(tree, "Previous question").props.onClick(); tree = h.render();
+  assert.equal(nodes(tree, node => node.type === "input" && node.props.value === "before")[0].props.checked, true);
+  assert.equal(checks.length, 2);
 });
 
-test("all 25 answers submit, a 96% result can be retried immediately, and 100% records the personal pass", async () => {
+test("all 25 answers are checked before completion and the first-answer percentage remains visible", async () => {
   const questions = Array.from({ length: 25 }, (_, index) => ({ id: `question-${index}`, prompt: `Activity 6 requirement ${index + 1}`, critical: true, options: [{ id: `answer-${index}`, text: "The current requirement" }, { id: `other-${index}`, text: "A different requirement" }] }));
-  let submissions = 0;
+  let submissions = 0; let checks = 0;
   const courseModule = course();
   const h = harness(async (_url, init) => {
     if (!init.method) return { ok: true, business, memberId: "member-a", modules: [courseModule] };
     const body = JSON.parse(init.body);
-    if (body.action === "start") return { ok: true, attempt: { ...attempt, id: `attempt-${submissions + 1}`, questions } };
-    assert.equal(Object.keys(body.answers).length, 25); submissions++;
-    const passed = submissions === 2;
-    if (passed) { courseModule.status = "passed"; courseModule.completion = { reference: "TL-CX-TRAIN-CURRENT-PASS", passedAt: "2026-09-19", expiresAt: "2027-09-19", revokedAt: "" }; }
-    return { ok: true, result: { passed, scorePercent: passed ? 100 : 96, criticalPassed: passed, reference: passed ? courseModule.completion.reference : "", expiresAt: passed ? courseModule.completion.expiresAt : "" } };
+    if (body.action === "start") return { ok: true, attempt: { ...attempt, questions } };
+    if (body.action === "check") { checks++; return { ok: true, feedback: { questionId: body.questionId, correct: body.answer.startsWith("answer-"), correctAnswer: "The current requirement", explanation: "Keep the evidence from the actual job.", sourceIds: ["esc"] } }; }
+    assert.equal(body.action, "submit"); assert.equal(Object.keys(body.answers).length, 25); submissions++;
+    courseModule.status = "passed"; courseModule.completion = { reference: "TL-CX-TRAIN-CURRENT-PASS", passedAt: "2026-09-19", expiresAt: "2027-09-19", revokedAt: "" };
+    return { ok: true, result: { passed: true, scorePercent: 100, firstTryScorePercent: 96, criticalPassed: true, reference: courseModule.completion.reference, expiresAt: courseModule.completion.expiresAt } };
   });
   let tree = await learn(h); button(tree, "Start assessment").props.onClick(); await flush(); tree = h.render();
-  for (let run = 0; run < 2; run++) {
-    for (let index = 0; index < 25; index++) {
-      assert.match(text(tree), new RegExp(`Question\\s+${index + 1}\\s+of\\s+25`));
-      nodes(tree, node => node.type === "input" && node.props.value === `answer-${index}`)[0].props.onChange(); tree = h.render();
-      if (index < 24) { button(tree, "Next question").props.onClick(); tree = h.render(); }
-    }
-    button(tree, "Submit assessment").props.onClick(); await flush(); tree = h.render();
-    if (run === 0) {
-      assert.match(text(tree), /Your score:\s+96\s*%/); assert.doesNotMatch(text(tree), /Assessment passed/);
-      assert.equal(button(tree, "Try the assessment again").props.disabled, false);
-      button(tree, "Try the assessment again").props.onClick(); await flush(); tree = h.render();
-      assert.match(text(tree), /0\s+answered/);
-    }
+  nodes(tree, node => node.type === "input" && node.props.value === "other-0")[0].props.onChange(); await flush(); tree = h.render();
+  assert.equal(button(tree, "Next question").props.disabled, true);
+  for (let index = 0; index < 25; index++) {
+    assert.match(text(tree), new RegExp(`Question\\s+${index + 1}\\s+of\\s+25`));
+    nodes(tree, node => node.type === "input" && node.props.value === `answer-${index}`)[0].props.onChange(); await flush(); tree = h.render();
+    if (index < 24) { button(tree, "Next question").props.onClick(); tree = h.render(); }
   }
-  assert.match(text(tree), /Your score:\s+100\s*%/); assert.match(text(tree), /TL-CX-TRAIN-CURRENT-PASS/);
-  assert.match(text(tree), /1\s+of\s+1\s+activity modules passed/);
-  assert.doesNotMatch(text(tree), /approval pending/i);
+  assert.equal(button(tree, "Submit assessment").props.disabled, false);
+  button(tree, "Submit assessment").props.onClick(); await flush(); tree = h.render();
+  assert.equal(checks, 26); assert.equal(submissions, 1);
+  assert.match(text(tree), /Your score:\s+100\s*%/); assert.match(text(tree), /First answers:\s+96\s*%/);
+  assert.match(text(tree), /TL-CX-TRAIN-CURRENT-PASS/); assert.match(text(tree), /1\s+of\s+1\s+activity modules passed/);
   assert.equal(button(tree, "Start assessment").props.disabled, true);
 });
 
@@ -185,12 +181,13 @@ test("a server-confirmed pass displays the returned completion reference and lea
   const h = harness(async (_url, init) => {
     if (!init.method) return { ok: true, business, memberId: "member-a", modules: [course()] };
     const body = JSON.parse(init.body); if (body.action === "start") return { ok: true, attempt };
+    if (body.action === "check") return { ok: true, feedback: { questionId: body.questionId, correct: true, correctAnswer: "The current requirement", explanation: "Retain informed customer consent before the agreement.", sourceIds: ["esc"] } };
     return { ok: true, result: { passed: true, scorePercent: 100, criticalPassed: true, reference: "TL-CX-TRAIN-SERVER-REFERENCE", expiresAt: "2027-01-01", feedback: [{ questionId: "q-consent", prompt: "When is customer consent needed?", correct: true, correctAnswer: "Before the relevant agreement", explanation: "Retain informed customer consent before the agreement.", sourceIds: ["esc"] }] } };
   });
   let tree = await learn(h); button(tree, "Start assessment").props.onClick(); await flush(); tree = h.render();
-  nodes(tree, (node) => node.type === "input" && node.props.value === "before")[0].props.onChange(); tree = h.render();
+  nodes(tree, (node) => node.type === "input" && node.props.value === "before")[0].props.onChange(); await flush(); tree = h.render();
   button(tree, "Next question").props.onClick(); tree = h.render();
-  nodes(tree, (node) => node.type === "input" && node.props.value === "actual")[0].props.onChange(); tree = h.render();
+  nodes(tree, (node) => node.type === "input" && node.props.value === "actual")[0].props.onChange(); await flush(); tree = h.render();
   button(tree, "Submit assessment").props.onClick(); await flush(); tree = h.render();
   assert.ok(text(tree).includes("TL-CX-TRAIN-SERVER-REFERENCE"));
   assert.ok(text(tree).includes("Retain informed customer consent before the agreement."));
@@ -353,4 +350,64 @@ test("blank service scope gives a setup action without suggesting approval", asy
   assert.ok(text(tree).includes("capabilities in Team"));
   assert.ok(text(tree).includes("An empty list does not approve government program work"));
   assert.equal(button(tree, "Start assessment"), undefined);
+});
+
+test("reopening a module resumes at its saved unfinished question with earlier feedback retained", async () => {
+  const prior = { questionId: 'q-consent', correct: true, correctAnswer: 'Before the relevant agreement', explanation: 'Get consent first.', sourceIds: ['esc'] };
+  const pending = { questionId: 'q-photo', correct: false, correctAnswer: 'The actual installation', explanation: 'The photo must show the work at this property.', sourceIds: ['esc'] };
+  const h = harness(async (_url, init) => init.method
+    ? { ok: true, attempt: { ...attempt, answers: { 'q-consent': 'before', 'q-photo': 'stock' }, feedback: { 'q-consent': prior, 'q-photo': pending } } }
+    : { ok: true, business, memberId: 'member-a', modules: [course()] });
+  let tree = await learn(h); button(tree, 'Start assessment').props.onClick(); await flush(); tree = h.render();
+  assert.match(text(tree), /Question\s+2\s+of\s+2/);
+  assert.match(text(tree), /The photo must show the work at this property/);
+  assert.equal(nodes(tree, node => node.type === 'input' && node.props.value === 'stock')[0].props.checked, true);
+  assert.equal(button(tree, 'Submit assessment').props.disabled, true);
+  button(tree, 'Previous question').props.onClick(); tree = h.render();
+  assert.match(text(tree), /Get consent first/);
+  assert.equal(nodes(tree, node => node.type === 'input' && node.props.value === 'before')[0].props.checked, true);
+});
+
+test("a stalled submit times out, keeps checked answers, and retries the same attempt", async () => {
+  const timers = new Map(); let nextTimer = 0; let submissions = 0; const submitted = [];
+  const runtime = { setTimeout(callback, milliseconds) { assert.equal(milliseconds, 25000); timers.set(++nextTimer, callback); return nextTimer; }, clearTimeout(id) { timers.delete(id); } };
+  const h = harness(async (_url, init) => {
+    if (!init.method) return { ok: true, business, memberId: 'member-a', modules: [course()] };
+    const body = JSON.parse(init.body);
+    if (body.action === 'start') return { ok: true, attempt };
+    if (body.action === 'check') return { ok: true, feedback: { questionId: body.questionId, correct: true, correctAnswer: 'Correct answer', explanation: 'Explanation.', sourceIds: ['esc'] } };
+    submissions++; submitted.push(body);
+    if (submissions === 1) return new Promise(() => {});
+    return { ok: true, result: { passed: true, scorePercent: 100, firstTryScorePercent: 100, criticalPassed: true, reference: 'SAVED-AFTER-RETRY', expiresAt: '2027-01-01' } };
+  }, 'TradeTrainingWorkspace', {}, runtime);
+  let tree = await learn(h); button(tree, 'Start assessment').props.onClick(); await flush(); tree = h.render();
+  nodes(tree, node => node.type === 'input' && node.props.value === 'before')[0].props.onChange(); await flush(); tree = h.render();
+  button(tree, 'Next question').props.onClick(); tree = h.render();
+  nodes(tree, node => node.type === 'input' && node.props.value === 'actual')[0].props.onChange(); await flush(); tree = h.render();
+  button(tree, 'Submit assessment').props.onClick(); await flush(); tree = h.render();
+  assert.equal(button(tree, 'Submitting...').props.disabled, true);
+  assert.equal(timers.size, 1); [...timers.values()][0](); await flush(); tree = h.render();
+  assert.match(text(tree), /connection took too long/); assert.match(text(tree), /answers are still here/);
+  assert.equal(button(tree, 'Submit assessment').props.disabled, false);
+  assert.equal(nodes(tree, node => node.type === 'input' && node.props.value === 'actual')[0].props.checked, true);
+  button(tree, 'Submit assessment').props.onClick(); await flush(); tree = h.render();
+  assert.deepEqual(submitted[1], submitted[0]); assert.match(text(tree), /SAVED-AFTER-RETRY/); assert.equal(timers.size, 0);
+});
+
+test("a non-JSON response releases answer checking and keeps the selected answer available to retry", async () => {
+  let checks = 0;
+  const h = harness(async (_url, init) => {
+    if (!init.method) return { ok: true, business, memberId: 'member-a', modules: [course()] };
+    const body = JSON.parse(init.body); if (body.action === 'start') return { ok: true, attempt };
+    checks++;
+    if (checks === 1) return { response: new Response('<html>Temporary proxy error</html>', { headers: { 'content-type': 'text/html' }, status: 503 }) };
+    return { ok: true, feedback: { questionId: body.questionId, correct: true, correctAnswer: 'Before the relevant agreement', explanation: 'Get consent first.', sourceIds: ['esc'] } };
+  });
+  let tree = await learn(h); button(tree, 'Start assessment').props.onClick(); await flush(); tree = h.render();
+  nodes(tree, node => node.type === 'input' && node.props.value === 'before')[0].props.onChange(); await flush(); tree = h.render();
+  assert.match(text(tree), /service did not return a result/);
+  assert.equal(button(tree, 'Next question').props.disabled, true);
+  assert.equal(nodes(tree, node => node.type === 'input' && node.props.value === 'before')[0].props.checked, true);
+  button(tree, 'Check selected answer').props.onClick(); await flush(); tree = h.render();
+  assert.equal(button(tree, 'Next question').props.disabled, false); assert.equal(checks, 2);
 });

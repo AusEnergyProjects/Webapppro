@@ -6,11 +6,15 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 19 September 2026
 
-Deployment baseline verified: 19 September 2026, Sites 580 and GitHub main at `d18192b5eb6bb6249b003c44279b2aab4112ca2a` before this release.
+Deployment baseline verified: 19 September 2026, Sites 581 and GitHub main at `0db8ca5f301f96c1c1af234688dacdae3a2d7710` before this release.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: self-service Creditex training and intake
+## Current implementation: editable compliance questionnaires and guided assessments
+
+Both internal and Creditex portals now provide Compliance questions and saved Trade compliance profiles. Personal answers are checked and saved as learners progress, with immediate explanations and correction before continuing. Final 100% passes are replay-safe; request failures time out visibly. Migration 0179 adds immutable published questionnaire versions and completed answer snapshots. Service/state and current-version requirements apply to additional questionnaires in learning, bookings and lead release. See [implementation and validation](./creditex-onboarding-implementation.md). This source record precedes publication; the coordinating task records the exact subsequent release.
+
+## Previous implementation: self-service Creditex training and intake
 
 The 19 September follow-up on `codex/creditex-activity-onboarding` makes complete activity courses assessable without manual curriculum approval, records a 100% personal pass automatically, removes the internal source-review notebook from learner links and scopes training/lead eligibility to declared served states. Business intake adds revision-bound automatic completion receipts, private signed-agreement evidence and actionable missing requirements. Forward migrations 0177 and 0178 preserve applied 0176. See [the implementation record](./creditex-onboarding-implementation.md) for controls, source gaps and validation.
 

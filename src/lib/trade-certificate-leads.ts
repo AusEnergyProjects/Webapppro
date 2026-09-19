@@ -38,21 +38,23 @@ const requiredCourseRows = [
  */
 export function certificateLeadEligibilitySql(ownerColumn: string, categoriesColumn: string, stateColumn: string) {
   const owner = expression(ownerColumn); const categories = expression(categoriesColumn); const state = expression(stateColumn);
-  return `(EXISTS (WITH required_course(module_id,version,content_hash,category,jurisdiction,source_complete,external_required)
-    AS (VALUES ${requiredCourseRows})
+  return `(EXISTS (WITH deployed_course(module_id,version,content_hash,category,jurisdiction,source_complete,external_required)
+    AS (VALUES ${requiredCourseRows}), required_course AS (
+      SELECT deployed.module_id,COALESCE(published.version,deployed.version) version,COALESCE(published.content_hash,deployed.content_hash) content_hash,
+        deployed.category,deployed.jurisdiction,COALESCE(published.source_complete,deployed.source_complete) source_complete,deployed.external_required
+      FROM deployed_course deployed LEFT JOIN trade_training_published_questionnaires published ON published.module_id=deployed.module_id)
     SELECT 1 FROM creditex_current_business_jurisdictions approved_business
-    WHERE approved_business.owner_uid = ${owner}
-      AND json_valid(${categories}) AND json_type(${categories}) = 'array' AND json_array_length(${categories}) > 0
-      AND approved_business.state = ${state}
+    WHERE (approved_business.owner_uid,approved_business.state) = (${owner},${state})
+      AND json_valid(${categories}) AND json_array_length(${categories}) > 0
       AND NOT EXISTS (SELECT 1 FROM required_course
-        JOIN json_each(${categories}) training_category ON training_category.value = required_course.category
-        WHERE required_course.jurisdiction IN ('AU', ${state})
-          AND (required_course.source_complete = 0 OR NOT EXISTS (
-            SELECT 1 FROM trade_training_current_category_qualifications qualification
+        WHERE required_course.category IN (SELECT value FROM json_each(${categories}))
+          AND required_course.jurisdiction IN ('AU', ${state})
+          AND NOT EXISTS (
+            SELECT 1 FROM trade_training_current_scoped_category_qualifications qualification
             WHERE (qualification.owner_uid, qualification.category, qualification.module_id,
-              qualification.version, qualification.content_hash, qualification.external_required) =
+              qualification.version, qualification.content_hash, qualification.external_required,qualification.state,required_course.source_complete) =
               (${owner}, required_course.category, required_course.module_id,
-                required_course.version, required_course.content_hash, required_course.external_required))))))`;
+                required_course.version, required_course.content_hash, required_course.external_required,${state},1)))))`;
 }
 
 export async function certificateLeadEligible(db: D1Database, ownerUid: string, categories: readonly string[], state: string) {

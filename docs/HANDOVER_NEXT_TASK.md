@@ -1,11 +1,11 @@
 # Next task handover
 
-Status: Self-service Creditex training and intake prepared for publication; real agreement and verification integrations remain to be supplied.
+Status: Editable compliance questionnaires and guided assessments prepared for publication; real agreement and verification integrations remain to be supplied.
 Prepared: 19 September 2026
 
 ## Current follow-up: complete external onboarding integrations
 
-The user requires autonomous TLink/Creditex onboarding. Complete activity training now uses automatic 100% assessment completion, served-state scope and individual records. Business intake completes automatically when actual required evidence and declarations are supplied. The user will provide the real partnership agreement and ABN verification/e-sign service details later; the agreement placeholder must never count as signed. Once supplied, integrate those actual services using the existing private evidence and audit boundaries, and test one complete onboarding path. Do not reintroduce routine manual curriculum or business-intake approval.
+The user requires autonomous TLink/Creditex onboarding. Both portals now provide Compliance questions with immutable published versions and saved personal answer records; learners correct each question as they go. Complete activity training now uses automatic 100% assessment completion, served-state scope and individual records. Business intake completes automatically when actual required evidence and declarations are supplied. The user will provide the real partnership agreement and ABN verification/e-sign service details later; the agreement placeholder must never count as signed. Once supplied, integrate those actual services using the existing private evidence and audit boundaries, and test one complete onboarding path. Do not reintroduce routine manual curriculum or business-intake approval.
 
 Current source worktree: `C:/Webproject/aea-energy-creditex-onboarding`, branch `codex/creditex-activity-onboarding`. The coordinating release response carries publication evidence. Older milestone sections below are historical.
 

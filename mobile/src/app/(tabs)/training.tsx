@@ -5,7 +5,7 @@ import { FieldButton } from '@/components/field-button';
 import { Screen } from '@/components/screen';
 import { API_BASE_URL } from '@/lib/config';
 import { colours, radius, spacing } from '@/lib/theme';
-import { loadTrainingOverview, startTrainingAssessment, submitTrainingAssessment, type TrainingAttempt, type TrainingModule, type TrainingOverview, type TrainingResult, type TrainingSource } from '@/lib/training';
+import { loadTrainingOverview, startTrainingAssessment, submitTrainingAssessment, checkTrainingAnswer, type TrainingAnswerFeedback, type TrainingAttempt, type TrainingModule, type TrainingOverview, type TrainingResult, type TrainingSource } from '@/lib/training';
 import { useApp } from '@/providers/app-provider';
 
 const readable = (value: string) => value.replaceAll('_', ' ').replace(/^./, letter => letter.toUpperCase());
@@ -35,6 +35,7 @@ function TrainingWorkspace({ online }: { online: boolean }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<TrainingResult | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [answerFeedback, setAnswerFeedback] = useState<Record<string, TrainingAnswerFeedback>>({});
 
   const refresh = useCallback(async () => {
     setBusy('load'); setError('');
@@ -52,7 +53,7 @@ function TrainingWorkspace({ online }: { online: boolean }) {
   }, []);
 
   function openModule(module: TrainingModule) {
-    setSelected(module); setLessonIndex(0); setReadLessons([]); setAttempt(null); setAnswers({}); setResult(null); setShowFeedback(false); setError('');
+    setSelected(module); setLessonIndex(0); setReadLessons([]); setAttempt(null); setAnswers({}); setAnswerFeedback({}); setResult(null); setShowFeedback(false); setError('');
   }
   async function openSource(source: TrainingSource) {
     try {
@@ -65,12 +66,19 @@ function TrainingWorkspace({ online }: { online: boolean }) {
     if (!selected || !allRead || !selected.assessmentAvailable || selected.status === 'passed' || !online || busy) return;
     setBusy('start'); setError('');
     try {
-      setAttempt(await startTrainingAssessment(selected.id)); setQuestionIndex(0); setAnswers({}); setResult(null); setShowFeedback(false);
+      const next = await startTrainingAssessment(selected.id); setAttempt(next); setQuestionIndex(Math.min(next.questions.length - 1, next.questions.filter(item => next.feedback?.[item.id]?.correct).length)); setAnswers(next.answers || {}); setAnswerFeedback(next.feedback || {}); setResult(null); setShowFeedback(false);
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'The assessment could not start. Refresh the module status.'); }
     finally { setBusy(''); }
   }
+  async function checkAnswer(answer: string) {
+    if (!attempt || !question || !online || busy || answerFeedback[question.id]?.correct) return;
+    setAnswers(current => ({ ...current, [question.id]: answer })); setBusy('check'); setError('');
+    try { const feedback = await checkTrainingAnswer(attempt.id, question.id, answer); setAnswerFeedback(current => ({ ...current, [question.id]: feedback })); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : 'This answer could not be checked. Try again.'); }
+    finally { setBusy(''); }
+  }
   async function submit() {
-    if (!attempt || attempt.questions.some(question => !answers[question.id]) || !online || busy) return;
+    if (!attempt || attempt.questions.some(question => !answerFeedback[question.id]?.correct) || !online || busy) return;
     setBusy('submit'); setError('');
     try {
       const marked = await submitTrainingAssessment(attempt.id, answers);
@@ -106,7 +114,7 @@ function TrainingWorkspace({ online }: { online: boolean }) {
   return <Screen scrollKey={`${selected?.id || 'list'}:${attempt ? `question-${questionIndex}` : result ? 'result' : `lesson-${lessonIndex}`}`}>
     <View style={styles.hero}><Text style={styles.eyebrow}>YOUR COMPLIANCE TO-DO LIST</Text><Text accessibilityRole="header" style={styles.heading}>Activity training</Text><Text style={styles.body}>Your own current activity pass is required before government program work. Business setup, current insurance, licences and job evidence also remain required.</Text></View>
     {data?.trainingServiceStates?.length ? <Text style={styles.note}>Training for {data.trainingServiceStates.join(', ')}, plus relevant national programs. The business owner manages service states in Business settings on TLink.</Text> : null}
-    <Text style={styles.note}>Training and assessment require internet access. Answers stay on this screen until submitted; closing the app clears unsent answers.</Text>
+    <Text style={styles.note}>Training and assessment require internet access. Checked answers are saved as you go. Reopen the module to resume your current attempt.</Text>
     {!online && <Text accessibilityLiveRegion="polite" style={styles.warning}>You are offline. Reconnect to load training, open sources or submit your assessment.</Text>}
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     {!selected && <>
@@ -128,18 +136,21 @@ function TrainingWorkspace({ online }: { online: boolean }) {
         <Text style={styles.badge}>Lesson {lessonIndex + 1} of {selected.lessons.length}</Text><Text accessibilityRole="header" style={styles.title}>{lesson.title}</Text><Text style={styles.body}>{lesson.body}</Text>{sourceLinks(lesson.sourceIds)}
         <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: readLessons.includes(lessonIndex) }} onPress={() => setReadLessons(current => current.includes(lessonIndex) ? current.filter(index => index !== lessonIndex) : [...current, lessonIndex])} style={styles.option}><Text style={styles.body}>{readLessons.includes(lessonIndex) ? '☑' : '☐'} I have read this lesson and its relevant source guidance.</Text></Pressable>
         <View style={styles.row}><FieldButton variant="secondary" disabled={lessonIndex === 0} onPress={() => setLessonIndex(value => value - 1)}>Previous lesson</FieldButton>{lessonIndex < selected.lessons.length - 1 ? <FieldButton variant="secondary" onPress={() => setLessonIndex(value => value + 1)}>Next lesson</FieldButton> : <Text accessibilityLiveRegion="polite" style={styles.label}>{allRead ? selected.status === 'passed' ? 'Lessons complete. Your learning pass is recorded.' : selected.assessmentAvailable ? 'Lessons complete. Continue to the assessment below.' : 'Lessons complete. Assessment is unavailable; see the reason below.' : 'Final lesson. Mark every lesson read to continue.'}</Text>}</View>
-        <Text style={styles.body}>Pass mark: 100%. Every answer must be correct. You can retry immediately as often as needed.</Text>
+        <Text style={styles.body}>Choose an answer to check it. If it is incorrect, read the explanation and choose again. Correct every question to reach 100%.</Text>
 
         <Text accessibilityLiveRegion="polite" style={styles.note}>{startReason}</Text>
         <FieldButton loading={busy === 'start'} disabled={!allRead || !selected.assessmentAvailable || selected.status === 'passed' || !online || Boolean(busy)} onPress={() => void start()}>Start assessment</FieldButton>
       </View>}
       {attempt && question && <View style={styles.card}>
         <Text style={styles.badge}>Question {questionIndex + 1} of {attempt.questions.length} · {Object.keys(answers).length} answered</Text><Text accessibilityRole="header" style={styles.title}>{question.prompt}</Text>
-        <View accessibilityRole="radiogroup" accessibilityLabel={question.prompt} style={styles.options}>{question.options.map(option => <Pressable key={option.id} accessibilityRole="radio" accessibilityState={{ checked: answers[question.id] === option.id, disabled: Boolean(busy) }} disabled={Boolean(busy)} style={[styles.option, answers[question.id] === option.id && styles.selected]} onPress={() => setAnswers(current => ({ ...current, [question.id]: option.id }))}><Text style={styles.body}>{answers[question.id] === option.id ? '●' : '○'} {option.text}</Text></Pressable>)}</View>
-        <View style={styles.row}><FieldButton variant="secondary" disabled={questionIndex === 0 || Boolean(busy)} onPress={() => setQuestionIndex(value => value - 1)}>Previous question</FieldButton>{questionIndex < attempt.questions.length - 1 && <FieldButton disabled={!answers[question.id] || Boolean(busy)} onPress={() => setQuestionIndex(value => value + 1)}>Next question</FieldButton>}</View>
-        {questionIndex === attempt.questions.length - 1 && <FieldButton loading={busy === 'submit'} disabled={!online || Boolean(busy) || attempt.questions.some(item => !answers[item.id])} onPress={() => void submit()}>Submit assessment</FieldButton>}
+        <View accessibilityRole="radiogroup" accessibilityLabel={question.prompt} style={styles.options}>{question.options.map(option => <Pressable key={option.id} accessibilityRole="radio" accessibilityState={{ checked: answers[question.id] === option.id, disabled: Boolean(busy) || answerFeedback[question.id]?.correct }} disabled={Boolean(busy) || answerFeedback[question.id]?.correct} style={[styles.option, answers[question.id] === option.id && styles.selected]} onPress={() => void checkAnswer(option.id)}><Text style={styles.body}>{answers[question.id] === option.id ? '●' : '○'} {option.text}</Text></Pressable>)}</View>
+        <Text accessibilityLiveRegion="polite" style={styles.note}>{busy === 'check' ? 'Checking your answer...' : ''}</Text>
+        {answerFeedback[question.id] && <View style={styles.feedback}><Text accessibilityLiveRegion="polite" style={answerFeedback[question.id].correct ? styles.success : styles.warning}>{answerFeedback[question.id].correct ? 'Correct' : 'Incorrect answer. Read the explanation, then choose again.'}</Text><Text style={styles.label}>{answerFeedback[question.id].correctAnswer}</Text><Text style={styles.body}>{answerFeedback[question.id].explanation}</Text></View>}
+        {answers[question.id] && !answerFeedback[question.id]?.correct && !busy && <FieldButton variant="secondary" disabled={!online} onPress={() => void checkAnswer(answers[question.id])}>Check selected answer</FieldButton>}
+        <View style={styles.row}><FieldButton variant="secondary" disabled={questionIndex === 0 || Boolean(busy)} onPress={() => setQuestionIndex(value => value - 1)}>Previous question</FieldButton>{questionIndex < attempt.questions.length - 1 && <FieldButton disabled={!answerFeedback[question.id]?.correct || Boolean(busy)} onPress={() => setQuestionIndex(value => value + 1)}>Next question</FieldButton>}</View>
+        {questionIndex === attempt.questions.length - 1 && <FieldButton loading={busy === 'submit'} disabled={!online || Boolean(busy) || attempt.questions.some(item => !answerFeedback[item.id]?.correct)} onPress={() => void submit()}>Submit assessment</FieldButton>}
       </View>}
-      {result && <View style={styles.card}><Text accessibilityRole="header" style={styles.title}>{result.passed ? '✓ Assessment passed' : 'More learning is needed'}</Text><Text accessibilityLiveRegion="polite" style={styles.score}>{result.scorePercent}%</Text><Text style={styles.body}>{result.passed ? 'Every answer was correct. Your personal learning completion was recorded.' : 'You need 100% to pass. Review the explanations and retry immediately as often as needed.'}</Text>{result.passed && <><Text style={styles.label}>Learning completion reference</Text><Text selectable style={styles.reference}>{result.reference}</Text><Text style={styles.note}>Valid until {date(result.expiresAt)}</Text></>}<Text style={styles.note}>This records your learning. It is not a government certificate, licence or external accreditation and cannot qualify another person.</Text><FieldButton variant="secondary" onPress={() => setShowFeedback(value => !value)}>{showFeedback ? 'Hide answer explanations' : 'Review answer explanations'}</FieldButton>{showFeedback && result.feedback.map(item => <View key={item.questionId} style={styles.feedback}><Text style={styles.label}>{item.correct ? '✓ Correct' : 'Review this answer'}</Text><Text style={styles.body}>{item.prompt}</Text><Text style={styles.success}>{item.correctAnswer}</Text><Text style={styles.body}>{item.explanation}</Text>{sourceLinks(item.sourceIds)}</View>)}{!result.passed && <FieldButton loading={busy === 'start'} disabled={!online || Boolean(busy)} onPress={() => void start()}>Try the assessment again</FieldButton>}</View>}
+      {result && <View style={styles.card}><Text accessibilityRole="header" style={styles.title}>{result.passed ? '✓ Assessment passed' : 'More learning is needed'}</Text><Text accessibilityLiveRegion="polite" style={styles.score}>{result.scorePercent}%</Text><Text style={styles.note}>First answers: {result.firstTryScorePercent ?? result.scorePercent}% correct before corrections.</Text><Text style={styles.body}>{result.passed ? 'Every answer is now correct. Your personal learning completion was recorded.' : 'You need 100% to pass. Review the explanations and retry immediately as often as needed.'}</Text>{result.passed && <><Text style={styles.label}>Learning completion reference</Text><Text selectable style={styles.reference}>{result.reference}</Text><Text style={styles.note}>Valid until {date(result.expiresAt)}</Text></>}<Text style={styles.note}>This records your learning. It is not a government certificate, licence or external accreditation and cannot qualify another person.</Text><FieldButton variant="secondary" onPress={() => setShowFeedback(value => !value)}>{showFeedback ? 'Hide answer explanations' : 'Review answer explanations'}</FieldButton>{showFeedback && result.feedback.map(item => <View key={item.questionId} style={styles.feedback}><Text style={styles.label}>{item.correct ? '✓ Correct' : 'Review this answer'}</Text><Text style={styles.body}>{item.prompt}</Text><Text style={styles.success}>{item.correctAnswer}</Text><Text style={styles.body}>{item.explanation}</Text>{sourceLinks(item.sourceIds)}</View>)}{!result.passed && <FieldButton loading={busy === 'start'} disabled={!online || Boolean(busy)} onPress={() => void start()}>Try the assessment again</FieldButton>}</View>}
       {attempt ? <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={leaveAssessment}>Leave assessment</FieldButton>
         : <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => { setSelected(null); setResult(null); }}>Back to activity modules</FieldButton>}
     </>}
