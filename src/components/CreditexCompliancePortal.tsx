@@ -352,6 +352,8 @@ export function CreditexCompliancePortal() {
   const [governanceActivityId, setGovernanceActivityId] = useState("");
   const canRequestPublication = canControlPublication(session);
   const canReviewTraining = Boolean(session?.governanceIdentityVerified && ["admin", "reviewer"].includes(session.role));
+  // The editor endpoint also authorises internal operations editors. Let it resolve access.
+  const canOpenQuestionnaires = Boolean(session && ["admin", "reviewer"].includes(session.role));
 
   const api = useCallback(async (
     path: string,
@@ -1016,7 +1018,8 @@ export function CreditexCompliancePortal() {
     const visibleTabs: Array<
       "cases" | "pilot" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance"
     > = ["cases", "pilot", "sources", "forms"];
-    if (canReviewTraining) visibleTabs.push("onboarding", "compliance-questions");
+    if (canReviewTraining) visibleTabs.push("onboarding");
+    if (canOpenQuestionnaires) visibleTabs.push("compliance-questions");
     if (session?.role === "admin") visibleTabs.push("governance");
     const currentIndex = visibleTabs.indexOf(tab);
     const nextIndex = event.key === "Home"
@@ -1271,7 +1274,7 @@ export function CreditexCompliancePortal() {
             Activity forms
           </button>
           {canReviewTraining && <button className={styles.tab} type="button" role="tab" id="creditex-tab-onboarding" aria-controls="creditex-panel-onboarding" aria-selected={tab === "onboarding"} tabIndex={tab === "onboarding" ? 0 : -1} onClick={() => selectTab("onboarding")} onKeyDown={handleWorkspaceTabKeyDown}>Onboarding &amp; training</button>}
-          {canReviewTraining && <button className={styles.tab} type="button" role="tab" id="creditex-tab-compliance-questions" aria-controls="creditex-panel-compliance-questions" aria-selected={tab === "compliance-questions"} tabIndex={tab === "compliance-questions" ? 0 : -1} onClick={() => selectTab("compliance-questions")} onKeyDown={handleWorkspaceTabKeyDown}>Compliance questions</button>}
+          {canOpenQuestionnaires && <button className={styles.tab} type="button" role="tab" id="creditex-tab-compliance-questions" aria-controls="creditex-panel-compliance-questions" aria-selected={tab === "compliance-questions"} tabIndex={tab === "compliance-questions" ? 0 : -1} onClick={() => selectTab("compliance-questions")} onKeyDown={handleWorkspaceTabKeyDown}>Compliance questions</button>}
           {session.role === "admin" && (
             <button
               className={styles.tab}
@@ -1426,7 +1429,7 @@ export function CreditexCompliancePortal() {
         )}
 
         {tab === "onboarding" && user && canReviewTraining && <section className={`${styles.panel} ${styles.governancePanel}`} id="creditex-panel-onboarding" role="tabpanel" aria-labelledby="creditex-tab-onboarding"><CreditexOnboardingReviewWorkspace api={api} user={user} canReview={canReviewTraining} /></section>}
-        {tab === "compliance-questions" && canReviewTraining && <section className={`${styles.panel} ${styles.governancePanel}`} id="creditex-panel-compliance-questions" role="tabpanel" aria-labelledby="creditex-tab-compliance-questions"><TrainingQuestionnaireEditor api={api} canEdit={canReviewTraining} onDirtyChange={reportQuestionnaireDirty} /></section>}
+        {tab === "compliance-questions" && canOpenQuestionnaires && <section className={`${styles.panel} ${styles.governancePanel}`} id="creditex-panel-compliance-questions" role="tabpanel" aria-labelledby="creditex-tab-compliance-questions"><TrainingQuestionnaireEditor api={api} canEdit={canOpenQuestionnaires} onDirtyChange={reportQuestionnaireDirty} /></section>}
 
         {tab === "governance" && session.role === "admin" && (
           <section
