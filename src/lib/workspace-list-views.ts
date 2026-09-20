@@ -101,7 +101,7 @@ const defaultsByView: Record<string, ListViewDefaults> = {
   "admin-accounts": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
   "admin-customers": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "customer", synthetic: "" },
   "admin-partners": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
-  "admin-opportunities": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
+  "admin-opportunities": { search: "", filter: "all", sort: "created-desc", pageSize: 25, type: "", synthetic: "" },
   "admin-products": { search: "", filter: "all", sort: "priority-desc", pageSize: 25, type: "", synthetic: "" },
 };
 
@@ -125,7 +125,7 @@ const sortsByView: Record<string, Set<string>> = {
   "admin-accounts": new Set(["updated-desc", "updated-asc", "name-asc", "name-desc", "type-asc", "type-desc", "status-asc", "status-desc"]),
   "admin-customers": new Set(["updated-desc", "updated-asc", "name-asc", "name-desc", "type-asc", "type-desc", "status-asc", "status-desc"]),
   "admin-partners": new Set(["updated-desc", "updated-asc", "name-asc", "name-desc", "type-asc", "type-desc", "verification-asc", "status-asc", "status-desc"]),
-  "admin-opportunities": new Set(["updated-desc", "updated-asc", "title-asc", "title-desc", "status-asc", "state-asc", "expires-asc"]),
+  "admin-opportunities": new Set(["created-desc", "created-asc", "updated-desc", "updated-asc", "title-asc", "title-desc", "status-asc", "state-asc", "expires-asc"]),
   "admin-products": new Set(["priority-desc", "updated-desc", "updated-asc", "name-asc", "name-desc", "supplier-asc", "brand-asc", "model-asc", "category-asc", "price-asc", "price-desc", "stock-asc", "lead-asc", "warranty-desc", "review-asc", "listing-asc"]),
 };
 

@@ -1,3 +1,4 @@
+import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { tradeOpportunityServiceScopeAllowed, tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
 import { getD1 } from "../../../../../db";
 import { adminError, adminJson, cleanAdminText, parseJsonList, requireAdminIdentity, sameOrigin, writeAdminAudit } from "@/lib/admin-server";
@@ -25,6 +26,8 @@ const makeSort = (terms: SortTerm[]): OpportunitySort => {
   return { orderBy: stable.map((item) => `${item.expression} ${item.direction.toUpperCase()}`).join(", "), terms: stable };
 };
 const SORTS: Record<string, OpportunitySort> = {
+  "created-desc": makeSort([term("o.created_at", "desc", "created_at")]),
+  "created-asc": makeSort([term("o.created_at", "asc", "created_at")]),
   "updated-desc": makeSort([term("o.updated_at", "desc", "updated_at")]),
   "updated-asc": makeSort([term("o.updated_at", "asc", "updated_at")]),
   "title-asc": makeSort([term("o.title COLLATE NOCASE", "asc", "title"), term("o.updated_at", "desc", "updated_at")]),
@@ -97,7 +100,7 @@ export async function GET(request: Request) {
     const state = canonicalAustralianState(url.searchParams.get("state")) || "";
     const synthetic = cleanAdminText(url.searchParams.get("synthetic"), 20);
     const sortValue = cleanAdminText(url.searchParams.get("sort"), 30);
-    const sort = SORTS[sortValue] ? sortValue : "updated-desc";
+    const sort = SORTS[sortValue] ? sortValue : "created-desc";
     const requestedPage = Number(url.searchParams.get("page"));
     const requestedPageSize = Number(url.searchParams.get("pageSize"));
     const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
@@ -139,8 +142,12 @@ export async function GET(request: Request) {
     const allocationRows = pageRows.length
       ? await db.prepare(`SELECT m.id, m.opportunity_id, m.firebase_uid, m.status, m.matched_categories,
           m.distance_metres, m.allocation_rank, m.match_source, m.contact_attempt_count, m.last_contact_at, m.connected_at, m.matched_at,
-          a.business_name, a.address_state, a.postcode
+          a.business_name, a.address_state, a.postcode,
+          delivery.status notification_status, delivery.sent_at notification_sent_at, delivery.delivered_at notification_delivered_at,
+          ${certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")} business_eligible
           FROM trade_opportunity_matches m JOIN trade_accounts a ON a.firebase_uid = m.firebase_uid
+          JOIN trade_opportunities o ON o.id = m.opportunity_id
+          LEFT JOIN trade_opportunity_notification_deliveries delivery ON delivery.match_id = m.id
           WHERE a.partner_type = 'installer'
             AND m.opportunity_id IN (${pageRows.map(() => "?").join(",")})
           ORDER BY m.opportunity_id, m.allocation_rank, m.matched_at`)
@@ -156,6 +163,7 @@ export async function GET(request: Request) {
       allocationRank: Number(item.allocation_rank || 0), matchSource: item.match_source,
       contactAttemptCount: Number(item.contact_attempt_count || 0), lastContactAt: item.last_contact_at,
       connectedAt: item.connected_at, matchedAt: item.matched_at,
+      notificationStatus: String(item.notification_status || ""), notificationSentAt: String(item.notification_sent_at || ""), notificationDeliveredAt: String(item.notification_delivered_at || ""), businessEligible: Boolean(item.business_eligible),
     })) })), pagination: { page, pageSize, total, pageCount: total === undefined ? undefined : Math.max(1, Math.ceil(total / pageSize)), hasNext, nextCursor } },
       { db, routeKey: "admin.opportunities", startedAt: timer.startedAt, dbDurationMs: timer.dbDurationMs, resultCount: pageRows.length, cursorUsed: Boolean(cursor) });
   } catch (error) { return adminError(error); }
