@@ -1,5 +1,8 @@
 # Next task handover
 
+Status: Trade-owned SMS is implemented and in release validation. Creditex PC audit calling is the next communications slice. External provider verification remains pending.
+Prepared: 21 September 2026
+
 ## Active contract: trade-owned SMS conversations, 21 September 2026
 
 Outcome: a verified trade business connects its own Twilio number once and sends and receives service SMS from its customer record, with clear delivery status and no repeated setup. Existing numbers must first be ported to Twilio; newly purchased Twilio numbers use the same connection.
