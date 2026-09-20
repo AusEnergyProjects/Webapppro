@@ -34,7 +34,7 @@ const integrationPurposes = [
   },
   {
     title: "Accounting",
-    body: "An installer can connect Xero, MYOB or QuickBooks to create an accounting draft from an accepted TLink quote or invoice. The connected accounting system keeps its own final ledger and tax controls.",
+    body: "An installer can connect an accounting system to export an issued TLink invoice. Xero creates a draft for review. MYOB and QuickBooks create invoices that record an amount owing. The connected accounting system keeps its own ledger and tax controls.",
   },
   {
     title: "Payment boundary",

@@ -78,8 +78,8 @@ function accountingError(error: unknown) {
   if (code === "JOB_NOT_FOUND") return adminJson({ ok: false, error: "Choose an active job." }, 404);
   if (code === "DIRECT_CUSTOMER_REQUIRED") return adminJson({ ok: false, error: "Accounting export is only available for customers who contacted your business directly. Australian Energy Assessments protected customer details cannot be sent to an accounting provider." }, 403);
   if (code === "ACCEPTED_INVOICE_ACCESS_REQUIRED") return adminJson({ ok: false, error: "This accepted invoice is not linked to the immutable customer disclosure and accepted quote handoff. Refresh the job before exporting." }, 409);
-  if (code === "ACCEPTED_HANDOFF_REQUIRED") return adminJson({ ok: false, error: "Accept a current quote before preparing its accounting draft." }, 409);
-  if (code === "QUICK_INVOICE_REQUIRED") return adminJson({ ok: false, error: "Create the TLink quick invoice before preparing its accounting draft." }, 409);
+  if (code === "ACCEPTED_HANDOFF_REQUIRED") return adminJson({ ok: false, error: "Accept a current quote before exporting its invoice to your accounting system." }, 409);
+  if (code === "QUICK_INVOICE_REQUIRED") return adminJson({ ok: false, error: "Create the TLink quick invoice before exporting it to your accounting system." }, 409);
   if (code === "QUICK_INVOICE_NOT_ISSUED") return adminJson({ ok: false, error: "Send this TLink invoice successfully before exporting its immutable issued version to accounting." }, 409);
   if (code === "QUICK_INVOICE_CREDITED") return adminJson({ ok: false, error: "This TLink invoice has a credit. Keep it in TLink until provider credit-note export is added." }, 409);
   if (code === "INTEGRATION_REQUIRED") return adminJson({ ok: false, error: "Connect this accounting provider in Integrations first." }, 409);
