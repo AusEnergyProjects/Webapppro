@@ -59,7 +59,7 @@ test('217 modules are paginated and exact programme filters preserve passed and 
   const h=harness(()=>payload({modules}));let tree=await h.settle();
   assert.equal(nodes(tree,node=>node.type==='li').length,6);assert.match(text(tree),/1 of 217 modules passed/);assert.match(text(tree),/TL-CX-TRAIN-MEMBER-A/);assert.match(text(tree),/Assessment unavailable/);assert.match(text(tree),/business has not enabled/);
   button(tree,'Next').props.onClick();tree=h.render();assert.match(text(tree),/Page 2 of 37/);
-  nodes(tree,node=>node.type==='select')[0].props.onChange({target:{value:'ACT-HES'}});tree=h.render();assert.match(text(tree),/117 matching activities/);
+  nodes(tree,node=>node.type==='select')[1].props.onChange({target:{value:'ACT-HES'}});tree=h.render();assert.match(text(tree),/117 matching activities/);
   nodes(tree,node=>node.type==='input')[0].props.onChange({target:{value:'Activity 120'}});tree=h.render();assert.equal(nodes(tree,node=>node.type==='li').length,1);assert.match(text(tree),/Activity 120/);
 });
 

@@ -11,7 +11,9 @@ import {
 } from "react";
 import type { User } from "firebase/auth";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 
+const TradeDocumentSamplePreview = dynamic(() => import("./TradeDocumentSamplePreview").then(module => module.TradeDocumentSamplePreview));
 const TradeCreditexOnboarding = dynamic(() => import("./TradeTrainingWorkspace").then((module) => module.TradeCreditexOnboarding), { loading: () => <p role="status">Loading Creditex onboarding...</p> });
 import {
   DEFAULT_QUOTE_EMAIL_INTRO,
@@ -112,7 +114,7 @@ const sectionOptions: Array<{
 }> = [
   { id: "account", label: "Account", detail: "Identity and verification" },
   { id: "team", label: "Team", detail: "People, access and files" },
-  { id: "appearance", label: "Appearance", detail: "Logo, banner and colours" },
+  { id: "appearance", label: "Appearance", detail: "Logo and colours" },
   { id: "documents", label: "Customer documents", detail: "Identity and payment" },
   { id: "service", label: "Services and areas", detail: "Business services and coverage" },
   { id: "quotes", label: "Quote defaults", detail: "Email and standard terms" },
@@ -180,353 +182,6 @@ const controlStyle: CSSProperties = {
   padding: "10px 12px",
   width: "100%",
 };
-
-type BannerCrop = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-
-const BANNER_CROP_SCALE = 10_000;
-const DEFAULT_BANNER_CROP: BannerCrop = {
-  x: 0,
-  y: 0,
-  width: 10_000,
-  height: 10_000,
-};
-
-function profileBannerCrop(profile: TradeBusinessSettingsProfile): BannerCrop {
-  const crop = {
-    x: Number(profile.bannerCropXBasisPoints ?? DEFAULT_BANNER_CROP.x),
-    y: Number(profile.bannerCropYBasisPoints ?? DEFAULT_BANNER_CROP.y),
-    width: Number(profile.bannerCropWidthBasisPoints ?? DEFAULT_BANNER_CROP.width),
-    height: Number(profile.bannerCropHeightBasisPoints ?? DEFAULT_BANNER_CROP.height),
-  };
-  return Object.values(crop).every(Number.isInteger)
-    && crop.x >= 0
-    && crop.y >= 0
-    && crop.width >= 500
-    && crop.height >= 500
-    && crop.x + crop.width <= BANNER_CROP_SCALE
-    && crop.y + crop.height <= BANNER_CROP_SCALE
-    ? crop
-    : DEFAULT_BANNER_CROP;
-}
-
-function fitCropToFiveToOne(
-  crop: BannerCrop,
-  naturalWidth: number,
-  naturalHeight: number,
-) {
-  let x = (crop.x / BANNER_CROP_SCALE) * naturalWidth;
-  let y = (crop.y / BANNER_CROP_SCALE) * naturalHeight;
-  let width = (crop.width / BANNER_CROP_SCALE) * naturalWidth;
-  let height = (crop.height / BANNER_CROP_SCALE) * naturalHeight;
-  const ratio = width / height;
-  if (ratio > 5) {
-    const fittedWidth = height * 5;
-    x += (width - fittedWidth) / 2;
-    width = fittedWidth;
-  } else if (ratio < 5) {
-    const fittedHeight = width / 5;
-    y += (height - fittedHeight) / 2;
-    height = fittedHeight;
-  }
-  return { x, y, width, height };
-}
-
-function BannerCropPreview({
-  src,
-  crop,
-  label,
-}: {
-  src: string;
-  crop: BannerCrop;
-  label: string;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !src) return;
-    const image = new Image();
-    image.onload = () => {
-      const context = canvas.getContext("2d");
-      if (!context) return;
-      const fitted = fitCropToFiveToOne(
-        crop,
-        image.naturalWidth,
-        image.naturalHeight,
-      );
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(
-        image,
-        fitted.x,
-        fitted.y,
-        fitted.width,
-        fitted.height,
-        0,
-        0,
-        canvas.width,
-        canvas.height,
-      );
-    };
-    image.src = src;
-    return () => {
-      image.onload = null;
-    };
-  }, [crop, src]);
-  return src ? (
-    <canvas
-      ref={canvasRef}
-      aria-label={label}
-      role="img"
-      width={1000}
-      height={200}
-    />
-  ) : (
-    <div className="business-settings-banner-placeholder">
-      Banner preview appears here
-    </div>
-  );
-}
-
-function BannerCropEditorContext({
-  src,
-  crop,
-}: {
-  src: string;
-  crop: BannerCrop;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !src) return;
-    const image = new Image();
-    image.onload = () => {
-      const context = canvas.getContext("2d");
-      if (!context) return;
-      const fitted = fitCropToFiveToOne(
-        crop,
-        image.naturalWidth,
-        image.naturalHeight,
-      );
-      const scale = Math.min(
-        canvas.width / image.naturalWidth,
-        canvas.height / image.naturalHeight,
-      );
-      const offsetX = (canvas.width - image.naturalWidth * scale) / 2;
-      const offsetY = (canvas.height - image.naturalHeight * scale) / 2;
-      context.fillStyle = "#071f28";
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(
-        image,
-        offsetX,
-        offsetY,
-        image.naturalWidth * scale,
-        image.naturalHeight * scale,
-      );
-      context.fillStyle = "rgba(2, 18, 25, .62)";
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      const cropX = offsetX + fitted.x * scale;
-      const cropY = offsetY + fitted.y * scale;
-      const cropWidth = fitted.width * scale;
-      const cropHeight = fitted.height * scale;
-      context.drawImage(
-        image,
-        fitted.x,
-        fitted.y,
-        fitted.width,
-        fitted.height,
-        cropX,
-        cropY,
-        cropWidth,
-        cropHeight,
-      );
-      context.strokeStyle = "#ffffff";
-      context.lineWidth = 4;
-      context.strokeRect(cropX, cropY, cropWidth, cropHeight);
-    };
-    image.src = src;
-    return () => {
-      image.onload = null;
-    };
-  }, [crop, src]);
-  return src ? (
-    <canvas
-      ref={canvasRef}
-      aria-label="Full banner image with the retained PDF crop outlined"
-      role="img"
-      width={1000}
-      height={450}
-    />
-  ) : (
-    <div className="business-settings-banner-placeholder">
-      Upload a banner to choose the retained area
-    </div>
-  );
-}
-
-function CustomerDocumentPreview({
-  kind,
-  bannerSrc,
-  bannerCrop,
-  logoSrc,
-  initials,
-  businessName,
-  phone,
-  email,
-  themeGradient,
-  themeInk,
-  borderRadius,
-  quoteTerms,
-  invoiceTerms,
-  paymentAccountName,
-  paymentBsb,
-  paymentAccountNumber,
-  paymentReference,
-}: {
-  kind: "quote" | "invoice";
-  bannerSrc: string;
-  bannerCrop: BannerCrop;
-  logoSrc: string;
-  initials: string;
-  businessName: string;
-  phone: string;
-  email: string;
-  themeGradient: string;
-  themeInk: string;
-  borderRadius: number;
-  quoteTerms: string;
-  invoiceTerms: string;
-  paymentAccountName: string;
-  paymentBsb: string;
-  paymentAccountNumber: string;
-  paymentReference: string;
-}) {
-  const discount = 200;
-  const subtotal = 4_040;
-  const taxable = subtotal - discount;
-  const gst = taxable * 0.1;
-  const total = taxable + gst;
-  const formatCurrency = (value: number) =>
-    value.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
-  const paymentComplete = Boolean(
-    paymentAccountName && paymentBsb && paymentAccountNumber,
-  );
-  const displayedBsb = /^\d{6}$/.test(paymentBsb)
-    ? `${paymentBsb.slice(0, 3)}-${paymentBsb.slice(3)}`
-    : paymentBsb;
-  return (
-    <article
-      className="business-settings-document-preview"
-      style={{ borderRadius }}
-      aria-label={`${kind} document preview`}
-    >
-      <div className="business-settings-document-banner">
-        <BannerCropPreview
-          src={bannerSrc}
-          crop={bannerCrop}
-          label={`${kind} banner crop`}
-        />
-      </div>
-      <header
-        className="business-settings-document-brand"
-        style={{ background: themeGradient, color: themeInk }}
-      >
-        <div
-          className="business-settings-document-logo"
-          style={{ borderRadius }}
-        >
-          {logoSrc ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoSrc} alt="" />
-          ) : (
-            initials
-          )}
-        </div>
-        <div>
-          <small>{kind === "quote" ? "Quote from" : "Invoice from"}</small>
-          <strong>{businessName}</strong>
-          <span>{[phone, email].filter(Boolean).join("  |  ")}</span>
-        </div>
-      </header>
-      <div className="business-settings-document-body">
-        <div className="business-settings-document-meta">
-          <div>
-            <small>{kind}</small>
-            <strong>
-              {kind === "quote" ? "Q-TLJ-PREVIEW" : "INV-TLJ-PREVIEW"}
-            </strong>
-          </div>
-          <div>
-            <small>Prepared for</small>
-            <strong>Sample customer</strong>
-          </div>
-          <div>
-            <small>{kind === "quote" ? "Valid until" : "Due date"}</small>
-            <strong>31 August 2026</strong>
-          </div>
-        </div>
-        <div className="business-settings-document-items">
-          <div className="heading">
-            <span>Description</span>
-            <span>Qty</span>
-            <span>Ex GST</span>
-            <span>Amount</span>
-          </div>
-          {[
-            ["Heat-pump supply", "1", "$3,500.00", "$3,500.00"],
-            ["Installation labour", "4", "$85.00", "$340.00"],
-            ["Commissioning and handover", "1", "$200.00", "$200.00"],
-          ].map((item) => (
-            <div key={item[0]}>
-              {item.map((value) => <span key={value}>{value}</span>)}
-            </div>
-          ))}
-        </div>
-        <div className="business-settings-document-summary">
-          <span>Subtotal</span><strong>{formatCurrency(subtotal)}</strong>
-          {discount > 0 && (
-            <>
-              <span>Discount</span><strong>-{formatCurrency(discount)}</strong>
-            </>
-          )}
-          <span>GST (10%)</span><strong>{formatCurrency(gst)}</strong>
-          <span className="total">Total</span>
-          <strong className="total">{formatCurrency(total)}</strong>
-        </div>
-        {kind === "invoice" && (
-          <section className="business-settings-document-payment">
-            <small>Payment details</small>
-            {paymentComplete ? (
-              <dl>
-                <div><dt>Account name</dt><dd>{paymentAccountName}</dd></div>
-                <div><dt>BSB</dt><dd>{displayedBsb}</dd></div>
-                <div><dt>Account number</dt><dd>{paymentAccountNumber}</dd></div>
-                <div><dt>Reference</dt><dd>{paymentReference || "Invoice number"}</dd></div>
-              </dl>
-            ) : (
-              <p>Add complete payment details above to show them here.</p>
-            )}
-          </section>
-        )}
-        <section className="business-settings-document-terms">
-          <small>{kind === "quote" ? "Quote terms" : "Invoice terms"}</small>
-          <p>
-            {(kind === "quote" ? quoteTerms : invoiceTerms)
-              || "No default terms saved. Terms can still be added before issue."}
-          </p>
-        </section>
-        <p className="business-settings-document-note">
-          Live settings preview with sample customer and line-item values.
-          Issued documents retain their exact saved identity, branding and
-          totals.
-        </p>
-      </div>
-    </article>
-  );
-}
 
 function visibleServiceStates(profile: Pick<TradeBusinessSettingsProfile, "serviceStates" | "addressState">) {
   const declared = [...new Set(profile.serviceStates.map(canonicalAustralianState).filter((state): state is string => Boolean(state)))];
@@ -650,20 +305,12 @@ export function TradeBusinessSettingsWorkspace({
   const [invoiceDefaultTerms, setInvoiceDefaultTerms] = useState(
     profile.invoiceDefaultTerms || "",
   );
-  const [bannerCrop, setBannerCrop] = useState<BannerCrop>(() =>
-    profileBannerCrop(profile),
-  );
-  const [bannerNaturalSize, setBannerNaturalSize] = useState({
-    width: 0,
-    height: 0,
-  });
   const [saveBusy, setSaveBusy] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
   const [saveSection, setSaveSection] = useState("");
-  const [mediaBusy, setMediaBusy] = useState<"" | "logo" | "banner">("");
+  const [mediaBusy, setMediaBusy] = useState<"" | "logo">("");
   const [mediaStatus, setMediaStatus] = useState("");
   const [logoPreview, setLogoPreview] = useState("");
-  const [bannerPreview, setBannerPreview] = useState("");
   const [closeOpen, setCloseOpen] = useState(false);
   const [closeReason, setCloseReason] = useState("");
   const [closeConfirmation, setCloseConfirmation] = useState("");
@@ -720,35 +367,6 @@ export function TradeBusinessSettingsWorkspace({
     };
   }, [profile.logoMediaUrl, user]);
 
-  useEffect(() => {
-    if (!profile.bannerMediaUrl) return;
-    const controller = new AbortController();
-    let active = true;
-    void user
-      .getIdToken()
-      .then((token) =>
-        fetch(profile.bannerMediaUrl || "", {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
-          signal: controller.signal,
-        }),
-      )
-      .then((response) => {
-        if (!response.ok) throw new Error("Banner could not be loaded.");
-        return response.blob();
-      })
-      .then((blob) => {
-        const objectUrl = URL.createObjectURL(blob);
-        if (active) setBannerPreview(objectUrl);
-        else URL.revokeObjectURL(objectUrl);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, [profile.bannerMediaUrl, user]);
-
   useEffect(
     () => () => {
       if (logoPreview) URL.revokeObjectURL(logoPreview);
@@ -756,43 +374,9 @@ export function TradeBusinessSettingsWorkspace({
     [logoPreview],
   );
 
-  useEffect(() => {
-    if (!bannerPreview) return;
-    const image = new Image();
-    image.onload = () => {
-      setBannerNaturalSize({
-        width: image.naturalWidth,
-        height: image.naturalHeight,
-      });
-    };
-    image.src = bannerPreview;
-    return () => {
-      image.onload = null;
-    };
-  }, [bannerPreview]);
-
-  useEffect(
-    () => () => {
-      if (bannerPreview) URL.revokeObjectURL(bannerPreview);
-    },
-    [bannerPreview],
-  );
-
-  const selectedTheme = TRADE_BRAND_THEME_OPTIONS[brandThemeKey];
-  const selectedBorder = borderOptions[brandBorderStyle];
   const businessWebsiteHref = useMemo(
     () => safeBusinessWebsiteHref(profile.businessWebsite),
     [profile.businessWebsite],
-  );
-  const accountInitials = useMemo(
-    () =>
-      (documentBusinessName || profile.businessName)
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part[0]?.toUpperCase())
-        .join("") || "TL",
-    [documentBusinessName, profile.businessName],
   );
   const documentDisplayBusinessName =
     documentBusinessName.trim() || profile.businessName;
@@ -800,51 +384,6 @@ export function TradeBusinessSettingsWorkspace({
     documentPhone.trim() || profile.phone || "";
   const documentDisplayEmail =
     documentEmail.trim() || profile.accountEmail || "";
-  const bannerZoom = Math.max(
-    100,
-    Math.min(400, Math.round((BANNER_CROP_SCALE / bannerCrop.width) * 100)),
-  );
-  const bannerHorizontalPosition = bannerCrop.width < BANNER_CROP_SCALE
-    ? Math.round(
-        (bannerCrop.x / (BANNER_CROP_SCALE - bannerCrop.width)) * 100,
-      )
-    : 50;
-  const bannerVerticalPosition = bannerCrop.height < BANNER_CROP_SCALE
-    ? Math.round(
-        (bannerCrop.y / (BANNER_CROP_SCALE - bannerCrop.height)) * 100,
-      )
-    : 50;
-
-  function updateBannerCrop(
-    zoom = bannerZoom,
-    horizontal = bannerHorizontalPosition,
-    vertical = bannerVerticalPosition,
-  ) {
-    const sourceWidth = bannerNaturalSize.width;
-    const sourceHeight = bannerNaturalSize.height;
-    if (!(sourceWidth > 0 && sourceHeight > 0)) return;
-    let width = Math.round(BANNER_CROP_SCALE * (100 / zoom));
-    let height = Math.round(
-      width * (sourceWidth / (5 * sourceHeight)),
-    );
-    if (height > BANNER_CROP_SCALE) {
-      height = BANNER_CROP_SCALE;
-      width = Math.round(height * (5 * sourceHeight / sourceWidth));
-    }
-    width = Math.max(500, Math.min(BANNER_CROP_SCALE, width));
-    height = Math.max(500, Math.min(BANNER_CROP_SCALE, height));
-    setBannerCrop({
-      x: Math.round(
-        (BANNER_CROP_SCALE - width) * Math.max(0, Math.min(100, horizontal)) / 100,
-      ),
-      y: Math.round(
-        (BANNER_CROP_SCALE - height) * Math.max(0, Math.min(100, vertical)) / 100,
-      ),
-      width,
-      height,
-    });
-  }
-
   function updateArea(
     index: number,
     change: Partial<Pick<ServiceArea, "postcode" | "radiusKm">>,
@@ -954,10 +493,6 @@ export function TradeBusinessSettingsWorkspace({
         ? {
             brandThemeKey,
             brandBorderStyle,
-            bannerCropXBasisPoints: bannerCrop.x,
-            bannerCropYBasisPoints: bannerCrop.y,
-            bannerCropWidthBasisPoints: bannerCrop.width,
-            bannerCropHeightBasisPoints: bannerCrop.height,
           }
         : targetSection === "documents"
           ? {
@@ -1046,7 +581,7 @@ export function TradeBusinessSettingsWorkspace({
     }
   }
 
-  async function uploadMedia(kind: "logo" | "banner", file: File | null) {
+  async function uploadMedia(kind: "logo", file: File | null) {
     if (!file) return;
     if (!["image/png", "image/jpeg"].includes(file.type)) {
       setMediaStatus("Choose a PNG or JPEG image.");
@@ -1074,45 +609,9 @@ export function TradeBusinessSettingsWorkspace({
         throw new Error(result.error || `The ${kind} could not be uploaded.`);
       }
       const nextPreview = URL.createObjectURL(file);
-      let bannerCropSaved = true;
-      if (kind === "logo") {
-        setLogoPreview(nextPreview);
-        onProfileChange({
-          hasLogo: true,
-          logoMediaUrl: "/api/trade-profile-media?kind=logo",
-        });
-      } else {
-        const nextCrop = DEFAULT_BANNER_CROP;
-        const cropResponse = await fetch("/api/trade-profile", {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            bannerCropXBasisPoints: nextCrop.x,
-            bannerCropYBasisPoints: nextCrop.y,
-            bannerCropWidthBasisPoints: nextCrop.width,
-            bannerCropHeightBasisPoints: nextCrop.height,
-          }),
-        });
-        bannerCropSaved = cropResponse.ok;
-        setBannerPreview(nextPreview);
-        setBannerCrop(nextCrop);
-        onProfileChange({
-          hasBanner: true,
-          bannerMediaUrl: "/api/trade-profile-media?kind=banner",
-          bannerCropXBasisPoints: nextCrop.x,
-          bannerCropYBasisPoints: nextCrop.y,
-          bannerCropWidthBasisPoints: nextCrop.width,
-          bannerCropHeightBasisPoints: nextCrop.height,
-        });
-      }
-      setMediaStatus(
-        kind === "banner" && !bannerCropSaved
-          ? "Banner uploaded. Review the crop and select Save appearance before issuing a document."
-          : `${kind === "logo" ? "Logo" : "Banner"} uploaded.`,
-      );
+      setLogoPreview(nextPreview);
+      onProfileChange({ hasLogo: true, logoMediaUrl: "/api/trade-profile-media?kind=logo" });
+      setMediaStatus("Logo uploaded.");
     } catch (error) {
       setMediaStatus(
         statusMessage(error, `The ${kind} could not be uploaded.`),
@@ -1193,7 +692,6 @@ export function TradeBusinessSettingsWorkspace({
     }
   }
 
-  const templateRadius = selectedBorder.radius;
   return (
     <section
       className="dashboard-panel dashboard-settings"
@@ -1364,7 +862,7 @@ export function TradeBusinessSettingsWorkspace({
           <header className="business-settings-section-heading">
             <span>Appearance</span>
             <h3 id="business-settings-appearance-title">
-              Logo, banner and colour theme
+              Logo and colour theme
             </h3>
             <p>
               Apply one accessible visual identity across the workspace and
@@ -1395,107 +893,15 @@ export function TradeBusinessSettingsWorkspace({
                     {profile.hasLogo ? "A logo is saved." : "No logo saved yet."}
                   </small>
                 </label>
-                <label style={fieldStyle}>
-                  <span>Document banner</span>
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg"
-                    disabled={Boolean(mediaBusy)}
-                    onChange={(event) =>
-                      void uploadMedia("banner", event.target.files?.[0] || null)
-                    }
-                    style={controlStyle}
-                  />
-                  <small style={{ color: "var(--trade-muted)", lineHeight: 1.4 }}>
-                    PNG or JPEG, up to 3 MB.{" "}
-                    {profile.hasBanner
-                      ? "A banner is saved."
-                      : "No banner saved yet."}
-                  </small>
-                </label>
+
               </div>
               {mediaStatus && (
                 <p className="dashboard-settings-status" role="status">
                   {mediaStatus}
                 </p>
               )}
-              <div className="business-settings-crop-editor">
-                <div>
-                  <strong>Banner crop</strong>
-                  <p>
-                    The outlined 5:1 frame is the exact full-width area used on
-                    customer quote and invoice PDFs.
-                  </p>
-                </div>
-                <div className="business-settings-banner-crop-context">
-                  <BannerCropEditorContext
-                    src={bannerPreview}
-                    crop={bannerCrop}
-                  />
-                </div>
-                <div>
-                  <strong>Exact PDF banner</strong>
-                  <p>Everything shown below is retained at full document width.</p>
-                </div>
-                <div className="business-settings-banner-frame">
-                  <BannerCropPreview
-                    src={bannerPreview}
-                    crop={bannerCrop}
-                    label="Customer document banner crop preview"
-                  />
-                </div>
-                <div className="business-settings-crop-controls">
-                  <label style={fieldStyle}>
-                    <span>Zoom: {bannerZoom}%</span>
-                    <input
-                      type="range"
-                      min="100"
-                      max="400"
-                      step="1"
-                      value={bannerZoom}
-                      disabled={!bannerPreview}
-                      onChange={(event) =>
-                        updateBannerCrop(Number(event.target.value))
-                      }
-                    />
-                  </label>
-                  <label style={fieldStyle}>
-                    <span>Move left or right</span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      step="1"
-                      value={bannerHorizontalPosition}
-                      disabled={!bannerPreview}
-                      onChange={(event) =>
-                        updateBannerCrop(
-                          bannerZoom,
-                          Number(event.target.value),
-                        )
-                      }
-                    />
-                  </label>
-                  <label style={fieldStyle}>
-                    <span>Move up or down</span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      step="1"
-                      value={bannerVerticalPosition}
-                      disabled={!bannerPreview}
-                      onChange={(event) =>
-                        updateBannerCrop(
-                          bannerZoom,
-                          bannerHorizontalPosition,
-                          Number(event.target.value),
-                        )
-                      }
-                    />
-                  </label>
-                </div>
-              </div>
+              {logoPreview && <Image src={logoPreview} alt="Business logo preview" width={200} height={90} unoptimized style={{ objectFit: "contain", marginTop: 12 }} />}
+              <p>Your logo appears at the top left of quotes and invoices.</p>
             </fieldset>
 
             <fieldset>
@@ -1562,7 +968,7 @@ export function TradeBusinessSettingsWorkspace({
               </div>
             </fieldset>
             <button className="btn" disabled={saveBusy || Boolean(mediaBusy)}>
-              {saveBusy ? "Saving..." : "Save appearance and apply crop"}
+              {saveBusy ? "Saving..." : "Save appearance"}
             </button>
             {saveStatus && saveSection === "appearance" && (
               <p className="dashboard-settings-status" role="status">
@@ -2121,29 +1527,13 @@ export function TradeBusinessSettingsWorkspace({
               customers.
             </p>
           </header>
-          <div className="business-settings-document-preview-grid">
-            {(["quote", "invoice"] as const).map((kind) => (
-              <CustomerDocumentPreview
-                key={kind}
-                kind={kind}
-                bannerSrc={bannerPreview}
-                bannerCrop={bannerCrop}
-                logoSrc={logoPreview}
-                initials={accountInitials}
-                businessName={documentDisplayBusinessName}
-                phone={documentDisplayPhone}
-                email={documentDisplayEmail}
-                themeGradient={selectedTheme.gradient}
-                themeInk={selectedTheme.ink}
-                borderRadius={templateRadius}
-                quoteTerms={quoteDefaultTerms}
-                invoiceTerms={invoiceDefaultTerms}
-                paymentAccountName={invoicePaymentAccountName}
-                paymentBsb={invoicePaymentBsb}
-                paymentAccountNumber={invoicePaymentAccountNumber}
-                paymentReference={invoicePaymentReference}
-              />
-            ))}
+          <div className="business-settings-pdf-preview">
+            <TradeDocumentSamplePreview logoSrc={logoPreview} settings={{
+              name: documentDisplayBusinessName, phone: documentDisplayPhone, email: documentDisplayEmail,
+              abn: profile.abn || "", website: profile.businessWebsite || "", address: [profile.addressLine1, profile.suburb, profile.addressState, profile.postcode].filter(Boolean).join(", "),
+              themeKey: brandThemeKey, borderStyle: brandBorderStyle, quoteTerms: quoteDefaultTerms,
+              payment: { accountName: invoicePaymentAccountName, bsb: invoicePaymentBsb, accountNumber: invoicePaymentAccountNumber, reference: invoicePaymentReference, terms: invoiceDefaultTerms },
+            }} />
             <button
               type="button"
               className="btn"
@@ -2154,7 +1544,7 @@ export function TradeBusinessSettingsWorkspace({
               }
               style={{ justifySelf: "start" }}
             >
-              Edit document appearance: logo, banner and colours
+              Edit document appearance: logo and colours
             </button>
           </div>
         </section>

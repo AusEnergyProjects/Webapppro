@@ -1,7 +1,8 @@
+import { TRADE_INVOICE_REGISTER_HANDOFF_JOIN_SQL } from "./trade-invoice-register.ts";
 import { addReportDays, ReportInputError, reportTrendWindows, resolveReportPeriod, type BusinessReport, type ReportMeasures } from "./trade-business-reports.ts";
 import { australiaLocalDateTime } from "./trade-schedule.ts";
 
-type ReportAccess = { isOwner: boolean; memberId: string; jobScope: string; scheduleScope: string; canViewInvoices: boolean; canViewQuotes: boolean };
+type ReportAccess = { isOwner: boolean; memberId: string; jobScope: string; scheduleScope: string; canViewInvoices: boolean; canViewQuotes: boolean; canViewPriceBook?: boolean };
 type Row = Record<string, unknown>;
 const number = (value: unknown) => Number(value || 0);
 const ISSUED = "('issued','part_credited','credited')";
@@ -58,6 +59,40 @@ const finance = `${native}, balances AS (
   WHERE n.id IS NOT NULL OR a.id IS NOT NULL OR (j.invoice_status IN ('issued','part_paid','paid','overdue') AND NOT EXISTS (SELECT 1 FROM trade_crm_quick_invoices q WHERE q.work_order_id=j.id AND q.firebase_uid=j.firebase_uid))
 ), outstanding AS (SELECT *, MAX(0,total-MAX(0,paid)) balance FROM balances)`;
 
+// Revenue and costs are aggregated separately to avoid multiplying invoice values by cost lines.
+const profitability = `${native}, completed AS (
+  SELECT j.id, MIN(e.created_at) completed_at FROM jobs j JOIN trade_work_order_events e ON e.work_order_id=j.id AND e.firebase_uid=j.firebase_uid
+  WHERE e.event_type='job_completed' GROUP BY j.id HAVING julianday(MIN(e.created_at))>=julianday(?) AND julianday(MIN(e.created_at))<julianday(?)
+), selected_plans AS (
+  SELECT w.id job_id,w.firebase_uid,p.id plan_id FROM jobs w
+  LEFT JOIN trade_crm_job_details d ON d.work_order_id=w.id AND d.firebase_uid=w.firebase_uid
+  ${TRADE_INVOICE_REGISTER_HANDOFF_JOIN_SQL}
+  LEFT JOIN trade_crm_job_plans p ON p.commercial_handoff_id=h.id AND p.work_order_id=w.id AND p.firebase_uid=w.firebase_uid
+), revenues AS (
+  SELECT work_order_id job_id,COUNT(*) invoice_count,SUM(net_cents) revenue FROM native_invoices GROUP BY work_order_id
+), job_credits AS (SELECT work_order_id job_id,SUM(total_cents-tax_cents) credits FROM credits GROUP BY work_order_id),
+requirements AS (
+  SELECT p.job_id, COUNT(CASE WHEN r.requirement_type<>'form' OR r.total_cost_cents>0 THEN 1 END) cost_lines,
+    COUNT(CASE WHEN r.status<>'not_needed' AND (r.requirement_type<>'form' OR r.total_cost_cents>0) AND a.id IS NULL THEN 1 END) missing_costs
+  FROM selected_plans p LEFT JOIN trade_crm_job_plan_requirements r ON r.job_plan_id=p.plan_id AND r.firebase_uid=p.firebase_uid
+  LEFT JOIN trade_crm_job_actuals a ON a.job_plan_requirement_id=r.id AND a.job_plan_id=p.plan_id AND a.work_order_id=p.job_id AND a.firebase_uid=p.firebase_uid GROUP BY p.job_id
+), actual_costs AS (
+  SELECT p.job_id,SUM(CASE WHEN a.actual_type='labour' THEN a.total_cost_cents ELSE 0 END) labour,
+    SUM(CASE WHEN a.actual_type='material' THEN a.total_cost_cents ELSE 0 END) material,
+    SUM(CASE WHEN a.actual_type NOT IN ('labour','material') THEN a.total_cost_cents ELSE 0 END) other,
+    SUM(CASE WHEN a.actual_type='labour' THEN a.duration_minutes ELSE 0 END) minutes
+  FROM selected_plans p JOIN trade_crm_job_actuals a ON a.job_plan_id=p.plan_id AND a.work_order_id=p.job_id AND a.firebase_uid=p.firebase_uid
+  JOIN trade_crm_job_plan_requirements r ON r.id=a.job_plan_requirement_id AND r.job_plan_id=p.plan_id AND r.firebase_uid=p.firebase_uid AND r.status<>'not_needed' GROUP BY p.job_id
+), profits AS (
+  SELECT j.id,j.work_number,j.title,c.completed_at,COALESCE(v.revenue,0)-COALESCE(k.credits,0) revenue,
+    COALESCE(a.labour,0) labour,COALESCE(a.material,0) material,COALESCE(a.other,0) other,COALESCE(a.minutes,0) minutes,COALESCE(r.missing_costs,0) missing_costs,
+    CASE WHEN COALESCE(v.invoice_count,0)=0 THEN 'invoice_needed' WHEN p.plan_id IS NULL THEN 'plan_needed'
+      WHEN EXISTS(SELECT 1 FROM trade_crm_job_actuals old WHERE old.work_order_id=j.id AND old.firebase_uid=j.firebase_uid AND old.job_plan_id<>p.plan_id) THEN 'scope_review'
+      WHEN r.missing_costs>0 OR COALESCE(r.cost_lines,0)=0 THEN 'costs_needed' ELSE 'complete' END status
+  FROM completed c JOIN jobs j ON j.id=c.id LEFT JOIN selected_plans p ON p.job_id=j.id LEFT JOIN revenues v ON v.job_id=j.id
+  LEFT JOIN job_credits k ON k.job_id=j.id LEFT JOIN requirements r ON r.job_id=j.id LEFT JOIN actual_costs a ON a.job_id=j.id
+)`;
+
 /** Aggregate at the database, never a capped customer/job list. No contact details are selected. */
 export async function loadBusinessReport(db: Pick<D1Database, "prepare" | "batch">, uid: string, access: ReportAccess, params: URLSearchParams, state = "NSW", now = new Date()): Promise<BusinessReport> {
   let period = resolveReportPeriod(params, state, now);
@@ -77,6 +112,10 @@ export async function loadBusinessReport(db: Pick<D1Database, "prepare" | "batch
   const windows = [{ id: "current", ...period }, ...(period.previous ? [{ id: "previous", ...period.previous }] : []), ...timeline.map((window, index) => ({ id: `trend${index}`, ...window }))];
   const upcomingEnd = addReportDays(period.today, 28);
   const scheduleRanges = JSON.stringify([{ id: "current", start: period.start, end: addReportDays(period.end, 1) }, ...(period.previous ? [{ id: "previous", start: period.previous.start, end: addReportDays(period.previous.end, 1) }] : []), { id: "upcoming", start: period.today, end: upcomingEnd }]);
+  const canViewCosts = access.canViewInvoices && (access.isOwner || Boolean(access.canViewPriceBook));
+  const profitPage = Number(params.get("profitPage") || 1);
+  if (!Number.isSafeInteger(profitPage) || profitPage < 1) throw new ReportInputError("Choose a valid profitability page.");
+  const profitArgs = [...args, period.startUtc, period.endUtc];
   const results = await db.batch<Row>([
     db.prepare(`${base}${events}${rangeCte}
       SELECT r.id, e.kind, COALESCE(SUM(e.value),0) value FROM ranges r JOIN events e ON julianday(e.at)>=julianday(r.start_utc) AND julianday(e.at)<julianday(r.end_utc) GROUP BY r.id,e.kind`).bind(...args, JSON.stringify(windows)),
@@ -103,6 +142,13 @@ export async function loadBusinessReport(db: Pick<D1Database, "prepare" | "batch
       FROM jobs j`).bind(...args, period.today, period.today),
     db.prepare(`${base} SELECT stage,COUNT(*) count FROM jobs GROUP BY stage`).bind(...args),
     db.prepare(`${base} SELECT DISTINCT service_category service,region FROM all_jobs ORDER BY service,region`).bind(...args),
+    ...(canViewCosts ? [
+      db.prepare(`${base}${profitability} SELECT COUNT(*) jobs,COUNT(CASE WHEN status='complete' THEN 1 END) complete_jobs,
+        SUM(revenue) revenue,SUM(labour) labour,SUM(material) material,SUM(other) other,SUM(minutes) minutes,
+        SUM(CASE WHEN status='complete' THEN revenue ELSE 0 END) complete_revenue,
+        SUM(CASE WHEN status='complete' THEN revenue-labour-material-other ELSE 0 END) margin FROM profits`).bind(...profitArgs),
+      db.prepare(`${base}${profitability} SELECT * FROM profits ORDER BY completed_at DESC,id DESC LIMIT 50 OFFSET ?`).bind(...profitArgs, (profitPage - 1) * 50),
+    ] : []),
   ]);
   const values = (id: string): ReportMeasures => {
     const totals = Object.fromEntries(results[0].results.filter(row => row.id === id).map(row => [String(row.kind), number(row.value)]));
@@ -135,6 +181,12 @@ export async function loadBusinessReport(db: Pick<D1Database, "prepare" | "batch
   const sumBalance = (key: string) => balances.reduce((total, row) => total + number(row[key]), 0);
   return { generatedAt: now.toISOString(), period, service, state: region, permissions: { invoices: access.canViewInvoices, quotes: access.canViewQuotes },
     options: { services: [...new Set(results[6].results.map(row => String(row.service)))], states: [...new Set(results[6].results.map(row => String(row.region)))].sort() },
+    profitability: canViewCosts ? (() => {
+      const row = results[7].results[0] || {}; const completeJobs = number(row.complete_jobs); const margin = completeJobs ? number(row.margin) : null;
+      return { jobs: number(row.jobs), completeJobs, revenueCents: number(row.revenue), labourCents: number(row.labour), materialCents: number(row.material), otherCents: number(row.other), labourMinutes: number(row.minutes), completeRevenueCents: number(row.complete_revenue), marginCents: margin, marginPercent: margin !== null && number(row.complete_revenue)>0 ? margin/number(row.complete_revenue)*100 : null, page: profitPage, pageSize: 50,
+        items: results[8].results.map(item => { const marginCents = item.status === "complete" ? number(item.revenue)-number(item.labour)-number(item.material)-number(item.other) : null;
+          return { id: String(item.id), number: String(item.work_number), title: String(item.title), completedAt: String(item.completed_at), revenueCents: number(item.revenue), labourCents: number(item.labour), materialCents: number(item.material), otherCents: number(item.other), labourMinutes: number(item.minutes), missingCosts: number(item.missing_costs), status: String(item.status), marginCents, marginPercent: marginCents !== null && number(item.revenue)>0 ? marginCents/number(item.revenue)*100 : null }; }) };
+    })() : null,
     current: values("current"), previous: period.previous ? values("previous") : null, trend: timeline.map((window, index) => ({ start: window.start, end: window.end, newJobs: values(`trend${index}`).newJobs, completedJobs: values(`trend${index}`).completedJobs, invoicedCents: values(`trend${index}`).invoicedCents })),
     services: breakdown("service"), regions: breakdown("region"), team: [...members.values()].sort((a, b) => b.bookedMinutes - a.bookedMinutes || a.label.localeCompare(b.label)),
     work: { openJobs: number(work.open_jobs), waitingJobs: number(work.waiting), unassignedJobs: number(work.unassigned), awaitingSchedule: number(work.awaiting), overdueTasks: number(work.overdue_tasks), openIssues: number(work.issues), completedUninvoiced: access.canViewInvoices ? number(work.uninvoiced) : null, stages: results[5].results.map(row => ({ key: String(row.stage), count: number(row.count) })) },

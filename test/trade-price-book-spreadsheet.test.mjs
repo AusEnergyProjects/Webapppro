@@ -54,7 +54,10 @@ test("CSV upload handles quoted commas and its downloadable example is directly 
   assert.deepEqual(mapPriceBookRows(csv, 0, detectPriceBookColumns(csv.data[0])), [{ rowNumber: 2, values: { name: "Call out, weekend", sellPrice: "220", description: 'Includes "after hours"' } }]);
   const [template] = await readPriceBookSpreadsheet(new File([priceBookTemplateCsv()], "template.csv"));
   const rows = mapPriceBookRows(template, 0, detectPriceBookColumns(template.data[0]));
-  assert.equal(rows.length, 2); assert.equal(rows[0].values.itemType, "call_out");
+  assert.equal(rows.length, 2); assert.equal(rows[0].values.itemType, undefined);
+  assert.equal(rows[0].values.unitLabel, undefined);
+  assert.ok(!template.data[0].includes("Type") && !template.data[0].includes("Charge by"));
+  assert.equal(rows[0].values.sellPrice, "200.00");
   await assert.rejects(readPriceBookSpreadsheet(new File(["old workbook"], "prices.xls")), /save older .xls/);
 });
 

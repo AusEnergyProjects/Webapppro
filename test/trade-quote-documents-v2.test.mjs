@@ -180,7 +180,7 @@ test("PDF rendering remains compatible with v1 and supports signed v2 discounts"
   assert.match(pdfSource, /Rebates and dollar discounts ex GST/);
   assert.match(pdfSource, /finalPercentDescription.*Final.*on included items ex GST/s);
   assert.match(pdfSource, /TOTAL INCL GST/);
-  assert.match(pdfSource, /rectangle\(0, boxBottom, A4_WIDTH, boxHeight\)/);
+  assert.doesNotMatch(pdfSource, /embeddedImage\(pdf, suppliedAssets\.banner\)/);
   assert.match(
     pdfSource,
     /if \(snapshot\.customerMessage\)[\s\S]*?messageHeight = Math\.max[\s\S]*?y: y - messageHeight \+ 5,[\s\S]*?height: messageHeight/,
@@ -238,7 +238,7 @@ test("v2 snapshot capture uses document identity, crop and signed adjustment fie
   );
 });
 
-test("customer quote surfaces share one crop and explicit discount breakdown", () => {
+test("customer quote surfaces preserve explicit discount breakdown with a logo-first PDF", () => {
   assert.match(reviewUi, /aspectRatio: "5 \/ 1"/);
   assert.match(reviewUi, /bannerBackgroundStyle/);
   assert.match(reviewUi, /Subtotal ex GST/);
@@ -249,8 +249,8 @@ test("customer quote surfaces share one crop and explicit discount breakdown", (
     /<span>Always included<\/span>|<h2>Your base scope<\/h2>|<span>Work<\/span>/,
   );
   assert.match(pdfSource, /tradeQuoteBannerCropForImage/);
-  assert.match(pdfSource, /pushGraphicsState\(\)[\s\S]*clip\(\)/);
-  assert.match(pdfSource, /label\("Quote from"\);\s*if \(logo\)/);
+  assert.match(pdfSource, /drawTradeDocumentHeader/);
+  assert.match(pdfSource, /drawText\("QUOTATION"/);
   assert.match(emailSource, /Subtotal ex GST/);
   assert.match(emailSource, /Rebates and dollar discounts ex GST/);
   assert.match(emailSource, /Final percentage discount on included items ex GST/);

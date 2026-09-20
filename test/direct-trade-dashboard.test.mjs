@@ -76,14 +76,14 @@ test("Business settings expose bounded branding, service, template and closure c
   assert.match(businessSettings, /TRADE_BRAND_THEME_KEYS/);
   assert.match(businessSettings, /TRADE_BRAND_BORDER_STYLES/);
   assert.match(businessSettings, /uploadMedia\("logo"/);
-  assert.match(businessSettings, /uploadMedia\("banner"/);
+  assert.doesNotMatch(businessSettings, /uploadMedia\("banner"/);
   assert.match(businessSettings, /serviceAreas\.length >= 6/);
   assert.match(businessSettings, /Business services and travel coverage/);
   assert.match(businessSettings, /ENERGY_SERVICE_CATALOGUE\.map/);
   assert.match(businessSettings, /AEA-managed enquiries remain with Australian Energy Assessments/);
   assert.match(businessSettings, /Quote and invoice preview/);
-  assert.match(businessSettings, /business-settings-document-preview-grid/);
-  assert.match(businessSettings, /\["quote", "invoice"\]/);
+  assert.match(businessSettings, /business-settings-pdf-preview/);
+  assert.match(businessSettings, /TradeDocumentSamplePreview/);
   assert.match(businessSettings, /Default quote email subject/);
   assert.match(businessSettings, /Type CLOSE ACCOUNT to confirm/);
   assert.match(businessSettings, /Closing removes trade workspace access/);

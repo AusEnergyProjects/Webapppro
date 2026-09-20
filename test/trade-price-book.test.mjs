@@ -166,7 +166,7 @@ test("active price-book items become authoritative direct-quote snapshots", () =
 test("the trade workspace prioritises quick setup and progressive disclosure", () => {
   for (const copy of ["Price book", "Start in under a minute", "Labour hour", "Material", "Call-out",
     "STC credit", "VEEC credit", "ESC credit", "Certificate", "negative amount per certificate",
-    "Only the name, type and sell price are essential", "More details, optional", "Save and use in quotes"]) {
+    "Only the name and sell price are essential", "More details, optional", "Save and use in quotes"]) {
     assert.match(`${workspace}\n${crm}`, new RegExp(copy));
   }
   assert.match(workspace, /Quick start/);

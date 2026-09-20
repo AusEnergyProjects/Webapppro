@@ -2086,7 +2086,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .business-settings-jump-nav a,
   .dashboard-account-links a,
-  .business-settings-crop-editor,
   .dashboard-choice-grid label,
   .dashboard-notification-list label,
   .business-hub-metrics article,
@@ -2123,7 +2122,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.supplier-command-n
 
 /* These canvases represent customer-facing documents and intentionally stay in day mode. */
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .business-settings-document-preview,
   .crm-invoice-preview,
   .trade-quote-document-sheet,
   .crm-invoice-preview-dialog:not(.schedule-appointment-dialog):not(:has(.crm-retake-review-dialog))
@@ -2155,16 +2153,7 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   color-scheme: light;
 }
 
-html[data-tlink-colour-mode="night"] .trade-portal-shell .business-settings-document-preview :is(.business-settings-document-terms, .business-settings-document-payment, .business-settings-document-banner) {
-  background: #f5f9f7;
-  border-color: #d5e4df;
-  color: #0c3738;
-}
 
-html[data-tlink-colour-mode="night"] .trade-portal-shell .business-settings-document-preview .heading {
-  background: var(--trade-day-accent-soft);
-  color: var(--trade-day-accent-soft-ink);
-}
 
 /* Date picker is portalled to document.body. */
 html[data-tlink-colour-mode="night"] .site-date-popover {

@@ -6,9 +6,12 @@ export type ReportWindow = { start: string; end: string; startUtc: string; endUt
 export type ReportPeriod = ReportWindow & { preset: ReportPreset; today: string; timeZone: string; previous: ReportWindow | null; previousAnchor: string | null; nextAnchor: string | null };
 export type ReportMeasures = { newJobs: number; completedJobs: number; quoteIssues: number | null; wonQuotes: number | null; declinedQuotes: number | null; wonCents: number | null; invoicedCents: number | null; creditCents: number | null; invoiceCount: number | null; bookedMinutes: number; visits: number; completedVisits: number; missingDurations: number };
 export type ReportBreakdown = { key: string; newJobs: number; completedJobs: number; invoicedCents: number | null };
+export type JobProfitability = { id: string; number: string; title: string; completedAt: string; revenueCents: number; labourCents: number; materialCents: number; otherCents: number; labourMinutes: number; missingCosts: number; status: string; marginCents: number | null; marginPercent: number | null };
+export type ProfitabilityReport = { jobs: number; completeJobs: number; revenueCents: number; labourCents: number; materialCents: number; otherCents: number; labourMinutes: number; completeRevenueCents: number; marginCents: number | null; marginPercent: number | null; page: number; pageSize: number; items: JobProfitability[] };
 export type BusinessReport = {
   generatedAt: string; period: ReportPeriod; service: string; state: string;
   permissions: { invoices: boolean; quotes: boolean };
+  profitability: ProfitabilityReport | null;
   options: { services: string[]; states: string[] };
   current: ReportMeasures; previous: ReportMeasures | null;
   trend: Array<{ start: string; end: string; newJobs: number; completedJobs: number; invoicedCents: number | null }>;
@@ -118,6 +121,15 @@ export function reportCsvRows(report: BusinessReport) {
     for (const bucket of report.receivables.buckets) put("Ageing", bucket.key, (bucket.cents / 100).toFixed(2), "", "Today, AUD including GST");
   }
   const workLabels: Record<string, string> = { openJobs: "Open jobs", waitingJobs: "Waiting jobs", unassignedJobs: "Unassigned jobs", awaitingSchedule: "Jobs needing a future visit", overdueTasks: "Overdue tasks", openIssues: "Open issues", completedUninvoiced: "Completed, not invoiced" };
+  if (report.profitability) {
+    const p = report.profitability;
+    const basis = "Current recorded position for jobs completed in the selected period; AUD excluding GST";
+    put("Job profitability", "Completed jobs", p.jobs); put("Job profitability", "Jobs with complete cost and invoice records", p.completeJobs);
+    for (const [label, value] of [["Net invoiced value", p.revenueCents], ["Recorded labour costs", p.labourCents], ["Recorded material costs", p.materialCents], ["Recorded other direct costs", p.otherCents], ["Net invoiced value for complete jobs", p.completeRevenueCents]] as const) put("Job profitability", label, (value / 100).toFixed(2), "", basis);
+    put("Job profitability", "Recorded labour hours", (p.labourMinutes / 60).toFixed(2));
+    if (p.marginCents !== null) put("Job profitability", "Gross job margin for complete jobs only", (p.marginCents / 100).toFixed(2), "", basis);
+    if (p.marginPercent !== null) put("Job profitability", "Gross job margin percentage for complete jobs only", p.marginPercent.toFixed(2), "", "Before business overheads, payroll on-costs and income tax");
+  }
   for (const [key, value] of Object.entries(report.work)) if (typeof value === "number") put("Work health", workLabels[key] || key, value, "", "Current active jobs");
   return rows;
 }

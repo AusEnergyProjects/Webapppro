@@ -1,11 +1,7 @@
+import { drawTradeDocumentHeader, drawTradeDocumentMetadata } from "./trade-document-pdf-layout.mjs";
 import {
   PDFDocument,
   StandardFonts,
-  clip,
-  endPath,
-  popGraphicsState,
-  pushGraphicsState,
-  rectangle,
   rgb,
 } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
@@ -14,7 +10,6 @@ const A4_WIDTH = 595.28;
 const A4_HEIGHT = 841.89;
 const MARGIN = 40;
 const CONTENT_WIDTH = A4_WIDTH - MARGIN * 2;
-const BANNER_HEIGHT = A4_WIDTH / 5;
 const MAX_FONT_BYTES = 2_000_000;
 
 const THEMES = {
@@ -206,30 +201,6 @@ export function resolveInvoiceBannerCropPixels(image, suppliedCrop) {
   return { x: cropX, y: cropY, width, height };
 }
 
-function drawBanner(page, image, crop) {
-  const targetY = A4_HEIGHT - BANNER_HEIGHT;
-  const source = resolveInvoiceBannerCropPixels(image, crop);
-  const scale = A4_WIDTH / source.width;
-  const drawWidth = image.width * scale;
-  const drawHeight = image.height * scale;
-  const drawX = -source.x * scale;
-  const drawY =
-    targetY + BANNER_HEIGHT - (image.height - source.y) * scale;
-  page.pushOperators(
-    pushGraphicsState(),
-    rectangle(0, targetY, A4_WIDTH, BANNER_HEIGHT),
-    clip(),
-    endPath(),
-  );
-  page.drawImage(image, {
-    x: drawX,
-    y: drawY,
-    width: drawWidth,
-    height: drawHeight,
-  });
-  page.pushOperators(popGraphicsState());
-}
-
 export async function createTradeQuickInvoicePdfBytes(
   snapshot,
   suppliedFonts = {},
@@ -257,7 +228,6 @@ export async function createTradeQuickInvoicePdfBytes(
     regularBytes && boldBytes
       ? await pdf.embedFont(boldBytes, { subset: false })
       : await pdf.embedFont(StandardFonts.HelveticaBold);
-  const banner = await embeddedImage(pdf, suppliedAssets.banner);
   const logo = await embeddedImage(pdf, suppliedAssets.logo);
   const [primaryHex, accentHex] =
     THEMES[snapshot.business.themeKey] || THEMES.emerald_navy;
@@ -266,155 +236,22 @@ export async function createTradeQuickInvoicePdfBytes(
   const ink = colour("#102f35");
   const muted = colour("#577074");
   const line = colour("#d4e2df");
-  const soft = colour("#f1f7f5");
-  const page = pdf.addPage([A4_WIDTH, A4_HEIGHT]);
-  let y = A4_HEIGHT - MARGIN;
+  let page; let y;
+  const headerOptions = { business: snapshot.business, logo, regular, bold, ink, accent, muted, margin: MARGIN, width: CONTENT_WIDTH, height: A4_HEIGHT, wrap };
+  function addPage() { page = pdf.addPage([A4_WIDTH, A4_HEIGHT]); y = drawTradeDocumentHeader(page, headerOptions); }
+  function ensureSpace(height) { if (y - height < 60) addPage(); }
+  addPage();
 
-  if (banner) {
-    drawBanner(page, banner, snapshot.business.bannerCrop);
-    y = A4_HEIGHT - BANNER_HEIGHT - 22;
-  } else {
-    page.drawRectangle({
-      x: 0,
-      y: A4_HEIGHT - 10,
-      width: A4_WIDTH,
-      height: 10,
-      color: accent,
-    });
-  }
+  page.drawText("INVOICE", { x: MARGIN, y, font: bold, size: 25, color: primary });
+  y -= 23;
+  for (const text of wrap(bold, snapshot.work.title, 11, CONTENT_WIDTH)) { page.drawText(text, { x: MARGIN, y, font: bold, size: 11, color: accent }); y -= 15; }
+  y -= 12;
+  y = drawTradeDocumentMetadata(page, [
+    ["Bill to", snapshot.customer.name], ["Site address", snapshot.site.summary], ["Invoice reference", snapshot.invoiceNumber],
+    ["Issue date", (snapshot.issuedAt || snapshot.capturedAt).slice(0,10)], ["Due date", snapshot.dueAt], ["Job reference", snapshot.work.number],
+  ], { y, margin: MARGIN, width: CONTENT_WIDTH, regular, bold, ink, accent, line, wrap });
 
-  if (logo) {
-    const scale = Math.min(78 / logo.width, 44 / logo.height, 1);
-    page.drawImage(logo, {
-      x: MARGIN,
-      y: y - logo.height * scale,
-      width: logo.width * scale,
-      height: logo.height * scale,
-    });
-  }
-  const identityX = logo ? MARGIN + 94 : MARGIN;
-  const invoiceTitle = "INVOICE";
-  const invoiceTitleSize = 21;
-  const invoiceTitleX =
-    A4_WIDTH - MARGIN - bold.widthOfTextAtSize(invoiceTitle, invoiceTitleSize);
-  const businessNameLayout = resolveInvoiceBusinessNameLayout(
-    bold,
-    snapshot.business.name,
-    invoiceTitleX - identityX - 16,
-  );
-  businessNameLayout.lines.forEach((line, index) => {
-    page.drawText(line, {
-      x: identityX,
-      y: y - 7 - index * businessNameLayout.lineHeight,
-      font: bold,
-      size: businessNameLayout.size,
-      color: primary,
-    });
-  });
-  const businessNameBottom =
-    7 + (businessNameLayout.lines.length - 1) * businessNameLayout.lineHeight;
-  const businessContactOffset = Math.max(25, businessNameBottom + 18);
-  const businessContact = [
-    snapshot.business.phone,
-    snapshot.business.email,
-    snapshot.business.abn ? `ABN ${snapshot.business.abn}` : "",
-  ]
-    .filter(Boolean)
-    .join(" | ");
-  page.drawText(safeText(businessContact), {
-    x: identityX,
-    y: y - businessContactOffset,
-    font: regular,
-    size: 7.8,
-    color: muted,
-  });
-  page.drawText(invoiceTitle, {
-    x: invoiceTitleX,
-    y: y - 7,
-    font: bold,
-    size: invoiceTitleSize,
-    color: primary,
-  });
-  y -= Math.max(66, businessContactOffset + 41);
-
-  page.drawRectangle({
-    x: MARGIN,
-    y: y - 77,
-    width: CONTENT_WIDTH,
-    height: 82,
-    color: soft,
-    borderColor: line,
-    borderWidth: 0.7,
-  });
-  const meta = [
-    ["Invoice", snapshot.invoiceNumber],
-    ["Issue date", (snapshot.issuedAt || snapshot.capturedAt).slice(0, 10)],
-    ["Due date", snapshot.dueAt],
-  ];
-  meta.forEach(([label, value], index) => {
-    const x = MARGIN + 14 + index * 112;
-    page.drawText(label.toUpperCase(), {
-      x,
-      y: y - 15,
-      font: bold,
-      size: 7,
-      color: accent,
-    });
-    page.drawText(safeText(value), {
-      x,
-      y: y - 32,
-      font: bold,
-      size: 9,
-      color: ink,
-    });
-  });
-  page.drawText("BILL TO", {
-    x: MARGIN + 355,
-    y: y - 15,
-    font: bold,
-    size: 7,
-    color: accent,
-  });
-  page.drawText(safeText(snapshot.customer.name), {
-    x: MARGIN + 355,
-    y: y - 32,
-    font: bold,
-    size: 9,
-    color: ink,
-  });
-  const addressLines = wrap(
-    regular,
-    snapshot.site.summary,
-    7.4,
-    CONTENT_WIDTH - 365,
-  ).slice(0, 3);
-  addressLines.forEach((value, index) =>
-    page.drawText(value, {
-      x: MARGIN + 355,
-      y: y - 45 - index * 10,
-      font: regular,
-      size: 7.4,
-      color: muted,
-    }),
-  );
-  y -= 97;
-
-  page.drawText(safeText(snapshot.work.title), {
-    x: MARGIN,
-    y,
-    font: bold,
-    size: 13,
-    color: ink,
-  });
-  page.drawText(safeText(`Job ${snapshot.work.number}`), {
-    x: MARGIN,
-    y: y - 15,
-    font: regular,
-    size: 8,
-    color: muted,
-  });
-  y -= 37;
-
+  function tableHeading() {
   page.drawRectangle({
     x: MARGIN,
     y: y - 23,
@@ -425,9 +262,9 @@ export async function createTradeQuickInvoicePdfBytes(
   const columns = [
     ["Description", MARGIN + 10],
     ["Qty", MARGIN + 302],
-    ["Unit", MARGIN + 342],
+    ["Unit ex GST", MARGIN + 342],
     ["GST", MARGIN + 413],
-    ["Amount", MARGIN + 468],
+    ["Ex GST", MARGIN + 470],
   ];
   columns.forEach(([label, x]) =>
     page.drawText(label, {
@@ -439,13 +276,16 @@ export async function createTradeQuickInvoicePdfBytes(
     }),
   );
   y -= 35;
+  }
+  tableHeading();
   for (const item of snapshot.lines) {
-    const description = wrap(regular, item.description, 8.3, 275).slice(0, 2);
+    const description = wrap(regular, item.description, 8.3, 275);
+    if (y - Math.max(26, description.length * 11 + 9) < 65) { addPage(); tableHeading(); }
     description.forEach((value, index) =>
       page.drawText(value, {
         x: MARGIN + 10,
         y: y - index * 10,
-        font: index === 0 ? bold : regular,
+        font: regular,
         size: 8.3,
         color: ink,
       }),
@@ -481,13 +321,14 @@ export async function createTradeQuickInvoicePdfBytes(
     });
     y -= Math.max(26, description.length * 11 + 9);
     page.drawLine({
-      start: { x: MARGIN, y: y + 7 },
-      end: { x: A4_WIDTH - MARGIN, y: y + 7 },
+      start: { x: MARGIN, y: y + 12 },
+      end: { x: A4_WIDTH - MARGIN, y: y + 12 },
       thickness: 0.5,
       color: line,
     });
   }
 
+  ensureSpace(150);
   y -= 4;
   const summaryY = y;
   const paymentRows = [
@@ -570,7 +411,7 @@ export async function createTradeQuickInvoicePdfBytes(
   });
   y -= 56;
 
-  if (snapshot.payment.terms && y > 110) {
+  if (snapshot.payment.terms) {
     page.drawText("PAYMENT TERMS", {
       x: MARGIN,
       y,
@@ -579,22 +420,16 @@ export async function createTradeQuickInvoicePdfBytes(
       color: accent,
     });
     y -= 15;
-    const terms = wrap(
-      regular,
-      snapshot.payment.terms,
-      7.6,
-      CONTENT_WIDTH,
-    ).slice(0, Math.max(1, Math.floor((y - 58) / 10)));
-    terms.forEach((value, index) =>
-      page.drawText(value, {
-        x: MARGIN,
-        y: y - index * 10,
-        font: regular,
-        size: 7.6,
-        color: muted,
-      }),
-    );
+    const terms = wrap(regular, snapshot.payment.terms, 8, CONTENT_WIDTH);
+    for (const value of terms) {
+      ensureSpace(12);
+      page.drawText(value, { x: MARGIN, y, font: regular, size: 8, color: muted });
+      y -= 11;
+    }
   }
+
+  for (const [pageIndex, footerPage] of pdf.getPages().entries()) {
+    page = footerPage;
 
   page.drawLine({
     start: { x: MARGIN, y: 43 },
@@ -614,7 +449,7 @@ export async function createTradeQuickInvoicePdfBytes(
     size: 7,
     color: muted,
   });
-  const footerRight = safeText(`${snapshot.invoiceNumber} | Page 1 of 1`);
+  const footerRight = safeText(`${snapshot.invoiceNumber} | Page ${pageIndex + 1} of ${pdf.getPageCount()}`);
   page.drawText(footerRight, {
     x: A4_WIDTH - MARGIN - regular.widthOfTextAtSize(footerRight, 7),
     y: 26,
@@ -623,6 +458,7 @@ export async function createTradeQuickInvoicePdfBytes(
     color: muted,
   });
 
+  }
   pdf.setTitle(
     safeText(`Invoice ${snapshot.invoiceNumber} from ${snapshot.business.name}`),
   );

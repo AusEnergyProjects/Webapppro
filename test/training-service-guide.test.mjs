@@ -1,0 +1,22 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import ts from "typescript";
+import * as jsx from "react/jsx-runtime";
+import { ENERGY_SERVICE_CATALOGUE } from "../src/lib/energy-service-catalogue.mjs";
+import * as sections from "../src/lib/training-service-sections.mjs";
+const source = fs.readFileSync(new URL("../src/components/TrainingServiceGuide.tsx",import.meta.url),"utf8");
+const compiled = ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+const text = node => node == null || typeof node === "boolean" ? "" : typeof node !== "object" ? String(node) : Array.isArray(node) ? node.map(text).join(" ") : text(node.props?.children);
+const nodes = (node,predicate) => node == null || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap(item=>nodes(item,predicate)) : [...(predicate(node)?[node]:[]),...nodes(node.props?.children,predicate)];
+test("service guide maps exact activities, retains passes and opens the chosen module",()=>{
+  let choice="";const opened=[];const exports={};
+  const require=id=>id==="react"?{useState:()=>[choice,next=>choice=next]}:id==="react/jsx-runtime"?jsx:id.includes("energy-service")?{ENERGY_SERVICE_CATALOGUE}:id.includes("training-service-sections")?sections:{default:{}};
+  Function("require","exports",compiled)(require,exports);
+  const modules=[{id:"veu-6",title:"VEU Activity 6",serviceCategory:"heating-cooling",activityTemplateIds:["VEU-6"],programCode:"VEU",jurisdictions:["VIC"],status:"required",assessmentAvailable:true},{id:"veu-48",title:"VEU Activity 48",serviceCategory:"insulation",activityTemplateIds:["VEU-48"],status:"passed",assessmentAvailable:false,assessmentUnavailableReason:"Module withdrawn"}];
+  const render=()=>exports.TrainingServiceGuide({services:["heating-cooling","insulation","plumbing"],states:["VIC"],modules,unavailable:[],busy:false,onOpen:module=>opened.push(module)});
+  let tree=render();assert.match(text(tree),/VEU Activity 6/);assert.doesNotMatch(text(tree),/VEU Activity 48/);
+  nodes(tree,node=>node.type==="button"&&text(node)==="Start / continue")[0].props.onClick();assert.equal(opened[0],modules[0]);
+  nodes(tree,node=>node.type==="button"&&text(node).startsWith("Insulation"))[0].props.onClick();tree=render();assert.match(text(tree),/VEU Activity 48/);assert.match(text(tree),/Passed/);assert.match(text(tree),/Module withdrawn/);
+  nodes(tree,node=>node.type==="button"&&text(node).startsWith("Plumbing"))[0].props.onClick();tree=render();assert.match(text(tree),/No government activity training is assigned/);assert.match(text(tree),/licences, qualifications and job evidence still apply/);
+});

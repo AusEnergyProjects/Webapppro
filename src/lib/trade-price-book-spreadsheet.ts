@@ -133,5 +133,5 @@ export async function readPriceBookSpreadsheet(file: File): Promise<PriceBookShe
 }
 
 export function priceBookTemplateCsv() {
-  return "Item name,SKU,Sell price ex GST,Cost ex GST,Type,Charge by,GST,Supplier,Description\r\nCall out fee,CALLOUT,200.00,0.00,call_out,visit,gst,,Standard call out\r\nElectrician labour,LABOUR,120.00,60.00,labour,hour,gst,,Hourly labour\r\n";
+  return "Item name,SKU,Sell price ex GST,Cost ex GST,GST,Supplier,Description\r\nCall out fee,CALLOUT,200.00,0.00,gst,,Standard call out\r\nElectrician labour per hour,LABOUR,120.00,60.00,gst,,One hour of labour\r\n";
 }

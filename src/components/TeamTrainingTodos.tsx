@@ -10,7 +10,7 @@ type Module = { id: string; title: string; programCode: string; activityTemplate
 type Result = { ok: boolean; error?: string; memberId: string; canTakeTraining: boolean; officeOnly?: boolean;
   trainingServiceStates?: string[];
   selectedMember: { memberId: string; displayName: string; isOwner: boolean; isSelf: boolean };
-  modules: Module[]; unavailableActivities: { id: string; title: string; programCode: string; message: string }[] };
+  modules: Module[]; unavailableActivities: { id: string; title: string; programCode: string; serviceCategory?: string; message: string }[] };
 type Props = { user: User; memberId: string; displayName: string; hasOfficeLogin: boolean; active: boolean; unsavedServices: boolean; saving: boolean;
   onSave: () => void; onOpenOwnTraining?: () => void; ownTrainingHref: string };
 
@@ -26,6 +26,7 @@ export function TeamTrainingTodos({ user, memberId, displayName, hasOfficeLogin,
   const [loading, setLoading] = useState(active);
   const [refresh, setRefresh] = useState(0);
   const [search, setSearch] = useState("");
+  const [service, setService] = useState("");
   const [program, setProgram] = useState("");
   const [page, setPage] = useState(1);
   useEffect(() => {
@@ -49,7 +50,7 @@ export function TeamTrainingTodos({ user, memberId, displayName, hasOfficeLogin,
   const modules = data?.modules || [];
   const unavailable = data?.unavailableActivities || [];
   const programs = [...new Set([...modules, ...unavailable].map(module => module.programCode))].sort();
-  const matches = (item: { id: string; title: string; programCode: string }) => (!program || item.programCode === program)
+  const matches = (item: { id: string; title: string; programCode: string; serviceCategory?: string }) => (!service || item.serviceCategory === service) && (!program || item.programCode === program)
     && `${item.id} ${item.title} ${item.programCode}`.toLowerCase().includes(search.trim().toLowerCase());
   const matching = modules.filter(matches);
   const totalPages = Math.max(1, Math.ceil(matching.length / 6));
@@ -72,10 +73,10 @@ export function TeamTrainingTodos({ user, memberId, displayName, hasOfficeLogin,
         {data.canTakeTraining && data.selectedMember.isSelf && (onOpenOwnTraining
           ? <button type="button" className={styles.button} disabled={saving} onClick={onOpenOwnTraining}>Open my training</button>
           : <a className={styles.button} href={ownTrainingHref}>Open my training</a>)}
-        {modules.length > 0 && <><div className={styles.filters}><label>Find an activity<input type="search" value={search} placeholder="Activity, program or work type" onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} onChange={event => { setSearch(event.target.value); setPage(1); }} /></label><label>Program<select value={program} onChange={event => { setProgram(event.target.value); setPage(1); }}><option value="">All programs</option>{programs.map(item => <option key={item} value={item}>{item}</option>)}</select></label></div>
+        {modules.length > 0 && <><div className={styles.filters}><label>Service<select value={service} onChange={event => { setService(event.target.value); setPage(1); }}><option value="">All assigned services</option>{ENERGY_SERVICE_CATALOGUE.filter(item => modules.some(module => module.serviceCategory === item.id)).map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label><label>Find an activity<input type="search" value={search} placeholder="Activity, program or work type" onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} onChange={event => { setSearch(event.target.value); setPage(1); }} /></label><label>Program<select value={program} onChange={event => { setProgram(event.target.value); setPage(1); }}><option value="">All programs</option>{programs.map(item => <option key={item} value={item}>{item}</option>)}</select></label></div>
           <p className={styles.note}>{matching.length} matching activities</p><ul className={styles.list}>{matching.slice((currentPage - 1) * 6, currentPage * 6).map(module => {
             const currentPass = module.status === "passed";
-            return <li key={module.id} className={styles.module}><div className={styles.row}><div><small>{module.programCode} · {module.activityTemplateIds.join(", ")}</small><h5>{module.title}</h5></div><span className={currentPass ? styles.passed : styles.badge}>{currentPass && <span aria-hidden="true">✓ </span>}{moduleStatus(module)}</span></div>
+            return <li key={module.id} className={styles.module}><div className={styles.row}><div><small>{module.programCode} · {module.activityTemplateIds.join(", ")}</small><h5>{module.title}</h5><small>Required for {serviceLabel(module.serviceCategory)} jobs using this activity.</small></div><span className={currentPass ? styles.passed : styles.badge}>{currentPass && <span aria-hidden="true">✓ </span>}{moduleStatus(module)}</span></div>
               {!module.assessmentAvailable && <p>{module.assessmentUnavailableReason || "Assessment is unavailable. Refresh training for the current requirements."}</p>}
               {!module.businessServiceEnabled && <p className={styles.notice}>The business has not enabled {serviceLabel(module.serviceCategory)}. The owner must update Business settings before this work becomes eligible.</p>}
               {currentPass && module.completion && <p className={styles.reference}><strong>Learning completion reference</strong><code>{module.completion.reference}</code><small>Valid until {new Date(module.completion.expiresAt).toLocaleDateString("en-AU")}</small></p>}

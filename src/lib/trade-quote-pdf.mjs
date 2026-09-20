@@ -1,11 +1,7 @@
+import { drawTradeDocumentHeader, drawTradeDocumentMetadata } from "./trade-document-pdf-layout.mjs";
 import {
   PDFDocument,
   StandardFonts,
-  clip,
-  endPath,
-  popGraphicsState,
-  pushGraphicsState,
-  rectangle,
   rgb,
 } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
@@ -213,17 +209,7 @@ function wrapText(font, value, size, width, supported) {
     });
 }
 
-function fitImage(image, maximumWidth, maximumHeight) {
-  const scale = Math.min(
-    maximumWidth / image.width,
-    maximumHeight / image.height,
-    1,
-  );
-  return {
-    width: image.width * scale,
-    height: image.height * scale,
-  };
-}
+
 
 export function tradeQuoteBannerCropForImage(
   suppliedCrop,
@@ -346,7 +332,6 @@ export async function createTradeQuotePdfBytes(
     ? await pdf.embedFont(boldBytes, { subset: false })
     : await pdf.embedFont(StandardFonts.HelveticaBold);
   const logo = await embeddedImage(pdf, suppliedAssets.logo);
-  const banner = await embeddedImage(pdf, suppliedAssets.banner);
   const palette =
     THEMES[snapshot.business.themeKey] || THEMES.emerald_navy;
   const displayTotals = tradeQuoteDocumentDisplayTotals(snapshot);
@@ -389,14 +374,7 @@ export async function createTradeQuotePdfBytes(
   function addPage() {
     page = pdf.addPage([A4_WIDTH, A4_HEIGHT]);
     pages.push(page);
-    page.drawRectangle({
-      x: 0,
-      y: A4_HEIGHT - 8,
-      width: A4_WIDTH,
-      height: 8,
-      color: palette.accent,
-    });
-    y = A4_HEIGHT - MARGIN;
+    y = drawTradeDocumentHeader(page, { business: snapshot.business, logo, regular, bold, ink: palette.ink, accent: palette.primary, muted: rgb(.34,.43,.45), margin: MARGIN, width: CONTENT_WIDTH, height: A4_HEIGHT, wrap: (font, value, size, width) => wrapText(font, value, size, width, font === bold ? boldCharacters : regularCharacters) });
     return page;
   }
 
@@ -415,8 +393,9 @@ export async function createTradeQuotePdfBytes(
   } = {}) {
     const chars = font === bold ? boldCharacters : regularCharacters;
     const lines = wrapText(font, value, size, width, chars);
-    ensureSpace(lines.length * lineHeight + gapAfter);
+    ensureSpace(Math.min(lines.length, 3) * lineHeight + gapAfter);
     for (const line of lines) {
+      ensureSpace(lineHeight);
       if (line) page.drawText(line, { x, y, font, size, color });
       y -= lineHeight;
     }
@@ -466,207 +445,30 @@ export async function createTradeQuotePdfBytes(
     }
   }
 
-  function lineItem(item) {
-    const amountWidth = 90;
-    const descriptionWidth = CONTENT_WIDTH - amountWidth - 16;
-    const lines = wrapText(
-      regular,
-      item.description,
-      9.25,
-      descriptionWidth,
-      regularCharacters,
-    );
-    const height = Math.max(22, lines.length * 12 + 9);
-    ensureSpace(height);
-    for (let index = 0; index < lines.length; index += 1) {
-      page.drawText(lines[index], {
-        x: MARGIN,
-        y: y - index * 12,
-        font: index === 0 ? bold : regular,
-        size: index === 0 ? 9.25 : 8.5,
-        color: palette.ink,
-      });
-    }
-    const amountText = safeText(amount(item.totalCents), boldCharacters);
-    page.drawText(amountText, {
-      x:
-        A4_WIDTH -
-        MARGIN -
-        bold.widthOfTextAtSize(amountText, 9.25),
-      y,
-      font: bold,
-      size: 9.25,
-      color: palette.ink,
-    });
-    y -= height;
-    page.drawLine({
-      start: { x: MARGIN, y: y + 3 },
-      end: { x: A4_WIDTH - MARGIN, y: y + 3 },
-      thickness: 0.45,
-      color: palette.line,
-    });
+  function tableHeading() {
+    ensureSpace(55);
+    page.drawRectangle({ x: MARGIN, y: y - 18, width: CONTENT_WIDTH, height: 25, color: palette.soft });
+    for (const [text, x] of [["Description", MARGIN + 8], ["Qty", MARGIN + 286], ["Unit ex GST", MARGIN + 333], ["Amount ex GST", MARGIN + 424]]) page.drawText(text, { x, y: y - 9, font: bold, size: 7.5, color: palette.primary });
+    y -= 34;
   }
-
-  function summaryCell(labelValue, value, x, width, secondary = "") {
-    const top = y;
-    page.drawText(
-      safeText(String(labelValue).toUpperCase(), boldCharacters),
-      {
-        x,
-        y: top,
-        font: bold,
-        size: 7.25,
-        color: palette.primary,
-      },
-    );
-    const valueLines = wrapText(
-      bold,
-      value,
-      10,
-      width,
-      boldCharacters,
-    ).slice(0, 3);
-    valueLines.forEach((line, index) => {
-      page.drawText(line, {
-        x,
-        y: top - 16 - index * 13,
-        font: bold,
-        size: 10,
-        color: palette.ink,
-      });
-    });
-    if (secondary) {
-      const secondaryLines = wrapText(
-        regular,
-        secondary,
-        7.75,
-        width,
-        regularCharacters,
-      ).slice(0, 2);
-      secondaryLines.forEach((line, index) => {
-        page.drawText(line, {
-          x,
-          y: top - 16 - valueLines.length * 13 - index * 10,
-          font: regular,
-          size: 7.75,
-          color: rgb(0.34, 0.45, 0.45),
-        });
-      });
-    }
+  function lineItem(item) {
+    const lines = wrapText(regular, item.description, 9, 266, regularCharacters);
+    const height = Math.max(27, lines.length * 12 + 12);
+    if (y - height < 54) { addPage(); tableHeading(); }
+    lines.forEach((text, index) => page.drawText(text, { x: MARGIN + 8, y: y - index * 12, font: regular, size: 9, color: palette.ink }));
+    const columns = [[String(Number(item.quantityMilli || 1000) / 1000), MARGIN + 310], [amount(item.unitPriceCents), MARGIN + 410], [amount(item.subtotalCents), A4_WIDTH - MARGIN - 8]];
+    columns.forEach(([value, right]) => { const text = safeText(value, regularCharacters); page.drawText(text, { x: right - regular.widthOfTextAtSize(text, 8.5), y, font: regular, size: 8.5, color: palette.ink }); });
+    y -= height;
+    page.drawLine({ start: { x: MARGIN, y: y + 12 }, end: { x: A4_WIDTH - MARGIN, y: y + 12 }, thickness: .45, color: palette.line });
   }
 
   addPage();
-  if (banner) {
-    const boxHeight = A4_WIDTH / 5;
-    const crop = tradeQuoteBannerCropForImage(
-      snapshot.business.bannerCrop,
-      banner.width,
-      banner.height,
-    );
-    const scale = A4_WIDTH / crop.width;
-    const boxBottom = A4_HEIGHT - boxHeight;
-    page.pushOperators(
-      pushGraphicsState(),
-      rectangle(0, boxBottom, A4_WIDTH, boxHeight),
-      clip(),
-      endPath(),
-    );
-    page.drawImage(banner, {
-      x: -crop.x * scale,
-      y: A4_HEIGHT + crop.y * scale - banner.height * scale,
-      width: banner.width * scale,
-      height: banner.height * scale,
-      opacity: 0.96,
-    });
-    page.pushOperators(popGraphicsState());
-    y = boxBottom - 18;
-  }
-
-  label("Quote from");
-  if (logo) {
-    const size = fitImage(logo, 96, 52);
-    const logoTop = y + 4;
-    page.drawImage(logo, {
-      x: MARGIN,
-      y: logoTop - size.height,
-      width: size.width,
-      height: size.height,
-    });
-    const nameTop = y;
-    drawText(snapshot.business.name, {
-      x: MARGIN + 112,
-      width: CONTENT_WIDTH - 112,
-      font: bold,
-      size: 21,
-      lineHeight: 25,
-      color: palette.ink,
-      gapAfter: 7,
-    });
-    y = Math.min(y, logoTop - size.height - 8, nameTop - 32);
-  } else {
-    drawText(snapshot.business.name, {
-      font: bold,
-      size: 23,
-      lineHeight: 27,
-      color: palette.ink,
-      gapAfter: 7,
-    });
-  }
-  const contact = [
-    snapshot.business.phone,
-    snapshot.business.email,
-    snapshot.business.abn ? `ABN ${snapshot.business.abn}` : "",
-  ]
-    .filter(Boolean)
-    .join(" | ");
-  if (contact) {
-    drawText(contact, {
-      size: 8.5,
-      color: rgb(0.31, 0.43, 0.43),
-      lineHeight: 12,
-      gapAfter: 8,
-    });
-  }
-
-  ensureSpace(104);
-  const summaryTop = y;
-  page.drawRectangle({
-    x: MARGIN,
-    y: y - 94,
-    width: CONTENT_WIDTH,
-    height: 98,
-    color: palette.soft,
-    borderColor: palette.line,
-    borderWidth: 0.7,
-  });
-  y -= 16;
-  const half = (CONTENT_WIDTH - 30) / 2;
-  summaryCell(
-    "Quote",
-    `${snapshot.quoteNumber} | Version ${snapshot.versionNumber}`,
-    MARGIN + 14,
-    half,
-    `${snapshot.work.title} | ${snapshot.work.number}`,
-  );
-  summaryCell(
-    "Prepared for",
-    snapshot.customer.name,
-    MARGIN + half + 22,
-    half,
-    snapshot.site.summary,
-  );
-  y = summaryTop - 110;
-  drawText(
-    snapshot.validUntil
-      ? `Valid until ${snapshot.validUntil}`
-      : "Ask the trade business about validity",
-    {
-      size: 8.5,
-      color: rgb(0.34, 0.45, 0.45),
-      lineHeight: 11,
-      gapAfter: 8,
-    },
-  );
+  drawText("QUOTATION", { font: bold, size: 25, lineHeight: 31, color: palette.ink, gapAfter: 4 });
+  drawText(snapshot.work.title, { font: bold, size: 11, lineHeight: 15, color: palette.primary, gapAfter: 20 });
+  y = drawTradeDocumentMetadata(page, [
+    ["Prepared for", snapshot.customer.name], ["Site address", snapshot.site.summary], ["Quote reference", `${snapshot.quoteNumber} | Version ${snapshot.versionNumber}`],
+    ["Issue date", (snapshot.issuedAt || snapshot.capturedAt || "").slice(0,10)], ["Valid until", snapshot.validUntil || "Ask the business"], ["Job reference", snapshot.work.number],
+  ], { y, margin: MARGIN, width: CONTENT_WIDTH, regular, bold, ink: palette.ink, accent: palette.primary, line: palette.line, wrap: (font, value, size, width) => wrapText(font, value, size, width, font === bold ? boldCharacters : regularCharacters) });
 
   if (snapshot.customerMessage) {
     const messageLineHeight = 13;
@@ -701,6 +503,7 @@ export async function createTradeQuotePdfBytes(
   const includedItems = snapshot.items?.filter((item) => !isFinalPercentDiscount(item)) || [];
   if (includedItems.length) {
     const sections = contiguousTradeQuoteSections(includedItems);
+    tableHeading();
     for (const section of sections) {
       if (sections.length > 1 || section.heading !== "Included work") {
         ensureSpace(34);
@@ -733,7 +536,7 @@ export async function createTradeQuotePdfBytes(
     y: y - 16,
     font: bold,
     size: 7.5,
-    color: palette.accent,
+    color: rgb(0.85, 0.94, 0.93),
     },
   );
   const total = safeText(amount(displayTotals.totalCents), boldCharacters);
@@ -761,7 +564,7 @@ export async function createTradeQuotePdfBytes(
     const amountText = safeText(amount(Number(rowAmount)), boldCharacters);
     const rowY = y - 18 - index * 17;
     page.drawText(labelText, {
-      x: A4_WIDTH - MARGIN - 178,
+      x: MARGIN + 216,
       y: rowY,
       font: regular,
       size: 8,
@@ -769,7 +572,7 @@ export async function createTradeQuotePdfBytes(
       color: rgb(0.87, 0.94, 0.93),
     });
     page.drawText(amountText, {
-      x: A4_WIDTH - MARGIN - bold.widthOfTextAtSize(amountText, 8.5),
+      x: A4_WIDTH - MARGIN - 14 - bold.widthOfTextAtSize(amountText, 8.5),
       y: rowY,
       font: bold,
       size: 8.5,
@@ -826,6 +629,7 @@ export async function createTradeQuotePdfBytes(
           gapAfter: 5,
         });
       }
+      tableHeading();
       choice.items?.filter((item) => !isFinalPercentDiscount(item)).forEach(lineItem);
       drawText(
         `${
@@ -843,11 +647,8 @@ export async function createTradeQuotePdfBytes(
   }
 
   if (snapshot.terms) {
-    rule();
-    sectionTitle(
-      "Recorded terms",
-      "Scope, exclusions and completion terms",
-    );
+    rule(14);
+    drawText("Scope, exclusions and completion terms", { font: bold, size: 12, lineHeight: 17, gapAfter: 7 });
     drawText(snapshot.terms, {
       size: 8.75,
       color: rgb(0.24, 0.34, 0.34),

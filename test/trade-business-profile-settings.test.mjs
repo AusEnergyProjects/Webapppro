@@ -341,7 +341,7 @@ test("business settings render as one continuous page with explicit section acti
   }
   assert.match(
     settingsUi,
-    /targetSection === "appearance"[\s\S]*bannerCropXBasisPoints: bannerCrop\.x[\s\S]*bannerCropHeightBasisPoints: bannerCrop\.height/,
+    /targetSection === "appearance"[\s\S]*brandThemeKey,[\s\S]*brandBorderStyle,/,
   );
   assert.match(
     settingsUi,
@@ -406,36 +406,19 @@ test("customer document identity, crop and payment settings have one strict owne
   assert.match(customerDocumentsMigration, /banner_crop_y_basis_points INTEGER NOT NULL DEFAULT 0/);
   assert.match(customerDocumentsMigration, /banner_crop_width_basis_points INTEGER NOT NULL DEFAULT 10000/);
   assert.match(customerDocumentsMigration, /banner_crop_height_basis_points INTEGER NOT NULL DEFAULT 10000/);
-  assert.match(settingsUi, /x: 0,[\s\S]*y: 0,[\s\S]*width: 10_000,[\s\S]*height: 10_000/);
+  assert.doesNotMatch(settingsUi, /Document banner|BannerCropPreview/);
   assert.match(profileRoute, /bankFields\.some\(Boolean\) && !bankFields\.every\(Boolean\)/);
   assert.match(profileRoute, /document_business_name = ''/);
   assert.match(profileRoute, /invoice_payment_account_number = ''/);
 });
 
-test("business settings show crop-safe quote and invoice previews together", () => {
-  assert.match(settingsUi, /function BannerCropPreview/);
-  assert.match(settingsUi, /function fitCropToFiveToOne/);
-  assert.match(settingsUi, /image\.naturalWidth/);
-  assert.match(settingsUi, /context\.drawImage/);
-  assert.match(settingsUi, /width=\{1000\}/);
-  assert.match(settingsUi, /height=\{200\}/);
-  assert.match(settingsUi, /Save appearance and apply crop/);
-  assert.match(settingsUi, /Customer-facing business name/);
-  assert.match(settingsUi, /Customer enquiries phone/);
-  assert.match(settingsUi, /Customer enquiries email/);
-  assert.match(settingsUi, /Invoice payment details/);
-  assert.match(settingsUi, /\(\["quote", "invoice"\] as const\)\.map/);
-  assert.match(settingsUi, /businessName=\{documentDisplayBusinessName\}/);
-  assert.match(settingsUi, /<span>Subtotal<\/span>/);
-  assert.match(settingsUi, /<span>Discount<\/span>/);
-  assert.match(settingsUi, /<span>GST \(10%\)<\/span>/);
-  assert.match(settingsUi, /<span className="total">Total<\/span>/);
-  assert.match(settingsUi, /Payment details/);
-  for (const redundantLabel of ["Always included", "Your base scope"]) {
-    assert.doesNotMatch(settingsUi, new RegExp(redundantLabel, "i"));
-  }
-  assert.match(globalStyles, /\.business-settings-document-banner \{[^}]*aspect-ratio: 5 \/ 1/);
-  assert.match(globalStyles, /\.business-settings-document-preview-grid/);
+test("business settings use real PDF samples with current branding and payment details", () => {
+  assert.match(settingsUi, /TradeDocumentSamplePreview/);
+  assert.match(settingsUi, /logoSrc=\{logoPreview\}/);
+  assert.match(settingsUi, /name: documentDisplayBusinessName/);
+  assert.match(settingsUi, /themeKey: brandThemeKey/);
+  assert.match(settingsUi, /accountNumber: invoicePaymentAccountNumber/);
+  assert.doesNotMatch(settingsUi, /CustomerDocumentPreview|BannerCropPreview|apply crop/);
 });
 
 test("saved themes expose readable workspace, rail, search and action tokens", () => {

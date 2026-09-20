@@ -11,7 +11,7 @@ const params = extra => new URLSearchParams({ period: "monthly", ...extra });
 const schema = fs.readFileSync(new URL("../db/schema.ts", import.meta.url), "utf8");
 function fixture() {
   const db = new DatabaseSync(":memory:");
-  const tables = ["trade_work_orders", "trade_crm_job_details", "trade_crm_service_sites", "trade_crm_quick_invoices", "trade_crm_accepted_invoices", "trade_crm_quick_invoice_credits", "trade_crm_quotes", "trade_crm_quote_versions", "trade_crm_quote_acceptances", "trade_work_order_events", "trade_crm_accounting_documents", "trade_crm_appointments", "trade_team_members", "trade_work_order_tasks", "trade_crm_job_notes"];
+  const tables = ["trade_work_orders", "trade_crm_job_details", "trade_crm_service_sites", "trade_crm_quick_invoices", "trade_crm_accepted_invoices", "trade_crm_quick_invoice_credits", "trade_crm_quotes", "trade_crm_quote_versions", "trade_crm_quote_acceptances", "trade_work_order_events", "trade_crm_accounting_documents", "trade_crm_appointments", "trade_team_members", "trade_work_order_tasks", "trade_crm_job_notes", "trade_crm_job_plans", "trade_crm_job_plan_requirements", "trade_crm_job_actuals", "trade_crm_commercial_handovers"];
   for (const table of tables) {
     const start = schema.indexOf(`sqliteTable("${table}", {`); assert.ok(start >= 0);
     const block = schema.slice(start, schema.indexOf("}, (table)", start));
@@ -25,6 +25,69 @@ function fixture() {
   const d1 = { prepare, async batch(statements) { db.exec("BEGIN"); try { const result = statements.map(statement => ({ results: db.prepare(statement.sql).all(...statement.values) })); db.exec("COMMIT"); return result; } catch(error) { db.exec("ROLLBACK"); throw error; } } };
   return { db, insert, job, invoice, report: (query = {}, permissions = {}) => loadBusinessReport(d1, "owner", { ...access, ...permissions }, params(query), "VIC", now) };
 }
+
+function costJob(f, id, actual = true) {
+  f.job(id, { stage: "completed", work_number: id }, { crm_customer_id: "customer" }); f.invoice(id);
+  f.insert("trade_work_order_events", { id: `e-${id}`, work_order_id: id, firebase_uid: "owner", event_type: "job_completed", created_at: "2026-09-10T12:00Z" });
+  f.insert("trade_crm_commercial_handovers", { id: `h-${id}`, work_order_id: id, firebase_uid: "owner", crm_customer_id: "customer", accepted_at: "2026-09-01T12:00Z" });
+  f.insert("trade_crm_job_plans", { id: `p-${id}`, commercial_handoff_id: `h-${id}`, work_order_id: id, firebase_uid: "owner", status: "completed" });
+  for (const [type, cost, minutes] of [["labour", 2000, 120], ["material", 1000, 0]]) {
+    f.insert("trade_crm_job_plan_requirements", { id: `${id}-${type}`, job_plan_id: `p-${id}`, firebase_uid: "owner", requirement_type: type, status: "completed" });
+    if (actual) f.insert("trade_crm_job_actuals", { id: `a-${id}-${type}`, job_plan_id: `p-${id}`, job_plan_requirement_id: `${id}-${type}`, work_order_id: id, firebase_uid: "owner", actual_type: type, total_cost_cents: cost, duration_minutes: minutes });
+  }
+}
+
+test("job margin uses whole-job invoices less credits and separately aggregated actual costs", async () => {
+  const f = fixture(); costJob(f, "complete");
+  f.db.exec("UPDATE trade_crm_quick_invoices SET sent_at='2026-08-12T12:00Z'");
+  f.insert("trade_crm_quick_invoice_credits", { id: "credit", invoice_id: "i-complete", work_order_id: "complete", firebase_uid: "owner", status: "issued", total_cents: 2200, tax_cents: 200, created_at: "2026-09-15T12:00Z" });
+  const p = (await f.report()).profitability;
+  assert.equal(p.jobs, 1); assert.equal(p.completeJobs, 1); assert.equal(p.revenueCents, 8000);
+  assert.equal(p.labourCents, 2000); assert.equal(p.materialCents, 1000); assert.equal(p.labourMinutes, 120);
+  assert.equal(p.marginCents, 5000); assert.equal(p.marginPercent, 62.5);
+});
+
+test("missing actuals and zero-budget service tasks never count as confirmed zero costs", async () => {
+  const f = fixture(); costJob(f, "missing", false); costJob(f, "task");
+  f.insert("trade_crm_job_plan_requirements", { id: "service", job_plan_id: "p-task", firebase_uid: "owner", requirement_type: "task", total_cost_cents: 0, status: "completed" });
+  let p = (await f.report()).profitability; assert.equal(p.completeJobs, 0); assert.equal(p.marginCents, null);
+  assert.equal(p.items.find(item => item.id === "missing").missingCosts, 2); assert.equal(p.items.find(item => item.id === "task").missingCosts, 1);
+  f.insert("trade_crm_job_actuals", { id: "explicit-zero", job_plan_id: "p-task", job_plan_requirement_id: "service", work_order_id: "task", firebase_uid: "owner", actual_type: "task", total_cost_cents: 0 });
+  p = (await f.report()).profitability; assert.equal(p.completeJobs, 1); assert.equal(p.marginCents, 7000);
+  f.db.exec("UPDATE trade_crm_job_plan_requirements SET status='not_needed' WHERE job_plan_id='p-missing'");
+  assert.equal((await f.report()).profitability.completeJobs, 2);
+});
+
+test("revised scope with earlier actuals withholds margin and respects invoice-linked handoff", async () => {
+  const f = fixture(); costJob(f, "revised");
+  f.insert("trade_crm_commercial_handovers", { id: "new-h", work_order_id: "revised", firebase_uid: "owner", crm_customer_id: "customer", accepted_at: "2026-09-15T12:00Z" });
+  f.insert("trade_crm_job_plans", { id: "new-p", commercial_handoff_id: "new-h", work_order_id: "revised", firebase_uid: "owner" });
+  let p = (await f.report()).profitability; assert.equal(p.items[0].status, "scope_review"); assert.equal(p.marginCents, null);
+  f.insert("trade_crm_accepted_invoices", { id: "accepted", work_order_id: "revised", firebase_uid: "owner", crm_customer_id: "customer", commercial_handoff_id: "h-revised", created_at: "2026-09-12T12:00Z" });
+  p = (await f.report()).profitability; assert.equal(p.items[0].status, "complete"); assert.equal(p.marginCents, 7000);
+});
+
+test("negative margins survive and zero revenue has no margin percentage", async () => {
+  const f = fixture(); costJob(f, "loss"); f.db.exec("UPDATE trade_crm_quick_invoices SET total_cents=0,tax_cents=0");
+  const p = (await f.report()).profitability; assert.equal(p.marginCents, -3000); assert.equal(p.marginPercent, null); assert.equal(p.items[0].marginPercent, null);
+});
+
+test("cost permissions and owner scope protect profitability and CSV", async () => {
+  const f = fixture(); costJob(f, "mine");
+  f.insert("trade_crm_job_actuals", { id: "foreign", job_plan_id: "p-mine", job_plan_requirement_id: "mine-labour", work_order_id: "mine", firebase_uid: "other", actual_type: "labour", total_cost_cents: 900000 });
+  assert.equal((await f.report()).profitability.labourCents, 2000);
+  for (const permissions of [{ canViewInvoices: false }, { isOwner: false, canViewPriceBook: false }]) {
+    const report = await f.report({}, permissions); assert.equal(report.profitability, null); assert.doesNotMatch(JSON.stringify(reportCsvRows(report)), /Job profitability|Recorded labour costs/);
+  }
+  assert.equal((await f.report({}, { isOwner: false, canViewPriceBook: true })).profitability.completeJobs, 1);
+  assert.equal((await f.report({}, { isOwner: false, canViewPriceBook: true, jobScope: "own", memberId: "other-member" })).profitability.jobs, 0);
+});
+
+test("profitability totals include every job and every page remains accessible", async () => {
+  const f = fixture(); f.db.exec("BEGIN"); for (let i = 0; i < 1051; i++) costJob(f, `cost-${i}`); f.db.exec("COMMIT");
+  const p = (await f.report({ profitPage: "22" })).profitability;
+  assert.equal(p.jobs, 1051); assert.equal(p.completeJobs, 1051); assert.equal(p.marginCents, 1051 * 7000); assert.equal(p.items.length, 1); assert.equal(p.page, 22);
+});
 
 test("presets use calendar weeks, quarters and Australian financial years with fair comparisons", () => {
   const weekly = resolveReportPeriod(params({ period: "weekly" }), "VIC", now);

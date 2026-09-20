@@ -54,7 +54,7 @@ async function payload(uid: string, workOrderId: string) {
   const [phases, requirements, member, proof] = await Promise.all([
     db.prepare(`SELECT * FROM trade_crm_job_plan_phases WHERE firebase_uid = ? AND job_plan_id = ? ORDER BY position`).bind(uid, plan.id).all<Row>(),
     db.prepare(`SELECT r.*, a.quantity_milli actual_quantity_milli, a.duration_minutes actual_duration_minutes,
-        a.total_cost_cents actual_total_cost_cents, a.note actual_note
+        a.id actual_id, a.total_cost_cents actual_total_cost_cents, a.note actual_note
       FROM trade_crm_job_plan_requirements r LEFT JOIN trade_crm_job_actuals a
         ON a.job_plan_requirement_id = r.id AND a.firebase_uid = r.firebase_uid
       WHERE r.firebase_uid = ? AND r.job_plan_id = ? ORDER BY r.position`).bind(uid, plan.id).all<Row>(),
@@ -88,7 +88,7 @@ async function payload(uid: string, workOrderId: string) {
     requirements: requirements.results.map((row) => ({ id: String(row.id), phaseId: String(row.job_plan_phase_id), type: String(row.requirement_type),
       description: String(row.description), status: String(row.status), quantityMilli: Number(row.quantity_milli), expectedDurationMinutes: Number(row.expected_duration_minutes),
       requiredCapability: String(row.required_capability || ""), totalCostCents: Number(row.total_cost_cents), actualQuantityMilli: Number(row.actual_quantity_milli || 0),
-      actualDurationMinutes: Number(row.actual_duration_minutes || 0), actualCostCents: Number(row.actual_total_cost_cents || 0), actualNote: String(row.actual_note || "") })),
+      actualDurationMinutes: Number(row.actual_duration_minutes || 0), actualCostCents: Number(row.actual_total_cost_cents || 0), actualRecorded: Boolean(row.actual_id), actualNote: String(row.actual_note || "") })),
     readiness: { ...checks, ready: Object.values(checks).every(Boolean), assignedTo: member?.display_name || "" },
     execution: { actualCostCents, forecastCostCents, forecastMarginCents: Number(plan.accepted_subtotal_cents) - forecastCostCents, varianceCents, varianceStatus },
     completion: { ...completionChecks, proofRequired: proof.required, ready: Object.values(completionChecks).every(Boolean) && ["ready", "in_progress", "completed"].includes(String(plan.status)),
@@ -156,6 +156,7 @@ export async function POST(request: Request) {
         for (const [title, lines] of grouped) { const phaseId = crypto.randomUUID(); statements.push(db.prepare(`INSERT INTO trade_crm_job_plan_phases (id, job_plan_id, firebase_uid, position, title, customer_description, source_packet_id, source_packet_revision, expected_duration_minutes, status, completed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, '', 0, 0, 'pending', '', ?, ?)`)
           .bind(phaseId, planId, identity.uid, phasePosition++, title, `${lines.length} accepted scope item${lines.length === 1 ? "" : "s"}`, now, now));
           lines.forEach((line) => { const type = lineRequirementType(line); addRequirement(phaseId, type, String(line.price_book_item_id || line.id), String(line.description), Number(line.quantity_milli), Number(line.unit_cost_cents_ex_gst || 0), 0, "", ["material", "form"].includes(type) ? "required" : "confirmed"); }); }
+        statements.push(db.prepare(`UPDATE trade_crm_job_plans SET status='completed', completed_at=COALESCE((SELECT MIN(created_at) FROM trade_work_order_events WHERE work_order_id=? AND firebase_uid=? AND event_type='job_completed'),'') WHERE id=? AND firebase_uid=? AND EXISTS(SELECT 1 FROM trade_work_orders WHERE id=? AND firebase_uid=? AND stage='completed')`).bind(workOrderId, identity.uid, planId, identity.uid, workOrderId, identity.uid));
         statements.push(db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, 'job_plan_prepared', ?, ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, `Accepted scope ${String(handoff.commercial_reference)} prepared from its immutable execution snapshot.`, now));
         await db.batch(statements);
       }
@@ -170,13 +171,17 @@ export async function POST(request: Request) {
       await db.batch([db.prepare(`UPDATE trade_crm_job_plans SET status = 'ready', ready_at = ?, updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?`).bind(now, now, workOrderId, identity.uid), db.prepare(`UPDATE trade_work_orders SET stage = 'ready', updated_at = ? WHERE id = ? AND firebase_uid = ?`).bind(now, workOrderId, identity.uid), db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, 'job_ready', 'Job is ready to schedule and dispatch.', ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, now)]);
     } else if (action === "actual") {
       const requirementId = cleanAdminText(body.requirementId, 180); const requirement = await db.prepare(`SELECT r.*, p.status plan_status, p.work_order_id FROM trade_crm_job_plan_requirements r JOIN trade_crm_job_plans p ON p.id = r.job_plan_id AND p.firebase_uid = r.firebase_uid WHERE r.id = ? AND r.firebase_uid = ? AND p.work_order_id = ?`).bind(requirementId, identity.uid, workOrderId).first<Row>();
-      if (!requirement) throw new Error("JOB_NOT_FOUND"); if (!["ready", "in_progress"].includes(String(requirement.plan_status))) throw new Error("NOT_READY_TO_WORK");
+      if (!requirement) throw new Error("JOB_NOT_FOUND"); if (!["ready", "in_progress", "completed"].includes(String(requirement.plan_status))) throw new Error("NOT_READY_TO_WORK");
+      if (requirement.status === "not_needed" || (requirement.plan_status === "completed" && requirement.requirement_type === "form")) throw new Error("INVALID_ACTUAL");
       const quantity = body.usePlanned === true ? Number(requirement.quantity_milli) : Math.round(Number(body.quantityMilli || 0));
       const duration = body.usePlanned === true ? Number(requirement.expected_duration_minutes) : Math.round(Number(body.durationMinutes || 0));
       const cost = body.usePlanned === true ? Number(requirement.total_cost_cents) : Math.round(Number(body.totalCostCents || 0));
       if (![quantity, duration, cost].every((value) => Number.isFinite(value) && value >= 0) || quantity > 100000000 || duration > 1000000 || cost > 1000000000) throw new Error("INVALID_ACTUAL");
       const actualType = ["material", "labour"].includes(String(requirement.requirement_type)) ? String(requirement.requirement_type) : "task";
       await db.batch([
+        db.prepare(`INSERT INTO trade_work_order_events (id,work_order_id,firebase_uid,event_type,summary,created_at) SELECT ?,?,?,'job_cost_recorded',
+          'Cost record for ' || ? || ': previous ' || COALESCE((SELECT json_object('quantityMilli',quantity_milli,'minutes',duration_minutes,'costExGstCents',total_cost_cents) FROM trade_crm_job_actuals WHERE job_plan_requirement_id=? AND firebase_uid=?),'not recorded') || '; saved ' || json_object('quantityMilli',?,'minutes',?,'costExGstCents',?), ?`)
+          .bind(crypto.randomUUID(), workOrderId, identity.uid, String(requirement.description), requirementId, identity.uid, quantity, duration, cost, now),
         db.prepare(`INSERT INTO trade_crm_job_actuals (id, job_plan_id, job_plan_phase_id, job_plan_requirement_id, work_order_id, firebase_uid, actual_type, quantity_milli, duration_minutes, total_cost_cents, note, recorded_by_uid, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(job_plan_requirement_id) DO UPDATE SET quantity_milli = excluded.quantity_milli, duration_minutes = excluded.duration_minutes, total_cost_cents = excluded.total_cost_cents, note = excluded.note, recorded_by_uid = excluded.recorded_by_uid, updated_at = excluded.updated_at`)
           .bind(crypto.randomUUID(), requirement.job_plan_id, requirement.job_plan_phase_id, requirementId, workOrderId, identity.uid, actualType, quantity, duration, cost, cleanAdminText(body.note, 300), identity.uid, now, now),
         db.prepare(`UPDATE trade_crm_job_plan_requirements SET status = 'completed' WHERE id = ? AND firebase_uid = ?`).bind(requirementId, identity.uid),

@@ -5,6 +5,7 @@ import type { User } from "firebase/auth";
 import { ENERGY_SERVICE_CATALOGUE } from "@/lib/energy-service-catalogue.mjs";
 import { TRAINING_SERVICE_SECTIONS, trainingServiceSection } from "@/lib/training-service-sections.mjs";
 import styles from "./TradeTrainingWorkspace.module.css";
+import { TrainingServiceGuide } from "./TrainingServiceGuide";
 
 type ApiResult = { ok?: boolean; error?: string; code?: string };
 type BusinessStatus = { status: string; revision: number; insuranceExpiresOn: string; approved: boolean; blockedReasons: string[]; completionReference?: string; completedAt?: string };
@@ -25,14 +26,14 @@ type Source = { id: string; title: string; url: string };
 type Lesson = { title: string; body: string; sourceIds: string[] };
 type Completion = { reference: string; passedAt: string; expiresAt: string; revokedAt: string };
 type Module = { id: string; programCode?: string; version: string | number; title: string; activityTemplateIds: string[];
-  serviceCategory?: string; trainingSection?: string; businessServiceEnabled?: boolean;
+  serviceCategory?: string; trainingSection?: string; businessServiceEnabled?: boolean; kind?: string; jurisdictions?: string[];
   estimatedMinutes: number; passPercent: number; validityDays: number; lessons: Lesson[]; sources: Source[];
   availability: string; assessmentAvailable: boolean; assessmentUnavailableReason: string; completion: Completion | null; status: string };
 type TeamProgress = { memberId: string; displayName: string; officeOnly?: boolean; modules: { id: string; title: string; serviceCategory?: string; trainingSection?: string; status: string; reference?: string; expiresAt?: string }[] };
 type UnavailableActivity = { id: string; title: string; programCode: string; serviceCategory: string; trainingSection?: string; status: "unavailable"; message: string };
 type SavedSubmission = { id: string; moduleId: string; version: string; scorePercent: number; firstTryScorePercent: number; reference: string; completedAt: string };
 type SubmittedAnswers = SavedSubmission & { snapshot: { title: string; questions: { id: string; prompt: string; options: { id: string; text: string }[]; selectedOptionId: string; explanation: string }[] } };
-type TrainingResult = ApiResult & { business: BusinessStatus; memberId: string; officeOnly?: boolean; selectedMember?: { isOwner: boolean }; trainingServiceStates?: string[]; modules: Module[]; team?: TeamProgress[]; unavailableActivities?: UnavailableActivity[]; submissions?: SavedSubmission[] };
+type TrainingResult = ApiResult & { business: BusinessStatus; memberId: string; officeOnly?: boolean; selectedMember?: { isOwner: boolean }; trainingServiceStates?: string[]; trainingServiceIds?: string[]; modules: Module[]; team?: TeamProgress[]; unavailableActivities?: UnavailableActivity[]; submissions?: SavedSubmission[] };
 type Attempt = { id: string; moduleId: string; version: string | number; expiresAt: string;
   answers?: Record<string, string>; feedback?: Record<string, AnswerFeedback>;
   questions: { id: string; prompt: string; options: { id: string; text: string }[]; critical: boolean }[] };
@@ -305,6 +306,7 @@ export function TradeTrainingWorkspace({ user }: { user: User }) {
   return <div className={styles.shell}>
     <header className={styles.hero}><span className={styles.eyebrow}>Your compliance to-do list</span><h2>To do &amp; training</h2><p>{data?.officeOnly ? "Your saved team profile has no on-site services. Installation training is not required for office work." : "Saving your on-site services assigns the relevant activity modules here. Complete your own learning and assessments before carrying out government-program work, alongside business setup, current insurance and required credentials."}</p>{data && !data.officeOnly && <><strong>{pending} training {pending === 1 ? "task" : "tasks"} to do</strong><span>{passed} of {data.modules.length} activity modules passed</span></>}</header>
     {!data?.officeOnly && data?.trainingServiceStates?.length ? <p className={styles.muted}>Training for {data.trainingServiceStates.join(", ")}, plus relevant national programs. {data.selectedMember?.isOwner ? "Change your business regions in Business > Services and areas." : "Your business owner or team manager can change your regions in Team > your profile > Service regions. Only regions the business also serves apply."}</p> : null}
+    {data && !data.officeOnly && <TrainingServiceGuide services={data.trainingServiceIds || [...new Set(data.modules.map(module => module.serviceCategory || ""))]} states={data.trainingServiceStates || []} modules={data.modules} unavailable={data.unavailableActivities || []} busy={Boolean(busy)} onOpen={openModule} />}
     <TradeCreditexOnboarding user={user} />
     {error && <p className={`${styles.notice} ${styles.error}`} role="alert">{error}</p>}
     {!data && !error && <p role="status">Loading your activity training...</p>}

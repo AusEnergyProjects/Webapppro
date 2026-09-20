@@ -274,7 +274,7 @@ export async function getTrainingModulesForMember(db: D1Database, ownerUid: stri
     const assignment = data.assignments.find(item => item.moduleId === course.id)?.assignment;
     const serviceCategory = assignment?.serviceCategory || '';
     modules.push({ id: course.id, version: course.version, title: course.title, programCode: course.programCode, serviceCategory, businessServiceEnabled: Boolean(memberScope?.businessCapabilities.includes(serviceCategory)), activityTemplateIds: course.activityTemplateIds, estimatedMinutes: course.estimatedMinutes, passPercent: 100, validityDays: course.validityDays, lessons: course.lessons.map(lesson => ({ ...lesson, sourceIds: learnerSourceIds(lesson.sourceIds) })), sources: course.sources.filter(source => source.id !== 'creditex-review'), availability, ...assessment, status,
-      trainingSection: assignment?.trainingSection, completion: completion ? { id: completion.id, reference: completion.reference, passedAt: completion.passed_at, expiresAt: completion.expires_at, revokedAt: completion.revoked_at } : null });
+      kind: assignment?.kind, jurisdictions: assignment?.jurisdictions, trainingSection: assignment?.trainingSection, completion: completion ? { id: completion.id, reference: completion.reference, passedAt: completion.passed_at, expiresAt: completion.expires_at, revokedAt: completion.revoked_at } : null });
   }
   return modules;
 }

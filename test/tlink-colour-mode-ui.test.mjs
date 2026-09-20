@@ -222,7 +222,6 @@ test("customer-facing document previews remain explicitly light in night mode", 
   );
 
   for (const documentSelector of [
-    ".business-settings-document-preview",
     ".crm-invoice-preview",
     ".trade-quote-document-sheet",
   ]) {
