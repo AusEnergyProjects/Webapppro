@@ -198,7 +198,8 @@ test("installer CRM exposes progressive integrations, field work and a read-only
   for (const label of ["Xero", "MYOB", "QuickBooks"]) assert.match(integrationUi, new RegExp(label));
   assert.doesNotMatch(integrationUi, /Stripe|Square/);
   assert.match(paymentUi, /Payment processing is outside TLink/);
-  assert.match(integrationUi, /never asks for or stores the provider password/);
+  assert.match(integrationUi, /Accounting and calendar connections use provider approval/);
+  assert.match(integrationUi, /never asks for or stores your accounting or calendar password/);
   assert.doesNotMatch(`${providerLayer}\n${integrationUi}\n${crm}`, /GOOGLE_MAPS_API_KEY|Google property tools|TradePropertyView/);
 });
 

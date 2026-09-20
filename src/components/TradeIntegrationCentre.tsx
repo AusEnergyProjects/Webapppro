@@ -103,6 +103,7 @@ export function TradeIntegrationCentre({ user }: { user: User }) {
 
   return <div className="crm-integrations">
     <div className="crm-page-heading"><div><span>Connected business services</span><h3>Integrations</h3><p>Connect your own accounting, calendar and SMS accounts. Each connection belongs to your business.</p></div></div>
+    <p>Accounting and calendar connections use provider approval. TLink never asks for or stores your accounting or calendar password.</p>
     {status && <p className="crm-inline-status" role="status">{status}</p>}
     {loading ? <section className="crm-loading"><span /><div><strong>Checking business connections</strong><p>Loading provider readiness...</p></div></section> : <>
       <section className="crm-integration-grid">
