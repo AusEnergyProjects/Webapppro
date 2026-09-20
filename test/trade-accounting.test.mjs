@@ -55,8 +55,11 @@ test("Xero, MYOB and QuickBooks statuses map into the simple CRM invoice states"
   assert.equal(accountingStatus("myob", "Open", 10000, 0, ""), "issued");
   assert.equal(accountingStatus("myob", "Closed", 10000, 10000, ""), "paid");
   assert.equal(accountingStatus("myob", "Credit", 10000, 0, ""), "void");
-  assert.equal(accountingStatus("quickbooks", "DRAFT", 10000, 0, ""), "draft");
-  assert.equal(accountingStatus("quickbooks", "DRAFT", 10000, 10000, ""), "paid");
+  assert.equal(accountingStatus("quickbooks", "Open", 10000, 0, ""), "issued");
+  assert.equal(accountingStatus("quickbooks", "Open", 10000, 10000, ""), "paid");
+  assert.equal(accountingStatus("quickbooks", "Open", 10000, 2500, ""), "part_paid");
+  assert.equal(accountingStatus("quickbooks", "Open", 10000, 0, "2026-01-01", "2026-01-02"), "overdue");
+  assert.equal(accountingStatus("quickbooks", "VOID", 10000, 0, ""), "void");
   assert.equal(centsFromProvider("123.455"), 12346);
 });
 
@@ -67,7 +70,7 @@ test("server blocks protected jobs before provider export", () => {
   assert.match(route, /Australian Energy Assessments protected customer details cannot be sent to an accounting provider/);
 });
 
-test("exports are drafts, do not email, and refresh provider totals", () => {
+test("exports use provider invoice states, do not request email, and refresh provider totals", () => {
   assert.match(providerExport, /Status: "DRAFT"/);
   assert.match(providerExport, /InvoiceDeliveryStatus: "Nothing"/);
   assert.match(providerExport, /IsTaxInclusive: false/);
@@ -80,6 +83,48 @@ test("exports are drafts, do not email, and refresh provider totals", () => {
   assert.match(route, /trade_crm_accounting_events/);
   assert.match(route, /EXPORT_IN_PROGRESS/);
   assert.match(route, /updated_at < \?/);
+});
+
+test("accounting job query keeps accepted and quick invoice references distinct", () => {
+  const query = route.match(/async function directJob[\s\S]*?prepare\(`([\s\S]*?)`\)/)?.[1];
+  assert.ok(query, "Use the actual accounting job query");
+  const database = new DatabaseSync(":memory:");
+  try {
+    database.exec(`
+      CREATE TABLE trade_work_orders (id, firebase_uid, work_number, title, source_type, partner_type, record_status);
+      CREATE TABLE trade_crm_job_details (work_order_id, firebase_uid, customer_source, crm_customer_id,
+        invoiced_value_cents, paid_value_cents, payment_due_at, accepted_disclosure_snapshot, accepted_disclosure_sha256, accepted_disclosure_at);
+      CREATE TABLE trade_crm_customers (id, firebase_uid, record_status, customer_number, customer_type,
+        first_name, last_name, business_name, email, phone, address_line_1, address_line_2, suburb, address_state, postcode);
+      CREATE TABLE trade_crm_accepted_invoices (id, firebase_uid, work_order_id, crm_customer_id, acceptance_id,
+        quote_id, quote_version_id, invoice_number, source_snapshot_sha256, document_snapshot_json, subtotal_cents,
+        tax_cents, total_cents, due_at, status, issue_blocker_code, commercial_handoff_id, created_at);
+      CREATE TABLE trade_crm_commercial_handovers (id, acceptance_id, quote_id, quote_version_id, work_order_id,
+        firebase_uid, crm_customer_id, status, commercial_reference, scope_snapshot_json, subtotal_cents, tax_cents, total_cents, accepted_at);
+      CREATE TABLE trade_crm_quote_acceptances (id, quote_id, quote_version_id, work_order_id,
+        firebase_uid, crm_customer_id, decision, result_invoice_id, invoice_creation_status);
+      CREATE TABLE trade_crm_quick_invoices (id, work_order_id, firebase_uid, invoice_number, line_items_json,
+        subtotal_cents, discount_cents, tax_cents, total_cents, due_at, status, delivery_status);
+      CREATE TABLE trade_crm_quick_invoice_credits (invoice_id, total_cents, status);
+      INSERT INTO trade_work_orders VALUES ('job', 'owner', 'JOB-1', 'Work', 'internal', 'installer', 'active');
+      INSERT INTO trade_crm_accepted_invoices (id, firebase_uid, work_order_id, invoice_number, created_at)
+        VALUES ('accepted', 'owner', 'job', 'ACCEPTED-001', '2026-09-20');
+    `);
+    const statement = database.prepare(query);
+    const acceptedOnly = statement.get("job", "owner");
+    assert.equal(acceptedOnly.invoice_number, "ACCEPTED-001");
+    assert.equal(acceptedOnly.quick_invoice_number, null);
+    database.exec(`INSERT INTO trade_crm_quick_invoices (id, work_order_id, firebase_uid, invoice_number)
+      VALUES ('quick', 'job', 'owner', 'QUICK-002');`);
+    const both = statement.get("job", "owner");
+    assert.equal(both.invoice_number, "ACCEPTED-001");
+    assert.equal(both.quick_invoice_number, "QUICK-002");
+    assert.equal(statement.get("job", "other-owner"), undefined);
+    database.exec("DELETE FROM trade_crm_accepted_invoices");
+    const quickOnly = statement.get("job", "owner");
+    assert.equal(quickOnly.invoice_number, null);
+    assert.equal(quickOnly.quick_invoice_number, "QUICK-002");
+  } finally { database.close(); }
 });
 
 test("accounting access is owner-scoped, permission-aware and assigned-job bounded", async () => {

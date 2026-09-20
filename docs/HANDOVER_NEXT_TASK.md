@@ -1,5 +1,24 @@
 # Next task handover
 
+Status: Accounting export reference and provider-status corrections prepared; external provider registration and live OAuth acceptance remain in progress.
+Prepared: 20 September 2026
+
+## Active contract: accounting provider activation, 20 September 2026
+
+Outcome: TLink businesses can connect their own Xero, MYOB and QuickBooks accounts and export the exact issued invoice, then refresh its accounting status. James authorised provider registration with `info@ausenergyassessments.com` and publication to GitHub and Sites.
+
+Owner: coordinating task in `C:/Webproject/aea-energy-accounting-integrations`, branch `codex/tlink-accounting-integrations`, based on verified live Sites 592 / GitHub main source `836c11152a685282c0d40fc35665ed194b5c64d7`.
+
+Scope: existing accounting OAuth, invoice export/query and provider-specific copy, regression tests, provider app registration and runtime credentials. Preserve encrypted owner-scoped tokens, consent boundaries, signed invoice totals and duplicate-export safeguards. No payment collection, automatic customer emails or unrelated portal changes.
+
+Acceptance: accepted and quick invoices retain their correct references; Xero drafts and MYOB/QuickBooks posted invoices are described accurately before export; provider callbacks and actual credentials are configured before claiming a connection works. Verify one authorised test organisation per provider without sending customer emails. Responsive integration controls must remain usable.
+
+Validation: executable database-query regression, existing accounting/OAuth/handoff tests, typecheck, lint, full validation and publication build. Release only matching committed source. Stop at unavailable account verification, provider approval, terms requiring owner confirmation or paid subscriptions; continue independent implementation work. No provider is complete based on fixture tests alone.
+
+Current external state: the existing Intuit account and TLink app have been recovered. Its production client ID and secret are stored as Sites secrets and the authorised apex callback is saved; deployment and live OAuth acceptance remain. The hosted encryption key exists; Xero and MYOB client credentials remain absent. Xero free-account terms and MYOB's $110/month application and terms await owner confirmation. No live provider connection or invoice export has been verified.
+
+Validation evidence: 41 focused accounting/integration/release tests and 37 integration tests pass; typecheck, lint, all 180 migration applications, customer-plan PDF audit and production build pass. The full test run had eight failures: the changed milestone assertion is corrected and rechecked; seven unrelated service-selection/brand tests reproduce identically on the clean live baseline. No migrations, dependencies or customer data changed.
+
 Status: Lead access, technician service regions (migration 0180), specific training sections and named booking blockers prepared for publication; real agreement and verification integrations remain to be supplied.
 Prepared: 20 September 2026
 

@@ -394,7 +394,7 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
       </div>}
       {needsReconciliation && <p className="crm-wizard-message" role="alert">This accepted invoice needs reconciliation before payment details can be used. It cannot be edited or sent again from this job.</p>}
       {!needsReconciliation && !bankPayment && <p className="crm-wizard-message" role="status">The invoice is recorded. Contact the business for payment details.</p>}
-      {!needsReconciliation && onOpenIntegrations && <details className="crm-quick-invoice-handoff"><summary>Send to MYOB, Xero or QuickBooks</summary><p>Create one matching draft in your connected accounting system without re-entering the customer, certificate credits, GST or totals.</p><TradeAccountingPanel
+      {!needsReconciliation && onOpenIntegrations && <details className="crm-quick-invoice-handoff"><summary>Send to MYOB, Xero or QuickBooks</summary><p>Create one matching invoice in your connected accounting system without re-entering the customer, certificate credits, GST or totals.</p><TradeAccountingPanel
         user={user} workOrderId={workOrderId} isProtected={false} hasDirectCustomer
         invoiceAmountCents={acceptedInvoice.totalCents} invoiceReference={acceptedInvoice.invoiceNumber}
         invoiceLines={(acceptedInvoice.document.lines || []).map((line) => ({ lineId: line.lineId, section: line.section, description: line.description, quantityMilli: line.quantityMilli, totalCents: line.totalCents }))}

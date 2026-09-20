@@ -54,13 +54,13 @@ test("Xero, MYOB and QuickBooks reuse the accepted handoff", () => {
   assert.match(accountingRoute, /minorversion=75/);
   assert.match(accountingRoute, /SELECT \* FROM Item WHERE Active = true/);
   assert.match(accountingRoute, /assertProviderTotalsMatch/);
-  assert.match(accountingUi, /Create QuickBooks draft/);
+  assert.match(accountingUi, /Create QuickBooks invoice/);
 });
 
 test("the office flow is progressive and exposes one commercial timeline", () => {
   for (const copy of ["Accepted quote handoff", "10% is the simple default", "Payment processing is outside TLink", "Commercial timeline", "No retyping or provider calculations"]) assert.match(`${ui}\n${read("../src/components/TradePaymentPanel.tsx")}`, new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.doesNotMatch(`${ui}\n${read("../src/components/TradePaymentPanel.tsx")}`, /Request with Stripe|Request with Square|Open checkout/);
-  for (const copy of ["Invoice preview", "Draft, not sent", "Preview, then create the draft", "Accounting system", "Nothing is approved or emailed automatically"]) assert.match(accountingUi, new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const copy of ["Invoice preview", "Export preview", "Preview, then export the invoice", "Accounting system", "TLink does not request an invoice email"]) assert.match(accountingUi, new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(accountingUi, /invoiceLines\.map/);
   assert.doesNotMatch(handoffRoute, /DEPOSIT_ALREADY_REQUESTED|trade_crm_payment_links/);
   assert.match(handoffRoute, /timeline/);

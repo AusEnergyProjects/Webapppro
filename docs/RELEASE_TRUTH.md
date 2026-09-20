@@ -6,11 +6,17 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 20 September 2026
 
-Deployment baseline verified: Sites 585 and GitHub main at `fe3f687270949d20ce1d69720bab487bcb2934d0` before this release.
+Deployment baseline verified: Sites 592 and GitHub main at `836c11152a685282c0d40fc35665ed194b5c64d7` before this release.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: lead access and technician service regions
+## Current implementation: accounting export correctness and provider activation
+
+The accounting job query now retains distinct accepted-invoice and quick-invoice references, preventing a joined quick-invoice column from replacing the immutable accepted invoice number. QuickBooks unpaid invoices are recorded as issued; export controls accurately describe Xero drafts and MYOB/QuickBooks invoices with amounts owing. TLink does not request invoice emails; users are directed to check their accounting system's automatic sending rules. Existing owner, privacy, amount and duplicate-export checks remain intact.
+
+The existing Intuit account and TLink app were recovered, their production credentials stored as Sites secrets and the authorised apex callback saved. Actual OAuth/export acceptance remains to be completed; Xero and MYOB registration and credentials remain pending. Do not describe any provider as connected based on this source change. Focused checks (41), integration checks (37), typecheck, lint, 180 migration applications, PDF audit and build pass. Seven unrelated full-suite failures reproduce on the clean baseline; the changed milestone assertions are corrected. The coordinating release response records the exact subsequent commit, Sites version and live checks.
+
+## Previous implementation: lead access and technician service regions
 
 Migration 0180 adds nullable team-member service states: null follows business regions; explicit selections are restricted to business regions and intersect them on every training and booking check. The owner covers the business footprint; each field technician receives modules for their own services and regions, including relevant national activities. Office-only staff need no installation assessments. Training does not block TLink lead allocation, disclosure or notification; business onboarding, active owner, service/location and consent checks remain. Certificate bookings retain current owner/assigned-technician training and credential checks, use the actual job state for national programs, and name missing modules with learning links. The broad Other training group now has nine curated sections, also available for new custom forms in both editors and native. This source record precedes publication; the coordinating response records the matching commit, Sites version and Android update.
 

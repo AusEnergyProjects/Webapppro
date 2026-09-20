@@ -103,7 +103,7 @@ export function accountingStatus(
       return "paid";
     if (paidAmountCents > 0) return "part_paid";
     if (dueAt && dueAt < today) return "overdue";
-    return "draft";
+    return "issued";
   }
   if (status === "CREDIT") return "void";
   if (

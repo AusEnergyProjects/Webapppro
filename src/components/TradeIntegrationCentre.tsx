@@ -26,8 +26,8 @@ type IntegrationResult = { ok?: boolean; providers?: Provider[]; error?: string 
 
 const providerNotes: Record<Provider["provider"], string> = {
   xero: "Export a direct-customer job as a draft Xero invoice, then refresh its total and payment status without sharing a Xero password.",
-  myob: "Export a direct-customer job as a draft MYOB service invoice, then refresh its total and payment status without giving Australian Energy Assessments your MYOB login.",
-  quickbooks: "Create a draft QuickBooks Online invoice from the exact accepted quote, then refresh its status without making QuickBooks the source of truth.",
+  myob: "Create an open MYOB service invoice from your TLink invoice, then refresh its total and payment status. This records the amount owing in MYOB.",
+  quickbooks: "Create a QuickBooks Online invoice from your TLink invoice, then refresh its total and payment status. This records the amount owing in QuickBooks.",
   google_calendar: "Mirror TLink appointments to Google Calendar. TLink stays authoritative and protected customer details are withheld.",
   microsoft_calendar: "Mirror TLink appointments to Outlook. TLink stays authoritative and protected customer details are withheld.",
 };

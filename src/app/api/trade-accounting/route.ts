@@ -227,7 +227,7 @@ async function directJob(firebaseUid: string, workOrderId: string, source: Invoi
       h.scope_snapshot_json handoff_scope_snapshot_json, h.subtotal_cents handoff_subtotal_cents,
       h.tax_cents handoff_tax_cents, h.total_cents handoff_total_cents, h.accepted_at,
       acceptance.id linked_acceptance_id, acceptance.result_invoice_id, acceptance.invoice_creation_status,
-      q.id quick_invoice_id, q.invoice_number, q.line_items_json, q.subtotal_cents quick_subtotal_cents,
+      q.id quick_invoice_id, q.invoice_number quick_invoice_number, q.line_items_json, q.subtotal_cents quick_subtotal_cents,
       q.discount_cents quick_discount_cents,
       q.tax_cents quick_tax_cents, q.total_cents quick_total_cents, q.due_at quick_due_at,
       q.status quick_status, q.delivery_status quick_delivery_status,
@@ -271,7 +271,7 @@ async function directJob(firebaseUid: string, workOrderId: string, source: Invoi
       taxCents: Number(row.quick_tax_cents),
       totalCents: Number(row.quick_total_cents),
     });
-    return { ...row, invoice_source: source, commercial_handoff_id: "", commercial_reference: row.invoice_number,
+    return { ...row, invoice_source: source, commercial_handoff_id: "", commercial_reference: row.quick_invoice_number,
       scope_snapshot_json: JSON.stringify(scope.lines), accepted_subtotal_cents: scope.totals.subtotalCents,
       accepted_tax_cents: row.quick_tax_cents, accepted_total_cents: row.quick_total_cents, payment_due_at: row.quick_due_at };
   }
@@ -822,7 +822,7 @@ async function exportInvoice(firebaseUid: string, provider: AccountingProvider, 
       .bind(externalContactId, selectedAccount, now, document.id).run();
     const externalId = String(provider === "xero" ? external.InvoiceID : provider === "myob" ? external.UID : external.Id);
     const externalNumber = String(provider === "xero" ? external.InvoiceNumber : provider === "myob" ? external.Number : external.DocNumber);
-    const providerStatus = String(external.Status || (provider === "myob" ? "Open" : "DRAFT"));
+    const providerStatus = String(external.Status || (provider === "xero" ? "DRAFT" : "Open"));
     const providerTotals = assertProviderTotalsMatch(provider, external, scope.totals);
     const totalCents = providerTotals.totalCents;
     const paidCents = provider === "xero" ? centsFromProvider(external.AmountPaid) : provider === "myob" ? Math.max(0, totalCents - centsFromProvider(external.BalanceDueAmount)) : Math.max(0, totalCents - centsFromProvider(external.Balance));
@@ -879,7 +879,7 @@ async function refreshInvoice(firebaseUid: string, job: Row) {
       invoice = result.Invoice && typeof result.Invoice === "object" ? result.Invoice as Row : {};
     }
     if (!(provider === "xero" ? invoice.InvoiceID : provider === "myob" ? invoice.UID : invoice.Id)) throw new Error("PROVIDER_REQUEST_FAILED");
-    const providerStatus = String(invoice.Status || (provider === "quickbooks" ? "DRAFT" : ""));
+    const providerStatus = String(invoice.Status || (provider === "quickbooks" ? "Open" : ""));
     const amountCents = assertProviderTotalsMatch(provider, invoice, acceptedScope(job).totals).totalCents;
     const providerPaidCents = provider === "xero" ? centsFromProvider(invoice.AmountPaid) : provider === "myob" ? Math.max(0, amountCents - centsFromProvider(invoice.BalanceDueAmount)) : Math.max(0, amountCents - centsFromProvider(invoice.Balance));
     const effectivePaidCents = Math.max(Number(job.paid_value_cents || 0), providerPaidCents);
