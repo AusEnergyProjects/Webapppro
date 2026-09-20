@@ -129,7 +129,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
   const [priority, setPriority] = useState("");
   const [notificationStatus, setNotificationStatus] = useState("");
   const [assignedFilter, setAssignedFilter] = useState("");
-  const [queue, setQueueState] = useState("all");
+  const [queue, setQueueState] = useState("action_required");
   const [actionOnly, setActionOnly] = useState(false);
   const [status, setStatus] = useState("");
   const [clearingAlerts, setClearingAlerts] = useState(false);
@@ -173,7 +173,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setBrowserAlerts(window.localStorage.getItem("aea-admin-browser-alerts") === "enabled");
-      setQueueState(window.localStorage.getItem("aea-admin-inbox-queue") || "all");
+      setQueueState(window.localStorage.getItem("aea-admin-inbox-queue") || "action_required");
       void load(true);
     }, 0);
     return () => window.clearTimeout(timer);
@@ -237,6 +237,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
     const term = search.trim().toLowerCase();
     const filtered = notifications.filter((item) => {
       const matchesQueue = queue === "all"
+        || queue === "action_required" && item.requiresAction && item.status !== "resolved"
         || queue === "mine" && item.assignedToUid === currentAdminUid && item.status !== "resolved"
         || queue === "unassigned" && !item.assignedToUid && item.requiresAction && item.status !== "resolved"
         || queue === "overdue" && item.slaState === "overdue" && item.status !== "resolved"
@@ -372,9 +373,9 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
     <>
       <header className="admin-page-heading admin-inbox-heading">
         <div>
-          <span>Proactive operations</span>
-          <h1>Notification and approvals inbox</h1>
-          <p>Every actionable event now has clear ownership, a response target, internal notes and a durable case history.</p>
+          <span>Daily work</span>
+          <h1>Inbox</h1>
+          <p>See what needs attention, assign it and keep the next action clear.</p>
         </div>
         <div className="admin-alert-controls">
           <button type="button" onClick={() => void load()} className="secondary">Refresh now</button>
@@ -384,11 +385,15 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
             disabled={clearingAlerts || counts.unread < 1}
             title="Marks every new alert as read. Cases that still need action stay in the inbox."
           >{clearingAlerts ? "Clearing..." : "Clear alerts"}</button>
-          {["owner", "admin"].includes(role) && <button type="button" onClick={() => void update("send_test")} disabled={!delivery.configured}>Send test alert</button>}
-          <button type="button" onClick={() => void enableBrowserAlerts()}>{browserAlerts ? "Disable browser alerts" : "Enable browser alerts"}</button>
+
         </div>
       </header>
       {status && <div className="admin-inline-status" role="status">{status}</div>}
+      <details className="admin-alert-settings"><summary>Notification settings & delivery</summary>
+        <div className="admin-alert-controls">
+          {["owner", "admin"].includes(role) && <button type="button" onClick={() => void update("send_test")} disabled={!delivery.configured}>Send test alert</button>}
+          <button type="button" onClick={() => void enableBrowserAlerts()}>{browserAlerts ? "Disable browser alerts" : "Enable browser alerts"}</button>
+        </div>
       <section className={`admin-delivery-health ${delivery.configured ? "connected" : "waiting"}`} aria-label="Off-screen notification delivery">
         <div>
           <span>Off-screen operations alerts</span>
@@ -405,12 +410,13 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
           <div><dt>Waiting</dt><dd>{(delivery.counts.pending || 0) + (delivery.counts.waiting_for_channel || 0)}</dd></div>
         </dl>
       </section>
+      </details>
       <section className="admin-metric-grid admin-notification-metrics">
         <article className={queue === "overdue" ? "active" : ""}><button type="button" onClick={() => setQueue("overdue")}><span>Overdue</span><strong>{counts.overdue || 0}</strong><small>Past their response target</small></button></article>
         <article className={queue === "due_soon" ? "active" : ""}><button type="button" onClick={() => setQueue("due_soon")}><span>Due soon</span><strong>{counts.due_soon || 0}</strong><small>Due within four hours</small></button></article>
         <article className={queue === "unassigned" ? "active" : ""}><button type="button" onClick={() => setQueue("unassigned")}><span>Unassigned</span><strong>{counts.unassigned || 0}</strong><small>Needs a responsible person</small></button></article>
         <article className={queue === "mine" ? "active" : ""}><button type="button" onClick={() => setQueue("mine")}><span>My queue</span><strong>{counts.mine || 0}</strong><small>Open cases assigned to you</small></button></article>
-        <article className={queue === "all" ? "active" : ""}><button type="button" onClick={() => setQueue("all")}><span>Action required</span><strong>{counts.action_required || 0}</strong><small>All open follow-up</small></button></article>
+        <article className={queue === "action_required" ? "active" : ""}><button type="button" onClick={() => setQueue("action_required")}><span>Action required</span><strong>{counts.action_required || 0}</strong><small>All open follow-up</small></button></article>
         <article className={queue === "resolved" ? "active" : ""}><button type="button" onClick={() => setQueue("resolved")}><span>Resolved</span><strong>{counts.resolved || 0}</strong><small>Completed with an audit trail</small></button></article>
       </section>
       <form className="admin-filterbar admin-notification-filter" onSubmit={submitFilters}>
@@ -457,12 +463,13 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
               </div>
               <h2>{item.title}</h2>
               <p>{item.summary}</p>
-              <dl className="admin-case-facts">
+              <div className="admin-inbox-row-facts"><span>{item.assignedToName || "Unassigned"}</span><span>{item.dueAt ? "Due " + dateTime(item.dueAt) : "No due date"}</span></div>
+              {expandedId === item.id && <dl className="admin-case-facts">
                 <div><dt>Owner</dt><dd>{item.assignedToName || "Unassigned"}</dd></div>
                 <div><dt>Response target</dt><dd>{item.dueAt ? dateTime(item.dueAt) : "No due date"}</dd></div>
                 <div><dt>Record</dt><dd>{readable(item.entityType)} | {item.entityId}</dd></div>
                 <div><dt>Off-screen delivery</dt><dd>{item.deliveryStatus === "not_queued" ? "Inbox only" : readable(item.deliveryStatus)}{item.deliveryAttempts ? ` | ${item.deliveryAttempts} attempt${item.deliveryAttempts === 1 ? "" : "s"}` : ""}</dd></div>
-              </dl>
+              </dl>}
               {item.resolutionNote && <div className="admin-resolution-note"><strong>Resolution</strong><span>{item.resolutionNote}</span></div>}
               {expandedId === item.id && (
                 <section className="admin-notification-case" aria-label={`Manage ${item.title}`}>

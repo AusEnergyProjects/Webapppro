@@ -10,6 +10,8 @@ import {
   useState,
 } from "react";
 import { firebaseAuth } from "@/lib/firebase-client";
+import type { User } from "firebase/auth";
+import { CreditexAuditCallPanel } from "./CreditexAuditCallPanel";
 import styles from "./CreditexOperationsWorkspace.module.css";
 
 type ComplianceRole = "admin" | "case_manager" | "reviewer" | "auditor";
@@ -474,8 +476,8 @@ const AREAS: Array<{
   label: string;
   shortLabel: string;
 }> = [
-  { id: "queue", label: "Work queue", shortLabel: "Queue" },
-  { id: "review", label: "Case review / Audit centre", shortLabel: "Review" },
+  { id: "queue", label: "Case list", shortLabel: "Cases" },
+  { id: "review", label: "Selected case", shortLabel: "Review" },
   { id: "tasks", label: "Tasks", shortLabel: "Tasks" },
   { id: "participants", label: "Participants", shortLabel: "People" },
   {
@@ -485,12 +487,12 @@ const AREAS: Array<{
   },
   {
     id: "submissions",
-    label: "Submissions & reconciliation",
+    label: "Submissions",
     shortLabel: "Submit",
   },
   {
     id: "certificates",
-    label: "Certificates & settlement",
+    label: "Certificates",
     shortLabel: "Certificates",
   },
   { id: "reports", label: "Reports", shortLabel: "Reports" },
@@ -2991,16 +2993,22 @@ export function CreditexOperationsWorkspace({
     operations.submissions.length,
   );
   const activeFilters = activeFilterCount(appliedFilters);
+  const primaryAreas: WorkspaceArea[] = ["queue", "review", "tasks", "submissions", "certificates"];
+  function areaButton(item: (typeof AREAS)[number]) {
+    return <button key={item.id} type="button" aria-current={area === item.id ? "page" : undefined} disabled={item.id === "review" && !selectedCase} onClick={() => {
+      if (item.id === "rules" && session.role === "admin") { onOpenActivityRules(); return; }
+      setArea(item.id);
+    }}><span>{item.label}</span><small>{item.shortLabel}</small></button>;
+  }
 
   return (
     <section className={styles.workspace} aria-label="Creditex operations">
       <header className={styles.workspaceHeader}>
         <div>
-          <span className={styles.eyebrow}>Creditex operations control</span>
-          <h2>Every program, one governed review path</h2>
+          <span className={styles.eyebrow}>Creditex casework</span>
+          <h2>Cases &amp; certificates</h2>
           <p>
-            Program workspaces and every governed activity version feed one
-            audited case, evidence, submission and external outcome workflow.
+            Review evidence, resolve tasks and track submissions from one case workspace.
           </p>
         </div>
         <button
@@ -3028,15 +3036,6 @@ export function CreditexOperationsWorkspace({
       {evidenceViewerError && (
         <p className={styles.error} role="alert">{evidenceViewerError}</p>
       )}
-      {operations.loaded && (
-        <p className={styles.warning} role="status">
-          The case search returned {operations.workspace.total} matching{" "}
-          {operations.workspace.total === 1 ? "case" : "cases"}; this page
-          shows up to {appliedFilters.pageSize}. Other operational categories
-          remain bounded lists, so an absent row never proves no record exists.
-        </p>
-      )}
-
       <div className={styles.summaryGrid} aria-label="Operational snapshot">
         <div>
           <span>Open cases</span>
@@ -3062,23 +3061,8 @@ export function CreditexOperationsWorkspace({
 
       <div className={styles.layout}>
         <nav className={styles.areaNav} aria-label="Creditex work areas">
-          {AREAS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-current={area === item.id ? "page" : undefined}
-              onClick={() => {
-                if (item.id === "rules" && session.role === "admin") {
-                  onOpenActivityRules();
-                  return;
-                }
-                setArea(item.id);
-              }}
-            >
-              <span>{item.label}</span>
-              <small>{item.shortLabel}</small>
-            </button>
-          ))}
+          <div className={styles.primaryAreas}>{AREAS.filter((item) => primaryAreas.includes(item.id)).map(areaButton)}</div>
+          <details className={styles.moreAreas} open={!primaryAreas.includes(area)}><summary>More tools</summary><div>{AREAS.filter((item) => !primaryAreas.includes(item.id)).map(areaButton)}</div></details>
         </nav>
 
         <div className={styles.areaContent}>
@@ -3086,10 +3070,9 @@ export function CreditexOperationsWorkspace({
             <section aria-labelledby="operations-queue-title">
               <div className={styles.sectionHeader}>
                 <div>
-                  <h3 id="operations-queue-title">Work queue</h3>
+                  <h3 id="operations-queue-title">Case list</h3>
                   <p>
-                    Privacy-minimised cases only. Select a case once, then
-                    continue through its review workspace.
+                    Open a case to review customer details, evidence, calls and next actions.
                   </p>
                 </div>
                 <div className={styles.filters}>
@@ -3148,32 +3131,14 @@ export function CreditexOperationsWorkspace({
 
               <div className={styles.caseWorkspace}>
                 <div className={styles.queueList}>
-                  {filteredCases.map((item) => (
-                    <button
-                      className={styles.queueItem}
-                      data-selected={
-                        selectedCase?.caseNumber === item.caseNumber
-                      }
-                      key={item.id || item.caseNumber}
-                      type="button"
-                      onClick={() => chooseCase(item)}
-                    >
-                      <span className={styles.queueTopline}>
-                        <strong>{item.caseNumber}</strong>
-                        <StatusPill value={item.workflowStatus} />
-                      </span>
-                      <span>{item.installerBusiness || "Installer not recorded"}</span>
-                      <small>
-                        {item.jobNumber || "No job number"} |{" "}
-                        {item.activity.registryActivityCode
-                          || item.activity.activityKey
-                          || "Activity not recorded"}
-                      </small>
-                      <small>
-                        Evidence: {readable(item.evidenceStatus)}
-                      </small>
-                    </button>
-                  ))}
+                  {Boolean(filteredCases.length) && <div className={styles.caseTableWrap}><table className={styles.caseTable}><thead><tr><th>Case / job</th><th>Installer</th><th>Program & activity</th><th>Status</th><th>Evidence</th><th>Activity date</th></tr></thead><tbody>{filteredCases.map((item) => <tr key={item.id || item.caseNumber} data-selected={selectedCase?.caseNumber === item.caseNumber}>
+                    <td><button className={styles.caseLink} type="button" onClick={() => chooseCase(item)}><strong>{item.caseNumber}</strong><span>{item.jobNumber || "No job number"}</span><small>Open case →</small></button></td>
+                    <td>{item.installerBusiness || "Not recorded"}</td>
+                    <td><strong>{item.activity.programName}</strong><small>{item.activity.registryActivityCode || item.activity.activityKey} · {item.activity.title}</small></td>
+                    <td><StatusPill value={item.workflowStatus} /></td>
+                    <td><StatusPill value={item.evidenceStatus} /></td>
+                    <td>{item.activityDate ? new Date(item.activityDate).toLocaleDateString("en-AU") : "Not recorded"}</td>
+                  </tr>)}</tbody></table></div>}
                   {!filteredCases.length && (
                     <EmptyState>
                       {query
@@ -3219,6 +3184,7 @@ export function CreditexOperationsWorkspace({
             <>
               <CaseReview
                 item={selectedCase}
+                user={firebaseAuth.currentUser}
                 loading={loadingOperations}
                 canViewEvidence={canViewEvidence}
                 evidenceAccessReceipts={evidenceAccessReceipts}
@@ -4917,7 +4883,7 @@ export function CreditexOperationsWorkspace({
           )}
         </div>
       </div>
-      <nav
+      <details className={styles.programShortcuts}><summary>Program shortcuts</summary><nav
         className={styles.programTabs}
         aria-label="Compliance program workspaces"
       >
@@ -4999,7 +4965,7 @@ export function CreditexOperationsWorkspace({
               ))}
           </div>
         )}
-      </nav>
+      </nav></details>
       {evidenceViewer && (
         <EvidenceViewerModal
           viewer={evidenceViewer}
@@ -5593,6 +5559,7 @@ function PrivateCaseDetails({ details }: {
 
 function CaseReview({
   item,
+  user,
   loading,
   canViewEvidence,
   evidenceAccessReceipts,
@@ -5600,6 +5567,7 @@ function CaseReview({
   onOpenEvidence,
 }: {
   item: OperationCase | null;
+  user: User | null;
   loading: boolean;
   canViewEvidence: boolean;
   evidenceAccessReceipts: Record<string, string>;
@@ -5633,6 +5601,7 @@ function CaseReview({
       />
       <CaseOverview item={item} />
       <PrivateCaseDetails details={item.privateDetails} />
+      {user && <CreditexAuditCallPanel key={`${user.uid}:${item.id}`} user={user} caseId={item.id} />}
       <div className={styles.auditGrid}>
         <div>
           <h4>Evidence checklist</h4>

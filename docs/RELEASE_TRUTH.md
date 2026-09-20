@@ -4,17 +4,27 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 20 September 2026
+Last reconciled locally: 21 September 2026
 
-Deployment baseline verified: Sites 592 and GitHub main at `836c11152a685282c0d40fc35665ed194b5c64d7` before this release.
+Deployment baseline verified: Sites 594 and GitHub main at `00e12a2a4088ceddcf574370e6746b05d040f195` before this release.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: trade-owned SMS conversations
+## Current implementation: Creditex and admin workspaces with private audit calls
+
+Creditex opens on Jobs, with detailed customer, trade, activity, site, schedule, stage and financial columns. Search, per-column filters and sorting apply before server pagination. Opening a job presents one audit workspace with summary, calls and expandable retained evidence and financial records. Cases and specialist tools remain available separately. The synthetic VEU pilot interface is retired; real VEU tools and historical evidence remain protected.
+
+Operations navigation groups daily work, catalogue, compliance and administration. The inbox defaults to action required; notification setup stays collapsed. Jobs use a paged, filterable register with configurable columns. Customer/account tables use the full workspace until a record is opened, and closed accounts and archived catalogue items are available through explicit filters. Owner-only demo cleanup previews exact explicitly marked records, checks recent authentication and the reviewed digest, uses close/archive lifecycle states and records confirmed outcomes without deleting audit history.
+
+Creditex PC calling uses its own Telnyx account, billing, default number and optional staff numbers. Migration 0183 adds encrypted organisation setup, single-use server-selected call intents and private recording receipts. Signed callbacks announce recording and require the customer to press 1 before recording and bridge. Acknowledged audio is stored privately in R2 with integrity metadata, bounded recovery and authorised audited playback. Unknown provider outcomes are not retried as new calls. History polling does not repeatedly contact provider configuration APIs. No AEA number or billing fallback exists.
+
+Focused SQLite/provider/signature/permission/consent/custody/UI tests and responsive component checks pass. Typecheck and full lint pass. The full suite reports 4,982 passing, 11 skipped and the same seven independently confirmed baseline failures: six service-selection fixture failures for next/image and one existing public-brand wording failure. All 183 migrations replay cleanly and the customer PDF audit passes. The coordinating task records the exact source publication build. Creditex must complete its own Telnyx account, billing, numbers and portal connection; actual audio and private provider-media transfer remain unverified until that acceptance call. No real customer call or SMS was made. The coordinating release records live archival counts and the exact GitHub/Sites identity; this source document does not itself prove deployment or data mutation.
+
+## Previous implementation: trade-owned SMS conversations
 
 Verified installer owners can connect an active main Twilio account, choose an owned Australian SMS number, and send service messages from a customer record. Credentials are encrypted and never returned. The connector verifies effective number routing, refuses another application's routing, and confirms cleanup on disconnect. Migration 0182 stores owner-scoped connections, consent/opt-out evidence and message history. Signed callbacks reconcile delivery and customer replies; duplicate requests and uncertain provider responses cannot automatically send again. One atomic reservation applies the daily outbound segment limit across reconnects. Carrier number rental and usage are billed by Twilio directly to the connected account; this limit is not an account-wide dollar cap. Existing and newly acquired Twilio numbers use the same setup; purchases and porting remain provider processes.
 
-The customer panel appears directly after the customer header, while credential setup stays in Integrations. Staff roles, protected opportunities and bulk marketing are excluded from this owner-only SMS slice. Focused provider, SQLite, permission, callback, UI and migration tests pass; the coordinating release records final broader validation and exact publication identity. No live customer SMS has been sent. AEA's Twilio account currently has no purchased number; Australian regulatory registration is in progress. Creditex PC audit calling with consented automatic recording is the user's next communications priority and is not implemented by this SMS change.
+The customer panel appears directly after the customer header, while credential setup stays in Integrations. Staff roles, protected opportunities and bulk marketing are excluded from this owner-only SMS slice. Focused provider, SQLite, permission, callback, UI and migration tests pass; the coordinating release records final broader validation and exact publication identity. No live customer SMS has been sent. AEA's Twilio account currently has no purchased number; Australian regulatory registration is in progress. Creditex PC audit calling is implemented separately in the current milestone above.
 
 ## Previous implementation: accounting export correctness and provider activation
 

@@ -233,7 +233,9 @@ export async function GET(request: Request) {
       );
       bindings.push(ftsPrefixQuery(search));
     }
-    if (ACCOUNT_STATUSES.has(status)) {
+    if (status === "open") {
+      clauses.push("account_status <> 'closed'");
+    } else if (ACCOUNT_STATUSES.has(status)) {
       clauses.push("account_status = ?");
       bindings.push(status);
     }

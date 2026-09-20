@@ -18,7 +18,7 @@ function harness(opportunity=lead,role='owner'){
  const state=[];let cursor=0;const exports={};
  const require=id=>id==='react'?{Fragment,useState:initial=>{const key=cursor++;if(!(key in state))state[key]=key===0?[opportunity]:typeof initial==='function'?initial():initial;return[state[key],value=>state[key]=typeof value==='function'?value(state[key]):value]},useEffect:()=>{},useCallback:fn=>fn,useRef:value=>({current:value})}:id==='react/jsx-runtime'?jsx:id.includes('energy-service-catalogue')?catalogue:id.includes('aea-trade-routing')?routing:id.includes('aea-service-identity')?aea:id.includes('australian-postcodes')?{AUSTRALIAN_STATE_CODES:['VIC','NSW']}:id.includes('admin-workspace')?{dateTime:value=>value||'Not yet',readable:value=>value.replaceAll('_',' ')}:id.endsWith('.css')?{default:{}}:{};
  Function('require','exports',compiled)(require,exports);
- return()=>{cursor=0;return exports.AdminOpportunityWorkspace({api:async()=>({}),demoOnlyRequest:0,role,setStatus:()=>{}})};
+ return()=>{cursor=0;return exports.AdminOpportunityWorkspace({api:async()=>({}),role,setStatus:()=>{}})};
 }
 test('lead register shows received timestamp and AEA routing before opening private details',()=>{
  const render=harness();let tree=render();assert.equal(nodes(tree,n=>n.type==='table').length,1);assert.match(text(tree),/2026-09-20T06:03:13.398Z/);assert.match(text(tree),/Australian Energy Assessments follow-up/);assert.match(text(tree),/Not available to other businesses/);

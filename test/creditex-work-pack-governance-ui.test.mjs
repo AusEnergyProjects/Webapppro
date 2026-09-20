@@ -12,7 +12,9 @@ const admin = read("../src/components/AdminOperationsPortal.tsx");
 const fieldMasters = read("../src/components/CreditexFieldFormMasters.tsx");
 
 test("Creditex and AEA admin share one governed activity form builder", () => {
-  assert.match(creditex, /id="creditex-tab-forms"/);
+  assert.match(creditex, /\{ id: "forms", label: "Activity forms" \}/);
+  assert.match(creditex, /toolsTabs\.map\([\s\S]*id=\{`creditex-tab-\$\{item\.id\}`\}[\s\S]*aria-controls=\{`creditex-panel-\$\{item\.id\}`\}/);
+  assert.match(creditex, /id="creditex-panel-forms"[\s\S]*aria-labelledby="creditex-tab-forms"/);
   assert.match(creditex, /endpoint="\/api\/creditex\/work-packs"/);
   assert.match(creditex, /sourceEndpoint="\/api\/creditex\/official-sources"/);
   assert.match(creditex, /canCaptureSource=\{\["admin", "case_manager"\]/);

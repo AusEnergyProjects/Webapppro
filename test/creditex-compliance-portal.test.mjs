@@ -359,25 +359,23 @@ test("planned intake exposes private job context only to the exact Creditex orga
     /trade_crm_job_media|object_key|firebase_id_token|refresh_token|password_hash|session_cookie/i,
   );
   for (const contract of [
-    /Creditex can inspect every assigned installer job, customer, service site and retained workflow record from planning onward/,
-    /Open full audit workspace/,
-    /All retained records/,
-    /Superseded planning history/,
+    /Find a job, review its records and call the customer from their audit workspace/,
+    /Open job/,
+    /All records/,
+    /Superseded history/,
     /requestSequence/,
-    /aria-expanded=\{expandedId === item\.id\}/,
+    /aria-controls="creditex-full-audit-workspace"/,
     /item\.customerName/,
     /item\.customerPhone, item\.customerEmail/,
     /item\.serviceAddress/,
-    /item\.customerPrivateNotes/,
-    /item\.accessInstructions/,
-    /item\.parkingInstructions/,
-    /item\.hazardNotes/,
-    /item\.estimatedValueCents/,
+    /AuditRecordView title="Customer" record=\{audit\.customer\}/,
+    /AuditRecordView title="Service site" record=\{audit\.serviceSite\}/,
+    /AuditRecordView title="Job details" record=\{audit\.jobDetails\}/,
+    /AuditRecordView title="Work order" record=\{audit\.workOrder\}/,
     /item\.quotedValueCents/,
     /item\.invoicedValueCents/,
-    /item\.paidValueCents/,
     /Re-plan required/,
-    /Planning snapshot:/,
+    /All saved fields and references/,
   ]) assert.match(plannedIntakeQueue, contract);
 
   for (const contract of [
@@ -923,7 +921,7 @@ test("authorised case detail renders private CRM data only after audited case ac
     /Appointments/,
   ]) assert.match(operations, contract);
   assert.match(operations, /Government activity sources/);
-  assert.match(operations, /submission and external outcome workflow/);
+  assert.match(operations, /Review evidence, resolve tasks and track submissions from one case workspace/);
   assert.doesNotMatch(operations, /submission and certificate workflow/);
   assert.doesNotMatch(portal, /remain outside this queue/);
   assert.doesNotMatch(
@@ -940,25 +938,23 @@ test("portal tabs and disabled actions expose accessible semantics", () => {
     "../src/components/CreditexCompliancePortal.module.css",
   );
   assert.match(portal, /role="tablist"/);
-  assert.match(portal, /aria-controls="creditex-panel-cases"/);
-  assert.match(portal, /aria-controls="creditex-panel-sources"/);
-  assert.match(portal, /aria-controls="creditex-panel-governance"/);
+  assert.match(portal, /aria-controls=\{`creditex-panel-\$\{item\.id\}`\}/);
+  for (const id of ["cases", "sources", "governance"]) assert.match(portal, new RegExp(`id: "${id}"`));
   assert.match(portal, /Official sources/);
-  assert.match(portal, /Official source custody/);
   assert.match(
     portal,
-    /setTab\(session\.role === "admin" \? "governance" : "sources"\)/,
+    /selectTab\(session\.role === "admin" \? "governance" : "sources"\)/,
   );
   assert.ok(
-    portal.indexOf('id="creditex-tab-sources"')
-      < portal.indexOf('{session.role === "admin" && ('),
+    portal.indexOf('{ id: "sources", label: "Official sources" }')
+      < portal.indexOf('...(session?.role === "admin" ?'),
     "Every authorised compliance role must reach the source custody tab.",
   );
   assert.match(portal, /role="tabpanel"/);
   assert.match(portal, /handleWorkspaceTabKeyDown/);
   assert.ok(
     portal.indexOf('className={styles.tabs}')
-      < portal.indexOf('{tab !== "pilot" && ('),
+      < portal.indexOf('{!["cases", "operations"].includes(tab) && ('),
     "The permanent workspace tabs must render before tab-specific content.",
   );
   assert.match(

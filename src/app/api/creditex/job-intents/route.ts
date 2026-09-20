@@ -4,6 +4,7 @@ import {
   requireComplianceAccess,
 } from "@/lib/compliance-access-server";
 import { CREDITEX_PARTNER_ORGANISATION_CODE } from "@/lib/trade-compliance-intent";
+import { CreditexQueueFilterError, creditexJobIntentFilters, creditexQueueLike } from "@/lib/creditex-job-intent-filters";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ function json(body: object, status = 200) {
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof CreditexQueueFilterError) return json({ ok: false, code: "CREDITEX_QUEUE_FILTER_INVALID", error: error.message }, 400);
   if (error instanceof ComplianceAccessError) {
     return json({ ok: false, code: error.code, error: error.message }, error.status);
   }
@@ -129,20 +131,22 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const status = queueStatus(url.searchParams.get("status"));
     const search = String(url.searchParams.get("search") || "").trim().slice(0, 120);
-    const searchLike = `%${search.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
+    const searchLike = creditexQueueLike(search);
+    const { filterSql, filterBindings, sortSql, sort, sortDirection } = creditexJobIntentFilters(url.searchParams);
     const requestedPage = Math.max(
       1,
       Math.min(10_000, Number.parseInt(url.searchParams.get("page") || "1", 10) || 1),
     );
-    const bindings = queueBindings(
+    const bindings = [...queueBindings(
       access.organisationId,
       status,
       search,
       searchLike,
-    );
+    ), ...filterBindings];
     const count = await database.prepare(`SELECT count(*) total
       ${QUEUE_JOINS}
-      ${QUEUE_WHERE}`)
+      ${QUEUE_WHERE}
+      ${filterSql}`)
       .bind(...bindings)
       .first<Record<string, unknown>>();
     const total = Number(count?.total || 0);
@@ -205,11 +209,8 @@ export async function GET(request: Request) {
         account.business_name installer_business
       ${QUEUE_JOINS}
       ${QUEUE_WHERE}
-      ORDER BY
-        CASE WHEN intent.planned_start = '' THEN 1 ELSE 0 END,
-        intent.planned_start,
-        intent.updated_at DESC,
-        intent.id
+      ${filterSql}
+      ORDER BY ${sortSql}
       LIMIT ? OFFSET ?`)
       .bind(
         ...bindings,
@@ -220,6 +221,8 @@ export async function GET(request: Request) {
     return json({
       ok: true,
       status,
+      sort,
+      sortDirection,
       page,
       pageSize: PAGE_SIZE,
       total,

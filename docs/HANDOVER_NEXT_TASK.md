@@ -1,5 +1,23 @@
 # Next task handover
 
+Status: Creditex/admin workflow cleanup and private PC audit calling are in release validation; Creditex completes its own provider activation.
+Prepared: 21 September 2026
+
+## Active contract: Creditex and admin workflow cleanup with PC audit calls, 21 September 2026
+
+Outcome: authorised Creditex staff call the customer on their selected job or case from their PC headset, obtain the customer's recorded-consent decision before audio capture, and automatically save the audit conversation privately against that audit for later playback. Creditex uses a Jobs-first workspace with full-result column filters and one-click audit access; Operations uses grouped navigation and detailed registers. Archive explicitly marked demo accounts/products and the synthetic pilot while retaining history.
+
+Owner: coordinating task, branch codex/creditex-audit-calls, worktree C:/Webproject/aea-energy-creditex-audit-calls, initial clean base 67875cf74a6b44f2b52193fda79b3d6e512a02ea. SMS release changes are carried forward explicitly.
+
+Scope: simplified Creditex/admin daily navigation and registers, retirement of the VEU pilot interface, owner-previewed audited synthetic dataset archival, and a dedicated job/case-bound outbound Voice SDK panel in the Audit centre; server-selected customer number; a Creditex-owned Telnyx account paid directly by Creditex; organisation-owned default and staff-assigned numbers; encrypted organisation-bound credentials; expiring single-use call intent; signed Telnyx calls and recording callbacks; customer DTMF consent before recording and bridge; private R2 audio custody with integrity metadata, automatic retry and authenticated audited playback. Admins and actively assigned case managers/reviewers/auditors can call and play recordings through this narrow new capability. Existing auditor restrictions on compliance editing remain unchanged. Telnyx WebRTC SDK is needed for actual browser audio. Creditex administrators complete their own provider account, billing and number purchases, then connect and assign numbers in the portal. No AEA calling account, personal number or billing fallback is permitted. Public privacy disclosure includes service messages and audit recordings.
+
+Acceptance: one clear Call customer action with microphone setup, mute and end-call controls; no arbitrary destination dialing; no recording on declined/missing consent; no false saved status; one active call per staff member and bounded daily attempts/duration; duplicate callbacks do not duplicate records; every read and initiation rechecks current organisation/assignment; private media only, no provider recording URLs exposed; readable desktop and narrow layouts with keyboard controls. Calls are records, not automatic compliance approval. No live customer test calls.
+
+Validation: real SQLite migration/permission/idempotency/callback/consent/custody tests, SDK lifecycle and UI behaviour tests, typecheck and lint, required exact-commit full validation, migration replay, publication build, responsive component checks and live authenticated/unauthenticated checks. Real audio and provider configuration are separate acceptance gates.
+
+Stop conditions: unavailable Creditex-owned credentials or dedicated numbers, missing private provider-media protection, or Creditex final account verification/payment steps. Do independent implementation and preserve honest unavailable states. Do not claim a connected or recorded call based on fixtures. No public audio, unrestricted dial pad, inbound call centre, transcription, campaign sending, automatic compliance findings, provider recording deletion or new retention period in this slice.
+## Previous handover
+
 Status: Trade-owned SMS is implemented and in release validation. Creditex PC audit calling is the next communications slice. External provider verification remains pending.
 Prepared: 21 September 2026
 

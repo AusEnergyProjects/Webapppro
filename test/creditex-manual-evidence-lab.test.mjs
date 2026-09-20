@@ -45,9 +45,6 @@ const workspace = read(
 const workspaceStyles = read(
   "../src/components/CreditexManualEvidenceLab.module.css",
 );
-const pilotWorkspace = read(
-  "../src/components/CreditexVeuPilotWorkspace.tsx",
-);
 
 class TestD1Statement {
   constructor(database, sql, values = []) {
@@ -791,8 +788,5 @@ test("manual lab route, UI and responsive preview keep protected boundaries visi
   assert.match(workspace, /MANUAL_EVIDENCE_FIELD_TYPES/);
   assert.match(workspaceStyles, /@media \(max-width: 430px\)/);
   assert.match(workspaceStyles, /\.phoneFrame/);
-  assert.match(
-    pilotWorkspace,
-    /<CreditexManualEvidenceLab api=\{api\} role=\{role\} \/>/,
-  );
+
 });

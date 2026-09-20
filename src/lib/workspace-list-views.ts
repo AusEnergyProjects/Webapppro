@@ -35,6 +35,7 @@ type ListViewDefaults = {
   customerFilterVersion?: number;
   type: string;
   synthetic: string;
+  accountStatus?: string;
   customer?: string;
   service?: string;
   pipeline?: string;
@@ -89,8 +90,8 @@ const columnsByView: Record<string, string[]> = {
   "installer-jobs": [...JOB_REGISTER_COLUMN_KEYS],
   "installer-customers": ["customer", "firstName", "lastName", "email", "phone", "suburb", "postcode", "jobs", "createdDate", "latestJob", "status"],
   "supplier-products": ["brand", "model", "name", "category", "price", "ordering", "stock", "lead", "warranty", "listing", "review", "kit", "action"],
-  "admin-accounts": ["account", "type", "status", "updated"],
-  "admin-customers": ["account", "type", "status", "updated"],
+  "admin-accounts": ["account", "contact", "location", "verification", "type", "status", "updated"],
+  "admin-customers": ["account", "contact", "location", "verification", "type", "status", "updated"],
 };
 
 const defaultsByView: Record<string, ListViewDefaults> = {
@@ -98,11 +99,11 @@ const defaultsByView: Record<string, ListViewDefaults> = {
   "installer-jobs": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
   "installer-customers": { search: "", filter: "all", sort: "name-asc", pageSize: 25, type: "", synthetic: "" },
   "purchasing-orders": { search: "", filter: "active", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
-  "admin-accounts": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
-  "admin-customers": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "customer", synthetic: "" },
-  "admin-partners": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
+  "admin-accounts": { search: "", filter: "open", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
+  "admin-customers": { search: "", filter: "open", sort: "updated-desc", pageSize: 25, type: "customer", synthetic: "" },
+  "admin-partners": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "", accountStatus: "open" },
   "admin-opportunities": { search: "", filter: "all", sort: "created-desc", pageSize: 25, type: "", synthetic: "" },
-  "admin-products": { search: "", filter: "all", sort: "priority-desc", pageSize: 25, type: "", synthetic: "" },
+  "admin-products": { search: "", filter: "all", sort: "priority-desc", pageSize: 25, type: "", synthetic: "", listing: "open" },
 };
 
 const filtersByView: Record<string, Set<string>> = {
@@ -110,8 +111,8 @@ const filtersByView: Record<string, Set<string>> = {
   "installer-jobs": new Set(["active", "attention", "platform", "completed", "all"]),
   "installer-customers": new Set(["all"]),
   "purchasing-orders": new Set(["active", "claims", "complete", "all"]),
-  "admin-accounts": new Set(["all", "active", "suspended", "closed"]),
-  "admin-customers": new Set(["all", "active", "suspended", "closed"]),
+  "admin-accounts": new Set(["all", "open", "active", "suspended", "closed"]),
+  "admin-customers": new Set(["all", "open", "active", "suspended", "closed"]),
   "admin-partners": new Set(["all", "not_started", "submitted", "under_review", "needs_information", "approved", "rejected", "expired"]),
   "admin-opportunities": new Set(["all", "draft", "open", "paused", "closed", "expired"]),
   "admin-products": new Set(["all", "pending", "approved", "needs_changes", "rejected"]),
@@ -181,6 +182,7 @@ export function cleanListView(
     customerFilterVersion: viewKey === "installer-customers" ? CUSTOMER_REGISTER_FILTER_VERSION : undefined,
     type: ["", "customer", "installer", "supplier", "admin"].includes(String(raw.type || "")) ? String(raw.type || "") : "",
     synthetic: ["", "exclude", "only"].includes(String(raw.synthetic || "")) ? String(raw.synthetic || "") : "",
+    accountStatus: ["", "open", "active", "suspended", "closed"].includes(String(raw.accountStatus || "")) ? String(raw.accountStatus || "") : "",
     customer: cleanAdminText(raw.customer, 100),
     service: cleanAdminText(raw.service, 40),
     pipeline: cleanAdminText(raw.pipeline, 40),

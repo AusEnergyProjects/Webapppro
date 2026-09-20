@@ -283,7 +283,8 @@ export async function GET(request: Request) {
     const conditions = ["1 = 1"];
     const bindings: unknown[] = [];
     if (type) { conditions.push("account_type = ?"); bindings.push(type); }
-    if (status) { conditions.push("account_status = ?"); bindings.push(status); }
+    if (status === "open") conditions.push("account_status <> 'closed'");
+    else if (status) { conditions.push("account_status = ?"); bindings.push(status); }
     if (synthetic !== "exclude") {
       if (synthetic === "only") conditions.push("is_synthetic = 1");
     } else conditions.push("is_synthetic = 0");
@@ -315,7 +316,7 @@ export async function GET(request: Request) {
         SUM(CASE WHEN account_type = 'installer' THEN 1 ELSE 0 END) installers,
         SUM(CASE WHEN account_type = 'supplier' THEN 1 ELSE 0 END) suppliers,
         SUM(CASE WHEN account_type = 'admin' THEN 1 ELSE 0 END) admins
-        FROM ${union} directory`).first<Record<string, unknown>>(),
+        FROM ${union} directory WHERE account_status <> 'closed'`).first<Record<string, unknown>>(),
     ]);
     const total = filteredCount ? Number(filteredCount.total || 0) : undefined;
     const hasNext = accountRows.results.length > pageSize;

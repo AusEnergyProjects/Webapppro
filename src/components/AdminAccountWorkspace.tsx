@@ -60,6 +60,7 @@ export function AdminAccountWorkspace({ api, role, setStatus, onCounts, target, 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [accountSearch, setAccountSearch] = useState("");
   const [accountType, setAccountType] = useState("");
+  const [accountStatus, setAccountStatus] = useState("open");
   const [accountVerification, setAccountVerification] = useState("");
   const [accountSort, setAccountSort] = useState("updated-desc");
   const [accountPage, setAccountPage] = useState(1);
@@ -82,6 +83,7 @@ export function AdminAccountWorkspace({ api, role, setStatus, onCounts, target, 
     if (totalReady.current) params.set("total", "0");
     if (accountSearch.trim()) params.set("search", accountSearch.trim());
     if (accountType) params.set("partnerType", accountType);
+    if (accountStatus) params.set("status", accountStatus);
     if (accountVerification) params.set("verification", accountVerification);
     try {
       const result = await api(`/api/admin/accounts?${params}`);
@@ -96,7 +98,7 @@ export function AdminAccountWorkspace({ api, role, setStatus, onCounts, target, 
       onCounts({ ...emptyCounts, ...(result.counts || {}) });
       if (announce) setStatus(`${result.pagination?.total || 0} business accounts match this view.`);
     } catch (error) { setStatus(workspaceError(error, "The secure account action could not be completed.")); }
-  }, [accountPage, accountPageSize, accountSearch, accountSort, accountType, accountVerification, api, onCounts, setStatus]);
+  }, [accountPage, accountPageSize, accountSearch, accountSort, accountStatus, accountType, accountVerification, api, onCounts, setStatus]);
 
   const openAccount = useCallback(async (uid: string) => {
     setStatus("Loading account details...");
@@ -124,13 +126,14 @@ export function AdminAccountWorkspace({ api, role, setStatus, onCounts, target, 
       if (cancelled) return;
       const preferences = (result.preferences || {}) as Partial<WorkspaceListPreferences>;
       setAccountSearch(preferences.search || ""); setAccountType(preferences.type || "");
+      setAccountStatus(preferences.accountStatus ?? (result.saved ? "" : "open"));
       setAccountVerification(preferences.filter === "all" ? "" : preferences.filter || "");
       setAccountSort(preferences.sort || "updated-desc");
       setAccountPageSize(preferences.pageSize || 25); setViewSaved(Boolean(result.saved));
     }).catch((error) => setStatus(workspaceError(error, "The secure account action could not be completed."))).finally(() => { if (!cancelled) setViewReady(true); });
     return () => { cancelled = true; };
   }, [api, setStatus]);
-  useEffect(() => { cursors.current = [""]; totalReady.current = false; }, [accountPageSize, accountSearch, accountSort, accountType, accountVerification]);
+  useEffect(() => { cursors.current = [""]; totalReady.current = false; }, [accountPageSize, accountSearch, accountSort, accountStatus, accountType, accountVerification]);
   useEffect(() => {
     if (!viewReady) return;
     const timer = window.setTimeout(() => { void loadAccounts(); }, 180);
@@ -149,13 +152,14 @@ export function AdminAccountWorkspace({ api, role, setStatus, onCounts, target, 
 
   function applyView(preferences: WorkspaceListPreferences) {
     setAccountSearch(preferences.search || ""); setAccountType(preferences.type || "");
+    setAccountStatus(preferences.accountStatus ?? "open");
     setAccountVerification(preferences.filter === "all" ? "" : preferences.filter || "");
     setAccountSort(preferences.sort || "updated-desc"); setAccountPageSize(preferences.pageSize || 25); setAccountPage(1);
   }
   async function saveView() {
     setViewBusy(true);
     try {
-      await saveWorkspaceListView(api, "admin-partners", { search: accountSearch, filter: accountVerification || "all", sort: accountSort, pageSize: accountPageSize, type: accountType });
+      await saveWorkspaceListView(api, "admin-partners", { search: accountSearch, filter: accountVerification || "all", sort: accountSort, pageSize: accountPageSize, type: accountType, accountStatus });
       setViewSaved(true); setStatus("Your default table view has been saved.");
     } catch (error) { setStatus(workspaceError(error, "The secure account action could not be completed.")); } finally { setViewBusy(false); }
   }
@@ -201,6 +205,7 @@ export function AdminAccountWorkspace({ api, role, setStatus, onCounts, target, 
     <form className="admin-filterbar" onSubmit={searchAccounts}>
       <input aria-label="Search accounts" placeholder="Business, contact, email or postcode" value={accountSearch} onChange={(event) => { setAccountSearch(event.target.value); setAccountPage(1); }} />
       <select aria-label="Partner type" value={accountType} onChange={(event) => { setAccountType(event.target.value); setAccountPage(1); }}><option value="">All partner types</option><option value="installer">Installers</option><option value="supplier">Wholesalers</option></select>
+      <select aria-label="Partner account status" value={accountStatus} onChange={(event) => { setAccountStatus(event.target.value); setAccountPage(1); }}><option value="open">Current accounts (exclude closed)</option><option value="">All account statuses</option><option value="active">Active</option><option value="suspended">Suspended</option><option value="closed">Closed</option></select>
       <select aria-label="Verification status" value={accountVerification} onChange={(event) => { setAccountVerification(event.target.value); setAccountPage(1); }}><option value="">All verification states</option>{["submitted", "under_review", "needs_information", "approved", "rejected", "expired"].map((value) => <option value={value} key={value}>{readable(value)}</option>)}</select>
       <select aria-label="Sort partners" value={accountSort} onChange={(event) => { setAccountSort(event.target.value); setAccountPage(1); }}><option value="updated-desc">Recently updated</option><option value="updated-asc">Oldest updated</option><option value="name-asc">Business A to Z</option><option value="name-desc">Business Z to A</option><option value="type-asc">Partner type</option><option value="verification-asc">Verification status</option><option value="status-asc">Account status</option></select><button type="submit">Apply filters</button>
     </form>

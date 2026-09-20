@@ -87,12 +87,11 @@ const emptyPagination: ListPagination = { page: 1, pageSize: 25, total: 0, pageC
 
 export type AdminOpportunityWorkspaceProps = {
   api: (path: string, init?: RequestInit) => Promise<AdminApiResult>;
-  demoOnlyRequest: number;
   role: AdminRole;
   setStatus: (status: string) => void;
 };
 
-export function AdminOpportunityWorkspace({ api, demoOnlyRequest, role, setStatus }: AdminOpportunityWorkspaceProps) {
+export function AdminOpportunityWorkspace({ api, role, setStatus }: AdminOpportunityWorkspaceProps) {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [opportunitySynthetic, setOpportunitySynthetic] = useState("");
   const [opportunitySearch, setOpportunitySearch] = useState("");
@@ -188,7 +187,7 @@ export function AdminOpportunityWorkspace({ api, demoOnlyRequest, role, setStatu
       setOpportunityStatusFilter(preferences.filter === "all" ? "" : preferences.filter || "");
       setOpportunityServiceFilter(preferences.service || "");
       setOpportunityStateFilter(preferences.state || "");
-      setOpportunitySynthetic(demoOnlyRequest ? "only" : preferences.synthetic || "");
+      setOpportunitySynthetic(preferences.synthetic || "");
       setOpportunitySort(preferences.sort || "created-desc");
       setOpportunityPageSize(preferences.pageSize || 25);
       setOpportunityViewSaved(Boolean(result.saved));
@@ -196,7 +195,7 @@ export function AdminOpportunityWorkspace({ api, demoOnlyRequest, role, setStatu
       if (!cancelled) setOpportunityViewReady(true);
     });
     return () => { cancelled = true; };
-  }, [api, demoOnlyRequest, setStatus]);
+  }, [api, setStatus]);
 
   useEffect(() => {
     opportunityCursors.current = [""]; opportunityTotalReady.current = false;

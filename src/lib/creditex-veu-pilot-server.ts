@@ -1796,6 +1796,7 @@ export async function archiveCreditexVeuPilot(
   database: D1Database,
   member: ComplianceIdentity,
   confirmation: unknown,
+  expected?: { id: string; status: string; updatedAt: string },
 ) {
   assertAdministrator(member);
   assertRecentAuthentication(member);
@@ -1809,10 +1810,15 @@ export async function archiveCreditexVeuPilot(
       "Type ARCHIVE SYNTHETIC VEU PILOT exactly to deactivate the test dataset.",
     );
   }
-  const run = await unarchivedPilotRunAnySeed(
+  const run = expected ? await database.prepare(`SELECT * FROM compliance_pilot_runs
+    WHERE id = ? AND organisation_id = ? AND program_code = 'VEU' AND record_mode = 'synthetic_test'`)
+    .bind(expected.id, member.organisationId).first<PilotRunRow>() : await unarchivedPilotRunAnySeed(
     database,
     member.organisationId,
   ) || await latestPilotRunAnySeed(database, member.organisationId);
+  if (expected && (!run || run.status !== expected.status || run.updated_at !== expected.updatedAt)) {
+    throw new CreditexVeuPilotError("CREDITEX_PILOT_CHANGED", 409, "The reviewed pilot changed before archival. Refresh the preview.");
+  }
   if (!run) {
     throw new CreditexVeuPilotError(
       "CREDITEX_PILOT_NOT_FOUND",
@@ -1822,21 +1828,25 @@ export async function archiveCreditexVeuPilot(
   }
   if (run.status === "archived") return { runId: run.id, archived: true };
   const now = new Date().toISOString();
-  await database.batch([
-    database.prepare(`UPDATE trade_accounts
+  const snapshotGuard = expected ? ` AND EXISTS (SELECT 1 FROM compliance_pilot_runs reviewed_run
+    WHERE reviewed_run.id = ? AND reviewed_run.organisation_id = ? AND reviewed_run.status = ? AND reviewed_run.updated_at = ?)` : "";
+  const snapshotBindings = expected ? [run.id, member.organisationId, expected.status, expected.updatedAt] : [];
+  const update = (query: string, ...bindings: unknown[]) => database.prepare(query + snapshotGuard).bind(...bindings, ...snapshotBindings);
+  const results = await database.batch([
+    update(`UPDATE trade_accounts
       SET account_status = 'closed', availability_status = 'paused',
         updated_at = ?
       WHERE firebase_uid IN (
         SELECT trade_account_uid FROM compliance_pilot_installers
         WHERE pilot_run_id = ?
-      ) AND is_synthetic = 1`).bind(now, run.id),
-    database.prepare(`UPDATE trade_team_members
+      ) AND is_synthetic = 1`, now, run.id),
+    update(`UPDATE trade_team_members
       SET status = 'suspended', updated_at = ?
       WHERE id IN (
         SELECT team_member_id FROM compliance_pilot_technicians
         WHERE pilot_run_id = ?
-      )`).bind(now, run.id),
-    database.prepare(`UPDATE trade_crm_customers
+      )`, now, run.id),
+    update(`UPDATE trade_crm_customers
       SET record_status = 'archived', updated_at = ?
       WHERE id IN (
         SELECT job_detail.crm_customer_id
@@ -1844,8 +1854,8 @@ export async function archiveCreditexVeuPilot(
         JOIN compliance_pilot_jobs pilot_job
           ON pilot_job.work_order_id = job_detail.work_order_id
         WHERE pilot_job.pilot_run_id = ?
-      )`).bind(now, run.id),
-    database.prepare(`UPDATE trade_crm_service_sites
+      )`, now, run.id),
+    update(`UPDATE trade_crm_service_sites
       SET record_status = 'archived', updated_at = ?
       WHERE id IN (
         SELECT job_detail.service_site_id
@@ -1853,42 +1863,49 @@ export async function archiveCreditexVeuPilot(
         JOIN compliance_pilot_jobs pilot_job
           ON pilot_job.work_order_id = job_detail.work_order_id
         WHERE pilot_job.pilot_run_id = ?
-      )`).bind(now, run.id),
-    database.prepare(`UPDATE trade_work_orders
+      )`, now, run.id),
+    update(`UPDATE trade_work_orders
       SET stage = 'cancelled', record_status = 'archived', updated_at = ?
-      WHERE source_type = 'synthetic_pilot' AND source_reference = ?`)
-      .bind(now, run.id),
-    database.prepare(`UPDATE trade_crm_appointments
+      WHERE source_type = 'synthetic_pilot' AND source_reference = ?`, now, run.id),
+    update(`UPDATE trade_crm_appointments
       SET status = 'cancelled', updated_at = ?
       WHERE work_order_id IN (
         SELECT work_order_id FROM compliance_pilot_jobs
         WHERE pilot_run_id = ?
-      )`).bind(now, run.id),
-    database.prepare(`UPDATE compliance_pilot_jobs
+      )`, now, run.id),
+    update(`UPDATE compliance_pilot_jobs
       SET review_status = 'archived', updated_at = ?
-      WHERE pilot_run_id = ?`).bind(now, run.id),
-    database.prepare(`UPDATE compliance_pilot_installers
+      WHERE pilot_run_id = ?`, now, run.id),
+    update(`UPDATE compliance_pilot_installers
       SET status = 'archived', updated_at = ?
-      WHERE pilot_run_id = ?`).bind(now, run.id),
-    database.prepare(`UPDATE compliance_pilot_technicians
+      WHERE pilot_run_id = ?`, now, run.id),
+    update(`UPDATE compliance_pilot_technicians
       SET status = 'archived', updated_at = ?
-      WHERE pilot_run_id = ?`).bind(now, run.id),
-    database.prepare(`UPDATE compliance_pilot_runs
+      WHERE pilot_run_id = ?`, now, run.id),
+    update(`UPDATE compliance_pilot_runs
       SET status = 'archived', archived_at = ?, updated_at = ?
-      WHERE id = ? AND status <> 'archived'`).bind(now, now, run.id),
+      WHERE id = ? AND status <> 'archived'`, now, now, run.id),
     database.prepare(`INSERT INTO compliance_pilot_events (
         id, pilot_run_id, organisation_id, event_type, actor_uid,
         summary, metadata, created_at
-      ) VALUES (?, ?, ?, 'pilot.archived', ?,
+      ) SELECT ?, ?, ?, 'pilot.archived', ?,
         'Archived the synthetic VEU pilot without deleting its audit history.',
-        '{"hardDelete":false}', ?)`).bind(
+        '{"hardDelete":false}', ? WHERE EXISTS (
+          SELECT 1 FROM compliance_pilot_runs WHERE id = ? AND status = 'archived' AND archived_at = ? AND updated_at = ?
+        )`).bind(
       `${run.id}:event:archived`,
       run.id,
       member.organisationId,
       member.uid,
       now,
+      run.id,
+      now,
+      now,
     ),
   ]);
+  if (expected && !results[9].meta.changes) {
+    throw new CreditexVeuPilotError("CREDITEX_PILOT_CHANGED", 409, "The reviewed pilot changed before archival. Refresh the preview.");
+  }
   return { runId: run.id, archived: true };
 }
 

@@ -6607,3 +6607,52 @@ export const tradeSmsMessages = sqliteTable("trade_sms_messages", {
   uniqueIndex("trade_sms_messages_provider_idx").on(t.connectionId, t.providerMessageSid).where(sql`${t.providerMessageSid} <> ''`),
   index("trade_sms_messages_history_idx").on(t.firebaseUid, t.customerId, t.createdAt), index("trade_sms_messages_usage_idx").on(t.firebaseUid, t.direction, t.createdAt),
   check("trade_sms_messages_direction_check", sql`${t.direction} IN ('inbound', 'outbound')`), check("trade_sms_messages_segments_check", sql`${t.segments} >= 1`)]);
+
+export const creditexVoiceConnections = sqliteTable("creditex_voice_connections", {
+  id: text("id").primaryKey(), organisationId: text("organisation_id").notNull(), accountKeyHash: text("account_key_hash").notNull(),
+  accountLabel: text("account_label").notNull(), encryptedCredentials: text("encrypted_credentials").notNull(),
+  credentialConnectionId: text("credential_connection_id").notNull().default(""), callControlApplicationId: text("call_control_application_id").notNull().default(""),
+  outboundVoiceProfileId: text("outbound_voice_profile_id").notNull().default(""), defaultNumberId: text("default_number_id").notNull().default(""),
+  status: text("status").notNull().default("connecting"), provisionStage: text("provision_stage").notNull().default("new"),
+  authorisedByMemberId: text("authorised_by_member_id").notNull(), errorCode: text("error_code").notNull().default(""),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (t) => [uniqueIndex("creditex_voice_active_org_idx").on(t.organisationId).where(sql`${t.status} IN ('connecting','connected')`),
+  uniqueIndex("creditex_voice_active_account_idx").on(t.accountKeyHash).where(sql`${t.status} IN ('connecting','connected')`),
+  check("creditex_voice_status_check",sql`${t.status} IN ('connecting','connected','disconnected')`),
+  check("creditex_voice_stage_check",sql`${t.provisionStage} IN ('new','profile_pending','profile_ready','credential_pending','credential_ready','application_pending','ready')`)]);
+export const creditexVoiceNumbers = sqliteTable("creditex_voice_numbers", {
+  connectionId:text("connection_id").notNull().references(()=>creditexVoiceConnections.id),numberId:text("number_id").notNull(),
+  phoneNumber:text("phone_number").notNull(),label:text("label").notNull(),active:integer("active").notNull().default(1),
+},t=>[primaryKey({columns:[t.connectionId,t.numberId]}),uniqueIndex("creditex_voice_number_phone_idx").on(t.connectionId,t.phoneNumber)]);
+export const creditexVoiceAssignments = sqliteTable("creditex_voice_assignments", {
+  connectionId:text("connection_id").notNull().references(()=>creditexVoiceConnections.id),memberId:text("member_id").notNull(),numberId:text("number_id").notNull(),
+},t=>[primaryKey({columns:[t.connectionId,t.memberId]})]);
+export const creditexAuditCalls = sqliteTable("creditex_audit_calls", {
+  id:text("id").primaryKey(),organisationId:text("organisation_id").notNull(),connectionId:text("connection_id").notNull().references(()=>creditexVoiceConnections.id),
+  caseId:text("case_id").notNull().default(""),jobIntentId:text("job_intent_id").notNull().default(""),startedByUid:text("started_by_uid").notNull(),
+  startedByMemberId:text("started_by_member_id").notNull(),startedByName:text("started_by_name").notNull(),requestId:text("request_id").notNull(),
+  customerPhone:text("customer_phone").notNull(),callerId:text("caller_id").notNull(),credentialConnectionId:text("credential_connection_id").notNull(),
+  callControlApplicationId:text("call_control_application_id").notNull(),telephonyCredentialId:text("telephony_credential_id").notNull().default(""),intentSecretHash:text("intent_secret_hash").notNull(),
+  status:text("status").notNull().default("prepared"),expiresAt:text("expires_at").notNull(),activeUntil:text("active_until").notNull(),
+  agentCallControlId:text("agent_call_control_id").notNull().default(""),agentCallLegId:text("agent_call_leg_id").notNull().default(""),
+  agentEnded:integer("agent_ended").notNull().default(0),customerEnded:integer("customer_ended").notNull().default(0),
+  customerCallControlId:text("customer_call_control_id").notNull().default(""),customerCallLegId:text("customer_call_leg_id").notNull().default(""),customerCallSessionId:text("customer_call_session_id").notNull().default(""),
+  consentStage:text("consent_stage").notNull().default(""),consentedAt:text("consented_at").notNull().default(""),consentVersion:text("consent_version").notNull().default(""),consentNotice:text("consent_notice").notNull().default(""),
+  recordingStatus:text("recording_status").notNull().default("none"),recordingId:text("recording_id").notNull().default(""),recordingObjectKey:text("recording_object_key").notNull().default(""),
+  recordingSha256:text("recording_sha256").notNull().default(""),recordingSizeBytes:integer("recording_size_bytes").notNull().default(0),durationSeconds:integer("duration_seconds").notNull().default(0),
+  recordingAttempts:integer("recording_attempts").notNull().default(0),nextRecordingAttemptAt:text("next_recording_attempt_at").notNull().default(""),
+  recordingLeaseToken:text("recording_lease_token").notNull().default(""),recordingLeaseUntil:text("recording_lease_until").notNull().default(""),
+  endRequested:integer("end_requested").notNull().default(0),savedAt:text("saved_at").notNull().default(""),errorCode:text("error_code").notNull().default(""),createdAt:text("created_at").notNull(),updatedAt:text("updated_at").notNull(),
+},t=>[uniqueIndex("creditex_audit_call_request_idx").on(t.organisationId,t.startedByUid,t.requestId),
+  uniqueIndex("creditex_audit_call_active_operator_idx").on(t.startedByUid).where(sql`${t.status} IN ('prepared','dialing','ringing','awaiting_consent','in_progress')`),
+  uniqueIndex("creditex_audit_call_secret_idx").on(t.intentSecretHash),
+  uniqueIndex("creditex_audit_call_agent_idx").on(t.connectionId,t.agentCallControlId).where(sql`${t.agentCallControlId}<>''`),
+  uniqueIndex("creditex_audit_call_customer_idx").on(t.connectionId,t.customerCallLegId).where(sql`${t.customerCallLegId}<>''`),
+  uniqueIndex("creditex_audit_call_recording_idx").on(t.connectionId,t.recordingId).where(sql`${t.recordingId}<>''`),
+  index("creditex_audit_call_case_idx").on(t.organisationId,t.caseId,t.createdAt),index("creditex_audit_call_job_idx").on(t.organisationId,t.jobIntentId,t.createdAt),
+  index("creditex_audit_call_usage_idx").on(t.organisationId,t.createdAt),index("creditex_audit_call_custody_idx").on(t.recordingStatus,t.nextRecordingAttemptAt),
+  check("creditex_audit_call_target_check",sql`${t.caseId}<>'' OR ${t.jobIntentId}<>''`),
+  check("creditex_audit_call_status_check",sql`${t.status} IN ('prepared','dialing','ringing','awaiting_consent','in_progress','completed','declined','cancelled','expired','failed','busy','no_answer')`),
+  check("creditex_audit_call_recording_status_check",sql`${t.recordingStatus} IN ('none','starting','recording','pending','saving','saved','failed','unknown')`),
+  check("creditex_audit_call_consent_stage_check",sql`${t.consentStage} IN ('','notice','gather','consented')`),
+  check("creditex_audit_call_saved_check",sql`${t.recordingStatus}<>'saved' OR (${t.recordingObjectKey}<>'' AND length(${t.recordingSha256})=64 AND ${t.recordingSizeBytes}>0 AND ${t.consentedAt}<>'' AND ${t.recordingId}<>'')`)]);

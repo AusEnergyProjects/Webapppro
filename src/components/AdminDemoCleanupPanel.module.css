@@ -1,0 +1,23 @@
+.panel { display: grid; gap: 16px; border: 1px solid #d8e0e9; border-radius: 14px; padding: 22px; background: #fff; color: #172b40; margin-block: 20px; }
+.heading { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+.heading h2 { margin: 0; font-size: 1.2rem; }
+.heading span { background: #edf3fa; border-radius: 20px; padding: 5px 10px; font-size: .8rem; }
+.panel p { margin: 0; line-height: 1.6; }
+.muted { color: #526378; font-size: .88rem; }
+.panel button { justify-self: start; border: 1px solid #1a4b6b; border-radius: 8px; background: #123a57; color: white; padding: 11px 16px; font: inherit; cursor: pointer; }
+.panel button:disabled { opacity: .55; cursor: default; }
+.counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.counts > div { display: grid; gap: 5px; background: #f3f6f9; padding: 12px; border-radius: 8px; }
+.counts strong { font-size: 1.4rem; }
+.counts span { font-size: .82rem; }
+.panel summary { cursor: pointer; font-weight: 600; }
+.records { max-height: 360px; overflow: auto; border: 1px solid #d8e0e9; margin-top: 12px; padding: 12px; }
+.records ul { padding: 0; list-style: none; }
+.records li { display: flex; gap: 14px; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #e6ebf1; font-size: .8rem; }
+.records code { overflow-wrap: anywhere; }
+.confirmation { display: grid; gap: 12px; }
+.confirmation label { display: grid; gap: 7px; font-size: .9rem; font-weight: 600; }
+.confirmation input { border: 1px solid #9aabba; background: white; color: #172b40; padding: 11px; border-radius: 7px; font: inherit; max-width: 420px; }
+.receipt { border-left: 3px solid #23816d; background: #edf8f4; padding: 12px; display: grid; gap: 6px; }
+.error { border-left: 3px solid #b74930; background: #fff0e9; padding: 12px; }
+@media (max-width: 600px) { .panel { padding: 16px; } .records li { display: grid; gap: 3px; } .confirmation input { min-width: 0; width: 100%; } }

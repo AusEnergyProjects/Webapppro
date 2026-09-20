@@ -2,6 +2,7 @@ import handler from "vinext/server/app-router-entry";
 import { getD1 } from "../db";
 import { getCustomerProjectEvidenceBucket } from "../src/lib/customer-project-evidence-bucket";
 import { dispatchAdminNotificationDeliveries } from "../src/lib/admin-notification-delivery";
+import { processCreditexAuditCallRecordings } from "../src/lib/creditex-audit-call-server";
 import { syncCertificatePriceHistory } from "../src/lib/certificate-prices-server";
 import {
   CUSTOMER_OPPORTUNITY_DISPATCH_HEADER,
@@ -86,7 +87,9 @@ function secureResponse(response: Response, request: Request, environment?: unkn
   ) {
     headers.set("Cache-Control", PRIVATE_HTML_CACHE_CONTROL);
   }
-  headers.set("Permissions-Policy", "camera=(), geolocation=(), microphone=()");
+  const microphonePolicy = pathname === "/creditex/compliance"
+    || pathname === "/creditex/compliance/" ? "(self)" : "()";
+  headers.set("Permissions-Policy", `camera=(), geolocation=(), microphone=${microphonePolicy}`);
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Frame-Options", "SAMEORIGIN");
@@ -520,6 +523,9 @@ const worker = {
       }).EVIDENCE;
       const registryEnvironment = workerEnv as Readonly<Record<string, unknown>>;
       tasks.push(
+        processCreditexAuditCallRecordings(getD1()).catch(() => {
+          console.error("Creditex audit recording custody retry failed.");
+        }),
         drainCreditexProductRegistryMaintenance({
           database: getD1(),
           targets: creditexAutomaticProductRegistryMaintenanceTargets({

@@ -18,7 +18,6 @@ const schema = read("../db/schema.ts");
 const contractSource = read("../src/lib/creditex-veu-pilot-contract.ts");
 const server = read("../src/lib/creditex-veu-pilot-server.ts");
 const route = read("../src/app/api/creditex/pilot/route.ts");
-const workspace = read("../src/components/CreditexVeuPilotWorkspace.tsx");
 const sresCalculator = read("../src/components/CreditexSresCalculator.tsx");
 const allProgramCalculator = read(
   "../src/components/CreditexAllProgramCalculator.tsx",
@@ -30,7 +29,6 @@ const officialProductPicker = read(
   "../src/components/CreditexOfficialProductPicker.tsx",
 );
 const calculationWorkspace = [
-  workspace,
   sresCalculator,
   allProgramCalculator,
   governedCalculator,
@@ -195,9 +193,9 @@ function testD1(database) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 182);
+  assert.equal(completeMigrationChain.length, 183);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0182_trade_sms\.sql$/);
+  assert.match(completeMigrationChain.at(-1), /^0183_creditex_audit_calls\.sql$/);
   assert.ok(
     completeMigrationChain.includes("0160_trade_rental_inspections.sql"),
     "the complete migration chain must include the rental inspection schema",
@@ -329,32 +327,6 @@ function sourceSection(source, start, end) {
   const endIndex = source.indexOf(end, startIndex + start.length);
   assert.notEqual(endIndex, -1, `Missing source boundary: ${end}`);
   return source.slice(startIndex, endIndex);
-}
-
-function loadIsolatedWorkspaceFunction(name) {
-  const sourceFile = ts.createSourceFile(
-    "CreditexVeuPilotWorkspace.tsx",
-    workspace,
-    ts.ScriptTarget.ES2022,
-    true,
-    ts.ScriptKind.TSX,
-  );
-  const declaration = sourceFile.statements.find(
-    (statement) =>
-      ts.isFunctionDeclaration(statement)
-      && statement.name?.text === name,
-  );
-  assert.ok(declaration, `Missing workspace function: ${name}`);
-  const isolatedSource = declaration.getText(sourceFile)
-    .replace(/^export\s+/, "");
-  const output = ts.transpileModule(isolatedSource, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-    },
-    fileName: `${name}.ts`,
-  }).outputText;
-  return new Function(`${output}\nreturn ${name};`)();
 }
 
 function projectionColumnCount(source) {
@@ -2108,7 +2080,7 @@ test("every VEU activity family is data-driven and receives a balanced pilot coh
     server,
     /CREDITEX_VEU_PILOT_ACTIVITIES\[\s*globalJobIndex % CREDITEX_VEU_PILOT_ACTIVITIES\.length\s*\]/,
   );
-  for (const source of [contractSource, server, route, workspace]) {
+  for (const source of [contractSource, server, route]) {
     assert.doesNotMatch(source, /6\(23\)/);
   }
 
@@ -2259,38 +2231,17 @@ test("manifest generation is deterministic, dry-run only and isolated from regul
   assert.match(server, /externalSubmissionEnabled: false/);
 });
 
-test("API exposes only the authenticated, same-origin pilot control surface", () => {
-  assert.equal(
-    (route.match(/if \(!sameOrigin\(request\)\)/g) || []).length,
-    2,
-  );
+test("retired pilot route keeps authentication, role gates and private responses", () => {
+  assert.match(route, /requireFirebaseIdentity\(request\)/);
+  assert.match(route, /requireComplianceIdentity\(identity, \{ allowedRoles \}/);
+  assert.match(route, /origin && origin !== new URL\(request.url\).origin/);
   assert.match(route, /"Cache-Control": "private, no-store"/);
   assert.match(route, /"X-Content-Type-Options": "nosniff"/);
-  assert.match(route, /requireFirebaseIdentity\(request\)/);
-  assert.match(route, /requireComplianceIdentity\(identity/);
-  assert.match(
-    route,
-    /allowedRoles: \["admin", "case_manager", "reviewer", "auditor"\]/,
-  );
-  assert.match(route, /parseCreditexPilotFilters/);
-  assert.match(route, /loadCreditexVeuPilotDashboard/);
-  assert.match(route, /loadCreditexVeuPilotJobWorkspace/);
-  assert.match(route, /searchParams\.get\("jobId"\)/);
-  assert.ok(
-    route.indexOf('searchParams.get("jobId")')
-      < route.indexOf("parseCreditexPilotFilters("),
-    "The opaque job-detail route must branch before dashboard filter parsing.",
-  );
-  assert.match(route, /return json\(\{ ok: true, workspace \}\)/);
-  assert.deepEqual(
-    Array.from(route.matchAll(/action === "([^"]+)"/g), (match) => match[1]),
-    ["start", "provision_next", "finalise", "update_job", "archive"],
-  );
-  assert.doesNotMatch(route, /action === "(?:submit|publish|trade)"/);
-  assert.doesNotMatch(
-    route,
-    /export async function (?:PUT|PATCH|DELETE)/,
-  );
+  assert.match(route, /CREDITEX_PILOT_RETIRED/);
+  assert.match(route, /\}, 410\)/);
+  assert.match(route, /return retired\(request, \["admin", "case_manager", "reviewer", "auditor"\]\)/);
+  assert.match(route, /return retired\(request, \["admin"\]\)/);
+  assert.doesNotMatch(route, /startCreditexVeuPilot|provisionNextCreditexVeuPilotCohort|archiveCreditexVeuPilot|loadCreditexVeuPilotDashboard|loadCreditexVeuPilotJobWorkspace/);
 });
 
 test("job detail projection is fail-closed, owner-scoped and read-only", () => {
@@ -2369,72 +2320,11 @@ test("job detail keeps each D1 projection within the 100-column limit", () => {
   assert.match(privateQuery, /pilotJobNotFound\(\)/);
 });
 
-test("job row clipboard cells remain single-line and spreadsheet-safe", () => {
-  const safeCell = loadIsolatedWorkspaceFunction(
-    "spreadsheetSafeClipboardCell",
-  );
-  assert.equal(safeCell("plain value"), "plain value");
-  assert.equal(safeCell("one\ttwo\r\nthree"), "one two three");
-  assert.equal(safeCell("line\u2028separator"), "line separator");
-  for (const formula of [
-    "=HYPERLINK(\"https://example.test\")",
-    "+cmd|' /C calc'!A0",
-    "-2+3",
-    "@SUM(1,2)",
-    " \uFEFF=1+1",
-    "\u200B@SUM(1,2)",
-  ]) {
-    assert.equal(
-      safeCell(formula),
-      `'${formula}`,
-      `${formula} must be copied as text`,
-    );
-  }
-
-  const clipboardText = sourceSection(
-    workspace,
-    "function dataforceClipboardText",
-    "function customerName",
-  );
-  assert.match(
-    clipboardText,
-    /DATAFORCE_JOB_CSV_HEADERS\.map\([\s\S]*spreadsheetSafeClipboardCell/,
-  );
-  for (const copyFunction of ["copyJobRow", "copyRegisterRow"]) {
-    const copySource = sourceSection(
-      workspace,
-      `async function ${copyFunction}`,
-      copyFunction === "copyJobRow"
-        ? "async function copyRegisterRow"
-        : "async function downloadDataforceCsv",
-    );
-    assert.match(
-      copySource,
-      /dataforceClipboardText\([^,]+,\s*includeHeaders\)/,
-    );
-  }
-});
-
-test("Creditex UI surfaces all five priorities, compact quick filters and controlled job menus", () => {
+test("Retained calculators, audit views and server priorities preserve their safeguards", () => {
   const priorities = sourceSection(
     server,
     "function pilotPriorities",
     "export async function startCreditexVeuPilot",
-  );
-  const advancedFilters = sourceSection(
-    workspace,
-    "function AdvancedRegisterFilters",
-    "export function CreditexVeuPilotWorkspace",
-  );
-  const sortHeader = sourceSection(
-    workspace,
-    "function PilotSortHeader",
-    "function pilotJobCellValue",
-  );
-  const jobColumns = sourceSection(
-    workspace,
-    "const DATAFORCE_JOB_COLUMN_CONFIG",
-    "type Filters",
   );
   assert.deepEqual(
     Array.from(priorities.matchAll(/key: "([^"]+)"/g), (match) => match[1]),
@@ -2450,113 +2340,9 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
     Array.from(priorities.matchAll(/number: (\d)/g), (match) => Number(match[1])),
     [1, 2, 3, 4, 5],
   );
-
-  for (const [key, label] of [
-    ["sources", "Sources"],
-    ["lookups", "Lookups"],
-    ["evidence", "Evidence"],
-    ["calculators", "Calculators"],
-    ["connectors", "Connectors"],
-  ]) {
-    assert.match(workspace, new RegExp(`\\["${key}", "${label}"\\]`));
-    assert.match(workspace, new RegExp(`panel === "${key}"`));
-  }
-  assert.doesNotMatch(workspace, /[^\x00-\x7F]/);
-  assert.match(workspace, /Blocked adapter descriptors/);
-  assert.doesNotMatch(workspace, /Dry-run adapters/);
-  assert.match(workspace, /snapshot\.priorities\.map/);
-  assert.match(advancedFilters, /visibleActivities\.map/);
-  assert.match(
-    advancedFilters,
-    /onChange\(\{ activityTemplateId: event\.target\.value \}\)/,
-  );
-  assert.match(advancedFilters, /visibleInstallers\.map/);
-  assert.match(advancedFilters, /visibleTechnicians\.map/);
-  assert.match(advancedFilters, /register\.facets\.statuses\.map/);
-  assert.match(advancedFilters, /register\.facets\.postcodes\.map/);
-  assert.match(workspace, /Object\.entries\(snapshot\.controls \|\| \{\}\)/);
-  assert.ok((workspace.match(/<select/g) || []).length >= 8);
-  assert.match(workspace, /<table className=\{styles\.jobTable\}>/);
-  assert.match(workspace, /<caption>/);
-  assert.match(workspace, /<thead>/);
-  assert.match(workspace, /<tbody>/);
-  assert.match(workspace, /scope="col"/);
-  assert.match(workspace, /aria-sort=\{state === "none" \? undefined : state\}/);
-  assert.match(workspace, /Actions for \$\{job\.jobNumber\}/);
-  assert.match(workspace, /className=\{styles\.advancedFilters\}/);
-  assert.match(workspace, /className=\{styles\.quickFilters\}/);
-  assert.match(workspace, /type="search"/);
-  assert.match(workspace, /Installer company/);
-  assert.match(workspace, /Program activity/);
-  assert.ok(
-    advancedFilters.indexOf("styles.quickFilters")
-      < advancedFilters.indexOf("<details>"),
-  );
-  assert.equal((advancedFilters.match(/Installer company/g) || []).length, 1);
-  assert.equal((advancedFilters.match(/Program activity/g) || []).length, 1);
-  assert.doesNotMatch(advancedFilters, /<details open>/);
-  assert.doesNotMatch(advancedFilters, /Search type|Bulk actions/);
-  assert.doesNotMatch(workspace, /aria-label="VEU activity tabs"/);
-  assert.match(advancedFilters, /value=\{option\.value\}/);
-  assert.doesNotMatch(workspace, /className=\{styles\.roster\}/);
   assert.doesNotMatch(workspaceStyles, /\.activityRail/);
   assert.doesNotMatch(workspaceStyles, /\.rosterGrid/);
-  assert.match(workspace, /Download CSV/);
-  assert.match(workspace, /Import CSV/);
-  assert.match(workspace, /\/api\/creditex\/dataforce/);
-  assert.match(workspace, /\/api\/creditex\/official-sources\/reviews/);
-  assert.match(workspace, /\/api\/creditex\/operational-lookups\/reviews/);
-  assert.match(workspace, /CreditexManualEvidenceLab/);
-  assert.match(workspace, /projectCreditexJobToDataforceRecord/);
-  assert.match(workspace, /exportDataforceJobCsv/);
-  assert.match(
-    workspace,
-    /No regulated jobs, cases or certificates were created/,
-  );
   assert.match(workspaceStyles, /\.importDialog/);
-  assert.deepEqual(
-    Array.from(
-      jobColumns.matchAll(/^  "([^"]+)": (?:\{|\{ key:)/gm),
-      (match) => match[1],
-    ),
-    [
-      "App Id",
-      "Job Id",
-      "Status",
-      "SubStatus",
-      "Type",
-      "Work Type",
-      "Scheduled Datetime",
-      "Balance",
-      "Certificates (VEECs)",
-      "Submission",
-      "Invoiced",
-      "Field Worker",
-      "Agent",
-      "Client",
-      "Customer",
-      "Company Name",
-      "Ext Cust Ref",
-      "Phone",
-      "Mobile",
-      "Email",
-      "Address",
-      "Suburb",
-      "Postcode",
-    ],
-  );
-  assert.match(
-    jobColumns,
-    /DATAFORCE_JOB_CSV_HEADERS\.map\(\(label\) => \(\{/,
-  );
-  assert.doesNotMatch(jobColumns, /label:\s*"Row"|key:\s*"actions"/);
-  for (const label of [
-    "Work &amp; personnel",
-    "Status &amp; location",
-    "Display",
-  ]) {
-    assert.match(advancedFilters, new RegExp(label));
-  }
   assert.doesNotMatch(
     sourceSection(workspaceStyles, ".jobTable {", ".jobTable caption"),
     /display:\s*none/,
@@ -2579,37 +2365,6 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
     /\.panelTabs\s*\{[\s\S]*overflow-y:\s*hidden/,
   );
   assert.doesNotMatch(workspaceStyles, /\.workspace\[data-panel="jobs"\] \.header/);
-  assert.match(workspace, /role="tablist"/);
-  assert.match(workspace, /role="tabpanel"/);
-  assert.match(workspace, /aria-selected=\{panel === key\}/);
-  assert.match(workspace, /aria-labelledby=\{`creditex-veu-pilot-tab-\$\{panel\}`\}/);
-  assert.match(workspace, /aria-label="Search all populated job data"/);
-  assert.match(workspace, /placeholder="Search all populated job data"/);
-  assert.ok(
-    workspace.indexOf("Density")
-      < workspace.indexOf('className={styles.registerSearch}'),
-  );
-  assert.ok(
-    workspace.indexOf('className={styles.registerSearch}')
-      < workspace.indexOf('aria-label="Advanced search"'),
-  );
-  assert.match(
-    workspace,
-    /className=\{styles\.registerTools\}[\s\S]*aria-label="Refresh jobs"[\s\S]*>\s*Refresh\s*<\/span>[\s\S]*aria-label="Advanced search"/,
-  );
-  assert.match(workspace, />\s*Advanced search\s*<\/span>/);
-  assert.match(workspace, />\s*Filters\s*<\/span>/);
-  assert.match(workspace, /className=\{styles\.densityControl\}/);
-  assert.match(workspace, /aria-label="Job row density"/);
-  assert.match(
-    workspace,
-    /if \(column\.label === "App Id"\)[\s\S]*className=\{styles\.rowActionButton\}/,
-  );
-  assert.match(workspace, /data-column=\{column\.key\}/);
-  assert.match(
-    workspace,
-    /\{PILOT_JOB_COLUMNS\.length\} legacy columns/,
-  );
   assert.match(
     workspaceStyles,
     /\.registerTools label\s*\{[\s\S]*display:\s*inline-flex[\s\S]*align-items:\s*center/,
@@ -2636,12 +2391,10 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   );
   assert.match(workspaceStyles, /--pilot-canvas:\s*#020b18/);
   assert.match(workspaceStyles, /--pilot-teal:\s*#20cbb8/);
-  assert.match(workspace, /Append-only review ledger/);
   assert.match(manualEvidenceWorkspace, /Form builder/);
   assert.match(manualEvidenceWorkspace, /Manual jobs/);
   assert.match(manualEvidenceWorkspace, /Installer preview/);
   assert.match(manualEvidenceWorkspace, /Submit for Creditex audit/);
-  assert.match(calculationWorkspace, /National certificate calculation workspace/);
   assert.match(calculationWorkspace, /Calculate STCs/);
   assert.match(calculationWorkspace, /REBATE CALCULATOR/);
   assert.match(calculationWorkspace, /NSW-PDRS-2026/);
@@ -2655,7 +2408,6 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
     calculationWorkspace,
     /Final eligibility[\s\S]{0,80}evidence must still be confirmed/,
   );
-  assert.match(calculationWorkspace, /Activity calculation readiness/);
   assert.match(calculationWorkspace, /\/api\/creditex\/stc-estimates/);
   assert.match(calculationWorkspace, /Source-verified result/);
   assert.doesNotMatch(sresCalculator, /Estimate only/);
@@ -2666,9 +2418,6 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.match(allProgramCalculator, /requestTimeoutMs: 25_000/);
   assert.match(calculationWorkspace, /Safety certification date/);
   assert.doesNotMatch(calculationWorkspace, /Site-assessed hours \| audit required/);
-  assert.match(workspace, /Controlled submission boundary/);
-  assert.match(workspace, /External submission blocked/);
-  assert.match(workspace, /No public national calculation API exists/);
   assert.match(
     workspaceStyles,
     /\.registerTools \.filterToggle\[aria-expanded="true"\]\s*\{[\s\S]*border-color:\s*var\(--pilot-line-strong\)[\s\S]*background:\s*#0d2a39[\s\S]*color:\s*var\(--pilot-ink\)/,
@@ -2677,15 +2426,13 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
     workspaceStyles,
     /\.jobRegister > header \.registerTools button,[\s\S]*height:\s*28px[\s\S]*max-height:\s*28px/,
   );
-  assert.match(workspace, /Exact staged-row binding available/);
-  assert.match(workspace, /External transport remains blocked/);
   assert.match(
     portalStyles,
-    /\.pilotShell\s*\{[\s\S]*background:\s*#020b18/,
+    /\.shell\s*\{[\s\S]*--portal-soft:\s*#071b2a[\s\S]*#020b18/,
   );
   assert.match(
     portalStyles,
-    /\.pilotFrame \.topbar\s*\{[\s\S]*background:\s*#031524/,
+    /\.topbar\s*\{[\s\S]*background:\s*linear-gradient/,
   );
   assert.match(
     workspaceStyles,
@@ -2710,86 +2457,6 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.match(
     workspaceStyles,
     /\.filterDrawer\s*\{[\s\S]*width:\s*min\(19rem,/,
-  );
-  assert.match(
-    workspace,
-    /import \{[\s\S]*CreditexVeuJobAuditWorkspace[\s\S]*\} from "\.\/CreditexVeuJobAuditWorkspace"/,
-  );
-  assert.match(workspace, /onDoubleClick=\{\(event\) =>/);
-  assert.match(workspace, /onContextMenu=\{\(event\) =>/);
-  assert.match(workspace, /JOB_CONTEXT_ITEMS\.map/);
-  assert.match(workspace, /APPOINTMENT_CONTEXT_ITEMS\.map/);
-  assert.match(workspace, /<CreditexVeuJobAuditWorkspace/);
-  assert.equal(
-    (workspace.match(/onClick=\{onCopySelection\}/g) || []).length,
-    2,
-  );
-  assert.doesNotMatch(
-    workspace,
-    /Copy Selection[\s\S]{0,250}disabled|disabled[\s\S]{0,250}Copy Selection/,
-  );
-  assert.match(workspace, /const detail = await openRecord\(job, "print_preview"\)/);
-  assert.match(workspace, /window\.requestAnimationFrame\(\(\) =>[\s\S]*window\.print\(\)/);
-  assert.match(workspace, /\{filtersOpen && \([\s\S]*<AdvancedRegisterFilters/);
-  assert.match(
-    workspace,
-    /drawerElement\.addEventListener\("keydown", trapFocus\)/,
-  );
-  assert.match(
-    workspace,
-    /window\.setTimeout\(\(\) =>[\s\S]*\(focusable\[0\] \|\| drawerElement\)\.focus\(\)/,
-  );
-  assert.match(
-    workspace,
-    /className=\{styles\.advancedFilters\}[\s\S]*role="dialog"[\s\S]*aria-modal="true"[\s\S]*aria-labelledby="creditex-advanced-register-filters-title"/,
-  );
-  assert.match(
-    workspace,
-    /className=\{styles\.jobRegister\} inert=\{filtersOpen\}/,
-  );
-  assert.match(
-    workspace,
-    /className=\{styles\.panelTabs\}[\s\S]{0,120}inert=\{filtersOpen\}/,
-  );
-  assert.match(
-    workspace,
-    /document\.addEventListener\([\s\S]*"pointerdown"[\s\S]*closeSortMenuOnOutsidePointer[\s\S]*true/,
-  );
-  assert.match(
-    workspace,
-    /target\?\.closest\("\[data-sort-menu\]"\)/,
-  );
-  assert.match(
-    workspace,
-    /aria-expanded=\{open\}/,
-  );
-  assert.match(
-    workspace,
-    /event\.key !== "Escape" \|\| !open[\s\S]*closeAndRestoreFocus\(\)/,
-  );
-  assert.equal(
-    (sortHeader.match(/closeAndRestoreFocus\(\)/g) || []).length,
-    5,
-  );
-  assert.match(
-    sortHeader,
-    /onSort\(column\.sortKey!, "asc"\);[\s\S]{0,120}closeAndRestoreFocus\(\)/,
-  );
-  assert.match(
-    sortHeader,
-    /onSort\(column\.sortKey!, "desc"\);[\s\S]{0,120}closeAndRestoreFocus\(\)/,
-  );
-  assert.match(
-    sortHeader,
-    /onSort\("jobId", "asc"\);[\s\S]{0,120}closeAndRestoreFocus\(\)/,
-  );
-  assert.match(
-    sourceSection(
-      workspace,
-      "async function copyJobRow",
-      "async function openPrint",
-    ),
-    /finally\s*\{\s*closeContextMenu\(\);\s*\}/,
   );
   assert.match(
     auditWorkspaceStyles,
@@ -2828,7 +2495,6 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
     /detail\.boundaries\.submissionItemsCreated/,
   );
   assert.match(auditWorkspace, /Job-level regulated records/);
-  assert.doesNotMatch(workspace, /boundaries=\{snapshot\.boundaries\}/);
   assert.doesNotMatch(auditWorkspace, /boundaries\?\.regulatedCasesCreated/);
   assert.match(
     auditWorkspace,
@@ -2875,33 +2541,7 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
       `Missing full-record workspace section ${section}`,
     );
   }
-  assert.match(
-    workspace,
-    /Exercise every VEU activity family across synthetic installer\s*records, field assignments and Creditex compliance workflow\s*structure/,
-  );
-  assert.match(workspace, /Physical field capture is not enabled/);
-  assert.match(
-    workspace,
-    /These records\s*can never become regulated cases, certificates, registry\s*submissions, trades or settlements/,
-  );
-  assert.match(
-    workspace,
-    /The database rejects any regulated compliance case or\s*submission item linked to a synthetic pilot work order/,
-  );
-  assert.match(
-    workspace,
-    /zero regulator acceptances because no regulator request is sent,\s*and no staged legacy row can create a customer,\s*job, regulated case, certificate, submission, trade or\s*settlement/,
-  );
 
-  assert.match(
-    portal,
-    /import \{ CreditexVeuPilotWorkspace \} from "\.\/CreditexVeuPilotWorkspace"/,
-  );
-  assert.match(portal, /id="creditex-tab-pilot"/);
-  assert.match(portal, /aria-controls="creditex-panel-pilot"/);
-  assert.match(portal, /tab === "pilot"/);
-  assert.match(
-    portal,
-    /<CreditexVeuPilotWorkspace api=\{api\} role=\{session\.role\} \/>/,
-  );
+  assert.doesNotMatch(portal, /CreditexVeuPilotWorkspace|creditex-tab-pilot|creditex-panel-pilot|VEU test pilot/);
+  assert.match(portal, /<CreditexPlannedIntakeQueue api=\{api\} \/>/);
 });

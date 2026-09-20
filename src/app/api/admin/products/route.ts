@@ -71,7 +71,8 @@ export async function GET(request: Request) {
     if (category) { clauses.push("p.category = ?"); bindings.push(category); }
     if (stock) { clauses.push("p.stock_status = ?"); bindings.push(stock); }
     if (REVIEW_STATUSES.has(review)) { clauses.push("p.review_status = ?"); bindings.push(review); }
-    if (LISTING_STATUSES.has(listing)) { clauses.push("p.listing_status = ?"); bindings.push(listing); }
+    if (listing === "open") clauses.push("p.listing_status <> 'archived'");
+    else if (LISTING_STATUSES.has(listing)) { clauses.push("p.listing_status = ?"); bindings.push(listing); }
     if (Number.isFinite(minimumPrice) && minimumPrice > 0) { clauses.push("p.unit_price_cents_ex_gst >= ?"); bindings.push(Math.round(minimumPrice * 100)); }
     if (Number.isFinite(maximumPrice) && maximumPrice > 0) { clauses.push("p.unit_price_cents_ex_gst <= ?"); bindings.push(Math.round(maximumPrice * 100)); }
     if (synthetic === "only") clauses.push("COALESCE(p.is_synthetic, 0) = 1");

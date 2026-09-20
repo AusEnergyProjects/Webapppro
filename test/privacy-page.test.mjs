@@ -55,6 +55,9 @@ test("the public privacy route covers the operational data boundary", () => {
   assert.match(privacy, /info@ausenergyassessments\.com/);
   assert.match(privacy, /Email, name and phone are shared only when the household ticks those choices/);
   assert.doesNotMatch(privacy, /\bCreditex\b/);
+  assert.match(privacy, /Telnyx processes the phone numbers, call connection and audio/);
+  assert.match(privacy, /press 1 to agree/);
+  assert.match(privacy, /saved privately against that audit/);
   assert.match(privacy, /Open trade workspace/);
 });
 

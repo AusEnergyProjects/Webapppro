@@ -101,11 +101,13 @@ test("all account types are listed without unsafe account impersonation", () => 
 });
 
 test("the operations portal prioritises alerts and provides a filterable account workspace", () => {
-  assert.match(portal, /<span>01<\/span>Inbox/);
-  assert.match(portal, /<span>03<\/span>All accounts/);
+  assert.match(portal, /AdminWorkspaceNavigation/);
+  assert.match(read("../src/components/AdminWorkspaceNavigation.tsx"), /id: "inbox", label: "Inbox"/);
+  assert.match(read("../src/components/AdminWorkspaceNavigation.tsx"), /id: "directory", label: "All accounts"/);
   assert.match(portal, /AdminNotificationInbox/);
   assert.match(portal, /AdminAccountDirectory/);
-  assert.equal((portal.match(/notificationCounts\.unread > 0 && <strong/g) || []).length, 2);
+  assert.equal((portal.match(/notificationCounts\.unread > 0 && <strong/g) || []).length, 1);
+  assert.match(portal, /unread=\{notificationCounts\.unread\}/);
   assert.match(portal, /Open operations inbox, \$\{notificationCounts\.unread/);
   assert.match(portal, /Alerts\s*\{notificationCounts\.unread > 0 && <strong>\{notificationCounts\.unread/);
   assert.match(portal, /<span>Action notifications<\/span>\s*<strong>\{notificationCounts\.action_required/);

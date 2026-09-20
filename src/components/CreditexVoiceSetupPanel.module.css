@@ -1,0 +1,20 @@
+.panel { border: 1px solid var(--line, #334155); border-radius: 14px; background: var(--panel, #111827); color: var(--text, #f8fafc); margin-block: 18px; }
+.panel > summary { cursor: pointer; padding: 16px 18px; font-weight: 650; }
+.panel > summary span { float: right; font-size: .8rem; font-weight: 500; }
+.content { padding: 0 18px 18px; display: grid; gap: 14px; font-size: .88rem; line-height: 1.55; }
+.content p { margin: 0; }
+.content a { color: #67e8f9; text-decoration: underline; text-underline-offset: 3px; }
+.muted { color: var(--muted, #cbd5e1); font-size: .82rem; }
+.form { display: grid; gap: 12px; }
+.form label, .assignments label { display: grid; gap: 6px; font-weight: 550; }
+.form input, .form select { width: 100%; min-width: 0; padding: 11px; border: 1px solid #64748b; border-radius: 8px; background: #0f172a; color: #f8fafc; font: inherit; }
+.content button { border: 1px solid #64748b; padding: 10px 14px; border-radius: 8px; background: #164e63; color: #f8fafc; font: inherit; cursor: pointer; min-height: 42px; }
+.content button:disabled { cursor: default; opacity: .55; }
+.actions { display: flex; flex-wrap: wrap; gap: 9px; }
+.check { display: flex; gap: 10px; align-items: flex-start; }
+.check input { margin-top: 5px; flex-shrink: 0; }
+.assignments { display: grid; }
+.assignments summary { cursor: pointer; padding-block: 8px; }
+.assignments label { margin-top: 10px; }
+.notice { border-left: 3px solid #22d3ee; padding: 8px 12px; background: #083344; border-radius: 5px; }
+@media (max-width: 600px) { .panel > summary span { float: none; display: block; margin-top: 4px; } .actions { display: grid; } }

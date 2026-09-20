@@ -12,6 +12,7 @@ export type WorkspaceListPreferences = {
   customerFilterVersion?: number;
   type?: string;
   synthetic?: string;
+  accountStatus?: string;
   customer?: string;
   service?: string;
   pipeline?: string;

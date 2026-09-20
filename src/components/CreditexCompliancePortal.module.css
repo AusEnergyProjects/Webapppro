@@ -31,87 +31,10 @@
   overflow: hidden;
 }
 
-.pilotShell {
-  --portal-ink: #f4fbff;
-  --portal-text: #d7e7eb;
-  --portal-muted: #94acb5;
-  --portal-line: rgba(108, 207, 192, .2);
-  --portal-soft: #071b2a;
-  --portal-green: #20cbb8;
-  --portal-green-dark: #7ee7d2;
-  background: #020b18;
-  height: 100vh;
-  height: 100dvh;
-  overflow: hidden;
-  padding: 0;
-}
-
-.pilotFrame {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.pilotFrame .topbar {
-  min-height: 48px;
-  flex: 0 0 auto;
-  border-width: 0 0 1px;
-  border-radius: 0;
-  background: #031524;
-  box-shadow: none;
-  padding: 5px 12px;
-}
-
-.pilotFrame .brand img {
-  width: 34px;
-  height: 34px;
-}
-
-.pilotFrame .tabs {
-  min-height: 36px;
-  flex: 0 0 auto;
-  margin: 0;
-  padding: 0 10px;
-  border-width: 0 0 1px;
-  border-radius: 0;
-  border-bottom-color: var(--portal-line);
-  background: #061724;
-}
-
-.pilotFrame .tab {
-  padding: 7px 10px 5px;
-  color: var(--portal-muted);
-  font-size: 0.64rem;
-}
-
-.pilotFrame .tab[aria-selected="true"] {
-  border-bottom-color: var(--portal-green);
-  color: var(--portal-ink);
-}
-
-.pilotFrame .secondaryButton {
-  border: 1px solid var(--portal-line);
-  background: #0b2635;
-  color: var(--portal-ink);
-}
-
-.pilotFrame > [role="tabpanel"] {
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-}
-
 .frame > [role="tabpanel"] {
   min-height: 0;
   flex: 1 1 auto;
   overflow: auto;
-}
-
-.frame.pilotFrame > [role="tabpanel"] {
-  overflow: hidden;
 }
 
 .topbar {
@@ -1117,25 +1040,7 @@
     padding: 0;
   }
 
-  .pilotShell {
-    padding: 0;
-  }
-
-  .pilotFrame .topbar {
-    align-items: center;
-    flex-direction: row;
-  }
-
-  .pilotFrame .brand span,
-  .pilotFrame .identity span {
-    display: none;
-  }
-
-  .pilotFrame .identity div {
-    text-align: right;
-  }
-
-  .topbar,
+.topbar,
   .panelHeader {
     align-items: stretch;
     flex-direction: column;
@@ -1212,3 +1117,28 @@
     padding-bottom: 220px;
   }
 }
+/* Operational workspace: clear primary navigation and compact supporting tools. */
+.topbar { min-height: 66px; padding: 10px 24px; gap: 16px; }
+.brand h1 { color: var(--portal-ink); font-size: 20px; letter-spacing: -.035em; line-height: 1.2; margin: 0; }
+.brand span { font-size: 12px; }
+.identity strong { font-size: 13px; }
+.identity span { font-size: 11px; }
+.tabs { display: grid; align-items: stretch; min-width: 0; gap: 0; padding: 0 24px; overflow: visible; }
+.primaryTabs, .toolsTabs { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+.tab { flex: 0 0 auto; min-height: 48px; padding: 14px 16px 11px; font-size: 14px; font-weight: 750; white-space: nowrap; }
+.toolsTabs { border-top: 1px solid var(--portal-line); padding: 4px 0; }
+.toolsTabs .tab { min-height: 38px; padding: 10px 12px 8px; font-size: 12px; }
+.toolsToggle { flex: 0 0 auto; margin-left: auto; border: 1px solid var(--portal-line); border-radius: 7px; background: transparent; color: var(--portal-muted); min-height: 35px; font: inherit; font-size: 12px; padding: 7px 11px; cursor: pointer; white-space: nowrap; }
+.toolsToggle[aria-expanded="true"] { color: var(--portal-ink); border-color: var(--portal-line-strong); }
+.toolsToggle:focus-visible, .tab:focus-visible { outline: 2px solid var(--portal-green); outline-offset: -3px; }
+.frame > [role="tabpanel"] { padding: 24px; box-sizing: border-box; scroll-padding-top: 18px; }
+.hero { margin: 18px 24px 0; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; }
+.heroCopy { border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 0; }
+.heroCopy h1 { font-size: 25px; margin: 5px 0 8px; }
+.heroCopy p { font-size: 13px; color: var(--portal-muted); max-width: 850px; line-height: 1.5; }
+.guardrail { max-width: 310px; padding: 12px 15px; border-radius: 9px; }
+.guardrail summary { font-size: 12px; color: var(--portal-muted); cursor: pointer; }
+.guardrail p { font-size: 12px; }
+.eyebrow { font-size: 10px; }
+.status { margin: 12px 24px 0; font-size: 13px; flex: 0 0 auto; }
+@media (max-width: 780px) { .topbar { flex-direction: row; align-items: center; padding: 12px 15px; } .identity div { display: none; } .brand span { font-size: 10px; } .tabs { padding: 0 12px; overflow: visible; } .tab { padding-left: 12px; padding-right: 12px; font-size: 13px; } .toolsToggle { margin-left: 6px; } .frame > [role="tabpanel"] { padding: 16px 12px; } .hero { margin: 15px 12px 0; grid-template-columns: 1fr; } .guardrail { max-width: none; padding: 10px; } .status { margin: 10px 12px 0; } }

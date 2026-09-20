@@ -474,7 +474,7 @@
 .crm-provider-mark.xero { background: #13b5ea; }
 .crm-provider-mark.myob { background: #6132a8; }
 .crm-provider-mark.google { background: linear-gradient(135deg, #4285f4 0 34%, #34a853 34% 58%, #fbbc05 58% 78%, #ea4335 78%); }
-.crm-integration-grid article > p { color: #4e635c; font-size: .6rem; line-height: 1.55; margin: 14px 0; }
+.crm-integration-grid article > p { color: var(--color-aea-muted); font-size: .6rem; line-height: 1.55; margin: 14px 0; }
 .crm-connected-account { background: #e8f7f1; border-radius: 9px; display: grid; gap: 3px; margin-bottom: 13px; padding: 10px; }
 .crm-connected-account span, .crm-connected-account small { color: #4e6c62; font-size: .52rem; }
 .crm-connected-account strong { color: #174f3e; font-size: .64rem; }

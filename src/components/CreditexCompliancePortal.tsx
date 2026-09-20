@@ -39,10 +39,11 @@ import { CreditexOutputActions } from "./CreditexOutputActions";
 import { CreditexOfficialSourceWorkbench } from "./CreditexOfficialSourceWorkbench";
 import { CreditexOperationsWorkspace } from "./CreditexOperationsWorkspace";
 import { CreditexPlannedIntakeQueue } from "./CreditexPlannedIntakeQueue";
-import { CreditexVeuPilotWorkspace } from "./CreditexVeuPilotWorkspace";
+import CreditexVoiceSetupPanel from "./CreditexVoiceSetupPanel";
 import styles from "./CreditexCompliancePortal.module.css";
 
 type ComplianceRole = "admin" | "case_manager" | "reviewer" | "auditor";
+type WorkspaceTab = "cases" | "operations" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance";
 
 type ComplianceSession = {
   email: string;
@@ -320,8 +321,8 @@ export function CreditexCompliancePortal() {
   );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [tab, setTab] =
-    useState<"cases" | "pilot" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance">("cases");
+  const [tab, setTab] = useState<WorkspaceTab>("cases");
+  const [showTools, setShowTools] = useState(false);
   const questionnaireDirty = useRef(false);
   const reportQuestionnaireDirty = useCallback((dirty: boolean) => { questionnaireDirty.current = dirty; }, []);
   function selectTab(next: typeof tab) {
@@ -329,6 +330,7 @@ export function CreditexCompliancePortal() {
     if (questionnaireDirty.current && !window.confirm("Discard the unsaved changes to this questionnaire?")) return false;
     questionnaireDirty.current = false;
     setTab(next);
+    if (!["cases", "operations", "onboarding"].includes(next)) setShowTools(true);
     return true;
   }
   const [cases, setCases] = useState<CaseQueueItem[]>([]);
@@ -1008,6 +1010,19 @@ export function CreditexCompliancePortal() {
     }
   }
 
+  const primaryTabs: { id: WorkspaceTab; label: string }[] = [
+    { id: "cases", label: "Jobs" },
+    { id: "operations", label: "Cases" },
+    ...(canReviewTraining ? [{ id: "onboarding" as const, label: "Trade onboarding" }] : []),
+  ];
+  const toolsTabs: { id: WorkspaceTab; label: string }[] = [
+    { id: "forms", label: "Activity forms" },
+    { id: "sources", label: "Official sources" },
+    ...(canOpenQuestionnaires ? [{ id: "compliance-questions" as const, label: "Compliance questions" }] : []),
+    ...(session?.role === "admin" ? [{ id: "governance" as const, label: "Government rules" }] : []),
+  ];
+  const visibleTabs = [...primaryTabs, ...(showTools ? toolsTabs : [])];
+
   function handleWorkspaceTabKeyDown(
     event: KeyboardEvent<HTMLButtonElement>,
   ) {
@@ -1015,13 +1030,7 @@ export function CreditexCompliancePortal() {
       return;
     }
     event.preventDefault();
-    const visibleTabs: Array<
-      "cases" | "pilot" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance"
-    > = ["cases", "pilot", "sources", "forms"];
-    if (canReviewTraining) visibleTabs.push("onboarding");
-    if (canOpenQuestionnaires) visibleTabs.push("compliance-questions");
-    if (session?.role === "admin") visibleTabs.push("governance");
-    const currentIndex = visibleTabs.indexOf(tab);
+    const currentIndex = visibleTabs.findIndex((item) => item.id === tab);
     const nextIndex = event.key === "Home"
       ? 0
       : event.key === "End"
@@ -1029,7 +1038,7 @@ export function CreditexCompliancePortal() {
         : event.key === "ArrowRight"
           ? (currentIndex + 1) % visibleTabs.length
           : (currentIndex - 1 + visibleTabs.length) % visibleTabs.length;
-    const nextTab = visibleTabs[nextIndex];
+    const nextTab = visibleTabs[nextIndex].id;
     if (!selectTab(nextTab)) return;
     window.requestAnimationFrame(() => {
       document.getElementById(`creditex-tab-${nextTab}`)?.focus();
@@ -1174,14 +1183,10 @@ export function CreditexCompliancePortal() {
 
   return (
     <main
-      className={`${styles.shell} ${tab === "pilot" ? styles.pilotShell : ""}`}
+      className={styles.shell}
       id="site-content"
     >
-      <div
-        className={`${styles.frame} ${
-          tab === "pilot" ? styles.pilotFrame : ""
-        }`}
-      >
+      <div className={styles.frame}>
         <header className={styles.topbar}>
           <div className={styles.brand}>
             <Image
@@ -1192,8 +1197,8 @@ export function CreditexCompliancePortal() {
               height={42}
             />
             <div>
-              <strong>TLink</strong>
-              <span>Creditex compliance workspace</span>
+              <h1>Creditex</h1>
+              <span>TLink partner workspace</span>
             </div>
           </div>
           <div className={styles.identity}>
@@ -1216,125 +1221,62 @@ export function CreditexCompliancePortal() {
           </div>
         </header>
 
-        <nav
-          className={styles.tabs}
-          aria-label="Compliance workspace"
-          role="tablist"
-        >
-          <button
-            className={styles.tab}
-            type="button"
-            role="tab"
-            id="creditex-tab-cases"
-            aria-controls="creditex-panel-cases"
-            aria-selected={tab === "cases"}
-            tabIndex={tab === "cases" ? 0 : -1}
-            onClick={() => selectTab("cases")}
-            onKeyDown={handleWorkspaceTabKeyDown}
-          >
-            Operations
-          </button>
-          <button
-            className={styles.tab}
-            type="button"
-            role="tab"
-            id="creditex-tab-pilot"
-            aria-controls="creditex-panel-pilot"
-            aria-selected={tab === "pilot"}
-            tabIndex={tab === "pilot" ? 0 : -1}
-            onClick={() => selectTab("pilot")}
-            onKeyDown={handleWorkspaceTabKeyDown}
-          >
-            VEU test pilot
-          </button>
-          <button
-            className={styles.tab}
-            type="button"
-            role="tab"
-            id="creditex-tab-sources"
-            aria-controls="creditex-panel-sources"
-            aria-selected={tab === "sources"}
-            tabIndex={tab === "sources" ? 0 : -1}
-            onClick={() => selectTab("sources")}
-            onKeyDown={handleWorkspaceTabKeyDown}
-          >
-            Official sources
-          </button>
-          <button
-            className={styles.tab}
-            type="button"
-            role="tab"
-            id="creditex-tab-forms"
-            aria-controls="creditex-panel-forms"
-            aria-selected={tab === "forms"}
-            tabIndex={tab === "forms" ? 0 : -1}
-            onClick={() => selectTab("forms")}
-            onKeyDown={handleWorkspaceTabKeyDown}
-          >
-            Activity forms
-          </button>
-          {canReviewTraining && <button className={styles.tab} type="button" role="tab" id="creditex-tab-onboarding" aria-controls="creditex-panel-onboarding" aria-selected={tab === "onboarding"} tabIndex={tab === "onboarding" ? 0 : -1} onClick={() => selectTab("onboarding")} onKeyDown={handleWorkspaceTabKeyDown}>Onboarding &amp; training</button>}
-          {canOpenQuestionnaires && <button className={styles.tab} type="button" role="tab" id="creditex-tab-compliance-questions" aria-controls="creditex-panel-compliance-questions" aria-selected={tab === "compliance-questions"} tabIndex={tab === "compliance-questions" ? 0 : -1} onClick={() => selectTab("compliance-questions")} onKeyDown={handleWorkspaceTabKeyDown}>Compliance questions</button>}
-          {session.role === "admin" && (
-            <button
-              className={styles.tab}
-              type="button"
-              role="tab"
-              id="creditex-tab-governance"
-              aria-controls="creditex-panel-governance"
-              aria-selected={tab === "governance"}
-              tabIndex={tab === "governance" ? 0 : -1}
-              onClick={() => selectTab("governance")}
-              onKeyDown={handleWorkspaceTabKeyDown}
-            >
-              Government rules
-            </button>
-          )}
+        <nav className={styles.tabs} aria-label="Creditex workspace" role="tablist">
+          <div className={styles.primaryTabs}>
+            {primaryTabs.map((item) => <button key={item.id} className={styles.tab} type="button" role="tab" id={`creditex-tab-${item.id}`} aria-controls={`creditex-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)} onKeyDown={handleWorkspaceTabKeyDown}>{item.label}</button>)}
+            <button className={styles.toolsToggle} type="button" aria-expanded={showTools} aria-controls="creditex-workspace-tools" onClick={() => {
+              if (showTools && toolsTabs.some((item) => item.id === tab) && !selectTab("cases")) return;
+              setShowTools((current) => !current);
+            }}>{showTools ? "Hide setup & rules" : "Setup & rules"}<span aria-hidden="true">{showTools ? " −" : " +"}</span></button>
+          </div>
+          {showTools && <div className={styles.toolsTabs} id="creditex-workspace-tools">
+            {toolsTabs.map((item) => <button key={item.id} className={styles.tab} type="button" role="tab" id={`creditex-tab-${item.id}`} aria-controls={`creditex-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)} onKeyDown={handleWorkspaceTabKeyDown}>{item.label}</button>)}
+          </div>}
         </nav>
 
-        {tab !== "pilot" && (
+        {!["cases", "operations"].includes(tab) && (
           <section className={styles.hero}>
             <div className={styles.heroCopy}>
               <span className={styles.eyebrow}>Protected partner operations</span>
               <h1>
                 {tab === "sources"
-                  ? "Official source custody"
+                  ? "Official sources"
                   : tab === "forms"
-                    ? "Activity form control"
+                    ? "Activity forms"
                   : tab === "onboarding"
                     ? "Business and training review"
                   : tab === "compliance-questions"
                     ? "Compliance questions"
                   : tab === "governance"
-                    ? "Government rule control"
+                    ? "Government rules"
                     : "Compliance case control"}
               </h1>
               <p>
                 {tab === "sources"
-                  ? "Authorised Creditex staff can compare current government links with exact retained bytes and immutable source-review records."
+                  ? "Find government sources, review retained documents and track publication changes."
                   : tab === "forms"
-                    ? "Build, review and publish the exact technician workflow for each effective activity. Trade accounts can complete a pinned published version but cannot alter its definition."
+                    ? "Build, review and publish the forms technicians complete for each activity."
                   : tab === "onboarding"
-                    ? "Review business applications, executed agreements and exact activity curricula. Every learner has an individual, revocable completion record."
+                    ? "Review trade applications, agreements and staff training in one place."
                   : tab === "compliance-questions"
                     ? "Write clear questions, explain the correct answers and publish training for the people who carry out each activity."
                   : tab === "governance"
-                    ? "Named administrators create and govern effective-dated program, activity and evidence records without turning Creditex instructions into government rules."
+                    ? "Manage published programs, activities, effective dates and evidence requirements."
                     : "Queue lists minimise private data. Authorised Creditex staff can open the audited case workspace for the customer, installer, site, appointments, evidence originals and captured metadata needed to review, correct and submit that exact job."}
               </p>
             </div>
-            <aside className={styles.guardrail}>
-              <strong>Governance boundary</strong>
+            <details className={styles.guardrail}>
+              <summary>About publication and case decisions</summary>
               <p>
                 Activity publication records source provenance and effective
                 dates. It does not make a financial, technical or regulator
                 decision for a case.
               </p>
-            </aside>
+            </details>
           </section>
         )}
 
-        {notice && tab !== "pilot" && (
+        {notice && (
           <p
             className={styles.status}
             data-kind={noticeKind}
@@ -1350,7 +1292,13 @@ export function CreditexCompliancePortal() {
             role="tabpanel"
             aria-labelledby="creditex-tab-cases"
           >
+            {session.role === "admin" && user && <CreditexVoiceSetupPanel user={user} />}
             <CreditexPlannedIntakeQueue api={api} />
+          </div>
+        )}
+
+        {tab === "operations" && (
+          <div id="creditex-panel-operations" role="tabpanel" aria-labelledby="creditex-tab-operations">
             <CreditexOperationsWorkspace
               session={session}
               seedCases={visibleCases}
@@ -1366,18 +1314,8 @@ export function CreditexCompliancePortal() {
               onRefreshSeedCases={() => void refreshCases()}
               onLoadNextSeedCases={() => void loadNextCases()}
               onOpenActivityRules={() =>
-                setTab(session.role === "admin" ? "governance" : "sources")}
+                selectTab(session.role === "admin" ? "governance" : "sources")}
             />
-          </div>
-        )}
-
-        {tab === "pilot" && (
-          <div
-            id="creditex-panel-pilot"
-            role="tabpanel"
-            aria-labelledby="creditex-tab-pilot"
-          >
-            <CreditexVeuPilotWorkspace api={api} role={session.role} />
           </div>
         )}
 

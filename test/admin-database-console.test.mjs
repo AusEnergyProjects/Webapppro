@@ -258,10 +258,10 @@ test("the edge route is owner-only, bounded, bound-value based and atomically au
 });
 
 test("the operations portal mounts a lazy owner-only database workspace", () => {
-  assert.match(portal, /"database" \| "access"/);
+  assert.match(portal, /AdminWorkspaceNavigation/);
   assert.match(portal, /session\.role === "owner"/);
-  assert.match(portal, /<span>15<\/span>Database/);
-  assert.match(portal, /tab === "database" && session\.role === "owner" && <AdminDatabaseWorkspace api=\{api\} setStatus=\{setStatus\}/);
+  assert.match(read("../src/components/AdminWorkspaceNavigation.tsx"), /id: "database", label: "Database", ownerOnly: true/);
+  assert.match(portal, /tab === "database" && session\.role === "owner" && <><AdminDatabaseWorkspace api=\{api\} setStatus=\{setStatus\}/);
   assert.doesNotMatch(portal.slice(portal.indexOf("const loadWorkspace"), portal.indexOf("const loadSession")), /\/api\/admin\/database/);
   assert.match(workspace, /Raw SQL, bulk changes and schema controls are not exposed/);
   assert.match(workspace, /deleteTarget\.deleteConfirmation/);

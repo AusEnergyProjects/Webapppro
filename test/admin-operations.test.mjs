@@ -223,13 +223,15 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.match(portal, /ABN and evidence review required/);
   assert.match(portal, /Operations team/);
   assert.match(portal, /Recent administrator activity/);
-  assert.match(portal, /<span>15<\/span>Database/);
+  assert.match(portal, /AdminWorkspaceNavigation/);
+  assert.match(read("../src/components/AdminWorkspaceNavigation.tsx"), /id: "database", label: "Database", ownerOnly: true/);
   assert.match(databaseWorkspace, /Live database console/);
   assert.match(portal, /sendPasswordResetEmail/);
   assert.match(portal, /Forgot password\?/);
   assert.match(portal, /href="#operations-inbox"/);
   assert.match(portal, /aria-label=\{`Open operations inbox/);
-  assert.match(portal, /Ecosystem walkthrough/);
+  assert.doesNotMatch(portal, /Ecosystem walkthrough|Open demo enquiries/);
+  assert.match(portal, /AdminDemoCleanupPanel user=\{user\}/);
   assert.match(portal, /Owner recovery readiness/);
   assert.match(opportunityWorkspace, /Search opportunities/);
   assert.match(accountWorkspace, /Export visible partners CSV/);
@@ -272,7 +274,7 @@ test("admin list workspaces share only proven formatting and saved-view helpers"
 });
 
 test("the extracted opportunity workspace preserves filters, cursors, actions and privacy-safe rendering", () => {
-  assert.match(portal, /<AdminOpportunityWorkspace api=\{api\} demoOnlyRequest=\{opportunityDemoRequest\} role=\{session\.role\} setStatus=\{setStatus\}/);
+  assert.match(portal, /<AdminOpportunityWorkspace api=\{api\} role=\{session\.role\} setStatus=\{setStatus\}/);
   for (const parameter of ["search", "status", "service", "state", "synthetic", "cursor", "total"]) {
     assert.match(opportunityWorkspace, new RegExp(`params\\.set\\("${parameter}"`));
   }

@@ -50,6 +50,14 @@ const sections = [
     body: "A trade account owner chooses whether to connect Google Calendar, Outlook, Xero, MYOB or QuickBooks. The trade workspace sends only the information needed for the chosen action. The trade workspace remains the operational source of truth, and connected providers apply their own privacy terms. The trade workspace does not offer payment-provider connections or initiate customer payments. Account owners can disconnect a connected calendar or accounting provider from the integration workspace.",
   },
   {
+    title: "Customer text messages",
+    body: "A trade business can connect its own Twilio account to send service text messages to its existing customers. Twilio processes the sender and recipient numbers, message content and delivery information. The authorised business can see its conversation history in TLink. Permission and opt-out records are retained with that conversation; replying STOP prevents further service texts through this connection. This connection does not enrol a customer in a marketing campaign.",
+  },
+  {
+    title: "Compliance audit calls",
+    body: "Authorised compliance partner staff can call the customer linked to a job or case using their PC through the calling account connected and paid for by their organisation. Telnyx processes the phone numbers, call connection and audio. Before staff are connected, the customer hears why the call will be recorded and is asked to press 1 to agree. Without that agreement, the call ends without a recording. After agreement, the audit conversation is recorded and saved privately against that audit with its consent, time and integrity records. Only currently authorised audit staff and organisation administrators can play it, and playback access is logged. The calling provider also processes the recording before it is saved to the audit. These providers may process information outside Australia. Recordings are used for the job or case audit and related review, not advertising or automatic compliance approval. Contact us if you need another way to complete the audit or want to request access or correction.",
+  },
+  {
     title: "Five-minute call bookings",
     body: "The public booking page embeds Calendly. When you choose a call time, Calendly receives the name, email address, booking answers and scheduling details you enter, creates the calendar event for Australian Energy Assessments and sends the related booking notifications. Calendly applies its own privacy terms. Do not enter identity documents, payment details, access codes or unrelated private information in the booking questions.",
   },
@@ -77,7 +85,7 @@ export default function PrivacyPage() {
       <SiteHeader active="direct-trade-dashboard" />
       <header className="trade-information-hero">
         <div>
-          <span>Effective 4 September 2026</span>
+          <span>Effective 21 September 2026</span>
           <h1>Privacy notice</h1>
           <p>
             This notice explains what Australian Energy Assessments collects,

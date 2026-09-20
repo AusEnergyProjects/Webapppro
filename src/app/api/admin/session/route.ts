@@ -26,9 +26,9 @@ export async function GET(request: Request) {
     const [customers, accounts, opportunities, matches, verification, products, notifications, audit] = await Promise.all([
       db.prepare(`SELECT COUNT(*) total,
         SUM(CASE WHEN account_status = 'active' THEN 1 ELSE 0 END) active,
-        (SELECT COUNT(*) FROM customer_projects) projects,
+        (SELECT COUNT(*) FROM customer_projects WHERE status <> 'withdrawn') projects,
         (SELECT COUNT(*) FROM customer_projects WHERE status IN ('matching', 'quote_review')) submitted
-        FROM customer_accounts`).first<Record<string, number>>(),
+        FROM customer_accounts WHERE account_status <> 'closed'`).first<Record<string, number>>(),
       db.prepare(`SELECT COUNT(*) total,
         SUM(CASE WHEN ${verifiedTradeAccountPredicate("account")} THEN 1 ELSE 0 END) active,
         SUM(CASE WHEN account.account_status = 'suspended' THEN 1 ELSE 0 END) suspended,
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
           AND ${verifiedTradeAccountPredicate("account")} THEN 1 ELSE 0 END) installers,
         SUM(CASE WHEN account.partner_type = 'supplier'
           AND ${verifiedTradeAccountPredicate("account")} THEN 1 ELSE 0 END) suppliers
-        FROM trade_accounts account`).first<Record<string, number>>(),
+        FROM trade_accounts account WHERE account.account_status <> 'closed'`).first<Record<string, number>>(),
       db.prepare(`SELECT COUNT(*) total,
         SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) open,
         SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) draft
@@ -52,11 +52,11 @@ export async function GET(request: Request) {
             AND NOT (${verifiedTradeAccountPredicate("account")}))
           THEN 1 ELSE 0 END) awaiting,
         SUM(CASE WHEN ${verifiedTradeAccountPredicate("account")} THEN 1 ELSE 0 END) approved
-        FROM trade_accounts account`).first<Record<string, number>>(),
+        FROM trade_accounts account WHERE account.account_status <> 'closed'`).first<Record<string, number>>(),
       db.prepare(`SELECT COUNT(*) total,
         SUM(CASE WHEN review_status = 'pending' THEN 1 ELSE 0 END) pending,
         SUM(CASE WHEN listing_status = 'published' AND review_status = 'approved' THEN 1 ELSE 0 END) live
-        FROM supplier_products`).first<Record<string, number>>(),
+        FROM supplier_products WHERE listing_status <> 'archived'`).first<Record<string, number>>(),
       db.prepare(`SELECT COUNT(*) total,
         SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) unread,
         SUM(CASE WHEN requires_action = 1 AND status != 'resolved' THEN 1 ELSE 0 END) action_required,

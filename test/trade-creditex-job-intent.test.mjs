@@ -17,6 +17,7 @@ import {
 import {
   CREDITEX_INSTALLER_ACCOUNT_SELECT_SQL,
 } from "../src/lib/creditex-job-audit-sql.ts";
+import { creditexJobIntentFilters } from "../src/lib/creditex-job-intent-filters.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (file) => fs.readFileSync(path.join(here, file), "utf8");
@@ -177,9 +178,9 @@ function applyMigrationChain(database, names) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 182);
+  assert.equal(completeMigrationChain.length, 183);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0182_trade_sms\.sql$/);
+  assert.match(completeMigrationChain.at(-1), /^0183_creditex_audit_calls\.sql$/);
   assert.ok(
     completeMigrationChain.includes("0160_trade_rental_inspections.sql"),
     "the complete migration chain must include the rental inspection schema",
@@ -821,8 +822,9 @@ test("Creditex register retains every assigned status and opens an audited full 
   assert.match(creditexQueueUi, /aria-controls="creditex-full-audit-workspace"/);
   assert.match(
     creditexQueueUi,
-    /const launcher = auditLauncherRef\.current;[\s\S]*requestAnimationFrame\(\(\) => \{[\s\S]*launcher\?\.isConnected[\s\S]*launcher\.focus\(\)/,
+    /const launcher = auditLauncherRef\.current;[\s\S]*requestAnimationFrame\(\(\) => \{[\s\S]*launcher\?\.isConnected[\s\S]*launcher\.focus\(\{ preventScroll: true \}\)/,
   );
+  assert.match(creditexQueueUi, /document\.getElementById\(`creditex-job-\$\{returnJobId\}`\)\?\.focus\(\{ preventScroll: true \}\)/);
   assert.match(creditexQueueRoute, /"Cache-Control": "private, no-store"/);
   assert.match(creditexQueueRoute, /const PAGE_SIZE = 75/);
   assert.match(creditexQueueRoute, /count\(\*\) total/);
@@ -892,6 +894,45 @@ test("Creditex register retains every assigned status and opens an audited full 
   );
 });
 
+test("returning from an audit restores the remounted job row and table position", () => {
+  const closeSource = creditexQueueUi.slice(
+    creditexQueueUi.indexOf("function closeAudit()"),
+    creditexQueueUi.indexOf("function changeFilter("),
+  );
+  assert.match(closeSource, /^function closeAudit\(\)/);
+  for (const connected of [true, false]) {
+    const focused = [];
+    const cleared = [];
+    let frame;
+    const original = { isConnected: connected, focus: options => focused.push(["original", options]) };
+    const tableRef = { current: null };
+    const environment = {
+      auditItem: { id: "job-intent-42" },
+      auditLauncherRef: { current: original },
+      auditSequence: { current: 3 },
+      tableRef,
+      tableScroll: { current: { top: 315, left: 280 } },
+      setAuditItem: value => cleared.push(["item", value]),
+      setAudit: value => cleared.push(["audit", value]),
+      setAuditMessage: value => cleared.push(["message", value]),
+      setAuditLoading: value => cleared.push(["loading", value]),
+      window: { requestAnimationFrame: callback => { frame = callback; } },
+      document: { getElementById: id => {
+        assert.equal(id, "creditex-job-job-intent-42");
+        return { focus: options => focused.push(["remounted", options]) };
+      } },
+    };
+    new Function("environment", `const { ${Object.keys(environment).join(", ")} } = environment; ${closeSource}; closeAudit();`)(environment);
+    assert.equal(environment.auditSequence.current, 4, "Late audit responses must be invalidated.");
+    assert.deepEqual(cleared, [["item", null], ["audit", null], ["message", ""], ["loading", false]]);
+    assert.deepEqual(focused, [], "Focus waits for the register to remount.");
+    tableRef.current = { scrollTop: 0, scrollLeft: 0 };
+    frame();
+    assert.deepEqual(tableRef.current, { scrollTop: 315, scrollLeft: 280 });
+    assert.deepEqual(focused, [[connected ? "original" : "remounted", { preventScroll: true }]]);
+  }
+});
+
 test("Creditex planned-intake queue SQL executes against the complete migration schema", () => {
   const database = new DatabaseSync(":memory:");
   applyCompleteMigrationChain(database);
@@ -899,9 +940,12 @@ test("Creditex planned-intake queue SQL executes against the complete migration 
     /const rows = await database\.prepare\(`([\s\S]*?)`\)\s*\.bind\(/,
   );
   assert.ok(selectMatch, "Missing planned-intake register query");
+  const filters = creditexJobIntentFilters(new URLSearchParams());
   const query = selectMatch[1]
     .replace("${QUEUE_JOINS}", routeTemplate("QUEUE_JOINS"))
-    .replace("${QUEUE_WHERE}", routeTemplate("QUEUE_WHERE"));
+    .replace("${QUEUE_WHERE}", routeTemplate("QUEUE_WHERE"))
+    .replace("${filterSql}", filters.filterSql)
+    .replace("${sortSql}", filters.sortSql);
   assert.doesNotMatch(query, /\$\{/);
   const bindings = [
     "creditex-org",

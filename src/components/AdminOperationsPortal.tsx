@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 /* eslint-disable @next/next/no-img-element */
 
 import "./AdminOperationsPortal.css";
+import { AdminWorkspaceNavigation, type AdminWorkspaceTab } from "./AdminWorkspaceNavigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   GoogleAuthProvider,
@@ -38,6 +39,7 @@ import { AdminAccountWorkspace } from "@/components/AdminAccountWorkspace";
 import { AdminProductEnquiryWorkspace, summariseProductEnquiries, type ProductEnquirySummary } from "@/components/AdminProductEnquiryWorkspace";
 import { AdminServiceReminderDelivery } from "@/components/AdminServiceReminderDelivery";
 import { AdminJobDirectory } from "@/components/AdminJobDirectory";
+import AdminDemoCleanupPanel from "@/components/AdminDemoCleanupPanel";
 import { AdminDatabaseWorkspace } from "@/components/AdminDatabaseWorkspace";
 import { AdminEnergyAssistantLeads } from "@/components/AdminEnergyAssistantLeads";
 import { AdminSurgeAnswerReviews } from "@/components/AdminSurgeAnswerReviews";
@@ -81,19 +83,6 @@ type AdminUser = {
   last_login_at: string;
   created_at: string;
 };
-type EcosystemHealth = {
-  status: "healthy" | "attention";
-  checkedAt: string;
-  counts: Record<string, number>;
-  checks: Array<{
-    key: string;
-    label: string;
-    passed: boolean;
-    detail: string;
-  }>;
-};
-
-
 function authMessage(error: unknown) {
   const code =
     typeof error === "object" && error && "code" in error
@@ -147,9 +136,7 @@ export function AdminOperationsPortal() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [bootstrapCode, setBootstrapCode] = useState("");
-  const [tab, setTab] = useState<
-    "inbox" | "overview" | "directory" | "jobs" | "customers" | "partners" | "assistant-leads" | "assistant-reviews" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "compliance-questions" | "field-pilot" | "database" | "access"
-  >("inbox");
+  const [tab, setTab] = useState<AdminWorkspaceTab>("inbox");
   const questionnaireDirty = useRef(false);
   const reportQuestionnaireDirty = useCallback((dirty: boolean) => { questionnaireDirty.current = dirty; }, []);
   function selectTab(next: typeof tab) {
@@ -163,8 +150,6 @@ export function AdminOperationsPortal() {
   const [audit, setAudit] = useState<AuditItem[]>([]);
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [productEnquirySummary, setProductEnquirySummary] = useState<ProductEnquirySummary>({ total: 0, open: 0, responded: 0, valueCents: 0 });
-  const [ecosystemHealth, setEcosystemHealth] = useState<EcosystemHealth | null>(null);
-  const [ecosystemBusy, setEcosystemBusy] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<AdminRole>("support");
@@ -182,7 +167,6 @@ export function AdminOperationsPortal() {
   const [directoryTarget, setDirectoryTarget] = useState<{ type: string; uid: string; nonce: number } | null>(null);
   const [partnerTarget, setPartnerTarget] = useState<{ uid: string; nonce: number } | null>(null);
   const [partnerVerificationTarget, setPartnerVerificationTarget] = useState("");
-  const [opportunityDemoRequest, setOpportunityDemoRequest] = useState(0);
   const [assistantLeadTarget, setAssistantLeadTarget] = useState<{ id: string; nonce: number } | null>(null);
 
   const api = useCallback(async (path: string, init: RequestInit = {}) => {
@@ -375,24 +359,6 @@ export function AdminOperationsPortal() {
         block: "start",
       });
     });
-  }
-
-  async function runEcosystemCheck() {
-    setEcosystemBusy(true);
-    setStatus("Checking the protected demo journey...");
-    try {
-      const result = await api("/api/admin/ecosystem-health");
-      setEcosystemHealth(result as unknown as EcosystemHealth);
-      setStatus(
-        result.status === "healthy"
-          ? "The full demo ecosystem passed every readiness check."
-          : "The demo ecosystem check found steps that need attention.",
-      );
-    } catch (error) {
-      setStatus(authMessage(error));
-    } finally {
-      setEcosystemBusy(false);
-    }
   }
 
   async function bootstrap(event: FormEvent) {
@@ -709,135 +675,7 @@ export function AdminOperationsPortal() {
         </div>
       </header>
       <div className="admin-layout">
-        <nav className="admin-sidebar" aria-label="Operations sections">
-          <button
-            className={tab === "inbox" ? "active" : ""}
-            onClick={() => selectTab("inbox")}
-          >
-            <span>01</span>Inbox
-            {notificationCounts.unread > 0 && <strong className="admin-nav-count">{notificationCounts.unread}</strong>}
-          </button>
-          <button
-            className={tab === "overview" ? "active" : ""}
-            onClick={() => selectTab("overview")}
-          >
-            <span>02</span>Overview
-          </button>
-          <button
-            className={tab === "directory" ? "active" : ""}
-            onClick={() => selectTab("directory")}
-          >
-            <span>03</span>All accounts
-          </button>
-          <button
-            className={tab === "jobs" ? "active" : ""}
-            onClick={() => selectTab("jobs")}
-          >
-            <span>04</span>Jobs
-          </button>
-          <button
-            className={tab === "customers" ? "active" : ""}
-            onClick={() => selectTab("customers")}
-          >
-            <span>05</span>Customers ({customerCounts.total || 0})
-          </button>
-          <button
-            className={tab === "partners" ? "active" : ""}
-            onClick={() => selectTab("partners")}
-          >
-            <span>06</span>Partners ({accountCounts.total || 0})
-          </button>
-          <button
-            className={tab === "assistant-leads" ? "active" : ""}
-            onClick={() => selectTab("assistant-leads")}
-          >
-            <span>G</span>Guide follow-ups
-          </button>
-          {session.role !== "support" && <button
-            className={tab === "assistant-reviews" ? "active" : ""}
-            onClick={() => selectTab("assistant-reviews")}
-          >
-            <span>R</span>Wattzun AI answer reviews
-          </button>}
-          <button
-            className={tab === "opportunities" ? "active" : ""}
-            onClick={() => selectTab("opportunities")}
-          >
-            <span>07</span>Leads ({opportunityCounts.total || 0})
-          </button>
-          <button
-            className={tab === "catalogue" ? "active" : ""}
-            onClick={() => selectTab("catalogue")}
-          >
-            <span>08</span>Products ({productCounts.total || 0})
-          </button>
-          <button
-            className={tab === "enquiries" ? "active" : ""}
-            onClick={() => selectTab("enquiries")}
-          >
-            <span>09</span>Product enquiries
-          </button>
-          <button
-            className={tab === "handovers" ? "active" : ""}
-            onClick={() => selectTab("handovers")}
-          >
-            <span>10</span>Handovers
-          </button>
-          <button
-            className={tab === "asset-safety" ? "active" : ""}
-            onClick={() => selectTab("asset-safety")}
-          >
-            <span>11</span>Asset safety
-          </button>
-          <button
-            className={tab === "asset-governance" ? "active" : ""}
-            onClick={() => selectTab("asset-governance")}
-          >
-            <span>12</span>Asset governance
-          </button>
-          <button
-            className={tab === "form-governance" ? "active" : ""}
-            onClick={() => selectTab("form-governance")}
-          >
-            <span>13</span>Field forms
-          </button>
-          <button
-            className={tab === "field-pilot" ? "active" : ""}
-            onClick={() => selectTab("field-pilot")}
-          >
-            <span>14</span>Field pilot
-          </button>
-          {session.role !== "support" && <button
-            className={tab === "compliance-questions" ? "active" : ""}
-            onClick={() => selectTab("compliance-questions")}
-          >
-            <span>✓</span>Compliance questions
-          </button>}
-          {session.role === "owner" && (
-            <>
-              <button
-                className={tab === "database" ? "active" : ""}
-                onClick={() => selectTab("database")}
-              >
-                <span>15</span>Database
-              </button>
-              <button
-                className={tab === "access" ? "active" : ""}
-                onClick={() => selectTab("access")}
-              >
-                <span>16</span>Access & audit
-              </button>
-            </>
-          )}
-          <aside>
-            <strong>Privacy boundary</strong>
-            <p>
-              Wholesalers never see household opportunities. Installer
-              allocations exclude names, street addresses and contact details.
-              The platform does not release them to trade accounts.
-            </p>
-          </aside>
-        </nav>
+        <AdminWorkspaceNavigation selected={tab} role={session.role} unread={notificationCounts.unread} onSelect={selectTab} />
         <section className="admin-content">
           {status && (
             <div className="admin-banner" role="status">
@@ -971,50 +809,6 @@ export function AdminOperationsPortal() {
                 <article><span>Approved</span><strong>{verificationCounts.approved || 0}</strong><small>Role-appropriate access available</small></article>
                 <article><span>Awaiting review</span><strong>{verificationCounts.awaiting || 0}</strong><small>ABN and evidence review required</small></article>
               </section>
-              <section className="admin-panel admin-ecosystem-check" aria-labelledby="ecosystem-check-title">
-                <div className="admin-panel-heading">
-                  <span>End-to-end assurance</span>
-                  <h2 id="ecosystem-check-title">Ecosystem walkthrough</h2>
-                  <p>
-                    Run a read-only check across demo customers, verified-trade distribution,
-                    wholesaler catalogue visibility, installer responses and structured quotes.
-                    This check never sends a new lead or exposes household information.
-                  </p>
-                </div>
-                <div className="admin-ecosystem-actions">
-                  <button type="button" onClick={() => void runEcosystemCheck()} disabled={ecosystemBusy}>
-                    {ecosystemBusy ? "Checking journey..." : ecosystemHealth ? "Run check again" : "Run ecosystem check"}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => {
-                      setOpportunityDemoRequest((current) => current + 1);
-                      setTab("opportunities");
-                    }}
-                  >
-                    Open demo enquiries
-                  </button>
-                  {ecosystemHealth && (
-                    <span className={`admin-ecosystem-state ${ecosystemHealth.status}`}>
-                      {ecosystemHealth.status === "healthy" ? "All checks passed" : "Attention required"}
-                    </span>
-                  )}
-                </div>
-                {ecosystemHealth && (
-                  <div className="admin-ecosystem-results">
-                    {ecosystemHealth.checks.map((check) => (
-                      <article key={check.key} className={check.passed ? "passed" : "attention"}>
-                        <span aria-hidden="true">{check.passed ? "OK" : "!"}</span>
-                        <div>
-                          <strong>{check.label}</strong>
-                          <small>{check.detail}</small>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </section>
               {["owner", "admin"].includes(session.role) && <AdminPerformancePanel api={api} />}
               {["owner", "admin"].includes(session.role) && <AdminServiceFollowUpReporting api={api} />}
               <div className="admin-overview-grid">
@@ -1090,7 +884,7 @@ export function AdminOperationsPortal() {
           )}
 
           {tab === "opportunities" && (
-            <AdminOpportunityWorkspace api={api} demoOnlyRequest={opportunityDemoRequest} role={session.role} setStatus={setStatus} />
+            <AdminOpportunityWorkspace api={api} role={session.role} setStatus={setStatus} />
           )}
 
           {tab === "assistant-leads" && (
@@ -1108,7 +902,7 @@ export function AdminOperationsPortal() {
 
           {tab === "enquiries" && <AdminProductEnquiryWorkspace api={api} setStatus={setStatus} onSummary={setProductEnquirySummary} />}
 
-          {tab === "database" && session.role === "owner" && <AdminDatabaseWorkspace api={api} setStatus={setStatus} />}
+          {tab === "database" && session.role === "owner" && <><AdminDatabaseWorkspace api={api} setStatus={setStatus} />{user && <AdminDemoCleanupPanel user={user} />}</>}
 
           {tab === "access" && session.role === "owner" && (
             <>
