@@ -1,5 +1,21 @@
 # Next task handover
 
+## Active contract: trade-owned SMS conversations, 21 September 2026
+
+Outcome: a verified trade business connects its own Twilio number once and sends and receives service SMS from its customer record, with clear delivery status and no repeated setup. Existing numbers must first be ported to Twilio; newly purchased Twilio numbers use the same connection.
+
+Owner: coordinating task, branch `codex/tlink-communications`, worktree `C:/Webproject/aea-energy-accounting-integrations`, clean base `864a97f03b516abbf3244075da254108f0aafd27` (GitHub main and Sites 593).
+
+Scope: a separate owner-scoped SMS connection, encrypted credentials, actual account/number verification, safe inbound routing, recorded service-message permission, signed inbound/status callbacks, duplicate-send protection and an atomic daily segment limit. Add connection setup to Integrations and conversations to trade-owned customer records. Never use the shared AEA notification account as an automatic fallback. Carrier charges stay with the connected trade account. Protected opportunities, bulk campaigns, number purchases/port orders and automatic customer sends are excluded from this SMS release. Calling and Mailchimp remain subsequent communications slices under the user's wider request; Outlook provider setup continues independently.
+
+Acceptance: owner and verified-business gates; no cross-business phone routing; refuse conflicting Twilio routing; no plaintext secrets returned or logged; opt-outs stop sends and cannot be cleared by a trade checkbox; repeat request IDs never send twice; uncertain provider responses remain uncertain; bounded daily usage; usable desktop and narrow-screen setup and message history. No real customer messages during validation.
+
+Validation: behavioural provider/signature, SQLite reservation/idempotency/tenant-isolation and permission tests; focused CRM/integration regressions; typecheck, lint, migration replay, full required release validation and publication build; responsive component/live checks. Record provider activation separately from fixture validation.
+
+Stop conditions: unavailable external credentials, owner-only verification/card steps, conflicting provider routing, or a required paid purchase/porting decision. Continue independent authorised implementation. No paid Azure resources are required for Outlook calendar API registration.
+
+External state: QuickBooks and Xero platform credentials are stored in Sites environment 97 and Sites 593 is deployed. Actual ledger export remains unverified. MYOB developer application ticket 52438 awaits approval. Outlook code passed its focused calendar checks; Azure account creation awaits owner card verification. Twilio existing-account sign-in is in progress.
+
 Status: Accounting export reference and provider-status corrections prepared; external provider registration and live OAuth acceptance remain in progress.
 Prepared: 20 September 2026
 

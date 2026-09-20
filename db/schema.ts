@@ -6578,3 +6578,32 @@ export const tradeTrainingSubmissions = sqliteTable("trade_training_submissions"
   scorePercent: integer("score_percent").notNull(), firstTryScorePercent: integer("first_try_score_percent").notNull(),
   reference: text("reference").notNull(), completedAt: text("completed_at").notNull(), snapshotJson: text("snapshot_json").notNull(), resultJson: text("result_json").notNull().default("{}"),
 }, (t) => [index("trade_training_submissions_person_idx").on(t.ownerUid,t.memberId,t.completedAt), index("trade_training_submissions_module_idx").on(t.moduleId,t.completedAt), check("training_submission_score_check", sql`${t.scorePercent} BETWEEN 0 AND 100 AND ${t.firstTryScorePercent} BETWEEN 0 AND 100`), check("training_submission_json_check", sql`json_valid(${t.snapshotJson}) AND json_valid(${t.resultJson})`)]);
+
+export const tradeSmsConnections = sqliteTable("trade_sms_connections", {
+  id: text("id").primaryKey(), firebaseUid: text("firebase_uid").notNull(), accountSid: text("account_sid").notNull(),
+  accountLabel: text("account_label").notNull(), accountType: text("account_type").notNull(), numberSid: text("number_sid").notNull(),
+  phoneNumber: text("phone_number").notNull(), encryptedCredentials: text("encrypted_credentials").notNull(), callbackUrl: text("callback_url").notNull(),
+  status: text("status").notNull().default("connecting"), dailyLimit: integer("daily_limit").notNull().default(100),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (t) => [uniqueIndex("trade_sms_connections_number_idx").on(t.accountSid, t.numberSid),
+  uniqueIndex("trade_sms_connections_active_owner_idx").on(t.firebaseUid).where(sql`${t.status} IN ('connecting', 'connected')`),
+  check("trade_sms_connections_limit_check", sql`${t.dailyLimit} BETWEEN 1 AND 1000`)]);
+
+export const tradeSmsRecipients = sqliteTable("trade_sms_recipients", {
+  id: text("id").primaryKey(), connectionId: text("connection_id").notNull().references(() => tradeSmsConnections.id),
+  firebaseUid: text("firebase_uid").notNull(), customerId: text("customer_id").notNull(), phoneNumber: text("phone_number").notNull(),
+  consentNote: text("consent_note").notNull().default(""), consentAt: text("consent_at").notNull().default(""),
+  optedOutAt: text("opted_out_at").notNull().default(""), optInAt: text("opt_in_at").notNull().default(""),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (t) => [uniqueIndex("trade_sms_recipients_number_idx").on(t.connectionId, t.phoneNumber), index("trade_sms_recipients_customer_idx").on(t.firebaseUid, t.customerId)]);
+
+export const tradeSmsMessages = sqliteTable("trade_sms_messages", {
+  id: text("id").primaryKey(), connectionId: text("connection_id").notNull().references(() => tradeSmsConnections.id),
+  recipientId: text("recipient_id").notNull().references(() => tradeSmsRecipients.id), firebaseUid: text("firebase_uid").notNull(),
+  customerId: text("customer_id").notNull(), direction: text("direction").notNull(), body: text("body").notNull(), status: text("status").notNull(),
+  segments: integer("segments").notNull(), requestId: text("request_id").notNull().default(""), providerMessageSid: text("provider_message_sid").notNull().default(""),
+  errorCode: text("error_code").notNull().default(""), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (t) => [uniqueIndex("trade_sms_messages_request_idx").on(t.firebaseUid, t.requestId).where(sql`${t.direction} = 'outbound'`),
+  uniqueIndex("trade_sms_messages_provider_idx").on(t.connectionId, t.providerMessageSid).where(sql`${t.providerMessageSid} <> ''`),
+  index("trade_sms_messages_history_idx").on(t.firebaseUid, t.customerId, t.createdAt), index("trade_sms_messages_usage_idx").on(t.firebaseUid, t.direction, t.createdAt),
+  check("trade_sms_messages_direction_check", sql`${t.direction} IN ('inbound', 'outbound')`), check("trade_sms_messages_segments_check", sql`${t.segments} >= 1`)]);

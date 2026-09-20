@@ -55,6 +55,7 @@ const TradeNewJobForm = recoverableTradeWorkspace(() => import("./TradeNewJobFor
 const TradeQuickInvoicePanel = dynamic(() => import("./TradeQuickInvoicePanel").then((module) => module.TradeQuickInvoicePanel));
 const TradeScheduleWorkspace = recoverableTradeWorkspace(() => import("./TradeScheduleWorkspace").then((module) => module.TradeScheduleWorkspace));
 const TradeCustomerDocumentDeliveryPanel = dynamic(() => import("./TradeCustomerDocumentDeliveryPanel").then((module) => module.TradeCustomerDocumentDeliveryPanel));
+const TradeCustomerSmsPanel = dynamic(() => import("./TradeCustomerSmsPanel").then((module) => module.TradeCustomerSmsPanel));
 
 type Customer = {
   id: string; customerNumber: string; customerType: string; displayName: string; firstName: string;
@@ -1359,7 +1360,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
 
     {view === "customers" && creating !== "customer" && selectedCustomerId && <div className="crm-view crm-customer-focus">
       <div className="crm-page-heading"><div><span>Customer workspace</span><h3>{selectedCustomerDetail?.id === selectedCustomerId ? selectedCustomerDetail.displayName : "Opening customer"}</h3><p>Contact, service sites and linked jobs stay together without lengthening the customer directory.</p></div><button type="button" className="crm-back-button" onClick={() => { setSelectedCustomerId(""); setSelectedCustomerDetail(null); }}>Back to all customers</button></div>
-      {selectedCustomerDetail?.id === selectedCustomerId ? <CustomerDetail key={`${selectedCustomerDetail.id}:${refreshNonce}`} user={user} customer={selectedCustomerDetail} contacts={selectedCustomerContacts} sites={selectedCustomerSites} jobs={selectedCustomerJobs} busy={busy} readOnly={Boolean(staffPermissions && !staffPermissions.canManageCustomers)} hideAssets={Boolean(staffPermissions)} onSave={crmRequest} onOpenJob={(id) => openFocusedJob(id, "summary", { kind: "customer", customerId: selectedCustomerDetail.id, customerName: selectedCustomerDetail.displayName })} /> : <div className="crm-empty"><strong>Loading customer...</strong><span>The private customer record will open here.</span></div>}
+      {selectedCustomerDetail?.id === selectedCustomerId ? <CustomerDetail key={`${selectedCustomerDetail.id}:${refreshNonce}`} user={user} customer={selectedCustomerDetail} contacts={selectedCustomerContacts} sites={selectedCustomerSites} jobs={selectedCustomerJobs} busy={busy} readOnly={Boolean(staffPermissions && !staffPermissions.canManageCustomers)} hideAssets={Boolean(staffPermissions)} canUseSms={!staffPermissions} onOpenIntegrations={() => setView("integrations")} onSave={crmRequest} onOpenJob={(id) => openFocusedJob(id, "summary", { kind: "customer", customerId: selectedCustomerDetail.id, customerName: selectedCustomerDetail.displayName })} /> : <div className="crm-empty"><strong>Loading customer...</strong><span>The private customer record will open here.</span></div>}
     </div>}
 
     {view === "customers" && creating !== "customer" && !selectedCustomerId && <div className="crm-view">
@@ -1812,8 +1813,8 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
   </article>;
 }
 
-function CustomerDetail({ user, customer, contacts, sites, jobs, busy, readOnly = false, hideAssets = false, onSave, onOpenJob }: {
-  user: User; customer: Customer; contacts: CustomerContact[]; sites: ServiceSite[]; jobs: Job[]; busy: string; readOnly?: boolean; hideAssets?: boolean;
+function CustomerDetail({ user, customer, contacts, sites, jobs, busy, readOnly = false, hideAssets = false, canUseSms, onOpenIntegrations, onSave, onOpenJob }: {
+  user: User; customer: Customer; contacts: CustomerContact[]; sites: ServiceSite[]; jobs: Job[]; busy: string; readOnly?: boolean; hideAssets?: boolean; canUseSms: boolean; onOpenIntegrations: () => void;
   onSave: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>;
   onOpenJob: (id: string) => void;
 }) {
@@ -1876,6 +1877,7 @@ function CustomerDetail({ user, customer, contacts, sites, jobs, busy, readOnly 
 
   return <section className={`crm-customer-detail ${registerStyles.customerEditor}`}><fieldset className={registerStyles.customerFieldset} disabled={readOnly}>
     <header><div><span>{customer.customerNumber}</span><h3>{customer.displayName}</h3><small>{customerKind} | {additionalContacts.length} additional contact{additionalContacts.length === 1 ? "" : "s"} | {sites.length} service site{sites.length === 1 ? "" : "s"}</small></div><div className="crm-customer-header-actions"><strong>Private installer record</strong><div className="crm-customer-contact-actions">{customer.phone && <a className="crm-customer-call-action" href={phoneHref(customer.phone)}>Call {customer.phone}</a>}{customer.email && <a className="crm-customer-email-action" href={`mailto:${customer.email}`}>Email customer</a>}</div></div></header>
+    {canUseSms && <TradeCustomerSmsPanel user={user} customerId={customer.id} onOpenIntegrations={onOpenIntegrations} />}
 
     <details className={registerStyles.customerPanel} open>
       <summary><span><strong>Customer details</strong><small>Name, contact information and main address</small></span><b>{readOnly ? "View" : "Edit"}</b></summary>
