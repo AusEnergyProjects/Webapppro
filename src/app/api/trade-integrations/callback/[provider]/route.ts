@@ -213,6 +213,8 @@ export async function GET(request: Request, context: CallbackContext) {
       FROM trade_accounts approved_account
       WHERE approved_account.firebase_uid = ? AND ${verifiedTradeAccountPredicate("approved_account")}
       ON CONFLICT(firebase_uid, provider) DO UPDATE SET status = 'connected',
+        default_account_reference = CASE WHEN trade_crm_integrations.external_account_id = excluded.external_account_id
+          THEN trade_crm_integrations.default_account_reference ELSE '' END,
         external_account_id = excluded.external_account_id, external_account_label = excluded.external_account_label,
         encrypted_credentials = excluded.encrypted_credentials, scopes = excluded.scopes,
         token_expires_at = excluded.token_expires_at, last_error = '', updated_at = excluded.updated_at`)

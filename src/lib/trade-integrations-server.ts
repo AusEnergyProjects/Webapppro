@@ -43,7 +43,7 @@ export function providerSetting(provider: IntegrationProvider): ProviderSetting 
     provider, label: "Xero", purpose: "Accounting and invoice sync", clientId: values.XERO_CLIENT_ID || "",
     clientSecret: values.XERO_CLIENT_SECRET || "", authorizeUrl: "https://login.xero.com/identity/connect/authorize",
     tokenUrl: "https://identity.xero.com/connect/token",
-    scopes: ["openid", "profile", "email", "offline_access", "accounting.invoices", "accounting.contacts"],
+    scopes: ["openid", "profile", "email", "offline_access", "accounting.invoices", "accounting.contacts", "accounting.settings.read"],
   };
   if (provider === "myob") return {
     provider, label: "MYOB", purpose: "Accounting and invoice sync", clientId: values.MYOB_CLIENT_ID || "",

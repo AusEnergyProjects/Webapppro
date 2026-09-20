@@ -7,6 +7,7 @@ import {
   assertQuickInvoiceAccountingEligibility,
   centsFromProvider,
   isAccountingProvider,
+  preferredAccountingProvider,
   quickBooksFailureDetail,
   requireAccountingJobAccess,
   type AccountingProvider,
@@ -86,6 +87,9 @@ function accountingError(error: unknown) {
   if (code === "INTEGRATION_RECONSENT_REQUIRED") return adminJson({ ok: false, error: "Reconnect MYOB in Integrations once so it can access customers, invoices and your income account list." }, 409);
   if (code === "MYOB_COMPANY_FILE_PASSWORD_UNSUPPORTED") return adminJson({ ok: false, error: "The selected MYOB company file did not accept passwordless access. TLink does not collect company-file usernames or passwords, so password-protected files are not supported." }, 409);
   if (code === "MYOB_ACCOUNT_REQUIRED") return adminJson({ ok: false, error: "Choose the MYOB income account that should receive this sale." }, 400);
+  if (code === "XERO_ACCOUNT_REQUIRED") return adminJson({ ok: false, error: "Choose the Xero income account that should receive this sale." }, 400);
+  if (code === "XERO_RECONSENT_REQUIRED") return adminJson({ ok: false, error: "Reconnect Xero in Integrations once to choose your income account and sync issued invoices." }, 409);
+  if (code === "XERO_INVOICE_NOT_ISSUED") return adminJson({ ok: false, error: "Xero did not confirm an approved invoice. Check the matching invoice and your invoice approval permission in Xero before retrying." }, 409);
   if (["MYOB_TAX_CODES_REQUIRED", "QUICKBOOKS_TAX_CODES_REQUIRED", "PROVIDER_TAX_CODE_REQUIRED"].includes(code)) return adminJson({ ok: false, error: "This accounting file needs active GST and GST-free sales tax codes before the accepted invoice can be exported exactly." }, 409);
   if (code === "QUICKBOOKS_ITEM_REQUIRED") return adminJson({ ok: false, error: "Choose the QuickBooks product or service that should receive this sale." }, 400);
   if (code === "DOCUMENT_ALREADY_EXPORTED") return adminJson({ ok: false, error: "This job already has an accounting invoice. Refresh the existing invoice instead of exporting a duplicate." }, 409);
@@ -124,6 +128,11 @@ function storedScopes(connection: Row | null) {
 function needsMyobReconsent(connection: Row | null) {
   const scopes = storedScopes(connection);
   return connection?.status === "connected" && !["sme-sales", "sme-contacts-customer", "sme-general-ledger"].every((scope) => scopes.includes(scope));
+}
+
+function needsXeroReconsent(connection: Row | null) {
+  const scopes = storedScopes(connection);
+  return connection?.status === "connected" && !scopes.includes("accounting.settings.read") && !scopes.includes("accounting.settings");
 }
 
 function invoiceSource(value: unknown): InvoiceSource {
@@ -305,6 +314,7 @@ async function connectionFor(firebaseUid: string, provider: AccountingProvider) 
     WHERE firebase_uid = ? AND provider = ? AND status = 'connected'`).bind(firebaseUid, provider).first<Row>();
   if (!row) throw new Error("INTEGRATION_REQUIRED");
   if (provider === "myob" && needsMyobReconsent(row)) throw new Error("INTEGRATION_RECONSENT_REQUIRED");
+  if (provider === "xero" && needsXeroReconsent(row)) throw new Error("XERO_RECONSENT_REQUIRED");
   return row;
 }
 
@@ -354,6 +364,13 @@ async function xeroFetch(connection: Row, credentials: Row, path: string, init: 
   const result = await response.json().catch(() => ({})) as Row;
   if (!response.ok) throw new Error("PROVIDER_REQUEST_FAILED");
   return { response, result };
+}
+
+async function listXeroAccounts(connection: Row, credentials: Row): Promise<QuickBooksItem[]> {
+  const { result } = await xeroFetch(connection, credentials, "Accounts");
+  return rowList(result.Accounts)
+    .filter((account) => account.Status === "ACTIVE" && ["REVENUE", "SALES"].includes(String(account.Type)) && account.Code)
+    .map((account) => ({ id: String(account.Code), code: String(account.Code), name: String(account.Name), taxCode: String(account.TaxType || "") }));
 }
 
 function myobCompanyBase(externalAccountId: unknown) {
@@ -554,9 +571,10 @@ async function createXeroInvoice(
   contactId: string,
   identity: AccountingProviderIdentity,
   scope: AccountingExportScope,
+  accountCode: string,
 ) {
   const invoiceNumber = identity.xeroNumber;
-  const expectation = { number: invoiceNumber, contactId, scope };
+  const expectation = { number: invoiceNumber, contactId, scope, accountReference: accountCode };
   const today = new Date().toISOString().slice(0, 10);
   const dueAt = invoiceDueAt(job);
   const { result } = await xeroFetch(connection, credentials, "Invoices", {
@@ -565,6 +583,7 @@ async function createXeroInvoice(
     body: JSON.stringify(xeroInvoicePayload({
       number: invoiceNumber,
       contactId,
+      accountCode,
       reference: String(job.commercial_reference),
       date: today,
       dueDate: dueAt,
@@ -633,7 +652,7 @@ async function createMyobInvoice(
   const invoiceNumber = identity.myobNumber;
   if (!account.gstTaxCodeId || !account.freeTaxCodeId) throw new Error("MYOB_TAX_CODES_REQUIRED");
   const taxCodes = { gst: account.gstTaxCodeId, free: account.freeTaxCodeId };
-  const expectation = { number: invoiceNumber, contactId, scope, myobTaxCodes: taxCodes };
+  const expectation = { number: invoiceNumber, contactId, scope, myobTaxCodes: taxCodes, accountReference: account.id };
   const { response, result } = await myobFetch(connection, credentials, "Sale/Invoice/Service", {
     method: "POST",
     body: JSON.stringify(myobInvoicePayload({
@@ -695,7 +714,7 @@ async function createQuickBooksInvoice(
   scope: AccountingExportScope,
 ) {
   const reference = identity.quickBooksNumber;
-  const expectation = { number: reference, contactId, scope, quickBooksTaxCodes: taxCodes };
+  const expectation = { number: reference, contactId, scope, quickBooksTaxCodes: taxCodes, accountReference: item.id };
   const requestId = encodeURIComponent(identity.quickBooksRequestId);
   const { result } = await quickBooksFetch(connection, credentials, `invoice?minorversion=75&requestid=${requestId}`, {
     method: "POST",
@@ -768,18 +787,23 @@ async function exportInvoice(firebaseUid: string, provider: AccountingProvider, 
     let external: Row;
     let selectedAccount = "";
     if (provider === "xero") {
+      const accounts = await listXeroAccounts(connection, credentials);
+      const account = accounts.find((item) => item.id === accountReference);
+      if (!account) throw new Error("XERO_ACCOUNT_REQUIRED");
+      selectedAccount = account.id;
       const expectedContact = providerContactExpectation(provider, job, externalContactId);
       const reconciled = await reconcileProviderExport({
         storedContactId: externalContactId,
         findContacts: () => findXeroContacts(connection, credentials, expectedContact.reference),
         findInvoices: () => findXeroInvoices(connection, credentials, providerIdentity.xeroNumber),
         validateContact: (contact) => assertProviderContactMatches(provider, contact, expectedContact),
-        validateInvoice: (invoice, contactId) => { assertProviderInvoiceMatches(provider, invoice, { number: providerIdentity.xeroNumber, contactId, scope }); },
+        validateInvoice: (invoice, contactId) => { assertProviderInvoiceMatches(provider, invoice, { number: providerIdentity.xeroNumber, contactId, scope, accountReference: account.id }); },
         createContact: () => createXeroContact(connection, credentials, job),
-        createInvoice: (contactId) => createXeroInvoice(connection, credentials, job, contactId, providerIdentity, scope),
+        createInvoice: (contactId) => createXeroInvoice(connection, credentials, job, contactId, providerIdentity, scope, account.id),
       });
       externalContactId = reconciled.contactId;
       external = reconciled.invoice;
+      if (!["AUTHORISED", "PAID"].includes(String(external.Status))) throw new Error("XERO_INVOICE_NOT_ISSUED");
     } else if (provider === "myob") {
       const accounts = await listMyobAccounts(connection, credentials);
       const account = accounts.find((item) => item.id === accountReference);
@@ -793,7 +817,7 @@ async function exportInvoice(firebaseUid: string, provider: AccountingProvider, 
         findContacts: () => findMyobContacts(connection, credentials, expectedContact.reference),
         findInvoices: () => findMyobInvoices(connection, credentials, providerIdentity.myobNumber),
         validateContact: (contact) => assertProviderContactMatches(provider, contact, expectedContact),
-        validateInvoice: (invoice, contactId) => { assertProviderInvoiceMatches(provider, invoice, { number: providerIdentity.myobNumber, contactId, scope, myobTaxCodes: taxCodes }); },
+        validateInvoice: (invoice, contactId) => { assertProviderInvoiceMatches(provider, invoice, { number: providerIdentity.myobNumber, contactId, scope, myobTaxCodes: taxCodes, accountReference: account.id }); },
         createContact: () => createMyobContact(connection, credentials, job),
         createInvoice: (contactId) => createMyobInvoice(connection, credentials, job, contactId, account, providerIdentity, scope),
       });
@@ -811,7 +835,7 @@ async function exportInvoice(firebaseUid: string, provider: AccountingProvider, 
         findContacts: () => findQuickBooksContacts(connection, credentials, expectedContact.reference),
         findInvoices: () => findQuickBooksInvoices(connection, credentials, providerIdentity.quickBooksNumber),
         validateContact: (contact) => assertProviderContactMatches(provider, contact, expectedContact),
-        validateInvoice: (invoice, contactId) => { assertProviderInvoiceMatches(provider, invoice, { number: providerIdentity.quickBooksNumber, contactId, scope, quickBooksTaxCodes: taxCodes }); },
+        validateInvoice: (invoice, contactId) => { assertProviderInvoiceMatches(provider, invoice, { number: providerIdentity.quickBooksNumber, contactId, scope, quickBooksTaxCodes: taxCodes, accountReference: item.id }); },
         createContact: () => createQuickBooksContact(connection, credentials, job),
         createInvoice: (contactId) => createQuickBooksInvoice(connection, credentials, job, contactId, item, taxCodes, providerIdentity, scope),
       });
@@ -822,7 +846,7 @@ async function exportInvoice(firebaseUid: string, provider: AccountingProvider, 
       .bind(externalContactId, selectedAccount, now, document.id).run();
     const externalId = String(provider === "xero" ? external.InvoiceID : provider === "myob" ? external.UID : external.Id);
     const externalNumber = String(provider === "xero" ? external.InvoiceNumber : provider === "myob" ? external.Number : external.DocNumber);
-    const providerStatus = String(external.Status || (provider === "xero" ? "DRAFT" : "Open"));
+    const providerStatus = String(external.Status || "Open");
     const providerTotals = assertProviderTotalsMatch(provider, external, scope.totals);
     const totalCents = providerTotals.totalCents;
     const paidCents = provider === "xero" ? centsFromProvider(external.AmountPaid) : provider === "myob" ? Math.max(0, totalCents - centsFromProvider(external.BalanceDueAmount)) : Math.max(0, totalCents - centsFromProvider(external.Balance));
@@ -836,8 +860,9 @@ async function exportInvoice(firebaseUid: string, provider: AccountingProvider, 
           totalCents, paidCents, status, providerStatus, syncedAt, syncedAt, document.id),
       db.prepare(`UPDATE trade_crm_job_details SET invoiced_value_cents = ?, invoice_status = ?, updated_at = ?
         WHERE work_order_id = ? AND firebase_uid = ?`).bind(totalCents, status, syncedAt, job.id, firebaseUid),
-      db.prepare(`UPDATE trade_crm_integrations SET last_sync_at = ?, last_error = '', updated_at = ? WHERE id = ?`)
-        .bind(syncedAt, syncedAt, connection.id),
+      db.prepare(`UPDATE trade_crm_integrations SET default_account_reference = ?, last_sync_at = ?, last_error = '', updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND external_account_id = ?`)
+        .bind(selectedAccount, syncedAt, syncedAt, connection.id, firebaseUid, connection.external_account_id),
     ]);
     document = await documentRow(firebaseUid, String(job.id));
     if (!document) throw new Error("PROVIDER_REQUEST_FAILED");
@@ -927,19 +952,30 @@ export async function GET(request: Request) {
     const document = storedDocument && String(storedDocument.commercial_handoff_id || "") === String(job.commercial_handoff_id || "")
       && String(storedDocument.commercial_reference || "") === String(job.commercial_reference || "") ? storedDocument : null;
     const providerValue = cleanAdminText(url.searchParams.get("provider"), 20).toLowerCase();
+    if (providerValue && !isAccountingProvider(providerValue)) return adminJson({ ok: false, error: "Choose Xero, MYOB or QuickBooks." }, 400);
+    const providers = (["xero", "myob", "quickbooks"] as AccountingProvider[]).map((provider) => ({
+      provider, label: provider === "xero" ? "Xero" : provider === "myob" ? "MYOB" : "QuickBooks", connected: connected[provider]?.status === "connected",
+      needsReconnect: provider === "myob" ? needsMyobReconsent(connected.myob || null) : provider === "xero" && needsXeroReconsent(connected.xero || null),
+      lastSyncAt: String(connected[provider]?.last_sync_at || ""),
+    }));
+    const existingProvider = String(document?.provider || "");
+    const selectedProvider = preferredAccountingProvider(providers,
+      isAccountingProvider(providerValue) ? providerValue : undefined,
+      isAccountingProvider(existingProvider) ? existingProvider : undefined);
+    const selected = providers.find((provider) => provider.provider === selectedProvider);
     let accounts: (MyobAccount | QuickBooksItem)[] = [];
-    if (providerValue) {
-      if (providerValue !== "myob" && providerValue !== "quickbooks") return adminJson({ ok: false, error: "Choose MYOB or QuickBooks to load its account choice." }, 400);
-      const connection = await connectionFor(ownerUid, providerValue);
-      const credentials = await activeCredentials(providerValue, connection);
-      accounts = providerValue === "myob" ? await listMyobAccounts(connection, credentials) : await listQuickBooksItems(connection, credentials);
+    let accountReference = "";
+    if (selected?.connected && !selected.needsReconnect && !document?.external_document_id) {
+      const connection = await connectionFor(ownerUid, selectedProvider);
+      const credentials = await activeCredentials(selectedProvider, connection);
+      accounts = selectedProvider === "xero" ? await listXeroAccounts(connection, credentials)
+        : selectedProvider === "myob" ? await listMyobAccounts(connection, credentials) : await listQuickBooksItems(connection, credentials);
+      const savedReference = String(connection.default_account_reference || "");
+      accountReference = accounts.find((account) => account.id === savedReference)?.id || (accounts.length === 1 ? accounts[0].id : "");
     }
     return adminJson({
       ok: true,
-      providers: (["xero", "myob", "quickbooks"] as AccountingProvider[]).map((provider) => ({
-        provider, label: provider === "xero" ? "Xero" : provider === "myob" ? "MYOB" : "QuickBooks", connected: connected[provider]?.status === "connected",
-        needsReconnect: provider === "myob" && needsMyobReconsent(connected.myob || null),
-      })),
+      providers, selectedProvider, accountReference,
       documents: document ? [documentJson(document)] : [],
       accounts,
     });

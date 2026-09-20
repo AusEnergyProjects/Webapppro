@@ -23,6 +23,7 @@ export type AccountingProviderIdentity = {
 export type ProviderInvoiceExpectation = {
   number: string;
   contactId: string;
+  accountReference?: string;
   scope: AccountingExportScope;
   myobTaxCodes?: { gst: string; free: string };
   quickBooksTaxCodes?: { gst: string; free: string };
@@ -451,6 +452,7 @@ export function quickBooksAuSalesTaxCodes(input: {
 export function xeroInvoicePayload(input: {
   number: string;
   contactId: string;
+  accountCode: string;
   reference: string;
   date: string;
   dueDate: string;
@@ -464,9 +466,10 @@ export function xeroInvoicePayload(input: {
     DueDate: input.dueDate,
     Reference: text(input.reference, 100),
     CurrencyCode: "AUD",
-    Status: "DRAFT",
+    Status: "AUTHORISED",
     LineAmountTypes: "Exclusive",
     LineItems: input.scope.lines.map((line) => ({
+      AccountCode: text(input.accountCode, 20, true),
       Description: providerDescription(line),
       Quantity: 1,
       UnitAmount: line.subtotalCents / 100,
@@ -547,6 +550,7 @@ export function quickBooksInvoicePayload(input: {
 function providerLines(provider: AccountingProvider, invoice: Row) {
   if (provider === "xero") {
     return list(invoice.LineItems).map((line) => ({
+      accountReference: String(line.AccountCode || ""),
       description: text(line.Description, 500),
       subtotalCents: signedCents(line.LineAmount ?? Number(line.UnitAmount || 0) * Number(line.Quantity || 1)),
       taxCents: optionalSignedCents(line.TaxAmount),
@@ -555,6 +559,7 @@ function providerLines(provider: AccountingProvider, invoice: Row) {
   }
   if (provider === "myob") {
     return list(invoice.Lines).filter((line) => String(line.Type || "") === "Transaction").map((line) => ({
+      accountReference: String(firstObject(line.Account).UID || ""),
       description: text(line.Description, 500),
       subtotalCents: signedCents(line.Total),
       taxCents: null,
@@ -566,6 +571,7 @@ function providerLines(provider: AccountingProvider, invoice: Row) {
     if (detailType !== "SalesItemLineDetail" && detailType !== "DiscountLineDetail") return [];
     const detail = firstObject(detailType === "DiscountLineDetail" ? line.DiscountLineDetail : line.SalesItemLineDetail);
     return [{
+      accountReference: detailType === "DiscountLineDetail" ? null : String(firstObject(detail.ItemRef).value || ""),
       description: text(line.Description, 500),
       subtotalCents: signedCents(line.Amount) * (detailType === "DiscountLineDetail" ? -1 : 1),
       taxCents: null,
@@ -610,6 +616,9 @@ export function assertProviderInvoiceMatches(
   expectation.scope.lines.forEach((line, index) => {
     const candidate = actual[index];
     if (!candidate || candidate.description !== providerDescription(line) || candidate.subtotalCents !== line.subtotalCents) {
+      throw new Error("PROVIDER_RECORD_MISMATCH");
+    }
+    if (expectation.accountReference && candidate.accountReference !== null && candidate.accountReference !== expectation.accountReference) {
       throw new Error("PROVIDER_RECORD_MISMATCH");
     }
     if (provider === "xero" && candidate.taxCents !== line.taxCents) throw new Error("PROVIDER_RECORD_MISMATCH");

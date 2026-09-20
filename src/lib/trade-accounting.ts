@@ -49,6 +49,15 @@ export function isAccountingProvider(
 ): value is AccountingProvider {
   return value === "xero" || value === "myob" || value === "quickbooks";
 }
+
+export function preferredAccountingProvider(providers: Array<{
+  provider: AccountingProvider; connected: boolean; lastSyncAt: string;
+}>, requested?: AccountingProvider, existing?: AccountingProvider): AccountingProvider {
+  if (existing) return existing;
+  if (requested) return requested;
+  return providers.filter((provider) => provider.connected)
+    .sort((left, right) => right.lastSyncAt.localeCompare(left.lastSyncAt))[0]?.provider || "xero";
+}
 export function accountingReference(workNumber: string, maximumLength: number) {
   const cleaned = `AEA-${workNumber}`
     .toUpperCase()

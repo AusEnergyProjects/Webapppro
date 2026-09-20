@@ -34,7 +34,7 @@ const integrationPurposes = [
   },
   {
     title: "Accounting",
-    body: "An installer can connect an accounting system to export an issued TLink invoice. Xero creates a draft for review. MYOB and QuickBooks create invoices that record an amount owing. The connected accounting system keeps its own ledger and tax controls.",
+    body: "Connect Xero, MYOB or QuickBooks once, then sync an issued TLink invoice with one click. TLink remembers your income account or product choice and creates an issued invoice with the amount owing. There is no second approval in your accounting system.",
   },
   {
     title: "Payment boundary",

@@ -82,7 +82,7 @@ const contactFixtures = {
 
 function exactProviderInvoice(provider) {
   if (provider === "xero") {
-    const invoice = xeroInvoicePayload({ number: "RETRY-XERO", contactId: "xero-contact", reference: "INV-TLJ-123", date: "2026-08-13", dueDate: "2026-08-27", scope }).Invoices[0];
+    const invoice = xeroInvoicePayload({ number: "RETRY-XERO", contactId: "xero-contact", accountCode: "200", reference: "INV-TLJ-123", date: "2026-08-13", dueDate: "2026-08-27", scope }).Invoices[0];
     return { ...invoice, InvoiceID: "xero-invoice", LineItems: invoice.LineItems.map((line) => ({ ...line, LineAmount: line.UnitAmount })), SubTotal: 360, TotalTax: 40, Total: 400 };
   }
   if (provider === "myob") {
@@ -99,6 +99,7 @@ function invoiceExpectation(provider) {
   return {
     number,
     contactId,
+    accountReference: provider === "xero" ? "200" : provider === "myob" ? "income" : "item",
     scope,
     ...(provider === "myob" ? { myobTaxCodes: { gst: "myob-gst", free: "myob-free" } } : {}),
     ...(provider === "quickbooks" ? { quickBooksTaxCodes: qboTaxCodes } : {}),
@@ -118,16 +119,27 @@ test("provider identities are stable, bounded and collision resistant", async ()
   assert.notEqual(collision.xeroIdempotencyKey, first.xeroIdempotencyKey);
 });
 
+test("provider retries only adopt invoices using the confirmed account or product mapping", () => {
+  for (const provider of ["xero", "myob", "quickbooks"]) {
+    const invoice = exactProviderInvoice(provider);
+    const expectation = invoiceExpectation(provider);
+    assert.deepEqual(assertProviderInvoiceMatches(provider, invoice, expectation), scope.totals);
+    assert.throws(() => assertProviderInvoiceMatches(provider, invoice, { ...expectation, accountReference: "different-account" }), /PROVIDER_RECORD_MISMATCH/);
+  }
+});
+
 test("Xero fixture exports every signed line with exact mixed GST", () => {
   const payload = xeroInvoicePayload({
     number: "AEA-INV-123-A1B2",
-    contactId: "xero-contact",
+    contactId: "xero-contact", accountCode: "200",
     reference: "INV-TLJ-123",
     date: "2026-08-13",
     dueDate: "2026-08-27",
     scope,
   });
   const invoice = payload.Invoices[0];
+  assert.equal(invoice.Status, "AUTHORISED");
+  assert.ok(invoice.LineItems.every((line) => line.AccountCode === "200"));
   assert.equal(invoice.LineItems.length, 3);
   assert.deepEqual(invoice.LineItems.map((line) => [line.UnitAmount, line.TaxAmount]), [
     [500, 50], [-100, -10], [-40, 0],

@@ -25,7 +25,7 @@ type Provider = {
 type IntegrationResult = { ok?: boolean; providers?: Provider[]; error?: string };
 
 const providerNotes: Record<Provider["provider"], string> = {
-  xero: "Export a direct-customer job as a draft Xero invoice, then refresh its total and payment status without sharing a Xero password.",
+  xero: "Sync an issued TLink invoice straight to Xero, with the amount owing and no second approval. Your income account choice is remembered.",
   myob: "Create an open MYOB service invoice from your TLink invoice, then refresh its total and payment status. This records the amount owing in MYOB.",
   quickbooks: "Create a QuickBooks Online invoice from your TLink invoice, then refresh its total and payment status. This records the amount owing in QuickBooks.",
   google_calendar: "Mirror TLink appointments to Google Calendar. TLink stays authoritative and protected customer details are withheld.",

@@ -3082,6 +3082,7 @@ export const tradeCrmIntegrations = sqliteTable("trade_crm_integrations", {
   status: text("status").notNull().default("connected"),
   externalAccountId: text("external_account_id").notNull().default(""),
   externalAccountLabel: text("external_account_label").notNull().default(""),
+  defaultAccountReference: text("default_account_reference").notNull().default(""),
   encryptedCredentials: text("encrypted_credentials").notNull(),
   scopes: text("scopes").notNull().default("[]"),
   tokenExpiresAt: text("token_expires_at").notNull().default(""),

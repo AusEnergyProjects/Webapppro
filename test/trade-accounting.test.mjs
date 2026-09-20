@@ -9,6 +9,7 @@ import {
   assertQuickInvoiceAccountingEligibility,
   centsFromProvider,
   quickBooksFailureDetail,
+  preferredAccountingProvider,
   requireAccountingJobAccess,
 } from "../src/lib/trade-accounting.ts";
 
@@ -47,6 +48,42 @@ test("provider references are deterministic and fit provider limits", () => {
   assert.equal(accountingReference("***", 13), "AEA");
 });
 
+test("accounting selection uses the existing invoice, explicit choice or most recently used connected provider", () => {
+  const providers = [
+    { provider: "xero", connected: false, lastSyncAt: "2026-09-21" },
+    { provider: "myob", connected: true, lastSyncAt: "2026-09-19" },
+    { provider: "quickbooks", connected: true, lastSyncAt: "2026-09-20" },
+  ];
+  assert.equal(preferredAccountingProvider(providers), "quickbooks");
+  assert.equal(preferredAccountingProvider(providers, "myob"), "myob");
+  assert.equal(preferredAccountingProvider(providers, "myob", "quickbooks"), "quickbooks");
+  assert.equal(preferredAccountingProvider([]), "xero");
+});
+
+test("saved accounting choices remain owner-scoped and reset when the connected business changes", () => {
+  const database = new DatabaseSync(":memory:");
+  try {
+    apply(database, read("../drizzle/0020_lying_stick.sql"));
+    apply(database, read("../drizzle/0181_accounting_export_defaults.sql"));
+    const callback = read("../src/app/api/trade-integrations/callback/[provider]/route.ts");
+    const update = callback.match(/default_account_reference = CASE[\s\S]*?external_account_id = excluded.external_account_id,/)?.[0];
+    assert.ok(update, "Use the actual callback mapping-reset expression");
+    const insert = database.prepare(`INSERT INTO trade_crm_integrations
+      (id, firebase_uid, provider, external_account_id, encrypted_credentials, created_at, updated_at)
+      VALUES (?, ?, 'quickbooks', ?, 'encrypted', 'now', 'now')
+      ON CONFLICT(firebase_uid, provider) DO UPDATE SET ${update.slice(0, -1)}`);
+    insert.run("owner-connection", "owner", "business-one");
+    insert.run("other-connection", "other", "business-one");
+    database.exec("UPDATE trade_crm_integrations SET default_account_reference = 'service-1' WHERE firebase_uid = 'owner'");
+    const choice = (owner) => database.prepare("SELECT default_account_reference FROM trade_crm_integrations WHERE firebase_uid = ?").get(owner).default_account_reference;
+    assert.equal(choice("other"), "");
+    insert.run("reconnect", "owner", "business-one");
+    assert.equal(choice("owner"), "service-1");
+    insert.run("switch", "owner", "business-two");
+    assert.equal(choice("owner"), "");
+  } finally { database.close(); }
+});
+
 test("Xero, MYOB and QuickBooks statuses map into the simple CRM invoice states", () => {
   assert.equal(accountingStatus("xero", "DRAFT", 10000, 0, ""), "draft");
   assert.equal(accountingStatus("xero", "AUTHORISED", 10000, 0, "2026-01-01", "2026-01-02"), "overdue");
@@ -71,7 +108,7 @@ test("server blocks protected jobs before provider export", () => {
 });
 
 test("exports use provider invoice states, do not request email, and refresh provider totals", () => {
-  assert.match(providerExport, /Status: "DRAFT"/);
+  assert.match(providerExport, /Status: "AUTHORISED"/);
   assert.match(providerExport, /InvoiceDeliveryStatus: "Nothing"/);
   assert.match(providerExport, /IsTaxInclusive: false/);
   assert.match(providerExport, /DiscountLineDetail/);
