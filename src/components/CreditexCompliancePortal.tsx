@@ -396,12 +396,17 @@ export function CreditexCompliancePortal() {
         request: async (idToken) => {
           headers.set("Authorization", `Bearer ${idToken}`);
           for (let attempt = 0; attempt < 20; attempt += 1) {
+            init.signal?.throwIfAborted();
             const controller = new AbortController();
+            const cancelRequest = () => controller.abort(init.signal?.reason);
+            init.signal?.addEventListener("abort", cancelRequest, { once: true });
+            let timedOut = false;
             const requestTimeout = window.setTimeout(
-              () => controller.abort(),
+              () => { timedOut = true; controller.abort(); },
               requestTimeoutMs,
             );
             let response: Response;
+            let result: ApiResult;
             try {
               response = await fetch(path, {
                 ...init,
@@ -409,8 +414,13 @@ export function CreditexCompliancePortal() {
                 cache: "no-store",
                 signal: controller.signal,
               });
+              result = (await response.json().catch((error: unknown) => {
+                if (controller.signal.aborted) throw error;
+                return {};
+              })) as ApiResult;
             } catch (error) {
-              if (error instanceof DOMException && error.name === "AbortError") {
+              init.signal?.throwIfAborted();
+              if (timedOut) {
                 throw new Error(
                   `The compliance service did not respond within ${Math.ceil(
                     requestTimeoutMs / 1_000,
@@ -420,9 +430,8 @@ export function CreditexCompliancePortal() {
               throw error;
             } finally {
               window.clearTimeout(requestTimeout);
+              init.signal?.removeEventListener("abort", cancelRequest);
             }
-            const result =
-              (await response.json().catch(() => ({}))) as ApiResult;
             if (firebaseAuth.currentUser?.uid !== activeUid) {
               throw new Error(
                 "The signed-in account changed. Loading the new workspace.",

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { listCurrentTrainingModules, loadTrainingModule, listTrainingAssignments, currentTrainingModuleGuard, trainingSubmissionSnapshotStatement } from './training-questionnaire-store';
+import { listCurrentTrainingModules, loadTrainingModule, listRetiredTrainingModuleIds, listTrainingAssignments, currentTrainingModuleGuard, trainingSubmissionSnapshotStatement } from './training-questionnaire-store';
 import { TRAINING_MODULES, type TradeTrainingModule } from '../data/creditex-training-curriculum';
 import { GOVERNMENT_ACTIVITY_TEMPLATES, GOVERNMENT_PROGRAM_TEMPLATES } from './australian-government-program-catalogue';
 import { ENERGY_SERVICE_ID_EXPANSIONS, savedEnergyServiceIds } from './energy-service-catalogue.mjs';
@@ -128,10 +128,11 @@ export async function certificateActivityEligibilityPredicate(input: Certificate
   // keep a twenty-activity batch below D1's 100-parameter limit.
   const sql = `EXISTS(WITH training_input(owner_uid,actor_member_id,assigned_member_id) AS (VALUES (?,?,?)),
     deployed_course(module_id,version,content_hash,category,jurisdiction,external_required,source_complete) AS (VALUES ${courseRows.join(',')}),
-    required_course AS (SELECT deployed.module_id,COALESCE(published.version,deployed.version) version,COALESCE(published.content_hash,deployed.content_hash) content_hash,deployed.category,deployed.jurisdiction,deployed.external_required,CASE WHEN published.module_id IS NOT NULL THEN 1 ELSE deployed.source_complete END source_complete,0 additional
+    required_course AS (SELECT deployed.module_id,COALESCE(published.version,deployed.version) version,COALESCE(published.content_hash,deployed.content_hash) content_hash,deployed.category,deployed.jurisdiction,deployed.external_required,CASE WHEN published.module_id IS NOT NULL THEN 1 ELSE deployed.source_complete END source_complete,0 additional,
+      EXISTS(SELECT 1 FROM trade_training_module_retirements retired WHERE retired.module_id=deployed.module_id) retired
       FROM deployed_course deployed LEFT JOIN trade_training_published_questionnaires published ON published.module_id=deployed.module_id
       UNION ALL
-      SELECT additional.module_id,additional.version,additional.content_hash,additional.category,additional.jurisdiction,0,1,1
+      SELECT additional.module_id,additional.version,additional.content_hash,additional.category,additional.jurisdiction,0,1,1,0
       FROM trade_training_additional_requirements additional
       WHERE EXISTS(SELECT 1 FROM deployed_course requested WHERE requested.category=additional.category
           AND (additional.jurisdiction='AU' OR additional.jurisdiction=requested.jurisdiction OR (requested.jurisdiction='AU'
@@ -147,7 +148,7 @@ export async function certificateActivityEligibilityPredicate(input: Certificate
           AND EXISTS(SELECT 1 FROM json_each(${memberServiceStatesSql('assigned_member', 'assigned_business')})${serviceState ? ` WHERE value=${literal(serviceState)}` : ''}))
       AND EXISTS(SELECT 1 FROM trade_team_members owner_member WHERE owner_member.owner_uid=training_input.owner_uid AND owner_member.member_uid=training_input.owner_uid AND owner_member.status='active')
       AND NOT EXISTS(SELECT 1 FROM required_course WHERE
-        required_course.source_complete=0 OR NOT EXISTS(SELECT 1 FROM trade_accounts scoped_account WHERE scoped_account.firebase_uid=training_input.owner_uid
+        (required_course.retired=0 AND required_course.source_complete=0) OR NOT EXISTS(SELECT 1 FROM trade_accounts scoped_account WHERE scoped_account.firebase_uid=training_input.owner_uid
           AND EXISTS(SELECT 1 FROM json_each(scoped_account.capabilities) WHERE value=required_course.category)
           AND (required_course.jurisdiction='AU' OR EXISTS(SELECT 1 FROM json_each(${trainingServiceStatesSql('scoped_account')}) WHERE value=required_course.jurisdiction)))
         OR EXISTS(SELECT 1 FROM required_person WHERE
@@ -156,9 +157,15 @@ export async function certificateActivityEligibilityPredicate(input: Certificate
           AND (NOT EXISTS(SELECT 1 FROM trade_team_members scoped_member JOIN trade_accounts scoped_business ON scoped_business.firebase_uid=scoped_member.owner_uid WHERE scoped_member.owner_uid=training_input.owner_uid AND scoped_member.id=required_person.member_id AND scoped_member.status='active'
             AND (scoped_member.member_uid=training_input.owner_uid OR EXISTS(SELECT 1 FROM json_each(scoped_member.capabilities) WHERE value=required_course.category))
             AND EXISTS(SELECT 1 FROM json_each(${memberServiceStatesSql('scoped_member', 'scoped_business')}) WHERE required_course.jurisdiction='AU' OR value=required_course.jurisdiction))
-          OR NOT ${currentCompletionSql('training_input.owner_uid', 'required_person.member_id', 'required_course.module_id', 'required_course.version', 'required_course.content_hash')}
+          OR (required_course.retired=0 AND NOT ${currentCompletionSql('training_input.owner_uid', 'required_person.member_id', 'required_course.module_id', 'required_course.version', 'required_course.content_hash')})
         ))
-        OR (required_course.external_required=1 AND NOT EXISTS(SELECT 1 FROM trade_training_current_completions installer_pass WHERE installer_pass.owner_uid=training_input.owner_uid AND installer_pass.member_id=training_input.assigned_member_id AND installer_pass.module_id=required_course.module_id AND installer_pass.version=required_course.version AND installer_pass.content_hash=required_course.content_hash AND installer_pass.external_required=1))
+        OR (required_course.external_required=1 AND (
+          (required_course.retired=0 AND NOT EXISTS(SELECT 1 FROM trade_training_current_completions installer_pass WHERE installer_pass.owner_uid=training_input.owner_uid AND installer_pass.member_id=training_input.assigned_member_id AND installer_pass.module_id=required_course.module_id AND installer_pass.version=required_course.version AND installer_pass.content_hash=required_course.content_hash AND installer_pass.external_required=1))
+          OR (required_course.retired=1 AND (
+            NOT EXISTS(SELECT 1 FROM trade_training_module_reviews authority WHERE authority.module_id=required_course.module_id AND authority.status='active' AND authority.scheme_authority_reference<>'' AND authority.reviewed_by_uid<>'' AND date(authority.source_reviewed_on)<=date('now') AND date(authority.review_expires_on)>=date('now'))
+            OR NOT EXISTS(SELECT 1 FROM trade_training_external_credentials credential JOIN trade_team_member_files evidence ON evidence.id=credential.document_id AND evidence.owner_uid=credential.owner_uid AND evidence.team_member_id=credential.member_id AND evidence.status='active'
+              WHERE credential.owner_uid=training_input.owner_uid AND credential.member_id=training_input.assigned_member_id AND credential.module_id=required_course.module_id AND credential.revoked_at='' AND credential.reviewed_by_uid<>'' AND credential.credential_reference<>'' AND credential.scheme_participant_reference<>'' AND date(credential.expires_on)>=date('now') AND (evidence.expires_at='' OR date(evidence.expires_at)>=date('now')))
+          ))))
       ))`;
   return { sql, bindings: [input.ownerUid, input.actorMemberId, input.assignedMemberId] };
 }
@@ -180,6 +187,7 @@ export async function getCertificateActivityEligibility(db: D1Database, input: C
   if (!owner || !assignedScope) return { eligible: false, reasons: [{ code: 'ACTIVE_TEAM_REQUIRED', message: 'Choose an active technician in a business with an active owner.' }] };
   const serviceState = input.serviceState?.trim().toUpperCase();
   if (!assignedScope.serviceStates.length || (serviceState !== undefined && !assignedScope.serviceStates.includes(serviceState))) return { eligible: false, reasons: [{ code: 'MEMBER_SERVICE_REGION_REQUIRED', message: 'Choose a technician who works in the job location. Their assigned regions must be included in the business service regions.' }] };
+  const retired = await listRetiredTrainingModuleIds(db);
   for (const activityTemplateId of [...new Set(input.activityTemplateIds)]) {
     const activity = GOVERNMENT_ACTIVITY_TEMPLATES.find(candidate => candidate.templateId === activityTemplateId);
     const program = activity ? trainingPrograms.get(activity.programCode) : undefined;
@@ -187,23 +195,25 @@ export async function getCertificateActivityEligibility(db: D1Database, input: C
       reasons.push({ code: 'PROGRAMME_ACTIVITY_NOT_OPEN', message: 'This government programme or activity is closed or not yet open. Training completion does not permit booking it.', activityTemplateId }); continue;
     }
     const seedCourse = TRAINING_MODULES.find(candidate => candidate.activityTemplateIds.includes(activityTemplateId));
-    const course = seedCourse ? await loadTrainingModule(db, seedCourse.id) : undefined;
-    if (!course) { reasons.push({ code: 'TRAINING_MODULE_UNAVAILABLE', message: 'This activity has no activity-specific training course and is unavailable for certificate jobs.', activityTemplateId }); continue; }
+    const course = seedCourse && !retired.has(seedCourse.id) ? await loadTrainingModule(db, seedCourse.id) : undefined;
+    if (!seedCourse) { reasons.push({ code: 'TRAINING_MODULE_UNAVAILABLE', message: 'This activity has no activity-specific training course and is unavailable for certificate jobs.', activityTemplateId }); continue; }
     if (!activity || !program || !assignedScope.businessCapabilities.includes(activity.serviceCategory) || !assignedScope.capabilities.includes(activity.serviceCategory)) {
       reasons.push({ code: 'MEMBER_CAPABILITY_REQUIRED', message: 'Enable this service for both the business and the assigned technician before booking.', activityTemplateId }); continue;
     }
     if (program.jurisdiction !== 'AU' && (!assignedScope.serviceStates.includes(program.jurisdiction) || (serviceState !== undefined && program.jurisdiction !== serviceState))) {
       reasons.push({ code: 'MEMBER_SERVICE_REGION_REQUIRED', message: `Choose a technician who works in ${program.jurisdiction} for this activity.`, activityTemplateId }); continue;
     }
-    const { review } = await moduleReview(db, course);
-    const assessment = assessmentAvailability(course, review);
-    if (!assessment.assessmentAvailable) { reasons.push({ code: 'TRAINING_CONTENT_UNAVAILABLE', message: assessment.assessmentUnavailableReason, activityTemplateId }); continue; }
+    if (course) {
+      const { review } = await moduleReview(db, course);
+      const assessment = assessmentAvailability(course, review);
+      if (!assessment.assessmentAvailable) { reasons.push({ code: 'TRAINING_CONTENT_UNAVAILABLE', message: assessment.assessmentUnavailableReason, activityTemplateId }); continue; }
+    }
     const predicate = await certificateActivityEligibilityPredicate({ ...input, activityTemplateIds: [activityTemplateId] });
     if (!await db.prepare(`SELECT 1 AS eligible WHERE ${predicate.sql}`).bind(...predicate.bindings).first()) {
       const assignments = await listTrainingAssignments(db);
       const additional = assignments.filter(({ assignment }) => assignment.kind === 'additional' && assignment.serviceCategory === activity.serviceCategory
         && assignment.jurisdictions.some(state => state === 'AU' || state === program.jurisdiction || (program.jurisdiction === 'AU' && (serviceState ? state === serviceState : assignedScope.businessServiceStates.includes(state)))));
-      const required = [{ course, members: [...new Set([owner.id, input.assignedMemberId])] }];
+      const required = course ? [{ course, members: [...new Set([owner.id, input.assignedMemberId])] }] : [];
       for (const extra of additional) {
         const extraCourse = await loadTrainingModule(db, extra.moduleId);
         if (extraCourse) required.push({ course: extraCourse, members: [...new Set([owner.id, ...(extra.assignment.jurisdictions.some(state => state === 'AU' || assignedScope.serviceStates.includes(state)) ? [input.assignedMemberId] : [])])] });
@@ -225,7 +235,7 @@ export async function getCertificateActivityEligibility(db: D1Database, input: C
         const people = missingMembers.map(memberId => memberId === owner.id ? 'Business owner' : assignedScope.displayName || 'Assigned technician');
         reasons.push({ code: 'ACTIVITY_TRAINING_REQUIRED', message: `This booking can be made once the required training module is complete. Required module: ${requirement.course.title}. To be completed by: ${people.join(', ')}.`, activityTemplateId, moduleId: requirement.course.id, moduleTitle: requirement.course.title, trainingHref: `/direct-trade/dashboard?workspace=training&module=${encodeURIComponent(requirement.course.id)}` });
       }
-      if (!missingPass && !unavailableContent) reasons.push(course.id === 'veu-48'
+      if (!missingPass && !unavailableContent) reasons.push(seedCourse.id === 'veu-48'
         ? { code: 'EXTERNAL_INSTALLER_REQUIRED', message: 'The assigned technician needs current scheme credentials for this activity before booking.', activityTemplateId }
         : { code: 'CERTIFICATE_ELIGIBILITY_CHANGED', message: 'The current business, technician or activity requirements changed. Refresh the job details before booking.', activityTemplateId });
     }
@@ -408,7 +418,7 @@ export async function submitTrainingAttempt(db: D1Database, input: { ownerUid: s
   return response;
 }
 export async function reviewTrainingModule(db: D1Database, reviewerUid: string, body: Record<string, unknown>) {
-  const course = await loadTrainingModule(db, textField(body.moduleId, 80)); const hash = await getTrainingModuleHash(course); const note = textField(body.reviewNote, 2000);
+  const course = await loadTrainingModule(db, textField(body.moduleId, 80), { forSchemeAuthority: true }); const hash = await getTrainingModuleHash(course); const note = textField(body.reviewNote, 2000);
   if (body.expectedVersion !== course.version || body.expectedHash !== hash) throw new CreditexComplianceError('TRAINING_VERSION_CHANGED', 'Refresh and review the exact current curriculum before making this decision.', 409);
   const expectedReviewUpdatedAt = textField(body.expectedReviewUpdatedAt, 40);
   const existingReview = await db.prepare('SELECT updated_at FROM trade_training_module_reviews WHERE module_id=?').bind(course.id).first<{ updated_at: string }>();
@@ -423,7 +433,9 @@ export async function reviewTrainingModule(db: D1Database, reviewerUid: string, 
 }
 export async function listTrainingGovernanceModules(db: D1Database) {
   const reviews = await db.prepare('SELECT * FROM trade_training_module_reviews').all<Review>();
-  return Promise.all((await listCurrentTrainingModules(db)).map(async course => { const { review, availability, hash } = await moduleReview(db, course, reviews.results); return { ...course, contentHash: hash, availability, reviewUpdatedAt: review?.updated_at || '', reviewExpiresOn: review?.review_expires_on || '', sourceReviewedOn: review?.source_reviewed_on || '', schemeAuthorityReference: review?.scheme_authority_reference || '' }; }));
+  const courses = await listCurrentTrainingModules(db); const retired = await listRetiredTrainingModuleIds(db);
+  if (retired.has('veu-48')) courses.push(await loadTrainingModule(db, 'veu-48', { forSchemeAuthority: true }));
+  return Promise.all(courses.map(async course => { const { review, availability, hash } = await moduleReview(db, course, reviews.results); return { ...course, retired: retired.has(course.id), contentHash: hash, availability: retired.has(course.id) ? 'retired' : availability, reviewUpdatedAt: review?.updated_at || '', reviewExpiresOn: review?.review_expires_on || '', sourceReviewedOn: review?.source_reviewed_on || '', schemeAuthorityReference: review?.scheme_authority_reference || '' }; }));
 }
 export async function revokeTrainingCompletion(db: D1Database, reviewerUid: string, completionId: string, reviewNote: string) {
   if (!reviewNote) throw new CreditexComplianceError('REVIEW_NOTE_REQUIRED', 'Record the reason for revocation.', 400);

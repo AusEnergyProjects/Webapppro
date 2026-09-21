@@ -153,12 +153,12 @@ class TestD1Statement {
   }
 
   async all() {
-    return { results: this.owner.sqlite.prepare(this.sql).all(...this.values) };
+    return { success: true, results: this.owner.sqlite.prepare(this.sql).all(...this.values), meta: { changes: 0 } };
   }
 
   runSync() {
     const result = this.owner.sqlite.prepare(this.sql).run(...this.values);
-    return { success: true, meta: { changes: Number(result.changes) } };
+    return { success: true, results: [], meta: { changes: Number(result.changes) } };
   }
 
   async run() {
@@ -190,7 +190,12 @@ class TestD1Database {
     }
     this.sqlite.exec("BEGIN");
     try {
-      const results = statements.map((statement) => statement.runSync());
+      const results = [];
+      for (const statement of statements) {
+        results.push(await (/^\s*(SELECT|PRAGMA)\b/i.test(statement.sql)
+          ? statement.all()
+          : statement.run()));
+      }
       this.sqlite.exec("COMMIT");
       return results;
     } catch (error) {

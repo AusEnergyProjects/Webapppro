@@ -6537,6 +6537,12 @@ export const tradeTrainingCurrentCategoryQualifications = sqliteView("trade_trai
   version: text("version").notNull(), contentHash: text("content_hash").notNull(), externalRequired: integer("external_required").notNull(),
 }).existing();
 
+export const tradeTrainingModuleRetirements = sqliteTable("trade_training_module_retirements", {
+  moduleId: text("module_id").primaryKey(), revision: integer("revision").notNull(),
+  courseJson: text("course_json").notNull(), assignmentJson: text("assignment_json").notNull(),
+  retiredByUid: text("retired_by_uid").notNull(), retiredAt: text("retired_at").notNull(),
+}, (t) => [check("training_retirement_revision_check", sql`${t.revision}>=0`), check("training_retirement_json_check", sql`json_valid(${t.courseJson}) AND json_valid(${t.assignmentJson})`)]);
+
 export const tradeTrainingQuestionnaires = sqliteTable("trade_training_questionnaires", {
   moduleId: text("module_id").primaryKey(), revision: integer("revision").notNull(),
   draftJson: text("draft_json").notNull(), assignmentJson: text("assignment_json").notNull(),

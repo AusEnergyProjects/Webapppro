@@ -11,33 +11,115 @@ import {
   ensureCreditexPilotSchemaGuards,
   ensureCreditexOfficialSourceCustodySchemaGuards,
 } from "../src/lib/creditex-schema-guards.ts";
+import { JOB_DELETION_SCHEMA_GUARDS } from "../src/lib/trade-job-deletion-schema-guards.ts";
 
 const HASH = "a".repeat(64);
 const NOW = "2026-08-01T00:00:00.000Z";
 
 // The SQL guard contracts are exercised below. This fixture isolates request
 // lifetime behaviour while presenting an already installed, valid schema.
-function installedSchemaD1(firstRead) {
-  let reads = 0;
-  const guards = [...CREDITEX_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS];
+function installedSchemaD1(firstRead = () => {}, options = {}) {
+  let reads = 0, roundTrips = 0, writes = 0;
+  const guards = new Map([...CREDITEX_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS].map(guard => [guard.name, guard.sql]));
+  async function read(sql) {
+    reads += 1;
+    if (reads === 1) await firstRead();
+    if (sql.includes("type = 'trigger'")) return { results: [...guards].map(([name, sql]) => ({ name, sql })) };
+    if (sql.includes("type = 'table'")) return { results: [...sql.matchAll(/'([^']+)'/g)].map((match) => ({ name: match[1] })).filter(row => row.name !== options.missingTable) };
+    if (sql === "PRAGMA table_xinfo(`compliance_cases`)") return { results: ['commercial_handoff_id', 'accepted_quote_version_id', 'accepted_scope_sha256', 'compliance_intent_id'].filter(name => name !== options.missingColumn).map(name => ({ name })) };
+    if (sql === "PRAGMA table_xinfo(`trade_work_order_compliance_intents`)") return { results: options.missingColumn === 'intent_key' ? [] : [{ name: 'intent_key' }] };
+    throw new Error(`Unexpected schema read: ${sql}`);
+  }
   return {
     get reads() { return reads; },
+    get roundTrips() { return roundTrips; },
+    get writes() { return writes; },
+    guards,
     prepare(sql) {
       return {
-        async all() {
-          reads += 1;
-          if (reads === 1) await firstRead();
-          if (sql.includes("type = 'trigger'")) return { results: guards };
-          if (sql.includes("type = 'table'")) return { results: [...sql.matchAll(/'([^']+)'/g)].map((match) => ({ name: match[1] })) };
-          if (sql === "PRAGMA table_xinfo(`compliance_cases`)") return { results: ['commercial_handoff_id', 'accepted_quote_version_id', 'accepted_scope_sha256', 'compliance_intent_id'].map((name) => ({ name })) };
-          if (sql === "PRAGMA table_xinfo(`trade_work_order_compliance_intents`)") return { results: [{ name: 'intent_key' }] };
-          throw new Error(`Unexpected schema read: ${sql}`);
+        sql,
+        async all() { roundTrips++; return read(sql); },
+        async first() {
+          roundTrips++;
+          assert.match(sql, /compliance_calculator_authoring_receipts/);
+          return { row_count: options.preseeded || 0 };
         },
       };
     },
-    async batch() { throw new Error('The complete schema must not need an installation'); },
+    async batch(statements) {
+      roundTrips++;
+      if (statements.every(statement => /^(SELECT|PRAGMA)\b/.test(statement.sql))) return Promise.all(statements.map(statement => read(statement.sql)));
+      assert.ok(options.allowWrites, 'The complete schema must not need an installation');
+      return statements.map(({ sql }) => {
+        writes++;
+        const drop = sql.match(/^DROP TRIGGER `([^`]+)`/);
+        const create = sql.match(/^CREATE TRIGGER (?:IF NOT EXISTS )?[`"]?([a-z_]+)/);
+        assert.ok(drop || create, sql);
+        if (!options.ignoreWrites) {
+          if (drop) guards.delete(drop[1]);
+          else if (!guards.has(create[1])) guards.set(create[1], sql);
+        }
+        return { success: true, results: [] };
+      });
+    },
   };
 }
+
+test("fully installed Creditex guards verify identical schema and SQL in two round trips with no writes", async () => {
+  const database = installedSchemaD1();
+  await ensureCreditexSchemaGuards(database);
+  assert.equal(database.roundTrips, 2); assert.equal(database.reads, 4); assert.equal(database.writes, 0);
+  await ensureCreditexSchemaGuards(database); assert.equal(database.roundTrips, 2);
+});
+
+test("batched metadata still rejects missing migration tables and both required column groups", async () => {
+  for (const options of [{ missingTable: 'compliance_official_source_artifacts' }, { missingColumn: 'compliance_intent_id' }, { missingColumn: 'intent_key' }]) {
+    const database = installedSchemaD1(undefined, options);
+    await assert.rejects(ensureCreditexSchemaGuards(database), /CREDITEX_SCHEMA_MIGRATIONS_REQUIRED/);
+    const firstTrips = database.roundTrips;
+    await assert.rejects(ensureCreditexSchemaGuards(database), /CREDITEX_SCHEMA_MIGRATIONS_REQUIRED/);
+    assert.ok(database.roundTrips > firstTrips, 'Failure must not enter the success cache');
+    assert.equal(database.writes, 0);
+  }
+});
+
+test("matching snapshot fast path still rejects unexpected canonical SQL before caching readiness", async () => {
+  const database = installedSchemaD1();
+  const guard = CREDITEX_SCHEMA_GUARD_DEFINITIONS.find(guard => !JOB_DELETION_SCHEMA_GUARDS.some(replacement => replacement.name === guard.name));
+  database.guards.set(guard.name, 'CREATE TRIGGER altered BEFORE DELETE ON compliance_cases BEGIN SELECT 1; END;');
+  await assert.rejects(ensureCreditexSchemaGuards(database), /CREDITEX_SCHEMA_GUARD_MISMATCH/);
+  assert.equal(database.writes, 0);
+  database.guards.set(guard.name, guard.sql);
+  await ensureCreditexSchemaGuards(database);
+  assert.equal(database.roundTrips, 4);
+});
+
+test("known legacy deletion guards still upgrade and verify; unexpected replacements remain blocked", async () => {
+  const replacement = JOB_DELETION_SCHEMA_GUARDS.find(guard => CREDITEX_SCHEMA_GUARD_DEFINITIONS.some(definition => definition.name === guard.name));
+  const database = installedSchemaD1(undefined, { allowWrites: true });
+  database.guards.set(replacement.name, replacement.legacySql);
+  await ensureCreditexSchemaGuards(database);
+  assert.equal(database.writes, 2);
+  assert.equal(canonicalCreditexSchemaGuardSql(database.guards.get(replacement.name)), canonicalCreditexSchemaGuardSql(replacement.sql));
+  const failed = installedSchemaD1(undefined, { allowWrites: true });
+  failed.guards.set(replacement.name, 'CREATE TRIGGER unexpected BEFORE DELETE ON compliance_cases BEGIN SELECT 1; END;');
+  await assert.rejects(ensureCreditexSchemaGuards(failed), /JOB_DELETION_SCHEMA_GUARD_MISMATCH/);
+  assert.equal(failed.writes, 0);
+});
+
+test("missing guards must actually install before readiness and authoring receipts stay fail closed", async () => {
+  const target = CREDITEX_SCHEMA_GUARD_DEFINITIONS.find(guard => !JOB_DELETION_SCHEMA_GUARDS.some(replacement => replacement.name === guard.name) && !CREDITEX_CALCULATOR_AUTHORING_SCHEMA_GUARD_DEFINITIONS.some(authoring => authoring.name === guard.name));
+  for (const ignoreWrites of [false, true]) {
+    const database = installedSchemaD1(undefined, { allowWrites: true, ignoreWrites });
+    database.guards.delete(target.name);
+    if (ignoreWrites) await assert.rejects(ensureCreditexSchemaGuards(database), /CREDITEX_SCHEMA_GUARDS_UNAVAILABLE/);
+    else { await ensureCreditexSchemaGuards(database); assert.equal(database.writes, 1); assert.equal(database.guards.get(target.name), target.sql); }
+  }
+  const seeded = installedSchemaD1(undefined, { allowWrites: true, preseeded: 1 });
+  seeded.guards.delete(CREDITEX_CALCULATOR_AUTHORING_SCHEMA_GUARD_DEFINITIONS[0].name);
+  await assert.rejects(ensureCreditexSchemaGuards(seeded), /CREDITEX_CALCULATOR_AUTHORING_PRESEED_ROWS_BLOCKED/);
+  assert.equal(seeded.writes, 0);
+});
 
 for (const [label, ensure] of [
   ['Creditex', ensureCreditexSchemaGuards],

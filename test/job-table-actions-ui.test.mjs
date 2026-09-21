@@ -97,7 +97,9 @@ test("Creditex context actions copy only selected values and Call customer opens
   let actions = h.menu(tree).menu.actions; assert.deepEqual(actions.map(action => action.label), ["Open job audit", "Call customer", "Copy job reference", "Copy site address"]);
   actions[2].run(); actions[3].run(); await flush(); assert.deepEqual(h.copied, [job.jobNumber, job.serviceAddress]); assert.equal(h.requests.length, 1);
   h.menu(tree).onClose(); actions[1].run(); await flush(); tree = h.render();
-  assert.equal(h.requests.at(-1).path, "/api/creditex/job-intents/intent-1"); assert.ok(h.requests.every(request => request.init === undefined));
+  assert.equal(h.requests.at(-1).path, "/api/creditex/job-intents/intent-1");
+  assert.ok(h.requests.every(request => !request.init?.method && !request.init?.body), "context actions only read authorised records");
+  assert.ok(h.requests[0].init.signal instanceof AbortSignal, "the list read supports cancellation");
   assert.ok(nodes(tree, node => node.props?.["aria-label"] === "Customer audit call controls").length); assert.match(text(tree), /Fresh Customer/); h.cleanup();
 });
 

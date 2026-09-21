@@ -17,10 +17,10 @@ const job = (id,name) => ({ id, jobId:id, jobNumber:id.toUpperCase(),jobTitle:'H
 const jobs=[job('job-1','Alex Example'),job('job-2','Sam Sample')];
 const audit = item => ({ ok:true,customer:{ phone:item.customerPhone },groups:[], serviceSiteAddressProvenance:{entryMode:'manual',provider:'',providerReference:'',formattedAddress:'Test site',verifiedAt:'',status:'manual_review_required',reviewRequired:true} });
 function runtime(name, props={}, options={}) {
-  const slots=[], effects=[], callbacks=[], queued=[], timers=new Map(), requests=[];
-  let cursor=0,stateOrdinal=0,timerId=0;
+  const slots=[], effects=[], callbacks=[], queued=[], timers=new Map(), requests=[], requestOptions=[];
+  let cursor=0,stateOrdinal=0,timerId=0,mounted=true,lateStateWrites=0;
   const hooks={
-    useState(initial) { const i=cursor++, ordinal=stateOrdinal++; if(!(i in slots))slots[i]=ordinal in (options.seed||{}) ? options.seed[ordinal] : typeof initial==='function'?initial():initial; return [slots[i],value=>{slots[i]=typeof value==='function'?value(slots[i]):value;}]; },
+    useState(initial) { const i=cursor++, ordinal=stateOrdinal++; if(!(i in slots))slots[i]=ordinal in (options.seed||{}) ? options.seed[ordinal] : typeof initial==='function'?initial():initial; return [slots[i],value=>{if(!mounted)lateStateWrites++;slots[i]=typeof value==='function'?value(slots[i]):value;}]; },
     useRef(initial){ const i=cursor++; if(!(i in slots))slots[i]={current:initial};return slots[i];},
     useCallback(callback,deps){const i=cursor++;if(!callbacks[i]||deps.some((x,j)=>x!==callbacks[i].deps[j]))callbacks[i]={callback,deps};return callbacks[i].callback;},
     useMemo(callback){cursor++;return callback();},
@@ -30,12 +30,12 @@ function runtime(name, props={}, options={}) {
   const rowActions={};
   const require=id=>id==='react'?hooks:id==='react/jsx-runtime'?jsx:id==='./JobRowActions'?rowActions:id==='@/lib/job-register-dates'?dateHelpers:id==='@/lib/australian-government-program-catalogue'?catalogue:id==='@/lib/firebase-client'?{firebaseAuth:{currentUser:user}}:id==='next/dynamic'?{default:()=>()=>null}:id.endsWith('.module.css')?{default:new Proxy({},{get:(_,key)=>String(key)})}:new Proxy({},{get:(_,key)=>{const name=key==='default'?id.split('/').pop():String(key);if(!stubs.has(name))stubs.set(name,Object.defineProperty(()=>null,'displayName',{value:name}));return stubs.get(name);}});
   Function('require','exports',compile('JobRowActions'))(require,rowActions);
-  const api=async(path)=>{requests.push(path);if(options.api)return options.api(path);return path.includes('?')?{ok:true,items:jobs,total:150,totalPages:2,page:Number(new URL(path,'https://test.invalid').searchParams.get('page'))}:audit(jobs.find(item=>path.endsWith(item.id)));};
+  const api=async(path,init)=>{requests.push(path);requestOptions.push(init);if(options.api)return options.api(path,init);return path.includes('?')?{ok:true,items:jobs,total:150,totalPages:2,page:Number(new URL(path,'https://test.invalid').searchParams.get('page'))}:audit(jobs.find(item=>path.endsWith(item.id)));};
   const window={setTimeout(callback){const id=++timerId;timers.set(id,callback);return id;},clearTimeout(id){timers.delete(id);},requestAnimationFrame(callback){callback();},confirm:()=>options.confirm!==false};
   const exports={}; Function('require','exports','window','document',compile(name))(require,exports,window,{getElementById:()=>({focus(){}})});
   const render=()=>{cursor=0;stateOrdinal=0;const tree=exports[name]({...props,...(name==='CreditexPlannedIntakeQueue'?{api}:{})});for(const effect of queued.splice(0))effect();return tree;};
   const settle=async()=>{render();for(const [id,callback] of [...timers]){timers.delete(id);callback();}await flush();return render();};
-  return {render,settle,requests,stubs,async mount(){return settle();},cleanup(){for(const effect of effects)effect?.cleanup?.();}};
+  return {render,settle,requests,requestOptions,stubs,get lateStateWrites(){return lateStateWrites;},async mount(){return settle();},cleanup(){mounted=false;for(const effect of effects)effect?.cleanup?.();}};
 }
 
 test('column filters request the full authorised dataset and reset pagination',async()=>{
@@ -77,6 +77,49 @@ test('created date and saved names have independent filters, sorts and paired ca
 test('filter controls remain usable when no rows match or a filter is rejected',async()=>{
   const h=runtime('CreditexPlannedIntakeQueue',{}, {api:async path=>new URL(path,'https://test.invalid').searchParams.has('customer')?{ok:false,error:'Invalid date range'}:{ok:true,items:[],total:0,page:1,totalPages:1}});
   let tree=await h.mount();button(tree,'Filters').props.onClick();tree=h.render();assert.ok(field(tree,'Filter customer'));field(tree,'Filter customer').props.onChange({target:{value:'Alex'}});tree=await h.settle();assert.match(text(tree),/Invalid date range/);assert.ok(field(tree,'Filter customer'));h.cleanup();
+});
+
+test('changed filters abort the old request before debounce and ignore its late response',async()=>{
+  const pending=[];
+  const h=runtime('CreditexPlannedIntakeQueue',{}, {api:(path,init)=>new Promise(resolve=>pending.push({path,signal:init.signal,resolve}))});
+  let tree=await h.mount();assert.equal(pending.length,1);assert.equal(pending[0].signal.aborted,false);
+  button(tree,'Filters').props.onClick();tree=h.render();field(tree,'Created from').props.onChange({target:{value:'2026-09-01'}});tree=h.render();
+  assert.equal(pending[0].signal.aborted,true);assert.equal(pending.length,1,'the replacement request is still debouncing');
+  pending[0].resolve({ok:true,items:jobs,total:2,totalPages:1,page:1});await flush();tree=h.render();
+  assert.doesNotMatch(text(tree),/JOB-1|JOB-2/);assert.match(text(tree),/Updating jobs/);
+  tree=await h.settle();assert.equal(pending.length,2);assert.match(pending[1].path,/createdFrom=2026-09-01/);
+  pending[1].resolve({ok:true,items:[job('fresh-job','Current customer')],total:1,totalPages:1,page:1});await flush();tree=h.render();
+  assert.match(text(tree),/FRESH-JOB/);assert.match(text(tree),/1 matching job/);assert.doesNotMatch(text(tree),/JOB-1|JOB-2/);h.cleanup();
+});
+
+test('failed filtering preserves loaded rows and offers immediate retry without claiming current counts',async()=>{
+  let attempt=0;
+  const h=runtime('CreditexPlannedIntakeQueue',{}, {api:async()=>{attempt++;if(attempt===2)throw Error('The request timed out.');return {ok:true,items:attempt===1?jobs:[jobs[1]],total:attempt===1?2:1,totalPages:1,page:1};}});
+  let tree=await h.mount();button(tree,'Filters').props.onClick();tree=h.render();field(tree,'Created to').props.onChange({target:{value:'2026-09-21'}});tree=await h.settle();
+  assert.match(text(tree),/JOB-1/);assert.match(text(tree),/JOB-2/);assert.match(text(tree),/2 previously loaded jobs shown/);assert.match(text(tree),/may not match the current filters/);
+  assert.doesNotMatch(text(tree),/0 jobs|matching jobs|filters applied/);assert.equal(field(tree,'Created to').props.value,'2026-09-21');
+  assert.equal(nodes(tree,n=>n.props?.role==='region')[0].props['data-stale'],true);assert.ok(button(tree,'Created ↕'));
+  button(tree,'Retry').props.onClick();assert.equal(h.requests.length,3,'explicit retry starts without waiting for debounce');await flush();tree=h.render();
+  assert.doesNotMatch(text(tree),/JOB-1|previously loaded|timed out/);assert.match(text(tree),/JOB-2/);assert.match(text(tree),/1 matching job/);h.cleanup();
+});
+
+test('first-load errors keep the table controls and never report zero jobs until a successful empty response',async()=>{
+  let attempt=0;
+  const h=runtime('CreditexPlannedIntakeQueue',{}, {api:async()=>{if(++attempt===1)throw Error('Service unavailable');return {ok:true,items:[],total:0,totalPages:1,page:1};}});
+  let tree=await h.mount();assert.match(text(tree),/Job count unavailable/);assert.match(text(tree),/Jobs could not be loaded/);
+  assert.doesNotMatch(text(tree),/0 jobs|0 matching|No matching jobs/);assert.ok(button(tree,'Created ↕'));
+  button(tree,'Filters').props.onClick();tree=h.render();assert.ok(field(tree,'Created from'));assert.ok(field(tree,'Filter first name'));
+  button(tree,'Retry').props.onClick();await flush();tree=h.render();assert.match(text(tree),/0 matching jobs/);assert.match(text(tree),/No matching jobs/);h.cleanup();
+});
+
+test('unmount aborts the active list load and ignores subsequent success or failure',async()=>{
+  for(const fail of [false,true]){
+    let resolveRequest,rejectRequest;
+    const h=runtime('CreditexPlannedIntakeQueue',{}, {api:()=>new Promise((resolve,reject)=>{resolveRequest=resolve;rejectRequest=reject;})});
+    await h.mount();const signal=h.requestOptions[0].signal;h.cleanup();assert.equal(signal.aborted,true);
+    if(fail)rejectRequest(Error('Late timeout'));else resolveRequest({ok:true,items:jobs,total:2,totalPages:1,page:1});
+    await flush();assert.equal(h.lateStateWrites,0);
+  }
 });
 
 test('one job action opens its audited work area and stale details cannot switch customer',async()=>{

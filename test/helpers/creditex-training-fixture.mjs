@@ -63,6 +63,7 @@ export function installCreditexTrainingFixture(database, { qualified = true } = 
     database.exec(read('drizzle/0179_training_questionnaires.sql'));
   }
   if (!memberColumns.has('service_states')) database.exec(read('drizzle/0180_team_member_service_states.sql'));
+  if (!database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='trade_training_module_retirements'").get()) database.exec(read('drizzle/0184_training_module_retirement.sql'));
   if (!qualified) return;
   const now = new Date().toISOString();
   const accounts = database.prepare('SELECT firebase_uid, abn, business_name FROM trade_accounts').all();

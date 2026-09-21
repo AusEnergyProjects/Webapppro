@@ -63,12 +63,12 @@ class TestD1Statement {
   }
 
   async all() {
-    return { results: this.database.prepare(this.sql).all(...this.values) };
+    return { success: true, results: this.database.prepare(this.sql).all(...this.values), meta: { changes: 0 } };
   }
 
   runSync() {
     const result = this.database.prepare(this.sql).run(...this.values);
-    return { success: true, meta: { changes: Number(result.changes) } };
+    return { success: true, results: [], meta: { changes: Number(result.changes) } };
   }
 
   async run() {
@@ -84,7 +84,12 @@ function testD1(database) {
     async batch(statements) {
       database.exec("BEGIN");
       try {
-        const results = statements.map((statement) => statement.runSync());
+        const results = [];
+        for (const statement of statements) {
+          results.push(await (/^\s*(SELECT|PRAGMA)\b/i.test(statement.sql)
+            ? statement.all()
+            : statement.run()));
+        }
         database.exec("COMMIT");
         return results;
       } catch (error) {
@@ -106,6 +111,7 @@ function schemaGuardD1(database) {
         )
       ) {
         return {
+          sql,
           async all() {
             const installed = database.prepare(
               "SELECT name, sql FROM sqlite_schema WHERE type = 'trigger'",
@@ -115,6 +121,7 @@ function schemaGuardD1(database) {
                 .map((definition) => definition.name),
             );
             return {
+              success: true, meta: { changes: 0 },
               results: [
                 ...CREDITEX_SCHEMA_GUARD_DEFINITIONS
                   .filter((definition) => !calculatorNames.has(definition.name))
@@ -133,8 +140,10 @@ function schemaGuardD1(database) {
         && sql.includes("WHERE type = 'table'")
       ) {
         return {
+          sql,
           async all() {
             return {
+              success: true, meta: { changes: 0 },
               results: [...sql.matchAll(/'([^']+)'/g)]
                 .map((match) => ({ name: match[1] })),
             };
@@ -143,8 +152,10 @@ function schemaGuardD1(database) {
       }
       if (sql === "PRAGMA table_xinfo(`compliance_cases`)") {
         return {
+          sql,
           async all() {
             return {
+              success: true, meta: { changes: 0 },
               results: [
                 { name: "compliance_intent_id" },
                 { name: "commercial_handoff_id" },
@@ -160,8 +171,10 @@ function schemaGuardD1(database) {
         === "PRAGMA table_xinfo(`trade_work_order_compliance_intents`)"
       ) {
         return {
+          sql,
           async all() {
             return {
+              success: true, meta: { changes: 0 },
               results: [{ name: "intent_key" }],
             };
           },

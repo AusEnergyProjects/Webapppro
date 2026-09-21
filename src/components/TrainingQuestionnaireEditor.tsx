@@ -64,7 +64,17 @@ export function TrainingQuestionnaireEditor({ api, canEdit, onDirtyChange }: { a
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [deleteCandidate, setDeleteCandidate] = useState<ModuleSummary | null>(null);
+  const deleteDialogRef = useRef<HTMLDialogElement>(null);
+  const deleteCancelRef = useRef<HTMLButtonElement>(null);
+  const deleteLauncherRef = useRef<HTMLElement | null>(null);
   const loadSequence = useRef(0);
+
+  useEffect(() => {
+    if (!deleteCandidate) return;
+    deleteDialogRef.current?.showModal();
+    deleteCancelRef.current?.focus();
+  }, [deleteCandidate]);
 
   const request = useCallback(async (path: string, init: RequestInit = {}) => {
     const controller = new AbortController();
@@ -124,16 +134,26 @@ export function TrainingQuestionnaireEditor({ api, canEdit, onDirtyChange }: { a
     catch (reason) { setError(failure(reason)); }
     finally { setBusy(""); }
   }
-  async function deleteDraft(item: ModuleSummary) {
+  function askDeleteModule(item: ModuleSummary, launcher: HTMLElement) {
     if (!canEdit || busy || !item.canDelete) return;
-    if (!window.confirm(`Delete the unused draft “${item.title}”?${dirty ? " Your unsaved edits will also be discarded." : ""} This cannot be undone.`)) return;
+    deleteLauncherRef.current = launcher;
+    setDeleteCandidate(item);
+  }
+  function closeDeleteDialog() {
+    deleteDialogRef.current?.close();
+    setDeleteCandidate(null);
+    if (deleteLauncherRef.current?.isConnected) deleteLauncherRef.current.focus({ preventScroll: true });
+  }
+  async function deleteModule(item: ModuleSummary) {
+    if (!canEdit || busy || !item.canDelete || !deleteDialogRef.current?.open) return;
+    closeDeleteDialog();
     setBusy("delete"); setError(""); setNotice("");
     try {
-      const result = await request(endpoint, { method: "POST", body: JSON.stringify({ action: "delete_draft", moduleId: item.id, expectedRevision: item.revision }) });
-      if (result.deleted !== true || result.moduleId !== item.id) throw new Error("The service did not confirm the deleted draft.");
+      const result = await request(endpoint, { method: "POST", body: JSON.stringify({ action: "delete_module", moduleId: item.id, expectedRevision: item.revision }) });
+      if (result.deleted !== true || result.requirementsRemoved !== true || result.historyPreserved !== true || result.moduleId !== item.id) throw new Error("The service did not confirm the module deletion and removal of its job requirement.");
       setCatalogue(current => current ? { ...current, modules: current.modules.filter(module => module.id !== item.id) } : current);
       if (questionnaire?.module.id === item.id) { setQuestionnaire(null); setVersions([]); setDirty(false); setCheckedSources(false); }
-      setNotice(`Deleted unused draft “${item.title}”. Published training and learner records were not changed.`);
+      setNotice(`Deleted “${item.title}”. Jobs no longer require this module. Completed training and audit history have been kept.`);
     } catch (reason) { setError(`Deletion could not be confirmed. Refresh the training list before trying again. ${failure(reason)}`); }
     finally { setBusy(""); }
   }
@@ -229,10 +249,21 @@ export function TrainingQuestionnaireEditor({ api, canEdit, onDirtyChange }: { a
   const sections = TRAINING_SERVICE_SECTIONS.filter((section) => catalogue?.services.some((service) => service.id === section.serviceCategory) || catalogue?.modules.some(item => moduleSection(item).id === section.id));
   const visibleModules = catalogue?.modules.filter((item) => (!serviceFilter || moduleSection(item).id === serviceFilter) && `${item.title} ${item.programCode} ${item.id} ${serviceLabel(item.assignment.serviceCategory)} ${moduleSection(item).label}`.toLowerCase().includes(search.trim().toLowerCase())) || [];
   const selectedSummary = catalogue?.modules.find(item => item.id === course?.id);
-  const protectedReason = (item: ModuleSummary) => item.deleteBlockedReason || (item.assignment.kind === "catalogue" ? "Required activity training cannot be deleted." : item.publishedVersion ? "Published training is retained with its compliance history." : "This training cannot be deleted.");
   const visibleSubmissions = submissions.filter((record) => !person || JSON.stringify([record.ownerUid, record.memberId]) === person);
 
   return <div className={styles.shell}>
+    {deleteCandidate && <dialog ref={deleteDialogRef} className={styles.deleteDialog} aria-labelledby="training-delete-title training-delete-name" aria-describedby="training-delete-impact" onCancel={event => { event.preventDefault(); closeDeleteDialog(); }}>
+      <div className={styles.deleteDialogBody}>
+        <h3 id="training-delete-title">Delete training module?</h3>
+        <p id="training-delete-name" className={styles.deleteModuleName}>{deleteCandidate.title}</p>
+        <div id="training-delete-impact" className={styles.deleteImpact}>
+          <p>It will disappear from the training library and will no longer be required on existing or new jobs.</p>
+          <p>Completed training, submitted answers and audit history will be kept. Other job and licence requirements still apply.</p>
+          {dirty && <p className={styles.deleteUnsaved}>Your unsaved edits will also be discarded.</p>}
+        </div>
+        <div className={styles.deleteDialogActions}><button ref={deleteCancelRef} className={styles.secondary} type="button" onClick={closeDeleteDialog}>Cancel</button><button className={`${styles.button} ${styles.deleteConfirm}`} type="button" onClick={() => void deleteModule(deleteCandidate)}>Delete module</button></div>
+      </div>
+    </dialog>}
     <header className={styles.header}><div><h2>Training</h2><p className={styles.muted}>Choose an activity to edit its learning material, questions and correct answers. View completed training in Trade compliance profiles.</p></div>{canEdit && <button className={styles.button} type="button" disabled={Boolean(busy)} onClick={create}>Create questionnaire</button>}</header>
     <nav className={styles.actions} aria-label="Compliance questions views"><button className={view === "questions" ? styles.button : styles.secondary} type="button" aria-pressed={view === "questions"} disabled={Boolean(busy)} onClick={() => setView("questions")}>Questionnaires</button><button className={view === "profiles" ? styles.button : styles.secondary} type="button" aria-pressed={view === "profiles"} disabled={Boolean(busy)} onClick={() => void openProfiles()}>Trade compliance profiles</button></nav>
     {error && <p className={`${styles.notice} ${styles.error}`} role="alert">{error}</p>}{notice && <p className={styles.notice} role="status">{notice}</p>}
@@ -241,13 +272,13 @@ export function TrainingQuestionnaireEditor({ api, canEdit, onDirtyChange }: { a
     {view === "questions" && catalogue && <>
       {!questionnaire && <section className={styles.library} aria-label="All training">
         <div className={styles.libraryToolbar}><div className={styles.fields}><label className={styles.field}>Find an activity<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Activity number, service, name or program" /></label><label className={styles.field}>Filter by service category<select value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)}><option value="">All service categories</option>{sections.map((section) => <option key={section.id} value={section.id}>{section.label} ({catalogue.modules.filter((item) => moduleSection(item).id === section.id).length})</option>)}</select></label></div><div className={styles.row}><p className={styles.muted}>{visibleModules.length} training {visibleModules.length === 1 ? "module" : "modules"}{search || serviceFilter ? " match these filters" : " in your library"}</p><div className={styles.actions}>{(search || serviceFilter) && <button className={styles.secondary} type="button" onClick={() => { setSearch(""); setServiceFilter(""); }}>Clear filters</button>}<button className={styles.secondary} type="button" disabled={Boolean(busy)} onClick={() => void refreshCatalogue()}>Refresh training</button></div></div></div>
-        <p className={styles.libraryNote}>Required and published training is retained with its learner history. Only unused custom drafts can be deleted.</p>
-        {sections.map(section => { const modules = visibleModules.filter(item => moduleSection(item).id === section.id); return modules.length ? <section key={section.id} className={styles.libraryGroup} aria-label={section.label}><header><h3>{section.label}</h3><span>{modules.length}</span></header><ul>{modules.map(item => <li key={item.id} className={styles.libraryRow}><div className={styles.moduleInfo}><strong>{item.title}</strong><span>{item.programCode} · {item.assignment.jurisdictions.join(", ") || "Australia wide"} · {item.questionCount} {item.questionCount === 1 ? "question" : "questions"}</span><small title={item.canDelete ? undefined : protectedReason(item)}>{item.canDelete ? "Unpublished draft" : item.assignment.kind === "catalogue" ? "Required programme module" : item.publishedVersion ? "Published" : "Protected training"}{item.hasDraft && item.publishedVersion ? " · draft changes" : ""}</small></div><div className={styles.actions}><button className={styles.secondary} type="button" aria-label={`${canEdit ? "Edit" : "View"} training ${item.title}`} disabled={Boolean(busy)} onClick={() => void loadModule(item.id)}>{canEdit ? "Edit" : "View"}</button>{canEdit && item.canDelete && <button className={styles.danger} type="button" aria-label={`Delete draft ${item.title}`} disabled={Boolean(busy)} onClick={() => void deleteDraft(item)}>Delete draft</button>}</div></li>)}</ul></section> : null; })}
+        <p className={styles.libraryNote}>Deleting a module removes its requirement from existing and new jobs. Completed training and audit history are kept.</p>
+        {sections.map(section => { const modules = visibleModules.filter(item => moduleSection(item).id === section.id); return modules.length ? <section key={section.id} className={styles.libraryGroup} aria-label={section.label}><header><h3>{section.label}</h3><span>{modules.length}</span></header><ul>{modules.map(item => <li key={item.id} className={styles.libraryRow}><div className={styles.moduleInfo}><strong>{item.title}</strong><span>{item.programCode} · {item.assignment.jurisdictions.join(", ") || "Australia wide"} · {item.questionCount} {item.questionCount === 1 ? "question" : "questions"}</span><small>{item.assignment.kind === "catalogue" ? "Required programme module" : item.publishedVersion ? "Published" : "Unpublished draft"}{item.hasDraft && item.publishedVersion ? " · draft changes" : ""}</small></div><div className={styles.actions}><button className={styles.secondary} type="button" aria-label={`${canEdit ? "Edit" : "View"} training ${item.title}`} disabled={Boolean(busy)} onClick={() => void loadModule(item.id)}>{canEdit ? "Edit" : "View"}</button>{canEdit && item.canDelete && <button className={styles.danger} type="button" aria-label={`Delete training ${item.title}`} disabled={Boolean(busy)} onClick={(event) => askDeleteModule(item, event.currentTarget)}>Delete</button>}</div></li>)}</ul></section> : null; })}
         {!visibleModules.length && <div className={styles.emptyLibrary}><h3>{catalogue.modules.length ? "No training matches these filters" : "No training modules yet"}</h3><p>{catalogue.modules.length ? "Clear the filters to see all training." : "Create a questionnaire to add training to the library."}</p></div>}
       </section>}
       {busy === "load" && <p role="status">Loading the questionnaire...</p>}
       {questionnaire && course && <>
-        <div className={styles.editorToolbar}><button className={styles.secondary} type="button" disabled={Boolean(busy)} onClick={backToLibrary}>Back to all training</button><div className={styles.actions}>{canEdit && isNew && <button className={styles.danger} type="button" disabled={Boolean(busy)} onClick={backToLibrary}>Discard new questionnaire</button>}{canEdit && selectedSummary?.canDelete && <button className={styles.danger} type="button" disabled={Boolean(busy)} onClick={() => void deleteDraft(selectedSummary)}>Delete draft</button>}</div></div>
+        <div className={styles.editorToolbar}><button className={styles.secondary} type="button" disabled={Boolean(busy)} onClick={backToLibrary}>Back to all training</button><div className={styles.actions}>{canEdit && isNew && <button className={styles.danger} type="button" disabled={Boolean(busy)} onClick={backToLibrary}>Discard new questionnaire</button>}{canEdit && selectedSummary?.canDelete && <button className={styles.danger} type="button" disabled={Boolean(busy)} onClick={(event) => askDeleteModule(selectedSummary, event.currentTarget)}>Delete</button>}</div></div>
         <section className={styles.panel}><header className={styles.row}><div><h3>{isNew ? "New activity questionnaire" : course.title}</h3><small>{questionnaire.publishedVersion ? `Published version ${questionnaire.publishedVersion}` : "Not published yet"}</small></div><span className={styles.badge}>{dirty ? "Unsaved changes" : "Saved"}</span></header>
           <div className={styles.fields}><label className={styles.field}>Activity name<input value={course.title} maxLength={240} disabled={locked} onChange={(event) => changeModule({ title: event.target.value })} placeholder="For example, heat pump installation" /></label><label className={styles.field}>Program<select value={course.programCode} disabled={locked || !isNew} onChange={(event) => { const program = catalogue.programs.find((item) => item.programCode === event.target.value); changeModule({ programCode: event.target.value }); changeAssignment({ jurisdictions: program && states.includes(program.jurisdiction) ? [program.jurisdiction] : [] }); }}><option value="">Choose a program</option>{catalogue.programs.map((program) => <option key={program.programCode} value={program.programCode}>{program.name}</option>)}</select></label></div>
           <label className={styles.field}>What does this training cover?<textarea value={course.scope} rows={3} disabled={locked} onChange={(event) => changeModule({ scope: event.target.value })} placeholder="Say what the installer needs to know before carrying out this work." /></label>

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { certificateTestDependency, installCreditexTrainingFixture } from './helpers/creditex-training-fixture.mjs';
@@ -15,6 +16,7 @@ class Statement {
 }
 function fixture() {
   const sql = new DatabaseSync(':memory:');
+  sql.exec(fs.readFileSync('drizzle/0004_mixed_chat.sql', 'utf8').match(/CREATE TABLE `admin_audit_log`[\s\S]*?;/)[0]);
   sql.exec(`PRAGMA foreign_keys=ON;
     CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY,abn TEXT,business_name TEXT,capabilities TEXT,service_states TEXT,address_state TEXT);
     CREATE TABLE trade_team_members(id TEXT PRIMARY KEY,owner_uid TEXT,status TEXT,display_name TEXT,member_uid TEXT,capabilities TEXT);
@@ -42,6 +44,7 @@ async function bookable(f, activityTemplateIds = ['veu-1']) {
   return Boolean(await f.db.prepare(`SELECT 1 ok WHERE ${predicate.sql}`).bind(...predicate.bindings).first());
 }
 const leadable = f => leads.certificateLeadEligible(f.db, 'owner', ['hot-water'], 'VIC');
+const booking = { ownerUid: 'owner', actorMemberId: 'owner-person', assignedMemberId: 'installer', activityTemplateIds: ['veu-1'], serviceState: 'VIC' };
 async function pass(f, course, memberId) {
   const actor = { ownerUid: 'owner', memberId, actorUid: memberId === 'owner-person' ? 'owner' : 'installer', moduleId: course.id };
   const attempt = await training.startTrainingAttempt(f.db, actor); const answers = {};
@@ -54,6 +57,55 @@ async function pass(f, course, memberId) {
   const result = await training.submitTrainingAttempt(f.db, { ...actor, attemptId: attempt.id, answers }); assert.equal(result.passed, true);
   return result;
 }
+
+test('retired built-in learning is no longer required by booking, member scope or projections, with business and technician gates retained', async () => {
+  const f = fixture();
+  f.sql.exec("UPDATE trade_training_completions SET revoked_at='2026-09-21' WHERE module_id='veu-1'");
+  assert.equal(await bookable(f), false);
+  await forms.retireTrainingQuestionnaire(f.db, 'editor', { moduleId: 'veu-1', expectedRevision: 0 });
+  assert.equal(await bookable(f), true);
+  assert.deepEqual(await training.getCertificateActivityEligibility(f.db, booking), { eligible: true, reasons: [] });
+  assert.equal((await training.getMemberTrainingScope(f.db, 'owner', 'installer')).assignedModuleIds.includes('veu-1'), false);
+  assert.equal((await training.getTrainingModulesForMember(f.db, 'owner', 'installer')).some(module => module.id === 'veu-1'), false);
+  await assert.rejects(training.startTrainingAttempt(f.db, { ownerUid: 'owner', memberId: 'installer', actorUid: 'installer', moduleId: 'veu-1' }), error => error.code === 'TRAINING_MODULE_RETIRED');
+  for (const [change, undo] of [
+    ["UPDATE trade_team_members SET capabilities='[]' WHERE id='installer'", "UPDATE trade_team_members SET capabilities='[\"hot-water\"]' WHERE id='installer'"],
+    ["UPDATE trade_accounts SET capabilities='[]'", "UPDATE trade_accounts SET capabilities='[\"hot-water\"]'"],
+    ["UPDATE trade_team_members SET service_states='[\"NSW\"]' WHERE id='installer'", "UPDATE trade_team_members SET service_states=NULL WHERE id='installer'"],
+    ["UPDATE trade_team_members SET status='disabled' WHERE id='installer'", "UPDATE trade_team_members SET status='active' WHERE id='installer'"],
+    ["UPDATE creditex_business_onboarding SET status='suspended'", "UPDATE creditex_business_onboarding SET status='approved'"],
+  ]) {
+    f.sql.exec(change); assert.equal(await bookable(f), false, change); assert.equal((await training.getCertificateActivityEligibility(f.db, booking)).eligible, false, change); f.sql.exec(undo);
+  }
+  assert.equal(await bookable(f), true);
+  assert.equal(await bookable(f, ['invented']), false);
+});
+
+test('retirement removes published additional requirements and never hides a different active module requirement', async () => {
+  const f = fixture(); const extra = await additional(f); assert.equal(await bookable(f), false);
+  await forms.retireTrainingQuestionnaire(f.db, 'editor', { moduleId: 'veu-1', expectedRevision: 0 });
+  assert.equal(await bookable(f), false, 'retiring built-in training does not waive active additional training');
+  const blocked = await training.getCertificateActivityEligibility(f.db, booking);
+  assert.deepEqual(blocked.reasons.map(reason => reason.moduleId), [extra.module.id]);
+  await forms.retireTrainingQuestionnaire(f.db, 'editor', { moduleId: extra.module.id, expectedRevision: extra.revision });
+  assert.equal(await bookable(f), true);
+  assert.deepEqual(await training.getCertificateActivityEligibility(f.db, booking), { eligible: true, reasons: [] });
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM trade_training_questionnaire_versions WHERE module_id=?').get(extra.module.id).n, 1);
+});
+
+test('retirement blocks in-progress answer and completion writes and atomic guards even when the old module was already read', async () => {
+  const f = fixture(); const extra = await additional(f); const actor = { ownerUid: 'owner', memberId: 'installer', actorUid: 'installer', moduleId: extra.module.id };
+  const attempt = await training.startTrainingAttempt(f.db, actor);
+  const guard = forms.currentTrainingModuleGuard(extra.module);
+  assert.ok(await f.db.prepare(`SELECT 1 ok WHERE ${guard.sql}`).bind(...guard.bindings).first());
+  await forms.retireTrainingQuestionnaire(f.db, 'editor', { moduleId: extra.module.id, expectedRevision: extra.revision });
+  assert.equal(await f.db.prepare(`SELECT 1 ok WHERE ${guard.sql}`).bind(...guard.bindings).first(), null);
+  const question = attempt.questions[0];
+  await assert.rejects(training.checkTrainingAnswer(f.db, { ...actor, attemptId: attempt.id, questionId: question.id, answer: question.options[0].id }), error => error.code === 'TRAINING_MODULE_RETIRED');
+  await assert.rejects(training.submitTrainingAttempt(f.db, { ...actor, attemptId: attempt.id, answers: { [question.id]: question.options[0].id } }), error => error.code === 'TRAINING_MODULE_RETIRED');
+  assert.equal(f.sql.prepare('SELECT status FROM trade_training_attempts WHERE id=?').get(attempt.id).status, 'in_progress');
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM trade_training_completions WHERE module_id=?').get(extra.module.id).n, 0);
+});
 
 test('a published extra form blocks certificate booking until each required person passes while leads remain available', async () => {
   const f = fixture(); assert.equal(await bookable(f), true); assert.equal(await leadable(f), true);

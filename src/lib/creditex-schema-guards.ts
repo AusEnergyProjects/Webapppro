@@ -664,17 +664,13 @@ async function requireCreditexSchemaMigrations(database: D1Database) {
   const tableNames = CREDITEX_REQUIRED_SCHEMA_TABLES
     .map((name) => `'${name}'`)
     .join(", ");
-  const tables = await database.prepare(
-    `SELECT name FROM sqlite_schema
+  const [tables, caseColumns, intentColumns] = await database.batch<{ name: string }>([
+    database.prepare(`SELECT name FROM sqlite_schema
       WHERE type = 'table'
-        AND name IN (${tableNames})`,
-  ).all<{ name: string }>();
-  const caseColumns = await database.prepare(
-    "PRAGMA table_xinfo(`compliance_cases`)",
-  ).all<{ name: string }>();
-  const intentColumns = await database.prepare(
-    "PRAGMA table_xinfo(`trade_work_order_compliance_intents`)",
-  ).all<{ name: string }>();
+        AND name IN (${tableNames})`),
+    database.prepare("PRAGMA table_xinfo(`compliance_cases`)"),
+    database.prepare("PRAGMA table_xinfo(`trade_work_order_compliance_intents`)"),
+  ]);
   const installedTables = new Set(
     tables.results.map((row) => String(row.name)),
   );
@@ -730,8 +726,16 @@ async function installCreditexSchemaGuards(
     requireCreditexSchemaMigrations,
 ) {
   await requireMigrations(database);
-  await upgradeJobDeletionGuards(database, [...JOB_DELETION_SCHEMA_GUARDS, ...draftComplianceDeletionGuardDefinitions].filter((replacement) => definitions.some((definition) => definition.name === replacement.name)), canonicalCreditexSchemaGuardSql);
-  const installed = await installedGuards(database);
+  let installed = await installedGuards(database);
+  const replacements = [...JOB_DELETION_SCHEMA_GUARDS, ...draftComplianceDeletionGuardDefinitions]
+    .filter((replacement) => definitions.some((definition) => definition.name === replacement.name));
+  if (replacements.some((replacement) =>
+    canonicalCreditexSchemaGuardSql(installed.get(replacement.name) || "")
+      !== canonicalCreditexSchemaGuardSql(replacement.sql)
+  )) {
+    await upgradeJobDeletionGuards(database, replacements, canonicalCreditexSchemaGuardSql);
+    installed = await installedGuards(database);
+  }
   const mismatched = definitions.filter(
     (definition) =>
       installed.has(definition.name) &&
@@ -748,6 +752,7 @@ async function installCreditexSchemaGuards(
   const missing = definitions.filter(
     (definition) => !installed.has(definition.name),
   );
+  if (missing.length === 0) return;
   if (
     missing.some((definition) =>
       CREDITEX_CALCULATOR_AUTHORING_SCHEMA_GUARD_NAMES.has(definition.name)

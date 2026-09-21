@@ -223,7 +223,8 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [message, setMessage] = useState("");
+  const [queueError, setQueueError] = useState<{ query: string; text: string } | null>(null);
+  const [loadedQuery, setLoadedQuery] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [auditItem, setAuditItem] = useState<PlannedIntake | null>(null);
   const [audit, setAudit] = useState<AuditWorkspace | null>(null);
@@ -232,6 +233,8 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
   const [actionMessage, setActionMessage] = useState("");
   const { menu, openMenu, closeMenu } = useJobRowMenu();
   const requestSequence = useRef(0);
+  const requestController = useRef<AbortController | null>(null);
+  const loadTimer = useRef<number | null>(null);
   const auditSequence = useRef(0);
   const auditHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const auditLauncherRef = useRef<HTMLElement | null>(null);
@@ -240,51 +243,64 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
   const tableRef = useRef<HTMLDivElement | null>(null);
   const tableScroll = useRef({ top: 0, left: 0 });
 
+  const query = new URLSearchParams({ status, search, page: String(page), sort, sortDirection });
+  for (const [key, value] of Object.entries(filters)) if (value) query.set(key, value);
+  const queryKey = query.toString();
+  const message = queueError?.query === queryKey ? queueError.text : "";
+  const hasLoaded = loadedQuery !== null;
+  const updating = loading || (loadedQuery !== queryKey && !message);
+  const stale = hasLoaded && (loadedQuery !== queryKey || Boolean(message));
+
   const load = useCallback(async () => {
+    if (loadTimer.current !== null) window.clearTimeout(loadTimer.current);
+    loadTimer.current = null;
     closeMenu(false);
     const requestId = requestSequence.current + 1;
     requestSequence.current = requestId;
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
     setLoading(true);
-    setMessage("");
+    setQueueError(null);
     try {
-      const query = new URLSearchParams({
-        status,
-        search,
-        page: String(page),
-        sort,
-        sortDirection,
-      });
-      for (const [key, value] of Object.entries(filters)) if (value) query.set(key, value);
-      const result = await api(`/api/creditex/job-intents?${query}`);
+      const result = await api(`/api/creditex/job-intents?${queryKey}`, { signal: controller.signal });
       if (result.ok !== true) {
         throw new Error(
           String(result.error || "The planned work queue could not be loaded."),
         );
       }
-      if (requestId !== requestSequence.current) return;
-      setItems((result.items || []) as PlannedIntake[]);
+      if (requestId !== requestSequence.current || controller.signal.aborted) return;
+      if (!Array.isArray(result.items) || typeof result.total !== "number" || !Number.isSafeInteger(result.total) || result.total < 0) {
+        throw new Error("The job results were incomplete. Please retry.");
+      }
+      setItems(result.items as PlannedIntake[]);
       setTotal(Number(result.total || 0));
       setTotalPages(Math.max(1, Number(result.totalPages || 1)));
+      setLoadedQuery(queryKey);
       const returnedPage = Math.max(1, Number(result.page || 1));
       if (returnedPage !== page) setPage(returnedPage);
     } catch (error) {
-      if (requestId !== requestSequence.current) return;
-      setItems([]);
-      setTotal(0);
-      setTotalPages(1);
-      setMessage(
-        error instanceof Error
+      if (requestId !== requestSequence.current || controller.signal.aborted) return;
+      setQueueError({ query: queryKey, text: error instanceof Error
           ? error.message
-          : "The planned work queue could not be loaded.",
-      );
+          : "The planned work queue could not be loaded." });
     } finally {
-      if (requestId === requestSequence.current) setLoading(false);
+      if (requestId === requestSequence.current && !controller.signal.aborted) {
+        requestController.current = null;
+        setLoading(false);
+      }
     }
-  }, [api, page, search, status, filters, sort, sortDirection, closeMenu]);
+  }, [api, page, queryKey, closeMenu]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 180);
-    return () => window.clearTimeout(timer);
+    loadTimer.current = window.setTimeout(() => void load(), 180);
+    return () => {
+      if (loadTimer.current !== null) window.clearTimeout(loadTimer.current);
+      loadTimer.current = null;
+      requestSequence.current += 1;
+      requestController.current?.abort();
+      requestController.current = null;
+    };
   }, [load]);
 
   const openAudit = useCallback(async (item: PlannedIntake, launcher: HTMLElement, focusCall = false) => {
@@ -494,7 +510,7 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
         <h2 id="creditex-planned-intake-title">Jobs</h2>
         <p>Find a job, review its records and call the customer from their audit workspace.</p>
       </div>
-      <strong>{loading ? "Loading" : `${total} jobs`}</strong>
+      <strong>{updating ? "Loading" : !hasLoaded ? "Unavailable" : stale ? "Last loaded results" : `${total} jobs`}</strong>
     </header>
     <div className={styles.controls}>
       <label><span>Search jobs</span><input
@@ -519,14 +535,13 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
         <option value="superseded">Superseded history</option>
       </select></label>
       <button type="button" className={styles.filterToggle} aria-expanded={showFilters} aria-controls="creditex-job-filters" onClick={() => setShowFilters((current) => !current)}>Filters{activeFilters ? ` (${activeFilters})` : ""}</button>
-      <button type="button" onClick={() => void load()} disabled={loading}>Refresh</button>
+      <button type="button" onClick={() => void load()} disabled={updating}>Refresh</button>
     </div>
-    <div className={styles.resultBar} aria-live="polite"><span>{loading ? "Updating jobs..." : `${total} matching ${total === 1 ? "job" : "jobs"}${totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""}`}{!loading && activeFilters ? ` · ${activeFilters} filters applied` : ""}</span>{(search || activeFilters || sort !== "plannedStart" || sortDirection !== "asc") && <button type="button" className={styles.detailButton} onClick={resetFilters}>Reset filters & sort</button>}</div>
+    <div className={styles.resultBar} aria-live="polite"><span>{updating ? "Updating jobs..." : message ? hasLoaded ? `${items.length} previously loaded ${items.length === 1 ? "job" : "jobs"} shown` : "Job count unavailable" : `${total} matching ${total === 1 ? "job" : "jobs"}${totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""}`}{!updating && !message && activeFilters ? ` · ${activeFilters} filters applied` : ""}</span>{(search || activeFilters || sort !== "plannedStart" || sortDirection !== "asc") && <button type="button" className={styles.detailButton} onClick={resetFilters}>Reset filters & sort</button>}</div>
     <p className={styles.tableHint}>Right-click a job or use its ⋯ button for job options. Scroll across for all columns.</p>
     {actionMessage && <p className={styles.tableHint} role="status">{actionMessage}</p>}
-    {message && <p className={styles.message} role="alert">{message}</p>}
-    {(!message || showFilters) && ((items.length || showFilters)
-      ? <div ref={tableRef} className={styles.tableWrap} aria-busy={loading} tabIndex={0} role="region" aria-label="Assigned jobs. Scroll horizontally for all columns."><table>
+    {message && <div className={`${styles.message} ${styles.loadError}`} role="alert"><div><strong>{hasLoaded ? "Jobs could not be updated" : "Jobs could not be loaded"}</strong><p>{message}</p>{hasLoaded && <p>Showing the last loaded results. They may not match the current filters.</p>}</div><button type="button" onClick={() => void load()} disabled={updating}>Retry</button></div>}
+      <div ref={tableRef} className={styles.tableWrap} aria-busy={updating} data-stale={stale || undefined} tabIndex={0} role="region" aria-label="Assigned jobs. Scroll horizontally for all columns."><table>
         <thead><tr>{sortableHeading("Job ID", "jobNumber")}{sortableHeading("Created", "createdAt")}<th scope="col">Work</th>{sortableHeading("First name", "customerFirstName")}{sortableHeading("Last name", "customerLastName")}<th scope="col">Contact</th>{sortableHeading("Installer", "installerBusiness")}{sortableHeading("Program & activity", "programCode")}<th scope="col">Service site</th>{sortableHeading("Planned", "plannedStart")}{sortableHeading("Stage", "jobStage")}{sortableHeading("Priority", "priority")}<th scope="col">Assigned to</th><th scope="col">Quote</th><th scope="col">Invoice</th><th scope="col">Record status</th>{sortableHeading("Updated", "updatedAt")}</tr>
           {showFilters && <tr className={styles.columnFilters} id="creditex-job-filters">
             <td>{filterInput("job", "Filter job", "Job number or title")}</td>
@@ -548,7 +563,7 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
             <td><button type="button" className={styles.detailButton} onClick={resetFilters}>Reset all</button></td>
           </tr>}
         </thead>
-        <tbody>{items.map((item) => <tr key={item.id} onContextMenu={event => { if (!loading) openMenu(event, `creditex-job-menu-${item.id}`, item.jobNumber || item.jobId, launcher => rowActions(item, launcher)); }}>
+        <tbody>{items.map((item) => <tr key={item.id} onContextMenu={event => { if (!updating) openMenu(event, `creditex-job-menu-${item.id}`, item.jobNumber || item.jobId, launcher => rowActions(item, launcher)); }}>
             <td>
               <div className={styles.jobActions}>
               <button type="button" id={`creditex-job-${item.id}`} className={styles.jobButton} onClick={(event) => void openAudit(item, event.currentTarget)} aria-controls="creditex-full-audit-workspace">
@@ -574,10 +589,9 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
             <td><span className={styles.status}>{itemStatus(item)}</span></td>
             <td>{item.updatedAt ? dateTime(item.updatedAt) : "Not recorded"}</td>
           </tr>
-        )}{!items.length && <tr><td colSpan={17}><div className={styles.empty}><strong>{loading ? "Loading jobs..." : "No matching jobs"}</strong><span>Change the column filters or reset your search.</span></div></td></tr>}</tbody>
+        )}{!items.length && <tr><td colSpan={17}><div className={styles.empty}><strong>{updating ? "Loading jobs..." : message ? "Results unavailable for these filters" : "No matching jobs"}</strong><span>{message ? "Retry or adjust the filters above." : "Change the column filters or reset your search."}</span></div></td></tr>}</tbody>
       </table></div>
-      : loading ? <p className={styles.message} role="status">Loading assigned jobs...</p> : <div className={styles.empty}><strong>No matching jobs</strong><span>Try a different search or reset the filters. Assigned installer jobs appear here when saved.</span></div>)}
-    {!loading && !message && totalPages > 1 && <nav className={styles.pagination} aria-label="Certificate-work register pages">
+    {!updating && !message && totalPages > 1 && <nav className={styles.pagination} aria-label="Certificate-work register pages">
       <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button>
       <span>Page {page} of {totalPages}</span>
       <button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>Next</button>

@@ -142,7 +142,7 @@ class TestD1Statement {
 
   async all() {
     return this.measure(
-      () => ({ results: this.database.prepare(this.sql).all(...this.values) }),
+      () => ({ success: true, results: this.database.prepare(this.sql).all(...this.values), meta: { changes: 0 } }),
     );
   }
 
@@ -151,6 +151,7 @@ class TestD1Statement {
       const result = this.database.prepare(this.sql).run(...this.values);
       return {
         success: true,
+        results: [],
         meta: {
           changes: Number(result.changes),
           last_row_id: result.lastInsertRowid,
@@ -180,7 +181,9 @@ function testD1(database) {
       try {
         const results = [];
         for (const statement of statements) {
-          results.push(await statement.run());
+          results.push(await (/^\s*(SELECT|PRAGMA)\b/i.test(statement.sql)
+            ? statement.all()
+            : statement.run()));
         }
         database.exec("COMMIT");
         return results;
@@ -193,9 +196,9 @@ function testD1(database) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 183);
+  assert.equal(completeMigrationChain.length, 184);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0183_creditex_audit_calls\.sql$/);
+  assert.match(completeMigrationChain.at(-1), /^0184_training_module_retirement\.sql$/);
   assert.ok(
     completeMigrationChain.includes("0160_trade_rental_inspections.sql"),
     "the complete migration chain must include the rental inspection schema",

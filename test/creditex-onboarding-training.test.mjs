@@ -27,6 +27,7 @@ class Statement {
 }
 function fixture() {
   const sql = new DatabaseSync(':memory:');
+  sql.exec(fs.readFileSync('drizzle/0004_mixed_chat.sql', 'utf8').match(/CREATE TABLE `admin_audit_log`[\s\S]*?;/)[0]);
   sql.exec(`PRAGMA foreign_keys=ON;
     CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY,abn TEXT,business_name TEXT,capabilities TEXT,service_states TEXT,address_state TEXT);
     CREATE TABLE trade_team_members(id TEXT PRIMARY KEY,owner_uid TEXT,status TEXT,display_name TEXT,member_uid TEXT,capabilities TEXT);
@@ -39,6 +40,7 @@ function fixture() {
   sql.exec(fs.readFileSync('drizzle/0178_autonomous_business_onboarding.sql', 'utf8'));
   sql.exec(fs.readFileSync('drizzle/0179_training_questionnaires.sql', 'utf8'));
   sql.exec(fs.readFileSync('drizzle/0180_team_member_service_states.sql', 'utf8'));
+  sql.exec(fs.readFileSync('drizzle/0184_training_module_retirement.sql', 'utf8'));
   const db = { prepare: query => new Statement(sql, query), batch: async statements => {
     sql.exec('BEGIN'); try { const results = []; for (const statement of statements) results.push(await statement.run()); sql.exec('COMMIT'); return results; } catch (error) { sql.exec('ROLLBACK'); throw error; }
   } };
@@ -376,6 +378,36 @@ test('Activity 48 needs quiz passes for everyone and reviewed EEC/ESC credential
   f.sql.prepare("UPDATE trade_team_member_files SET status='active'").run();
   f.sql.prepare("UPDATE trade_training_external_credentials SET scheme_participant_reference=''").run(); assert.equal((await training.getCertificateActivityEligibility(f.db,input)).eligible,false);
 });
+test('retired Activity 48 waives quiz completion but still requires renewable scheme authority and actual installer credentials', async () => {
+  const f = fixture(); await approveBusiness(f); await activate(f, 'veu-48');
+  await questionnaires.retireTrainingQuestionnaire(f.db, 'reviewer', { moduleId: 'veu-48', expectedRevision: 0 });
+  const input = { ...booking, activityTemplateIds: ['veu-48'] };
+  const allowed = async () => {
+    const predicate = await training.certificateActivityEligibilityPredicate(input);
+    const value = Boolean(await f.db.prepare(`SELECT 1 ok WHERE ${predicate.sql}`).bind(...predicate.bindings).first());
+    assert.equal((await training.getCertificateActivityEligibility(f.db, input)).eligible, value);
+    return value;
+  };
+  assert.equal(await allowed(), false, 'retiring training alone cannot authorise an unqualified installer');
+  f.sql.prepare('INSERT INTO trade_team_member_files VALUES (?,?,?,?,?,?)').run('installer-credential', 'owner', 'installer-member', 'active', yearLater(), 'training');
+  f.sql.prepare('INSERT INTO trade_training_external_credentials VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run('credential', 'owner', 'installer-member', 'veu-48', 'installer-credential', 'EEC-CII-verified', 'ESC-participant-verified', tomorrow(), 'reviewer', 'Verified registers', '', new Date().toISOString());
+  assert.equal(await allowed(), true, 'no quiz attempts or passes are required for the retired module');
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM trade_training_attempts').get().n, 0);
+  assert.equal((await training.getTrainingModulesForMember(f.db, 'owner', 'installer-member')).some(module => module.id === 'veu-48'), false);
+  const governance = (await training.listTrainingGovernanceModules(f.db)).find(module => module.id === 'veu-48');
+  assert.equal(governance.retired, true); assert.equal(governance.availability, 'retired');
+  f.sql.exec("UPDATE trade_training_module_reviews SET review_expires_on='2000-01-01' WHERE module_id='veu-48'");
+  assert.equal(await allowed(), false);
+  await activate(f, 'veu-48'); assert.equal(await allowed(), true, 'authority can be renewed without reactivating training');
+  assert.equal((await questionnaires.listCurrentTrainingModules(f.db)).some(module => module.id === 'veu-48'), false);
+  for (const [change, undo] of [
+    ["UPDATE trade_training_external_credentials SET revoked_at='2026-09-21'", "UPDATE trade_training_external_credentials SET revoked_at=''"],
+    ["UPDATE trade_team_member_files SET status='deleted'", "UPDATE trade_team_member_files SET status='active'"],
+    ["UPDATE trade_training_external_credentials SET expires_on='2000-01-01'", `UPDATE trade_training_external_credentials SET expires_on='${tomorrow()}'`],
+    ["UPDATE trade_training_module_reviews SET status='withdrawn'", "UPDATE trade_training_module_reviews SET status='active'"],
+  ]) { f.sql.exec(change); assert.equal(await allowed(), false, change); f.sql.exec(undo); }
+});
+
 test('learner catalogue conceals answer keys and remains current independently of optional review metadata', async () => {
   const f=fixture(); await activate(f); await pass(f);
   const catalogue=await training.getTrainingModulesForMember(f.db,'owner','owner-member');

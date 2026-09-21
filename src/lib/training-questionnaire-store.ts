@@ -96,6 +96,12 @@ function editableModule(course: TradeTrainingModule) {
   return { ...course, sources, lessons: course.lessons.map(lesson => ({ ...lesson, sourceIds: lesson.sourceIds.filter(id => visibleIds.has(id)) })), questions: course.questions.map(question => ({ ...question, sourceIds: question.sourceIds.filter(id => visibleIds.has(id)) })) };
 }
 function rowQuestionnaire(row: QuestionnaireRow): TrainingQuestionnaire { return { module: JSON.parse(row.draft_json), assignment: JSON.parse(row.assignment_json), revision: row.revision, hasDraft: row.revision !== row.published_revision, publishedVersion: row.published_version, publishedAt: row.published_at, updatedAt: row.updated_at }; }
+export async function listRetiredTrainingModuleIds(db: D1Database) {
+  return new Set((await db.prepare('SELECT module_id FROM trade_training_module_retirements').all<{ module_id: string }>()).results.map(row => row.module_id));
+}
+async function assertTrainingModuleActive(db: D1Database, moduleId: string) {
+  if (await db.prepare('SELECT 1 FROM trade_training_module_retirements WHERE module_id=?').bind(moduleId).first()) throw new CreditexComplianceError('TRAINING_MODULE_RETIRED', 'This training module has been deleted from the active library. Its saved learning history is retained.', 409);
+}
 const trainingHistoryPredicate = `EXISTS(SELECT 1 FROM trade_training_questionnaire_versions v WHERE v.module_id=q.module_id)
   OR EXISTS(SELECT 1 FROM trade_training_attempts a WHERE a.module_id=q.module_id)
   OR EXISTS(SELECT 1 FROM trade_training_completions c WHERE c.module_id=q.module_id)
@@ -111,17 +117,38 @@ function draftDeleteBlockedReason(moduleId: string, row?: QuestionnaireRow) {
   return '';
 }
 export async function getTrainingQuestionnaire(db: D1Database, moduleId: string): Promise<TrainingQuestionnaire> {
+  await assertTrainingModuleActive(db, moduleId);
   const row = await db.prepare('SELECT * FROM trade_training_questionnaires WHERE module_id=?').bind(moduleId).first<QuestionnaireRow>(); if (row) return rowQuestionnaire(row);
   const course = TRAINING_MODULES.find(course => course.id === moduleId); if (!course) throw new CreditexComplianceError('QUESTIONNAIRE_NOT_FOUND', 'Training form not found.', 404);
   return { module: editableModule(course), assignment: questionnaireAssignment(course), revision: 0, hasDraft: false, publishedVersion: course.version, publishedAt: '', updatedAt: '' };
 }
 export async function listTrainingQuestionnaires(db: D1Database): Promise<TrainingQuestionnaireSummary[]> {
-  const rows = await db.prepare(`SELECT q.*, CASE WHEN (${trainingHistoryPredicate}) THEN 1 ELSE 0 END has_history FROM trade_training_questionnaires q`).all<QuestionnaireRow>(); const map = new Map(rows.results.map(row => [row.module_id, row]));
+  const retired = await listRetiredTrainingModuleIds(db);
+  const rows = await db.prepare('SELECT * FROM trade_training_questionnaires').all<QuestionnaireRow>(); const map = new Map(rows.results.map(row => [row.module_id, row]));
   const ids = [...TRAINING_MODULES.map(course => course.id), ...rows.results.filter(row => !TRAINING_MODULES.some(course => course.id === row.module_id)).map(row => row.module_id)];
-  return ids.map(id => { const row = map.get(id); const course = row ? JSON.parse(row.draft_json) as TradeTrainingModule : TRAINING_MODULES.find(course => course.id === id)!; const deleteBlockedReason = draftDeleteBlockedReason(id, row); return { id, title: course.title, programCode: course.programCode, questionCount: course.questions.length, revision: row?.revision || 0, publishedVersion: row?.published_version || (row ? '' : course.version), hasDraft: row ? row.revision !== row.published_revision : false, assignment: row ? JSON.parse(row.assignment_json) as TrainingAssignment : questionnaireAssignment(course), canDelete: !deleteBlockedReason, deleteBlockedReason }; });
+  return ids.filter(id => !retired.has(id)).map(id => { const row = map.get(id); const course = row ? JSON.parse(row.draft_json) as TradeTrainingModule : TRAINING_MODULES.find(course => course.id === id)!; return { id, title: course.title, programCode: course.programCode, questionCount: course.questions.length, revision: row?.revision || 0, publishedVersion: row?.published_version || (row ? '' : course.version), hasDraft: row ? row.revision !== row.published_revision : false, assignment: row ? JSON.parse(row.assignment_json) as TrainingAssignment : questionnaireAssignment(course), canDelete: true, deleteBlockedReason: '' }; });
+}
+export async function retireTrainingQuestionnaire(db: D1Database, actorUid: string, body: Record<string, unknown>) {
+  const moduleId = idText(body.moduleId, 'Form ID'); const expected = revision(body.expectedRevision);
+  const retired = await db.prepare('SELECT revision FROM trade_training_module_retirements WHERE module_id=?').bind(moduleId).first<{ revision: number }>();
+  const result = { moduleId, deleted: true, retired: true, requirementsRemoved: true, historyPreserved: true };
+  if (retired) {
+    if (retired.revision !== expected) throw new CreditexComplianceError('REVISION_CONFLICT', 'This module was deleted at a different revision. Refresh the training list.', 409);
+    return result;
+  }
+  const questionnaire = await getTrainingQuestionnaire(db, moduleId);
+  if (questionnaire.revision !== expected) throw new CreditexComplianceError('REVISION_CONFLICT', 'Someone else edited this form. Reload it before deleting.', 409);
+  const now = new Date().toISOString();
+  await db.batch([
+    creditexWriteGuard(db, actorUid, 'COALESCE((SELECT revision FROM trade_training_questionnaires WHERE module_id=?),0)=? AND NOT EXISTS(SELECT 1 FROM trade_training_module_retirements WHERE module_id=?)', [moduleId, expected, moduleId]),
+    db.prepare('INSERT INTO trade_training_module_retirements(module_id,revision,course_json,assignment_json,retired_by_uid,retired_at) VALUES (?,?,?,?,?,?)').bind(moduleId, expected, JSON.stringify(questionnaire.module), JSON.stringify(questionnaire.assignment), actorUid, now),
+    db.prepare('INSERT INTO admin_audit_log(id,admin_uid,action,entity_type,entity_id,summary,metadata,created_at) VALUES (?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), actorUid, 'training_questionnaire.retire', 'training_questionnaire', moduleId, 'Removed training from the active library and current job requirements; retained learning history.', JSON.stringify({ title: questionnaire.module.title, revision: expected, requirementsRemoved: true, historyPreserved: true }), now),
+  ]);
+  return result;
 }
 export async function deleteTrainingQuestionnaireDraft(db: D1Database, actorUid: string, body: Record<string, unknown>) {
   const moduleId = idText(body.moduleId, 'Form ID'); const expected = revision(body.expectedRevision);
+  await assertTrainingModuleActive(db, moduleId);
   if (TRAINING_MODULES.some(course => course.id === moduleId)) throw new CreditexComplianceError('DRAFT_DELETE_BLOCKED', 'Required activity training cannot be deleted.', 409);
   const row = await db.prepare(`SELECT q.*, CASE WHEN (${trainingHistoryPredicate}) THEN 1 ELSE 0 END has_history FROM trade_training_questionnaires q WHERE q.module_id=?`).bind(moduleId).first<QuestionnaireRow>();
   if (!row) throw new CreditexComplianceError('QUESTIONNAIRE_NOT_FOUND', 'Training draft not found. Refresh the list.', 404);
@@ -130,17 +157,21 @@ export async function deleteTrainingQuestionnaireDraft(db: D1Database, actorUid:
   if (reason) throw new CreditexComplianceError('DRAFT_DELETE_BLOCKED', reason, 409);
   const course = JSON.parse(row.draft_json) as TradeTrainingModule;
   await db.batch([
-    creditexWriteGuard(db, actorUid, `EXISTS(SELECT 1 FROM trade_training_questionnaires q WHERE q.module_id=? AND q.revision=? AND q.published_version='' AND q.published_revision=0 AND q.published_at='' AND json_extract(q.assignment_json,'$.kind')='additional' AND NOT (${trainingHistoryPredicate}))`, [moduleId, expected]),
+    creditexWriteGuard(db, actorUid, `EXISTS(SELECT 1 FROM trade_training_questionnaires q WHERE q.module_id=? AND q.revision=? AND q.published_version='' AND q.published_revision=0 AND q.published_at='' AND json_extract(q.assignment_json,'$.kind')='additional' AND NOT (${trainingHistoryPredicate}) AND NOT EXISTS(SELECT 1 FROM trade_training_module_retirements retired WHERE retired.module_id=q.module_id))`, [moduleId, expected]),
     db.prepare('DELETE FROM trade_training_questionnaires WHERE module_id=? AND revision=?').bind(moduleId, expected),
     db.prepare(`INSERT INTO admin_audit_log(id,admin_uid,action,entity_type,entity_id,summary,metadata,created_at) VALUES (?,?,?,?,?,?,?,?)`).bind(crypto.randomUUID(), actorUid, 'training_questionnaire.draft_delete', 'training_questionnaire', moduleId, 'Deleted an unused, never-published custom training draft.', JSON.stringify({ title: course.title, revision: expected, publishedHistoryDeleted: false }), new Date().toISOString()),
   ]);
   return { moduleId, deleted: true };
 }
 export async function listCurrentTrainingModules(db: D1Database): Promise<TradeTrainingModule[]> {
+  const retired = await listRetiredTrainingModuleIds(db);
   const rows = await db.prepare('SELECT v.* FROM trade_training_questionnaire_versions v JOIN trade_training_questionnaires q ON q.module_id=v.module_id AND q.published_version=v.version').all<VersionRow>(); const overrides = new Map(rows.results.map(row => [row.module_id, JSON.parse(row.course_json) as TradeTrainingModule]));
-  return [...TRAINING_MODULES.map(course => overrides.get(course.id) || course), ...[...overrides.values()].filter(course => !TRAINING_MODULES.some(staticCourse => staticCourse.id === course.id))];
+  return [...TRAINING_MODULES.map(course => overrides.get(course.id) || course), ...[...overrides.values()].filter(course => !TRAINING_MODULES.some(staticCourse => staticCourse.id === course.id))].filter(course => !retired.has(course.id));
 }
-export async function loadTrainingModule(db: D1Database, moduleId: string) {
+export async function loadTrainingModule(db: D1Database, moduleId: string, options: { forSchemeAuthority?: boolean } = {}) {
+  // Activity 48 scheme authority remains independently renewable after its quiz
+  // is retired. Learner and editor callers never opt into this governance read.
+  if (!options.forSchemeAuthority || moduleId !== 'veu-48') await assertTrainingModuleActive(db, moduleId);
   const row = await db.prepare('SELECT v.* FROM trade_training_questionnaire_versions v JOIN trade_training_questionnaires q ON q.module_id=v.module_id AND q.published_version=v.version WHERE v.module_id=?').bind(moduleId).first<VersionRow>();
   const course = row ? JSON.parse(row.course_json) as TradeTrainingModule : TRAINING_MODULES.find(course => course.id === moduleId);
   if (!course) throw new CreditexComplianceError('TRAINING_MODULE_UNAVAILABLE', 'This activity has no published training form.', 409); return course;
@@ -151,15 +182,17 @@ export async function loadTrainingModuleVersion(db: D1Database, moduleId: string
   if (!course) throw new CreditexComplianceError('TRAINING_VERSION_CHANGED', 'This assessment version is no longer available. Start the current form.', 409); return course;
 }
 export function currentTrainingModuleGuard(course: TradeTrainingModule) {
-  return { sql: `(EXISTS(SELECT 1 FROM trade_training_questionnaires q JOIN trade_training_questionnaire_versions v ON v.module_id=q.module_id AND v.version=q.published_version WHERE q.module_id=? AND v.version=? AND v.content_hash=?) OR (?=1 AND NOT EXISTS(SELECT 1 FROM trade_training_questionnaires WHERE module_id=? AND published_version<>'')))`, bindings: [course.id, course.version, hash(course), TRAINING_MODULES.some(staticCourse => staticCourse.id === course.id && hash(staticCourse) === hash(course)) ? 1 : 0, course.id] };
+  return { sql: `(EXISTS(SELECT 1 FROM trade_training_questionnaires q JOIN trade_training_questionnaire_versions v ON v.module_id=q.module_id AND v.version=q.published_version WHERE q.module_id=? AND v.version=? AND v.content_hash=?) OR (?=1 AND NOT EXISTS(SELECT 1 FROM trade_training_questionnaires WHERE module_id=? AND published_version<>''))) AND NOT EXISTS(SELECT 1 FROM trade_training_module_retirements WHERE module_id=?)`, bindings: [course.id, course.version, hash(course), TRAINING_MODULES.some(staticCourse => staticCourse.id === course.id && hash(staticCourse) === hash(course)) ? 1 : 0, course.id, course.id] };
 }
 export async function listTrainingAssignments(db: D1Database) {
+  const retired = await listRetiredTrainingModuleIds(db);
   const rows = await db.prepare('SELECT v.* FROM trade_training_questionnaire_versions v JOIN trade_training_questionnaires q ON q.module_id=v.module_id AND q.published_version=v.version').all<VersionRow>(); const overrides = new Map(rows.results.map(row => [row.module_id, JSON.parse(row.assignment_json) as TrainingAssignment]));
-  return [...TRAINING_MODULES.map(course => ({ moduleId: course.id, assignment: overrides.get(course.id) || questionnaireAssignment(course) })), ...rows.results.filter(row => !TRAINING_MODULES.some(course => course.id === row.module_id)).map(row => ({ moduleId: row.module_id, assignment: JSON.parse(row.assignment_json) as TrainingAssignment }))];
+  return [...TRAINING_MODULES.map(course => ({ moduleId: course.id, assignment: overrides.get(course.id) || questionnaireAssignment(course) })), ...rows.results.filter(row => !TRAINING_MODULES.some(course => course.id === row.module_id)).map(row => ({ moduleId: row.module_id, assignment: JSON.parse(row.assignment_json) as TrainingAssignment }))].filter(item => !retired.has(item.moduleId));
 }
 function audit(db: D1Database, actorUid: string, moduleId: string, action: string, revision: number, metadata: object = {}) { return db.prepare('INSERT INTO trade_training_questionnaire_events(id,module_id,actor_uid,event_type,revision,metadata_json,created_at) VALUES (?,?,?,?,?,?,?)').bind(crypto.randomUUID(), moduleId, actorUid, action, revision, JSON.stringify(metadata), new Date().toISOString()); }
 export async function saveTrainingQuestionnaire(db: D1Database, actorUid: string, body: Record<string, unknown>) {
   const moduleId = body.moduleId === undefined || body.moduleId === '' ? `custom-${crypto.randomUUID()}` : idText(body.moduleId, 'Form ID'); const expected = revision(body.expectedRevision);
+  await assertTrainingModuleActive(db, moduleId);
   const staticCourse = TRAINING_MODULES.find(course => course.id === moduleId) || null;
   const existing = await db.prepare('SELECT * FROM trade_training_questionnaires WHERE module_id=?').bind(moduleId).first<QuestionnaireRow>();
   if (body.moduleId && !existing && !staticCourse) throw new CreditexComplianceError('QUESTIONNAIRE_NOT_FOUND', 'Training form not found.', 404);
@@ -168,18 +201,19 @@ export async function saveTrainingQuestionnaire(db: D1Database, actorUid: string
   const course = validateQuestionnaireModule(body.module, original, moduleId);
   const assignment = staticCourse ? questionnaireAssignment(staticCourse) : existing ? JSON.parse(existing.assignment_json) as TrainingAssignment : cleanAdditionalAssignment(body.assignment, course.programCode);
   const now = new Date().toISOString(); const nextRevision = expected + 1;
-  await db.batch([creditexWriteGuard(db, actorUid, 'COALESCE((SELECT revision FROM trade_training_questionnaires WHERE module_id=?),0)=?', [moduleId, expected]),
+  await db.batch([creditexWriteGuard(db, actorUid, 'COALESCE((SELECT revision FROM trade_training_questionnaires WHERE module_id=?),0)=? AND NOT EXISTS(SELECT 1 FROM trade_training_module_retirements WHERE module_id=?)', [moduleId, expected, moduleId]),
     db.prepare(`INSERT INTO trade_training_questionnaires(module_id,revision,draft_json,assignment_json,published_version,published_revision,published_at,updated_at,updated_by_uid) VALUES (?,?,?,?,'',0,'',?,?) ON CONFLICT(module_id) DO UPDATE SET revision=excluded.revision,draft_json=excluded.draft_json,updated_at=excluded.updated_at,updated_by_uid=excluded.updated_by_uid`).bind(moduleId, nextRevision, JSON.stringify(course), JSON.stringify(assignment), now, actorUid), audit(db, actorUid, moduleId, 'draft_saved', nextRevision)]);
   return getTrainingQuestionnaire(db, moduleId);
 }
 export async function publishTrainingQuestionnaire(db: D1Database, actorUid: string, body: Record<string, unknown>) {
   if (body.sourcesChecked !== true) invalid('Check the lesson, correct answers and sources before publishing.');
   const moduleId = idText(body.moduleId, 'Form ID'); const expected = revision(body.expectedRevision); const row = await db.prepare('SELECT * FROM trade_training_questionnaires WHERE module_id=?').bind(moduleId).first<QuestionnaireRow>();
+  await assertTrainingModuleActive(db, moduleId);
   if (!row || row.revision !== expected) throw new CreditexComplianceError('REVISION_CONFLICT', 'Save the form and reload its current revision before publishing.', 409);
   if (row.published_revision === row.revision) throw new CreditexComplianceError('QUESTIONNAIRE_ALREADY_PUBLISHED', 'This saved form is already published.', 409);
   const draft: TradeTrainingModule = JSON.parse(row.draft_json); const course = validateQuestionnaireModule(draft, draft, moduleId, true); course.version = `authored-${row.revision}-${crypto.randomUUID()}`;
   const contentHash = hash(course); const now = new Date().toISOString();
-  await db.batch([creditexWriteGuard(db, actorUid, 'EXISTS(SELECT 1 FROM trade_training_questionnaires WHERE module_id=? AND revision=? AND published_revision<>revision)', [moduleId, expected]),
+  await db.batch([creditexWriteGuard(db, actorUid, 'EXISTS(SELECT 1 FROM trade_training_questionnaires WHERE module_id=? AND revision=? AND published_revision<>revision) AND NOT EXISTS(SELECT 1 FROM trade_training_module_retirements WHERE module_id=?)', [moduleId, expected, moduleId]),
     db.prepare('INSERT INTO trade_training_questionnaire_versions(module_id,version,content_hash,course_json,assignment_json,published_by_uid,published_at) VALUES (?,?,?,?,?,?,?)').bind(moduleId, course.version, contentHash, JSON.stringify(course), row.assignment_json, actorUid, now),
     db.prepare('UPDATE trade_training_questionnaires SET published_version=?,published_revision=revision,published_at=?,draft_json=?,updated_at=?,updated_by_uid=? WHERE module_id=?').bind(course.version, now, JSON.stringify(course), now, actorUid, moduleId), audit(db, actorUid, moduleId, 'published', row.revision, { version: course.version, contentHash })]);
   return getTrainingQuestionnaire(db, moduleId);

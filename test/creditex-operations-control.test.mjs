@@ -95,12 +95,12 @@ class TestD1Statement {
   }
 
   async all() {
-    return { results: this.database.prepare(this.sql).all(...this.values) };
+    return { success: true, results: this.database.prepare(this.sql).all(...this.values), meta: { changes: 0 } };
   }
 
   async run() {
     const result = this.database.prepare(this.sql).run(...this.values);
-    return { success: true, meta: { changes: Number(result.changes) } };
+    return { success: true, results: [], meta: { changes: Number(result.changes) } };
   }
 }
 
@@ -113,7 +113,11 @@ function testD1(database) {
       database.exec("BEGIN");
       try {
         const results = [];
-        for (const statement of statements) results.push(await statement.run());
+        for (const statement of statements) {
+          results.push(await (/^\s*(SELECT|PRAGMA)\b/i.test(statement.sql)
+            ? statement.all()
+            : statement.run()));
+        }
         database.exec("COMMIT");
         return results;
       } catch (error) {

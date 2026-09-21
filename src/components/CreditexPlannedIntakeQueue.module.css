@@ -45,6 +45,11 @@
 .callTarget:focus { outline: 2px solid var(--portal-green); outline-offset: 5px; border-radius: 12px; }
 .detailButton { border: 0; background: transparent; color: var(--portal-green-dark); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; padding: 4px 0; text-decoration: underline; text-underline-offset: 3px; }
 .message, .empty { margin: 0; border: 1px solid var(--portal-line); border-radius: 10px; background: var(--portal-raised); padding: 20px; color: var(--portal-text); font-size: 13px; line-height: 1.5; }
+.loadError { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-color: #b87925; padding: 14px 16px; }
+.loadError strong { color: var(--portal-ink); }
+.loadError p { margin: 4px 0 0; }
+.loadError button { min-height: 38px; padding: 8px 16px; border: 1px solid var(--portal-line-strong); border-radius: 7px; background: var(--portal-soft); color: var(--portal-green-dark); font: inherit; font-weight: 750; cursor: pointer; }
+.tableWrap[data-stale="true"] { border-color: #b87925; }
 .empty { display: grid; gap: 5px; padding: 36px 20px; text-align: center; }
 .empty strong { color: var(--portal-ink); font-size: 17px; }
 .empty span { color: var(--portal-muted); }

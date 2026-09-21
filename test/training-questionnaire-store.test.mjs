@@ -39,7 +39,7 @@ function fixture() {
     CREATE TABLE trade_team_member_files(id TEXT PRIMARY KEY,owner_uid TEXT,team_member_id TEXT,status TEXT,expires_at TEXT,category TEXT);
     INSERT INTO trade_accounts VALUES('owner','53004085616','Example Pty Ltd','["hot-water"]','["VIC"]','VIC');
     INSERT INTO trade_team_members(id,owner_uid,status,display_name,member_uid,capabilities) VALUES('person','owner','active','Installer','actor','["hot-water"]');`);
-  for (const file of ['0116_trade_crm_write_guard.sql', '0176_creditex_onboarding_training.sql', '0177_autonomous_activity_training.sql', '0178_autonomous_business_onboarding.sql', '0179_training_questionnaires.sql', '0180_team_member_service_states.sql']) sql.exec(fs.readFileSync(`drizzle/${file}`, 'utf8'));
+  for (const file of ['0116_trade_crm_write_guard.sql', '0176_creditex_onboarding_training.sql', '0177_autonomous_activity_training.sql', '0178_autonomous_business_onboarding.sql', '0179_training_questionnaires.sql', '0180_team_member_service_states.sql', '0184_training_module_retirement.sql']) sql.exec(fs.readFileSync(`drizzle/${file}`, 'utf8'));
   const db = { prepare: query => new Statement(sql, query), beforeBatch: null, batch: async statements => {
     const before = db.beforeBatch; db.beforeBatch = null; before?.();
     sql.exec('BEGIN');
@@ -86,7 +86,7 @@ test('only unused never-published custom drafts can be deleted and the deletion 
   await assert.rejects(store.deleteTrainingQuestionnaireDraft(f.db, 'editor', { moduleId: saved.module.id, expectedRevision: 1 }), error => error.code === 'QUESTIONNAIRE_NOT_FOUND');
 });
 
-test('deletion protects required catalogue modules, published versions and any learner or review history', async () => {
+test('legacy draft removal protects required catalogue modules and history while active rows permit logical retirement', async () => {
   const f = fixture();
   await assert.rejects(store.deleteTrainingQuestionnaireDraft(f.db, 'editor', { moduleId: 'veu-6', expectedRevision: 0 }), error => error.code === 'DRAFT_DELETE_BLOCKED');
   const published = await publish(f, await create(f));
@@ -97,11 +97,66 @@ test('deletion protects required catalogue modules, published versions and any l
     if (history === 'review') f.sql.prepare("INSERT INTO trade_training_module_reviews VALUES (?,? ,?,'withdrawn','2026-09-01','2026-12-01','','reviewer','Retained review','2026-09-21')").run(saved.module.id, saved.module.version, hash(saved.module));
     if (history === 'publication') f.sql.prepare("INSERT INTO trade_training_questionnaire_events VALUES ('old-publication',?,'editor','published',1,'{}','2026-09-21')").run(saved.module.id);
     const summary = (await store.listTrainingQuestionnaires(f.db)).find(item => item.id === saved.module.id);
-    assert.equal(summary.canDelete, false, history); assert.ok(summary.deleteBlockedReason);
+    assert.equal(summary.canDelete, true, history); assert.equal(summary.deleteBlockedReason, '');
     await assert.rejects(store.deleteTrainingQuestionnaireDraft(f.db, 'editor', { moduleId: saved.module.id, expectedRevision: 1 }), error => error.code === 'DRAFT_DELETE_BLOCKED');
   }
   assert.equal(f.sql.prepare('SELECT count(*) n FROM admin_audit_log').get().n, 0);
   assert.equal(f.sql.prepare('SELECT count(*) n FROM trade_training_questionnaire_versions').get().n, 1);
+});
+
+test('retirement removes built-in and published modules from all current training reads while preserving immutable evidence', async () => {
+  const f = fixture(); const published = await publish(f, await create(f)); const input = seedAttempt(f, published.module);
+  await store.trainingSubmissionSnapshotStatement(f.db, input).run();
+  f.sql.prepare('INSERT INTO trade_training_completions(id,attempt_id,owner_uid,member_id,module_id,version,content_hash,reference,passed_at,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?)').run('completion', input.attemptId, input.ownerUid, input.memberId, published.module.id, published.module.version, hash(published.module), 'completion-reference', new Date().toISOString(), '2099-12-31');
+  const before = await store.getTrainingSubmission(f.db, input.attemptId);
+  for (const [moduleId, expectedRevision] of [['veu-1', 0], [published.module.id, published.revision]]) {
+    assert.equal((await store.listTrainingQuestionnaires(f.db)).find(item => item.id === moduleId).canDelete, true);
+    const result = await store.retireTrainingQuestionnaire(f.db, 'reviewer', { moduleId, expectedRevision });
+    assert.deepEqual(result, { moduleId, deleted: true, retired: true, requirementsRemoved: true, historyPreserved: true });
+    assert.deepEqual(await store.retireTrainingQuestionnaire(f.db, 'reviewer', { moduleId, expectedRevision }), result, 'lost-response retry is idempotent');
+    assert.equal((await store.listTrainingQuestionnaires(f.db)).some(item => item.id === moduleId), false);
+    assert.equal((await store.listCurrentTrainingModules(f.db)).some(item => item.id === moduleId), false);
+    assert.equal((await store.listTrainingAssignments(f.db)).some(item => item.moduleId === moduleId), false);
+    await assert.rejects(store.loadTrainingModule(f.db, moduleId), error => error.code === 'TRAINING_MODULE_RETIRED');
+    await assert.rejects(store.getTrainingQuestionnaire(f.db, moduleId), error => error.code === 'TRAINING_MODULE_RETIRED');
+    await assert.rejects(store.saveTrainingQuestionnaire(f.db, 'editor', { moduleId, expectedRevision, module: form() }), error => error.code === 'TRAINING_MODULE_RETIRED');
+    await assert.rejects(store.publishTrainingQuestionnaire(f.db, 'editor', { moduleId, expectedRevision, sourcesChecked: true }), error => error.code === 'TRAINING_MODULE_RETIRED');
+  }
+  assert.deepEqual(await store.getTrainingSubmission(f.db, input.attemptId), before);
+  assert.equal((await store.listTrainingSubmissions(f.db, { moduleId: published.module.id })).length, 1);
+  assert.equal((await store.listTrainingQuestionnaireVersions(f.db, published.module.id)).length, 1);
+  assert.deepEqual(await store.loadTrainingModuleVersion(f.db, published.module.id, published.module.version, hash(published.module)), published.module);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM trade_training_completions').get().n, 1);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM trade_training_additional_requirements').get().n, 0);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM admin_audit_log').get().n, 2);
+  const event = f.sql.prepare('SELECT * FROM admin_audit_log WHERE entity_id=?').get(published.module.id);
+  assert.equal(event.action, 'training_questionnaire.retire'); assert.equal(event.admin_uid, 'reviewer');
+  assert.deepEqual(JSON.parse(event.metadata), { title: published.module.title, revision: published.revision, requirementsRemoved: true, historyPreserved: true });
+  assert.throws(() => f.sql.exec('DELETE FROM trade_training_module_retirements'), /append-only/);
+  assert.throws(() => f.sql.exec("UPDATE trade_training_module_retirements SET retired_by_uid='other'"), /append-only/);
+});
+
+test('retirement checks exact revision at commit and rolls back on audit failure without reactivating deleted modules', async () => {
+  const f = fixture(); const saved = await create(f); const body = { moduleId: saved.module.id, expectedRevision: saved.revision };
+  await assert.rejects(store.retireTrainingQuestionnaire(f.db, 'editor', { ...body, expectedRevision: 0 }), error => error.code === 'REVISION_CONFLICT');
+  await assert.rejects(store.retireTrainingQuestionnaire(f.db, 'editor', { moduleId: 'invented', expectedRevision: 0 }), error => error.code === 'QUESTIONNAIRE_NOT_FOUND');
+  f.db.beforeBatch = () => f.sql.prepare('UPDATE trade_training_questionnaires SET revision=revision+1 WHERE module_id=?').run(saved.module.id);
+  await assert.rejects(store.retireTrainingQuestionnaire(f.db, 'editor', body), /CHECK constraint/);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM trade_training_module_retirements').get().n, 0);
+  f.sql.exec("CREATE TRIGGER fail_retirement_audit BEFORE INSERT ON admin_audit_log BEGIN SELECT RAISE(ABORT,'Audit unavailable'); END");
+  await assert.rejects(store.retireTrainingQuestionnaire(f.db, 'editor', { ...body, expectedRevision: 2 }), /Audit unavailable/);
+  assert.ok(await store.getTrainingQuestionnaire(f.db, saved.module.id));
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM trade_training_module_retirements').get().n, 0);
+  f.sql.exec('DROP TRIGGER fail_retirement_audit');
+  const course = curriculum.TRAINING_MODULES.find(item => item.id === 'veu-1');
+  const retireDuringWrite = () => f.sql.prepare('INSERT INTO trade_training_module_retirements VALUES (?,?,?,?,?,?)').run(course.id, 0, JSON.stringify(course), JSON.stringify(store.questionnaireAssignment(course)), 'reviewer', new Date().toISOString());
+  f.db.beforeBatch = retireDuringWrite;
+  await assert.rejects(store.saveTrainingQuestionnaire(f.db, 'editor', { moduleId: course.id, expectedRevision: 0, module: course }), /CHECK constraint/);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM trade_training_questionnaires WHERE module_id=?').get(course.id).n, 0);
+  const publishTarget = await create(f);
+  f.db.beforeBatch = () => f.sql.prepare('INSERT INTO trade_training_module_retirements VALUES (?,?,?,?,?,?)').run(publishTarget.module.id, 1, JSON.stringify(publishTarget.module), JSON.stringify(publishTarget.assignment), 'reviewer', new Date().toISOString());
+  await assert.rejects(publish(f, publishTarget), /CHECK constraint/);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM trade_training_questionnaire_versions WHERE module_id=?').get(publishTarget.module.id).n, 0);
 });
 
 test('revision conflicts, concurrent history changes and audit failures cannot partially delete a draft', async () => {
@@ -288,9 +343,9 @@ test('AEA editors and independently authorised Creditex reviewers can save throu
 });
 
 test('delete action keeps the existing editor and origin boundary and records the actual authorised actor', async () => {
-  for (const adminError of [null, new Error('ADMIN_REQUIRED')]) {
+  for (const action of ['delete_draft', 'delete_module']) for (const adminError of [null, new Error('ADMIN_REQUIRED')]) {
     const f = fixture(); const saved = await create(f); const api = route(f, { adminError });
-    const body = { action: 'delete_draft', moduleId: saved.module.id, expectedRevision: saved.revision };
+    const body = { action, moduleId: saved.module.id, expectedRevision: saved.revision };
     assert.equal((await api.POST(post(body, 'https://other.test'))).status, 403);
     assert.ok(await store.getTrainingQuestionnaire(f.db, saved.module.id));
     const denied = route(f, { adminError: new Error('ADMIN_SUSPENDED') });

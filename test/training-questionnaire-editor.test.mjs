@@ -21,6 +21,8 @@ function responder() { let saved = original(); const versions = []; return async
 }; }
 function harness(respond = responder(), options = {}) {
   const state = []; const effects = []; const timers = new Map(); const requests = []; const dirty = []; const listeners = new Map(); let cursor = 0; let timerId = 0;
+  const focusEvents = []; const modal = { open: false, showCount: 0, showModal() { this.open = true; this.showCount++; }, close() { this.open = false; } };
+  const launcher = { isConnected: true, focus() { focusEvents.push('launcher'); } };
   const hooks = {
     useState(value) { const i = cursor++; if (!(i in state)) state[i] = typeof value === 'function' ? value() : value; return [state[i], next => { state[i] = typeof next === 'function' ? next(state[i]) : next; }]; },
     useRef(value) { const i = cursor++; if (!(i in state)) state[i] = { current: value }; return state[i]; },
@@ -33,8 +35,8 @@ function harness(respond = responder(), options = {}) {
   const exports = {}; const require = id => id === 'react' ? hooks : id === 'react/jsx-runtime' ? jsx : id === '@/lib/training-service-sections.mjs' ? trainingSections : id.endsWith('.module.css') ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : (() => { throw Error(`Unexpected runtime import ${id}`); })();
   Function('require', 'exports', 'window', 'setTimeout', 'clearTimeout', compiled)(require, exports, window, callback => { timers.set(++timerId, callback); return timerId; }, id => timers.delete(id));
   const onDirtyChange = value => dirty.push(value);
-  const render = () => { cursor = 0; const tree = exports.TrainingQuestionnaireEditor({ api, canEdit: true, onDirtyChange, ...options }); for (const effect of effects.splice(0)) effect(); return tree; };
-  return { render, requests, dirty, listeners, confirmations, refuseDiscard() { allowDiscard = false; }, allowDiscard() { allowDiscard = true; }, expireRequest() { assert.equal(timers.size, 1); [...timers.values()][0](); }, async mount() { render(); await flush(); return render(); } };
+  const render = () => { cursor = 0; const tree = exports.TrainingQuestionnaireEditor({ api, canEdit: true, onDirtyChange, ...options }); for (const node of nodes(tree, node => node.props?.ref)) node.props.ref.current = node.type === 'dialog' ? modal : { focus() { focusEvents.push(text(node)); } }; for (const effect of effects.splice(0)) effect(); return tree; };
+  return { render, requests, dirty, listeners, confirmations, modal, launcher, focusEvents, refuseDiscard() { allowDiscard = false; }, allowDiscard() { allowDiscard = true; }, expireRequest() { assert.equal(timers.size, 1); [...timers.values()][0](); }, async mount() { render(); await flush(); return render(); } };
 }
 const moduleAction = (tree, title = original().module.title) => nodes(tree, node => node.type === 'button' && ['Edit training ', 'View training '].some(prefix => node.props['aria-label'] === prefix + title))[0];
 async function open(h) { let tree = await h.mount(); moduleAction(tree).props.onClick(); await flush(); return h.render(); }
@@ -187,8 +189,8 @@ test('training opens as a full visible library, including uncategorised entries,
   assert.equal(nodes(tree, node => node.type === 'option' && text(node).includes('Activity 6 heating')).length, 0);
   assert.equal(nodes(tree, node => node.type === 'li' && node.props?.className === 'libraryRow').length, 2);
   assert.match(text(tree), /Required programme module/);
-  assert.ok(nodes(tree, node => node.props?.title === 'Required activity training cannot be deleted.')[0]);
-  assert.equal(button(tree, 'Delete draft'), undefined);
+  assert.match(text(tree), /Deleting a module removes its requirement from existing and new jobs/);
+  assert.equal(button(tree, 'Delete'), undefined);
 });
 
 test('Back to all training preserves cancelled edits and accepted navigation restores the complete library', async () => {
@@ -201,23 +203,55 @@ test('Back to all training preserves cancelled edits and accepted navigation res
   assert.ok(moduleAction(tree)); assert.equal(h.requests.some(request => request.method), false);
 });
 
-test('only eligible drafts offer named deletion and cancelled confirmation makes no request', async () => {
-  const library = catalogue(); const item = { ...library.modules[0], id: 'custom-draft', title: 'Unused induction', revision: 3, publishedVersion: '', canDelete: true, deleteBlockedReason: '', assignment: { ...library.modules[0].assignment, kind: 'additional' } }; library.modules.push(item);
-  const h = harness(async (url, init) => init.method ? { moduleId: item.id, deleted: true } : library);
-  let tree = await h.mount(); h.refuseDiscard(); button(tree, 'Delete draft').props.onClick(); tree = h.render();
-  assert.equal(h.requests.some(request => request.method), false); assert.match(h.confirmations[0], /Unused induction/);
-  h.allowDiscard(); button(tree, 'Delete draft').props.onClick(); await flush(); tree = h.render();
+test('required published modules offer named deletion and cancelling its impact warning makes no request', async () => {
+  const library = catalogue(); const item = { ...library.modules[0], id: 'veu-45', title: 'Required lighting training', revision: 3, canDelete: true, deleteBlockedReason: '' }; library.modules.push(item);
+  const h = harness(async (url, init) => init.method ? { moduleId: item.id, deleted: true, requirementsRemoved: true, historyPreserved: true } : library);
+  let tree = await h.mount(); button(tree, 'Delete').props.onClick({ currentTarget: h.launcher }); tree = h.render();
+  const dialog = nodes(tree, node => node.type === 'dialog')[0];
+  assert.equal(h.modal.open, true); assert.equal(h.focusEvents.at(-1), 'Cancel'); assert.equal(h.confirmations.length, 0);
+  assert.equal(dialog.props['aria-labelledby'], 'training-delete-title training-delete-name'); assert.equal(dialog.props['aria-describedby'], 'training-delete-impact');
+  assert.equal(nodes(dialog, node => node.props?.id === 'training-delete-title').length, 1); assert.equal(text(nodes(dialog, node => node.props?.id === 'training-delete-name')[0]), item.title); assert.equal(nodes(dialog, node => node.props?.id === 'training-delete-impact').length, 1);
+  assert.equal(h.requests.some(request => request.method), false); assert.match(text(dialog), /Required lighting training/);
+  assert.match(text(dialog), /no longer be required on existing or new jobs/);
+  assert.match(text(dialog), /audit history will be kept/);
+  assert.match(text(dialog), /Other job and licence requirements still apply/);
+  button(dialog, 'Cancel').props.onClick(); tree = h.render();
+  assert.equal(h.modal.open, false); assert.equal(nodes(tree, node => node.type === 'dialog').length, 0); assert.equal(h.focusEvents.at(-1), 'launcher');
+  assert.equal(h.requests.some(request => request.method), false);
+  button(tree, 'Delete').props.onClick({ currentTarget: h.launcher }); tree = h.render();
+  button(tree, 'Delete module').props.onClick(); await flush(); tree = h.render();
+  assert.equal(h.modal.open, false);
   const write = JSON.parse(h.requests.find(request => request.method).body);
-  assert.deepEqual(write, { action: 'delete_draft', moduleId: 'custom-draft', expectedRevision: 3 });
-  assert.equal(moduleAction(tree, item.title), undefined); assert.ok(moduleAction(tree)); assert.match(text(tree), /Deleted unused draft/);
+  assert.deepEqual(write, { action: 'delete_module', moduleId: 'veu-45', expectedRevision: 3 });
+  assert.equal(moduleAction(tree, item.title), undefined); assert.ok(moduleAction(tree)); assert.match(text(tree), /Jobs no longer require this module/);
   const readOnly = harness(async () => library, { canEdit: false }); const readOnlyTree = await readOnly.mount();
-  assert.equal(button(readOnlyTree, 'Delete draft'), undefined); assert.ok(moduleAction(readOnlyTree, item.title));
+  assert.equal(button(readOnlyTree, 'Delete'), undefined); assert.ok(moduleAction(readOnlyTree, item.title));
 });
 
 test('unconfirmed deletion retains the draft and offers refresh without claiming success', async () => {
   const library = catalogue(); const item = { ...library.modules[0], id: 'custom-draft', title: 'Unused induction', revision: 3, canDelete: true, assignment: { ...library.modules[0].assignment, kind: 'additional' } }; library.modules = [item];
   const h = harness(async (_url, init) => { if (init.method) throw Error('Revision changed.'); return library; });
-  let tree = await h.mount(); button(tree, 'Delete draft').props.onClick(); await flush(); tree = h.render();
+  let tree = await h.mount(); button(tree, 'Delete').props.onClick({ currentTarget: h.launcher }); tree = h.render(); button(tree, 'Delete module').props.onClick(); await flush(); tree = h.render();
   assert.ok(moduleAction(tree, item.title)); assert.match(text(tree), /Deletion could not be confirmed/); assert.match(text(tree), /Revision changed/);
-  assert.doesNotMatch(text(tree), /Deleted unused draft/); assert.equal(button(tree, 'Refresh training').props.disabled, false);
+  assert.doesNotMatch(text(tree), /Jobs no longer require this module/); assert.equal(button(tree, 'Refresh training').props.disabled, false);
+});
+
+test('deletion requires confirmation that both job requirements and history were handled', async () => {
+  const library = catalogue(); library.modules[0].canDelete = true;
+  const h = harness(async (_url, init) => init.method ? { moduleId: 'veu-6', deleted: true } : library);
+  let tree = await h.mount(); button(tree, 'Delete').props.onClick({ currentTarget: h.launcher }); tree = h.render(); button(tree, 'Delete module').props.onClick(); await flush(); tree = h.render();
+  assert.ok(moduleAction(tree)); assert.match(text(tree), /Deletion could not be confirmed/);
+});
+
+test('Escape cancels the deletion dialog without losing unsaved edits or writing to the service', async () => {
+  const library = catalogue(); library.modules[0].canDelete = true;
+  const read = responder(); const h = harness((url, init) => url === endpoint && !init.method ? library : read(url, init));
+  let tree = await open(h); tree = edit(h, tree, 'Question', 'Keep this draft question');
+  button(tree, 'Delete').props.onClick({ currentTarget: h.launcher }); tree = h.render();
+  const dialog = nodes(tree, node => node.type === 'dialog')[0];
+  assert.match(text(dialog), /Your unsaved edits will also be discarded/); assert.equal(h.focusEvents.at(-1), 'Cancel');
+  let prevented = false; dialog.props.onCancel({ preventDefault() { prevented = true; } }); tree = h.render();
+  assert.equal(prevented, true); assert.equal(h.modal.open, false); assert.equal(h.focusEvents.at(-1), 'launcher');
+  assert.equal(field(tree, 'Question').props.value, 'Keep this draft question'); assert.equal(h.dirty.at(-1), true);
+  assert.equal(h.requests.some(request => request.method), false); assert.equal(h.confirmations.length, 0);
 });

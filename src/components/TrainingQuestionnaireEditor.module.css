@@ -24,6 +24,17 @@
 .button { color: #fff; background: #087f78; border-color: #087f78; }
 .secondary { background: var(--editor-soft); color: var(--editor-ink); }
 .danger { background: var(--editor-soft); color: var(--portal-ink, #9b3333); }
+.deleteDialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 1px solid var(--editor-line); border-radius: 18px; background: var(--editor-surface); color: var(--editor-ink); box-shadow: 0 24px 80px #071c3866; }
+.deleteDialog::backdrop { background: #061b2ab3; backdrop-filter: blur(3px); }
+.deleteDialogBody { display: grid; gap: 18px; padding: clamp(20px, 4vw, 30px); }
+.deleteDialog h3 { font-size: 1.25rem; }
+.deleteModuleName { padding: 12px 15px; border-radius: 9px; background: var(--editor-soft); font-weight: 750; overflow-wrap: anywhere; }
+.deleteImpact { display: grid; gap: 12px; color: var(--editor-muted); font-size: .9rem; }
+.deleteUnsaved { border-left: 3px solid #c47469; padding-left: 12px; font-weight: 700; }
+.deleteDialogActions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; padding-top: 4px; }
+.deleteDialogActions > button { flex: 1 1 150px; }
+.deleteConfirm { background: #b12f36; border-color: #b12f36; color: #fff; }
+.deleteConfirm:hover { background: #95232a; border-color: #95232a; }
 .shell button:disabled { opacity: .5; cursor: not-allowed; }
 .shell :focus-visible { outline: 3px solid #16b7a8; outline-offset: 3px; }
 .check { display: flex; align-items: flex-start; gap: 9px; line-height: 1.6; font-size: .88rem; }
