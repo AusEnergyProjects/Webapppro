@@ -28,9 +28,9 @@ test("Creditex and AEA admin share one governed activity form builder", () => {
   assert.match(admin, /!\(init\.body instanceof FormData\)/);
   assert.match(admin, /Supporting non-program field templates/);
   assert.match(builder, /canAuthor=\{fieldMasterCanAuthor \?\? snapshot\.access\.canAuthor\}/);
-  assert.match(fieldMasters, /requires a named Creditex administrator, case manager or reviewer login/);
-  assert.match(fieldMasters, /Bootstrap, shared-mailbox and auditor accounts stay read-only/);
-  assert.match(fieldMasters, /Operations Control Centre → 13 Field forms/);
+  assert.match(fieldMasters, /named Creditex administrator, case manager or reviewer account/);
+  assert.match(fieldMasters, /Shared-mailbox and auditor accounts are read-only/);
+  assert.match(fieldMasters, /Admin → Activity forms/);
 });
 
 test("Forms can capture and inspect one governed source artifact without making it selectable early", () => {

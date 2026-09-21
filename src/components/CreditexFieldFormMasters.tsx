@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ActivityAnswer, ActivityCondition, ActivityDeclaration, ActivityField, ActivityForm, ActivityRecord, ActivityPhase } from "@/lib/trade-activity-forms";
 import styles from "./CreditexActivityWorkPackGovernance.module.css";
 
@@ -133,9 +133,10 @@ function ConditionEditor({ form, targetKey, phase, condition, locked, label, onC
 
 export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true }: { api: Api; actorMode: "admin" | "creditex"; canAuthor?: boolean }) {
   const [catalogue, setCatalogue] = useState<Option[]>([]);
+  const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(""); const [form, setForm] = useState<ActivityForm | null>(null);
   const [expectedVersion, setExpectedVersion] = useState(0); const [question, setQuestion] = useState(0);
-  const [busy, setBusy] = useState(false); const [dirty, setDirty] = useState(false); const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(canAuthor); const [dirty, setDirty] = useState(false); const [message, setMessage] = useState("");
   const [records, setRecords] = useState<ActivityRecord[]>([]);
   const [reviewLink, setReviewLink] = useState("");
   const endpoint = "/api/trade-activity-forms";
@@ -144,13 +145,30 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true }: {
     const prevent = (event: BeforeUnloadEvent) => { event.preventDefault(); };
     window.addEventListener("beforeunload", prevent); return () => window.removeEventListener("beforeunload", prevent);
   }, [dirty]);
+  const requestCatalogue = useCallback(async (signal?: AbortSignal) => {
+    const result = await api(`${endpoint}?view=masters&actorMode=${actorMode}`, { signal });
+    if (!Array.isArray(result.catalogue)) throw new Error("Activity forms could not be read.");
+    return result.catalogue;
+  }, [api, actorMode]);
   async function loadCatalogue() {
+    if (!canAuthor) return;
     setBusy(true); setMessage("");
-    try { const result = await api(`${endpoint}?view=masters&actorMode=${actorMode}`);
-      if (!Array.isArray(result.catalogue)) throw new Error("Activity forms could not be read.");
-      setCatalogue(result.catalogue); } catch (error) { setMessage(error instanceof Error ? error.message : "Forms could not be loaded."); }
+    try { setCatalogue(await requestCatalogue()); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Forms could not be loaded."); }
     finally { setBusy(false); }
   }
+  useEffect(() => {
+    if (!canAuthor) return;
+    const controller = new AbortController();
+    void requestCatalogue(controller.signal).then((items) => {
+      if (!controller.signal.aborted) setCatalogue(items);
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "Forms could not be loaded.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setBusy(false);
+    });
+    return () => controller.abort();
+  }, [canAuthor, requestCatalogue]);
   async function load(templateId: string, variantId = "") {
     if (dirty && !window.confirm("Discard unsaved master-form changes?")) return;
     setBusy(true); setMessage("");
@@ -241,14 +259,15 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true }: {
   const selectedFieldIsReferenced = Boolean(form && field && fieldIsReferenced(form, field.key));
   const earlierField = form ? fieldMoveDestination(form.fields, question, -1) : -1;
   const laterField = form ? fieldMoveDestination(form.fields, question, 1) : -1;
-  return <section className={styles.builderSection}>
-    <header><div><h4>Active trade activity forms</h4><p>{actorMode === "admin" ? "Admin portal: Operations Control Centre → 13 Field forms → Active trade activity forms." : "Creditex portal: Compliance → Activity forms → Active trade activity forms."} Trades complete these forms and send the signed field records to Creditex. Saving publishes the next master immediately. New records and unsigned drafts use it when opened; signed and submitted records stay locked to what was agreed.</p></div>
-      <button type="button" disabled={busy || !canAuthor} onClick={() => void loadCatalogue()}>Open active form library</button>
+  const visibleCatalogue = catalogue.filter((item) => `${item.programCode} ${item.activityCode} ${item.title}`.toLowerCase().includes(search.trim().toLowerCase()));
+  return <section className={`${styles.builderSection} ${styles.masterLibrary}`} aria-label="Activity form editor">
+    <header><div><h2>Activity forms</h2><p>Choose an activity to edit the questions, photos and declarations your technicians complete. Saving makes the updated master available immediately.</p></div>
+      <button type="button" disabled={busy || !canAuthor} onClick={() => void loadCatalogue()}>{busy ? "Loading forms..." : "Refresh forms"}</button>
       <button type="button" disabled={busy || !canAuthor} onClick={() => void reviewQueue()}>Submitted field records</button></header>
-    {actorMode === "creditex" && !canAuthor ? <p role="note">Master-form editing requires a named Creditex administrator, case manager or reviewer login. Bootstrap, shared-mailbox and auditor accounts stay read-only. Australian Energy Assessments owners can edit these forms in Operations Control Centre → 13 Field forms.</p> : null}
+    {actorMode === "creditex" && !canAuthor ? <p role="note">Sign in with your named Creditex administrator, case manager or reviewer account to edit forms. Shared-mailbox and auditor accounts are read-only. AEA owners can use <a href="/operations/control-centre#form-governance">Admin → Activity forms</a>.</p> : null}
     {message ? <p role="status">{message}</p> : null}
     {reviewLink ? <p><a href={reviewLink} target="_blank" rel="noreferrer">Open the signed field report and original evidence</a> (link expires in one hour)</p> : null}
-    {catalogue.length ? <label>Activity<select disabled={busy} value={selected} onChange={(event) => void load(event.target.value)}><option value="" disabled>Choose an activity</option>{catalogue.map((item) => <option key={item.activityTemplateId} value={item.activityTemplateId}>{item.programCode} {item.activityCode} | {item.title}</option>)}</select></label> : null}
+    {catalogue.length ? <><div className={styles.masterFilters}><label>Find an activity<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Activity number, service or program" /></label><label>Activity<select disabled={busy} value={visibleCatalogue.some((item) => item.activityTemplateId === selected) ? selected : ""} onChange={(event) => void load(event.target.value)}><option value="" disabled>Choose an activity</option>{visibleCatalogue.map((item) => <option key={item.activityTemplateId} value={item.activityTemplateId}>{item.programCode} {item.activityCode} | {item.title}</option>)}</select></label></div><small>{visibleCatalogue.length} activities found. New records and unsigned drafts use it when opened; signed and submitted records stay locked to what was agreed.</small></> : null}
     {form && field ? <fieldset disabled={busy || !canAuthor}>
       <legend>Master version {form.version}{dirty ? " | Unsaved changes" : ""}</legend>
       {form.variantOptions.length > 1 ? <label>Premises<select value={form.variantId} onChange={(event) => void load(selected, event.target.value)}>{form.variantOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label> : null}

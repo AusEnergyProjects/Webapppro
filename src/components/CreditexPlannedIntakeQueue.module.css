@@ -16,12 +16,12 @@
 .resultBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 24px; font-size: 12px; color: var(--portal-muted); }
 .tableWrap { max-width: 100%; overflow: auto; border: 1px solid var(--portal-line); border-radius: 11px; background: var(--portal-soft); max-height: 65vh; scrollbar-width: thin; }
 .tableWrap[aria-busy="true"] tbody { opacity: .55; pointer-events: none; }
-.tableWrap table { width: 100%; min-width: 1480px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.tableWrap table { width: 100%; min-width: 2540px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .tableWrap th, .tableWrap td { padding: 13px 14px; border-bottom: 1px solid var(--portal-line); text-align: left; vertical-align: top; line-height: 1.45; min-width: 130px; max-width: 245px; }
 .tableWrap th { position: sticky; top: 0; background: var(--portal-raised); color: var(--portal-muted); font-size: 11px; font-weight: 800; z-index: 2; white-space: nowrap; }
 .tableWrap th button { border: 0; background: none; color: inherit; font: inherit; cursor: pointer; padding: 0; min-height: 20px; text-align: left; }
 .tableWrap th[aria-sort="ascending"], .tableWrap th[aria-sort="descending"] { color: var(--portal-green-dark); }
-.tableWrap th:first-child, .tableWrap tbody tr td:first-child { position: sticky; left: 0; min-width: 195px; max-width: 220px; background: var(--portal-soft); border-right: 1px solid var(--portal-line); z-index: 1; }
+.tableWrap th:first-child, .tableWrap tbody tr td:first-child { position: sticky; left: 0; min-width: 218px; max-width: 240px; background: var(--portal-soft); border-right: 1px solid var(--portal-line); z-index: 1; }
 .tableWrap th:first-child { background: var(--portal-raised); z-index: 3; }
 .tableWrap tr[data-selected="true"] td { background: var(--portal-raised); }
 .tableWrap tr[data-selected="true"] td:first-child { background: var(--portal-raised); box-shadow: inset 3px 0 var(--portal-green); }
@@ -29,7 +29,15 @@
 .tableWrap td strong, .tableWrap td small { display: block; }
 .tableWrap td strong { color: var(--portal-ink); font-weight: 650; }
 .tableWrap td small { margin-top: 4px; color: var(--portal-muted); font-size: 11px; overflow-wrap: anywhere; }
-.tableWrap td small[data-priority="urgent"], .tableWrap td small[data-priority="high"] { color: #f1d38e; }
+.tableHint { margin: 0; color: var(--portal-muted); font-size: 12px; line-height: 1.5; }
+.jobActions { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.tableWrap td { overflow-wrap: anywhere; }
+.tableWrap .contactCell { min-width: 205px; }
+.tableWrap .moneyCell { min-width: 130px; font-variant-numeric: tabular-nums; }
+.priority { display: inline-block; border: 1px solid var(--portal-line-strong); border-radius: 6px; padding: 4px 7px; font-size: 11px; }
+.priority[data-priority="high"], .priority[data-priority="urgent"] { color: #ffe0a3; background: #71430e; border-color: #b87925; }
+.callTarget { scroll-margin-top: 20px; min-width: 0; }
+.callTarget:focus { outline: 2px solid var(--portal-green); outline-offset: 5px; border-radius: 12px; }
 .detailButton { border: 0; background: transparent; color: var(--portal-green-dark); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; padding: 4px 0; text-decoration: underline; text-underline-offset: 3px; }
 .message, .empty { margin: 0; border: 1px solid var(--portal-line); border-radius: 10px; background: var(--portal-raised); padding: 20px; color: var(--portal-text); font-size: 13px; line-height: 1.5; }
 .empty { display: grid; gap: 5px; padding: 36px 20px; text-align: center; }
@@ -73,7 +81,6 @@
 @media (max-width: 1050px) { .auditSummary { grid-template-columns: repeat(2, minmax(0, 1fr)); }  }
 @media (max-width: 700px) { .controls { grid-template-columns: 1fr 1fr; padding: 12px; } .controls label { grid-column: 1 / -1; } .controls button { width: 100%; } .queue > header, .auditWorkspace > header { align-items: flex-start; flex-wrap: wrap; } .queue h2 { font-size: 23px; }   .auditCore, .auditGroupRows { grid-template-columns: 1fr; } .auditWorkspace { padding: 13px; } .auditSummary { grid-template-columns: 1fr; } .fullDetails > summary span { display: block; margin: 5px 0 0; } .pagination, .resultBar { flex-wrap: wrap; } .tableWrap th:first-child, .tableWrap tbody tr td:first-child { min-width: 160px; max-width: 175px; } }
 .jobButton { display: grid; gap: 6px; width: 100%; border: 0; text-align: left; background: none; color: var(--portal-ink); font: inherit; cursor: pointer; padding: 0; }
-.jobButton span { color: var(--portal-muted); font-size: 12px; }
 .tableWrap .jobButton small { color: var(--portal-green-dark); font-weight: 750; font-size: 12px; margin-top: 3px; }
 .columnFilters td { position: sticky; top: 46px; z-index: 2; background: var(--portal-raised); padding: 10px; }
 .tableWrap .columnFilters td:first-child { position: sticky; left: 0; z-index: 3; background: var(--portal-raised); }

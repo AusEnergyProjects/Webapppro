@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 /* eslint-disable @next/next/no-img-element */
 
 import "./AdminOperationsPortal.css";
-import { AdminWorkspaceNavigation, type AdminWorkspaceTab } from "./AdminWorkspaceNavigation";
+import { AdminWorkspaceNavigation, adminWorkspaceHash, adminWorkspaceTabFromHash, type AdminWorkspaceTab } from "./AdminWorkspaceNavigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   GoogleAuthProvider,
@@ -113,6 +113,16 @@ function dateTime(value: unknown) {
     : date.toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
 }
 
+const WORKSPACE_HISTORY_INDEX = "tlinkAdminWorkspaceIndex";
+function workspaceHistoryIndex(): number | null {
+  const value = window.history.state?.[WORKSPACE_HISTORY_INDEX];
+  return typeof value === "number" && Number.isSafeInteger(value) ? value : null;
+}
+function workspaceHistoryState(index: number) {
+  const current = window.history.state;
+  return { ...(current && typeof current === "object" ? current : {}), [WORKSPACE_HISTORY_INDEX]: index };
+}
+
 function AdminTLinkBrand({ context }: { context: string }) {
   return (
     <div className="admin-brand admin-tlink-brand">
@@ -138,14 +148,60 @@ export function AdminOperationsPortal() {
   const [bootstrapCode, setBootstrapCode] = useState("");
   const [tab, setTab] = useState<AdminWorkspaceTab>("inbox");
   const questionnaireDirty = useRef(false);
+  const historyIndex = useRef<number | null>(null);
+  const restoringHistory = useRef(false);
   const reportQuestionnaireDirty = useCallback((dirty: boolean) => { questionnaireDirty.current = dirty; }, []);
-  function selectTab(next: typeof tab) {
+  const selectTab = useCallback((next: AdminWorkspaceTab, updateHistory = true) => {
     if (next === tab) return true;
     if (questionnaireDirty.current && !window.confirm("Discard the unsaved changes to this questionnaire?")) return false;
     questionnaireDirty.current = false;
     setTab(next);
+    if (updateHistory && window.location.hash !== adminWorkspaceHash(next)) {
+      const index = (historyIndex.current ?? 0) + 1;
+      window.history.pushState(workspaceHistoryState(index), "", adminWorkspaceHash(next));
+      historyIndex.current = index;
+    }
     return true;
-  }
+  }, [tab]);
+  useEffect(() => {
+    if (!session) return;
+    const role = session.role;
+    if (historyIndex.current === null) {
+      historyIndex.current = workspaceHistoryIndex() ?? 0;
+      window.history.replaceState(workspaceHistoryState(historyIndex.current), "");
+    }
+    function readWorkspaceHash() {
+      const currentIndex = historyIndex.current ?? 0;
+      let nextIndex = workspaceHistoryIndex();
+      if (restoringHistory.current) {
+        if (nextIndex === currentIndex) restoringHistory.current = false;
+        return;
+      }
+      const next = adminWorkspaceTabFromHash(window.location.hash, role);
+      if (!next) return;
+      // Native fragment links create an entry without our navigation index.
+      if (nextIndex === null) {
+        nextIndex = currentIndex + 1;
+        window.history.replaceState(workspaceHistoryState(nextIndex), "");
+      }
+      if (!selectTab(next, false)) {
+        const distance = currentIndex - nextIndex;
+        if (distance) {
+          restoringHistory.current = true;
+          window.history.go(distance);
+        }
+        return;
+      }
+      historyIndex.current = nextIndex;
+    }
+    readWorkspaceHash();
+    window.addEventListener("hashchange", readWorkspaceHash);
+    window.addEventListener("popstate", readWorkspaceHash);
+    return () => {
+      window.removeEventListener("hashchange", readWorkspaceHash);
+      window.removeEventListener("popstate", readWorkspaceHash);
+    };
+  }, [session, selectTab, tab]);
   const [metrics, setMetrics] = useState<Metrics>({});
   const [audit, setAudit] = useState<AuditItem[]>([]);
   const [admins, setAdmins] = useState<AdminUser[]>([]);
@@ -351,8 +407,7 @@ export function AdminOperationsPortal() {
   }
 
   function openNotificationInbox() {
-    setTab("inbox");
-    window.history.replaceState(null, "", "#operations-inbox");
+    if (!selectTab("inbox")) return;
     window.requestAnimationFrame(() => {
       document.getElementById("operations-inbox")?.scrollIntoView({
         behavior: "smooth",
@@ -390,7 +445,7 @@ export function AdminOperationsPortal() {
   function openNotificationRecord(notification: AdminNotification) {
     if (notification.entityType === "energy_assistant_lead") {
       setAssistantLeadTarget({ id: notification.entityId, nonce: Date.now() });
-      setTab("assistant-leads");
+      selectTab("assistant-leads");
       return;
     }
     if (notification.actorType === "customer" || ["customer_account", "customer_project"].includes(notification.entityType)) {
@@ -399,41 +454,41 @@ export function AdminOperationsPortal() {
         return;
       }
       setDirectoryTarget({ type: "customer", uid: notification.actorUid, nonce: Date.now() });
-      setTab("customers");
+      selectTab("customers");
       return;
     }
     if (notification.entityType === "supplier_product") {
-      setTab("catalogue");
+      selectTab("catalogue");
       return;
     }
     if (["supplier_product_enquiry", "installer_product_list"].includes(notification.entityType)) {
-      setTab("enquiries");
+      selectTab("enquiries");
       return;
     }
     if (notification.entityType === "trade_handover_pack") {
-      setTab("handovers");
+      selectTab("handovers");
       return;
     }
     if (notification.entityType === "asset_safety_notice") {
-      setTab("asset-safety");
+      selectTab("asset-safety");
       return;
     }
     if (["customer_asset_transfer", "trade_handover_correction"].includes(notification.entityType)) {
-      setTab("asset-governance");
+      selectTab("asset-governance");
       return;
     }
     if (["trade_opportunity_match", "customer_project_quote"].includes(notification.entityType)) {
-      setTab("opportunities");
+      selectTab("opportunities");
       return;
     }
     if (["trade_account", "verification_document"].includes(notification.entityType) || ["installer", "supplier"].includes(notification.actorType)) {
       if (notification.actorUid) {
         setPartnerTarget({ uid: notification.actorUid, nonce: Date.now() });
-        setTab("partners");
+        selectTab("partners");
         return;
       }
     }
-    setTab("opportunities");
+    selectTab("opportunities");
   }
 
   async function inviteAdmin(event: FormEvent) {
@@ -647,8 +702,14 @@ export function AdminOperationsPortal() {
 
   return (
     <main className="admin-shell admin-workspace">
+      <a className="admin-skip-link" href="#admin-workspace-content" onClick={(event) => {
+        event.preventDefault();
+        const content = document.getElementById("admin-workspace-content");
+        content?.focus({ preventScroll: true });
+        content?.scrollIntoView({ block: "start" });
+      }}>Skip to workspace</a>
       <header className="admin-topbar">
-        <AdminTLinkBrand context="Operations control centre" />
+        <AdminTLinkBrand context="Administration" />
         <div className="admin-topbar-account">
           <a
             href="#operations-inbox"
@@ -676,7 +737,7 @@ export function AdminOperationsPortal() {
       </header>
       <div className="admin-layout">
         <AdminWorkspaceNavigation selected={tab} role={session.role} unread={notificationCounts.unread} onSelect={selectTab} />
-        <section className="admin-content">
+        <section className="admin-content" id="admin-workspace-content" aria-label="Selected operations workspace" tabIndex={-1}>
           {status && (
             <div className="admin-banner" role="status">
               {status}
@@ -700,10 +761,10 @@ export function AdminOperationsPortal() {
               target={directoryTarget}
               onManageTrade={(uid) => {
                 setPartnerTarget({ uid, nonce: Date.now() });
-                setTab("partners");
+                selectTab("partners");
               }}
               onManageAdmin={() => {
-                if (session.role === "owner") setTab("access");
+                if (session.role === "owner") selectTab("access");
                 else setStatus("Only an owner can change operations access.");
               }}
             />
@@ -717,10 +778,10 @@ export function AdminOperationsPortal() {
               target={directoryTarget?.type === "customer" ? directoryTarget : null}
               onManageTrade={(uid) => {
                 setPartnerTarget({ uid, nonce: Date.now() });
-                setTab("partners");
+                selectTab("partners");
               }}
               onManageAdmin={() => {
-                if (session.role === "owner") setTab("access");
+                if (session.role === "owner") selectTab("access");
                 else setStatus("Only an owner can change operations access.");
               }}
             />
@@ -739,11 +800,14 @@ export function AdminOperationsPortal() {
                 onDownloadSource={downloadOfficialSource}
                 contextLabel="Australian Energy Assessments operations"
               />
-              <CreditexOutputActions
-                api={api}
-                endpoint="/api/admin/compliance-output-actions"
-                contextLabel="Australian Energy Assessments administration"
-              />
+              <details className="admin-card admin-supporting-form-templates">
+                <summary>Certificate outputs</summary>
+                <CreditexOutputActions
+                  api={api}
+                  endpoint="/api/admin/compliance-output-actions"
+                  contextLabel="Australian Energy Assessments administration"
+                />
+              </details>
               <details className="admin-card admin-supporting-form-templates">
                 <summary>Supporting non-program field templates</summary>
                 <AdminFormTemplates api={api} role={session.role} />
@@ -832,7 +896,7 @@ export function AdminOperationsPortal() {
                     </button>
                     <button
                       onClick={() => {
-                        setTab("partners");
+                        selectTab("partners");
                         setPartnerVerificationTarget("under_review");
                       }}
                     >

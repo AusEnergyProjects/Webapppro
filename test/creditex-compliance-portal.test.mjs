@@ -366,7 +366,7 @@ test("planned intake exposes private job context only to the exact Creditex orga
     /requestSequence/,
     /aria-controls="creditex-full-audit-workspace"/,
     /item\.customerName/,
-    /item\.customerPhone, item\.customerEmail/,
+    /item\.customerPhone \|\| "No phone recorded"[\s\S]*item\.customerEmail \|\| "No email recorded"/,
     /item\.serviceAddress/,
     /AuditRecordView title="Customer" record=\{audit\.customer\}/,
     /AuditRecordView title="Service site" record=\{audit\.serviceSite\}/,
@@ -954,7 +954,7 @@ test("portal tabs and disabled actions expose accessible semantics", () => {
   assert.match(portal, /handleWorkspaceTabKeyDown/);
   assert.ok(
     portal.indexOf('className={styles.tabs}')
-      < portal.indexOf('{!["cases", "operations"].includes(tab) && ('),
+      < portal.indexOf('{!["cases", "operations", "forms", "compliance-questions"].includes(tab) && ('),
     "The permanent workspace tabs must render before tab-specific content.",
   );
   assert.match(
@@ -963,7 +963,7 @@ test("portal tabs and disabled actions expose accessible semantics", () => {
   );
   assert.match(
     portalStyles,
-    /\.frame\s*\{[\s\S]*display:\s*flex[\s\S]*flex-direction:\s*column/,
+    /\.frame\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*232px minmax\(0, 1fr\)/,
   );
   assert.match(portalStyles, /--portal-ink:\s*#f4fbff/);
   assert.match(portalStyles, /--portal-soft:\s*#071b2a/);

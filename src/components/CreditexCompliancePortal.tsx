@@ -34,7 +34,7 @@ import { firebaseAuth } from "@/lib/firebase-client";
 import { CreditexEvidencePolicyGovernance } from "./CreditexEvidencePolicyGovernance";
 const CreditexActivityWorkPackGovernance = dynamic(() => import("./CreditexActivityWorkPackGovernance").then((module) => module.CreditexActivityWorkPackGovernance), { loading: () => <p role="status">Loading master forms...</p> });
 const CreditexOnboardingReviewWorkspace = dynamic(() => import("./CreditexOnboardingReviewWorkspace").then((module) => module.CreditexOnboardingReviewWorkspace), { loading: () => <p role="status">Loading onboarding reviews...</p> });
-const TrainingQuestionnaireEditor = dynamic(() => import("./TrainingQuestionnaireEditor").then((module) => module.TrainingQuestionnaireEditor), { loading: () => <p role="status">Loading compliance questions...</p> });
+const TrainingQuestionnaireEditor = dynamic(() => import("./TrainingQuestionnaireEditor").then((module) => module.TrainingQuestionnaireEditor), { loading: () => <p role="status">Loading training...</p> });
 import { CreditexOutputActions } from "./CreditexOutputActions";
 import { CreditexOfficialSourceWorkbench } from "./CreditexOfficialSourceWorkbench";
 import { CreditexOperationsWorkspace } from "./CreditexOperationsWorkspace";
@@ -44,6 +44,19 @@ import styles from "./CreditexCompliancePortal.module.css";
 
 type ComplianceRole = "admin" | "case_manager" | "reviewer" | "auditor";
 type WorkspaceTab = "cases" | "operations" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance";
+
+function WorkspaceIcon({ tab }: { tab: WorkspaceTab }) {
+  const paths: Record<WorkspaceTab, string> = {
+    cases: "M8 6V4h8v2M4 6h16v14H4zM4 11h16M10 11v3h4v-3",
+    operations: "M4 5h6l2 2h8v13H4zM8 12h8M8 16h5",
+    "compliance-questions": "m2 8 10-5 10 5-10 5zM6 10v7c4 3 8 3 12 0v-7M22 8v9",
+    forms: "M8 4h11v17H5V7M8 3H5v5h6V3zM9 12h6M9 16h6",
+    onboarding: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M17 8h5M19.5 5.5v5",
+    sources: "M12 5c-3-2-6-2-10-1v15c4-1 7-1 10 1 3-2 6-2 10-1V4c-4-1-7-1-10 1v15",
+    governance: "m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6zM8 12l3 3 5-6",
+  };
+  return <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={paths[tab]} /></svg>;
+}
 
 type ComplianceSession = {
   email: string;
@@ -322,7 +335,6 @@ export function CreditexCompliancePortal() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tab, setTab] = useState<WorkspaceTab>("cases");
-  const [showTools, setShowTools] = useState(false);
   const questionnaireDirty = useRef(false);
   const reportQuestionnaireDirty = useCallback((dirty: boolean) => { questionnaireDirty.current = dirty; }, []);
   function selectTab(next: typeof tab) {
@@ -330,7 +342,6 @@ export function CreditexCompliancePortal() {
     if (questionnaireDirty.current && !window.confirm("Discard the unsaved changes to this questionnaire?")) return false;
     questionnaireDirty.current = false;
     setTab(next);
-    if (!["cases", "operations", "onboarding"].includes(next)) setShowTools(true);
     return true;
   }
   const [cases, setCases] = useState<CaseQueueItem[]>([]);
@@ -1013,20 +1024,22 @@ export function CreditexCompliancePortal() {
   const primaryTabs: { id: WorkspaceTab; label: string }[] = [
     { id: "cases", label: "Jobs" },
     { id: "operations", label: "Cases" },
-    ...(canReviewTraining ? [{ id: "onboarding" as const, label: "Trade onboarding" }] : []),
   ];
   const toolsTabs: { id: WorkspaceTab; label: string }[] = [
+    ...(canOpenQuestionnaires ? [{ id: "compliance-questions" as const, label: "Training" }] : []),
     { id: "forms", label: "Activity forms" },
+  ];
+  const reviewTabs: { id: WorkspaceTab; label: string }[] = [
+    ...(canReviewTraining ? [{ id: "onboarding" as const, label: "Trade onboarding" }] : []),
     { id: "sources", label: "Official sources" },
-    ...(canOpenQuestionnaires ? [{ id: "compliance-questions" as const, label: "Compliance questions" }] : []),
     ...(session?.role === "admin" ? [{ id: "governance" as const, label: "Government rules" }] : []),
   ];
-  const visibleTabs = [...primaryTabs, ...(showTools ? toolsTabs : [])];
+  const visibleTabs = [...primaryTabs, ...toolsTabs, ...reviewTabs];
 
   function handleWorkspaceTabKeyDown(
     event: KeyboardEvent<HTMLButtonElement>,
   ) {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+    if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
       return;
     }
     event.preventDefault();
@@ -1035,7 +1048,7 @@ export function CreditexCompliancePortal() {
       ? 0
       : event.key === "End"
         ? visibleTabs.length - 1
-        : event.key === "ArrowRight"
+        : ["ArrowDown", "ArrowRight"].includes(event.key)
           ? (currentIndex + 1) % visibleTabs.length
           : (currentIndex - 1 + visibleTabs.length) % visibleTabs.length;
     const nextTab = visibleTabs[nextIndex].id;
@@ -1187,7 +1200,7 @@ export function CreditexCompliancePortal() {
       id="site-content"
     >
       <div className={styles.frame}>
-        <header className={styles.topbar}>
+        <aside className={styles.sidebar} aria-label="Creditex navigation">
           <div className={styles.brand}>
             <Image
               src="/tlink-icon-192.png"
@@ -1200,6 +1213,40 @@ export function CreditexCompliancePortal() {
               <h1>Creditex</h1>
               <span>TLink partner workspace</span>
             </div>
+          </div>
+          <label className={styles.mobileNavigation}>
+            Workspace
+            <select value={tab} onChange={(event) => {
+              const next = visibleTabs.find((item) => item.id === event.target.value);
+              if (next) selectTab(next.id);
+            }}>
+              {visibleTabs.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+            </select>
+          </label>
+          <nav className={styles.tabs} aria-label="Creditex workspace" role="tablist" aria-orientation="vertical">
+            <div className={styles.navGroup} role="presentation">
+              <span className={styles.groupLabel}>Work</span>
+              {primaryTabs.map((item) => <button key={item.id} className={styles.tab} type="button" role="tab" id={`creditex-tab-${item.id}`} aria-controls={`creditex-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)} onKeyDown={handleWorkspaceTabKeyDown}><WorkspaceIcon tab={item.id} /><span>{item.label}</span></button>)}
+            </div>
+            <div className={styles.navGroup} role="presentation">
+              <span className={styles.groupLabel}>Training &amp; forms</span>
+              {toolsTabs.map((item) => <button key={item.id} className={styles.tab} type="button" role="tab" id={`creditex-tab-${item.id}`} aria-controls={`creditex-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)} onKeyDown={handleWorkspaceTabKeyDown}><WorkspaceIcon tab={item.id} /><span>{item.label}</span></button>)}
+            </div>
+            <div className={styles.navGroup} role="presentation">
+              <span className={styles.groupLabel}>Management</span>
+              {reviewTabs.map((item) => <button key={item.id} className={styles.tab} type="button" role="tab" id={`creditex-tab-${item.id}`} aria-controls={`creditex-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)} onKeyDown={handleWorkspaceTabKeyDown}><WorkspaceIcon tab={item.id} /><span>{item.label}</span></button>)}
+            </div>
+          </nav>
+          <div className={styles.railFooter}>
+            <span>Partner workspace</span>
+            <strong>{session.organisation.tradingName || session.organisation.legalName}</strong>
+          </div>
+        </aside>
+        <div className={styles.workspace}>
+        <header className={styles.topbar}>
+          <div className={styles.workspaceContext}>
+            <span>Creditex workspace</span>
+            <strong>{visibleTabs.find((item) => item.id === tab)?.label}</strong>
           </div>
           <div className={styles.identity}>
             <div>
@@ -1220,33 +1267,15 @@ export function CreditexCompliancePortal() {
             </button>
           </div>
         </header>
-
-        <nav className={styles.tabs} aria-label="Creditex workspace" role="tablist">
-          <div className={styles.primaryTabs}>
-            {primaryTabs.map((item) => <button key={item.id} className={styles.tab} type="button" role="tab" id={`creditex-tab-${item.id}`} aria-controls={`creditex-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)} onKeyDown={handleWorkspaceTabKeyDown}>{item.label}</button>)}
-            <button className={styles.toolsToggle} type="button" aria-expanded={showTools} aria-controls="creditex-workspace-tools" onClick={() => {
-              if (showTools && toolsTabs.some((item) => item.id === tab) && !selectTab("cases")) return;
-              setShowTools((current) => !current);
-            }}>{showTools ? "Hide setup & rules" : "Setup & rules"}<span aria-hidden="true">{showTools ? " −" : " +"}</span></button>
-          </div>
-          {showTools && <div className={styles.toolsTabs} id="creditex-workspace-tools">
-            {toolsTabs.map((item) => <button key={item.id} className={styles.tab} type="button" role="tab" id={`creditex-tab-${item.id}`} aria-controls={`creditex-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)} onKeyDown={handleWorkspaceTabKeyDown}>{item.label}</button>)}
-          </div>}
-        </nav>
-
-        {!["cases", "operations"].includes(tab) && (
+        <div className={styles.content}>
+        {!["cases", "operations", "forms", "compliance-questions"].includes(tab) && (
           <section className={styles.hero}>
             <div className={styles.heroCopy}>
-              <span className={styles.eyebrow}>Protected partner operations</span>
               <h1>
                 {tab === "sources"
                   ? "Official sources"
-                  : tab === "forms"
-                    ? "Activity forms"
                   : tab === "onboarding"
                     ? "Business and training review"
-                  : tab === "compliance-questions"
-                    ? "Compliance questions"
                   : tab === "governance"
                     ? "Government rules"
                     : "Compliance case control"}
@@ -1254,12 +1283,8 @@ export function CreditexCompliancePortal() {
               <p>
                 {tab === "sources"
                   ? "Find government sources, review retained documents and track publication changes."
-                  : tab === "forms"
-                    ? "Build, review and publish the forms technicians complete for each activity."
                   : tab === "onboarding"
                     ? "Review trade applications, agreements and staff training in one place."
-                  : tab === "compliance-questions"
-                    ? "Write clear questions, explain the correct answers and publish training for the people who carry out each activity."
                   : tab === "governance"
                     ? "Manage published programs, activities, effective dates and evidence requirements."
                     : "Queue lists minimise private data. Authorised Creditex staff can open the audited case workspace for the customer, installer, site, appointments, evidence originals and captured metadata needed to review, correct and submit that exact job."}
@@ -1358,11 +1383,14 @@ export function CreditexCompliancePortal() {
               onDownloadSource={downloadOfficialSource}
               contextLabel="Creditex"
             />
-            <CreditexOutputActions
-              api={api}
-              endpoint="/api/creditex/output-actions"
-              contextLabel="Creditex compliance"
-            />
+            <details className={styles.supportingTools}>
+              <summary>Certificate outputs</summary>
+              <CreditexOutputActions
+                api={api}
+                endpoint="/api/creditex/output-actions"
+                contextLabel="Creditex compliance"
+              />
+            </details>
           </section>
         )}
 
@@ -2426,6 +2454,8 @@ export function CreditexCompliancePortal() {
             </nav>
           </section>
         )}
+        </div>
+        </div>
       </div>
     </main>
   );

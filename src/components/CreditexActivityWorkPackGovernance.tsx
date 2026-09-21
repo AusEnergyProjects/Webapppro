@@ -1436,11 +1436,16 @@ export function CreditexActivityWorkPackGovernance({
 
   return (
     <section className={styles.workspace} aria-label={`${contextLabel} compliance form governance`}>
+      <CreditexFieldFormMasters api={api} actorMode={endpoint.startsWith('/api/admin/') ? 'admin' : 'creditex'} canAuthor={fieldMasterCanAuthor ?? snapshot.access.canAuthor} />
+
+      <details className={styles.advancedGovernance}>
+        <summary><strong>Source review &amp; publication rules</strong><span>{pendingCalculatorReviews.length ? `${pendingCalculatorReviews.length} calculations awaiting review · ` : ""}Official documents, governed versions and calculation approvals</span></summary>
+        <div className={styles.advancedContent}>
       <header className={styles.heading}>
         <div>
-          <span>Governed activity workflows</span>
-          <h2>Compliance forms</h2>
-          <p>Build, review and attach reusable activity-specific technician workflows. Signed and submitted job records keep their exact published version. Unsigned drafts receive the latest saved master when opened. Each job instance receives its server-resolved provider, installer business and assigned technician identities separately.</p>
+          <span>Publication governance</span>
+          <h2>Governed activity workflows</h2>
+          <p>Manage the source approvals and published versions used for programme outputs. Edit the forms technicians complete in the activity editor above.</p>
         </div>
         <dl>
           <div><dt>Current catalogue</dt><dd>{snapshot.coverage.length}</dd></div>
@@ -1453,7 +1458,6 @@ export function CreditexActivityWorkPackGovernance({
 
       {(status || error) && <div className={error ? styles.error : styles.status} role={error ? "alert" : "status"}>{error || status}</div>}
 
-      <CreditexFieldFormMasters api={api} actorMode={endpoint.startsWith('/api/admin/') ? 'admin' : 'creditex'} canAuthor={fieldMasterCanAuthor ?? snapshot.access.canAuthor} />
       <CreditexOfficialSourceBatchAcquisition
         api={api}
         endpoint={sourceBatchEndpoint}
@@ -1958,9 +1962,11 @@ export function CreditexActivityWorkPackGovernance({
                 </form>
               )}
             </>
-          ) : <div className={styles.empty}><strong>No current activity was returned</strong><p>The forms register stays closed until the governed activity catalogue is available.</p></div>}
+          ) : <div className={styles.empty}><strong>No governed version selected</strong><p>This publication register is separate from the activity forms above. A current governed activity version is required before preparing programme outputs.</p></div>}
         </main>
       </div>
+        </div>
+      </details>
 
       {governanceAction && (
         <div className={styles.dialogBackdrop} role="presentation" onMouseDown={(event) => {

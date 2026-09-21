@@ -9,6 +9,7 @@ import {
 import styles from "./CreditexPlannedIntakeQueue.module.css";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { CreditexAuditCallPanel } from "./CreditexAuditCallPanel";
+import { JobActionsButton, JobRowMenu, useJobRowMenu } from "./JobRowActions";
 
 type QueueStatus = "all" | "planned" | "case_linked" | "superseded";
 type QueueSort = "plannedStart" | "jobNumber" | "customerName" | "installerBusiness" | "programCode" | "jobStage" | "priority" | "updatedAt";
@@ -223,14 +224,19 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
   const [audit, setAudit] = useState<AuditWorkspace | null>(null);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditMessage, setAuditMessage] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
+  const { menu, openMenu, closeMenu } = useJobRowMenu();
   const requestSequence = useRef(0);
   const auditSequence = useRef(0);
   const auditHeadingRef = useRef<HTMLHeadingElement | null>(null);
-  const auditLauncherRef = useRef<HTMLButtonElement | null>(null);
+  const auditLauncherRef = useRef<HTMLElement | null>(null);
+  const callPanelRef = useRef<HTMLDivElement | null>(null);
+  const focusCallRef = useRef(false);
   const tableRef = useRef<HTMLDivElement | null>(null);
   const tableScroll = useRef({ top: 0, left: 0 });
 
   const load = useCallback(async () => {
+    closeMenu(false);
     const requestId = requestSequence.current + 1;
     requestSequence.current = requestId;
     setLoading(true);
@@ -269,17 +275,18 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
     } finally {
       if (requestId === requestSequence.current) setLoading(false);
     }
-  }, [api, page, search, status, filters, sort, sortDirection]);
+  }, [api, page, search, status, filters, sort, sortDirection, closeMenu]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 180);
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const openAudit = useCallback(async (item: PlannedIntake, launcher: HTMLButtonElement) => {
+  const openAudit = useCallback(async (item: PlannedIntake, launcher: HTMLElement, focusCall = false) => {
     const requestId = auditSequence.current + 1;
     auditSequence.current = requestId;
     auditLauncherRef.current = launcher;
+    focusCallRef.current = focusCall;
     if (tableRef.current) tableScroll.current = { top: tableRef.current.scrollTop, left: tableRef.current.scrollLeft };
     setAuditItem(item);
     setAudit(null);
@@ -325,10 +332,29 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
     } finally {
       if (requestId === auditSequence.current) {
         setAuditLoading(false);
-        window.requestAnimationFrame(() => auditHeadingRef.current?.focus());
+        window.requestAnimationFrame(() => {
+          if (focusCallRef.current && callPanelRef.current) {
+            callPanelRef.current.focus({ preventScroll: true });
+            callPanelRef.current.scrollIntoView({ block: "nearest" });
+          } else auditHeadingRef.current?.focus();
+        });
       }
     }
   }, [api]);
+
+  async function copyJobValue(value: string, label: string) {
+    try { await navigator.clipboard.writeText(value); setActionMessage(`${label} copied.`); }
+    catch { setActionMessage("Copy was unavailable. Select the text in the job details to copy it."); }
+  }
+
+  function rowActions(item: PlannedIntake, launcher: HTMLElement) {
+    return [
+      { label: "Open job audit", run: () => { void openAudit(item, launcher); } },
+      ...(item.customerPhone ? [{ label: "Call customer", run: () => { void openAudit(item, launcher, true); } }] : []),
+      { label: "Copy job reference", run: () => { void copyJobValue(item.jobNumber || item.jobId, "Job reference"); } },
+      ...(item.serviceAddress ? [{ label: "Copy site address", run: () => { void copyJobValue(item.serviceAddress, "Site address"); } }] : []),
+    ];
+  }
 
   const loadAuditGroup = useCallback(async (
     groupKey: string,
@@ -490,38 +516,55 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
       <button type="button" onClick={() => void load()} disabled={loading}>Refresh</button>
     </div>
     <div className={styles.resultBar} aria-live="polite"><span>{loading ? "Updating jobs..." : `${total} matching ${total === 1 ? "job" : "jobs"}${totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""}`}{!loading && activeFilters ? ` · ${activeFilters} filters applied` : ""}</span>{(search || activeFilters || sort !== "plannedStart" || sortDirection !== "asc") && <button type="button" className={styles.detailButton} onClick={resetFilters}>Reset filters & sort</button>}</div>
+    <p className={styles.tableHint}>Right-click a job or use its ⋯ button for job options. Scroll across for all columns.</p>
+    {actionMessage && <p className={styles.tableHint} role="status">{actionMessage}</p>}
     {message && <p className={styles.message} role="alert">{message}</p>}
     {(!message || showFilters) && ((items.length || showFilters)
       ? <div ref={tableRef} className={styles.tableWrap} aria-busy={loading} tabIndex={0} role="region" aria-label="Assigned jobs. Scroll horizontally for all columns."><table>
-        <thead><tr>{sortableHeading("Job", "jobNumber")}{sortableHeading("Customer", "customerName")}{sortableHeading("Installer", "installerBusiness")}{sortableHeading("Program & activity", "programCode")}<th scope="col">Service site</th>{sortableHeading("Planned", "plannedStart")}{sortableHeading("Stage & priority", "jobStage")}<th scope="col">Quote & invoice</th>{sortableHeading("Status / updated", "updatedAt")}</tr>
+        <thead><tr>{sortableHeading("Job", "jobNumber")}<th scope="col">Work</th>{sortableHeading("Customer", "customerName")}<th scope="col">Contact</th>{sortableHeading("Installer", "installerBusiness")}{sortableHeading("Program & activity", "programCode")}<th scope="col">Service site</th>{sortableHeading("Planned", "plannedStart")}{sortableHeading("Stage", "jobStage")}{sortableHeading("Priority", "priority")}<th scope="col">Assigned to</th><th scope="col">Quote</th><th scope="col">Invoice</th><th scope="col">Record status</th>{sortableHeading("Updated", "updatedAt")}</tr>
           {showFilters && <tr className={styles.columnFilters} id="creditex-job-filters">
             <td>{filterInput("job", "Filter job", "Job number or title")}</td>
+            <td><small>Job filter includes work title</small></td>
             <td>{filterInput("customer", "Filter customer", "Name, phone or email")}</td>
+            <td><small>Customer filter includes phone and email</small></td>
             <td>{filterInput("installer", "Filter installer", "Business name")}</td>
             <td>{filterInput("program", "Filter program", "Program code")}{filterInput("activity", "Filter activity", "Activity code or name")}</td>
             <td>{filterInput("serviceSite", "Filter service site", "Address or suburb")}</td>
             <td><label>From{filterInput("plannedFrom", "Planned from", "", "date")}</label><label>To{filterInput("plannedTo", "Planned to", "", "date")}</label></td>
-            <td>{filterSelect("jobStage", "Filter job stage", "All stages", ["backlog", "ready", "scheduled", "in_progress", "blocked", "completed", "cancelled"])}{filterSelect("priority", "Filter priority", "All priorities", ["low", "standard", "high", "urgent"])}</td>
-            <td>{filterSelect("quoteStatus", "Filter quote status", "All quotes", ["not_started", "draft", "issued", "sent", "accepted", "declined"])}{filterSelect("invoiceStatus", "Filter invoice status", "All invoices", ["not_started", "draft", "issued", "part_paid", "paid", "overdue", "void"])}</td>
-            <td><small>Record status above</small><button type="button" className={styles.detailButton} onClick={resetFilters}>Reset all</button></td>
+            <td>{filterSelect("jobStage", "Filter job stage", "All stages", ["backlog", "ready", "scheduled", "in_progress", "blocked", "completed", "cancelled"])}</td>
+            <td>{filterSelect("priority", "Filter priority", "All priorities", ["low", "standard", "high", "urgent"])}</td>
+            <td><small>Saved staff assignment</small></td>
+            <td>{filterSelect("quoteStatus", "Filter quote status", "All quotes", ["not_started", "draft", "issued", "sent", "accepted", "declined"])}</td>
+            <td>{filterSelect("invoiceStatus", "Filter invoice status", "All invoices", ["not_started", "draft", "issued", "part_paid", "paid", "overdue", "void"])}</td>
+            <td><small>Record status above</small></td>
+            <td><button type="button" className={styles.detailButton} onClick={resetFilters}>Reset all</button></td>
           </tr>}
         </thead>
-        <tbody>{items.map((item) => <tr key={item.id}>
+        <tbody>{items.map((item) => <tr key={item.id} onContextMenu={event => { if (!loading) openMenu(event, `creditex-job-menu-${item.id}`, item.jobNumber || item.jobId, launcher => rowActions(item, launcher)); }}>
             <td>
+              <div className={styles.jobActions}>
               <button type="button" id={`creditex-job-${item.id}`} className={styles.jobButton} onClick={(event) => void openAudit(item, event.currentTarget)} aria-controls="creditex-full-audit-workspace">
-                <strong>{item.jobNumber || item.jobId}</strong><span>{item.jobTitle || "Retained job record"}</span><small>Open job →</small>
+                <strong>{item.jobNumber || item.jobId}</strong><small>Open job →</small>
               </button>
+              <JobActionsButton label={item.jobNumber || item.jobId} menuId={`creditex-job-menu-${item.id}`} expanded={menu?.id === `creditex-job-menu-${item.id}`} onClick={event => openMenu(event, `creditex-job-menu-${item.id}`, item.jobNumber || item.jobId, launcher => rowActions(item, launcher))} />
+              </div>
             </td>
-            <td><strong>{item.customerName || "Retained customer"}</strong><small>{item.customerNumber}</small><small>{[item.customerPhone, item.customerEmail].filter(Boolean).join(" | ")}</small></td>
-            <td>{item.installerBusiness}</td>
+            <td><strong>{item.jobTitle || "Retained job record"}</strong><small>{humanField(item.serviceCategory || "")}</small></td>
+            <td><strong>{item.customerName || "Retained customer"}</strong><small>{item.customerNumber}</small></td>
+            <td className={styles.contactCell}><strong>{item.customerPhone || "No phone recorded"}</strong><small>{item.customerEmail || "No email recorded"}</small></td>
+            <td>{item.installerBusiness || "Not recorded"}</td>
             <td><strong>{item.programCode} · {item.registryActivityCode || item.activityKey}</strong><small>{item.activityTitle}</small><small>{item.claimOutputCode} {item.claimOutputLabel}</small></td>
             <td><strong>{item.siteJurisdiction}</strong><small>{item.serviceAddress || "Retained site record"}</small></td>
             <td>{dateTime(item.plannedStart)}</td>
-            <td><strong>{humanField(item.jobStage)}</strong><small data-priority={item.jobPriority}>{humanField(item.jobPriority)} priority</small><small>{item.assigneeLabel || "Unassigned"}</small></td>
-            <td><strong>{money(item.quotedValueCents)} quoted</strong><small>{humanField(item.quoteStatus)}</small><small>{money(item.invoicedValueCents)} invoiced · {humanField(item.invoiceStatus)}</small></td>
-            <td><span className={styles.status}>{itemStatus(item)}</span><small>{dateTime(item.updatedAt)}</small>{item.complianceCaseId && <small>Case linked</small>}</td>
+            <td><strong>{humanField(item.jobStage)}</strong></td>
+            <td><span className={styles.priority} data-priority={item.jobPriority}>{humanField(item.jobPriority)}</span></td>
+            <td>{item.assigneeLabel || "Unassigned"}</td>
+            <td className={styles.moneyCell}><strong>{money(item.quotedValueCents)}</strong><small>{humanField(item.quoteStatus)}</small></td>
+            <td className={styles.moneyCell}><strong>{money(item.invoicedValueCents)}</strong><small>{humanField(item.invoiceStatus)}</small></td>
+            <td><span className={styles.status}>{itemStatus(item)}</span></td>
+            <td>{item.updatedAt ? dateTime(item.updatedAt) : "Not recorded"}</td>
           </tr>
-        )}{!items.length && <tr><td colSpan={9}><div className={styles.empty}><strong>{loading ? "Loading jobs..." : "No matching jobs"}</strong><span>Change the column filters or reset your search.</span></div></td></tr>}</tbody>
+        )}{!items.length && <tr><td colSpan={15}><div className={styles.empty}><strong>{loading ? "Loading jobs..." : "No matching jobs"}</strong><span>Change the column filters or reset your search.</span></div></td></tr>}</tbody>
       </table></div>
       : loading ? <p className={styles.message} role="status">Loading assigned jobs...</p> : <div className={styles.empty}><strong>No matching jobs</strong><span>Try a different search or reset the filters. Assigned installer jobs appear here when saved.</span></div>)}
     {!loading && !message && totalPages > 1 && <nav className={styles.pagination} aria-label="Certificate-work register pages">
@@ -550,7 +593,7 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
           <div><span>Activity</span><strong>{auditItem.programCode} · {auditItem.registryActivityCode || auditItem.activityKey}</strong><p>{auditItem.activityTitle}</p><p>{itemStatus(auditItem)}</p></div>
           <div><span>Next action</span><strong>{String(audit.jobDetails?.next_action || "Review the job records")}</strong><p>{humanField(String(audit.workOrder?.stage || "Not recorded"))} · {String(audit.workOrder?.assignee_label || "Unassigned")}</p></div>
         </div>
-        {!auditLoading && audit.customer && typeof audit.customer.phone === "string" && audit.customer.phone.trim() && firebaseAuth.currentUser && <CreditexAuditCallPanel key={`${firebaseAuth.currentUser.uid}:${auditItem.id}`} user={firebaseAuth.currentUser} jobIntentId={auditItem.id} />}
+        {!auditLoading && audit.customer && typeof audit.customer.phone === "string" && audit.customer.phone.trim() && firebaseAuth.currentUser && <div ref={callPanelRef} tabIndex={-1} className={styles.callTarget} aria-label="Customer audit call controls"><CreditexAuditCallPanel key={`${firebaseAuth.currentUser.uid}:${auditItem.id}`} user={firebaseAuth.currentUser} jobIntentId={auditItem.id} /></div>}
         <details className={styles.fullDetails}><summary>Job, customer & site details <span>All saved fields and references</span></summary><div className={styles.auditCore}>
           <AuditRecordView title="Compliance intent" record={audit.intent} />
           <AuditRecordView title="Work order" record={audit.workOrder} />
@@ -616,5 +659,6 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
         </div>
       </>}
     </section>}
+    <JobRowMenu menu={menu} onClose={closeMenu} />
   </section>;
 }

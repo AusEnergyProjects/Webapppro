@@ -1,57 +1,101 @@
 .shell {
-  --portal-ink: #f4fbff;
-  --portal-text: #d7e7eb;
-  --portal-muted: #94acb5;
-  --portal-line: rgba(108, 207, 192, .2);
-  --portal-line-strong: rgba(108, 220, 199, .36);
-  --portal-soft: #071b2a;
-  --portal-raised: #0b2635;
-  --portal-input: #061724;
+  --portal-ink: var(--trade-ink, #17383e);
+  --portal-text: var(--trade-text, #314f59);
+  --portal-muted: var(--trade-muted, #5f717b);
+  --portal-line: #dce5e8;
+  --portal-line-strong: #b9ced2;
+  --portal-soft: #fff;
+  --portal-raised: #f3f7f8;
+  --portal-input: #fff;
   --portal-green: #20cbb8;
-  --portal-green-dark: #7ee7d2;
+  --portal-green-dark: #087f78;
   --portal-warn: #8c5b0a;
-  background:
-    radial-gradient(circle at 8% 0%, rgba(18, 126, 167, .2), transparent 34rem),
-    radial-gradient(circle at 92% 18%, rgba(18, 166, 106, .13), transparent 30rem),
-    #020b18;
+  background: var(--portal-raised);
   color: var(--portal-text);
   height: 100vh;
   height: 100dvh;
   min-height: 0;
   overflow: hidden;
   padding: 0;
+  color-scheme: light;
+}
+
+:global(html[data-tlink-colour-mode="night"]) .shell {
+  --portal-ink: #f4fbff;
+  --portal-text: #d7e7eb;
+  --portal-muted: #a2b8c0;
+  --portal-line: #29434d;
+  --portal-line-strong: #3d6069;
+  --portal-soft: #071b2a;
+  --portal-raised: #0b2635;
+  --portal-input: #061724;
+  --portal-green-dark: #7ee7d2;
+  color-scheme: dark;
 }
 
 .frame {
-  display: flex;
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
   width: 100%;
   height: 100%;
-  max-width: none;
-  flex-direction: column;
   overflow: hidden;
 }
 
-.frame > [role="tabpanel"] {
+.sidebar {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
-  flex: 1 1 auto;
+  gap: 28px;
+  padding: 26px 14px 18px;
   overflow: auto;
+  background: #102b36;
+  color: #e4eff1;
+  border-right: 1px solid #213f4a;
 }
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.content {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  scroll-padding-top: 24px;
+}
+
+.content > [role="tabpanel"] {
+  padding: 24px;
+  box-sizing: border-box;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.content > [id="creditex-panel-governance"] { padding-bottom: 178px; }
 
 .topbar {
   align-items: center;
-  background: linear-gradient(135deg, rgba(3, 21, 36, .97), rgba(7, 48, 60, .95));
-  min-height: 48px;
+  background: var(--portal-soft);
+  border-bottom: 1px solid var(--portal-line);
+  min-height: 76px;
   flex: 0 0 auto;
-  border-width: 0 0 1px;
-  border-style: solid;
-  border-color: rgba(108, 207, 192, .24);
-  border-radius: 0;
-  box-shadow: none;
   display: flex;
   gap: 20px;
   justify-content: space-between;
-  padding: 5px 12px;
+  padding: 14px 28px;
+  box-sizing: border-box;
 }
+
+.workspaceContext { display: grid; gap: 4px; }
+.workspaceContext > span { font-size: 11px; color: var(--portal-muted); }
+.workspaceContext > strong { font-size: 18px; letter-spacing: -.025em; color: var(--portal-ink); }
 
 .brand {
   align-items: center;
@@ -259,34 +303,19 @@
   color: #8f2e17;
 }
 
-.tabs {
-  align-items: end;
-  min-height: 36px;
-  flex: 0 0 auto;
-  border-width: 0 0 1px;
-  border-style: solid;
-  border-color: rgba(108, 207, 192, .18);
-  border-radius: 0;
-  background: rgba(6, 23, 36, .94);
-  display: flex;
-  gap: 4px;
-  margin: 0;
-  padding: 0 10px;
-}
-
-.tab {
-  background: transparent;
-  border-bottom: 3px solid transparent;
-  color: #94acb5;
-  font-size: .7rem;
-  font-weight: 800;
-  padding: 7px 10px 5px;
-}
-
-.tab[aria-selected="true"] {
-  border-bottom-color: #20cbb8;
-  color: #f4fbff;
-}
+.tabs { display: grid; gap: 24px; }
+.navGroup { display: grid; gap: 5px; }
+.groupLabel { color: #94b0bb; font-size: 10px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; padding: 0 12px 7px; }
+.tab { align-items: center; display: flex; gap: 12px; width: 100%; min-height: 46px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: #c3d7df; text-align: left; padding: 11px 12px; font-size: 14px; font-weight: 650; line-height: 1.3; }
+.tab svg { width: 19px; height: 19px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.tab:hover { background: #1b3c48; color: #fff; }
+.tab[aria-selected="true"] { background: #164b4d; border-color: #276869; color: #fff; box-shadow: inset 3px 0 #2fd1b8; }
+.tab[aria-selected="true"] svg { color: #63e3cc; }
+.tab:focus-visible { outline: 2px solid #7ee7d2; outline-offset: 2px; }
+.mobileNavigation { display: none; }
+.railFooter { display: grid; gap: 6px; padding: 18px 12px 0; border-top: 1px solid #2a4651; margin-top: auto; }
+.railFooter span { font-size: 10px; color: #91afba; }
+.railFooter strong { font-size: 12px; font-weight: 600; line-height: 1.5; color: #dcebef; overflow-wrap: anywhere; }
 
 .panel,
 .signInCard {
@@ -832,7 +861,7 @@
 .governanceProgramTabs button[data-selected="true"] {
   background: var(--portal-green);
   border-color: var(--portal-green);
-  color: #fff;
+  color: #052e2b;
 }
 
 .governanceProgramTabs button strong,
@@ -855,7 +884,7 @@
   outline-offset: 2px;
 }
 
-/* Shared Creditex dark surface system. */
+/* Shared Creditex surfaces inherit the active workspace palette. */
 .hero {
   margin: 12px;
 }
@@ -901,7 +930,7 @@
 
 .templateNotice,
 .record {
-  background: #092331;
+  background: var(--portal-input);
 }
 
 .warning,
@@ -1117,28 +1146,51 @@
     padding-bottom: 220px;
   }
 }
-/* Operational workspace: clear primary navigation and compact supporting tools. */
-.topbar { min-height: 66px; padding: 10px 24px; gap: 16px; }
-.brand h1 { color: var(--portal-ink); font-size: 20px; letter-spacing: -.035em; line-height: 1.2; margin: 0; }
-.brand span { font-size: 12px; }
-.identity strong { font-size: 13px; }
-.identity span { font-size: 11px; }
-.tabs { display: grid; align-items: stretch; min-width: 0; gap: 0; padding: 0 24px; overflow: visible; }
-.primaryTabs, .toolsTabs { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
-.tab { flex: 0 0 auto; min-height: 48px; padding: 14px 16px 11px; font-size: 14px; font-weight: 750; white-space: nowrap; }
-.toolsTabs { border-top: 1px solid var(--portal-line); padding: 4px 0; }
-.toolsTabs .tab { min-height: 38px; padding: 10px 12px 8px; font-size: 12px; }
-.toolsToggle { flex: 0 0 auto; margin-left: auto; border: 1px solid var(--portal-line); border-radius: 7px; background: transparent; color: var(--portal-muted); min-height: 35px; font: inherit; font-size: 12px; padding: 7px 11px; cursor: pointer; white-space: nowrap; }
-.toolsToggle[aria-expanded="true"] { color: var(--portal-ink); border-color: var(--portal-line-strong); }
-.toolsToggle:focus-visible, .tab:focus-visible { outline: 2px solid var(--portal-green); outline-offset: -3px; }
-.frame > [role="tabpanel"] { padding: 24px; box-sizing: border-box; scroll-padding-top: 18px; }
-.hero { margin: 18px 24px 0; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; }
-.heroCopy { border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 0; }
-.heroCopy h1 { font-size: 25px; margin: 5px 0 8px; }
-.heroCopy p { font-size: 13px; color: var(--portal-muted); max-width: 850px; line-height: 1.5; }
-.guardrail { max-width: 310px; padding: 12px 15px; border-radius: 9px; }
-.guardrail summary { font-size: 12px; color: var(--portal-muted); cursor: pointer; }
-.guardrail p { font-size: 12px; }
-.eyebrow { font-size: 10px; }
-.status { margin: 12px 24px 0; font-size: 13px; flex: 0 0 auto; }
-@media (max-width: 780px) { .topbar { flex-direction: row; align-items: center; padding: 12px 15px; } .identity div { display: none; } .brand span { font-size: 10px; } .tabs { padding: 0 12px; overflow: visible; } .tab { padding-left: 12px; padding-right: 12px; font-size: 13px; } .toolsToggle { margin-left: 6px; } .frame > [role="tabpanel"] { padding: 16px 12px; } .hero { margin: 15px 12px 0; grid-template-columns: 1fr; } .guardrail { max-width: none; padding: 10px; } .status { margin: 10px 12px 0; } }
+/* Creditex uses the same navy rail and clear day workspace as TLink. */
+.sidebar .brand { padding: 0 8px; gap: 10px; }
+.sidebar .brand img { width: 36px; height: 36px; border-radius: 11px; }
+.sidebar .brand h1 { color: #fff; font-size: 23px; letter-spacing: -.04em; line-height: 1.2; margin: 0; }
+.sidebar .brand span { font-size: 10px; color: #9bb6c0; margin-top: 4px; }
+.signInIntro .brand strong { color: #fff; }
+.signInIntro .brand span { color: #b7d3da; }
+.identity strong { font-size: 13px; font-weight: 650; }
+.identity span { font-size: 11px; margin-top: 4px; }
+.topbar .identity strong { color: var(--portal-ink); }
+.topbar .identity span { color: var(--portal-muted); }
+.topbar .secondaryButton { min-height: 36px; padding: 8px 12px; background: var(--portal-soft); color: var(--portal-text); border: 1px solid var(--portal-line-strong); font-size: 12px; }
+.button { color: #052e2b; }
+.hero { margin: 24px 24px 0; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: start; }
+.heroCopy { border: 0; border-radius: 0; box-shadow: none; background: transparent; color: var(--portal-ink); padding: 0; }
+.heroCopy h1 { font-size: 25px; margin: 0 0 8px; }
+.heroCopy p { font-size: 13px; color: var(--portal-muted); max-width: 850px; line-height: 1.6; }
+.guardrail { max-width: 275px; padding: 10px 12px; border-radius: 8px; background: var(--portal-soft); border: 1px solid var(--portal-line); }
+.guardrail summary { font-size: 11px; color: var(--portal-muted); cursor: pointer; line-height: 1.5; }
+.guardrail p { font-size: 12px; color: var(--portal-muted); }
+.status { margin: 16px 24px 0; font-size: 13px; }
+.supportingTools { margin-top: 20px; border: 1px solid var(--portal-line); border-radius: 10px; background: var(--portal-soft); }
+.supportingTools > summary { padding: 15px 18px; color: var(--portal-ink); font-size: 14px; font-weight: 650; cursor: pointer; }
+.supportingTools > :not(summary) { padding: 0 18px 18px; }
+.supportingTools > summary:focus-visible, .mobileNavigation select:focus-visible { outline: 2px solid var(--portal-green); outline-offset: 2px; }
+.governanceProgramTabs { left: calc(50% + 116px); width: min(calc(100vw - 280px), 1480px); background: var(--portal-soft); }
+@media (max-width: 1050px) { .hero { grid-template-columns: 1fr; } .guardrail { max-width: none; } }
+@media (max-width: 780px) {
+  .frame { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .sidebar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(135px, .95fr); align-items: center; gap: 12px; padding: 12px 16px; overflow: visible; border: 0; }
+  .sidebar .brand { padding: 0; gap: 9px; }
+  .sidebar .brand h1 { font-size: 21px; }
+  .sidebar .brand span { font-size: 9px; }
+  .tabs, .railFooter { display: none; }
+  .mobileNavigation { display: grid; gap: 5px; color: #b8d1da; font-size: 10px; }
+  .mobileNavigation select { min-width: 0; width: 100%; min-height: 40px; border: 1px solid #47616c; border-radius: 7px; background: #193e4c; color: #fff; font: inherit; font-size: 13px; padding: 8px; color-scheme: dark; }
+  .topbar { flex-direction: row; align-items: center; min-height: 64px; padding: 12px 16px; }
+  .identity div { display: none; }
+  .workspaceContext { gap: 3px; }
+  .workspaceContext > span { font-size: 10px; }
+  .workspaceContext > strong { font-size: 16px; }
+  .content > [role="tabpanel"] { padding: 18px 12px; }
+  .hero { margin: 18px 12px 0; }
+  .heroCopy h1 { font-size: 23px; }
+  .status { margin: 12px 12px 0; }
+  .governanceProgramTabs { left: 50%; width: calc(100vw - 24px); }
+}
+@media (max-width: 560px) { .content > [id="creditex-panel-governance"] { padding-bottom: 220px; } }

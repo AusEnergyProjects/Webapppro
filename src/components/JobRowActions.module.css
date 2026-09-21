@@ -1,0 +1,6 @@
+.trigger { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 36px; width: 36px; min-height: 36px; border: 1px solid var(--portal-line-strong, #c6d6cf); border-radius: 7px; background: var(--portal-raised, #f2f7f4); color: var(--portal-ink, #173e30); font-size: 23px; font-weight: 800; line-height: 1; cursor: pointer; }
+.menu { position: fixed; z-index: 1200; width: 248px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); box-sizing: border-box; overflow: auto; padding: 7px; border: 1px solid var(--portal-line-strong, #c6d6cf); border-radius: 11px; background: var(--portal-raised, #fff); color: var(--portal-ink, #173e30); box-shadow: 0 12px 38px #0003; }
+.label { display: block; padding: 8px 10px; font-size: 11px; font-weight: 750; color: var(--portal-muted, #52685d); overflow-wrap: anywhere; }
+.menu button { display: block; width: 100%; min-height: 42px; padding: 10px; border: 0; border-radius: 6px; text-align: left; background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: 13px; }
+.menu button:hover, .menu button:focus { background: var(--portal-soft, #e9f4ed); }
+.menu button:focus-visible, .trigger:focus-visible { outline: 2px solid var(--portal-green, #218260); outline-offset: -2px; }

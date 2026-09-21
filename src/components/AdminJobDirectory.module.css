@@ -1,0 +1,24 @@
+.directory { min-width: 0; }
+.hint { margin: 0; font-size: 12px; color: #53695e; line-height: 1.5; }
+.table table { min-width: 1500px; }
+.table th, .table td { box-sizing: border-box; }
+.table .actionsColumn { min-width: 60px; width: 60px; padding: 9px 11px; position: sticky; left: 0; background: #fff; z-index: 2; border-right: 1px solid #d4e1da; }
+.table th.actionsColumn { z-index: 4; background: #eaf2ee; }
+.table th:nth-child(2), .table td:nth-child(2) { position: sticky; left: 60px; background: #fff; box-shadow: 1px 0 #d4e1da; z-index: 1; }
+.table th:nth-child(2) { background: #eaf2ee; z-index: 3; }
+.table td[data-column="workNumber"] { min-width: 165px; white-space: nowrap; }
+.table td[data-column="title"], .table td[data-column="customerName"], .table td[data-column="installerBusiness"], .table td[data-column="siteArea"] { min-width: 190px; max-width: 290px; }
+.table td[data-column="createdAt"], .table td[data-column="updatedAt"], .table td[data-column="scheduledStart"] { min-width: 180px; font-variant-numeric: tabular-nums; }
+.jobLink { border: 0; padding: 4px 0; background: transparent; color: #126443; font: inherit; font-weight: 750; text-align: left; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.jobLink:focus-visible, .details button:focus-visible { outline: 2px solid #218260; outline-offset: 3px; }
+.details { width: 640px; max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); overflow: auto; box-sizing: border-box; padding: 24px; border: 1px solid #c6d6cf; border-radius: 16px; color: #173e30; background: #fff; box-shadow: 0 18px 70px #0003; }
+.details::backdrop { background: #102e2566; }
+.details header { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.details header span { color: #53695e; font-size: 12px; }
+.details h2 { font-size: 23px; margin: 5px 0 18px; overflow-wrap: anywhere; }
+.details button { min-height: 40px; padding: 8px 15px; border: 1px solid #c6d6cf; border-radius: 8px; background: #eef5f1; color: #173e30; cursor: pointer; font: inherit; }
+.details dl { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 0; }
+.details dl div { padding-bottom: 12px; border-bottom: 1px solid #e4ece7; min-width: 0; }
+.details dt { color: #53695e; font-size: 12px; margin-bottom: 5px; }
+.details dd { margin: 0; font-size: 14px; overflow-wrap: anywhere; line-height: 1.5; }
+@media (max-width: 560px) { .details { padding: 17px; } .details dl { grid-template-columns: 1fr; gap: 12px; } }

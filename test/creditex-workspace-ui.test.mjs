@@ -26,7 +26,9 @@ function runtime(name, props={}, options={}) {
     useEffect(callback,deps){const i=cursor++; if(options.noEffects)return; if(!effects[i]||deps.some((x,j)=>x!==effects[i].deps[j])){effects[i]?.cleanup?.();effects[i]={deps};queued.push(()=>{effects[i].cleanup=callback();});}},
   };
   const stubs=new Map();
-  const require=id=>id==='react'?hooks:id==='react/jsx-runtime'?jsx:id==='@/lib/australian-government-program-catalogue'?catalogue:id==='@/lib/firebase-client'?{firebaseAuth:{currentUser:user}}:id==='next/dynamic'?{default:()=>()=>null}:id.endsWith('.module.css')?{default:new Proxy({},{get:(_,key)=>String(key)})}:new Proxy({},{get:(_,key)=>{const name=key==='default'?id.split('/').pop():String(key);if(!stubs.has(name))stubs.set(name,Object.defineProperty(()=>null,'displayName',{value:name}));return stubs.get(name);}});
+  const rowActions={};
+  const require=id=>id==='react'?hooks:id==='react/jsx-runtime'?jsx:id==='./JobRowActions'?rowActions:id==='@/lib/australian-government-program-catalogue'?catalogue:id==='@/lib/firebase-client'?{firebaseAuth:{currentUser:user}}:id==='next/dynamic'?{default:()=>()=>null}:id.endsWith('.module.css')?{default:new Proxy({},{get:(_,key)=>String(key)})}:new Proxy({},{get:(_,key)=>{const name=key==='default'?id.split('/').pop():String(key);if(!stubs.has(name))stubs.set(name,Object.defineProperty(()=>null,'displayName',{value:name}));return stubs.get(name);}});
+  Function('require','exports',compile('JobRowActions'))(require,rowActions);
   const api=async(path)=>{requests.push(path);if(options.api)return options.api(path);return path.includes('?')?{ok:true,items:jobs,total:150,totalPages:2,page:Number(new URL(path,'https://test.invalid').searchParams.get('page'))}:audit(jobs.find(item=>path.endsWith(item.id)));};
   const window={setTimeout(callback){const id=++timerId;timers.set(id,callback);return id;},clearTimeout(id){timers.delete(id);},requestAnimationFrame(callback){callback();},confirm:()=>options.confirm!==false};
   const exports={}; Function('require','exports','window','document',compile(name))(require,exports,window,{getElementById:()=>({focus(){}})});
@@ -76,20 +78,42 @@ test('selected work replaces the register, uses fresh private details and return
   button(tree,'Back to jobs').props.onClick();tree=h.render();assert.equal(field(tree,'Filter customer').props.value,'Alex');h.cleanup();
 });
 
-function portal(role='admin') {return runtime('CreditexCompliancePortal',{}, {noEffects:true,seed:{0:user,1:true,2:{role,email:'reviewer@example.invalid',displayName:'Test Reviewer',governanceIdentityVerified:true,canEditFieldMasters:role==='admin',organisation:{code:'creditex',legalName:'Creditex',tradingName:'Creditex'}},3:false}});}
+function portal(role='admin', options={}) {return runtime('CreditexCompliancePortal',{}, {noEffects:true,...options,seed:{0:user,1:true,2:{role,email:'reviewer@example.invalid',displayName:'Test Reviewer',governanceIdentityVerified:true,canEditFieldMasters:role==='admin',organisation:{code:'creditex',legalName:'Creditex',tradingName:'Creditex'}},3:false}});}
 
-test('Jobs is the default and setup tools are secondary; pilot is absent',()=>{
-  const h=portal();let tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);assert.equal(button(tree,'Official sources'),undefined);assert.doesNotMatch(text(tree),/VEU test pilot/);
+test('Jobs defaults and Training and Activity forms stay directly visible in the left rail',()=>{
+  const h=portal();let tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);
+  for(const label of ['Jobs','Cases','Training','Activity forms','Trade onboarding','Official sources','Government rules'])assert.ok(button(tree,label));
+  assert.doesNotMatch(text(tree),/Setup & rules|VEU test pilot/);
+  assert.equal(nodes(tree,n=>n.props?.role==='tablist')[0].props['aria-orientation'],'vertical');
   button(tree,'Cases').props.onClick();tree=h.render();assert.equal(button(tree,'Cases').props['aria-selected'],true);assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexOperationsWorkspace').length,1);
-  button(tree,'Setup & rules  +').props.onClick();tree=h.render();assert.ok(button(tree,'Official sources'));assert.ok(button(tree,'Government rules'));h.cleanup();
+  button(tree,'Activity forms').props.onClick();tree=h.render();assert.ok(nodes(tree,n=>n.props?.id==='creditex-panel-forms')[0]);
+  const outputs=nodes(tree,n=>n.type==='details'&&text(n).includes('Certificate outputs'))[0];assert.ok(outputs);assert.notEqual(outputs.props.open,true);h.cleanup();
 });
 
-test('auditors retain source access but never gain administrator setup or governance',()=>{
-  const h=portal('auditor');let tree=h.render();assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexVoiceSetupPanel').length,0);assert.equal(button(tree,'Trade onboarding'),undefined);
-  button(tree,'Setup & rules  +').props.onClick();tree=h.render();assert.ok(button(tree,'Official sources'));assert.equal(button(tree,'Government rules'),undefined);assert.equal(button(tree,'Compliance questions'),undefined);h.cleanup();
+test('auditors retain forms and source access but never gain training or administrator tools',()=>{
+  const h=portal('auditor');const tree=h.render();assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexVoiceSetupPanel').length,0);
+  assert.ok(button(tree,'Official sources'));assert.ok(button(tree,'Activity forms'));
+  for(const label of ['Government rules','Training','Trade onboarding'])assert.equal(button(tree,label),undefined);
+  const selector=nodes(tree,n=>n.type==='select'&&n.props.value==='cases')[0];assert.deepEqual(nodes(selector,n=>n.type==='option').map(n=>n.props.value),['cases','operations','forms','sources']);h.cleanup();
 });
 
-test('keyboard navigation follows only visible workspace tabs',()=>{
-  const h=portal();let tree=h.render();let prevented=false;button(tree,'Jobs').props.onKeyDown({key:'ArrowRight',preventDefault(){prevented=true;}});tree=h.render();assert.equal(prevented,true);assert.equal(button(tree,'Cases').props['aria-selected'],true);
-  button(tree,'Cases').props.onKeyDown({key:'End',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Trade onboarding').props['aria-selected'],true);assert.equal(button(tree,'Official sources'),undefined);h.cleanup();
+test('vertical keyboard navigation cycles through the visible authorised tabs',()=>{
+  const h=portal();let tree=h.render();let prevented=false;button(tree,'Jobs').props.onKeyDown({key:'ArrowDown',preventDefault(){prevented=true;}});tree=h.render();assert.equal(prevented,true);assert.equal(button(tree,'Cases').props['aria-selected'],true);
+  button(tree,'Cases').props.onKeyDown({key:'End',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Government rules').props['aria-selected'],true);
+  button(tree,'Government rules').props.onKeyDown({key:'ArrowDown',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);
+  button(tree,'Jobs').props.onKeyDown({key:'ArrowUp',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Government rules').props['aria-selected'],true);
+  button(tree,'Government rules').props.onKeyDown({key:'Home',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);h.cleanup();
+});
+
+test('mobile section selector opens the same panels and ignores unavailable destinations',()=>{
+  const h=portal('reviewer');let tree=h.render();const select=()=>nodes(h.render(),n=>n.type==='select'&&Array.isArray(n.props.children)&&n.props.children.some(x=>x?.props?.value==='cases'))[0];
+  select().props.onChange({target:{value:'compliance-questions'}});tree=h.render();assert.equal(button(tree,'Training').props['aria-selected'],true);assert.ok(nodes(tree,n=>n.props?.id==='creditex-panel-compliance-questions')[0]);
+  select().props.onChange({target:{value:'governance'}});tree=h.render();assert.equal(button(tree,'Training').props['aria-selected'],true);h.cleanup();
+});
+
+test('desktop, keyboard and mobile changes all respect unsaved training edits',()=>{
+  const h=portal('admin',{confirm:false});let tree=h.render();button(tree,'Training').props.onClick();tree=h.render();nodes(tree,n=>typeof n.props?.onDirtyChange==='function')[0].props.onDirtyChange(true);
+  button(tree,'Jobs').props.onClick();tree=h.render();assert.equal(button(tree,'Training').props['aria-selected'],true);
+  button(tree,'Training').props.onKeyDown({key:'Home',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Training').props['aria-selected'],true);
+  nodes(tree,n=>n.type==='select'&&n.props.value==='compliance-questions')[0].props.onChange({target:{value:'forms'}});tree=h.render();assert.equal(button(tree,'Training').props['aria-selected'],true);h.cleanup();
 });

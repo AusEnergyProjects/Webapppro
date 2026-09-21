@@ -206,7 +206,7 @@ export function TrainingQuestionnaireEditor({ api, canEdit, onDirtyChange }: { a
   const visibleSubmissions = submissions.filter((record) => !person || JSON.stringify([record.ownerUid, record.memberId]) === person);
 
   return <div className={styles.shell}>
-    <header className={styles.header}><div><h2>Compliance activation questions</h2><p className={styles.muted}>Choose an activity, write clear questions and explain each correct answer. Every learner must answer every question correctly.</p></div>{canEdit && <button className={styles.button} type="button" disabled={Boolean(busy)} onClick={create}>Create questionnaire</button>}</header>
+    <header className={styles.header}><div><h2>Training</h2><p className={styles.muted}>Choose an activity to edit its learning material, questions and correct answers. View completed training in Trade compliance profiles.</p></div>{canEdit && <button className={styles.button} type="button" disabled={Boolean(busy)} onClick={create}>Create questionnaire</button>}</header>
     <nav className={styles.actions} aria-label="Compliance questions views"><button className={view === "questions" ? styles.button : styles.secondary} type="button" aria-pressed={view === "questions"} disabled={Boolean(busy)} onClick={() => setView("questions")}>Questionnaires</button><button className={view === "profiles" ? styles.button : styles.secondary} type="button" aria-pressed={view === "profiles"} disabled={Boolean(busy)} onClick={() => void openProfiles()}>Trade compliance profiles</button></nav>
     {error && <p className={`${styles.notice} ${styles.error}`} role="alert">{error}</p>}{notice && <p className={styles.notice} role="status">{notice}</p>}
     {!catalogue && !error && <p role="status">Loading questionnaires...</p>}

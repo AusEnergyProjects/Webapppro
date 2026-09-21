@@ -4,6 +4,49 @@
   min-width: 0;
 }
 
+.advancedGovernance {
+  min-width: 0;
+  border: 1px solid var(--portal-line, #d5e2df);
+  border-radius: 14px;
+  background: var(--portal-raised, #fff);
+}
+.advancedGovernance > summary {
+  cursor: pointer;
+  padding: 18px 20px;
+  color: var(--portal-ink, #173f43);
+}
+.advancedGovernance > summary strong { font-size: .92rem; }
+.advancedGovernance > summary span {
+  display: block;
+  margin: 5px 0 0 18px;
+  color: var(--portal-muted, #526d72);
+  font-size: .82rem;
+}
+.advancedGovernance > summary:focus-visible { outline: 3px solid #16b7a8; outline-offset: 3px; }
+.advancedContent { display: grid; gap: 18px; min-width: 0; padding: 0 clamp(12px, 2vw, 20px) 20px; }
+.masterLibrary { display: grid; gap: 16px; min-width: 0; }
+.masterLibrary > header { align-items: center; flex-wrap: wrap; }
+.masterLibrary > header > div { flex: 1 1 300px; }
+.masterLibrary > header h2 { color: var(--portal-ink, #173f43); margin: 0; font-size: 1.35rem; }
+.masterLibrary > header p { max-width: 70ch; font-size: .86rem; }
+.masterFilters { display: grid; grid-template-columns: minmax(160px, .65fr) minmax(0, 1.35fr); gap: 14px; }
+.masterFilters > label { display: grid; gap: 7px; min-width: 0; font-size: .85rem; font-weight: 700; }
+.masterFilters :is(input, select) { width: 100%; min-width: 0; min-height: 44px; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--portal-line, #ccdcd7); border-radius: 9px; color: var(--portal-ink, #173f43); background: var(--portal-input, #fff); font: inherit; }
+.masterFilters :focus-visible { outline: 3px solid #16b7a8; outline-offset: 2px; }
+.masterLibrary > fieldset { min-width: 0; margin: 0; border: 1px solid var(--portal-line, #d5e2df); border-radius: 12px; padding: clamp(14px, 2vw, 22px); display: grid; gap: 14px; }
+.masterLibrary > fieldset > legend { padding: 0 8px; font-weight: 800; color: var(--portal-ink, #173f43); }
+.builderSection.masterLibrary { background: var(--portal-raised, #fff); color: var(--portal-ink, #173f43); border-color: var(--portal-line, #d5e2df); }
+.builderSection.masterLibrary :is(h2, h3, h4, strong, legend, label) { color: var(--portal-ink, #173f43); }
+.builderSection.masterLibrary :is(p, small) { color: var(--portal-muted, #526d72); }
+.masterLibrary label { display: grid; gap: 7px; min-width: 0; font-size: .85rem; }
+.masterLibrary :is(input, select, textarea) { min-width: 0; width: 100%; min-height: 44px; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--portal-line, #ccdcd7); border-radius: 9px; color: var(--portal-ink, #173f43); background: var(--portal-input, #fff); font: inherit; }
+.masterLibrary :is(input[type="checkbox"], input[type="radio"]) { width: 18px; min-height: 18px; accent-color: #087f78; }
+.masterLibrary label:has(> input[type="checkbox"]) { display: flex; align-items: center; gap: 9px; }
+.masterLibrary :is(button, a) { color: var(--portal-green-dark, #08775d); }
+.masterLibrary button { background: var(--portal-soft, #f3f8f6); border-color: var(--portal-line, #ccdcd7); }
+.masterLibrary :focus-visible { outline: 3px solid #16b7a8; outline-offset: 2px; }
+@media (max-width: 720px) { .masterFilters { grid-template-columns: 1fr; } }
+
 .heading,
 .activityHeading,
 .versionRegister > header,
