@@ -1,4 +1,5 @@
 import { jobCreationDayStart } from "./job-register-dates.ts";
+import { CREDITEX_CERTIFICATE_TYPES, isCreditexCertificateType } from "./creditex-certificate-types.ts";
 
 const CUSTOMER_NAME_SQL = "COALESCE(NULLIF(trim(customer.business_name), ''), trim(COALESCE(customer.first_name, '') || ' ' || COALESCE(customer.last_name, '')))";
 const SORT_COLUMNS = {
@@ -10,6 +11,7 @@ const SORT_COLUMNS = {
   customerLastName: "customer.last_name COLLATE NOCASE",
   installerBusiness: "account.business_name COLLATE NOCASE",
   programCode: "intent.program_code COLLATE NOCASE",
+  certificateType: "json_extract(intent.intent_snapshot, '$.program.claimOutputCode') COLLATE NOCASE",
   jobStage: "work.stage COLLATE NOCASE",
   priority: "CASE work.priority WHEN 'low' THEN 1 WHEN 'standard' THEN 2 WHEN 'high' THEN 3 WHEN 'urgent' THEN 4 ELSE 0 END",
   updatedAt: "intent.updated_at",
@@ -32,6 +34,14 @@ export function creditexJobIntentFilters(params: URLSearchParams) {
   const conditions: string[] = [];
   const bindings: string[] = [];
   const value = (key: string) => (params.get(key) || "").trim().slice(0, 120);
+  const certificateType = (params.get("certificateType") || "all").trim();
+  if (certificateType === "certificates") {
+    conditions.push(`json_extract(intent.intent_snapshot, '$.program.claimOutputCode') IN (${CREDITEX_CERTIFICATE_TYPES.map(() => "?").join(",")})`);
+    bindings.push(...CREDITEX_CERTIFICATE_TYPES);
+  } else if (certificateType !== "all") {
+    if (!isCreditexCertificateType(certificateType)) throw new CreditexQueueFilterError("Choose a supported certificate type.");
+    conditions.push("json_extract(intent.intent_snapshot, '$.program.claimOutputCode') = ?"); bindings.push(certificateType);
+  }
   for (const [key, column] of [["program", "intent.program_code"], ["jobStage", "work.stage"], ["priority", "work.priority"], ["quoteStatus", "details.quote_status"], ["invoiceStatus", "details.invoice_status"]]) {
     const filter = value(key);
     if (filter && filter !== "all") { conditions.push(`${column} = ? COLLATE NOCASE`); bindings.push(filter); }
@@ -69,5 +79,5 @@ export function creditexJobIntentFilters(params: URLSearchParams) {
   const order = sortDirection === "desc" ? "DESC" : "ASC";
   const dateColumn = sort === "plannedStart" ? "intent.planned_start" : sort === "createdAt" ? "work.created_at" : "";
   const sortSql = `${dateColumn ? `CASE WHEN COALESCE(${dateColumn}, '') = '' THEN 1 ELSE 0 END, ` : ""}${SORT_COLUMNS[sort]} ${order}, intent.id ASC`;
-  return { filterSql: conditions.length ? `AND ${conditions.join(" AND ")}` : "", filterBindings: bindings, sortSql, sort, sortDirection };
+  return { filterSql: conditions.length ? `AND ${conditions.join(" AND ")}` : "", filterBindings: bindings, sortSql, sort, sortDirection, certificateType };
 }

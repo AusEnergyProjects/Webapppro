@@ -826,7 +826,7 @@ test("Creditex register retains every assigned status and opens an audited full 
   );
   assert.match(creditexQueueUi, /document\.getElementById\(`creditex-job-\$\{returnJobId\}`\)\?\.focus\(\{ preventScroll: true \}\)/);
   assert.match(creditexQueueRoute, /"Cache-Control": "private, no-store"/);
-  assert.match(creditexQueueRoute, /const PAGE_SIZE = 75/);
+  assert.match(creditexQueueRoute, /const PAGE_SIZE = 50/);
   assert.match(creditexQueueRoute, /count\(\*\) total/);
   assert.match(creditexQueueRoute, /totalPages/);
   assert.match(creditexQueueRoute, /value === "superseded"/);
@@ -953,7 +953,7 @@ test("Creditex planned-intake queue SQL executes against the complete migration 
     "all",
     "",
     ...Array.from({ length: 15 }, () => "%"),
-    75,
+    50,
     0,
   ];
   assert.equal(

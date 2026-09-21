@@ -5,10 +5,11 @@ import {
 } from "@/lib/compliance-access-server";
 import { CREDITEX_PARTNER_ORGANISATION_CODE } from "@/lib/trade-compliance-intent";
 import { CreditexQueueFilterError, creditexJobIntentFilters, creditexQueueLike } from "@/lib/creditex-job-intent-filters";
+import { isCreditexCertificateType } from "@/lib/creditex-certificate-types";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
-const PAGE_SIZE = 75;
+const PAGE_SIZE = 50;
 
 function sameOrigin(request: Request) {
   const origin = request.headers.get("origin");
@@ -42,6 +43,7 @@ function errorResponse(error: unknown) {
 }
 
 function storedObject(value: unknown) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
   try {
     const parsed = JSON.parse(String(value || "{}"));
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
@@ -91,7 +93,13 @@ const QUEUE_JOINS = `FROM trade_work_order_compliance_intents intent
     AND site.firebase_uid = work.firebase_uid
     AND site.customer_id = customer.id
   LEFT JOIN trade_accounts account
-    ON account.firebase_uid = intent.installer_uid`;
+    ON account.firebase_uid = intent.installer_uid
+  LEFT JOIN compliance_cases linked_case
+    ON linked_case.id = intent.compliance_case_id
+    AND linked_case.organisation_id = intent.compliance_organisation_id
+    AND linked_case.installer_uid = intent.installer_uid
+    AND linked_case.work_order_id = intent.work_order_id
+    AND linked_case.compliance_intent_id = intent.id`;
 
 const QUEUE_WHERE = `WHERE intent.compliance_organisation_id = ?
   AND (? = 'all' OR intent.status = ?)
@@ -132,7 +140,7 @@ export async function GET(request: Request) {
     const status = queueStatus(url.searchParams.get("status"));
     const search = String(url.searchParams.get("search") || "").trim().slice(0, 120);
     const searchLike = creditexQueueLike(search);
-    const { filterSql, filterBindings, sortSql, sort, sortDirection } = creditexJobIntentFilters(url.searchParams);
+    const { filterSql, filterBindings, sortSql, sort, sortDirection, certificateType } = creditexJobIntentFilters(url.searchParams);
     const requestedPage = Math.max(
       1,
       Math.min(10_000, Number.parseInt(url.searchParams.get("page") || "1", 10) || 1),
@@ -154,6 +162,9 @@ export async function GET(request: Request) {
     const page = Math.min(requestedPage, totalPages);
     const rows = await database.prepare(`SELECT
         intent.*,
+        linked_case.case_number,
+        linked_case.status case_status,
+        linked_case.evidence_status,
         work.work_number,
         work.created_at job_created_at,
         work.title job_title,
@@ -222,6 +233,7 @@ export async function GET(request: Request) {
     return json({
       ok: true,
       status,
+      certificateType,
       sort,
       sortDirection,
       page,
@@ -279,6 +291,8 @@ export async function GET(request: Request) {
             row.address_state,
             row.postcode,
           ].map((part) => String(part || "").trim()).filter(Boolean).join(", "),
+          siteSuburb: String(row.suburb || ""),
+          sitePostcode: String(row.postcode || ""),
           accessInstructions: String(row.access_instructions || ""),
           parkingInstructions: String(row.parking_instructions || ""),
           hazardNotes: String(row.hazard_notes || ""),
@@ -287,6 +301,7 @@ export async function GET(request: Request) {
           siteJurisdiction: String(row.site_jurisdiction),
           plannedStart: String(row.planned_start || ""),
           programCode: String(row.program_code),
+          certificateType: isCreditexCertificateType(program.claimOutputCode) ? program.claimOutputCode : "",
           claimOutputCode: String(program.claimOutputCode || ""),
           claimOutputLabel: String(program.claimOutputLabel || ""),
           registryActivityCode: String(row.registry_activity_code || ""),
@@ -296,6 +311,9 @@ export async function GET(request: Request) {
           catalogueReviewedOn: String(row.catalogue_reviewed_on),
           status: String(row.status),
           complianceCaseId: String(row.compliance_case_id || ""),
+          caseNumber: String(row.case_number || ""),
+          caseStatus: String(row.case_status || ""),
+          evidenceStatus: String(row.evidence_status || ""),
           updatedAt: String(row.updated_at),
         };
       }),

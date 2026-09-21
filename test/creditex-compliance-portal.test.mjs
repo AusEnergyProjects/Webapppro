@@ -291,7 +291,7 @@ test("planned intake exposes private job context only to the exact Creditex orga
     plannedJobIntentRoute,
     /(?:work|customer|site)\.record_status = 'active'/,
   );
-  assert.match(plannedJobIntentRoute, /const PAGE_SIZE = 75/);
+  assert.match(plannedJobIntentRoute, /const PAGE_SIZE = 50/);
   assert.match(plannedJobIntentRoute, /count\(\*\) total/);
   assert.match(plannedJobIntentRoute, /totalPages/);
   assert.match(plannedJobIntentRoute, /value === "superseded"/);
@@ -368,7 +368,8 @@ test("planned intake exposes private job context only to the exact Creditex orga
     /item\.customerFirstName/,
     /item\.customerLastName/,
     /item\.customerBusinessName/,
-    /item\.customerPhone \|\| "No phone recorded"[\s\S]*item\.customerEmail \|\| "No email recorded"/,
+    /<td>\{item\.customerPhone \|\| "Not recorded"\}<\/td>/,
+    /<td>\{item\.customerEmail \|\| "Not recorded"\}<\/td>/,
     /item\.serviceAddress/,
     /AuditRecordView title="Customer" record=\{audit\.customer\}/,
     /AuditRecordView title="Service site" record=\{audit\.serviceSite\}/,

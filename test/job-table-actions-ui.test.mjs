@@ -4,6 +4,7 @@ import fs from "node:fs";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
 import * as dateHelpers from "../src/lib/job-register-dates.ts";
+import * as certificateTypes from "../src/lib/creditex-certificate-types.ts";
 
 const compile = name => ts.transpileModule(fs.readFileSync(new URL(`../src/components/${name}.tsx`, import.meta.url), "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
 const text = node => node == null || typeof node === "boolean" ? "" : typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join(" ") : text(node.props?.children);
@@ -36,7 +37,7 @@ function harness(name, options = {}) {
   function WorkspaceTableTools() {}
   function CreditexAuditCallPanel() {}
   const shared = {};
-  const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./JobRowActions" ? shared : id === "@/lib/job-register-dates" ? dateHelpers : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : id === "./WorkspaceTableTools" ? { WorkspaceTableTools, downloadWorkspaceCsv() {} } : id === "./CreditexAuditCallPanel" ? { CreditexAuditCallPanel } : id === "@/lib/firebase-client" ? { firebaseAuth: { currentUser: { uid: "reviewer" } } } : {};
+  const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./JobRowActions" ? shared : id === "@/lib/job-register-dates" ? dateHelpers : id === "@/lib/creditex-certificate-types" ? certificateTypes : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : id === "./WorkspaceTableTools" ? { WorkspaceTableTools, downloadWorkspaceCsv() {} } : id === "./CreditexAuditCallPanel" ? { CreditexAuditCallPanel } : id === "@/lib/firebase-client" ? { firebaseAuth: { currentUser: { uid: "reviewer" } } } : {};
   Function("require", "exports", "window", "document", compile("JobRowActions"))(require, shared, window, document);
   const exported = {};
   if (name !== "JobRowMenu" && name !== "JobActionsButton") Function("require", "exports", "window", "document", "navigator", compile(name))(require, exported, window, document, navigator);
@@ -74,12 +75,16 @@ test("copy reference stays local and clipboard denial produces a useful failure 
   }
 });
 
-test("Creditex displays independent contact, priority, assignment, quote, invoice and update columns", async () => {
-  const h = harness("CreditexPlannedIntakeQueue"); const tree = await h.mount();
-  const headings = nodes(tree, node => node.type === "th").map(text);
-  assert.equal(headings.length, 17);
-  for (const label of ["Created", "Work", "First name", "Last name", "Contact", "Priority", "Assigned to", "Quote", "Invoice", "Record status", "Updated"]) assert.ok(headings.some(heading => heading.includes(label)), label);
-  assert.match(text(tree), /customer@example.invalid/); assert.match(text(tree), /Assigned technician/); assert.match(text(tree), /\$1,234\.00/); assert.match(text(tree), /\$500\.00/); h.cleanup();
+test("Creditex displays flat, distinct activity, case, contact, address and commercial columns", async () => {
+  const h = harness("CreditexPlannedIntakeQueue", { job: { certificateType: "VEEC", caseNumber: "CX-QA-1", caseStatus: "draft", evidenceStatus: "pending", customerBusinessName: "Example Business", businessNumber: "12345678901", siteSuburb: "Melbourne", siteJurisdiction: "VIC", sitePostcode: "3000", paidValueCents: 25000, nextAction: "Confirm appointment" } }); const tree = await h.mount();
+  const headings = nodes(tree, node => node.type === "th").map(node => text(node).replace(/[↑↓↕]/g, "").trim());
+  assert.deepEqual(headings, ["Job ID", "Created", "Certificate", "First name", "Last name", "Job title", "Stage", "Case number", "Case status", "Evidence status", "Program", "Activity code", "Activity name", "Service", "Installer", "Phone", "Email", "Customer ID", "Business", "ABN", "Service address", "Suburb", "State", "Postcode", "Planned", "Scheduled end", "Priority", "Assigned to", "Quote amount", "Quote status", "Invoice amount", "Invoice status", "Paid", "Record status", "Next action", "Updated"]);
+  const row = nodes(tree, node => node.type === "tr" && node.props.onContextMenu)[0];
+  const cells = nodes(row, node => node.type === "td"); assert.equal(cells.length, headings.length);
+  const values = Object.fromEntries(headings.map((heading, index) => [heading, text(cells[index])]));
+  for (const [heading, value] of [["Certificate", "VEEC"], ["Case number", "CX-QA-1"], ["Case status", "Draft"], ["Evidence status", "Pending"], ["Phone", job.customerPhone], ["Email", job.customerEmail], ["Business", "Example Business"], ["ABN", "12345678901"], ["Suburb", "Melbourne"], ["State", "VIC"], ["Postcode", "3000"], ["Assigned to", "Assigned technician"], ["Quote amount", "$1,234.00"], ["Quote status", "Accepted"], ["Invoice amount", "$500.00"], ["Invoice status", "Issued"], ["Paid", "$250.00"], ["Next action", "Confirm appointment"]]) assert.equal(values[heading], value, heading);
+  assert.equal(nodes(row, node => node.type === "small" || node.type === "br").length, 0, "details belong in independent columns rather than stacked metadata");
+  assert.match(text(tree), /50\s+records per page/); assert.equal(button(tree, "Open job"), undefined); h.cleanup();
 });
 
 test("Creditex names remain stored fields and business-only customers never receive guessed personal names", async () => {
@@ -87,8 +92,9 @@ test("Creditex names remain stored fields and business-only customers never rece
   const tree = await h.mount(); const row = nodes(tree, node => node.type === "tr" && node.props.onContextMenu)[0];
   const cells = nodes(row, node => node.type === "td");
   assert.equal(text(cells[1]), "21 Sept 2026");
-  assert.match(text(cells[3]), /Not recorded/); assert.match(text(cells[3]), /Business:.*Example Business Pty Ltd/);
-  assert.match(text(cells[4]), /Not recorded/); assert.doesNotMatch(text(cells[4]), /Business|Pty|Ltd/); h.cleanup();
+  assert.equal(text(cells[3]), "Not recorded"); assert.equal(text(cells[4]), "Not recorded");
+  const headings = nodes(tree, node => node.type === "th").map(node => text(node).replace(/[↑↓↕]/g, "").trim());
+  assert.equal(text(cells[headings.indexOf("Business")]), "Example Business Pty Ltd"); h.cleanup();
 });
 
 test("Creditex context actions copy only selected values and Call customer opens authorised controls without dialing", async () => {

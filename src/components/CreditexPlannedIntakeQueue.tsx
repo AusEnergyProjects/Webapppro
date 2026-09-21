@@ -11,9 +11,11 @@ import { firebaseAuth } from "@/lib/firebase-client";
 import { CreditexAuditCallPanel } from "./CreditexAuditCallPanel";
 import { JobActionsButton, JobRowMenu, useJobRowMenu } from "./JobRowActions";
 import { jobCreationDate } from "@/lib/job-register-dates";
+import { CREDITEX_CERTIFICATE_TYPES } from "@/lib/creditex-certificate-types";
 
 type QueueStatus = "all" | "planned" | "case_linked" | "superseded";
-type QueueSort = "plannedStart" | "jobNumber" | "createdAt" | "customerName" | "customerFirstName" | "customerLastName" | "installerBusiness" | "programCode" | "jobStage" | "priority" | "updatedAt";
+const PAGE_SIZE = 50;
+type QueueSort = "certificateType" | "plannedStart" | "jobNumber" | "createdAt" | "customerName" | "customerFirstName" | "customerLastName" | "installerBusiness" | "programCode" | "jobStage" | "priority" | "updatedAt";
 const EMPTY_FILTERS = { job: "", customer: "", firstName: "", lastName: "", program: "", activity: "", installer: "", serviceSite: "", jobStage: "", priority: "", createdFrom: "", createdTo: "", plannedFrom: "", plannedTo: "", quoteStatus: "", invoiceStatus: "" };
 
 type PlannedIntake = {
@@ -64,6 +66,12 @@ type PlannedIntake = {
   plannedStart: string;
   programCode: string;
   claimOutputCode: string;
+  certificateType: string;
+  caseNumber: string;
+  caseStatus: string;
+  evidenceStatus: string;
+  siteSuburb: string;
+  sitePostcode: string;
   claimOutputLabel: string;
   registryActivityCode: string;
   activityKey: string;
@@ -231,6 +239,10 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditMessage, setAuditMessage] = useState("");
   const [actionMessage, setActionMessage] = useState("");
+  const [certificateType, setCertificateType] = useState("all");
+  const [draftFilters, setDraftFilters] = useState(EMPTY_FILTERS);
+  const filterLauncherRef = useRef<HTMLButtonElement | null>(null);
+  const filterHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const { menu, openMenu, closeMenu } = useJobRowMenu();
   const requestSequence = useRef(0);
   const requestController = useRef<AbortController | null>(null);
@@ -243,7 +255,7 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
   const tableRef = useRef<HTMLDivElement | null>(null);
   const tableScroll = useRef({ top: 0, left: 0 });
 
-  const query = new URLSearchParams({ status, search, page: String(page), sort, sortDirection });
+  const query = new URLSearchParams({ status, search, certificateType, page: String(page), sort, sortDirection });
   for (const [key, value] of Object.entries(filters)) if (value) query.set(key, value);
   const queryKey = query.toString();
   const message = queueError?.query === queryKey ? queueError.text : "";
@@ -302,6 +314,10 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
       requestController.current = null;
     };
   }, [load]);
+
+  useEffect(() => {
+    if (showFilters) filterHeadingRef.current?.focus();
+  }, [showFilters]);
 
   const openAudit = useCallback(async (item: PlannedIntake, launcher: HTMLElement, focusCall = false) => {
     const requestId = auditSequence.current + 1;
@@ -470,12 +486,22 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
     });
   }
 
+  function closeFilters() {
+    setShowFilters(false);
+    filterLauncherRef.current?.focus({ preventScroll: true });
+  }
+
+  function toggleFilters() {
+    if (showFilters) closeFilters();
+    else { setDraftFilters(filters); setShowFilters(true); }
+  }
+
   function changeFilter(key: keyof typeof EMPTY_FILTERS, value: string) {
-    setFilters((current) => ({ ...current, [key]: value })); setPage(1);
+    setDraftFilters((current) => ({ ...current, [key]: value }));
   }
 
   function resetFilters() {
-    setSearch(""); setStatus("all"); setFilters(EMPTY_FILTERS); setPage(1); setSort("plannedStart"); setSortDirection("asc");
+    setSearch(""); setStatus("all"); setCertificateType("all"); setFilters(EMPTY_FILTERS); setDraftFilters(EMPTY_FILTERS); setPage(1); setSort("plannedStart"); setSortDirection("asc");
   }
 
   function sortableHeading(label: string, key: QueueSort) {
@@ -486,14 +512,14 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
 
   function filterInput(key: keyof typeof EMPTY_FILTERS, label: string, placeholder: string, type = "search") {
     const range = key.startsWith("created") ? "creditex-job-created" : "creditex-job-planned";
-    return <input aria-label={label} type={type} placeholder={placeholder} value={filters[key]} data-date-range-group={type === "date" ? range : undefined} data-date-range-role={type === "date" ? key.endsWith("From") ? "start" : "end" : undefined} onChange={(event) => changeFilter(key, event.target.value)} />;
+    return <input aria-label={label} type={type} placeholder={placeholder} value={draftFilters[key]} data-date-range-group={type === "date" ? range : undefined} data-date-range-role={type === "date" ? key.endsWith("From") ? "start" : "end" : undefined} onChange={(event) => changeFilter(key, event.target.value)} />;
   }
 
   function filterSelect(key: keyof typeof EMPTY_FILTERS, label: string, allLabel: string, options: string[]) {
-    return <select aria-label={label} value={filters[key]} onChange={(event) => changeFilter(key, event.target.value)}><option value="">{allLabel}</option>{options.map((value) => <option key={value} value={value}>{humanField(value)}</option>)}</select>;
+    return <select aria-label={label} value={draftFilters[key]} onChange={(event) => changeFilter(key, event.target.value)}><option value="">{allLabel}</option>{options.map((value) => <option key={value} value={value}>{humanField(value)}</option>)}</select>;
   }
 
-  const activeFilters = Object.values(filters).filter(Boolean).length + (status !== "all" ? 1 : 0);
+  const activeFilters = Object.values(filters).filter(Boolean).length + (status !== "all" ? 1 : 0) + (certificateType !== "all" ? 1 : 0);
   const auditCustomerName = String(audit?.customer?.business_name || "").trim()
     || [audit?.customer?.first_name, audit?.customer?.last_name].filter((value) => typeof value === "string" && value.trim()).join(" ");
   const auditAddress = [audit?.serviceSite?.address_line_1, audit?.serviceSite?.address_line_2, audit?.serviceSite?.suburb, audit?.serviceSite?.address_state, audit?.serviceSite?.postcode]
@@ -510,7 +536,7 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
         <h2 id="creditex-planned-intake-title">Jobs</h2>
         <p>Find a job, review its records and call the customer from their audit workspace.</p>
       </div>
-      <strong>{updating ? "Loading" : !hasLoaded ? "Unavailable" : stale ? "Last loaded results" : `${total} jobs`}</strong>
+      <strong>{updating ? "Loading" : !hasLoaded ? "Unavailable" : stale ? "Last loaded results" : `${total} ${total === 1 ? "record" : "records"}`}</strong>
     </header>
     <div className={styles.controls}>
       <label><span>Search jobs</span><input
@@ -522,6 +548,13 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
         }}
         placeholder="Job, customer, installer, site, type or activity"
       /></label>
+      <label><span>Certificate type</span><select value={certificateType} onChange={(event) => {
+        setCertificateType(event.target.value); setPage(1);
+      }}>
+        <option value="all">All types</option>
+        <option value="certificates">All certificates & credits</option>
+        {CREDITEX_CERTIFICATE_TYPES.map((type) => <option key={type} value={type}>{type === "VEEC" ? "VEEC (VEU)" : type}</option>)}
+      </select></label>
       <label><span>Record status</span><select
         value={status}
         onChange={(event) => {
@@ -534,68 +567,97 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
         <option value="case_linked">Case linked</option>
         <option value="superseded">Superseded history</option>
       </select></label>
-      <button type="button" className={styles.filterToggle} aria-expanded={showFilters} aria-controls="creditex-job-filters" onClick={() => setShowFilters((current) => !current)}>Filters{activeFilters ? ` (${activeFilters})` : ""}</button>
+      <button ref={filterLauncherRef} type="button" className={styles.filterToggle} aria-expanded={showFilters} aria-controls="creditex-job-filters" onClick={toggleFilters}>Filters{activeFilters ? ` (${activeFilters})` : ""}</button>
       <button type="button" onClick={() => void load()} disabled={updating}>Refresh</button>
     </div>
-    <div className={styles.resultBar} aria-live="polite"><span>{updating ? "Updating jobs..." : message ? hasLoaded ? `${items.length} previously loaded ${items.length === 1 ? "job" : "jobs"} shown` : "Job count unavailable" : `${total} matching ${total === 1 ? "job" : "jobs"}${totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""}`}{!updating && !message && activeFilters ? ` · ${activeFilters} filters applied` : ""}</span>{(search || activeFilters || sort !== "plannedStart" || sortDirection !== "asc") && <button type="button" className={styles.detailButton} onClick={resetFilters}>Reset filters & sort</button>}</div>
-    <p className={styles.tableHint}>Right-click a job or use its ⋯ button for job options. Scroll across for all columns.</p>
+    <div className={styles.resultBar} aria-live="polite"><span>{updating ? "Updating jobs..." : message ? hasLoaded ? `${items.length} previously loaded ${items.length === 1 ? "record" : "records"} shown` : "Job count unavailable" : `${total} matching ${total === 1 ? "record" : "records"}${totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""}`}{!updating && !message && activeFilters ? ` · ${activeFilters} filters applied` : ""}</span>{(search || activeFilters || sort !== "plannedStart" || sortDirection !== "asc") && <button type="button" className={styles.detailButton} onClick={resetFilters}>Reset filters & sort</button>}</div>
+    <p className={styles.tableHint}>Each row is a job activity. Click its Job ID to open it, or right-click for options. Scroll across for all details.</p>
     {actionMessage && <p className={styles.tableHint} role="status">{actionMessage}</p>}
     {message && <div className={`${styles.message} ${styles.loadError}`} role="alert"><div><strong>{hasLoaded ? "Jobs could not be updated" : "Jobs could not be loaded"}</strong><p>{message}</p>{hasLoaded && <p>Showing the last loaded results. They may not match the current filters.</p>}</div><button type="button" onClick={() => void load()} disabled={updating}>Retry</button></div>}
       <div ref={tableRef} className={styles.tableWrap} aria-busy={updating} data-stale={stale || undefined} tabIndex={0} role="region" aria-label="Assigned jobs. Scroll horizontally for all columns."><table>
-        <thead><tr>{sortableHeading("Job ID", "jobNumber")}{sortableHeading("Created", "createdAt")}<th scope="col">Work</th>{sortableHeading("First name", "customerFirstName")}{sortableHeading("Last name", "customerLastName")}<th scope="col">Contact</th>{sortableHeading("Installer", "installerBusiness")}{sortableHeading("Program & activity", "programCode")}<th scope="col">Service site</th>{sortableHeading("Planned", "plannedStart")}{sortableHeading("Stage", "jobStage")}{sortableHeading("Priority", "priority")}<th scope="col">Assigned to</th><th scope="col">Quote</th><th scope="col">Invoice</th><th scope="col">Record status</th>{sortableHeading("Updated", "updatedAt")}</tr>
-          {showFilters && <tr className={styles.columnFilters} id="creditex-job-filters">
-            <td>{filterInput("job", "Filter job", "Job number or title")}</td>
-            <td><label>From{filterInput("createdFrom", "Created from", "", "date")}</label><label>To{filterInput("createdTo", "Created to", "", "date")}</label><small>Sydney dates, inclusive</small></td>
-            <td><small>Job filter includes work title</small></td>
-            <td>{filterInput("firstName", "Filter first name", "First name")}{filterInput("customer", "Filter customer", "Business or customer ID")}</td>
-            <td>{filterInput("lastName", "Filter last name", "Last name")}</td>
-            <td><small>Search jobs includes phone and email</small></td>
-            <td>{filterInput("installer", "Filter installer", "Business name")}</td>
-            <td>{filterInput("program", "Filter program", "Program code")}{filterInput("activity", "Filter activity", "Activity code or name")}</td>
-            <td>{filterInput("serviceSite", "Filter service site", "Address or suburb")}</td>
-            <td><label>From{filterInput("plannedFrom", "Planned from", "", "date")}</label><label>To{filterInput("plannedTo", "Planned to", "", "date")}</label></td>
-            <td>{filterSelect("jobStage", "Filter job stage", "All stages", ["backlog", "ready", "scheduled", "in_progress", "blocked", "completed", "cancelled"])}</td>
-            <td>{filterSelect("priority", "Filter priority", "All priorities", ["low", "standard", "high", "urgent"])}</td>
-            <td><small>Saved staff assignment</small></td>
-            <td>{filterSelect("quoteStatus", "Filter quote status", "All quotes", ["not_started", "draft", "issued", "sent", "accepted", "declined"])}</td>
-            <td>{filterSelect("invoiceStatus", "Filter invoice status", "All invoices", ["not_started", "draft", "issued", "part_paid", "paid", "overdue", "void"])}</td>
-            <td><small>Record status above</small></td>
-            <td><button type="button" className={styles.detailButton} onClick={resetFilters}>Reset all</button></td>
-          </tr>}
-        </thead>
+        <thead><tr>{sortableHeading("Job ID", "jobNumber")}{sortableHeading("Created", "createdAt")}{sortableHeading("Certificate", "certificateType")}{sortableHeading("First name", "customerFirstName")}{sortableHeading("Last name", "customerLastName")}<th scope="col">Job title</th>{sortableHeading("Stage", "jobStage")}<th scope="col">Case number</th><th scope="col">Case status</th><th scope="col">Evidence status</th>{sortableHeading("Program", "programCode")}<th scope="col">Activity code</th><th scope="col">Activity name</th><th scope="col">Service</th>{sortableHeading("Installer", "installerBusiness")}<th scope="col">Phone</th><th scope="col">Email</th><th scope="col">Customer ID</th><th scope="col">Business</th><th scope="col">ABN</th><th scope="col">Service address</th><th scope="col">Suburb</th><th scope="col">State</th><th scope="col">Postcode</th>{sortableHeading("Planned", "plannedStart")}<th scope="col">Scheduled end</th>{sortableHeading("Priority", "priority")}<th scope="col">Assigned to</th><th scope="col">Quote amount</th><th scope="col">Quote status</th><th scope="col">Invoice amount</th><th scope="col">Invoice status</th><th scope="col">Paid</th><th scope="col">Record status</th><th scope="col">Next action</th>{sortableHeading("Updated", "updatedAt")}</tr></thead>
         <tbody>{items.map((item) => <tr key={item.id} onContextMenu={event => { if (!updating) openMenu(event, `creditex-job-menu-${item.id}`, item.jobNumber || item.jobId, launcher => rowActions(item, launcher)); }}>
-            <td>
-              <div className={styles.jobActions}>
-              <button type="button" id={`creditex-job-${item.id}`} className={styles.jobButton} onClick={(event) => void openAudit(item, event.currentTarget)} aria-controls="creditex-full-audit-workspace">
-                <strong>{item.jobNumber || item.jobId}</strong><small>Open job →</small>
-              </button>
+            <td><div className={styles.jobActions}>
+              <button type="button" id={`creditex-job-${item.id}`} className={styles.jobButton} onClick={(event) => void openAudit(item, event.currentTarget)} aria-label={`Open job ${item.jobNumber || item.jobId}`} aria-controls="creditex-full-audit-workspace">{item.jobNumber || item.jobId}</button>
               <JobActionsButton label={item.jobNumber || item.jobId} menuId={`creditex-job-menu-${item.id}`} expanded={menu?.id === `creditex-job-menu-${item.id}`} onClick={event => openMenu(event, `creditex-job-menu-${item.id}`, item.jobNumber || item.jobId, launcher => rowActions(item, launcher))} />
-              </div>
-            </td>
+            </div></td>
             <td title="Job creation date in Australia/Sydney">{jobCreationDate(item.createdAt)}</td>
-            <td><strong>{item.jobTitle || "Retained job record"}</strong><small>{humanField(item.serviceCategory || "")}</small></td>
-            <td><strong>{item.customerFirstName || "Not recorded"}</strong>{item.customerBusinessName && <small>Business: {item.customerBusinessName}</small>}</td>
-            <td><strong>{item.customerLastName || "Not recorded"}</strong><small>{item.customerNumber}</small></td>
-            <td className={styles.contactCell}><strong>{item.customerPhone || "No phone recorded"}</strong><small>{item.customerEmail || "No email recorded"}</small></td>
+            <td title={item.claimOutputLabel || undefined}><strong>{item.certificateType || item.claimOutputCode || "Not recorded"}</strong></td>
+            <td>{item.customerFirstName || "Not recorded"}</td>
+            <td>{item.customerLastName || "Not recorded"}</td>
+            <td className={styles.longCell} title={item.jobTitle}>{item.jobTitle || "Retained job record"}</td>
+            <td>{humanField(item.jobStage)}</td>
+            <td>{item.caseNumber || "No case"}</td>
+            <td>{item.caseStatus ? humanField(item.caseStatus) : "No case"}</td>
+            <td>{item.evidenceStatus ? humanField(item.evidenceStatus) : "No case"}</td>
+            <td>{item.programCode}</td>
+            <td>{item.registryActivityCode || item.activityKey}</td>
+            <td className={styles.longCell} title={item.activityTitle}>{item.activityTitle || "Not recorded"}</td>
+            <td>{humanField(item.serviceCategory || "")}</td>
             <td>{item.installerBusiness || "Not recorded"}</td>
-            <td><strong>{item.programCode} · {item.registryActivityCode || item.activityKey}</strong><small>{item.activityTitle}</small><small>{item.claimOutputCode} {item.claimOutputLabel}</small></td>
-            <td><strong>{item.siteJurisdiction}</strong><small>{item.serviceAddress || "Retained site record"}</small></td>
+            <td>{item.customerPhone || "Not recorded"}</td>
+            <td>{item.customerEmail || "Not recorded"}</td>
+            <td>{item.customerNumber}</td>
+            <td>{item.customerBusinessName || "Not recorded"}</td>
+            <td>{item.businessNumber || "Not recorded"}</td>
+            <td>{item.serviceAddress || "Retained site record"}</td>
+            <td>{item.siteSuburb || "Not recorded"}</td>
+            <td>{item.siteJurisdiction}</td>
+            <td>{item.sitePostcode || "Not recorded"}</td>
             <td>{dateTime(item.plannedStart)}</td>
-            <td><strong>{humanField(item.jobStage)}</strong></td>
+            <td>{dateTime(item.scheduledEnd)}</td>
             <td><span className={styles.priority} data-priority={item.jobPriority}>{humanField(item.jobPriority)}</span></td>
             <td>{item.assigneeLabel || "Unassigned"}</td>
-            <td className={styles.moneyCell}><strong>{money(item.quotedValueCents)}</strong><small>{humanField(item.quoteStatus)}</small></td>
-            <td className={styles.moneyCell}><strong>{money(item.invoicedValueCents)}</strong><small>{humanField(item.invoiceStatus)}</small></td>
+            <td className={styles.moneyCell}>{money(item.quotedValueCents)}</td>
+            <td>{humanField(item.quoteStatus)}</td>
+            <td className={styles.moneyCell}>{money(item.invoicedValueCents)}</td>
+            <td>{humanField(item.invoiceStatus)}</td>
+            <td className={styles.moneyCell}>{money(item.paidValueCents)}</td>
             <td><span className={styles.status}>{itemStatus(item)}</span></td>
+            <td className={styles.longCell} title={item.nextAction}>{item.nextAction || "Not recorded"}</td>
             <td>{item.updatedAt ? dateTime(item.updatedAt) : "Not recorded"}</td>
           </tr>
-        )}{!items.length && <tr><td colSpan={17}><div className={styles.empty}><strong>{updating ? "Loading jobs..." : message ? "Results unavailable for these filters" : "No matching jobs"}</strong><span>{message ? "Retry or adjust the filters above." : "Change the column filters or reset your search."}</span></div></td></tr>}</tbody>
+        )}{!items.length && <tr><td colSpan={36}><div className={styles.empty}><strong>{updating ? "Loading jobs..." : message ? "Results unavailable for these filters" : "No matching jobs"}</strong><span>{message ? "Retry or adjust the filters." : "Change the filters or reset your search."}</span></div></td></tr>}</tbody>
       </table></div>
-    {!updating && !message && totalPages > 1 && <nav className={styles.pagination} aria-label="Certificate-work register pages">
+    {!updating && !message && <nav className={styles.pagination} aria-label="Certificate-work register pages">
+      <span className={styles.pageSize}>{PAGE_SIZE} records per page</span>
+      <span>{total ? `${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total}` : "0 records"}</span>
       <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button>
       <span>Page {page} of {totalPages}</span>
       <button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>Next</button>
     </nav>}
+    {showFilters && <aside id="creditex-job-filters" className={styles.filterDrawer} aria-labelledby="creditex-job-filters-title" onKeyDown={(event) => {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeFilters(); }
+    }}>
+      <form onSubmit={(event) => { event.preventDefault(); setFilters(draftFilters); setPage(1); }}>
+        <header><div><h3 id="creditex-job-filters-title" tabIndex={-1} ref={filterHeadingRef}>Job filters</h3><p>Choose your filters, then search.</p></div><button type="button" aria-label="Close filters" onClick={closeFilters}>&times;</button></header>
+        <div className={styles.filterFields}>
+          <details open><summary>Dates</summary><div className={styles.filterGroup}>
+            <fieldset><legend>Creation date</legend><div className={styles.dateRange}><label>From{filterInput("createdFrom", "Created from", "", "date")}</label><label>To{filterInput("createdTo", "Created to", "", "date")}</label></div><small>Sydney dates, including both selected days.</small></fieldset>
+            <fieldset><legend>Planned date</legend><div className={styles.dateRange}><label>From{filterInput("plannedFrom", "Planned from", "", "date")}</label><label>To{filterInput("plannedTo", "Planned to", "", "date")}</label></div></fieldset>
+          </div></details>
+          <details open><summary>Job & activity</summary><div className={styles.filterGroup}>
+            <label>Job{filterInput("job", "Filter job", "Job number or title")}</label>
+            <label>Program{filterInput("program", "Filter program", "Program code")}</label>
+            <label>Activity{filterInput("activity", "Filter activity", "Activity code or name")}</label>
+            <label>Job stage{filterSelect("jobStage", "Filter job stage", "All stages", ["backlog", "ready", "scheduled", "in_progress", "blocked", "completed", "cancelled"])}</label>
+            <label>Priority{filterSelect("priority", "Filter priority", "All priorities", ["low", "standard", "high", "urgent"])}</label>
+            <label>Installer{filterInput("installer", "Filter installer", "Business name")}</label>
+          </div></details>
+          <details><summary>Customer & address</summary><div className={styles.filterGroup}>
+            <label>First name{filterInput("firstName", "Filter first name", "First name")}</label>
+            <label>Last name{filterInput("lastName", "Filter last name", "Last name")}</label>
+            <label>Customer{filterInput("customer", "Filter customer", "Business or customer ID")}</label>
+            <label>Service site{filterInput("serviceSite", "Filter service site", "Address or suburb")}</label>
+          </div></details>
+          <details><summary>Quotes & invoices</summary><div className={styles.filterGroup}>
+            <label>Quote status{filterSelect("quoteStatus", "Filter quote status", "All quotes", ["not_started", "draft", "issued", "sent", "accepted", "declined"])}</label>
+            <label>Invoice status{filterSelect("invoiceStatus", "Filter invoice status", "All invoices", ["not_started", "draft", "issued", "part_paid", "paid", "overdue", "void"])}</label>
+          </div></details>
+        </div>
+        <footer><button type="button" onClick={resetFilters}>Clear filters</button><button type="submit">Search</button></footer>
+      </form>
+    </aside>}
     </>}
     {auditItem && <section id="creditex-full-audit-workspace" className={styles.auditWorkspace} aria-labelledby="creditex-full-audit-title">
       <header>
