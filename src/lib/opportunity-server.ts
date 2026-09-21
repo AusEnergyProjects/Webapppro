@@ -616,11 +616,17 @@ function candidateFromRow(
   const capabilities = parseJsonList(row.capabilities);
   const categories = parseJsonList(opportunity.service_categories);
   const state = canonicalMarketplaceState(opportunity.state);
-  const matchedCategories = requiresAeaDelivery(categories)
+  const aeaOnly = requiresAeaDelivery(categories);
+  const matchedCategories = aeaOnly
     ? Number(row.aea_delivery_authorised) === 1 ? categories : []
     : matchedServiceCategories(categories, capabilities);
-  if (!serviceStates.includes(state) || !matchedCategories.length) return null;
-  const serviceArea = qualifyingServiceArea(
+  if (!state || !matchedCategories.length || (!aeaOnly && !serviceStates.includes(state))) return null;
+  // These are the company's own enquiries nationwide, not a local trade offer.
+  // Distance is retained as metadata only; it does not restrict the recipient.
+  const serviceArea = aeaOnly ? {
+    distanceKm: postcodeDistanceKm(String(row.service_base_postcode || row.postcode || ""), String(opportunity.postcode || "")) ?? 0,
+    radiusKm: Number(row.service_radius_km || 0),
+  } : qualifyingServiceArea(
     row,
     String(opportunity.postcode || ""),
   );

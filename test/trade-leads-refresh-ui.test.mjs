@@ -132,3 +132,33 @@ test('supplier, unavailable entitlement and mismatched identity cannot fetch pro
   }
   const h = harness(); h.protectedIdentityUid.current = 'different-account'; await h.mount(); await h.refresh(); assert.equal(h.requests.length, 0); h.cleanup();
 });
+
+test('AEA-owned enquiries show national coverage and direct authorisation without changing ordinary lead disclosures', () => {
+  const element = (tag, includes) => find(node => ts.isJsxElement(node)
+    && node.openingElement.tagName.getText(parsed) === tag && node.getText(parsed).includes(includes)).getText(parsed);
+  const heading = element('span', 'opportunity.distanceBand');
+  const contact = element('p', 'Contact details were released to this exact installer match on');
+  const coverage = element('strong', 'profile.serviceRadiusKm');
+  const privacy = element('small', 'dashboard-enquiry-privacy');
+  const render = (markup, releaseScope) => {
+    const releasedCustomerContact = { releaseScope, grantedAt: '2026-09-22T01:00:00.000Z' };
+    const opportunity = { customerContact: releasedCustomerContact, distanceBand: 'Within 25 km' };
+    return text(evaluate(`exports.node = (${markup});`, {
+      opportunity, releasedCustomerContact, selectedLeadOpportunity: opportunity,
+      opportunityBroadLocation: () => 'MELBOURNE 3000, VIC',
+      profile: { serviceBasePostcode: '3000', serviceRadiusKm: 25, serviceStates: ['VIC'] },
+    }).node);
+  };
+  assert.equal(render(heading, 'aea_only'), 'Australian Energy Assessments enquiry · Australia-wide');
+  assert.match(render(contact, 'aea_only'), /customer authorised Australian Energy Assessments to handle this enquiry/);
+  assert.doesNotMatch(render(contact, 'aea_only'), /exact installer match|every verified matching trade/);
+  assert.equal(render(coverage, 'aea_only'), 'Australia-wide');
+  assert.match(render(privacy, 'aea_only'), /available to Australian Energy Assessments/);
+  for (const scope of ['all_qualified_trades', 'shortlisted_installer']) {
+    assert.match(render(heading, scope), /MELBOURNE 3000, VIC.*Within 25 km/);
+    assert.match(render(coverage, scope), /3000.*25.*km radius.*VIC/);
+    assert.match(render(privacy, scope), /customer-selected contact and service address above are released to this business/);
+  }
+  assert.match(render(contact, 'all_qualified_trades'), /share these details with every verified matching trade/);
+  assert.match(render(contact, 'shortlisted_installer'), /released to this exact installer match/);
+});

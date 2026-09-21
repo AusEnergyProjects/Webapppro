@@ -7,18 +7,15 @@ function expression(value: string) {
 }
 /** Rechecked at allocation, disclosure and notification claim, including old matches.
  * Receiving an opportunity requires current business onboarding and service/location
- * coverage. Training and installer credentials are enforced when booking the work.
+ * coverage. Verified AEA owners receive reserved assessment leads nationwide.
+ * Training and installer credentials are enforced when booking the work.
  * Consent and customer-contact disclosure remain separate checks at each caller.
  */
 export function certificateLeadEligibilitySql(ownerColumn: string, categoriesColumn: string, stateColumn: string) {
   const owner = expression(ownerColumn); const categories = expression(categoriesColumn); const state = expression(stateColumn);
   const [categoryAlias, categoryColumn] = categories.split(".");
   return `(CASE WHEN ${aeaDeliveredServiceScopeSql(categoryAlias, categoryColumn)} THEN
-    (${aeaTradeOwnerSql(owner)} AND EXISTS (
-    SELECT 1 FROM trade_accounts aea_coverage
-    WHERE aea_coverage.firebase_uid = ${owner}
-      AND EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(aea_coverage.service_states) THEN aea_coverage.service_states ELSE '[]' END) aea_state
-        WHERE (aea_state.type, aea_state.value) = ('text', ${state})))) ELSE
+    ${aeaTradeOwnerSql(owner)} ELSE
     EXISTS (SELECT 1 FROM creditex_current_business_jurisdictions approved_business
     WHERE (approved_business.owner_uid,approved_business.state) = (${owner},${state})
       AND EXISTS (SELECT 1 FROM trade_accounts offered_business

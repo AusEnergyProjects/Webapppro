@@ -83,7 +83,7 @@ export const AEA_BUNDLE_IDENTITIES = Object.freeze({
   }),
 });
 
-export const AEA_RESERVED_SERVICE_IDS = Object.freeze(["assessment", "rental-inspection", ...Object.values(AEA_SERVICE_IDENTITIES).map(({ id }) => id), ...Object.values(AEA_BUNDLE_IDENTITIES).map(({ id }) => id)]);
+export const AEA_RESERVED_SERVICE_IDS = Object.freeze(["assessment", "rental-inspection", "blower-door-testing", "thermal-imaging", ...Object.values(AEA_SERVICE_IDENTITIES).map(({ id }) => id), ...Object.values(AEA_BUNDLE_IDENTITIES).map(({ id }) => id)]);
 const reservedServiceIds = new Set(AEA_RESERVED_SERVICE_IDS);
 export function isAeaReservedService(value) { return reservedServiceIds.has(value); }
 // A mixed enquiry stays with Australian Energy Assessments so its complete scope remains private.

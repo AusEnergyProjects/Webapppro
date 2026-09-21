@@ -58,8 +58,28 @@ test("reserved and mixed requests cannot become another trade's capabilities or 
   assert.deepEqual(matchedServiceCategories(["solar", "battery"], ["solar"]), ["solar"]);
 });
 
+test("assessment testing stays with AEA while ordinary work remains available for trade matching", () => {
+  const reserved = ["assessment", "rental-inspection", "blower-door-testing", "thermal-imaging",
+    "smoke-alarm-blind-safety", "gas-safety-check", "electrical-safety-check", "minimum-rental-standards",
+    "nathers-new", "nathers-existing", "onsite-energy-assessment", "rental-electrical-bundle", "rental-gas-electrical-bundle"];
+  assert.deepEqual([...AEA_RESERVED_SERVICE_IDS].sort(), [...reserved].sort());
+  for (const id of reserved.filter((service) => service !== "rental-inspection")) {
+    assert.ok(ENERGY_SERVICE_IDS.includes(id), `${id} remains a public enquiry choice`);
+    assert.ok(AEA_RESERVED_SERVICE_IDS.includes(id), `${id} is AEA-only`);
+    assert.equal(requiresAeaDelivery([id]), true);
+    assert.equal(requiresAeaDelivery(["insulation", id]), true);
+  }
+  const ordinary = ["electrical", "plumbing", "solar", "battery", "heating-cooling", "hot-water",
+    "electric-cooking", "draught-proofing", "insulation", "glazing", "window-coverings", "ev-charging", "other"];
+  assert.deepEqual(TRADE_SERVICE_IDS, ordinary);
+  for (const id of ordinary) {
+    assert.equal(requiresAeaDelivery([id]), false, id);
+    assert.deepEqual(matchedServiceCategories([id], [id]), [id]);
+  }
+});
+
 test("AEA-only and mixed receipts describe direct handling without a false no-match message", () => {
-  for (const services of [["gas-safety-check"], ["solar", "nathers-existing"]]) {
+  for (const services of [["gas-safety-check"], ["solar", "nathers-existing"], ["blower-door-testing"], ["insulation", "thermal-imaging"]]) {
     const receipt = quickUpgradeReceiptDraft({ firstName: "Jamie", reference: "aea-service-test", services, matchingState: "review" });
     assert.match(receipt.body, /handle your service enquiry directly/);
     assert.match(receipt.body, /not distributed to other TLink businesses/);

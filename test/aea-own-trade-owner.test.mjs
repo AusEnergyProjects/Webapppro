@@ -8,6 +8,7 @@ import { expandCreditexLeadSql } from './helpers/creditex-training-sql.mjs';
 
 const { aeaTradeOwnerSql, tradeOpportunityOwnerScopeSql, isAeaTradeOwner } = certificateTestDependency('aea-trade-owner-server');
 const { verifiedTradeAccountPredicate } = certificateTestDependency('trade-access-server');
+const { certificateLeadEligibilitySql } = certificateTestDependency('trade-certificate-leads');
 const AEA_ABN = PUBLIC_SITE.abn.replace(/\D/g, '');
 const OTHER_ABN = '53004085616';
 const reviewedAt = '2026-09-22T00:00:00.000Z';
@@ -126,5 +127,46 @@ test('shared source expansion retains real owner checks and rejects unsafe SQL i
   assert.deepEqual({ ...db.prepare(sql).get('aea-owner', JSON.stringify([AEA_RESERVED_SERVICE_IDS[0]])) }, { owner: 1, scope: 1 });
   for (const identifier of ['owner_uid', 'r.owner_uid OR 1=1', 'r.owner_uid;', 'r.owner_uid.other', 'r."owner_uid"']) assert.throws(() => aeaTradeOwnerSql(identifier), /static qualified SQL column/);
   assert.throws(() => tradeOpportunityOwnerScopeSql('o; SELECT 1', 'r.owner_uid'), /Invalid opportunity SQL alias/);
+  db.close();
+});
+
+test('verified AEA reserved lead eligibility covers all Australian jurisdictions without a service-state gate', () => {
+  const db = database();
+  approvedAccount(db, 'aea-owner');
+  approvedAccount(db, 'external', { abn: OTHER_ABN, admin: null });
+  installCreditexTrainingFixture(db);
+  db.exec(`UPDATE trade_accounts SET service_states='["VIC"]',address_state='VIC';
+    UPDATE creditex_business_onboarding SET status='submitted' WHERE owner_uid='aea-owner'`);
+  const states = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'];
+  const predicate = certificateLeadEligibilitySql('lead.owner_uid', 'lead.categories', 'lead.state');
+  const eligible = db.prepare(`SELECT 1 FROM (SELECT ? owner_uid, ? categories, ? state) lead WHERE ${predicate}`);
+  for (const state of states) {
+    for (const id of AEA_RESERVED_SERVICE_IDS) {
+      assert.ok(eligible.get('aea-owner', JSON.stringify([id]), state), `${id} must reach verified AEA in ${state}`);
+      assert.equal(eligible.get('external', JSON.stringify([id]), state), undefined, `${id} remains private to AEA in ${state}`);
+    }
+    assert.ok(eligible.get('aea-owner', '["assessment","solar"]', state), `mixed reserved scope remains with AEA in ${state}`);
+  }
+  db.exec("UPDATE admin_users SET status='suspended' WHERE firebase_uid='aea-owner'");
+  for (const state of states) assert.equal(eligible.get('aea-owner', '["assessment"]', state), undefined, `current AEA authority remains mandatory in ${state}`);
+  db.close();
+});
+
+test('ordinary lead eligibility retains declared state, service and business approval gates for every business', () => {
+  const db = database();
+  approvedAccount(db, 'aea-owner');
+  approvedAccount(db, 'external', { abn: OTHER_ABN, admin: null });
+  installCreditexTrainingFixture(db);
+  db.exec(`UPDATE trade_accounts SET service_states='["VIC"]',address_state='VIC',capabilities='["heating-cooling"]'`);
+  const predicate = certificateLeadEligibilitySql('lead.owner_uid', 'lead.categories', 'lead.state');
+  const eligible = db.prepare(`SELECT 1 FROM (SELECT ? owner_uid, ? categories, ? state) lead WHERE ${predicate}`);
+  for (const uid of ['aea-owner', 'external']) {
+    for (const state of ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA']) {
+      assert.equal(Boolean(eligible.get(uid, '["heating-cooling"]', state)), state === 'VIC', `${uid} ordinary coverage remains limited to its saved state`);
+    }
+    assert.equal(eligible.get(uid, '["solar"]', 'VIC'), undefined, 'undeclared ordinary services stay ineligible');
+  }
+  db.exec("UPDATE creditex_business_onboarding SET status='submitted'");
+  for (const uid of ['aea-owner', 'external']) assert.equal(eligible.get(uid, '["heating-cooling"]', 'VIC'), undefined, 'ordinary leads retain current business approval');
   db.close();
 });

@@ -238,7 +238,7 @@ test("building-fabric categories have separate capabilities and quote evidence",
   );
 });
 
-test("building diagnostics require exact capabilities and their own report evidence", () => {
+test("building diagnostics retain exact capabilities and report evidence while enquiries stay with AEA", () => {
   const diagnosticProject = {
     ...project,
     projectCategories: ["blower-door-testing", "thermal-imaging"],
@@ -258,9 +258,10 @@ test("building diagnostics require exact capabilities and their own report evide
     ],
     { now: new Date("2026-07-14T01:00:00.000Z") },
   );
-  assert.equal(candidates.find((candidate) => candidate.participantId === "diagnostic-fit").eligibleForReview, true);
-  assert.deepEqual(candidates.find((candidate) => candidate.participantId === "generic-assessor").reasons, ["capability_mismatch"]);
-  assert.deepEqual(candidates.find((candidate) => candidate.participantId === "thermal-only").reasons, ["capability_mismatch"]);
+  for (const candidate of candidates) {
+    assert.equal(candidate.eligibleForReview, false, candidate.participantId);
+    assert.deepEqual(candidate.reasons, ["aea_delivered_service"], candidate.participantId);
+  }
 });
 
 test("legacy combined project and participant categories normalize to current capabilities", () => {

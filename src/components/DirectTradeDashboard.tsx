@@ -141,7 +141,7 @@ type DashboardOpportunity = {
     postcode: string;
     grantedAt: string;
     message: string;
-    releaseScope: "shortlisted_installer" | "all_qualified_trades";
+    releaseScope: "shortlisted_installer" | "all_qualified_trades" | "aea_only";
   };
   evidence: Array<{
     id: string;
@@ -582,7 +582,9 @@ function EnquiryPack({
       </div>
 
       <small className="dashboard-enquiry-privacy">
-        {opportunity.customerContact
+        {opportunity.customerContact?.releaseScope === "aea_only"
+          ? "These enquiry details are available to Australian Energy Assessments to arrange the customer's requested services."
+          : opportunity.customerContact
           ? "The customer-selected contact and service address above are released to this business. Private notes, room details and evidence filenames remain withheld."
           : "Suburb, postcode and state are shown for service-area planning. Customer identity, contact details, street and unit address, private notes, room details and evidence filenames remain withheld."}
       </small>
@@ -2618,7 +2620,9 @@ export function DirectTradeDashboard() {
                           <header>
                             <div className="dashboard-opportunity-heading">
                               <span>
-                                {opportunityBroadLocation(opportunity)} | {opportunity.distanceBand}
+                                {releasedCustomerContact?.releaseScope === "aea_only"
+                                  ? "Australian Energy Assessments enquiry · Australia-wide"
+                                  : <>{opportunityBroadLocation(opportunity)} | {opportunity.distanceBand}</>}
                               </span>
                               <h3 id={previewHeadingId}>{customerDisplayName}</h3>
                               {releasedCustomerName && (
@@ -2665,7 +2669,9 @@ export function DirectTradeDashboard() {
                                       {customerDisplayName}
                                     </h4>
                                     <p>
-                                      {releasedCustomerContact.releaseScope === "all_qualified_trades"
+                                      {releasedCustomerContact.releaseScope === "aea_only"
+                                        ? "The customer authorised Australian Energy Assessments to handle this enquiry on "
+                                        : releasedCustomerContact.releaseScope === "all_qualified_trades"
                                         ? "The customer consented to share these details with every verified matching trade on "
                                         : "Contact details were released to this exact installer match on "}
                                       {new Date(
@@ -2896,11 +2902,11 @@ export function DirectTradeDashboard() {
                   )}
                   <div className="dashboard-profile-summary">
                     <div>
-                      <span>Serviceability</span>
+                      <span>{selectedLeadOpportunity?.customerContact?.releaseScope === "aea_only" ? "Enquiry coverage" : "Serviceability"}</span>
                       <strong>
-                        {profile.serviceBasePostcode || profile.postcode} ·{" "}
+                        {selectedLeadOpportunity?.customerContact?.releaseScope === "aea_only" ? "Australia-wide" : <>{profile.serviceBasePostcode || profile.postcode} ·{" "}
                         {profile.serviceRadiusKm || 50} km radius ·{" "}
-                        {profile.serviceStates.join(", ")}
+                        {profile.serviceStates.join(", ")}</>}
                       </strong>
                     </div>
                     <div>

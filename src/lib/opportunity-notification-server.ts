@@ -125,7 +125,7 @@ async function deliveryContext(deliveryId: string) {
       matching_locality_consent.withdrawn_at matching_withdrawn_at,
       account.email, account.business_name, account.consent_at, account.email_opportunities,
       account.availability_status,
-      CASE WHEN ${verifiedTradeAccountPredicate("account")} AND account.partner_type = 'installer'
+      CASE WHEN (${verifiedTradeAccountPredicate("account")}) AND account.partner_type = 'installer'
         AND ${await certificateLeadEligibilitySql("assignment.firebase_uid", "assignment.matched_categories", "opportunity.state")}
         THEN 1 ELSE 0 END installer_access_approved,
       COALESCE((
@@ -257,6 +257,8 @@ async function finishWithoutSend(deliveryId: string, status: "skipped" | "suppre
 }
 
 async function recoverLegacyPublicOptionalEmailSkips(now: string) {
+  // Keep compound predicates grouped: D1 caps expression depth at 100, and
+  // flattening verification into this AND chain exceeds it after view expansion.
   return getD1().prepare(`UPDATE trade_opportunity_notification_deliveries
     SET status = 'pending', eligibility_reason = '', next_attempt_at = '', updated_at = ?
     WHERE status = 'skipped'
@@ -271,10 +273,10 @@ async function recoverLegacyPublicOptionalEmailSkips(now: string) {
           ON recovery_account.firebase_uid = recovery_match.firebase_uid
         JOIN public_trade_lead_contact_releases recovery_public_contact
           ON recovery_public_contact.opportunity_id = recovery_opportunity.id
-        WHERE recovery_match.id = trade_opportunity_notification_deliveries.match_id
+        WHERE (recovery_match.id = trade_opportunity_notification_deliveries.match_id
           AND recovery_match.status IN ('offered', 'viewed', 'interested', 'connected')
           AND recovery_opportunity.status = 'open'
-          AND ${tradeOpportunityOwnerScopeSql("recovery_opportunity", "recovery_match.firebase_uid")}
+          AND ${tradeOpportunityOwnerScopeSql("recovery_opportunity", "recovery_match.firebase_uid")})
           AND (
             (recovery_opportunity.expires_at <> '' AND recovery_opportunity.expires_at > ?)
             OR (
@@ -282,17 +284,17 @@ async function recoverLegacyPublicOptionalEmailSkips(now: string) {
               AND datetime(recovery_opportunity.created_at, '+30 days') > ?
             )
           )
-          AND recovery_account.partner_type = 'installer'
+          AND (recovery_account.partner_type = 'installer'
           AND recovery_account.consent_at <> ''
           AND recovery_account.availability_status IN ('open', 'limited')
           AND recovery_account.email <> ''
-          AND ${verifiedTradeAccountPredicate("recovery_account")}
+          AND (${verifiedTradeAccountPredicate("recovery_account")}))
           AND ${await certificateLeadEligibilitySql("recovery_match.firebase_uid", "recovery_match.matched_categories", "recovery_opportunity.state")}
-          AND recovery_public_contact.status = 'active'
+          AND (recovery_public_contact.status = 'active'
           AND ${publicPlanContactReleaseAccessSql("recovery_public_contact")}
           AND datetime(recovery_public_contact.granted_at) IS NOT NULL
           AND recovery_public_contact.withdrawn_at = ''
-          AND recovery_public_contact.postcode = recovery_opportunity.postcode
+          AND recovery_public_contact.postcode = recovery_opportunity.postcode)
       )`)
     .bind(
       now,
@@ -465,11 +467,12 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
   const html = opportunityNotificationHtml(draft);
   const attempts = previousAttempts + 1;
   const attemptedAt = new Date().toISOString();
+  // Group the same atomic authorization checks to stay below D1's depth limit.
   const claim = await db.prepare(`UPDATE trade_opportunity_notification_deliveries
     SET status = 'sending', attempts = ?, next_attempt_at = '', eligibility_reason = '',
       recipient_email_hash = ?, idempotency_key = ?, subject = ?, body = ?,
       last_attempt_at = ?, updated_at = ?
-    WHERE ${OPPORTUNITY_NOTIFICATION_CLAIM_GUARD_SQL}
+    WHERE (${OPPORTUNITY_NOTIFICATION_CLAIM_GUARD_SQL})
       AND NOT EXISTS (
         SELECT 1 FROM trade_opportunity_email_suppressions suppression
         WHERE suppression.email_hash = ?
@@ -479,10 +482,10 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
         FROM trade_opportunity_matches current_match
         JOIN trade_opportunities current_opportunity ON current_opportunity.id = current_match.opportunity_id
         JOIN trade_accounts current_account ON current_account.firebase_uid = current_match.firebase_uid
-        WHERE current_match.id = trade_opportunity_notification_deliveries.match_id
+        WHERE (current_match.id = trade_opportunity_notification_deliveries.match_id
           AND current_match.status IN ('offered', 'viewed', 'interested', 'connected')
           AND current_opportunity.status = 'open'
-          AND ${tradeOpportunityOwnerScopeSql("current_opportunity", "current_match.firebase_uid")}
+          AND ${tradeOpportunityOwnerScopeSql("current_opportunity", "current_match.firebase_uid")})
           AND (
             (current_opportunity.expires_at <> '' AND current_opportunity.expires_at > ?)
             OR (
@@ -504,10 +507,10 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
                 AND mandatory_public_email.withdrawn_at = ''
             )
           )
-          AND current_account.consent_at <> ''
+          AND (current_account.consent_at <> ''
           AND current_account.availability_status IN ('open', 'limited')
           AND current_account.partner_type = 'installer'
-          AND ${verifiedTradeAccountPredicate("current_account")}
+          AND (${verifiedTradeAccountPredicate("current_account")}))
           AND ${await certificateLeadEligibilitySql("current_match.firebase_uid", "current_match.matched_categories", "current_opportunity.state")}
           AND (
             NOT EXISTS (

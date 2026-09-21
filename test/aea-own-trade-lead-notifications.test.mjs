@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
+import { Miniflare } from 'miniflare';
+import { installCreditexTrainingFixture } from './helpers/creditex-training-fixture.mjs';
 import * as routing from '../src/lib/aea-trade-routing.mjs';
 import * as publicSite from '../src/lib/public-site.ts';
 import * as tradeAbn from '../src/lib/trade-abn.ts';
@@ -36,16 +38,23 @@ function fixture(t, { scope = ['assessment', 'solar'], status = 'open' } = {}) {
     CREATE TABLE public_trade_lead_contact_releases(id TEXT PRIMARY KEY,opportunity_id TEXT,status TEXT,notice_version TEXT,consent_purpose TEXT,disclosed_fields TEXT,customer_first_name TEXT,customer_last_name TEXT,customer_street_address TEXT,customer_suburb TEXT,customer_address_state TEXT,postcode TEXT,customer_message TEXT,customer_email TEXT,customer_phone TEXT,granted_at TEXT,withdrawn_at TEXT);
     CREATE TABLE customer_projects(id TEXT,firebase_uid TEXT,opportunity_id TEXT);
     CREATE TABLE customer_consent_receipts(id TEXT,project_id TEXT,firebase_uid TEXT,purpose TEXT,notice_version TEXT,granted_at TEXT,withdrawn_at TEXT);
-    CREATE TABLE customer_project_evidence(id TEXT,project_id TEXT,customer_uid TEXT,status TEXT,sharing_scope TEXT);
-    CREATE TABLE creditex_current_business_jurisdictions(owner_uid TEXT,state TEXT);`);
+    CREATE TABLE customer_project_evidence(id TEXT,project_id TEXT,customer_uid TEXT,status TEXT,sharing_scope TEXT);`);
   sql.exec(fs.readFileSync('drizzle/0087_trade_opportunity_notifications.sql', 'utf8'));
   const now = new Date().toISOString();
   for (const [uid, abn, name] of [['aea', publicSite.PUBLIC_SITE.abn.replace(/\D/g, ''), publicSite.PUBLIC_SITE.legalName], ['external', '53004085616', 'External Solar']]) {
     sql.prepare('INSERT INTO trade_accounts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(uid, `${uid}@example.test`, name, abn, 'installer', 'active', 'approved', abn, `${uid}-review`, now, 'reviewer', now, 0, 'open', '["assessment","solar"]');
     sql.prepare('INSERT INTO trade_account_verification_reviews VALUES (?,?,?,?,?,?,?,?,?)').run(`${uid}-review`, uid, abn, name, 'installer', 'approved', 'official_abr_lookup', 'reviewer', now);
-    sql.prepare('INSERT INTO creditex_current_business_jurisdictions VALUES (?,?)').run(uid, 'VIC');
   }
-  sql.exec(`ALTER TABLE trade_accounts ADD COLUMN service_states TEXT NOT NULL DEFAULT '["VIC"]'`);
+  // Real onboarding/jurisdiction views matter: D1 expands them when compiling
+  // notification guards, which contributes to its 100-level expression limit.
+  installCreditexTrainingFixture(sql, { qualified: false });
+  for (const uid of ['aea', 'external']) {
+    sql.prepare("INSERT INTO trade_team_members(id,owner_uid,member_uid,status) VALUES (?,?,?,'active')").run(`owner-${uid}`, uid, uid);
+    sql.prepare(`INSERT INTO creditex_business_onboarding
+      (owner_uid,status,revision,application_json,business_abn,business_name,insurance_expires_on,agreement_reference,reviewed_by_uid,reviewed_at,updated_at)
+      SELECT firebase_uid,'approved',1,'{}',abn,business_name,'2099-12-31','test-agreement','test-reviewer',?,?
+      FROM trade_accounts WHERE firebase_uid=?`).run(now, now, uid);
+  }
   sql.exec("INSERT INTO admin_users VALUES ('aea','active','owner')");
   sql.prepare('INSERT INTO trade_opportunities VALUES (?,?,?,?,?,?,?,?,?,?)').run('opportunity', JSON.stringify(scope), 'Private suburb', '3000', 'VIC', 'planning', '2099-01-01T00:00:00.000Z', now, status, 'public-enquiry');
   sql.prepare('INSERT INTO public_trade_lead_contact_releases VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run('release', 'opportunity', 'active', notices.PUBLIC_PLAN_CONSENT_NOTICE_VERSION, notices.PUBLIC_PLAN_CONSENT_PURPOSE, '["customer_email","postcode","service_categories"]', '', '', '', '', '', '3000', '', 'private-customer@example.test', '', now, '');
@@ -91,6 +100,15 @@ test('pre-existing external matches never receive reserved data and ordinary ser
   const ordinary = fixture(t, { scope: ['solar'] }); assert.equal((await ordinary.drain()).sent, 2);
 });
 
+test('verified AEA receives reserved enquiries nationwide without exposing them to external trades', async t => {
+  const f = fixture(t);
+  f.sql.exec("UPDATE trade_accounts SET service_states='[\"NSW\"]' WHERE firebase_uid='aea'");
+  const result = await f.drain();
+  assert.equal(result.sent, 1);
+  assert.equal(result.skipped, 1);
+  assert.deepEqual(f.sent.map(message => message.recipient), ['aea@example.test']);
+});
+
 test('draft, malformed scope, withdrawn consent, unavailable owner and revoked authority fail closed', async t => {
   for (const change of [
     "UPDATE trade_opportunities SET status='draft'",
@@ -98,7 +116,6 @@ test('draft, malformed scope, withdrawn consent, unavailable owner and revoked a
     "UPDATE public_trade_lead_contact_releases SET withdrawn_at='2026-09-22T00:00:00Z'",
     "UPDATE public_trade_lead_contact_releases SET notice_version='unrecognised'",
     "UPDATE trade_accounts SET availability_status='paused' WHERE firebase_uid='aea'",
-    "UPDATE trade_accounts SET service_states='[\"NSW\"]' WHERE firebase_uid='aea'",
     "UPDATE admin_users SET status='suspended' WHERE firebase_uid='aea'",
     "UPDATE admin_users SET role='reviewer' WHERE firebase_uid='aea'",
     "UPDATE trade_accounts SET account_status='closed' WHERE firebase_uid='aea'",
@@ -133,4 +150,73 @@ test('manual retry and recoverable zero-attempt skips remain owner scoped and co
   assert.equal((await recovered.drain()).sent, 1); assert.deepEqual(recovered.sent.map(message => message.recipient), ['aea@example.test']);
   const withdrawn = fixture(t); withdrawn.sql.exec("UPDATE trade_opportunity_notification_deliveries SET status='skipped',eligibility_reason='Optional opportunity emails are disabled.'; UPDATE public_trade_lead_contact_releases SET withdrawn_at='2026-09-22T00:00:00Z'");
   assert.equal((await withdrawn.drain()).attempted, 0); assert.equal(withdrawn.sent.length, 0);
+});
+
+test('Cloudflare D1 compiles and executes notification recovery, context and atomic claims with real eligibility views', async t => {
+  const f = fixture(t);
+  const runtime = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("test"); } };',
+    compatibilityDate: '2026-05-22', d1Databases: { DB: 'notification-depth-check' } });
+  t.after(() => runtime.dispose());
+  const d1 = await runtime.getD1Database('DB');
+  const schema = f.sql.prepare("SELECT name,type,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY rowid").all();
+  for (const row of schema.filter(row => row.type === 'table')) await d1.prepare(row.sql).run();
+  for (const table of schema.filter(row => row.type === 'table')) {
+    const identifier = `"${table.name.replaceAll('"', '""')}"`;
+    for (const row of f.sql.prepare(`SELECT * FROM ${identifier}`).all()) {
+      const columns = Object.keys(row).map(name => `"${name.replaceAll('"', '""')}"`).join(',');
+      await d1.prepare(`INSERT INTO ${identifier} (${columns}) VALUES (${Object.keys(row).map(() => '?').join(',')})`).bind(...Object.values(row)).run();
+    }
+  }
+  for (const row of schema.filter(row => row.type !== 'table')) await d1.prepare(row.sql).run();
+  const runtimeStatement = (query, native = d1.prepare(query)) => ({
+    native,
+    bind: (...values) => runtimeStatement(query, native.bind(...values)),
+    first: () => native.first(), all: () => native.all(),
+    run: async () => {
+      if (query.includes("SET status = 'sending'")) {
+        const hook = f.db.beforeClaim; f.db.beforeClaim = null; await hook?.();
+      }
+      return native.run();
+    },
+  });
+  f.db.prepare = query => runtimeStatement(query);
+  f.db.batch = statements => d1.batch(statements.map(statement => statement.native));
+  await d1.prepare('UPDATE trade_accounts SET service_states=? WHERE firebase_uid=?').bind('["NSW"]', 'aea').run();
+  await d1.prepare('DELETE FROM trade_opportunity_notification_deliveries').run();
+  assert.deepEqual(await f.server.ensureOpportunityNotificationDeliveries('opportunity'), { activeMatchCount: 1, deliveryCount: 1 });
+  await d1.prepare("UPDATE trade_opportunity_notification_deliveries SET status='skipped',eligibility_reason='Optional opportunity emails are disabled.'").run();
+  assert.equal((await f.drain()).sent, 1);
+  assert.deepEqual(f.sent.map(message => message.recipient), ['aea@example.test']);
+  await d1.prepare("UPDATE trade_opportunity_notification_deliveries SET status='failed'").run();
+  assert.deepEqual(await f.server.prepareOpportunityNotificationDeliveriesForManualRetry('opportunity'), { prepared: 1 });
+  await d1.prepare("UPDATE admin_users SET status='suspended'").run();
+  assert.equal((await f.drain()).sent, 0);
+  assert.equal(f.sent.length, 1);
+
+  await d1.prepare("UPDATE admin_users SET status='active'").run();
+  await d1.prepare('UPDATE trade_accounts SET service_states=? WHERE firebase_uid=?').bind('["VIC"]', 'aea').run();
+  await d1.prepare('UPDATE trade_opportunities SET service_categories=?').bind('["solar"]').run();
+  await d1.prepare('UPDATE trade_opportunity_matches SET matched_categories=?').bind('["solar"]').run();
+  await d1.prepare('DELETE FROM trade_opportunity_notification_deliveries').run();
+  assert.deepEqual(await f.server.ensureOpportunityNotificationDeliveries('opportunity'), { activeMatchCount: 2, deliveryCount: 2 });
+  assert.equal((await f.drain()).sent, 2);
+  assert.equal(f.sent.length, 3);
+
+  await d1.prepare('UPDATE trade_opportunities SET service_categories=?').bind('["assessment","solar"]').run();
+  await d1.prepare('UPDATE trade_opportunity_matches SET matched_categories=?').bind('["assessment","solar"]').run();
+  for (const [revoke, restore] of [
+    ["UPDATE admin_users SET status='suspended'", "UPDATE admin_users SET status='active'"],
+    ["UPDATE trade_account_verification_reviews SET decision='rejected' WHERE firebase_uid='aea'", "UPDATE trade_account_verification_reviews SET decision='approved' WHERE firebase_uid='aea'"],
+    ["UPDATE public_trade_lead_contact_releases SET withdrawn_at='2026-09-22T00:00:00Z'", "UPDATE public_trade_lead_contact_releases SET withdrawn_at=''"],
+    ["UPDATE trade_accounts SET email='changed@example.test' WHERE firebase_uid='aea'", "UPDATE trade_accounts SET email='aea@example.test' WHERE firebase_uid='aea'"],
+    ["UPDATE trade_opportunities SET status='draft'", "UPDATE trade_opportunities SET status='open'"],
+  ]) {
+    await d1.prepare('DELETE FROM trade_opportunity_notification_deliveries').run();
+    await f.server.ensureOpportunityNotificationDeliveries('opportunity');
+    f.db.beforeClaim = () => d1.prepare(revoke).run();
+    assert.equal((await f.drain()).sent, 0, revoke);
+    assert.equal((await d1.prepare("SELECT attempts FROM trade_opportunity_notification_deliveries WHERE match_id='match-aea'").first()).attempts, 0, revoke);
+    await d1.prepare(restore).run();
+  }
+  assert.equal(f.sent.length, 3);
 });

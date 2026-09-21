@@ -88,7 +88,7 @@ test('retained assessment and mixed scope route only to verified AEA and replay 
   }
 });
 
-test('reserved draft remains held when consent, AEA authority, availability, area or data partition is wrong', async () => {
+test('reserved draft remains held when consent, AEA authority, availability or data partition is wrong', async () => {
   for (const change of [
     "UPDATE public_trade_lead_contact_releases SET withdrawn_at='2026-09-02'",
     "UPDATE public_trade_lead_contact_releases SET source_reference='different'",
@@ -96,8 +96,6 @@ test('reserved draft remains held when consent, AEA authority, availability, are
     "DELETE FROM admin_users",
     "UPDATE trade_account_verification_reviews SET decision='rejected'",
     "UPDATE trade_accounts SET availability_status='closed' WHERE firebase_uid='aea'",
-    "UPDATE trade_accounts SET service_states='[\"NSW\"]' WHERE firebase_uid='aea'",
-    "UPDATE trade_accounts SET service_base_postcode='2000' WHERE firebase_uid='aea'",
     "UPDATE trade_accounts SET is_synthetic=1 WHERE firebase_uid='aea'",
     "UPDATE trade_opportunities SET expires_at='2000-01-01'",
   ]) {
@@ -107,6 +105,21 @@ test('reserved draft remains held when consent, AEA authority, availability, are
       assert.equal((await f.routeAeaServiceOpportunity('lead','admin')).allocated.length,0,change);
       assert.equal(f.sql.prepare('SELECT status FROM trade_opportunities').get().status,'draft',change);
       assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_opportunity_matches').get().count,0,change);
+    } finally { f.sql.close(); }
+  }
+});
+
+test('owned assessment enquiries route to AEA nationwide outside its local trade states and radius', async () => {
+  for (const [state, postcode] of [['ACT','2600'],['NSW','2000'],['NT','0800'],['QLD','4000'],['SA','5000'],['TAS','7000'],['VIC','3500'],['WA','6000']]) {
+    const f = fixture(['assessment','solar']);
+    try {
+      f.sql.prepare('UPDATE trade_opportunities SET state=?,postcode=?').run(state,postcode);
+      f.sql.prepare('UPDATE public_trade_lead_contact_releases SET postcode=?').run(postcode);
+      f.sql.exec("UPDATE trade_accounts SET service_states='[]',service_radius_km=1,capabilities='[]' WHERE firebase_uid='aea'");
+      const result = await f.routeAeaServiceOpportunity('lead','admin');
+      assert.deepEqual(result.allocated.map(candidate => candidate.firebaseUid),['aea'],state);
+      assert.equal(result.allocated[0].distanceKm,1000,state);
+      assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_opportunity_matches').get().count,1,state);
     } finally { f.sql.close(); }
   }
 });
