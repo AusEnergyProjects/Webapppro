@@ -56,7 +56,27 @@
 .saveBar { display: grid; gap: 13px; border-top: 1px solid var(--editor-line); padding-top: 18px; }
 .recordButton { width: 100%; text-align: left; display: grid; gap: 6px; }
 .assignment { display: grid; gap: 7px; padding: 15px; background: var(--editor-soft); border-left: 3px solid #087f78; border-radius: 0 9px 9px 0; }
+.library { display: grid; gap: 22px; min-width: 0; }
+.libraryToolbar { display: grid; gap: 14px; }
+.libraryToolbar .row { align-items: center; }
+.libraryGroup { border: 1px solid var(--editor-line); border-radius: 12px; overflow: hidden; background: var(--editor-surface); }
+.libraryGroup > header { align-items: center; display: flex; gap: 10px; padding: 13px 18px; background: var(--editor-soft); border-bottom: 1px solid var(--editor-line); }
+.libraryGroup h3 { font-size: .95rem; }
+.libraryGroup > header > span { color: var(--editor-muted); font-size: .8rem; }
+.libraryGroup ul { list-style: none; margin: 0; padding: 0; }
+.libraryRow { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 15px 18px; }
+.libraryRow + .libraryRow { border-top: 1px solid var(--editor-line); }
+.moduleInfo { display: grid; gap: 5px; min-width: 0; }
+.moduleInfo > strong { font-size: .9rem; overflow-wrap: anywhere; }
+.moduleInfo > span { color: var(--editor-muted); font-size: .8rem; }
+.libraryNote { color: var(--editor-muted); font-size: .8rem; }
+.libraryRow > .actions { flex-shrink: 0; }
+.libraryRow button { min-height: 38px; padding: 8px 14px; }
+.editorToolbar { display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.emptyLibrary { display: grid; gap: 8px; padding: 30px 20px; text-align: center; border: 1px dashed var(--editor-line); border-radius: 12px; }
 @media (max-width: 760px) {
+  .libraryRow { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .libraryRow > .actions { width: 100%; }
   .questionLayout { grid-template-columns: 1fr; }
   .questionList { grid-template-columns: repeat(auto-fill, minmax(45px, 1fr)); max-height: 150px; }
   .questionLink { justify-content: center; padding: 10px; }

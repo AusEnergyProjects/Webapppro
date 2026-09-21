@@ -1,14 +1,16 @@
 .directory { min-width: 0; }
 .hint { margin: 0; font-size: 12px; color: #53695e; line-height: 1.5; }
-.table table { min-width: 1500px; }
-.table th, .table td { box-sizing: border-box; }
-.table .actionsColumn { min-width: 60px; width: 60px; padding: 9px 11px; position: sticky; left: 0; background: #fff; z-index: 2; border-right: 1px solid #d4e1da; }
+.table table { min-width: 0; width: max-content; max-width: none; }
+.table th, .table td { box-sizing: border-box; padding: 9px 10px; min-width: 105px; max-width: 200px; font-size: 13px; }
+.table .actionsColumn { min-width: 48px; width: 48px; padding: 7px 6px; position: sticky; left: 0; background: #fff; z-index: 2; border-right: 1px solid #d4e1da; }
 .table th.actionsColumn { z-index: 4; background: #eaf2ee; }
-.table th:nth-child(2), .table td:nth-child(2) { position: sticky; left: 60px; background: #fff; box-shadow: 1px 0 #d4e1da; z-index: 1; }
+.table th:nth-child(2), .table td:nth-child(2) { position: sticky; left: 48px; background: #fff; box-shadow: 1px 0 #d4e1da; z-index: 1; }
 .table th:nth-child(2) { background: #eaf2ee; z-index: 3; }
-.table td[data-column="workNumber"] { min-width: 165px; white-space: nowrap; }
-.table td[data-column="title"], .table td[data-column="customerName"], .table td[data-column="installerBusiness"], .table td[data-column="siteArea"] { min-width: 190px; max-width: 290px; }
-.table td[data-column="createdAt"], .table td[data-column="updatedAt"], .table td[data-column="scheduledStart"] { min-width: 180px; font-variant-numeric: tabular-nums; }
+.table td[data-column="workNumber"] { min-width: 138px; white-space: nowrap; }
+.table td[data-column="title"], .table td[data-column="installerBusiness"], .table td[data-column="siteArea"] { min-width: 145px; max-width: 215px; }
+.table td[data-column="createdAt"] { min-width: 115px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.table td[data-column="updatedAt"], .table td[data-column="scheduledStart"] { min-width: 150px; font-variant-numeric: tabular-nums; }
+.business { display: block; margin-top: 4px; color: #53695e; font-size: 11px; max-width: 160px; }
 .jobLink { border: 0; padding: 4px 0; background: transparent; color: #126443; font: inherit; font-weight: 750; text-align: left; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .jobLink:focus-visible, .details button:focus-visible { outline: 2px solid #218260; outline-offset: 3px; }
 .details { width: 640px; max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); overflow: auto; box-sizing: border-box; padding: 24px; border: 1px solid #c6d6cf; border-radius: 16px; color: #173e30; background: #fff; box-shadow: 0 18px 70px #0003; }

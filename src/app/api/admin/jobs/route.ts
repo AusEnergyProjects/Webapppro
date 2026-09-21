@@ -12,6 +12,7 @@ export async function GET(request: Request) {
     const db = getD1();
     const [rows, count, facets] = await Promise.all([db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.stage,
         w.site_area, w.scheduled_start, w.created_at, w.updated_at, a.business_name installer_business,
+        c.first_name customer_first_name, c.last_name customer_last_name, c.business_name customer_business_name,
         CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name
       ${ADMIN_JOB_JOINS} WHERE ${query.where}
       ORDER BY ${query.orderBy} LIMIT ? OFFSET ?`)
@@ -30,6 +31,7 @@ export async function GET(request: Request) {
       id: row.id, workNumber: row.work_number, title: row.title, serviceCategory: row.service_category,
       stage: row.stage, siteArea: row.site_area, scheduledStart: row.scheduled_start,
       installerBusiness: row.installer_business, customerName: row.customer_name,
+      customerFirstName: String(row.customer_first_name || ""), customerLastName: String(row.customer_last_name || ""), customerBusinessName: String(row.customer_business_name || ""),
       createdAt: row.created_at, updatedAt: row.updated_at,
     })) });
   } catch (error) { return adminError(error); }

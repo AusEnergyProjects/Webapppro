@@ -8,7 +8,7 @@
 .controls { display: grid; grid-template-columns: minmax(230px, 1fr) minmax(180px, 240px) auto auto; gap: 10px; align-items: end; background: var(--portal-raised); border: 1px solid var(--portal-line); border-radius: 12px; padding: 14px; }
 .controls label { display: grid; gap: 6px; min-width: 0; }
 .controls label span { color: var(--portal-text); font-size: 12px; font-weight: 700; }
-.controls input, .controls select, .controls button { box-sizing: border-box; min-width: 0; width: 100%; min-height: 40px; border: 1px solid var(--portal-line-strong); border-radius: 7px; background: var(--portal-input); color: var(--portal-ink); font: inherit; font-size: 13px; padding: 9px 11px; color-scheme: dark; }
+.controls input, .controls select, .controls button { box-sizing: border-box; min-width: 0; width: 100%; min-height: 40px; border: 1px solid var(--portal-line-strong); border-radius: 7px; background: var(--portal-input); color: var(--portal-ink); font: inherit; font-size: 13px; padding: 9px 11px; color-scheme: inherit; }
 .controls button { cursor: pointer; width: auto; background: var(--portal-green); color: #032b26; font-weight: 800; }
 .controls .filterToggle { background: var(--portal-soft); color: var(--portal-ink); }
 .controls .filterToggle[aria-expanded="true"] { border-color: var(--portal-green); }
@@ -16,12 +16,17 @@
 .resultBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 24px; font-size: 12px; color: var(--portal-muted); }
 .tableWrap { max-width: 100%; overflow: auto; border: 1px solid var(--portal-line); border-radius: 11px; background: var(--portal-soft); max-height: 65vh; scrollbar-width: thin; }
 .tableWrap[aria-busy="true"] tbody { opacity: .55; pointer-events: none; }
-.tableWrap table { width: 100%; min-width: 2540px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
-.tableWrap th, .tableWrap td { padding: 13px 14px; border-bottom: 1px solid var(--portal-line); text-align: left; vertical-align: top; line-height: 1.45; min-width: 130px; max-width: 245px; }
+.tableWrap table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.tableWrap th, .tableWrap td { padding: 9px 8px; border-bottom: 1px solid var(--portal-line); text-align: left; vertical-align: top; line-height: 1.35; min-width: 76px; max-width: 170px; }
 .tableWrap th { position: sticky; top: 0; background: var(--portal-raised); color: var(--portal-muted); font-size: 11px; font-weight: 800; z-index: 2; white-space: nowrap; }
 .tableWrap th button { border: 0; background: none; color: inherit; font: inherit; cursor: pointer; padding: 0; min-height: 20px; text-align: left; }
 .tableWrap th[aria-sort="ascending"], .tableWrap th[aria-sort="descending"] { color: var(--portal-green-dark); }
-.tableWrap th:first-child, .tableWrap tbody tr td:first-child { position: sticky; left: 0; min-width: 218px; max-width: 240px; background: var(--portal-soft); border-right: 1px solid var(--portal-line); z-index: 1; }
+.tableWrap th:first-child, .tableWrap tbody tr td:first-child { position: sticky; left: 0; min-width: 168px; max-width: 185px; background: var(--portal-soft); border-right: 1px solid var(--portal-line); z-index: 1; }
+.tableWrap th:nth-child(2), .tableWrap td:nth-child(2), .tableWrap th:nth-child(10), .tableWrap td:nth-child(10), .tableWrap th:nth-child(17), .tableWrap td:nth-child(17) { min-width: 104px; max-width: 124px; font-variant-numeric: tabular-nums; }
+.tableWrap th:nth-child(3), .tableWrap td:nth-child(3), .tableWrap th:nth-child(8), .tableWrap td:nth-child(8) { min-width: 120px; max-width: 168px; }
+.tableWrap th:nth-child(4), .tableWrap td:nth-child(4), .tableWrap th:nth-child(5), .tableWrap td:nth-child(5) { min-width: 90px; max-width: 130px; }
+.tableWrap th:nth-child(9), .tableWrap td:nth-child(9) { min-width: 140px; max-width: 188px; }
+.tableWrap th:nth-child(12), .tableWrap td:nth-child(12) { min-width: 64px; max-width: 86px; }
 .tableWrap th:first-child { background: var(--portal-raised); z-index: 3; }
 .tableWrap tr[data-selected="true"] td { background: var(--portal-raised); }
 .tableWrap tr[data-selected="true"] td:first-child { background: var(--portal-raised); box-shadow: inset 3px 0 var(--portal-green); }
@@ -30,10 +35,10 @@
 .tableWrap td strong { color: var(--portal-ink); font-weight: 650; }
 .tableWrap td small { margin-top: 4px; color: var(--portal-muted); font-size: 11px; overflow-wrap: anywhere; }
 .tableHint { margin: 0; color: var(--portal-muted); font-size: 12px; line-height: 1.5; }
-.jobActions { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.jobActions { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
 .tableWrap td { overflow-wrap: anywhere; }
-.tableWrap .contactCell { min-width: 205px; }
-.tableWrap .moneyCell { min-width: 130px; font-variant-numeric: tabular-nums; }
+.tableWrap .contactCell { min-width: 145px; max-width: 180px; }
+.tableWrap .moneyCell { min-width: 84px; max-width: 105px; font-variant-numeric: tabular-nums; }
 .priority { display: inline-block; border: 1px solid var(--portal-line-strong); border-radius: 6px; padding: 4px 7px; font-size: 11px; }
 .priority[data-priority="high"], .priority[data-priority="urgent"] { color: #ffe0a3; background: #71430e; border-color: #b87925; }
 .callTarget { scroll-margin-top: 20px; min-width: 0; }
@@ -80,9 +85,11 @@
 .auditGroupRows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0 10px 10px; }
 @media (max-width: 1050px) { .auditSummary { grid-template-columns: repeat(2, minmax(0, 1fr)); }  }
 @media (max-width: 700px) { .controls { grid-template-columns: 1fr 1fr; padding: 12px; } .controls label { grid-column: 1 / -1; } .controls button { width: 100%; } .queue > header, .auditWorkspace > header { align-items: flex-start; flex-wrap: wrap; } .queue h2 { font-size: 23px; }   .auditCore, .auditGroupRows { grid-template-columns: 1fr; } .auditWorkspace { padding: 13px; } .auditSummary { grid-template-columns: 1fr; } .fullDetails > summary span { display: block; margin: 5px 0 0; } .pagination, .resultBar { flex-wrap: wrap; } .tableWrap th:first-child, .tableWrap tbody tr td:first-child { min-width: 160px; max-width: 175px; } }
-.jobButton { display: grid; gap: 6px; width: 100%; border: 0; text-align: left; background: none; color: var(--portal-ink); font: inherit; cursor: pointer; padding: 0; }
+.jobButton { display: grid; gap: 3px; width: 100%; border: 0; text-align: left; background: none; color: var(--portal-ink); font: inherit; cursor: pointer; padding: 0; }
 .tableWrap .jobButton small { color: var(--portal-green-dark); font-weight: 750; font-size: 12px; margin-top: 3px; }
-.columnFilters td { position: sticky; top: 46px; z-index: 2; background: var(--portal-raised); padding: 10px; }
+.columnFilters td { position: sticky; top: 39px; z-index: 2; background: var(--portal-raised); padding: 6px; }
 .tableWrap .columnFilters td:first-child { position: sticky; left: 0; z-index: 3; background: var(--portal-raised); }
-.columnFilters input, .columnFilters select { box-sizing: border-box; width: 100%; min-width: 100px; max-width: 200px; min-height: 35px; margin-bottom: 5px; border: 1px solid var(--portal-line-strong); border-radius: 6px; color: var(--portal-ink); background: var(--portal-input); font: inherit; font-size: 11px; padding: 7px; color-scheme: dark; }
-.columnFilters label { display: grid; grid-template-columns: 29px minmax(100px, 1fr); align-items: center; gap: 5px; color: var(--portal-muted); font-size: 11px; }
+.columnFilters input, .columnFilters select { box-sizing: border-box; width: 100%; min-width: 80px; max-width: 170px; min-height: 33px; margin-bottom: 4px; border: 1px solid var(--portal-line-strong); border-radius: 6px; color: var(--portal-ink); background: var(--portal-input); font: inherit; font-size: 11px; padding: 5px; color-scheme: inherit; }
+.columnFilters td:nth-child(2), .columnFilters td:nth-child(10) { min-width: 148px; max-width: 160px; }
+.columnFilters label { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: center; gap: 3px; color: var(--portal-muted); font-size: 11px; }
+.columnFilters input[type="date"] { min-width: 0; max-width: none; }

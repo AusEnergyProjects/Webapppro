@@ -10,15 +10,17 @@ import styles from "./CreditexPlannedIntakeQueue.module.css";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { CreditexAuditCallPanel } from "./CreditexAuditCallPanel";
 import { JobActionsButton, JobRowMenu, useJobRowMenu } from "./JobRowActions";
+import { jobCreationDate } from "@/lib/job-register-dates";
 
 type QueueStatus = "all" | "planned" | "case_linked" | "superseded";
-type QueueSort = "plannedStart" | "jobNumber" | "customerName" | "installerBusiness" | "programCode" | "jobStage" | "priority" | "updatedAt";
-const EMPTY_FILTERS = { job: "", customer: "", program: "", activity: "", installer: "", serviceSite: "", jobStage: "", priority: "", plannedFrom: "", plannedTo: "", quoteStatus: "", invoiceStatus: "" };
+type QueueSort = "plannedStart" | "jobNumber" | "createdAt" | "customerName" | "customerFirstName" | "customerLastName" | "installerBusiness" | "programCode" | "jobStage" | "priority" | "updatedAt";
+const EMPTY_FILTERS = { job: "", customer: "", firstName: "", lastName: "", program: "", activity: "", installer: "", serviceSite: "", jobStage: "", priority: "", createdFrom: "", createdTo: "", plannedFrom: "", plannedTo: "", quoteStatus: "", invoiceStatus: "" };
 
 type PlannedIntake = {
   id: string;
   jobId: string;
   jobNumber: string;
+  createdAt: string;
   jobTitle: string;
   jobStage: string;
   jobPriority: string;
@@ -42,6 +44,9 @@ type PlannedIntake = {
   customerNumber: string;
   customerType: string;
   customerName: string;
+  customerFirstName: string;
+  customerLastName: string;
+  customerBusinessName: string;
   businessNumber: string;
   customerEmail: string;
   customerPhone: string;
@@ -464,7 +469,8 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
   }
 
   function filterInput(key: keyof typeof EMPTY_FILTERS, label: string, placeholder: string, type = "search") {
-    return <input aria-label={label} type={type} placeholder={placeholder} value={filters[key]} onChange={(event) => changeFilter(key, event.target.value)} />;
+    const range = key.startsWith("created") ? "creditex-job-created" : "creditex-job-planned";
+    return <input aria-label={label} type={type} placeholder={placeholder} value={filters[key]} data-date-range-group={type === "date" ? range : undefined} data-date-range-role={type === "date" ? key.endsWith("From") ? "start" : "end" : undefined} onChange={(event) => changeFilter(key, event.target.value)} />;
   }
 
   function filterSelect(key: keyof typeof EMPTY_FILTERS, label: string, allLabel: string, options: string[]) {
@@ -521,12 +527,14 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
     {message && <p className={styles.message} role="alert">{message}</p>}
     {(!message || showFilters) && ((items.length || showFilters)
       ? <div ref={tableRef} className={styles.tableWrap} aria-busy={loading} tabIndex={0} role="region" aria-label="Assigned jobs. Scroll horizontally for all columns."><table>
-        <thead><tr>{sortableHeading("Job", "jobNumber")}<th scope="col">Work</th>{sortableHeading("Customer", "customerName")}<th scope="col">Contact</th>{sortableHeading("Installer", "installerBusiness")}{sortableHeading("Program & activity", "programCode")}<th scope="col">Service site</th>{sortableHeading("Planned", "plannedStart")}{sortableHeading("Stage", "jobStage")}{sortableHeading("Priority", "priority")}<th scope="col">Assigned to</th><th scope="col">Quote</th><th scope="col">Invoice</th><th scope="col">Record status</th>{sortableHeading("Updated", "updatedAt")}</tr>
+        <thead><tr>{sortableHeading("Job ID", "jobNumber")}{sortableHeading("Created", "createdAt")}<th scope="col">Work</th>{sortableHeading("First name", "customerFirstName")}{sortableHeading("Last name", "customerLastName")}<th scope="col">Contact</th>{sortableHeading("Installer", "installerBusiness")}{sortableHeading("Program & activity", "programCode")}<th scope="col">Service site</th>{sortableHeading("Planned", "plannedStart")}{sortableHeading("Stage", "jobStage")}{sortableHeading("Priority", "priority")}<th scope="col">Assigned to</th><th scope="col">Quote</th><th scope="col">Invoice</th><th scope="col">Record status</th>{sortableHeading("Updated", "updatedAt")}</tr>
           {showFilters && <tr className={styles.columnFilters} id="creditex-job-filters">
             <td>{filterInput("job", "Filter job", "Job number or title")}</td>
+            <td><label>From{filterInput("createdFrom", "Created from", "", "date")}</label><label>To{filterInput("createdTo", "Created to", "", "date")}</label><small>Sydney dates, inclusive</small></td>
             <td><small>Job filter includes work title</small></td>
-            <td>{filterInput("customer", "Filter customer", "Name, phone or email")}</td>
-            <td><small>Customer filter includes phone and email</small></td>
+            <td>{filterInput("firstName", "Filter first name", "First name")}{filterInput("customer", "Filter customer", "Business or customer ID")}</td>
+            <td>{filterInput("lastName", "Filter last name", "Last name")}</td>
+            <td><small>Search jobs includes phone and email</small></td>
             <td>{filterInput("installer", "Filter installer", "Business name")}</td>
             <td>{filterInput("program", "Filter program", "Program code")}{filterInput("activity", "Filter activity", "Activity code or name")}</td>
             <td>{filterInput("serviceSite", "Filter service site", "Address or suburb")}</td>
@@ -549,8 +557,10 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
               <JobActionsButton label={item.jobNumber || item.jobId} menuId={`creditex-job-menu-${item.id}`} expanded={menu?.id === `creditex-job-menu-${item.id}`} onClick={event => openMenu(event, `creditex-job-menu-${item.id}`, item.jobNumber || item.jobId, launcher => rowActions(item, launcher))} />
               </div>
             </td>
+            <td title="Job creation date in Australia/Sydney">{jobCreationDate(item.createdAt)}</td>
             <td><strong>{item.jobTitle || "Retained job record"}</strong><small>{humanField(item.serviceCategory || "")}</small></td>
-            <td><strong>{item.customerName || "Retained customer"}</strong><small>{item.customerNumber}</small></td>
+            <td><strong>{item.customerFirstName || "Not recorded"}</strong>{item.customerBusinessName && <small>Business: {item.customerBusinessName}</small>}</td>
+            <td><strong>{item.customerLastName || "Not recorded"}</strong><small>{item.customerNumber}</small></td>
             <td className={styles.contactCell}><strong>{item.customerPhone || "No phone recorded"}</strong><small>{item.customerEmail || "No email recorded"}</small></td>
             <td>{item.installerBusiness || "Not recorded"}</td>
             <td><strong>{item.programCode} · {item.registryActivityCode || item.activityKey}</strong><small>{item.activityTitle}</small><small>{item.claimOutputCode} {item.claimOutputLabel}</small></td>
@@ -564,7 +574,7 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
             <td><span className={styles.status}>{itemStatus(item)}</span></td>
             <td>{item.updatedAt ? dateTime(item.updatedAt) : "Not recorded"}</td>
           </tr>
-        )}{!items.length && <tr><td colSpan={15}><div className={styles.empty}><strong>{loading ? "Loading jobs..." : "No matching jobs"}</strong><span>Change the column filters or reset your search.</span></div></td></tr>}</tbody>
+        )}{!items.length && <tr><td colSpan={17}><div className={styles.empty}><strong>{loading ? "Loading jobs..." : "No matching jobs"}</strong><span>Change the column filters or reset your search.</span></div></td></tr>}</tbody>
       </table></div>
       : loading ? <p className={styles.message} role="status">Loading assigned jobs...</p> : <div className={styles.empty}><strong>No matching jobs</strong><span>Try a different search or reset the filters. Assigned installer jobs appear here when saved.</span></div>)}
     {!loading && !message && totalPages > 1 && <nav className={styles.pagination} aria-label="Certificate-work register pages">

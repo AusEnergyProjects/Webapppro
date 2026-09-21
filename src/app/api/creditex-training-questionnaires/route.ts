@@ -5,7 +5,7 @@ import { creditexApiError, creditexJson, requireCreditexTrainingReviewer } from 
 import { CreditexComplianceError, record, textField } from '@/lib/creditex-onboarding-server';
 import { GOVERNMENT_PROGRAM_TEMPLATES } from '@/lib/australian-government-program-catalogue';
 import { ENERGY_SERVICE_CATALOGUE } from '@/lib/energy-service-catalogue.mjs';
-import { getTrainingQuestionnaire, getTrainingSubmission, listTrainingQuestionnaires, listTrainingQuestionnaireVersions, listTrainingSubmissionPeople, listTrainingSubmissions, publishTrainingQuestionnaire, saveTrainingQuestionnaire } from '@/lib/training-questionnaire-store';
+import { deleteTrainingQuestionnaireDraft, getTrainingQuestionnaire, getTrainingSubmission, listTrainingQuestionnaires, listTrainingQuestionnaireVersions, listTrainingSubmissionPeople, listTrainingSubmissions, publishTrainingQuestionnaire, saveTrainingQuestionnaire } from '@/lib/training-questionnaire-store';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -44,6 +44,7 @@ export async function POST(request: Request) {
     const editor = await requireQuestionnaireEditor(request); const body = record(await readBoundedJsonRequest(request, 512 * 1024)); const db = getD1();
     if (body.action === 'save_draft') return creditexJson({ ok: true, questionnaire: await saveTrainingQuestionnaire(db, editor.uid, body) });
     if (body.action === 'publish') return creditexJson({ ok: true, questionnaire: await publishTrainingQuestionnaire(db, editor.uid, body) });
-    throw new CreditexComplianceError('ACTION_INVALID', 'Choose save draft or publish.', 400);
+    if (body.action === 'delete_draft') return creditexJson({ ok: true, ...await deleteTrainingQuestionnaireDraft(db, editor.uid, body) });
+    throw new CreditexComplianceError('ACTION_INVALID', 'Choose save draft, publish or delete an unused draft.', 400);
   } catch (error) { return apiError(error); }
 }

@@ -814,7 +814,7 @@ test("planned work is assigned fail-closed to the active Creditex partner", () =
 });
 
 test("Creditex register retains every assigned status and opens an audited full job workspace", () => {
-  assert.match(creditexQueueUi, /const auditLauncherRef = useRef<HTMLButtonElement \| null>\(null\)/);
+  assert.match(creditexQueueUi, /const auditLauncherRef = useRef<HTMLElement \| null>\(null\)/);
   assert.match(
     creditexQueueUi,
     /onClick=\{\(event\) => void openAudit\(item, event\.currentTarget\)\}/,

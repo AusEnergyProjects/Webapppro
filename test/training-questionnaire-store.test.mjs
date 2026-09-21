@@ -32,6 +32,7 @@ class Statement {
 }
 function fixture() {
   const sql = new DatabaseSync(':memory:');
+  sql.exec(fs.readFileSync('drizzle/0004_mixed_chat.sql', 'utf8').match(/CREATE TABLE `admin_audit_log`[\s\S]*?;/)[0]);
   sql.exec(`PRAGMA foreign_keys=ON;
     CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY,abn TEXT,business_name TEXT,capabilities TEXT,service_states TEXT,address_state TEXT);
     CREATE TABLE trade_team_members(id TEXT PRIMARY KEY,owner_uid TEXT,status TEXT,display_name TEXT,member_uid TEXT,capabilities TEXT);
@@ -71,6 +72,49 @@ test('catalogue forms remain available and editable without a database copy or i
   assert.ok(read.module.sources.every(source => source.id !== 'creditex-review' && !source.url.endsWith('.md')));
   assert.deepEqual(await store.listCurrentTrainingModules(f.db), curriculum.TRAINING_MODULES);
   assert.equal(await store.loadTrainingModule(f.db, 'veu-6'), curriculum.TRAINING_MODULES.find(course => course.id === 'veu-6'));
+});
+
+test('only unused never-published custom drafts can be deleted and the deletion is audited atomically', async () => {
+  const f = fixture(); const saved = await create(f);
+  assert.equal((await store.listTrainingQuestionnaires(f.db)).find(item => item.id === saved.module.id).canDelete, true);
+  assert.deepEqual(await store.deleteTrainingQuestionnaireDraft(f.db, 'editor', { moduleId: saved.module.id, expectedRevision: saved.revision }), { moduleId: saved.module.id, deleted: true });
+  assert.equal((await store.listTrainingQuestionnaires(f.db)).some(item => item.id === saved.module.id), false);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM trade_training_questionnaire_events').get().n, 1);
+  const audit = f.sql.prepare('SELECT * FROM admin_audit_log').get();
+  assert.equal(audit.action, 'training_questionnaire.draft_delete'); assert.equal(audit.admin_uid, 'editor'); assert.equal(audit.entity_id, saved.module.id);
+  assert.deepEqual(JSON.parse(audit.metadata), { title: saved.module.title, revision: 1, publishedHistoryDeleted: false });
+  await assert.rejects(store.deleteTrainingQuestionnaireDraft(f.db, 'editor', { moduleId: saved.module.id, expectedRevision: 1 }), error => error.code === 'QUESTIONNAIRE_NOT_FOUND');
+});
+
+test('deletion protects required catalogue modules, published versions and any learner or review history', async () => {
+  const f = fixture();
+  await assert.rejects(store.deleteTrainingQuestionnaireDraft(f.db, 'editor', { moduleId: 'veu-6', expectedRevision: 0 }), error => error.code === 'DRAFT_DELETE_BLOCKED');
+  const published = await publish(f, await create(f));
+  await assert.rejects(store.deleteTrainingQuestionnaireDraft(f.db, 'editor', { moduleId: published.module.id, expectedRevision: published.revision }), error => error.code === 'DRAFT_DELETE_BLOCKED');
+  for (const history of ['attempt', 'review', 'publication']) {
+    const saved = await create(f);
+    if (history === 'attempt') seedAttempt(f, saved.module, { id: 'unused-attempt', status: 'in_progress', score: 0 });
+    if (history === 'review') f.sql.prepare("INSERT INTO trade_training_module_reviews VALUES (?,? ,?,'withdrawn','2026-09-01','2026-12-01','','reviewer','Retained review','2026-09-21')").run(saved.module.id, saved.module.version, hash(saved.module));
+    if (history === 'publication') f.sql.prepare("INSERT INTO trade_training_questionnaire_events VALUES ('old-publication',?,'editor','published',1,'{}','2026-09-21')").run(saved.module.id);
+    const summary = (await store.listTrainingQuestionnaires(f.db)).find(item => item.id === saved.module.id);
+    assert.equal(summary.canDelete, false, history); assert.ok(summary.deleteBlockedReason);
+    await assert.rejects(store.deleteTrainingQuestionnaireDraft(f.db, 'editor', { moduleId: saved.module.id, expectedRevision: 1 }), error => error.code === 'DRAFT_DELETE_BLOCKED');
+  }
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM admin_audit_log').get().n, 0);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM trade_training_questionnaire_versions').get().n, 1);
+});
+
+test('revision conflicts, concurrent history changes and audit failures cannot partially delete a draft', async () => {
+  const f = fixture(); const saved = await create(f); const body = { moduleId: saved.module.id, expectedRevision: 1 };
+  await assert.rejects(store.deleteTrainingQuestionnaireDraft(f.db, 'editor', { ...body, expectedRevision: 0 }), error => error.code === 'REVISION_CONFLICT');
+  f.db.beforeBatch = () => seedAttempt(f, saved.module, { id: 'racing-attempt', status: 'in_progress', score: 0 });
+  await assert.rejects(store.deleteTrainingQuestionnaireDraft(f.db, 'editor', body), /CHECK constraint/);
+  assert.ok(await store.getTrainingQuestionnaire(f.db, saved.module.id));
+  const second = await create(f);
+  f.sql.exec("CREATE TRIGGER reject_delete_audit BEFORE INSERT ON admin_audit_log BEGIN SELECT RAISE(ABORT,'Audit unavailable'); END");
+  await assert.rejects(store.deleteTrainingQuestionnaireDraft(f.db, 'editor', { moduleId: second.module.id, expectedRevision: 1 }), /Audit unavailable/);
+  assert.ok(await store.getTrainingQuestionnaire(f.db, second.module.id));
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM admin_audit_log').get().n, 0);
 });
 
 test('Other questionnaire sections persist as display metadata without changing service or state scope', async () => {
@@ -240,6 +284,23 @@ test('AEA editors and independently authorised Creditex reviewers can save throu
     const f = fixture(); const api = route(f, { adminError }); const response = await api.POST(post({ action: 'save_draft', expectedRevision: 0, module: form(), assignment: assignment() }));
     assert.equal(response.status, 200); assert.equal(api.calls.reviewer, adminError ? 1 : 0);
     assert.equal(f.sql.prepare('SELECT updated_by_uid FROM trade_training_questionnaires').get().updated_by_uid, adminError ? 'creditex-editor' : 'aea-editor');
+  }
+});
+
+test('delete action keeps the existing editor and origin boundary and records the actual authorised actor', async () => {
+  for (const adminError of [null, new Error('ADMIN_REQUIRED')]) {
+    const f = fixture(); const saved = await create(f); const api = route(f, { adminError });
+    const body = { action: 'delete_draft', moduleId: saved.module.id, expectedRevision: saved.revision };
+    assert.equal((await api.POST(post(body, 'https://other.test'))).status, 403);
+    assert.ok(await store.getTrainingQuestionnaire(f.db, saved.module.id));
+    const denied = route(f, { adminError: new Error('ADMIN_SUSPENDED') });
+    assert.equal((await denied.POST(post(body))).status, 403);
+    const unauthorised = route(f, { adminError: new Error('ADMIN_REQUIRED'), reviewerError: new onboarding.CreditexComplianceError('CREDITEX_REVIEWER_REQUIRED', 'Denied', 403) });
+    assert.equal((await unauthorised.POST(post(body))).status, 403);
+    assert.ok(await store.getTrainingQuestionnaire(f.db, saved.module.id));
+    const response = await api.POST(post(body)); assert.equal(response.status, 200);
+    assert.equal((await response.json()).deleted, true);
+    assert.equal(f.sql.prepare('SELECT admin_uid FROM admin_audit_log').get().admin_uid, adminError ? 'creditex-editor' : 'aea-editor');
   }
 });
 

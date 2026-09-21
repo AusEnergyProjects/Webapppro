@@ -5,13 +5,13 @@ import { adminJobQuery, ADMIN_JOB_JOINS } from "../src/lib/admin-job-register.ts
 
 function fixture() {
   const db = new DatabaseSync(":memory:");
-  db.exec(`CREATE TABLE trade_work_orders(id TEXT PRIMARY KEY,firebase_uid TEXT,partner_type TEXT,record_status TEXT,work_number TEXT,title TEXT,stage TEXT,service_category TEXT,site_area TEXT,scheduled_start TEXT,updated_at TEXT);
+  db.exec(`CREATE TABLE trade_work_orders(id TEXT PRIMARY KEY,firebase_uid TEXT,partner_type TEXT,record_status TEXT,work_number TEXT,title TEXT,stage TEXT,service_category TEXT,site_area TEXT,scheduled_start TEXT,updated_at TEXT,created_at TEXT);
     CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY,business_name TEXT);
     CREATE TABLE trade_crm_job_details(work_order_id TEXT PRIMARY KEY,firebase_uid TEXT,crm_customer_id TEXT);
     CREATE TABLE trade_crm_customers(id TEXT PRIMARY KEY,firebase_uid TEXT,business_name TEXT,first_name TEXT,last_name TEXT);
     INSERT INTO trade_accounts VALUES ('trade','Example Electrical'),('other','Different owner');
     INSERT INTO trade_crm_customers VALUES ('customer','trade','','Customer','One'),('other-customer','other','','Private','Other');`);
-  const add = db.prepare("INSERT INTO trade_work_orders VALUES (?,?, 'installer','active',?,?,?, 'electrical','VIC 3000',?,?)");
+  const add = db.prepare("INSERT INTO trade_work_orders VALUES (?,?, 'installer','active',?,?,?, 'electrical','VIC 3000',?,?,'2026-09-20T14:30:00Z')");
   for (let n = 0; n < 112; n++) {
     const id = `job-${String(n).padStart(3,"0")}`;
     add.run(id,"trade",`TLJ-${n}`,n===110?"100%_literal":"Switchboard",n===111?"completed":"scheduled","2026-09-22T09:00:00Z","2026-09-21T01:00:00Z");
@@ -56,5 +56,20 @@ test("binned work and cross-owner linked customer details never leak into the re
     assert.equal(f.select({}).count,111);
     assert.equal(f.select({q:"Private Other"}).count,0);
     assert.equal(f.select({q:"job-001"}).rows[0].customer_name,"");
+  }finally{f.db.close();}
+});
+
+test("creation ranges use the displayed Australian day and combine with independent name filters",()=>{
+  const f=fixture();try{
+    assert.equal(f.select({createdFrom:"2026-09-21",createdTo:"2026-09-21",firstName:"customer",lastName:"one"}).count,112);
+    assert.equal(f.select({createdTo:"2026-09-20"}).count,0);
+    assert.equal(f.select({firstName:"one"}).count,0);
+    assert.equal(f.select({lastName:"customer"}).count,0);
+    assert.equal(f.select({firstName:"Cust%"}).count,0);
+    f.db.exec("UPDATE trade_work_orders SET created_at='2026-09-21T14:00:00Z' WHERE id='job-111'");
+    assert.equal(f.select({createdTo:"2026-09-21"}).count,111);
+    assert.equal(f.select({sort:"created-desc"}).rows[0].id,"job-111");
+    assert.equal(f.select({sort:"first-name-asc"}).count,112);
+    assert.equal(f.select({sort:"last-name-asc"}).count,112);
   }finally{f.db.close();}
 });

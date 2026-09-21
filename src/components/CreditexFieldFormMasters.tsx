@@ -134,6 +134,7 @@ function ConditionEditor({ form, targetKey, phase, condition, locked, label, onC
 export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true }: { api: Api; actorMode: "admin" | "creditex"; canAuthor?: boolean }) {
   const [catalogue, setCatalogue] = useState<Option[]>([]);
   const [search, setSearch] = useState("");
+  const [program, setProgram] = useState("");
   const [selected, setSelected] = useState(""); const [form, setForm] = useState<ActivityForm | null>(null);
   const [expectedVersion, setExpectedVersion] = useState(0); const [question, setQuestion] = useState(0);
   const [busy, setBusy] = useState(canAuthor); const [dirty, setDirty] = useState(false); const [message, setMessage] = useState("");
@@ -170,6 +171,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true }: {
     return () => controller.abort();
   }, [canAuthor, requestCatalogue]);
   async function load(templateId: string, variantId = "") {
+    if (!canAuthor || busy) return;
     if (dirty && !window.confirm("Discard unsaved master-form changes?")) return;
     setBusy(true); setMessage("");
     try { const result = await api(`${endpoint}?view=masters&actorMode=${actorMode}&activityTemplateId=${encodeURIComponent(templateId)}&variantId=${encodeURIComponent(variantId)}`);
@@ -177,6 +179,11 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true }: {
       setForm(result.form as ActivityForm); setExpectedVersion(Number(result.expectedVersion)); setSelected(templateId); setQuestion(0); setDirty(false);
     } catch (error) { setMessage(error instanceof Error ? error.message : "The form could not be loaded."); }
     finally { setBusy(false); }
+  }
+  function backToCatalogue() {
+    if (busy || (dirty && !window.confirm("Discard unsaved master-form changes?"))) return;
+    setForm(null); setSelected(""); setQuestion(0); setDirty(false); setMessage("");
+    setSearch(""); setProgram("");
   }
   async function save() {
     if (!form) return; setBusy(true); setMessage("");
@@ -259,17 +266,42 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true }: {
   const selectedFieldIsReferenced = Boolean(form && field && fieldIsReferenced(form, field.key));
   const earlierField = form ? fieldMoveDestination(form.fields, question, -1) : -1;
   const laterField = form ? fieldMoveDestination(form.fields, question, 1) : -1;
-  const visibleCatalogue = catalogue.filter((item) => `${item.programCode} ${item.activityCode} ${item.title}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const programs = [...new Set(catalogue.map((item) => item.programCode))].sort();
+  const visibleCatalogue = catalogue.filter((item) => (!program || item.programCode === program)
+    && `${item.programCode} ${item.activityCode} ${item.title}`.toLowerCase().includes(search.trim().toLowerCase()));
   return <section className={`${styles.builderSection} ${styles.masterLibrary}`} aria-label="Activity form editor">
-    <header><div><h2>Activity forms</h2><p>Choose an activity to edit the questions, photos and declarations your technicians complete. Saving makes the updated master available immediately.</p></div>
-      <button type="button" disabled={busy || !canAuthor} onClick={() => void loadCatalogue()}>{busy ? "Loading forms..." : "Refresh forms"}</button>
+    {form && <button className={styles.masterBack} type="button" disabled={busy} onClick={backToCatalogue}>Back to all forms</button>}
+    <header><div><h2>{form ? form.title : "Activity forms"}</h2><p>{form ? "Edit the questions, photos and declarations technicians complete. Saving makes the updated master available immediately." : "Browse your activity forms below. Choose Edit to open a form."}</p></div>
+      {!form && <button type="button" disabled={busy || !canAuthor} onClick={() => void loadCatalogue()}>{busy ? "Loading forms..." : "Refresh forms"}</button>}
       <button type="button" disabled={busy || !canAuthor} onClick={() => void reviewQueue()}>Submitted field records</button></header>
     {actorMode === "creditex" && !canAuthor ? <p role="note">Sign in with your named Creditex administrator, case manager or reviewer account to edit forms. Shared-mailbox and auditor accounts are read-only. AEA owners can use <a href="/operations/control-centre#form-governance">Admin → Activity forms</a>.</p> : null}
     {message ? <p role="status">{message}</p> : null}
     {reviewLink ? <p><a href={reviewLink} target="_blank" rel="noreferrer">Open the signed field report and original evidence</a> (link expires in one hour)</p> : null}
-    {catalogue.length ? <><div className={styles.masterFilters}><label>Find an activity<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Activity number, service or program" /></label><label>Activity<select disabled={busy} value={visibleCatalogue.some((item) => item.activityTemplateId === selected) ? selected : ""} onChange={(event) => void load(event.target.value)}><option value="" disabled>Choose an activity</option>{visibleCatalogue.map((item) => <option key={item.activityTemplateId} value={item.activityTemplateId}>{item.programCode} {item.activityCode} | {item.title}</option>)}</select></label></div><small>{visibleCatalogue.length} activities found. New records and unsigned drafts use it when opened; signed and submitted records stay locked to what was agreed.</small></> : null}
+    {!form && catalogue.length > 0 && <>
+      <div className={styles.masterFilters}>
+        <label><span>Find a form <small>(optional)</small></span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Activity number, service or program" /></label>
+        <label>Program<select value={program} onChange={(event) => setProgram(event.target.value)}><option value="">All programs</option>{programs.map((code) => <option key={code} value={code}>{code}</option>)}</select></label>
+      </div>
+      <div className={styles.masterResultBar}><span role="status">{visibleCatalogue.length} of {catalogue.length} forms</span>{(search || program) && <button type="button" onClick={() => { setSearch(""); setProgram(""); }}>Clear filters</button>}</div>
+      <p className={styles.masterLibraryNote}>Program forms stay available for their activities. Edit a form to change its questions; completed records keep their original version.</p>
+      <div className={styles.masterCatalogue} aria-label="All activity forms" aria-busy={busy}>
+        {programs.map((code) => {
+          const items = visibleCatalogue.filter((item) => item.programCode === code);
+          return items.length > 0 ? <section className={styles.masterGroup} key={code} aria-labelledby={`master-program-${actorMode}-${code}`}>
+            <header><h3 id={`master-program-${actorMode}-${code}`}>{code}</h3><span>{items.length} built-in program {items.length === 1 ? "form" : "forms"}</span></header>
+            <ul>{items.map((item) => <li key={item.activityTemplateId} className={styles.masterRow}>
+              <span className={styles.masterCode}>{item.activityCode}</span><strong>{item.title}</strong>
+              <button type="button" disabled={busy || !canAuthor} aria-label={`Edit ${item.programCode} ${item.activityCode}: ${item.title}`} onClick={() => void load(item.activityTemplateId)}>Edit</button>
+            </li>)}</ul>
+          </section> : null;
+        })}
+        {!visibleCatalogue.length && <p className={styles.masterEmpty}>No forms match these filters. Clear the filters to see all forms.</p>}
+      </div>
+    </>}
+    {!form && !busy && canAuthor && !catalogue.length && !message && <p>No activity forms are available.</p>}
     {form && field ? <fieldset disabled={busy || !canAuthor}>
       <legend>Master version {form.version}{dirty ? " | Unsaved changes" : ""}</legend>
+      <small>New records and unsigned drafts use it when opened; signed and submitted records stay locked to what was agreed.</small>
       {form.variantOptions.length > 1 ? <label>Premises<select value={form.variantId} onChange={(event) => void load(selected, event.target.value)}>{form.variantOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label> : null}
       <label>Form title<input value={form.title} maxLength={300} onChange={(event) => { setForm({ ...form, title: event.target.value }); setDirty(true); }} /></label>
       <label>Question<select value={question} onChange={(event) => setQuestion(Number(event.target.value))}>{form.fields.map((item, index) => <option key={item.key} value={index}>{index + 1}. {item.section}: {item.label}</option>)}</select></label>

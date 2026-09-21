@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import ts from 'typescript';
 import * as jsx from 'react/jsx-runtime';
 import * as catalogue from '../src/lib/australian-government-program-catalogue.ts';
+import * as dateHelpers from '../src/lib/job-register-dates.ts';
 const compile = name => ts.transpileModule(fs.readFileSync(new URL(`../src/components/${name}.tsx`, import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
 const text = node => node == null || typeof node === 'boolean' ? '' : typeof node === 'string' || typeof node === 'number' ? String(node) : Array.isArray(node) ? node.map(text).join(' ') : text(node.props?.children);
 const nodes = (node, predicate) => !node || typeof node !== 'object' ? [] : Array.isArray(node) ? node.flatMap(child => nodes(child,predicate)) : [...(predicate(node) ? [node] : []),...nodes(node.props?.children,predicate)];
@@ -27,7 +28,7 @@ function runtime(name, props={}, options={}) {
   };
   const stubs=new Map();
   const rowActions={};
-  const require=id=>id==='react'?hooks:id==='react/jsx-runtime'?jsx:id==='./JobRowActions'?rowActions:id==='@/lib/australian-government-program-catalogue'?catalogue:id==='@/lib/firebase-client'?{firebaseAuth:{currentUser:user}}:id==='next/dynamic'?{default:()=>()=>null}:id.endsWith('.module.css')?{default:new Proxy({},{get:(_,key)=>String(key)})}:new Proxy({},{get:(_,key)=>{const name=key==='default'?id.split('/').pop():String(key);if(!stubs.has(name))stubs.set(name,Object.defineProperty(()=>null,'displayName',{value:name}));return stubs.get(name);}});
+  const require=id=>id==='react'?hooks:id==='react/jsx-runtime'?jsx:id==='./JobRowActions'?rowActions:id==='@/lib/job-register-dates'?dateHelpers:id==='@/lib/australian-government-program-catalogue'?catalogue:id==='@/lib/firebase-client'?{firebaseAuth:{currentUser:user}}:id==='next/dynamic'?{default:()=>()=>null}:id.endsWith('.module.css')?{default:new Proxy({},{get:(_,key)=>String(key)})}:new Proxy({},{get:(_,key)=>{const name=key==='default'?id.split('/').pop():String(key);if(!stubs.has(name))stubs.set(name,Object.defineProperty(()=>null,'displayName',{value:name}));return stubs.get(name);}});
   Function('require','exports',compile('JobRowActions'))(require,rowActions);
   const api=async(path)=>{requests.push(path);if(options.api)return options.api(path);return path.includes('?')?{ok:true,items:jobs,total:150,totalPages:2,page:Number(new URL(path,'https://test.invalid').searchParams.get('page'))}:audit(jobs.find(item=>path.endsWith(item.id)));};
   const window={setTimeout(callback){const id=++timerId;timers.set(id,callback);return id;},clearTimeout(id){timers.delete(id);},requestAnimationFrame(callback){callback();},confirm:()=>options.confirm!==false};
@@ -46,10 +47,31 @@ test('column filters request the full authorised dataset and reset pagination',a
 });
 
 test('column sorting uses API direction and exposes the actual selected sort',async()=>{
-  const h=runtime('CreditexPlannedIntakeQueue');let tree=await h.mount();button(tree,'Customer ↕').props.onClick();tree=await h.settle();
-  assert.match(h.requests.at(-1),/sort=customerName/);assert.match(h.requests.at(-1),/sortDirection=asc/);
-  assert.equal(nodes(tree,n=>n.type==='th'&&normalize(text(n))==='Customer ↑')[0].props['aria-sort'],'ascending');
-  button(tree,'Customer ↑').props.onClick();tree=await h.settle();assert.match(h.requests.at(-1),/sortDirection=desc/);assert.ok(button(tree,'Customer ↓'));h.cleanup();
+  const h=runtime('CreditexPlannedIntakeQueue');let tree=await h.mount();button(tree,'First name ↕').props.onClick();tree=await h.settle();
+  assert.match(h.requests.at(-1),/sort=customerFirstName/);assert.match(h.requests.at(-1),/sortDirection=asc/);
+  assert.equal(nodes(tree,n=>n.type==='th'&&normalize(text(n))==='First name ↑')[0].props['aria-sort'],'ascending');
+  button(tree,'First name ↑').props.onClick();tree=await h.settle();assert.match(h.requests.at(-1),/sortDirection=desc/);assert.ok(button(tree,'First name ↓'));h.cleanup();
+});
+
+test('created date and saved names have independent filters, sorts and paired calendar controls',async()=>{
+  const h=runtime('CreditexPlannedIntakeQueue');let tree=await h.mount();
+  assert.deepEqual(nodes(tree,n=>n.type==='th').slice(0,2).map(n=>normalize(text(n))),['Job ID ↕','Created ↕']);
+  button(tree,'Next').props.onClick();tree=await h.settle();
+  button(tree,'Filters').props.onClick();tree=h.render();
+  for(const [label,value] of [['Filter first name','Mary Jane'],['Filter last name','van Example'],['Created from','2026-09-20'],['Created to','2026-09-21']]) {
+    field(tree,label).props.onChange({target:{value}});tree=await h.settle();
+  }
+  const params=new URL(h.requests.at(-1),'https://test.invalid').searchParams;
+  assert.equal(params.get('firstName'),'Mary Jane');assert.equal(params.get('lastName'),'van Example');assert.equal(params.get('createdFrom'),'2026-09-20');assert.equal(params.get('createdTo'),'2026-09-21');assert.equal(params.get('page'),'1');
+  for(const [prefix,group] of [['Created','creditex-job-created'],['Planned','creditex-job-planned']]) {
+    assert.equal(field(tree,`${prefix} from`).props['data-date-range-group'],group);assert.equal(field(tree,`${prefix} to`).props['data-date-range-group'],group);
+    assert.equal(field(tree,`${prefix} from`).props['data-date-range-role'],'start');assert.equal(field(tree,`${prefix} to`).props['data-date-range-role'],'end');
+  }
+  button(tree,'Last name ↕').props.onClick();tree=await h.settle();assert.match(h.requests.at(-1),/sort=customerLastName/);
+  button(tree,'Created ↕').props.onClick();tree=await h.settle();assert.match(h.requests.at(-1),/sort=createdAt/);assert.match(h.requests.at(-1),/sortDirection=asc/);
+  button(tree,'Created ↑').props.onClick();tree=await h.settle();assert.match(h.requests.at(-1),/sortDirection=desc/);
+  button(tree,'Reset filters & sort').props.onClick();await h.settle();const reset=new URL(h.requests.at(-1),'https://test.invalid').searchParams;
+  for(const key of ['firstName','lastName','createdFrom','createdTo'])assert.equal(reset.has(key),false);h.cleanup();
 });
 
 test('filter controls remain usable when no rows match or a filter is rejected',async()=>{

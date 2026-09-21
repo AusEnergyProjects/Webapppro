@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
+import * as dateHelpers from "../src/lib/job-register-dates.ts";
 
 const compile = name => ts.transpileModule(fs.readFileSync(new URL(`../src/components/${name}.tsx`, import.meta.url), "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
 const text = node => node == null || typeof node === "boolean" ? "" : typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join(" ") : text(node.props?.children);
@@ -25,7 +26,7 @@ function harness(name, options = {}) {
   const document = { activeElement: null, documentElement: { clientWidth: 369 }, getElementById: () => ({ focus() {} }), addEventListener: (name, handler) => documentEvents.set(name, handler), removeEventListener: name => documentEvents.delete(name) };
   const window = { innerWidth: 390, innerHeight: 500, setTimeout(callback) { const id = ++timerId; timers.set(id, callback); return id; }, clearTimeout: id => timers.delete(id), requestAnimationFrame: callback => callback(), addEventListener: (name, handler) => windowEvents.set(name, handler), removeEventListener: name => windowEvents.delete(name) };
   const navigator = { clipboard: { async writeText(value) { if (options.clipboardFails) throw new Error("Denied"); copied.push(value); } } };
-  const item = { ...job, ...options.job };
+  const item = { ...job, customerFirstName: "Example", customerLastName: "Customer", customerBusinessName: "", ...options.job };
   const api = async (path, init) => {
     requests.push({ path, init });
     if (path.startsWith("/api/admin/jobs?")) return { ok: true, jobs: [item], facets: { stages: [], services: [], installers: [] }, pagination: { total: 1, pageSize: 50, hasNext: false } };
@@ -35,7 +36,7 @@ function harness(name, options = {}) {
   function WorkspaceTableTools() {}
   function CreditexAuditCallPanel() {}
   const shared = {};
-  const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./JobRowActions" ? shared : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : id === "./WorkspaceTableTools" ? { WorkspaceTableTools, downloadWorkspaceCsv() {} } : id === "./CreditexAuditCallPanel" ? { CreditexAuditCallPanel } : id === "@/lib/firebase-client" ? { firebaseAuth: { currentUser: { uid: "reviewer" } } } : {};
+  const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./JobRowActions" ? shared : id === "@/lib/job-register-dates" ? dateHelpers : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : id === "./WorkspaceTableTools" ? { WorkspaceTableTools, downloadWorkspaceCsv() {} } : id === "./CreditexAuditCallPanel" ? { CreditexAuditCallPanel } : id === "@/lib/firebase-client" ? { firebaseAuth: { currentUser: { uid: "reviewer" } } } : {};
   Function("require", "exports", "window", "document", compile("JobRowActions"))(require, shared, window, document);
   const exported = {};
   if (name !== "JobRowMenu" && name !== "JobActionsButton") Function("require", "exports", "window", "document", "navigator", compile(name))(require, exported, window, document, navigator);
@@ -76,9 +77,18 @@ test("copy reference stays local and clipboard denial produces a useful failure 
 test("Creditex displays independent contact, priority, assignment, quote, invoice and update columns", async () => {
   const h = harness("CreditexPlannedIntakeQueue"); const tree = await h.mount();
   const headings = nodes(tree, node => node.type === "th").map(text);
-  assert.equal(headings.length, 15);
-  for (const label of ["Work", "Contact", "Priority", "Assigned to", "Quote", "Invoice", "Record status", "Updated"]) assert.ok(headings.some(heading => heading.includes(label)), label);
+  assert.equal(headings.length, 17);
+  for (const label of ["Created", "Work", "First name", "Last name", "Contact", "Priority", "Assigned to", "Quote", "Invoice", "Record status", "Updated"]) assert.ok(headings.some(heading => heading.includes(label)), label);
   assert.match(text(tree), /customer@example.invalid/); assert.match(text(tree), /Assigned technician/); assert.match(text(tree), /\$1,234\.00/); assert.match(text(tree), /\$500\.00/); h.cleanup();
+});
+
+test("Creditex names remain stored fields and business-only customers never receive guessed personal names", async () => {
+  const h = harness("CreditexPlannedIntakeQueue", { job: { customerFirstName: "", customerLastName: "", customerName: "Example Business Pty Ltd", customerBusinessName: "Example Business Pty Ltd", createdAt: "2026-09-20T14:01:00.000Z" } });
+  const tree = await h.mount(); const row = nodes(tree, node => node.type === "tr" && node.props.onContextMenu)[0];
+  const cells = nodes(row, node => node.type === "td");
+  assert.equal(text(cells[1]), "21 Sept 2026");
+  assert.match(text(cells[3]), /Not recorded/); assert.match(text(cells[3]), /Business:.*Example Business Pty Ltd/);
+  assert.match(text(cells[4]), /Not recorded/); assert.doesNotMatch(text(cells[4]), /Business|Pty|Ltd/); h.cleanup();
 });
 
 test("Creditex context actions copy only selected values and Call customer opens authorised controls without dialing", async () => {

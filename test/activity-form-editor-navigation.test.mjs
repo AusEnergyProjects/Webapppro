@@ -16,8 +16,21 @@ const catalogue = [
   { activityTemplateId: "veu-6", programCode: "VEU", activityCode: "6", title: "Heating and cooling" },
   { activityTemplateId: "sres-pv", programCode: "SRES", activityCode: "PV", title: "Solar panels" },
 ];
+const masterForm = {
+  activityTemplateId: "veu-6", programCode: "VEU", variantId: "", variantOptions: [], title: "Heating and cooling", version: 2,
+  fields: [
+    { key: "custom.comment", label: "Extra comment", section: "Visit", type: "text", phase: "before", required: false, options: [], help: "" },
+    { key: "required.photo", label: "Required photo", section: "Visit", type: "photo", phase: "before", required: true, options: [], help: "", sourceRequirementId: "government-evidence" },
+  ],
+  declarations: [
+    { key: "custom.confirmation", title: "Extra confirmation", text: "I confirm the extra work.", role: "customer", phase: "after", required: false, sourceUrl: "", sourceTextSha256: "" },
+    { key: "program.confirmation", title: "Program confirmation", text: "Required program wording.", role: "customer", phase: "after", required: true, sourceUrl: "https://example.invalid/rule", sourceTextSha256: "source-hash" },
+  ], sources: [], reviewNotes: [],
+};
+const button = (tree, label) => nodes(tree, node => node.type === "button" && text(node) === label)[0];
+const edit = tree => nodes(tree, node => node.type === "button" && node.props["aria-label"] === "Edit VEU 6: Heating and cooling")[0];
 const flush = () => new Promise(resolve => setImmediate(resolve));
-function harness({ canAuthor = true, respond = async () => ({ catalogue }) } = {}) {
+function harness({ canAuthor = true, respond = async () => ({ catalogue }), confirm = true } = {}) {
   const state = [], effects = [], requests = [], signals = []; let cursor = 0, mounted = true, lateStateWrites = 0;
   const hooks = {
     useState(initial) { const i = cursor++; if (!(i in state)) state[i] = initial; return [state[i], value => { if (!mounted) lateStateWrites++; state[i] = typeof value === "function" ? value(state[i]) : value; }]; },
@@ -26,19 +39,59 @@ function harness({ canAuthor = true, respond = async () => ({ catalogue }) } = {
   };
   const api = async (path, init) => { requests.push(path); signals.push(init?.signal); return respond(path, init); };
   const exports = {};
-  Function("require", "exports", compiled)(id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id.endsWith(".module.css") ? { default: {} } : (() => { throw Error(id); })(), exports);
+  const window = { confirm: () => confirm, addEventListener() {}, removeEventListener() {} };
+  Function("require", "exports", "window", compiled)(id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id.endsWith(".module.css") ? { default: {} } : (() => { throw Error(id); })(), exports, window);
   const render = () => { cursor = 0; const tree = exports.CreditexFieldFormMasters({ api, actorMode: "admin", canAuthor }); effects.splice(0).forEach(run => run()); return tree; };
-  return { requests, signals, render, get lateStateWrites() { return lateStateWrites; }, unmount() { mounted = false; for (const slot of state) slot?.cleanup?.(); }, async mount() { render(); await flush(); return render(); } };
+  return { requests, signals, render, setConfirm(value) { confirm = value; }, get lateStateWrites() { return lateStateWrites; }, unmount() { mounted = false; for (const slot of state) slot?.cleanup?.(); }, async mount() { render(); await flush(); return render(); } };
 }
 
-test("authorised users get a searchable activity selector without opening another library", async () => {
+test("every form is immediately listed by program with its own Edit action", async () => {
   const h = harness(); let tree = await h.mount();
   assert.deepEqual(h.requests, ["/api/trade-activity-forms?view=masters&actorMode=admin"]);
   assert.match(text(tree), /Heating and cooling/); assert.match(text(tree), /Solar panels/);
+  assert.equal(nodes(tree, node => node.type === "button" && text(node) === "Edit").length, 2);
+  assert.equal(nodes(tree, node => node.type === "li").length, 2);
+  assert.deepEqual(nodes(tree, node => node.type === "h3").map(text), ["SRES", "VEU"]);
+  assert.match(text(tree), /Program forms stay available/);
   nodes(tree, node => node.type === "input" && node.props.type === "search")[0].props.onChange({ target: { value: "solar" } });
   tree = h.render();
   assert.match(text(tree), /Solar panels/); assert.doesNotMatch(text(tree), /Heating and cooling/);
   assert.equal(h.requests.length, 1, "search stays local to the loaded catalogue");
+});
+
+test("optional program and search filters combine, and clear restores all forms", async () => {
+  const h = harness(); let tree = await h.mount();
+  nodes(tree, node => node.type === "select")[0].props.onChange({ target: { value: "VEU" } });
+  tree = h.render(); assert.equal(nodes(tree, node => node.type === "li").length, 1); assert.ok(edit(tree));
+  nodes(tree, node => node.type === "input" && node.props.type === "search")[0].props.onChange({ target: { value: "solar" } });
+  tree = h.render(); assert.equal(nodes(tree, node => node.type === "li").length, 0); assert.match(text(tree), /No forms match these filters/);
+  button(tree, "Clear filters").props.onClick(); tree = h.render(); assert.equal(nodes(tree, node => node.type === "li").length, 2);
+  assert.equal(h.requests.length, 1);
+});
+
+test("Edit opens the exact form and Back preserves unsaved changes unless discard is confirmed", async () => {
+  const h = harness({ respond: async path => new URL(path, "https://test.invalid").searchParams.has("activityTemplateId") ? { form: masterForm, expectedVersion: 2 } : { catalogue }, confirm: false });
+  let tree = await h.mount(); edit(tree).props.onClick(); await flush(); tree = h.render();
+  assert.match(h.requests[1], /activityTemplateId=veu-6/);
+  assert.equal(nodes(tree, node => node.type === "li").length, 0); assert.ok(button(tree, "Back to all forms"));
+  const title = nodes(tree, node => node.type === "input" && node.props.value === "Heating and cooling")[0];
+  title.props.onChange({ target: { value: "Edited title" } }); tree = h.render();
+  button(tree, "Back to all forms").props.onClick(); tree = h.render(); assert.match(text(tree), /Unsaved changes/); assert.match(text(tree), /Edited title/);
+  h.setConfirm(true); button(tree, "Back to all forms").props.onClick(); tree = h.render();
+  assert.equal(nodes(tree, node => node.type === "li").length, 2); assert.equal(button(tree, "Back to all forms"), undefined);
+  assert.equal(h.requests.length, 2, "returning to the catalogue does not save or reload the edited master");
+});
+
+test("custom questions and declarations remain deletable while program requirements stay protected", async () => {
+  const h = harness({ respond: async path => path.includes("activityTemplateId") ? { form: masterForm, expectedVersion: 2 } : { catalogue } });
+  let tree = await h.mount(); edit(tree).props.onClick(); await flush(); tree = h.render();
+  assert.equal(button(tree, "Delete question").props.disabled, false);
+  const declarationButtons = nodes(tree, node => node.type === "button" && text(node) === "Delete declaration");
+  assert.deepEqual(declarationButtons.map(node => node.props.disabled), [false, true]);
+  declarationButtons[0].props.onClick(); tree = h.render(); assert.doesNotMatch(text(tree), /Extra confirmation/); assert.match(text(tree), /Program confirmation/);
+  button(tree, "Delete question").props.onClick(); tree = h.render();
+  assert.equal(button(tree, "Delete question").props.disabled, true); assert.match(text(tree), /regulator requirement/);
+  assert.equal(h.requests.length, 2, "question edits stay local until Save and publish master is chosen");
 });
 
 test("read-only identities do not request the protected master catalogue", async () => {

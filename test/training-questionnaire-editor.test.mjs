@@ -36,7 +36,8 @@ function harness(respond = responder(), options = {}) {
   const render = () => { cursor = 0; const tree = exports.TrainingQuestionnaireEditor({ api, canEdit: true, onDirtyChange, ...options }); for (const effect of effects.splice(0)) effect(); return tree; };
   return { render, requests, dirty, listeners, confirmations, refuseDiscard() { allowDiscard = false; }, allowDiscard() { allowDiscard = true; }, expireRequest() { assert.equal(timers.size, 1); [...timers.values()][0](); }, async mount() { render(); await flush(); return render(); } };
 }
-async function open(h) { let tree = await h.mount(); field(tree, 'Questionnaire').props.onChange({ target: { value: 'veu-6' } }); await flush(); return h.render(); }
+const moduleAction = (tree, title = original().module.title) => nodes(tree, node => node.type === 'button' && ['Edit training ', 'View training '].some(prefix => node.props['aria-label'] === prefix + title))[0];
+async function open(h) { let tree = await h.mount(); moduleAction(tree).props.onClick(); await flush(); return h.render(); }
 function edit(h, tree, name, value) { field(tree, name).props.onChange({ target: { value } }); return h.render(); }
 function review(h, tree) { field(tree, 'I have checked').props.onChange({ target: { checked: true } }); return h.render(); }
 
@@ -73,7 +74,7 @@ test('a timed-out save releases controls and preserves edits with an explicit re
 test('unsaved changes survive cancelled activity changes and switching to submitted records', async () => {
   const read = responder(); const h = harness((url, init) => url.includes('view=submissions') ? { submissions: [] } : read(url, init));
   let tree = await open(h); tree = edit(h, tree, 'Question', 'Keep my edits'); h.refuseDiscard();
-  const before = h.requests.length; field(tree, 'Questionnaire').props.onChange({ target: { value: 'other-module' } }); tree = h.render();
+  const before = h.requests.length; button(tree, 'Back to all training').props.onClick(); tree = h.render();
   assert.equal(h.requests.length, before); assert.equal(field(tree, 'Question').props.value, 'Keep my edits'); assert.equal(h.confirmations.length, 1);
   let warned = false; h.listeners.get('beforeunload')({ preventDefault() { warned = true; }, returnValue: undefined }); assert.equal(warned, true);
   button(tree, 'Trade compliance profiles').props.onClick(); await flush(); tree = h.render(); button(tree, 'Questionnaires').props.onClick(); tree = h.render();
@@ -145,10 +146,10 @@ test('people index finds older learners and loads more submissions within the sa
 test('editor groups and filters questionnaires by service, then creates in the chosen category', async () => {
   const normal = responder(); const h = harness((url, init) => url === endpoint ? { ...catalogue(), modules: [...catalogue().modules, { ...catalogue().modules[0], id: 'veu-48', title: 'Activity 48 ceiling insulation', assignment: { kind: 'catalogue', serviceCategory: 'insulation', jurisdictions: ['VIC'], activityLabel: 'Activity 48' } }] } : normal(url, init));
   let tree = await h.mount();
-  const grouped = nodes(field(tree, 'Questionnaire'), node => node.type === 'optgroup');
-  assert.deepEqual(grouped.map(node => node.props.label), ['Heating and cooling', 'Insulation']);
+  const grouped = nodes(tree, node => node.props?.className === 'libraryGroup');
+  assert.deepEqual(grouped.map(node => node.props['aria-label']), ['Heating and cooling', 'Insulation']);
   tree = edit(h, tree, 'Filter by service category', 'insulation');
-  assert.match(text(field(tree, 'Questionnaire')), /Activity 48/); assert.doesNotMatch(text(field(tree, 'Questionnaire')), /Activity 6 heating/);
+  assert.match(text(tree), /Activity 48/); assert.doesNotMatch(text(tree), /Activity 6 heating/);
   button(tree, 'Create questionnaire').props.onClick(); tree = h.render();
   assert.equal(field(tree, 'Service category for this training').props.value, 'insulation');
   assert.equal(field(tree, 'Service category for this training').props.disabled, false);
@@ -167,9 +168,9 @@ test('Other forms are browsed in specific sections and new custom forms save a c
   const fridge = { ...pool, id: 'veu-22', title: 'Fridge installation' };
   const h = harness((url, init) => url === endpoint && !init.method ? { ...catalogue(), modules: [pool, fridge], services: [...catalogue().services, { id: 'other', label: 'Other energy upgrade' }] } : normal(url, init));
   let tree = await h.mount();
-  assert.deepEqual(nodes(field(tree, 'Questionnaire'), node => node.type === 'optgroup').map(node => node.props.label), ['Fridges and freezers', 'Pool and spa pumps']);
+  assert.deepEqual(nodes(tree, node => node.props?.className === 'libraryGroup').map(node => node.props['aria-label']), ['Fridges and freezers', 'Pool and spa pumps']);
   tree = edit(h, tree, 'Filter by service category', 'other:pool-pumps');
-  assert.doesNotMatch(text(field(tree, 'Questionnaire')), /Fridge installation/);
+  assert.doesNotMatch(text(tree), /Fridge installation/);
   button(tree, 'Create questionnaire').props.onClick(); tree = h.render();
   assert.equal(field(tree, 'Service category for this training').props.value, 'other');
   assert.equal(field(tree, 'Training section').props.value, 'pool-pumps');
@@ -177,4 +178,46 @@ test('Other forms are browsed in specific sections and new custom forms save a c
   button(tree, 'Save draft').props.onClick(); await flush();
   const body = JSON.parse(h.requests.find(item => item.method === 'POST').body);
   assert.equal(body.assignment.serviceCategory, 'other'); assert.equal(body.assignment.trainingSection, 'commercial-refrigeration');
+});
+
+test('training opens as a full visible library, including uncategorised entries, without a module dropdown', async () => {
+  const library = catalogue(); library.modules.push({ ...library.modules[0], id: 'custom-draft', title: 'Site briefing', publishedVersion: '', assignment: { kind: 'additional', serviceCategory: '', jurisdictions: ['AU'], activityLabel: 'Briefing' } });
+  const h = harness(async () => library); const tree = await h.mount();
+  assert.ok(moduleAction(tree)); assert.ok(moduleAction(tree, 'Site briefing'));
+  assert.equal(nodes(tree, node => node.type === 'option' && text(node).includes('Activity 6 heating')).length, 0);
+  assert.equal(nodes(tree, node => node.type === 'li' && node.props?.className === 'libraryRow').length, 2);
+  assert.match(text(tree), /Required programme module/);
+  assert.ok(nodes(tree, node => node.props?.title === 'Required activity training cannot be deleted.')[0]);
+  assert.equal(button(tree, 'Delete draft'), undefined);
+});
+
+test('Back to all training preserves cancelled edits and accepted navigation restores the complete library', async () => {
+  const h = harness(); let tree = await open(h);
+  tree = edit(h, tree, 'Question', 'Unsaved question'); h.refuseDiscard(); button(tree, 'Back to all training').props.onClick(); tree = h.render();
+  assert.equal(field(tree, 'Question').props.value, 'Unsaved question');
+  h.allowDiscard(); button(tree, 'Back to all training').props.onClick(); tree = h.render();
+  assert.ok(moduleAction(tree)); assert.equal(h.dirty.at(-1), false); assert.equal(button(tree, 'Save draft'), undefined);
+  button(tree, 'Create questionnaire').props.onClick(); tree = h.render(); button(tree, 'Discard new questionnaire').props.onClick(); tree = h.render();
+  assert.ok(moduleAction(tree)); assert.equal(h.requests.some(request => request.method), false);
+});
+
+test('only eligible drafts offer named deletion and cancelled confirmation makes no request', async () => {
+  const library = catalogue(); const item = { ...library.modules[0], id: 'custom-draft', title: 'Unused induction', revision: 3, publishedVersion: '', canDelete: true, deleteBlockedReason: '', assignment: { ...library.modules[0].assignment, kind: 'additional' } }; library.modules.push(item);
+  const h = harness(async (url, init) => init.method ? { moduleId: item.id, deleted: true } : library);
+  let tree = await h.mount(); h.refuseDiscard(); button(tree, 'Delete draft').props.onClick(); tree = h.render();
+  assert.equal(h.requests.some(request => request.method), false); assert.match(h.confirmations[0], /Unused induction/);
+  h.allowDiscard(); button(tree, 'Delete draft').props.onClick(); await flush(); tree = h.render();
+  const write = JSON.parse(h.requests.find(request => request.method).body);
+  assert.deepEqual(write, { action: 'delete_draft', moduleId: 'custom-draft', expectedRevision: 3 });
+  assert.equal(moduleAction(tree, item.title), undefined); assert.ok(moduleAction(tree)); assert.match(text(tree), /Deleted unused draft/);
+  const readOnly = harness(async () => library, { canEdit: false }); const readOnlyTree = await readOnly.mount();
+  assert.equal(button(readOnlyTree, 'Delete draft'), undefined); assert.ok(moduleAction(readOnlyTree, item.title));
+});
+
+test('unconfirmed deletion retains the draft and offers refresh without claiming success', async () => {
+  const library = catalogue(); const item = { ...library.modules[0], id: 'custom-draft', title: 'Unused induction', revision: 3, canDelete: true, assignment: { ...library.modules[0].assignment, kind: 'additional' } }; library.modules = [item];
+  const h = harness(async (_url, init) => { if (init.method) throw Error('Revision changed.'); return library; });
+  let tree = await h.mount(); button(tree, 'Delete draft').props.onClick(); await flush(); tree = h.render();
+  assert.ok(moduleAction(tree, item.title)); assert.match(text(tree), /Deletion could not be confirmed/); assert.match(text(tree), /Revision changed/);
+  assert.doesNotMatch(text(tree), /Deleted unused draft/); assert.equal(button(tree, 'Refresh training').props.disabled, false);
 });
