@@ -50,8 +50,8 @@ export function publicLeadAcceptedCrmCustomerName(contact) {
   };
 }
 
-export function publicLeadQuoteWorkflowSnapshot(row) {
-  const contact = publicTradeContactForMatchedLead(row);
+export function publicLeadQuoteWorkflowSnapshot(row, allowAeaDelivery = false) {
+  const contact = publicTradeContactForMatchedLead(row, allowAeaDelivery);
   const categories = strictPublicPlanQuoteServiceCategories(row?.matched_categories);
   if (!contact || !categories.length) return null;
   const answers = publicPlanQuoteAnswersForMatchedCategories(
@@ -128,7 +128,7 @@ export function publicLeadAcceptedDisclosure(snapshot, row, acceptedAt, photos =
   };
 }
 
-export function publicLeadQuoteAccessSnapshot(row, now = Date.now()) {
+export function publicLeadQuoteAccessSnapshot(row, now = Date.now(), allowAeaDelivery = false) {
   const nowMs = typeof now === "number" ? now : Date.parse(String(now || ""));
   const expiresAtMs = Date.parse(String(row?.expires_at || ""));
   if (
@@ -138,7 +138,7 @@ export function publicLeadQuoteAccessSnapshot(row, now = Date.now()) {
     || !["interested", "connected"].includes(String(row?.match_status || ""))
     || String(row?.opportunity_status || "") !== "open"
   ) return null;
-  return publicLeadQuoteWorkflowSnapshot(row);
+  return publicLeadQuoteWorkflowSnapshot(row, allowAeaDelivery);
 }
 
 export function publicLeadQuoteAccessFingerprint(row) {

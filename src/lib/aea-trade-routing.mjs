@@ -1,7 +1,7 @@
 import { AEA_RESERVED_SERVICE_IDS, requiresAeaDelivery } from "./aea-service-identity.mjs";
 
 // Authorize the complete stored scope before exposing any part of an enquiry.
-export function tradeOpportunityServiceScopeAllowed(value) {
+export function tradeOpportunityServiceScopeAllowed(value, allowAeaDelivery = false) {
   let services;
   try {
     services = Array.isArray(value) ? value : JSON.parse(String(value ?? ""));
@@ -12,13 +12,14 @@ export function tradeOpportunityServiceScopeAllowed(value) {
     || services.some((service) => typeof service !== "string" || !service.trim())) {
     return false;
   }
-  return !requiresAeaDelivery(services.map((service) => service.trim().toLowerCase()));
+  return allowAeaDelivery === true || !requiresAeaDelivery(services.map((service) => service.trim().toLowerCase()));
 }
 
 // Only server-owned SQL aliases are accepted; service IDs come from the catalogue.
-function opportunityServiceScopeSqlParts(alias) {
+export function opportunityServiceScopeSqlParts(alias, column = "service_categories") {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(alias)) throw new Error("Invalid opportunity SQL alias.");
-  const raw = alias + ".service_categories";
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) throw new Error("Invalid service scope SQL column.");
+  const raw = alias + "." + column;
   const reserved = AEA_RESERVED_SERVICE_IDS.map((id) => "'" + id.replaceAll("'", "''") + "'").join(", ");
   return { raw, reserved };
 }
@@ -32,8 +33,8 @@ export function tradeOpportunityServiceScopeSql(alias) {
 }
 
 // Customer delivery may use reserved drafts, but invalid scope is never permission.
-export function aeaDeliveredServiceScopeSql(alias) {
-  const { raw, reserved } = opportunityServiceScopeSqlParts(alias);
+export function aeaDeliveredServiceScopeSql(alias, column = "service_categories") {
+  const { raw, reserved } = opportunityServiceScopeSqlParts(alias, column);
   return "(CASE WHEN json_valid(" + raw + ") THEN (json_type(" + raw + ") = 'array' AND json_array_length(" + raw + ") > 0"
     + " AND NOT EXISTS (SELECT 1 FROM json_each(" + raw + ") scope_service"
     + " WHERE scope_service.type <> 'text' OR trim(scope_service.value) = '')"

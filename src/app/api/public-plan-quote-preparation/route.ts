@@ -1,4 +1,5 @@
-import { aeaDeliveredServiceScopeSql, tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
+import { aeaDeliveredServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
+import { tradeOpportunityOwnerScopeSql } from "@/lib/aea-trade-owner-server";
 import { getD1 } from "../../../../db";
 import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { getCustomerProjectEvidenceBucket as getEvidenceBucket } from "@/lib/customer-project-evidence-bucket";
@@ -947,12 +948,12 @@ export async function GET(request: Request) {
       ON opportunity.id = photo.opportunity_id
       AND opportunity.source_reference = preparation.source_reference
       AND opportunity.status = 'open'
-      AND ${tradeOpportunityServiceScopeSql("opportunity")}
       AND datetime(opportunity.expires_at) > datetime('now')
     JOIN trade_opportunity_matches match
       ON match.opportunity_id = opportunity.id
       AND match.firebase_uid = ?
       AND match.status IN ('offered', 'viewed', 'interested', 'connected')
+      AND ${tradeOpportunityOwnerScopeSql("opportunity", "match.firebase_uid")}
       AND ${certificateLeadEligibilitySql("match.firebase_uid", "match.matched_categories", "opportunity.state")}
     JOIN trade_accounts account
       ON account.firebase_uid = match.firebase_uid

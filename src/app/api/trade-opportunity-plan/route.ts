@@ -1,4 +1,4 @@
-import { tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
+import { tradeOpportunityOwnerScopeSql } from "@/lib/aea-trade-owner-server";
 import { getD1 } from "../../../../db";
 import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
@@ -102,7 +102,7 @@ export async function GET(request: Request) {
       AND m.status IN ('offered', 'viewed', 'interested', 'connected')
       AND o.status IN ('open', 'paused')
       AND ${certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
-      AND ${tradeOpportunityServiceScopeSql("o")}
+      AND ${tradeOpportunityOwnerScopeSql("o", "m.firebase_uid")}
       AND o.source_reference LIKE 'customer-project:%'
       AND EXISTS (
         SELECT 1 FROM customer_consent_receipts consent

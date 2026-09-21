@@ -10,9 +10,9 @@ function exactStoredDisclosedFields(value) {
   }
 }
 
-export function publicTradeContactForMatchedLead(row) {
+export function publicTradeContactForMatchedLead(row, allowAeaDelivery = false) {
   if (!row?.public_contact_release_id
-    || !tradeOpportunityServiceScopeAllowed(row.opportunity_service_categories)) return null;
+    || !tradeOpportunityServiceScopeAllowed(row.opportunity_service_categories, allowAeaDelivery)) return null;
   const disclosedFields = exactStoredDisclosedFields(
     row.public_contact_disclosed_fields,
   );
@@ -90,6 +90,7 @@ export function publicTradeContactForMatchedLead(row) {
     grantedAt: row.public_contact_granted_at,
     noticeVersion: row.public_contact_notice_version,
     message,
-    releaseScope: "all_qualified_trades",
+    releaseScope: tradeOpportunityServiceScopeAllowed(row.opportunity_service_categories)
+      ? "all_qualified_trades" : "aea_only",
   };
 }

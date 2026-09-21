@@ -426,12 +426,15 @@ test("exact opportunity targeting validates one match id and remains owner scope
   );
   assert.match(
     tradeOpportunities,
-    /JOIN trade_opportunity_matches m ON m\.opportunity_id = p\.opportunity_id AND m\.firebase_uid = \?[\s\S]*AND \(\? = '' OR m\.id = \?\)/,
+    /JOIN trade_opportunity_matches m ON m\.opportunity_id = p\.opportunity_id AND m\.firebase_uid = \?[\s\S]*AND m\.id IN \(SELECT value FROM json_each\(\?\)\)/,
   );
   assert.match(
     tradeOpportunities,
     /\.bind\(user\.uid, requestedMatchId, requestedMatchId\)/,
   );
+  assert.match(tradeOpportunities, /const initiallyAuthorized = await authorizedLeadIdsStatement\.all/);
+  assert.match(tradeOpportunities, /\.bind\(user\.uid, authorizedMatchIdsJson\)/);
+  assert.match(tradeOpportunities, /if \(!authorizedMatchIds\.has\(matchId\) \|\| !currentAuthorizedMatchIds\.has\(matchId\)\) return \[\]/);
 });
 
 test("activity delivery rechecks recipient consent and preserves exact retry payloads", () => {

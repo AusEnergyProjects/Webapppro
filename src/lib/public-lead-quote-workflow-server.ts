@@ -1,4 +1,4 @@
-import { tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
+import { isAeaTradeOwner, tradeOpportunityOwnerScopeSql } from "@/lib/aea-trade-owner-server";
 import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import {
   publicPlanContactReleaseAccessSql,
@@ -320,7 +320,7 @@ export async function startPublicLeadQuoteWorkflow(
     JOIN trade_opportunities o ON o.id = m.opportunity_id
     WHERE m.id = ? AND m.firebase_uid = ?
     AND ${certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
-    AND ${tradeOpportunityServiceScopeSql("o")} LIMIT 1`)
+    AND ${tradeOpportunityOwnerScopeSql("o", "m.firebase_uid")} LIMIT 1`)
     .bind(matchId, installerUid).first();
   if (!scope) throw new Error("PUBLIC_LEAD_QUOTE_WORKFLOW_UNAVAILABLE");
   const existing = await existingWorkflow(db, installerUid, matchId, ids);
@@ -379,7 +379,7 @@ export async function startPublicLeadQuoteWorkflow(
       AND preparation.withdrawn_at = ''
     WHERE m.id = ? AND m.firebase_uid = ? AND m.status = ?
       AND o.status = 'open'
-      AND ${tradeOpportunityServiceScopeSql("o")}
+      AND ${tradeOpportunityOwnerScopeSql("o", "m.firebase_uid")}
       AND o.expires_at > ?
     LIMIT 1`)
     .bind(
@@ -391,7 +391,7 @@ export async function startPublicLeadQuoteWorkflow(
       now,
     )
     .first<Row>();
-  const snapshot = publicLeadQuoteWorkflowSnapshot(row);
+  const snapshot = publicLeadQuoteWorkflowSnapshot(row, await isAeaTradeOwner(db, installerUid));
   if (!row || !snapshot) throw new Error("PUBLIC_LEAD_QUOTE_WORKFLOW_UNAVAILABLE");
   const acceptedCrmName = publicLeadAcceptedCrmCustomerName(snapshot.contact);
   // Production D1 limits compound SELECTs to five terms. Keep this fail-closed
@@ -529,7 +529,7 @@ export async function startPublicLeadQuoteWorkflow(
           AND guarded_match.status = ? AND guarded_match.opportunity_id = ?
           AND guarded_opportunity.status = 'open'
           AND ${certificateLeadEligibilitySql("guarded_match.firebase_uid", "guarded_match.matched_categories", "guarded_opportunity.state")}
-          AND ${tradeOpportunityServiceScopeSql("guarded_opportunity")}
+          AND ${tradeOpportunityOwnerScopeSql("guarded_opportunity", "guarded_match.firebase_uid")}
           AND guarded_opportunity.expires_at > ?
       ) THEN 1 ELSE json_extract('PUBLIC_LEAD_QUOTE_STATE_CHANGED', '$') END workflow_guard`)
       .bind(row.public_contact_release_id, matchId, installerUid,
@@ -540,7 +540,7 @@ export async function startPublicLeadQuoteWorkflow(
         AND EXISTS (SELECT 1 FROM trade_opportunities opportunity
           WHERE opportunity.id = trade_opportunity_matches.opportunity_id
             AND opportunity.status = 'open'
-            AND ${tradeOpportunityServiceScopeSql("opportunity")}
+            AND ${tradeOpportunityOwnerScopeSql("opportunity", "trade_opportunity_matches.firebase_uid")}
             AND opportunity.expires_at > ?)`)
       .bind(now, matchId, installerUid, expectedMatchStatus, row.opportunity_id, now),
     db.prepare(`INSERT OR IGNORE INTO trade_crm_customers

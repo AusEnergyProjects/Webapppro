@@ -1,3 +1,6 @@
+import { aeaTradeOwnerSql } from "./aea-trade-owner-server";
+import { aeaDeliveredServiceScopeSql } from "./aea-trade-routing.mjs";
+
 function expression(value: string) {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*$/.test(value)) throw new Error("A static qualified SQL column is required.");
   return value;
@@ -9,7 +12,14 @@ function expression(value: string) {
  */
 export function certificateLeadEligibilitySql(ownerColumn: string, categoriesColumn: string, stateColumn: string) {
   const owner = expression(ownerColumn); const categories = expression(categoriesColumn); const state = expression(stateColumn);
-  return `(EXISTS (SELECT 1 FROM creditex_current_business_jurisdictions approved_business
+  const [categoryAlias, categoryColumn] = categories.split(".");
+  return `(CASE WHEN ${aeaDeliveredServiceScopeSql(categoryAlias, categoryColumn)} THEN
+    (${aeaTradeOwnerSql(owner)} AND EXISTS (
+    SELECT 1 FROM trade_accounts aea_coverage
+    WHERE aea_coverage.firebase_uid = ${owner}
+      AND EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(aea_coverage.service_states) THEN aea_coverage.service_states ELSE '[]' END) aea_state
+        WHERE (aea_state.type, aea_state.value) = ('text', ${state})))) ELSE
+    EXISTS (SELECT 1 FROM creditex_current_business_jurisdictions approved_business
     WHERE (approved_business.owner_uid,approved_business.state) = (${owner},${state})
       AND EXISTS (SELECT 1 FROM trade_accounts offered_business
         WHERE offered_business.firebase_uid = ${owner}
@@ -20,7 +30,7 @@ export function certificateLeadEligibilitySql(ownerColumn: string, categoriesCol
               WHERE NOT EXISTS (
                 SELECT 1 FROM json_each(offered_business.capabilities) offered_category
                 WHERE (offered_category.type,offered_category.value,matched_category.type) = ('text',matched_category.value,'text')))
-          ELSE 0 END)))`;
+          ELSE 0 END)) END)`;
 }
 
 export async function certificateLeadEligible(db: D1Database, ownerUid: string, categories: readonly string[], state: string) {

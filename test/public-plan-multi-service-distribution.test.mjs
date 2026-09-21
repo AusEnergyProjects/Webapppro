@@ -111,7 +111,7 @@ test("a multi-service public lead reaches every approved trade matching at least
     ],
   );
   assert.equal(recipients.some((trade) => trade.firebaseUid === "unrelated"), false);
-  assert.match(opportunityServer, /const matchedCategories = matchedServiceCategories\(categories, capabilities\)/);
+  assert.match(opportunityServer, /const matchedCategories = requiresAeaDelivery\(categories\)[\s\S]*aea_delivery_authorised[\s\S]*: matchedServiceCategories\(categories, capabilities\)/);
   assert.match(opportunityServer, /if \(!serviceStates\.includes\(state\) \|\| !matchedCategories\.length\) return null/);
 });
 

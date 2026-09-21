@@ -1,9 +1,12 @@
 import { certificateTestDependency, installCreditexTrainingFixture } from './creditex-training-fixture.mjs';
 const { certificateLeadEligibilitySql } = certificateTestDependency('trade-certificate-leads');
+const { tradeOpportunityOwnerScopeSql, aeaTradeOwnerSql } = certificateTestDependency('aea-trade-owner-server');
 
 export function expandCreditexLeadSql(sql) {
   return sql.replaceAll(/\$\{(?:await )?certificateLeadEligibilitySql\("([^"]+)", "([^"]+)", "([^"]+)"\)\}/g,
-    (_, owner, categories, state) => certificateLeadEligibilitySql(owner, categories, state));
+    (_, owner, categories, state) => certificateLeadEligibilitySql(owner, categories, state))
+    .replaceAll(/\$\{tradeOpportunityOwnerScopeSql\("([^"]+)", "([^"]+)"\)\}/g, (_, opportunity, owner) => tradeOpportunityOwnerScopeSql(opportunity, owner))
+    .replaceAll(/\$\{aeaTradeOwnerSql\("([^"]+)"\)\}/g, (_, owner) => aeaTradeOwnerSql(owner));
 }
 
 export function qualifyLeadFixture(database) {

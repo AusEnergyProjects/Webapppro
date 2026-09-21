@@ -1,4 +1,5 @@
-import { tradeOpportunityServiceScopeAllowed, tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
+import { aeaDeliveredServiceScopeSql, tradeOpportunityServiceScopeAllowed } from "@/lib/aea-trade-routing.mjs";
+import { aeaTradeOwnerSql, tradeOpportunityOwnerScopeSql } from "@/lib/aea-trade-owner-server";
 import { getD1 } from "../../db";
 import { parseJsonList } from "@/lib/admin-server";
 import { postcodeDistanceKm } from "@/lib/postcode-distance";
@@ -83,7 +84,7 @@ export async function syncMarketplaceEnquiries(db: D1Database, opportunityId: st
             AND ${verifiedTradeAccountPredicate("current_trade_account")}
         )
     WHERE m.opportunity_id = ? AND (? = '' OR m.firebase_uid = ?)
-      AND ${tradeOpportunityServiceScopeSql("o")}
+      AND ${tradeOpportunityOwnerScopeSql("o", "m.firebase_uid")}
       AND ${await certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
     ON CONFLICT(firebase_uid, source_type, source_reference) DO UPDATE SET
       status = excluded.status, service_category = excluded.service_category,
@@ -569,6 +570,10 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
         eligibleCount: 0,
         dispatchRequired: true,
       }
+    : requiresAeaDelivery(categories) && protectedPublicLead && stored.contactIsCurrent
+      && payload.directTradeTriage?.autoSend !== false && !assistantDurableDispatch
+      && ["draft", "open"].includes(stored.status)
+      ? await routeAeaServiceOpportunity(stored.id, "automatic-aea-lead-intake")
     : stored.status === "open" && stored.contactIsCurrent
       ? await allocateNearestInstallers(stored.id, "automatic-lead-intake")
       : { allocated: [], activeCount: 0, eligibleCount: 0 };
@@ -611,7 +616,9 @@ function candidateFromRow(
   const capabilities = parseJsonList(row.capabilities);
   const categories = parseJsonList(opportunity.service_categories);
   const state = canonicalMarketplaceState(opportunity.state);
-  const matchedCategories = matchedServiceCategories(categories, capabilities);
+  const matchedCategories = requiresAeaDelivery(categories)
+    ? Number(row.aea_delivery_authorised) === 1 ? categories : []
+    : matchedServiceCategories(categories, capabilities);
   if (!serviceStates.includes(state) || !matchedCategories.length) return null;
   const serviceArea = qualifyingServiceArea(
     row,
@@ -640,6 +647,7 @@ function candidateFromRow(
 export async function allocateNearestInstallers(
   opportunityId: string,
   matchedByUid: string,
+  allowAeaDraft = false,
 ) {
   await expireStaleOpportunities();
   const db = getD1();
@@ -651,10 +659,13 @@ export async function allocateNearestInstallers(
     .bind(opportunityId)
     .first<Record<string, unknown>>();
   if (!opportunity) throw new Error("OPPORTUNITY_NOT_FOUND");
-  if (!tradeOpportunityServiceScopeAllowed(opportunity.service_categories)) {
+  if (!tradeOpportunityServiceScopeAllowed(opportunity.service_categories, true)) {
     return { allocated: [], activeCount: 0, eligibleCount: 0, alreadyAllocatedCount: 0 };
   }
-  if (opportunity.status !== "open") throw new Error("OPPORTUNITY_NOT_OPEN");
+  const aeaOnly = requiresAeaDelivery(parseJsonList(opportunity.service_categories));
+  if (allowAeaDraft && !aeaOnly) throw new Error("AEA_SERVICE_REQUIRED");
+  const openAeaDraft = allowAeaDraft && aeaOnly && opportunity.status === "draft";
+  if (opportunity.status !== "open" && !openAeaDraft) throw new Error("OPPORTUNITY_NOT_OPEN");
   if (
     postcodeDistanceKm(
       String(opportunity.postcode),
@@ -684,6 +695,7 @@ export async function allocateNearestInstallers(
     .prepare(
       `SELECT a.firebase_uid, a.business_name, a.postcode, a.service_base_postcode,
     a.service_radius_km, a.service_states, a.capabilities, a.availability_status,
+    ${aeaTradeOwnerSql("a.firebase_uid")} aea_delivery_authorised,
     COALESCE((
       SELECT json_group_array(json_object(
         'postcode', service_area.postcode,
@@ -709,6 +721,21 @@ export async function allocateNearestInstallers(
     .filter((item: InstallerCandidate | null): item is InstallerCandidate => Boolean(item));
   const eligibleOwners = await certificateLeadEligibleOwners(db, categoryCandidates, String(opportunity.state));
   const qualifiedCandidates = categoryCandidates.filter((candidate) => eligibleOwners.has(candidate.firebaseUid));
+  if (openAeaDraft && qualifiedCandidates.length) {
+    await db.prepare(`UPDATE trade_opportunities SET status = 'open', updated_at = ?
+      WHERE id = ? AND status = 'draft' AND datetime(expires_at) > datetime('now')
+        AND ${aeaDeliveredServiceScopeSql("trade_opportunities")}
+        AND EXISTS (SELECT 1 FROM public_trade_lead_contact_releases retained_contact
+          WHERE retained_contact.opportunity_id = trade_opportunities.id
+            AND retained_contact.source_reference = trade_opportunities.source_reference
+            AND retained_contact.postcode = trade_opportunities.postcode
+            AND retained_contact.status = 'active' AND retained_contact.withdrawn_at = ''
+            AND datetime(retained_contact.granted_at) IS NOT NULL
+            AND ${publicPlanContactReleaseAccessSql("retained_contact")})
+        AND EXISTS (SELECT 1 FROM json_each(?) aea_candidate
+          WHERE ${aeaTradeOwnerSql("aea_candidate.value")})`)
+      .bind(now, opportunityId, JSON.stringify(qualifiedCandidates.map(candidate => candidate.firebaseUid))).run();
+  }
   const candidates = qualifiedCandidates
     .filter((candidate: InstallerCandidate) => !previouslyMatched.has(candidate.firebaseUid))
     .sort(
@@ -742,7 +769,16 @@ export async function allocateNearestInstallers(
     FROM (SELECT ? owner_uid, ? categories, ? state) certificate_candidate
     WHERE ${businessLeadPredicate} AND EXISTS (SELECT 1 FROM trade_opportunities current_opportunity
       WHERE current_opportunity.id = ? AND current_opportunity.status = 'open'
-        AND ${tradeOpportunityServiceScopeSql("current_opportunity")})
+        AND datetime(current_opportunity.expires_at) > datetime('now')
+        AND ${tradeOpportunityOwnerScopeSql("current_opportunity", "certificate_candidate.owner_uid")}
+        AND (NOT ${aeaDeliveredServiceScopeSql("current_opportunity")} OR EXISTS (
+          SELECT 1 FROM public_trade_lead_contact_releases retained_contact
+          WHERE retained_contact.opportunity_id = current_opportunity.id
+            AND retained_contact.source_reference = current_opportunity.source_reference
+            AND retained_contact.postcode = current_opportunity.postcode
+            AND retained_contact.status = 'active' AND retained_contact.withdrawn_at = ''
+            AND datetime(retained_contact.granted_at) IS NOT NULL
+            AND ${publicPlanContactReleaseAccessSql("retained_contact")})))
     ON CONFLICT(opportunity_id, firebase_uid) DO NOTHING`,
           )
           .bind(
@@ -776,4 +812,10 @@ export async function allocateNearestInstallers(
     eligibleCount: qualifiedCandidates.length,
     alreadyAllocatedCount: qualifiedCandidates.length - candidates.length,
   };
+}
+
+// Retained enquiries may open only through the AEA-only recipient and consent checks.
+// Ordinary drafts and manually paused/closed enquiries remain untouched.
+export async function routeAeaServiceOpportunity(opportunityId: string, matchedByUid: string) {
+  return allocateNearestInstallers(opportunityId, matchedByUid, true);
 }

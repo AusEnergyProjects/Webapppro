@@ -1,4 +1,5 @@
-import { tradeOpportunityServiceScopeAllowed, tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
+import { isAeaTradeOwner, tradeOpportunityOwnerScopeSql } from "@/lib/aea-trade-owner-server";
+import { tradeOpportunityServiceScopeAllowed } from "@/lib/aea-trade-routing.mjs";
 import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { getD1 } from "../../../../db";
 import { parseJsonList } from "@/lib/admin-server";
@@ -257,45 +258,23 @@ export async function GET(request: Request) {
       FROM trade_opportunity_matches bounded_match
       JOIN trade_opportunities bounded_opportunity
         ON bounded_opportunity.id = bounded_match.opportunity_id
-      LEFT JOIN customer_projects bounded_project
-        ON (bounded_project.opportunity_id, bounded_opportunity.source_reference) =
-          (bounded_opportunity.id, 'customer-project:' || bounded_project.id)
       WHERE bounded_match.firebase_uid = ?
-        AND (? = '' OR bounded_match.id = ?)
+        AND bounded_match.id IN (SELECT value FROM json_each(?))
         AND bounded_opportunity.status IN ('open', 'paused')
-        AND ${tradeOpportunityServiceScopeSql("bounded_opportunity")}
-        AND ${await certificateLeadEligibilitySql("bounded_match.firebase_uid", "bounded_match.matched_categories", "bounded_opportunity.state")}
         AND bounded_match.status IN ('offered', 'viewed', 'interested', 'connected')
-        AND (
-          bounded_project.id IS NULL OR EXISTS (
-            SELECT 1 FROM customer_consent_receipts bounded_matching_consent
-            WHERE (bounded_matching_consent.project_id, bounded_matching_consent.firebase_uid,
-              bounded_matching_consent.purpose, bounded_matching_consent.withdrawn_at) =
-              (bounded_project.id, bounded_project.firebase_uid, 'anonymized_installer_matching', '')
-          )
-        )
       ORDER BY (bounded_match.status = 'offered') DESC, (bounded_match.status = 'viewed') DESC,
         (bounded_match.status = 'interested') DESC,
         bounded_match.updated_at DESC, bounded_match.id ASC
       LIMIT 100
     )`;
-  const baseLeadStatement = db.prepare(`SELECT
-      m.id match_id, m.firebase_uid installer_uid, m.status match_status,
-      m.matched_categories, m.distance_metres, m.allocation_rank,
-      m.contact_attempt_count, m.last_contact_at, m.connected_at,
-      m.matched_at, m.updated_at,
-      o.id, o.title, o.project_type, o.suburb opportunity_suburb,
-      o.postcode opportunity_postcode, o.state, o.service_categories,
-      o.priority, o.timing, o.summary, o.status, o.contact_limit,
-      o.expires_at, o.source_reference,
-      p.id customer_project_id, p.firebase_uid customer_uid
+  const authorizedLeadIdsStatement = db.prepare(`SELECT m.id authorized_match_id
     FROM trade_opportunity_matches m
     JOIN trade_opportunities o ON o.id = m.opportunity_id
     LEFT JOIN customer_projects p ON p.opportunity_id = o.id
       AND o.source_reference = 'customer-project:' || p.id
     WHERE m.firebase_uid = ? AND (? = '' OR m.id = ?)
       AND o.status IN ('open', 'paused')
-      AND ${tradeOpportunityServiceScopeSql("o")}
+      AND ${tradeOpportunityOwnerScopeSql("o", "m.firebase_uid")}
       AND ${certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
       AND m.status IN ('offered', 'viewed', 'interested', 'connected')
       AND (
@@ -311,6 +290,32 @@ export async function GET(request: Request) {
       (m.status = 'interested') DESC,
       m.updated_at DESC, m.id ASC
     LIMIT 100`).bind(user.uid, requestedMatchId, requestedMatchId);
+  // Keep extensions bounded without repeating the entire authorization graph in
+  // every query. The batch below re-runs this authoritative read in the same
+  // transaction as the extensions; only IDs surviving both reads are serialized.
+  const initiallyAuthorized = await authorizedLeadIdsStatement.all<Record<string, unknown>>();
+  const authorizedMatchIds = new Set(initiallyAuthorized.results.map((row) => String(row.authorized_match_id)));
+  if (!authorizedMatchIds.size) return json({ ok: true, opportunities: [] });
+  const authorizedMatchIdsJson = JSON.stringify([...authorizedMatchIds]);
+  const baseLeadStatement = db.prepare(`SELECT
+      m.id match_id, m.firebase_uid installer_uid, m.status match_status,
+      m.matched_categories, m.distance_metres, m.allocation_rank,
+      m.contact_attempt_count, m.last_contact_at, m.connected_at,
+      m.matched_at, m.updated_at,
+      o.id, o.title, o.project_type, o.suburb opportunity_suburb,
+      o.postcode opportunity_postcode, o.state, o.service_categories,
+      o.priority, o.timing, o.summary, o.status, o.contact_limit,
+      o.expires_at, o.source_reference,
+      p.id customer_project_id, p.firebase_uid customer_uid
+    FROM trade_opportunity_matches m
+    JOIN trade_opportunities o ON o.id = m.opportunity_id
+    LEFT JOIN customer_projects p ON p.opportunity_id = o.id
+      AND o.source_reference = 'customer-project:' || p.id
+    WHERE m.firebase_uid = ? AND m.id IN (SELECT value FROM json_each(?))
+    ORDER BY (m.status = 'offered') DESC, (m.status = 'viewed') DESC,
+      (m.status = 'interested') DESC,
+      m.updated_at DESC, m.id ASC
+    LIMIT 100`).bind(user.uid, authorizedMatchIdsJson);
   const projectContextStatement = db.prepare(`SELECT
       m.id project_match_id, p.id customer_project_id, p.firebase_uid customer_uid,
       p.property_context, p.goal customer_goal, p.goals customer_goals,
@@ -325,12 +330,10 @@ export async function GET(request: Request) {
       p.updated_at customer_project_updated_at
     FROM customer_projects p
     JOIN trade_opportunity_matches m ON m.opportunity_id = p.opportunity_id AND m.firebase_uid = ?
-      AND (? = '' OR m.id = ?)
+      AND m.id IN (SELECT value FROM json_each(?))
     JOIN trade_opportunities o ON o.id = p.opportunity_id
       AND o.source_reference = 'customer-project:' || p.id
     WHERE o.status IN ('open', 'paused')
-    AND ${tradeOpportunityServiceScopeSql("o")}
-      AND ${certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
       AND m.status IN ('offered', 'viewed', 'interested', 'connected')
       AND EXISTS (
         SELECT 1 FROM customer_consent_receipts matching_consent
@@ -342,7 +345,7 @@ export async function GET(request: Request) {
     ORDER BY CASE m.status WHEN 'offered' THEN 0 WHEN 'viewed' THEN 1
       WHEN 'interested' THEN 2 WHEN 'connected' THEN 3 ELSE 4 END,
       m.updated_at DESC, m.id ASC
-    LIMIT 100`).bind(user.uid, requestedMatchId, requestedMatchId);
+    LIMIT 100`).bind(user.uid, authorizedMatchIdsJson);
   const matchingLocalityStatement = db.prepare(`${boundedLeadMatchesSql}
     SELECT
       authorized_match.match_id locality_match_id,
@@ -361,8 +364,7 @@ export async function GET(request: Request) {
       AND receipt.granted_at <> '' AND receipt.withdrawn_at = ''
     ORDER BY receipt.granted_at DESC, receipt.id DESC`).bind(
     user.uid,
-    requestedMatchId,
-    requestedMatchId,
+    authorizedMatchIdsJson,
   );
   const quoteStatement = db.prepare(`${boundedLeadMatchesSql}
     SELECT
@@ -383,8 +385,7 @@ export async function GET(request: Request) {
       ON q.opportunity_match_id = authorized_match.match_id
       AND q.installer_uid = authorized_match.installer_uid`).bind(
     user.uid,
-    requestedMatchId,
-    requestedMatchId,
+    authorizedMatchIdsJson,
   );
   const customerContactStatement = db.prepare(`${boundedLeadMatchesSql}
     SELECT
@@ -406,8 +407,7 @@ export async function GET(request: Request) {
       ON r.opportunity_match_id = authorized_match.match_id
       AND r.installer_uid = authorized_match.installer_uid`).bind(
     user.uid,
-    requestedMatchId,
-    requestedMatchId,
+    authorizedMatchIdsJson,
   );
   const arrivalStatement = db.prepare(`${boundedLeadMatchesSql}
     SELECT
@@ -429,8 +429,7 @@ export async function GET(request: Request) {
       ON ap.opportunity_match_id = authorized_match.match_id
       AND ap.installer_uid = authorized_match.installer_uid`).bind(
     user.uid,
-    requestedMatchId,
-    requestedMatchId,
+    authorizedMatchIdsJson,
   );
   const publicLeadContextStatement = db.prepare(`${boundedLeadMatchesSql}
     SELECT
@@ -480,8 +479,7 @@ export async function GET(request: Request) {
         AND datetime(public_quote_preparation.granted_at) IS NOT NULL
     ORDER BY public_contact.granted_at DESC, public_contact.id DESC`).bind(
     user.uid,
-    requestedMatchId,
-    requestedMatchId,
+    authorizedMatchIdsJson,
   );
   const evidenceStatement = db.prepare(`${boundedLeadMatchesSql}
     SELECT e.id, e.project_id, e.category, e.content_type,
@@ -498,7 +496,7 @@ export async function GET(request: Request) {
         WHERE consent.project_id = p.id AND consent.firebase_uid = p.firebase_uid
           AND consent.purpose = 'installer_evidence_sharing' AND consent.withdrawn_at = ''
       )
-    ORDER BY e.created_at DESC`).bind(user.uid, requestedMatchId, requestedMatchId);
+    ORDER BY e.created_at DESC`).bind(user.uid, authorizedMatchIdsJson);
   const publicPhotoStatement = db.prepare(`${boundedLeadMatchesSql}
     SELECT photo.id, photo.prompt_id,
       photo.prompt_label, photo.service_categories, photo.content_type,
@@ -532,8 +530,9 @@ export async function GET(request: Request) {
       AND datetime(contact.granted_at) IS NOT NULL
       AND contact.withdrawn_at = ''
     WHERE photo.status = 'active'
-    ORDER BY photo.created_at DESC`).bind(user.uid, requestedMatchId, requestedMatchId);
+    ORDER BY photo.created_at DESC`).bind(user.uid, authorizedMatchIdsJson);
   const [
+    currentAuthorization,
     rows,
     projectRows,
     localityRows,
@@ -544,6 +543,7 @@ export async function GET(request: Request) {
     evidenceRows,
     publicPhotoRows,
   ] = await db.batch<Record<string, unknown>>([
+    authorizedLeadIdsStatement,
     baseLeadStatement,
     projectContextStatement,
     matchingLocalityStatement,
@@ -554,6 +554,7 @@ export async function GET(request: Request) {
     evidenceStatement,
     publicPhotoStatement,
   ]);
+  const currentAuthorizedMatchIds = new Set(currentAuthorization.results.map((row) => String(row.authorized_match_id)));
   const projectByMatch = new Map<string, Record<string, unknown>>();
   for (const item of projectRows.results) {
     const matchId = String(item.project_match_id || "");
@@ -581,12 +582,13 @@ export async function GET(request: Request) {
   }
   const publicReleaseMatches = new Set<string>();
   const publicLeadContextByMatch = new Map<string, Record<string, unknown>>();
+  const allowAeaDelivery = await isAeaTradeOwner(db, user.uid);
   const publicContactByMatch = new Map<string, NonNullable<ReturnType<typeof publicTradeContactForMatchedLead>>>();
   for (const item of publicLeadContextRows.results) {
     const matchId = String(item.opportunity_match_id || "");
     if (!matchId || publicReleaseMatches.has(matchId)) continue;
     publicReleaseMatches.add(matchId);
-    const contact = publicTradeContactForMatchedLead(item);
+    const contact = publicTradeContactForMatchedLead(item, allowAeaDelivery);
     if (!contact) continue;
     publicLeadContextByMatch.set(matchId, item);
     publicContactByMatch.set(matchId, contact);
@@ -615,6 +617,7 @@ export async function GET(request: Request) {
     ok: true,
     opportunities: rows.results.flatMap((baseRow: Record<string, unknown>) => {
       const matchId = String(baseRow.match_id || "");
+      if (!authorizedMatchIds.has(matchId) || !currentAuthorizedMatchIds.has(matchId)) return [];
       const publicLeadContext = publicLeadContextByMatch.get(matchId);
       if (publicReleaseMatches.has(matchId) && !publicLeadContext) return [];
       const publicContact = publicContactByMatch.get(matchId) || null;
@@ -781,13 +784,15 @@ export async function PATCH(request: Request) {
     );
   await expireStaleOpportunities();
   const now = new Date().toISOString();
+  const allowAeaDelivery = await isAeaTradeOwner(db, user.uid);
   const serviceScope = await db.prepare(`SELECT o.service_categories
     FROM trade_opportunity_matches m
     JOIN trade_opportunities o ON o.id = m.opportunity_id
     WHERE m.id = ? AND m.firebase_uid = ?
+      AND ${tradeOpportunityOwnerScopeSql("o", "m.firebase_uid")}
       AND ${await certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")} LIMIT 1`)
     .bind(matchId, user.uid).first<{ service_categories: string }>();
-  if (!serviceScope || !tradeOpportunityServiceScopeAllowed(serviceScope.service_categories)) {
+  if (!serviceScope || !tradeOpportunityServiceScopeAllowed(serviceScope.service_categories, allowAeaDelivery)) {
     return json({ ok: false, error: "The opportunity could not be updated." }, 404);
   }
   if (action === "record_contact") {
@@ -983,7 +988,7 @@ export async function PATCH(request: Request) {
               AND guarded_match.opportunity_id = ?
               AND guarded_match.status IN ('interested', 'connected')
               AND guarded_opportunity.status = 'open'
-              AND ${tradeOpportunityServiceScopeSql("guarded_opportunity")}
+              AND ${tradeOpportunityOwnerScopeSql("guarded_opportunity", "guarded_match.firebase_uid")}
               AND ${certificateLeadEligibilitySql("guarded_match.firebase_uid", "guarded_match.matched_categories", "guarded_opportunity.state")}
               AND guarded_opportunity.expires_at > ?
               AND EXISTS (
@@ -1145,7 +1150,7 @@ export async function PATCH(request: Request) {
         (? = 'open_public_quote' AND o.status IN ('open', 'paused'))
         OR (? != 'open_public_quote' AND o.status = 'open')
       )
-      AND ${tradeOpportunityServiceScopeSql("o")}
+      AND ${tradeOpportunityOwnerScopeSql("o", "m.firebase_uid")}
       AND ${certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
       AND o.expires_at > ?`)
     .bind(matchId, user.uid, action, action, now).first<Record<string, unknown>>();
@@ -1189,7 +1194,7 @@ export async function PATCH(request: Request) {
     ORDER BY public_contact.granted_at DESC, public_contact.id DESC
     LIMIT 1`)
     .bind(matchId, user.uid).first<Record<string, unknown>>();
-  if (currentPublicContact && !publicTradeContactForMatchedLead(currentPublicContact)) {
+  if (currentPublicContact && !publicTradeContactForMatchedLead(currentPublicContact, allowAeaDelivery)) {
     return json({ ok: false, error: "The opportunity could not be updated." }, 404);
   }
   const projectSourceReference = String(current.source_reference || "");
@@ -1294,19 +1299,16 @@ export async function PATCH(request: Request) {
   const updateStatement = currentPublicContact
     ? db.prepare(`UPDATE trade_opportunity_matches
         SET status = ?, partner_note = '', updated_at = ?
-        WHERE id = ? AND firebase_uid = ? AND status = ? AND opportunity_id = ?
+        WHERE (id, firebase_uid, status, opportunity_id) = (?, ?, ?, ?)
           AND EXISTS (
             SELECT 1 FROM trade_opportunities available_opportunity
             JOIN public_trade_lead_contact_releases active_public_contact
               ON active_public_contact.opportunity_id = available_opportunity.id
-            WHERE available_opportunity.id = ?
-              AND available_opportunity.status = 'open'
-              AND ${tradeOpportunityServiceScopeSql("available_opportunity")}
+            WHERE (available_opportunity.id, available_opportunity.status) = (?, 'open')
+              AND ${tradeOpportunityOwnerScopeSql("available_opportunity", "trade_opportunity_matches.firebase_uid")}
               AND ${certificateLeadEligibilitySql("trade_opportunity_matches.firebase_uid", "trade_opportunity_matches.matched_categories", "available_opportunity.state")}
               AND available_opportunity.expires_at > ?
-              AND available_opportunity.source_reference = ?
-              AND available_opportunity.postcode = ?
-              AND available_opportunity.state = ?
+              AND (available_opportunity.source_reference, available_opportunity.postcode, available_opportunity.state) = (?, ?, ?)
               AND active_public_contact.id = ?
               AND active_public_contact.source_reference = available_opportunity.source_reference
               AND active_public_contact.status = 'active'
@@ -1334,7 +1336,7 @@ export async function PATCH(request: Request) {
     : currentProjectConsent
       ? db.prepare(`UPDATE trade_opportunity_matches
           SET status = ?, partner_note = '', updated_at = ?
-          WHERE id = ? AND firebase_uid = ? AND status = ? AND opportunity_id = ?
+          WHERE (id, firebase_uid, status, opportunity_id) = (?, ?, ?, ?)
             AND EXISTS (
               SELECT 1 FROM trade_opportunities available_opportunity
               JOIN customer_projects current_project
@@ -1342,16 +1344,13 @@ export async function PATCH(request: Request) {
               JOIN customer_consent_receipts current_matching_consent
                 ON current_matching_consent.project_id = current_project.id
                 AND current_matching_consent.firebase_uid = current_project.firebase_uid
-              WHERE available_opportunity.id = ?
-                AND available_opportunity.status = 'open'
-                AND ${tradeOpportunityServiceScopeSql("available_opportunity")}
+              WHERE (available_opportunity.id, available_opportunity.status) = (?, 'open')
+                AND ${tradeOpportunityOwnerScopeSql("available_opportunity", "trade_opportunity_matches.firebase_uid")}
               AND ${certificateLeadEligibilitySql("trade_opportunity_matches.firebase_uid", "trade_opportunity_matches.matched_categories", "available_opportunity.state")}
                 AND available_opportunity.expires_at > ?
-                AND available_opportunity.source_reference = ?
-                AND current_project.id = ?
-                AND current_project.firebase_uid = ?
-                AND current_matching_consent.purpose = 'anonymized_installer_matching'
-                AND current_matching_consent.withdrawn_at = ''
+                AND (available_opportunity.source_reference, current_project.id, current_project.firebase_uid,
+                  current_matching_consent.purpose, current_matching_consent.withdrawn_at) =
+                  (?, ?, ?, 'anonymized_installer_matching', '')
             )
             AND NOT EXISTS (
               SELECT 1 FROM public_trade_lead_contact_releases any_public_contact
@@ -1386,7 +1385,7 @@ export async function PATCH(request: Request) {
             SELECT 1 FROM trade_opportunities available_opportunity
             WHERE available_opportunity.id = ?
               AND available_opportunity.status = 'open'
-              AND ${tradeOpportunityServiceScopeSql("available_opportunity")}
+              AND ${tradeOpportunityOwnerScopeSql("available_opportunity", "trade_opportunity_matches.firebase_uid")}
               AND ${certificateLeadEligibilitySql("trade_opportunity_matches.firebase_uid", "trade_opportunity_matches.matched_categories", "available_opportunity.state")}
               AND available_opportunity.expires_at > ?
           )

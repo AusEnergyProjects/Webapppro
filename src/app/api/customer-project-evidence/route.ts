@@ -1,4 +1,4 @@
-import { tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
+import { tradeOpportunityOwnerScopeSql } from "@/lib/aea-trade-owner-server";
 import { getD1 } from "../../../../db";
 import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
@@ -40,7 +40,7 @@ async function installerCanAccess(installerUid: string, record: EvidenceRecord) 
       AND m.status IN ('offered', 'viewed', 'interested', 'connected')
       AND o.status IN ('open', 'paused')
       AND ${certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
-      AND ${tradeOpportunityServiceScopeSql("o")}
+      AND ${tradeOpportunityOwnerScopeSql("o", "m.firebase_uid")}
       AND a.partner_type = 'installer'
       AND EXISTS (
         SELECT 1 FROM customer_consent_receipts consent

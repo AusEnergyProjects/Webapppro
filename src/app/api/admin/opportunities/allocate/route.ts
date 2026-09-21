@@ -1,4 +1,4 @@
-import { allocateNearestInstallers } from "@/lib/opportunity-server";
+import { allocateNearestInstallers, routeAeaServiceOpportunity } from "@/lib/opportunity-server";
 import {
   drainOpportunityNotificationDeliveriesForOpportunity,
   prepareOpportunityNotificationDeliveriesForManualRetry,
@@ -17,7 +17,8 @@ export async function POST(request: Request) {
     const opportunityId = cleanAdminText(body.opportunityId, 180);
     if (!opportunityId) return adminJson({ ok: false, error: "Choose an open opportunity." }, 400);
     try {
-      const result = await allocateNearestInstallers(opportunityId, admin.uid);
+      const aeaOnly = body.routing === "aea";
+      const result = await (aeaOnly ? routeAeaServiceOpportunity : allocateNearestInstallers)(opportunityId, admin.uid);
       const notificationRecovery =
         await prepareOpportunityNotificationDeliveriesForManualRetry(opportunityId);
       const notificationDelivery =
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
           activeCount: result.activeCount,
           eligibleCount: result.eligibleCount,
           alreadyAllocatedCount: result.alreadyAllocatedCount,
-          distributionPolicy: "all_verified_service_area_installers",
+          distributionPolicy: aeaOnly ? "verified_aea_service_account" : "all_verified_service_area_installers",
           notificationRecovery,
           notificationDelivery,
         });
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
       if (code === "OPPORTUNITY_NOT_FOUND") return adminJson({ ok: false, error: "Opportunity not found." }, 404);
+      if (code === "AEA_SERVICE_REQUIRED") return adminJson({ ok: false, error: "Choose an enquiry reserved for Australian Energy Assessments." }, 409);
       if (code === "OPPORTUNITY_NOT_OPEN") return adminJson({ ok: false, error: "Open the opportunity before allocating installers." }, 409);
       if (code === "POSTCODE_CENTROID_UNAVAILABLE") return adminJson({ ok: false, error: "This postcode does not have a service-distance centroid. Review the location before matching." }, 409);
       throw error;

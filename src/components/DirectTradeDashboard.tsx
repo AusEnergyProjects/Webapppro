@@ -764,6 +764,8 @@ export function DirectTradeDashboard() {
   const [opportunityBusy, setOpportunityBusy] = useState("");
   const [opportunityStatus, setOpportunityStatus] = useState("");
   const [opportunityLoadError, setOpportunityLoadError] = useState("");
+  const [opportunitiesLoading, setOpportunitiesLoading] = useState(false);
+  const opportunityListController = useRef<AbortController | null>(null);
   const [publicLeadHandoff, setPublicLeadHandoff] =
     useState<PublicLeadHandoffState | null>(null);
   const [opportunityNavigationStatus, setOpportunityNavigationStatus] =
@@ -1103,6 +1105,7 @@ export function DirectTradeDashboard() {
     setOpportunityBusy("");
     setOpportunityStatus("");
     setOpportunityLoadError("");
+    setOpportunitiesLoading(false);
     setPublicLeadHandoff(null);
     publicLeadHandoffRequestMatchId.current = "";
     setOpportunityNavigationStatus("");
@@ -1229,22 +1232,31 @@ export function DirectTradeDashboard() {
     }
   }, [profile?.partnerType, workspace]);
 
-  useEffect(() => {
-    if (!user || !profile || profile.partnerType === "supplier" || !profile.entitlements?.features?.installer_leads) return;
+  const refreshOpportunities = useCallback(async () => {
+    if (!user || !profile || profile.partnerType === "supplier" || !profile.entitlements?.features?.installer_leads
+      || protectedIdentityUid.current !== user.uid) return;
+    if (opportunityListController.current && !opportunityListController.current.signal.aborted) return;
     const controller = new AbortController();
-    let active = true;
+    opportunityListController.current = controller;
+    protectedOpportunityRequestControllers.current.add(controller);
+    setOpportunitiesLoading(true);
     setOpportunityLoadError("");
     const identityRevision = protectedIdentityRevision.current;
     const identityIsCurrent = () => (
       protectedIdentityRevision.current === identityRevision
       && protectedIdentityUid.current === user.uid
+      && opportunityListController.current === controller
+      && !controller.signal.aborted
     );
-    void user.getIdToken().then((token) => fetch("/api/trade-opportunities", {
-      headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal,
-    })).then(async (response) => {
+    try {
+      const token = await user.getIdToken();
+      if (!identityIsCurrent()) return;
+      const response = await fetch("/api/trade-opportunities", {
+        headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal,
+      });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Leads could not be loaded.");
-      if (active && identityIsCurrent()) {
+      if (identityIsCurrent()) {
         const loadedOpportunities = result.opportunities || [];
         setOpportunities((current) => {
           const requestedMatchId = exactOpportunityMatchId.current;
@@ -1257,13 +1269,35 @@ export function DirectTradeDashboard() {
         });
         setOpportunityLoadError("");
       }
-    }).catch((loadError) => {
-      if (active && identityIsCurrent() && !controller.signal.aborted) {
+    } catch (loadError) {
+      if (identityIsCurrent()) {
         setOpportunityLoadError(loadError instanceof Error ? loadError.message : "Leads could not be loaded.");
       }
-    });
-    return () => { active = false; controller.abort(); };
+    } finally {
+      if (identityIsCurrent()) setOpportunitiesLoading(false);
+      protectedOpportunityRequestControllers.current.delete(controller);
+      if (opportunityListController.current === controller) opportunityListController.current = null;
+    }
   }, [profile, user]);
+
+  useEffect(() => {
+    void refreshOpportunities();
+    return () => {
+      opportunityListController.current?.abort();
+      opportunityListController.current = null;
+    };
+  }, [refreshOpportunities]);
+
+  const leadsViewActive = workspace === "work" && activeWorkView === "leads";
+  useEffect(() => {
+    if (!leadsViewActive) return;
+    void refreshOpportunities();
+    const refreshOnFocus = () => {
+      if (document.visibilityState === "visible") void refreshOpportunities();
+    };
+    window.addEventListener("focus", refreshOnFocus);
+    return () => window.removeEventListener("focus", refreshOnFocus);
+  }, [leadsViewActive, refreshOpportunities]);
 
   const isSupplier = profile?.partnerType === "supplier";
   const hasLeadAccess = Boolean(profile?.entitlements?.features?.installer_leads);
@@ -2456,7 +2490,11 @@ export function DirectTradeDashboard() {
                     <p>
                       Public enquiries show each business only the details the household agreed to share. Quick upgrade requests include the postcode, selected services, any written message and full property address. Email, name and phone appear only when selected. Customer account project contact and street details stay protected until the customer chooses this business.
                     </p>
+                    {hasLeadAccess && <div className="dashboard-opportunity-actions">
+                      <button type="button" disabled={opportunitiesLoading} onClick={() => void refreshOpportunities()}>{opportunitiesLoading ? "Refreshing leads..." : "Refresh leads"}</button>
+                    </div>}
                   </div>
+                  {hasLeadAccess && opportunitiesLoading && <p className="dashboard-settings-status" role="status">Checking for new leads...</p>}
                   {opportunityNavigationStatus && (
                     <p
                       className="dashboard-settings-status dashboard-opportunity-navigation-status"
@@ -2834,6 +2872,8 @@ export function DirectTradeDashboard() {
                       })}
                     </div></div> : <div className="dashboard-empty-state"><strong>No leads match these filters</strong><p>Clear one or more filters to return to the full opportunity inbox.</p></div>}
                     </>
+                  ) : opportunitiesLoading ? (
+                    <div className="dashboard-empty-state"><strong>Loading leads...</strong></div>
                   ) : opportunityLoadError ? (
                     <div className="dashboard-empty-state" role="alert">
                       <strong>Leads could not be loaded</strong>

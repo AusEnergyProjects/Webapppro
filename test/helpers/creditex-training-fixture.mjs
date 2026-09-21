@@ -7,24 +7,58 @@ import * as onboarding from '../../src/lib/creditex-onboarding-server.ts';
 import * as energyServices from '../../src/lib/energy-service-catalogue.mjs';
 import * as teamServiceStates from '../../src/lib/trade-team-service-states.ts';
 import * as trainingSections from '../../src/lib/training-service-sections.mjs';
+import * as aeaRouting from '../../src/lib/aea-trade-routing.mjs';
+import * as publicSite from '../../src/lib/public-site.ts';
+import * as tradeAbn from '../../src/lib/trade-abn.ts';
 
 const read = (path) => fs.readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
+const unavailableRuntime = () => { throw new Error('Runtime authentication and D1 access are not provided by the SQL fixture.'); };
+// These exist only to load the real SQL predicates. Do not expose them to test
+// harnesses, which provide their own authenticated runtime and D1 adapters.
+const runtimeModules = {
+  '../../db': { getD1: unavailableRuntime }, 'firebase-server': { requireFirebaseIdentity: unavailableRuntime },
+  'creditex-schema-guards': { ensureCreditexSchemaGuards: unavailableRuntime },
+};
 const modules = { 'node:crypto': crypto, 'creditex-training-curriculum': curriculum,
-  'australian-government-program-catalogue': catalogue, 'creditex-onboarding-server': onboarding, 'energy-service-catalogue.mjs': energyServices, 'trade-team-service-states': teamServiceStates, 'training-service-sections.mjs': trainingSections };
+  'australian-government-program-catalogue': catalogue, 'creditex-onboarding-server': onboarding, 'energy-service-catalogue.mjs': energyServices, 'trade-team-service-states': teamServiceStates, 'training-service-sections.mjs': trainingSections,
+  'aea-trade-routing.mjs': aeaRouting, 'public-site': publicSite, 'trade-abn': tradeAbn };
 export function certificateTestDependency(specifier) {
   return modules[specifier] || modules[specifier.split('/').at(-1).replace(/\.ts$/, '')];
 }
-for (const name of ['training-questionnaire-store', 'trade-training-server', 'trade-certificate-eligibility', 'trade-certificate-leads']) {
+for (const name of ['trade-access-server', 'aea-trade-owner-server', 'opportunity-notification-retry', 'training-questionnaire-store', 'trade-training-server', 'trade-certificate-eligibility', 'trade-certificate-leads']) {
   const output = ts.transpileModule(read(`src/lib/${name}.ts`), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const loaded = { exports: {} };
   new Function('require', 'module', 'exports', output)((specifier) => {
-    const dependency = certificateTestDependency(specifier);
+    const dependency = runtimeModules[specifier] || runtimeModules[specifier.split('/').at(-1).replace(/\.ts$/, '')] || certificateTestDependency(specifier);
     if (!dependency) throw new Error(`Unresolved training fixture dependency: ${specifier}`);
     return dependency;
   }, loaded, loaded.exports);
   modules[name] = loaded.exports;
+}
+
+/** Add only the schema needed by the real owner predicate. No approval or admin
+ * identity is granted; tests that need AEA authority must insert it explicitly.
+ */
+export function installAeaTradeOwnerFixtureSchema(database) {
+  database.exec(`CREATE TABLE IF NOT EXISTS trade_accounts(firebase_uid TEXT PRIMARY KEY);
+    CREATE TABLE IF NOT EXISTS admin_users(id TEXT PRIMARY KEY);
+    CREATE TABLE IF NOT EXISTS trade_account_verification_reviews(id TEXT PRIMARY KEY);`);
+  for (const [table, fields] of [
+    ['trade_accounts', ['abn', 'business_name', 'partner_type', 'account_status', 'verification_status', 'verified_abn', 'verification_review_id', 'verification_reviewed_at', 'verification_reviewed_by_uid']],
+    ['admin_users', ['firebase_uid', 'status', 'role']],
+    ['trade_account_verification_reviews', ['firebase_uid', 'abn', 'business_name', 'partner_type', 'decision', 'review_method', 'reviewed_by_uid', 'reviewed_at']],
+  ]) {
+    const existing = new Set(database.prepare(`PRAGMA table_info(${table})`).all().map(row => row.name));
+    for (const column of fields) if (!existing.has(column)) {
+      // Preserve the original ordinary-trade fixture defaults regardless of
+      // installer order. Existing empty fields and all authority stay untouched.
+      const fallback = table === 'trade_accounts' && column === 'abn' ? '53004085616'
+        : table === 'trade_accounts' && column === 'business_name' ? 'Training fixture Pty Ltd' : '';
+      database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT NOT NULL DEFAULT '${fallback}'`);
+    }
+  }
 }
 
 /** Explicitly qualifies test businesses and people under the new production gate.
@@ -44,6 +78,7 @@ export function installCreditexTrainingFixture(database, { qualified = true } = 
   if (!columns.has('capabilities')) database.exec(`ALTER TABLE trade_accounts ADD COLUMN capabilities TEXT NOT NULL DEFAULT '${categories}'`);
   if (!columns.has('service_states')) database.exec(`ALTER TABLE trade_accounts ADD COLUMN service_states TEXT NOT NULL DEFAULT '["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"]'`);
   if (!columns.has('address_state')) database.exec("ALTER TABLE trade_accounts ADD COLUMN address_state TEXT NOT NULL DEFAULT 'VIC'");
+  installAeaTradeOwnerFixtureSchema(database);
   const memberColumns = new Set(database.prepare('PRAGMA table_info(trade_team_members)').all().map(row => row.name));
   if (!memberColumns.has('member_uid')) database.exec("ALTER TABLE trade_team_members ADD COLUMN member_uid TEXT NOT NULL DEFAULT ''");
   if (!memberColumns.has('display_name')) database.exec("ALTER TABLE trade_team_members ADD COLUMN display_name TEXT NOT NULL DEFAULT 'Fixture technician'");

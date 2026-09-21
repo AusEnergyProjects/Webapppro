@@ -1,4 +1,4 @@
-import { tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
+import { isAeaTradeOwner, tradeOpportunityOwnerScopeSql } from "@/lib/aea-trade-owner-server";
 import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
@@ -40,7 +40,7 @@ const currentPublicMarketplaceAccessSql = (enquiryAlias: string) => `(
   OR (
     current_public_match.status IN ('interested', 'connected')
     AND current_public_opportunity.status = 'open'
-    AND ${tradeOpportunityServiceScopeSql("current_public_opportunity")}
+    AND ${tradeOpportunityOwnerScopeSql("current_public_opportunity", "current_public_match.firebase_uid")}
     AND ${certificateLeadEligibilitySql("current_public_match.firebase_uid", "current_public_match.matched_categories", "current_public_opportunity.state")}
     AND datetime(current_public_opportunity.expires_at) > datetime('now')
     AND current_public_release.status = 'active'
@@ -101,7 +101,7 @@ async function installerIdentity(request: Request) {
   const access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
   const entitlements = await accountEntitlements(access.identity.uid, "installer");
   if (!entitlements.features.business_operations) throw new Error("FULL_ACCESS_REQUIRED");
-  return { uid: access.identity.uid };
+  return { uid: access.identity.uid, allowAeaDelivery: await isAeaTradeOwner(getD1(), access.identity.uid) };
 }
 
 function errorResponse(error: unknown) {
@@ -115,17 +115,21 @@ function errorResponse(error: unknown) {
   return adminJson({ ok: false, error: "The private enquiry request could not be completed." }, 500);
 }
 
-function parseRows(result: D1Result<Record<string, unknown>>) {
-  return result.results.map((row) => parseRow(row)).filter(Boolean);
+function parseRows(result: D1Result<Record<string, unknown>>, allowAeaDelivery = false) {
+  return result.results.map((row) => parseRow(row, allowAeaDelivery)).filter(Boolean);
 }
 
-function parseRow(row: Record<string, unknown>) {
-  const projected = projectPublicMarketplaceEnquiry(row);
+function camelCaseRow(row: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(row).map(([key, value]) => [key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()), value]));
+}
+
+function parseRow(row: Record<string, unknown>, allowAeaDelivery = false) {
+  const projected = projectPublicMarketplaceEnquiry(row, allowAeaDelivery);
   if (!projected) return null;
-  return Object.fromEntries(Object.entries(projected).map(([key, value]) => [key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()), value]));
+  return camelCaseRow(projected);
 }
 
-async function ownedEnquiry(uid: string, id: string) {
+async function ownedEnquiry(uid: string, id: string, allowAeaDelivery = false) {
   const row = await getD1().prepare(`SELECT enquiry.*,
       ${publicMarketplaceProjectionSql}
     FROM trade_crm_enquiries enquiry
@@ -133,7 +137,7 @@ async function ownedEnquiry(uid: string, id: string) {
     WHERE enquiry.id = ? AND enquiry.firebase_uid = ? AND enquiry.record_status = 'active'
       AND ${currentPublicMarketplaceAccessSql("enquiry")}`).bind(id, uid).first<Record<string, unknown>>();
   if (!row) throw new Error("ENQUIRY_NOT_FOUND");
-  const projected = projectPublicMarketplaceEnquiry(row);
+  const projected = projectPublicMarketplaceEnquiry(row, allowAeaDelivery);
   if (!projected) throw new Error("ENQUIRY_NOT_FOUND");
   return projected;
 }
@@ -141,12 +145,12 @@ async function ownedEnquiry(uid: string, id: string) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const { uid } = await installerIdentity(request);
+    const { uid, allowAeaDelivery } = await installerIdentity(request);
     const url = new URL(request.url);
     const id = cleanAdminText(url.searchParams.get("id"), 180);
     const db = getD1();
     if (id) {
-      const enquiry = await ownedEnquiry(uid, id);
+      const enquiry = await ownedEnquiry(uid, id, allowAeaDelivery);
       const [messages, attachments, events, candidates] = await Promise.all([
         db.prepare("SELECT * FROM trade_crm_enquiry_messages WHERE enquiry_id = ? AND firebase_uid = ? ORDER BY occurred_at DESC").bind(id, uid).all<Record<string, unknown>>(),
         db.prepare("SELECT * FROM trade_crm_enquiry_attachments WHERE enquiry_id = ? AND firebase_uid = ? ORDER BY created_at DESC").bind(id, uid).all<Record<string, unknown>>(),
@@ -156,7 +160,7 @@ export async function GET(request: Request) {
           addressLine1: enquiry.address_line_1, suburb: enquiry.suburb, addressState: enquiry.address_state, postcode: enquiry.postcode,
         }),
       ]);
-      return adminJson({ ok: true, enquiry: parseRow(enquiry), messages: parseRows(messages), attachments: parseRows(attachments), events: parseRows(events), duplicateCandidates: candidates });
+      return adminJson({ ok: true, enquiry: camelCaseRow(enquiry), messages: parseRows(messages), attachments: parseRows(attachments), events: parseRows(events), duplicateCandidates: candidates });
     }
     const status = cleanAdminText(url.searchParams.get("status"), 30);
     const source = cleanAdminText(url.searchParams.get("source"), 40);
@@ -171,14 +175,14 @@ export async function GET(request: Request) {
       AND (? = '' OR LOWER(${enquirySearchTextSql("enquiry")}) LIKE '%' || ? || '%')
       ORDER BY CASE enquiry.status WHEN 'new' THEN 0 WHEN 'contacted' THEN 1 WHEN 'site_visit' THEN 2 WHEN 'quote_required' THEN 3 WHEN 'quoted' THEN 4 WHEN 'booked' THEN 5 ELSE 6 END, enquiry.updated_at DESC LIMIT 250`)
       .bind(uid, status, status, source, source, search, search).all<Record<string, unknown>>();
-    return adminJson({ ok: true, enquiries: parseRows(rows) });
+    return adminJson({ ok: true, enquiries: parseRows(rows, allowAeaDelivery) });
   } catch (error) { return errorResponse(error); }
 }
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const { uid } = await installerIdentity(request);
+    const { uid, allowAeaDelivery } = await installerIdentity(request);
     const body = await request.json() as Record<string, unknown>;
     const action = cleanAdminText(body.action, 40);
     const db = getD1();
@@ -190,7 +194,7 @@ export async function POST(request: Request) {
       }, 410);
     }
     const enquiryId = cleanAdminText(body.enquiryId, 180);
-    const enquiry = await ownedEnquiry(uid, enquiryId);
+    const enquiry = await ownedEnquiry(uid, enquiryId, allowAeaDelivery);
     if (action === "update_status") {
       const status = cleanAdminText(body.status, 30);
       if (!ENQUIRY_STATUSES.has(status)) return adminJson({ ok: false, error: "Choose a valid enquiry status." }, 400);

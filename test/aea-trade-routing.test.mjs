@@ -8,7 +8,8 @@ import { aeaDeliveredServiceScopeSql, tradeOpportunityServiceScopeAllowed, trade
 import { publicTradeContactForMatchedLead } from "../src/lib/public-trade-lead-access.mjs";
 import { projectPublicMarketplaceEnquiry } from "../src/lib/public-marketplace-enquiry-projection.mjs";
 import { PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE, publicPlanContactReleaseConsentSql } from "../src/lib/public-plan-enquiry.mjs";
-import { OPPORTUNITY_NOTIFICATION_CLAIM_GUARD_SQL, OPPORTUNITY_NOTIFICATION_ENSURE_DELIVERIES_SQL } from "../src/lib/opportunity-notification-retry.ts";
+import { certificateTestDependency, installAeaTradeOwnerFixtureSchema } from "./helpers/creditex-training-fixture.mjs";
+const { OPPORTUNITY_NOTIFICATION_CLAIM_GUARD_SQL, OPPORTUNITY_NOTIFICATION_ENSURE_DELIVERIES_SQL } = certificateTestDependency("opportunity-notification-retry");
 
 const source = (file) => fs.readFileSync(new URL(file, import.meta.url), "utf8");
 const scopeSql = (sql) => expandCreditexLeadSql(sql).replaceAll(/\$\{tradeOpportunityServiceScopeSql\("([^"]+)"\)\}/g, (_, alias) => tradeOpportunityServiceScopeSql(alias));
@@ -107,6 +108,7 @@ test("actual notification enqueue and final claim deny legacy mixed scope and a 
     INSERT INTO trade_opportunity_matches VALUES ('match-1','opportunity-1','trade-1','offered','2026-09-14T00:00:00.000Z');
     INSERT INTO trade_accounts VALUES ('trade-1','trade@example.test',1,'2026-09-14T00:00:00.000Z','open','installer',1);`);
   const now = "2026-09-14T01:00:00.000Z";
+  installAeaTradeOwnerFixtureSchema(db);
   const enqueue = db.prepare(OPPORTUNITY_NOTIFICATION_ENSURE_DELIVERIES_SQL);
   assert.equal(enqueue.run(now, "opportunity-1").changes, 0);
   db.prepare("UPDATE trade_opportunities SET service_categories = ?").run('["solar"]');

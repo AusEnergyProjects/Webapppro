@@ -31,7 +31,7 @@ function withoutPrivateProjectionFields(row) {
   return result;
 }
 
-export function projectPublicMarketplaceEnquiry(row) {
+export function projectPublicMarketplaceEnquiry(row, allowAeaDelivery = false) {
   if (!row || typeof row !== "object") return null;
   if (String(row.source_type || "") !== "tlink_marketplace") {
     return withoutPrivateProjectionFields(row);
@@ -40,7 +40,7 @@ export function projectPublicMarketplaceEnquiry(row) {
     ...row,
     source_reference: row.public_opportunity_source_reference,
     state: row.opportunity_state,
-  });
+  }, allowAeaDelivery);
   if (!contact) return null;
   const description = [
     String(row.description || "").trim(),

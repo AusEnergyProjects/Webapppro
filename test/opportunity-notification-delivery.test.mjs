@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { expandCreditexLeadSql, qualifyLeadFixture } from "./helpers/creditex-training-sql.mjs";
+import { certificateTestDependency, installAeaTradeOwnerFixtureSchema } from "./helpers/creditex-training-fixture.mjs";
 import {
   OPPORTUNITY_INBOX_URL,
   opportunityNotificationDraft,
@@ -19,7 +20,7 @@ import {
   publicPlanContactReleaseAccessSql,
   publicPlanContactReleaseConsentSql,
 } from "../src/lib/public-plan-enquiry.mjs";
-import {
+const {
   OPPORTUNITY_NOTIFICATION_CLAIM_GUARD_SQL,
   OPPORTUNITY_NOTIFICATION_ENSURE_DELIVERIES_SQL,
   OPPORTUNITY_NOTIFICATION_MANUAL_RETRY_STATUS_SQL,
@@ -28,7 +29,7 @@ import {
   opportunityNotificationRetryAt,
   shouldDrainOpportunityNotificationBacklog,
   takeOpportunityNotificationDispatch,
-} from "../src/lib/opportunity-notification-retry.ts";
+} = certificateTestDependency("opportunity-notification-retry");
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8")
   .replaceAll(/\$\{tradeOpportunityServiceScopeSql\("([^"]+)"\)\}/g, (_, alias) => tradeOpportunityServiceScopeSql(alias));
@@ -49,6 +50,7 @@ const CONSENT_VERSION_SKIP_REASON =
 
 function notificationDatabase() {
   const db = new DatabaseSync(":memory:");
+  installAeaTradeOwnerFixtureSchema(db);
   db.exec(`CREATE TABLE trade_opportunity_matches (
     id text PRIMARY KEY NOT NULL,
     opportunity_id text NOT NULL,

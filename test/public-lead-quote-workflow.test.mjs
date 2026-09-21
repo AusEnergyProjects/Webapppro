@@ -1,4 +1,6 @@
 import { tradeOpportunityServiceScopeSql } from "../src/lib/aea-trade-routing.mjs";
+import { expandCreditexLeadSql } from "./helpers/creditex-training-sql.mjs";
+import { installAeaTradeOwnerFixtureSchema } from "./helpers/creditex-training-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -48,7 +50,7 @@ const legacyStructuredAddressPurpose =
 function workflowAccessSql() {
   const sql = server.match(/const row = await db\.prepare\(`([\s\S]*?)`\)/)?.[1];
   assert.ok(sql, "workflow access SQL must be extractable for execution");
-  return sql.replace(
+  return expandCreditexLeadSql(sql).replace(
     '${publicPlanContactReleaseAccessSql("contact")}',
     publicPlanContactReleaseAccessSql("contact"),
   );
@@ -280,6 +282,7 @@ test("workflow start validates only the latest exact contact release", () => {
     PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE,
     "2026-08-12T01:00:00.000Z", "2026-08-12T01:01:00.000Z",
   );
+  installAeaTradeOwnerFixtureSchema(database);
   const query = database.prepare(workflowAccessSql());
   const bindings = [
     PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,

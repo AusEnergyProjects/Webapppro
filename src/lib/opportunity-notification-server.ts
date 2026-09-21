@@ -1,4 +1,5 @@
-import { tradeOpportunityServiceScopeAllowed, tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
+import { tradeOpportunityServiceScopeAllowed } from "@/lib/aea-trade-routing.mjs";
+import { aeaTradeOwnerSql, tradeOpportunityOwnerScopeSql } from "@/lib/aea-trade-owner-server";
 import { getD1 } from "../../db";
 import {
   opportunityNotificationDraft,
@@ -87,6 +88,8 @@ async function deliveryContext(deliveryId: string) {
       assignment.firebase_uid, assignment.status match_status, assignment.matched_categories,
       opportunity.suburb opportunity_suburb, opportunity.postcode opportunity_postcode,
       opportunity.service_categories opportunity_service_categories,
+      CASE WHEN ${aeaTradeOwnerSql("assignment.firebase_uid")}
+        THEN 1 ELSE 0 END aea_delivery_authorised,
       opportunity.state, opportunity.timing, opportunity.expires_at,
       opportunity.created_at opportunity_created_at, opportunity.status opportunity_status,
       CASE
@@ -167,7 +170,10 @@ async function deliveryContext(deliveryId: string) {
 }
 
 function ineligibility(context: DeliveryRow) {
-  if (!tradeOpportunityServiceScopeAllowed(context.opportunity_service_categories)) {
+  // This authorization is projected from the current owner/account records in
+  // deliveryContext, never accepted from a request or stored opportunity flag.
+  if (!tradeOpportunityServiceScopeAllowed(context.opportunity_service_categories,
+    Number(context.aea_delivery_authorised) === 1)) {
     return "This service enquiry is reserved for Australian Energy Assessments.";
   }
   if (Number(context.installer_access_approved || 0) !== 1) {
@@ -268,7 +274,7 @@ async function recoverLegacyPublicOptionalEmailSkips(now: string) {
         WHERE recovery_match.id = trade_opportunity_notification_deliveries.match_id
           AND recovery_match.status IN ('offered', 'viewed', 'interested', 'connected')
           AND recovery_opportunity.status = 'open'
-          AND ${tradeOpportunityServiceScopeSql("recovery_opportunity")}
+          AND ${tradeOpportunityOwnerScopeSql("recovery_opportunity", "recovery_match.firebase_uid")}
           AND (
             (recovery_opportunity.expires_at <> '' AND recovery_opportunity.expires_at > ?)
             OR (
@@ -315,7 +321,7 @@ export async function ensureOpportunityNotificationDeliveries(
     LEFT JOIN trade_opportunity_notification_deliveries delivery
       ON delivery.match_id = assignment.id
     WHERE assignment.opportunity_id = ?
-      AND ${tradeOpportunityServiceScopeSql("opportunity")}
+      AND ${tradeOpportunityOwnerScopeSql("opportunity", "assignment.firebase_uid")}
       AND assignment.status IN ('offered', 'viewed', 'interested', 'connected')`)
     .bind(exactOpportunityId)
     .first<{ active_match_count: number; delivery_count: number }>();
@@ -344,7 +350,7 @@ export async function prepareOpportunityNotificationDeliveriesForManualRetry(
       JOIN trade_opportunity_matches assignment ON assignment.id = delivery.match_id
       JOIN trade_opportunities opportunity ON opportunity.id = assignment.opportunity_id
       WHERE assignment.opportunity_id = ?
-        AND ${tradeOpportunityServiceScopeSql("opportunity")}
+        AND ${tradeOpportunityOwnerScopeSql("opportunity", "assignment.firebase_uid")}
         AND delivery.status IN (${OPPORTUNITY_NOTIFICATION_MANUAL_RETRY_STATUS_SQL})`)
       .bind(now, now, now, exactOpportunityId),
     db.prepare(`UPDATE trade_opportunity_notification_deliveries
@@ -354,7 +360,7 @@ export async function prepareOpportunityNotificationDeliveriesForManualRetry(
           SELECT 1 FROM trade_opportunity_matches assignment
           JOIN trade_opportunities opportunity ON opportunity.id = assignment.opportunity_id
           WHERE assignment.id = trade_opportunity_notification_deliveries.match_id
-            AND ${tradeOpportunityServiceScopeSql("opportunity")}
+            AND ${tradeOpportunityOwnerScopeSql("opportunity", "assignment.firebase_uid")}
             AND assignment.opportunity_id = ?
         )`)
       .bind(now, exactOpportunityId),
@@ -476,7 +482,7 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
         WHERE current_match.id = trade_opportunity_notification_deliveries.match_id
           AND current_match.status IN ('offered', 'viewed', 'interested', 'connected')
           AND current_opportunity.status = 'open'
-          AND ${tradeOpportunityServiceScopeSql("current_opportunity")}
+          AND ${tradeOpportunityOwnerScopeSql("current_opportunity", "current_match.firebase_uid")}
           AND (
             (current_opportunity.expires_at <> '' AND current_opportunity.expires_at > ?)
             OR (

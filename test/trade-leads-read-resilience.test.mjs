@@ -183,6 +183,7 @@ test("trade lead reads split base rows from any-release context and validate bef
   database.close();
 
   const baseRead = sqlTemplateContaining(route, "m.id match_id, m.firebase_uid installer_uid");
+  const authorizationRead = sqlTemplateContaining(route, "SELECT m.id authorized_match_id");
   const boundedMatchRead = sqlTemplateContaining(route, "SELECT bounded_match.id match_id");
   const projectRead = sqlTemplateContaining(route, "m.id project_match_id, p.id customer_project_id");
   const boundedAuxiliaryReads = [
@@ -234,9 +235,9 @@ test("trade lead reads split base rows from any-release context and validate bef
   assert.match(route, /publicReleaseMatches\.add\(matchId\)/);
   assert.match(
     route,
-    /if \(!matchId \|\| publicReleaseMatches\.has\(matchId\)\) continue;[\s\S]*publicReleaseMatches\.add\(matchId\);[\s\S]*const contact = publicTradeContactForMatchedLead\(item\)/,
+    /if \(!matchId \|\| publicReleaseMatches\.has\(matchId\)\) continue;[\s\S]*publicReleaseMatches\.add\(matchId\);[\s\S]*const contact = publicTradeContactForMatchedLead\(item, allowAeaDelivery\)/,
   );
-  assert.match(route, /const contact = publicTradeContactForMatchedLead\(item\)/);
+  assert.match(route, /const contact = publicTradeContactForMatchedLead\(item, allowAeaDelivery\)/);
   assert.match(route, /publicReleaseMatches\.has\(matchId\) && !publicLeadContext[\s\S]*return \[\]/);
   const contextReadBlock = route.slice(
     route.indexOf("const publicLeadContextStatement"),
@@ -245,7 +246,14 @@ test("trade lead reads split base rows from any-release context and validate bef
   assert.doesNotMatch(contextReadBlock, /\.catch\(/);
   const getBlock = route.slice(route.indexOf("export async function GET"), route.indexOf("export async function PATCH"));
   assert.equal((getBlock.match(/await db\.batch<Record<string, unknown>>\(/g) || []).length, 1);
-  assert.match(getBlock, /baseLeadStatement,[\s\S]*projectContextStatement,[\s\S]*matchingLocalityStatement,[\s\S]*quoteStatement,[\s\S]*customerContactStatement,[\s\S]*arrivalStatement,[\s\S]*publicLeadContextStatement,[\s\S]*evidenceStatement,[\s\S]*publicPhotoStatement/);
+  assert.match(getBlock, /const initiallyAuthorized = await authorizedLeadIdsStatement\.all<Record<string, unknown>>\(\)/);
+  assert.match(getBlock, /const authorizedMatchIds = new Set\(initiallyAuthorized\.results\.map/);
+  assert.match(getBlock, /if \(!authorizedMatchIds\.size\) return json\(\{ ok: true, opportunities: \[\] \}\)/);
+  assert.match(boundedMatchRead, /bounded_match\.id IN \(SELECT value FROM json_each\(\?\)\)/);
+  assert.match(boundedMatchRead, /bounded_match\.firebase_uid = \?/);
+  assert.match(getBlock, /if \(!authorizedMatchIds\.has\(matchId\) \|\| !currentAuthorizedMatchIds\.has\(matchId\)\) return \[\]/);
+  assert.match(getBlock, /const currentAuthorizedMatchIds = new Set\(currentAuthorization\.results\.map/);
+  assert.match(getBlock, /authorizedLeadIdsStatement,[\s\S]*baseLeadStatement,[\s\S]*projectContextStatement,[\s\S]*matchingLocalityStatement,[\s\S]*quoteStatement,[\s\S]*customerContactStatement,[\s\S]*arrivalStatement,[\s\S]*publicLeadContextStatement,[\s\S]*evidenceStatement,[\s\S]*publicPhotoStatement/);
 
   assertD1StatementIsBounded(boundedMatchRead);
   for (const statement of [
@@ -267,7 +275,7 @@ test("trade lead reads split base rows from any-release context and validate bef
   assert.doesNotMatch(patchBaseRead, /public_trade_lead_contact_releases|public_contact/);
   assert.match(patchContextRead, /JOIN public_trade_lead_contact_releases public_contact/);
   assert.doesNotMatch(patchContextRead, /public_contact\.status = 'active'/);
-  assert.match(route, /currentPublicContact && !publicTradeContactForMatchedLead\(currentPublicContact\)/);
+  assert.match(route, /currentPublicContact && !publicTradeContactForMatchedLead\(currentPublicContact, allowAeaDelivery\)/);
   assert.match(route, /active_public_contact\.id = \?/);
   assert.match(route, /active_public_contact\.source_reference = available_opportunity\.source_reference/);
   assert.match(route, /active_public_contact\.postcode = available_opportunity\.postcode/);
@@ -276,12 +284,11 @@ test("trade lead reads split base rows from any-release context and validate bef
   assert.match(patchProjectConsentRead, /current_matching_consent\.purpose = 'anonymized_installer_matching'/);
   assert.match(patchProjectConsentRead, /current_matching_consent\.withdrawn_at = ''/);
   assert.match(route, /isCustomerProject && \(!currentProjectConsent \|\| currentPublicContact\)/);
-  assert.match(patchProjectUpdate, /available_opportunity\.source_reference = \?/);
-  assert.match(patchProjectUpdate, /current_project\.id = \?/);
-  assert.match(patchProjectUpdate, /current_matching_consent\.withdrawn_at = ''/);
+  assert.match(patchProjectUpdate, /\(available_opportunity\.source_reference, current_project\.id, current_project\.firebase_uid,\s*current_matching_consent\.purpose, current_matching_consent\.withdrawn_at\) =\s*\(\?, \?, \?, 'anonymized_installer_matching', ''\)/);
   assert.match(route, /NOT EXISTS \([\s\S]*any_public_contact\.opportunity_id = \?/);
 
   const leadStatements = [
+    authorizationRead,
     baseRead,
     boundedMatchRead,
     projectRead,
@@ -299,8 +306,9 @@ test("trade lead reads split base rows from any-release context and validate bef
     sqlTemplateContaining(route, "JOIN public_trade_lead_contact_releases active_public_contact"),
     sqlTemplateContaining(route, "WHERE any_public_contact.opportunity_id = ?"),
   ];
-  for (const statement of leadStatements) {
-    assertD1StatementIsBounded(statement);
+  for (const [index, statement] of leadStatements.entries()) {
+    try { assertD1StatementIsBounded(statement); }
+    catch (error) { error.message = `Lead statement ${index}: ${error.message}`; throw error; }
   }
   const legacyOversizedRead = `SELECT ${Array.from({ length: 84 }, (_, index) => `t.c${index}`).join(", ")}
     FROM t ${Array.from({ length: 6 }, (_, index) => `JOIN j${index} ON j${index}.id = t.id`).join(" ")}
@@ -321,6 +329,7 @@ test("trade lead reads split base rows from any-release context and validate bef
 
 test("the authoritative base read supports broad and exact loads, caps at 100, and revokes project rows fail closed", () => {
   const baseRead = sqlTemplateContaining(route, "m.id match_id, m.firebase_uid installer_uid");
+  const authorizationRead = sqlTemplateContaining(route, "SELECT m.id authorized_match_id");
   const boundedMatchRead = sqlTemplateContaining(route, "SELECT bounded_match.id match_id");
   const quoteRead = sqlTemplateContaining(route, "authorized_match.match_id quote_match_id")
     .replace("${boundedLeadMatchesSql}", boundedMatchRead);
@@ -370,25 +379,30 @@ test("the authoritative base read supports broad and exact loads, caps at 100, a
   }
   database.exec("CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY, abn TEXT, business_name TEXT); INSERT INTO trade_accounts VALUES ('installer-1','53004085616','Fixture Pty Ltd')");
   qualifyLeadFixture(database);
-  const broadBaseRows = database.prepare(baseRead).all("installer-1", "", "");
+  const loadBase = (requestedId = "") => {
+    const authorized = database.prepare(authorizationRead).all("installer-1", requestedId, requestedId);
+    return database.prepare(baseRead).all("installer-1", JSON.stringify(authorized.map((row) => row.authorized_match_id)));
+  };
+  const broadBaseRows = loadBase();
   assert.equal(broadBaseRows.length, 100);
   assert.equal(broadBaseRows[0].match_id, "match-000");
   assert.equal(broadBaseRows.at(-1).match_id, "match-099");
-  assert.equal(database.prepare(baseRead).all("installer-1", "match-000", "match-000").length, 1);
+  assert.equal(loadBase("match-000").length, 1);
   for (const scope of [null, "[]", "not-json", '["solar","assessment"]']) {
     database.prepare("UPDATE trade_opportunities SET service_categories = ? WHERE id = 'opportunity-000'").run(scope);
-    assert.equal(database.prepare(baseRead).all("installer-1", "match-000", "match-000").length, 0);
-    assert.equal(database.prepare(quoteRead).all("installer-1", "match-000", "match-000").length, 0);
+    const authorizedRows = loadBase("match-000");
+    assert.equal(authorizedRows.length, 0);
+    assert.equal(database.prepare(quoteRead).all("installer-1", JSON.stringify(authorizedRows.map((row) => row.match_id))).length, 0);
   }
   database.prepare("UPDATE trade_opportunities SET service_categories = '[\"solar\"]' WHERE id = 'opportunity-000'").run();
-  const broadQuoteRows = database.prepare(quoteRead).all("installer-1", "", "");
+  const broadQuoteRows = database.prepare(quoteRead).all("installer-1", JSON.stringify(broadBaseRows.map((row) => row.match_id)));
   assert.equal(broadQuoteRows.length, 100);
   assert.deepEqual(
     broadQuoteRows.map((row) => row.quote_match_id).sort(),
     broadBaseRows.map((row) => row.match_id).sort(),
   );
   assert.equal(
-    database.prepare(quoteRead).all("installer-1", "match-000", "match-000").length,
+    database.prepare(quoteRead).all("installer-1", JSON.stringify(["match-000"])).length,
     1,
   );
 
@@ -400,13 +414,13 @@ test("the authoritative base read supports broad and exact loads, caps at 100, a
     "2026-08-12T01:00:00.000Z",
     "2026-08-12T01:00:00.000Z",
   );
-  assert.equal(database.prepare(baseRead).all("installer-1", "project-match", "project-match").length, 0);
+  assert.equal(loadBase("project-match").length, 0);
   database.prepare(`INSERT INTO customer_consent_receipts VALUES
     ('withdrawn', 'project-1', 'customer-1', 'anonymized_installer_matching', '2026-08-12T01:01:00.000Z')`).run();
-  assert.equal(database.prepare(baseRead).all("installer-1", "project-match", "project-match").length, 0);
+  assert.equal(loadBase("project-match").length, 0);
   database.prepare(`INSERT INTO customer_consent_receipts VALUES
     ('active', 'project-1', 'customer-1', 'anonymized_installer_matching', '')`).run();
-  assert.equal(database.prepare(baseRead).all("installer-1", "project-match", "project-match").length, 1);
+  assert.equal(loadBase("project-match").length, 1);
   database.close();
 });
 

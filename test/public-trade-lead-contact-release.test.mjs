@@ -634,7 +634,7 @@ test("server and trade workspace enforce the allocation-scoped contact boundary"
   assert.doesNotMatch(tradeRoute, /publicPlanContactReleaseAccessSql\("(?:public_contact|active_public_contact)"\)/);
   assert.match(tradeRoute, /JOIN public_trade_lead_contact_releases public_contact[\s\S]*current_release\.opportunity_id = o\.id[\s\S]*current_release\.source_reference = o\.source_reference/);
   assert.match(tradeRoute, /ORDER BY datetime\(current_release\.updated_at\) DESC/);
-  assert.match(tradeRoute, /publicTradeContactForMatchedLead\(item\)/);
+  assert.match(tradeRoute, /publicTradeContactForMatchedLead\(item, allowAeaDelivery\)/);
   assert.match(tradeLeadAccess, /export function publicTradeContactForMatchedLead\(/);
   assert.match(tradeLeadAccess, /publicPlanContactReleaseDisclosedFieldsAreValid\(/);
   assert.match(tradeLeadAccess, /const firstName = disclosed\.has\("customer_name"\)/);
@@ -651,7 +651,7 @@ test("server and trade workspace enforce the allocation-scoped contact boundary"
   assert.match(tradeLeadAccess, /!suburb/);
   assert.match(tradeLeadAccess, /!addressState/);
   assert.match(tradeRoute, /publicReleaseMatches\.has\(matchId\) && !publicLeadContext/);
-  assert.match(tradeRoute, /currentPublicContact && !publicTradeContactForMatchedLead\(currentPublicContact\)/);
+  assert.match(tradeRoute, /currentPublicContact && !publicTradeContactForMatchedLead\(currentPublicContact, allowAeaDelivery\)/);
   assert.match(tradeEnquiriesRoute, /currentPublicMarketplaceAccessSql/);
   assert.match(tradeEnquiriesRoute, /publicPlanContactReleaseAccessSql\("current_public_release"\)/);
   assert.match(tradeEnquiriesRoute, /verifiedTradeAccountPredicate\("current_public_account"\)/);
@@ -668,7 +668,7 @@ test("server and trade workspace enforce the allocation-scoped contact boundary"
   assert.match(adminMatchesRoute, /accountHasFeature\(firebaseUid, "installer", "installer_leads"\)/);
   assert.match(adminMatchesRoute, /qualifyingServiceArea\(account, String\(opportunity\.postcode\)\)/);
   assert.doesNotMatch(`${opportunityServer}\n${tradeRoute}\n${tradeEnquiriesRoute}\n${adminMatchesRoute}`, /trade_capability|capability_review|service qualification/i);
-  assert.match(tradeLeadAccess, /releaseScope: "all_qualified_trades"/);
+  assert.match(tradeLeadAccess, /releaseScope: tradeOpportunityServiceScopeAllowed\(row.opportunity_service_categories\)[\s\S]*\? "all_qualified_trades" : "aea_only"/);
   assert.doesNotMatch(tradeRoute, /SELECT \* FROM public_trade_lead_contact_releases/);
   assert.match(tradeDashboard, /every verified matching trade/);
   assert.doesNotMatch(tradeDashboard, /Allocation \{opportunity\.allocationRank\} of 6/);
