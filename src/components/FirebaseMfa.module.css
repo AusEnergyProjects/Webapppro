@@ -14,4 +14,8 @@
 .card .secret { font-family: monospace; font-size: 15px; letter-spacing: .04em; }
 .status { border-left: 3px solid #008f80; background: #edf8f6; padding: 10px 12px; font-size: 13px; }
 .account { overflow-wrap: anywhere; font-weight: 700; font-size: 13px; }
+.workspaceNav { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: min(100%, 520px); box-sizing: border-box; margin: 24px auto; padding: 10px; border: 1px solid #cbdde0; border-radius: 12px; background: #fff; }
+.workspaceNav a, .workspaceNav button { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 12px; border: 0; border-radius: 8px; background: #fff; color: #173d48; font: inherit; font-size: 14px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.workspaceNav a:hover, .workspaceNav button:hover { background: #edf8f6; color: #006c62; }
+.workspaceNav a:focus-visible, .workspaceNav button:focus-visible { outline: 2px solid #008f80; outline-offset: 2px; }
 @media (max-width: 600px) { .card { padding: 20px; margin: 16px auto; } }

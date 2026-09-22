@@ -5,6 +5,7 @@ import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { FirebaseAccountSecurity } from "./FirebaseMfa";
 import { TLinkHeader } from "./TLinkChrome";
+import styles from "./FirebaseMfa.module.css";
 
 export function AccountSecurityPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -14,7 +15,7 @@ export function AccountSecurityPage() {
     <TLinkHeader active="partners" />
     {!ready ? <p role="status">Opening account security...</p> : user ? <>
       <FirebaseAccountSecurity key={user.uid} user={user} />
-      <nav style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 20, margin: "24px 0" }} aria-label="Return to your workspace">
+      <nav className={styles.workspaceNav} aria-label="Return to your workspace">
         <a href="/direct-trade/dashboard">TLink workspace</a>
         <a href="/direct-trade/team">Team workspace</a>
         <button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button>
