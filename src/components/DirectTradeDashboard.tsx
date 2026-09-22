@@ -12,6 +12,7 @@ import Image from "next/image";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { isMfaRequiredResponse, MFA_SETUP_URL } from "@/lib/firebase-mfa";
+import type { FinanceView } from "./TradeFinanceWorkspace";
 import { SiteFooter } from "./SiteFooter";
 import { TradeBusinessHub } from "./TradeBusinessHub";
 import {
@@ -50,7 +51,7 @@ const InstallerPlatformQuote = dynamic(() => import("./InstallerPlatformQuote").
 const InstallerArrivalWindows = dynamic(() => import("./InstallerArrivalWindows").then((module) => module.InstallerArrivalWindows));
 const TradePurchasingWorkspace = dynamic(() => import("./TradePurchasingWorkspace").then((module) => module.TradePurchasingWorkspace));
 const TradeDataImportWorkspace = dynamic(() => import("./TradeDataImportWorkspace").then((module) => module.TradeDataImportWorkspace));
-const TradeInvoiceWorkspace = dynamic(() => import("./TradeInvoiceWorkspace").then((module) => module.TradeInvoiceWorkspace));
+const TradeFinanceWorkspace = dynamic(() => import("./TradeFinanceWorkspace").then((module) => module.TradeFinanceWorkspace));
 const TradeServiceFollowUpWorkspace = dynamic(() => import("./TradeServiceFollowUpWorkspace").then((module) => module.TradeServiceFollowUpWorkspace));
 const TradeRebateCalculatorWorkspace = dynamic(() => import("./TradeRebateCalculatorWorkspace").then((module) => module.TradeRebateCalculatorWorkspace));
 const TradeTeamSettings = dynamic(() => import("./TradeTeamSettings").then((module) => module.TradeTeamSettings));
@@ -221,12 +222,12 @@ const publicLeadHandoffStages = [
     detail: "The quote will open automatically as soon as the handoff is confirmed.",
   },
 ] as const;
-type DashboardWorkspace = "work" | "team" | "training" | "invoices" | "follow-ups" | "products" | "calculator" | "orders" | "import" | "account";
+type DashboardWorkspace = "work" | "team" | "training" | "finance" | "follow-ups" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
   "team",
   "training",
-  "invoices",
+  "finance",
   "follow-ups",
   "products",
   "calculator",
@@ -237,10 +238,18 @@ const dashboardWorkspaces = new Set<DashboardWorkspace>([
 
 function dashboardWorkspaceFromSearch(search: string): DashboardWorkspace {
   const requested = new URLSearchParams(search).get("workspace");
+  if (requested === "invoices") return "finance";
   if (requested === "schedule" || requested === "leads") return "work";
   return dashboardWorkspaces.has(requested as DashboardWorkspace)
     ? requested as DashboardWorkspace
     : "work";
+}
+
+function dashboardFinanceViewFromSearch(search: string): FinanceView {
+  const parameters = new URLSearchParams(search);
+  if (parameters.get("workspace") === "invoices") return "invoices";
+  const view = parameters.get("financeView");
+  return view === "invoices" || view === "pricebook" || view === "reports" ? view : "quotes";
 }
 
 function dashboardWorkViewFromSearch(search: string) {
@@ -255,7 +264,9 @@ function jobNavigationFromSearch(search: string): TLinkCommandTarget | null {
   const parameters = new URLSearchParams(search);
   const jobId = parameters.get("jobId") || "";
   if (dashboardWorkspaceFromSearch(search) !== "work" || !workOrderIdPattern.test(jobId)) return null;
-  return { workspace: "work", kind: "job", id: jobId, query: "", jobTab: "schedule", nonce: Date.now() };
+  const requestedTab = parameters.get("jobTab");
+  const jobTab = requestedTab === "quote" || requestedTab === "invoice" || requestedTab === "field" || requestedTab === "summary" ? requestedTab : "schedule";
+  return { workspace: "work", kind: "job", id: jobId, query: "", jobTab, nonce: Date.now() };
 }
 
 function dashboardCommandTargetFromSearch(search: string): TLinkCommandTarget | null {
@@ -787,6 +798,13 @@ export function DirectTradeDashboard() {
       ? "work"
       : dashboardWorkspaceFromSearch(window.location.search)
   );
+  const [financeView, setFinanceView] = useState<FinanceView>(() => typeof window === "undefined" ? "quotes" : dashboardFinanceViewFromSearch(window.location.search));
+  const [financePriceBookView, setFinancePriceBookView] = useState<"items" | "packets">("items");
+  const openFinance = (view: FinanceView, priceBookView: "items" | "packets" = "items") => {
+    setFinanceView(view);
+    setFinancePriceBookView(priceBookView);
+    setWorkspace("finance");
+  };
   const [activeWorkView, setActiveWorkView] = useState(() =>
     typeof window === "undefined" ? "today" : dashboardWorkViewFromSearch(window.location.search)
   );
@@ -868,6 +886,7 @@ export function DirectTradeDashboard() {
         ? opportunityMatchFromSearch(window.location.search)
         : "";
       setWorkspace(nextWorkspace);
+      setFinanceView(dashboardFinanceViewFromSearch(window.location.search));
       setActiveWorkView(nextWorkView);
       setSelectedOpportunityMatchId(nextMatchId);
       setFocusedOpportunityMatchId(nextMatchId);
@@ -895,6 +914,9 @@ export function DirectTradeDashboard() {
       : workspace;
     let changed = nextUrl.searchParams.get("workspace") !== routeWorkspace;
     nextUrl.searchParams.set("workspace", routeWorkspace);
+    if (workspace === "finance") {
+      if (nextUrl.searchParams.get("financeView") !== financeView) { nextUrl.searchParams.set("financeView", financeView); changed = true; }
+    } else if (nextUrl.searchParams.has("financeView")) { nextUrl.searchParams.delete("financeView"); changed = true; }
     if (workspace === "work" && activeWorkView === "leads") {
       if (selectedOpportunityMatchId && nextUrl.searchParams.get("matchId") !== selectedOpportunityMatchId) {
         nextUrl.searchParams.set("matchId", selectedOpportunityMatchId);
@@ -915,6 +937,9 @@ export function DirectTradeDashboard() {
       nextUrl.searchParams.delete("jobId");
       changed = true;
     }
+    const openJobTab = openJobId ? commandTarget?.jobTab || "summary" : "";
+    if (openJobTab && nextUrl.searchParams.get("jobTab") !== openJobTab) { nextUrl.searchParams.set("jobTab", openJobTab); changed = true; }
+    else if (!openJobTab && nextUrl.searchParams.has("jobTab")) { nextUrl.searchParams.delete("jobTab"); changed = true; }
     const nextLocation = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
     if (changed) {
       if (!workspaceRouteInitialised.current || workspacePopstateSync.current) window.history.replaceState(window.history.state, "", nextLocation);
@@ -922,7 +947,7 @@ export function DirectTradeDashboard() {
     }
     workspaceRouteInitialised.current = true;
     workspacePopstateSync.current = false;
-  }, [activeWorkView, commandTarget, selectedOpportunityMatchId, workspace]);
+  }, [activeWorkView, commandTarget, financeView, selectedOpportunityMatchId, workspace]);
   const photoLightboxOpener = useRef<HTMLElement | null>(null);
   const protectedOpportunityRequestControllers = useRef(
     new Set<AbortController>(),
@@ -2396,7 +2421,7 @@ export function DirectTradeDashboard() {
                   setWorkspace("work");
                 }}><b aria-hidden="true">01</b><span>Work</span><small>Today and next actions</small></button>
                 <div className="dashboard-workspace-shortcuts" aria-label="Work shortcuts">
-                  {([['jobs', 'Jobs'], ['customers', 'Customers'], ['pricebook', 'Price book']] as const).map(([view, label]) => <button type="button" key={view} onClick={() => {
+                  {([['jobs', 'Jobs'], ['customers', 'Customers']] as const).map(([view, label]) => <button type="button" key={view} onClick={() => {
                     setCommandTarget({ workspace: "work", kind: "crm-view", id: view, query: "", nonce: Date.now() });
                     setWorkspace("work");
                   }}><span>{label}</span></button>)}
@@ -2408,7 +2433,7 @@ export function DirectTradeDashboard() {
                   setActiveWorkView("schedule");
                   setWorkspace("work");
                 }}><b aria-hidden="true">03</b><span>Schedule</span><small>Capacity and dispatch</small></button>
-                <button type="button" aria-current={workspace === "invoices" ? "page" : undefined} className={workspace === "invoices" ? "active" : ""} onClick={() => setWorkspace("invoices")}><b aria-hidden="true">04</b><span>Invoices</span><small>Prepare drafts and get paid</small></button>
+                <button type="button" aria-current={workspace === "finance" ? "page" : undefined} className={workspace === "finance" ? "active" : ""} onClick={() => setWorkspace("finance")}><b aria-hidden="true">04</b><span>Finance</span><small>Quotes, invoices, pricing and reports</small></button>
                 <button type="button" aria-current={workspace === "follow-ups" ? "page" : undefined} className={workspace === "follow-ups" ? "active" : ""} onClick={() => setWorkspace("follow-ups")}><b aria-hidden="true">05</b><span>Follow-ups</span><small>Consent-aware service preparation</small></button>
                 <button type="button" aria-current={workspace === "work" && activeWorkView === "leads" ? "page" : undefined} className={workspace === "work" && activeWorkView === "leads" ? "active" : ""} onClick={() => {
                   setCommandTarget({ workspace: "work", kind: "crm-view", id: "leads", query: "", nonce: Date.now() });
@@ -2439,11 +2464,13 @@ export function DirectTradeDashboard() {
                   setWorkspace("work");
                 }}
                 onWorkViewChange={(nextView) => {
+                  if (nextView === "pricebook" || nextView === "reports") { openFinance(nextView); return; }
                   setCommandTarget((current) => current?.kind === "crm-view" && current.id !== nextView ? null : current);
                   setActiveWorkView(nextView);
                   setWorkspace("work");
                 }}
-                onOpenInvoices={() => setWorkspace("invoices")}
+                onOpenInvoices={() => openFinance("invoices")}
+                onOpenFinance={openFinance}
                 onCloseJobNavigation={() => setCommandTarget((current) => current?.kind === "job"
                   ? { workspace: "work", kind: "crm-view", id: "jobs", query: "", nonce: Date.now() }
                   : current)}
@@ -2462,10 +2489,20 @@ export function DirectTradeDashboard() {
                 </section>
               ) : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before team management is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
 
-              {workspace === "invoices" && (hasBusinessOperations ? <TradeInvoiceWorkspace user={user} onOpenJob={(workOrderId) => {
-                setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, query: "", jobTab: "invoice", nonce: Date.now() });
+              {workspace === "finance" && (hasBusinessOperations ? <TradeFinanceWorkspace key={user.uid} user={user} view={financeView} priceBookView={financePriceBookView} onViewChange={(view) => openFinance(view)} onOpenJob={(workOrderId, jobTab) => {
+                setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, query: "", jobTab, nonce: Date.now() });
                 setWorkspace("work");
-              }} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before invoicing is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
+              }} onNewQuote={() => {
+                setCommandTarget({ workspace: "work", kind: "new-job", id: "", query: "", jobTab: "quote", nonce: Date.now() });
+                setWorkspace("work");
+              }} onOpenJobs={() => {
+                setCommandTarget({ workspace: "work", kind: "crm-view", id: "jobs", query: "", nonce: Date.now() });
+                setWorkspace("work");
+              }} onOpenSchedule={() => {
+                setCommandTarget({ workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() });
+                setActiveWorkView("schedule");
+                setWorkspace("work");
+              }} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>Complete business verification to use Finance.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
 
               {workspace === "follow-ups" && (hasBusinessOperations && hasTeamAccess ? <TradeServiceFollowUpWorkspace user={user} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before service follow-up preparation is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
 

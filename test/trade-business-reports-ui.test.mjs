@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
+import * as projection from "../src/lib/trade-finance-projection.ts";
 import * as reporting from "../src/lib/trade-business-reports.ts";
 const source = fs.readFileSync(new URL("../src/components/TradeBusinessReports.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -16,7 +17,7 @@ function harness(responder, options={}) {
   let cursor=0; const state=[]; const effects=[]; const pending=[]; const requests=[]; const exports={}; const downloads=[];
   const user={getIdToken:options.getIdToken || (async()=>"token")};
   const hooks={useState(initial){const index=cursor++; if(!(index in state)) state[index]=typeof initial==="function"?initial():initial; return [state[index],next=>state[index]=typeof next==="function"?next(state[index]):next];},useEffect(callback,deps){const index=cursor++; const old=effects[index]; if(!old || deps.some((value,i)=>value!==old.deps[i])) { old?.cleanup?.(); effects[index]={deps}; pending.push(()=>effects[index].cleanup=callback()); }}};
-  const require=id=>id==="react"?hooks:id==="react/jsx-runtime"?jsx:id==="@/lib/trade-business-reports"?reporting:id==="@/lib/energy-service-catalogue.mjs"?{ENERGY_SERVICE_LABELS:{"hot-water":"Hot water"}}:id==="./WorkspaceTableTools"?{downloadWorkspaceCsv:(...args)=>downloads.push(args)}:id.endsWith(".module.css")?{default:new Proxy({},{get:(_,key)=>String(key)})}:{};
+  const require=id=>id==="react"?hooks:id==="react/jsx-runtime"?jsx:id==="@/lib/trade-business-reports"?reporting:id==="@/lib/trade-finance-projection"?projection:id==="@/lib/energy-service-catalogue.mjs"?{ENERGY_SERVICE_LABELS:{"hot-water":"Hot water"}}:id==="./WorkspaceTableTools"?{downloadWorkspaceCsv:(...args)=>downloads.push(args)}:id.endsWith(".module.css")?{default:new Proxy({},{get:(_,key)=>String(key)})}:{};
   const fetch=async(url,init)=>{requests.push({url,init}); return responder(url,init);};
   Function("require","exports","fetch",compiled)(require,exports,fetch);
   const render=()=>{cursor=0; const tree=exports.TradeBusinessReports({user,onOpenJobs(){}}); for(const effect of pending.splice(0)) effect(); return tree;};

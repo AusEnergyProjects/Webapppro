@@ -1,0 +1,10 @@
+.workspace { min-width: 0; color: var(--color-aea-ink, #092f35); background: var(--trade-surface-raised, #fff); border: 1px solid var(--color-aea-line, #d7e5df); border-radius: 16px; overflow: hidden; }
+.heading { padding: clamp(18px, 2.2vw, 28px); padding-bottom: 16px; }
+.heading h2 { margin: 0 0 6px; font-size: clamp(1.6rem, 2.5vw, 2rem); letter-spacing: -.03em; }
+.heading p { margin: 0; color: var(--color-aea-muted, #526b6f); }
+.navigation { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 clamp(18px, 2.2vw, 28px) 18px; border-bottom: 1px solid var(--color-aea-line, #d7e5df); }
+.navigation button { min-height: 44px; padding: 10px 16px; border: 1px solid var(--color-aea-line, #d7e5df); border-radius: 9px; background: var(--trade-field, #fff); color: var(--trade-field-ink, #113e43); font: inherit; font-weight: 750; cursor: pointer; }
+.navigation button[aria-current="page"] { background: var(--trade-accent, #087b7c); border-color: transparent; color: #fff; }
+.navigation button:focus-visible { outline: 3px solid var(--trade-accent, #087b7c); outline-offset: 3px; }
+.priceBook { padding: clamp(16px, 2.2vw, 28px); min-width: 0; }
+@media (max-width: 600px) { .navigation { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .navigation button { padding: 10px 8px; font-size: .9rem; } }

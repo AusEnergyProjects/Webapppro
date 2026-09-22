@@ -5,6 +5,8 @@ import type { User } from "firebase/auth";
 import { reportChange, reportCsvRows, type BusinessReport, type ReportBreakdown, type ReportPreset } from "@/lib/trade-business-reports";
 import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
 import { downloadWorkspaceCsv } from "./WorkspaceTableTools";
+import { TradeFinanceProjection } from "./TradeFinanceProjection";
+import { revenueProjectionCsvRows } from "@/lib/trade-finance-projection";
 import styles from "./TradeBusinessReports.module.css";
 
 const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(cents / 100);
@@ -57,7 +59,7 @@ export function TradeBusinessReports({ user, onOpenJobs, onOpenSchedule, onOpenI
     if (!report || loading || error) return;
     downloadWorkspaceCsv(`TLink-business-report-${report.period.start}-${report.period.end}.csv`, [
       { key: "section", label: "Section" }, { key: "metric", label: "Metric" }, { key: "value", label: "Value" }, { key: "comparison", label: "Previous period" }, { key: "basis", label: "Basis" },
-    ], reportCsvRows(report));
+    ], [...reportCsvRows(report), ...revenueProjectionCsvRows(report)]);
   }
   const current = report?.current; const previous = report?.previous;
   const decisions = (current?.wonQuotes || 0) + (current?.declinedQuotes || 0);
@@ -88,6 +90,7 @@ export function TradeBusinessReports({ user, onOpenJobs, onOpenSchedule, onOpenI
         {current.wonQuotes !== null && <Metric label="Quote decision win rate" value={winRate === null ? "No decisions" : `${winRate.toFixed(0)}%`} detail={`${current.wonQuotes} accepted · ${current.declinedQuotes} declined`} comparison={!previous ? null : previousWinRate === null ? "No previous decisions" : `Previous: ${previousWinRate.toFixed(0)}%`} />}
         <Metric label="Booked hours" value={hours(current.bookedMinutes)} detail={`${current.visits} visits · ${current.completedVisits} completed`} comparison={previous ? reportChange(current.bookedMinutes, previous.bookedMinutes) : null} />
       </div>
+      <TradeFinanceProjection report={report} />
       <div className={styles.twoColumns}>
         <section className={styles.card} aria-label="Performance trend"><header><div><h4>Performance over time</h4><p>{chartIsMoney ? "Net TLink invoicing, excluding GST" : "Jobs created"}</p></div><div className={styles.actions}><button type="button" aria-pressed={!chartIsMoney} onClick={() => setChart("jobs")}>Jobs</button>{report.permissions.invoices && <button type="button" aria-pressed={chartIsMoney} onClick={() => setChart("invoices")}>Invoicing</button>}</div></header>
           <div className={styles.chart} role="img" aria-label={`${chartIsMoney ? "Net invoicing" : "New jobs"} trend. Exact values are in the table below.`}>{trend.map((bucket, index) => <div className={styles.chartColumn} key={bucket.start}><div className={styles.barTrack}><div className={values[index] < 0 ? styles.negativeBar : styles.bar} style={{ height: `${Math.abs(values[index]) / max * 100}%` }} title={`${date(bucket.start)} to ${date(bucket.end)}: ${chartIsMoney ? exactMoney(values[index]) : values[index]}`} /></div><span>{index === 0 || index === trend.length - 1 || trend.length < 14 || index % 5 === 0 ? trendDate(bucket.start) : ""}</span></div>)}</div>

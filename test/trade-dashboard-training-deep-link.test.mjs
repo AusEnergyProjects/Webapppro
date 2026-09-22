@@ -88,8 +88,9 @@ test("account replacement and sign-out still clear the previous account workspac
 test("initial sign-in retains only a validated workspace and same-UID refresh leaves navigation alone", () => {
   const valid = harness("?workspace=team"); valid.authenticate({ uid: "installer-a" }); valid.sync();
   assert.equal(valid.url.searchParams.get("workspace"), "team");
-  valid.state.workspace = "invoices"; valid.authenticate({ uid: "installer-a" }); valid.sync();
-  assert.equal(valid.url.searchParams.get("workspace"), "invoices");
+  valid.state.workspace = "finance"; valid.state.financeView = "invoices"; valid.authenticate({ uid: "installer-a" }); valid.sync();
+  assert.equal(valid.url.searchParams.get("workspace"), "finance");
+  assert.equal(valid.url.searchParams.get("financeView"), "invoices");
   const invalid = harness("?workspace=untrusted"); invalid.authenticate({ uid: "installer-a" }); invalid.sync();
   assert.equal(invalid.url.searchParams.get("workspace"), "work");
 });

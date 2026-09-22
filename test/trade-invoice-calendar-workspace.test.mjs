@@ -12,6 +12,7 @@ const root = path.resolve(import.meta.dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 const dashboard = read("src/components/DirectTradeDashboard.tsx");
+const finance = read("src/components/TradeFinanceWorkspace.tsx");
 const crm = read("src/components/InstallerCrmWorkspace.tsx");
 const schedule = read("src/components/TradeScheduleWorkspace.tsx");
 const scheduleRoute = read("src/app/api/trade-schedule/route.ts");
@@ -23,10 +24,10 @@ const calendarServer = read("src/lib/trade-calendar-sync-server.ts");
 const integrations = read("src/lib/trade-integrations-server.ts");
 const migration = read("drizzle/0072_trade_calendar_sync.sql");
 
-test("invoices are a main installer workspace over existing owner-scoped records", () => {
-  assert.match(dashboard, />Invoices</);
-  assert.match(dashboard, /workspace === "invoices"/);
-  assert.match(dashboard, /<TradeInvoiceWorkspace/);
+test("invoices live in Finance over existing owner-scoped records", () => {
+  assert.match(dashboard, />Finance</);
+  assert.match(dashboard, /workspace === "finance"/);
+  assert.match(finance, /<TradeInvoiceWorkspace/);
   assert.match(invoiceRoute, /WHERE w\.firebase_uid = \?/);
   assert.match(invoiceRoute, /TRADE_INVOICE_REGISTER_HANDOFF_JOIN_SQL/);
   assert.match(invoiceRegister, /trade_crm_commercial_handovers/);
@@ -42,7 +43,7 @@ test("invoices are a main installer workspace over existing owner-scoped records
   assert.match(invoiceUi, /Due \$\{new Date/);
   assert.match(invoiceUi, /Acceptance recorded\. Confirm the existing invoice before payment\./);
   assert.match(invoiceUi, /onDoubleClick=\{\(\) => onOpenJob\(item\.id\)\}/);
-  assert.match(dashboard, /jobTab: "invoice"/);
+  assert.match(finance, /onOpenJob\(id, "invoice"\)/);
 });
 
 test("invoice register keeps an existing accounting invoice authoritative over a reconciliation record", () => {

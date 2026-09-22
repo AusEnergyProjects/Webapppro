@@ -480,7 +480,7 @@ test("reviewed installer team members use the same authenticated address suggest
 });
 
 test("heavy workspaces load dynamically and profile readiness does not wait for opportunities", () => {
-  for (const workspace of ["SupplierCatalogueWorkspace", "TradePurchasingWorkspace", "TradeDataImportWorkspace", "TradeInvoiceWorkspace", "TradeServiceFollowUpWorkspace"]) {
+  for (const workspace of ["SupplierCatalogueWorkspace", "TradePurchasingWorkspace", "TradeDataImportWorkspace", "TradeFinanceWorkspace", "TradeServiceFollowUpWorkspace"]) {
     assert.match(dashboard, new RegExp(`const ${workspace} = dynamic\\(\\(\\) => import\\("\\./${workspace}"\\)`));
     assert.doesNotMatch(dashboard, new RegExp(`import \\{ ${workspace} \\} from "\\./${workspace}"`));
   }
@@ -533,7 +533,8 @@ test("My day exposes owner scoped local workload and direct action charts", () =
   assert.match(crm, /className="crm-chart-row"/);
   assert.match(crm, /aria-label=\{`Open schedule for/);
   assert.match(crm, /openJobsForStage\(item\.stage\)/);
-  assert.match(crm, /setPriceBookView\("packets"\); setView\("pricebook"\)/);
+  assert.match(crm, /openPriceBook\("packets"\)/);
+  assert.match(crm, /onOpenFinance\("pricebook", next\)/);
   assert.match(crm, /initialView=\{priceBookView\}/);
   assert.match(crm, /key=\{priceBookView\}/);
   assert.match(hub, /onOpenSchedule=\{props\.onOpenSchedule\}/);
@@ -541,8 +542,8 @@ test("My day exposes owner scoped local workload and direct action charts", () =
   assert.match(hub, /onOpenInvoices=\{props\.onOpenInvoices\}/);
   assert.match(crm, /const \[scheduleWeekStart, setScheduleWeekStart\] = useState\(""\)/);
   assert.match(crm, /initialWeekStart=\{scheduleWeekStart\}/);
-  assert.match(dashboard, /onWorkViewChange=\{\(nextView\) => \{\s*setCommandTarget\(\(current\) => current\?\.kind === "crm-view" && current\.id !== nextView \? null : current\);\s*setActiveWorkView\(nextView\);\s*setWorkspace\("work"\);\s*\}\}/);
-  assert.match(dashboard, /onOpenInvoices=\{\(\) => setWorkspace\("invoices"\)\}/);
+  assert.match(dashboard, /onWorkViewChange=\{\(nextView\) => \{\s*if \(nextView === "pricebook" \|\| nextView === "reports"\) \{ openFinance\(nextView\); return; \}\s*setCommandTarget\(\(current\) => current\?\.kind === "crm-view" && current\.id !== nextView \? null : current\);\s*setActiveWorkView\(nextView\);\s*setWorkspace\("work"\);\s*\}\}/);
+  assert.match(dashboard, /onOpenInvoices=\{\(\) => openFinance\("invoices"\)\}/);
 });
 
 test("CRM writes no longer return the full customer and job workspace", () => {

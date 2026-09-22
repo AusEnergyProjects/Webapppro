@@ -355,7 +355,7 @@ function unreachableCustomerRegisterColumn(key: never): never {
   throw new Error(`Unsupported customer register column: ${String(key)}`);
 }
 
-export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navigationTarget, onOpenSchedule, onViewChange, onOpenInvoices, onCloseJobNavigation }: { user: User; teamAccess: boolean; staffPermissions?: TradeTeamPermissions; navigationTarget?: TLinkCommandTarget | null; onOpenSchedule?: (weekStart?: string) => void; onViewChange?: (view: View) => void; onOpenInvoices?: () => void; onCloseJobNavigation?: () => void }) {
+export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navigationTarget, onOpenSchedule, onViewChange, onOpenInvoices, onOpenFinance, onCloseJobNavigation }: { user: User; teamAccess: boolean; staffPermissions?: TradeTeamPermissions; navigationTarget?: TLinkCommandTarget | null; onOpenSchedule?: (weekStart?: string) => void; onViewChange?: (view: View) => void; onOpenInvoices?: () => void; onOpenFinance?: (view: "pricebook" | "reports", priceBookView?: "items" | "packets") => void; onCloseJobNavigation?: () => void }) {
   const [templates, setTemplates] = useState<JobTemplate[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [view, setView] = useState<View>(() => staffPermissions ? "jobs" : "today");
@@ -473,6 +473,11 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     if (staffPermissions.canRunReports) views.push("reports");
     return views;
   }, [staffPermissions]);
+  function openPriceBook(next: "items" | "packets" = "items") {
+    if (onOpenFinance) { onOpenFinance("pricebook", next); return; }
+    setPriceBookView(next);
+    setView("pricebook");
+  }
   const canCreateCustomer = !staffPermissions || staffPermissions.canManageCustomers;
   const canCreateJob = !staffPermissions || staffPermissions.canCreateJobs;
   const canSearchCustomerFields = true;
@@ -1273,6 +1278,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       ].filter(Boolean).join(" ");
       setStatus(creationResults);
       form.reset(); setNewJobSeed(null); setCreating(""); setView("jobs");
+      if (result.id && navigationTarget?.kind === "new-job" && navigationTarget.jobTab === "quote") openFocusedJob(result.id, "quote");
     } catch (error) { setStatus(error instanceof Error ? error.message : "The customer, service site and job were not created."); }
     finally { setBusy(""); }
   }
@@ -1293,7 +1299,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       {(canCreateJob || canCreateCustomer) && <div className="crm-primary-actions"><AccessibleMenu className="crm-quick-create" label="New">{(close) => <>{canCreateJob && <button role="menuitem" type="button" onClick={() => { setNewJobSeed(null); setView("jobs"); setCreating("job"); close(); }}>Job</button>}{canCreateCustomer && allowedViews.includes("customers") && <button role="menuitem" type="button" onClick={() => { setView("customers"); setCreating("customer"); close(); }}>Customer</button>}</>}</AccessibleMenu></div>}
     </header>
     <nav className="crm-nav" aria-label="Installer CRM">
-      {allowedViews.map((item) => <button key={item} type="button" className={view === item ? "active" : ""} aria-current={view === item ? "page" : undefined} onClick={() => {
+      {allowedViews.filter((item) => !onOpenFinance || (item !== "pricebook" && item !== "reports")).map((item) => <button key={item} type="button" className={view === item ? "active" : ""} aria-current={view === item ? "page" : undefined} onClick={() => {
         if (item === "schedule") { openVisualSchedule(); return; }
         if (item === "pricebook") setPriceBookView("items");
         if (item === "jobs") { setFocusedJobId(""); setJobReturnTarget({ kind: "jobs" }); }
@@ -1318,7 +1324,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
         <section className="crm-card"><header><div><span>Next up</span><h3>Schedule</h3></div><button type="button" onClick={() => openVisualSchedule()}>Open schedule</button></header>{upcomingAppointments.length ? <ol className="crm-agenda">{upcomingAppointments.slice(0, 6).map((item) => <li key={item.id}><time>{dateLabel(item.startsAt, true)}</time><button type="button" onClick={() => openFocusedJob(item.job.id)}><strong>{item.title}</strong><span>{item.job.workNumber} | {item.job.title}</span></button></li>)}</ol> : <div className="crm-empty"><strong>No upcoming visits</strong><span>Add an appointment from any job.</span></div>}</section>
         <section className="crm-card"><header><div><span>Attention</span><h3>Things to clear</h3></div></header>{!overdueTasks.length && !openIssues.length ? <div className="crm-empty"><strong>You are up to date</strong><span>No overdue tasks or open issues.</span></div> : <ul className="crm-attention-list">{overdueTasks.slice(0, 4).map((item) => <li key={item.id}><span>Overdue task</span><button type="button" onClick={() => openFocusedJob(item.job.id)}>{item.title}<small>{item.job.workNumber}</small></button></li>)}{openIssues.slice(0, 4).map((item) => <li key={item.id}><span>Open issue</span><button type="button" onClick={() => openFocusedJob(item.job.id)}>{item.body}<small>{item.job.workNumber}</small></button></li>)}</ul>}</section>
       </div>
-      <nav className="crm-today-actions" aria-label="Quick actions"><button type="button" className="primary" onClick={() => { setNewJobSeed(null); setFocusedJobId(""); setView("jobs"); setCreating("job"); }}>New job</button><button type="button" onClick={() => openVisualSchedule()}>Schedule</button><button type="button" onClick={() => { setCreating(""); setView("customers"); }}>Customers</button><button type="button" onClick={() => { setPriceBookView("items"); setView("pricebook"); }}>Price book</button><button type="button" onClick={() => { setPriceBookView("packets"); setView("pricebook"); }}>Common jobs</button><button type="button" onClick={() => onOpenInvoices?.()} disabled={!onOpenInvoices}>Invoices</button></nav>
+      <nav className="crm-today-actions" aria-label="Quick actions"><button type="button" className="primary" onClick={() => { setNewJobSeed(null); setFocusedJobId(""); setView("jobs"); setCreating("job"); }}>New job</button><button type="button" onClick={() => openVisualSchedule()}>Schedule</button><button type="button" onClick={() => { setCreating(""); setView("customers"); }}>Customers</button><button type="button" onClick={() => openPriceBook()}>Price book</button><button type="button" onClick={() => openPriceBook("packets")}>Common jobs</button><button type="button" onClick={() => onOpenInvoices?.()} disabled={!onOpenInvoices}>Invoices</button></nav>
     </div>}
     {view === "jobs" && creating === "job" && <div className="crm-view crm-create-screen">
       <div className="crm-page-heading"><div><h3 ref={newJobHeadingRef} tabIndex={-1}>Create job</h3></div><button type="button" className="crm-back-button" onClick={() => setCreating("")}>Back to all jobs</button></div>
@@ -1327,7 +1333,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
 
     {view === "jobs" && creating !== "job" && focusedJobId && <div className="crm-view crm-job-workspace">
       <div className="crm-page-heading"><div><span>Job workspace</span><h3>{selectedJobDetail?.id === focusedJobId ? selectedJobDetail.workNumber : "Opening job"}</h3><p>Edit the job, schedule, quote, field record and invoice from one focused page.</p></div><button type="button" className="crm-back-button" onClick={closeFocusedJob}>{jobReturnTarget.kind === "customer" ? `Back to ${jobReturnTarget.customerName}` : "Back to all jobs"}</button></div>
-      {selectedJobDetail?.id === focusedJobId ? <JobDetail key={`${selectedJobDetail.id}:${focusedJobTab}`} job={selectedJobDetail} customer={selectedJobCustomer || undefined} sites={selectedJobSites} user={user} busy={busy} refreshing={focusedJobRefreshing} teamMembers={teamMembers} permissions={staffPermissions} initialTab={focusedJobTab} onCrm={crmRequest} onWorkOrder={crmRequest} onOpenJob={(workOrderId) => openFocusedJob(workOrderId, "schedule")} onOpenPriceBook={() => { setPriceBookView("items"); setView("pricebook"); }} onOpenCustomer={(customerId) => { setFocusedJobId(""); setSelectedJobDetail(null); setSelectedCustomerId(customerId); setView("customers"); }} onOpenIntegrations={() => setView("integrations")} onReload={async () => { setFocusedJobRefreshing(true); setRefreshNonce((value) => value + 1); }} /> : <div className="crm-empty"><strong>Loading job...</strong><span>The full job record will open here.</span></div>}
+      {selectedJobDetail?.id === focusedJobId ? <JobDetail key={`${selectedJobDetail.id}:${focusedJobTab}`} job={selectedJobDetail} customer={selectedJobCustomer || undefined} sites={selectedJobSites} user={user} busy={busy} refreshing={focusedJobRefreshing} teamMembers={teamMembers} permissions={staffPermissions} initialTab={focusedJobTab} onCrm={crmRequest} onWorkOrder={crmRequest} onOpenJob={(workOrderId) => openFocusedJob(workOrderId, "schedule")} onOpenPriceBook={() => openPriceBook()} onOpenCustomer={(customerId) => { setFocusedJobId(""); setSelectedJobDetail(null); setSelectedCustomerId(customerId); setView("customers"); }} onOpenIntegrations={() => setView("integrations")} onReload={async () => { setFocusedJobRefreshing(true); setRefreshNonce((value) => value + 1); }} /> : <div className="crm-empty"><strong>Loading job...</strong><span>The full job record will open here.</span></div>}
     </div>}
 
     {view === "jobs" && creating !== "job" && !focusedJobId && <div className="crm-view">
