@@ -42,20 +42,10 @@ test("public planning PDFs and consented enquiries survive customer account remo
   assert.equal(fs.existsSync(new URL("../src/components/CustomerDashboard.tsx", import.meta.url)), false);
 });
 
-test("retired service-reminder actions stop before any data access", async () => {
-  const source = fs.readFileSync(new URL("../src/app/api/trade-service-follow-ups/route.ts", import.meta.url), "utf8");
-  const compiled = ts.transpileModule(source.replace(/^import .*;\r?\n/gm, ""), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  const access = { canManageCustomers: true, canRunReports: true, canViewCustomers: true, canSearchCustomers: true };
-  const handlers = new Function("exports", "getD1", "sameOrigin", "requireInstallerTeamAccess", "cleanAdminText", "adminJson", `${compiled}; return exports;`)(
-    {}, () => { throw new Error("Retired operations must not read or mutate data"); }, () => true,
-    async () => access, (value) => String(value), (body, status = 200) => Response.json(body, { status }),
-  );
-  for (const action of ["prepare_reminder", "send_reminder", "retry_delivery"]) {
-    const result = await handlers.PATCH(new Request("https://example.test/api/trade-service-follow-ups", { method: "PATCH", body: JSON.stringify({ action }) }));
-    assert.equal(result.status, 410);
-    assert.equal((await result.json()).code, "CUSTOMER_ACCOUNTS_RETIRED");
+test("retired service follow-up endpoints cannot read or mutate data", () => {
+  for (const path of ["../src/app/api/trade-service-follow-ups/route.ts", "../src/app/api/admin/service-follow-up-reporting/route.ts"]) {
+    assert.equal(fs.existsSync(new URL(path, import.meta.url)), false);
   }
-  assert.doesNotMatch(source, /sendServiceReminderProviderMessage|INSERT INTO service_reminder_deliveries/);
 });
 
 test("queued customer-account notifications are suppressed while installer acceptance can still deliver", () => {

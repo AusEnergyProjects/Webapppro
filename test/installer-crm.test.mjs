@@ -480,7 +480,7 @@ test("reviewed installer team members use the same authenticated address suggest
 });
 
 test("heavy workspaces load dynamically and profile readiness does not wait for opportunities", () => {
-  for (const workspace of ["SupplierCatalogueWorkspace", "TradePurchasingWorkspace", "TradeDataImportWorkspace", "TradeFinanceWorkspace", "TradeServiceFollowUpWorkspace"]) {
+  for (const workspace of ["SupplierCatalogueWorkspace", "TradePurchasingWorkspace", "TradeDataImportWorkspace", "TradeFinanceWorkspace"]) {
     assert.match(dashboard, new RegExp(`const ${workspace} = dynamic\\(\\(\\) => import\\("\\./${workspace}"\\)`));
     assert.doesNotMatch(dashboard, new RegExp(`import \\{ ${workspace} \\} from "\\./${workspace}"`));
   }

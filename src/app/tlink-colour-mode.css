@@ -167,10 +167,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .crm-template-library > header span,
   .invoice-heading span,
   .invoice-metrics span,
-  .follow-up-heading span,
-  .follow-up-list article > header span,
-  .follow-up-asset span,
-  .follow-up-draft > span,
   .schedule-heading > div:first-child > span,
   .schedule-unassigned header span,
   .marketplace-product-grid header span,
@@ -212,9 +208,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-privacy-line stron
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .invoice-metrics strong,
   .invoice-list article > div > strong,
-  .follow-up-metrics strong,
-  .follow-up-asset strong,
-  .follow-up-draft strong,
   .schedule-capacity article > strong,
   .schedule-board > section > header strong,
   .schedule-reschedule-queue > header h3,
@@ -1242,41 +1235,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .crm-invoice-credit > summary,
   .crm-invoice-history > summary
 ) {
-  color: var(--trade-accent-readable);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .follow-up-metrics article,
-  .follow-up-asset,
-  .follow-up-deliveries article
-) {
-  background: var(--trade-surface-soft);
-  border-color: var(--trade-line);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .follow-up-list > article {
-  background: var(--trade-surface);
-  border-color: var(--trade-line);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .follow-up-list > article.due-overdue {
-  border-left-color: #e07b61;
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .follow-up-list > article.due-due_soon {
-  border-left-color: #d8b34c;
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .follow-up-list article > header > div:last-child strong,
-html[data-tlink-colour-mode="night"] .trade-portal-shell .follow-up-draft {
-  background: var(--trade-accent-soft);
-  border-color: color-mix(in srgb, var(--trade-accent) 44%, var(--trade-line));
-  color: var(--trade-accent-soft-ink);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.follow-up-heading button, .follow-up-list footer button:not(.primary)) {
-  background: var(--trade-field);
-  border-color: #426066;
   color: var(--trade-accent-readable);
 }
 

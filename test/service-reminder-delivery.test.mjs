@@ -18,7 +18,6 @@ const schema = read("../db/schema.ts"); const migration = read("../drizzle/0053_
 const resendRoute = read("../src/app/api/service-reminder-provider-events/resend/route.ts");
 const twilioRoute = read("../src/app/api/service-reminder-provider-events/twilio/route.ts");
 const adminRoute = read("../src/app/api/admin/service-reminder-delivery/route.ts");
-const ui = read("../src/components/TradeServiceFollowUpWorkspace.tsx");
 const adminUi = read("../src/components/AdminServiceReminderDelivery.tsx");
 
 test("provider readiness requires send credentials and authenticated callbacks", () => {
@@ -99,6 +98,5 @@ test("historical delivery callbacks preserve verification and opt-out boundaries
 test("administrator configuration and deliberate review controls expose no credentials", () => {
   assert.match(adminRoute, /requireAdminIdentity\(request, \["owner"\]\)/); assert.match(adminRoute, /writeAdminAudit/);
   assert.doesNotMatch(`${adminRoute}\n${adminUi}`, /RESEND_API_KEY|TWILIO_AUTH_TOKEN/);
-  assert.doesNotMatch(ui, /send_reminder|retry_delivery|Prepare reminder/);
-  assert.doesNotMatch(`${ui}\n${adminUi}`, /customer@example|mobile_e164|account\.email/);
+  assert.doesNotMatch(adminUi, /customer@example|mobile_e164|account\.email/);
 });

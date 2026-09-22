@@ -183,13 +183,13 @@ test("installer and wholesaler dashboards share the clean operations shell", () 
   assert.match(dashboard, /TLinkBrand/);
   assert.match(dashboard, /Wholesaler control centre/);
   assert.match(dashboard, /Installer control centre/);
-  assert.match(dashboard, /dashboard-rail-note/);
+  assert.doesNotMatch(dashboard, /dashboard-rail-note|TradeServiceFollowUpWorkspace|workspace === "follow-ups"/);
   assert.match(styles, /Admin-inspired trade CRM shell/);
   assert.match(styles, /grid-template-columns: 244px minmax\(0, 1fr\)/);
   assert.match(styles, /@media \(max-width: 780px\)/);
   assert.match(styles, /dashboard-workspace-nav button\.active/);
   assert.match(dashboard, /dashboard-workspace-shortcuts/);
-  for (const shortcut of ["Jobs", "Customers", "Price book"]) assert.match(dashboard, new RegExp(`'${shortcut}'`));
+  for (const shortcut of ["Jobs", "Customers"]) assert.match(dashboard, new RegExp(`'${shortcut}'`));
   assert.match(dashboard, /kind: "crm-view"/);
   assert.match(styles, /dashboard-workspace-shortcuts/);
 });

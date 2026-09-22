@@ -53,7 +53,6 @@ const InstallerArrivalWindows = dynamic(() => import("./InstallerArrivalWindows"
 const TradePurchasingWorkspace = dynamic(() => import("./TradePurchasingWorkspace").then((module) => module.TradePurchasingWorkspace));
 const TradeDataImportWorkspace = dynamic(() => import("./TradeDataImportWorkspace").then((module) => module.TradeDataImportWorkspace));
 const TradeFinanceWorkspace = dynamic(() => import("./TradeFinanceWorkspace").then((module) => module.TradeFinanceWorkspace));
-const TradeServiceFollowUpWorkspace = dynamic(() => import("./TradeServiceFollowUpWorkspace").then((module) => module.TradeServiceFollowUpWorkspace));
 const TradeRebateCalculatorWorkspace = dynamic(() => import("./TradeRebateCalculatorWorkspace").then((module) => module.TradeRebateCalculatorWorkspace));
 const TradeTeamSettings = dynamic(() => import("./TradeTeamSettings").then((module) => module.TradeTeamSettings));
 const TradeTrainingWorkspace = dynamic(() => import("./TradeTrainingWorkspace").then((module) => module.TradeTrainingWorkspace), { loading: () => <p role="status">Loading training and onboarding...</p> });
@@ -223,13 +222,12 @@ const publicLeadHandoffStages = [
     detail: "The quote will open automatically as soon as the handoff is confirmed.",
   },
 ] as const;
-type DashboardWorkspace = "work" | "team" | "training" | "finance" | "follow-ups" | "products" | "calculator" | "orders" | "import" | "account";
+type DashboardWorkspace = "work" | "team" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
   "team",
   "training",
   "finance",
-  "follow-ups",
   "products",
   "calculator",
   "orders",
@@ -2375,7 +2373,6 @@ export function DirectTradeDashboard() {
                 <button type="button" className={workspace === "orders" ? "active" : ""} onClick={() => setWorkspace("orders")}><TLinkNavigationIcon name="orders" /><span>Orders</span><small>Supply and warranties</small></button>
                 <button type="button" className={workspace === "import" ? "active" : ""} onClick={() => setWorkspace("import")}><TLinkNavigationIcon name="import" /><span>Import</span><small>Guided data migration</small></button>
                 <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><TLinkNavigationIcon name="business" /><span>Business</span><small>Profile and verification</small></button>
-                <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>Wholesalers manage products and supply. Household leads and customer contact details never enter this workspace.</p></div>
               </nav>
               {workspace === "work" && <TradeBusinessHub
                 user={user}
@@ -2435,7 +2432,6 @@ export function DirectTradeDashboard() {
                   setWorkspace("work");
                 }}><TLinkNavigationIcon name="schedule" /><span>Schedule</span><small>Capacity and dispatch</small></button>
                 <button type="button" aria-current={workspace === "finance" ? "page" : undefined} className={workspace === "finance" ? "active" : ""} onClick={() => setWorkspace("finance")}><TLinkNavigationIcon name="finance" /><span>Finance</span><small>Quotes, invoices, pricing and reports</small></button>
-                <button type="button" aria-current={workspace === "follow-ups" ? "page" : undefined} className={workspace === "follow-ups" ? "active" : ""} onClick={() => setWorkspace("follow-ups")}><TLinkNavigationIcon name="follow-ups" /><span>Follow-ups</span><small>Consent-aware service preparation</small></button>
                 <button type="button" aria-current={workspace === "work" && activeWorkView === "leads" ? "page" : undefined} className={workspace === "work" && activeWorkView === "leads" ? "active" : ""} onClick={() => {
                   setCommandTarget({ workspace: "work", kind: "crm-view", id: "leads", query: "", nonce: Date.now() });
                   setActiveWorkView("leads");
@@ -2444,7 +2440,6 @@ export function DirectTradeDashboard() {
                 <button type="button" aria-current={workspace === "products" ? "page" : undefined} className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><TLinkNavigationIcon name="products" /><span>Products</span><small>Approved trade catalogue</small></button>
                 <button type="button" aria-current={workspace === "calculator" ? "page" : undefined} className={workspace === "calculator" ? "active" : ""} onClick={() => setWorkspace("calculator")}><TLinkNavigationIcon name="calculator" /><span>Calculator</span><small>Rebates for quotes and invoices</small></button>
                 <button type="button" aria-current={workspace === "account" ? "page" : undefined} className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><TLinkNavigationIcon name="business" /><span>Business</span><small>Settings and verification</small></button>
-                <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>Australian Energy Assessments and TLink leads show only consent-released details. Trade-sourced contacts belong in Customers or Jobs.</p></div>
               </nav>
 
               {workspace === "work" && <TradeBusinessHub
@@ -2504,8 +2499,6 @@ export function DirectTradeDashboard() {
                 setActiveWorkView("schedule");
                 setWorkspace("work");
               }} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>Complete business verification to use Finance.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
-
-              {workspace === "follow-ups" && (hasBusinessOperations && hasTeamAccess ? <TradeServiceFollowUpWorkspace user={user} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before service follow-up preparation is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
 
               {workspace === "calculator" && (hasBusinessOperations ? (
                 <TradeRebateCalculatorWorkspace key={user.uid} user={user} />

@@ -33,7 +33,6 @@ const TrainingQuestionnaireEditor = dynamic(() => import("./TrainingQuestionnair
 import { CreditexOutputActions } from "@/components/CreditexOutputActions";
 import { AdminUsabilityPilot } from "@/components/AdminUsabilityPilot";
 import { AdminPerformancePanel } from "@/components/AdminPerformancePanel";
-import { AdminServiceFollowUpReporting } from "@/components/AdminServiceFollowUpReporting";
 import { AdminOpportunityWorkspace } from "@/components/AdminOpportunityWorkspace";
 import { AdminCatalogueWorkspace } from "@/components/AdminCatalogueWorkspace";
 import { AdminAccountWorkspace } from "@/components/AdminAccountWorkspace";
@@ -882,7 +881,6 @@ export function AdminOperationsPortal() {
                 <article><span>Awaiting review</span><strong>{verificationCounts.awaiting || 0}</strong><small>ABN and evidence review required</small></article>
               </section>
               {["owner", "admin"].includes(session.role) && <AdminPerformancePanel api={api} />}
-              {["owner", "admin"].includes(session.role) && <AdminServiceFollowUpReporting api={api} />}
               <div className="admin-overview-grid">
                 <section className="admin-panel">
                   <div className="admin-panel-heading">

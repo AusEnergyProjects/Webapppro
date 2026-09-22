@@ -1877,9 +1877,6 @@
 .trade-portal-shell .dashboard-workspace-shortcuts .tlink-navigation-icon { flex: 0 0 16px; height: 16px; width: 16px; }
 .trade-portal-shell .dashboard-workspace-shortcuts button span { color: var(--trade-rail-ink); font-size: .59rem; font-weight: 800; }
 .trade-portal-shell .dashboard-workspace-shortcuts button:hover span, .trade-portal-shell .dashboard-workspace-shortcuts button:focus-visible span { color: #fff; }
-.dashboard-rail-note { background: var(--trade-rail-hover); border: 1px solid var(--trade-rail-line); border-radius: 12px; margin-top: auto; padding: 13px; }
-.dashboard-rail-note strong { color: #fff; display: block; font-size: .59rem; }
-.dashboard-rail-note p { color: var(--trade-rail-ink); font-size: .54rem; line-height: 1.5; margin-top: 6px; }
 
 .trade-portal-shell .dashboard-panel,
 .trade-portal-shell .dashboard-access-overview,
@@ -2111,7 +2108,6 @@
   .trade-portal-shell .dashboard-workspace-nav button { flex: 0 0 150px; padding: 10px; }
   .trade-portal-shell .dashboard-workspace-shortcuts { display: flex; flex: 0 0 auto; gap: 4px; margin: 0; }
   .trade-portal-shell .dashboard-workspace-shortcuts button { flex: 0 0 auto; padding: 10px 12px; }
-  .dashboard-rail-note { display: none; }
   .trade-portal-shell > :not(.dashboard-hero):not(.dashboard-workspace-nav):not(.trade-portal-intro) { margin-left: 14px; margin-right: 14px; }
   .trade-portal-shell .crm-hero { gap: 14px; padding: 20px 18px 17px; }
   .trade-portal-shell .crm-hero h2 { font-size: 1.3rem; }

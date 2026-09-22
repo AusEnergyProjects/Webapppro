@@ -47,6 +47,11 @@ test("Finance parses all sections and keeps legacy invoice URLs working", () => 
   assert.equal(helpers.dashboardWorkspaceFromSearch("?workspace=unknown"), "work");
 });
 
+test("retired Follow-ups bookmarks fall back to the Work workspace", () => {
+  assert.equal(helpers.dashboardWorkspaceFromSearch("?workspace=follow-ups"), "work");
+  assert.equal(helpers.dashboardWorkViewFromSearch("?workspace=follow-ups"), "today");
+});
+
 test("job links retain quote, invoice and cost tabs on refresh and reject invalid job IDs", () => {
   for (const jobTab of ["quote", "invoice", "field", "summary", "schedule"]) {
     const result = helpers.dashboardCommandTargetFromSearch(`?workspace=work&jobId=job-123&jobTab=${jobTab}`);
