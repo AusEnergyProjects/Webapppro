@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import assert from "node:assert/strict";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import test from "node:test";
@@ -54,7 +55,7 @@ function loadRoute(database, aborted, currentAccess = managerAccess) {
   const moduleRecord = { exports: {} }; const databaseBinding = d1(database);
   const mocks = {
     "../../../../db": { getD1: () => databaseBinding },
-    "@/lib/admin-server": { adminJson: (value, status = 200) => Response.json(value, { status }),
+    "@/lib/admin-server": { mfaErrorResponse, adminJson: (value, status = 200) => Response.json(value, { status }),
       cleanAdminText: (value, maximum) => String(value || "").trim().slice(0, maximum), sameOrigin: () => true },
     "@/lib/firebase-server": { requireFirebaseIdentity: async () => ({ uid: "manager-uid" }) },
     "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => currentAccess,
@@ -177,7 +178,7 @@ test("saving canonical personal services independently creates exact training to
   const onboarding = certificateTestDependency('creditex-onboarding-server');
   const loaded = { exports: {} };
   const output = ts.transpileModule(fs.readFileSync('src/app/api/trade-training/route.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  const dependencies = { '../../../../db': { getD1: () => d1(database) }, '@/lib/admin-server': {}, '@/lib/bounded-json-request': {},
+  const dependencies = { '../../../../db': { getD1: () => d1(database) }, '@/lib/admin-server': { mfaErrorResponse,}, '@/lib/bounded-json-request': {},
     '@/lib/creditex-onboarding-api': { creditexJson: (body, status = 200) => Response.json(body, { status }), creditexApiError: error => Response.json({ code: error.code }, { status: error.status || 503 }) },
     '@/lib/creditex-onboarding-server': onboarding, '@/lib/trade-training-server': training,
     '@/lib/training-questionnaire-store': certificateTestDependency('training-questionnaire-store'),

@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -40,7 +41,7 @@ function fixture() {
   const route=load('../src/app/api/trade-team/member-files/route.ts',{
     'cloudflare:workers':{env:{EVIDENCE:{put:async(key)=>stored.push(key),get:async()=>null,delete:async()=>{}}}},
     '../../../../../db':{getD1:()=>db},
-    '@/lib/admin-server':{adminJson:(value,status=200)=>Response.json(value,{status}),sameOrigin:()=>true,cleanAdminText:(value,max)=>String(value||'').trim().slice(0,max)},
+    '@/lib/admin-server':{ mfaErrorResponse,adminJson:(value,status=200)=>Response.json(value,{status}),sameOrigin:()=>true,cleanAdminText:(value,max)=>String(value||'').trim().slice(0,max)},
     '@/lib/trade-team-server':{requireInstallerTeamAccess:async()=>access},
     '@/lib/trade-team-member-files-server':load('../src/lib/trade-team-member-files-server.ts'),
     '@/lib/trade-team-document-expiry-server':{tradeTeamDocumentExpiryStatus},

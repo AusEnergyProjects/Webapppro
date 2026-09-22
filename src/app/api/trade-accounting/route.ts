@@ -4,6 +4,7 @@ import {
   accountingContactReference,
   accountingProviderUrl,
   accountingStatus,
+  assertAccountingDocumentConnection,
   assertQuickInvoiceAccountingEligibility,
   centsFromProvider,
   isAccountingProvider,
@@ -33,6 +34,8 @@ import {
 import { decryptIntegrationCredentials, encryptIntegrationCredentials } from "@/lib/trade-integration-crypto";
 import { providerSetting } from "@/lib/trade-integrations-server";
 import { assignedJob, requireInstallerTeamAccess } from "@/lib/trade-team-server";
+import { MFA_REQUIRED_MESSAGE, MFA_SETUP_URL, requireSecondFactor } from "@/lib/firebase-mfa";
+import { writeMyobSecurityEvent } from "@/lib/myob-security-audit";
 
 export const runtime = "edge";
 
@@ -63,12 +66,21 @@ function accountingErrorCode(error: unknown) {
   return error instanceof AccountingProviderRequestError ? error.code : error instanceof Error ? error.message : "";
 }
 
-function accountingErrorDetail(error: unknown) {
+function accountingErrorDetail(error: unknown, provider?: AccountingProvider) {
+  if (provider === "myob") {
+    const code = accountingErrorCode(error);
+    return ["INTEGRATION_REQUIRED", "INTEGRATION_RECONSENT_REQUIRED", "INTEGRATION_CONNECTION_CHANGED",
+      "ACCOUNTING_COMPANY_FILE_UNBOUND", "ACCOUNTING_COMPANY_FILE_MISMATCH", "MYOB_COMPANY_FILE_PASSWORD_UNSUPPORTED",
+      "MYOB_ACCOUNT_REQUIRED", "MYOB_TAX_CODES_REQUIRED", "PROVIDER_TAX_CODE_REQUIRED", "PROVIDER_RECORD_COLLISION",
+      "PROVIDER_RECORD_MISMATCH", "INVALID_ACCOUNTING_SCOPE", "EXPORT_IN_PROGRESS", "DOCUMENT_ALREADY_EXPORTED"]
+      .includes(code) ? code : "PROVIDER_REQUEST_FAILED";
+  }
   return error instanceof AccountingProviderRequestError ? error.diagnostic : error instanceof Error ? error.message : "PROVIDER_REQUEST_FAILED";
 }
 
 function accountingError(error: unknown) {
   const code = accountingErrorCode(error);
+  if (code === "MFA_REQUIRED") return adminJson({ ok: false, error: MFA_REQUIRED_MESSAGE, code, setupUrl: MFA_SETUP_URL }, 403);
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (["PROFILE_REQUIRED", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "ACCOUNT_INACTIVE"].includes(code)) {
     return adminJson({ ok: false, error: "Accounting export is not available to this account." }, 403);
@@ -84,6 +96,9 @@ function accountingError(error: unknown) {
   if (code === "QUICK_INVOICE_NOT_ISSUED") return adminJson({ ok: false, error: "Send this TLink invoice successfully before exporting its immutable issued version to accounting." }, 409);
   if (code === "QUICK_INVOICE_CREDITED") return adminJson({ ok: false, error: "This TLink invoice has a credit. Keep it in TLink until provider credit-note export is added." }, 409);
   if (code === "INTEGRATION_REQUIRED") return adminJson({ ok: false, error: "Connect this accounting provider in Integrations first." }, 409);
+  if (code === "ACCOUNTING_COMPANY_FILE_UNBOUND") return adminJson({ ok: false, error: "This older export has no verified accounting company-file link. Check it in the original accounting file and contact support before syncing it again." }, 409);
+  if (code === "ACCOUNTING_COMPANY_FILE_MISMATCH") return adminJson({ ok: false, error: "This invoice belongs to a different accounting company file. Reconnect its original file before syncing it again." }, 409);
+  if (code === "INTEGRATION_CONNECTION_CHANGED") return adminJson({ ok: false, error: "The accounting connection changed during this request. Refresh the job before syncing again." }, 409);
   if (code === "INTEGRATION_RECONSENT_REQUIRED") return adminJson({ ok: false, error: "Reconnect MYOB in Integrations once so it can access customers, invoices and your income account list." }, 409);
   if (code === "MYOB_COMPANY_FILE_PASSWORD_UNSUPPORTED") return adminJson({ ok: false, error: "The selected MYOB company file did not accept passwordless access. TLink does not collect company-file usernames or passwords, so password-protected files are not supported." }, 409);
   if (code === "MYOB_ACCOUNT_REQUIRED") return adminJson({ ok: false, error: "Choose the MYOB income account that should receive this sale." }, 400);
@@ -312,13 +327,21 @@ async function connections(firebaseUid: string) {
 async function connectionFor(firebaseUid: string, provider: AccountingProvider) {
   const row = await getD1().prepare(`SELECT * FROM trade_crm_integrations
     WHERE firebase_uid = ? AND provider = ? AND status = 'connected'`).bind(firebaseUid, provider).first<Row>();
-  if (!row) throw new Error("INTEGRATION_REQUIRED");
+  if (!row || !String(row.external_account_id || "").trim()) throw new Error("INTEGRATION_REQUIRED");
   if (provider === "myob" && needsMyobReconsent(row)) throw new Error("INTEGRATION_RECONSENT_REQUIRED");
   if (provider === "xero" && needsXeroReconsent(row)) throw new Error("XERO_RECONSENT_REQUIRED");
   return row;
 }
 
+async function assertCurrentConnection(connection: Row) {
+  const current = await getD1().prepare(`SELECT id FROM trade_crm_integrations
+    WHERE id = ? AND firebase_uid = ? AND provider = ? AND external_account_id = ? AND status = 'connected'`)
+    .bind(connection.id, connection.firebase_uid, connection.provider, connection.external_account_id).first();
+  if (!current) throw new Error("INTEGRATION_CONNECTION_CHANGED");
+}
+
 async function activeCredentials(provider: AccountingProvider, connection: Row) {
+  await assertCurrentConnection(connection);
   const credentials = await decryptIntegrationCredentials(String(connection.encrypted_credentials || ""));
   const expiresAt = Date.parse(String(connection.token_expires_at || ""));
   if (Number.isFinite(expiresAt) && expiresAt > Date.now() + 2 * 60 * 1000) return credentials;
@@ -344,13 +367,17 @@ async function activeCredentials(provider: AccountingProvider, connection: Row) 
   const tokenExpiresAt = Number(refreshed.expires_in || 0) > 0
     ? new Date(Date.now() + Number(refreshed.expires_in) * 1000).toISOString()
     : "";
-  await getD1().prepare(`UPDATE trade_crm_integrations SET encrypted_credentials = ?, token_expires_at = ?,
-    last_error = '', updated_at = ? WHERE id = ? AND firebase_uid = ?`)
-    .bind(await encryptIntegrationCredentials(next), tokenExpiresAt, now, connection.id, connection.firebase_uid).run();
+  const updated = await getD1().prepare(`UPDATE trade_crm_integrations SET encrypted_credentials = ?, token_expires_at = ?,
+    last_error = '', updated_at = ? WHERE id = ? AND firebase_uid = ? AND provider = ? AND external_account_id = ?
+      AND status = 'connected' AND encrypted_credentials = ?`)
+    .bind(await encryptIntegrationCredentials(next), tokenExpiresAt, now, connection.id, connection.firebase_uid,
+      provider, connection.external_account_id, connection.encrypted_credentials).run();
+  if (Number(updated.meta.changes || 0) !== 1) throw new Error("INTEGRATION_CONNECTION_CHANGED");
   return next;
 }
 
 async function xeroFetch(connection: Row, credentials: Row, path: string, init: RequestInit = {}) {
+  await assertCurrentConnection(connection);
   const response = await fetch(`https://api.xero.com/api.xro/2.0/${path}`, {
     ...init,
     headers: {
@@ -393,6 +420,7 @@ function myobCompanyFileAuthenticationRejected(response: Response, result: Row) 
 
 async function myobFetch(connection: Row, credentials: Row, path: string, init: RequestInit = {}) {
   const request = async (companyFileToken = "") => {
+    await assertCurrentConnection(connection);
     const response = await fetch(`${myobCompanyBase(connection.external_account_id)}/${path}`, {
       ...init,
       headers: {
@@ -421,6 +449,7 @@ async function myobFetch(connection: Row, credentials: Row, path: string, init: 
 }
 
 async function quickBooksFetch(connection: Row, credentials: Row, path: string, init: RequestInit = {}) {
+  await assertCurrentConnection(connection);
   const realmId = cleanAdminText(connection.external_account_id, 80);
   if (!realmId || !/^\d+$/.test(realmId)) throw new Error("INTEGRATION_REQUIRED");
   const response = await fetch(`https://quickbooks.api.intuit.com/v3/company/${encodeURIComponent(realmId)}/${path}`,
@@ -757,20 +786,21 @@ async function exportInvoice(firebaseUid: string, provider: AccountingProvider, 
     String(job.commercial_reference),
   );
   const connection = await connectionFor(firebaseUid, provider);
-  const credentials = await activeCredentials(provider, connection);
   const db = getD1();
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
   const inserted = await db.prepare(`INSERT INTO trade_crm_accounting_documents
     (id, work_order_id, firebase_uid, commercial_handoff_id, commercial_reference, scope_snapshot_json,
-     subtotal_cents, tax_cents, provider, document_type, amount_cents, paid_amount_cents, currency,
-     status, due_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'invoice', ?, 0, 'AUD', 'exporting', ?, ?, ?)
+     subtotal_cents, tax_cents, provider, external_account_id, document_type, amount_cents, paid_amount_cents, currency,
+     status, due_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'invoice', ?, 0, 'AUD', 'exporting', ?, ?, ?)
     ON CONFLICT(firebase_uid, work_order_id, document_type) DO NOTHING`)
     .bind(id, job.id, firebaseUid, job.commercial_handoff_id, job.commercial_reference, job.scope_snapshot_json,
-      job.accepted_subtotal_cents, job.accepted_tax_cents, provider, amountCents, invoiceDueAt(job), now, now).run();
+      job.accepted_subtotal_cents, job.accepted_tax_cents, provider, connection.external_account_id, amountCents, invoiceDueAt(job), now, now).run();
   let document = await documentRow(firebaseUid, String(job.id));
   if (!document) throw new Error("PROVIDER_REQUEST_FAILED");
-  if (document.commercial_handoff_id !== job.commercial_handoff_id) throw new Error("DOCUMENT_ALREADY_EXPORTED");
+  assertAccountingDocumentConnection(document, connection);
+  if (document.commercial_handoff_id !== job.commercial_handoff_id
+    || document.commercial_reference !== job.commercial_reference) throw new Error("DOCUMENT_ALREADY_EXPORTED");
   if (document.provider !== provider) throw new Error("DOCUMENT_ALREADY_EXPORTED");
   if (document.external_document_id) return document;
   if (Number(inserted.meta.changes || 0) !== 1) {
@@ -783,6 +813,7 @@ async function exportInvoice(firebaseUid: string, provider: AccountingProvider, 
     if (!document) throw new Error("PROVIDER_REQUEST_FAILED");
   }
   try {
+    const credentials = await activeCredentials(provider, connection);
     let externalContactId = String(document.external_contact_id || "");
     let external: Row;
     let selectedAccount = "";
@@ -861,22 +892,23 @@ async function exportInvoice(firebaseUid: string, provider: AccountingProvider, 
       db.prepare(`UPDATE trade_crm_job_details SET invoiced_value_cents = ?, invoice_status = ?, updated_at = ?
         WHERE work_order_id = ? AND firebase_uid = ?`).bind(totalCents, status, syncedAt, job.id, firebaseUid),
       db.prepare(`UPDATE trade_crm_integrations SET default_account_reference = ?, last_sync_at = ?, last_error = '', updated_at = ?
-        WHERE id = ? AND firebase_uid = ? AND external_account_id = ?`)
-        .bind(selectedAccount, syncedAt, syncedAt, connection.id, firebaseUid, connection.external_account_id),
+        WHERE id = ? AND firebase_uid = ? AND provider = ? AND external_account_id = ? AND status = 'connected'`)
+        .bind(selectedAccount, syncedAt, syncedAt, connection.id, firebaseUid, provider, connection.external_account_id),
     ]);
     document = await documentRow(firebaseUid, String(job.id));
     if (!document) throw new Error("PROVIDER_REQUEST_FAILED");
     await addEvent(document, "export", status, providerStatus, totalCents, paidCents);
     return document;
   } catch (error) {
-    const message = accountingErrorDetail(error);
+    const message = accountingErrorDetail(error, provider);
     const failedAt = new Date().toISOString();
     if (document) {
       await db.prepare(`UPDATE trade_crm_accounting_documents SET status = 'error', last_error = ?, updated_at = ? WHERE id = ?`)
         .bind(message, failedAt, document.id).run();
     }
-    await db.prepare(`UPDATE trade_crm_integrations SET last_error = ?, updated_at = ? WHERE id = ?`)
-      .bind(message, failedAt, connection.id).run();
+    await db.prepare(`UPDATE trade_crm_integrations SET last_error = ?, updated_at = ?
+      WHERE id = ? AND firebase_uid = ? AND provider = ? AND external_account_id = ? AND status = 'connected'`)
+      .bind(message, failedAt, connection.id, firebaseUid, provider, connection.external_account_id).run();
     const failed = await documentRow(firebaseUid, String(job.id));
     if (failed) await addEvent(failed, "export", "error", "", amountCents, 0, message);
     throw error;
@@ -890,6 +922,7 @@ async function refreshInvoice(firebaseUid: string, job: Row) {
     || String(document.commercial_reference || "") !== String(job.commercial_reference || "")) throw new Error("DOCUMENT_ALREADY_EXPORTED");
   const provider = document.provider as AccountingProvider;
   const connection = await connectionFor(firebaseUid, provider);
+  assertAccountingDocumentConnection(document, connection);
   const credentials = await activeCredentials(provider, connection);
   try {
     let invoice: Row;
@@ -919,20 +952,22 @@ async function refreshInvoice(firebaseUid: string, job: Row) {
         invoice_status = ?, pipeline_stage = CASE WHEN ? = 'paid' THEN 'paid' WHEN ? IN ('issued', 'part_paid', 'overdue') THEN 'invoiced' ELSE pipeline_stage END,
         updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?`)
         .bind(amountCents, providerPaidCents, jobStatus, jobStatus, jobStatus, now, job.id, firebaseUid),
-      getD1().prepare(`UPDATE trade_crm_integrations SET last_sync_at = ?, last_error = '', updated_at = ? WHERE id = ?`)
-        .bind(now, now, connection.id),
+      getD1().prepare(`UPDATE trade_crm_integrations SET last_sync_at = ?, last_error = '', updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND provider = ? AND external_account_id = ? AND status = 'connected'`)
+        .bind(now, now, connection.id, firebaseUid, provider, connection.external_account_id),
     ]);
     const updated = await documentRow(firebaseUid, String(job.id));
     if (!updated) throw new Error("PROVIDER_REQUEST_FAILED");
     await addEvent(updated, "refresh", status, providerStatus, amountCents, providerPaidCents);
     return updated;
   } catch (error) {
-    const message = accountingErrorDetail(error);
+    const message = accountingErrorDetail(error, provider);
     const now = new Date().toISOString();
     await getD1().prepare(`UPDATE trade_crm_accounting_documents SET last_error = ?, updated_at = ? WHERE id = ?`)
       .bind(message, now, document.id).run();
-    await getD1().prepare(`UPDATE trade_crm_integrations SET last_error = ?, updated_at = ? WHERE id = ?`)
-      .bind(message, now, connection.id).run();
+    await getD1().prepare(`UPDATE trade_crm_integrations SET last_error = ?, updated_at = ?
+      WHERE id = ? AND firebase_uid = ? AND provider = ? AND external_account_id = ? AND status = 'connected'`)
+      .bind(message, now, connection.id, firebaseUid, provider, connection.external_account_id).run();
     await addEvent(document, "refresh", "error", String(document.provider_status || ""), Number(document.amount_cents || 0), Number(document.paid_amount_cents || 0), message);
     throw error;
   }
@@ -940,19 +975,29 @@ async function refreshInvoice(firebaseUid: string, job: Row) {
 
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
+  let audit: { actorUid: string; ownerUid: string; resourceId: string; action: "accounting.read" } | null = null;
   try {
     const access = await requireInstallerTeamAccess(request);
     const url = new URL(request.url);
     const workOrderId = cleanAdminText(url.searchParams.get("workOrderId"), 180);
     const source = invoiceSource(url.searchParams.get("invoiceSource"));
     const ownerUid = await requireAccountingJobAccess(access, workOrderId, false, () => assignedJob(access, workOrderId));
+    const providerValue = cleanAdminText(url.searchParams.get("provider"), 20).toLowerCase();
+    if (providerValue && !isAccountingProvider(providerValue)) return adminJson({ ok: false, error: "Choose Xero, MYOB or QuickBooks." }, 400);
+    const myobRecord = await getD1().prepare(`SELECT 1 FROM trade_crm_accounting_documents
+      WHERE firebase_uid = ? AND work_order_id = ? AND provider = 'myob'
+      UNION ALL SELECT 1 FROM trade_crm_integrations WHERE firebase_uid = ? AND provider = 'myob' AND status = 'connected' LIMIT 1`)
+      .bind(ownerUid, workOrderId, ownerUid).first();
+    if (providerValue === "myob" || myobRecord) {
+      audit = { actorUid: access.actorUid, ownerUid, resourceId: workOrderId, action: "accounting.read" };
+      requireSecondFactor(access.identity);
+      await writeMyobSecurityEvent(getD1(), { ...audit, outcome: "attempt" });
+    }
     const job = await directJob(ownerUid, workOrderId, source);
     const connected = await connections(ownerUid);
     const storedDocument = await documentRow(ownerUid, workOrderId);
     const document = storedDocument && String(storedDocument.commercial_handoff_id || "") === String(job.commercial_handoff_id || "")
       && String(storedDocument.commercial_reference || "") === String(job.commercial_reference || "") ? storedDocument : null;
-    const providerValue = cleanAdminText(url.searchParams.get("provider"), 20).toLowerCase();
-    if (providerValue && !isAccountingProvider(providerValue)) return adminJson({ ok: false, error: "Choose Xero, MYOB or QuickBooks." }, 400);
     const providers = (["xero", "myob", "quickbooks"] as AccountingProvider[]).map((provider) => ({
       provider, label: provider === "xero" ? "Xero" : provider === "myob" ? "MYOB" : "QuickBooks", connected: connected[provider]?.status === "connected",
       needsReconnect: provider === "myob" ? needsMyobReconsent(connected.myob || null) : provider === "xero" && needsXeroReconsent(connected.xero || null),
@@ -973,17 +1018,22 @@ export async function GET(request: Request) {
       const savedReference = String(connection.default_account_reference || "");
       accountReference = accounts.find((account) => account.id === savedReference)?.id || (accounts.length === 1 ? accounts[0].id : "");
     }
+    if (audit) await writeMyobSecurityEvent(getD1(), { ...audit, outcome: "success" });
     return adminJson({
       ok: true,
       providers, selectedProvider, accountReference,
       documents: document ? [documentJson(document)] : [],
       accounts,
     });
-  } catch (error) { return accountingError(error); }
+  } catch (error) {
+    if (audit) await writeMyobSecurityEvent(getD1(), { ...audit, outcome: accountingErrorCode(error) === "MFA_REQUIRED" ? "denied" : "failure" });
+    return accountingError(error);
+  }
 }
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
+  let audit: { actorUid: string; ownerUid: string; resourceId: string; action: "invoice.export" | "invoice.refresh" } | null = null;
   try {
     const access = await requireInstallerTeamAccess(request);
     let body: Row;
@@ -992,18 +1042,29 @@ export async function POST(request: Request) {
     const workOrderId = cleanAdminText(body.workOrderId, 180);
     const source = invoiceSource(body.invoiceSource);
     const ownerUid = await requireAccountingJobAccess(access, workOrderId, true, () => assignedJob(access, workOrderId));
-    const job = await directJob(ownerUid, workOrderId, source);
     const action = cleanAdminText(body.action, 20).toLowerCase();
+    const providerValue = cleanAdminText(body.provider, 20).toLowerCase();
+    if (action !== "export" && action !== "refresh") return adminJson({ ok: false, error: "Choose export or refresh." }, 400);
+    if (action === "export" && !isAccountingProvider(providerValue)) return adminJson({ ok: false, error: "Choose Xero, MYOB or QuickBooks." }, 400);
+    const existing = action === "refresh" ? await getD1().prepare(`SELECT provider FROM trade_crm_accounting_documents
+      WHERE firebase_uid = ? AND work_order_id = ? AND document_type = 'invoice'`).bind(ownerUid, workOrderId).first<Row>() : null;
+    if ((action === "export" ? providerValue : existing?.provider) === "myob") {
+      audit = { actorUid: access.actorUid, ownerUid, resourceId: workOrderId, action: action === "export" ? "invoice.export" : "invoice.refresh" };
+      requireSecondFactor(access.identity);
+      await writeMyobSecurityEvent(getD1(), { ...audit, outcome: "attempt" });
+    }
+    const job = await directJob(ownerUid, workOrderId, source);
     let document: Row;
     if (action === "export") {
-      const providerValue = cleanAdminText(body.provider, 20).toLowerCase();
       if (!isAccountingProvider(providerValue)) return adminJson({ ok: false, error: "Choose Xero, MYOB or QuickBooks." }, 400);
       document = await exportInvoice(ownerUid, providerValue, job, cleanAdminText(body.accountReference, 180));
-    } else if (action === "refresh") {
-      document = await refreshInvoice(ownerUid, job);
     } else {
-      return adminJson({ ok: false, error: "Choose export or refresh." }, 400);
+      document = await refreshInvoice(ownerUid, job);
     }
+    if (audit) await writeMyobSecurityEvent(getD1(), { ...audit, outcome: "success" });
     return adminJson({ ok: true, document: documentJson(document) }, action === "export" ? 201 : 200);
-  } catch (error) { return accountingError(error); }
+  } catch (error) {
+    if (audit) await writeMyobSecurityEvent(getD1(), { ...audit, outcome: accountingErrorCode(error) === "MFA_REQUIRED" ? "denied" : "failure" });
+    return accountingError(error);
+  }
 }

@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -14,6 +15,7 @@ const native = read("../mobile/src/app/new-job.tsx");
 const crm = read("../src/app/api/trade-crm/route.ts");
 const optionsSource = read("../src/app/api/field/job-options/route.ts");
 const admin = {
+  mfaErrorResponse,
   cleanAdminText: (value, limit) => String(value || "").trim().slice(0, limit),
   sameOrigin: () => true,
   adminJson: (body, status = 200) => Response.json(body, { status }),

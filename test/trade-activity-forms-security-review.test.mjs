@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -239,7 +240,7 @@ test("approved product facets stay behind record-scoped installer access and use
   const route = ({ requireAccess = async () => access, loadRecord, searchProducts }) => loadModule(
     read("../src/app/api/trade-activity-forms/route.ts"), {
       "../../../../db": { getD1: () => database },
-      "@/lib/admin-server": {
+      "@/lib/admin-server": { mfaErrorResponse,
         adminJson: (body, status = 200) => Response.json(body, { status }),
         requireAdminIdentity: async () => ({ uid: "admin" }), sameOrigin: () => true,
       },

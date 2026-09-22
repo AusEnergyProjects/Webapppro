@@ -1,5 +1,5 @@
 import { getD1 } from "../../../../../db";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, canAssignJob, requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { canRescheduleWithinScope } from "@/lib/trade-team-permission-policy.mjs";
 import { PATCH as changeSchedule } from "../../trade-schedule/route";
@@ -42,6 +42,8 @@ async function context(request: Request, workOrderId: string) {
 }
 
 function fail(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   if (error instanceof Error && 'code' in error && typeof error.code === 'string' && error.code.startsWith('JOB_DELETE_')) {
     return adminJson({ ok: false, code: error.code, error: error.message }, error.code === 'JOB_DELETE_NOT_ALLOWED' ? 403 : 409);
   }

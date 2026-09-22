@@ -1,5 +1,5 @@
 import { getD1 } from "../../../../db";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import {
   guardedOnlineChildMutationBatch,
@@ -16,6 +16,8 @@ const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
 const PHONE_PATTERN = /(?:\+?\d[\s().-]*){8,}/;
 
 function formError(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "TEAM_ACCESS_RECORD_REQUIRED") return adminJson({ ok: false, error: "No active installer team access was found." }, 404);

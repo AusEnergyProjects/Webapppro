@@ -1,5 +1,5 @@
 import { getD1 } from "../../../../../db";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { canManageTeam, requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import {
   appVersionAccepted,
@@ -16,6 +16,8 @@ export const runtime = "edge";
 const PUSH_PROVIDERS = new Set(["fcm", "apns"]);
 
 function deviceError(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const mobile = mobileErrorResponse(error);
   if (mobile) return adminJson({ ok: false, code: mobile.code, error: mobile.error,
     ...(mobile.minimumVersion ? { minimumVersion: mobile.minimumVersion } : {}) }, mobile.status);

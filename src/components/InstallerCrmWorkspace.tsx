@@ -6,6 +6,7 @@ import { type CSSProperties, FormEvent, type KeyboardEvent, type MouseEvent, typ
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import type { User } from "firebase/auth";
+import { isMfaRequiredResponse, MFA_SETUP_URL } from "@/lib/firebase-mfa";
 import { AccessibleMenu } from "./AccessibleMenu";
 import { SearchableLookup, type SearchableLookupOption } from "./SearchableLookup";
 import {
@@ -454,6 +455,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   const customerPreferencesReady = Boolean(staffPermissions) || savedCustomerPreferencesReady;
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState("");
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [bookingTraining, setBookingTraining] = useState<BookingTrainingModule[]>([]);
   const newJobHeadingRef = useRef<HTMLHeadingElement>(null);
   const bootstrapStarted = useRef(false);
@@ -521,6 +523,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     const token = await user.getIdToken();
     const response = await fetch("/api/trade-crm?mode=bootstrap", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
     const result = await response.json().catch(() => ({})) as CrmResult;
+    if (isMfaRequiredResponse(result)) setMfaRequired(true);
     if (!response.ok || !result.ok) throw new Error(result.error || "The installer CRM could not be loaded.");
     setTemplates(result.templates || []);
     setTeamMembers(result.teamMembers || []);
@@ -554,6 +557,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     void user.getIdToken().then(async (token) => {
       const response = await fetch(`/api/trade-list-views?view=${viewKey}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal });
       const result = await response.json().catch(() => ({}));
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok || !result.ok) throw new Error(result.error || "The saved list view could not be loaded.");
       if (!active) return;
       const preferences = (result.preferences || {}) as Partial<WorkspaceListPreferences>;
@@ -622,6 +626,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     const params = jobIndexParams(jobPage, jobPageSize, cursor, !jobTotalReady.current);
     const response = await fetch(`/api/trade-crm?${params}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal });
     const result = await response.json().catch(() => ({})) as CrmIndexResult;
+    if (isMfaRequiredResponse(result)) setMfaRequired(true);
     if (!response.ok || !result.ok) throw new Error(result.error || "The job list could not be loaded.");
     if (signal.aborted) return;
     const items = (result.items || []) as Job[];
@@ -655,6 +660,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
           cache: "no-store",
         });
         const result = await response.json().catch(() => ({})) as CrmIndexResult;
+        if (isMfaRequiredResponse(result)) setMfaRequired(true);
         if (!response.ok || !result.ok) throw new Error(result.error || "The complete filtered job export could not be loaded.");
         if (!Array.isArray(result.items) || !result.pagination) {
           throw new Error("The complete filtered job export returned an invalid page.");
@@ -727,6 +733,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     if (customerTotalReady.current) params.set("total", "0");
     const response = await fetch(`/api/trade-crm?${params}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal });
     const result = await response.json().catch(() => ({})) as CrmIndexResult;
+    if (isMfaRequiredResponse(result)) setMfaRequired(true);
     if (!response.ok || !result.ok) throw new Error(result.error || "The customer list could not be loaded.");
     if (signal.aborted) return;
     const items = (result.items || []) as Customer[];
@@ -789,6 +796,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal,
     })).then(async (response) => {
       const result = await response.json().catch(() => ({})) as CrmDetailResult;
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok || !result.ok || !result.job) throw new Error(result.error || "The job record could not be loaded.");
       if (active) { setSelectedJobDetail(result.job); setSelectedJobCustomer(result.customer || null); setSelectedJobSites(result.sites || []); setFocusedJobRefreshing(false); }
     }).catch((error) => active && !controller.signal.aborted && setStatus(error instanceof Error ? error.message : "The job record could not be loaded."));
@@ -822,6 +830,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal,
     })).then(async (response) => {
       const result = await response.json().catch(() => ({})) as CrmDetailResult;
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok || !result.ok || !result.customer) throw new Error(result.error || "The customer record could not be loaded.");
       if (active) {
         setSelectedCustomerDetail(result.customer);
@@ -840,6 +849,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
     })).then(async (response) => {
       const result = await response.json().catch(() => ({})) as CrmSummaryResult;
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok || !result.ok) throw new Error(result.error || "The workday summary could not be loaded.");
       if (active) setSummary(result);
     }).catch((error) => active && setStatus(error instanceof Error ? error.message : "The workday summary could not be loaded."));
@@ -855,6 +865,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
         const params = new URLSearchParams({ mode: "index", resource: "jobs", filter: "all", pipeline: stage, sort: "updated-desc", page: "1", pageSize: "25" });
         const response = await fetch(`/api/trade-crm?${params}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
         const result = await response.json().catch(() => ({})) as CrmIndexResult;
+        if (isMfaRequiredResponse(result)) setMfaRequired(true);
         if (!response.ok || !result.ok) throw new Error(result.error || "The job board could not be loaded.");
         return [stage, (result.items || []) as Job[], result.pagination?.total || 0] as const;
       }));
@@ -951,6 +962,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
         method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body),
       });
       const result = await response.json().catch(() => ({})) as { ok?: boolean; code?: string; error?: string; trainingModules?: BookingTrainingModule[]; calendarSync?: AppointmentCalendarSync };
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok || !result.ok) {
         setBookingTraining(result.trainingModules || []);
         if (result.code === "REVISION_CONFLICT" && body.workOrderId === focusedJobId) {
@@ -978,6 +990,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
         method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body),
       });
       const result = await response.json().catch(() => ({})) as { ok?: boolean; error?: string };
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok || !result.ok) throw new Error(result.error || "The selected records could not be updated.");
       setSelectedCustomerIds([]); setRefreshNonce((value) => value + 1); setStatus(success);
     } catch (error) { setStatus(error instanceof Error ? error.message : "The selected records could not be updated."); }
@@ -1161,6 +1174,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
         body: method === "PATCH" ? JSON.stringify(body) : undefined,
       });
       const result = await response.json().catch(() => ({}));
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok || !result.ok) throw new Error(result.error || "The default list view could not be saved.");
       const preferences = (result.preferences || {}) as Partial<WorkspaceListPreferences>;
       if (viewKey === "installer-jobs") {
@@ -1185,6 +1199,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
         body: JSON.stringify({ name, preferences: currentListPreferences(viewKey) }),
       });
       const result = await response.json().catch(() => ({}));
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok || !result.ok || !result.preset) throw new Error(result.error || "The saved view could not be updated.");
       const preset = result.preset as NamedWorkspaceListView;
       if (viewKey === "installer-jobs") {
@@ -1204,6 +1219,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       const token = await user.getIdToken();
       const response = await fetch(`/api/trade-list-views?view=${viewKey}&preset=${encodeURIComponent(presetId)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
       const result = await response.json().catch(() => ({}));
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok || !result.ok) throw new Error(result.error || "The saved view could not be deleted.");
       if (viewKey === "installer-jobs") { setJobPresets((current) => current.filter((item) => item.id !== presetId)); setActiveJobPresetId(""); }
       else { setCustomerPresets((current) => current.filter((item) => item.id !== presetId)); setActiveCustomerPresetId(""); }
@@ -1231,6 +1247,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       const body = Object.fromEntries(data);
       const response = await fetch("/api/trade-crm", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: "create_scheduled_job", ...body }) });
       const result = await response.json().catch(() => ({})) as CreateJobResult;
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok || !result.ok) {
         setBookingTraining(result.trainingModules || []);
         const matches = result.duplicateCandidates?.map((item) => `${item.displayName} (${item.customerNumber}: ${item.reasons.join(", ")})`).join("; ");
@@ -1442,7 +1459,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     {view === "assets" && <div className="crm-view"><TradeAssetWorkspace user={user} /></div>}
     {view === "integrations" && <div className="crm-view"><TradeIntegrationCentre user={user} /></div>}
     <BookingTrainingLinks modules={bookingTraining} teamPortal={Boolean(staffPermissions)} />
-    {status && <p className="crm-status" role="status">{status}{status.includes("Calendar sync needs another try.") && <> <a href="/direct-trade/dashboard?workspace=schedule">Open Schedule and retry calendar sync</a>.</>}</p>}
+    {status && <p className="crm-status" role="status">{status}{mfaRequired && <> <a href={MFA_SETUP_URL}>Set up or verify authenticator</a>.</>}{status.includes("Calendar sync needs another try.") && <> <a href="/direct-trade/dashboard?workspace=schedule">Open Schedule and retry calendar sync</a>.</>}</p>}
   </section>;
 }
 

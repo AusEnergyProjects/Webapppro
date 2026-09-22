@@ -1,5 +1,5 @@
 import { getD1 } from "../../../../../db";
-import { adminJson, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { readBoundedRequestText, RequestBodyTooLargeError } from "@/lib/bounded-request-body.mjs";
 import { PRICE_BOOK_IMPORT_MAX_BODY_BYTES } from "@/lib/trade-price-book-import";
@@ -19,6 +19,8 @@ export async function POST(request: Request) {
     if (!body || typeof body !== "object" || Array.isArray(body)) return adminJson({ ok: false, error: "Check the spreadsheet request." }, 400);
     return adminJson(await importPriceBook(getD1(), access.ownerUid, access.actorUid, body as Record<string, unknown>));
   } catch (error) {
+    const mfa = mfaErrorResponse(error);
+    if (mfa) return mfa;
     if (error instanceof RequestBodyTooLargeError) return adminJson({ ok: false, error: "This upload contains too much data. Use up to 2,000 rows and remove unused columns." }, 413);
     if (error instanceof PriceBookImportError) return adminJson({ ok: false, error: error.message, ...(error.preview ? { preview: error.preview } : {}) }, error.status);
     const code = error instanceof Error ? error.message : "";

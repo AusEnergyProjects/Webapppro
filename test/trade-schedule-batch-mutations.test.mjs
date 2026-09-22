@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -229,7 +230,7 @@ function scheduleRoute(d1, notifications = [], synced = [], access = ownerAccess
   });
   return loadTypescriptModule("../src/app/api/trade-schedule/route.ts", {
     "../../../../db": { getD1: () => d1 },
-    "@/lib/admin-server": {
+    "@/lib/admin-server": { mfaErrorResponse,
       adminJson,
       cleanAdminText: (value, maximum) => typeof value === "string" ? value.trim().slice(0, maximum) : "",
       sameOrigin: () => true,
@@ -605,7 +606,7 @@ test('mobile rescheduling preserves every selected weekday and uses its containi
       const teams=loadTypescriptModule('../src/lib/trade-team-server.ts',{'../../db':{getD1:()=>d1}});
       const route=loadTypescriptModule('../src/app/api/field/appointment-actions/route.ts', {
         '../../../../../db':{getD1:()=>d1},
-        '@/lib/admin-server':{sameOrigin:()=>true,cleanAdminText:(value,max)=>String(value||'').trim().slice(0,max),adminJson:(body,status=200)=>Response.json(body,{status})},
+        '@/lib/admin-server':{ mfaErrorResponse,sameOrigin:()=>true,cleanAdminText:(value,max)=>String(value||'').trim().slice(0,max),adminJson:(body,status=200)=>Response.json(body,{status})},
         '@/lib/trade-team-server':{requireInstallerTeamAccess:async()=>access,assignedJob:teams.assignedJob},
         '@/lib/trade-team-permission-policy.mjs':{canRescheduleWithinScope},
         '@/lib/trade-schedule':loadTypescriptModule('../src/lib/trade-schedule.ts'),

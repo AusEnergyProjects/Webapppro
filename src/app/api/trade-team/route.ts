@@ -1,7 +1,7 @@
 import { CreditexComplianceError, creditexMutationConflict } from "@/lib/creditex-onboarding-server";
 import { getD1 } from "../../../../db";
 import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { assignedJob, canAssignJob, canManageTeam, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import {
@@ -332,6 +332,8 @@ function inviteReplacementStatements(db: D1Database, access: TeamAccess, memberI
 }
 
 function errorResponse(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const conflict = creditexMutationConflict(error);
   if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
   if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message, trainingModules: error.trainingModules }, error.status);

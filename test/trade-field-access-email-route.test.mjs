@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -17,7 +18,7 @@ function loadRoute({ configured = true, deliveryFails = false, issueError = "" }
   }).outputText;
   const moduleRecord = { exports: {} };
   const mocks = {
-    "@/lib/admin-server": {
+    "@/lib/admin-server": { mfaErrorResponse,
       adminJson: (value, status = 200) => Response.json(value, { status }),
       cleanAdminText: (value, maximum) => String(value || "").trim().slice(0, maximum),
       sameOrigin: () => true,

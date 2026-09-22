@@ -1,7 +1,7 @@
 import { CreditexComplianceError, creditexMutationConflict } from "@/lib/creditex-onboarding-server";
 import { getD1 } from "../../../../db";
 import { assertCertificateJobEligibility } from "@/lib/trade-certificate-eligibility";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { canAssignJob, canViewSchedule, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { addCalendarDays, appointmentEndsAt, assertAppointmentSlot, assertFutureAppointment, australiaLocalDateTime, defaultWorkingWindow, insideWorkingWindow, localDayAndMinute, normaliseLocalDateTime, normaliseScheduleRangeWeeks, normaliseWeekStart, scheduleConflictIds } from "@/lib/trade-schedule";
@@ -31,6 +31,8 @@ import {
 export const runtime = "edge";
 
 function errorResponse(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const conflict = creditexMutationConflict(error);
   if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
   if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message, trainingModules: error.trainingModules }, error.status);

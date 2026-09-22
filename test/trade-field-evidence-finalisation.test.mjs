@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -487,7 +488,7 @@ function routeHarness(database, storage, options = {}) {
   const route = loadTypescriptModule(mediaRouteSource, {
     "cloudflare:workers": { env: { EVIDENCE: storage } },
     "../../../../../db": { getD1: () => d1 },
-    "@/lib/admin-server": {
+    "@/lib/admin-server": { mfaErrorResponse,
       adminJson: (body, status = 200) => Response.json(body, { status }),
       cleanAdminText: (value, maximum) => (
         typeof value === "string" ? value.trim().slice(0, maximum) : ""
@@ -552,7 +553,7 @@ function deviceRouteHarness(database, storage, options = {}) {
   const route = loadTypescriptModule(devicesRouteSource, {
     "cloudflare:workers": { env: { EVIDENCE: storage } },
     "../../../../../db": { getD1: () => d1 },
-    "@/lib/admin-server": {
+    "@/lib/admin-server": { mfaErrorResponse,
       adminJson: (body, status = 200) => Response.json(body, { status }),
       cleanAdminText: (value, maximum) => (
         typeof value === "string" ? value.trim().slice(0, maximum) : ""

@@ -16,6 +16,7 @@ import {
   type User,
 } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
+import { FirebaseMfaChallenge, useFirebaseMfaChallenge } from "./FirebaseMfa";
 import { Field, SiteFooter } from "./ComparatorChrome";
 import { TLinkHeader } from "./TLinkChrome";
 import dynamic from "next/dynamic";
@@ -62,6 +63,7 @@ function authMessage(error: unknown) {
 }
 
 export function DirectTradePartnerForm() {
+  const { resolver, captureMfaError, clearMfaChallenge } = useFirebaseMfaChallenge();
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("create");
@@ -164,7 +166,7 @@ export function DirectTradePartnerForm() {
       await signInWithPopup(firebaseAuth, provider);
       setAuthStatus("Google account connected. Complete the business profile below.");
     } catch (error) {
-      setAuthStatus(authMessage(error));
+      if (!captureMfaError(error)) setAuthStatus(authMessage(error));
     } finally {
       setAuthBusy(false);
     }
@@ -192,7 +194,7 @@ export function DirectTradePartnerForm() {
       }
       setAuthPassword("");
     } catch (error) {
-      setAuthStatus(authMessage(error));
+      if (!captureMfaError(error)) setAuthStatus(authMessage(error));
     } finally {
       setAuthBusy(false);
     }
@@ -279,6 +281,8 @@ export function DirectTradePartnerForm() {
     }
   }
 
+  if (resolver) return <main className="wrap direct-trade-request-page"><TLinkHeader active="partners" /><FirebaseMfaChallenge resolver={resolver} onCancel={clearMfaChallenge} onComplete={() => { clearMfaChallenge(); setAuthStatus("Signed in securely."); }} /></main>;
+
   return <main className="wrap direct-trade-request-page">
     <TLinkHeader active="partners" />
     <header className="direct-trade-request-hero trade-account-hero"><div><span>TLink trade accounts</span><h1>Join TLink and run more of your business in one place</h1><p>Create a free business profile, define where your team works and submit the required details for A$0 access to the trade operating platform.</p><div className="trade-account-hero-links"><a className="direct-trade-hero-link" href="/direct-trade/standards">Read the marketplace and customer standards</a><a className="direct-trade-hero-link" href="/direct-trade/access">See what is included for free</a></div></div><aside><strong>No payment details required</strong><p>Approved trades receive CRM, jobs, scheduling, marketplace, team, field and purchasing tools. Matching follows capability, service coverage and availability.</p><span className="trade-free-access-badge">Core access A$0</span></aside></header>
@@ -300,7 +304,7 @@ export function DirectTradePartnerForm() {
       </div>
       <aside className="trade-auth-benefits"><strong>Build the profile first</strong><ul><li>National service-area and capability profile</li><li>Installer or wholesaler-specific setup</li><li>No payment details or per-lead charge</li><li>Core workspace access after approval</li></ul></aside>
     </section> : <>
-      <section className="trade-signed-in" aria-label="Signed in account"><div><span>{profileSaved ? "Profile submitted" : "Secure account connected"}</span><strong>{user.email}</strong><small>{profileSaved ? "Application status is available while trade access remains locked for review." : "Complete the business profile to begin review."}</small></div><div className="trade-signed-in-actions">{profileSaved && <a href="/direct-trade/dashboard">View application status</a>}<button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></div></section>
+      <section className="trade-signed-in" aria-label="Signed in account"><div><span>{profileSaved ? "Profile submitted" : "Secure account connected"}</span><strong>{user.email}</strong><small>{profileSaved ? "Application status is available while trade access remains locked for review." : "Complete the business profile to begin review."}</small></div><div className="trade-signed-in-actions"><a href="/direct-trade/security">Account security</a>{profileSaved && <a href="/direct-trade/dashboard">View application status</a>}<button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></div></section>
       <form className="direct-trade-brief" onSubmit={submitProfile} noValidate>
         <section
           className="direct-trade-form-section"

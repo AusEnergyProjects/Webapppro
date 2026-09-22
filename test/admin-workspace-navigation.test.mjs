@@ -4,6 +4,9 @@ import fs from "node:fs";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
+import * as firebaseApp from "firebase/app";
+import * as firebaseAuth from "firebase/auth";
+import * as firebaseMfa from "../src/lib/firebase-mfa.ts";
 
 const read = name => fs.readFileSync(new URL(`../src/components/${name}`, import.meta.url), "utf8");
 const compile = name => ts.transpileModule(read(`${name}.tsx`), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -71,7 +74,9 @@ function portalHarness({ hash = "", role = "owner" } = {}) {
   let cursor = 0, stateIndex = 0, permitDiscard = false, historyIndex = 0;
   const history = [hash];
   const historyStates = [{ existingRouterState: "preserved" }];
-  const seeded = { 0: { uid: "owner" }, 1: true, 2: { role, email: "owner@example.invalid", displayName: "Owner" }, 5: false };
+  // The real MFA hook owns state 0 (no pending challenge); the portal's
+  // mfaRequired state follows. Seed only this navigation fixture's session.
+  const seeded = { 2: { uid: "owner" }, 3: true, 4: { role, email: "owner@example.invalid", displayName: "Owner" }, 7: false };
   const changed = (a, b) => !a || b.some((value, index) => value !== a[index]);
   const hooks = {
     useState(initial) { const i = cursor++, index = stateIndex++; if (!(i in slots)) slots[i] = index in seeded ? seeded[index] : initial; return [slots[i], value => { slots[i] = typeof value === "function" ? value(slots[i]) : value; }]; },
@@ -93,12 +98,17 @@ function portalHarness({ hash = "", role = "owner" } = {}) {
     requestAnimationFrame(callback) { callback(); },
   };
   const stubbed = new Map();
+  const mfa = {};
   const require = name => name === "react" ? hooks : name === "react/jsx-runtime" ? jsx
     : name === "./AdminWorkspaceNavigation" ? navigation
-      : name === "firebase/auth" ? { onAuthStateChanged: () => () => {} }
+      : name === "./FirebaseMfa" ? mfa
+      : name === "firebase/app" ? firebaseApp
+      : name === "@/lib/firebase-mfa" ? firebaseMfa
+      : name === "firebase/auth" ? { ...firebaseAuth, onAuthStateChanged: () => () => {} }
         : name === "@/lib/firebase-client" ? { firebaseAuth: {} }
           : name === "next/dynamic" ? { default: () => () => null }
             : name.endsWith(".css") ? {} : new Proxy({}, { get: (_, key) => { const id = `${name}/${String(key)}`; if (!stubbed.has(id)) stubbed.set(id, () => null); return stubbed.get(id); } });
+  Function("require", "exports", compile("FirebaseMfa"))(require, mfa);
   const exported = {};
   Function("require", "exports", "window", "document", compile("AdminOperationsPortal"))(require, exported, window, { getElementById: id => ({ focus(options) { focusCalls.push({ id, options }); }, scrollIntoView() {} }) });
   const render = () => { cursor = 0; stateIndex = 0; const tree = exported.AdminOperationsPortal(); for (const effect of queued.splice(0)) effect(); return tree; };

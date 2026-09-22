@@ -4,6 +4,9 @@ import {
   type FirebaseIdentity,
 } from "./firebase-server";
 import { ensureCreditexSchemaGuards } from "./creditex-schema-guards";
+import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, requireSecondFactor } from "./firebase-mfa";
+import { hasMyobIntegrationData, writeMyobSecurityEvent } from "./myob-security-audit";
+import { CREDITEX_PARTNER_ORGANISATION_CODE } from "./trade-compliance-intent";
 
 export const COMPLIANCE_ROLES = [
   "admin",
@@ -357,6 +360,19 @@ export async function requireComplianceIdentity(
     membership,
     options.allowedRoles,
   );
+  // Creditex's job register includes balances copied from the accounting provider.
+  // Validate membership first; unrelated partner organisations do not read that register.
+  if (access.organisationCode === CREDITEX_PARTNER_ORGANISATION_CODE && await hasMyobIntegrationData(db)) {
+    try { requireSecondFactor(identity); }
+    catch (error) {
+      if (!(error instanceof FirebaseMfaRequiredError)) throw error;
+      await writeMyobSecurityEvent(db, { actorUid: identity.uid, ownerUid: identity.uid,
+        action: "access.denied", resourceId: access.organisationId, outcome: "denied" });
+      throw new ComplianceAccessError("MFA_REQUIRED", 403, MFA_REQUIRED_MESSAGE);
+    }
+    await writeMyobSecurityEvent(db, { actorUid: identity.uid, ownerUid: identity.uid,
+      action: "compliance.access", resourceId: access.organisationId, outcome: "success" });
+  }
   const lastLoginAt = Date.parse(membership?.lastLoginAt || "");
   if (
     !Number.isFinite(lastLoginAt)

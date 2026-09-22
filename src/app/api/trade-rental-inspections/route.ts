@@ -1,5 +1,5 @@
 import { getD1 } from "../../../../db";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import {
   assignedJob,
   requireInstallerTeamAccess,
@@ -182,6 +182,8 @@ function normaliseModuleAnswers(moduleTemplate: Row, value: unknown) {
 }
 
 function inspectionError(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   if (error instanceof BoundedJsonRequestError) {
     return adminJson({ ok: false, error: error.code === "REQUEST_TOO_LARGE"
       ? "The assessment request is too large."

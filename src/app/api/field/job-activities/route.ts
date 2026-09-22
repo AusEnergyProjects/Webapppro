@@ -2,7 +2,7 @@ import { CreditexComplianceError, creditexMutationConflict } from "@/lib/credite
 import { getD1 } from "../../../../../db";
 import { assertCertificateActivityEligibility, certificateActivityEligibilityGuardStatement } from "@/lib/trade-training-server";
 import { certificateActivityIds, certificateActivityBlockReason } from "@/lib/trade-certificate-eligibility";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
 import { assignedJob, canManageJobs, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { guardedOnlineJobMutationBatch, jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
@@ -127,6 +127,8 @@ async function options(context: Context) {
 }
 
 function failure(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const conflict = creditexMutationConflict(error);
   if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
   if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);

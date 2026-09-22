@@ -1,5 +1,5 @@
 import { getD1 } from "../../../../db";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { adminNotificationStatement } from "@/lib/admin-notifications";
 import {
   requireVerifiedTradeAccess,
@@ -29,6 +29,8 @@ async function installerIdentity(request: Request) {
 }
 
 function errorResponse(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   if (error instanceof TradeAccessError) {
     return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   }

@@ -1,5 +1,5 @@
 import { getD1 } from "../../../../db";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { canAssignJob, requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { serviceFollowUpDueState } from "@/lib/trade-service-follow-ups";
 
@@ -8,6 +8,8 @@ export const runtime = "edge";
 const ACTIONS = new Set(["save_preparation", "suppress", "complete", "reopen"]);
 
 function errorResponse(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (["TEAM_ACCESS_REQUIRED", "TEAM_ACCESS_RECORD_REQUIRED", "ACCOUNT_INACTIVE", "INSTALLER_ONLY"].includes(code)) return adminJson({ ok: false, error: "This account does not have active installer follow-up access." }, 403);

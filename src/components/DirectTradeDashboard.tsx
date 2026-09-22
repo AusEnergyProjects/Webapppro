@@ -11,6 +11,7 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
+import { isMfaRequiredResponse, MFA_SETUP_URL } from "@/lib/firebase-mfa";
 import { SiteFooter } from "./SiteFooter";
 import { TradeBusinessHub } from "./TradeBusinessHub";
 import {
@@ -760,6 +761,7 @@ export function DirectTradeDashboard() {
   const [profile, setProfile] = useState<DashboardProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [opportunities, setOpportunities] = useState<DashboardOpportunity[]>(
     [],
   );
@@ -1103,6 +1105,7 @@ export function DirectTradeDashboard() {
     revokeAllEvidenceObjectUrls();
     setProfile(null);
     setError("");
+    setMfaRequired(false);
     setOpportunities([]);
     setOpportunityBusy("");
     setOpportunityStatus("");
@@ -1202,6 +1205,8 @@ export function DirectTradeDashboard() {
           cache: "no-store",
         });
         const result = await response.json().catch(() => ({}));
+        if (cancelled || !identityIsCurrent()) return;
+        if (isMfaRequiredResponse(result)) setMfaRequired(true);
         if (!response.ok)
           throw new Error(result.error || "The dashboard could not be loaded.");
         if (!cancelled && identityIsCurrent()) {
@@ -1257,6 +1262,8 @@ export function DirectTradeDashboard() {
         headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal,
       });
       const result = await response.json().catch(() => ({}));
+      if (!identityIsCurrent()) return;
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok) throw new Error(result.error || "Leads could not be loaded.");
       if (identityIsCurrent()) {
         const loadedOpportunities = result.opportunities || [];
@@ -1391,6 +1398,7 @@ export function DirectTradeDashboard() {
       if (!requestIsCurrent()) return;
       const result = await response.json().catch(() => ({}));
       if (!requestIsCurrent()) return;
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok) {
         throw new Error(result.error || "The lead could not be refreshed.");
       }
@@ -1522,6 +1530,7 @@ export function DirectTradeDashboard() {
       if (!requestIsCurrent()) return;
       const result = await response.json().catch(() => ({}));
       if (!requestIsCurrent()) return;
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       requestReference = [result.requestId, result.errorCode]
         .filter((item) => typeof item === "string" && item.trim())
         .join(" | ");
@@ -1652,6 +1661,7 @@ export function DirectTradeDashboard() {
       if (!requestIsCurrent()) return;
       const result = await response.json().catch(() => ({}));
       if (!requestIsCurrent()) return;
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       const quoteTarget = publicLeadQuoteNavigationTarget(result.quoteWorkflow);
       if (!response.ok || !result.ok || !quoteTarget) {
         throw new Error(result.error || "The editable quote could not be reopened.");
@@ -1790,6 +1800,7 @@ export function DirectTradeDashboard() {
         if (!response.ok) {
           const result = await response.json().catch(() => ({}));
           if (!requestIsCurrent()) return null;
+          if (isMfaRequiredResponse(result)) setMfaRequired(true);
           throw new Error(
             result.error || "The shared photo could not be opened.",
           );
@@ -1864,7 +1875,11 @@ export function DirectTradeDashboard() {
     opportunity: DashboardOpportunity,
     activeUser: User,
   ): Promise<CustomerPlanReportView> {
-    if (protectedIdentityUid.current !== activeUser.uid) {
+    const identityRevision = protectedIdentityRevision.current;
+    const identityIsCurrent = () =>
+      protectedIdentityUid.current === activeUser.uid &&
+      protectedIdentityRevision.current === identityRevision;
+    if (!identityIsCurrent()) {
       throw new Error("Sign in to open this household plan.");
     }
     const token = await activeUser.getIdToken();
@@ -1876,6 +1891,7 @@ export function DirectTradeDashboard() {
       },
     );
     const result = await response.json().catch(() => ({}));
+    if (identityIsCurrent() && isMfaRequiredResponse(result)) setMfaRequired(true);
     if (!response.ok || !result.ok || !result.report) {
       throw new Error(result.error || "The complete household plan could not be opened.");
     }
@@ -1982,6 +1998,7 @@ export function DirectTradeDashboard() {
   return (
     <main className="wrap direct-trade-dashboard-page">
       <TLinkHeader active="dashboard" />
+      {user && mfaRequired && <p className="crm-status" role="status">Your account needs authenticator verification. <a href={MFA_SETUP_URL}>Set up or verify authenticator</a>.</p>}
       {authReady && user && installerPlanPreview && (
         <CustomerPlanReportPreviewDialog
           context="installer-enquiry"

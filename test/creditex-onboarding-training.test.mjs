@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import ts from 'typescript';
+import { mfaErrorResponse } from './helpers/admin-response-fixture.mjs';
 
 const nodeRequire = createRequire(import.meta.url);
 const modules = new Map();
@@ -50,7 +51,7 @@ function trainingRoute(f, access = {}) {
   const actor = { ownerUid: 'owner', memberId: 'owner-member', actorUid: 'owner', displayName: 'Owner', isOwner: true, canManageTeam: true, ...access };
   const dependencies = {
     '../../../../db': { getD1: () => f.db },
-    '@/lib/admin-server': { sameOrigin: request => !request.headers.get('origin') || request.headers.get('origin') === new URL(request.url).origin },
+    '@/lib/admin-server': { mfaErrorResponse, sameOrigin: request => !request.headers.get('origin') || request.headers.get('origin') === new URL(request.url).origin },
     '@/lib/bounded-json-request': { readBoundedJsonRequest: request => request.json() },
     '@/lib/creditex-onboarding-api': { creditexJson: (body, status = 200) => Response.json(body, { status }), creditexApiError: error => Response.json({ ok: false, code: error.code || 'FAILED' }, { status: error.status || 503 }) },
     '@/lib/creditex-onboarding-server': onboarding,

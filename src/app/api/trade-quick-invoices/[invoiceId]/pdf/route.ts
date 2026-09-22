@@ -1,4 +1,4 @@
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { getD1 } from "../../../../../../db";
 import {
   assignedJob,
@@ -47,6 +47,8 @@ export async function GET(
       },
     });
   } catch (error) {
+    const mfa = mfaErrorResponse(error);
+    if (mfa) return mfa;
     const code = error instanceof Error ? error.message : "";
     if (code === "AUTH_REQUIRED") {
       return adminJson({ ok: false, error: "Sign in to continue." }, 401);

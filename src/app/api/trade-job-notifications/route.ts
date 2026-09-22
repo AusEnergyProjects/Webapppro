@@ -1,6 +1,6 @@
 import { getD1 } from "../../../../db";
 import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { listTradeTeamDocumentExpiryWarnings } from "@/lib/trade-team-document-expiry-server";
 import { tradeQuoteDeliveryPresentation } from "@/lib/trade-quote-delivery-policy.mjs";
@@ -24,6 +24,8 @@ type JobNotification = {
 };
 
 function notificationError(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (["ACCOUNT_INACTIVE", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "TEAM_ACCESS_REQUIRED", "TEAM_ACCESS_RECORD_REQUIRED"].includes(code)) {

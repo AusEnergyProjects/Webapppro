@@ -3,6 +3,8 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import ts from "typescript";
+import * as firebaseMfa from "../src/lib/firebase-mfa.ts";
+import * as myobSecurityAudit from "../src/lib/myob-security-audit.ts";
 import * as pure from "../src/lib/creditex-audit-calls.ts";
 
 function load(file, dependencies) {
@@ -18,6 +20,8 @@ function load(file, dependencies) {
 }
 const access = load("../src/lib/compliance-access-server.ts", {
   "../../db": {}, "./firebase-server": {}, "./creditex-schema-guards": {},
+  "./firebase-mfa": firebaseMfa, "./myob-security-audit": myobSecurityAudit,
+  "./trade-compliance-intent": { CREDITEX_PARTNER_ORGANISATION_CODE: "CREDITEX-AU" },
 });
 const server = load("../src/lib/creditex-audit-call-target-server.ts", {
   "./compliance-access-server": access,

@@ -1,6 +1,6 @@
 import { CreditexComplianceError, creditexMutationConflict } from "@/lib/creditex-onboarding-server";
 import { getD1 } from "../../../../db";
-import { adminJson, requireAdminIdentity, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, requireAdminIdentity, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { requireComplianceAccess } from "@/lib/compliance-access-server";
 import { canEditCreditexFieldMasters } from "@/lib/creditex-field-master-access";
@@ -54,6 +54,8 @@ const errorMessages: Record<string, [number, string]> = {
   ACTIVITY_VARIANT_ALREADY_STARTED: [409, "The premises form cannot change after work has been saved. Choose the premises type when first opening the form."],
 };
 function failure(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const conflict = creditexMutationConflict(error);
   if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
   if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);

@@ -1,4 +1,4 @@
-import { adminJson, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, sameOrigin } from "@/lib/admin-server";
 import { BoundedJsonRequestError } from "@/lib/bounded-json-request";
 import {
   CreditexActivityWorkPackServerError,
@@ -39,6 +39,8 @@ export async function assignedWorkPackRequestScope(request: Request) {
 }
 
 export function assignedWorkPackError(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   if (error instanceof CreditexActivityWorkPackServerError) {
     return adminJson({
       ok: false,

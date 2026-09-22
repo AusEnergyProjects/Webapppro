@@ -85,6 +85,7 @@ export async function requireInstallerOperations(request: Request) {
   });
   return {
     uid: access.identity.uid,
+    identity: access.identity,
     businessName: access.businessName || "Trade business",
   };
 }

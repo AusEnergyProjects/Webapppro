@@ -4,6 +4,7 @@ import { encryptIntegrationCredentials, integrationStateHash } from "@/lib/trade
 import { calendarIntegrationStateWeekStart } from "@/lib/trade-integration-state";
 import { isIntegrationProvider, providerSetting } from "@/lib/trade-integrations-server";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
+import { myobSecurityEventStatement, writeMyobSecurityEvent } from "@/lib/myob-security-audit";
 
 export const runtime = "edge";
 
@@ -47,7 +48,7 @@ function callbackFailureDetails(provider: string, error: unknown) {
     provider,
     stage: error.stage,
     failure: error.message,
-    ...(error.providerCode ? { providerCode: error.providerCode } : {}),
+    ...(provider !== "myob" && error.providerCode ? { providerCode: error.providerCode } : {}),
     ...(error.responseStatus ? { responseStatus: error.responseStatus } : {}),
   };
 }
@@ -166,14 +167,21 @@ export async function GET(request: Request, context: CallbackContext) {
     return dashboardRedirect(request, provider, "failed");
   }
   let returnWeekStart = "";
+  let myobActorUid = "";
   try {
     const db = getD1();
     const now = new Date().toISOString();
     const stateHash = await integrationStateHash(state);
-    const stateRow = await db.prepare(`SELECT id, firebase_uid, provider, redirect_uri FROM trade_crm_oauth_states
+    const stateRow = await db.prepare(`SELECT id, firebase_uid, provider, redirect_uri, mfa_verified_at FROM trade_crm_oauth_states
       WHERE state_hash = ? AND provider = ? AND consumed_at = '' AND expires_at > ?`)
       .bind(stateHash, provider, now).first<Record<string, unknown>>();
     if (!stateRow) throw new OAuthCallbackFailure("STATE_INVALID", "state");
+    if (provider === "myob") {
+      if (!stateRow.mfa_verified_at) throw new OAuthCallbackFailure("MFA_REQUIRED", "state");
+      myobActorUid = String(stateRow.firebase_uid);
+      await writeMyobSecurityEvent(db, { actorUid: myobActorUid, ownerUid: myobActorUid,
+        action: "oauth.callback", outcome: "attempt" });
+    }
     if (provider === "google_calendar" || provider === "microsoft_calendar") {
       returnWeekStart = calendarIntegrationStateWeekStart(state);
     }
@@ -184,6 +192,8 @@ export async function GET(request: Request, context: CallbackContext) {
     if (authorizationError) {
       const providerCode = sanitiseProviderErrorCode(authorizationError) || "provider_error";
       if (["access_denied", "user_cancelled", "user_denied"].includes(providerCode)) {
+        if (myobActorUid) await writeMyobSecurityEvent(db, { actorUid: myobActorUid, ownerUid: myobActorUid,
+          action: "oauth.callback", outcome: "denied" });
         return dashboardRedirect(request, provider, "cancelled", returnWeekStart);
       }
       throw new OAuthCallbackFailure("AUTHORIZATION_REJECTED", "authorization", providerCode);
@@ -206,12 +216,15 @@ export async function GET(request: Request, context: CallbackContext) {
     const expiresAt = Number(token.expires_in || 0) > 0
       ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString()
       : "";
-    const attached = await db.prepare(`INSERT INTO trade_crm_integrations
+    const attachmentStatement = db.prepare(`INSERT INTO trade_crm_integrations
       (id, firebase_uid, provider, status, external_account_id, external_account_label, encrypted_credentials,
        scopes, token_expires_at, last_sync_at, last_error, created_at, updated_at)
       SELECT ?, approved_account.firebase_uid, ?, 'connected', ?, ?, ?, ?, ?, '', '', ?, ?
       FROM trade_accounts approved_account
       WHERE approved_account.firebase_uid = ? AND ${verifiedTradeAccountPredicate("approved_account")}
+        AND EXISTS (SELECT 1 FROM trade_crm_oauth_states active_state
+          WHERE active_state.id = ? AND active_state.firebase_uid = approved_account.firebase_uid
+            AND active_state.provider = ? AND active_state.consumed_at = ? AND active_state.expires_at > ?)
       ON CONFLICT(firebase_uid, provider) DO UPDATE SET status = 'connected',
         default_account_reference = CASE WHEN trade_crm_integrations.external_account_id = excluded.external_account_id
           THEN trade_crm_integrations.default_account_reference ELSE '' END,
@@ -220,12 +233,22 @@ export async function GET(request: Request, context: CallbackContext) {
         token_expires_at = excluded.token_expires_at, last_error = '', updated_at = excluded.updated_at`)
       .bind(crypto.randomUUID(), provider, account.id, account.label,
         await encryptIntegrationCredentials(credentials), JSON.stringify(setting.scopes), expiresAt, now, now,
-        stateRow.firebase_uid).run();
+        stateRow.firebase_uid, stateRow.id, provider, now, new Date().toISOString());
+    const [attached] = await db.batch([
+      attachmentStatement,
+      ...(myobActorUid ? [myobSecurityEventStatement(db, { actorUid: myobActorUid, ownerUid: myobActorUid,
+        action: "oauth.callback", outcome: "success" }, true)] : []),
+    ]);
     if (Number(attached.meta.changes || 0) !== 1) {
       throw new OAuthCallbackFailure("TRADE_ACCESS_REVOKED", "authorization");
     }
     return dashboardRedirect(request, provider, "connected", returnWeekStart);
   } catch (error) {
+    if (myobActorUid) {
+      try { await writeMyobSecurityEvent(getD1(), { actorUid: myobActorUid, ownerUid: myobActorUid,
+        action: "oauth.callback", outcome: "failure" }); }
+      catch { console.error("MYOB security audit unavailable", { stage: "callback" }); }
+    }
     console.error("Trade integration OAuth callback failed", callbackFailureDetails(provider, error));
     return dashboardRedirect(request, provider, "failed", returnWeekStart);
   }

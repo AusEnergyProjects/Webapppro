@@ -178,9 +178,9 @@ function applyMigrationChain(database, names) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 184);
+  assert.equal(completeMigrationChain.length, 186);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0184_training_module_retirement\.sql$/);
+  assert.match(completeMigrationChain.at(-1), /^0186_myob_security_events\.sql$/);
   assert.ok(
     completeMigrationChain.includes("0160_trade_rental_inspections.sql"),
     "the complete migration chain must include the rental inspection schema",

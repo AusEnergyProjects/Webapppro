@@ -7,6 +7,24 @@ export type AccountingTeamAccess = {
   canManageInvoices: boolean;
 };
 
+type AccountingCompanyBinding = {
+  firebase_uid?: unknown;
+  provider?: unknown;
+  external_account_id?: unknown;
+};
+
+/** Historical provider IDs are meaningful only inside their original company file. */
+export function assertAccountingDocumentConnection(document: AccountingCompanyBinding, connection: AccountingCompanyBinding) {
+  if (typeof document.external_account_id !== "string" || !document.external_account_id.trim()) {
+    throw new Error("ACCOUNTING_COMPANY_FILE_UNBOUND");
+  }
+  if (!document.firebase_uid || !isAccountingProvider(String(document.provider))
+    || document.firebase_uid !== connection.firebase_uid || document.provider !== connection.provider
+    || document.external_account_id !== connection.external_account_id) {
+    throw new Error("ACCOUNTING_COMPANY_FILE_MISMATCH");
+  }
+}
+
 type ProviderPayload = Record<string, unknown>;
 
 function diagnosticToken(value: unknown, limit: number) {

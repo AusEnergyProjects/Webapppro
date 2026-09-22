@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import * as myobSecurityAudit from "../src/lib/myob-security-audit.ts";
+import * as firebaseMfa from "../src/lib/firebase-mfa.ts";
 import { installMissingDraftDeletionContext } from "./helpers/job-deletion-guard-fixture.mjs";
 import {
   CREDITEX_FOUNDATION_SCHEMA_GUARD_DEFINITIONS,
@@ -106,6 +108,9 @@ function loadTypescriptModule(path, mocks = {}) {
   }).outputText;
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
+    if (specifier === "./firebase-mfa") return firebaseMfa;
+    if (specifier === "./myob-security-audit") return myobSecurityAudit;
+    if (specifier === "./trade-compliance-intent") return { CREDITEX_PARTNER_ORGANISATION_CODE: "CREDITEX-AU" };
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };

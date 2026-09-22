@@ -25,3 +25,14 @@ test("public pages, neighbouring routes and call APIs retain the microphone proh
     assert.equal(response.headers.get("Permissions-Policy"), "camera=(), geolocation=(), microphone=()");
   }
 });
+
+test("edge responses retain stricter route CSP while adding baseline document and HTTPS protections", () => {
+  const response = secureResponse(new Response("private file", {
+    headers: { "Content-Security-Policy": "sandbox; default-src 'none'" },
+  }), new Request("https://example.test/api/private-file"));
+  assert.equal(response.headers.get("Content-Security-Policy"),
+    "sandbox; default-src 'none', frame-ancestors 'self'; object-src 'none'; base-uri 'self'");
+  assert.equal(response.headers.get("Strict-Transport-Security"), "max-age=31536000");
+  const local = secureResponse(new Response("page"), new Request("http://localhost/account"));
+  assert.equal(local.headers.has("Strict-Transport-Security"), false);
+});

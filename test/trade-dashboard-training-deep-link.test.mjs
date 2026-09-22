@@ -46,6 +46,7 @@ function harness(search = "?workspace=training") {
     publicLeadHandoffRequestMatchId: { current: "old-private-match" },
     scrubProtectedOpportunityNavigation: () => calls.push("scrub"),
     setUser: user => calls.push(`user:${user?.uid || "none"}`), setAuthReady: () => {}, setLoading: () => {},
+    setMfaRequired: value => calls.push(["setMfaRequired", value]),
   };
   for (const setter of clearCallback.matchAll(/\b(set\w+)\(/g)) bindings[setter[1]] = value => calls.push([setter[1], value]);
   Object.assign(bindings, {

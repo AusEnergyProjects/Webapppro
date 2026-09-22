@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { certificateTestDependency } from "./helpers/creditex-training-fixture.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -25,6 +26,7 @@ function transpileRoute(path, mocks) {
 }
 
 const adminServer = {
+  mfaErrorResponse,
   adminJson: (value, status = 200) => Response.json(value, { status }),
   cleanAdminText: (value, maximum) => String(value || "").trim().slice(0, maximum),
   sameOrigin: () => true,

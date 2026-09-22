@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
+import { FirebaseAccountSecurity, FirebaseMfaChallenge, useFirebaseMfaChallenge } from "./FirebaseMfa";
 import { SiteFooter } from "./ComparatorChrome";
 import { TLinkHeader } from "./TLinkChrome";
 import { InstallerCrmWorkspace } from "./InstallerCrmWorkspace";
@@ -20,11 +21,13 @@ type Task = { id: string; title: string; dueAt: string; status: string };
 type Job = { id: string; workNumber: string; title: string; serviceCategory: string; siteArea: string; stage: string; priority: string; scheduledStart: string; scheduledEnd: string; assigneeMemberId: string; assigneeLabel: string; protectedJob: boolean; serviceAddress: string; tasks: Task[] };
 type AssigneeRoster = { page: number; pageSize: number; total: number; totalPages: number; search: string; capability: string };
 type WorkRoster = { included: boolean; page: number; pageSize: number; total: number; totalPages: number };
-type Result = { ok?: boolean; accepted?: boolean; access?: { businessName: string; displayName: string; memberId: string; isOwner: boolean; permissions: TradeTeamPermissions }; members?: Member[]; assignees?: Assignee[]; assigneeRoster?: AssigneeRoster; work?: WorkRoster; jobs?: Job[]; error?: string };
+type Result = { code?: string; ok?: boolean; accepted?: boolean; access?: { businessName: string; displayName: string; memberId: string; isOwner: boolean; permissions: TradeTeamPermissions }; members?: Member[]; assignees?: Assignee[]; assigneeRoster?: AssigneeRoster; work?: WorkRoster; jobs?: Job[]; error?: string };
 
 const stages = [["backlog", "Planning"], ["ready", "Ready"], ["scheduled", "Scheduled"], ["in_progress", "On site"], ["blocked", "Waiting"], ["completed", "Complete"], ["cancelled", "Cancelled"]];
 
 export function TradeTeamPortal() {
+  const { resolver, captureMfaError, clearMfaChallenge } = useFirebaseMfaChallenge();
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [mode, setMode] = useState<"signin" | "create">("signin");
@@ -54,6 +57,7 @@ export function TradeTeamPortal() {
       headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
     });
     const result = await response.json().catch(() => ({})) as Result;
+    if (result.code === "MFA_REQUIRED") setMfaRequired(true);
     if (!response.ok) throw new Error(result.error || "The staff portal could not be opened.");
     const requestedLastPage = Math.min(Math.max(1, throughPage), result.work?.totalPages || 1);
     for (let workPage = 2; workPage <= requestedLastPage; workPage += 1) {
@@ -125,7 +129,7 @@ export function TradeTeamPortal() {
     }
   }, [data.work, user, workLoading]);
 
-  useEffect(() => onAuthStateChanged(firebaseAuth, (next) => { setUser(next); setAuthReady(true); }), []);
+  useEffect(() => onAuthStateChanged(firebaseAuth, (next) => { setUser(next); setAuthReady(true); if (!next) setMfaRequired(false); }), []);
   useEffect(() => {
     if (!user) return; let active = true;
     const frame = window.requestAnimationFrame(() => {
@@ -145,8 +149,8 @@ export function TradeTeamPortal() {
     return () => { active = false; window.cancelAnimationFrame(frame); };
   }, [loadWork, user]);
 
-  async function google() { setBusy("auth"); setStatus("Opening Google sign-in..."); try { const provider = new GoogleAuthProvider(); provider.setCustomParameters({ prompt: "select_account" }); await signInWithPopup(firebaseAuth, provider); } catch { setStatus("Google sign-in could not be completed."); } finally { setBusy(""); } }
-  async function emailAuth(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy("auth"); setStatus(mode === "create" ? "Creating your team login..." : "Signing in..."); try { if (mode === "create") { const credential = await createUserWithEmailAndPassword(firebaseAuth, email.trim().toLowerCase(), password); await updateProfile(credential.user, { displayName: name.trim() }); } else await signInWithEmailAndPassword(firebaseAuth, email.trim().toLowerCase(), password); setPassword(""); } catch { setStatus("Check the email and password, then try again."); } finally { setBusy(""); } }
+  async function google() { setBusy("auth"); setStatus("Opening Google sign-in..."); try { const provider = new GoogleAuthProvider(); provider.setCustomParameters({ prompt: "select_account" }); await signInWithPopup(firebaseAuth, provider); } catch (error) { if (!captureMfaError(error)) setStatus("Google sign-in could not be completed."); } finally { setBusy(""); } }
+  async function emailAuth(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy("auth"); setStatus(mode === "create" ? "Creating your team login..." : "Signing in..."); try { if (mode === "create") { const credential = await createUserWithEmailAndPassword(firebaseAuth, email.trim().toLowerCase(), password); await updateProfile(credential.user, { displayName: name.trim() }); } else await signInWithEmailAndPassword(firebaseAuth, email.trim().toLowerCase(), password); setPassword(""); } catch (error) { if (!captureMfaError(error)) setStatus("Check the email and password, then try again."); } finally { setBusy(""); } }
   async function reset() { if (!email.trim()) { setStatus("Enter your email first."); return; } await sendPasswordResetEmail(firebaseAuth, email.trim().toLowerCase()).then(() => setStatus("Password reset instructions sent.")).catch(() => setStatus("Password reset could not be sent.")); }
   async function update(body: Record<string, unknown>, key: string, success: string) { if (!user) return; setBusy(key); try { const token = await user.getIdToken(); const response = await fetch("/api/trade-team", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }); const result = await response.json().catch(() => ({})) as Result; if (!response.ok) throw new Error(result.error || "The update could not be saved."); const selectedCapability = data.jobs?.find((job) => job.id === selectedJobId)?.serviceCategory || ""; const refreshed = await loadWork(selectedCapability, data.work?.page || 1); setData(refreshed); setSelectedJobId((current) => refreshed.jobs?.some((job) => job.id === current) ? current : refreshed.jobs?.[0]?.id || ""); setStatus(success); } catch (error) { setStatus(error instanceof Error ? error.message : "The update could not be saved."); } finally { setBusy(""); } }
 
@@ -158,6 +162,9 @@ export function TradeTeamPortal() {
     || permissions.canViewCustomers || permissions.canViewQuotes || permissions.canViewPriceBook
     || permissions.canRunReports || permissions.scheduleScope
   ));
+
+  if (resolver) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseMfaChallenge resolver={resolver} onCancel={clearMfaChallenge} onComplete={clearMfaChallenge} /></main>;
+  if (user && mfaRequired) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); setData(await loadWork()); }} /><button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></main>;
 
   return <main className="wrap trade-team-page"><TLinkHeader active="team" />
     {!authReady ? <section className="dashboard-state-card"><p>Opening the secure staff portal...</p></section> : !user ? <section className="team-auth-shell"><div className="team-auth-intro"><span>TLink installer team access</span><h1>Your workday, without the office clutter</h1><p>Use the email address your employer invited. Your workspace shows only the jobs, customers and business tools your saved access permits.</p></div><div className="team-auth-card"><button className="customer-google-button" type="button" onClick={() => void google()} disabled={busy === "auth"}>Continue with Google</button><div className="customer-auth-tabs"><button type="button" className={mode === "signin" ? "selected" : ""} onClick={() => setMode("signin")}>Sign in</button><button type="button" className={mode === "create" ? "selected" : ""} onClick={() => setMode("create")}>Create login</button></div><form onSubmit={emailAuth}>{mode === "create" && <label><span>Your name</span><input value={name} required onChange={(event) => setName(event.target.value)} /></label>}<label><span>Invited email</span><input type="email" value={email} required onChange={(event) => setEmail(event.target.value)} /></label><label><span>Password</span><input type="password" minLength={8} required value={password} onChange={(event) => setPassword(event.target.value)} /></label><button className="btn" disabled={busy === "auth"}>{busy === "auth" ? "Please wait..." : mode === "create" ? "Create team login" : "Sign in"}</button>{mode === "signin" && <button className="customer-reset-link" type="button" onClick={() => void reset()}>Reset password</button>}</form>{status && <p role="status">{status}</p>}</div></section> : loading ? <section className="dashboard-state-card"><p>Loading assigned work...</p></section> : !data.access ? <section className="dashboard-state-card"><span>Team access required</span><h1>This login is not connected to an active installer team</h1><p>{status || "Open the invitation link from your employer, or ask them to create a fresh link."}</p><button className="btn" type="button" onClick={() => void signOut(firebaseAuth)}>Use another account</button></section> : <>

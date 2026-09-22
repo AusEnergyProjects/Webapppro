@@ -1,5 +1,5 @@
 import { getD1 } from "../../../../../db";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import {
   requireVerifiedTradeAccess,
   TradeAccessError,
@@ -20,6 +20,8 @@ export async function GET(request: Request) {
   try {
     await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
   } catch (error) {
+    const mfa = mfaErrorResponse(error);
+    if (mfa) return mfa;
     if (error instanceof TradeAccessError) {
       return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
     }

@@ -3,6 +3,8 @@ import fs from "node:fs";
 import test from "node:test";
 import { errors } from "jose";
 import ts from "typescript";
+import * as myobSecurityAudit from "../src/lib/myob-security-audit.ts";
+import * as firebaseMfa from "../src/lib/firebase-mfa.ts";
 
 import {
   FirebaseAuthError,
@@ -23,6 +25,10 @@ function loadTypescriptModule(path, mocks = {}) {
   }).outputText;
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
+    if (specifier === "./firebase-mfa") return firebaseMfa;
+    if (specifier === "./myob-security-audit") return myobSecurityAudit;
+    if (specifier === "./trade-compliance-intent") return { CREDITEX_PARTNER_ORGANISATION_CODE: "CREDITEX-AU" };
+    if (specifier === "./firebase-mfa.ts") return firebaseMfa;
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
@@ -75,6 +81,10 @@ function pendingInvitationDatabase() {
       const statement = {
         bind() {
           return statement;
+        },
+        async first() {
+          if (sql.includes("FROM trade_crm_integrations") && sql.includes("FROM trade_crm_accounting_documents")) return null; // This invitation-only fixture has no MYOB data.
+          throw new Error(`Unexpected first query: ${sql}`);
         },
         async all() {
           if (sql.includes("FROM compliance_users member")) {

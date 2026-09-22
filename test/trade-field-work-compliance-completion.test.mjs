@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import * as activityCompletion from "../src/lib/trade-activity-forms-completion.ts";
 import * as fieldCompletionPolicy from "../src/lib/trade-field-completion-policy.ts";
 import test from "node:test";
@@ -90,7 +91,7 @@ function loadRoute(db) {
   const mocks = {
     "cloudflare:workers": { env: {} },
     "../../../../db": { getD1: () => db },
-    "@/lib/admin-server": {
+    "@/lib/admin-server": { mfaErrorResponse,
       adminJson: (value, status = 200) => Response.json(value, { status }),
       cleanAdminText: (value, maxLength) => String(value || "").trim().slice(0, maxLength),
       sameOrigin: () => true,

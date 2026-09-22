@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -299,7 +300,7 @@ function routeHarness(options = {}) {
   const state = fixture(); const calls = { database: 0, access: 0 }; const exports = {};
   const require = (id) => {
     if (id.endsWith("/db")) return { getD1() { calls.database++; return state.api; } };
-    if (id === "@/lib/admin-server") return { adminJson: (body, status = 200) => Response.json(body, { status }),
+    if (id === "@/lib/admin-server") return { mfaErrorResponse, adminJson: (body, status = 200) => Response.json(body, { status }),
       sameOrigin: (request) => request.headers.get("Origin") === "https://tlink.example" };
     if (id === "@/lib/trade-team-server") return { async requireInstallerTeamAccess() {
       calls.access++;

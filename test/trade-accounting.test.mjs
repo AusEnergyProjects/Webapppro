@@ -229,5 +229,5 @@ test("QuickBooks failures retain bounded support identifiers without storing pro
   );
   assert.equal(quickBooksFailureDetail(999, "", null), "provider=quickbooks; status=0");
   assert.match(route, /response\.headers\.get\("intuit_tid"\)/);
-  assert.match(route, /accountingErrorDetail\(error\)/);
+  assert.match(route, /accountingErrorDetail\(error, provider\)/);
 });

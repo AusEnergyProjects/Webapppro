@@ -1,5 +1,7 @@
 import { getD1 } from "../../db";
 import { requireFirebaseIdentity, type FirebaseIdentity } from "@/lib/firebase-server";
+import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL, requireSecondFactor } from "@/lib/firebase-mfa";
+import { hasMyobIntegrationData, writeMyobSecurityEvent } from "@/lib/myob-security-audit";
 
 export const ADMIN_ROLES = ["owner", "admin", "reviewer", "support"] as const;
 export type AdminRole = typeof ADMIN_ROLES[number];
@@ -20,14 +22,22 @@ export function adminJson(body: object, status = 200) {
 }
 
 export function adminError(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const code = error instanceof Error ? error.message : "ADMIN_REQUIRED";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "EMAIL_VERIFICATION_REQUIRED") return adminJson({ ok: false, error: "Verify the account email before using operations access." }, 403);
   if (code === "ADMIN_SUSPENDED") return adminJson({ ok: false, error: "This operations account is suspended." }, 403);
   if (code === "ROLE_REQUIRED") return adminJson({ ok: false, error: "Your operations role does not permit this action." }, 403);
   if (code === "ADMIN_REQUIRED") return adminJson({ ok: false, error: "This account does not have operations access." }, 403);
-  console.error("Operations API failure", error);
+  // Provider errors can contain financial payloads. Log a correlation ID only.
+  console.error("Operations API failure", { reference: crypto.randomUUID(), code: "INTERNAL_ERROR" });
   return adminJson({ ok: false, error: "Operations data could not be loaded. Try again or check the service health." }, 500);
+}
+
+export function mfaErrorResponse(error: unknown) {
+  if (!(error instanceof FirebaseMfaRequiredError)) return null;
+  return adminJson({ ok: false, code: "MFA_REQUIRED", error: MFA_REQUIRED_MESSAGE, setupUrl: MFA_SETUP_URL }, 403);
 }
 
 export async function requireAdminIdentity(request: Request, allowedRoles: readonly AdminRole[] = ADMIN_ROLES): Promise<AdminIdentity> {
@@ -47,6 +57,22 @@ export async function requireAdminIdentity(request: Request, allowedRoles: reado
 
   const role = String(record.role) as AdminRole;
   if (!ADMIN_ROLES.includes(role) || !allowedRoles.includes(role)) throw new Error("ROLE_REQUIRED");
+  if (record.firebase_uid !== identity.uid && !String(record.firebase_uid || "").startsWith("pending:")) {
+    throw new Error("ADMIN_REQUIRED");
+  }
+
+  // Operations can inspect shared CRM financial projections. Once MYOB data exists,
+  // every operations role must present a server-verified second factor.
+  if (await hasMyobIntegrationData(db)) {
+    try { requireSecondFactor(identity); }
+    catch (error) {
+      await writeMyobSecurityEvent(db, { actorUid: identity.uid, ownerUid: identity.uid,
+        action: "access.denied", resourceId: "operations", outcome: "denied" });
+      throw error;
+    }
+    await writeMyobSecurityEvent(db, { actorUid: identity.uid, ownerUid: identity.uid,
+      action: "admin.access", resourceId: "operations", outcome: "success" });
+  }
 
   if (record.firebase_uid !== identity.uid) {
     const pendingUid = String(record.firebase_uid || "");

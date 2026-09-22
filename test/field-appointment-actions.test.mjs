@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import { mfaErrorResponse } from './helpers/admin-response-fixture.mjs';
 import { canAssignWithinScope, canRescheduleWithinScope } from "../src/lib/trade-team-permission-policy.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -110,7 +111,7 @@ function fixture(overrides = {}, effects = {}) {
   const messages = []; const calendars = []; const scheduleChanges = [];
   const route = loadTypescriptModule('../src/app/api/field/appointment-actions/route.ts', {
     '../../../../../db': { getD1: () => db },
-    '@/lib/admin-server': { sameOrigin: () => true, cleanAdminText: (value, max) => String(value || '').trim().slice(0,max),
+    '@/lib/admin-server': { mfaErrorResponse, sameOrigin: () => true, cleanAdminText: (value, max) => String(value || '').trim().slice(0,max),
       adminJson: (body,status=200) => Response.json(body,{status}) },
     '@/lib/trade-team-server': { requireInstallerTeamAccess: async () => access,
       assignedJob: teams.assignedJob, canAssignJob: canAssignWithinScope },

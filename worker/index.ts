@@ -70,6 +70,7 @@ import {
   shouldApplyCanonicalHostRedirect,
 } from "../src/lib/public-redirects.mjs";
 import { releaseIdentityFromEnvironment } from "../src/lib/release-identity.mjs";
+import { removeExpiredIntegrationStates } from "../src/lib/myob-security-audit";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
 const PRIVATE_HTML_CACHE_CONTROL = "private, no-store, max-age=0";
@@ -93,6 +94,8 @@ function secureResponse(response: Response, request: Request, environment?: unkn
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Frame-Options", "SAMEORIGIN");
+  // Baseline document restrictions; Firebase sign-in and existing embeds keep their own sources.
+  headers.append("Content-Security-Policy", "frame-ancestors 'self'; object-src 'none'; base-uri 'self'");
   if (pathname === "/api/health") {
     const releaseId = releaseIdentityFromEnvironment(environment);
     if (releaseId) headers.set("X-Release-Id", releaseId);
@@ -523,6 +526,9 @@ const worker = {
       }).EVIDENCE;
       const registryEnvironment = workerEnv as Readonly<Record<string, unknown>>;
       tasks.push(
+        removeExpiredIntegrationStates(getD1()).catch(() => {
+          console.error("Integration state retention cleanup failed.", { code: "OAUTH_STATE_CLEANUP_FAILED" });
+        }),
         processCreditexAuditCallRecordings(getD1()).catch(() => {
           console.error("Creditex audit recording custody retry failed.");
         }),

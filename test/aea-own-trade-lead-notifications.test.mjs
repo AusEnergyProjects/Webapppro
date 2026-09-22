@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
 import { Miniflare } from 'miniflare';
-import { installCreditexTrainingFixture } from './helpers/creditex-training-fixture.mjs';
+import { certificateTestDependency, installCreditexTrainingFixture } from './helpers/creditex-training-fixture.mjs';
 import * as routing from '../src/lib/aea-trade-routing.mjs';
 import * as publicSite from '../src/lib/public-site.ts';
 import * as tradeAbn from '../src/lib/trade-abn.ts';
@@ -23,7 +23,7 @@ function load(name, dependencies) {
 }
 // Use the real verification SQL. Unused authentication/service dependencies are
 // isolated; no identity, provider or production database is contacted by tests.
-const access = load('trade-access-server', { '../../db': {}, './firebase-server': {}, './creditex-schema-guards': {}, './trade-abn': {} });
+const access = load('trade-access-server', { '../../db': {}, './firebase-server': {}, './creditex-schema-guards': {}, './trade-abn': {}, './trade-mfa-server': certificateTestDependency('./trade-mfa-server') });
 const owner = load('aea-trade-owner-server', { './aea-trade-routing.mjs': routing, './public-site': publicSite, './trade-abn': tradeAbn });
 const eligibility = load('trade-certificate-leads', { './aea-trade-owner-server': owner, './aea-trade-routing.mjs': routing });
 const retry = load('opportunity-notification-retry', { './aea-trade-owner-server.ts': owner });

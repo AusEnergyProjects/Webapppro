@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ts from 'typescript';
 import * as jsx from 'react/jsx-runtime';
+import * as firebaseApp from 'firebase/app';
+import * as firebaseAuth from 'firebase/auth';
+import * as firebaseMfa from '../src/lib/firebase-mfa.ts';
 import * as catalogue from '../src/lib/australian-government-program-catalogue.ts';
 import * as dateHelpers from '../src/lib/job-register-dates.ts';
 import * as certificateTypes from '../src/lib/creditex-certificate-types.ts';
@@ -34,7 +37,9 @@ function runtime(name, props={}, options={}) {
   };
   const stubs=new Map();
   const rowActions={};
-  const require=id=>id==='react'?hooks:id==='react/jsx-runtime'?jsx:id==='./JobRowActions'?rowActions:id==='@/lib/job-register-dates'?dateHelpers:id==='@/lib/creditex-certificate-types'?certificateTypes:id==='@/lib/australian-government-program-catalogue'?catalogue:id==='@/lib/firebase-client'?{firebaseAuth:{currentUser:user}}:id==='next/dynamic'?{default:()=>()=>null}:id.endsWith('.module.css')?{default:new Proxy({},{get:(_,key)=>String(key)})}:new Proxy({},{get:(_,key)=>{const name=key==='default'?id.split('/').pop():String(key);if(!stubs.has(name))stubs.set(name,Object.defineProperty(()=>null,'displayName',{value:name}));return stubs.get(name);}});
+  const mfa={};
+  const require=id=>id==='react'?hooks:id==='react/jsx-runtime'?jsx:id==='./FirebaseMfa'?mfa:id==='firebase/app'?firebaseApp:id==='firebase/auth'?firebaseAuth:id==='@/lib/firebase-mfa'?firebaseMfa:id==='./JobRowActions'?rowActions:id==='@/lib/job-register-dates'?dateHelpers:id==='@/lib/creditex-certificate-types'?certificateTypes:id==='@/lib/australian-government-program-catalogue'?catalogue:id==='@/lib/firebase-client'?{firebaseAuth:{currentUser:user}}:id==='next/dynamic'?{default:()=>()=>null}:id.endsWith('.module.css')?{default:new Proxy({},{get:(_,key)=>String(key)})}:new Proxy({},{get:(_,key)=>{const name=key==='default'?id.split('/').pop():String(key);if(!stubs.has(name))stubs.set(name,Object.defineProperty(()=>null,'displayName',{value:name}));return stubs.get(name);}});
+  Function('require','exports',compile('FirebaseMfa'))(require,mfa);
   Function('require','exports',compile('JobRowActions'))(require,rowActions);
   const api=async(path,init)=>{requests.push(path);requestOptions.push(init);if(options.api)return options.api(path,init);return path.includes('?')?{ok:true,items:jobs,total:150,totalPages:3,page:Number(new URL(path,'https://test.invalid').searchParams.get('page'))}:audit(jobs.find(item=>path.endsWith(item.id)));};
   const filterLauncher={isConnected:true,focus(){focusEvents.push('Filters');}};
@@ -209,7 +214,9 @@ test('selected work replaces the register, uses fresh private details and return
   button(tree,'Back to jobs').props.onClick();tree=h.render();assert.equal(field(tree,'Filter customer').props.value,'Alex');h.cleanup();
 });
 
-function portal(role='admin', options={}) {return runtime('CreditexCompliancePortal',{}, {noEffects:true,...options,seed:{0:user,1:true,2:{role,email:'reviewer@example.invalid',displayName:'Test Reviewer',governanceIdentityVerified:true,canEditFieldMasters:role==='admin',organisation:{code:'creditex',legalName:'Creditex',tradingName:'Creditex'}},3:false}});}
+// Keep the real MFA hook's resolver and the portal's mfaRequired state at their
+// initial values; the session fixture follows those two state slots.
+function portal(role='admin', options={}) {return runtime('CreditexCompliancePortal',{}, {noEffects:true,...options,seed:{2:user,3:true,4:{role,email:'reviewer@example.invalid',displayName:'Test Reviewer',governanceIdentityVerified:true,canEditFieldMasters:role==='admin',organisation:{code:'creditex',legalName:'Creditex',tradingName:'Creditex'}},5:false}});}
 
 test('Jobs defaults and Training and Activity forms stay directly visible in the left rail',()=>{
   const h=portal();let tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);

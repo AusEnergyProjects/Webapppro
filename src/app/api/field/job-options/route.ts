@@ -1,5 +1,5 @@
 import { getD1 } from "../../../../../db";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { tradeFieldPermissions } from "@/lib/trade-field-permissions";
 import { ENERGY_SERVICE_CATALOGUE } from "@/lib/energy-service-catalogue.mjs";
@@ -66,6 +66,8 @@ export async function GET(request: Request) {
         code: activity.registryActivityCode || activity.activityKey, title: activity.title, serviceCategory: activity.serviceCategory })),
     });
   } catch (error) {
+    const mfa = mfaErrorResponse(error);
+    if (mfa) return mfa;
     if (error instanceof TradeComplianceIntentError) return adminJson({ ok: false, code: error.code, error: error.message }, 400);
     if (error instanceof Error && error.message === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
     if (error instanceof Error && ["ABN_REVIEW_REQUIRED", "TEAM_ACCESS_RECORD_REQUIRED", "EMAIL_VERIFICATION_REQUIRED", "FIELD_ACCESS_REQUIRED"].includes(error.message)) return adminJson({ ok: false, error: "Active approved Team access is required." }, 403);

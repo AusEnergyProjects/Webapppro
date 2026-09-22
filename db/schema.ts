@@ -3103,6 +3103,7 @@ export const tradeCrmOauthStates = sqliteTable("trade_crm_oauth_states", {
   redirectUri: text("redirect_uri").notNull(),
   expiresAt: text("expires_at").notNull(),
   consumedAt: text("consumed_at").notNull().default(""),
+  mfaVerifiedAt: text("mfa_verified_at").notNull().default(""),
   createdAt: text("created_at").notNull(),
 }, (table) => [
   uniqueIndex("trade_crm_oauth_states_hash_idx").on(table.stateHash),
@@ -3120,6 +3121,7 @@ export const tradeCrmAccountingDocuments = sqliteTable("trade_crm_accounting_doc
   taxCents: integer("tax_cents").notNull().default(0),
   provider: text("provider").notNull(),
   documentType: text("document_type").notNull().default("invoice"),
+  externalAccountId: text("external_account_id").notNull().default(""),
   externalContactId: text("external_contact_id").notNull().default(""),
   externalDocumentId: text("external_document_id").notNull().default(""),
   externalNumber: text("external_number").notNull().default(""),
@@ -3158,6 +3160,21 @@ export const tradeCrmAccountingEvents = sqliteTable("trade_crm_accounting_events
 }, (table) => [
   index("trade_crm_accounting_events_document_idx").on(table.accountingDocumentId, table.occurredAt),
   index("trade_crm_accounting_events_owner_idx").on(table.firebaseUid, table.occurredAt),
+]);
+
+export const myobSecurityEvents = sqliteTable("myob_security_events", {
+  id: text("id").primaryKey(),
+  actorUid: text("actor_uid").notNull(),
+  ownerUid: text("owner_uid").notNull(),
+  action: text("action").notNull(),
+  resourceId: text("resource_id").notNull().default(""),
+  outcome: text("outcome").notNull(),
+  createdAt: text("created_at").notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+}, (table) => [
+  index("myob_security_events_owner_created_idx").on(table.ownerUid, table.createdAt),
+  index("myob_security_events_created_idx").on(table.createdAt),
+  check("myob_security_events_action_check", sql`${table.action} IN ('accounting.read','invoice.export','invoice.refresh','oauth.connect','oauth.callback','oauth.disconnect','access.denied','retention.review','admin.access')`),
+  check("myob_security_events_outcome_check", sql`${table.outcome} IN ('attempt','success','denied','failure')`),
 ]);
 
 export const customerAccounts = sqliteTable("customer_accounts", {

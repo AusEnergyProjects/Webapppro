@@ -1,5 +1,5 @@
 import { getD1 } from "../../../../db";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import {
   requireVerifiedTradeIdentity,
@@ -23,6 +23,8 @@ const readable = (value: unknown) => String(value || "").replaceAll("_", " ").re
 const money = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 });
 
 function errorResponse(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   if (error instanceof TradeAccessError) {
     return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   }

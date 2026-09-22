@@ -1,5 +1,7 @@
 import { getD1 } from "../../../../db";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { adminJson, cleanAdminText, mfaErrorResponse, sameOrigin } from "@/lib/admin-server";
+import { requireSecondFactor } from "@/lib/firebase-mfa";
+import { myobSecurityEventStatement, writeMyobSecurityEvent } from "@/lib/myob-security-audit";
 import { decryptIntegrationCredentials, encryptIntegrationCredentials, integrationStateHash, newIntegrationState } from "@/lib/trade-integration-crypto";
 import {
   INTEGRATION_PROVIDERS,
@@ -15,6 +17,8 @@ import { normaliseWeekStart } from "@/lib/trade-schedule";
 export const runtime = "edge";
 
 function integrationError(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the installer profile first." }, 404);
@@ -65,6 +69,7 @@ export async function POST(request: Request) {
     const providerValue = cleanAdminText(body.provider, 40).toLowerCase();
     if (!isIntegrationProvider(providerValue)) return adminJson({ ok: false, error: "Choose a supported provider." }, 400);
     const setting = providerSetting(providerValue);
+    if (providerValue === "myob") requireSecondFactor(identity.identity);
     if (!providerConfigured(providerValue)) {
       return adminJson({ ok: false, error: `TLink is still preparing the secure ${setting.label} connection.` }, 503);
     }
@@ -75,12 +80,15 @@ export async function POST(request: Request) {
     const redirectUri = integrationCallbackUri(request, providerValue);
     const db = getD1();
     await db.batch([
-      db.prepare("DELETE FROM trade_crm_oauth_states WHERE expires_at < ? OR consumed_at <> ''").bind(now.toISOString()),
+      db.prepare("DELETE FROM trade_crm_oauth_states WHERE expires_at < ?").bind(now.toISOString()),
+      db.prepare("DELETE FROM trade_crm_oauth_states WHERE firebase_uid = ? AND provider = ?").bind(identity.uid, providerValue),
       db.prepare(`INSERT INTO trade_crm_oauth_states
-        (id, firebase_uid, provider, state_hash, redirect_uri, expires_at, consumed_at, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, '', ?)`)
+        (id, firebase_uid, provider, state_hash, redirect_uri, expires_at, consumed_at, created_at, mfa_verified_at)
+        VALUES (?, ?, ?, ?, ?, ?, '', ?, ?)`)
         .bind(crypto.randomUUID(), identity.uid, providerValue, await integrationStateHash(state), redirectUri,
-          new Date(now.getTime() + 10 * 60 * 1000).toISOString(), now.toISOString()),
+          new Date(now.getTime() + 10 * 60 * 1000).toISOString(), now.toISOString(), providerValue === "myob" ? now.toISOString() : ""),
+      ...(providerValue === "myob" ? [myobSecurityEventStatement(db, { actorUid: identity.uid, ownerUid: identity.uid,
+        action: "oauth.connect", outcome: "success" })] : []),
     ]);
     const authorization = new URL(setting.authorizeUrl);
     authorization.searchParams.set("client_id", setting.clientId);
@@ -165,13 +173,24 @@ export async function PATCH(request: Request) {
     const providerValue = cleanAdminText(body.provider, 40).toLowerCase();
     if (!isIntegrationProvider(providerValue)) return adminJson({ ok: false, error: "Choose a supported provider." }, 400);
     const db = getD1();
+    if (providerValue === "myob") {
+      requireSecondFactor(identity.identity);
+      await writeMyobSecurityEvent(db, { actorUid: identity.uid, ownerUid: identity.uid,
+        action: "oauth.disconnect", outcome: "attempt" });
+    }
     const row = await db.prepare(`SELECT * FROM trade_crm_integrations WHERE firebase_uid = ? AND provider = ?`)
       .bind(identity.uid, providerValue).first<Record<string, unknown>>();
     if (row && !(await bestEffortRevoke(providerValue, row)) && providerValue === "xero") {
       return adminJson({ ok: false, error: "Xero could not confirm the disconnect. The TLink connection was kept so you can try again safely." }, 502);
     }
-    await db.prepare("DELETE FROM trade_crm_integrations WHERE firebase_uid = ? AND provider = ?")
-      .bind(identity.uid, providerValue).run();
+    await db.batch([
+      db.prepare("DELETE FROM trade_crm_integrations WHERE firebase_uid = ? AND provider = ?")
+        .bind(identity.uid, providerValue),
+      db.prepare("DELETE FROM trade_crm_oauth_states WHERE firebase_uid = ? AND provider = ?")
+        .bind(identity.uid, providerValue),
+      ...(providerValue === "myob" ? [myobSecurityEventStatement(db, { actorUid: identity.uid, ownerUid: identity.uid,
+        action: "oauth.disconnect", outcome: "success" })] : []),
+    ]);
     return adminJson({ ok: true });
   } catch (error) { return integrationError(error); }
 }

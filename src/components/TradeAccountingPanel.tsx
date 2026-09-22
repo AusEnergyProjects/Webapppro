@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
+import { isMfaRequiredResponse, MFA_SETUP_URL } from "@/lib/firebase-mfa";
 import { isAccountingProvider, type AccountingProvider } from "@/lib/trade-accounting";
 
 type Provider = { provider: AccountingProvider; label: string; connected: boolean; needsReconnect: boolean };
@@ -45,6 +46,7 @@ export function TradeAccountingPanel({
   const [accountReference, setAccountReference] = useState("");
   const [busy, setBusy] = useState("loading");
   const [status, setStatus] = useState("");
+  const [mfaRequired, setMfaRequired] = useState(false);
   const loadGeneration = useRef(0);
 
   const load = useCallback(async (provider?: AccountingProvider) => {
@@ -57,6 +59,7 @@ export function TradeAccountingPanel({
       if (provider) query.set("provider", provider);
       const response = await fetch(`/api/trade-accounting?${query}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
       const result = await response.json().catch(() => ({})) as AccountingResult;
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (generation !== loadGeneration.current) return;
       if (!response.ok) throw new Error(result.error || "Accounting information could not be loaded.");
       setProviders(result.providers || []); setDocuments(result.documents || []);
@@ -85,6 +88,7 @@ export function TradeAccountingPanel({
         body: JSON.stringify({ action: "export", provider, workOrderId, invoiceSource, accountReference }),
       });
       const result = await response.json().catch(() => ({})) as AccountingResult;
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok || !result.document) throw new Error(result.error || "The invoice could not be exported.");
       setDocuments([result.document]); setStatus(`Invoice ${result.document.externalNumber || "created"} is synced to ${label}.`);
       await onChanged();
@@ -101,6 +105,7 @@ export function TradeAccountingPanel({
         body: JSON.stringify({ action: "refresh", workOrderId, invoiceSource }),
       });
       const result = await response.json().catch(() => ({})) as AccountingResult;
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok || !result.document) throw new Error(result.error || "The invoice status could not be refreshed.");
       setDocuments([result.document]); setStatus("Invoice total and payment status refreshed from the accounting provider.");
       await onChanged();
@@ -142,6 +147,6 @@ export function TradeAccountingPanel({
         </div>}
       </aside>
     </div>
-    {status && <p className="crm-inline-status" role="status">{status}{!busy && !providers.length && <button type="button" onClick={() => void load()}>Retry loading</button>}</p>}
+    {status && <p className="crm-inline-status" role="status">{status}{mfaRequired && <> <a href={MFA_SETUP_URL}>Set up or verify authenticator</a>.</>}{!busy && !providers.length && <button type="button" onClick={() => void load()}>Retry loading</button>}</p>}
   </section>;
 }

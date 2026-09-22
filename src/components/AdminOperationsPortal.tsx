@@ -17,6 +17,7 @@ import {
   type User,
 } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
+import { FirebaseAccountSecurity, FirebaseMfaChallenge, useFirebaseMfaChallenge } from "./FirebaseMfa";
 import {
   AdminNotificationInbox,
   type AdminNotification,
@@ -136,6 +137,8 @@ function AdminTLinkBrand({ context }: { context: string }) {
 }
 
 export function AdminOperationsPortal() {
+  const { resolver, captureMfaError, clearMfaChallenge } = useFirebaseMfaChallenge();
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [session, setSession] = useState<AdminSession | null>(null);
@@ -239,6 +242,7 @@ export function AdminOperationsPortal() {
       headers.set("Content-Type", "application/json");
     const response = await fetch(path, { ...init, headers, cache: "no-store" });
     const result = await response.json().catch(() => ({}));
+    if (result.code === "MFA_REQUIRED") setMfaRequired(true);
     if (!response.ok || result.ok === false) {
       const error = new Error(
         result.error || "The operations request could not be completed.",
@@ -352,6 +356,7 @@ export function AdminOperationsPortal() {
     () =>
       onAuthStateChanged(firebaseAuth, (nextUser) => {
         setUser(nextUser);
+        if (!nextUser) setMfaRequired(false);
         setAuthReady(true);
         if (nextUser) void loadSession();
         else {
@@ -371,7 +376,7 @@ export function AdminOperationsPortal() {
       provider.setCustomParameters({ prompt: "select_account" });
       await signInWithPopup(firebaseAuth, provider);
     } catch (error) {
-      setStatus(authMessage(error));
+      if (!captureMfaError(error)) setStatus(authMessage(error));
     }
   }
 
@@ -385,7 +390,7 @@ export function AdminOperationsPortal() {
         password,
       );
     } catch (error) {
-      setStatus(authMessage(error));
+      if (!captureMfaError(error)) setStatus(authMessage(error));
     }
   }
 
@@ -541,6 +546,9 @@ export function AdminOperationsPortal() {
   const activeOwners = admins.filter(
     (item) => item.role === "owner" && item.status === "active",
   ).length;
+  if (resolver) return <main className="admin-shell"><FirebaseMfaChallenge resolver={resolver} onCancel={clearMfaChallenge} onComplete={clearMfaChallenge} /></main>;
+  if (user && mfaRequired) return <main className="admin-shell"><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); await loadSession(); }} /><p style={{ textAlign: "center" }}><button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></p></main>;
+
   if (!authReady || loading)
     return (
       <main className="admin-shell">

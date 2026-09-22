@@ -7,11 +7,14 @@ import { BoundedJsonRequestError } from './bounded-json-request';
 import { TeamMemberFileError } from './trade-team-member-files-server';
 import { isFieldSessionRequest } from './trade-field-session-server';
 import { TradeAccessError } from './trade-access-server';
+import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL } from './firebase-mfa';
 
 export function creditexJson(body: object, status = 200) {
   return Response.json(body, { status, headers: { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' } });
 }
 export function creditexApiError(error: unknown) {
+  if (error instanceof FirebaseMfaRequiredError) return creditexJson({ ok: false, code: error.code,
+    error: MFA_REQUIRED_MESSAGE, setupUrl: MFA_SETUP_URL }, 403);
   const conflict = creditexMutationConflict(error);
   if (conflict) return creditexJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
   if (error instanceof CreditexComplianceError || error instanceof ComplianceAccessError || error instanceof BoundedJsonRequestError || error instanceof TeamMemberFileError || error instanceof TradeAccessError) return creditexJson({ ok: false, code: error.code, error: error.message }, error.status);

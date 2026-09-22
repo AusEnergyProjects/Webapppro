@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "@/lib/admin-server";
 import { getD1 } from "../../../../db";
 import { createAdminNotification } from "@/lib/admin-notifications";
 import {
@@ -95,6 +96,8 @@ async function supplierIdentity(request: Request) {
 }
 
 function errorResponse(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   if (error instanceof TradeAccessError) {
     return json({ ok: false, code: error.code, error: error.message }, error.status);
   }

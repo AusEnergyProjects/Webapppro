@@ -1,7 +1,7 @@
 import { getD1 } from "../../../../../db";
 import { CreditexComplianceError, creditexMutationConflict } from "@/lib/creditex-onboarding-server";
 import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { fieldFinishWithoutActiveAppointment, fieldTransitionExpectedStatus } from "@/lib/trade-field-completion-policy";
 import { activityConsumerDocuments } from "@/lib/trade-activity-forms-library";
@@ -527,6 +527,8 @@ async function workOrderMutationState(
 }
 
 function syncError(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const mobile = mobileErrorResponse(error);
   if (mobile) return adminJson({ ok: false, code: mobile.code, error: mobile.error,
     ...(mobile.minimumVersion ? { minimumVersion: mobile.minimumVersion } : {}) }, mobile.status);

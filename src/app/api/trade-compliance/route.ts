@@ -2,7 +2,7 @@ import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard }
 import { getD1 } from "../../../../db";
 import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import {
   appendLiveComplianceCaseStatements,
   AUSTRALIAN_SITE_JURISDICTIONS,
@@ -60,6 +60,8 @@ type ComplianceOrganisationRef = {
 };
 
 function errorResponse(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const conflict = creditexMutationConflict(error);
   if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
   if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);

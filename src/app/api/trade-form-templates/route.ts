@@ -1,5 +1,5 @@
 import { getD1 } from "../../../../db";
-import { adminJson, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { cleanTradeFormTemplateInput } from "@/lib/trade-form-template-input";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
@@ -24,6 +24,8 @@ async function templates(ownerUid: string) {
 }
 
 function errorResponse(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   if (error instanceof BoundedJsonRequestError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   const message = error instanceof Error ? error.message : "";
   if (message === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);

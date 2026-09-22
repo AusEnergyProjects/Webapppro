@@ -50,6 +50,14 @@ const sections = [
     body: "A trade account owner chooses whether to connect Google Calendar, Outlook, Xero, MYOB or QuickBooks. The trade workspace sends only the information needed for the chosen action. The trade workspace remains the operational source of truth, and connected providers apply their own privacy terms. The trade workspace does not offer payment-provider connections or initiate customer payments. Account owners can disconnect a connected calendar or accounting provider from the integration workspace.",
   },
   {
+    title: "MYOB connection and financial information",
+    body: "MYOB activation is subject to provider approval. When available, each business will authorise its own MYOB company file. The connection is limited to locating or creating the customer for a TLink invoice, creating a service invoice, reading its status and balance, and reading accounts and tax codes for mapping. MYOB information and credentials must not be supplied to AI development tools or used to train AI models. Disconnecting removes the stored connection credentials; it does not delete original invoices or records that need to remain for reconciliation, security or a documented legal purpose. Contact us to request a review or deletion of retained information. Security access records are retained for at least 365 days; other records are reviewed against their purpose rather than kept indefinitely.",
+  },
+  {
+    title: "Hosting providers and overseas processing",
+    body: "OpenAI Sites provides application hosting using Cloudflare infrastructure, including database and private file storage. Firebase Authentication, provided by Google, handles sign-in information and processes that authentication data in the United States. Hosting, support and other connected providers may also process information overseas. We assess these arrangements and apply contractual, access and security controls; we do not represent this service as exclusively hosted in Australia. Ask us for information about the providers and safeguards relevant to your account.",
+  },
+  {
     title: "Customer text messages",
     body: "A trade business can connect its own Twilio account to send service text messages to its existing customers. Twilio processes the sender and recipient numbers, message content and delivery information. The authorised business can see its conversation history in TLink. Permission and opt-out records are retained with that conversation; replying STOP prevents further service texts through this connection. This connection does not enrol a customer in a marketing campaign.",
   },
@@ -85,7 +93,7 @@ export default function PrivacyPage() {
       <SiteHeader active="direct-trade-dashboard" />
       <header className="trade-information-hero">
         <div>
-          <span>Effective 21 September 2026</span>
+          <span>Effective 22 September 2026</span>
           <h1>Privacy notice</h1>
           <p>
             This notice explains what Australian Energy Assessments collects,

@@ -4,7 +4,7 @@ import { loadBusinessReport } from "@/lib/trade-business-reports-server";
 import { ReportInputError } from "@/lib/trade-business-reports";
 import { assertCertificateActivityEligibility, certificateActivityEligibilityGuardStatement } from "@/lib/trade-training-server";
 import { certificateActivityIds, assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { TradeAccessError } from "@/lib/trade-access-server";
 import { nextTlinkJobNumber } from "@/lib/trade-job-number-server";
 import {
@@ -365,6 +365,8 @@ async function crmIdentity(request: Request): Promise<CrmIdentity> {
 }
 
 function errorResponse(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const conflict = creditexMutationConflict(error);
   if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
   if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message, trainingModules: error.trainingModules }, error.status);

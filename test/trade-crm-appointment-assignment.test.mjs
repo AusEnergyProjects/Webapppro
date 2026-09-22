@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -416,7 +417,7 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
     "@/lib/trade-business-reports-server": { loadBusinessReport: reportLoader },
     "@/lib/trade-business-reports": { ReportInputError },
     "../../../../db": { getD1: () => d1 },
-    "@/lib/admin-server": {
+    "@/lib/admin-server": { mfaErrorResponse,
       adminJson,
       cleanAdminText: (value, maximum) => typeof value === "string" ? value.trim().slice(0, maximum) : "",
       sameOrigin: () => true,

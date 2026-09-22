@@ -1,4 +1,4 @@
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { abortMemberDeviceUploads } from "@/lib/trade-mobile-device-revocation";
 import {
   issueFieldSetupPin,
@@ -15,6 +15,8 @@ import { canManageTeam, requireInstallerTeamAccess } from "@/lib/trade-team-serv
 export const runtime = "edge";
 
 function errorResponse(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, code, error: "Sign in to continue." }, 401);
   if (code === "MEMBER_NOT_FOUND") return adminJson({ ok: false, code, error: "Team member not found." }, 404);

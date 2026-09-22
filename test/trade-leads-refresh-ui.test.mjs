@@ -1,3 +1,4 @@
+import { isMfaRequiredResponse } from "../src/lib/firebase-mfa.ts";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -36,14 +37,14 @@ const lead = matchId => ({ matchId, title: matchId });
 const profile = { partnerType: 'installer', entitlements: { features: { installer_leads: true } } };
 
 function harness(fetchResult = async () => response([]), props = {}) {
-  const state = { opportunities: [], opportunitiesLoading: false, opportunityLoadError: '', leadSearch: 'solar', leadStatusFilter: 'offered', leadServiceFilter: 'solar', leadStateFilter: 'VIC' };
+  const state = { mfaRequired: false, opportunities: [], opportunitiesLoading: false, opportunityLoadError: '', leadSearch: 'solar', leadStatusFilter: 'offered', leadServiceFilter: 'solar', leadStateFilter: 'VIC' };
   const user = { uid: 'trade-a', getIdToken: async () => 'token-a' };
   const protectedIdentityUid = { current: user.uid }, protectedIdentityRevision = { current: 1 };
   const opportunityListController = { current: null }, protectedOpportunityRequestControllers = { current: new Set() }, exactOpportunityMatchId = { current: '' };
   const slots = [], queued = [], events = new Map(), requests = [], writes = [];
   const document = { visibilityState: 'visible' };
   let cursor = 0, currentProps = { user, profile, workspace: 'work', activeWorkView: 'today', ...props }, refresh;
-  const bindings = { protectedIdentityUid, protectedIdentityRevision, opportunityListController, protectedOpportunityRequestControllers, exactOpportunityMatchId, document,
+  const bindings = { isMfaRequiredResponse, protectedIdentityUid, protectedIdentityRevision, opportunityListController, protectedOpportunityRequestControllers, exactOpportunityMatchId, document,
     window: { addEventListener: (event, callback) => events.set(event, callback), removeEventListener: (event, callback) => { if (events.get(event) === callback) events.delete(event); } },
     fetch: async (url, init) => { requests.push({ url, init }); return fetchResult(url, init); },
     useCallback(callback, deps) { const i = cursor++; if (!slots[i] || deps.some((value, index) => value !== slots[i].deps[index])) slots[i] = { callback, deps }; return slots[i].callback; },

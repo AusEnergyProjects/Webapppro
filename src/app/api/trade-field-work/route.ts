@@ -2,7 +2,7 @@ import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard }
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
 import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { fieldTransitionExpectedStatus } from "@/lib/trade-field-completion-policy";
 import { submittedActivityFieldCaseSql, UNFINISHED_ACTIVITY_FIELD_INTENTS_SQL } from "@/lib/trade-activity-forms-completion";
@@ -258,6 +258,8 @@ function rentalUploadReplay(record: RentalUploadRecord, input: {
 }
 
 function fieldError(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const conflict = creditexMutationConflict(error);
   if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
   if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);

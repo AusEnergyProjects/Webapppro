@@ -1,4 +1,4 @@
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { authenticatedRentalReportPdf } from "@/lib/trade-rental-report-server";
 
@@ -28,6 +28,8 @@ export async function GET(request: Request, context: Context) {
       },
     });
   } catch (error) {
+    const mfa = mfaErrorResponse(error);
+    if (mfa) return mfa;
     const code = error instanceof Error ? error.message : "";
     if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
     if (code === "RENTAL_REPORT_LINK_NOT_FOUND") return adminJson({ ok: false, error: "Issued rental report not found." }, 404);

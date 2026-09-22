@@ -1,5 +1,5 @@
 import { getD1 } from "../../../../../db";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
@@ -93,6 +93,8 @@ async function authorisedInstaller(request: Request) {
     });
     return { identity: access.identity };
   } catch (error) {
+    const mfa = mfaErrorResponse(error);
+    if (mfa) return { response: mfa };
     if (error instanceof TradeAccessError) {
       return { response: adminJson({ ok: false, code: error.code, error: error.message }, error.status) };
     }

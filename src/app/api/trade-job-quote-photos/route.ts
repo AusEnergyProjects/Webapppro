@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, canViewQuotes, requireInstallerTeamAccess } from "@/lib/trade-team-server";
 
 export const runtime = "edge";
@@ -17,6 +17,8 @@ function bucket() {
 }
 
 function errorResponse(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "QUOTE_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not include customer quotes." }, 403);

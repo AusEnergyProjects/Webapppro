@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { certificateTestDependency } from "./helpers/creditex-training-fixture.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -33,7 +34,7 @@ function loadRoute({ originAccepted, readPdf = async () => reportBytes() }) {
   const moduleRecord = { exports: {} };
   const mocks = {
     "../../../../db": { getD1: () => ({}) },
-    "@/lib/admin-server": {
+    "@/lib/admin-server": { mfaErrorResponse,
       adminJson: (value, status = 200) => Response.json(value, { status }),
       requireAdminIdentity: async () => { throw new Error("unexpected admin access"); },
       sameOrigin: () => { calls.origin += 1; return originAccepted; },

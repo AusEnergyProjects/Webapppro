@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs";
@@ -60,7 +61,7 @@ function loadRoute(accessRecord) {
   }).outputText;
   const mocks = {
     "cloudflare:workers": { env: { EVIDENCE: bucket } }, "../../../../db": { getD1: () => db },
-    "@/lib/admin-server": { adminJson: (value, status = 200) => Response.json(value, { status }),
+    "@/lib/admin-server": { mfaErrorResponse, adminJson: (value, status = 200) => Response.json(value, { status }),
       cleanAdminText: (value, maximum) => String(value || "").trim().slice(0, maximum),
       sameOrigin: (request) => !request.headers.get("origin") || request.headers.get("origin") === new URL(request.url).origin },
     "@/lib/trade-team-server": {

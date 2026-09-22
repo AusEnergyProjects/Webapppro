@@ -1,4 +1,6 @@
 import { createRemoteJWKSet, errors, jwtVerify } from "jose";
+import { firebaseSecondFactorClaim } from "./firebase-mfa.ts";
+export { requireSecondFactor, FirebaseMfaRequiredError } from "./firebase-mfa.ts";
 
 const FIREBASE_PROJECT_ID = "australian-energy-assessments";
 const FIREBASE_ISSUER = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
@@ -12,6 +14,7 @@ export type FirebaseIdentity = {
   emailVerified: boolean;
   authTime: number;
   signInProvider: string;
+  secondFactor?: string;
 };
 
 export class FirebaseAuthError extends Error {
@@ -70,6 +73,7 @@ export async function requireFirebaseIdentity(request: Request): Promise<Firebas
     email,
     emailVerified: payload.email_verified === true,
     authTime: typeof payload.auth_time === "number" ? payload.auth_time : 0,
+    secondFactor: firebaseSecondFactorClaim(firebase),
     signInProvider:
       typeof firebase.sign_in_provider === "string"
         ? firebase.sign_in_provider

@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { runInNewContext } from "node:vm";
+import ts from "typescript";
+import { isMfaRequiredResponse } from "../src/lib/firebase-mfa.ts";
 import {
   createInstallerEnquiryPack,
   createInstallerPlanReportView,
@@ -49,7 +51,7 @@ function assertEveryAwaitIsRequestGuarded(handlerSource) {
       awaitIndex,
     );
     const nextAwaitIndex = awaits[index + 1]?.index ?? Number.POSITIVE_INFINITY;
-    const protectedWrite = /\bset(?:Opportunities|OpportunityStatus|OpportunityBusy|OpportunityNavigationStatus|Workspace)\s*\(/g;
+    const protectedWrite = /\bset(?:Opportunities|OpportunityStatus|OpportunityBusy|OpportunityNavigationStatus|Workspace|MfaRequired)\s*\(/g;
     protectedWrite.lastIndex = awaitIndex;
     const nextWriteIndex = protectedWrite.exec(successPath)?.index
       ?? Number.POSITIVE_INFINITY;
@@ -401,6 +403,7 @@ test("protected installer plan and evidence state is cleared before an auth iden
       authTransition.indexOf("setUser(nextUser);"),
   );
   for (const stateReset of [
+    "setMfaRequired(false)",
     "setInstallerPlanPreview(null)",
     'setInstallerPlanBusy("")',
     "setInstallerPlanErrors({})",
@@ -428,6 +431,54 @@ test("protected installer plan and evidence state is cleared before an auth iden
     dashboard,
     /\{installerPlanPreview && \(/,
   );
+});
+
+test("profile and lead-list responses check identity before updating MFA state", () => {
+  const profileLoader = sourceBetween(dashboard, "async function loadDashboard", "void loadDashboard()");
+  const listLoader = sourceBetween(dashboard, "const refreshOpportunities", "void refreshOpportunities()");
+  assert.match(profileLoader, /const result = await response\.json\(\)\.catch\(\(\) => \(\{\}\)\);\s*if \(cancelled \|\| !identityIsCurrent\(\)\) return;\s*if \(isMfaRequiredResponse\(result\)\) setMfaRequired\(true\);/);
+  assert.match(listLoader, /const result = await response\.json\(\)\.catch\(\(\) => \(\{\}\)\);\s*if \(!identityIsCurrent\(\)\) return;\s*if \(isMfaRequiredResponse\(result\)\) setMfaRequired\(true\);/);
+});
+
+test("delayed plan responses only update MFA state for the current identity revision", async () => {
+  const source = sourceBetween(dashboard, "async function installerPlanReport", "async function openInstallerPlan");
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+
+  for (const nextIdentity of [
+    { uid: "installer-b", revision: 12, expected: [] },
+    { uid: "installer-a", revision: 12, expected: [] },
+    { uid: "installer-a", revision: 11, expected: [true] },
+  ]) {
+    const uid = { current: "installer-a" };
+    const revision = { current: 11 };
+    const writes = [];
+    let releaseResponse;
+    let markResponsePending;
+    const responsePending = new Promise((resolve) => { markResponsePending = resolve; });
+    const delayedResponse = new Promise((resolve) => { releaseResponse = resolve; });
+    const loadReport = runInNewContext(`${compiled}\ninstallerPlanReport`, {
+      protectedIdentityUid: uid,
+      protectedIdentityRevision: revision,
+      isMfaRequiredResponse,
+      setMfaRequired: (value) => writes.push(value),
+      fetch: async () => ({
+        ok: false,
+        json: () => { markResponsePending(); return delayedResponse; },
+      }),
+    });
+    const pendingReport = loadReport(
+      { matchId: "synthetic-match" },
+      { uid: "installer-a", getIdToken: async () => "synthetic-token" },
+    );
+    await responsePending;
+    uid.current = nextIdentity.uid;
+    revision.current = nextIdentity.revision;
+    releaseResponse({ code: "MFA_REQUIRED", error: "Authenticator verification required" });
+    await assert.rejects(pendingReport, /Authenticator verification required/);
+    assert.deepEqual(writes, nextIdentity.expected);
+  }
 });
 
 test("stale old-UID lead continuations cannot write after an identity switch", async () => {

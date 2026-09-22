@@ -10,6 +10,8 @@ import * as trainingSections from '../../src/lib/training-service-sections.mjs';
 import * as aeaRouting from '../../src/lib/aea-trade-routing.mjs';
 import * as publicSite from '../../src/lib/public-site.ts';
 import * as tradeAbn from '../../src/lib/trade-abn.ts';
+import * as firebaseMfa from '../../src/lib/firebase-mfa.ts';
+import * as myobSecurityAudit from '../../src/lib/myob-security-audit.ts';
 
 const read = (path) => fs.readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 const unavailableRuntime = () => { throw new Error('Runtime authentication and D1 access are not provided by the SQL fixture.'); };
@@ -21,11 +23,11 @@ const runtimeModules = {
 };
 const modules = { 'node:crypto': crypto, 'creditex-training-curriculum': curriculum,
   'australian-government-program-catalogue': catalogue, 'creditex-onboarding-server': onboarding, 'energy-service-catalogue.mjs': energyServices, 'trade-team-service-states': teamServiceStates, 'training-service-sections.mjs': trainingSections,
-  'aea-trade-routing.mjs': aeaRouting, 'public-site': publicSite, 'trade-abn': tradeAbn };
+  'aea-trade-routing.mjs': aeaRouting, 'public-site': publicSite, 'trade-abn': tradeAbn, 'firebase-mfa': firebaseMfa, 'myob-security-audit': myobSecurityAudit };
 export function certificateTestDependency(specifier) {
   return modules[specifier] || modules[specifier.split('/').at(-1).replace(/\.ts$/, '')];
 }
-for (const name of ['trade-access-server', 'aea-trade-owner-server', 'opportunity-notification-retry', 'training-questionnaire-store', 'trade-training-server', 'trade-certificate-eligibility', 'trade-certificate-leads']) {
+for (const name of ['trade-mfa-server', 'trade-access-server', 'aea-trade-owner-server', 'opportunity-notification-retry', 'training-questionnaire-store', 'trade-training-server', 'trade-certificate-eligibility', 'trade-certificate-leads']) {
   const output = ts.transpileModule(read(`src/lib/${name}.ts`), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;

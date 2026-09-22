@@ -1,5 +1,6 @@
 import { getD1 } from "../../db";
-import { requireFirebaseIdentity } from "./firebase-server";
+import { requireFirebaseIdentity, type FirebaseIdentity } from "./firebase-server";
+import { requireTradeMyobSecondFactor } from "./trade-mfa-server";
 import {
   requireVerifiedTradeIdentity,
   tradeAccountProjection,
@@ -11,6 +12,7 @@ import { isFieldSessionRequest, requireFieldSessionAccess } from "./trade-field-
 
 export type TeamScope = "own" | "team";
 export type TeamAccess = {
+  identity?: FirebaseIdentity;
   ownerUid: string;
   actorUid: string;
   actorEmail: string;
@@ -94,7 +96,11 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
 }
 
 export async function requireInstallerTeamAccess(request: Request): Promise<TeamAccess> {
-  if (isFieldSessionRequest(request)) return requireFieldSessionAccess(request);
+  if (isFieldSessionRequest(request)) {
+    const access = await requireFieldSessionAccess(request);
+    await requireTradeMyobSecondFactor(undefined, access.ownerUid, access.actorUid);
+    return access;
+  }
   const identity = await requireFirebaseIdentity(request);
   const db = getD1();
   await ensureCreditexSchemaGuards(db);
@@ -104,7 +110,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
     const verified = await requireVerifiedTradeIdentity(identity, { partnerTypes: ["installer"] });
     const displayName = verified.businessName || "Business owner";
     const memberId = await ensureOwnerTeamMember(identity.uid, identity.email, displayName);
-    return { ownerUid: identity.uid, actorUid: identity.uid, actorEmail: identity.email, memberId,
+    return { identity, ownerUid: identity.uid, actorUid: identity.uid, actorEmail: identity.email, memberId,
       displayName, isOwner: true,
       businessName: verified.businessName || "Installer business",
       canCreateJobs: true, canManageJobs: true, canAssignJobs: true, jobScope: "team",
@@ -137,9 +143,10 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
   if (!ownerAccount || ownerAccount.partnerType !== "installer" || !ownerAccount.approvedAbnAccess) {
     throw new Error("ABN_REVIEW_REQUIRED");
   }
+  await requireTradeMyobSecondFactor(identity, ownerUid);
   await db.prepare("UPDATE trade_team_members SET last_active_at = ? WHERE id = ? AND member_uid = ?")
     .bind(new Date().toISOString(), member.id, identity.uid).run();
-  return { ownerUid, actorUid: identity.uid, actorEmail: identity.email, memberId: String(member.id),
+  return { identity, ownerUid, actorUid: identity.uid, actorEmail: identity.email, memberId: String(member.id),
     displayName: String(member.display_name || identity.email), isOwner: false,
     businessName: String(member.business_name || "Installer business"),
     canCreateJobs: Boolean(member.can_create_jobs), canManageJobs: Boolean(member.can_manage_jobs),

@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import assert from "node:assert/strict";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import { canEditCreditexFieldMasters } from "../src/lib/creditex-field-master-access.ts";
@@ -95,7 +96,7 @@ function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
   });
   const dependencies = {
     "../../../../db": { getD1: () => d1 },
-    "@/lib/admin-server": { sameOrigin: () => true, adminJson: (body, status = 200) => Response.json(body, { status }),
+    "@/lib/admin-server": { mfaErrorResponse, sameOrigin: () => true, adminJson: (body, status = 200) => Response.json(body, { status }),
       requireAdminIdentity: async () => ({ uid: "aea-admin" }) },
     "@/lib/compliance-access-server": { requireComplianceAccess: async () => ({ uid: "creditex-author", organisationId: "creditex", organisationCode: "CREDITEX-AU", governanceIdentityVerified: true,
       email: "test.author@creditex.example", displayName: "Test Author", role: "admin" }) },

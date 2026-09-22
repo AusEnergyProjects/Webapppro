@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { certificateTestDependency } from "./helpers/creditex-training-fixture.mjs";
 import * as activityCompletion from "../src/lib/trade-activity-forms-completion.ts";
 import * as fieldCompletionPolicy from "../src/lib/trade-field-completion-policy.ts";
@@ -82,7 +83,7 @@ function fieldRoute(accessRecord, jobs) {
   const db = { prepare: (sql) => new Statement(sql) };
   return compile(fieldSource, "src/app/api/trade-field-work/route.ts", {
     "cloudflare:workers": { env: {} }, "../../../../db": { getD1: () => db },
-    "@/lib/admin-server": { adminJson: (value, status = 200) => Response.json(value, { status }),
+    "@/lib/admin-server": { mfaErrorResponse, adminJson: (value, status = 200) => Response.json(value, { status }),
       cleanAdminText: (value, maximum) => String(value || "").trim().slice(0, maximum), sameOrigin: () => true },
     "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => accessRecord,
       assignedJob: async (_access, workOrderId) => assigned(accessRecord, jobs, workOrderId) },
@@ -112,7 +113,7 @@ function syncRoute(accessRecord, jobs) {
   const db = { prepare: (sql) => new Statement(sql) };
   return compile(syncSource, "src/app/api/trade-team/sync/route.ts", {
     "../../../../../db": { getD1: () => db },
-    "@/lib/admin-server": { adminJson: (value, status = 200) => Response.json(value, { status }),
+    "@/lib/admin-server": { mfaErrorResponse, adminJson: (value, status = 200) => Response.json(value, { status }),
       cleanAdminText: (value, maximum) => String(value || "").trim().slice(0, maximum), sameOrigin: () => true },
     "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => accessRecord,
       assignedJob: async (_access, workOrderId) => assigned(accessRecord, jobs, workOrderId) },

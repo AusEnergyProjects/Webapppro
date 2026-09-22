@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -277,6 +278,7 @@ const access = {
 };
 
 const adminServer = {
+  mfaErrorResponse,
   adminJson: (value, status = 200) => Response.json(value, { status }),
   cleanAdminText: (value, maxLength) => String(value || "").trim().slice(0, maxLength),
   parseJsonList: (value) => {

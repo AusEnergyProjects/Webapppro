@@ -1,0 +1,17 @@
+.card { width: min(100%, 520px); margin: 24px auto; padding: 28px; box-sizing: border-box; border: 1px solid #cbdde0; border-radius: 16px; background: #fff; color: #173d48; box-shadow: 0 8px 32px #12313b0b; }
+.card h2 { margin: 7px 0 12px; color: #12313b; font-size: 24px; line-height: 1.2; }
+.card p { line-height: 1.5; }
+.eyebrow { color: #00796e; text-transform: uppercase; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.card form { display: grid; gap: 12px; margin: 16px 0; }
+.card label { display: grid; gap: 8px; font-size: 13px; font-weight: 700; }
+.card input, .card select { width: 100%; min-height: 44px; box-sizing: border-box; padding: 10px 12px; background: #fff; color: #173d48; border: 1px solid #aac4cb; border-radius: 8px; font: inherit; }
+.card input:focus, .card select:focus { outline: 2px solid #008f80; outline-offset: 2px; }
+.card button { min-height: 42px; padding: 10px 15px; border: 1px solid #007a70; border-radius: 8px; background: #007a70; color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; }
+.card button:disabled { opacity: .65; cursor: wait; }
+.card .secondary { background: #fff; border-color: #aac4cb; color: #173d48; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.card small { display: block; margin-top: 14px; font-size: 12px; line-height: 1.5; color: #526d74; }
+.card .secret { font-family: monospace; font-size: 15px; letter-spacing: .04em; }
+.status { border-left: 3px solid #008f80; background: #edf8f6; padding: 10px 12px; font-size: 13px; }
+.account { overflow-wrap: anywhere; font-weight: 700; font-size: 13px; }
+@media (max-width: 600px) { .card { padding: 20px; margin: 16px auto; } }

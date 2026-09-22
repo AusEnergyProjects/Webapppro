@@ -1,5 +1,5 @@
 import { getD1 } from "../../../../db";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
@@ -14,6 +14,8 @@ async function supplier(request: Request) {
 }
 
 function accessError(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   if (error instanceof TradeAccessError) {
     return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   }
@@ -41,6 +43,8 @@ export async function POST(request: Request) {
     else await getD1().prepare(`INSERT INTO trade_supplier_locations (id, firebase_uid, location_name, location_type, address_line_1, suburb, address_state, postcode, sales_email, contact_number, dispatch_notes, service_states_json, record_status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`).bind(crypto.randomUUID(), uid, name, type, address, suburb, state, postcode, salesEmail, phone, notes, JSON.stringify(serviceStates), now, now).run();
     return GET(request);
   } catch (error) {
+    const mfa = mfaErrorResponse(error);
+    if (mfa) return mfa;
     if (error instanceof TradeAccessError) return accessError(error);
     return adminJson({ ok: false, error: error instanceof Error && error.message.includes("UNIQUE") ? "Use a unique location name." : "The wholesaler location could not be saved." }, 409);
   }

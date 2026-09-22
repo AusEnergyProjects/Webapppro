@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import * as activityCompletion from "../src/lib/trade-activity-forms-completion.ts";
 import * as fieldCompletionPolicy from "../src/lib/trade-field-completion-policy.ts";
@@ -549,7 +550,7 @@ function routeHarness(database, { assigned = true, workPacks = [] } = {}) {
   };
   const route = loadRoute({
     "../../../../../db": { getD1: () => d1 },
-    "@/lib/admin-server": {
+    "@/lib/admin-server": { mfaErrorResponse,
       adminJson: (body, status = 200) => Response.json(body, { status }),
       cleanAdminText: (value, maximum) => (
         typeof value === "string" ? value.trim().slice(0, maximum) : ""

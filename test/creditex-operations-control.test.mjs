@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import * as myobSecurityAudit from "../src/lib/myob-security-audit.ts";
+import * as firebaseMfa from "../src/lib/firebase-mfa.ts";
 import { installMissingDraftDeletionContext } from "./helpers/job-deletion-guard-fixture.mjs";
 import {
   canonicalCreditexSchemaGuardSql,
@@ -139,6 +141,9 @@ function loadTypescriptModule(path, mocks = {}) {
   }).outputText;
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
+    if (specifier === "./firebase-mfa") return firebaseMfa;
+    if (specifier === "./myob-security-audit") return myobSecurityAudit;
+    if (specifier === "./trade-compliance-intent") return { CREDITEX_PARTNER_ORGANISATION_CODE: "CREDITEX-AU" };
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
@@ -1177,6 +1182,7 @@ test("the verified bootstrap identity claims the invitation exactly once", async
   t.mock.timers.enable({ apis: ["Date"], now: new Date(TEST_NOW) });
   const database = databaseWithComplianceOperations();
   const d1 = testD1(database);
+  database.exec("CREATE TABLE IF NOT EXISTS trade_crm_integrations(provider TEXT); CREATE TABLE IF NOT EXISTS trade_crm_accounting_documents(provider TEXT);");
   const access = loadTypescriptModule("../src/lib/compliance-access-server.ts", {
     "../../db": { getD1: () => d1 },
     "./firebase-server": {

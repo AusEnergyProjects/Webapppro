@@ -31,6 +31,7 @@ import {
 } from "@/lib/australian-government-program-catalogue";
 import { requestWithCreditexTokenRecovery } from "@/lib/creditex-auth-token";
 import { firebaseAuth } from "@/lib/firebase-client";
+import { FirebaseAccountSecurity, FirebaseMfaChallenge, useFirebaseMfaChallenge } from "./FirebaseMfa";
 import { CreditexEvidencePolicyGovernance } from "./CreditexEvidencePolicyGovernance";
 const CreditexActivityWorkPackGovernance = dynamic(() => import("./CreditexActivityWorkPackGovernance").then((module) => module.CreditexActivityWorkPackGovernance), { loading: () => <p role="status">Loading master forms...</p> });
 const CreditexOnboardingReviewWorkspace = dynamic(() => import("./CreditexOnboardingReviewWorkspace").then((module) => module.CreditexOnboardingReviewWorkspace), { loading: () => <p role="status">Loading onboarding reviews...</p> });
@@ -315,6 +316,8 @@ function emptyActivityForm() {
 }
 
 export function CreditexCompliancePortal() {
+  const { resolver, captureMfaError, clearMfaChallenge } = useFirebaseMfaChallenge();
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [session, setSession] = useState<ComplianceSession | null>(null);
@@ -472,6 +475,7 @@ export function CreditexCompliancePortal() {
         },
       });
 
+    if (result.code === "MFA_REQUIRED") setMfaRequired(true);
     if (!response.ok || result.ok === false) {
       const error = new Error(
         result.error || "The compliance request could not be completed.",
@@ -649,6 +653,7 @@ export function CreditexCompliancePortal() {
           setNotice("");
         }
         setUser(nextUser);
+        if (!nextUser) setMfaRequired(false);
         setAuthReady(true);
         if (nextUser) {
           setLoading(true);
@@ -844,7 +849,7 @@ export function CreditexCompliancePortal() {
       );
       setPassword("");
     } catch (error) {
-      setNotice(authMessage(error));
+      if (!captureMfaError(error)) setNotice(authMessage(error));
       setNoticeKind("error");
     } finally {
       setBusy("");
@@ -861,7 +866,7 @@ export function CreditexCompliancePortal() {
       provider.setCustomParameters({ prompt: "select_account" });
       await signInWithPopup(firebaseAuth, provider);
     } catch (error) {
-      setNotice(authMessage(error));
+      if (!captureMfaError(error)) setNotice(authMessage(error));
       setNoticeKind("error");
     } finally {
       setBusy("");
@@ -1066,6 +1071,9 @@ export function CreditexCompliancePortal() {
       document.getElementById(`creditex-tab-${nextTab}`)?.focus();
     });
   }
+
+  if (resolver) return <main className={styles.shell}><FirebaseMfaChallenge resolver={resolver} onCancel={clearMfaChallenge} onComplete={clearMfaChallenge} /></main>;
+  if (user && mfaRequired) return <main className={styles.shell}><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); await loadWorkspace(); }} /><p style={{ textAlign: "center" }}><button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></p></main>;
 
   if (!authReady || (user && loading)) {
     return (

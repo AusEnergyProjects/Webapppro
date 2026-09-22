@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -99,7 +100,7 @@ function fixture(t) {
   const teams = load('src/lib/trade-team-server.ts', { '../../db': { getD1: () => db } });
   const route = load('src/app/api/field/appointment-actions/route.ts', {
     '../../../../../db': { getD1: () => db },
-    '@/lib/admin-server': { sameOrigin: () => true, cleanAdminText: (value, limit) => String(value || '').trim().slice(0, limit), adminJson: (value, status = 200) => Response.json(value, { status }) },
+    '@/lib/admin-server': { mfaErrorResponse, sameOrigin: () => true, cleanAdminText: (value, limit) => String(value || '').trim().slice(0, limit), adminJson: (value, status = 200) => Response.json(value, { status }) },
     '@/lib/trade-team-server': { assignedJob: teams.assignedJob, requireInstallerTeamAccess: async () => access },
     '@/lib/trade-team-permission-policy.mjs': { canRescheduleWithinScope: () => true },
     '@/lib/trade-job-deletion-server': service,

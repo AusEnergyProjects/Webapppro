@@ -1,5 +1,5 @@
 import { getD1 } from '../../../../db';
-import { sameOrigin } from '@/lib/admin-server';
+import { mfaErrorResponse, sameOrigin } from '@/lib/admin-server';
 import { readBoundedJsonRequest } from '@/lib/bounded-json-request';
 import { creditexApiError, creditexJson } from '@/lib/creditex-onboarding-api';
 import { CreditexComplianceError, getCreditexBusinessStatus, record, textField } from '@/lib/creditex-onboarding-server';
@@ -36,7 +36,11 @@ export async function GET(request: Request) {
       }
     }
     return creditexJson({ ok: true, business, memberId, officeOnly: scope.officeOnly, trainingServiceStates: scope.serviceStates, trainingServiceIds: scope.capabilities, assignedServiceStates: scope.assignedServiceStates, businessServiceStates: scope.businessServiceStates, actor: { isOwner: access.isOwner, displayName: access.displayName, memberId: access.memberId }, selectedMember: { memberId, displayName: scope.displayName, isOwner: scope.isOwner, officeOnly: scope.officeOnly, isSelf: memberId === access.memberId }, canTakeTraining: memberId === access.memberId, modules, unavailableActivities, team, submissions: memberId === access.memberId ? await listTrainingSubmissions(db, { ownerUid: access.ownerUid, memberId }) : [] });
-  } catch (error) { return creditexApiError(error); }
+  } catch (error) {
+    const mfa = mfaErrorResponse(error);
+    if (mfa) return mfa;
+    return creditexApiError(error);
+  }
 }
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return creditexJson({ ok: false, error: 'Request origin was not accepted.' }, 403);
@@ -49,5 +53,9 @@ export async function POST(request: Request) {
     if (body.action === 'check') return creditexJson({ ok: true, feedback: await checkTrainingAnswer(db, { ...actor, attemptId: textField(body.attemptId, 80), questionId: textField(body.questionId, 100), answer: textField(body.answer, 100) }) });
     if (body.action === 'submit') return creditexJson({ ok: true, result: await submitTrainingAttempt(db, { ...actor, attemptId: textField(body.attemptId, 80), answers: body.answers }) });
     throw new CreditexComplianceError('ACTION_INVALID', 'Choose a supported training action.', 400);
-  } catch (error) { return creditexApiError(error); }
+  } catch (error) {
+    const mfa = mfaErrorResponse(error);
+    if (mfa) return mfa;
+    return creditexApiError(error);
+  }
 }

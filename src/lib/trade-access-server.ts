@@ -5,6 +5,7 @@ import {
 } from "./firebase-server";
 import { ensureCreditexSchemaGuards } from "./creditex-schema-guards";
 import { isValidAbn, normalizeAbn } from "./trade-abn";
+import { requireTradeMyobSecondFactor } from "./trade-mfa-server";
 
 export type TradePartnerType = "installer" | "supplier";
 
@@ -207,6 +208,7 @@ export async function requireVerifiedTradeIdentity(
       "ABN review and trade approval are required before using TLink operations.",
     );
   }
+  await requireTradeMyobSecondFactor(identity, identity.uid);
   return { ...account, identity };
 }
 

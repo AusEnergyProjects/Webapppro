@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
+import { mfaErrorResponse } from './helpers/admin-response-fixture.mjs';
 import * as catalogue from '../src/lib/australian-government-program-catalogue.ts';
 import * as forms from '../src/lib/trade-activity-forms-library.ts';
 import * as rental from '../src/lib/trade-rental-assessment.mjs';
@@ -86,7 +87,7 @@ function fixture(accessOverrides = {}) {
     './firebase-server': {}, './trade-access-server': {}, './creditex-schema-guards': {}, './tlink-schema-guards': {}, './trade-field-session-server': {} });
   const route = load('src/app/api/field/job-activities/route.ts', {
     '../../../../../db': { getD1: () => db },
-    '@/lib/admin-server': { cleanAdminText: (value, max) => String(value || '').trim().slice(0, max),
+    '@/lib/admin-server': { mfaErrorResponse, cleanAdminText: (value, max) => String(value || '').trim().slice(0, max),
       sameOrigin: (request) => !request.headers.get('origin') || request.headers.get('origin') === new URL(request.url).origin,
       adminJson: (body, status = 200) => Response.json(body, { status }) },
     '@/lib/trade-team-server': { requireInstallerTeamAccess: async () => access, canManageJobs: teams.canManageJobs, assignedJob: teams.assignedJob },

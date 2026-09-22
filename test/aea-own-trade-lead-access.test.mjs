@@ -3,6 +3,7 @@ import test from "node:test";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL } from "../src/lib/firebase-mfa.ts";
 import * as routing from "../src/lib/aea-trade-routing.mjs";
 import * as plan from "../src/lib/public-plan-enquiry.mjs";
 import * as preparation from "../src/lib/public-plan-quote-preparation.mjs";
@@ -39,7 +40,7 @@ function loadTypescript(path, overrides = {}) {
     if (Object.hasOwn(overrides, specifier)) return overrides[specifier];
     const name = specifier.split("/").at(-1).replace(/\.ts$/, "");
     if (modules.has(name)) return modules.get(name);
-    assert.ok(["public-site", "trade-abn", "trade-access-server", "aea-trade-owner-server", "trade-certificate-leads"].includes(name), `Unexpected dependency: ${specifier}`);
+    assert.ok(["public-site", "trade-abn", "firebase-mfa", "myob-security-audit", "trade-mfa-server", "trade-access-server", "aea-trade-owner-server", "trade-certificate-leads"].includes(name), `Unexpected dependency: ${specifier}`);
     const loaded = loadTypescript(`src/lib/${name}.ts`);
     modules.set(name, loaded);
     return loaded;
@@ -260,6 +261,7 @@ test("legacy enquiry list and detail return the authorized projection once and d
   const route = loadTypescript("src/app/api/trade-enquiries/route.ts", {
     "../../../../db": { getD1: () => db },
     "@/lib/admin-server": { sameOrigin: () => true, cleanAdminText: (value, length) => String(value || "").slice(0, length),
+      mfaErrorResponse: (error) => error instanceof FirebaseMfaRequiredError ? Response.json({ ok: false, code: "MFA_REQUIRED", error: MFA_REQUIRED_MESSAGE, setupUrl: MFA_SETUP_URL }, { status: 403 }) : null,
       adminJson: (body, status = 200) => Response.json(body, { status }) },
     "@/lib/direct-trade-entitlements-server": { accountEntitlements: async () => ({ features: { business_operations: true } }) },
     "@/lib/trade-access-server": { ...modules.get("trade-access-server"),

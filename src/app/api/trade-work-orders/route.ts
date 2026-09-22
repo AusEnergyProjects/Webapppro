@@ -2,7 +2,7 @@ import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard }
 import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { getD1 } from "../../../../db";
 import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
-import { adminJson, cleanAdminText, parseJsonList, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, parseJsonList, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 import { nextTlinkJobNumber, nextTradeWorkNumber } from "@/lib/trade-job-number-server";
@@ -141,6 +141,8 @@ async function mutationIdentity(request: Request, action: string): Promise<{
 }
 
 function errorResponse(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   const conflict = creditexMutationConflict(error);
   if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
   if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message, trainingModules: error.trainingModules }, error.status);

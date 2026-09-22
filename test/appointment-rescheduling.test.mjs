@@ -6,6 +6,7 @@ import ts from "typescript";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import { normalisePreferredWindows, parsePreferredWindows } from "../src/lib/appointment-rescheduling.ts";
 import * as scheduleHelpers from "../src/lib/trade-schedule.ts";
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 function loadTypescriptModule(path, mocks) {
@@ -136,6 +137,7 @@ function conflictDispatchRoute(conflictCode) {
   const route = loadTypescriptModule("../src/app/api/trade-schedule/route.ts", {
     "../../../../db": { getD1: () => database },
     "@/lib/admin-server": {
+      mfaErrorResponse,
       adminJson: (value, status = 200) => Response.json(value, { status }),
       cleanAdminText: (value, maximum) => String(value || "").trim().slice(0, maximum),
       sameOrigin: () => true,

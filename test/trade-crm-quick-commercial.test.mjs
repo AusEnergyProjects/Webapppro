@@ -1,3 +1,4 @@
+import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -72,7 +73,7 @@ function fixture(overrides = {}) {
   let numbers = 0;
   const route = moduleAt('../src/app/api/trade-crm/route.ts', {
     '../../../../db': { getD1: () => d1 },
-    '@/lib/admin-server': { adminJson: (body, status = 200) => Response.json(body, { status }), cleanAdminText: clean, sameOrigin: () => true },
+    '@/lib/admin-server': { mfaErrorResponse, adminJson: (body, status = 200) => Response.json(body, { status }), cleanAdminText: clean, sameOrigin: () => true },
     '@/lib/trade-access-server': { TradeAccessError: DomainError },
     '@/lib/route-performance': { routeTimer: () => ({ database: async value => value, startedAt: 0, dbDurationMs: 0 }), performanceJson: body => Response.json(body) },
     '@/lib/keyset-pagination': moduleAt('../src/lib/keyset-pagination.ts'),

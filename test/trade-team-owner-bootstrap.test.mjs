@@ -1,3 +1,5 @@
+import * as firebaseMfa from "../src/lib/firebase-mfa.ts";
+import * as myobSecurityAudit from "../src/lib/myob-security-audit.ts";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -34,6 +36,8 @@ function loadServer(database) {
   }).outputText;
   const moduleRecord = { exports: {} };
   const mocks = {
+    "./firebase-mfa": firebaseMfa,
+    "./myob-security-audit": myobSecurityAudit,
     "../../db": { getD1: () => ({ prepare: (sql) => new Statement(database, sql) }) },
     "./firebase-server": { requireFirebaseIdentity: async () => { throw new Error("not used"); } },
     "./trade-access-server": {
@@ -50,6 +54,15 @@ function loadServer(database) {
   };
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+    if (specifier === "./trade-mfa-server") {
+      const loaded = { exports: {} };
+      const mfaSource = fs.readFileSync(new URL("../src/lib/trade-mfa-server.ts", import.meta.url), "utf8");
+      const compiled = ts.transpileModule(mfaSource, {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+      }).outputText;
+      new Function("require", "module", "exports", compiled)(require, loaded, loaded.exports);
+      return loaded.exports;
+    }
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
   new Function("require", "module", "exports", output)(require, moduleRecord, moduleRecord.exports);

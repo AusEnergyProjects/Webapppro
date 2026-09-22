@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
+import { isMfaRequiredResponse, MFA_SETUP_URL } from "@/lib/firebase-mfa";
 import { TradeSmsConnectionPanel } from "./TradeSmsConnectionPanel";
 import {
   clearIntegrationReturnFromAddress,
@@ -38,11 +39,13 @@ export function TradeIntegrationCentre({ user }: { user: User }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState("");
+  const [mfaRequired, setMfaRequired] = useState(false);
 
   const load = useCallback(async () => {
     const token = await user.getIdToken();
     const response = await fetch("/api/trade-integrations", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
     const result = await response.json().catch(() => ({})) as IntegrationResult;
+    if (isMfaRequiredResponse(result)) setMfaRequired(true);
     if (!response.ok) throw new Error(result.error || "Integrations could not be loaded.");
     const nextProviders = result.providers || [];
     setProviders(nextProviders);
@@ -78,6 +81,7 @@ export function TradeIntegrationCentre({ user }: { user: User }) {
         body: JSON.stringify({ provider: provider.provider }),
       });
       const result = await response.json().catch(() => ({})) as { authorizationUrl?: string; error?: string };
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok || !result.authorizationUrl) throw new Error(result.error || "The secure connection could not be started.");
       window.location.assign(result.authorizationUrl);
     } catch (error) {
@@ -95,6 +99,7 @@ export function TradeIntegrationCentre({ user }: { user: User }) {
         body: JSON.stringify({ provider: provider.provider }),
       });
       const result = await response.json().catch(() => ({})) as { error?: string };
+      if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok) throw new Error(result.error || "The provider could not be disconnected.");
       await load(); setStatus(`${provider.label} disconnected.`);
     } catch (error) { setStatus(error instanceof Error ? error.message : "The provider could not be disconnected."); }
@@ -104,7 +109,7 @@ export function TradeIntegrationCentre({ user }: { user: User }) {
   return <div className="crm-integrations">
     <div className="crm-page-heading"><div><span>Connected business services</span><h3>Integrations</h3><p>Connect your own accounting, calendar and SMS accounts. Each connection belongs to your business.</p></div></div>
     <p>Accounting and calendar connections use provider approval. TLink never asks for or stores your accounting or calendar password.</p>
-    {status && <p className="crm-inline-status" role="status">{status}</p>}
+    {status && <p className="crm-inline-status" role="status">{status}{mfaRequired && <> <a href={MFA_SETUP_URL}>Set up or verify authenticator</a>.</>}</p>}
     {loading ? <section className="crm-loading"><span /><div><strong>Checking business connections</strong><p>Loading provider readiness...</p></div></section> : <>
       <section className="crm-integration-grid">
         {providers.map((provider) => {

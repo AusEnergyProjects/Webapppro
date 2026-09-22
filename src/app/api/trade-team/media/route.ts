@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../../db";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { nextJobRevision } from "@/lib/trade-team-sync-server";
 import { mobileErrorResponse, MOBILE_CLIENT_ID_PATTERN, requireRegisteredMobileDevice } from "@/lib/trade-mobile-server";
@@ -791,6 +791,8 @@ async function validateEvidenceContract(
 }
 
 function mediaError(error: unknown) {
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
   if (error instanceof EvidenceContractError) {
     return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   }
