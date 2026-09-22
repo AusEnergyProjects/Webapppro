@@ -1869,11 +1869,12 @@
 .trade-portal-shell .dashboard-workspace-nav button { align-items: center; border: 1px solid transparent; border-radius: 10px; color: var(--trade-rail-ink); display: grid; gap: 1px 8px; grid-template-columns: 26px minmax(0, 1fr); padding: 12px 11px; }
 .trade-portal-shell .dashboard-workspace-nav button:hover { background: var(--trade-rail-hover); }
 .trade-portal-shell .dashboard-workspace-nav button.active { background: var(--trade-rail-active); border-color: var(--trade-rail-line); color: #fff; }
-.trade-portal-shell .dashboard-workspace-nav button b { color: #fff; font-size: .52rem; grid-row: 1 / span 2; }
+.trade-portal-shell .dashboard-workspace-nav .tlink-navigation-icon { color: currentColor; display: block; grid-row: 1 / span 2; height: 20px; width: 20px; }
 .trade-portal-shell .dashboard-workspace-nav button span { font-size: .7rem; }
 .trade-portal-shell .dashboard-workspace-nav button small { color: var(--trade-rail-muted); font-size: .55rem; line-height: 1.25; }
 .trade-portal-shell .dashboard-workspace-shortcuts { display: grid; gap: 3px; margin: -2px 4px 5px 38px; }
-.trade-portal-shell .dashboard-workspace-shortcuts button { border-radius: 7px; display: block; padding: 7px 9px; text-align: left; }
+.trade-portal-shell .dashboard-workspace-shortcuts button { align-items: center; border-radius: 7px; display: flex; gap: 8px; padding: 7px 9px; text-align: left; }
+.trade-portal-shell .dashboard-workspace-shortcuts .tlink-navigation-icon { flex: 0 0 16px; height: 16px; width: 16px; }
 .trade-portal-shell .dashboard-workspace-shortcuts button span { color: var(--trade-rail-ink); font-size: .59rem; font-weight: 800; }
 .trade-portal-shell .dashboard-workspace-shortcuts button:hover span, .trade-portal-shell .dashboard-workspace-shortcuts button:focus-visible span { color: #fff; }
 .dashboard-rail-note { background: var(--trade-rail-hover); border: 1px solid var(--trade-rail-line); border-radius: 12px; margin-top: auto; padding: 13px; }

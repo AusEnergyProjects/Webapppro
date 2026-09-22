@@ -13,6 +13,7 @@ import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { isMfaRequiredResponse, MFA_SETUP_URL } from "@/lib/firebase-mfa";
 import type { FinanceView } from "./TradeFinanceWorkspace";
+import { TLinkNavigationIcon } from "./TLinkNavigationIcon";
 import { SiteFooter } from "./SiteFooter";
 import { TradeBusinessHub } from "./TradeBusinessHub";
 import {
@@ -2369,11 +2370,11 @@ export function DirectTradeDashboard() {
           {isSupplier ? (
             <>
               <nav className="dashboard-workspace-nav" aria-label="Wholesaler workspace">
-                <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><b aria-hidden="true">01</b><span>Products</span><small>Catalogue and stock</small></button>
-                <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => setWorkspace("work")}><b aria-hidden="true">02</b><span>Work</span><small>Requests and tasks</small></button>
-                <button type="button" className={workspace === "orders" ? "active" : ""} onClick={() => setWorkspace("orders")}><b aria-hidden="true">03</b><span>Orders</span><small>Supply and warranties</small></button>
-                <button type="button" className={workspace === "import" ? "active" : ""} onClick={() => setWorkspace("import")}><b aria-hidden="true">04</b><span>Import</span><small>Guided data migration</small></button>
-                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">05</b><span>Business</span><small>Profile and verification</small></button>
+                <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><TLinkNavigationIcon name="products" /><span>Products</span><small>Catalogue and stock</small></button>
+                <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => setWorkspace("work")}><TLinkNavigationIcon name="work" /><span>Work</span><small>Requests and tasks</small></button>
+                <button type="button" className={workspace === "orders" ? "active" : ""} onClick={() => setWorkspace("orders")}><TLinkNavigationIcon name="orders" /><span>Orders</span><small>Supply and warranties</small></button>
+                <button type="button" className={workspace === "import" ? "active" : ""} onClick={() => setWorkspace("import")}><TLinkNavigationIcon name="import" /><span>Import</span><small>Guided data migration</small></button>
+                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><TLinkNavigationIcon name="business" /><span>Business</span><small>Profile and verification</small></button>
                 <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>Wholesalers manage products and supply. Household leads and customer contact details never enter this workspace.</p></div>
               </nav>
               {workspace === "work" && <TradeBusinessHub
@@ -2419,30 +2420,30 @@ export function DirectTradeDashboard() {
                   setCommandTarget({ workspace: "work", kind: "crm-view", id: "today", query: "", nonce: Date.now() });
                   setActiveWorkView("today");
                   setWorkspace("work");
-                }}><b aria-hidden="true">01</b><span>Work</span><small>Today and next actions</small></button>
+                }}><TLinkNavigationIcon name="work" /><span>Work</span><small>Today and next actions</small></button>
                 <div className="dashboard-workspace-shortcuts" aria-label="Work shortcuts">
                   {([['jobs', 'Jobs'], ['customers', 'Customers']] as const).map(([view, label]) => <button type="button" key={view} onClick={() => {
                     setCommandTarget({ workspace: "work", kind: "crm-view", id: view, query: "", nonce: Date.now() });
                     setWorkspace("work");
-                  }}><span>{label}</span></button>)}
+                  }}><TLinkNavigationIcon name={view} /><span>{label}</span></button>)}
                 </div>
-                <button type="button" aria-current={workspace === "team" ? "page" : undefined} className={workspace === "team" ? "active" : ""} onClick={() => setWorkspace("team")}><b aria-hidden="true">02</b><span>Team</span><small>People, access and files</small></button>
-                <button type="button" aria-current={workspace === "training" ? "page" : undefined} className={workspace === "training" ? "active" : ""} onClick={() => setWorkspace("training")}><b aria-hidden="true">✓</b><span>To do &amp; training</span><small>Activity modules and Creditex onboarding</small></button>
+                <button type="button" aria-current={workspace === "team" ? "page" : undefined} className={workspace === "team" ? "active" : ""} onClick={() => setWorkspace("team")}><TLinkNavigationIcon name="team" /><span>Team</span><small>People, access and files</small></button>
+                <button type="button" aria-current={workspace === "training" ? "page" : undefined} className={workspace === "training" ? "active" : ""} onClick={() => setWorkspace("training")}><TLinkNavigationIcon name="training" /><span>To do &amp; training</span><small>Activity modules and Creditex onboarding</small></button>
                 <button type="button" aria-current={workspace === "work" && activeWorkView === "schedule" ? "page" : undefined} className={workspace === "work" && activeWorkView === "schedule" ? "active" : ""} onClick={() => {
                   setCommandTarget({ workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() });
                   setActiveWorkView("schedule");
                   setWorkspace("work");
-                }}><b aria-hidden="true">03</b><span>Schedule</span><small>Capacity and dispatch</small></button>
-                <button type="button" aria-current={workspace === "finance" ? "page" : undefined} className={workspace === "finance" ? "active" : ""} onClick={() => setWorkspace("finance")}><b aria-hidden="true">04</b><span>Finance</span><small>Quotes, invoices, pricing and reports</small></button>
-                <button type="button" aria-current={workspace === "follow-ups" ? "page" : undefined} className={workspace === "follow-ups" ? "active" : ""} onClick={() => setWorkspace("follow-ups")}><b aria-hidden="true">05</b><span>Follow-ups</span><small>Consent-aware service preparation</small></button>
+                }}><TLinkNavigationIcon name="schedule" /><span>Schedule</span><small>Capacity and dispatch</small></button>
+                <button type="button" aria-current={workspace === "finance" ? "page" : undefined} className={workspace === "finance" ? "active" : ""} onClick={() => setWorkspace("finance")}><TLinkNavigationIcon name="finance" /><span>Finance</span><small>Quotes, invoices, pricing and reports</small></button>
+                <button type="button" aria-current={workspace === "follow-ups" ? "page" : undefined} className={workspace === "follow-ups" ? "active" : ""} onClick={() => setWorkspace("follow-ups")}><TLinkNavigationIcon name="follow-ups" /><span>Follow-ups</span><small>Consent-aware service preparation</small></button>
                 <button type="button" aria-current={workspace === "work" && activeWorkView === "leads" ? "page" : undefined} className={workspace === "work" && activeWorkView === "leads" ? "active" : ""} onClick={() => {
                   setCommandTarget({ workspace: "work", kind: "crm-view", id: "leads", query: "", nonce: Date.now() });
                   setActiveWorkView("leads");
                   setWorkspace("work");
-                }}><b aria-hidden="true">06</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>Australian Energy Assessments protected opportunities</small></button>
-                <button type="button" aria-current={workspace === "products" ? "page" : undefined} className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><b aria-hidden="true">07</b><span>Products</span><small>Approved trade catalogue</small></button>
-                <button type="button" aria-current={workspace === "calculator" ? "page" : undefined} className={workspace === "calculator" ? "active" : ""} onClick={() => setWorkspace("calculator")}><b aria-hidden="true">08</b><span>Calculator</span><small>Rebates for quotes and invoices</small></button>
-                <button type="button" aria-current={workspace === "account" ? "page" : undefined} className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">09</b><span>Business</span><small>Settings and verification</small></button>
+                }}><TLinkNavigationIcon name="leads" /><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>Australian Energy Assessments protected opportunities</small></button>
+                <button type="button" aria-current={workspace === "products" ? "page" : undefined} className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><TLinkNavigationIcon name="products" /><span>Products</span><small>Approved trade catalogue</small></button>
+                <button type="button" aria-current={workspace === "calculator" ? "page" : undefined} className={workspace === "calculator" ? "active" : ""} onClick={() => setWorkspace("calculator")}><TLinkNavigationIcon name="calculator" /><span>Calculator</span><small>Rebates for quotes and invoices</small></button>
+                <button type="button" aria-current={workspace === "account" ? "page" : undefined} className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><TLinkNavigationIcon name="business" /><span>Business</span><small>Settings and verification</small></button>
                 <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>Australian Energy Assessments and TLink leads show only consent-released details. Trade-sourced contacts belong in Customers or Jobs.</p></div>
               </nav>
 
