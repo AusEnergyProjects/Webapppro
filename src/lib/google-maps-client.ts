@@ -89,6 +89,7 @@ export function loadGoogleMaps(apiKey: string): Promise<typeof google.maps> {
       google.maps.importLibrary("maps"),
       google.maps.importLibrary("marker"),
       google.maps.importLibrary("geocoding"),
+      google.maps.importLibrary("geometry"),
     ]);
     if (authFailed) throw new GoogleMapsClientError("auth");
     return google.maps;

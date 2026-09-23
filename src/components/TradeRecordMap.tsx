@@ -2,7 +2,7 @@
 
 /// <reference types="google.maps" />
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import {
   geocodeTradeMapAddress,
@@ -26,6 +26,7 @@ import {
   type TradeMapRecord,
 } from "@/lib/trade-record-map";
 import styles from "./TradeRecordMap.module.css";
+import { TradeMapTools } from "./TradeMapTools";
 
 type Props = {
   user: User;
@@ -101,6 +102,9 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
   const selectionRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef(new Map<string, MarkerEntry>());
   const interactedRef = useRef(false);
+  const exploringRef = useRef(false);
+  const [measuring, setMeasuring] = useState(false);
+  const exploreMap = useCallback(() => { exploringRef.current = true; interactedRef.current = true; }, []);
   const [runtime, setRuntime] = useState<Runtime | null>(null);
   const [mapState, setMapState] = useState<MapState>("loading");
   const [locations, setLocations] = useState<ReadonlyMap<string, TradeMapGeocodeResult>>(new Map());
@@ -155,6 +159,14 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
           center: { lat: -25.5, lng: 134 },
           zoom: 4,
           mapTypeControl: false,
+          scaleControl: true,
+          zoomControl: true,
+          cameraControl: false,
+          tilt: 0,
+          heading: 0,
+          tiltInteractionEnabled: false,
+          headingInteractionEnabled: false,
+          rotateControl: false,
           streetViewControl: false,
           clickableIcons: false,
           fullscreenControl: true,
@@ -185,7 +197,7 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
       setSelection(null);
       setLocations(new Map());
       setProgress(INITIAL_PROGRESS);
-      interactedRef.current = false;
+      interactedRef.current = exploringRef.current;
       if (!runtime || runtime.ownerUid !== user.uid || loading) return;
       const addresses = new Map<string, string>();
       for (const record of records) {
@@ -268,6 +280,7 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
         markers.set(pin.key, entry);
       }
       const category = tradeMapPinCategory(pin.records);
+      entry.marker.map = measuring ? null : runtime.map;
       // The local marker has a status label; geocoding still receives only the address.
       updateMarker(entry,
         `${TRADE_MAP_PIN_LABELS[category]}. ${pin.records.length} ${pin.records.length === 1 ? "record" : "records"} at ${pin.records[0].address}. Select to view details.`,
@@ -276,7 +289,7 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
         selectedPinKeys.has(pin.key),
       );
     }
-  }, [runtime, pins, selectedPinKeys, user.uid]);
+  }, [runtime, pins, selectedPinKeys, user.uid, measuring]);
 
   function selectRecord(record: TradeMapRecord) {
     interactedRef.current = true;
@@ -305,9 +318,7 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
   const allJobs = records.length > 0 && records.every((record) => record.kind === "job");
   const allCustomers = records.length > 0 && records.every((record) => record.kind === "customer");
   const recordLabel = allJobs ? "jobs" : allCustomers ? "customers" : "records";
-  const overlay = loading ? { title: "Loading records", detail: "Updating this page of the map." }
-    : !records.length ? { title: "No matching records", detail: "Adjust your filters to see customer or job locations." }
-      : mapState !== "ready" ? mapMessages[mapState] : null;
+  const overlay = mapState !== "ready" ? mapMessages[mapState] : null;
 
   return (
     <section className={styles.root} aria-label={allJobs ? "Job map" : allCustomers ? "Customer map" : "Record map"}>
@@ -316,11 +327,13 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
           <h3>{allJobs ? "Job locations" : allCustomers ? "Customer locations" : "Locations"}</h3>
           <p>Showing {records.length} of {total} matching {recordLabel}. Pins cover this page.</p>
         </div>
-        <button type="button" className={styles.button} disabled={!runtime || !pins.length || loading || mapState !== "ready"}
-          onClick={() => { if (runtime) { interactedRef.current = true; fitPositions(runtime, pins.map((pin) => pin.position)); } }}>
+        <button type="button" className={styles.button} disabled={!runtime || !pins.length || loading || measuring || mapState !== "ready"}
+          onClick={() => { if (runtime) { exploringRef.current = false; interactedRef.current = true; fitPositions(runtime, pins.map((pin) => pin.position)); } }}>
           Fit all pins
         </button>
       </header>
+
+      {runtime && mapState === "ready" && <TradeMapTools api={runtime.api} map={runtime.map} onExplore={exploreMap} onMeasuring={setMeasuring} />}
 
       <div className={styles.status} role="status" aria-live="polite">
         <span><i className={styles.dot} aria-hidden="true" />{locatedCount} mapped{pins.length ? ` at ${pins.length} ${pins.length === 1 ? "location" : "locations"}` : ""}</span>
@@ -347,7 +360,7 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
             <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 43S9 29 9 18a15 15 0 0 1 30 0c0 11-15 25-15 25Z" /><circle cx="24" cy="18" r="5" /></svg>
             <strong>{overlay.title}</strong>
             <p>{overlay.detail}</p>
-            {!loading && records.length > 0 && ["unavailable", "access", "unconfigured"].includes(mapState)
+            {["unavailable", "access", "unconfigured"].includes(mapState)
               ? <button type="button" className={styles.button} onClick={() => setSetupAttempt((attempt) => attempt + 1)}>Try again</button> : null}
           </div> : null}
         </div>
