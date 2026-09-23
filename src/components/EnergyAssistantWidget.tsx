@@ -2463,7 +2463,7 @@ export function EnergyAssistantWidget({
                     <h4 id="aea-lead-preferences">{leadMatchesTrades ? "Choose exactly what trades may see" : "Response preferences"}</h4>
                     {leadMatchesTrades ? (
                       <>
-                        <p>Email, postcode, selected services, your message and any quote answers are included. Your name, phone and property address are selected by default. Untick a box to keep that detail private from matched trades.</p>
+                        <p>Email, postcode, services, message and quote answers are included. Name, phone and address are ticked by default. Untick to keep them private from trades.</p>
                         <label className={styles.consent}><input type="checkbox" checked={lead.shareName} onChange={(event) => updateLead((current) => ({ ...current, shareName: event.target.checked }))} /><span>Share my first and last name. Untick to keep it private from matched trades.</span></label>
                         <label className={styles.consent}><input type="checkbox" checked={lead.sharePhone} onChange={(event) => updateLead((current) => ({ ...current, sharePhone: event.target.checked }))} /><span>Share my phone number. Untick to keep it private from matched trades.</span></label>
                         <label className={styles.consent}><input type="checkbox" checked={lead.shareAddress} onChange={(event) => updateLead((current) => ({ ...current, shareAddress: event.target.checked }))} /><span>Share my unit, street, suburb and state. Untick to keep them private from matched trades.</span></label>
