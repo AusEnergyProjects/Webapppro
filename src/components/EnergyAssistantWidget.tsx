@@ -2464,9 +2464,9 @@ export function EnergyAssistantWidget({
                     {leadMatchesTrades ? (
                       <>
                         <p>Email, postcode, services, message and quote answers are included. Name, phone and address are ticked by default. Untick to keep them private from trades.</p>
-                        <label className={styles.consent}><input type="checkbox" checked={lead.shareName} onChange={(event) => updateLead((current) => ({ ...current, shareName: event.target.checked }))} /><span>Share my first and last name. Untick to keep it private from matched trades.</span></label>
-                        <label className={styles.consent}><input type="checkbox" checked={lead.sharePhone} onChange={(event) => updateLead((current) => ({ ...current, sharePhone: event.target.checked }))} /><span>Share my phone number. Untick to keep it private from matched trades.</span></label>
-                        <label className={styles.consent}><input type="checkbox" checked={lead.shareAddress} onChange={(event) => updateLead((current) => ({ ...current, shareAddress: event.target.checked }))} /><span>Share my unit, street, suburb and state. Untick to keep them private from matched trades.</span></label>
+                        <label className={styles.consent}><input type="checkbox" checked={lead.shareName} onChange={(event) => updateLead((current) => ({ ...current, shareName: event.target.checked }))} /><span>Share my first and last name.</span></label>
+                        <label className={styles.consent}><input type="checkbox" checked={lead.sharePhone} onChange={(event) => updateLead((current) => ({ ...current, sharePhone: event.target.checked }))} /><span>Share my phone number.</span></label>
+                        <label className={styles.consent}><input type="checkbox" checked={lead.shareAddress} onChange={(event) => updateLead((current) => ({ ...current, shareAddress: event.target.checked }))} /><span>Share my unit, street, suburb and state.</span></label>
                         <label className={styles.consent}><input type="checkbox" checked={lead.shareKnownPlanFacts} onChange={(event) => updateLead((current) => ({ ...current, shareKnownPlanFacts: event.target.checked }))} /><span>Also include confirmed home-plan facts relevant to the selected services. My full plan stays private.</span></label>
                       </>
                     ) : (
