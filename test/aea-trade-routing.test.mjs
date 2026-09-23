@@ -103,7 +103,8 @@ test("actual notification enqueue and final claim deny legacy mixed scope and a 
     CREATE TABLE trade_accounts (firebase_uid text, email text, email_opportunities integer,
       consent_at text, availability_status text, partner_type text, approved integer);
     CREATE TABLE public_trade_lead_contact_releases (id text, opportunity_id text, status text,
-      notice_version text, consent_purpose text, postcode text, granted_at text, withdrawn_at text);
+      notice_version text, consent_purpose text, postcode text, granted_at text, withdrawn_at text,
+      disclosed_fields text, customer_email text, customer_first_name text, customer_last_name text, customer_phone text);
     INSERT INTO trade_opportunities VALUES ('opportunity-1','["assessment","solar"]','open','2099-09-14T00:00:00.000Z','2026-09-14T00:00:00.000Z','3000');
     INSERT INTO trade_opportunity_matches VALUES ('match-1','opportunity-1','trade-1','offered','2026-09-14T00:00:00.000Z');
     INSERT INTO trade_accounts VALUES ('trade-1','trade@example.test',1,'2026-09-14T00:00:00.000Z','open','installer',1);`);
@@ -126,7 +127,8 @@ test("actual notification enqueue and final claim deny legacy mixed scope and a 
   db.exec("DELETE FROM trade_training_completions; DELETE FROM trade_training_attempts"); // Lead receipt does not require completed training.
   const claim = db.prepare(sql);
   const bindings = [1, "email-hash", "idempotency", "Bounded subject", "Bounded body", now, now,
-    row.id, row.status, row.attempts, "email-hash", now, now, "trade@example.test"];
+    row.id, row.status, row.attempts, "email-hash", now, now, "trade@example.test", '["solar"]',
+    "", "", "", "", 0];
   let providerCalls = 0;
   for (const id of AEA_RESERVED_SERVICE_IDS) {
     db.prepare("UPDATE trade_opportunities SET service_categories = ?").run(JSON.stringify(["solar", id]));

@@ -110,7 +110,7 @@ test("the enquiry captures the private address and supports one, several or all 
   assert.match(enquiryForm, /showLocalityStates \? ` \(\$\{locality\.state\}\)`/);
   assert.match(enquiryForm, /Unit number/);
   assert.match(enquiryForm, /<AustralianAddressLookup/);
-  assert.match(enquiryForm, /Street address, private unless you share it below/);
+  assert.match(enquiryForm, /Street address, required/);
   assert.match(enquiryForm, /autoComplete="address-line2" maxLength=\{40\}/);
   assert.match(addressLookup, /autoComplete="address-line1"/);
   assert.match(addressLookup, /maxLength = 140/);
@@ -140,16 +140,29 @@ test("the enquiry captures the private address and supports one, several or all 
   assert.match(enquiryStyles, /\.readOnlyControl \{/);
 });
 
-test("the enquiry keeps admin contact data private unless each field is selected for sharing", () => {
+test("the enquiry shares the selected contact fields and preserves every user opt-out", () => {
   assert.match(enquiryForm, /name: shareName/);
   assert.match(enquiryForm, /phone: sharePhone/);
   assert.match(enquiryForm, /address: shareAddress/);
-  assert.match(enquiryForm, /Also share my first and last name/);
-  assert.match(enquiryForm, /Also share my phone number/);
-  assert.match(enquiryForm, /Also share my full property address/);
+  assert.match(enquiryForm, /Share my first and last name/);
+  assert.match(enquiryForm, /Share my phone number/);
+  assert.match(enquiryForm, /Share my full property address/);
   assert.match(enquiryForm, /email: true/);
   assert.match(enquiryForm, /postcode: true/);
   assert.doesNotMatch(enquiryForm, /shareMessage|Also share my message/);
+});
+
+test("new and reset plan enquiries select contact sharing without pre-accepting consent", () => {
+  const reset = enquiryForm.slice(enquiryForm.indexOf("function reset()"), enquiryForm.indexOf("function changeInterests"));
+  for (const field of ["Name", "Phone", "Address"]) {
+    assert.match(enquiryForm, new RegExp(`const \\[share${field}, setShare${field}\\] = useState\\(true\\)`));
+    assert.match(reset, new RegExp(`setShare${field}\\(true\\)`));
+    assert.match(enquiryForm, new RegExp(`checked=\\{share${field}\\} onChange=\\{\\(event\\) => setShare${field}\\(event\\.target\\.checked\\)\\}`));
+    assert.doesNotMatch(enquiryForm.replace(reset, ""), new RegExp(`setShare${field}\\((?:true|false)\\)`));
+  }
+  assert.match(enquiryForm, /Untick any box to keep that detail private from matching trades/);
+  assert.match(enquiryForm, /const \[consent, setConsent\] = useState\(false\)/);
+  assert.match(reset, /setConsent\(false\)/);
 });
 
 test("customer consent describes approved matched trades without internal product names", () => {

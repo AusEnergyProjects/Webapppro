@@ -40,22 +40,37 @@ test("a provider-selected title-case suburb adopts the postcode directory casing
 });
 
 test("quick request makes required and optional sharing explicit", () => {
-  assert.match(dialog, /Australian Energy Assessments needs these details to manage the request/);
+  assert.match(dialog, /Your name, email and phone are required/);
   assert.match(dialog, /Your selected services, full property address/);
-  assert.match(dialog, /Your email, name and phone are included only if you tick them/);
-  assert.match(dialog, /Share my email/);
+  assert.match(dialog, /Your email is always included\. Your name and phone are included unless you untick their boxes/);
+  assert.match(dialog, /Matching businesses always receive your email so they can respond/);
+  assert.match(dialog, /tradeSharing: \{\s*email: true/);
+  assert.doesNotMatch(dialog, /Share my email|shareEmail|setShareEmail/);
   assert.match(dialog, /Share my name/);
   assert.match(dialog, /Share my phone number/);
   assert.match(dialog, /<span>First name \*<\/span>[\s\S]*?required/);
   assert.match(dialog, /<span>Last name \*<\/span>[\s\S]*?required/);
   assert.match(dialog, /<span>Phone \*<\/span>[\s\S]*?required/);
-  assert.match(dialog, /const \[shareEmail, setShareEmail\] = useState\(false\)/);
+  assert.match(dialog, /<span>Email \*<\/span>[\s\S]*?required/);
   assert.match(dialog, /QUICK_UPGRADE_CONSENT_PURPOSE/);
   assert.match(dialog, /consentAccepted/);
   assert.match(dialog, /type="checkbox"/);
   assert.doesNotMatch(dialog, /defaultChecked/);
   assert.doesNotMatch(dialog, /matchedBusinessCount|matching \$\{matchedCount\}/);
   assert.match(dialog, /Australian Energy Assessments can help if no suitable business is available/);
+});
+
+test("new quick requests default to name and phone sharing while preserving explicit opt-outs", () => {
+  assert.match(component, /\{open \? <QuickUpgradeEnquiryDialog[\s\S]*onClose=\{\(\) => setOpen\(false\)\} \/> : null\}/);
+  for (const field of ["Name", "Phone"]) {
+    assert.match(dialog, new RegExp(`const \\[share${field}, setShare${field}\\] = useState\\(true\\)`));
+    assert.match(dialog, new RegExp(`checked=\\{share${field}\\} onChange=\\{\\(event\\) => setShare${field}\\(event\\.target\\.checked\\)\\}`));
+    assert.doesNotMatch(dialog, new RegExp(`setShare${field}\\((?:true|false)\\)`));
+  }
+  assert.match(dialog, /name: !aeaOnly && shareName/);
+  assert.match(dialog, /phone: !aeaOnly && sharePhone/);
+  assert.match(dialog, /Your name and phone are selected by default\. Untick either box/);
+  assert.match(dialog, /const \[consentAccepted, setConsentAccepted\] = useState\(false\)/);
 });
 
 test("receipt confirms the saved request without promising responses or email delivery", () => {
@@ -83,7 +98,7 @@ test("compact sharing summary retains address, notes, chosen contact details and
   assert.match(dialog, /aeaOnly \? <div className=\{styles\.sharingSummary\}/);
   assert.ok(summary, "sharing summary must be present");
   assert.match(summary, /<ul>[\s\S]*<li><strong>Request:<\/strong> Your selected services, full property address and your notes\.<\/li>/);
-  assert.match(summary, /<li><strong>Contact:<\/strong> Your email, name and phone are included only if you tick them\.<\/li>/);
+  assert.match(summary, /<li><strong>Contact:<\/strong> Your email is always included\. Your name and phone are included unless you untick their boxes\.<\/li>/);
   assert.match(summary, /approved TLink businesses that match your services and area/);
   assert.match(summary, /Australian Energy Assessments keeps all contact details to manage your request and help if needed/);
   assert.match(summary, /do not sell leads or let businesses pay for placement/);

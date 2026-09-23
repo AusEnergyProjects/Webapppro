@@ -15,6 +15,8 @@ import {
 import {
   PREVIOUS_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   PREVIOUS_QUICK_UPGRADE_CONSENT_PURPOSE,
+  AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
   LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
@@ -138,9 +140,9 @@ function releaseRow(overrides = {}) {
 
 test("trade lead reads split base rows from any-release context and validate before serialization", () => {
   const consentGuard = publicPlanContactReleaseConsentSql("public_contact");
-  // Nine exact policy pairs retain the single shallow CASE used by the previous seven.
-  assert.ok(consentGuard.length < 2_000, "lead read consent guard must stay shallow for D1");
-  assert.equal((consentGuard.match(/\bWHEN\b/g) || []).length, 9);
+  // Ten exact policy pairs retain one shallow CASE expression for D1.
+  assert.ok(consentGuard.length < 2_200, "lead read consent guard must stay shallow for D1");
+  assert.equal((consentGuard.match(/\bWHEN\b/g) || []).length, 10);
   assert.equal((consentGuard.match(/\bCASE\b/g) || []).length, 1, "Additional exact notice versions must not add nested CASE expressions");
   assert.equal((consentGuard.match(/\bELSE\b/g) || []).length, 1);
 
@@ -152,6 +154,7 @@ test("trade lead reads split base rows from any-release context and validate bef
   insert.run("v7", V7_NOTICE, V7_PURPOSE);
   insert.run("v8", V8_NOTICE, V8_PURPOSE);
   insert.run("quick-previous", PREVIOUS_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, PREVIOUS_QUICK_UPGRADE_CONSENT_PURPOSE);
+  insert.run("quick-aea-v3", AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE);
   insert.run(
     "current",
     PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
@@ -178,7 +181,7 @@ test("trade lead reads split base rows from any-release context and validate bef
     database.prepare(`SELECT id FROM public_contact WHERE ${consentGuard} ORDER BY id`)
       .all()
       .map((row) => row.id),
-    ["assistant", "current", "quick", "quick-legacy", "quick-previous", "v4", "v6", "v7", "v8"],
+    ["assistant", "current", "quick", "quick-aea-v3", "quick-legacy", "quick-previous", "v4", "v6", "v7", "v8"],
   );
   database.close();
 

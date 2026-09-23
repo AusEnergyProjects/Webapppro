@@ -437,6 +437,24 @@ test("invalid residential postcodes, state mismatches, non-canonical services an
   assert.equal(database.prepare("SELECT COUNT(*) total FROM energy_assistant_leads").get().total, 0);
 });
 
+test("every follow-up requires name, email and phone regardless of preferred contact method", async (t) => {
+  const { database, d1 } = fixture();
+  t.after(() => database.close());
+  for (const field of ["name", "email", "phone"]) {
+    for (const contactPreference of ["email", "phone", "either"]) {
+      const input = payload({ [field]: " " });
+      input.quoteBrief.contactPreference = contactPreference;
+      await assert.rejects(
+        createEnergyAssistantLead(input, dependencies(d1)),
+        (error) => error instanceof EnergyAssistantLeadError && error.code === "INVALID_LEAD",
+        `${field} is mandatory even when ${contactPreference} is preferred`,
+      );
+    }
+  }
+  assert.equal(database.prepare("SELECT COUNT(*) total FROM energy_assistant_leads").get().total, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) total FROM energy_assistant_lead_events").get().total, 0);
+});
+
 test("trade sharing remains AEA-only until the hot-water brief captures every required fact or explicit unknown", async (t) => {
   const { database, d1 } = fixture();
   t.after(() => database.close());

@@ -6,6 +6,8 @@ import {
 } from "./customer-projects.mjs";
 import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
 import {
+  AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
   LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
   PREVIOUS_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
@@ -67,6 +69,18 @@ const publicPlanContactReleasePolicies = Object.freeze([
   Object.freeze({
     noticeVersion: QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
     purpose: QUICK_UPGRADE_CONSENT_PURPOSE,
+    requiredDisclosedFields: Object.freeze([...quickUpgradeContactReleaseRequiredFields, "customer_email"]),
+    allowedDisclosedFields: Object.freeze([
+      ...quickUpgradeContactReleaseRequiredFields,
+      "customer_email",
+      "customer_name",
+      "customer_phone",
+      "customer_message",
+    ]),
+  }),
+  Object.freeze({
+    noticeVersion: AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+    purpose: AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
     requiredDisclosedFields: quickUpgradeContactReleaseRequiredFields,
     allowedDisclosedFields: Object.freeze([
       ...quickUpgradeContactReleaseRequiredFields,

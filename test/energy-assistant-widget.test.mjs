@@ -28,6 +28,25 @@ const gettingStarted = read("../src/components/GettingStarted.tsx");
 const wattzunRoute = read("../src/app/wattzun/page.tsx");
 const legacySurgeRoute = read("../src/app/surge/page.tsx");
 const surgeRouteStyles = read("../src/app/surge/surge-page.module.css");
+
+test("Australian Energy Assessments follow-up requires both email and phone", () => {
+  assert.doesNotMatch(widget, /Email or phone required|Add an email address or phone number/);
+  assert.match(widget, /if \(!lead\.email\.trim\(\) \|\| !lead\.phone\.trim\(\)\)/);
+  assert.match(widget, /Email <small>Required<\/small><\/span><input required type="email"/);
+  assert.match(widget, /Phone <small>Required<\/small><\/span><input required type="tel"/);
+});
+
+test("contact-sharing choices start selected while enquiry and marketing consent remain opt-in", () => {
+  const defaults = widget.slice(widget.indexOf("shareName: true,"), widget.indexOf("shareName: true,") + 1000);
+  assert.match(defaults, /sharePhone: true/);
+  assert.match(defaults, /shareAddress: true/);
+  assert.match(widget, /serviceConsent: false/);
+  assert.match(widget, /marketingConsent: false/);
+  assert.match(widget, /shareName: event\.target\.checked/);
+  assert.match(widget, /sharePhone: event\.target\.checked/);
+  const consentReset = widget.slice(widget.indexOf("const RESET_LEAD_CONSENT"), widget.indexOf("const EMPTY_LEAD"));
+  assert.doesNotMatch(consentReset, /shareName|sharePhone|shareAddress/);
+});
 const surgeOpenButton = read("../src/components/SurgeOpenButton.tsx");
 const surgeNavigation = read("../src/lib/surge-page-navigation.ts");
 const homeContextTipsSource = read("../src/lib/surge-home-context-tips.ts");
@@ -959,7 +978,7 @@ test("the matched-trade brief is progressive, phone-safe and privacy explicit", 
   }
   for (const field of ["shareName", "sharePhone", "shareAddress", "shareKnownPlanFacts"]) {
     assert.match(widget, new RegExp(`checked=\\{lead\\.${field}\\}`));
-    assert.match(widget, new RegExp(`${field}: false`));
+    assert.match(widget, new RegExp(`${field}: ${field === "shareKnownPlanFacts" ? "false" : "true"}`));
   }
   assert.match(widget, /Details selected for matched trades/);
   assert.match(widget, /Private plan copy, full saved plan and chat: private/);

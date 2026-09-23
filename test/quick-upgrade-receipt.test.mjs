@@ -5,7 +5,12 @@ import { DatabaseSync } from "node:sqlite";
 import { QUICK_UPGRADE_RECEIPT_PREFIX, quickUpgradeReceiptDraft } from "../src/lib/quick-upgrade-receipt.mjs";
 import { enqueueQuickUpgradeReceipt, dispatchQuickUpgradeReceipt } from "../src/lib/quick-upgrade-receipt-delivery.mjs";
 import { cleanupPublicPlanDeliveryObjectsWrite } from "../src/lib/public-plan-delivery-cleanup.mjs";
-import { QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE } from "../src/lib/quick-upgrade-enquiry.mjs";
+import {
+  AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
+  QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  QUICK_UPGRADE_CONSENT_PURPOSE,
+} from "../src/lib/quick-upgrade-enquiry.mjs";
 
 const reference = "AEA-20260911-12345678ABCD4ABC";
 const input = { reference, opportunityId: "opportunity-1", fingerprint: "a".repeat(64), recipient: "attacker@example.test" };
@@ -104,6 +109,29 @@ test("a receipt cannot be queued without durable intake and required no-match re
   assert.equal(f.objects.size, 0);
   assert.equal(f.delivery(), undefined);
   await assert.rejects(enqueueQuickUpgradeReceipt({ ...input, opportunityId: "not-saved" }, f), /INTAKE_INCOMPLETE/);
+});
+
+test("the v4 contact notice preserves customer receipt delivery for exact historical v3 consent", async (t) => {
+  const f = fixture(t);
+  f.sqlite.prepare("UPDATE public_trade_lead_contact_releases SET notice_version = ?, consent_purpose = ?")
+    .run(AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE);
+  await enqueueQuickUpgradeReceipt(input, f);
+  const calls = [];
+  await dispatchQuickUpgradeReceipt(f.row(), { ...f, fetchImpl: async (_url, options) => {
+    calls.push(JSON.parse(options.body));
+    return Response.json({ id: "provider-historical-receipt" });
+  } });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].to, ["jamie@example.test"]);
+  assert.equal(f.delivery().status, "sent");
+});
+
+test("receipt delivery rejects mismatched current and historical consent pairs", async (t) => {
+  const f = fixture(t);
+  f.sqlite.prepare("UPDATE public_trade_lead_contact_releases SET notice_version = ?")
+    .run(AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION);
+  await assert.rejects(enqueueQuickUpgradeReceipt(input, f), /INTAKE_INCOMPLETE/);
+  assert.equal(f.objects.size, 0);
 });
 
 test("AEA-only and mixed drafts enqueue and send one private customer receipt", async (t) => {

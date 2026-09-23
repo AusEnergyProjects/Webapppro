@@ -326,8 +326,8 @@ test("the public component sends the visible contact fields and bounded plan sel
   assert.match(component, /approved trades that service my area and offer at least one selected service/);
   assert.doesNotMatch(component, /TLink|Creditex/);
   assert.match(component, /full plan and PDF stay private/);
-  assert.match(component, /Also share my first and last name/);
-  assert.match(component, /Also share my phone number/);
+  assert.match(component, /Share my first and last name/);
+  assert.match(component, /Share my phone number/);
   assert.doesNotMatch(component, /shareMessage|Also share my optional message/);
   assert.match(component, /email, postcode, selected services, message and any optional quote details or photos are included/i);
   assert.match(component, /message and any quote details or photos I chose to add/i);

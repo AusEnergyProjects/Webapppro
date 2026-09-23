@@ -327,6 +327,7 @@ function publicContactRelease(payload: DirectTradeLead) {
       || !customerFirstName
       || !customerLastName
       || !customerEmail
+      || !customerPhone
       || !customerSuburb
       || !customerAddressState
       || customerAddressState !== canonicalAustralianState(payload.state)
@@ -382,7 +383,7 @@ function publicContactRelease(payload: DirectTradeLead) {
       || !customerSuburb
       || !customerAddressState
       || customerAddressState !== canonicalAustralianState(payload.state)
-      || typeof tradeSharing?.email !== "boolean"
+      || tradeSharing?.email !== true
       || tradeSharing?.postcode !== true
       || tradeSharing?.address !== true
       || typeof tradeSharing?.name !== "boolean"

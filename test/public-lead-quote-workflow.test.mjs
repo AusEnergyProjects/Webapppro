@@ -15,6 +15,8 @@ import {
   PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
 } from "../src/lib/public-plan-quote-preparation.mjs";
 import {
+  AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   QUICK_UPGRADE_CONSENT_PURPOSE,
 } from "../src/lib/quick-upgrade-enquiry.mjs";
@@ -175,8 +177,9 @@ test("workflow snapshot keeps undisclosed private fields out and filters quote a
   })?.title, "Customer enquiry");
 });
 
-test("quick request quote workflow keeps collected contact details private unless the customer shares them", () => {
+test("quick request quote workflow requires email and keeps optional name and phone redacted", () => {
   const row = publicLeadRow([
+    "customer_email",
     "postcode",
     "service_categories",
     "customer_address",
@@ -188,10 +191,11 @@ test("quick request quote workflow keeps collected contact details private unles
   });
   const snapshot = publicLeadQuoteWorkflowSnapshot(row);
   assert.ok(snapshot);
-  assert.equal(snapshot.contact.email, "");
+  assert.equal(snapshot.contact.email, "customer@example.com");
   assert.equal(snapshot.contact.firstName, "");
   assert.equal(snapshot.contact.lastName, "");
   assert.equal(snapshot.contact.phone, "");
+  assert.deepEqual(snapshot.contact.redactedFields, ["name", "phone"]);
   assert.equal(snapshot.contact.addressLine1, "1 Secret Street");
   assert.equal(snapshot.contact.addressLine2, "Unit 9");
 
@@ -209,10 +213,20 @@ test("quick request quote workflow keeps collected contact details private unles
   }, {
     firstName: "",
     lastName: "",
-    email: "",
+    email: "customer@example.com",
     phone: "",
   });
   assert.equal(disclosure.customer.addressLine1, "1 Secret Street");
+  assert.equal(Object.hasOwn(disclosure.source, "contactAccessBasis"), false);
+});
+
+test("legacy quick requests cannot start a quote without permission to share email", () => {
+  const row = publicLeadRow(["postcode", "service_categories", "customer_address"], {
+    public_contact_notice_version: AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+    public_contact_consent_purpose: AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
+  });
+  assert.equal(publicLeadQuoteWorkflowSnapshot(row), null);
+  assert.equal(publicLeadQuoteAccessSnapshot(row, "2026-09-23T01:00:00.000Z"), null);
 });
 
 test("released lead quote access fails closed after withdrawal, expiry, closure or invalid consent", () => {

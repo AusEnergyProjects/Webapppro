@@ -83,9 +83,8 @@ export function QuickUpgradeEnquiryDialog({
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
-  const [shareEmail, setShareEmail] = useState(false);
-  const [shareName, setShareName] = useState(false);
-  const [sharePhone, setSharePhone] = useState(false);
+  const [shareName, setShareName] = useState(true);
+  const [sharePhone, setSharePhone] = useState(true);
   const [notes, setNotes] = useState("");
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [website, setWebsite] = useState("");
@@ -273,7 +272,7 @@ export function QuickUpgradeEnquiryDialog({
     const core = JSON.stringify({
       services: [...services].sort(), postcode, locality, streetAddress: streetAddress.trim(),
       unitNumber: unitNumber.trim(), email: email.trim().toLowerCase(), firstName: firstName.trim(),
-      lastName: lastName.trim(), phone: phone.trim(), shareEmail, shareName, sharePhone, notes: notes.trim(), consentAccepted,
+      lastName: lastName.trim(), phone: phone.trim(), shareName, sharePhone, notes: notes.trim(), consentAccepted,
     });
     if (!submissionId.current || (lastAttemptCore.current && lastAttemptCore.current !== core)) {
       submissionId.current = createSubmissionId();
@@ -310,7 +309,7 @@ export function QuickUpgradeEnquiryDialog({
           projectCategories: services,
           projectNotes: notes.trim(),
           tradeSharing: {
-            email: !aeaOnly && shareEmail,
+            email: true,
             postcode: true,
             address: true,
             name: !aeaOnly && shareName,
@@ -428,25 +427,24 @@ export function QuickUpgradeEnquiryDialog({
                   <AustralianAddressLookup className={styles.street} label="Street address *" value={streetAddress} onChange={setStreetAddress} onSelect={selectAddress} required />
                 </div>
 
-                <div className={styles.stepHeading}><h3>Your contact details</h3><p>{aeaOnly ? "Australian Energy Assessments will use these details to contact you about your services." : "Australian Energy Assessments needs these details to manage the request and help if something gets stuck. You choose which contact details matching businesses can see."}</p></div>
+                <div className={styles.stepHeading}><h3>Your contact details</h3><p>{aeaOnly ? "Your name, email and phone are required so Australian Energy Assessments can contact you about your services." : "Your name, email and phone are required so Australian Energy Assessments can manage your request. Matching businesses always receive your email so they can respond. You choose whether to share your name and phone."}</p></div>
                 <div className={styles.contactGrid}>
-                  <label className={styles.full}><span>Email *</span><input type="email" value={email} onChange={(event) => { setEmail(event.target.value); if (!event.target.value.trim()) setShareEmail(false); }} autoComplete="email" maxLength={254} required /></label>
-                  <label><span>First name *</span><input value={firstName} onChange={(event) => { setFirstName(event.target.value); if (!event.target.value.trim() || !lastName.trim()) setShareName(false); }} autoComplete="given-name" maxLength={60} required /></label>
-                  <label><span>Last name *</span><input value={lastName} onChange={(event) => { setLastName(event.target.value); if (!event.target.value.trim() || !firstName.trim()) setShareName(false); }} autoComplete="family-name" maxLength={60} required /></label>
-                  <label className={styles.full}><span>Phone *</span><input type="tel" value={phone} onChange={(event) => { setPhone(event.target.value); if (!event.target.value.trim()) setSharePhone(false); }} autoComplete="tel" maxLength={40} required /></label>
+                  <label className={styles.full}><span>Email *</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" maxLength={254} required /></label>
+                  <label><span>First name *</span><input value={firstName} onChange={(event) => setFirstName(event.target.value)} autoComplete="given-name" maxLength={60} required /></label>
+                  <label><span>Last name *</span><input value={lastName} onChange={(event) => setLastName(event.target.value)} autoComplete="family-name" maxLength={60} required /></label>
+                  <label className={styles.full}><span>Phone *</span><input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" maxLength={40} required /></label>
                 </div>
                 {!aeaOnly ? <div className={styles.optionalSharing}>
-                  <span>Choose contact details to share with matching businesses</span>
-                  <label><input type="checkbox" checked={shareEmail} disabled={!email.trim()} onChange={(event) => setShareEmail(event.target.checked)} /> Share my email</label>
-                  <label><input type="checkbox" checked={shareName} disabled={!firstName.trim() || !lastName.trim()} onChange={(event) => setShareName(event.target.checked)} /> Share my name</label>
-                  <label><input type="checkbox" checked={sharePhone} disabled={!phone.trim()} onChange={(event) => setSharePhone(event.target.checked)} /> Share my phone number</label>
+                  <span>Your name and phone are selected by default. Untick either box to keep that detail private from matching businesses.</span>
+                  <label><input type="checkbox" checked={shareName} onChange={(event) => setShareName(event.target.checked)} /> Share my name</label>
+                  <label><input type="checkbox" checked={sharePhone} onChange={(event) => setSharePhone(event.target.checked)} /> Share my phone number</label>
                 </div> : null}
                 <label className={styles.notes}><span>Anything useful to add?</span><textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} maxLength={500} placeholder="For example: what you want to improve, when you hope to start, or what you are unsure about." /><small>Do not include account numbers, meter numbers, access codes or payment details.</small></label>
                 {aeaOnly ? <div className={styles.sharingSummary}><h4>Sent directly to Australian Energy Assessments</h4><p>Australian Energy Assessments will use your property and contact details to arrange your assessment or safety service. This enquiry, including any additional services, is not distributed to other TLink businesses.</p></div> : <div className={styles.sharingSummary}>
                   <h4>What matching businesses will receive</h4>
                   <ul>
                     <li><strong>Request:</strong> Your selected services, full property address and your notes.</li>
-                    <li><strong>Contact:</strong> Your email, name and phone are included only if you tick them.</li>
+                    <li><strong>Contact:</strong> Your email is always included. Your name and phone are included unless you untick their boxes.</li>
                   </ul>
                   <p>Shared with approved TLink businesses that match your services and area.</p>
                   <p>Australian Energy Assessments keeps all contact details to manage your request and help if needed. We do not sell leads or let businesses pay for placement.</p>

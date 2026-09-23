@@ -144,6 +144,7 @@ type DashboardOpportunity = {
     grantedAt: string;
     message: string;
     releaseScope: "shortlisted_installer" | "all_qualified_trades" | "aea_only";
+    redactedFields?: Array<"name" | "phone" | "email">;
   };
   evidence: Array<{
     id: string;
@@ -309,6 +310,14 @@ function shouldClearOpportunityDeepLink(
   nextUid = "",
 ) {
   return Boolean(previousUid) && previousUid !== nextUid;
+}
+
+function contactFieldIsRedacted(
+  contact: DashboardOpportunity["customerContact"],
+  field: "name" | "phone" | "email",
+) {
+  if (!contact || !contact[field].trim()) return true;
+  return Boolean(contact.redactedFields?.includes(field));
 }
 
 function opportunityBroadLocation(opportunity: DashboardOpportunity) {
@@ -2538,7 +2547,7 @@ export function DirectTradeDashboard() {
                       Protected leads matched to this business
                     </h2>
                     <p>
-                      Public enquiries show each business only the details the household agreed to share. Quick upgrade requests include the postcode, selected services, any written message and full property address. Email, name and phone appear only when selected. Customer account project contact and street details stay protected until the customer chooses this business.
+                      Public enquiries include the customer&apos;s email and the details they agreed to share. Name and phone are marked Redacted when not released. Customer account project contact and street details stay protected until the customer chooses this business.
                     </p>
                     {hasLeadAccess && <div className="dashboard-opportunity-actions">
                       <button type="button" disabled={opportunitiesLoading} onClick={() => void refreshOpportunities()}>{opportunitiesLoading ? "Refreshing leads..." : "Refresh leads"}</button>
@@ -2619,7 +2628,9 @@ export function DirectTradeDashboard() {
                       <nav className="dashboard-lead-list" aria-label="Available leads">
                         {visibleLeadOpportunities.map((opportunity) => {
                           const selected = selectedLeadOpportunity?.matchId === opportunity.matchId;
-                          const customerName = opportunity.customerContact?.name.trim()
+                          const customerName = (!contactFieldIsRedacted(opportunity.customerContact, "name")
+                            ? opportunity.customerContact?.name.trim()
+                            : "")
                             || opportunity.title
                             || "Customer enquiry";
                           return <button
@@ -2641,8 +2652,9 @@ export function DirectTradeDashboard() {
                       {visibleLeadOpportunities.map((opportunity) => {
                         const isExpanded = selectedLeadOpportunity?.matchId === opportunity.matchId;
                         const releasedCustomerContact = opportunity.customerContact;
-                        const releasedCustomerName =
-                          releasedCustomerContact?.name.trim() || "";
+                        const releasedCustomerName = contactFieldIsRedacted(releasedCustomerContact, "name")
+                          ? ""
+                          : releasedCustomerContact?.name.trim() || "";
                         const customerDisplayName = releasedCustomerName
                           || opportunity.title
                           || "Customer enquiry";
@@ -2698,7 +2710,6 @@ export function DirectTradeDashboard() {
                               </button>}
                             </div>
                           </header>
-                          {releasedCustomerContact && (
                             <section
                               id={customerIdentityId}
                               className="dashboard-connected-customer-identity"
@@ -2712,11 +2723,11 @@ export function DirectTradeDashboard() {
                               {isExpanded && (
                                 <>
                                   <div className="dashboard-connected-customer-intro">
-                                    <span>Customer-authorised contact</span>
+                                    <span>{releasedCustomerContact ? "Customer-authorised contact" : "Contact details redacted"}</span>
                                     <h4 id={customerIdentityHeadingId}>
-                                      {customerDisplayName}
+                                      Contact details
                                     </h4>
-                                    <p>
+                                    {releasedCustomerContact && <p>
                                       {releasedCustomerContact.releaseScope === "aea_only"
                                         ? "The customer authorised Australian Energy Assessments to handle this enquiry on "
                                         : releasedCustomerContact.releaseScope === "all_qualified_trades"
@@ -2726,29 +2737,37 @@ export function DirectTradeDashboard() {
                                         releasedCustomerContact.grantedAt,
                                       ).toLocaleString("en-AU")}
                                       .
-                                    </p>
+                                    </p>}
+                                    {(["name", "phone"] as const).some((field) => contactFieldIsRedacted(releasedCustomerContact, field)) && <p>
+                                      <strong>Redacted:</strong> these details have not been released to your business.
+                                      {!releasedCustomerContact && " No active contact release is available. The customer needs to release their details before you can call or email them."}
+                                    </p>}
                                   </div>
                                   <dl
                                     className="dashboard-connected-customer-contact-grid"
                                     aria-label={`Contact details for ${customerDisplayName}`}
                                   >
-                                    {releasedCustomerContact.phone && <div>
+                                    <div>
+                                      <dt>Name</dt>
+                                      <dd>{contactFieldIsRedacted(releasedCustomerContact, "name") ? "Redacted" : releasedCustomerName}</dd>
+                                    </div>
+                                    <div>
                                       <dt>Phone</dt>
                                       <dd>
-                                        <a href={`tel:${releasedCustomerContact.phone}`}>
+                                        {releasedCustomerContact && !contactFieldIsRedacted(releasedCustomerContact, "phone") ? <a href={`tel:${releasedCustomerContact.phone}`}>
                                           {releasedCustomerContact.phone}
-                                        </a>
+                                        </a> : "Redacted"}
                                       </dd>
-                                    </div>}
-                                    {releasedCustomerContact.email && <div>
+                                    </div>
+                                    <div>
                                       <dt>Email</dt>
                                       <dd>
-                                        <a href={`mailto:${releasedCustomerContact.email}`}>
+                                        {releasedCustomerContact && !contactFieldIsRedacted(releasedCustomerContact, "email") ? <a href={`mailto:${releasedCustomerContact.email}`}>
                                           {releasedCustomerContact.email}
-                                        </a>
+                                        </a> : "Awaiting customer release"}
                                       </dd>
-                                    </div>}
-                                    <div>
+                                    </div>
+                                    {releasedCustomerContact && <div className="dashboard-connected-customer-context">
                                       <dt>{releasedCustomerContact.releaseScope === "all_qualified_trades" ? "Service area" : "Service address"}</dt>
                                       <dd>
                                         {[
@@ -2759,10 +2778,10 @@ export function DirectTradeDashboard() {
                                           releasedCustomerContact.postcode,
                                         ]
                                           .filter(Boolean)
-                                          .join(", ")}
+                                          .join(", ") || "Address unavailable"}
                                       </dd>
-                                    </div>
-                                    {releasedCustomerContact.message && <div>
+                                    </div>}
+                                    {releasedCustomerContact?.message && <div className="dashboard-connected-customer-context">
                                       <dt>Customer message</dt>
                                       <dd>{releasedCustomerContact.message}</dd>
                                     </div>}
@@ -2770,7 +2789,6 @@ export function DirectTradeDashboard() {
                                 </>
                               )}
                             </section>
-                          )}
                           <div className="dashboard-opportunity-compact-summary">
                             <p>
                               {opportunity.enquiryPack?.summary ||

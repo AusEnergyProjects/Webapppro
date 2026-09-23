@@ -90,6 +90,8 @@ export function publicLeadAcceptedDisclosure(snapshot, row, acceptedAt, photos =
       sourceReference: snapshot.reference,
       releaseId: String(row?.public_contact_release_id || ""),
       disclosedFields: disclosedFields.map(String).sort(),
+      ...(snapshot.contact.accessBasis === "aea_service_handling"
+        ? { contactAccessBasis: "aea_service_handling" } : {}),
       noticeVersion: String(row?.public_contact_notice_version || ""),
       consentPurpose: String(row?.public_contact_consent_purpose || ""),
       grantedAt: String(row?.public_contact_granted_at || ""),

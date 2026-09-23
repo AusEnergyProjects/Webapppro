@@ -12,7 +12,7 @@ test("legacy rental scope survives normalisation before trade routing", () => {
     const result = validateLeadPayload({ submissionType: "upgrade", enquiry: "quick-upgrade-options",
       submissionId: "20260914.12345678-abcd-4abc-8def-123456789abc", clientStartedAt: Date.now() - 1000, customerFirstName: "Test", customerLastName: "Customer",
       email: "test@example.com", phone: "0400000000", customerStreetAddress: "15 Example Street", customerSuburb: "MELBOURNE", customerState: "VIC", postcode: "3000",
-      projectCategories: [reserved, "solar"], tradeSharing: { email: false, postcode: true, address: true, name: false, phone: false },
+      projectCategories: [reserved, "solar"], tradeSharing: { email: true, postcode: true, address: true, name: false, phone: false },
       consent: { accepted: true, purpose: QUICK_UPGRADE_CONSENT_PURPOSE, noticeVersion: QUICK_UPGRADE_CONSENT_NOTICE_VERSION, grantedAt: new Date().toISOString() },
     });
     assert.equal(result.ok, true, result.error);

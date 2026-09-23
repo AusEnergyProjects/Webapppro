@@ -1,6 +1,11 @@
 import { normalizeEnergyServiceIds } from "./energy-service-catalogue.mjs";
 import { aeaDeliveredServiceScopeSql } from "./aea-trade-routing.mjs";
-import { QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE } from "./quick-upgrade-enquiry.mjs";
+import {
+  AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
+  QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  QUICK_UPGRADE_CONSENT_PURPOSE,
+} from "./quick-upgrade-enquiry.mjs";
 import { QUICK_UPGRADE_RECEIPT_KIND, QUICK_UPGRADE_RECEIPT_PREFIX, quickUpgradeReceiptDraft } from "./quick-upgrade-receipt.mjs";
 import { publicPlanDeliveryRetryAt } from "./public-plan-delivery-retry.ts";
 import { ReminderProviderDeliveryError, sendServiceReminderProviderMessage, serviceReminderProviderConfiguration } from "./service-reminder-delivery.ts";
@@ -37,9 +42,12 @@ async function currentContact(db, opportunityId, reference) {
       AND (opportunity.status = 'open'
         OR (opportunity.status = 'draft' AND ${aeaDeliveredServiceScopeSql("opportunity")}))
       AND contact.status = 'active'
-      AND contact.notice_version = ? AND contact.consent_purpose = ?
+      AND ((contact.notice_version = ? AND contact.consent_purpose = ?)
+        OR (contact.notice_version = ? AND contact.consent_purpose = ?))
       AND datetime(contact.granted_at) IS NOT NULL AND contact.withdrawn_at = '' LIMIT 1`)
-    .bind(opportunityId, reference, QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE).first();
+    .bind(opportunityId, reference,
+      QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE,
+      AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE).first();
 }
 
 async function canonical(db, reference) {

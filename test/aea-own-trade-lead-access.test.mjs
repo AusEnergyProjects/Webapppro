@@ -6,6 +6,7 @@ import ts from "typescript";
 import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL } from "../src/lib/firebase-mfa.ts";
 import * as routing from "../src/lib/aea-trade-routing.mjs";
 import * as plan from "../src/lib/public-plan-enquiry.mjs";
+import * as quick from "../src/lib/quick-upgrade-enquiry.mjs";
 import * as preparation from "../src/lib/public-plan-quote-preparation.mjs";
 import * as workflow from "../src/lib/public-lead-quote-workflow.mjs";
 import { publicTradeContactForMatchedLead } from "../src/lib/public-trade-lead-access.mjs";
@@ -20,6 +21,16 @@ const now = "2026-09-22T01:04:00.000Z";
 const matchId = "39c16039-4acd-4664-a2e5-3d8ad0dd7dd6";
 const reference = "AEA-20260922-0011223344556677";
 const categories = '["assessment","solar"]';
+const quickContact = {
+  notice_version: quick.AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  consent_purpose: quick.AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
+  // AEA-only quick enquiries submit email/name/phone sharing as false.
+  disclosed_fields: '["postcode","service_categories","customer_address","customer_message"]',
+  customer_first_name: "Alex", customer_last_name: "Customer",
+  customer_email: "alex@example.test", customer_phone: "0412345678",
+  customer_street_address: "10 Example Street", customer_suburb: "Melbourne",
+  customer_address_state: "VIC", customer_message: "Please arrange an assessment.",
+};
 const modules = new Map([
   ["aea-trade-routing.mjs", routing],
   ["public-plan-enquiry.mjs", plan],
@@ -106,7 +117,7 @@ function insert(database, table, values) {
   database.prepare(`INSERT INTO ${table} (${keys.join(",")}) VALUES (${keys.map(() => "?").join(",")})`).run(...keys.map((key) => supplied[key]));
 }
 
-function fixture() {
+function fixture(contactOverrides = {}) {
   const database = new DatabaseSync(":memory:");
   const directory = new URL("../drizzle/", import.meta.url);
   for (const name of fs.readdirSync(directory).filter((name) => /^\d+.*\.sql$/.test(name)).sort()) {
@@ -144,7 +155,8 @@ function fixture() {
     status: "active", notice_version: plan.PUBLIC_PLAN_CONSENT_NOTICE_VERSION, consent_purpose: plan.PUBLIC_PLAN_CONSENT_PURPOSE,
     disclosed_fields: '["customer_email","postcode","service_categories"]', customer_email: "customer@example.test",
     customer_first_name: "Not", customer_last_name: "Disclosed", customer_phone: "0400000000",
-    customer_street_address: "1 Private Street", postcode: "3000", granted_at: now, withdrawn_at: "", created_at: now, updated_at: now });
+    customer_street_address: "1 Private Street", postcode: "3000", granted_at: now, withdrawn_at: "", created_at: now, updated_at: now,
+    ...contactOverrides });
   insert(database, "trade_crm_enquiries", { id: `marketplace-${matchId}`, firebase_uid: "aea-owner", source_type: "tlink_marketplace",
     source_reference: matchId, opportunity_match_id: matchId, status: "new", record_status: "active", protected_source: 1, created_at: now, updated_at: now });
   return { database, db: d1(database) };
@@ -158,12 +170,12 @@ function contactRow(overrides = {}) {
     public_contact_withdrawn_at: "", public_contact_disclosed_fields: '["customer_email","postcode","service_categories"]',
     public_contact_notice_version: plan.PUBLIC_PLAN_CONSENT_NOTICE_VERSION, public_contact_consent_purpose: plan.PUBLIC_PLAN_CONSENT_PURPOSE,
     public_contact_postcode: "3000", public_contact_granted_at: now, public_customer_email: "customer@example.test",
-    public_customer_first_name: "Not", public_customer_phone: "0400000000", matched_categories: categories,
+    public_customer_first_name: "Not", public_customer_last_name: "Disclosed", public_customer_phone: "0400000000", matched_categories: categories,
     match_status: "interested", opportunity_status: "open", expires_at: "2099-09-22T00:00:00.000Z", ...overrides,
   };
 }
 
-test("AEA contact and quote projections require explicit authorization and preserve chosen fields", () => {
+test("current AEA handling consent exposes retained contacts only with explicit AEA authorization", () => {
   const row = contactRow();
   for (const authorization of [undefined, false, 1, "true"]) {
     assert.equal(publicTradeContactForMatchedLead(row, authorization), null);
@@ -173,11 +185,13 @@ test("AEA contact and quote projections require explicit authorization and prese
   const contact = publicTradeContactForMatchedLead(row, true);
   assert.equal(contact.releaseScope, "aea_only");
   assert.equal(contact.email, "customer@example.test");
-  assert.equal(contact.firstName, "");
-  assert.equal(contact.phone, "");
+  assert.equal(contact.firstName, "Not");
+  assert.equal(contact.lastName, "Disclosed");
+  assert.equal(contact.phone, "0400000000");
+  assert.deepEqual(contact.redactedFields, []);
   const projected = projectPublicMarketplaceEnquiry(row, true);
   assert.equal(projected.email, contact.email);
-  assert.equal(projected.phone, "");
+  assert.equal(projected.phone, "0400000000");
   assert.equal(Object.hasOwn(projected, "public_customer_first_name"), false);
   assert.deepEqual(workflow.publicLeadQuoteWorkflowSnapshot(row, true).categories, ["assessment", "solar"]);
   assert.ok(workflow.publicLeadQuoteAccessSnapshot(row, now, true));
@@ -186,6 +200,118 @@ test("AEA contact and quote projections require explicit authorization and prese
     { opportunity_service_categories: '["assessment",null]' }, { opportunity_service_categories: "invalid" }]) {
     assert.equal(publicTradeContactForMatchedLead(contactRow(change), true), null);
     assert.equal(workflow.publicLeadQuoteWorkflowSnapshot(contactRow(change), true), null);
+  }
+});
+
+function quickContactRow(overrides = {}) {
+  return contactRow({
+    public_contact_notice_version: quickContact.notice_version,
+    public_contact_consent_purpose: quickContact.consent_purpose,
+    public_contact_disclosed_fields: quickContact.disclosed_fields,
+    public_customer_first_name: quickContact.customer_first_name,
+    public_customer_last_name: quickContact.customer_last_name,
+    public_customer_email: quickContact.customer_email,
+    public_customer_phone: quickContact.customer_phone,
+    public_customer_street_address: quickContact.customer_street_address,
+    public_customer_suburb: quickContact.customer_suburb,
+    public_customer_address_state: quickContact.customer_address_state,
+    public_customer_message: quickContact.customer_message,
+    ...overrides,
+  });
+}
+
+test("AEA quick enquiry retains its contact in lead and quote projections without changing trade consent", () => {
+  const row = quickContactRow();
+  const before = structuredClone(row);
+  const contact = publicTradeContactForMatchedLead(row, true);
+  assert.equal(contact.name, "Alex Customer");
+  assert.equal(contact.email, "alex@example.test");
+  assert.equal(contact.phone, "0412345678");
+  assert.equal(contact.releaseScope, "aea_only");
+  assert.deepEqual(contact.redactedFields, []);
+  const enquiry = projectPublicMarketplaceEnquiry(row, true);
+  assert.equal(enquiry.first_name, "Alex");
+  assert.equal(enquiry.email, contact.email);
+  assert.equal(enquiry.phone, contact.phone);
+  const snapshot = workflow.publicLeadQuoteWorkflowSnapshot(row, true);
+  assert.deepEqual(snapshot.contact, contact);
+  const disclosure = workflow.publicLeadAcceptedDisclosure(snapshot, row, now);
+  assert.equal(disclosure.customer.firstName, "Alex");
+  assert.equal(disclosure.customer.phone, contact.phone);
+  assert.deepEqual(disclosure.source.disclosedFields, JSON.parse(row.public_contact_disclosed_fields).sort());
+  assert.equal(disclosure.source.contactAccessBasis, "aea_service_handling");
+  assert.deepEqual(row, before, "reading AEA contact must not rewrite the customer's sharing choices");
+});
+
+test("new mandatory-email AEA consent retains name and phone without external sharing", () => {
+  const row = quickContactRow({
+    public_contact_notice_version: quick.QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+    public_contact_consent_purpose: quick.QUICK_UPGRADE_CONSENT_PURPOSE,
+    public_contact_disclosed_fields: JSON.stringify([...JSON.parse(quickContact.disclosed_fields), "customer_email"]),
+  });
+  const contact = publicTradeContactForMatchedLead(row, true);
+  assert.equal(contact.name, "Alex Customer");
+  assert.equal(contact.email, "alex@example.test");
+  assert.equal(contact.phone, "0412345678");
+  assert.deepEqual(contact.redactedFields, []);
+  assert.equal(publicTradeContactForMatchedLead(row), null);
+});
+
+test("retained AEA contact never widens external sharing or older consent", () => {
+  for (const authorization of [undefined, false, 1, "true"]) {
+    assert.equal(publicTradeContactForMatchedLead(quickContactRow(), authorization), null);
+  }
+  for (const allowAeaDelivery of [false, true]) {
+    const noEmail = quickContactRow({ opportunity_service_categories: '["solar"]' });
+    assert.equal(publicTradeContactForMatchedLead(noEmail, allowAeaDelivery), null);
+    const externalScope = publicTradeContactForMatchedLead(quickContactRow({
+      opportunity_service_categories: '["solar"]',
+      public_contact_disclosed_fields: JSON.stringify([...JSON.parse(quickContact.disclosed_fields), "customer_email"]),
+    }), allowAeaDelivery);
+    assert.equal(externalScope.name, "");
+    assert.equal(externalScope.email, "alex@example.test");
+    assert.equal(externalScope.phone, "");
+    assert.equal(externalScope.releaseScope, "all_qualified_trades");
+    assert.deepEqual(externalScope.redactedFields, ["name", "phone"]);
+    assert.equal(externalScope.accessBasis, undefined);
+  }
+  const olderQuickRow = quickContactRow({
+    public_contact_notice_version: quick.PREVIOUS_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+    public_contact_consent_purpose: quick.PREVIOUS_QUICK_UPGRADE_CONSENT_PURPOSE,
+  });
+  assert.equal(publicTradeContactForMatchedLead(olderQuickRow, true), null);
+  const olderQuick = publicTradeContactForMatchedLead({ ...olderQuickRow,
+    public_contact_disclosed_fields: JSON.stringify([...JSON.parse(quickContact.disclosed_fields), "customer_email"]),
+  }, true);
+  assert.equal(olderQuick.name, "");
+  assert.equal(olderQuick.email, "alex@example.test");
+  assert.equal(olderQuick.phone, "");
+  assert.deepEqual(olderQuick.redactedFields, ["name", "phone"]);
+  const olderPlan = publicTradeContactForMatchedLead(contactRow({
+    public_contact_notice_version: "2026-08-21-quote-preparation-sharing-notice-v8",
+    public_contact_consent_purpose: "Email my private plan and share my email, postcode, services, message, quote answers and selected photos with approved trades matched to my area",
+  }), true);
+  assert.equal(olderPlan.email, "customer@example.test");
+  assert.equal(olderPlan.name, "");
+  assert.equal(olderPlan.phone, "");
+  assert.deepEqual(olderPlan.redactedFields, ["name", "phone"]);
+});
+
+test("AEA quick enquiry contact still requires a current valid receipt and valid retained email", () => {
+  for (const change of [
+    { public_contact_withdrawn_at: now }, { public_contact_status: "withdrawn" },
+    { public_contact_source_reference: "another" }, { public_contact_postcode: "3001" },
+    { public_contact_granted_at: "invalid" }, { public_contact_release_id: "" },
+    { public_contact_consent_purpose: plan.PUBLIC_PLAN_CONSENT_PURPOSE },
+    { public_contact_notice_version: "unknown" }, { public_contact_disclosed_fields: "[]" },
+    { opportunity_service_categories: '["assessment",null]' },
+    { public_customer_email: "invalid" }, { public_customer_email: "" },
+    { public_customer_first_name: "" }, { public_customer_last_name: "" }, { public_customer_phone: "" },
+  ]) {
+    const row = quickContactRow(change);
+    assert.equal(publicTradeContactForMatchedLead(row, true), null, JSON.stringify(change));
+    assert.equal(projectPublicMarketplaceEnquiry(row, true), null, JSON.stringify(change));
+    assert.equal(workflow.publicLeadQuoteWorkflowSnapshot(row, true), null, JSON.stringify(change));
   }
 });
 
@@ -201,13 +327,33 @@ test("real quote handoff creates one owner-scoped job and quote with retained AE
   const customer = database.prepare("SELECT * FROM trade_crm_customers WHERE id=?").get(first.customerId);
   assert.equal(customer.firebase_uid, "aea-owner");
   assert.equal(customer.email, "customer@example.test");
-  assert.equal(customer.first_name, "Redacted");
-  assert.equal(customer.phone, "");
+  assert.equal(customer.first_name, "Not");
+  assert.equal(customer.phone, "0400000000");
   const detail = database.prepare("SELECT * FROM trade_crm_job_details WHERE work_order_id=?").get(first.workOrderId);
   const disclosure = JSON.parse(detail.accepted_disclosure_snapshot);
   assert.deepEqual(disclosure.enquiry.categories, ["assessment", "solar"]);
   assert.equal(disclosure.source.consentPurpose, plan.PUBLIC_PLAN_CONSENT_PURPOSE);
   assert.match(detail.accepted_disclosure_sha256, /^[a-f0-9]{64}$/);
+  await assert.rejects(server.startPublicLeadQuoteWorkflow(db, "external-owner", matchId, now), /UNAVAILABLE/);
+  database.close();
+});
+
+test("AEA quick enquiry quote handoff uses saved contacts when no contacts were shared with other trades", async () => {
+  const { database, db } = fixture(quickContact);
+  const before = database.prepare("SELECT * FROM public_trade_lead_contact_releases").get();
+  const result = await server.startPublicLeadQuoteWorkflow(db, "aea-owner", matchId, now, "offered");
+  const customer = database.prepare("SELECT * FROM trade_crm_customers WHERE id=?").get(result.customerId);
+  assert.equal(customer.first_name, "Alex");
+  assert.equal(customer.last_name, "Customer");
+  assert.equal(customer.email, "alex@example.test");
+  assert.equal(customer.phone, "0412345678");
+  const detail = database.prepare("SELECT * FROM trade_crm_job_details WHERE work_order_id=?").get(result.workOrderId);
+  const disclosure = JSON.parse(detail.accepted_disclosure_snapshot);
+  assert.equal(disclosure.customer.email, "alex@example.test");
+  assert.equal(disclosure.customer.phone, "0412345678");
+  assert.deepEqual(disclosure.source.disclosedFields, JSON.parse(quickContact.disclosed_fields).sort());
+  assert.equal(disclosure.source.contactAccessBasis, "aea_service_handling");
+  assert.deepEqual(database.prepare("SELECT * FROM public_trade_lead_contact_releases").get(), before);
   await assert.rejects(server.startPublicLeadQuoteWorkflow(db, "external-owner", matchId, now), /UNAVAILABLE/);
   database.close();
 });
@@ -218,7 +364,7 @@ for (const [label, revoke] of [
   ["contact consent", (database) => database.prepare("UPDATE public_trade_lead_contact_releases SET withdrawn_at=?").run(now)],
 ]) {
   test(`quote transaction rechecks ${label} after the initial read and rolls back`, async () => {
-    const { database } = fixture();
+    const { database } = fixture(quickContact);
     let revokedBeforeCommit = false;
     const db = d1(database, { beforeWorkflowBatch: () => { revoke(database); revokedBeforeCommit = true; } });
     await assert.rejects(server.startPublicLeadQuoteWorkflow(db, "aea-owner", matchId, now, "offered"), /malformed JSON/);
@@ -277,8 +423,8 @@ test("legacy enquiry list and detail return the authorized projection once and d
   assert.equal(detail.status, 200);
   const body = await detail.json();
   assert.equal(body.enquiry.email, "customer@example.test");
-  assert.equal(body.enquiry.firstName, "");
-  assert.equal(body.enquiry.phone, "");
+  assert.equal(body.enquiry.firstName, "Not");
+  assert.equal(body.enquiry.phone, "0400000000");
   assert.equal(Object.hasOwn(body.enquiry, "publicCustomerFirstName"), false);
   database.exec("UPDATE admin_users SET status='suspended'");
   const denied = await route.GET(new Request(url));
@@ -339,14 +485,14 @@ test("production household plan and evidence queries retain their separate conse
   database.close();
 });
 
-function leadRoute(db) {
+function leadRoute(db, uid = "aea-owner") {
   return loadTypescript("src/app/api/trade-opportunities/route.ts", {
     "../../../../db": { getD1: () => db },
     "@/lib/admin-server": { parseJsonList: (value) => JSON.parse(value || "[]") },
     "@/lib/opportunity-server": { expireStaleOpportunities: async () => {} },
     "@/lib/direct-trade-entitlements-server": { accountHasFeature: async () => true },
     "@/lib/trade-access-server": { ...modules.get("trade-access-server"),
-      requireVerifiedTradeAccess: async () => ({ identity: { uid: "aea-owner" } }) },
+      requireVerifiedTradeAccess: async () => ({ identity: { uid } }) },
     "@/lib/customer-projects.mjs": customerProjects,
     "@/lib/customer-matching-locality.mjs": locality,
     "@/lib/public-trade-lead-access.mjs": { publicTradeContactForMatchedLead },
@@ -361,8 +507,26 @@ function leadRoute(db) {
   });
 }
 
+test("GET returns the saved AEA quick enquiry contact and denies an external legacy assignment", async () => {
+  const { database, db } = fixture(quickContact);
+  const response = await leadRoute(db).GET(new Request("https://test/api/trade-opportunities"));
+  assert.equal(response.status, 200);
+  const opportunities = (await response.json()).opportunities;
+  assert.equal(opportunities.length, 1);
+  assert.equal(opportunities[0].customerContact.name, "Alex Customer");
+  assert.equal(opportunities[0].customerContact.email, "alex@example.test");
+  assert.equal(opportunities[0].customerContact.phone, "0412345678");
+  assert.equal(opportunities[0].customerContact.releaseScope, "aea_only");
+  assert.deepEqual(opportunities[0].customerContact.redactedFields, []);
+  database.exec("UPDATE trade_opportunity_matches SET firebase_uid='external-owner'");
+  const denied = await leadRoute(db, "external-owner").GET(new Request("https://test/api/trade-opportunities"));
+  assert.equal(denied.status, 200);
+  assert.deepEqual((await denied.json()).opportunities, []);
+  database.close();
+});
+
 test("GET binds extension queries to authorized IDs and rechecks AEA authority in the same read batch", async () => {
-  const { database } = fixture();
+  const { database } = fixture(quickContact);
   let batchCount = 0;
   const db = d1(database, { beforeReadBatch: (statements) => {
     batchCount += 1;
@@ -376,7 +540,8 @@ test("GET binds extension queries to authorized IDs and rechecks AEA authority i
   assert.equal(first.status, 200);
   const visible = (await first.json()).opportunities;
   assert.equal(visible.length, 1);
-  assert.equal(visible[0].customerContact.email, "customer@example.test");
+  assert.equal(visible[0].customerContact.email, "alex@example.test");
+  assert.equal(visible[0].customerContact.phone, "0412345678");
   const revoked = await route.GET(new Request("https://test/api/trade-opportunities"));
   assert.equal(batchCount, 2, "revocation must occur after initial authorization and before the read batch");
   assert.equal(revoked.status, 200);
@@ -385,7 +550,7 @@ test("GET binds extension queries to authorized IDs and rechecks AEA authority i
 });
 
 test("GET does not serialize contacts withdrawn between initial authorization and the read batch", async () => {
-  const { database } = fixture();
+  const { database } = fixture(quickContact);
   let withdrew = false;
   const db = d1(database, { beforeReadBatch: () => {
     database.prepare("UPDATE public_trade_lead_contact_releases SET withdrawn_at=?").run(now);

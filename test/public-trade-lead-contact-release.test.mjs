@@ -165,7 +165,7 @@ test("stored public contact releases accept only recognized policy and field pai
   const insert = database.prepare(`INSERT INTO releases
     (id, notice_version, consent_purpose, disclosed_fields) VALUES (?, ?, ?, ?)`);
   const required = ["customer_email", "postcode", "service_categories"];
-  const quickRequired = ["postcode", "service_categories", "customer_address"];
+  const quickRequired = ["customer_email", "postcode", "service_categories", "customer_address"];
   insert.run("v4-good", LEGACY_V4_NOTICE, LEGACY_V4_PURPOSE, JSON.stringify([
     ...required,
     "customer_name",
@@ -184,7 +184,8 @@ test("stored public contact releases accept only recognized policy and field pai
     ...required,
     "customer_address",
   ]));
-  insert.run("quick-missing-address", QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE, JSON.stringify(quickRequired.slice(0, 2)));
+  insert.run("quick-missing-address", QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE, JSON.stringify(quickRequired.filter((field) => field !== "customer_address")));
+  insert.run("quick-missing-email", QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE, JSON.stringify(quickRequired.filter((field) => field !== "customer_email")));
   insert.run("wrong-purpose", LEGACY_V6_NOTICE, LEGACY_V4_PURPOSE, JSON.stringify(required));
   insert.run("unknown-version", "2026-08-10-unknown-v5", LEGACY_V6_PURPOSE, JSON.stringify(required));
   insert.run("malformed-fields", LEGACY_V6_NOTICE, LEGACY_V6_PURPOSE, "not-json");
@@ -211,6 +212,7 @@ test("stored public contact releases accept only recognized policy and field pai
     "missing-services",
     "quick-good",
     "quick-missing-address",
+    "quick-missing-email",
     "quick-v1-good",
     "v4-address-overreach",
     "v4-good",

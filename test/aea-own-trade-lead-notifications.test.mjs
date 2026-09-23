@@ -12,6 +12,7 @@ import * as notices from '../src/lib/public-plan-enquiry.mjs';
 import * as quickNotices from '../src/lib/quick-upgrade-enquiry.mjs';
 import * as locality from '../src/lib/customer-matching-locality.mjs';
 import * as notifications from '../src/lib/opportunity-notifications.ts';
+import { aeaServiceContactConsentAllows } from '../src/lib/public-trade-lead-access.mjs';
 
 function load(name, dependencies) {
   const output = ts.transpileModule(fs.readFileSync(`src/lib/${name}.ts`, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -57,7 +58,7 @@ function fixture(t, { scope = ['assessment', 'solar'], status = 'open' } = {}) {
   }
   sql.exec("INSERT INTO admin_users VALUES ('aea','active','owner')");
   sql.prepare('INSERT INTO trade_opportunities VALUES (?,?,?,?,?,?,?,?,?,?)').run('opportunity', JSON.stringify(scope), 'Private suburb', '3000', 'VIC', 'planning', '2099-01-01T00:00:00.000Z', now, status, 'public-enquiry');
-  sql.prepare('INSERT INTO public_trade_lead_contact_releases VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run('release', 'opportunity', 'active', notices.PUBLIC_PLAN_CONSENT_NOTICE_VERSION, notices.PUBLIC_PLAN_CONSENT_PURPOSE, '["customer_email","postcode","service_categories"]', '', '', '', '', '', '3000', '', 'private-customer@example.test', '', now, '');
+  sql.prepare('INSERT INTO public_trade_lead_contact_releases VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run('release', 'opportunity', 'active', notices.PUBLIC_PLAN_CONSENT_NOTICE_VERSION, notices.PUBLIC_PLAN_CONSENT_PURPOSE, '["customer_email","postcode","service_categories"]', 'Private', 'Customer', '', '', '', '3000', '', 'private-customer@example.test', '0412345678', now, '');
   for (const uid of ['aea', 'external']) sql.prepare('INSERT INTO trade_opportunity_matches VALUES (?,?,?,?,?,?)').run(`match-${uid}`, 'opportunity', uid, 'offered', JSON.stringify(scope), now);
   const sent = []; const db = { beforeClaim: null };
   const statement = (query, values = []) => ({
@@ -75,6 +76,7 @@ function fixture(t, { scope = ['assessment', 'solar'], status = 'open' } = {}) {
     '../../db': { getD1: () => db }, '@/lib/aea-trade-routing.mjs': routing, '@/lib/aea-trade-owner-server': owner,
     '@/lib/opportunity-notifications': notifications, '@/lib/customer-matching-locality.mjs': locality,
     '@/lib/public-plan-enquiry.mjs': notices, '@/lib/quick-upgrade-enquiry.mjs': quickNotices,
+    '@/lib/public-trade-lead-access.mjs': { aeaServiceContactConsentAllows },
     '@/lib/opportunity-notification-retry': retry, '@/lib/trade-access-server': access, '@/lib/trade-certificate-leads': eligibility,
     '@/lib/service-reminder-delivery': { serviceReminderProviderConfiguration: () => ({ email: { configured: true } }), sendServiceReminderProviderMessage: async message => { sent.push(message); return { provider: 'resend', providerMessageId: `test-${sent.length}`, providerStatus: 'accepted' }; } },
   });
@@ -92,6 +94,49 @@ test('reserved assessment and mixed notifications enqueue only the verified AEA 
     assert.doesNotMatch(f.sent[0].body, /private-customer@example|Private suburb/);
     assert.equal((await f.drain()).attempted, 0);
   }
+});
+
+function quickReceipt(f, { shareEmail = false, current = false } = {}) {
+  f.sql.prepare(`UPDATE public_trade_lead_contact_releases SET notice_version=?, consent_purpose=?,
+    disclosed_fields=?, customer_street_address='10 Private Street', customer_suburb='Melbourne', customer_address_state='VIC'`)
+    .run(current ? quickNotices.QUICK_UPGRADE_CONSENT_NOTICE_VERSION : quickNotices.AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+      current ? quickNotices.QUICK_UPGRADE_CONSENT_PURPOSE : quickNotices.AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
+      JSON.stringify(['postcode', 'service_categories', 'customer_address', ...(shareEmail ? ['customer_email'] : [])]));
+}
+
+test('quick notification requires deliverable email consent and preserves AEA v3 handling', async t => {
+  for (const current of [false, true]) {
+    const aea = fixture(t); quickReceipt(aea, { current, shareEmail: current });
+    assert.equal((await aea.drain()).sent, 1);
+    assert.deepEqual(aea.sent.map(message => message.recipient), ['aea@example.test']);
+    assert.match(aea.sent[0].body, /No home plan or PDF was created/);
+    assert.doesNotMatch(aea.sent[0].body, /private-customer@example|0412345678|10 Private Street|Private Customer/);
+  }
+  const withheld = fixture(t, { scope: ['solar'] }); quickReceipt(withheld);
+  assert.equal((await withheld.drain()).sent, 0);
+  assert.equal(withheld.sent.length, 0);
+  const shared = fixture(t, { scope: ['solar'] }); quickReceipt(shared, { shareEmail: true });
+  assert.equal((await shared.drain()).sent, 2);
+});
+
+test('AEA quick notification rejects incomplete retained contact and changed sharing at final claim', async t => {
+  for (const field of ['customer_first_name', 'customer_last_name', 'customer_email', 'customer_phone']) {
+    const f = fixture(t); quickReceipt(f);
+    f.sql.exec(`UPDATE public_trade_lead_contact_releases SET ${field}=''`);
+    assert.equal((await f.drain()).sent, 0, field);
+  }
+  const changed = fixture(t, { scope: ['solar'] }); quickReceipt(changed, { shareEmail: true });
+  changed.db.beforeClaim = () => quickReceipt(changed);
+  assert.equal((await changed.drain()).sent, 0);
+  assert.equal(changed.sent.length, 0);
+  const removedPhone = fixture(t); quickReceipt(removedPhone);
+  removedPhone.db.beforeClaim = () => removedPhone.sql.exec("UPDATE public_trade_lead_contact_releases SET customer_phone=''");
+  assert.equal((await removedPhone.drain()).sent, 0);
+  assert.equal(removedPhone.sent.length, 0);
+  const changedScope = fixture(t); quickReceipt(changedScope);
+  changedScope.db.beforeClaim = () => changedScope.sql.exec("UPDATE trade_opportunities SET service_categories='[\"solar\"]'");
+  assert.equal((await changedScope.drain()).sent, 0);
+  assert.equal(changedScope.sent.length, 0);
 });
 
 test('pre-existing external matches never receive reserved data and ordinary service delivery is unchanged', async t => {

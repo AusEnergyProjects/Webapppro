@@ -1,5 +1,6 @@
 import { tradeOpportunityServiceScopeAllowed } from "@/lib/aea-trade-routing.mjs";
 import { aeaTradeOwnerSql, tradeOpportunityOwnerScopeSql } from "@/lib/aea-trade-owner-server";
+import { aeaServiceContactConsentAllows } from "@/lib/public-trade-lead-access.mjs";
 import { getD1 } from "../../db";
 import {
   opportunityNotificationDraft,
@@ -19,6 +20,8 @@ import {
   publicPlanContactReleaseDisclosedFieldsAreValid,
 } from "@/lib/public-plan-enquiry.mjs";
 import {
+  AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
   LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
@@ -95,6 +98,8 @@ async function deliveryContext(deliveryId: string) {
       CASE
         WHEN (public_contact.notice_version = '${QUICK_UPGRADE_CONSENT_NOTICE_VERSION}'
           AND public_contact.consent_purpose = '${QUICK_UPGRADE_CONSENT_PURPOSE}')
+          OR (public_contact.notice_version = '${AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION}'
+          AND public_contact.consent_purpose = '${AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE}')
           OR (public_contact.notice_version = '${LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION}'
           AND public_contact.consent_purpose = '${LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE}')
           THEN 'quick_upgrade_enquiry'
@@ -102,21 +107,22 @@ async function deliveryContext(deliveryId: string) {
         WHEN project.id IS NOT NULL THEN 'customer_project'
         ELSE 'legacy_marketplace'
       END notification_source,
+      public_contact.id public_contact_release_id,
       public_contact.status public_contact_status,
       public_contact.notice_version public_contact_notice_version,
       public_contact.consent_purpose public_contact_consent_purpose,
       public_contact.disclosed_fields public_contact_disclosed_fields,
       trim(public_contact.customer_first_name || ' ' || public_contact.customer_last_name) public_customer_name,
-      CASE WHEN public_contact.customer_first_name <> '' THEN 1 ELSE 0 END public_contact_has_first_name,
-      CASE WHEN public_contact.customer_last_name <> '' THEN 1 ELSE 0 END public_contact_has_last_name,
+      CASE WHEN trim(public_contact.customer_first_name) <> '' THEN 1 ELSE 0 END public_contact_has_first_name,
+      CASE WHEN trim(public_contact.customer_last_name) <> '' THEN 1 ELSE 0 END public_contact_has_last_name,
       CASE WHEN public_contact.customer_street_address <> ''
         AND public_contact.customer_suburb <> ''
         AND public_contact.customer_address_state <> ''
         THEN 1 ELSE 0 END public_contact_has_address,
       public_contact.postcode public_contact_postcode,
       public_contact.customer_message public_customer_message,
-      CASE WHEN public_contact.customer_email <> '' THEN 1 ELSE 0 END public_contact_has_email,
-      CASE WHEN public_contact.customer_phone <> '' THEN 1 ELSE 0 END public_contact_has_phone,
+      CASE WHEN trim(public_contact.customer_email) <> '' THEN 1 ELSE 0 END public_contact_has_email,
+      CASE WHEN trim(public_contact.customer_phone) <> '' THEN 1 ELSE 0 END public_contact_has_phone,
       public_contact.granted_at public_contact_granted_at,
       public_contact.withdrawn_at public_contact_withdrawn_at,
       matching_locality_consent.purpose matching_consent_purpose,
@@ -195,6 +201,8 @@ function ineligibility(context: DeliveryRow) {
     return "Optional opportunity emails are disabled.";
   }
   if (["public_plan_enquiry", "quick_upgrade_enquiry"].includes(String(context.notification_source))) {
+    const aeaHandledContact = aeaServiceContactConsentAllows(context,
+      Number(context.aea_delivery_authorised) === 1);
     const disclosedFields = list(context.public_contact_disclosed_fields);
     const hasEmail = Number(context.public_contact_has_email || 0) === 1;
     const hasPhone = Number(context.public_contact_has_phone || 0) === 1;
@@ -216,12 +224,13 @@ function ineligibility(context: DeliveryRow) {
       || !/^\d{4}$/.test(text(context.public_contact_postcode, 4))
       || text(context.public_contact_postcode, 4) !== text(context.opportunity_postcode, 4)
       || !hasEmail
-      || (sharesName && (
+      || (!disclosedFields.includes("customer_email") && !aeaHandledContact)
+      || ((sharesName || aeaHandledContact) && (
         Number(context.public_contact_has_first_name || 0) !== 1
         || Number(context.public_contact_has_last_name || 0) !== 1
         || !text(context.public_customer_name, 120)
       ))
-      || (sharesPhone && !hasPhone)
+      || ((sharesPhone || aeaHandledContact) && !hasPhone)
       || (sharesMessage && !hasMessage)
       || (sharesAddress && !hasAddress)
     ) return "The public enquiry contact consent is unavailable or no longer current.";
@@ -493,7 +502,7 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
               AND datetime(current_opportunity.created_at, '+30 days') > ?
             )
           )
-          AND current_account.email = ?
+          AND (current_account.email, current_opportunity.service_categories) = (?, ?)
           AND (
             current_account.email_opportunities = 1
             OR EXISTS (
@@ -523,11 +532,17 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
                 SELECT 1
                 FROM public_trade_lead_contact_releases current_public_contact
                 WHERE current_public_contact.opportunity_id = current_opportunity.id
+                  AND (current_public_contact.id, current_public_contact.notice_version,
+                    current_public_contact.consent_purpose, current_public_contact.disclosed_fields) = (?, ?, ?, ?)
                   AND current_public_contact.status = 'active'
                   AND ${publicPlanContactReleaseConsentSql("current_public_contact")}
                   AND current_public_contact.postcode = current_opportunity.postcode
                   AND datetime(current_public_contact.granted_at) IS NOT NULL
                   AND current_public_contact.withdrawn_at = ''
+                  AND trim(current_public_contact.customer_email) <> ''
+                  AND (? = 0 OR (trim(current_public_contact.customer_first_name) <> ''
+                    AND trim(current_public_contact.customer_last_name) <> ''
+                    AND trim(current_public_contact.customer_phone) <> ''))
               )
             )
           )
@@ -547,6 +562,12 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
       attemptedAt,
       attemptedAt,
       email,
+      String(context.opportunity_service_categories || ""),
+      String(context.public_contact_release_id || ""),
+      String(context.public_contact_notice_version || ""),
+      String(context.public_contact_consent_purpose || ""),
+      String(context.public_contact_disclosed_fields || ""),
+      aeaServiceContactConsentAllows(context, Number(context.aea_delivery_authorised) === 1) ? 1 : 0,
     ).run();
   if (!claim.meta.changes) return { outcome: "not_claimed" };
 

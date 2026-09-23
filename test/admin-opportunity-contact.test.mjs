@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { publicPlanContactReleaseAccessSql } from "../src/lib/public-plan-enquiry.mjs";
-import { QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE } from "../src/lib/quick-upgrade-enquiry.mjs";
+import { AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE } from "../src/lib/quick-upgrade-enquiry.mjs";
 
 const route = readFileSync(new URL("../src/app/api/admin/opportunities/route.ts", import.meta.url), "utf8");
 const workspace = readFileSync(new URL("../src/components/AdminOpportunityWorkspace.tsx", import.meta.url), "utf8");
@@ -25,7 +25,7 @@ function fixture() {
   const contact = {
     id: "contact-1", opportunity_id: "opportunity-1", source_reference: "source-1", postcode: "3000",
     status: "active", withdrawn_at: "", granted_at: "2026-09-04T00:00:00Z", updated_at: "2026-09-04T00:00:00Z",
-    notice_version: QUICK_UPGRADE_CONSENT_NOTICE_VERSION, consent_purpose: QUICK_UPGRADE_CONSENT_PURPOSE,
+    notice_version: AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, consent_purpose: AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
     disclosed_fields: JSON.stringify(["postcode", "service_categories", "customer_address"]),
     customer_first_name: "Jamie", customer_last_name: "Customer", customer_email: "jamie@example.test",
     customer_phone: "0400000000", customer_unit_number: "4", customer_street_address: "15 Example Street",

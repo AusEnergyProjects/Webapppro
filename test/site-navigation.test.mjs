@@ -476,7 +476,7 @@ test("getting-started copy preserves comparison and privacy boundaries", () => {
   assert.match(quickUpgradeEnquiry, /requiresAeaDelivery\(\[service\]\) \?/);
   assert.match(quickUpgradeEnquiry, /This enquiry goes to Australian Energy Assessments\. It is not distributed to other TLink businesses/);
   assert.match(matchingDialog, /Your selected services, full property address and your notes/);
-  assert.match(matchingDialog, /Your email, name and phone are included only if you tick them/);
+  assert.match(matchingDialog, /Your email is always included\. Your name and phone are included unless you untick their boxes/);
   assert.match(matchingDialog, /including any additional services, is not distributed to other TLink businesses/);
   assert.match(guide, /Prices, rebates and rules can change/);
   assert.doesNotMatch(guide, /household evidence|Charge-level calculation evidence|recorded capability|confirmed NSW approval pathway/i);

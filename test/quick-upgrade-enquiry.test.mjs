@@ -15,8 +15,12 @@ import { publicTradeContactForMatchedLead } from "../src/lib/public-trade-lead-a
 import {
   isQuickUpgradeEnquiry,
   isQuickUpgradeSubmissionId,
+  AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
   LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
+  PREVIOUS_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  PREVIOUS_QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_ENQUIRY_KIND,
@@ -40,7 +44,7 @@ function validQuickUpgrade(overrides = {}) {
     projectCategories: ["heating-cooling", "insulation"],
     projectNotes: "Please help me compare practical options.",
     tradeSharing: {
-      email: false,
+      email: true,
       postcode: true,
       address: true,
       name: false,
@@ -81,7 +85,7 @@ test("quick upgrade validation canonicalizes the verified address and keeps only
   assert.equal(result.value.preferredContact, "either");
   assert.deepEqual(result.value.projectCategories, ["heating-cooling", "insulation"]);
   assert.deepEqual(result.value.tradeSharing, {
-    email: false,
+    email: true,
     postcode: true,
     address: true,
     name: false,
@@ -108,7 +112,8 @@ test("quick upgrade validation fails closed at every public trust boundary", () 
     [validQuickUpgrade({ projectCategories: ["not-a-service"] }), /at least one service/i],
     [validQuickUpgrade({ phone: "call me" }), /valid phone/i],
     [validQuickUpgrade({ tradeSharing: { email: true, postcode: true, address: false, name: false, phone: false } }), /address must be shared/i],
-    [validQuickUpgrade({ tradeSharing: { postcode: true, address: true, name: false, phone: false } }), /contact detail sharing preference/i],
+    [validQuickUpgrade({ tradeSharing: { email: false, postcode: true, address: true, name: false, phone: false } }), /email must be shared/i],
+    [validQuickUpgrade({ tradeSharing: { postcode: true, address: true, name: false, phone: false } }), /email must be shared/i],
     [validQuickUpgrade({ tradeSharing: { email: true, postcode: true, address: true, name: false } }), /contact detail sharing preference/i],
     [validQuickUpgrade({ projectNotes: "My NMI number is 6407123456" }), /remove nmi/i],
     [validQuickUpgrade({ projectNotes: "Access code 123456" }), /remove nmi/i],
@@ -117,6 +122,7 @@ test("quick upgrade validation fails closed at every public trust boundary", () 
     [validQuickUpgrade({ projectNotes: "Call me on 0400 000 000" }), /remove nmi/i],
     [validQuickUpgrade({ clientStartedAt: undefined }), /new upgrade request/i],
     [validQuickUpgrade({ consent: { accepted: true, purpose: "old", noticeVersion: QUICK_UPGRADE_CONSENT_NOTICE_VERSION, grantedAt: new Date().toISOString() } }), /current sharing notice/i],
+    [validQuickUpgrade({ consent: { accepted: true, purpose: AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE, noticeVersion: AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, grantedAt: new Date().toISOString() } }), /current sharing notice/i],
   ];
   for (const [payload, expected] of invalidCases) {
     const result = validateLeadPayload(payload);
@@ -167,11 +173,12 @@ test("the quick envelope opens automatic matching without manufacturing a plan o
   );
 });
 
-test("quick contact releases require address and reveal only customer-selected contact fields", () => {
+test("current quick contact releases require email and address while name and phone remain customer-selected", () => {
   const requiredFields = [
     "postcode",
     "service_categories",
     "customer_address",
+    "customer_email",
     "customer_message",
   ];
   assert.equal(publicPlanContactReleaseDisclosedFieldsAreValid(
@@ -183,6 +190,11 @@ test("quick contact releases require address and reveal only customer-selected c
     QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
     QUICK_UPGRADE_CONSENT_PURPOSE,
     requiredFields.filter((field) => field !== "customer_address"),
+  ), false);
+  assert.equal(publicPlanContactReleaseDisclosedFieldsAreValid(
+    QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+    QUICK_UPGRADE_CONSENT_PURPOSE,
+    requiredFields.filter((field) => field !== "customer_email"),
   ), false);
   const baseRow = {
     opportunity_service_categories: JSON.stringify(["solar"]),
@@ -221,7 +233,7 @@ test("quick contact releases require address and reveal only customer-selected c
   }, {
     name: "",
     phone: "",
-    email: "",
+    email: "jamie@example.com",
     addressLine1: "15 Example Street",
     message: "Please help me compare practical options.",
   });
@@ -229,7 +241,6 @@ test("quick contact releases require address and reveal only customer-selected c
     ...baseRow,
     public_contact_disclosed_fields: JSON.stringify([
       ...requiredFields,
-      "customer_email",
       "customer_name",
       "customer_phone",
     ]),
@@ -242,6 +253,19 @@ test("quick contact releases require address and reveal only customer-selected c
     LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
     ["customer_email", "postcode", "service_categories", "customer_address"],
   ), true);
+  for (const [noticeVersion, purpose] of [
+    [PREVIOUS_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, PREVIOUS_QUICK_UPGRADE_CONSENT_PURPOSE],
+    [AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE],
+  ]) {
+    const historicalFields = requiredFields.filter((field) => field !== "customer_email");
+    assert.equal(publicPlanContactReleaseDisclosedFieldsAreValid(noticeVersion, purpose, historicalFields), true);
+    assert.equal(publicTradeContactForMatchedLead({
+      ...baseRow,
+      public_contact_notice_version: noticeVersion,
+      public_contact_consent_purpose: purpose,
+      public_contact_disclosed_fields: JSON.stringify(historicalFields),
+    }), null, "Historical consent must not disclose an email the customer did not select");
+  }
 });
 
 function quickHandler({
@@ -486,7 +510,7 @@ function durableContact(id, overrides = {}) {
     noticeVersion: QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
     consentPurpose: QUICK_UPGRADE_CONSENT_PURPOSE,
     disclosedFields: [
-      "postcode", "service_categories", "customer_address",
+      "postcode", "service_categories", "customer_address", "customer_email",
     ],
     customerFirstName: "Jamie",
     customerLastName: "Customer",
@@ -538,7 +562,8 @@ test("quick retries converge on one durable opportunity and reject a changed add
     public_customer_address_state: stored.customer_address_state,
   });
   assert.ok(shared);
-  for (const field of ["firstName", "lastName", "name", "email", "phone"]) assert.equal(shared[field], "");
+  for (const field of ["firstName", "lastName", "name", "phone"]) assert.equal(shared[field], "");
+  assert.equal(shared.email, "jamie@example.test");
   assert.equal(shared.addressLine1, "15 Example Street");
   await assert.rejects(() => persistLeadOpportunity(
     adapter,
@@ -549,7 +574,7 @@ test("quick retries converge on one durable opportunity and reject a changed add
   await assert.rejects(() => persistLeadOpportunity(
     adapter,
     durableOpportunity("opportunity-d"),
-    durableContact("contact-d", { disclosedFields: [...durableContact("unused").disclosedFields, "customer_email"] }),
+    durableContact("contact-d", { disclosedFields: [...durableContact("unused").disclosedFields, "customer_name"] }),
     currentConsent,
   ), /OPPORTUNITY_SOURCE_REFERENCE_MISMATCH/);
   database.close();

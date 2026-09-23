@@ -159,7 +159,10 @@ function quickUpgradeTradeSharing(value) {
   if (value.postcode !== true || value.address !== true) {
     return { ok: false, error: "Postcode and property address must be shared so businesses can assess the request." };
   }
-  for (const key of ["email", "name", "phone"]) {
+  if (value.email !== true) {
+    return { ok: false, error: "Email must be shared so the business handling your request can respond." };
+  }
+  for (const key of ["name", "phone"]) {
     if (typeof value[key] !== "boolean") {
       return { ok: false, error: "Choose each contact detail sharing preference." };
     }
@@ -167,7 +170,7 @@ function quickUpgradeTradeSharing(value) {
   return {
     ok: true,
     value: {
-      email: value.email,
+      email: true,
       postcode: true,
       address: true,
       name: value.name,

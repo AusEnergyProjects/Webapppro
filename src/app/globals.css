@@ -536,15 +536,16 @@ h3, h4 { font-family: var(--font-aea-heading); font-size: var(--type-card-title)
 .dashboard-opportunity-card-controls > .dashboard-lead-dismiss:hover { background: #fff0ed; border-color: #b85a49; }
 .dashboard-lead-dismiss svg { fill: none; height: 17px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; width: 17px; }
 .dashboard-opportunity-card > p { color: var(--color-aea-muted); font-size: .69rem; line-height: 1.58; margin: 10px 0; }
-.dashboard-connected-customer-identity { align-items: start; background: linear-gradient(135deg, #e6f8f1, #f4fbff); border: 1px solid #9fd6c5; border-radius: 13px; display: grid; gap: 13px; grid-template-columns: minmax(190px, .62fr) minmax(0, 1.38fr); margin-top: 13px; padding: 14px; }
+.dashboard-connected-customer-identity { align-items: start; background: linear-gradient(135deg, #e6f8f1, #f4fbff); border: 1px solid #9fd6c5; border-radius: 13px; display: grid; gap: 13px; grid-template-columns: minmax(0, 1fr); margin-top: 13px; padding: 14px; }
 .dashboard-connected-customer-intro span { color: #08794c; display: block; font-size: .56rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
 .dashboard-connected-customer-intro h4 { color: var(--color-aea-ink); font-size: 1rem; margin-top: 4px; }
 .dashboard-connected-customer-intro p { color: #587068; font-size: .58rem; line-height: 1.48; margin: 5px 0 0; }
-.dashboard-connected-customer-contact-grid { display: grid; gap: 8px; grid-template-columns: minmax(115px, .7fr) minmax(180px, 1fr) minmax(240px, 1.45fr); margin: 0; }
+.dashboard-connected-customer-contact-grid { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; }
 .dashboard-connected-customer-contact-grid > div { background: rgba(255, 255, 255, .86); border: 1px solid #cce3db; border-radius: 10px; min-width: 0; padding: 10px; }
+.dashboard-connected-customer-contact-grid > .dashboard-connected-customer-context { grid-column: 1 / -1; }
 .dashboard-connected-customer-contact-grid dt { color: #5b7a70; font-size: .5rem; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
 .dashboard-connected-customer-contact-grid dd { color: #123e34; font-size: .62rem; font-weight: 800; line-height: 1.42; margin: 4px 0 0; overflow-wrap: anywhere; }
-.dashboard-connected-customer-contact-grid a { color: #08794c; }
+.dashboard-connected-customer-contact-grid a { align-items: center; color: #08794c; display: inline-flex; max-width: 100%; min-height: 44px; overflow-wrap: anywhere; text-decoration: underline; }
 .dashboard-opportunity-compact-summary { display: grid; gap: 8px; margin-top: 10px; }
 .dashboard-opportunity-compact-summary > p { color: #587068; display: -webkit-box; font-size: .64rem; line-height: 1.45; margin: 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
 .dashboard-opportunity-compact-summary dl { display: grid; gap: 7px; grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(105px, .55fr)); margin: 0; }

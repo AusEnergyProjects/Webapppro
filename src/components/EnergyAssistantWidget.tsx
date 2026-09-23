@@ -291,14 +291,14 @@ const SAFE_EXACT_ACTIONS = new Set([
 
 const RESET_LEAD_CONSENT = {
   serviceConsent: false,
-  shareName: false,
-  sharePhone: false,
-  shareAddress: false,
   shareKnownPlanFacts: false,
   marketingConsent: false,
 };
 
 const EMPTY_LEAD: LeadDraft = {
+  shareName: true,
+  sharePhone: true,
+  shareAddress: true,
   destination: "",
   name: "",
   firstName: "",
@@ -1822,8 +1822,8 @@ export function EnergyAssistantWidget({
         setLeadError("Add your name so Australian Energy Assessments knows who requested help.");
         return;
       }
-      if (!lead.email.trim() && !lead.phone.trim()) {
-        setLeadError("Add an email address or phone number so Australian Energy Assessments can respond.");
+      if (!lead.email.trim() || !lead.phone.trim()) {
+        setLeadError("Add your email address and phone number so Australian Energy Assessments can respond.");
         return;
       }
     }
@@ -1857,8 +1857,8 @@ export function EnergyAssistantWidget({
         setLeadError("Record at least one home-energy priority before requesting trade matching. Your private plan and chat remain available.");
         return;
       }
-    } else if (!lead.name.trim() || (!lead.email.trim() && !lead.phone.trim())) {
-      setLeadError("Add your name and an email address or phone number for Australian Energy Assessments follow-up.");
+    } else if (!lead.name.trim() || !lead.email.trim() || !lead.phone.trim()) {
+      setLeadError("Add your name, email address and phone number for Australian Energy Assessments follow-up.");
       setLeadStage("contact");
       return;
     }
@@ -2450,8 +2450,8 @@ export function EnergyAssistantWidget({
                       <>
                         <p>Only the details you enter here go to Australian Energy Assessments. Nothing is shared with matched trades.</p>
                         <label><span>Name</span><input required maxLength={120} autoComplete="name" value={lead.name} onChange={(event) => updateLead((current) => ({ ...current, name: event.target.value }))} /></label>
-                        <label><span>Email <small>Email or phone required</small></span><input type="email" maxLength={254} autoComplete="email" inputMode="email" value={lead.email} onChange={(event) => updateLead((current) => ({ ...current, email: event.target.value }))} /></label>
-                        <label><span>Phone <small>Email or phone required</small></span><input type="tel" maxLength={32} autoComplete="tel" inputMode="tel" value={lead.phone} onChange={(event) => updateLead((current) => ({ ...current, phone: event.target.value }))} /></label>
+                        <label><span>Email <small>Required</small></span><input required type="email" maxLength={254} autoComplete="email" inputMode="email" value={lead.email} onChange={(event) => updateLead((current) => ({ ...current, email: event.target.value }))} /></label>
+                        <label><span>Phone <small>Required</small></span><input required type="tel" maxLength={32} autoComplete="tel" inputMode="tel" value={lead.phone} onChange={(event) => updateLead((current) => ({ ...current, phone: event.target.value }))} /></label>
                       </>
                     )}
                     <div className={styles.leadNav}><button className={styles.leadSecondary} type="button" onClick={() => setLeadStage(leadMatchesTrades && quoteQuestions.length ? "questions" : "scope")}>Back</button><button className={styles.leadPrimary} type="button" onClick={advanceLeadContact}>Continue</button></div>
@@ -2463,10 +2463,10 @@ export function EnergyAssistantWidget({
                     <h4 id="aea-lead-preferences">{leadMatchesTrades ? "Choose exactly what trades may see" : "Response preferences"}</h4>
                     {leadMatchesTrades ? (
                       <>
-                        <p>Email, postcode, selected services, your message and any quote answers are included. The following details remain private unless you select them:</p>
-                        <label className={styles.consent}><input type="checkbox" checked={lead.shareName} onChange={(event) => updateLead((current) => ({ ...current, shareName: event.target.checked }))} /><span>Also share my first and last name.</span></label>
-                        <label className={styles.consent}><input type="checkbox" checked={lead.sharePhone} onChange={(event) => updateLead((current) => ({ ...current, sharePhone: event.target.checked }))} /><span>Also share my phone number.</span></label>
-                        <label className={styles.consent}><input type="checkbox" checked={lead.shareAddress} onChange={(event) => updateLead((current) => ({ ...current, shareAddress: event.target.checked }))} /><span>Also share my unit, street, suburb and state.</span></label>
+                        <p>Email, postcode, selected services, your message and any quote answers are included. Your name, phone and property address are selected by default. Untick a box to keep that detail private from matched trades.</p>
+                        <label className={styles.consent}><input type="checkbox" checked={lead.shareName} onChange={(event) => updateLead((current) => ({ ...current, shareName: event.target.checked }))} /><span>Share my first and last name. Untick to keep it private from matched trades.</span></label>
+                        <label className={styles.consent}><input type="checkbox" checked={lead.sharePhone} onChange={(event) => updateLead((current) => ({ ...current, sharePhone: event.target.checked }))} /><span>Share my phone number. Untick to keep it private from matched trades.</span></label>
+                        <label className={styles.consent}><input type="checkbox" checked={lead.shareAddress} onChange={(event) => updateLead((current) => ({ ...current, shareAddress: event.target.checked }))} /><span>Share my unit, street, suburb and state. Untick to keep them private from matched trades.</span></label>
                         <label className={styles.consent}><input type="checkbox" checked={lead.shareKnownPlanFacts} onChange={(event) => updateLead((current) => ({ ...current, shareKnownPlanFacts: event.target.checked }))} /><span>Also include confirmed home-plan facts relevant to the selected services. My full plan stays private.</span></label>
                       </>
                     ) : (

@@ -35,8 +35,9 @@ test("authorised customer identity is the first selected lead preview section", 
   assert.ok(enquiryPackPosition > compactSummaryPosition);
   assert.match(
     leadList,
-    /releasedCustomerContact && \([\s\S]*dashboard-connected-customer-identity[\s\S]*hidden=\{!isExpanded\}/,
+    /<section[\s\S]*dashboard-connected-customer-identity[\s\S]*hidden=\{!isExpanded\}/,
   );
+  assert.doesNotMatch(leadList, /releasedCustomerContact && \(\s*<section/);
   assert.match(
     leadList,
     /aria-labelledby=\{\s*isExpanded\s*\? customerIdentityHeadingId\s*: undefined\s*\}/,
@@ -100,7 +101,7 @@ test("released contact details have one authoritative block", () => {
 test("unselected previews stay hidden and connected leads retain the contact boundary", () => {
   assert.match(
     leadList,
-    /const releasedCustomerName =\s*releasedCustomerContact\?\.name\.trim\(\) \|\| ""/,
+    /const releasedCustomerName = contactFieldIsRedacted\(releasedCustomerContact, "name"\)\s*\? ""\s*: releasedCustomerContact\?\.name\.trim\(\) \|\| ""/,
   );
   const compactSummary = leadList.slice(
     leadList.indexOf('className="dashboard-opportunity-compact-summary"'),

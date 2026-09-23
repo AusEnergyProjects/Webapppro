@@ -336,9 +336,9 @@ export function PublicPlanEnquiryForm({
   const [includeKnownPlanAnswers, setIncludeKnownPlanAnswers] = useState(false);
   const [quotePhotos, setQuotePhotos] = useState<QuotePhotoSelection[]>([]);
   const [quotePhotoError, setQuotePhotoError] = useState("");
-  const [shareName, setShareName] = useState(false);
-  const [sharePhone, setSharePhone] = useState(false);
-  const [shareAddress, setShareAddress] = useState(false);
+  const [shareName, setShareName] = useState(true);
+  const [sharePhone, setSharePhone] = useState(true);
+  const [shareAddress, setShareAddress] = useState(true);
   const [website, setWebsite] = useState("");
   const [consent, setConsent] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
@@ -501,9 +501,9 @@ export function PublicPlanEnquiryForm({
     setIncludeKnownPlanAnswers(false);
     setQuotePhotos([]);
     setQuotePhotoError("");
-    setShareName(false);
-    setSharePhone(false);
-    setShareAddress(false);
+    setShareName(true);
+    setSharePhone(true);
+    setShareAddress(true);
     setSubmitAttempted(false);
     setGatewayOpen(false);
     setGatewayPlanDownloadBusy(false);
@@ -879,11 +879,11 @@ export function PublicPlanEnquiryForm({
     event.preventDefault();
     setSubmitAttempted(true);
     if (!customerFirstName.trim()) {
-      setStatus({ kind: "error", message: "Enter your first name for Australian Energy Assessments records. It stays private unless you choose to share it." });
+      setStatus({ kind: "error", message: "Enter your first name for Australian Energy Assessments records." });
       return;
     }
     if (!customerLastName.trim()) {
-      setStatus({ kind: "error", message: "Enter your last name for Australian Energy Assessments records. It stays private unless you choose to share it." });
+      setStatus({ kind: "error", message: "Enter your last name for Australian Energy Assessments records." });
       return;
     }
     if (!email.trim()) {
@@ -891,11 +891,11 @@ export function PublicPlanEnquiryForm({
       return;
     }
     if (!phone.trim()) {
-      setStatus({ kind: "error", message: "Enter your phone number for Australian Energy Assessments records. It stays private unless you choose to share it." });
+      setStatus({ kind: "error", message: "Enter your phone number for Australian Energy Assessments records." });
       return;
     }
     if (!customerStreetAddress.trim()) {
-      setStatus({ kind: "error", message: "Enter the street address for Australian Energy Assessments records. It stays private unless you choose to share it." });
+      setStatus({ kind: "error", message: "Enter the street address for Australian Energy Assessments records." });
       return;
     }
     if (!/^\d{4}$/.test(postcode)) {
@@ -1235,11 +1235,11 @@ export function PublicPlanEnquiryForm({
       <form className={styles.form} onSubmit={submit}>
         <div className={styles.grid}>
           <label className={styles.field}>
-            <span className={styles.labelRow}>First name <span className={styles.optional}>private unless you share it below</span></span>
+            <span className={styles.labelRow}>First name <span className={styles.optional}>required</span></span>
             <input className={styles.control} required autoComplete="given-name" maxLength={60} value={customerFirstName} onChange={(event) => setCustomerFirstName(event.target.value)} />
           </label>
           <label className={styles.field}>
-            <span className={styles.labelRow}>Last name <span className={styles.optional}>private unless you share it below</span></span>
+            <span className={styles.labelRow}>Last name <span className={styles.optional}>required</span></span>
             <input className={styles.control} required autoComplete="family-name" maxLength={60} value={customerLastName} onChange={(event) => setCustomerLastName(event.target.value)} />
           </label>
           <label className={styles.field}>
@@ -1247,7 +1247,7 @@ export function PublicPlanEnquiryForm({
             <input className={styles.control} required type="email" autoComplete="email" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} aria-describedby="public-plan-contact-hint" />
           </label>
           <label className={styles.field}>
-            <span className={styles.labelRow}>Phone <span className={styles.optional}>private unless you share it below</span></span>
+            <span className={styles.labelRow}>Phone <span className={styles.optional}>required</span></span>
             <input className={styles.control} required type="tel" autoComplete="tel" maxLength={40} value={phone} onChange={(event) => setPhone(event.target.value)} aria-describedby="public-plan-contact-hint" />
           </label>
           <fieldset className={`${styles.addressFields} ${styles.full}`}>
@@ -1307,7 +1307,7 @@ export function PublicPlanEnquiryForm({
               <AustralianAddressLookup
                 className={`${styles.field} ${styles.addressStreet}`}
                 inputClassName={styles.control}
-                label="Street address, private unless you share it below"
+                label="Street address, required"
                 required
                 value={customerStreetAddress}
                 onChange={setCustomerStreetAddress}
@@ -1333,7 +1333,7 @@ export function PublicPlanEnquiryForm({
                   : localityLookupError}
             </p>
           </fieldset>
-          <p className={`${styles.hint} ${styles.full}`} id="public-plan-contact-hint">{aeaOnly ? "Your assessment or safety enquiry, including any additional services, stays with Australian Energy Assessments. We use your contact and property details to arrange the next step." : "Matching trades always receive your email, postcode and selected services. Your first and last name, phone, unit, street, suburb and state stay private unless you choose to share them."}</p>
+          <p className={`${styles.hint} ${styles.full}`} id="public-plan-contact-hint">{aeaOnly ? "Your assessment or safety enquiry, including any additional services, stays with Australian Energy Assessments. We use your contact and property details to arrange the next step." : "Matching trades always receive your email, postcode and selected services. Your name, phone and full property address are selected by default. Untick their sharing boxes below to keep those details private from matching trades."}</p>
           <fieldset
             aria-describedby={serviceSelectionInvalid
               ? "public-plan-service-hint public-plan-service-error"
@@ -1517,18 +1517,18 @@ export function PublicPlanEnquiryForm({
 
         {!aeaOnly ? <fieldset className={styles.shareChoices}>
           <legend>Choose what matching trades can see</legend>
-          <p>Your email, postcode, selected services, message and any optional quote details or photos are included so trades can reply and understand what you need. Relevant facts from your plan are included only when you choose to share the read-only summary above.</p>
+          <p>Your email, postcode, selected services, message and any optional quote details or photos are included so trades can reply and understand what you need. Your name, phone and full property address are selected by default. Untick any box to keep that detail private from matching trades. Relevant facts from your plan are included only when you choose to share the read-only summary above.</p>
           <label>
             <input type="checkbox" checked={shareName} onChange={(event) => setShareName(event.target.checked)} />
-            <span>Also share my first and last name</span>
+            <span>Share my first and last name</span>
           </label>
           <label>
             <input type="checkbox" checked={sharePhone} onChange={(event) => setSharePhone(event.target.checked)} />
-            <span>Also share my phone number</span>
+            <span>Share my phone number</span>
           </label>
           <label>
             <input type="checkbox" checked={shareAddress} onChange={(event) => setShareAddress(event.target.checked)} />
-            <span>Also share my full property address</span>
+            <span>Share my full property address</span>
           </label>
         </fieldset> : null}
 

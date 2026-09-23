@@ -549,15 +549,12 @@ async function normalizeLead(input: EnergyAssistantLeadInput, now: Date): Promis
   const name = cleanLine(input.name, 2, 120, "Name");
   const emailValue = optionalLine(input.email, 254).toLowerCase();
   const phoneValue = optionalLine(input.phone, 32);
-  if (emailValue && !EMAIL_PATTERN.test(emailValue)) {
+  if (!EMAIL_PATTERN.test(emailValue)) {
     throw new EnergyAssistantLeadError(400, "INVALID_LEAD", "Enter a valid email address.");
   }
   const phoneDigits = phoneValue.replace(/\D/g, "");
-  if (phoneValue && (!PHONE_PATTERN.test(phoneValue) || phoneDigits.length < 8 || phoneDigits.length > 15)) {
+  if (!PHONE_PATTERN.test(phoneValue) || phoneDigits.length < 8 || phoneDigits.length > 15) {
     throw new EnergyAssistantLeadError(400, "INVALID_LEAD", "Enter a valid phone number.");
-  }
-  if (!emailValue && !phoneValue) {
-    throw new EnergyAssistantLeadError(400, "INVALID_LEAD", "Add an email address or phone number so Australian Energy Assessments can respond.");
   }
 
   const postcode = typeof input.postcode === "string" ? input.postcode.trim() : "";
@@ -572,20 +569,6 @@ async function normalizeLead(input: EnergyAssistantLeadInput, now: Date): Promis
 
   const services = servicesFrom(input.services);
   const quoteBrief = quoteBriefFrom(input.quoteBrief, services);
-  if (quoteBrief.contactPreference === "email" && !emailValue) {
-    throw new EnergyAssistantLeadError(
-      400,
-      "INVALID_LEAD",
-      "Add an email address or choose a different contact preference.",
-    );
-  }
-  if (quoteBrief.contactPreference === "phone" && !phoneValue) {
-    throw new EnergyAssistantLeadError(
-      400,
-      "INVALID_LEAD",
-      "Add a phone number or choose a different contact preference.",
-    );
-  }
   const serviceConsentGrantedAt = receiptFrom(
     input.serviceConsent,
     ENERGY_ASSISTANT_SERVICE_CONSENT_VERSION,
@@ -594,9 +577,6 @@ async function normalizeLead(input: EnergyAssistantLeadInput, now: Date): Promis
     "Australian Energy Assessments follow-up consent",
   );
   const tradeReceipt = tradeReceiptFrom(input.tradeSharingConsent, now, phoneValue || null);
-  if (tradeReceipt.accepted && !emailValue) {
-    throw new EnergyAssistantLeadError(400, "TRADE_EMAIL_REQUIRED", "Add an email address before choosing to share this brief with matched trades.");
-  }
   if (tradeReceipt.accepted && name.split(/\s+/).length < 2) {
     throw new EnergyAssistantLeadError(400, "TRADE_NAME_REQUIRED", "Add your first and last name before sharing the brief with matched trades.");
   }
