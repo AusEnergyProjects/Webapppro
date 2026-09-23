@@ -1,5 +1,6 @@
 import type { TradeQuoteDocumentSnapshot } from "./trade-quote-review-server.ts";
 import { tradeQuoteDocumentDisplayTotals } from "./trade-quote-document-totals.mjs";
+import { canonicalGoogleBusinessProfileUrl } from "./trade-google-business-profile.mjs";
 
 export type TradeQuoteEmail = {
   subject: string;
@@ -203,6 +204,7 @@ export function buildTradeQuoteEmail(
     .map((value) => cleanText(value, 160))
     .filter(Boolean)
     .join(" | ");
+  const googleBusinessProfileUrl = canonicalGoogleBusinessProfileUrl(snapshot.business.googleBusinessProfileUrl);
   const optionalText =
     snapshot.choices.length > 0
       ? `\nThis quote includes ${snapshot.choices.length} customer choice${snapshot.choices.length === 1 ? "" : "s"} to review online.`
@@ -241,6 +243,7 @@ export function buildTradeQuoteEmail(
     "",
     contact ? `${snapshot.business.name} | ${contact}` : snapshot.business.name,
     snapshot.business.abn ? `ABN ${snapshot.business.abn}` : "",
+    googleBusinessProfileUrl ? `View Google business profile: ${googleBusinessProfileUrl}` : "",
   ]
     .filter((line, index, all) => line || all[index - 1] !== "")
     .join("\n")
@@ -288,7 +291,7 @@ export function buildTradeQuoteEmail(
             <p style="margin:20px 0 0;font-size:13px;line-height:1.5;color:#6c827f">Use the private link to review the quote, ask a question, choose options, sign or decline.${expires ? ` It expires ${escapeHtml(expires)}.` : ""} A PDF copy is attached for your records.</p>
           </td></tr>
           <tr><td style="padding:20px 32px;border-top:1px solid #d9e8e5;background:#f7fbfa;font-size:13px;line-height:1.55;color:#55736f">
-            <strong style="color:#173f3b">${escapeHtml(snapshot.business.name)}</strong>${contact ? `<br>${escapeHtml(contact)}` : ""}${snapshot.business.abn ? `<br>ABN ${escapeHtml(snapshot.business.abn)}` : ""}
+            <strong style="color:#173f3b">${escapeHtml(snapshot.business.name)}</strong>${contact ? `<br>${escapeHtml(contact)}` : ""}${snapshot.business.abn ? `<br>ABN ${escapeHtml(snapshot.business.abn)}` : ""}${googleBusinessProfileUrl ? `<br><a href="${escapeHtml(googleBusinessProfileUrl)}" target="_blank" rel="noopener noreferrer" style="color:#0b6258">View Google business profile</a>` : ""}
           </td></tr>
         </table>
       </td></tr>

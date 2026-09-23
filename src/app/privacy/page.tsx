@@ -25,6 +25,11 @@ const sections = [
     googleAddressSearch: true,
   },
   {
+    title: "Customer and job maps",
+    body: "When an authorised business user opens a customer or job map, addresses for the displayed records are sent from their browser to Google Maps to locate pins. Customer names, contact details, job notes and job descriptions are not included in those address lookups. Google also receives the browser and network information needed to deliver its map. TLink keeps lookup results in memory while the map is open and does not save those coordinates in customer or job records. Existing account permissions continue to control which records and addresses are available. Users can keep working in the list view without opening a map.",
+    googleAddressSearch: true,
+  },
+  {
     title: "How information is used",
     body: "Information is used to provide comparisons and assessments, operate authorised trade workflows, schedule work, prepare quotes and invoices, request evidence, send service messages, reconcile provider status, prevent misuse, meet legal obligations and support account owners. We do not sell personal information or sell household leads.",
   },
@@ -137,7 +142,7 @@ export default function PrivacyPage() {
               ) : null}
               {section.googleAddressSearch ? (
                 <p>
-                  Address suggestions are provided under the Google Maps
+                  Google Maps services are provided under the Google Maps
                   Platform <a href="https://maps.google.com/help/terms_maps/" target="_blank" rel="noopener noreferrer">Terms of Service</a> and
                   Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
                 </p>

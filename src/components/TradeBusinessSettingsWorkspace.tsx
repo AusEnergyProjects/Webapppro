@@ -31,6 +31,7 @@ import {
   savedEnergyServiceIds,
 } from "@/lib/energy-service-catalogue.mjs";
 import { AUSTRALIAN_STATE_OPTIONS, canonicalAustralianState } from "@/lib/australian-postcodes.mjs";
+import { canonicalGoogleBusinessProfileUrl } from "@/lib/trade-google-business-profile.mjs";
 
 type AvailabilityStatus = "open" | "limited" | "paused";
 
@@ -52,6 +53,7 @@ export type TradeBusinessSettingsProfile = {
   contactName?: string;
   phone?: string;
   businessWebsite?: string;
+  googleBusinessProfileUrl?: string;
   serviceStates: string[];
   capabilities: string[];
   accountStatus: string;
@@ -291,6 +293,7 @@ export function TradeBusinessSettingsWorkspace({
   const [documentEmail, setDocumentEmail] = useState(
     profile.documentEmail || "",
   );
+  const [googleBusinessProfileUrl, setGoogleBusinessProfileUrl] = useState(profile.googleBusinessProfileUrl || "");
   const [invoicePaymentAccountName, setInvoicePaymentAccountName] = useState(
     profile.invoicePaymentAccountName || "",
   );
@@ -454,6 +457,9 @@ export function TradeBusinessSettingsWorkspace({
       }
     }
     if (targetSection === "documents") {
+      if (canonicalGoogleBusinessProfileUrl(googleBusinessProfileUrl) === null) {
+        return "Enter a public HTTPS Google Maps business listing link, or leave it blank.";
+      }
       const phoneDigits = documentPhone.replace(/\D/g, "");
       if (documentPhone && (phoneDigits.length < 8 || phoneDigits.length > 15)) {
         return "Enter a valid customer-facing phone number, or leave it blank to use the account phone.";
@@ -499,6 +505,7 @@ export function TradeBusinessSettingsWorkspace({
               documentBusinessName: documentBusinessName.trim(),
               documentPhone: documentPhone.trim(),
               documentEmail: documentEmail.trim(),
+              googleBusinessProfileUrl: googleBusinessProfileUrl.trim(),
               invoicePaymentAccountName: invoicePaymentAccountName.trim(),
               invoicePaymentBsb: invoicePaymentBsb.trim(),
               invoicePaymentAccountNumber:
@@ -1038,6 +1045,25 @@ export function TradeBusinessSettingsWorkspace({
                   />
                 </label>
               </div>
+            </fieldset>
+            <fieldset>
+              <legend>Google Business Profile</legend>
+              <label style={fieldStyle}>
+                <span>Public business profile link (optional)</span>
+                <input
+                  type="url"
+                  maxLength={2048}
+                  value={googleBusinessProfileUrl}
+                  onChange={(event) => setGoogleBusinessProfileUrl(event.target.value)}
+                  placeholder="https://maps.app.goo.gl/..."
+                  aria-describedby="google-business-profile-help"
+                  style={controlStyle}
+                />
+                <small id="google-business-profile-help">Paste the share link for your business listing from Google Maps. New quotes will include a link so customers can view your profile and reviews. Existing issued quotes keep their original details.</small>
+              </label>
+              {canonicalGoogleBusinessProfileUrl(googleBusinessProfileUrl) && (
+                <a href={canonicalGoogleBusinessProfileUrl(googleBusinessProfileUrl) || undefined} target="_blank" rel="noopener noreferrer">Preview Google business profile</a>
+              )}
             </fieldset>
             <fieldset>
               <legend>Invoice payment details</legend>

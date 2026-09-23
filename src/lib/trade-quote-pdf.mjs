@@ -1,11 +1,14 @@
 import { drawTradeDocumentHeader, drawTradeDocumentMetadata } from "./trade-document-pdf-layout.mjs";
 import {
   PDFDocument,
+  PDFName,
+  PDFString,
   StandardFonts,
   rgb,
 } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { tradeQuoteDocumentDisplayTotals } from "./trade-quote-document-totals.mjs";
+import { canonicalGoogleBusinessProfileUrl } from "./trade-google-business-profile.mjs";
 
 const A4_WIDTH = 595.28;
 const A4_HEIGHT = 841.89;
@@ -658,6 +661,22 @@ export async function createTradeQuotePdfBytes(
   }
 
   rule(9);
+  const googleBusinessProfileUrl = canonicalGoogleBusinessProfileUrl(snapshot.business.googleBusinessProfileUrl);
+  if (googleBusinessProfileUrl) {
+    const linkLabel = "View Google business profile";
+    const linkSize = 9;
+    ensureSpace(28);
+    const linkWidth = regular.widthOfTextAtSize(linkLabel, linkSize);
+    page.node.addAnnot(pdf.context.register(pdf.context.obj({
+      Type: PDFName.of("Annot"),
+      Subtype: PDFName.of("Link"),
+      Rect: [MARGIN, y - 2, MARGIN + linkWidth, y + linkSize + 2],
+      Border: [0, 0, 0],
+      Contents: PDFString.of(linkLabel),
+      A: { Type: PDFName.of("Action"), S: PDFName.of("URI"), URI: PDFString.of(googleBusinessProfileUrl) },
+    })));
+    drawText(linkLabel, { size: linkSize, color: palette.primary, gapAfter: 9 });
+  }
   drawText(
     `This PDF is a copy of quote ${snapshot.quoteNumber}, version ${snapshot.versionNumber}. Review and acceptance take place through the private quote link sent by ${snapshot.business.name}.`,
     {

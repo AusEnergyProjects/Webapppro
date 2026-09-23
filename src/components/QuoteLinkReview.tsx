@@ -9,6 +9,7 @@ import {
   type CSSProperties,
 } from "react";
 import { isPayableQuoteDecisionInvoice } from "@/lib/trade-quote-receipt";
+import { canonicalGoogleBusinessProfileUrl } from "@/lib/trade-google-business-profile.mjs";
 
 type Line = {
   id: string;
@@ -64,6 +65,7 @@ type Quote = {
     phone: string;
     abn: string;
     website: string;
+    googleBusinessProfileUrl?: string;
     themeKey: string;
     borderStyle: string;
     hasLogo: boolean;
@@ -724,6 +726,9 @@ export function QuoteLinkReview({ token }: { token: string }) {
             <div>
               <span>Quote from</span>
               <h1>{quote.business.name}</h1>
+              {canonicalGoogleBusinessProfileUrl(quote.business.googleBusinessProfileUrl) && (
+                <p><a href={canonicalGoogleBusinessProfileUrl(quote.business.googleBusinessProfileUrl) || undefined} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", textUnderlineOffset: "3px", fontWeight: 600 }}>View Google business profile</a></p>
+              )}
               <p>
                 {quote.business.phone}
                 {quote.business.email ? ` | ${quote.business.email}` : ""}

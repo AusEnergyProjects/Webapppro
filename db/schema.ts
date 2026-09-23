@@ -14,6 +14,7 @@ export const tradeAccounts = sqliteTable("trade_accounts", {
   phone: text("phone").notNull().default(""),
   partnerType: text("partner_type").notNull().default("installer"),
   businessWebsite: text("business_website").notNull().default(""),
+  googleBusinessProfileUrl: text("google_business_profile_url").notNull().default(""),
   serviceStates: text("service_states").notNull().default("[]"),
   capabilities: text("capabilities").notNull().default("[]"),
   summary: text("summary").notNull().default(""),

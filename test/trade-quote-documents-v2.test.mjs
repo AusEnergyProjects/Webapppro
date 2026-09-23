@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import { PDFDocument, PDFName, PDFDict, PDFString } from "pdf-lib";
+import { buildTradeQuoteEmail } from "../src/lib/trade-quote-email.ts";
+import { canonicalGoogleBusinessProfileUrl } from "../src/lib/trade-google-business-profile.mjs";
+import ts from "typescript";
 import {
   contiguousTradeQuoteSections,
   createTradeQuotePdfBytes,
@@ -114,6 +118,54 @@ function snapshot(schemaVersion = "trade-quote-document-v2") {
     choices: [],
   };
 }
+
+test("new quote emails and PDFs contain only a validated saved Google business link", async () => {
+  for (const url of [undefined, "https://maps.app.goo.gl/Business123", "https://example.com/reviews", "javascript:alert(1)"]) {
+    const document = snapshot();
+    if (url !== undefined) document.business.googleBusinessProfileUrl = url;
+    const expected = url === "https://maps.app.goo.gl/Business123";
+    const email = buildTradeQuoteEmail({ snapshot: document, shareUrl: "https://example.com/quote-review/secret", expiresAt: "2026-10-01" });
+    assert.equal(email.text.includes("View Google business profile"), expected);
+    assert.equal(email.html.includes("View Google business profile"), expected);
+    if (expected) assert.ok(email.html.includes(`href="${url}"`));
+    const pdf = await PDFDocument.load(await createTradeQuotePdfBytes(document));
+    const links = pdf.getPages().flatMap((page) => {
+      const annotations = page.node.Annots();
+      return annotations ? annotations.asArray().map((ref) => {
+        const annotation = pdf.context.lookup(ref, PDFDict);
+        const action = annotation.lookupMaybe(PDFName.of("A"), PDFDict);
+        return action?.lookupMaybe(PDFName.of("URI"), PDFString)?.decodeText();
+      }).filter(Boolean) : [];
+    });
+    assert.deepEqual(links, expected ? [url] : []);
+  }
+});
+
+test("issued quote links use the immutable snapshot without consulting the current business profile", async () => {
+  const compiled = ts.transpileModule(reviewServer, { compilerOptions: {
+    module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
+  } }).outputText;
+  const dependencies = {
+    "../../db": { getD1() { throw new Error("Issued quote must not reread the current profile"); } },
+    "@/lib/admin-server": {}, "@/lib/trade-quote-links": {}, "@/lib/trade-access-server": {},
+    "./trade-google-business-profile.mjs": { canonicalGoogleBusinessProfileUrl },
+  };
+  const exports = {};
+  Function("require", "exports", compiled)((id) => {
+    assert.ok(Object.hasOwn(dependencies, id), id);
+    return dependencies[id];
+  }, exports);
+  for (const savedUrl of [undefined, "https://g.page/original-business", "javascript:alert(1)"]) {
+    const saved = snapshot();
+    if (savedUrl !== undefined) saved.business.googleBusinessProfileUrl = savedUrl;
+    const loaded = await exports.quoteDocumentSnapshotForAuthorisedLink({
+      document_snapshot_json: JSON.stringify(saved), quote_id: saved.quoteId, quote_version_id: saved.quoteVersionId,
+      work_order_id: saved.work.id, crm_customer_id: saved.customer.id, firebase_uid: "owner-1",
+    });
+    assert.equal(loaded.business.googleBusinessProfileUrl,
+      savedUrl === undefined ? undefined : canonicalGoogleBusinessProfileUrl(savedUrl) || "");
+  }
+});
 
 test("banner crop produces the same bounded 5 to 1 source geometry", () => {
   const defaultCrop = tradeQuoteBannerCropForImage(

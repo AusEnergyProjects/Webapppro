@@ -1,5 +1,40 @@
 # Next task handover
 
+Status: Customer/job maps and Google Business Profile quote links implemented and validated; Google Maps credential activation and exact-source publication are in progress.
+Prepared: 23 September 2026
+
+## Active contract: customer/job maps and Google Business Profile links
+
+Outcome: businesses can open their filtered customer/job records on Google Maps
+and include a public Google Business Profile link in newly issued quotes.
+
+Owner: `C:/Webproject/aea-energy-tlink-map`, branch `codex/tlink-customer-job-map`,
+based on verified live source `e17b85cd6bf4bbe31bb35a49b073942baa5bf7b7` (Sites 607).
+
+Scope: CRM map toggle and record panel, dedicated browser map configuration,
+business-profile URL storage/settings and immutable quote presentation. Existing
+record permissions apply. Council dashboards, review synchronisation and OAuth
+business-profile management are excluded. No unrelated provider work is included.
+
+Acceptance: filtered current-page pins; shared-address selection; missing and
+protected locations remain unlocated; record navigation and responsive day/night
+layout; safe Google profile URLs; historical quote compatibility. Validate focused
+tests, typecheck/lint, migration checks, full required suite and publication build.
+Google Cloud sign-in is complete and the owned JavaScript map ID is created.
+Browser-key configuration and real-map runtime checks remain activation gates.
+Preserve existing records and unrelated worktrees.
+
+Validation: focused map/configuration/release checks passed 25/25, profile/quote
+checks passed 100/100, typecheck and source lint passed, and all 187 migrations
+replayed successfully. Full suite: 5,219 passed, 11 skipped, six unrelated existing
+assertion failures and one stalled test worker. The stalled security file passed
+56/56 on its isolated rerun. The existing Surge source-approval audit reports
+expired review windows; other required audits and the publication build passed.
+
+---
+
+## Previous handover
+
 Status: Creditex/admin workflow cleanup and private PC audit calling are in release validation; Creditex completes its own provider activation.
 Prepared: 21 September 2026
 

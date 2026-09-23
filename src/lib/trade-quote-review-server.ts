@@ -5,6 +5,7 @@ import {
   splitQuoteLinkToken,
 } from "@/lib/trade-quote-links";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
+import { canonicalGoogleBusinessProfileUrl } from "./trade-google-business-profile.mjs";
 
 type Row = Record<string, unknown>;
 
@@ -79,6 +80,7 @@ export type TradeQuoteDocumentSnapshot = {
     phone: string;
     abn: string;
     website: string;
+    googleBusinessProfileUrl?: string;
     address: string;
     themeKey: string;
     borderStyle: string;
@@ -146,6 +148,7 @@ export type TradeQuoteReviewPayload = {
     abn: string;
     website: string;
     themeKey: string;
+    googleBusinessProfileUrl?: string;
     borderStyle: string;
     hasLogo: boolean;
     hasBanner: boolean;
@@ -452,6 +455,9 @@ function snapshotFromObject(
       phone: cleanText(business.phone, 60),
       abn: cleanText(business.abn, 20),
       website: cleanText(business.website, 500),
+      ...(business.googleBusinessProfileUrl === undefined ? {} : {
+        googleBusinessProfileUrl: canonicalGoogleBusinessProfileUrl(business.googleBusinessProfileUrl) || "",
+      }),
       address: cleanText(business.address, 800),
       themeKey: cleanText(business.themeKey, 60) || "emerald_navy",
       borderStyle: cleanText(business.borderStyle, 30) || "soft",
@@ -518,7 +524,8 @@ export async function buildTradeQuoteDocumentSnapshot(
         site.address_state, site.postcode,
         trade.business_name trade_business_name, trade.email trade_email,
         trade.phone trade_phone, trade.abn trade_abn,
-        trade.business_website trade_website, trade.address_line_1 trade_address_line_1,
+        trade.business_website trade_website, trade.google_business_profile_url,
+        trade.address_line_1 trade_address_line_1,
         trade.suburb trade_suburb, trade.address_state trade_address_state,
         trade.postcode trade_postcode, trade.brand_theme_key,
         trade.brand_border_style, trade.logo_object_key, trade.logo_content_type,
@@ -636,6 +643,7 @@ export async function buildTradeQuoteDocumentSnapshot(
         cleanText(row.trade_phone, 60),
       abn: cleanText(row.trade_abn, 20),
       website: cleanText(row.trade_website, 500),
+      googleBusinessProfileUrl: canonicalGoogleBusinessProfileUrl(row.google_business_profile_url) || "",
       address: businessAddress,
       themeKey: cleanText(row.brand_theme_key, 60) || "emerald_navy",
       borderStyle: cleanText(row.brand_border_style, 30) || "soft",
@@ -826,6 +834,7 @@ export async function buildTradeQuoteReviewPayload(
       phone: snapshot.business.phone,
       abn: snapshot.business.abn,
       website: snapshot.business.website,
+      googleBusinessProfileUrl: snapshot.business.googleBusinessProfileUrl || "",
       themeKey: snapshot.business.themeKey,
       borderStyle: snapshot.business.borderStyle,
       hasLogo: Boolean(snapshot.business.logo),

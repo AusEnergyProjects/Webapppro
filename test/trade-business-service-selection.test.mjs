@@ -9,6 +9,7 @@ import * as branding from "../src/lib/trade-business-branding.ts";
 import * as abn from "../src/lib/trade-abn.ts";
 import * as entitlements from "../src/lib/direct-trade-entitlements.ts";
 import * as states from "../src/lib/australian-postcodes.mjs";
+import * as googleProfile from "../src/lib/trade-google-business-profile.mjs";
 import { AEA_RESERVED_SERVICE_IDS } from "../src/lib/aea-service-identity.mjs";
 import { matchedServiceCategories } from "../src/lib/trade-service-matching.mjs";
 
@@ -38,8 +39,10 @@ function businessHarness(capabilities, serviceStates = ["VIC"], addressState = "
   const exports = {};
   const dependencies = {
     react: hooks, "react/jsx-runtime": jsx, "next/dynamic": { default: () => () => null },
+    "next/image": { default: (props) => jsx.jsx("img", props) },
     "@/lib/trade-business-branding": branding, "@/lib/energy-service-catalogue.mjs": services,
     "@/lib/australian-postcodes.mjs": states,
+    "@/lib/trade-google-business-profile.mjs": googleProfile,
   };
   Function("require", "exports", "fetch", uiCompiled)((id) => {
     assert.ok(Object.hasOwn(dependencies, id), `Unexpected UI dependency: ${id}`);
@@ -61,7 +64,7 @@ const renderBusiness = (capabilities) => businessHarness(capabilities).render();
 function routeFixture(capabilities = ["solar"], serviceStates = ["VIC"]) {
   const database = new DatabaseSync(":memory:");
   const textColumns = ["email", "business_name", "abn", "address_line_1", "suburb", "address_state", "postcode",
-    "contact_name", "phone", "partner_type", "business_website", "service_states", "capabilities", "summary",
+    "contact_name", "phone", "partner_type", "business_website", "google_business_profile_url", "service_states", "capabilities", "summary",
     "account_status", "verification_status", "verified_abn", "verification_review_id", "verification_reviewed_at",
     "verification_reviewed_by_uid", "availability_status", "service_base_postcode", "settings_updated_at",
     "brand_theme_key", "brand_border_style", "logo_object_key", "logo_content_type", "banner_object_key",
@@ -101,6 +104,7 @@ function routeFixture(capabilities = ["solar"], serviceStates = ["VIC"]) {
     "@/lib/postcode-distance": { postcodeCoordinate: (postcode) => ({ "3000": [-37.81, 144.96], "2000": [-33.86, 151.20] })[postcode] || null },
     "@/lib/admin-notifications": {}, "@/lib/direct-trade-entitlements": entitlements,
     "@/lib/australian-postcodes.mjs": states, "@/lib/trade-abn": abn,
+    "@/lib/trade-google-business-profile.mjs": googleProfile,
     "@/lib/trade-business-branding": branding, "@/lib/energy-service-catalogue.mjs": services,
   };
   const exports = {};
@@ -153,6 +157,40 @@ test("settings API roundtrip preserves every supported service without granting 
     }
     assert.deepEqual(matchedServiceCategories(["solar"], services.ENERGY_SERVICE_IDS), ["solar"]);
   } finally { f.database.close(); }
+});
+
+test("business profile link saves, reloads, survives other settings and rejects invalid changes", async () => {
+  const f = routeFixture();
+  try {
+    const link = "https://maps.app.goo.gl/Business123";
+    const saved = await f.patch({ googleBusinessProfileUrl: link });
+    assert.equal(saved.status, 200);
+    assert.equal((await saved.json()).settings.googleBusinessProfileUrl, link);
+    assert.equal((await (await f.get()).json()).profile.googleBusinessProfileUrl, link);
+    assert.equal((await f.patch({ availabilityStatus: "limited" })).status, 200);
+    for (const invalid of ["javascript:alert(1)", "https://example.com", "https://g.page/" + "a".repeat(2048), { url: link }]) {
+      const response = await f.patch({ googleBusinessProfileUrl: invalid });
+      assert.equal(response.status, 400);
+      assert.equal(f.database.prepare("SELECT google_business_profile_url FROM trade_accounts").get().google_business_profile_url, link);
+    }
+    assert.equal((await f.patch({ googleBusinessProfileUrl: "" })).status, 200);
+    assert.equal((await (await f.get()).json()).profile.googleBusinessProfileUrl, "");
+  } finally { f.database.close(); }
+});
+
+test("business settings saves the Google profile with document settings and previews the public link", async () => {
+  const h = businessHarness(["solar"]);
+  let tree = h.render();
+  const input = nodes(tree, (node) => node.type === "input" && node.props["aria-describedby"] === "google-business-profile-help")[0];
+  assert.ok(input);
+  input.props.onChange({ target: { value: "https://maps.app.goo.gl/Business123" } });
+  tree = h.render();
+  const preview = nodes(tree, (node) => node.type === "a" && text(node) === "Preview Google business profile")[0];
+  assert.equal(preview.props.href, "https://maps.app.goo.gl/Business123");
+  assert.equal(preview.props.rel, "noopener noreferrer");
+  await nodes(tree, (node) => node.type === "form" && node.props["data-settings-section"] === "documents")[0]
+    .props.onSubmit({ preventDefault() {}, currentTarget: { dataset: { settingsSection: "documents" } } });
+  assert.equal(JSON.parse(h.requests[0].body).googleBusinessProfileUrl, preview.props.href);
 });
 
 test("legacy stored services survive unrelated saves while duplicates and unknowns do not affect selections", async () => {

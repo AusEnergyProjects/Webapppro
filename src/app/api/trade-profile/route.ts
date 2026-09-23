@@ -23,6 +23,7 @@ import {
   TRADE_BRAND_THEME_KEYS,
 } from "@/lib/trade-business-branding";
 import { normalizeEnergyServiceIds, savedEnergyServiceIds } from "@/lib/energy-service-catalogue.mjs";
+import { canonicalGoogleBusinessProfileUrl } from "@/lib/trade-google-business-profile.mjs";
 
 export const runtime = "edge";
 
@@ -275,7 +276,7 @@ export async function GET(request: Request) {
     SELECT account.email, account.business_name, account.abn, account.address_line_1,
            account.suburb, account.address_state, account.postcode,
            account.contact_name, account.phone, account.partner_type,
-           account.business_website, account.service_states, account.capabilities,
+           account.business_website, account.google_business_profile_url, account.service_states, account.capabilities,
            account.summary, account.account_status, account.verification_status,
            account.verified_abn, account.verification_review_id,
            account.verification_reviewed_at, account.verification_reviewed_by_uid,
@@ -337,6 +338,7 @@ export async function GET(request: Request) {
       phone: record.phone,
       partnerType: record.partner_type,
       businessWebsite,
+      googleBusinessProfileUrl: canonicalGoogleBusinessProfileUrl(record.google_business_profile_url) || "",
       serviceStates: parseStringList(record.service_states),
       capabilities: savedEnergyServiceIds(parseStringList(record.capabilities)),
       summary: record.summary,
@@ -404,6 +406,7 @@ type SettingsPayload = {
   documentBusinessName?: unknown;
   documentPhone?: unknown;
   documentEmail?: unknown;
+  googleBusinessProfileUrl?: unknown;
   bannerCropXBasisPoints?: unknown;
   bannerCropYBasisPoints?: unknown;
   bannerCropWidthBasisPoints?: unknown;
@@ -441,7 +444,7 @@ export async function PATCH(request: Request) {
       service_radius_km, availability_status, email_opportunities,
       email_weekly_summary, brand_theme_key, brand_border_style,
       quote_email_subject_template, quote_email_intro, quote_default_terms,
-      document_business_name, document_phone, document_email,
+      document_business_name, document_phone, document_email, google_business_profile_url,
       banner_crop_x_basis_points, banner_crop_y_basis_points,
       banner_crop_width_basis_points, banner_crop_height_basis_points,
       invoice_payment_account_name, invoice_payment_bsb,
@@ -581,6 +584,12 @@ export async function PATCH(request: Request) {
   const documentEmail = raw.documentEmail === undefined
     ? String(account.document_email || "")
     : normaliseOptionalEmail(raw.documentEmail);
+  const googleBusinessProfileUrl = canonicalGoogleBusinessProfileUrl(
+    raw.googleBusinessProfileUrl === undefined ? account.google_business_profile_url : raw.googleBusinessProfileUrl,
+  );
+  if (googleBusinessProfileUrl === null) {
+    return json({ ok: false, error: "Enter a public HTTPS Google Maps business listing link, or leave it blank." }, 400);
+  }
   if (documentBusinessName === null || documentPhone === null || documentEmail === null) {
     return json({
       ok: false,
@@ -644,7 +653,7 @@ export async function PATCH(request: Request) {
     SET capabilities = ?, availability_status = ?, service_base_postcode = ?, service_radius_km = ?,
         email_opportunities = ?, email_weekly_summary = ?,
         brand_theme_key = ?, brand_border_style = ?,
-        document_business_name = ?, document_phone = ?, document_email = ?,
+        document_business_name = ?, document_phone = ?, document_email = ?, google_business_profile_url = ?,
         banner_crop_x_basis_points = ?, banner_crop_y_basis_points = ?,
         banner_crop_width_basis_points = ?, banner_crop_height_basis_points = ?,
         quote_email_subject_template = ?, quote_email_intro = ?, quote_default_terms = ?,
@@ -665,6 +674,7 @@ export async function PATCH(request: Request) {
     documentBusinessName,
     documentPhone,
     documentEmail,
+    googleBusinessProfileUrl,
     bannerCrop.x,
     bannerCrop.y,
     bannerCrop.width,
@@ -723,6 +733,7 @@ export async function PATCH(request: Request) {
       documentBusinessName,
       documentPhone,
       documentEmail,
+      googleBusinessProfileUrl,
       documentDisplayBusinessName: documentBusinessName || String(account.business_name || ""),
       documentDisplayPhone: documentPhone || String(account.phone || ""),
       documentDisplayEmail: documentEmail || String(account.email || ""),
@@ -1064,6 +1075,7 @@ export async function DELETE(request: Request) {
           document_business_name = '',
           document_phone = '',
           document_email = '',
+          google_business_profile_url = '',
           banner_crop_x_basis_points = 0,
           banner_crop_y_basis_points = 0,
           banner_crop_width_basis_points = 10000,
