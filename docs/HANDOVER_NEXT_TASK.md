@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: Customer/job maps and Google Business Profile quote links implemented and validated; Google Maps credential activation and exact-source publication are in progress.
+Status: Customer/job maps and Google Business Profile quote links are live; Google Maps activation and live map acceptance are complete.
 Prepared: 23 September 2026
 
 ## Active contract: customer/job maps and Google Business Profile links
@@ -20,9 +20,17 @@ Acceptance: filtered current-page pins; shared-address selection; missing and
 protected locations remain unlocated; record navigation and responsive day/night
 layout; safe Google profile URLs; historical quote compatibility. Validate focused
 tests, typecheck/lint, migration checks, full required suite and publication build.
-Google Cloud sign-in is complete and the owned JavaScript map ID is created.
-Browser-key configuration and real-map runtime checks remain activation gates.
-Preserve existing records and unrelated worktrees.
+Verified deployment baseline: Sites 609, source
+`16783d75ee21247771cff7f6ea01be52b9884e0b`, environment revision 112.
+The existing `australian-energy-assessments` Google Cloud project has an owned
+JavaScript map ID and the `TLink Maps browser` key, restricted to production
+apex-site HTTP referrers and the Maps JavaScript and Geocoding APIs. The temporary
+local testing allowance was removed after the real Google checks.
+Real Google customer and job pins opened the correct records; a shared-address
+fixture passed against Google; mobile layout/actions and day/night views were
+checked. Each business receives only its server-authorised CRM records. Council
+pins remain outside this completed slice. Preserve existing records and unrelated
+worktrees.
 
 Validation: focused map/configuration/release checks passed 25/25, profile/quote
 checks passed 100/100, typecheck and source lint passed, and all 187 migrations

@@ -4,13 +4,23 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 21 September 2026
+Last reconciled locally: 23 September 2026
 
-Deployment baseline verified: Sites 594 and GitHub main at `00e12a2a4088ceddcf574370e6746b05d040f195` before this release.
+Deployment baseline verified: Sites 609, source `16783d75ee21247771cff7f6ea01be52b9884e0b`, environment revision 112.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: Creditex and admin workspaces with private audit calls
+## Current implementation: customer/job maps and Google Business Profile quote links
+
+Customer and job registers now offer a Google Maps view of the current filtered page, with clickable pins, shared-location selection, record opening and directions. Existing pagination and server-authorised business/team scope remain authoritative. Job pins use the service-site address; missing and protected locations remain unpinned. Account changes clear map state and cached locations. Council dashboards are outside this slice.
+
+Google Maps is active in the existing `australian-energy-assessments` project using an owned JavaScript map ID. The `TLink Maps browser` key is restricted to production apex-site HTTP referrers and only the Maps JavaScript and Geocoding APIs; the temporary local testing allowance was removed after verification. Real Google customer/job pins opened the correct records, shared-address selection passed with a fixture against Google, and mobile layout/actions plus day/night views were checked. Sites 609/source `16783d75ee21247771cff7f6ea01be52b9884e0b`/environment 112 is the verified deployment baseline.
+
+Business settings can store a public Google Business Profile link for newly issued quotes. Safe Google URL validation, immutable quote snapshots and historical quote compatibility remain in place. Focused map/configuration/release checks passed 25/25 and profile/quote checks passed 100/100; typecheck, source lint, all 187 migration replays and the publication build passed. The full validation retains the unrelated baseline assertion failures and expired Surge source-review windows documented in the current handover; the stalled security worker passed all 56 tests on an isolated rerun.
+
+## Previous implementation: Creditex and admin workspaces with private audit calls
+
+Previous deployment baseline: Sites 594 and GitHub main at `00e12a2a4088ceddcf574370e6746b05d040f195` before the Creditex release.
 
 Creditex opens on Jobs, with detailed customer, trade, activity, site, schedule, stage and financial columns. Search, per-column filters and sorting apply before server pagination. Opening a job presents one audit workspace with summary, calls and expandable retained evidence and financial records. Cases and specialist tools remain available separately. The synthetic VEU pilot interface is retired; real VEU tools and historical evidence remain protected.
 
