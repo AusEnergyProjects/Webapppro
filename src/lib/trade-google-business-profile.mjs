@@ -17,7 +17,7 @@ export function canonicalGoogleBusinessProfileUrl(value) {
   const legacyMapsHost = ["maps.google.com", "maps.google.com.au"].includes(host);
   const listingPath = /^\/maps\/(?:place|search)\/.+/.test(path);
   const listingQuery = ["cid", "ftid", "q", "query", "query_place_id"].some((key) => url.searchParams.get(key)?.trim());
-  const mapsLink = (mapsHost && (listingPath || (/^\/maps(?:\/search)?\/?$/.test(path) && listingQuery)))
+  const mapsLink = (mapsHost && (listingPath || (/^\/maps(?:\/(?:place|search))?\/?$/.test(path) && listingQuery)))
     || (legacyMapsHost && (/^\/(?:maps\/?)?$/.test(path) && listingQuery));
   if (!shortLink && !businessLink && !mapsLink) return null;
   // These are listing URLs, not Google's redirect endpoints.

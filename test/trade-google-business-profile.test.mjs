@@ -10,6 +10,7 @@ test("public Google business listing links preserve their exact listing destinat
     "https://g.page/example-business",
     "https://g.page/r/Example123/review",
     "https://www.google.com/maps/place/Example+Business/@-37,145,16z/data=test",
+    "https://www.google.com/maps/place/?q=place_id:ChIJS2WVhrVD1moRFxEPRjRPxtE",
     "https://www.google.com.au/maps?cid=123456789",
     "https://www.google.com/maps/search/?api=1&query=Example&query_place_id=ChIJ123",
     "https://maps.google.com/?cid=1234",
@@ -21,7 +22,7 @@ test("Google profile validation rejects unsafe, unrelated and misleading URL for
   for (const value of [
     "javascript:alert(1)", "http://g.page/example", "//g.page/example", "https://example.com/reviews",
     "https://g.page.example.com/example", "https://maps.app.goo.gl.evil.com/abc", "https://google.com/search?q=trade",
-    "https://www.google.com/maps", "https://www.google.com/maps/dir/Somewhere",
+    "https://www.google.com/maps", "https://www.google.com/maps/place/", "https://www.google.com/maps/place/?q=", "https://www.google.com/maps/dir/Somewhere",
     "https://username:password@g.page/example", "https://g.page:444/example",
     "https://maps.app.goo.gl/", "https://g.page/example\n/review", "https://g.page\\@example.com/path",
     "https://www.google.com/maps/place/Business?url=https://example.com", "https://g.page/example?continue=https://example.com",
