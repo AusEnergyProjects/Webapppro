@@ -170,7 +170,7 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
           streetViewControl: false,
           clickableIcons: false,
           fullscreenControl: true,
-          gestureHandling: "cooperative",
+          gestureHandling: window.matchMedia("(pointer: fine)").matches ? "greedy" : "cooperative",
           colorScheme: document.documentElement.dataset.tlinkColourMode === "night" ? "DARK" : "LIGHT",
         });
         createdMap.addListener("dragstart", () => { interactedRef.current = true; });
