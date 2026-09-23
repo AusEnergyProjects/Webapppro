@@ -34,6 +34,8 @@ test("a job map pin uses its service-site projection instead of the customer bil
   assert.equal(record.kind, "job");
   assert.equal(record.reference, "TLJ-101");
   assert.equal(record.detail, "Insulation | unscheduled");
+  assert.equal(record.jobStatus, job.jobRegister.operationalStatus);
+  assert.equal(jobMapRecord({ ...job, jobRegister: { ...job.jobRegister, operationalStatus: "partial" } }).jobStatus, "partial");
   assert.doesNotMatch(record.address, /Billing|Melbourne/);
 });
 
@@ -48,7 +50,7 @@ test("missing street or locality stays unpinned instead of geocoding a postcode,
 test("protected jobs cannot leak a location or customer name even with a populated register projection", () => {
   for (const protectedJob of [{ ...job, customerSource: "platform_private" }, { ...job, sourceType: "opportunity" }]) {
     assert.deepEqual(jobMapRecord(protectedJob), {
-      id: "job-1", kind: "job", title: "Protected job", reference: "TLJ-101", address: "", detail: "Customer location protected",
+      id: "job-1", kind: "job", jobStatus: "unscheduled", title: "Protected job", reference: "TLJ-101", address: "", detail: "Customer location protected",
     });
   }
   const redacted = projectJobRegisterRecord({ jobId: "TLJ-101", addressLine1: "20 Service Street", suburb: "Ballarat", postcode: "3350", canViewCustomer: false });

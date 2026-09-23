@@ -50,6 +50,7 @@ export function jobMapRecord(job: JobMapSource): TradeMapRecord {
   return {
     id: job.id,
     kind: "job",
+    jobStatus: record.operationalStatus,
     title: protectedLocation ? "Protected job" : job.customerDisplayName || job.title || job.workNumber,
     reference: job.workNumber,
     // The register projection comes from the job's service site, never its customer's billing address.

@@ -7,7 +7,11 @@ import {
   prepareTradeMapAddress,
   tradeMapAddressKey,
   tradeMapDirectionsUrl,
+  tradeMapPinCategory,
+  tradeMapRecordCategory,
+  TRADE_MAP_PIN_LABELS,
 } from "../src/lib/trade-record-map.ts";
+import { TRADE_JOB_LIFECYCLE_LABELS, TRADE_JOB_LIFECYCLE_STATUSES } from "../src/lib/trade-job-lifecycle.ts";
 
 const record = (id, address, kind = "job") => ({ id, kind, address, title: `Private title ${id}`, reference: `JOB-${id}`, detail: "Private customer notes" });
 const located = (lat = -37.81, lng = 144.96, approximate = false) => ({ status: "located", position: { lat, lng }, approximate });
@@ -15,6 +19,35 @@ const candidate = (options = {}) => ({
   address_components: [{ short_name: options.country ?? "AU", types: ["country"] }],
   partial_match: options.partial ?? false,
   geometry: { location_type: options.type ?? "ROOFTOP", location: { lat: () => options.lat ?? -37.81, lng: () => options.lng ?? 144.96 } },
+});
+
+test("map categories preserve the indexed operational lifecycle and customer distinction", () => {
+  const job = record("1", "1 Smith St Melbourne VIC 3000");
+  for (const jobStatus of TRADE_JOB_LIFECYCLE_STATUSES) {
+    assert.equal(tradeMapRecordCategory({ ...job, jobStatus }), jobStatus);
+    assert.equal(TRADE_MAP_PIN_LABELS[jobStatus], TRADE_JOB_LIFECYCLE_LABELS[jobStatus]);
+  }
+  assert.equal(tradeMapRecordCategory(job), "unknown", "missing status must not be presented as unscheduled");
+  assert.equal(tradeMapRecordCategory({ ...job, kind: "customer", jobStatus: "completed" }), "customer");
+  assert.equal(TRADE_MAP_PIN_LABELS.partial, "Partial");
+  assert.equal(TRADE_MAP_PIN_LABELS.no_show, "No show");
+});
+
+test("co-located jobs retain counts and use mixed status only when their lifecycles differ", () => {
+  const records = [
+    { ...record("1", "1 Smith St Melbourne VIC 3000"), jobStatus: "scheduled" },
+    { ...record("2", "1 Smith St Melbourne VIC 3000"), jobStatus: "scheduled" },
+  ];
+  const results = new Map([[tradeMapAddressKey(records[0].address), located()]]);
+  const pins = groupTradeMapPins(records, results);
+  assert.equal(pins.length, 1);
+  assert.equal(pins[0].records.length, 2);
+  assert.equal(tradeMapPinCategory(pins[0].records), "scheduled");
+  assert.equal(tradeMapPinCategory([records[0], { ...records[1], jobStatus: "completed" }]), "mixed");
+  assert.equal(tradeMapPinCategory([records[0], { ...records[1], jobStatus: undefined }]), "mixed");
+  assert.equal(tradeMapPinCategory([records[0], { ...records[1], kind: "customer" }]), "mixed_records");
+  assert.equal(tradeMapPinCategory([{ ...records[0], kind: "customer" }, { ...records[1], kind: "customer" }]), "customer");
+  assert.equal(tradeMapPinCategory([]), "unknown");
 });
 
 test("map addresses exclude missing, withheld, non-street and invalid inputs", () => {

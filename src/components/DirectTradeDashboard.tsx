@@ -223,9 +223,10 @@ const publicLeadHandoffStages = [
     detail: "The quote will open automatically as soon as the handoff is confirmed.",
   },
 ] as const;
-type DashboardWorkspace = "work" | "team" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
+type DashboardWorkspace = "work" | "map" | "team" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
+  "map",
   "team",
   "training",
   "finance",
@@ -806,6 +807,7 @@ export function DirectTradeDashboard() {
       ? "work"
       : dashboardWorkspaceFromSearch(window.location.search)
   );
+  const [mapNavigationNonce, setMapNavigationNonce] = useState(0);
   const [financeView, setFinanceView] = useState<FinanceView>(() => typeof window === "undefined" ? "quotes" : dashboardFinanceViewFromSearch(window.location.search));
   const [financePriceBookView, setFinancePriceBookView] = useState<"items" | "packets">("items");
   const openFinance = (view: FinanceView, priceBookView: "items" | "packets" = "items") => {
@@ -1267,7 +1269,7 @@ export function DirectTradeDashboard() {
   }, [user]);
 
   useEffect(() => {
-    if (profile?.partnerType === "supplier" && workspace === "calculator") {
+    if (profile?.partnerType === "supplier" && (workspace === "calculator" || workspace === "map")) {
       setWorkspace("work");
     }
   }, [profile?.partnerType, workspace]);
@@ -2364,7 +2366,7 @@ export function DirectTradeDashboard() {
             </div>
           </header>
 
-          <div className="trade-portal-intro">
+          {workspace !== "map" && <div className="trade-portal-intro">
             <span>{isSupplier ? "Wholesale operations" : "Business operations"}</span>
             <h1>{isSupplier ? "Products, orders and supply in one place" : "Your workday, without the clutter"}</h1>
             <p>
@@ -2372,7 +2374,7 @@ export function DirectTradeDashboard() {
                 ? "Manage the catalogue, trade requests, fulfilment and business settings from one clear workspace."
                 : "Manage jobs, customers, schedules, products and protected opportunities from one clear workspace."}
               </p>
-            </div>
+            </div>}
 
           {isSupplier ? (
             <>
@@ -2422,6 +2424,11 @@ export function DirectTradeDashboard() {
                 className="dashboard-workspace-nav"
                 aria-label="TLink installer account"
               >
+                <button type="button" aria-current={workspace === "map" ? "page" : undefined} className={workspace === "map" ? "active" : ""} onClick={() => {
+                  setCommandTarget(null);
+                  setMapNavigationNonce((current) => current + 1);
+                  setWorkspace("map");
+                }}><TLinkNavigationIcon name="map" /><span>Map</span><small>Customer and job locations</small></button>
                 <button type="button" aria-current={workspace === "work" && activeWorkView !== "schedule" && activeWorkView !== "leads" ? "page" : undefined} className={workspace === "work" && activeWorkView !== "schedule" && activeWorkView !== "leads" ? "active" : ""} onClick={() => {
                   setCommandTarget({ workspace: "work", kind: "crm-view", id: "today", query: "", nonce: Date.now() });
                   setActiveWorkView("today");
@@ -2451,12 +2458,14 @@ export function DirectTradeDashboard() {
                 <button type="button" aria-current={workspace === "account" ? "page" : undefined} className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><TLinkNavigationIcon name="business" /><span>Business</span><small>Settings and verification</small></button>
               </nav>
 
-              {workspace === "work" && <TradeBusinessHub
+              {(workspace === "work" || workspace === "map") && <TradeBusinessHub
+                key={`${user.uid}:${workspace}:${workspace === "map" ? mapNavigationNonce : 0}`}
                 user={user}
                 partnerType="installer"
                 fullAccess={hasBusinessOperations}
                 teamAccess={hasTeamAccess}
-                navigationTarget={commandTarget}
+                mapWorkspace={workspace === "map"}
+                navigationTarget={workspace === "map" ? null : commandTarget}
                 onOpenSchedule={(weekStart) => {
                   setCommandTarget({
                     workspace: "work",
@@ -2469,8 +2478,11 @@ export function DirectTradeDashboard() {
                   setWorkspace("work");
                 }}
                 onWorkViewChange={(nextView) => {
+                  if (workspace === "map" && (nextView === "jobs" || nextView === "customers")) return;
                   if (nextView === "pricebook" || nextView === "reports") { openFinance(nextView); return; }
-                  setCommandTarget((current) => current?.kind === "crm-view" && current.id !== nextView ? null : current);
+                  setCommandTarget((current) => workspace === "map"
+                    ? { workspace: "work", kind: "crm-view", id: nextView, query: "", nonce: Date.now() }
+                    : current?.kind === "crm-view" && current.id !== nextView ? null : current);
                   setActiveWorkView(nextView);
                   setWorkspace("work");
                 }}

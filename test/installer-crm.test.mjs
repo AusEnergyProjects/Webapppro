@@ -361,17 +361,17 @@ test("job and customer directories open focused records without automatic or inl
   assert.match(crm, /onClick=\{\(\) => openFocusedJob\(job\.id\)\}/);
   assert.match(crm, /crm-view crm-job-workspace/);
   assert.match(crm, /crm-view crm-customer-focus/);
-  assert.match(crm, /Back to all jobs/);
-  assert.match(crm, /Back to all customers/);
+  assert.match(crm, /mapWorkspace \? "Back to map" : "Back to all jobs"/);
+  assert.match(crm, /mapWorkspace \? "Back to map" : "Back to all customers"/);
   assert.match(crm, /jobReturnTarget\.kind === "customer"/);
   assert.match(crm, /kind: "customer", customerId: selectedCustomerDetail\.id, customerName: selectedCustomerDetail\.displayName/);
 
-  const jobDirectoryStart = crm.indexOf('{view === "jobs" && creating !== "job" && !focusedJobId');
+  const jobDirectoryStart = crm.indexOf('{!mapWorkspace && view === "jobs" && creating !== "job" && !focusedJobId');
   const jobDirectoryEnd = crm.indexOf('{view === "schedule"', jobDirectoryStart);
   assert.ok(jobDirectoryStart >= 0 && jobDirectoryEnd > jobDirectoryStart);
   assert.doesNotMatch(crm.slice(jobDirectoryStart, jobDirectoryEnd), /<JobDetail/);
 
-  const customerDirectoryStart = crm.indexOf('{view === "customers" && creating !== "customer" && !selectedCustomerId');
+  const customerDirectoryStart = crm.indexOf('{!mapWorkspace && view === "customers" && creating !== "customer" && !selectedCustomerId');
   const customerDirectoryEnd = crm.indexOf('{view === "templates"', customerDirectoryStart);
   assert.ok(customerDirectoryStart >= 0 && customerDirectoryEnd > customerDirectoryStart);
   assert.doesNotMatch(crm.slice(customerDirectoryStart, customerDirectoryEnd), /<CustomerDetail/);
@@ -382,7 +382,7 @@ test("owner and staff CRM destinations follow the primary navigation and saved a
   assert.doesNotMatch(crm, /TradeEnquiryInbox|"enquiries" as View/);
   assert.match(crm, /navigationTarget\?\.kind === "crm-view"[\s\S]*allowedViews\.some\(\(item\) => item === navigationTarget\.id\)[\s\S]*appliedNavigationTargetNonce\.current !== navigationTarget\.nonce[\s\S]*view !== navigationTarget\.id[\s\S]*\) return;[\s\S]*onViewChange\?\.\(view\)/);
   assert.match(crm, /appliedNavigationTargetNonce\.current = navigationTarget\.nonce;[\s\S]*setView\(navigationTarget\.id\)/);
-  assert.match(dashboard, /setCommandTarget\(\(current\) => current\?\.kind === "crm-view" && current\.id !== nextView \? null : current\)/);
+  assert.match(dashboard, /setCommandTarget\(\(current\) => workspace === "map"\s*\? \{ workspace: "work", kind: "crm-view", id: nextView, query: "", nonce: Date\.now\(\) \}\s*: current\?\.kind === "crm-view" && current\.id !== nextView \? null : current\)/);
   assert.match(crm, /if \(staffPermissions\.canViewCustomers && staffPermissions\.canSearchCustomers\) views\.push\("customers"\)/);
   assert.match(crm, /if \(staffPermissions\.canViewPriceBook\) views\.push\("pricebook"\)/);
   assert.match(crm, /if \(staffPermissions\.canRunReports\) views\.push\("reports"\)/);
@@ -542,7 +542,7 @@ test("My day exposes owner scoped local workload and direct action charts", () =
   assert.match(hub, /onOpenInvoices=\{props\.onOpenInvoices\}/);
   assert.match(crm, /const \[scheduleWeekStart, setScheduleWeekStart\] = useState\(""\)/);
   assert.match(crm, /initialWeekStart=\{scheduleWeekStart\}/);
-  assert.match(dashboard, /onWorkViewChange=\{\(nextView\) => \{\s*if \(nextView === "pricebook" \|\| nextView === "reports"\) \{ openFinance\(nextView\); return; \}\s*setCommandTarget\(\(current\) => current\?\.kind === "crm-view" && current\.id !== nextView \? null : current\);\s*setActiveWorkView\(nextView\);\s*setWorkspace\("work"\);\s*\}\}/);
+  assert.match(dashboard, /onWorkViewChange=\{\(nextView\) => \{\s*if \(workspace === "map" && \(nextView === "jobs" \|\| nextView === "customers"\)\) return;\s*if \(nextView === "pricebook" \|\| nextView === "reports"\) \{ openFinance\(nextView\); return; \}\s*setCommandTarget\(\(current\) => workspace === "map"\s*\? \{ workspace: "work", kind: "crm-view", id: nextView, query: "", nonce: Date\.now\(\) \}\s*: current\?\.kind === "crm-view" && current\.id !== nextView \? null : current\);\s*setActiveWorkView\(nextView\);\s*setWorkspace\("work"\);\s*\}\}/);
   assert.match(dashboard, /onOpenInvoices=\{\(\) => openFinance\("invoices"\)\}/);
 });
 

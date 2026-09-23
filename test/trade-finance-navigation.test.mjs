@@ -24,6 +24,9 @@ const helpersSource = dashboard.statements.filter(node => ts.isFunctionDeclarati
   || ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => variableNames.includes(declaration.name.getText(dashboard)))).map(node => node.getText(dashboard)).join("\n");
 const helpers = Function(`${compile(helpersSource)}\nreturn {${helperNames.join(",")}};`)();
 const financeElement = find(dashboard, node => ts.isJsxSelfClosingElement(node) && node.tagName.getText(dashboard) === "TradeFinanceWorkspace");
+const mapHubElement = find(dashboard, node => ts.isJsxSelfClosingElement(node)
+  && node.tagName.getText(dashboard) === "TradeBusinessHub"
+  && node.attributes.properties.some(attribute => ts.isJsxAttribute(attribute) && attribute.name.getText(dashboard) === "mapWorkspace"));
 function dashboardCallback(name, context) {
   const attribute = financeElement.attributes.properties.find(node => ts.isJsxAttribute(node) && node.name.getText(dashboard) === name);
   return evaluate(attribute.initializer.expression, dashboard, context);
@@ -50,6 +53,113 @@ test("Finance parses all sections and keeps legacy invoice URLs working", () => 
 test("retired Follow-ups bookmarks fall back to the Work workspace", () => {
   assert.equal(helpers.dashboardWorkspaceFromSearch("?workspace=follow-ups"), "work");
   assert.equal(helpers.dashboardWorkViewFromSearch("?workspace=follow-ups"), "today");
+});
+
+test("Map bookmarks select their own workspace without restoring stale Work job targets", () => {
+  assert.equal(helpers.dashboardWorkspaceFromSearch("?workspace=map"), "map");
+  assert.equal(helpers.dashboardCommandTargetFromSearch("?workspace=map&jobId=old-job&jobTab=quote"), null);
+});
+
+test("installer Map navigation is explicit, independently active and clears the previous command", () => {
+  const button = find(dashboard, node => ts.isJsxElement(node)
+    && node.openingElement.tagName.getText(dashboard) === "button"
+    && node.getText(dashboard).includes('<span>Map</span>'));
+  const captured = {};
+  const context = {
+    require: () => jsx, exports: {}, TLinkNavigationIcon() {}, workspace: "map",
+    setCommandTarget: value => { captured.target = value; },
+    setMapNavigationNonce: update => { captured.nonce = update(captured.nonce || 0); },
+    setWorkspace: value => { captured.workspace = value; },
+  };
+  const active = evaluate(button, dashboard, context);
+  assert.equal(active.props["aria-current"], "page");
+  assert.equal(active.props.className, "active");
+  assert.equal(nodes(active, node => node.type === context.TLinkNavigationIcon)[0].props.name, "map");
+  active.props.onClick();
+  assert.deepEqual(captured, { target: null, nonce: 1, workspace: "map" });
+  active.props.onClick();
+  assert.equal(captured.nonce, 2, "clicking Map again must reset a focused record");
+  assert.equal(evaluate(button, dashboard, { ...context, workspace: "work" }).props["aria-current"], undefined);
+  const installerNav = find(dashboard, node => ts.isJsxElement(node)
+    && node.openingElement.tagName.getText(dashboard) === "nav"
+    && node.openingElement.getText(dashboard).includes('aria-label="TLink installer account"'));
+  const firstButton = installerNav.children.find(node => ts.isJsxElement(node) && node.openingElement.tagName.getText(dashboard) === "button");
+  assert.equal(firstButton, button, "Map stays visible first in the compact navigation");
+});
+
+test("the Map hub resets between workspaces and keeps Jobs or Customers inside Map", () => {
+  const captured = [];
+  const context = {
+    require: () => jsx, exports: {}, TradeBusinessHub() {}, user: { uid: "business-owner" }, workspace: "map",
+    mapNavigationNonce: 1,
+    hasBusinessOperations: true, hasTeamAccess: true, commandTarget: { kind: "job", id: "old-job" },
+    openFinance: view => captured.push(["finance", view]),
+    setCommandTarget: value => captured.push(["target", value]),
+    setActiveWorkView: value => captured.push(["view", value]),
+    setWorkspace: value => captured.push(["workspace", value]),
+  };
+  const map = evaluate(mapHubElement, dashboard, context);
+  assert.equal(map.key, "business-owner:map:1");
+  assert.notEqual(evaluate(mapHubElement, dashboard, { ...context, mapNavigationNonce: 2 }).key, map.key);
+  assert.equal(map.props.mapWorkspace, true);
+  assert.equal(map.props.navigationTarget, null);
+  assert.equal(map.props.fullAccess, true);
+  map.props.onWorkViewChange("jobs"); map.props.onWorkViewChange("customers");
+  assert.deepEqual(captured, []);
+  map.props.onOpenSchedule("2026-09-21");
+  assert.equal(captured.at(-1)[1], "work");
+  const work = evaluate(mapHubElement, dashboard, { ...context, workspace: "work", hasBusinessOperations: false });
+  assert.equal(work.key, "business-owner:work:0");
+  assert.equal(work.props.mapWorkspace, false);
+  assert.equal(work.props.fullAccess, false);
+  assert.equal(work.props.navigationTarget.id, "old-job");
+});
+
+test("Map detail tools select exact Work destinations and preserve existing Work navigation", () => {
+  const attribute = mapHubElement.attributes.properties.find(node => ts.isJsxAttribute(node) && node.name.getText(dashboard) === "onWorkViewChange");
+  const run = (workspace, nextView, current) => {
+    const captured = {};
+    evaluate(attribute.initializer.expression, dashboard, {
+      workspace,
+      Date: { now: () => 1234 },
+      openFinance: value => { captured.finance = value; },
+      setCommandTarget: update => { captured.target = update(current); },
+      setActiveWorkView: value => { captured.view = value; },
+      setWorkspace: value => { captured.workspace = value; },
+    })(nextView);
+    return captured;
+  };
+  const jobTarget = { workspace: "work", kind: "job", id: "old-job" };
+  for (const nextView of ["today", "leads", "schedule", "assets", "templates", "import", "integrations"]) {
+    assert.deepEqual(run("map", nextView, jobTarget), {
+      target: { workspace: "work", kind: "crm-view", id: nextView, query: "", nonce: 1234 },
+      view: nextView,
+      workspace: "work",
+    });
+  }
+  for (const workspace of ["map", "work"]) {
+    for (const view of ["pricebook", "reports"]) assert.deepEqual(run(workspace, view, jobTarget), { finance: view });
+  }
+  const viewTarget = { workspace: "work", kind: "crm-view", id: "jobs" };
+  assert.deepEqual(run("work", "jobs", viewTarget), { target: viewTarget, view: "jobs", workspace: "work" });
+  assert.deepEqual(run("work", "schedule", viewTarget), { target: null, view: "schedule", workspace: "work" });
+  assert.deepEqual(run("work", "jobs", jobTarget), { target: jobTarget, view: "jobs", workspace: "work" });
+});
+
+test("Map visibility only follows the focused record for its current view", () => {
+  const mapBlock = find(crm, node => ts.isJsxExpression(node)
+    && node.expression?.getText(crm).startsWith('mapWorkspace && (view === "jobs" || view === "customers")'));
+  assert.ok(ts.isBinaryExpression(mapBlock?.expression));
+  const visible = overrides => Boolean(evaluate(mapBlock.expression.left, crm, {
+    mapWorkspace: true, view: "jobs", creating: "", focusedJobId: "", selectedCustomerId: "", ...overrides,
+  }));
+  assert.equal(visible({ selectedCustomerId: "stale-customer" }), true);
+  assert.equal(visible({ view: "customers", focusedJobId: "stale-job" }), true);
+  assert.equal(visible({ focusedJobId: "active-job" }), false);
+  assert.equal(visible({ view: "customers", selectedCustomerId: "active-customer" }), false);
+  assert.equal(visible({ view: "schedule" }), false);
+  assert.equal(visible({ creating: "job" }), false);
+  assert.equal(visible({ mapWorkspace: false }), false);
 });
 
 test("job links retain quote, invoice and cost tabs on refresh and reject invalid job IDs", () => {
@@ -110,6 +220,8 @@ test("URL updates canonicalise legacy invoices and preserve section and job-tab 
   dashboardEffect("window.history.replaceState", { ...context, workspace: "work", activeWorkView: "jobs", commandTarget: { kind: "job", id: "job-123", jobTab: "invoice" } })();
   assert.equal(new URL(window.location.href).searchParams.has("financeView"), false);
   assert.equal(helpers.jobNavigationFromSearch(window.location.search).jobTab, "invoice");
+  dashboardEffect("window.history.replaceState", { ...context, workspace: "map", activeWorkView: "schedule" })();
+  assert.equal(window.location.search, "?workspace=map");
 });
 
 test("browser back restores the Finance section and retains existing job targets", () => {
@@ -120,6 +232,8 @@ test("browser back restores the Finance section and retains existing job targets
   listeners.popstate(); assert.equal(captured.setWorkspace, "finance"); assert.equal(captured.setFinanceView, "pricebook");
   context.window.location.search = "?workspace=work&jobId=job-123&jobTab=quote";
   listeners.popstate(); assert.equal(captured.setCommandTarget.id, "job-123"); assert.equal(captured.setCommandTarget.jobTab, "quote");
+  context.window.location.search = "?workspace=map";
+  listeners.popstate(); assert.equal(captured.setWorkspace, "map"); assert.equal(captured.setCommandTarget, null);
   cleanup();
 });
 
@@ -127,11 +241,11 @@ test("owner Work removes duplicate finance tabs while authorised staff retain th
   const declaration = find(crm, node => ts.isVariableDeclaration(node) && node.name.getText(crm) === "allowedViews");
   const filter = find(crm, node => ts.isCallExpression(node) && node.expression.getText(crm) === "allowedViews.filter");
   const ownerViews = evaluate(declaration.initializer.arguments[0], crm, { staffPermissions: undefined })();
-  const ownerFilter = evaluate(filter.arguments[0], crm, { onOpenFinance() {} });
+  const ownerFilter = evaluate(filter.arguments[0], crm, { mapWorkspace: false, onOpenFinance() {} });
   assert.equal(ownerViews.filter(ownerFilter).includes("pricebook"), false); assert.equal(ownerViews.filter(ownerFilter).includes("reports"), false);
   const permissions = { canViewPriceBook: true, canRunReports: true };
   const staffViews = evaluate(declaration.initializer.arguments[0], crm, { staffPermissions: permissions })();
-  const staffFilter = evaluate(filter.arguments[0], crm, { onOpenFinance: undefined });
+  const staffFilter = evaluate(filter.arguments[0], crm, { mapWorkspace: false, onOpenFinance: undefined });
   assert.deepEqual(staffViews.filter(staffFilter), ["jobs", "pricebook", "reports"]);
   const restrictedViews = evaluate(declaration.initializer.arguments[0], crm, { staffPermissions: {} })(); assert.deepEqual(restrictedViews.filter(staffFilter), ["jobs"]);
 });

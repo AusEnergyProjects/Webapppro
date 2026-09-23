@@ -16,7 +16,12 @@ import {
   prepareTradeMapAddress,
   tradeMapAddressKey,
   tradeMapDirectionsUrl,
+  tradeMapPinCategory,
+  tradeMapRecordCategory,
+  TRADE_MAP_PIN_CATEGORY_ORDER,
+  TRADE_MAP_PIN_LABELS,
   type TradeMapGeocodeResult,
+  type TradeMapPinCategory,
   type TradeMapPosition,
   type TradeMapRecord,
 } from "@/lib/trade-record-map";
@@ -49,9 +54,10 @@ function removeMarker(entry: MarkerEntry) {
   entry.marker.map = null;
 }
 
-function updateMarker(entry: MarkerEntry, title: string, label: string, selected: boolean) {
+function updateMarker(entry: MarkerEntry, title: string, label: string, category: TradeMapPinCategory, selected: boolean) {
   entry.marker.title = title;
   entry.badge.textContent = label;
+  entry.badge.dataset.category = category;
   entry.badge.dataset.selected = String(selected);
   entry.marker.zIndex = selected ? 1000 : undefined;
 }
@@ -213,6 +219,11 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
   }, [runtime, records, loading, locateAttempt, user.uid]);
 
   const pins = useMemo(() => groupTradeMapPins(records, locations), [records, locations]);
+  const legendCategories = useMemo(() => {
+    const categories = new Set(records.map(tradeMapRecordCategory));
+    for (const pin of pins) categories.add(tradeMapPinCategory(pin.records));
+    return TRADE_MAP_PIN_CATEGORY_ORDER.filter((category) => categories.has(category));
+  }, [records, pins]);
   const selectedRecords = useMemo(() => {
     if (!selection) return [];
     if (selection.kind === "pin") return pins.find((pin) => pin.key === selection.key)?.records ?? [];
@@ -256,10 +267,12 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
         entry = { marker, badge, click };
         markers.set(pin.key, entry);
       }
-      // Google receives a local pin's address/count, never customer names or job details.
+      const category = tradeMapPinCategory(pin.records);
+      // The local marker has a status label; geocoding still receives only the address.
       updateMarker(entry,
-        `${pin.records.length} ${pin.records.length === 1 ? "record" : "records"} at ${pin.records[0].address}. Select to view details.`,
+        `${TRADE_MAP_PIN_LABELS[category]}. ${pin.records.length} ${pin.records.length === 1 ? "record" : "records"} at ${pin.records[0].address}. Select to view details.`,
         pin.records.length > 1 ? String(pin.records.length) : pin.records[0].kind === "job" ? "J" : "C",
+        category,
         selectedPinKeys.has(pin.key),
       );
     }
@@ -314,6 +327,12 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
         <span>{unavailableCount} {progress.running ? "not mapped yet" : "without a pin"}</span>
         {progress.running ? <span>Checking addresses: {progress.completed} of {progress.total}</span> : null}
       </div>
+      {legendCategories.length > 0 ? <ul className={styles.legend} aria-label="Map pin colours">
+        {legendCategories.map((category) => <li key={category}>
+          <i className={styles.swatch} data-category={category} aria-hidden="true" />
+          <span>{TRADE_MAP_PIN_LABELS[category]}</span>
+        </li>)}
+      </ul> : null}
       {progress.error && mapState === "ready" ? (
         <div className={styles.notice} role="alert">
           <p>{geocodeMessages[progress.error]}</p>
@@ -367,6 +386,10 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
                   <span className={styles.reference}>{record.reference || (record.kind === "job" ? "Job" : "Customer")}</span>
                   <strong>{record.title}</strong>
                   <span className={styles.address}>{record.address || "Address unavailable"}</span>
+                  {record.kind === "job" ? <span className={styles.recordStatus}>
+                    <i className={styles.swatch} data-category={tradeMapRecordCategory(record)} aria-hidden="true" />
+                    {TRADE_MAP_PIN_LABELS[tradeMapRecordCategory(record)]}
+                  </span> : null}
                   <span className={styles.locationState} data-located={label === "On map" || label === "Approximate pin"}>{label}</span>
                 </button>
               </li>;

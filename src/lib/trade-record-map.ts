@@ -1,3 +1,6 @@
+import type { JobRegisterOperationalStatus } from "./trade-crm-job-register.ts";
+import { TRADE_JOB_LIFECYCLE_LABELS, TRADE_JOB_LIFECYCLE_STATUSES } from "./trade-job-lifecycle.ts";
+
 export type TradeMapRecord = {
   id: string;
   kind: "customer" | "job";
@@ -5,7 +8,32 @@ export type TradeMapRecord = {
   reference: string;
   address: string;
   detail: string;
+  jobStatus?: JobRegisterOperationalStatus;
 };
+
+export type TradeMapPinCategory = JobRegisterOperationalStatus | "customer" | "unknown" | "mixed" | "mixed_records";
+
+export const TRADE_MAP_PIN_CATEGORY_ORDER: readonly TradeMapPinCategory[] = [
+  "customer", ...TRADE_JOB_LIFECYCLE_STATUSES, "unknown", "mixed", "mixed_records",
+];
+
+export const TRADE_MAP_PIN_LABELS: Record<TradeMapPinCategory, string> = {
+  ...TRADE_JOB_LIFECYCLE_LABELS,
+  customer: "Customer",
+  unknown: "Status unavailable",
+  mixed: "Mixed statuses",
+  mixed_records: "Mixed records",
+};
+
+export function tradeMapRecordCategory(record: TradeMapRecord): TradeMapPinCategory {
+  return record.kind === "customer" ? "customer" : record.jobStatus ?? "unknown";
+}
+
+export function tradeMapPinCategory(records: readonly TradeMapRecord[]): TradeMapPinCategory {
+  const categories = new Set(records.map(tradeMapRecordCategory));
+  if (categories.size > 1) return categories.has("customer") ? "mixed_records" : "mixed";
+  return categories.values().next().value ?? "unknown";
+}
 
 export type TradeMapPosition = { lat: number; lng: number };
 export type TradeMapGeocodeResult =
