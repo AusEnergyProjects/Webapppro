@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: Creditex registry operations implemented locally; final validation and publication pending. Direct regulator transmission remains dependent on approved interfaces and delegated access.
+Status: Creditex registry operations implemented and locally verified; publication blocked by missing Sites packaging helpers. Direct regulator transmission remains dependent on approved interfaces and delegated access.
 Prepared: 24 September 2026
 
 ## Active contract: Creditex registry submission operations, 24 September 2026
@@ -16,6 +16,16 @@ Acceptance: server-side organisation and role boundaries; no duplicate dispatch 
 Validation: behavioural SQLite, adapter failure/idempotency, evidence custody, permission, money and result reconciliation tests; exact official format fixtures; focused UI checks; typecheck, lint, migration replay, full required validation and publication build. Record pre-existing failures independently. External registry UAT and a real claim require approved provider access and are separate acceptance gates. The full validation reaches the existing expired Surge source-approval gate; no approval dates or statutory evidence were fabricated to bypass it.
 
 Stop conditions: missing private VEU schema/authentication or an unverified NSW/CER write interface blocks only its live connector. Continue all independent functionality. Preserve current source on concurrent changes; never invent government fields, approve source governance on behalf of Creditex, pay fees, transmit a live claim or publish mixed source.
+
+Verified recovery checkpoint: implementation and portable schema files are committed at `87e0f94883052f67332f55e1cf7478d8a0d92b82`. The coordinating task may add this status-only record in a subsequent commit. No push or deployment was performed. GitHub main remains `78f2d9cee075826af05961a7e40a7db364f2e129`; the last read Sites version remains 613. The current isolated worktree preserves all fourteen pre-existing live-source commits.
+
+Validation completed: 170/170 focused registry, dispatch, navigation, governance and release tests; 37/37 integration tests; typecheck and full ESLint; 189 production migrations replayed against fresh local D1; customer PDF, source custody, assessor education, conversation quality, community response and continuity checks; production build with Sites bundle and public-performance audits. Eight synthetic desktop/mobile screenshots of the real component passed overflow and browser-error checks. No authenticated deployed check of the new workspace is claimed.
+
+The complete test pass reported 5,299 passed, 11 skipped, eight existing assertion failures and one worker access violation (exit 3221225477). The worker's 16 tests passed when rerun alone. All eight assertion failures were independently reproduced from pristine source `0473715`: VEU pilot theme, lead-admin navigation, Surge tariff wording, calendar deep link, price-book fixture, rebate navigation, Team navigation and visible brand wording. `npm run validate` passed typecheck/lint then stopped at the existing expired Surge source approvals; the same audit fails on pristine source. These unrelated assertions and source approvals were not weakened or repaired in this scope.
+
+Release blocker: the installed `C:/Users/james/.codex/plugins/cache/openai-curated-remote/sites/0.1.71/` directory disappeared during execution. The official hosting workflow had been read successfully earlier; repeated bounded discovery found no replacement `site-workflow.mjs` or `package-site` helper in the plugin directory. Restore/re-enable the Sites plugin first, then re-read its installed hosting skill, verify live/source has not changed, publish the exact committed source with the retained matching build if its inputs are unchanged, and check Submissions in Creditex/admin. Do not substitute a guessed packaging layout. Current build is under `dist/`; logs and visual fixtures are in `C:/Webproject/outputs/creditex-certificate-submissions-2026-09-24/` and `C:/Webproject/outputs/creditex-registry-ui-2026-09-24/`.
+
+Changed implementation: `src/lib/creditex-registry{,-server,-exports,-formats,-rec}.ts`; organisation-scoped Creditex/admin registry routes; `CreditexRegistryWorkspace` and both portal navigation integrations; existing output-action dispatch and runtime guards; additive migrations 0188/0189 and Drizzle declarations. Retained official contracts and source hashes are in `docs/compliance/registry-contracts/`. Directly affected behavioural/navigation/migration tests and release assertions are updated. Unused extraction intermediates were removed; official source bytes remain unchanged; no new dependency or secret was added.
 
 ## Previous handover
 
