@@ -2920,6 +2920,7 @@ export async function acquireCreditexVeuPowerBiEvidenceDurably(
       const retained = await loadVeuAcquisition(acquisitionContext);
       if (!retained) throw error;
       await markVeuAcquisitionForCleanup(acquisitionContext, retained);
+      throw error;
     }
     return incompleteVeuAcquisitionResult(acquisitionContext);
   }
@@ -2989,6 +2990,7 @@ async function resumeVeuAcquisitionWithoutUpstream(
     if (!(error instanceof VeuAcquisitionYield)) {
       if (!isVeuSourceError(error)) throw error;
       await markVeuAcquisitionForCleanup(context, acquisition);
+      throw error;
     }
     return incompleteVeuAcquisitionResult(context);
   }

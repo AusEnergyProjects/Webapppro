@@ -193,6 +193,23 @@ test("installer official-product responses redact every registry status and reta
   );
 });
 
+test("refresh progress exposes safe counters without queue diagnostics or custody keys", () => {
+  const progress = {
+    phase: "products", stagedRecordCount: 500, recordCount: 76564,
+    startedAt: "2026-09-24T00:00:00.000Z", updatedAt: "2026-09-24T00:01:00.000Z",
+    retryAt: null, attemptCount: 0,
+  };
+  for (const access of ["installer", "public_quote"]) {
+    const result = projectCreditexCalculatorReadResponse(access, {
+      ok: true, registry: { registryCode: "veu-approved-products", refreshProgress: {
+        ...progress, lastError: "private queue diagnostic", objectKey: "private/custody/key",
+      } },
+    });
+    assert.deepEqual(result.registry.refreshProgress, progress);
+    assert.doesNotMatch(JSON.stringify(result), /private queue|private\/custody/);
+  }
+});
+
 test("public quote registry responses use the same redacted projection as installers", () => {
   const response = {
     ok: true,

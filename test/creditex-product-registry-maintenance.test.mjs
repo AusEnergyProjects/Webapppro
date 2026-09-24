@@ -204,7 +204,8 @@ function fleetDatabase() {
             )
           ))
           .sort((left, right) => (
-            left.requestedAt.localeCompare(right.requestedAt)
+            left.notBefore.localeCompare(right.notBefore)
+            || left.requestedAt.localeCompare(right.requestedAt)
             || left.registryCode.localeCompare(right.registryCode)
           ))[0];
         return due ? {
@@ -805,6 +806,40 @@ test("a due durable retry overrides the failed-attempt status backoff", async ()
   assert.equal(refreshCalls, 2);
   assert.equal(retried.outcome, "refreshed");
   assert.equal(database.state.refreshRequests.size, 0);
+});
+
+test("a failing oldest registry cannot starve other due registries on minute ticks", async () => {
+  const database = fleetDatabase();
+  const visited = [];
+  const codes = ["gems-products", "nsw-tessa-products", "veu-approved-products"];
+  for (const [index, code] of codes.entries()) {
+    await enqueueCreditexProductRegistryRefresh(database, code,
+      new Date(NOW.getTime() - (3 - index) * 60_000),
+      { ensureSchema: withoutSchemaInstall });
+  }
+  const targets = codes.map((registryCode) => ({
+    registryCode,
+    loadStatus: async () => registryStatus({ registryCode, status: "stale" }),
+    refresh: async () => {
+      visited.push(registryCode);
+      if (registryCode === "gems-products") throw new Error("source unavailable");
+      return { changed: true, complete: true };
+    },
+  }));
+  for (let minute = 0; minute < 3; minute += 1) {
+    await maintainNextCreditexProductRegistry({
+      database, targets, now: new Date(NOW.getTime() + minute * 60_000),
+      withFleetLease: realFleetLease, returnScheduledFailures: true,
+    });
+  }
+  assert.deepEqual(visited, codes);
+  assert.deepEqual([...database.state.refreshRequests.keys()], ["gems-products"]);
+  assert.equal(database.state.refreshRequests.get("gems-products").attemptCount, 1);
+});
+
+test("due refresh SQL prioritises retry eligibility before original request age", () => {
+  const source = fs.readFileSync(new URL("../src/lib/creditex-product-registry-maintenance.ts", import.meta.url), "utf8");
+  assert.match(source, /WHERE not_before <= \? AND registry_code IN \(\$\{placeholders\}\)\s+ORDER BY not_before, requested_at, registry_code/);
 });
 
 test("an explicit due queue refreshes a current registry", async () => {

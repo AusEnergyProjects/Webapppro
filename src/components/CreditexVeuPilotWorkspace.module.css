@@ -1847,6 +1847,31 @@
   font-weight: 850;
 }
 
+.estimatorForm .capacityDefaults {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 44px;
+  color: var(--pilot-ink);
+}
+
+.capacityDefaults input[type="checkbox"] {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  accent-color: var(--pilot-teal);
+}
+
+.capacityExplanation {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--pilot-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
 .officialProductPicker > small {
   grid-column: 1 / -1;
   color: var(--pilot-muted);

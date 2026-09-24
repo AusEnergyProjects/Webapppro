@@ -241,6 +241,15 @@ export type CreditexOfficialProductRegistryStatus = {
     checkedAt: string;
     message: string;
   } | null;
+  refreshProgress?: {
+    phase: "queued" | "acquisition" | "supplements" | "products" | "activate" | "cleanup";
+    stagedRecordCount: number;
+    recordCount: number;
+    startedAt: string;
+    updatedAt: string;
+    retryAt: string | null;
+    attemptCount: number;
+  } | null;
 };
 
 export type CreditexOfficialProductSelection = {

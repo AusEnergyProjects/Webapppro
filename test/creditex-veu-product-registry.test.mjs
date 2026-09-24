@@ -938,6 +938,37 @@ test("VEU durable acquisition resumes exact pages and assembles canonical bytes"
       WHERE acquisition_id = ?`).get(acquisitionId);
     assert.equal(firstReceipts.count, 17);
 
+    await t.test("invalid fresh controls remain a failure after retaining cleanup", async () => {
+      database.exec("SAVEPOINT invalid_fresh_controls");
+      try {
+        const invalidControlsFetch = async (input, init = {}) => {
+          const selections = String(input).includes("/querydata")
+            ? JSON.parse(String(init.body)).queries[0].Query.Commands[0].SemanticQueryDataShapeCommand.Query.Select
+            : [];
+          if (selections.length === 1 && selections[0].Name === "Count_Product_ID") {
+            return new Response(aggregateResponse(1), {
+              status: 200, headers: { "Content-Type": "application/json" },
+            });
+          }
+          return fetchImpl(input, init);
+        };
+        await assert.rejects(
+          acquireCreditexVeuPowerBiEvidenceDurably(
+            invalidControlsFetch, context, "https://cluster.example.test", "embed-token",
+          ),
+          /Power BI aggregate controls changed/,
+        );
+        assert.deepEqual({ ...database.prepare(`SELECT acquisition_id, phase
+          FROM compliance_official_product_source_acquisitions
+          WHERE acquisition_id = ?`).get(acquisitionId) }, {
+          acquisition_id: acquisitionId, phase: "cleanup",
+        });
+      } finally {
+        database.exec("ROLLBACK TO invalid_fresh_controls");
+        database.exec("RELEASE invalid_fresh_controls");
+      }
+    });
+
     const baseNow = Date.parse(checkedAt);
     const boundedAssemblyContext = { ...context, yieldAt: baseNow + 1_000 };
     Date.now = () => {
@@ -1039,16 +1070,24 @@ test("VEU durable acquisition resumes exact pages and assembles canonical bytes"
       last_record_id: "a0O000000070000",
       terminal: 1,
     });
-    await t.test("a delayed retained assembly is invalidated once its source becomes stale", async () => {
+    await t.test("a stale retained assembly reports failure and preserves recoverable cleanup", async () => {
       Date.now = () => Date.parse("2026-08-12T00:30:00.000Z");
-      const stale = await fetchCreditexVeuProductSources(
-        async () => { throw new Error("stale assembly cleanup must be source-free"); },
-        context,
+      await assert.rejects(
+        fetchCreditexVeuProductSources(
+          async () => { throw new Error("stale assembly cleanup must be source-free"); },
+          context,
+        ),
+        /retained Power BI registry source became stale or future-dated/,
       );
-      assert.equal(stale.complete, false);
       assert.equal(database.prepare(`SELECT phase FROM
         compliance_official_product_source_acquisitions
         WHERE acquisition_id = ?`).get(acquisitionId).phase, "cleanup");
+      const cleanup = await fetchCreditexVeuProductSources(
+        async () => { throw new Error("retained cleanup must not fetch upstream"); },
+        context,
+      );
+      assert.equal(cleanup.complete, false);
+      assert.equal(cleanup.acquisitionId, acquisitionId);
     });
   } finally {
     Date.now = originalDateNow;

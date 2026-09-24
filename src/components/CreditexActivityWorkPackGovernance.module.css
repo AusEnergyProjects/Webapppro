@@ -29,6 +29,15 @@
 .masterLibrary > header > div { flex: 1 1 300px; }
 .masterLibrary > header h2 { color: var(--portal-ink, #173f43); margin: 0; font-size: 1.35rem; }
 .masterLibrary > header p { max-width: 70ch; font-size: .86rem; }
+.masterCreate { display: grid; gap: 14px; padding: 20px; border: 2px solid var(--portal-green, #087f78); border-radius: 12px; background: var(--portal-soft, #edf7f3); }
+.masterCreate h3, .masterCreate p { margin: 0; }
+.masterCreate p { margin-top: 6px; font-size: .84rem; line-height: 1.5; }
+.masterCreate fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.masterCreate legend { margin-bottom: 12px; font-weight: 700; font-size: .85rem; }
+.masterCreateInputs { display: grid; grid-template-columns: minmax(130px, .5fr) minmax(0, 1fr); gap: 14px; }
+.masterLibrary button.masterPrimaryAction { min-height: 44px; padding: 10px 18px; border: 1px solid #087f78; border-radius: 9px; background: #087f78; color: #fff; font: inherit; font-weight: 750; }
+.masterLibrary button.masterPrimaryAction:disabled { opacity: .6; }
+@media (max-width: 720px) { .masterCreateInputs { grid-template-columns: 1fr; } }
 .masterFilters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, .4fr); gap: 14px; }
 .masterFilters > label { display: grid; gap: 7px; min-width: 0; font-size: .85rem; font-weight: 700; }
 .masterFilters > label small { color: var(--portal-muted, #526d72); font-weight: 400; }

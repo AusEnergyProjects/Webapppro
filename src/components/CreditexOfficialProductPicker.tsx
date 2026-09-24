@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   officialProductKindLabel,
   type CreditexOfficialProductKind,
@@ -14,6 +14,7 @@ type Api = (
 ) => Promise<Record<string, unknown>>;
 
 const OFFICIAL_PRODUCT_RECOVERY_TIMEOUT_MS = 25_000;
+const STALE_PRODUCT_RECHECK_MS = 30_000;
 
 export type CreditexOfficialProductOption = {
   id: string;
@@ -235,6 +236,7 @@ export function CreditexOfficialProductPicker({
   const requestRef = useRef(0);
   const onSelectRef = useRef(onSelect);
   const selectedIdRef = useRef(selectedId);
+  const selectedProductRef = useRef<CreditexOfficialProductOption | null>(null);
 
   useEffect(() => {
     onSelectRef.current = onSelect;
@@ -242,14 +244,24 @@ export function CreditexOfficialProductPicker({
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
+    if (selectedProductRef.current?.id !== selectedId) selectedProductRef.current = null;
   }, [selectedId]);
+
+  const selectProduct = useCallback((product: CreditexOfficialProductOption | null) => {
+    selectedProductRef.current = product;
+    selectedIdRef.current = product?.id || "";
+    onSelectRef.current(product?.id || "", product);
+  }, []);
 
   useEffect(() => {
     const requestVersion = requestRef.current + 1;
     requestRef.current = requestVersion;
-    const timer = window.setTimeout(() => {
-      setBusy(true);
-      setError("");
+    let refreshTimer: number | undefined;
+    function requestProducts(background = false) {
+      if (!background) {
+        setBusy(true);
+        setError("");
+      }
       const parameters = new URLSearchParams({
         productKind: kind,
         installationDate,
@@ -282,14 +294,24 @@ export function CreditexOfficialProductPicker({
           ) {
             setProductType(nextFacets.productTypes[0].value);
           }
-          if (
-            !selectedIdRef.current
-            && brand
+          if (selectedIdRef.current && brand && model) {
+            const selected = nextProducts.find((product) => product.id === selectedIdRef.current);
+            if (!selected) selectProduct(null);
+            else if (selectedProductRef.current?.snapshotId !== selected.snapshotId
+              || selectedProductRef.current?.sourceSha256 !== selected.sourceSha256) {
+              selectProduct(selected);
+            }
+          } else if (
+            brand
             && model
             && nextProducts.length === 1
             && nextFacets.productTypes.length <= 1
           ) {
-            onSelectRef.current(nextProducts[0].id, nextProducts[0]);
+            selectProduct(nextProducts[0]);
+          }
+          const registry = result.registry as Record<string, unknown> | undefined;
+          if (registry?.status === "stale") {
+            refreshTimer = window.setTimeout(() => requestProducts(true), STALE_PRODUCT_RECHECK_MS);
           }
         })
         .catch((caught) => {
@@ -305,11 +327,13 @@ export function CreditexOfficialProductPicker({
           );
         })
         .finally(() => {
-          if (requestRef.current === requestVersion) setBusy(false);
+          if (requestRef.current === requestVersion && !background) setBusy(false);
         });
-    }, 0);
+    }
+    const timer = window.setTimeout(() => requestProducts(), 0);
     return () => {
       window.clearTimeout(timer);
+      window.clearTimeout(refreshTimer);
       requestRef.current += 1;
     };
   }, [
@@ -320,6 +344,7 @@ export function CreditexOfficialProductPicker({
     model,
     productType,
     retryNonce,
+    selectProduct,
     veuActivityCode,
     veuScenario,
   ]);
@@ -348,7 +373,7 @@ export function CreditexOfficialProductPicker({
               models: [],
               productTypes: [],
             }));
-            onSelect("", null);
+            selectProduct(null);
           }}
         >
           <option value="">
@@ -372,7 +397,7 @@ export function CreditexOfficialProductPicker({
             setProductType("");
             setProducts([]);
             setFacets((current) => ({ ...current, productTypes: [] }));
-            onSelect("", null);
+            selectProduct(null);
           }}
         >
           <option value="">
@@ -399,7 +424,7 @@ export function CreditexOfficialProductPicker({
             onChange={(event) => {
               setProductType(event.target.value);
               setProducts([]);
-              onSelect("", null);
+              selectProduct(null);
             }}
           >
             <option value="">Choose product type</option>
@@ -424,7 +449,7 @@ export function CreditexOfficialProductPicker({
               const id = event.target.value;
               const product = options.find((candidate) => candidate.id === id)
                 || null;
-              onSelect(id, product);
+              selectProduct(product);
             }}
           >
             <option value="">Choose approval</option>

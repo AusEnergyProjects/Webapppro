@@ -23,6 +23,8 @@ const errorMessages: Record<string, [number, string]> = {
   ACTIVITY_ACCESS_REQUIRED: [403, "Your Team access does not include this action."],
   ACTIVITY_AUTHOR_REQUIRED: [403, "An authorised Australian Energy Assessments or Creditex master-form login is required."],
   ACTIVITY_MASTER_DRAFT_NOT_FOUND: [404, "This draft copy was not found in your organisation."],
+  INVALID_ACTIVITY_DRAFT_START: [400, "Choose an existing activity and enter a form name of 1 to 300 characters."],
+  ACTIVITY_FORM_VARIANT_INVALID: [400, "Choose an available premises type for this activity."],
   ACTIVITY_DRAFT_REVISION_CONFLICT: [409, "This draft copy changed in another session. Your unsaved edits are retained. Reopen the saved draft before trying again."],
   ACTIVITY_MASTER_CHANGED: [409, "The published form changed after this copy was made. Keep this draft for reference and make a new copy of the current published form."],
   ACTIVITY_MASTER_INTEGRITY_FAILED: [409, "This form could not pass its saved integrity check. Ask an administrator to review it."],
@@ -284,9 +286,16 @@ function draftAudit(database: D1Database, actor: { uid: string; organisationId: 
 async function mutateMasterDraft(database: D1Database, actor: { uid: string; organisationId: string }, body: Row) {
   const action = str(body.action); const now = new Date().toISOString(); const mode = str(body.actorMode);
   if (action === "create_master_draft") {
+    if (body.startFrom !== undefined && body.startFrom !== "activity_template") throw new Error("INVALID_ACTIVITY_DRAFT_START");
+    const fromTemplate = body.startFrom === "activity_template";
+    const title = str(body.title);
+    if (fromTemplate && (!title || title.length > 300)) throw new Error("INVALID_ACTIVITY_DRAFT_START");
     const current = await currentMaster(database, actor.organisationId, str(body.activityTemplateId), str(body.variantId));
     if (body.expectedVersion !== current.version) throw new Error("ACTIVITY_MASTER_CHANGED");
-    const id = crypto.randomUUID(); const hash = activityHash(current.form);
+    const form = fromTemplate
+      ? validateMaster(applyDefaultActivityFormPolicy({ ...current.builtIn, title }, current.builtIn), current.builtIn)
+      : current.form;
+    const id = crypto.randomUUID(); const baseHash = activityHash(current.form); const hash = activityHash(form);
     const result = await database.batch([
       database.prepare(`INSERT INTO trade_activity_field_master_drafts
         (id, organisation_id, activity_template_id, variant_id, revision, base_master_version, base_form_sha256,
@@ -294,8 +303,8 @@ async function mutateMasterDraft(database: D1Database, actor: { uid: string; org
         SELECT ?, ?, ?, ?, 1, ?, ?, ?, ?, 'draft', ?, ?, ?, ?
         WHERE COALESCE((SELECT MAX(version) FROM trade_activity_field_masters
           WHERE organisation_id = ? AND activity_template_id = ? AND variant_id = ?), 0) = ?`)
-        .bind(id, actor.organisationId, current.form.activityTemplateId, current.form.variantId, current.version, hash,
-          activityCanonical(current.form), hash, actor.uid, actor.uid, now, now,
+        .bind(id, actor.organisationId, form.activityTemplateId, form.variantId, current.version, baseHash,
+          activityCanonical(form), hash, actor.uid, actor.uid, now, now,
           actor.organisationId, current.form.activityTemplateId, current.form.variantId, current.version),
       draftAudit(database, actor, mode, id, "created", 1, now),
     ]);

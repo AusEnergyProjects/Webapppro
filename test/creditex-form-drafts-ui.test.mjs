@@ -17,7 +17,7 @@ async function click(h, tree, label) {
   const target = button(tree, label); assert.ok(target, `${label} is displayed`); assert.ok(!target.props.disabled, `${label} is enabled`);
   target.props.onClick(); await flush(); return h.render();
 }
-function fixture({ canAuthor = true, initialDrafts = [draft()], saveError = "", publishError = "", publishedForm = masterForm } = {}) {
+function fixture({ canAuthor = true, initialDrafts = [draft()], saveError = "", publishError = "", createError = "", publishedForm = masterForm } = {}) {
   let published = clone(publishedForm);
   const saved = new Map(initialDrafts.map(value => [value.id, clone(value)]));
   const h = harness({ actorMode: "creditex", canAuthor, respond: async (path, init) => {
@@ -29,7 +29,9 @@ function fixture({ canAuthor = true, initialDrafts = [draft()], saveError = "", 
     }
     const body = JSON.parse(init.body);
     if (body.action === "create_master_draft") {
-      const copy = draft({ id: "created-copy", title: published.title, form: clone(published) }); saved.set(copy.id, copy); return { draft: clone(copy) };
+      if (createError) throw new Error(createError);
+      const form = body.startFrom === "activity_template" ? { ...clone(masterForm), title: body.title } : clone(published);
+      const copy = draft({ id: "created-copy", title: form.title, form }); saved.set(copy.id, copy); return { draft: clone(copy) };
     }
     const copy = saved.get(body.draftId);
     assert.ok(copy, "draft mutation references a known saved copy");
@@ -84,6 +86,100 @@ test("Duplicate creates a server-saved copy from the exact published version wit
   assert.deepEqual(posts(h), [{ action: "create_master_draft", actorMode: "creditex", activityTemplateId: "veu-6", variantId: "", expectedVersion: 2 }]);
   assert.equal(f.saved.size, 1); assert.equal(f.published.version, 2); assert.match(text(tree), /Draft copy saved/);
   assert.equal(button(tree, "Save draft").props.disabled, true); assert.equal(button(tree, "Replace published form").props.disabled, false);
+});
+
+test("New form creates a named activity draft directly, then supports editing, phone preview, saving and publication", async () => {
+  const f = fixture({ initialDrafts: [] }); const { h } = f; let tree = await h.mount();
+  tree = await click(h, tree, "New form");
+  assert.match(text(tree), /required program questions and signatures/); assert.match(text(tree), /one published form/);
+  assert.equal(button(tree, "Create draft").props.disabled, true);
+  assert.deepEqual(nodes(control(tree, "Activity", "select"), node => node.type === "option").map(node => node.props.value), ["", "veu-6"]);
+  control(tree, "Activity", "select").props.onChange({ target: { value: "veu-6" } }); await flush(); tree = h.render();
+  assert.equal(button(tree, "Create draft").props.disabled, true);
+  control(tree, "Form name").props.onChange({ target: { value: "  Creditex installation checks  " } }); tree = h.render();
+  tree = await click(h, tree, "Create draft");
+  assert.deepEqual(posts(h), [{ action: "create_master_draft", actorMode: "creditex", startFrom: "activity_template", title: "Creditex installation checks", activityTemplateId: "veu-6", variantId: "", expectedVersion: 2 }]);
+  assert.match(text(tree), /New form saved as a draft/); assert.equal(phone(tree).props.form.title, "Creditex installation checks");
+  assert.equal(f.published.title, masterForm.title); assert.equal(button(tree, "New form"), undefined);
+  tree = await click(h, tree, "Add page");
+  const newKey = phone(tree).props.selectedFieldKey; assert.match(newKey, /^custom\./);
+  control(tree, "Question").props.onChange({ target: { value: "Describe any access constraints" } }); tree = h.render();
+  assert.equal(phone(tree).props.form.fields.find(field => field.key === newKey).label, "Describe any access constraints");
+  assert.equal(button(tree, "Replace published form").props.disabled, true);
+  tree = await click(h, tree, "Save draft"); tree = await click(h, tree, "Back to all forms");
+  assert.match(text(tree), /Creditex installation checks/); tree = await click(h, tree, "Continue draft");
+  assert.equal(phone(tree).props.form.fields.find(field => field.key === newKey).label, "Describe any access constraints");
+  tree = await click(h, tree, "Replace published form"); tree = await click(h, tree, "Confirm replacement");
+  assert.equal(f.published.title, "Creditex installation checks"); assert.equal(f.published.fields.find(field => field.key === newKey).label, "Describe any access constraints");
+  assert.deepEqual(posts(h).map(body => body.action), ["create_master_draft", "save_master_draft", "publish_master_draft"]);
+  assert.match(text(tree), /retained signed records keep their original form/);
+});
+
+test("New form restricts activity choices to the selected program and keeps premises bound to the loaded activity", async () => {
+  const variantOptions = [{ id: "residential", label: "Residential premises" }, { id: "business", label: "Business premises" }];
+  const h = harness({ actorMode: "creditex", respond: async (path, init) => {
+    if (init?.body) throw Error("Creation not expected in this selection test");
+    const params = new URL(path, "https://test.invalid").searchParams;
+    return params.has("activityTemplateId") ? { form: { ...masterForm, variantOptions, variantId: params.get("variantId") || "residential" }, expectedVersion: params.get("variantId") === "business" ? 4 : 2 } : { catalogue };
+  } });
+  let tree = await h.mount(); tree = await click(h, tree, "New form");
+  control(tree, "Activity", "select").props.onChange({ target: { value: "veu-6" } }); await flush(); tree = h.render();
+  assert.equal(control(tree, "Premises", "select").props.value, "residential");
+  control(tree, "Premises", "select").props.onChange({ target: { value: "business" } }); await flush(); tree = h.render();
+  assert.match(h.requests.at(-1), /activityTemplateId=veu-6&variantId=business/); assert.equal(control(tree, "Premises", "select").props.value, "business");
+  control(tree, "Form name").props.onChange({ target: { value: "Retained name" } }); tree = h.render();
+  control(tree, "Program", "select").props.onChange({ target: { value: "SRES" } }); tree = h.render();
+  assert.equal(control(tree, "Activity", "select").props.value, "");
+  assert.deepEqual(nodes(control(tree, "Activity", "select"), node => node.type === "option").map(node => node.props.value), ["", "sres-pv"]);
+  assert.equal(button(tree, "Create draft").props.disabled, true); assert.equal(control(tree, "Form name").props.value, "Retained name");
+  assert.equal(nodes(tree, node => node.type === "label" && text(node).startsWith("Premises")).length, 0);
+  tree = await click(h, tree, "Cancel new form"); assert.equal(button(tree, "Create draft"), undefined); assert.deepEqual(posts(h), []);
+});
+
+test("New form creation errors retain the user's name and activity without claiming a saved draft", async () => {
+  const f = fixture({ initialDrafts: [], createError: "The published form changed. Try again with the current form." }); const { h } = f;
+  let tree = await h.mount(); tree = await click(h, tree, "New form");
+  control(tree, "Activity", "select").props.onChange({ target: { value: "veu-6" } }); await flush(); tree = h.render();
+  control(tree, "Form name").props.onChange({ target: { value: "My new form" } }); tree = h.render();
+  tree = await click(h, tree, "Create draft");
+  assert.match(text(tree), /published form changed/); assert.doesNotMatch(text(tree), /New form saved/);
+  assert.equal(control(tree, "Form name").props.value, "My new form"); assert.equal(control(tree, "Activity", "select").props.value, "veu-6");
+  assert.equal(phone(tree), undefined); assert.equal(f.saved.size, 0); assert.equal(f.published.version, 2);
+  tree = await click(h, tree, "Reload activity");
+  assert.match(h.requests.at(-1), /activityTemplateId=veu-6/); assert.equal(control(tree, "Form name").props.value, "My new form");
+  assert.doesNotMatch(text(tree), /published form changed/);
+});
+
+test("New form waits for server creation before opening the saved draft editor", async () => {
+  let resolveCreate;
+  const h = harness({ actorMode: "creditex", respond: async (path, init) => {
+    if (init?.body) return new Promise(resolve => { resolveCreate = resolve; });
+    return path.includes("activityTemplateId") ? { form: masterForm, expectedVersion: 2 } : { catalogue };
+  } });
+  let tree = await h.mount(); tree = await click(h, tree, "New form");
+  control(tree, "Activity", "select").props.onChange({ target: { value: "veu-6" } }); await flush(); tree = h.render();
+  control(tree, "Form name").props.onChange({ target: { value: "Pending form" } }); tree = h.render();
+  button(tree, "Create draft").props.onClick(); tree = h.render();
+  assert.equal(button(tree, "Preparing form...").props.disabled, true); assert.equal(phone(tree), undefined);
+  assert.equal(button(tree, "Cancel new form").props.disabled, true); assert.doesNotMatch(text(tree), /New form saved/);
+  resolveCreate({ draft: draft({ title: "Pending form", form: { ...masterForm, title: "Pending form" } }) }); await flush(); tree = h.render();
+  assert.equal(phone(tree).props.form.title, "Pending form"); assert.match(text(tree), /New form saved/);
+});
+
+test("New form activity-load failures remain retryable without submitting a draft", async () => {
+  let failLoad = true;
+  const h = harness({ actorMode: "creditex", respond: async path => {
+    if (!path.includes("activityTemplateId")) return { catalogue };
+    if (failLoad) throw Error("Activity temporarily unavailable");
+    return { form: masterForm, expectedVersion: 2 };
+  } });
+  let tree = await h.mount(); tree = await click(h, tree, "New form");
+  control(tree, "Form name").props.onChange({ target: { value: "Keep this name" } }); tree = h.render();
+  control(tree, "Activity", "select").props.onChange({ target: { value: "veu-6" } }); await flush(); tree = h.render();
+  assert.equal(button(tree, "Create draft").props.disabled, true); assert.match(text(tree), /Activity temporarily unavailable/);
+  failLoad = false; tree = await click(h, tree, "Reload activity");
+  assert.equal(button(tree, "Create draft").props.disabled, false); assert.equal(control(tree, "Form name").props.value, "Keep this name");
+  assert.deepEqual(posts(h), []);
 });
 
 test("saving a draft persists edits for reopening and never sends the published-master save action", async () => {
@@ -142,7 +238,7 @@ test("publish conflicts keep the saved copy and show failure without claiming su
 
 test("read-only members may open draft previews but cannot create, save, replace or discard drafts", async () => {
   const { h } = fixture({ canAuthor: false }); let tree = await h.mount();
-  assert.equal(button(tree, "Duplicate"), undefined); tree = await click(h, tree, "Preview draft");
+  assert.equal(button(tree, "Duplicate"), undefined); assert.equal(button(tree, "New form"), undefined); tree = await click(h, tree, "Preview draft");
   assert.equal(phone(tree).props.canEdit, false); assert.equal(nodes(tree, node => node.type === "fieldset")[0].props.disabled, true);
   for (const label of ["Replace published form", "Discard draft", "Add signature", "Duplicate to draft"]) assert.equal(button(tree, label), undefined);
   assert.deepEqual(posts(h), []);

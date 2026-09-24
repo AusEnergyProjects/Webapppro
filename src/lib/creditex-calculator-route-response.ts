@@ -116,6 +116,18 @@ function projectedRegistryStatus(value: unknown) {
     lastCheckedAt: status.lastCheckedAt,
     lastAttempt: projectedLastAttempt(status.lastAttempt),
   };
+  const progress = record(status.refreshProgress);
+  if (Object.hasOwn(status, "refreshProgress")) {
+    projected.refreshProgress = progress ? {
+      phase: progress.phase,
+      stagedRecordCount: progress.stagedRecordCount,
+      recordCount: progress.recordCount,
+      startedAt: progress.startedAt,
+      updatedAt: progress.updatedAt,
+      retryAt: progress.retryAt,
+      attemptCount: progress.attemptCount,
+    } : null;
+  }
   const readiness = record(status.readiness);
   if (readiness) {
     projected.readiness = {

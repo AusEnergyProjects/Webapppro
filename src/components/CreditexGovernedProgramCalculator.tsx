@@ -227,9 +227,29 @@ const INITIAL_PART_6_INDOOR_UNITS: CreditexPart6IndoorUnit[] = [{
   label: "",
   model: "",
   quantity: "1",
-  heatingCapacityKw: "3.5",
-  coolingCapacityKw: "3.5",
+  heatingCapacityKw: "",
+  coolingCapacityKw: "",
 }];
+
+export function creditexPart6ProductCapacityDefaults(
+  product: CreditexOfficialProductOption | null | undefined,
+) {
+  if (product?.productKind !== "veu_air_conditioner") return null;
+  const capacity = (key: string) => {
+    const value = product.attributes[key];
+    if (typeof value !== "number" && typeof value !== "string") return null;
+    const decimal = String(value).trim();
+    return /^(?:\d+(?:\.\d*)?|\.\d+)$/.test(decimal)
+      && Number.isFinite(Number(decimal)) && Number(decimal) > 0
+      ? decimal
+      : null;
+  };
+  const heatingCapacityKw = capacity("ratedHeatingCapacityKw");
+  const coolingCapacityKw = capacity("ratedCoolingCapacityKw");
+  return heatingCapacityKw && coolingCapacityKw
+    ? { heatingCapacityKw, coolingCapacityKw }
+    : null;
+}
 
 export function creditexPart6IndoorCapacityTotals(
   units: readonly CreditexPart6IndoorUnit[],
@@ -1145,6 +1165,7 @@ function CreditexVeuCalculator({
   const [part6IndoorUnits, setPart6IndoorUnits] = useState<
     CreditexPart6IndoorUnit[]
   >(INITIAL_PART_6_INDOOR_UNITS);
+  const [usePart6ProductDefaults, setUsePart6ProductDefaults] = useState(true);
   const part6IndoorUnitIdRef = useRef(1);
   const [waterHeaterItems, setWaterHeaterItems] = useState<
     CreditexVeuWaterHeaterItemDraft[]
@@ -1164,7 +1185,6 @@ function CreditexVeuCalculator({
   const [estimate, setEstimate] = useState<CreditexGovernedEstimate | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [productPickerRevision, setProductPickerRevision] = useState(0);
   const requestRef = useRef(0);
   const activity = useMemo(
     () => CREDITEX_VEU_ACTIVITY_DEFINITIONS.find((candidate) => (
@@ -1219,6 +1239,13 @@ function CreditexVeuCalculator({
     () => creditexPart6IndoorCapacityTotals(part6IndoorUnits),
     [part6IndoorUnits],
   );
+  const part6Multi = activity.activityCode === "6"
+    && selectedProducts.veu_air_conditioner?.attributes.veuProductConfigurationClass === "multi";
+  const part6ProductDefaults = creditexPart6ProductCapacityDefaults(
+    selectedProducts.veu_air_conditioner,
+  );
+  const usingPart6ProductDefaults = usePart6ProductDefaults && Boolean(part6ProductDefaults);
+  const part6CapacityIncomplete = part6Multi && !usingPart6ProductDefaults && !part6IndoorTotals.complete;
 
   const invalidate = useCallback(() => {
     requestRef.current += 1;
@@ -1278,13 +1305,9 @@ function CreditexVeuCalculator({
       const previousSnapshotId = registrySnapshotIdsRef.current[kind];
       registrySnapshotIdsRef.current[kind] = snapshotId;
       if (previousSnapshotId && previousSnapshotId !== snapshotId) {
-        setProductPickerRevision((current) => current + 1);
-        clearProductEvidence(
-          `The ${registryLabel} snapshot changed. Select the exact ${creditexVeuEffectiveDateLabel(activity.activityCode).toLowerCase()}-eligible model again.`,
-        );
-      } else {
-        dispatchProductUi({ type: "registry_current" });
+        invalidate();
       }
+      dispatchProductUi({ type: "registry_current" });
       return result;
     } catch (caught) {
       if (!creditexVeuShouldApplyProductResponse(
@@ -1299,7 +1322,7 @@ function CreditexVeuCalculator({
       clearProductEvidence(message);
       throw caught;
     }
-  }, [activity.activityCode, api, clearProductEvidence]);
+  }, [api, clearProductEvidence, invalidate]);
 
   async function calculate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1323,16 +1346,26 @@ function CreditexVeuCalculator({
         visibleInputs.prior_relevant_period_water_heater_products =
           VEU_WATER_HEATER_PRIOR_PRODUCT_QUOTE_ASSUMPTION;
       }
-      if (activity.activityCode === "6" && inputs.configuration === "multi") {
+      if (part6Multi) {
         delete visibleInputs.rated_heating_capacity_kw;
         delete visibleInputs.rated_cooling_capacity_kw;
-        visibleInputs.indoor_units = part6IndoorUnits.map((unit) => ({
-          label: unit.label,
-          model: unit.model,
-          quantity: unit.quantity,
-          heatingCapacityKw: unit.heatingCapacityKw,
-          coolingCapacityKw: unit.coolingCapacityKw,
-        }));
+        if (usingPart6ProductDefaults && part6ProductDefaults) {
+          // These are quote capacity assumptions, not an invented indoor-unit list.
+          // The server still derives the outdoor rating and applies its formula caps.
+          visibleInputs.rated_heating_capacity_kw = part6ProductDefaults.heatingCapacityKw;
+          visibleInputs.rated_cooling_capacity_kw = part6ProductDefaults.coolingCapacityKw;
+        } else {
+          if (!part6IndoorTotals.complete) {
+            throw new Error("Enter the quantity, heating and cooling capacity for every connected indoor unit.");
+          }
+          visibleInputs.indoor_units = part6IndoorUnits.map((unit) => ({
+            label: unit.label,
+            model: unit.model,
+            quantity: unit.quantity,
+            heatingCapacityKw: unit.heatingCapacityKw,
+            coolingCapacityKw: unit.coolingCapacityKw,
+          }));
+        }
       }
       const result = await api("/api/creditex/program-estimates", {
         method: "POST",
@@ -1395,8 +1428,8 @@ function CreditexVeuCalculator({
             label: "",
             model: "",
             quantity: "1",
-            heatingCapacityKw: "3.5",
-            coolingCapacityKw: "3.5",
+            heatingCapacityKw: "",
+            coolingCapacityKw: "",
           },
         ]);
   }
@@ -1591,6 +1624,7 @@ function CreditexVeuCalculator({
               if (next.activityCode === "6") {
                 part6IndoorUnitIdRef.current = 1;
                 setPart6IndoorUnits(INITIAL_PART_6_INDOOR_UNITS);
+                setUsePart6ProductDefaults(true);
               }
               waterHeaterItemIdRef.current = 1;
               setWaterHeaterItems(initialVeuWaterHeaterItems());
@@ -1675,7 +1709,7 @@ function CreditexVeuCalculator({
         </label>
         {!waterHeaterActivity && requiredKinds.map((kind) => (
           <CreditexOfficialProductPicker
-            key={`${activity.activityCode}:${productContractScenario}:${date}:${kind}:${productPickerRevision}`}
+            key={`${activity.activityCode}:${productContractScenario}:${date}:${kind}`}
             api={officialProductApi}
             kind={kind}
             installationDate={date}
@@ -1758,7 +1792,7 @@ function CreditexVeuCalculator({
                 <fieldset key={item.id}>
                 <legend>Approved product {index + 1}</legend>
                 <CreditexOfficialProductPicker
-                  key={`${activity.activityCode}:${date}:${item.id}:${productPickerRevision}`}
+                    key={`${activity.activityCode}:${date}:${item.id}`}
                   api={officialProductApi}
                   kind="veu_water_heater"
                   installationDate={date}
@@ -1854,10 +1888,40 @@ function CreditexVeuCalculator({
             </small>
           </fieldset>
         )}
-        {activity.activityCode === "6" && inputs.configuration === "multi" && (
+        {part6Multi && (
           <fieldset className={styles.officialProductPicker}>
             <legend>Connected indoor units</legend>
-            <p>
+            <label className={styles.capacityDefaults}>
+              <input
+                type="checkbox"
+                checked={usingPart6ProductDefaults}
+                disabled={!part6ProductDefaults}
+                onChange={(event) => {
+                  invalidate();
+                  const checked = event.target.checked;
+                  setUsePart6ProductDefaults(checked);
+                  if (!checked && part6ProductDefaults) {
+                    setPart6IndoorUnits((current) => current.length === 1
+                      && !current[0].heatingCapacityKw && !current[0].coolingCapacityKw
+                      ? [{ ...current[0], ...part6ProductDefaults }]
+                      : current);
+                  }
+                }}
+              />
+              Use default heating and cooling
+            </label>
+            {part6ProductDefaults ? (
+              <p className={styles.capacityExplanation}>
+                Selected product: {part6ProductDefaults.heatingCapacityKw} kW heating and{" "}
+                {part6ProductDefaults.coolingCapacityKw} kW cooling.
+                {" "}The quote assumes this full capacity is connected. Untick if
+                installing less or to enter the actual indoor units.
+              </p>
+            ) : (
+              <p className={styles.capacityExplanation}>Default heating and cooling ratings are unavailable for this model. Enter the connected indoor capacities below.</p>
+            )}
+            {!usingPart6ProductDefaults && <>
+              <p>
               Add each indoor-unit type once, then enter how many are connected.
               The calculator totals their heating and cooling capacity and applies
               the approved outdoor-unit and formula caps automatically.
@@ -1953,6 +2017,7 @@ function CreditexVeuCalculator({
                 ? `Connected total: ${part6IndoorTotals.quantity} units, ${part6IndoorTotals.heatingCapacityKw.toLocaleString("en-AU", { maximumFractionDigits: 3 })} kW heating and ${part6IndoorTotals.coolingCapacityKw.toLocaleString("en-AU", { maximumFractionDigits: 3 })} kW cooling.`
                 : "Complete every quantity, heating and cooling field to calculate the connected total."}
             </p>
+            </>}
           </fieldset>
         )}
         {postcodeRequired && (
@@ -2021,7 +2086,7 @@ function CreditexVeuCalculator({
         )}
         <button
           type="submit"
-          disabled={busy || (waterHeaterActivity && !waterHeaterUnitTotal.complete)}
+          disabled={busy || part6CapacityIncomplete || (waterHeaterActivity && !waterHeaterUnitTotal.complete)}
         >
           {busy ? "Calculating..." : "Calculate source-verified result"}
         </button>

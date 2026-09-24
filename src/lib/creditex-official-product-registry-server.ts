@@ -312,6 +312,7 @@ type SourceAcquisitionProgressRow = {
   cleanup_disposition: "restart" | "finish";
   total_record_count: number;
   created_at: string;
+  updated_at: string;
 };
 
 type PendingOfficialProductRefresh = Readonly<{
@@ -321,6 +322,7 @@ type PendingOfficialProductRefresh = Readonly<{
   recordCount: number;
   stagedRecordCount: number;
   checkedAt: string;
+  updatedAt: string;
   postActivationCleanup: boolean;
 }>;
 
@@ -1801,6 +1803,22 @@ export async function hasPendingCreditexOfficialProductRefresh(
   return Boolean(await loadPendingOfficialProductRefresh(db, registryCode));
 }
 
+async function loadOfficialProductRefreshCheckpoint(
+  db: D1Database,
+  registryCode: string,
+) {
+  const result = await db.prepare(`SELECT 'refresh' AS kind,
+      snapshot_id AS id, revision
+    FROM compliance_official_product_refresh_progress WHERE registry_code = ?
+    UNION ALL
+    SELECT 'acquisition' AS kind, acquisition_id AS id, revision
+    FROM compliance_official_product_source_acquisitions WHERE registry_code = ?
+    ORDER BY kind`)
+    .bind(registryCode, registryCode)
+    .all<{ kind: string; id: string; revision: number }>();
+  return canonicalJson(result.results || []);
+}
+
 async function loadPendingOfficialProductRefresh(
   db: D1Database,
   registryCode: string,
@@ -1814,7 +1832,7 @@ async function loadPendingOfficialProductRefresh(
   ] = await Promise.all([
     loadRefreshProgress(db, registryCode),
     db.prepare(`SELECT acquisition_id, phase, cleanup_disposition,
-        total_record_count, created_at
+        total_record_count, created_at, updated_at
       FROM compliance_official_product_source_acquisitions
       WHERE registry_code = ?`)
       .bind(registryCode)
@@ -1863,6 +1881,7 @@ async function loadPendingOfficialProductRefresh(
       recordCount: Number(snapshot?.record_count || 0),
       stagedRecordCount: progress.product_record_count,
       checkedAt: progress.created_at,
+      updatedAt: progress.updated_at,
       postActivationCleanup: progress.phase === "cleanup"
         && progress.snapshot_id === current?.id
         && currentReceiptCovers(progress.created_at),
@@ -1876,6 +1895,7 @@ async function loadPendingOfficialProductRefresh(
     recordCount: Number(acquisition.total_record_count),
     stagedRecordCount: Number(acquisitionProducts?.record_count || 0),
     checkedAt: acquisition.created_at,
+    updatedAt: acquisition.updated_at,
     postActivationCleanup: acquisition.phase === "cleanup"
       && acquisition.cleanup_disposition === "finish"
       && currentReceiptCovers(acquisition.created_at),
@@ -3219,6 +3239,7 @@ export async function syncOfficialProductRegistry(
   const leaseId = options.fleetLeaseId || crypto.randomUUID();
   let leaseAcquired = false;
   let stagingSnapshotId = "";
+  let checkpointBefore: string | undefined;
   try {
     await acquireLease(
       db,
@@ -3235,6 +3256,10 @@ export async function syncOfficialProductRegistry(
         "Immutable official source storage is unavailable.",
       );
     }
+    checkpointBefore = await loadOfficialProductRefreshCheckpoint(
+      db,
+      definition.registryCode,
+    );
     const current = await db.prepare(`SELECT
       id, source_manifest_json, source_sha256, record_count, activated_at
       FROM compliance_official_product_snapshots
@@ -3866,12 +3891,21 @@ export async function syncOfficialProductRegistry(
           definition.registryCode,
         ).catch(() => null)
       : null;
-    const boundedCheckpointYield = error instanceof CreditexOfficialProductError
+    const backgroundDeadline = error instanceof CreditexOfficialProductError
       && error.code === "OFFICIAL_PRODUCT_REFRESH_DEADLINE"
       && options.signal?.aborted === true
       && options.signal.reason
         === CREDITEX_OFFICIAL_PRODUCT_BACKGROUND_TIMEOUT_REASON
       && pendingRefresh !== null;
+    // An old retained checkpoint does not prove this invocation progressed.
+    // Repeated deadlines before the next durable write must enter retry/backoff.
+    const checkpointAfter = backgroundDeadline && checkpointBefore !== undefined
+      ? await loadOfficialProductRefreshCheckpoint(db, definition.registryCode)
+        .catch(() => checkpointBefore)
+      : checkpointBefore;
+    const boundedCheckpointYield = backgroundDeadline
+      && checkpointBefore !== undefined
+      && checkpointAfter !== checkpointBefore;
     if (leaseAcquired && !ownershipLost && !boundedCheckpointYield
       && !pendingRefresh?.postActivationCleanup) {
       const message = error instanceof Error && error.message.trim()
@@ -3910,7 +3944,7 @@ export async function syncOfficialProductRegistry(
 export async function loadOfficialProductRegistryStatus(
   db: D1Database,
   registryCode: string,
-  options: { now?: Date } = {},
+  options: { now?: Date; includeRefreshProgress?: boolean } = {},
 ): Promise<CreditexOfficialProductRegistryStatus> {
   await ensureCreditexProductRegistrySchemaGuards(db);
   const now = options.now || new Date();
@@ -3941,6 +3975,25 @@ export async function loadOfficialProductRegistryStatus(
     && checkedAgeMs >= 0
     && checkedAgeMs <= FRESHNESS_WINDOW_MS,
   );
+  let refreshProgress: CreditexOfficialProductRegistryStatus["refreshProgress"];
+  if (options.includeRefreshProgress) {
+    const [pending, queued] = await Promise.all([
+      loadPendingOfficialProductRefresh(db, registryCode),
+      db.prepare(`SELECT requested_at, not_before, attempt_count, updated_at
+        FROM compliance_official_product_refresh_requests WHERE registry_code = ?`)
+        .bind(registryCode)
+        .first<{ requested_at: string; not_before: string; attempt_count: number; updated_at: string }>(),
+    ]);
+    refreshProgress = pending || queued ? {
+      phase: pending?.phase || "queued",
+      stagedRecordCount: pending?.stagedRecordCount || 0,
+      recordCount: pending?.recordCount ?? Number(snapshot?.record_count || 0),
+      startedAt: pending?.checkedAt || queued!.requested_at,
+      updatedAt: pending?.updatedAt || queued!.updated_at,
+      retryAt: queued?.not_before || null,
+      attemptCount: Number(queued?.attempt_count || 0),
+    } : null;
+  }
   return {
     registryCode,
     status: !snapshot ? "unavailable" : current ? "current" : "stale",
@@ -3954,6 +4007,7 @@ export async function loadOfficialProductRegistryStatus(
       checkedAt: lastAttempt.checked_at,
       message: lastAttempt.message,
     } : null,
+    ...(options.includeRefreshProgress ? { refreshProgress } : {}),
   };
 }
 

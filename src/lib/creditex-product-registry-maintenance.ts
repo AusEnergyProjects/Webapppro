@@ -399,7 +399,7 @@ async function loadQueuedRefreshRequest(
   return database.prepare(`SELECT registry_code, attempt_count, requested_at
       FROM compliance_official_product_refresh_requests
       WHERE not_before <= ? AND registry_code IN (${placeholders})
-      ORDER BY requested_at, registry_code LIMIT 1`)
+      ORDER BY not_before, requested_at, registry_code LIMIT 1`)
     .bind(now.toISOString(), ...registryCodes)
     .first<RefreshRequestRow>();
 }

@@ -109,6 +109,81 @@ test("draft copies persist separately, reopen across requests, and publish only 
   assert.equal(h.count("compliance_audit_events"), 3);
 });
 
+test("New form starts from program requirements with a chosen name and preserves the current publication baseline", async (t) => {
+  const h = fixture(t);
+  const previous = { ...h.form, title: "Previous Creditex custom form", fields: [...h.form.fields,
+    { key: "custom.previous", label: "Old custom question", section: "Previous extras", phase: "after", type: "text", required: false, options: [], help: "" }] };
+  const published = await h.post({ action: "save_master", activityTemplateId: h.form.activityTemplateId,
+    variantId: h.form.variantId, expectedVersion: 0, form: previous });
+  assert.equal(published.status, 200);
+  const retainedMaster = h.database.prepare("SELECT * FROM trade_activity_field_masters").get();
+  const created = await h.create({ startFrom: "activity_template", title: "  Creditex installation checks  ", expectedVersion: published.body.expectedVersion,
+    form: { fields: [] }, organisationId: "forged-org", programCode: "invented-program" });
+  assert.equal(created.status, 200);
+  const draft = created.body.draft;
+  assert.equal(draft.title, "Creditex installation checks"); assert.equal(draft.baseIsCurrent, true);
+  assert.equal(draft.baseMasterVersion, published.body.expectedVersion);
+  assert.equal(draft.form.programCode, h.form.programCode);
+  assert.equal(draft.form.fields.some(field => field.key === "custom.previous"), false);
+  assert.deepEqual(draft.form.fields, library.applyDefaultActivityFormPolicy(h.form, h.form).fields);
+  assert.deepEqual(draft.form.declarations, h.form.declarations);
+  assert.deepEqual(h.database.prepare("SELECT * FROM trade_activity_field_masters").get(), retainedMaster);
+  const stored = h.database.prepare("SELECT * FROM trade_activity_field_master_drafts WHERE id=?").get(draft.id);
+  assert.equal(stored.organisation_id, "creditex");
+  assert.equal(stored.base_form_sha256, core.activityHash(library.applyDefaultActivityFormPolicy(published.body.form, h.form)));
+  assert.equal(stored.form_sha256, core.activityHash(draft.form)); assert.notEqual(stored.base_form_sha256, stored.form_sha256);
+  const duplicate = await h.create({ expectedVersion: published.body.expectedVersion });
+  assert.equal(duplicate.body.draft.title, previous.title);
+  assert.equal(duplicate.body.draft.form.fields.some(field => field.key === "custom.previous"), true);
+  const custom = { key: "custom.new", label: "Creditex site notes", section: "New extras", phase: "after", type: "text", required: false, options: [], help: "" };
+  const saved = await h.post({ action: "save_master_draft", draftId: draft.id, expectedRevision: 1,
+    form: { ...draft.form, fields: [...draft.form.fields, custom] } });
+  assert.equal(saved.status, 200);
+  const result = await h.post({ action: "publish_master_draft", draftId: draft.id, expectedRevision: 2 });
+  assert.equal(result.status, 200); assert.equal(result.body.form.title, draft.title);
+  assert.deepEqual(result.body.form.fields.find(field => field.key === custom.key), custom);
+  assert.deepEqual(h.database.prepare("SELECT * FROM trade_activity_field_masters WHERE id=?").get(retainedMaster.id), retainedMaster);
+});
+
+test("New form requires a valid name, known activity and premises, and existing author access", async (t) => {
+  const h = fixture(t);
+  for (const title of [undefined, "", "   ", 42, "x".repeat(301)]) {
+    const result = await h.create({ startFrom: "activity_template", title });
+    assert.equal(result.status, 400); assert.equal(result.body.code, "INVALID_ACTIVITY_DRAFT_START");
+  }
+  assert.equal((await h.create({ startFrom: "blank", title: "Unchecked form" })).status, 400);
+  assert.notEqual((await h.create({ startFrom: "activity_template", title: "Unknown activity", activityTemplateId: "invented-activity" })).status, 200);
+  assert.equal((await h.create({ startFrom: "activity_template", title: "Unknown premises", variantId: "invented-premises" })).status, 400);
+  h.setActor({ role: "auditor" });
+  assert.equal((await h.create({ startFrom: "activity_template", title: "Viewer draft" })).status, 403);
+  h.setActor({ role: "admin", displayName: "Creditex Office", email: "info@example.com" });
+  assert.equal((await h.create({ startFrom: "activity_template", title: "Shared mailbox draft" })).status, 403);
+  assert.equal(h.count("trade_activity_field_master_drafts"), 0); assert.equal(h.count("compliance_audit_events"), 0);
+});
+
+test("New forms are available across existing program activities and premises variants", async (t) => {
+  const h = fixture(t); let created = 0;
+  for (const activity of library.activityFieldCatalogue()) {
+    const builtIn = library.defaultActivityFieldForm(activity.activityTemplateId);
+    for (const variantId of builtIn.variantOptions.length ? builtIn.variantOptions.map(item => item.id) : [builtIn.variantId]) {
+      const result = await h.create({ activityTemplateId: activity.activityTemplateId, variantId, startFrom: "activity_template", title: `${activity.programCode} ${activity.activityCode} new form` });
+      assert.equal(result.status, 200, `${activity.activityTemplateId} ${variantId}: ${JSON.stringify(result.body)}`);
+      assert.equal(result.body.draft.form.activityTemplateId, activity.activityTemplateId);
+      assert.equal(result.body.draft.form.variantId, variantId); assert.equal(result.body.draft.baseIsCurrent, true); created++;
+    }
+  }
+  assert.equal(h.count("trade_activity_field_master_drafts"), created); assert.equal(h.count("trade_activity_field_masters"), 0);
+});
+
+test("New form creation rejects stale publication state inside the atomic batch", async (t) => {
+  const h = fixture(t);
+  h.race(async () => assert.equal((await h.post({ action: "save_master", activityTemplateId: h.form.activityTemplateId,
+    variantId: h.form.variantId, expectedVersion: 0, form: h.form })).status, 200));
+  const result = await h.create({ startFrom: "activity_template", title: "Stale creation" });
+  assert.equal(result.status, 409); assert.equal(result.body.code, "ACTIVITY_MASTER_CHANGED");
+  assert.equal(h.count("trade_activity_field_master_drafts"), 0); assert.equal(h.count("compliance_audit_events"), 0);
+});
+
 test("draft save and discard require the exact revision and retain closed copies", async (t) => {
   const h = fixture(t); const { draft } = (await h.create()).body;
   const first = await h.post({ action: "save_master_draft", draftId: draft.id, expectedRevision: 1, form: { ...draft.form, title: "Saved first" } });

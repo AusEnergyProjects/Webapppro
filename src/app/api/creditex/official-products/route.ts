@@ -225,7 +225,9 @@ export async function GET(request: Request) {
           async (registryCode) => {
             const status = registryCode === "cer_sres_swh"
               ? await loadCerSresRegistryStatus(database)
-              : await loadOfficialProductRegistryStatus(database, registryCode);
+              : await loadOfficialProductRegistryStatus(database, registryCode, {
+                  includeRefreshProgress: true,
+                });
             return {
               ...status,
               refreshDesign:

@@ -160,6 +160,11 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
   const [drafts, setDrafts] = useState<ActivityMasterDraftSummary[]>([]);
   const [draftCopy, setDraftCopy] = useState<ActivityMasterDraft | null>(null);
   const [draftConfirmation, setDraftConfirmation] = useState<"publish" | "discard" | null>(null);
+  const [creatingForm, setCreatingForm] = useState(false);
+  const [newFormProgram, setNewFormProgram] = useState("");
+  const [newFormActivity, setNewFormActivity] = useState("");
+  const [newFormName, setNewFormName] = useState("");
+  const [newFormSource, setNewFormSource] = useState<{ form: ActivityForm; expectedVersion: number } | null>(null);
   const [signingItem, setSigningItem] = useState("");
   const [removal, setRemoval] = useState<{ kind: "question" | "signature" | "page"; key: string } | null>(null);
   const [renamingPage, setRenamingPage] = useState("");
@@ -209,7 +214,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
     setBusy(true); setMessage("");
     try { const result = await api(`${endpoint}?view=masters&actorMode=${actorMode}&activityTemplateId=${encodeURIComponent(templateId)}&variantId=${encodeURIComponent(variantId)}`);
       if (!result.form || typeof result.form !== "object" || !("fields" in result.form) || !Array.isArray(result.form.fields)) throw new Error("The activity form could not be read.");
-      setForm(result.form as ActivityForm); setExpectedVersion(Number(result.expectedVersion)); setSelected(templateId); setQuestion(0); setSigningItem(""); setRemoval(null); setRenamingPage(""); setDirty(false); setDraftCopy(null); setDraftConfirmation(null);
+      setForm(result.form as ActivityForm); setExpectedVersion(Number(result.expectedVersion)); setSelected(templateId); setQuestion(0); setSigningItem(""); setRemoval(null); setRenamingPage(""); setDirty(false); setDraftCopy(null); setDraftConfirmation(null); setCreatingForm(false);
     } catch (error) { setMessage(error instanceof Error ? error.message : "The form could not be loaded."); }
     finally { setBusy(false); }
   }
@@ -234,7 +239,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
     if (value.status !== "draft") throw new Error("This copy has already been published or discarded. Refresh forms to see the current drafts.");
     setQuestion(Math.max(0, value.form.fields.findIndex((item) => item.key === form?.fields[question]?.key)));
     setDraftCopy(value); setForm(value.form); setSelected(value.activityTemplateId); setExpectedVersion(value.baseMasterVersion);
-    setDirty(false); setDraftConfirmation(null);
+    setDirty(false); setDraftConfirmation(null); setCreatingForm(false);
     setDrafts((current) => [...current.filter((item) => item.id !== value.id), value]);
   }
   async function openDraft(draftId: string) {
@@ -255,6 +260,38 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
       const result = await api(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create_master_draft", actorMode, activityTemplateId: templateId, variantId: source.form.variantId, expectedVersion: source.expectedVersion }) });
       acceptDraft(result.draft); setQuestion(0); setSigningItem(""); setRemoval(null); setRenamingPage(""); setMessage("Draft copy saved. Edit and test it here; the published form stays available until you replace it.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "The draft copy could not be created."); }
+    finally { setBusy(false); }
+  }
+  function startNewForm() {
+    if (busy || !canAuthor || form) return;
+    setCreatingForm(true); setNewFormProgram(program || catalogue[0]?.programCode || "");
+    setNewFormActivity(""); setNewFormSource(null); setNewFormName(""); setMessage("");
+  }
+  async function chooseNewFormActivity(templateId: string, variantId = "") {
+    if (busy || !canAuthor) return;
+    setNewFormActivity(templateId); setNewFormSource(null); setMessage("");
+    if (!templateId) return;
+    setBusy(true);
+    try {
+      const result = await api(`${endpoint}?view=masters&actorMode=${actorMode}&activityTemplateId=${encodeURIComponent(templateId)}&variantId=${encodeURIComponent(variantId)}`);
+      if (!result.form || typeof result.form !== "object" || !("fields" in result.form) || !Array.isArray(result.form.fields)
+        || !("variantOptions" in result.form) || !Array.isArray(result.form.variantOptions) || typeof result.expectedVersion !== "number") throw new Error("The activity requirements could not be loaded.");
+      setNewFormSource({ form: result.form as ActivityForm, expectedVersion: result.expectedVersion });
+    } catch (error) { setMessage(error instanceof Error ? error.message : "The activity requirements could not be loaded."); }
+    finally { setBusy(false); }
+  }
+  async function createNewForm() {
+    if (busy || !canAuthor || !newFormSource || !newFormName.trim()) return;
+    setBusy(true); setMessage("");
+    try {
+      const result = await api(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+        action: "create_master_draft", actorMode, startFrom: "activity_template", title: newFormName.trim(),
+        activityTemplateId: newFormSource.form.activityTemplateId, variantId: newFormSource.form.variantId, expectedVersion: newFormSource.expectedVersion,
+      }) });
+      acceptDraft(result.draft); setQuestion(0); setSigningItem(""); setRemoval(null); setRenamingPage(""); setCreatingForm(false);
+      setNewFormSource(null); setNewFormName("");
+      setMessage("New form saved as a draft with the required program questions. Add your pages, questions and signatures, then test them in the phone preview.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "The new form could not be created. Your selections are still here."); }
     finally { setBusy(false); }
   }
   async function saveDraft() {
@@ -399,13 +436,28 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
   const saveCurrent = draftCopy ? saveDraft : save;
   return <section className={`${styles.builderSection} ${styles.masterLibrary}`} aria-label="Activity form editor">
     {form && <button className={styles.masterBack} type="button" disabled={busy} onClick={backToCatalogue}>Back to all forms</button>}
-    <header><div><h2>{form ? form.title : "Activity forms"}</h2><p>{canAuthor ? form ? draftCopy ? "Edit and save your draft while the published form stays available. Replace it when your team is ready." : "Changes appear in the phone as you type. Make a draft copy if you want to save work before publishing." : "Edit a published form, or duplicate it to work on a saved draft first." : "Choose a form to test its questions in the phone preview."}</p></div>
+    <header><div><h2>{form ? form.title : "Activity forms"}</h2><p>{canAuthor ? form ? draftCopy ? "Edit and save your draft while the published form stays available. Replace it when your team is ready." : "Changes appear in the phone as you type. Make a draft copy if you want to save work before publishing." : "Create a new form for an activity, edit a published form, or duplicate one into a saved draft." : "Choose a form to test its questions in the phone preview."}</p></div>
+      {!form && canAuthor && <button type="button" className={styles.masterPrimaryAction} disabled={busy || !catalogue.length || creatingForm} onClick={startNewForm}>New form</button>}
       {!form && <button type="button" disabled={busy} onClick={() => void loadCatalogue()}>{busy ? "Loading forms..." : "Refresh forms"}</button>}
       {canAuthor && <button type="button" disabled={busy} onClick={() => void reviewQueue()}>Submitted field records</button>}
       {onManageAccess && <button type="button" onClick={onManageAccess}>Set up form editors</button>}</header>
     {actorMode === "creditex" && !canAuthor ? <div className={styles.masterAccess} role="note"><strong>You can preview and test every form.</strong><p>Sign in with your named Creditex administrator, case manager or reviewer account to edit forms. Shared-mailbox and auditor accounts are read-only. {onManageAccess ? "Use Set up form editors to invite a named member of your team." : "Ask your Creditex administrator to invite you through Team access."} AEA owners can use <a href="/operations/control-centre#form-governance">Admin → Activity forms</a>.</p></div> : null}
     {message ? <p role="status">{message}</p> : null}
     {reviewLink ? <p><a href={reviewLink} target="_blank" rel="noreferrer">Open the signed field report and original evidence</a> (link expires in one hour)</p> : null}
+    {!form && creatingForm && canAuthor && <section className={styles.masterCreate} aria-label="Create a new activity form">
+      <div><h3>New form</h3><p>Start with the activity&apos;s required program questions and signatures, then add your own content. Your new form is saved as a draft.</p></div>
+      <fieldset disabled={busy}>
+        <legend>Choose the activity and name your form</legend>
+        <div className={styles.masterCreateInputs}>
+          <label>Program<select value={newFormProgram} onChange={(event) => { setNewFormProgram(event.target.value); setNewFormActivity(""); setNewFormSource(null); setMessage(""); }}>{programs.map((code) => <option key={code} value={code}>{code}</option>)}</select></label>
+          <label>Activity<select value={newFormActivity} onChange={(event) => void chooseNewFormActivity(event.target.value)}><option value="">Choose an activity</option>{catalogue.filter((item) => item.programCode === newFormProgram).map((item) => <option key={item.activityTemplateId} value={item.activityTemplateId}>{item.activityCode}: {item.title}</option>)}</select></label>
+          {newFormSource && newFormSource.form.variantOptions.length > 1 && <label>Premises<select value={newFormSource.form.variantId} onChange={(event) => void chooseNewFormActivity(newFormActivity, event.target.value)}>{newFormSource.form.variantOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
+          <label>Form name<input value={newFormName} maxLength={300} placeholder="For example, Creditex installation checks" onChange={(event) => setNewFormName(event.target.value)} /></label>
+        </div>
+      </fieldset>
+      <p>The published form stays available until you choose Replace published form. Each activity and premises type uses one published form for new records.</p>
+      <div className={styles.masterRowActions}><button type="button" className={styles.masterPrimaryAction} disabled={busy || !newFormSource || !newFormName.trim()} onClick={() => void createNewForm()}>{busy ? "Preparing form..." : "Create draft"}</button>{message && newFormActivity && <button type="button" disabled={busy} onClick={() => void chooseNewFormActivity(newFormActivity, newFormSource?.form.variantId)}>Reload activity</button>}<button type="button" disabled={busy} onClick={() => { setCreatingForm(false); setNewFormSource(null); setNewFormName(""); setMessage(""); }}>Cancel new form</button></div>
+    </section>}
     {!form && catalogue.length > 0 && <>
       <div className={styles.masterFilters}>
         <label><span>Find a form <small>(optional)</small></span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Activity number, service or program" /></label>

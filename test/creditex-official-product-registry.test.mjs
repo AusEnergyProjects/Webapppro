@@ -779,6 +779,90 @@ test("a bounded deadline during acquisition yields after its durable checkpoint"
   });
 });
 
+test("repeated acquisition deadlines without a new checkpoint remain failures", async (t) => {
+  const { database, d1, artifactStore } = fixture();
+  t.after(() => database.close());
+  const acquisitionId = "durable-acquisition-stalled-fixture";
+  let invocation = 0;
+  const durableDefinition = {
+    ...definition,
+    registryCode: "fixture-acquisition-stalled",
+    async fetchSources(_fetchImpl, context) {
+      invocation += 1;
+      if (invocation === 1) {
+        await persistMinimalSourceAcquisition(context, acquisitionId);
+      } else if (invocation === 5) {
+        await context.database.prepare(`UPDATE
+            compliance_official_product_source_acquisitions
+          SET phase = 'assemble', revision = revision + 1, updated_at = ?
+          WHERE acquisition_id = ?`)
+          .bind(context.checkedAt, acquisitionId).run();
+      }
+      throw new Error("the active fetch observed its abort signal");
+    },
+  };
+  const controller = new AbortController();
+  controller.abort(CREDITEX_OFFICIAL_PRODUCT_BACKGROUND_TIMEOUT_REASON);
+  const refresh = (second) => syncOfficialProductRegistry(d1, durableDefinition, {
+    artifactStore,
+    now: new Date(`2026-08-08T00:02:0${second}.000Z`),
+    signal: controller.signal,
+  });
+  assert.equal((await refresh(0)).complete, false);
+  for (const second of [1, 2, 3]) {
+    await assert.rejects(refresh(second), expectedError("OFFICIAL_PRODUCT_REFRESH_DEADLINE"));
+  }
+  assert.deepEqual({ ...database.prepare(`SELECT revision, updated_at
+    FROM compliance_official_product_source_acquisitions
+    WHERE acquisition_id = ?`).get(acquisitionId) }, {
+    revision: 1, updated_at: "2026-08-08T00:02:00.000Z",
+  });
+  const failedStatus = await loadOfficialProductRegistryStatus(d1, durableDefinition.registryCode);
+  assert.equal(failedStatus.lastAttempt.status, "failed");
+  assert.equal(failedStatus.lastAttempt.checkedAt, "2026-08-08T00:02:03.000Z");
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+    compliance_official_product_sync_runs WHERE registry_code = ? AND status = 'failed'`)
+    .get(durableDefinition.registryCode).count, 3);
+  assert.equal((await refresh(4)).complete, false, "a changed existing checkpoint remains resumable");
+  assert.equal(database.prepare(`SELECT revision FROM
+    compliance_official_product_source_acquisitions WHERE acquisition_id = ?`)
+    .get(acquisitionId).revision, 2);
+});
+
+test("registry status optionally exposes bounded durable progress without queue error details", async (t) => {
+  const queries = [];
+  const { database, d1 } = fixture({ onBind: (sql) => queries.push(sql) });
+  t.after(() => database.close());
+  const registryCode = "fixture-progress-status";
+  const defaultStatus = await loadOfficialProductRegistryStatus(d1, registryCode);
+  assert.equal("refreshProgress" in defaultStatus, false);
+  assert.equal(queries.some(sql => sql.includes("SELECT acquisition_id, phase")), false);
+  assert.equal((await loadOfficialProductRegistryStatus(d1, registryCode, {
+    includeRefreshProgress: true,
+  })).refreshProgress, null);
+  database.prepare(`INSERT INTO compliance_official_product_refresh_requests
+    (registry_code, requested_at, not_before, attempt_count, last_error, updated_at)
+    VALUES (?, ?, ?, 2, ?, ?)`)
+    .run(registryCode, "2026-08-08T00:00:00.000Z", "2026-08-08T00:03:00.000Z",
+      "private-artifact-key-must-not-be-exposed", "2026-08-08T00:02:00.000Z");
+  const queued = await loadOfficialProductRegistryStatus(d1, registryCode, { includeRefreshProgress: true });
+  assert.deepEqual(queued.refreshProgress, {
+    phase: "queued", stagedRecordCount: 0, recordCount: 0,
+    startedAt: "2026-08-08T00:00:00.000Z", updatedAt: "2026-08-08T00:02:00.000Z",
+    retryAt: "2026-08-08T00:03:00.000Z", attemptCount: 2,
+  });
+  await persistMinimalSourceAcquisition({
+    database: d1, registryCode, checkedAt: "2026-08-08T00:01:00.000Z",
+  }, "progress-status-acquisition");
+  const pending = await loadOfficialProductRegistryStatus(d1, registryCode, { includeRefreshProgress: true });
+  assert.deepEqual(pending.refreshProgress, {
+    phase: "acquisition", stagedRecordCount: 0, recordCount: 4,
+    startedAt: "2026-08-08T00:01:00.000Z", updatedAt: "2026-08-08T00:01:00.000Z",
+    retryAt: "2026-08-08T00:03:00.000Z", attemptCount: 2,
+  });
+  assert.equal(JSON.stringify(pending).includes("private-artifact-key"), false);
+});
+
 test("a deterministic acquisition error is not hidden by a simultaneous deadline", async (t) => {
   const { database, d1, artifactStore } = fixture();
   t.after(() => database.close());
@@ -2229,7 +2313,7 @@ test("cleanup that lost its activated current snapshot remains an integrity fail
     .get(harness.registryCode).count, 1);
 });
 
-test("a bounded deadline with retained replay progress yields without a failed source receipt", async (t) => {
+test("a bounded deadline without new replay progress records failure and remains resumable", async (t) => {
   const recordCount = 1_001;
   const { database, d1, artifactStore } = fixture();
   t.after(() => database.close());
@@ -2254,30 +2338,18 @@ test("a bounded deadline with retained replay progress yields without a failed s
 
   const controller = new AbortController();
   controller.abort(CREDITEX_OFFICIAL_PRODUCT_BACKGROUND_TIMEOUT_REASON);
-  const yielded = await syncOfficialProductRegistry(d1, harness.definition, {
-    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
-    artifactStore,
-    maximumStreamingRecordsPerRun: 500,
-    now: new Date("2026-08-03T01:00:01.000Z"),
-    signal: controller.signal,
-  });
-  assert.deepEqual({
-    changed: yielded.changed,
-    complete: yielded.complete,
-    phase: yielded.phase,
-    snapshotId: yielded.snapshotId,
-    checkedAt: yielded.checkedAt,
-  }, {
-    changed: false,
-    complete: false,
-    phase: checkpoint.phase,
-    snapshotId: checkpoint.snapshot_id,
-    checkedAt: checkpoint.created_at,
-  });
+  await assert.rejects(syncOfficialProductRegistry(d1, harness.definition, {
+      fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+      artifactStore,
+      maximumStreamingRecordsPerRun: 500,
+      now: new Date("2026-08-03T01:00:01.000Z"),
+      signal: controller.signal,
+    }), expectedError("OFFICIAL_PRODUCT_REFRESH_DEADLINE"));
+  assert.deepEqual(persistedRefreshProgress(database, harness.registryCode), checkpoint);
   assert.equal(database.prepare(`SELECT count(*) count FROM
       compliance_official_product_sync_runs
     WHERE registry_code = ? AND status = 'failed'`)
-    .get(harness.registryCode).count, 0);
+    .get(harness.registryCode).count, 1);
   assert.equal(harness.fetchCalls(), 2);
 
   let activation = null;
@@ -2306,7 +2378,7 @@ test("a bounded deadline with retained replay progress yields without a failed s
   assert.equal(database.prepare(`SELECT count(*) count FROM
       compliance_official_product_sync_runs
     WHERE registry_code = ? AND status = 'failed'`)
-    .get(harness.registryCode).count, 0);
+    .get(harness.registryCode).count, 1);
   assert.equal(harness.fetchCalls(), 2);
 });
 
