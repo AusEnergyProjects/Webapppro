@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ActivityAnswer, ActivityCondition, ActivityDeclaration, ActivityField, ActivityForm, ActivityRecord, ActivityPhase } from "@/lib/trade-activity-forms";
 import type { ActivityMasterDraft, ActivityMasterDraftSummary } from "@/lib/trade-activity-master-drafts";
-import { addEditorPage, addEditorPageQuestion, deleteEditorPage, editorFormPages, editorPageDeleteReason, editorPageRenameReason, editorQuestionDeleteReason, editorQuestionMoveReason, moveEditorQuestion, renameEditorPage, type EditorFormChange } from "@/lib/creditex-form-pages";
+import { addEditorPage, addEditorPageQuestion, deleteEditorPage, editorFormPages, editorPageDeleteReason, editorPageRenameReason, editorQuestionDeleteReason, editorQuestionMoveReason, moveEditorQuestion, dropEditorQuestion, renameEditorPage, type EditorFormChange } from "@/lib/creditex-form-pages";
+import { changeEditorCondition, conditionFieldKeys, conditionFields, conditionValue, directCondition, editorConditionLockReason, makeCondition } from "@/lib/creditex-form-conditions";
+import { TlinkFormMindMap, TlinkMindMapMark } from "./TlinkFormMindMap";
 import { ACTIVITY_WIZARD_PAGE_FIELD_LIMIT } from "@/lib/trade-activity-form-flow";
 import { CreditexFormPhonePreview } from "./CreditexFormPhonePreview";
 import styles from "./CreditexActivityWorkPackGovernance.module.css";
@@ -46,51 +48,6 @@ function parsedChoices(value: string) {
   const options = [...new Set(entries.map((entry) => entry.value))];
   const optionLabels = Object.fromEntries(entries.filter((entry) => entry.label).map((entry) => [entry.value, entry.label]));
   return { options, ...(Object.keys(optionLabels).length ? { optionLabels } : { optionLabels: undefined }) };
-}
-
-type DirectCondition = { fieldKey: string; operator: "equals" | "notEquals"; value: ActivityAnswer };
-
-function conditionFieldKeys(condition: ActivityCondition | undefined): string[] {
-  if (!condition) return [];
-  if (condition.fieldKey) return [condition.fieldKey];
-  return [...(condition.all || []), ...(condition.any || [])].flatMap(conditionFieldKeys);
-}
-
-function directCondition(condition: ActivityCondition | undefined): DirectCondition | null {
-  if (!condition?.fieldKey || Object.keys(condition).length !== 2) return null;
-  if (Object.prototype.hasOwnProperty.call(condition, "equals") && condition.equals !== undefined) {
-    return { fieldKey: condition.fieldKey, operator: "equals", value: condition.equals };
-  }
-  if (Object.prototype.hasOwnProperty.call(condition, "notEquals") && condition.notEquals !== undefined) {
-    return { fieldKey: condition.fieldKey, operator: "notEquals", value: condition.notEquals };
-  }
-  return null;
-}
-
-function conditionValue(field: ActivityField): ActivityAnswer {
-  if (field.type === "boolean") return true;
-  if (field.type === "number") return 0;
-  if (field.type === "select") return field.options[0] || "";
-  return "";
-}
-
-function makeCondition(fieldKey: string, operator: DirectCondition["operator"], value: ActivityAnswer): ActivityCondition {
-  return operator === "equals" ? { fieldKey, equals: value } : { fieldKey, notEquals: value };
-}
-
-function fieldDependsOn(form: ActivityForm, fieldKey: string, targetKey: string, seen = new Set<string>()): boolean {
-  if (fieldKey === targetKey) return true;
-  if (seen.has(fieldKey)) return false;
-  seen.add(fieldKey);
-  const field = form.fields.find((item) => item.key === fieldKey);
-  return conditionFieldKeys(field?.condition).some((dependency) => fieldDependsOn(form, dependency, targetKey, new Set(seen)));
-}
-
-function conditionFields(form: ActivityForm, targetKey: string, targetPhase: ActivityPhase) {
-  return form.fields.filter((candidate) => candidate.key !== targetKey
-    && !["photo", "document"].includes(candidate.type)
-    && (targetPhase === "after" || candidate.phase === "before")
-    && !fieldDependsOn(form, candidate.key, targetKey));
 }
 
 function fieldIsReferenced(form: ActivityForm, fieldKey: string) {
@@ -156,6 +113,9 @@ function ConditionEditor({ form, targetKey, phase, condition, locked, label, onC
 }
 
 export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onManageAccess, onDirtyChange }: { api: Api; actorMode: "admin" | "creditex"; canAuthor?: boolean; onManageAccess?: () => void; onDirtyChange?: (dirty: boolean) => void }) {
+  const [editorView, setEditorView] = useState<"form" | "map">("form");
+  const [mapOpened, setMapOpened] = useState(false);
+  const [mapEditorOpen, setMapEditorOpen] = useState(false);
   const [catalogue, setCatalogue] = useState<Option[]>([]);
   const [drafts, setDrafts] = useState<ActivityMasterDraftSummary[]>([]);
   const [draftCopy, setDraftCopy] = useState<ActivityMasterDraft | null>(null);
@@ -220,7 +180,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
   }
   function backToCatalogue() {
     if (busy || (dirty && !window.confirm("Discard unsaved master-form changes?"))) return;
-    setForm(null); setSelected(""); setQuestion(0); setSigningItem(""); setRemoval(null); setRenamingPage(""); setDirty(false); setMessage(""); setDraftCopy(null); setDraftConfirmation(null);
+    setForm(null); setSelected(""); setQuestion(0); setSigningItem(""); setRemoval(null); setRenamingPage(""); setDirty(false); setMessage(""); setDraftCopy(null); setDraftConfirmation(null); setEditorView("form"); setMapOpened(false); setMapEditorOpen(false);
     setSearch(""); setProgram("");
   }
   async function save() {
@@ -358,15 +318,25 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
       text: "Enter the declaration wording.", role: "customer", phase: "after", required: false, sourceUrl: "", sourceTextSha256: "" };
     setForm({ ...form, declarations: [...form.declarations, declaration] }); selectSignature(declaration.key); setDirty(true);
   }
+  function updateCondition(key: string, condition: ActivityCondition | undefined) {
+    if (!form || !canAuthor || busy) return false;
+    try { setForm(changeEditorCondition(form, key, condition)); setDirty(true); setMessage(""); return true; }
+    catch (error) { setMessage(error instanceof Error ? error.message : "This answer rule could not be changed."); return false; }
+  }
+  function selectMapItem(key: string) {
+    if (key.startsWith("@declaration:")) selectSignature(key.slice(13));
+    else { const index = form?.fields.findIndex((item) => item.key === key) ?? -1; if (index >= 0) selectQuestion(index); }
+  }
   function selectQuestion(index: number) { setQuestion(index); setSigningItem(""); setRemoval(null); setRenamingPage(""); }
   function selectSignature(key: string) { setSigningItem(key); setRemoval(null); setRenamingPage(""); }
   function editPage(change: () => EditorFormChange) {
-    if (!canAuthor || busy) return;
+    if (!canAuthor || busy) return false;
     try {
       const next = change();
       setForm(next.form); selectQuestion(Math.max(0, next.form.fields.findIndex((item) => item.key === next.selectedFieldKey)));
       setDirty(true); setMessage("");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "This page could not be changed."); }
+      return true;
+    } catch (error) { setMessage(error instanceof Error ? error.message : "This page could not be changed."); return false; }
   }
   function confirmRemoval() {
     if (!form || !removal || !canAuthor || busy) return;
@@ -413,7 +383,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
   const profilePlacementControlled = field?.presentation === "derived" || field?.presentation === "prefilled";
   const fieldOrderControlled = sourcePlacementControlled || field?.presentation === "derived" || field?.requiredValue !== undefined;
   const questionDeleteReason = form && field ? editorQuestionDeleteReason(form, field.key) : "";
-  const fieldConditionControlled = sourcePlacementControlled || field?.presentation === "derived" || field?.requiredValue !== undefined;
+  const fieldConditionControlled = Boolean(form && field && editorConditionLockReason(form, field.key));
   const selectedFieldIsReferenced = Boolean(form && field && fieldIsReferenced(form, field.key));
   const earlierField = form ? fieldMoveDestination(form.fields, question, -1) : -1;
   const laterField = form ? fieldMoveDestination(form.fields, question, 1) : -1;
@@ -434,6 +404,62 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
     return (!program || activity?.programCode === program) && `${activity?.programCode || ""} ${activity?.activityCode || ""} ${item.title}`.toLowerCase().includes(search.trim().toLowerCase());
   });
   const saveCurrent = draftCopy ? saveDraft : save;
+  const renameControls = form && selectedPage && renamingPage === selectedPage.key && <div className={styles.masterPageAction}><label>Page name<input value={pageName} maxLength={160} onChange={(event) => setPageName(event.target.value)} /></label><div className={styles.masterRowActions}><button type="button" disabled={busy || !pageName.trim()} onClick={() => editPage(() => renameEditorPage(form, selectedPage.key, pageName))}>Apply page name</button><button type="button" onClick={() => setRenamingPage("")}>Cancel rename</button></div></div>;
+  const removalControls = removal && removalLabel && <div className={styles.masterPageAction} role="alert"><strong>Delete {removal.kind} &quot;{removalLabel}&quot;?</strong><p>{removalPage ? `This removes the page and its ${removalPage.fields.length} question${removalPage.fields.length === 1 ? "" : "s"}.` : "This removes the selected item from this form."} Changes take effect when you {draftCopy ? "save and publish this draft" : "save and publish"}. Existing signed records keep their original form.</p>{removalPage && <ul>{removalPage.fields.map((item) => <li key={item.key}>{item.label}</li>)}</ul>}<div className={styles.masterRowActions}><button type="button" className={styles.masterDelete} disabled={busy} onClick={confirmRemoval}>{`Confirm delete ${removal.kind}`}</button><button type="button" onClick={() => setRemoval(null)}>{`Keep ${removal.kind}`}</button></div></div>;
+  const itemActions = form && field && canAuthor && <div className={styles.masterRowActions}><button type="button" disabled={busy} onClick={addDeclaration}>Add signature</button>{signingItem ? <><button type="button" onClick={() => selectQuestion(question)}>Back to questions</button><button type="button" className={styles.masterDelete} disabled={busy || !selectedDeclaration?.key.startsWith("custom.") || Boolean(selectedDeclaration.sourceUrl || selectedDeclaration.sourceTextSha256)} onClick={() => deleteDeclaration(form.declarations.findIndex((item) => item.key === signingItem))}>Delete signature</button></> : <button type="button" className={styles.masterDelete} disabled={busy || Boolean(questionDeleteReason)} onClick={deleteField}>Delete question</button>}</div>;
+  const itemEditor = form && field ? (<fieldset disabled={busy || !canAuthor}>
+      <legend>{draftCopy ? "Draft form" : `Master version ${form.version}`}{dirty ? " | Unsaved changes" : ""}</legend>
+      <small>{draftCopy ? "This copy does not change live jobs. After publication, new records and unsigned drafts use it; signed and submitted records keep their original version." : "New records and unsigned drafts use it when opened; signed and submitted records stay locked to what was agreed."}</small>
+      <label>Form title<input value={form.title} maxLength={300} onChange={(event) => { setForm({ ...form, title: event.target.value }); setDirty(true); }} /></label>
+      {!signingItem && <>
+      {field.presentation === "derived" ? <p role="note"><strong>Filled automatically by TLink.</strong> The field app displays this as recorded job, customer, business, Team profile, document-delivery or signature data. The tradie is not asked to enter it.</p> : null}
+      {field.presentation === "prefilled" ? <p role="note"><strong>Prefilled by TLink and editable in the field.</strong> The assigned worker or business profile supplies the starting value. The tradie can correct it when another licensed role holder performed that part of the work.</p> : null}
+      {sourcePlacementControlled ? <p role="note"><strong>This evidence question is governed by its regulator requirement.</strong> Its wording, section, timing, evidence type, mandatory status and location rule stay linked to the requirement. Add an optional question if Creditex needs extra information.</p> : null}
+      <div className="admin-form-grid"><label>Move to page<select disabled={!selectedPage || busy || Boolean(questionMoveReason)} title={questionMoveReason || undefined} value={selectedPage?.key || ""} onChange={(event) => editPage(() => moveEditorQuestion(form, field.key, event.target.value))}>
+        {!selectedPage && <option value="">Recorded automatically</option>}{pages.filter((page) => page.phase === field.phase && page.repeatGroup === field.repeatGroup).map((page) => <option key={page.key} value={page.key} disabled={page.key !== selectedPage?.key && Boolean(editorQuestionMoveReason(form, field.key, page.key))}>{pages.indexOf(page) + 1}. {page.section}{page.fields.length >= ACTIVITY_WIZARD_PAGE_FIELD_LIMIT ? " (full)" : ""}</option>)}
+      </select></label>
+        <label>Question<input disabled={sourcePlacementControlled} value={field.label} onChange={(event) => updateField({ label: event.target.value })} /></label>
+        <label>Answer type<select disabled={profilePlacementControlled || sourcePlacementControlled || selectedFieldIsReferenced} value={field.type} onChange={(event) => { if (event.target.value === "signature") { convertToSignature(); return; } const type = answerTypes.find((item) => item.value === event.target.value)?.value; if (!type) return;
+          updateField({ type, options: type === "select" ? ["Yes", "No"] : [], optionLabels: undefined, requireLocation: type === "photo" ? field.requireLocation : undefined }); }}>{answerTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}<option value="signature" disabled={!field.key.startsWith("custom.") || form.fields.length <= 1 || Boolean(field.presentation) || field.requiredValue !== undefined}>Signature / declaration</option></select></label>
+        <label>When<select disabled={profilePlacementControlled || sourcePlacementControlled || selectedFieldIsReferenced} value={field.phase} onChange={(event) => updateField({ phase: event.target.value === "before" ? "before" : "after" })}><option value="before">Before work</option><option value="after">After work</option></select></label>
+      </div>
+      <label>Instructions<textarea disabled={sourcePlacementControlled} value={field.help} onChange={(event) => updateField({ help: event.target.value })} /></label>
+      {field.type === "select" ? <label>Stored code | label shown to the tradie, one per line<textarea disabled={profilePlacementControlled || selectedFieldIsReferenced} value={formattedChoices(field)} onChange={(event) => updateField(parsedChoices(event.target.value))} /></label> : null}
+      <label><input type="checkbox" disabled={profilePlacementControlled || sourcePlacementControlled} checked={field.required} onChange={(event) => updateField({ required: event.target.checked })} />Required question</label>
+      {field.type === "photo" ? <label><input type="checkbox" disabled={sourcePlacementControlled} checked={Boolean(field.requireLocation)} onChange={(event) => updateField({ requireLocation: event.target.checked })} />Require accurate GPS location with each captured photo</label> : null}
+      <ConditionEditor form={form} targetKey={field.key} phase={field.phase} condition={field.condition} locked={fieldConditionControlled} label="When this question appears" onChange={(condition) => updateCondition(field.key, condition)} />
+      {field.type === "document" && <p role="note">This question uploads a document, including an already-signed copy. Use Add signature to have someone sign wording inside this form.</p>}
+      <div className="admin-choice-row"><button type="button" disabled={question === 0} onClick={() => selectQuestion(question - 1)}>Previous question</button><button type="button" disabled={question >= form.fields.length - 1} onClick={() => selectQuestion(question + 1)}>Next question</button>
+        <button type="button" disabled={fieldOrderControlled || earlierField < 0} onClick={() => moveField(-1)}>Move earlier in section</button>
+        <button type="button" disabled={fieldOrderControlled || laterField < 0} onClick={() => moveField(1)}>Move later in section</button>
+        </div>
+      </>}
+      <details open={Boolean(signingItem)}><summary>Signatures and declarations ({form.declarations.length})</summary><p>Choose who signs and the wording they must read. The field app records the actual signature against this version and its evidence.</p>{form.declarations.map((declaration, index) => {
+        if (signingItem && declaration.key !== signingItem) return null;
+        const prescribed = Boolean(declaration.sourceUrl || declaration.sourceTextSha256);
+        const custom = declaration.key.startsWith("custom.");
+        return <article key={declaration.key}>
+          <strong>{declaration.title}{prescribed ? " | Prescribed wording" : ""}</strong>
+          <label>Answer type<select value="signature" disabled><option value="signature">Signature / declaration</option></select></label>
+          <button type="button" onClick={() => selectSignature(declaration.key)}>Preview this signature</button>
+          <label>Declaration title<input disabled={prescribed} value={declaration.title} maxLength={300} onChange={(event) => updateDeclaration(index, { title: event.target.value })} /></label>
+          <label>Wording<textarea disabled={prescribed} rows={8} value={declaration.text} onChange={(event) => updateDeclaration(index, { text: event.target.value })} /></label>
+          <div className="admin-form-grid">
+            <label>Signer<select disabled={!custom} value={declaration.role} onChange={(event) => updateDeclaration(index, { role: event.target.value as ActivityDeclaration["role"] })}><option value="customer">Customer</option><option value="technician">Technician</option><option value="other">Other verified signer</option></select></label>
+            <label>When<select disabled={!custom} value={declaration.phase} onChange={(event) => updateDeclaration(index, { phase: event.target.value === "before" ? "before" : "after" })}><option value="before">Before work</option><option value="after">After work</option></select></label>
+          </div>
+          <label><input type="checkbox" disabled={!custom} checked={declaration.required} onChange={(event) => updateDeclaration(index, { required: event.target.checked })} />Required signature</label>
+          <ConditionEditor form={form} targetKey={`@declaration:${declaration.key}`} phase={declaration.phase} condition={declaration.condition} locked={Boolean(editorConditionLockReason(form, `@declaration:${declaration.key}`))} label="When this declaration appears" onChange={(condition) => updateCondition(`@declaration:${declaration.key}`, condition)} />
+          <div className="admin-choice-row"><button type="button" disabled={index === 0} onClick={() => moveDeclaration(index, -1)}>Move declaration earlier</button>
+            <button type="button" disabled={index >= form.declarations.length - 1} onClick={() => moveDeclaration(index, 1)}>Move declaration later</button>
+            {!signingItem && <button type="button" className={styles.masterDelete} disabled={!custom || prescribed} onClick={() => deleteDeclaration(index)}>Delete signature</button>}</div>
+          {prescribed ? <small>This wording is fixed by the recorded source. Creditex-authored declarations without a prescribed source can be edited here.</small>
+            : !custom ? <small>This default Creditex declaration can be rewritten. Its signer role, timing and required status remain governed.</small> : null}
+        </article>;
+      })}</details>
+      <details><summary>Regulator sources and review notes</summary>{form.sources.map((source) => <p key={source.url}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a></p>)}{form.reviewNotes.map((note, index) => <p key={index}>{note}</p>)}</details>
+      <button type="button" disabled={!dirty} onClick={() => void saveCurrent()}>{busy ? "Saving..." : draftCopy ? "Save draft" : "Save and publish master"}</button>
+    </fieldset>) : null;
   return <section className={`${styles.builderSection} ${styles.masterLibrary}`} aria-label="Activity form editor">
     {form && <button className={styles.masterBack} type="button" disabled={busy} onClick={backToCatalogue}>Back to all forms</button>}
     <header><div><h2>{form ? form.title : "Activity forms"}</h2><p>{canAuthor ? form ? draftCopy ? "Edit and save your draft while the published form stays available. Replace it when your team is ready." : "Changes appear in the phone as you type. Make a draft copy if you want to save work before publishing." : "Create a new form for an activity, edit a published form, or duplicate one into a saved draft." : "Choose a form to test its questions in the phone preview."}</p></div>
@@ -486,6 +512,20 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
     <div className={styles.masterSaveBar}><span role="status">{draftCopy ? `Draft copy ${draftCopy.revision}${dirty ? " | Unsaved changes" : " | Saved"}` : canAuthor ? dirty ? "Unsaved changes" : "Published form" : "Read-only preview"} · {draftCopy ? draftCopy.baseMasterVersion ? `Published version ${draftCopy.baseMasterVersion}` : "Based on built-in form" : `Published version ${form.version}`}</span>{canAuthor && <div className={styles.masterRowActions}><button type="button" disabled={!dirty || busy} onClick={() => void saveCurrent()}>{busy ? "Saving..." : draftCopy ? "Save draft" : "Save and publish master"}</button>{draftCopy ? <><button type="button" disabled={busy || dirty || !draftCopy.baseIsCurrent} onClick={() => setDraftConfirmation("publish")}>Replace published form</button><button type="button" disabled={busy} onClick={() => setDraftConfirmation("discard")}>Discard draft</button></> : <button type="button" disabled={busy || dirty} onClick={() => void duplicate(form.activityTemplateId)}>Duplicate to draft</button>}</div>}</div>
     {draftCopy && <p className={styles.masterLibraryNote}>{dirty ? "Save your draft before replacing the published form." : "You can leave and return to this saved draft at any time."} {!draftCopy.baseIsCurrent && "The published form has changed since this copy was created. This copy cannot replace it; create a new copy of the current form."}</p>}
     {draftConfirmation && draftCopy && <div className={styles.masterAccess} role="alert"><strong>{draftConfirmation === "publish" ? draftCopy.baseMasterVersion ? `Replace published version ${draftCopy.baseMasterVersion} with this saved draft?` : "Replace the built-in form with this saved draft?" : "Discard this draft copy?"}</strong><p>{draftConfirmation === "publish" ? "New records will use the replacement. Signed and submitted records keep their original version." : "The published form stays unchanged. Any unsaved edits in this copy will be discarded."}</p><div className={styles.masterRowActions}><button type="button" disabled={busy || (draftConfirmation === "publish" && (dirty || !draftCopy.baseIsCurrent))} onClick={() => void finishDraft(draftConfirmation === "publish" ? "publish_master_draft" : "discard_master_draft")}>{draftConfirmation === "publish" ? "Confirm replacement" : "Confirm discard"}</button><button type="button" disabled={busy} onClick={() => setDraftConfirmation(null)}>Keep editing</button></div></div>}
+    <div className={styles.masterViewPicker} role="group" aria-label="Form design view"><button type="button" aria-pressed={editorView === "form"} onClick={() => setEditorView("form")}>Form editor</button><button type="button" aria-pressed={editorView === "map"} onClick={() => { setMapOpened(true); setEditorView("map"); }}><TlinkMindMapMark /> TLink Mind Map</button></div>
+    <div hidden={editorView !== "map"}>
+      {mapOpened && <TlinkFormMindMap key={`${form.activityTemplateId}:${form.variantId}:${draftCopy?.id || "published"}`} form={form} editable={canAuthor && !busy} selectedKey={signingItem ? '@declaration:' + signingItem : field.key}
+        onSelect={selectMapItem} onEdit={(key) => { selectMapItem(key); setMapEditorOpen(true); }} onCondition={updateCondition}
+        onAddPage={() => editPage(() => addEditorPage(form, selectedPage?.key))}
+        onAddQuestion={(key) => editPage(() => addEditorPageQuestion(form, key))}
+        onMoveQuestion={(key, destination) => editPage(() => moveEditorQuestion(form, key, destination))}
+        onDropQuestion={(key, target, position) => editPage(() => dropEditorQuestion(form, key, target, position))}
+        editor={editorView === "map" && mapEditorOpen ? <>{message && <p role="status">{message}</p>}{renamingPage ? renameControls : removal ? removalControls : <>{itemActions}{itemEditor}</>}</> : null}
+        onCloseEditor={() => { setMapEditorOpen(false); setRemoval(null); setRenamingPage(""); }}
+        onRenamePage={(key) => { if (!canAuthor || busy) return; const page = pages.find((item) => item.key === key); if (!page || editorPageRenameReason(form, key)) return; selectMapItem(key); setMapEditorOpen(true); setRenamingPage(key); setPageName(page.section); }}
+        onDelete={(kind, key) => { if (!canAuthor || busy) return; selectMapItem(kind === "signature" ? `@declaration:${key}` : key); setMapEditorOpen(true); setRemoval({ kind, key }); }} />}
+    </div>
+    {editorView === "form" && <>
     <section className={styles.masterPages} aria-label="Pages and sections">
       <header><div><h3>Pages and sections</h3><p>Group questions on a page, then check the phone preview.</p></div>{canAuthor && <button type="button" disabled={busy} onClick={() => editPage(() => addEditorPage(form, selectedPage?.key))}>Add page</button>}</header>
       <label>Page to {canAuthor ? "edit" : "preview"}<select value={selectedPage?.key || ""} onChange={(event) => { const page = pages.find((item) => item.key === event.target.value); if (page) selectQuestion(form.fields.findIndex((item) => item.key === page.fieldKeys[0])); }}>
@@ -499,68 +539,17 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
           <button type="button" className={styles.masterDelete} disabled={busy || Boolean(pageDeleteReason)} onClick={() => { setRemoval({ kind: "page", key: selectedPage.key }); setRenamingPage(""); }}>Delete page</button>
         </div>}
         {canAuthor && (pageRenameReason || pageDeleteReason) && <small>{pageRenameReason} {pageDeleteReason}</small>}
-        {renamingPage === selectedPage.key && <div className={styles.masterPageAction}><label>Page name<input value={pageName} maxLength={160} onChange={(event) => setPageName(event.target.value)} /></label><div className={styles.masterRowActions}><button type="button" disabled={busy || !pageName.trim()} onClick={() => editPage(() => renameEditorPage(form, selectedPage.key, pageName))}>Apply page name</button><button type="button" onClick={() => setRenamingPage("")}>Cancel rename</button></div></div>}
+        {renameControls}
       </>}
       <small>Up to 8 questions per screen. Answers can hide questions; repeated items have their own pages. A new page starts with one question. Signatures follow the question pages.</small>
     </section>
     <label>Item to {canAuthor ? "edit" : "preview"}<select value={signingItem ? `signature:${signingItem}` : String(question)} onChange={(event) => { if (event.target.value.startsWith("signature:")) selectSignature(event.target.value.slice(10)); else selectQuestion(Number(event.target.value)); }}><optgroup label="Questions">{form.fields.map((item, index) => <option key={item.key} value={index}>{index + 1}. {item.section}: {item.label}</option>)}</optgroup><optgroup label="Signatures">{form.declarations.map((item) => <option key={item.key} value={`signature:${item.key}`}>Signature: {item.title}</option>)}</optgroup></select></label>
-    {canAuthor && <div className={styles.masterRowActions}><button type="button" disabled={busy} onClick={addDeclaration}>Add signature</button>{signingItem ? <><button type="button" onClick={() => selectQuestion(question)}>Back to questions</button><button type="button" className={styles.masterDelete} disabled={busy || !selectedDeclaration?.key.startsWith("custom.") || Boolean(selectedDeclaration.sourceUrl || selectedDeclaration.sourceTextSha256)} onClick={() => deleteDeclaration(form.declarations.findIndex((item) => item.key === signingItem))}>Delete signature</button></> : <button type="button" className={styles.masterDelete} disabled={busy || Boolean(questionDeleteReason)} onClick={deleteField}>Delete question</button>}</div>}
+    {itemActions}
     {canAuthor && !signingItem && questionDeleteReason && <p className={styles.masterLibraryNote}>{questionDeleteReason}</p>}
-    {removal && removalLabel && <div className={styles.masterPageAction} role="alert"><strong>Delete {removal.kind} &quot;{removalLabel}&quot;?</strong><p>{removalPage ? `This removes the page and its ${removalPage.fields.length} question${removalPage.fields.length === 1 ? "" : "s"}.` : "This removes the selected item from this form."} Changes take effect when you {draftCopy ? "save and publish this draft" : "save and publish"}. Existing signed records keep their original form.</p>{removalPage && <ul>{removalPage.fields.map((item) => <li key={item.key}>{item.label}</li>)}</ul>}<div className={styles.masterRowActions}><button type="button" className={styles.masterDelete} disabled={busy} onClick={confirmRemoval}>{`Confirm delete ${removal.kind}`}</button><button type="button" onClick={() => setRemoval(null)}>{`Keep ${removal.kind}`}</button></div></div>}
+    {removalControls}
     {form.variantOptions.length > 1 ? <label>Premises<select disabled={busy || Boolean(draftCopy)} value={form.variantId} onChange={(event) => void load(selected, event.target.value)}>{form.variantOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label> : null}
-    <fieldset disabled={busy || !canAuthor}>
-      <legend>{draftCopy ? "Draft form" : `Master version ${form.version}`}{dirty ? " | Unsaved changes" : ""}</legend>
-      <small>{draftCopy ? "This copy does not change live jobs. After publication, new records and unsigned drafts use it; signed and submitted records keep their original version." : "New records and unsigned drafts use it when opened; signed and submitted records stay locked to what was agreed."}</small>
-      <label>Form title<input value={form.title} maxLength={300} onChange={(event) => { setForm({ ...form, title: event.target.value }); setDirty(true); }} /></label>
-      {!signingItem && <>
-      {field.presentation === "derived" ? <p role="note"><strong>Filled automatically by TLink.</strong> The field app displays this as recorded job, customer, business, Team profile, document-delivery or signature data. The tradie is not asked to enter it.</p> : null}
-      {field.presentation === "prefilled" ? <p role="note"><strong>Prefilled by TLink and editable in the field.</strong> The assigned worker or business profile supplies the starting value. The tradie can correct it when another licensed role holder performed that part of the work.</p> : null}
-      {sourcePlacementControlled ? <p role="note"><strong>This evidence question is governed by its regulator requirement.</strong> Its wording, section, timing, evidence type, mandatory status and location rule stay linked to the requirement. Add an optional question if Creditex needs extra information.</p> : null}
-      <div className="admin-form-grid"><label>Move to page<select disabled={!selectedPage || busy || Boolean(questionMoveReason)} title={questionMoveReason || undefined} value={selectedPage?.key || ""} onChange={(event) => editPage(() => moveEditorQuestion(form, field.key, event.target.value))}>
-        {!selectedPage && <option value="">Recorded automatically</option>}{pages.filter((page) => page.phase === field.phase && page.repeatGroup === field.repeatGroup).map((page) => <option key={page.key} value={page.key} disabled={page.key !== selectedPage?.key && Boolean(editorQuestionMoveReason(form, field.key, page.key))}>{pages.indexOf(page) + 1}. {page.section}{page.fields.length >= ACTIVITY_WIZARD_PAGE_FIELD_LIMIT ? " (full)" : ""}</option>)}
-      </select></label>
-        <label>Question<input disabled={sourcePlacementControlled} value={field.label} onChange={(event) => updateField({ label: event.target.value })} /></label>
-        <label>Answer type<select disabled={profilePlacementControlled || sourcePlacementControlled || selectedFieldIsReferenced} value={field.type} onChange={(event) => { if (event.target.value === "signature") { convertToSignature(); return; } const type = answerTypes.find((item) => item.value === event.target.value)?.value; if (!type) return;
-          updateField({ type, options: type === "select" ? ["Yes", "No"] : [], optionLabels: undefined, requireLocation: type === "photo" ? field.requireLocation : undefined }); }}>{answerTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}<option value="signature" disabled={!field.key.startsWith("custom.") || form.fields.length <= 1 || Boolean(field.presentation) || field.requiredValue !== undefined}>Signature / declaration</option></select></label>
-        <label>When<select disabled={profilePlacementControlled || sourcePlacementControlled || selectedFieldIsReferenced} value={field.phase} onChange={(event) => updateField({ phase: event.target.value === "before" ? "before" : "after" })}><option value="before">Before work</option><option value="after">After work</option></select></label>
-      </div>
-      <label>Instructions<textarea disabled={sourcePlacementControlled} value={field.help} onChange={(event) => updateField({ help: event.target.value })} /></label>
-      {field.type === "select" ? <label>Stored code | label shown to the tradie, one per line<textarea disabled={profilePlacementControlled || selectedFieldIsReferenced} value={formattedChoices(field)} onChange={(event) => updateField(parsedChoices(event.target.value))} /></label> : null}
-      <label><input type="checkbox" disabled={profilePlacementControlled || sourcePlacementControlled} checked={field.required} onChange={(event) => updateField({ required: event.target.checked })} />Required question</label>
-      {field.type === "photo" ? <label><input type="checkbox" disabled={sourcePlacementControlled} checked={Boolean(field.requireLocation)} onChange={(event) => updateField({ requireLocation: event.target.checked })} />Require accurate GPS location with each captured photo</label> : null}
-      <ConditionEditor form={form} targetKey={field.key} phase={field.phase} condition={field.condition} locked={fieldConditionControlled} label="When this question appears" onChange={(condition) => updateField({ condition })} />
-      {field.type === "document" && <p role="note">This question uploads a document, including an already-signed copy. Use Add signature to have someone sign wording inside this form.</p>}
-      <div className="admin-choice-row"><button type="button" disabled={question === 0} onClick={() => selectQuestion(question - 1)}>Previous question</button><button type="button" disabled={question >= form.fields.length - 1} onClick={() => selectQuestion(question + 1)}>Next question</button>
-        <button type="button" disabled={fieldOrderControlled || earlierField < 0} onClick={() => moveField(-1)}>Move earlier in section</button>
-        <button type="button" disabled={fieldOrderControlled || laterField < 0} onClick={() => moveField(1)}>Move later in section</button>
-        </div>
-      </>}
-      <details open={Boolean(signingItem)}><summary>Signatures and declarations ({form.declarations.length})</summary><p>Choose who signs and the wording they must read. The field app records the actual signature against this version and its evidence.</p>{form.declarations.map((declaration, index) => {
-        if (signingItem && declaration.key !== signingItem) return null;
-        const prescribed = Boolean(declaration.sourceUrl || declaration.sourceTextSha256);
-        const custom = declaration.key.startsWith("custom.");
-        return <article key={declaration.key}>
-          <strong>{declaration.title}{prescribed ? " | Prescribed wording" : ""}</strong>
-          <label>Answer type<select value="signature" disabled><option value="signature">Signature / declaration</option></select></label>
-          <button type="button" onClick={() => selectSignature(declaration.key)}>Preview this signature</button>
-          <label>Declaration title<input disabled={prescribed} value={declaration.title} maxLength={300} onChange={(event) => updateDeclaration(index, { title: event.target.value })} /></label>
-          <label>Wording<textarea disabled={prescribed} rows={8} value={declaration.text} onChange={(event) => updateDeclaration(index, { text: event.target.value })} /></label>
-          <div className="admin-form-grid">
-            <label>Signer<select disabled={!custom} value={declaration.role} onChange={(event) => updateDeclaration(index, { role: event.target.value as ActivityDeclaration["role"] })}><option value="customer">Customer</option><option value="technician">Technician</option><option value="other">Other verified signer</option></select></label>
-            <label>When<select disabled={!custom} value={declaration.phase} onChange={(event) => updateDeclaration(index, { phase: event.target.value === "before" ? "before" : "after" })}><option value="before">Before work</option><option value="after">After work</option></select></label>
-          </div>
-          <label><input type="checkbox" disabled={!custom} checked={declaration.required} onChange={(event) => updateDeclaration(index, { required: event.target.checked })} />Required signature</label>
-          <ConditionEditor form={form} targetKey={`@declaration:${declaration.key}`} phase={declaration.phase} condition={declaration.condition} locked={!custom} label="When this declaration appears" onChange={(condition) => updateDeclaration(index, { condition })} />
-          <div className="admin-choice-row"><button type="button" disabled={index === 0} onClick={() => moveDeclaration(index, -1)}>Move declaration earlier</button>
-            <button type="button" disabled={index >= form.declarations.length - 1} onClick={() => moveDeclaration(index, 1)}>Move declaration later</button>
-            {!signingItem && <button type="button" className={styles.masterDelete} disabled={!custom || prescribed} onClick={() => deleteDeclaration(index)}>Delete signature</button>}</div>
-          {prescribed ? <small>This wording is fixed by the recorded source. Creditex-authored declarations without a prescribed source can be edited here.</small>
-            : !custom ? <small>This default Creditex declaration can be rewritten. Its signer role, timing and required status remain governed.</small> : null}
-        </article>;
-      })}</details>
-      <details><summary>Regulator sources and review notes</summary>{form.sources.map((source) => <p key={source.url}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a></p>)}{form.reviewNotes.map((note, index) => <p key={index}>{note}</p>)}</details>
-      <button type="button" disabled={!dirty} onClick={() => void saveCurrent()}>{busy ? "Saving..." : draftCopy ? "Save draft" : "Save and publish master"}</button>
-    </fieldset></div>
+    {itemEditor}</>}
+    </div>
     <CreditexFormPhonePreview key={`${form.activityTemplateId}:${form.variantId}:${draftCopy?.id || "published"}`} form={form} canEdit={canAuthor} selectedFieldKey={signingItem ? undefined : field.key} selectedDeclarationKey={signingItem || undefined} onSelectDeclaration={selectSignature} onSelectField={(key) => { const index = form.fields.findIndex((item) => item.key === key); if (index >= 0) selectQuestion(index); }} />
     </div> : null}
     {records.length ? <table><thead><tr><th>Field record</th><th>Activity</th><th>Submitted</th><th>Job</th><th>Report</th></tr></thead><tbody>{records.map((record) => <tr key={record.id}><td>{record.recordNumber}</td><td>{record.form.title}</td><td>{record.submittedAt}</td><td>{record.workOrderId}</td><td><button type="button" disabled={busy} onClick={() => void viewReport(record.id)}>View report</button></td></tr>)}</tbody></table> : null}

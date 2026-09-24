@@ -12,8 +12,8 @@ export function activityCanonical(value: unknown): string {
 }
 export function activityHash(value: unknown) { return createHash("sha256").update(typeof value === "string" || value instanceof Uint8Array ? value : activityCanonical(value)).digest("hex"); }
 
-export function activityConditionMet(condition: ActivityCondition | undefined, answers: ActivityAnswers): boolean {
-  return fieldConditionMet(condition, answers);
+export function activityConditionMet(condition: ActivityCondition | undefined, answers: ActivityAnswers, form?: ActivityForm): boolean {
+  return fieldConditionMet(condition, answers, form);
 }
 
 export function normaliseActivityAnswers(form: ActivityForm, raw: unknown): ActivityAnswers {
@@ -90,7 +90,7 @@ export function activityMissing(record: Pick<ActivityRecord, "form" | "formSha25
     }
   }
   if (includeSignatures) for (const declaration of record.form.declarations) {
-    if ((phase && declaration.phase !== phase) || !declaration.required || !activityConditionMet(declaration.condition, record.answers)) continue;
+    if ((phase && declaration.phase !== phase) || !declaration.required || !activityConditionMet(declaration.condition, record.answers, record.form)) continue;
     const text = activityDeclarationText(declaration, record.answers);
     const hash = activitySigningScope(record, declaration.phase);
     if (/\{\{/.test(text) || !record.signatures.some((signature) => signature.declarationKey === declaration.key

@@ -79,7 +79,7 @@ function hasCycle(graph: Map<string, Set<string>>) {
   }
   return [...graph.keys()].some(visit);
 }
-function routingReason(form: ActivityForm) {
+export function editorFormRoutingReason(form: ActivityForm) {
   const fields = new Map(form.fields.map((field) => [field.key, field]));
   const sections = new Map<string, Set<string>>(), units = new Map<string, Set<string>>();
   const section = (field: ActivityField) => JSON.stringify([field.phase, field.section]);
@@ -95,7 +95,7 @@ function routingReason(form: ActivityForm) {
 }
 function changed(form: ActivityForm, fields: ActivityField[], selectedFieldKey: string): EditorFormChange {
   const next = { ...form, fields };
-  const reason = routingReason(next);
+  const reason = editorFormRoutingReason(next);
   if (reason) throw new Error(reason);
   return { form: next, selectedFieldKey };
 }
@@ -155,7 +155,7 @@ export function editorQuestionMoveReason(form: ActivityForm, fieldKey: string, p
   if (!destination || !page.fieldKeys.every((key) => destination.fieldKeys.includes(key))) {
     return "This move would regroup questions across the 8-question page boundary. Give the destination page its own section name first.";
   }
-  return routingReason(next);
+  return editorFormRoutingReason(next);
 }
 export function moveEditorQuestion(form: ActivityForm, fieldKey: string, pageKey: string): EditorFormChange {
   const reason = editorQuestionMoveReason(form, fieldKey, pageKey);
@@ -166,6 +166,39 @@ export function moveEditorQuestion(form: ActivityForm, fieldKey: string, pageKey
   const fields = form.fields.filter((item) => item.key !== fieldKey);
   fields.splice(pageEndIndex({ ...form, fields }, page), 0, { ...field, section: page.section });
   return changed(form, fields, fieldKey);
+}
+export function reorderEditorQuestion(form: ActivityForm, fieldKey: string, targetKey: string, position: "before" | "after"): EditorFormChange {
+  const page = editorFormPages(form).find((item) => item.fieldKeys.includes(fieldKey));
+  const field = form.fields.find((item) => item.key === fieldKey);
+  if (!page || !field || !page.fieldKeys.includes(targetKey)) throw new Error("Drag the question above or below another question in the same page card.");
+  if (protectedField(field)) throw new Error("This question follows its required program or profile order.");
+  if (fieldKey === targetKey) return { form, selectedFieldKey: fieldKey };
+  const expected = page.fieldKeys.filter((key) => key !== fieldKey);
+  expected.splice(expected.indexOf(targetKey) + (position === "after" ? 1 : 0), 0, fieldKey);
+  const ordered = expected.map((key) => form.fields.find((item) => item.key === key)!);
+  const ancestors = (item: ActivityField, seen = new Set<string>()): string[] => conditionKeys(item.condition).flatMap((key) => {
+    if (seen.has(key)) return [];
+    seen.add(key); const source = form.fields.find((candidate) => candidate.key === key);
+    return [key, ...(source ? ancestors(source, seen) : [])];
+  });
+  if (ordered.some((item, position) => ancestors(item).some((key) => expected.includes(key) && expected.indexOf(key) >= position))) {
+    throw new Error("Keep an answer before questions that depend on it.");
+  }
+  if (JSON.stringify(expected) === JSON.stringify(page.fieldKeys)) return { form, selectedFieldKey: fieldKey };
+  let index = 0;
+  const fields = form.fields.map((item) => page.fieldKeys.includes(item.key) ? ordered[index++] : item);
+  const result = changed(form, fields, fieldKey);
+  const reordered = editorFormPages(result.form).find((item) => item.fieldKeys.includes(fieldKey));
+  if (!reordered || JSON.stringify(reordered.fieldKeys) !== JSON.stringify(expected)) {
+    throw new Error("Keep an answer before questions that depend on it. This move would change the app's question order or page grouping.");
+  }
+  return result;
+}
+export function dropEditorQuestion(form: ActivityForm, fieldKey: string, targetKey: string, position: "before" | "after"): EditorFormChange {
+  const page = editorFormPages(form).find((item) => item.fieldKeys.includes(targetKey));
+  if (!page) throw new Error("Drop on a question page.");
+  const moved = page.fieldKeys.includes(fieldKey) ? form : moveEditorQuestion(form, fieldKey, page.key).form;
+  return reorderEditorQuestion(moved, fieldKey, targetKey, position);
 }
 export function renameEditorPage(form: ActivityForm, pageKey: string, title: string): EditorFormChange {
   const reason = editorPageRenameReason(form, pageKey);

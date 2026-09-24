@@ -17,6 +17,7 @@ const source = fs.readFileSync(new URL("../src/app/api/trade-activity-forms/rout
 
 test("the master editor supports safe routing, ordering and Creditex declarations while locking governed content", () => {
   const editor = fs.readFileSync(new URL("../src/components/CreditexFieldFormMasters.tsx", import.meta.url), "utf8");
+  const conditions = fs.readFileSync(new URL("../src/lib/creditex-form-conditions.ts", import.meta.url), "utf8");
   const governance = fs.readFileSync(new URL("../src/components/CreditexActivityWorkPackGovernance.tsx", import.meta.url), "utf8");
   assert.match(editor, /sourcePlacementControlled = Boolean\(field\?\.sourceRequirementId\)/);
   assert.match(editor, /New records and unsigned drafts use it when opened; signed and submitted records stay locked to what was agreed/);
@@ -31,8 +32,9 @@ test("the master editor supports safe routing, ordering and Creditex declaration
   assert.match(editor, /prescribed \? " \| Prescribed wording" : ""/);
   assert.match(editor, /<textarea disabled=\{prescribed\}/);
   assert.match(editor, /Creditex-authored declarations without a prescribed source can be edited here/);
-  assert.match(editor, /function conditionFields\(/);
-  assert.match(editor, /fieldDependsOn\(form, candidate\.key, targetKey\)/);
+  assert.match(editor, /conditionFields.*from "@\/lib\/creditex-form-conditions"/);
+  assert.match(conditions, /function conditionFields\(/);
+  assert.match(conditions, /!dependsOn\(form, source\.key, targetKey\)/);
   assert.match(editor, /When this question appears/);
   assert.match(editor, /Show when an answer equals/);
   assert.match(editor, /Replace with always show/);

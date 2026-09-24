@@ -5,6 +5,7 @@ import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
 import * as pages from "../../src/lib/creditex-form-pages.ts";
 import * as flow from "../../src/lib/trade-activity-form-flow.ts";
+import * as conditions from "../../src/lib/creditex-form-conditions.ts";
 
 const source = fs.readFileSync(new URL("../../src/components/CreditexFieldFormMasters.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -42,7 +43,7 @@ function harness({ canAuthor = true, actorMode = "admin", respond = async () => 
   const api = async (path, init) => { requests.push(path); calls.push({ path, body: init?.body ? JSON.parse(init.body) : undefined }); signals.push(init?.signal); return respond(path, init); };
   const exports = {};
   const window = { confirm: () => confirm, addEventListener() {}, removeEventListener() {} };
-  Function("require", "exports", "window", compiled)(id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./CreditexFormPhonePreview" ? { CreditexFormPhonePreview: "phone-preview" } : id.endsWith("/creditex-form-pages") ? pages : id.endsWith("/trade-activity-form-flow") ? flow : id.endsWith(".module.css") ? { default: {} } : (() => { throw Error(id); })(), exports, window);
+  Function("require", "exports", "window", compiled)(id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./CreditexFormPhonePreview" ? { CreditexFormPhonePreview: "phone-preview" } : id === "./TlinkFormMindMap" ? { TlinkFormMindMap: "form-mind-map", TlinkMindMapMark: "mind-map-mark" } : id.endsWith("/creditex-form-conditions") ? conditions : id.endsWith("/creditex-form-pages") ? pages : id.endsWith("/trade-activity-form-flow") ? flow : id.endsWith(".module.css") ? { default: {} } : (() => { throw Error(id); })(), exports, window);
   const render = () => { cursor = 0; const tree = exports.CreditexFieldFormMasters({ api, actorMode, canAuthor, onManageAccess, onDirtyChange }); effects.splice(0).forEach(run => run()); return tree; };
   return { requests, calls, signals, render, setConfirm(value) { confirm = value; }, get lateStateWrites() { return lateStateWrites; }, unmount() { mounted = false; for (const slot of state) slot?.cleanup?.(); }, async mount() { render(); await flush(); return render(); } };
 }

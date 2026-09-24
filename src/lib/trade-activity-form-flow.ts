@@ -41,13 +41,22 @@ export function removeLastActivityRepeat(form: ActivityForm, answers: ActivityAn
   }
   return next;
 }
-export function fieldConditionMet(condition: ActivityCondition | undefined, answers: ActivityAnswers, form?: ActivityForm, group?: string, index = 0): boolean {
+export function fieldConditionMet(condition: ActivityCondition | undefined, answers: ActivityAnswers, form?: ActivityForm, group?: string, index = 0, active = new Set<string>()): boolean {
   if (!condition) return true;
-  if (condition.all) return condition.all.every((item) => fieldConditionMet(item, answers, form, group, index));
-  if (condition.any) return condition.any.some((item) => fieldConditionMet(item, answers, form, group, index));
+  if (condition.all) return condition.all.every((item) => fieldConditionMet(item, answers, form, group, index, active));
+  if (condition.any) return condition.any.some((item) => fieldConditionMet(item, answers, form, group, index, active));
   if (!condition.fieldKey) return false;
-  const sameGroup = group && form?.fields.some((field) => field.key === condition.fieldKey && field.repeatGroup === group);
-  const value = answers[sameGroup ? activityRepeatKey(condition.fieldKey, index) : condition.fieldKey];
+  const source = form?.fields.find((field) => field.key === condition.fieldKey);
+  const sourceIndex = group && source?.repeatGroup === group ? index : 0;
+  const answerKey = activityRepeatKey(condition.fieldKey, sourceIndex);
+  // Retained answers must not keep a descendant open after its parent branch closes.
+  // Do not erase those answers or change the signed form/evidence snapshot.
+  if (form) {
+    if (!source || active.has(answerKey)) return false;
+    const next = new Set(active); next.add(answerKey);
+    if (!fieldConditionMet(source.condition, answers, form, source.repeatGroup, sourceIndex, next)) return false;
+  }
+  const value = answers[answerKey];
   if (value === undefined || value === '') return false;
   if (condition.lessThanOrEqual !== undefined) {
     return typeof value === 'number' && Number.isFinite(value) && value <= condition.lessThanOrEqual;
@@ -90,7 +99,7 @@ export function activityWizardSteps(form: ActivityForm, answers: ActivityAnswers
   const fields = visibleActivityWizardFields(form, answers);
   for (const phase of ['before', 'after'] as const) {
     steps.push(...fields.filter((field) => field.phase === phase).map((field): ActivityWizardStep => ({ key: field.key, kind: 'field', field })));
-    for (const declaration of form.declarations.filter((item) => item.phase === phase && fieldConditionMet(item.condition, answers))) {
+    for (const declaration of form.declarations.filter((item) => item.phase === phase && fieldConditionMet(item.condition, answers, form))) {
       steps.push({ key: declaration.key, kind: 'signature', declaration });
     }
   }
@@ -172,7 +181,7 @@ export function activityWizardPages(form: ActivityForm, answers: ActivityAnswers
       pageFields.push(field);
     }
     flush();
-    for (const declaration of form.declarations.filter((item) => item.phase === phase && fieldConditionMet(item.condition, answers))) {
+    for (const declaration of form.declarations.filter((item) => item.phase === phase && fieldConditionMet(item.condition, answers, form))) {
       pages.push({ key: declaration.key, kind: 'signature', phase, declaration, legacyStepKeys: [declaration.key] });
     }
   }

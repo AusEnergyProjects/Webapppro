@@ -24,6 +24,43 @@ test('numeric upper-bound conditions use typed numbers and include the exact bou
   assert.equal(fieldConditionMet(condition, { distance: 1.01 }), false);
   assert.equal(fieldConditionMet(condition, { distance: '0.75' }), false);
 });
+
+test('closing a parent branch hides descendants and signatures without deleting retained answers or signed content', () => {
+  const nested = { ...form, fields: [field('a', 'boolean'),
+    field('b', 'boolean', { condition: { fieldKey: 'a', equals: true } }),
+    field('c', 'text', { condition: { fieldKey: 'b', equals: true } })],
+    declarations: [{ ...form.declarations[1], condition: { fieldKey: 'b', equals: true } }] };
+  const answers = { a: false, b: true, c: 'Retained answer' };
+  const snapshot = { ...record(answers), form: nested };
+  const before = JSON.stringify(snapshot);
+  const scope = activitySigningScope(snapshot, 'after');
+  assert.deepEqual(expandedActivityFields(nested, answers).map(item => item.key), ['a']);
+  assert.deepEqual(activityWizardSteps(nested, answers).map(item => item.key), ['a', 'review']);
+  assert.deepEqual(activityWizardPages(nested, answers).map(item => item.kind), ['fields', 'review']);
+  assert.deepEqual(activityMissing(snapshot), []);
+  assert.equal(JSON.stringify(snapshot), before);
+  assert.equal(activitySigningScope(snapshot, 'after'), scope);
+  assert.notEqual(activitySigningScope({ ...snapshot, answers: { a: false } }, 'after'), scope);
+  assert.deepEqual(expandedActivityFields(nested, { ...answers, a: true }).map(item => item.key), ['a', 'b', 'c']);
+});
+
+test('nested repeated branches use their own parent answers and combined rules keep independent paths', () => {
+  const nested = { ...form, declarations: [], fields: [field('global', 'boolean'),
+    field('a', 'boolean', { repeatGroup: 'units' }),
+    field('b', 'boolean', { repeatGroup: 'units', condition: { fieldKey: 'a', equals: true } }),
+    field('c', 'text', { repeatGroup: 'units', condition: { any: [{ fieldKey: 'b', equals: true }, { fieldKey: 'global', equals: true }] } })] };
+  const answers = { '$repeat.units': 2, global: false, a: true, b: true, 'a[1]': false, 'b[1]': true };
+  assert.deepEqual(expandedActivityFields(nested, answers).map(item => item.key), ['global', 'a', 'b', 'c', 'a[1]']);
+  assert.ok(expandedActivityFields(nested, { ...answers, global: true }).some(item => item.key === 'c[1]'));
+  assert.equal(fieldConditionMet({ all: [{ fieldKey: 'b', equals: true }, { fieldKey: 'global', equals: false }] }, answers, nested, 'units', 1), false);
+});
+
+test('invalid legacy condition cycles and missing sources fail closed without recursion overflow', () => {
+  const cyclic = { ...form, fields: [field('a', 'boolean', { condition: { fieldKey: 'b', equals: true } }),
+    field('b', 'boolean', { condition: { fieldKey: 'a', equals: true } })] };
+  assert.deepEqual(expandedActivityFields(cyclic, { a: true, b: true }), []);
+  assert.equal(fieldConditionMet({ fieldKey: 'unknown', equals: true }, { unknown: true }, cyclic), false);
+});
 test('repeat instances keep the same identity while each section remains one run', () => {
   const split = { ...form, fields: [
     field('installed', 'boolean', { repeatGroup: 'units', section: 'Equipment' }),

@@ -15,7 +15,7 @@ export function ActivityAssignmentReview({ record, answers, declaration }: {
     && answers[field.key] !== undefined && answers[field.key] !== '');
   const currentSignatureKeys = activityCurrentSignatureKeys(record.signatures, record.missing);
   const sections = [...new Set(fields.map((field) => `${field.phase}:${field.section}`))];
-  const declarations = record.form.declarations.filter((item) => fieldConditionMet(item.condition, answers));
+  const declarations = record.form.declarations.filter((item) => fieldConditionMet(item.condition, answers, record.form));
   return <View style={styles.document}>
     <View style={styles.cover}>
       <Text style={styles.brand}>CREDITEX</Text>

@@ -169,7 +169,7 @@ export function activityPresentation(record: ActivityRecord, signerSetup?: Activ
   const form = activityFieldWorkerForm(record.form);
   const missing = activityMissing(record);
   const total = expandedActivityFields(form, record.answers).filter((field) => field.required && field.presentation !== "derived").length
-    + form.declarations.filter((item) => item.required && activityConditionMet(item.condition, record.answers)).length;
+    + form.declarations.filter((item) => item.required && activityConditionMet(item.condition, record.answers, form)).length;
   const userMissing = activityUserActionableMissing(record);
   return { ...record, form, ...(signerSetup ? { signerSetup } : {}), evidence: record.evidence.map(({ objectKey, previewObjectKey, ...item }) => { void objectKey; void previewObjectKey; return item; }), missing,
     signingScopes: { before: activitySigningScope(record, "before"), after: activitySigningScope(record, "after") },
@@ -777,7 +777,7 @@ export async function signActivityDeclaration(access: TeamAccess, id: string, bo
   const previous = await loadActivityRecord(access, id, true);
   assertCurrentActivityRequirements(previous);
   const declaration = previous.form.declarations.find((item) => item.key === body.declarationKey);
-  if (!declaration || !activityConditionMet(declaration.condition, previous.answers)) {
+  if (!declaration || !activityConditionMet(declaration.condition, previous.answers, previous.form)) {
     throw Object.assign(new Error("ACTIVITY_DECLARATION_INVALID"), {
       fieldKey: string(body.declarationKey),
       fieldLabel: declaration?.title || "signature declaration",
