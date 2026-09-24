@@ -316,15 +316,32 @@ export async function GET(request: Request) {
       ok: true,
       ...result,
     });
-    if (creditexProductRegistryRefreshDue(result.registry)) {
-      await enqueueCreditexProductRegistryRefresh(
+    const refreshDue = creditexProductRegistryRefreshDue(result.registry);
+    if (refreshDue || result.registry.status !== "current"
+      || result.registry.lastAttempt?.status === "failed") {
+      const registryCodes = [result.registry.registryCode];
+      let continuationDue = await hasDueCreditexProductRegistryRefreshRequest(
         database,
-        result.registry.registryCode,
+        registryCodes,
       );
-      return json(responseBody, 200, {
-        [CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER]:
+      if (!continuationDue && refreshDue
+        && !await hasQueuedCreditexProductRegistryRefreshRequest(database, registryCodes)) {
+        await enqueueCreditexProductRegistryRefresh(
+          database,
           result.registry.registryCode,
-      });
+        );
+        // A concurrent request may already have scheduled a future retry.
+        continuationDue = await hasDueCreditexProductRegistryRefreshRequest(
+          database,
+          registryCodes,
+        );
+      }
+      if (continuationDue) {
+        return json(responseBody, 200, {
+          [CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER]:
+            result.registry.registryCode,
+        });
+      }
     }
     return json(responseBody);
   } catch (error) {
