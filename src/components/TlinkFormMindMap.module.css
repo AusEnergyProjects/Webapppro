@@ -1,4 +1,4 @@
-.map { --portal-danger: #ffabc0; --portal-ink: #eff8ff; --portal-muted: #b5c9dc; --portal-green-dark: #36e8c0; --portal-soft: #132b40; --portal-line: #2b4d66; --portal-input: #09192c; color-scheme: dark; color: #eff8ff; background: #071223; border: 1px solid #274359; border-radius: 16px; overflow: hidden; min-width: 0; }
+.map { --portal-raised: #142e42; --portal-line-strong: #52748c; --portal-danger: #ffabc0; --portal-ink: #eff8ff; --portal-muted: #b5c9dc; --portal-green-dark: #36e8c0; --portal-soft: #132b40; --portal-line: #2b4d66; --portal-input: #09192c; color-scheme: dark; color: #eff8ff; background: #071223; border: 1px solid #274359; border-radius: 16px; overflow: hidden; min-width: 0; }
 .toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; padding: 18px; border-bottom: 1px solid #223c54; background: linear-gradient(120deg, #102039, #0c2630); }
 .brand { display: flex; align-items: center; gap: 10px; color: #38ecc7; }
 .brand > div { display: grid; gap: 3px; }
