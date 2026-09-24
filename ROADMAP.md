@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 9 September 2026
+Last reconciled: 25 September 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -15,6 +15,10 @@ Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-curren
 The dated audit is the immutable evidence baseline. [Release truth](./docs/RELEASE_TRUTH.md) records the latest reconciled implementation and deployment state. The [next-task handover](./docs/HANDOVER_NEXT_TASK.md) contains one executable milestone. This roadmap contains only approved forward work and measurable gates.
 
 Sequence is dependency based, not a calendar promise. A source change is not a release. A roadmap item is complete only when its required tests, release identity and runtime evidence are recorded.
+
+## Current certificate submission priority
+
+Deliver the user-requested minimal-click VEU submission through approved access. The ESC developer invitation request has been sent with a demo offer. Complete UAT onboarding, obtain the current contract and Creditex delegation, then verify real regulator outcomes before production activation. Keep existing REC/TESSA file routes and the new REGO/ACCU project routes honest about their required portal steps. Account defaults and simpler claim actions reduce administration; they do not replace regulator approval or evidence requirements.
 
 ## Current onboarding priority
 

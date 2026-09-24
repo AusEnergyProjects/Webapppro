@@ -6705,7 +6705,7 @@ export const creditexRegistryAccounts = sqliteTable("creditex_registry_accounts"
 }, t => [
   uniqueIndex("creditex_registry_accounts_reference_idx").on(t.organisationId, t.scheme, t.accountReference),
   uniqueIndex("creditex_registry_accounts_org_id_idx").on(t.organisationId, t.id),
-  check("creditex_registry_accounts_scheme_check", sql`${t.scheme} IN ('veu','nsw_esc','nsw_prc','stc','reps','eeis','lgc')`),
+  check("creditex_registry_accounts_scheme_check", sql`${t.scheme} IN ('veu','nsw_esc','nsw_prc','stc','reps','eeis','lgc','rego','accu')`),
   check("creditex_registry_accounts_version_check", sql`${t.version}>0`),
   check("creditex_registry_accounts_enabled_check", sql`${t.enabled} IN (0,1)`),
 ]);

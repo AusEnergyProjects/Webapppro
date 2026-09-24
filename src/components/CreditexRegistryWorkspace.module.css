@@ -50,7 +50,7 @@
 .field textarea { resize: vertical; }.formActions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: end; gap: .6rem; }
 .setup { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid var(--registry-line); border-left: 4px solid #20cbb8; border-radius: 10px; background: var(--registry-raised); }
 .setup p { margin-top: .3rem; }.setup button { flex-shrink: 0; }
-.filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .45fr); gap: .8rem; }
+.filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .7fr) minmax(180px, .55fr); gap: .8rem; }
 .empty { padding: 2rem 1rem; text-align: center; display: grid; justify-items: center; gap: .65rem; border: 1px dashed var(--registry-line); border-radius: 12px; }
 .empty p { max-width: 58ch; }
 .claimLayout { display: grid; grid-template-columns: minmax(210px, .7fr) minmax(0, 1.7fr); gap: 1rem; align-items: start; }
@@ -81,5 +81,5 @@
 .filePreview th, .filePreview td { padding: .6rem; border: 1px solid var(--registry-line); text-align: left; vertical-align: top; overflow-wrap: anywhere; white-space: pre-wrap; }
 .filePreview th { color: var(--registry-ink); background: var(--registry-raised); }
 .filePreview tbody th { width: 45%; font-weight: 500; }
-@media (max-width: 1000px) { .schemeGrid { grid-template-columns: 1fr; }.claimLayout { grid-template-columns: 1fr; }.claimList { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 340px; } }
+@media (max-width: 1000px) { .filters { grid-template-columns: 1fr; } .schemeGrid { grid-template-columns: 1fr; }.claimLayout { grid-template-columns: 1fr; }.claimList { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 340px; } }
 @media (max-width: 600px) { .workspace { padding: .85rem; border-radius: 12px; }.heading, .sectionHeading, .setup { flex-direction: column; }.summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }.summary > div { padding: .75rem; }.summary > div:nth-child(2) { border-right: 0; }.summary > div:nth-child(-n+2) { border-bottom: 1px solid var(--registry-line); }.summary strong { font-size: 1.15rem; }.navigation { gap: .2rem; }.navigation button { flex: 1 1 auto; padding-inline: .6rem; }.formGrid, .filters, .claimList { grid-template-columns: 1fr; }.claimDetail { padding: .85rem; }.balance { white-space: normal; }.payment { align-items: flex-start; flex-wrap: wrap; } }

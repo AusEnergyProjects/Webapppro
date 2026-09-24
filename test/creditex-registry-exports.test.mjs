@@ -27,12 +27,18 @@ function exportFixture(t) {
   assert.equal(serialized.valid, true, JSON.stringify(serialized.issues));
   let evidenceAvailable = true;
   let evidenceChecks = 0;
+  let dispatchIntent = null;
   const dependencies = {
     "./creditex-interchange-preflight": preflight,
     "./creditex-registry-formats": formats,
     "./creditex-registry": registry,
     "./creditex-registry-server": f.service,
-    "./creditex-output-action-server": { async recheckOutputDispatchEvidence() {
+    "./creditex-output-action-server": { async loadCreditexOutputDispatchIntent(database, actor, packetId) {
+      assert.equal(database, f.db);
+      assert.equal(actor.organisationId, author.organisationId);
+      assert.equal(packetId, f.packet.id);
+      return dispatchIntent;
+    }, async recheckOutputDispatchEvidence() {
       evidenceChecks++;
       if (!evidenceAvailable) throw Object.assign(new Error("Current source approval withdrawn"), { code: "OUTPUT_ACTION_EVIDENCE_CHANGED" });
     } },
@@ -48,6 +54,7 @@ function exportFixture(t) {
   const exports = moduleRecord.exports;
   return { ...f, exports, format, row, csv: serialized.csv,
     revokeEvidence() { evidenceAvailable = false; },
+    reserveDispatch(status) { dispatchIntent = { id: "retained-dispatch", status }; },
     evidenceChecks() { return evidenceChecks; },
     async setup() {
       const accountId = await f.account(author, { scheme: "nsw_esc", activityScope: ["nsw-d16"] });
@@ -91,6 +98,38 @@ test("export preparation rejects changed headers, unknown rows, invalid values a
   assert.equal(f.records.size, 0);
 });
 
+test("reserved dispatches cannot create another registry template or submission file", async t => {
+  for (const status of ["dispatching", "uncertain", "completed"]) {
+    const f = exportFixture(t), input = await f.setup();
+    f.reserveDispatch(status);
+    await assert.rejects(f.exports.registryExportTemplate(f.db, author, input, f.options), { code: "REGISTRY_EXPORT_DISPATCH_RESERVED" });
+    await assert.rejects(f.exports.prepareRegistryExport(f.db, author, input, f.options), { code: "REGISTRY_EXPORT_DISPATCH_RESERVED" });
+    assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM creditex_registry_exports").get().n, 0);
+    assert.equal(f.records.size, 0);
+    assert.equal(f.evidenceChecks(), 0);
+  }
+});
+
+test("a reserved dispatch blocks approval and approved-file download while retained previews remain readable", async t => {
+  for (const status of ["dispatching", "uncertain", "completed"]) {
+    const f = exportFixture(t), { input, exportId } = await f.prepare();
+    await f.approve(exportId);
+    f.reserveDispatch(status);
+    await assert.rejects(f.exports.prepareRegistryExport(f.db, author, input, f.options), { code: "REGISTRY_EXPORT_DISPATCH_RESERVED" });
+    await assert.rejects(f.exports.downloadRegistryExport(f.db, author, exportId, f.options), { code: "REGISTRY_EXPORT_DISPATCH_RESERVED" });
+    const preview = await f.exports.previewRegistryExport(f.db, reviewer, exportId, f.options);
+    assert.equal(preview.reviewStatus, "approved");
+    assert.equal(preview.rows[0][0], f.packet.id);
+    assert.equal(f.auditCount("registry_export_prepared"), 1);
+    assert.equal(f.auditCount("registry_export_reviewed"), 1);
+
+    const pending = exportFixture(t), prepared = await pending.prepare();
+    pending.reserveDispatch(status);
+    await assert.rejects(pending.approve(prepared.exportId), { code: "REGISTRY_EXPORT_DISPATCH_RESERVED" });
+    assert.equal(pending.auditCount("registry_export_reviewed"), 0);
+  }
+});
+
 test("prepared exports replay exactly, permit review preview, and require independent approval before download", async t => {
   const f = exportFixture(t), { input, exportId } = await f.prepare();
   assert.equal(await f.exports.prepareRegistryExport(f.db, author, input, f.options), exportId);
@@ -117,6 +156,31 @@ test("account revision changes invalidate approval and download of an earlier ex
   const secondId = await f.exports.prepareRegistryExport(f.db, author, input, f.options);
   assert.notEqual(secondId, exportId);
   assert.equal((await f.exports.listRegistryExports(f.db, reviewer)).find(row => row.id === secondId).reviewStatus, "pending");
+});
+
+test("concurrent identical export preparation retains one file record with exact original bytes", async t => {
+  const f = exportFixture(t), input = await f.setup();
+  const ids = await Promise.all([1, 2].map(() => f.exports.prepareRegistryExport(f.db, author, input, f.options)));
+  assert.equal(ids[0], ids[1]);
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM creditex_registry_exports").get().n, 1);
+  assert.equal(f.auditCount("registry_export_prepared"), 1);
+  const row = f.sqlite.prepare("SELECT evidence_id FROM creditex_registry_exports WHERE id=?").get(ids[0]);
+  const original = await f.service.downloadRegistryEvidence(f.db, reviewer, row.evidence_id, f.options);
+  assert.equal(await original.text(), f.csv);
+  await f.approve(ids[0]);
+  assert.equal(await (await f.exports.downloadRegistryExport(f.db, author, ids[0], f.options)).text(), f.csv);
+});
+
+test("concurrent export reviews cannot replace the first independent decision", async t => {
+  const f = exportFixture(t), { exportId } = await f.prepare();
+  const results = await Promise.allSettled(["approved", "rejected"].map(decision =>
+    f.exports.reviewRegistryExport(f.db, reviewer, { exportId, decision, note: "Independent row and evidence review." }, f.options)));
+  assert.equal(results.filter(result => result.status === "fulfilled").length, 1);
+  assert.equal(results.find(result => result.status === "rejected").reason.code, "REGISTRY_ALREADY_REVIEWED");
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM creditex_registry_export_reviews").get().n, 1);
+  assert.equal(f.auditCount("registry_export_reviewed"), 1);
+  const savedDecision = f.sqlite.prepare("SELECT decision FROM creditex_registry_export_reviews WHERE export_id=?").get(exportId).decision;
+  assert.equal(savedDecision, results[0].status === "fulfilled" ? "approved" : "rejected");
 });
 
 test("withdrawn governed source approval blocks export preparation, review and approved download", async t => {

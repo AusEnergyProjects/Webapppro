@@ -81,7 +81,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(agents, /immutable dated evidence baseline; never rewrite it as current status/);
   assert.match(readme, /immutable evidence baseline/);
   assert.match(releaseTruth, /only current implementation and release-status document/);
-  assert.match(roadmap, /Last reconciled: 9 September 2026/);
+  assert.match(roadmap, /Last reconciled: 25 September 2026/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-PRACTICAL-ASSESSOR-GUIDANCE-81/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80/);
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-69/);
@@ -90,21 +90,21 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-71/);
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-70/);
   assert.match(roadmap, /## Previous released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79/);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 24 September 2026/);
+  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 25 September 2026/);
   assert.match(
     handover,
     /Status: system audit and polish[^\n]*Customer self-service accounts[^\n]*\r?\nPrepared: 9 September 2026/,
   );
   assert.match(handover, /Current production: Sites version 499/);
-  assert.match(releaseTruth, /Last reconciled locally: 24 September 2026/);
-  assert.match(releaseTruth, /## Current implementation: Creditex manager access and draft form editing/);
+  assert.match(releaseTruth, /Last reconciled locally: 25 September 2026/);
+  assert.match(releaseTruth, /## Current implementation: simpler submissions and complete certificate scheme routing/);
   assert.match(releaseTruth, /## Previous implementation: Creditex registry submission operations/);
   assert.match(releaseTruth, /## Previous implementation: customer\/job maps and Google Business Profile quote links/);
   assert.match(releaseTruth, /## Previous implementation: Creditex and admin workspaces with private audit calls/);
   assert.match(releaseTruth, /## Previous implementation: accounting export correctness and provider activation/);
   assert.match(releaseTruth, /## Previous implementation: lead access and technician service regions/);
   assert.match(releaseTruth, /## Historical public production release: predictive navigation and exact provenance/);
-  assert.match(releaseTruth, /Deployment baseline verified: Sites 615, source `4283cec0618b63e21f1e3726091c65485ba8cb2a`/);
+  assert.match(releaseTruth, /Deployment baseline for this change: Sites 622, source `509ada1594d375fce066ed7b9b7dfca5ade4c6d0`/);
   assert.match(releaseTruth, /4908a1467d90b2fff57b70517fad5e41e18e12b0/);
   assert.match(releaseTruth, /Sites version 499/);
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_a43c371ac43c8191ad99a0f4189e7508/);
@@ -1076,7 +1076,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /focused 22 of 22 checks/);
   assert.match(roadmap, /3d36c715-4904-4a1b-bde3-aa3e8253c74b/);
   assert.match(roadmap, /Live v307 QA confirmed the compact header shows Account\s+then TLink with no separator dot and no horizontal overflow/);
-  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*named Creditex manager confirmation/);
+  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*submission reliability/);
   assert.match(currentHandover, /Direct regulator transmission remains dependent on approved interfaces and delegated access/);
   assert.match(currentHandover, /external provider registration and live OAuth acceptance remain in progress/);
   assert.match(currentHandover, /Milestone ID: `PUBLIC-MEASUREMENT-PROVENANCE-86`/);

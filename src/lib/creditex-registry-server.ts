@@ -203,12 +203,19 @@ export async function recordRegistryInvoice(db:D1Database,actor:RegistryActor,in
   const existing=await db.prepare("SELECT id,payload_sha256 FROM creditex_registry_invoices WHERE organisation_id=? AND account_id=? AND reference=?").bind(actor.organisationId,account.id,reference).first<{id:string;payload_sha256:string}>();
   if(existing) { if(existing.payload_sha256!==hash) fail("REGISTRY_INVOICE_CONFLICT","This invoice reference already has different retained details."); return existing.id; }
   const id=crypto.randomUUID();
-  await db.batch([
-    db.prepare("INSERT INTO creditex_registry_invoices (id,organisation_id,account_id,reference,amount_minor,due_date,evidence_id,payload_sha256,created_by_uid,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
+  const results=await db.batch([
+    db.prepare(`INSERT INTO creditex_registry_invoices (id,organisation_id,account_id,reference,amount_minor,due_date,evidence_id,payload_sha256,created_by_uid,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(organisation_id,account_id,reference) DO NOTHING`)
       .bind(id,actor.organisationId,account.id,reference,amount,due,evidence.id,hash,actor.actorUid,now(options)),
-    ...packets.map(packetId=>db.prepare("INSERT INTO creditex_registry_invoice_claims (organisation_id,invoice_id,packet_id) VALUES (?,?,?)").bind(actor.organisationId,id,packetId)),
-    audit(db,actor,"registry_invoice_recorded",id,{accountId:account.id,amountMinor:amount}),
+    audit(db,actor,"registry_invoice_recorded",id,{accountId:account.id,amountMinor:amount},true),
+    ...packets.map(packetId=>db.prepare(`INSERT INTO creditex_registry_invoice_claims (organisation_id,invoice_id,packet_id)
+      SELECT organisation_id,id,? FROM creditex_registry_invoices WHERE organisation_id=? AND id=?`).bind(packetId,actor.organisationId,id)),
   ]);
+  if(!results[0].meta.changes) {
+    const retained=await db.prepare("SELECT id,payload_sha256 FROM creditex_registry_invoices WHERE organisation_id=? AND account_id=? AND reference=?").bind(actor.organisationId,account.id,reference).first<{id:string;payload_sha256:string}>();
+    if(!retained||retained.payload_sha256!==hash) fail("REGISTRY_INVOICE_CONFLICT","This invoice reference already has different retained details.");
+    return retained.id;
+  }
   return id;
 }
 
@@ -252,12 +259,24 @@ export async function recordRegistryResult(db:D1Database,actor:RegistryActor,inp
 }
 
 export async function insertRegistryResult(db:D1Database,actor:RegistryActor,input:Omit<RegistryResult,"id"|"recordedByUid"|"reviewStatus"|"canReview"|"createdAt">,options:RegistryOptions={}) {
-  const fingerprint=creditexCanonicalSha256({...input,evidenceId:undefined}),id=crypto.randomUUID();
-  const existing=await db.prepare("SELECT id FROM creditex_registry_results WHERE organisation_id=? AND packet_id=? AND fingerprint=?").bind(actor.organisationId,input.packetId,fingerprint).first<{id:string}>();
+  const event={...input,evidenceId:undefined},eventFingerprint=creditexCanonicalSha256(event),id=crypto.randomUUID();
+  const evidence=input.source==="reviewed_document"?await requireRegistryEvidence(db,actor,input.evidenceId):null;
+  const fingerprint=evidence?creditexCanonicalSha256({...event,evidenceSha256:evidence.sha256}):eventFingerprint;
+  // Older manual results used only the event fingerprint. Reuse them only when their retained document is identical.
+  const existing=await db.prepare(`SELECT result.id FROM creditex_registry_results result
+    JOIN creditex_registry_evidence evidence ON evidence.organisation_id=result.organisation_id AND evidence.id=result.evidence_id
+    WHERE result.organisation_id=? AND result.packet_id=? AND (result.fingerprint=? OR (result.fingerprint=? AND evidence.sha256=?))`)
+    .bind(actor.organisationId,input.packetId,fingerprint,eventFingerprint,evidence?.sha256||"").first<{id:string}>();
   if(existing) return existing.id;
-  await db.batch([db.prepare(`INSERT INTO creditex_registry_results (id,organisation_id,packet_id,account_id,external_reference,registry_status,quantity,occurred_at,evidence_id,note,source,fingerprint,recorded_by_uid,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,actor.organisationId,input.packetId,input.accountId,input.externalReference,input.registryStatus,input.quantity,input.occurredAt,input.evidenceId,input.note,input.source,fingerprint,actor.actorUid,now(options)),
-    audit(db,actor,"registry_result_retained",id,{packetId:input.packetId,source:input.source})]);
+  const results=await db.batch([db.prepare(`INSERT INTO creditex_registry_results (id,organisation_id,packet_id,account_id,external_reference,registry_status,quantity,occurred_at,evidence_id,note,source,fingerprint,recorded_by_uid,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(organisation_id,packet_id,fingerprint) DO NOTHING`)
+    .bind(id,actor.organisationId,input.packetId,input.accountId,input.externalReference,input.registryStatus,input.quantity,input.occurredAt,input.evidenceId,input.note,input.source,fingerprint,actor.actorUid,now(options)),
+    audit(db,actor,"registry_result_retained",id,{packetId:input.packetId,source:input.source},true)]);
+  if(!results[0].meta.changes) {
+    const retained=await db.prepare("SELECT id FROM creditex_registry_results WHERE organisation_id=? AND packet_id=? AND fingerprint=?").bind(actor.organisationId,input.packetId,fingerprint).first<{id:string}>();
+    if(!retained) fail("REGISTRY_RESULT_CHANGED","The registry result changed. Refresh before continuing.");
+    return retained.id;
+  }
   return id;
 }
 
@@ -273,9 +292,11 @@ export async function reviewRegistryResult(db:D1Database,actor:RegistryActor,inp
   const prior=await db.prepare("SELECT decision FROM creditex_registry_result_reviews WHERE organisation_id=? AND result_id=?").bind(actor.organisationId,id).first<{decision:string}>();
   if(prior) fail("REGISTRY_ALREADY_REVIEWED","This exact result has already been reviewed.");
   if(decision==="approved") await downloadRegistryEvidence(db,actor,result.evidence_id,options);
-  await db.batch([db.prepare(`INSERT INTO creditex_registry_result_reviews (organisation_id,result_id,decision,note,reviewed_by_uid,created_at)
-    SELECT ?,?,?,?,?,? FROM creditex_registry_results WHERE organisation_id=? AND id=? AND recorded_by_uid<>? AND source='reviewed_document'`)
-    .bind(actor.organisationId,id,decision,note,actor.actorUid,now(options),actor.organisationId,id,actor.actorUid),audit(db,actor,"registry_result_reviewed",id,{decision})]);
+  const reviews=await db.batch([db.prepare(`INSERT INTO creditex_registry_result_reviews (organisation_id,result_id,decision,note,reviewed_by_uid,created_at)
+    SELECT ?,?,?,?,?,? FROM creditex_registry_results WHERE organisation_id=? AND id=? AND recorded_by_uid<>? AND source='reviewed_document'
+    ON CONFLICT(organisation_id,result_id) DO NOTHING`)
+    .bind(actor.organisationId,id,decision,note,actor.actorUid,now(options),actor.organisationId,id,actor.actorUid),audit(db,actor,"registry_result_reviewed",id,{decision},true)]);
+  if(!reviews[0].meta.changes) fail("REGISTRY_ALREADY_REVIEWED","This exact result has already been reviewed.");
 }
 
 export async function loadRegistryWorkspace(db:D1Database,actor:RegistryActor):Promise<RegistryWorkspace> {
@@ -312,7 +333,7 @@ export async function loadRegistryWorkspace(db:D1Database,actor:RegistryActor):P
     if(!scheme) return [];
     const result=latest.get(action.id);
     return [{packetId:action.id,packetSha256:action.packetSha256,scheme,jobReference:action.jobReference,jobLabel:action.jobLabel,customerLabel:action.customerLabel,
-      activityTitle:action.activityTitle,quantity:action.quantity,unit:action.unit,status:action.status,approved:action.review?.decision==="approved",canSubmit:action.capabilities.canSubmit,
+      activityTemplateId:action.activityTemplateId,activityTitle:action.activityTitle,quantity:action.quantity,unit:action.unit,status:action.status,approved:action.review?.decision==="approved",canSubmit:action.capabilities.canSubmit,
       providerReference:action.providerReference,accountId:accountByPacket.get(action.id)||"",registryStatus:result?.registry_status||"unconfirmed",registeredQuantity:result?.registry_status==="registered"?result.quantity:"",
       lastCheckedAt:[result?.created_at||"",checkedByAccount.get(accountByPacket.get(action.id)||"")||""].sort().at(-1)||""}];
   });

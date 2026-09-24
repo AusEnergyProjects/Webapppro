@@ -199,6 +199,86 @@ test("invalid response and transport exception retain uncertainty without succes
   }
 });
 
+test("failed HTTP responses cannot become submitted or accepted certificates", async (t) => {
+  for (const providerStatus of ["submitted", "provider_accepted"]) {
+    for (const httpStatus of [100, 199, 300, 302, 400, 401, 409, 500, 503, 599]) {
+      const f = fixture(t);
+      await assert.rejects(f.send({ id: "synthetic-adapter", submit: async () => ({
+        ...accepted(), providerStatus, httpStatus,
+      }) }), { code: "OUTPUT_ACTION_DISPATCH_UNCERTAIN" });
+      assert.equal(f.intent().failure_code, "OUTPUT_ACTION_ADAPTER_RESPONSE_INVALID");
+      assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM compliance_output_action_adapter_receipts").get().n, 0);
+      assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM compliance_output_action_events").get().n, 1);
+    }
+  }
+});
+
+test("successful asynchronous and immediate provider responses retain their distinct statuses", async (t) => {
+  for (const [providerStatus, httpStatus] of [["submitted", 202], ["provider_accepted", 201]]) {
+    const f = fixture(t);
+    const result = await f.send({ id: "synthetic-adapter", submit: async () => ({
+      ...accepted(), providerStatus, httpStatus,
+    }) });
+    assert.equal(result.action.status, providerStatus);
+    assert.equal(f.intent().status, "completed");
+    assert.equal((await service.listCreditexOutputActions(f.database, actor))[0].capabilities.canSubmit, false);
+  }
+});
+
+test("a real provider rejection remains a retained rejected outcome", async (t) => {
+  const f = fixture(t);
+  const result = await f.send({ id: "synthetic-adapter", submit: async () => ({
+    ...accepted(), providerStatus: "rejected", httpStatus: 422,
+  }) });
+  assert.equal(result.action.status, "rejected");
+  assert.equal(f.intent().status, "completed");
+});
+
+test("an old response cannot settle a newer submission attempt", async (t) => {
+  const f = fixture(t);
+  await assert.rejects(f.send({ id: "synthetic-adapter", submit: async () => accepted() }, {
+    now: () => "2026-09-24T01:00:00.000Z",
+  }), { code: "OUTPUT_ACTION_DISPATCH_UNCERTAIN" });
+  assert.equal(f.intent().failure_code, "OUTPUT_ACTION_ADAPTER_RESPONSE_INVALID");
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM compliance_output_action_adapter_receipts").get().n, 0);
+});
+
+test("response clock skew accepts the five-minute boundary and rejects a later result", async (t) => {
+  const atBoundary = fixture(t);
+  const result = await atBoundary.send({ id: "synthetic-adapter", submit: async () => ({
+    ...accepted(), responseReceivedAt: "2026-09-24T00:05:00.000Z",
+  }) });
+  assert.equal(result.action.status, "provider_accepted");
+  assert.equal(atBoundary.intent().finished_at, "2026-09-24T00:05:00.000Z");
+
+  const beyondBoundary = fixture(t);
+  await assert.rejects(beyondBoundary.send({ id: "synthetic-adapter", submit: async () => ({
+    ...accepted(), responseReceivedAt: "2026-09-24T00:05:00.001Z",
+  }) }), { code: "OUTPUT_ACTION_DISPATCH_UNCERTAIN" });
+  assert.equal(beyondBoundary.intent().failure_code, "OUTPUT_ACTION_ADAPTER_RESPONSE_INVALID");
+  assert.equal(beyondBoundary.sqlite.prepare("SELECT COUNT(*) n FROM compliance_output_action_adapter_receipts").get().n, 0);
+});
+
+test("submission time cannot predate its packet approval", async (t) => {
+  const f = fixture(t);
+  await assert.rejects(f.send({ id: "synthetic-adapter", async submit() { assert.fail("must not send"); } }, {
+    now: () => "2026-09-23T23:59:59.999Z",
+  }), { code: "OUTPUT_ACTION_TIME_BEFORE_EVIDENCE" });
+  assert.equal(f.intent(), undefined);
+});
+
+test("reserved and uncertain packets stop advertising another submit action", async (t) => {
+  const f = fixture(t);
+  assert.equal((await service.listCreditexOutputActions(f.database, actor))[0].capabilities.canSubmit, true);
+  await assert.rejects(f.send({ id: "synthetic-adapter", async submit() {
+    assert.equal((await service.listCreditexOutputActions(f.database, actor))[0].capabilities.canSubmit, false);
+    throw new Error("response lost");
+  } }), { code: "OUTPUT_ACTION_DISPATCH_UNCERTAIN" });
+  const [action] = await service.listCreditexOutputActions(f.database, actor);
+  assert.equal(action.status, "prepared");
+  assert.equal(action.capabilities.canSubmit, false);
+});
+
 test("receipt persistence failure rolls back events and retains a non-retryable attempt", async (t) => {
   const f = fixture(t);
   f.sqlite.exec(`CREATE TRIGGER synthetic_receipt_failure BEFORE INSERT ON compliance_output_action_adapter_receipts

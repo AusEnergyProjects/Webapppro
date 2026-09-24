@@ -1,9 +1,9 @@
 import { analyseCreditexCsv, creditexCanonicalSha256 } from "./creditex-interchange-preflight";
 import { listRegistryFormats, serializeRegistryRows, type RegistryFormatDescriptor } from "./creditex-registry-formats";
-import { recheckOutputDispatchEvidence } from "./creditex-output-action-server";
+import { loadCreditexOutputDispatchIntent, recheckOutputDispatchEvidence } from "./creditex-output-action-server";
 import { CreditexRegistryError, registryCapabilities, requireRegistryAccount, requireRegistryClaimBinding,
   persistRegistryEvidence, downloadRegistryEvidence, type RegistryActor, type RegistryOptions } from "./creditex-registry-server";
-import { registrySchemeForProgram, type RegistryExport } from "./creditex-registry";
+import { registrySchemeForProgram, registryFormatSupportsActivity, type RegistryExport } from "./creditex-registry";
 
 type Input=Readonly<Record<string,unknown>>;
 type ExportRow={id:string;account_id:string;format_key:string;packet_ids:string;packet_hashes:string;base_vintage:string;evidence_id:string;
@@ -18,7 +18,7 @@ function identifiers(value:unknown):string[] {
 function formatHash(format:RegistryFormatDescriptor) {return creditexCanonicalSha256(format);}
 function audit(db:D1Database,actor:RegistryActor,event:string,id:string) {
   return db.prepare(`INSERT INTO compliance_audit_events(id,organisation_id,actor_type,actor_uid,event_type,target_type,target_id,summary,metadata,created_at)
-    VALUES(?,?,?,?,?,'registry_export',?,'Official submission file retained or reviewed.','{}',?)`)
+    SELECT ?,?,?,?,?,'registry_export',?,'Official submission file retained or reviewed.','{}',? WHERE changes()=1`)
     .bind(crypto.randomUUID(),actor.organisationId,actor.actorKind==="admin"?"platform":"compliance",actor.actorUid,event,id,new Date().toISOString());
 }
 async function context(db:D1Database,actor:RegistryActor,input:Input,options:RegistryOptions={}) {
@@ -29,9 +29,9 @@ async function context(db:D1Database,actor:RegistryActor,input:Input,options:Reg
   for(const id of packetIds) {
     const packet=await requireRegistryClaimBinding(db,actor,id,account.id);
     if(packet.review?.decision!=="approved"||packet.status!=="prepared"||packet.providerReference) fail("REGISTRY_EXPORT_NOT_READY","Only independently approved claims awaiting lodgement can be exported.");
+    if(await loadCreditexOutputDispatchIntent(db,actor,id)) fail("REGISTRY_EXPORT_DISPATCH_RESERVED","An external submission attempt is already retained. Reconcile its result before preparing or downloading another file for lodgement.");
     if(!account.activityScope.includes(packet.activityTemplateId)||registrySchemeForProgram(packet.programCode)!==account.scheme) fail("REGISTRY_ACTIVITY_NOT_AUTHORISED","The account no longer authorises this claim's activity.");
-    const recActivities:Readonly<Record<string,readonly string[]>>={rec_sgu:["sres-pv","sres-wind","sres-hydro"],rec_swh:["sres-swh","sres-ashp"],rec_battery:["sres-bess"]};
-    if(account.scheme==="stc"&&!recActivities[format.key]?.includes(packet.activityTemplateId)) fail("REGISTRY_EXPORT_ACTIVITY","Choose the REC file format for this approved activity.");
+    if(!registryFormatSupportsActivity(format.key,packet.activityTemplateId)) fail("REGISTRY_EXPORT_ACTIVITY","Choose the REC file format for this approved activity.");
     await recheckOutputDispatchEvidence(db,actor,packet);
     packets.push(packet);
   }
@@ -69,8 +69,14 @@ export async function prepareRegistryExport(db:D1Database,actor:RegistryActor,in
   if(prior) return prior.id;
   const id=crypto.randomUUID(),bytes=new TextEncoder().encode(serialized.csv);
   const evidenceId=await persistRegistryEvidence(db,actor,{bytes:bytes.buffer,filename:`${format.key}-${id}.csv`,mime:"text/csv; charset=utf-8"},options);
-  await db.batch([db.prepare(`INSERT INTO creditex_registry_exports(id,organisation_id,account_id,format_key,base_vintage,packet_ids,packet_hashes,evidence_id,payload_sha256,account_version,format_sha256,created_by_uid,created_at)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,actor.organisationId,account.id,format.key,baseVintage,JSON.stringify(packetIds),JSON.stringify(packetHashes),evidenceId,hash,account.version,schemaHash,actor.actorUid,options.now?.()||new Date().toISOString()),audit(db,actor,"registry_export_prepared",id)]);
+  const results=await db.batch([db.prepare(`INSERT INTO creditex_registry_exports(id,organisation_id,account_id,format_key,base_vintage,packet_ids,packet_hashes,evidence_id,payload_sha256,account_version,format_sha256,created_by_uid,created_at)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(organisation_id,account_id,payload_sha256) DO NOTHING`)
+    .bind(id,actor.organisationId,account.id,format.key,baseVintage,JSON.stringify(packetIds),JSON.stringify(packetHashes),evidenceId,hash,account.version,schemaHash,actor.actorUid,options.now?.()||new Date().toISOString()),audit(db,actor,"registry_export_prepared",id)]);
+  if(!results[0].meta.changes) {
+    const retained=await db.prepare("SELECT id FROM creditex_registry_exports WHERE organisation_id=? AND account_id=? AND payload_sha256=?").bind(actor.organisationId,account.id,hash).first<{id:string}>();
+    if(!retained) fail("REGISTRY_EXPORT_CHANGED","The submission file changed. Refresh before continuing.");
+    return retained.id;
+  }
   return id;
 }
 async function loadExport(db:D1Database,actor:RegistryActor,id:unknown) {
@@ -96,8 +102,10 @@ export async function reviewRegistryExport(db:D1Database,actor:RegistryActor,inp
   if(input.decision==="approved") await checkExport(db,actor,row,options);
   // Reading verifies the retained bytes before a reviewer can approve them.
   await downloadRegistryEvidence(db,actor,row.evidence_id,options);
-  await db.batch([db.prepare("INSERT INTO creditex_registry_export_reviews(organisation_id,export_id,decision,note,reviewed_by_uid,created_at) VALUES(?,?,?,?,?,?)")
+  const reviews=await db.batch([db.prepare(`INSERT INTO creditex_registry_export_reviews(organisation_id,export_id,decision,note,reviewed_by_uid,created_at) VALUES(?,?,?,?,?,?)
+    ON CONFLICT(organisation_id,export_id) DO NOTHING`)
     .bind(actor.organisationId,row.id,input.decision,input.note.trim(),actor.actorUid,options.now?.()||new Date().toISOString()),audit(db,actor,"registry_export_reviewed",row.id)]);
+  if(!reviews[0].meta.changes) fail("REGISTRY_ALREADY_REVIEWED","This exact submission file has already been reviewed.");
 }
 export async function downloadRegistryExport(db:D1Database,actor:RegistryActor,id:unknown,options:RegistryOptions={}) {
   await registryCapabilities(db,actor);

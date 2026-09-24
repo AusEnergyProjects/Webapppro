@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { creditexCanonicalSha256 } from "../src/lib/creditex-interchange-preflight.ts";
 import { fixture, NOW, HASH, author, reviewer, auditor, administrator, accountInput } from "./helpers/creditex-registry-fixture.mjs";
 
 test("AUD input preserves exact cents and rejects floats, signs, exponent notation and invalid precision", t => {
@@ -108,6 +109,31 @@ test("payment evidence has exact replay, bounded balance and never registers cer
   assert.equal(workspace.claims[0].registeredQuantity, "");
 });
 
+test("concurrent duplicate fee invoices retain one invoice, claim link and audit", async t => {
+  const f = fixture(t), setup = await f.ready();
+  const input = { ...setup, reference: "INV-RACE", amount: "100.00", dueDate: "2026-10-01", packetIds: [f.packet.id] };
+  const ids = await Promise.all([1, 2].map(() => f.service.recordRegistryInvoice(f.db, author, input, f.options)));
+  assert.equal(ids[0], ids[1]);
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM creditex_registry_invoices").get().n, 1);
+  const links = f.sqlite.prepare("SELECT invoice_id,packet_id FROM creditex_registry_invoice_claims").all();
+  assert.equal(links.length, 1);
+  assert.equal(links[0].invoice_id, ids[0]);
+  assert.equal(links[0].packet_id, f.packet.id);
+  assert.equal(f.auditCount("registry_invoice_recorded"), 1);
+  assert.equal((await f.service.loadRegistryWorkspace(f.db, author)).claims[0].activityTemplateId, f.packet.activityTemplateId);
+});
+
+test("concurrent fee invoices with conflicting details reject the losing payload", async t => {
+  const f = fixture(t), setup = await f.ready();
+  const input = { ...setup, reference: "INV-CONFLICT", dueDate: "2026-10-01", packetIds: [f.packet.id] };
+  const results = await Promise.allSettled(["100.00", "101.00"].map(amount => f.service.recordRegistryInvoice(f.db, author, { ...input, amount }, f.options)));
+  assert.equal(results.filter(result => result.status === "fulfilled").length, 1);
+  assert.equal(results.find(result => result.status === "rejected").reason.code, "REGISTRY_INVOICE_CONFLICT");
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM creditex_registry_invoices").get().n, 1);
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM creditex_registry_invoice_claims").get().n, 1);
+  assert.equal(f.auditCount("registry_invoice_recorded"), 1);
+});
+
 test("concurrent payments cannot overpay and do not audit the rejected attempt as saved", async t => {
   const f = fixture(t), { invoiceId, evidenceId } = await f.invoice();
   const input = { invoiceId, evidenceId, amount: "70.00", paidAt: NOW };
@@ -154,6 +180,73 @@ test("a late imported older result cannot regress a newer approved registry even
   assert.equal((await f.service.loadRegistryWorkspace(f.db, reviewer)).claims[0].registryStatus, "registered");
   const empty = await f.service.loadRegistryWorkspace(f.db, { ...author, organisationId: "org-two" });
   assert.deepEqual([empty.accounts, empty.claims, empty.invoices, empty.payments, empty.results], [[], [], [], [], []]);
+});
+
+test("corrected original evidence creates a new review while exact document reuploads replay the result", async t => {
+  const f = fixture(t), { accountId, evidenceId } = await f.ready();
+  const input = { accountId, evidenceId, packetId: f.packet.id, expectedPacketSha256: HASH,
+    externalReference: f.packet.providerReference, registryStatus: "registered", quantity: "10",
+    occurredAt: "2026-09-23T01:00:00Z", note: "Registry confirmation." };
+  const rejectedId = await f.service.recordRegistryResult(f.db, author, input, f.options);
+  await f.service.reviewRegistryResult(f.db, reviewer, { resultId: rejectedId, decision: "rejected", note: "Wrong original document attached." }, f.options);
+  const correctedEvidenceId = await f.evidence(author, "Correct original registry confirmation");
+  const correctedId = await f.service.recordRegistryResult(f.db, author, { ...input, evidenceId: correctedEvidenceId }, f.options);
+  assert.notEqual(correctedId, rejectedId);
+  const duplicateEvidenceId = await f.evidence(author, "Correct original registry confirmation");
+  assert.equal(await f.service.recordRegistryResult(f.db, author, { ...input, evidenceId: duplicateEvidenceId }, f.options), correctedId);
+  const workspace = await f.service.loadRegistryWorkspace(f.db, reviewer);
+  assert.equal(workspace.results.find(result => result.id === rejectedId).reviewStatus, "rejected");
+  assert.equal(workspace.results.find(result => result.id === rejectedId).evidenceId, evidenceId);
+  assert.equal(workspace.results.find(result => result.id === correctedId).reviewStatus, "pending");
+  assert.equal(workspace.results.find(result => result.id === correctedId).evidenceId, correctedEvidenceId);
+  assert.equal(workspace.claims[0].registryStatus, "unconfirmed");
+  assert.equal(await (await f.service.downloadRegistryEvidence(f.db, reviewer, evidenceId, f.options)).text(), "Synthetic registry receipt");
+  assert.equal(await (await f.service.downloadRegistryEvidence(f.db, reviewer, correctedEvidenceId, f.options)).text(), "Correct original registry confirmation");
+  await f.service.reviewRegistryResult(f.db, reviewer, { resultId: correctedId, decision: "approved", note: "Verified the corrected original." }, f.options);
+  assert.equal((await f.service.loadRegistryWorkspace(f.db, reviewer)).claims[0].registryStatus, "registered");
+  assert.equal(f.auditCount("registry_result_retained"), 2);
+});
+
+test("legacy result fingerprints only replay with the same original document bytes", async t => {
+  const f = fixture(t), { accountId, evidenceId } = await f.ready();
+  const event = { accountId, evidenceId, packetId: f.packet.id, externalReference: f.packet.providerReference,
+    registryStatus: "assessment", quantity: "", occurredAt: NOW, note: "Registry response.", source: "reviewed_document" };
+  const legacyId = await f.service.insertRegistryResult(f.db, author, event, f.options);
+  f.sqlite.prepare("UPDATE creditex_registry_results SET fingerprint=? WHERE id=?")
+    .run(creditexCanonicalSha256({ ...event, evidenceId: undefined }), legacyId);
+  const sameBytes = await f.evidence();
+  assert.equal(await f.service.insertRegistryResult(f.db, author, { ...event, evidenceId: sameBytes }, f.options), legacyId);
+  const changedBytes = await f.evidence(author, "Corrected original response");
+  assert.notEqual(await f.service.insertRegistryResult(f.db, author, { ...event, evidenceId: changedBytes }, f.options), legacyId);
+  assert.equal(f.sqlite.prepare("SELECT evidence_id FROM creditex_registry_results WHERE id=?").get(legacyId).evidence_id, evidenceId);
+});
+
+test("concurrent duplicate results and reviews keep one retained event and one independent decision", async t => {
+  const f = fixture(t), { accountId, evidenceId } = await f.ready();
+  const input = { accountId, evidenceId, packetId: f.packet.id, expectedPacketSha256: HASH,
+    externalReference: f.packet.providerReference, registryStatus: "registered", quantity: "10",
+    occurredAt: "2026-09-23T01:00:00Z", note: "Original regulator confirmation." };
+  const ids = await Promise.all([1, 2].map(() => f.service.recordRegistryResult(f.db, author, input, f.options)));
+  assert.equal(ids[0], ids[1]);
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM creditex_registry_results").get().n, 1);
+  assert.equal(f.auditCount("registry_result_retained"), 1);
+  const reviews = await Promise.allSettled(["approved", "rejected"].map(decision => f.service.reviewRegistryResult(f.db, reviewer,
+    { resultId: ids[0], decision, note: "Independent review." }, f.options)));
+  assert.equal(reviews.filter(result => result.status === "fulfilled").length, 1);
+  assert.equal(reviews.find(result => result.status === "rejected").reason.code, "REGISTRY_ALREADY_REVIEWED");
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM creditex_registry_result_reviews").get().n, 1);
+  assert.equal(f.auditCount("registry_result_reviewed"), 1);
+});
+
+test("REC public register event dedupe preserves its original evidence across later feed captures", async t => {
+  const f = fixture(t), { accountId, evidenceId } = await f.ready();
+  const event = { accountId, evidenceId, packetId: f.packet.id, externalReference: f.packet.providerReference,
+    registryStatus: "registered", quantity: "10", occurredAt: NOW, note: "Authoritative public register event.", source: "rec_public_register" };
+  const resultId = await f.service.insertRegistryResult(f.db, author, event, f.options);
+  const laterCapture = await f.evidence(author, "Same matched event in a later full feed capture");
+  assert.equal(await f.service.insertRegistryResult(f.db, author, { ...event, evidenceId: laterCapture }, f.options), resultId);
+  assert.equal(f.sqlite.prepare("SELECT evidence_id FROM creditex_registry_results WHERE id=?").get(resultId).evidence_id, evidenceId);
+  assert.equal(f.auditCount("registry_result_retained"), 1);
 });
 
 test("registration approval requires the retained original evidence to exist and match its hash", async t => {

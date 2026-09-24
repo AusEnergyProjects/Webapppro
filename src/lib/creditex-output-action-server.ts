@@ -706,6 +706,7 @@ type OutputActionPacketRecord = {
   status_at: string;
   provider_reference: string;
   submitted_actor_uid: string;
+  dispatch_status: string;
   job_reference: string;
   job_label: string;
   customer_label: string;
@@ -729,6 +730,7 @@ function projectPacket(
       capabilities?.canSubmit
       && row.status === "prepared"
       && row.review_decision === "approved"
+      && !row.dispatch_status
     ),
     canRecordOutcome: Boolean(
       capabilities?.canRecordOutcome
@@ -797,6 +799,10 @@ const PACKET_PROJECTION_SQL = `SELECT packet.*,
         AND receipt.provider_reference <> ''
       ORDER BY receipt.response_received_at DESC, receipt.id DESC LIMIT 1), '')
       provider_reference
+    , COALESCE((SELECT intent.status
+        FROM compliance_output_dispatch_intents intent
+        WHERE intent.organisation_id = packet.organisation_id
+          AND intent.packet_id = packet.id LIMIT 1), '') dispatch_status
     , COALESCE((SELECT submitted.actor_uid
         FROM compliance_output_action_events submitted
         WHERE submitted.organisation_id = packet.organisation_id
@@ -2046,7 +2052,11 @@ export async function submitCreditexOutputAction(
     return fail("OUTPUT_ACTION_DISPATCH_TIMEOUT_INVALID", 500, "The external submission timeout is invalid.");
   }
   const intentId = outputId("output-dispatch-intent", options);
-  const startedAt = outputNow(options);
+  const startedAt = trustedServerActionAt(
+    outputNow(options),
+    [packet.preparedAt, packet.review.reviewedAt],
+    "External submission time",
+  );
   const reserved = await database.prepare(`INSERT INTO compliance_output_dispatch_intents (
       id, organisation_id, packet_id, packet_sha256, adapter_id, requested_by_uid,
       status, started_at
@@ -2081,6 +2091,8 @@ export async function submitCreditexOutputAction(
       || !Number.isInteger(result.httpStatus)
       || result.httpStatus < 100
       || result.httpStatus > 599
+      || (["submitted", "provider_accepted"].includes(result.providerStatus)
+        && (result.httpStatus < 200 || result.httpStatus >= 300))
       || Number.isNaN(Date.parse(result.responseReceivedAt))
       || !Object.keys(record(result.requestSnapshot)).length
       || !Object.keys(record(result.responseSnapshot)).length
@@ -2102,7 +2114,7 @@ export async function submitCreditexOutputAction(
     );
     const responseReceivedAt = trustedManualOccurredAt(
       result.responseReceivedAt,
-      packet.review?.reviewedAt || packet.preparedAt,
+      startedAt,
       now,
       "OUTPUT_ACTION_ADAPTER_RESPONSE_INVALID",
       "Adapter provider response time",

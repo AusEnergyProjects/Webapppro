@@ -1,5 +1,5 @@
 /** Browser-safe registry workspace contract. Regulator transport is capability-specific. */
-export const REGISTRY_SCHEME_KEYS = ["veu", "nsw_esc", "nsw_prc", "stc", "reps", "eeis", "lgc"] as const;
+export const REGISTRY_SCHEME_KEYS = ["veu", "nsw_esc", "nsw_prc", "stc", "reps", "eeis", "lgc", "rego", "accu"] as const;
 export type RegistrySchemeKey = typeof REGISTRY_SCHEME_KEYS[number];
 export type RegistryStatus = "submitted" | "assessment" | "registered" | "rejected" | "withdrawn";
 
@@ -20,14 +20,26 @@ export const REGISTRY_SCHEMES: readonly RegistryScheme[] = [
   { key: "reps", title: "SA Retailer Energy Productivity Scheme", output: "Retailer reporting", portalUrl: "https://www.escosa.sa.gov.au/industry/reps", submissionMode: "retailer_reporting", connectionMessage: "Use the reporting process agreed with your obliged retailer. This is a separate retailer obligation workflow." },
   { key: "eeis", title: "ACT Energy Efficiency Improvement Scheme", output: "Retailer reporting", portalUrl: "https://www.climatechoices.act.gov.au/policy-programs/energy-efficiency-improvement-scheme", submissionMode: "retailer_reporting", connectionMessage: "Use your approved provider and retailer reporting arrangements." },
   { key: "lgc", title: "Large-scale Renewable Energy Target", output: "LGCs", portalUrl: "https://www.rec-registry.gov.au/", submissionMode: "portal", connectionMessage: "Use the accredited power-station generation workflow in REC Registry." },
+  { key: "rego", title: "Renewable Electricity Guarantee of Origin", output: "REGOs", portalUrl: "https://onlineservices.cer.gov.au/", submissionMode: "portal", connectionMessage: "Submit the facility generation claim in CER Online Services. CER invoices the creation fee, assesses the claim after payment, then registers certificates or requests further information." },
+  { key: "accu", title: "Australian Carbon Credit Unit Scheme", output: "ACCUs", portalUrl: "https://onlineservices.cer.gov.au/", submissionMode: "portal", connectionMessage: "Submit the project report and crediting application in CER Online Services. After approval, CER issues an abatement statement and deposits units into the authorised ANREU account. Payment does not create units." },
 ];
 
 export function registrySchemeForProgram(program: string): RegistrySchemeKey | null {
   const map: Readonly<Record<string, RegistrySchemeKey>> = {
     VEU: "veu", "NSW-ESS": "nsw_esc", ESS: "nsw_esc", PDRS: "nsw_prc", "NSW-PDRS": "nsw_prc",
-    SRES: "stc", STC: "stc", "SA-REPS": "reps", REPS: "reps", "ACT-EEIS": "eeis", EEIS: "eeis", LRET: "lgc",
+    SRES: "stc", STC: "stc", "SA-REPS": "reps", REPS: "reps", "ACT-EEIS": "eeis", EEIS: "eeis", LRET: "lgc", REGO: "rego", ACCU: "accu",
   };
   return map[program] ?? null;
+}
+
+/** Program, claiming-account scope and authority are checked separately. */
+export function registryFormatSupportsActivity(formatKey: string, activityTemplateId: string): boolean {
+  const recActivities: Readonly<Record<string, readonly string[]>> = {
+    rec_sgu: ["sres-pv", "sres-wind", "sres-hydro"],
+    rec_swh: ["sres-swh", "sres-ashp"],
+    rec_battery: ["sres-bess"],
+  };
+  return formatKey === "nsw_esc" || formatKey === "nsw_prc" || Boolean(recActivities[formatKey]?.includes(activityTemplateId));
 }
 
 export type RegistryAccount = Readonly<{
@@ -38,7 +50,7 @@ export type RegistryAccount = Readonly<{
 
 export type RegistryClaim = Readonly<{
   packetId: string; packetSha256: string; scheme: RegistrySchemeKey; jobReference: string; jobLabel: string;
-  customerLabel: string; activityTitle: string; quantity: string; unit: string; status: string;
+  customerLabel: string; activityTitle: string; activityTemplateId?: string; quantity: string; unit: string; status: string;
   approved: boolean; canSubmit: boolean; providerReference: string; accountId: string;
   registryStatus: RegistryStatus | "unconfirmed"; registeredQuantity: string; lastCheckedAt: string;
 }>;

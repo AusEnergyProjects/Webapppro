@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import { firebaseAuth } from "@/lib/firebase-client";
 import {
   REGISTRY_SCHEMES,
+  registryFormatSupportsActivity,
   type RegistryAccount,
   type RegistryClaim,
   type RegistrySchemeKey,
@@ -21,6 +22,15 @@ const statusLabels: Record<RegistryStatus | "unconfirmed", string> = {
   registered: "Registered", rejected: "Rejected", withdrawn: "Withdrawn",
 };
 const field = (form: FormData, name: string) => String(form.get(name) ?? "").trim();
+
+function accountIsCurrent(account: RegistryAccount) {
+  return account.enabled && (!account.authorityExpiresOn || account.authorityExpiresOn >= new Date().toISOString().slice(0, 10));
+}
+
+function accountCoversClaim(account: RegistryAccount, claim: RegistryClaim) {
+  return accountIsCurrent(account) && account.scheme === claim.scheme
+    && Boolean(claim.activityTemplateId && account.activityScope.includes(claim.activityTemplateId));
+}
 
 function localDateTime() {
   const now = new Date();
@@ -50,8 +60,8 @@ function EvidenceField({ label = "Supporting evidence" }: { label?: string }) {
   return <Field label={label} hint="Private PDF, CSV, JSON or text file. Maximum 5 MB."><input name="evidence" type="file" accept=".pdf,.csv,.json,.txt" required /></Field>;
 }
 
-function Status({ value }: { value: RegistryStatus | "unconfirmed" }) {
-  return <span className={styles.badge} data-tone={value === "registered" ? "good" : value === "rejected" ? "bad" : "neutral"}>{statusLabels[value]}</span>;
+function Status({ value, scheme }: { value: RegistryStatus | "unconfirmed"; scheme?: RegistrySchemeKey }) {
+  return <span className={styles.badge} data-tone={value === "registered" ? "good" : value === "rejected" ? "bad" : "neutral"}>{scheme === "accu" && value === "registered" ? "Issued" : statusLabels[value]}</span>;
 }
 
 export function CreditexRegistryWorkspace({ api, endpoint, outputEndpoint, children }: Readonly<{
@@ -62,6 +72,7 @@ export function CreditexRegistryWorkspace({ api, endpoint, outputEndpoint, child
   const [selectedPacket, setSelectedPacket] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [schemeFilter, setSchemeFilter] = useState("all");
   const [editingAccount, setEditingAccount] = useState<RegistryAccount | null>(null);
   const [accountFormVisible, setAccountFormVisible] = useState(false);
   const [accountScheme, setAccountScheme] = useState<RegistrySchemeKey>("veu");
@@ -177,6 +188,43 @@ export function CreditexRegistryWorkspace({ api, endpoint, outputEndpoint, child
     });
   }
 
+  function recordLodgement(event: FormEvent<HTMLFormElement>, claim: RegistryClaim) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    void run("Recording lodgement", async () => {
+      if (!field(data, "providerReference")) throw new Error("Enter the actual reference returned by the registry.");
+      if (!selectedAccount || !accountCoversClaim(selectedAccount, claim)) throw new Error("Choose an authorised account for this claim.");
+      if (claim.accountId !== selectedAccount.id) await associateAccount(claim, selectedAccount);
+      await api(outputEndpoint, { method: "POST", body: JSON.stringify({
+        action: "record_manual_submission", packetId: claim.packetId, expectedPacketSha256: claim.packetSha256,
+        providerName: field(data, "providerName"), providerReference: field(data, "providerReference"),
+        submittedAt: new Date(field(data, "submittedAt")).toISOString(), submissionMethod: "manual_provider_portal",
+      }) });
+      // Reload authoritative state after recording, never infer registration from a receipt.
+      setWorkspace(readWorkspace(await api(endpoint)));
+      setNotice("Lodgement reference recorded. Add the original registry response for independent review; registration is not yet confirmed.");
+    });
+  }
+
+  async function associateAccount(claim: RegistryClaim, account: RegistryAccount) {
+    await mutate({ action: "attach_account", packetId: claim.packetId, expectedPacketSha256: claim.packetSha256,
+      accountId: account.id }, "Saved account applied to this claim.");
+  }
+
+  function openSelectedFile() {
+    if (!selected || !selectedAccount) return;
+    if (selectedFile) {
+      setOpenedExportId(selectedFile.id); setView("files"); void inspectExport(selectedFile.id); return;
+    }
+    void run("Preparing claim selection", async () => {
+      if (selected.accountId !== selectedAccount.id) await associateAccount(selected, selectedAccount);
+      setOpenedExportId(""); setExportAccountId(selectedAccount.id);
+      setExportFormatKey(workspace?.formats.find((format) => registryFormatSupportsActivity(format.key, selected.activityTemplateId || "")
+        && format.scheme === (selected.scheme === "stc" ? "SRES" : selected.scheme === "nsw_esc" ? "ESS" : "PDRS"))?.key || "");
+      setExportPacketIds([selected.packetId]); setView("files");
+    });
+  }
+
   function recordInvoice(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const element = event.currentTarget;
@@ -237,28 +285,39 @@ export function CreditexRegistryWorkspace({ api, endpoint, outputEndpoint, child
   }
 
   const accounts = workspace?.accounts || [];
-  const activeAccounts = accounts.filter((account) => account.enabled);
+  const activeAccounts = accounts.filter(accountIsCurrent);
   const claims = workspace?.claims || [];
   const unresolvedSyncMatches = workspace?.unresolvedMatches || [];
   const pendingResults = workspace?.results.filter((result) => result.reviewStatus === "pending") || [];
   const filtered = claims.filter((claim) => {
     const match = `${claim.jobReference} ${claim.jobLabel} ${claim.customerLabel} ${claim.activityTitle}`.toLowerCase().includes(search.toLowerCase());
-    return match && (filter === "all" || (filter === "review" ? pendingResults.some((result) => result.packetId === claim.packetId) : claim.registryStatus === filter));
+    return match && (schemeFilter === "all" || claim.scheme === schemeFilter)
+      && (filter === "all" || (filter === "review" ? pendingResults.some((result) => result.packetId === claim.packetId)
+        : filter === "unlodged" ? !claim.providerReference
+        : filter === "reconciliation" ? claim.status === "reconciliation_required" || (claim.approved && claim.status === "prepared" && !claim.canSubmit)
+        : claim.registryStatus === filter));
   });
   const selected = filtered.find((claim) => claim.packetId === selectedPacket) || filtered[0];
   const selectedScheme = REGISTRY_SCHEMES.find((scheme) => scheme.key === selected?.scheme);
-  const selectedAccount = accounts.find((account) => account.id === selected?.accountId);
-  const invoiceAccount = activeAccounts.find((account) => account.id === invoiceAccountId) || activeAccounts[0];
+  const selectedEligibleAccounts = selected ? activeAccounts.filter((account) => accountCoversClaim(account, selected)) : [];
+  const selectedAccount = accounts.find((account) => account.id === selected?.accountId)
+    || (!selected?.accountId && selectedEligibleAccounts.length === 1 ? selectedEligibleAccounts[0] : undefined);
+  const invoiceAccounts = accounts.filter((account) => accountIsCurrent(account) || claims.some((claim) => claim.accountId === account.id && claim.providerReference));
+  const invoiceAccount = invoiceAccounts.find((account) => account.id === invoiceAccountId) || invoiceAccounts[0];
   const exportAccounts = activeAccounts.filter((account) => ["stc", "nsw_esc", "nsw_prc"].includes(account.scheme));
   const exportAccount = exportAccounts.find((account) => account.id === exportAccountId) || exportAccounts[0];
   const exportFormats = workspace?.formats.filter((format) => format.scheme === (exportAccount?.scheme === "stc" ? "SRES" : exportAccount?.scheme === "nsw_esc" ? "ESS" : exportAccount?.scheme === "nsw_prc" ? "PDRS" : "")) || [];
   const exportFormat = exportFormats.find((format) => format.key === exportFormatKey) || exportFormats[0];
-  const exportClaims = claims.filter((claim) => claim.accountId === exportAccount?.id && claim.approved && !claim.providerReference);
+  const exportClaims = claims.filter((claim) => claim.accountId === exportAccount?.id && claim.approved && claim.status === "prepared" && claim.canSubmit && !claim.providerReference
+    && exportAccount && accountCoversClaim(exportAccount, claim) && registryFormatSupportsActivity(exportFormat?.key || "", claim.activityTemplateId || ""));
   const selectedFile = workspace?.exports.find((item) => item.accountId === selected?.accountId && item.packetIds.includes(selected?.packetId || "") && item.reviewStatus !== "rejected");
-  const canPrepareSelectedFile = Boolean(selected?.approved && !selected.providerReference && selectedAccount?.enabled
+  const canPrepareSelectedFile = Boolean(selected?.approved && selected.status === "prepared" && selected.canSubmit && !selected.providerReference && selectedAccount && accountCoversClaim(selectedAccount, selected)
     && ["stc", "nsw_esc", "nsw_prc"].includes(selectedAccount.scheme) && workspace?.capabilities.canOperate);
   const outstanding = workspace?.invoices.filter((invoice) => invoice.status === "active").reduce((total, invoice) => total + Math.max(0, invoice.amountMinor - invoice.paidMinor), 0) || 0;
   const locked = Boolean(busy);
+  const selectedAccountReady = Boolean(selected && selectedAccount && accountCoversClaim(selectedAccount, selected));
+  const selectedNeedsReconciliation = Boolean(selected && (selected.status === "reconciliation_required"
+    || (workspace?.capabilities.canOperate && !selected.providerReference && selected.approved && !selected.canSubmit)));
 
   return <section className={styles.workspace} aria-label="Certificate submissions" aria-busy={loading || locked}>
     <header className={styles.heading}>
@@ -267,13 +326,13 @@ export function CreditexRegistryWorkspace({ api, endpoint, outputEndpoint, child
     </header>
     {error && <p className={styles.notice} data-kind="error" role="alert">{error}</p>}
     {notice && <p className={styles.notice} role="status">{notice}</p>}
-    {unresolvedSyncMatches.length > 0 && <div className={styles.section} aria-label="REC matches requiring reconciliation">{unresolvedSyncMatches.map((match) => <div className={styles.history} key={`${match.packetId}:${match.evidenceId}`}><strong>{claims.find((claim) => claim.packetId === match.packetId)?.jobLabel || "Claim requiring reconciliation"}</strong><p>The public register did not confirm the full approved quantity and status for {dateLabel(match.sourceDate)}. Open the retained response, then check the original registry result before recording evidence in Claims.</p><div className={styles.actions}>{evidenceButton(match.evidenceId)}<button type="button" data-variant="quiet" disabled={locked} onClick={() => { setView("claims"); setSearch(""); setFilter("all"); setSelectedPacket(match.packetId); }}>Open claim</button></div></div>)}</div>}
+    {unresolvedSyncMatches.length > 0 && <div className={styles.section} aria-label="REC matches requiring reconciliation">{unresolvedSyncMatches.map((match) => <div className={styles.history} key={`${match.packetId}:${match.evidenceId}`}><strong>{claims.find((claim) => claim.packetId === match.packetId)?.jobLabel || "Claim requiring reconciliation"}</strong><p>The public register did not confirm the full approved quantity and status for {dateLabel(match.sourceDate)}. Open the retained response, then check the original registry result before recording evidence in Claims.</p><div className={styles.actions}>{evidenceButton(match.evidenceId)}<button type="button" data-variant="quiet" disabled={locked} onClick={() => { setView("claims"); setSearch(""); setFilter("all"); setSchemeFilter("all"); setSelectedPacket(match.packetId); }}>Open claim</button></div></div>)}</div>}
     {busy && <p className={styles.progress} role="status">{busy}…</p>}
     {loading && !workspace ? <p className={styles.empty}>Loading certificate submissions…</p> : workspace && <>
       <div className={styles.summary}>
         <div><span>Claims</span><strong>{claims.length}</strong></div>
         <div><span>Awaiting result review</span><strong>{pendingResults.length}</strong></div>
-        <div><span>Registered claims</span><strong>{claims.filter((claim) => claim.registryStatus === "registered").length}</strong></div>
+        <div><span>Registered or issued claims</span><strong>{claims.filter((claim) => claim.registryStatus === "registered").length}</strong></div>
         <div><span>Fees outstanding</span><strong>{money(outstanding)}</strong></div>
       </div>
       <nav className={styles.navigation} aria-label="Submission workspace views">
@@ -301,7 +360,7 @@ export function CreditexRegistryWorkspace({ api, endpoint, outputEndpoint, child
           <div className={styles.cardTitle}><div><span className={styles.eyebrow}>{scheme.output}</span><h4>{scheme.title}</h4></div><span className={styles.badge}>{scheme.submissionMode === "provider_approval_required" ? "Connection approval required" : scheme.submissionMode === "retailer_reporting" ? "Retailer reporting" : "Official portal"}</span></div>
           <p>{scheme.connectionMessage}</p>
           {accounts.filter((account) => account.scheme === scheme.key).map((account) => <div className={styles.account} key={account.id}>
-            <div><strong>{account.legalName}</strong><span>{account.accountReference} · {account.enabled ? "Account saved" : "Disabled"}</span><small>Activities: {account.activityScope.map((id) => workspace.activityOptions.find((option) => option.activityTemplateId === id)?.title || id).join(", ")}</small><small>Results: {account.resultsEmail}</small></div>
+            <div><strong>{account.legalName}</strong><span>{account.accountReference} · {!account.enabled ? "Disabled" : accountIsCurrent(account) ? "Account saved" : "Authority expired"}</span><small>Activities: {account.activityScope.map((id) => workspace.activityOptions.find((option) => option.activityTemplateId === id)?.title || id).join(", ")}</small><small>Results: {account.resultsEmail}</small>{account.authorityExpiresOn && <small>Authority expires: {dateLabel(account.authorityExpiresOn)}</small>}</div>
             <div className={styles.actions}>
               {workspace.capabilities.canManageAccounts && <button type="button" data-variant="quiet" disabled={locked} onClick={() => { setEditingAccount(account); setAccountScheme(account.scheme); setAccountFormVisible(true); }}>Edit account</button>}
               {scheme.key === "veu" && <button type="button" data-variant="quiet" disabled={locked} onClick={() => void download(`${endpoint}?download=onboarding&accountId=${encodeURIComponent(account.id)}`, "veu-onboarding-request.txt")}>Download access request</button>}
@@ -316,35 +375,50 @@ export function CreditexRegistryWorkspace({ api, endpoint, outputEndpoint, child
 
       {view === "claims" && <div className={styles.section}>
         {!activeAccounts.length && <div className={styles.setup}><div><h3>Start with your scheme account</h3><p>Add the accredited organisation and its approved activity scope before associating a claim.</p></div><button type="button" disabled={locked} onClick={() => { setView("accounts"); if (workspace.capabilities.canManageAccounts) setAccountFormVisible(true); }}>Set up scheme accounts</button></div>}
-        <div className={styles.filters}><Field label="Find a claim"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Job, customer or activity" /></Field><Field label="Show"><select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">All claims</option><option value="review">Awaiting result review</option>{Object.entries(statusLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></Field></div>
+        <div className={styles.filters}>
+          <Field label="Find a claim"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Job, customer or activity" /></Field>
+          <Field label="Certificate or scheme"><select value={schemeFilter} onChange={(event) => setSchemeFilter(event.target.value)}><option value="all">All schemes</option>{REGISTRY_SCHEMES.map((scheme) => <option key={scheme.key} value={scheme.key}>{scheme.output} · {scheme.title}</option>)}</select></Field>
+          <Field label="Show"><select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">All claims</option><option value="unlodged">Awaiting lodgement</option><option value="reconciliation">Check submission outcome</option><option value="review">Awaiting result review</option>{Object.entries(statusLabels).map(([key, label]) => <option key={key} value={key}>{key === "registered" ? "Registered or issued" : label}</option>)}</select></Field>
+        </div>
         {!filtered.length ? <div className={styles.empty}><h3>{claims.length ? "No matching claims" : "Your prepared claims will appear here"}</h3><p>{claims.length ? "Change the search or status filter to see more claims." : "Use Prepare and review claims below to finish the evidence checks and create a claim packet."}</p></div> : <div className={styles.claimLayout}>
-          <div className={styles.claimList} aria-label="Prepared claims">{filtered.map((claim) => <button type="button" key={claim.packetId} aria-pressed={selected?.packetId === claim.packetId} disabled={locked} onClick={() => setSelectedPacket(claim.packetId)}><span className={styles.cardTitle}><strong>{claim.jobLabel || claim.jobReference}</strong><Status value={claim.registryStatus} /></span><span>{claim.customerLabel}</span><small>{claim.activityTitle}</small><small>{claim.quantity} {claim.unit}</small></button>)}</div>
+          <div className={styles.claimList} aria-label="Prepared claims">{filtered.map((claim) => <button type="button" key={claim.packetId} aria-pressed={selected?.packetId === claim.packetId} disabled={locked} onClick={() => setSelectedPacket(claim.packetId)}><span className={styles.cardTitle}><strong>{claim.jobLabel || claim.jobReference}</strong><Status value={claim.registryStatus} scheme={claim.scheme} /></span><span>{claim.customerLabel}</span><small>{claim.activityTitle}</small><small>{claim.quantity} {claim.unit}</small></button>)}</div>
           {selected && selectedScheme && <article className={styles.claimDetail} key={selected.packetId}>
-            <header className={styles.sectionHeading}><div><span className={styles.eyebrow}>{selectedScheme.output} · {selected.jobReference}</span><h3>{selected.activityTitle}</h3><p>{selected.customerLabel}</p></div><Status value={selected.registryStatus} /></header>
-            <dl className={styles.claimFacts}><div><dt>Prepared quantity</dt><dd>{selected.quantity} {selected.unit}</dd></div><div><dt>Claim review</dt><dd>{selected.approved ? "Approved" : "Review required"}</dd></div><div><dt>Registered quantity</dt><dd>{selected.registryStatus === "registered" ? `${selected.registeredQuantity} ${selected.unit}` : "Not confirmed"}</dd></div><div><dt>Last checked</dt><dd>{dateLabel(selected.lastCheckedAt)}</dd></div></dl>
+            <header className={styles.sectionHeading}><div><span className={styles.eyebrow}>{selectedScheme.output} · {selected.jobReference}</span><h3>{selected.activityTitle}</h3><p>{selected.customerLabel}</p></div><Status value={selected.registryStatus} scheme={selected.scheme} /></header>
+            <dl className={styles.claimFacts}><div><dt>Prepared quantity</dt><dd>{selected.quantity} {selected.unit}</dd></div><div><dt>Claim review</dt><dd>{selected.approved ? "Approved" : "Review required"}</dd></div><div><dt>{selected.scheme === "accu" ? "Issued quantity" : "Registered quantity"}</dt><dd>{selected.registryStatus === "registered" ? `${selected.registeredQuantity} ${selected.unit}` : "Not confirmed"}</dd></div><div><dt>Last checked</dt><dd>{dateLabel(selected.lastCheckedAt)}</dd></div></dl>
             <div className={styles.nextStep} aria-label="Next submission step">
-              <div><span className={styles.eyebrow}>Next step</span><strong>{!selected.approved ? "Review the prepared claim" : !selectedAccount?.enabled ? "Choose the claiming account below" : selected.registryStatus === "registered" ? "Registration confirmed" : selected.registryStatus === "rejected" || selected.registryStatus === "withdrawn" ? "Check the registry decision" : selected.providerReference ? "Follow the registry result and fees" : selectedFile?.reviewStatus === "approved" ? "Download your approved file and lodge it" : selectedFile ? "Complete the independent file review" : canPrepareSelectedFile ? "Prepare the official registry file" : "Continue through the authorised scheme"}</strong>
+              <div><span className={styles.eyebrow}>Next step</span><strong>{selected.registryStatus === "registered" ? selected.scheme === "accu" ? "Issuance confirmed" : "Registration confirmed" : selected.registryStatus === "rejected" || selected.registryStatus === "withdrawn" ? "Check the registry decision" : !selected.approved ? "Review the prepared claim" : selectedNeedsReconciliation ? "Check the previous submission outcome" : pendingResults.some((result) => result.packetId === selected.packetId) ? "Complete the independent result review" : selected.providerReference ? "Follow the registry result and fees" : !selectedAccountReady ? "Choose or update the authorised account" : selectedFile?.reviewStatus === "approved" ? "Download your approved file and lodge it" : selectedFile ? "Complete the independent file review" : canPrepareSelectedFile ? "Prepare the official registry file" : "Lodge through the authorised scheme"}</strong>
               <p>{selected.registryStatus === "registered" ? "The confirmed result is retained with this claim. Check any remaining fees separately." : !selected.approved ? "Open Prepare and review claims below to complete the evidence review." : selected.providerReference ? "Retain the original regulator invoice and returned result against this claim." : selectedFile ? "Your existing file is retained in Registry files with its review history." : canPrepareSelectedFile ? "The account and this claim will be selected for you. Choose the correct official format before completing the file." : selectedScheme.connectionMessage}</p></div>
-              <div className={styles.actions}>{canPrepareSelectedFile && selectedAccount && <button type="button" disabled={locked} onClick={() => { setOpenedExportId(selectedFile?.id || ""); setView("files"); if (selectedFile) { void inspectExport(selectedFile.id); } else { setExportAccountId(selectedAccount.id); setExportFormatKey(""); setExportPacketIds([selected.packetId]); } }}>{selectedFile ? "Open existing registry file" : "Prepare registry file"}</button>}{selected.providerReference && <button type="button" data-variant="quiet" disabled={locked} onClick={() => { setInvoiceAccountId(selected.accountId); setView("fees"); }}>Open fees and payments</button>}</div>
+              <div className={styles.actions}>{canPrepareSelectedFile && selectedAccount && <button type="button" disabled={locked} onClick={openSelectedFile}>{selectedFile ? "Open existing registry file" : "Prepare registry file"}</button>}{!selectedAccountReady && <button type="button" data-variant="quiet" disabled={locked} onClick={() => { setView("accounts"); if (selectedAccount && workspace.capabilities.canManageAccounts) { setEditingAccount(selectedAccount); setAccountScheme(selectedAccount.scheme); setAccountFormVisible(true); } }}>Manage scheme account</button>}{selected.providerReference && <button type="button" data-variant="quiet" disabled={locked} onClick={() => { setInvoiceAccountId(selected.accountId); setView("fees"); }}>Open fees and payments</button>}</div>
             </div>
-            <p className={styles.connectionNotice}>{selectedScheme.connectionMessage}</p>
-            <div className={styles.actions}><a className={styles.primaryLink} href={selectedScheme.portalUrl} target="_blank" rel="noreferrer">Open {selectedScheme.submissionMode === "retailer_reporting" ? "scheme guidance" : "official registry"} ↗</a><button type="button" data-variant="quiet" disabled={locked} onClick={() => void download(`${outputEndpoint}?download=packet&packetId=${encodeURIComponent(selected.packetId)}`, "claim-packet.json")}>Download claim packet</button></div>
+            <div className={styles.actions}>{selected.approved && selectedAccountReady && !selectedNeedsReconciliation && (!canPrepareSelectedFile || selectedFile?.reviewStatus === "approved") && <a className={styles.primaryLink} href={selectedScheme.portalUrl} target="_blank" rel="noreferrer">Open {selectedScheme.submissionMode === "retailer_reporting" ? "scheme guidance" : "official registry"} ↗</a>}</div>
+            <details className={styles.details}><summary>Scheme guidance and claim packet</summary><p>{selectedScheme.connectionMessage}</p><div className={styles.actions}><a className={styles.portalLink} href={selectedScheme.portalUrl} target="_blank" rel="noreferrer">Official scheme website ↗</a><button type="button" data-variant="quiet" disabled={locked} onClick={() => void download(`${outputEndpoint}?download=packet&packetId=${encodeURIComponent(selected.packetId)}`, "claim-packet.json")}>Download claim packet</button></div></details>
             {selected.providerReference && <p className={styles.reference}>External reference: <strong>{selected.providerReference}</strong></p>}
-            <div className={styles.subsection}><h4>Claiming account</h4>{workspace.capabilities.canOperate ? <form key={`${selected.packetId}:${selected.accountId}`} onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); void run("Associating account", () => mutate({ action: "attach_account", packetId: selected.packetId, expectedPacketSha256: selected.packetSha256, accountId: field(data, "accountId") }, "Claiming account associated with this packet.")); }}><fieldset disabled={locked} className={styles.formGrid}><Field label="Authorised account"><select name="accountId" defaultValue={selected.accountId} required><option value="">Choose an account</option>{activeAccounts.filter((account) => account.scheme === selected.scheme).map((account) => <option value={account.id} key={account.id}>{account.legalName} · {account.accountReference}</option>)}</select></Field><div className={styles.formActions}><button type="submit">Save association</button></div></fieldset></form> : <p>{selectedAccount ? `${selectedAccount.legalName} · ${selectedAccount.accountReference}` : "An authorised operator must associate this claim with a scheme account."}</p>}</div>
-            {!selected.providerReference && <p className={styles.connectionNotice}>After lodging through the official registry, record its actual submission reference in Prepare and review claims below. Registry results can then be matched to this claim.</p>}
-            {selectedAccount && selected.providerReference && workspace.capabilities.canOperate && <details className={styles.details}><summary>Record a registry result</summary><p>Attach the original registry evidence. A different authorised reviewer must approve the result before it updates the confirmed status.</p><form onSubmit={(event) => recordResult(event, selected)}><fieldset disabled={locked || !selectedAccount.enabled} className={styles.formGrid}>
+            <details className={styles.details} open={!selectedAccountReady}><summary>{selectedAccountReady ? `Claiming account: ${selectedAccount?.legalName}` : "Choose claiming account"}</summary>{workspace.capabilities.canOperate && !selected.providerReference ? <form key={`${selected.packetId}:${selected.accountId}`} onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); void run("Associating account", () => mutate({ action: "attach_account", packetId: selected.packetId, expectedPacketSha256: selected.packetSha256, accountId: field(data, "accountId") }, "Claiming account associated with this packet.")); }}><fieldset disabled={locked} className={styles.formGrid}><Field label="Authorised account"><select name="accountId" defaultValue={selectedAccount?.id || ""} required><option value="">Choose an account</option>{activeAccounts.filter((account) => accountCoversClaim(account, selected)).map((account) => <option value={account.id} key={account.id}>{account.legalName} · {account.accountReference}</option>)}</select></Field><div className={styles.formActions}><button type="submit">Save association</button></div></fieldset></form> : <p>{selectedAccount ? `${selectedAccount.legalName} · ${selectedAccount.accountReference}` : "An authorised operator must associate this claim with a scheme account."}</p>}</details>
+            {selectedNeedsReconciliation && <p className={styles.notice} role="status">A submission may already be in progress or require reconciliation. Check its retained receipt and the official registry before attempting another lodgement.</p>}
+            {!selected.providerReference && <p className={styles.connectionNotice}>After lodging through the official registry, record its actual submission reference here. Registry results can then be matched to this claim.</p>}
+            {!selected.providerReference && selected.canSubmit && selectedAccountReady && workspace.capabilities.canOperate && <details className={styles.details}>
+              <summary>Record lodgement reference</summary>
+              <p>Use the receipt returned by the official registry. This records an existing lodgement and does not send another application.</p>
+              <form onSubmit={(event) => recordLodgement(event, selected)}><fieldset disabled={locked} className={styles.formGrid}>
+                <Field label="Registry or authorised provider"><input name="providerName" defaultValue={selectedScheme.title} required maxLength={180} /></Field>
+                <Field label="Actual registry reference"><input name="providerReference" required maxLength={240} autoComplete="off" /></Field>
+                <Field label="Lodged date and time"><input name="submittedAt" type="datetime-local" defaultValue={localDateTime()} required /></Field>
+                <div className={styles.formActions}><button type="submit">Save lodgement reference</button></div>
+              </fieldset></form>
+            </details>}
+            {selectedAccount && selected.accountId === selectedAccount.id && selected.providerReference && workspace.capabilities.canOperate && <details className={styles.details}><summary>Record a registry result</summary><p>Attach the original registry evidence. A different authorised reviewer must approve the result before it updates the confirmed status.</p><form onSubmit={(event) => recordResult(event, selected)}><fieldset disabled={locked} className={styles.formGrid}>
               <Field label="Recorded registry reference"><input value={selected.providerReference} readOnly /></Field>
-              <Field label="Registry status"><select name="registryStatus" defaultValue="submitted">{Object.entries(statusLabels).filter(([key]) => key !== "unconfirmed" && (selectedScheme.submissionMode !== "retailer_reporting" || key !== "registered")).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></Field>
+              <Field label="Registry status"><select name="registryStatus" defaultValue="submitted">{Object.entries(statusLabels).filter(([key]) => key !== "unconfirmed" && (selectedScheme.submissionMode !== "retailer_reporting" || key !== "registered")).map(([key, label]) => <option key={key} value={key}>{key === "registered" && selected.scheme === "accu" ? "Issued" : label}</option>)}</select></Field>
               <Field label={selectedScheme.submissionMode === "retailer_reporting" ? "Reported quantity" : "Certificate quantity"}><input name="quantity" inputMode="numeric" defaultValue={selected.quantity} required pattern="[0-9]+" /></Field>
               <Field label="Registry event date and time"><input name="occurredAt" type="datetime-local" defaultValue={localDateTime()} required /></Field>
               <EvidenceField label="Original registry response" /><Field label="Result notes"><textarea name="note" rows={3} required maxLength={2000} /></Field>
               <div className={styles.formActions}><button type="submit">Save result for review</button></div>
             </fieldset></form></details>}
-            <div className={styles.subsection}><h4>Registry history</h4>{workspace.results.filter((result) => result.packetId === selected.packetId).length === 0 && <p className={styles.muted}>No registry evidence has been recorded for this claim.</p>}{workspace.results.filter((result) => result.packetId === selected.packetId).map((result) => <div className={styles.history} key={result.id}>
-              <div className={styles.cardTitle}><strong>{statusLabels[result.registryStatus]} · {result.quantity} {selected.unit}</strong><span className={styles.badge}>{result.reviewStatus === "pending" ? "Review pending" : result.reviewStatus === "approved" ? "Evidence approved" : "Evidence rejected"}</span></div><p>{result.externalReference} · {dateLabel(result.occurredAt)}</p><small>{result.source === "rec_public_register" ? "REC public register" : "Retained registry document"}</small>{result.note && <p>{result.note}</p>}
+            <details className={styles.details} open={pendingResults.some((result) => result.packetId === selected.packetId)}><summary>Registry history and evidence</summary>{workspace.results.filter((result) => result.packetId === selected.packetId).length === 0 && <p className={styles.muted}>No registry evidence has been recorded for this claim.</p>}{workspace.results.filter((result) => result.packetId === selected.packetId).map((result) => <div className={styles.history} key={result.id}>
+              <div className={styles.cardTitle}><strong>{result.registryStatus === "registered" && selected.scheme === "accu" ? "Issued" : statusLabels[result.registryStatus]} · {result.quantity} {selected.unit}</strong><span className={styles.badge}>{result.reviewStatus === "pending" ? "Review pending" : result.reviewStatus === "approved" ? "Evidence approved" : "Evidence rejected"}</span></div><p>{result.externalReference} · {dateLabel(result.occurredAt)}</p><small>{result.source === "rec_public_register" ? "REC public register" : "Retained registry document"}</small>{result.note && <p>{result.note}</p>}
               {evidenceButton(result.evidenceId)}
               {result.reviewStatus === "pending" && (result.canReview && workspace.capabilities.canReview ? <form onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); void run("Reviewing registry result", () => mutate({ action: "review_result", resultId: result.id, decision: field(data, "decision"), note: field(data, "note") }, "Independent result review saved.")); }}><fieldset disabled={locked} className={styles.formGrid}><Field label="Review decision"><select name="decision" defaultValue="" required><option value="" disabled>Choose after checking evidence</option><option value="approved">Approve evidence</option><option value="rejected">Reject evidence</option></select></Field><Field label="Review note"><textarea name="note" required rows={2} maxLength={2000} /></Field><div className={styles.formActions}><button type="submit">Save independent review</button></div></fieldset></form> : <p className={styles.muted}>Awaiting a different authorised reviewer.</p>)}
-            </div>)}</div>
+            </div>)}</details>
           </article>}
         </div>}
         <details className={styles.details}><summary>Prepare and review claims</summary><p>Complete the governed preparation and approval steps here. Refresh the submissions workspace after preparing or approving a claim.</p>{children}</details>
@@ -359,7 +433,7 @@ export function CreditexRegistryWorkspace({ api, endpoint, outputEndpoint, child
             <Field label="Claiming account"><select name="accountId" value={exportAccount.id} required onChange={(event) => { setExportAccountId(event.target.value); setExportFormatKey(""); setExportPacketIds([]); }}>{exportAccounts.map((account) => <option key={account.id} value={account.id}>{account.legalName} · {account.accountReference}</option>)}</select></Field>
             <Field label="Official file format"><select name="formatKey" value={exportFormat.key} required onChange={(event) => { setExportFormatKey(event.target.value); setExportPacketIds([]); }}>{exportFormats.map((format) => <option key={format.key} value={format.key}>{format.label}</option>)}</select></Field>
             {exportAccount.scheme !== "stc" && <Field label="Base vintage year" hint="Use the same vintage selected for this accreditation in TESSA."><input name="baseVintage" inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} required placeholder="2026" /></Field>}
-            <fieldset className={styles.checkList}><legend>Approved claims for this file</legend>{exportClaims.length > 0 && <div className={styles.actions}><button type="button" data-variant="quiet" onClick={() => setExportPacketIds(exportClaims.slice(0, exportFormat.maximumRecords).map((claim) => claim.packetId))}>Select {Math.min(exportClaims.length, exportFormat.maximumRecords)} claims</button><button type="button" data-variant="quiet" disabled={!exportPacketIds.length} onClick={() => setExportPacketIds([])}>Clear selection</button></div>}{exportClaims.map((claim) => <label key={claim.packetId}><input type="checkbox" checked={exportPacketIds.includes(claim.packetId)} disabled={!exportPacketIds.includes(claim.packetId) && exportPacketIds.length >= exportFormat.maximumRecords} onChange={(event) => setExportPacketIds(event.target.checked ? [...exportPacketIds, claim.packetId] : exportPacketIds.filter((id) => id !== claim.packetId))} /><span>{claim.jobLabel || claim.jobReference} · {claim.activityTitle} · {claim.quantity} {claim.unit}</span></label>)}{!exportClaims.length && <p>Approve a claim and associate it with this account in Claims first. Already lodged claims are excluded.</p>}</fieldset>
+            <fieldset className={styles.checkList}><legend>Approved claims for this file</legend>{exportClaims.length > 0 && <div className={styles.actions}><button type="button" data-variant="quiet" onClick={() => setExportPacketIds(exportClaims.slice(0, exportFormat.maximumRecords).map((claim) => claim.packetId))}>Select {Math.min(exportClaims.length, exportFormat.maximumRecords)} claims</button><button type="button" data-variant="quiet" disabled={!exportPacketIds.length} onClick={() => setExportPacketIds([])}>Clear selection</button></div>}{exportClaims.map((claim) => <label key={claim.packetId}><input type="checkbox" checked={exportPacketIds.includes(claim.packetId)} disabled={!exportPacketIds.includes(claim.packetId) && exportPacketIds.length >= exportFormat.maximumRecords} onChange={(event) => setExportPacketIds(event.target.checked ? [...exportPacketIds, claim.packetId] : exportPacketIds.filter((id) => id !== claim.packetId))} /><span>{claim.jobLabel || claim.jobReference} · {claim.activityTitle} · {claim.quantity} {claim.unit}</span></label>)}{!exportClaims.length && <p>Only approved, unlodged claims covered by this account and official file format appear here. Change the format to see other eligible activities.</p>}</fieldset>
             <div className={styles.formActions}><button type="button" data-variant="quiet" disabled={!exportPacketIds.length || exportPacketIds.length > exportFormat.maximumRecords} onClick={() => void download(endpoint, `${exportFormat.key}-template.csv`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "download_template", accountId: exportAccount.id, formatKey: exportFormat.key, packetIds: exportPacketIds }) })}>Download template for selected claims</button><span className={styles.muted}>{exportPacketIds.length} selected · Maximum {exportFormat.maximumRecords} per file</span></div>
             <Field label="Completed official CSV" hint={`Keep the ${exportFormat.referenceField} values supplied in the template. Maximum 2 MB.`}><input name="csv" type="file" accept=".csv,text/csv" required /></Field>
             <div className={styles.formActions}><button type="submit" disabled={!exportPacketIds.length || exportPacketIds.length > exportFormat.maximumRecords}>Check file and request review</button></div>
@@ -381,8 +455,8 @@ export function CreditexRegistryWorkspace({ api, endpoint, outputEndpoint, child
       {view === "fees" && <div className={styles.section}>
         <header className={styles.sectionHeading}><div><h3>Regulator fees and payments</h3><p>Track the original regulator invoice and settlement evidence separately from certificate registration.</p></div><strong className={styles.balance}>{money(outstanding)} outstanding</strong></header>
         <p className={styles.connectionNotice}>Pay using the original regulator invoice or official registry. Amounts paid below reflect retained payment evidence, not confirmation from the regulator. Recording a payment here does not register certificates.</p>
-        {workspace.capabilities.canOperate && activeAccounts.length > 0 && <details className={styles.details}><summary>Record a regulator invoice</summary><form onSubmit={recordInvoice}><fieldset disabled={locked} className={styles.formGrid}>
-          <Field label="Invoiced account"><select name="accountId" value={invoiceAccount?.id || ""} onChange={(event) => setInvoiceAccountId(event.target.value)} required>{activeAccounts.map((account) => <option value={account.id} key={account.id}>{account.legalName} · {account.accountReference}</option>)}</select></Field>
+        {workspace.capabilities.canOperate && invoiceAccounts.length > 0 && <details className={styles.details}><summary>Record a regulator invoice</summary><form onSubmit={recordInvoice}><fieldset disabled={locked} className={styles.formGrid}>
+          <Field label="Invoiced account"><select name="accountId" value={invoiceAccount?.id || ""} onChange={(event) => setInvoiceAccountId(event.target.value)} required>{invoiceAccounts.map((account) => <option value={account.id} key={account.id}>{account.legalName} · {account.accountReference}</option>)}</select></Field>
           <Field label="Invoice reference"><input name="reference" required maxLength={160} /></Field><Field label="Invoice total (AUD)"><input name="amount" type="number" min="0.01" step="0.01" inputMode="decimal" required /></Field><Field label="Due date"><input name="dueDate" type="date" required /></Field><EvidenceField label="Original fee invoice" />
           <fieldset className={styles.checkList}><legend>Claims covered by this invoice</legend>{claims.filter((claim) => claim.accountId === invoiceAccount?.id).map((claim) => <label key={claim.packetId}><input name="packetIds" type="checkbox" value={claim.packetId} /><span>{claim.jobLabel || claim.jobReference} · {claim.activityTitle}</span></label>)}{!claims.some((claim) => claim.accountId === invoiceAccount?.id) && <p>Associate claims with this account first.</p>}</fieldset>
           <div className={styles.formActions}><button type="submit" disabled={!claims.some((claim) => claim.accountId === invoiceAccount?.id)}>Save regulator invoice</button></div>

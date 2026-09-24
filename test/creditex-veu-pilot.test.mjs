@@ -196,9 +196,13 @@ function testD1(database) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 190);
+  assert.equal(completeMigrationChain.length, 191);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0190_trade_activity_master_drafts\.sql$/);
+  assert.match(completeMigrationChain.at(-1), /^0191_creditex_project_registry_schemes\.sql$/);
+  assert.ok(
+    completeMigrationChain.includes("0190_trade_activity_master_drafts.sql"),
+    "the complete migration chain must include activity master drafts",
+  );
   assert.ok(
     completeMigrationChain.includes("0189_creditex_registry_operations.sql"),
     "the complete migration chain must include certificate registry operations",

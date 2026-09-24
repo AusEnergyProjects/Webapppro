@@ -4,13 +4,25 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 24 September 2026
+Last reconciled locally: 25 September 2026
 
-Deployment baseline verified: Sites 615, source `4283cec0618b63e21f1e3726091c65485ba8cb2a`, environment 116. GitHub main matches this source.
+Deployment baseline for this change: Sites 622, source `509ada1594d375fce066ed7b9b7dfca5ade4c6d0`. The coordinating release records the next matching GitHub/Sites identity.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: Creditex manager access and draft form editing
+## Current implementation: simpler submissions and complete certificate scheme routing
+
+The claim screen now records actual lodgement references directly, applies the single eligible saved account during the next action, chooses the matching REC format and filters by scheme or work awaiting action. Multiple eligible accounts still require an explicit choice. Account details and retained history are collapsed until needed. Existing lodged claims remain reconcilable after authority expiry; current authority and activity scope are required for new submissions and exports.
+
+Migration 0191 adds REGO and ACCU account routes without changing existing account identities or linked evidence, reviews and fees. All certificate, project-credit and retailer-obligation programmes in the catalogue now have an explicit workspace route. This does not activate every activity calculation or establish universal direct transmission. REGO assessment follows payment; ACCU approval leads to issuance in ANREU. REPS and EEIS remain retailer reporting.
+
+Submission safeguards now reject success claims attached to non-2xx responses or response timestamps preceding dispatch. Reserved and uncertain attempts cannot offer another submission. Corrected manual result documents have their own evidence-bound review identity, while exact repeats retain the original record. Concurrent invoice, result, export and review requests preserve one retained outcome rather than causing duplicate fees or replacing audit evidence.
+
+Validation includes focused dispatch, SQLite concurrency, official-format, UI and populated migration checks, root typecheck, changed-file lint, all 191 migrations on local D1 and the publication build. The full suite still has eight independently established baseline failures; ten exact migration-count assertions were updated for 0191 and passed on focused rerun. Full lint reports an unchanged test-file rule violation outside this scope. Final command results and publication evidence are in the coordinating task's release record.
+
+Direct VEU transmission is not connected. On 25 September, James authorised the software-provider request to ESC; it was sent from his business mailbox with an offer to demonstrate TLink before access is granted. ESC's current process starts with an emailed MuleSoft invitation, then UAT access and testing, production approval and Creditex's formal third-party authorisation. No regulator acceptance, fee payment or actual certificate application was performed during verification.
+
+## Previous implementation: Creditex manager access and draft form editing
 
 The existing verified AEA owner can confirm James Morris as the named Creditex administrator using the same info@ausenergyassessments.com login. This one account must retain its active owner role, active Creditex administrator membership and original claimed bootstrap invitation; an immutable audit receipt attests the named-owner exception. Other shared-mailbox identities do not inherit the exception. Staff invitation, role management, final-administrator protection and independent governance approval remain governed by their existing server checks. Live read-only checks confirm that the owner and original invitation belong to the same identity; activation and its deployed verification are recorded by the coordinating task.
 
