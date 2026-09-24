@@ -105,6 +105,46 @@ export type ActivityWizardPage =
     legacyStepKeys: string[] }
   | { key: 'review'; kind: 'review'; legacyStepKeys: ['review'] };
 
+/** The field app groups applicable declarations by signer after the questions. */
+export function streamlinedActivityPages(source: readonly ActivityWizardPage[]): ActivityWizardPage[] {
+  const fieldPages = source.filter((page) => page.kind === 'fields');
+  const signaturePages: ActivityWizardPage[] = [];
+  const signerPageIndexes = new Map<string, number>();
+  const review = source.find((page) => page.kind === 'review');
+  for (const page of source) {
+    if (page.kind !== 'signature') continue;
+    if (!['customer', 'technician'].includes(page.declaration.role)) {
+      signaturePages.push(page);
+      continue;
+    }
+    const existingIndex = signerPageIndexes.get(page.declaration.role);
+    if (existingIndex === undefined) {
+      signerPageIndexes.set(page.declaration.role, signaturePages.length);
+      signaturePages.push(page);
+      continue;
+    }
+    const existing = signaturePages[existingIndex];
+    if (existing?.kind !== 'signature') continue;
+    signaturePages[existingIndex] = {
+      ...existing,
+      legacyStepKeys: [...new Set([...existing.legacyStepKeys, ...page.legacyStepKeys])],
+    };
+  }
+  return [...fieldPages, ...signaturePages, ...(review ? [review] : [])];
+}
+
+export function activityOptionLabel(value: string, explicit?: string) {
+  const supplied = explicit?.trim();
+  if (supplied) return supplied;
+  const raw = value.trim();
+  if (!raw) return '';
+  if (/^(i|ii|iii|iv|v|vi|vii|viii|ix|x|xi)$/i.test(raw)) return `Scenario ${raw.toUpperCase()}`;
+  if (raw === 'retain_unsafe_or_impractical') return 'Retain because removal is unsafe or impractical';
+  if (/^(n_?a|not_applicable)$/i.test(raw)) return 'Not applicable';
+  const readable = raw.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return readable.charAt(0).toUpperCase() + readable.slice(1);
+}
+
 /**
  * Groups the existing conditional/repeating field stream into short pages without
  * changing field keys. A repeated item remains together where its field count

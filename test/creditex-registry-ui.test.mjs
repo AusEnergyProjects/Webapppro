@@ -240,3 +240,41 @@ test("bulk templates use an authenticated JSON POST instead of putting claim IDs
   assert.equal(downloads[0].init.headers.get("Authorization"), "Bearer synthetic-token");
   assert.deepEqual(JSON.parse(downloads[0].init.body), { action: "download_template", accountId: fileAccount.id, formatKey: fileFormat.key, packetIds: [fileClaim.packetId] });
 });
+
+test("claim shortcut selects its own claiming account and packet without lodging anything", async () => {
+  const second = { ...fileAccount, id: "another-account" };
+  const h = harness(snapshot({ accounts: [second, fileAccount], claims: [fileClaim], formats: [fileFormat] }));
+  button(await h.mount(), "Prepare registry file").props.onClick();
+  const tree = h.render();
+  assert.equal(nodes(tree, (node) => node.type === "select" && node.props.name === "accountId")[0].props.value, fileAccount.id);
+  assert.equal(nodes(tree, (node) => node.type === "input" && node.props.type === "checkbox")[0].props.checked, true);
+  assert.equal(h.requests.filter((request) => request.init.method === "POST").length, 0);
+});
+
+test("bulk claim selection excludes lodged and unapproved claims and respects registry row limit", async () => {
+  const h = harness(snapshot({ accounts: [fileAccount], claims: [fileClaim, { ...fileClaim, packetId: "second" }, { ...fileClaim, packetId: "third" }, { ...fileClaim, packetId: "unapproved", approved: false }, { ...fileClaim, packetId: "lodged", providerReference: "NSW-1" }], formats: [{ ...fileFormat, maximumRecords: 2 }] }));
+  button(await h.mount(), "Registry files").props.onClick();
+  nodes(h.render(), (node) => node.type === "button" && /Select\s+2\s+claims/.test(text(node)))[0].props.onClick();
+  let tree = h.render();
+  const boxes = nodes(tree, (node) => node.type === "input" && node.props.type === "checkbox");
+  assert.deepEqual(boxes.map((node) => node.props.checked), [true, true, false]);
+  assert.equal(boxes[2].props.disabled, true);
+  button(tree, "Clear selection").props.onClick(); tree = h.render();
+  assert.ok(nodes(tree, (node) => node.type === "input" && node.props.type === "checkbox").every((node) => !node.props.checked && !node.props.disabled));
+});
+
+test("existing retained files have a direct review path and unapproved claims have no preparation shortcut", async () => {
+  const h = harness(snapshot({ accounts: [fileAccount], claims: [fileClaim], formats: [fileFormat], exports: [preparedFile, { ...preparedFile, id: "unrelated-file", packetIds: ["another-claim"] }] }), { respond: async (path) => path.includes("preview=export") ? { headers: fileFormat.headers, rows: [[fileClaim.packetId, "Exact retained row"]] } : null });
+  const tree = await h.mount();
+  assert.match(text(tree), /Complete the independent file review/);
+  button(tree, "Open existing registry file").props.onClick();
+  const opened = await h.settle();
+  assert.match(text(opened), /Exact retained row/);
+  assert.equal(form(opened, "Check file and request review"), undefined);
+  assert.equal(nodes(opened, (node) => node.type === "article").length, 1);
+  assert.ok(h.requests.some((request) => request.path.endsWith("preview=export&exportId=export-1")));
+  button(opened, "All registry files").props.onClick();
+  assert.equal(nodes(h.render(), (node) => node.type === "article").length, 2);
+  const unapproved = harness(snapshot({ accounts: [fileAccount], claims: [{ ...fileClaim, approved: false }], formats: [fileFormat] }));
+  assert.equal(button(await unapproved.mount(), "Prepare registry file"), undefined);
+});

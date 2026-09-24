@@ -22,7 +22,7 @@ import { activityCurrentSignatureKeys, activityOptionLabel, activityProgress, ac
 import { colours, radius, spacing } from '@/lib/theme';
 import type { FieldWorkPackSignatureDraft, FieldWorkPackSignerRole } from '@/lib/types';
 import type { ActivityAnswers, ActivityRecord } from '../../../src/lib/trade-activity-form-types';
-import { activityBaseFieldKey, activityRepeatCount, activityRepeatItemLabel, activityRepeatKey, boundActivityDeclaration, removeLastActivityRepeat, activityWizardSteps, activityWizardPages, activityWizardPageForStepKey, type ExpandedActivityField } from '../../../src/lib/trade-activity-form-flow';
+import { activityBaseFieldKey, activityRepeatCount, activityRepeatItemLabel, activityRepeatKey, boundActivityDeclaration, removeLastActivityRepeat, activityWizardSteps, activityWizardPages, activityWizardPageForStepKey, streamlinedActivityPages, type ExpandedActivityField } from '../../../src/lib/trade-activity-form-flow';
 
 const endpoint = '/api/trade-activity-forms';
 export type ActivityFieldSummary = { id: string; intentId: string; title: string; status: 'not_started' | ActivityRecord['status']; lifecycleStatus?: 'unscheduled' | 'scheduled' | 'partial' | 'completed' | 'audited' | 'cancelled'; recordNumber: string; progress: { complete: number; total: number } };
@@ -57,33 +57,6 @@ function rebaseUntouchedSignatureDraft(
   const currentName = draft.signerName.trim();
   if (draft.strokes.length > 0 || (currentName && currentName !== previousDefault.trim())) return draft;
   return signatureDraft(role, nextDefault);
-}
-
-function streamlinedActivityPages(source: ReturnType<typeof activityWizardPages>) {
-  const fieldPages = source.filter((page) => page.kind === 'fields');
-  const signaturePages: ReturnType<typeof activityWizardPages> = [];
-  const signerPageIndexes = new Map<string, number>();
-  const review = source.find((page) => page.kind === 'review');
-  for (const page of source) {
-    if (page.kind !== 'signature') continue;
-    if (!['customer', 'technician'].includes(page.declaration.role)) {
-      signaturePages.push(page);
-      continue;
-    }
-    const existingIndex = signerPageIndexes.get(page.declaration.role);
-    if (existingIndex === undefined) {
-      signerPageIndexes.set(page.declaration.role, signaturePages.length);
-      signaturePages.push(page);
-      continue;
-    }
-    const existing = signaturePages[existingIndex];
-    if (existing?.kind !== 'signature') continue;
-    signaturePages[existingIndex] = {
-      ...existing,
-      legacyStepKeys: [...new Set([...existing.legacyStepKeys, ...page.legacyStepKeys])],
-    };
-  }
-  return [...fieldPages, ...signaturePages, ...(review ? [review] : [])];
 }
 
 function availableStepKey(record: Presented, answers: ActivityAnswers, requested = '') {

@@ -1,0 +1,86 @@
+.preview { min-width: 0; width: 100%; max-width: 440px; margin: 0 auto; color: inherit; }
+.tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.tools strong { font-size: 18px; }
+.tools p { margin: 4px 0 0; font-size: 13px; opacity: .75; }
+.preview button { cursor: pointer; font: inherit; }
+.tools > button { border: 1px solid #54717e; border-radius: 9px; padding: 9px 12px; background: transparent; color: inherit; white-space: nowrap; }
+.devicePicker { display: grid; grid-template-columns: 1fr 1fr; padding: 4px; gap: 4px; border: 1px solid #405764; border-radius: 12px; background: #132735; }
+.devicePicker button { border: 0; border-radius: 8px; padding: 10px 4px; color: #a7bdc8; background: transparent; font-size: 13px; }
+.devicePicker button[aria-pressed=true] { color: #06271b; background: #71ecc1; font-weight: 700; }
+.caption { font-size: 12px; line-height: 1.65; margin: 11px 0 17px; opacity: .8; }
+.inspectionNotice { padding: 12px; border: 1px solid #779094; border-radius: 12px; margin-bottom: 15px; font-size: 13px; }
+.inspectionNotice p { margin: 0 0 9px; }
+.inspectionNotice button { padding: 7px 10px; color: #06271b; background: #b0ead7; border: 0; border-radius: 7px; }
+.phone { width: 100%; max-width: 406px; margin: 0 auto; padding: 9px; position: relative; box-sizing: border-box; background: linear-gradient(135deg, #899091 0%, #323c42 12%, #050709 45%, #73777a 80%, #282e32 100%); border: 1px solid #acb3b5; border-radius: 51px; box-shadow: 0 24px 48px #0005, inset 0 0 0 3px #161c20; }
+.screen { --portal-ink: #f3faf8; --portal-muted: #9ab0b5; --portal-input: #10293a; --portal-line: #294657; --portal-soft: #10293a; --portal-green-dark: #f3faf8; border-radius: 41px; overflow: hidden; background: #06131f; color: #f3faf8; border: 2px solid #000; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color-scheme: dark; }
+.galaxy { max-width: 412px; border-radius: 29px; padding: 7px; }
+.galaxy .screen { --portal-ink: #f3faf8; --portal-muted: #9ab0b5; --portal-input: #10293a; --portal-line: #294657; --portal-soft: #10293a; --portal-green-dark: #f3faf8; border-radius: 22px; }
+.statusBar { display: flex; justify-content: space-between; align-items: center; height: 47px; padding: 0 22px; position: relative; background: #07131c; font-weight: 700; font-size: 12px; letter-spacing: .02em; }
+.statusBar > i { position: absolute; left: 50%; transform: translateX(-50%); top: 10px; width: 105px; height: 25px; background: #000; border-radius: 30px; }
+.galaxy .statusBar > i { width: 12px; height: 12px; top: 13px; box-shadow: inset 0 0 0 3px #171f29; }
+.appHeader { display: flex; align-items: center; gap: 9px; padding: 8px 16px 12px; border-bottom: 1px solid #294657; }
+.appHeader > span:not(.brand) { font-size: 9px; letter-spacing: .16em; color: #9ab0b5; }
+.brand { font-size: 23px; font-weight: 850; letter-spacing: -.9px; color: #54e3b2; }
+.appHeader > b { margin-left: auto; color: #bce1ed; font-size: 9px; letter-spacing: .1em; border: 1px solid #365260; padding: 4px 6px; border-radius: 5px; }
+.formTitle { padding: 14px 16px 10px; font-size: 14px; line-height: 1.4; font-weight: 700; overflow-wrap: anywhere; }
+.formTitle small { display: block; margin-top: 5px; font-size: 11px; color: #9ab0b5; font-weight: 400; }
+.pagePicker { padding: 0 16px 12px; }
+.pagePicker label { font-size: 11px; display: block; color: #9ab0b5; margin-bottom: 5px; }
+.preview .phone select, .preview .phone input:not([type=checkbox]), .preview .phone textarea { display: block; width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid #294657; border-radius: 10px; background: #10293a; color: #f3faf8; padding: 13px 12px; font: inherit; font-size: 16px; min-height: 50px; }
+.phone input::placeholder { color: #9ab0b5; }
+.pagePicker select { min-height: 39px; padding: 8px 10px; font-size: 12px; }
+.body { height: 390px; min-height: 260px; max-height: 52vh; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #3b5866 transparent; padding: 0 14px 18px; scroll-behavior: smooth; }
+.progress { padding: 10px; background: #0b2030; border-radius: 10px; margin-bottom: 18px; }
+.progress > span { display: flex; justify-content: space-between; font-size: 12px; color: #bdd1d4; }
+.progress progress { display: block; width: 100%; height: 5px; border: 0; border-radius: 99px; overflow: hidden; margin-top: 9px; background: #294657; }
+.progress progress::-webkit-progress-bar { background: #294657; }
+.progress progress::-webkit-progress-value { background: #54e3b2; }
+.progress progress::-moz-progress-bar { background: #54e3b2; }
+.sectionHeading { margin: 0 0 14px; }
+.validationTools { display: grid; gap: 7px; margin: 0 0 14px; }
+.preview .phone .validationTools button { justify-self: start; padding: 6px 0; min-height: 28px; border: 0; background: transparent; color: #80d9bd; font-size: 12px; }
+.validationTools small { font-size: 11px; line-height: 17px; }
+.sectionHeading small { font-size: 9px; letter-spacing: .13em; color: #9ab0b5; }
+.preview .phone .sectionHeading h3 { margin: 5px 0 0; font-size: 19px; line-height: 1.35; color: #54e3b2; }
+.field { padding: 16px; border: 1px solid #294657; border-radius: 10px; background: #0b2030; margin: 0 0 13px; display: grid; gap: 10px; min-width: 0; }
+.field[data-selected=true] { border-color: #54e3b2; box-shadow: 0 0 0 1px #54e3b226; }
+.fieldHeading { display: grid; gap: 5px; }
+.phone .fieldHeading > label { font-size: 17px; font-weight: 700; line-height: 23px; overflow-wrap: anywhere; }
+.fieldHeading > span { font-size: 10px; color: #9ab0b5; }
+.field p { font-size: 15px; line-height: 23px; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.field small, .attachment small { color: #9ab0b5; line-height: 18px; font-size: 12px; }
+.preview .phone button { border: 1px solid #294657; border-radius: 10px; padding: 12px; min-height: 44px; background: #10293a; color: #f3faf8; }
+.preview .phone button:disabled { cursor: default; opacity: .38; }
+.preview .phone button:hover:not(:disabled) { border-color: #54e3b2; }
+.phone :is(button, input, select, textarea):focus-visible { outline: 2px solid #54e3b2; outline-offset: 3px; }
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.choices button { min-height: 54px; font-size: 16px; }
+.preview .phone .choices .chosen { border-color: #54e3b2; background: #173947; }
+.preview .phone .field .editQuestion { background: transparent; padding: 0; border: 0; font-size: 11px; min-height: 24px; justify-self: start; color: #80d9bd; }
+.attachment { display: grid; gap: 10px; }
+.preview .phone .attachment > button, .preview .phone .repeat > button { color: #07182b; background: #54e3b2; font-size: 13px; font-weight: 700; }
+.sampleFile { min-height: 105px; border: 1px dashed #547d88; border-radius: 9px; display: grid; place-content: center; justify-items: center; gap: 5px; font-size: 25px; background: #102938; }
+.sampleFile strong { font-size: 13px; }
+.reference, .notice { font-size: 12px; line-height: 19px; padding: 10px; border: 1px solid #355566; background: #10293a; border-radius: 8px; color: #c9dde0; }
+.preview .phone .error { color: #ff9ca1; font-size: 13px; }
+.repeat { border: 1px solid #54e3b2; padding: 14px; border-radius: 10px; display: grid; gap: 10px; margin-bottom: 13px; }
+.repeat strong { font-size: 13px; }
+.signature { display: grid; gap: 15px; }
+.signature article { border-bottom: 1px solid #294657; padding-bottom: 12px; }
+.signature h4 { font-size: 16px; margin: 0 0 8px; }
+.signature p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 23px; }
+.signature label { font-size: 13px; display: grid; gap: 7px; }
+.signature .check { display: flex; align-items: start; line-height: 20px; }
+.check input { width: 20px; height: 20px; flex-shrink: 0; accent-color: #54e3b2; }
+.signature svg { min-width: 0; }
+.review { display: grid; gap: 12px; font-size: 14px; line-height: 21px; }
+.review p { margin: 0; }
+.review > button { text-align: left; font-size: 13px; }
+.footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 16px 8px; background: #0b2030; border-top: 1px solid #294657; }
+.footer span { font-size: 11px; color: #9ab0b5; }
+.footer button { min-width: 78px; font-size: 13px; }
+.preview .phone .footer button:last-child { background: #54e3b2; border-color: #54e3b2; color: #07182b; font-weight: 700; }
+.homeBar { height: 24px; background: #0b2030; display: grid; place-items: center; }
+.homeBar i { width: 107px; height: 4px; border-radius: 9px; background: #d9e2e6; }
+@media (max-width: 460px) { .phone { padding: 6px; border-radius: 40px; } .screen { --portal-ink: #f3faf8; --portal-muted: #9ab0b5; --portal-input: #10293a; --portal-line: #294657; --portal-soft: #10293a; --portal-green-dark: #f3faf8; border-radius: 33px; } .galaxy { border-radius: 25px; } .galaxy .screen { --portal-ink: #f3faf8; --portal-muted: #9ab0b5; --portal-input: #10293a; --portal-line: #294657; --portal-soft: #10293a; --portal-green-dark: #f3faf8; border-radius: 19px; } .statusBar { padding: 0 19px; } .body { padding-inline: 10px; } .field { padding: 12px; } }
+@media (prefers-reduced-motion: reduce) { .body { scroll-behavior: auto; } }

@@ -39,13 +39,13 @@ const TrainingQuestionnaireEditor = dynamic(() => import("./TrainingQuestionnair
 import { CreditexOutputActions } from "./CreditexOutputActions";
 import { CreditexRegistryWorkspace } from "./CreditexRegistryWorkspace";
 import { CreditexOfficialSourceWorkbench } from "./CreditexOfficialSourceWorkbench";
-import { CreditexOperationsWorkspace } from "./CreditexOperationsWorkspace";
+import { CreditexOperationsWorkspace, CreditexTeamAccess } from "./CreditexOperationsWorkspace";
 import { CreditexPlannedIntakeQueue } from "./CreditexPlannedIntakeQueue";
 import CreditexVoiceSetupPanel from "./CreditexVoiceSetupPanel";
 import styles from "./CreditexCompliancePortal.module.css";
 
 type ComplianceRole = "admin" | "case_manager" | "reviewer" | "auditor";
-type WorkspaceTab = "cases" | "operations" | "submissions" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance";
+type WorkspaceTab = "cases" | "operations" | "submissions" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance" | "team";
 
 function WorkspaceIcon({ tab }: { tab: WorkspaceTab }) {
   const paths: Record<WorkspaceTab, string> = {
@@ -57,6 +57,7 @@ function WorkspaceIcon({ tab }: { tab: WorkspaceTab }) {
     onboarding: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M17 8h5M19.5 5.5v5",
     sources: "M12 5c-3-2-6-2-10-1v15c4-1 7-1 10 1 3-2 6-2 10-1V4c-4-1-7-1-10 1v15",
     governance: "m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6zM8 12l3 3 5-6",
+    team: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M20 8v6M17 11h6",
   };
   return <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={paths[tab]} /></svg>;
 }
@@ -341,11 +342,15 @@ export function CreditexCompliancePortal() {
   const [password, setPassword] = useState("");
   const [tab, setTab] = useState<WorkspaceTab>("cases");
   const questionnaireDirty = useRef(false);
+  const fieldFormDirty = useRef(false);
   const reportQuestionnaireDirty = useCallback((dirty: boolean) => { questionnaireDirty.current = dirty; }, []);
+  const reportFieldFormDirty = useCallback((dirty: boolean) => { fieldFormDirty.current = dirty; }, []);
   function selectTab(next: typeof tab) {
     if (next === tab) return true;
     if (questionnaireDirty.current && !window.confirm("Discard the unsaved changes to this questionnaire?")) return false;
+    if (fieldFormDirty.current && !window.confirm("Discard the unsaved changes to this activity form?")) return false;
     questionnaireDirty.current = false;
+    fieldFormDirty.current = false;
     setTab(next);
     return true;
   }
@@ -1050,6 +1055,7 @@ export function CreditexCompliancePortal() {
     ...(canReviewTraining ? [{ id: "onboarding" as const, label: "Trade onboarding" }] : []),
     { id: "sources", label: "Official sources" },
     ...(session?.role === "admin" ? [{ id: "governance" as const, label: "Government rules" }] : []),
+    ...(session?.role === "admin" ? [{ id: "team" as const, label: "Team access" }] : []),
   ];
   const visibleTabs = [...primaryTabs, ...toolsTabs, ...reviewTabs];
 
@@ -1288,7 +1294,7 @@ export function CreditexCompliancePortal() {
           </div>
         </header>
         <div className={styles.content}>
-        {!["cases", "operations", "submissions", "forms", "compliance-questions"].includes(tab) && (
+        {!["cases", "operations", "submissions", "forms", "compliance-questions", "team"].includes(tab) && (
           <section className={styles.hero}>
             <div className={styles.heroCopy}>
               <h1>
@@ -1400,9 +1406,17 @@ export function CreditexCompliancePortal() {
               sourceBatchEndpoint="/api/creditex/official-sources/batch-import"
               canCaptureSource={["admin", "case_manager"].includes(session.role)}
               fieldMasterCanAuthor={session.canEditFieldMasters}
+              onManageFormAccess={session.role === "admin" ? () => selectTab("team") : undefined}
+              onFieldFormDirtyChange={reportFieldFormDirty}
               onDownloadSource={downloadOfficialSource}
               contextLabel="Creditex"
             />
+          </section>
+        )}
+
+        {tab === "team" && session.role === "admin" && (
+          <section className={styles.panel} id="creditex-panel-team" role="tabpanel" aria-labelledby="creditex-tab-team">
+            <CreditexTeamAccess session={session} />
           </section>
         )}
 

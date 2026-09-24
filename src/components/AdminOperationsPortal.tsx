@@ -151,13 +151,17 @@ export function AdminOperationsPortal() {
   const [bootstrapCode, setBootstrapCode] = useState("");
   const [tab, setTab] = useState<AdminWorkspaceTab>("inbox");
   const questionnaireDirty = useRef(false);
+  const fieldFormDirty = useRef(false);
   const historyIndex = useRef<number | null>(null);
   const restoringHistory = useRef(false);
   const reportQuestionnaireDirty = useCallback((dirty: boolean) => { questionnaireDirty.current = dirty; }, []);
+  const reportFieldFormDirty = useCallback((dirty: boolean) => { fieldFormDirty.current = dirty; }, []);
   const selectTab = useCallback((next: AdminWorkspaceTab, updateHistory = true) => {
     if (next === tab) return true;
     if (questionnaireDirty.current && !window.confirm("Discard the unsaved changes to this questionnaire?")) return false;
+    if (fieldFormDirty.current && !window.confirm("Discard the unsaved changes to this activity form?")) return false;
     questionnaireDirty.current = false;
+    fieldFormDirty.current = false;
     setTab(next);
     if (updateHistory && window.location.hash !== adminWorkspaceHash(next)) {
       const index = (historyIndex.current ?? 0) + 1;
@@ -805,6 +809,7 @@ export function AdminOperationsPortal() {
                 sourceEndpoint="/api/admin/compliance-official-sources"
                 sourceBatchEndpoint="/api/admin/compliance-official-sources/batch-import"
                 canCaptureSource={["owner", "admin"].includes(session.role)}
+                onFieldFormDirtyChange={reportFieldFormDirty}
                 onDownloadSource={downloadOfficialSource}
                 contextLabel="Australian Energy Assessments operations"
               />

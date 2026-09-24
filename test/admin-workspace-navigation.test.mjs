@@ -158,6 +158,21 @@ test("unsaved training edits block desktop, alert and browser-history navigation
   h.cleanup();
 });
 
+test("unsaved activity form edits block tab and browser-history navigation until discard is confirmed", () => {
+  const h = portalHarness(); let tree = h.settle();
+  h.nav(tree).onSelect("form-governance"); tree = h.settle();
+  nodes(tree, node => typeof node.props?.onFieldFormDirtyChange === "function")[0].props.onFieldFormDirtyChange(true);
+  assert.equal(h.nav(tree).onSelect("jobs"), false);
+  h.back(); tree = h.settle();
+  assert.equal(h.nav(tree).selected, "form-governance");
+  assert.equal(h.window.location.hash, "#form-governance");
+  assert.equal(h.historyIndex, 1);
+  assert.deepEqual(h.confirmations, ["Discard the unsaved changes to this activity form?", "Discard the unsaved changes to this activity form?"]);
+  h.permitDiscard(true); h.back(); tree = h.settle();
+  assert.equal(h.nav(tree).selected, "inbox");
+  h.cleanup();
+});
+
 test("skip link moves focus without changing section history or its Back destination", () => {
   const h = portalHarness({ hash: "#form-governance" }); let tree = h.settle();
   const skip = nodes(tree, node => node.type === "a" && node.props.className === "admin-skip-link")[0];

@@ -4672,6 +4672,38 @@ export async function executeCreditexAccessAction(
     const role = choice(body.role, "Role", [
       "admin", "case_manager", "reviewer", "auditor",
     ] as const);
+    const existingMember = await first(database,
+      `SELECT id FROM compliance_users
+        WHERE organisation_id = ? AND email = ? COLLATE NOCASE`,
+      [identity.organisationId, email]);
+    if (existingMember) {
+      throw new CreditexOperationsError(
+        "CREDITEX_MEMBER_EXISTS", 409,
+        "This person already belongs to your team. Update their access in the member list.",
+      );
+    }
+    const findInvitation = () => first(database,
+      `SELECT id, display_name, role, status, expires_at FROM compliance_invitations
+        WHERE organisation_id = ? AND email = ? COLLATE NOCASE
+          AND status IN ('pending', 'claimed')`,
+      [identity.organisationId, email]);
+    const matchesPending = (invitation: Row | null): boolean => invitation !== null
+      && invitation.status === "pending"
+      && valueText(invitation.expires_at) > now
+      && invitation.display_name === displayName
+      && invitation.role === role;
+    const existingInvitation = await findInvitation();
+    if (existingInvitation && matchesPending(existingInvitation)) {
+      return { id: valueText(existingInvitation.id), delivery: "not_sent" as const,
+        reused: true, signInUrl: "/creditex/compliance" };
+    }
+    if (existingInvitation && (existingInvitation.status === "claimed"
+      || valueText(existingInvitation.expires_at) > now)) {
+      throw new CreditexOperationsError(
+        "CREDITEX_INVITATION_EXISTS", 409,
+        "This person already has an invitation. Revoke the pending invitation before changing their details or role.",
+      );
+    }
     const expiresAt = instant(
       body.expiresAt
         || new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000).toISOString(),
@@ -4689,7 +4721,12 @@ export async function executeCreditexAccessAction(
       );
     }
     const id = crypto.randomUUID();
-    await writeWithAudit(database, identity, [
+    const writes = existingInvitation ? [
+      database.prepare(`UPDATE compliance_invitations SET status = 'expired', updated_at = ?
+        WHERE id = ? AND organisation_id = ? AND status = 'pending' AND expires_at <= ?`)
+        .bind(now, existingInvitation.id, identity.organisationId, now),
+    ] : [];
+    writes.push(
       database.prepare(`INSERT INTO compliance_invitations (
           id, organisation_id, email, display_name, role, status,
           invited_by_uid, expires_at, claimed_by_uid, claimed_at,
@@ -4706,14 +4743,27 @@ export async function executeCreditexAccessAction(
           now,
           now,
         ),
-    ], {
-      eventType: "membership.invitation_created",
-      targetType: "compliance_invitation",
-      targetId: id,
-      summary: "A named compliance portal invitation was created.",
-      metadata: { role },
-    }, now);
-    return { id, delivery: "not_sent" as const };
+    );
+    try {
+      await writeWithAudit(database, identity, writes, {
+        eventType: "membership.invitation_created",
+        targetType: "compliance_invitation",
+        targetId: id,
+        summary: "A named compliance portal invitation was created.",
+        metadata: { role, ...(existingInvitation ? { expiredInvitationId: existingInvitation.id } : {}) },
+      }, now);
+    } catch (error) {
+      // A simultaneous retry may already have created this exact pending invitation.
+      if (error instanceof Error && /UNIQUE constraint failed|SQLITE_CONSTRAINT_UNIQUE|compliance_write_guards/.test(error.message)) {
+        const invitation = await findInvitation();
+        if (invitation && matchesPending(invitation)) {
+          return { id: valueText(invitation.id), delivery: "not_sent" as const,
+            reused: true, signInUrl: "/creditex/compliance" };
+        }
+      }
+      throw error;
+    }
+    return { id, delivery: "not_sent" as const, reused: false, signInUrl: "/creditex/compliance" };
   }
   if (action === "revoke_invitation") {
     const invitationId = text(body.invitationId, "Invitation", 180);

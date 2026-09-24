@@ -1282,6 +1282,89 @@ test("ordinary Creditex administrators cannot confer governance identity", async
   assert.equal("governanceIdentityVerificationBasis" in person, false);
 });
 
+test("team invitations reuse identical pending requests without duplicate audit or membership", async () => {
+  const database = databaseWithComplianceOperations();
+  const operations = loadTypescriptModule("../src/lib/creditex-operations-server.ts");
+  const actor = { uid: "bootstrap-admin", role: "admin", organisationId: "org_creditex_au" };
+  const request = { action: "create_invitation", displayName: "Jamie Smith", email: "Jamie.Smith@example.com", role: "reviewer" };
+  const first = await operations.executeCreditexAccessAction(testD1(database), actor, request);
+  const repeated = await operations.executeCreditexAccessAction(testD1(database), actor, request);
+  assert.equal(repeated.id, first.id);
+  assert.equal(first.reused, false);
+  assert.equal(repeated.reused, true);
+  assert.equal(repeated.delivery, "not_sent");
+  assert.equal(repeated.signInUrl, "/creditex/compliance");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM compliance_users").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM compliance_audit_events WHERE event_type = 'membership.invitation_created'").get().count, 1);
+  await assert.rejects(operations.executeCreditexAccessAction(testD1(database), actor, { ...request, role: "admin" }),
+    (error) => error.code === "CREDITEX_INVITATION_EXISTS");
+  assert.equal(database.prepare("SELECT role FROM compliance_invitations WHERE id = ?").get(first.id).role, "reviewer");
+});
+
+test("expired team invitation can be renewed without deleting its history", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-09-24T00:00:00.000Z") });
+  const database = databaseWithComplianceOperations();
+  const operations = loadTypescriptModule("../src/lib/creditex-operations-server.ts");
+  const actor = { uid: "bootstrap-admin", role: "admin", organisationId: "org_creditex_au" };
+  const request = { action: "create_invitation", displayName: "Jamie Smith", email: "jamie.smith@example.com", role: "reviewer" };
+  const first = await operations.executeCreditexAccessAction(testD1(database), actor, request);
+  t.mock.timers.setTime(new Date("2026-10-02T00:00:00.000Z").getTime());
+  const renewed = await operations.executeCreditexAccessAction(testD1(database), actor, request);
+  assert.notEqual(renewed.id, first.id);
+  assert.equal(database.prepare("SELECT status FROM compliance_invitations WHERE id = ?").get(first.id).status, "expired");
+  assert.equal(database.prepare("SELECT status FROM compliance_invitations WHERE id = ?").get(renewed.id).status, "pending");
+  const audit = database.prepare("SELECT metadata FROM compliance_audit_events WHERE target_id = ?").get(renewed.id);
+  assert.equal(JSON.parse(audit.metadata).expiredInvitationId, first.id);
+});
+
+test("a concurrent invitation retry returns the winning record with one audit", async () => {
+  const database = databaseWithComplianceOperations();
+  const operations = loadTypescriptModule("../src/lib/creditex-operations-server.ts");
+  const actor = { uid: "bootstrap-admin", role: "admin", organisationId: "org_creditex_au" };
+  const request = { action: "create_invitation", displayName: "Jamie Smith", email: "jamie.smith@example.com", role: "reviewer" };
+  const d1 = testD1(database);
+  let winner;
+  const racingD1 = {
+    prepare: d1.prepare,
+    async batch(statements) {
+      winner = await operations.executeCreditexAccessAction(d1, actor, request);
+      return d1.batch(statements);
+    },
+  };
+  const retry = await operations.executeCreditexAccessAction(racingD1, actor, request);
+  assert.equal(retry.id, winner.id);
+  assert.equal(retry.reused, true);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM compliance_audit_events WHERE event_type = 'membership.invitation_created'").get().count, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM compliance_invitations WHERE email = ?").get(request.email).count, 1);
+});
+
+test("team invitations retain named-user roles and organisation boundaries", async () => {
+  const database = databaseWithComplianceOperations();
+  const operations = loadTypescriptModule("../src/lib/creditex-operations-server.ts");
+  const actor = { uid: "bootstrap-admin", role: "admin", organisationId: "org_creditex_au" };
+  const request = { action: "create_invitation", displayName: "Jamie Smith", email: "jamie.smith@example.com", role: "reviewer" };
+  await assert.rejects(operations.executeCreditexAccessAction(testD1(database), { ...actor, role: "reviewer" }, request),
+    (error) => error.code === "CREDITEX_ROLE_REQUIRED");
+  await assert.rejects(operations.executeCreditexAccessAction(testD1(database), actor, { ...request, email: "office@example.com" }),
+    (error) => error.code === "CREDITEX_NAMED_USER_REQUIRED");
+  const invitation = await operations.executeCreditexAccessAction(testD1(database), actor, { ...request, organisationId: "org-other" });
+  assert.equal(database.prepare("SELECT organisation_id FROM compliance_invitations WHERE id = ?").get(invitation.id).organisation_id, actor.organisationId);
+  await assert.rejects(operations.executeCreditexAccessAction(testD1(database), { ...actor, organisationId: "org-other" },
+    { action: "revoke_invitation", invitationId: invitation.id }), (error) => error.code === "CREDITEX_RECORD_NOT_FOUND");
+  assert.equal(database.prepare("SELECT status FROM compliance_invitations WHERE id = ?").get(invitation.id).status, "pending");
+});
+
+test("existing team members must use member access instead of a second invitation", async () => {
+  const database = databaseWithComplianceOperations();
+  const operations = loadTypescriptModule("../src/lib/creditex-operations-server.ts");
+  seedComplianceUser(database, { id: "jamie", firebaseUid: "jamie.smith", role: "reviewer" });
+  await assert.rejects(operations.executeCreditexAccessAction(testD1(database),
+    { uid: "bootstrap-admin", role: "admin", organisationId: "org_creditex_au" },
+    { action: "create_invitation", displayName: "Jamie Smith", email: "jamie.smith@example.com", role: "admin" }),
+  (error) => error.code === "CREDITEX_MEMBER_EXISTS");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM compliance_audit_events").get().count, 0);
+});
+
 test("operations dashboard and access queries execute against the operations schema", async () => {
   const database = databaseWithComplianceOperations();
   const operations = loadTypescriptModule(

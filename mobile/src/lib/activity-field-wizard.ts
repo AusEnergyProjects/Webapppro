@@ -1,4 +1,4 @@
-export { mergeActivityAnswers } from '../../../src/lib/trade-activity-form-flow';
+export { mergeActivityAnswers, activityOptionLabel } from '../../../src/lib/trade-activity-form-flow';
 
 type ActivityAnswer = string | number | boolean;
 type ActivityAnswers = Record<string, ActivityAnswer>;
@@ -24,18 +24,6 @@ type RequiredProgressStep = ProgressFieldStep | ProgressSignatureStep;
 type ActivitySignatureIdentity = { declarationKey: string };
 type ActivityMissingIdentity = { key: string; kind: string };
 type ActivitySignerDefaults = { signerDefaults?: { technician?: string; customer?: string } };
-
-export function activityOptionLabel(value: string, explicit?: string) {
-  const supplied = explicit?.trim();
-  if (supplied) return supplied;
-  const raw = value.trim();
-  if (!raw) return '';
-  if (/^(i|ii|iii|iv|v|vi|vii|viii|ix|x|xi)$/i.test(raw)) return `Scenario ${raw.toUpperCase()}`;
-  if (raw === 'retain_unsafe_or_impractical') return 'Retain because removal is unsafe or impractical';
-  if (/^(n_?a|not_applicable)$/i.test(raw)) return 'Not applicable';
-  const readable = raw.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
-  return readable.charAt(0).toUpperCase() + readable.slice(1);
-}
 
 export function activityCurrentSignatureKeys(
   signatures: readonly ActivitySignatureIdentity[],

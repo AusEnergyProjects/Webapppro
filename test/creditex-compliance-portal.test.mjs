@@ -957,7 +957,7 @@ test("portal tabs and disabled actions expose accessible semantics", () => {
   assert.match(portal, /handleWorkspaceTabKeyDown/);
   assert.ok(
     portal.indexOf('className={styles.tabs}')
-      < portal.indexOf('{!["cases", "operations", "submissions", "forms", "compliance-questions"].includes(tab) && ('),
+      < portal.indexOf('{!["cases", "operations", "submissions", "forms", "compliance-questions", "team"].includes(tab) && ('),
     "The permanent workspace tabs must render before tab-specific content.",
   );
   assert.match(

@@ -30,7 +30,7 @@ const masterForm = {
 const button = (tree, label) => nodes(tree, node => node.type === "button" && text(node) === label)[0];
 const edit = tree => nodes(tree, node => node.type === "button" && node.props["aria-label"] === "Edit VEU 6: Heating and cooling")[0];
 const flush = () => new Promise(resolve => setImmediate(resolve));
-function harness({ canAuthor = true, respond = async () => ({ catalogue }), confirm = true } = {}) {
+function harness({ canAuthor = true, actorMode = "admin", respond = async () => ({ catalogue }), confirm = true, onManageAccess, onDirtyChange } = {}) {
   const state = [], effects = [], requests = [], signals = []; let cursor = 0, mounted = true, lateStateWrites = 0;
   const hooks = {
     useState(initial) { const i = cursor++; if (!(i in state)) state[i] = initial; return [state[i], value => { if (!mounted) lateStateWrites++; state[i] = typeof value === "function" ? value(state[i]) : value; }]; },
@@ -40,8 +40,8 @@ function harness({ canAuthor = true, respond = async () => ({ catalogue }), conf
   const api = async (path, init) => { requests.push(path); signals.push(init?.signal); return respond(path, init); };
   const exports = {};
   const window = { confirm: () => confirm, addEventListener() {}, removeEventListener() {} };
-  Function("require", "exports", "window", compiled)(id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id.endsWith(".module.css") ? { default: {} } : (() => { throw Error(id); })(), exports, window);
-  const render = () => { cursor = 0; const tree = exports.CreditexFieldFormMasters({ api, actorMode: "admin", canAuthor }); effects.splice(0).forEach(run => run()); return tree; };
+  Function("require", "exports", "window", compiled)(id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./CreditexFormPhonePreview" ? { CreditexFormPhonePreview: "phone-preview" } : id.endsWith(".module.css") ? { default: {} } : (() => { throw Error(id); })(), exports, window);
+  const render = () => { cursor = 0; const tree = exports.CreditexFieldFormMasters({ api, actorMode, canAuthor, onManageAccess, onDirtyChange }); effects.splice(0).forEach(run => run()); return tree; };
   return { requests, signals, render, setConfirm(value) { confirm = value; }, get lateStateWrites() { return lateStateWrites; }, unmount() { mounted = false; for (const slot of state) slot?.cleanup?.(); }, async mount() { render(); await flush(); return render(); } };
 }
 
@@ -94,11 +94,44 @@ test("custom questions and declarations remain deletable while program requireme
   assert.equal(h.requests.length, 2, "question edits stay local until Save and publish master is chosen");
 });
 
-test("read-only identities do not request the protected master catalogue", async () => {
-  const h = harness({ canAuthor: false }); const tree = await h.mount();
-  assert.equal(h.requests.length, 0);
-  assert.equal(nodes(tree, node => node.type === "select").length, 0);
-  assert.equal(nodes(tree, node => node.type === "button" && text(node) === "Refresh forms")[0].props.disabled, true);
+test("read-only Creditex members can preview forms while edit and publication remain disabled", async () => {
+  const h = harness({ canAuthor: false, actorMode: "creditex", respond: async path => path.includes("activityTemplateId") ? { form: masterForm, expectedVersion: 2 } : { catalogue } });
+  let tree = await h.mount();
+  assert.deepEqual(h.requests, ["/api/trade-activity-forms?view=masters&actorMode=creditex"]);
+  assert.equal(button(tree, "Refresh forms").props.disabled, false);
+  assert.match(text(tree), /Shared-mailbox and auditor accounts are read-only/);
+  const preview = nodes(tree, node => node.type === "button" && node.props["aria-label"] === "Preview VEU 6: Heating and cooling")[0];
+  preview.props.onClick(); await flush(); tree = h.render();
+  assert.equal(nodes(tree, node => node.type === "fieldset")[0].props.disabled, true);
+  assert.equal(nodes(tree, node => node.type === "phone-preview").length, 1);
+  assert.equal(nodes(tree, node => node.type === "phone-preview")[0].props.canEdit, false);
+  assert.equal(nodes(nodes(tree, node => node.type === "fieldset")[0], node => node.type === "phone-preview").length, 0);
+  assert.equal(button(tree, "Submitted field records"), undefined);
+  assert.equal(h.requests.length, 2);
+});
+
+test("phone preview follows unsaved question edits and selecting a phone question opens its editor", async () => {
+  const h = harness({ respond: async path => path.includes("activityTemplateId") ? { form: masterForm, expectedVersion: 2 } : { catalogue } });
+  let tree = await h.mount(); edit(tree).props.onClick(); await flush(); tree = h.render();
+  nodes(tree, node => node.type === "input" && node.props.value === "Extra comment")[0].props.onChange({ target: { value: "Describe the installation" } });
+  tree = h.render();
+  const preview = nodes(tree, node => node.type === "phone-preview")[0];
+  assert.equal(preview.props.form.fields[0].label, "Describe the installation");
+  assert.equal(preview.props.selectedFieldKey, "custom.comment");
+  assert.equal(preview.props.canEdit, true);
+  preview.props.onSelectField("required.photo"); tree = h.render();
+  assert.equal(nodes(tree, node => node.type === "phone-preview")[0].props.selectedFieldKey, "required.photo");
+  assert.equal(h.requests.length, 2, "typing and testing do not publish the master");
+});
+
+test("form access setup and unsaved-change state are connected to the parent workspace", async () => {
+  let accessOpened = 0; const dirtyStates = [];
+  const h = harness({ onManageAccess: () => accessOpened++, onDirtyChange: value => dirtyStates.push(value), respond: async path => path.includes("activityTemplateId") ? { form: masterForm, expectedVersion: 2 } : { catalogue } });
+  let tree = await h.mount(); button(tree, "Set up form editors").props.onClick(); assert.equal(accessOpened, 1);
+  edit(tree).props.onClick(); await flush(); tree = h.render();
+  nodes(tree, node => node.type === "input" && node.props.value === "Heating and cooling")[0].props.onChange({ target: { value: "Updated" } });
+  h.render(); assert.equal(dirtyStates.at(-1), true);
+  h.unmount(); assert.equal(dirtyStates.at(-1), false);
 });
 
 test("failed automatic loading shows the error and allows an explicit refresh", async () => {

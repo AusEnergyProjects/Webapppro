@@ -220,7 +220,7 @@ function portal(role='admin', options={}) {return runtime('CreditexCompliancePor
 
 test('Jobs defaults and Submissions, Training and Activity forms stay directly visible in the left rail',()=>{
   const h=portal();let tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);
-  for(const label of ['Jobs','Cases','Submissions','Training','Activity forms','Trade onboarding','Official sources','Government rules'])assert.ok(button(tree,label));
+  for(const label of ['Jobs','Cases','Submissions','Training','Activity forms','Trade onboarding','Official sources','Government rules','Team access'])assert.ok(button(tree,label));
   assert.doesNotMatch(text(tree),/Setup & rules|VEU test pilot/);
   assert.equal(nodes(tree,n=>n.props?.role==='tablist')[0].props['aria-orientation'],'vertical');
   button(tree,'Cases').props.onClick();tree=h.render();assert.equal(button(tree,'Cases').props['aria-selected'],true);assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexOperationsWorkspace').length,1);
@@ -234,16 +234,16 @@ test('Jobs defaults and Submissions, Training and Activity forms stay directly v
 test('auditors retain forms and source access but never gain training or administrator tools',()=>{
   const h=portal('auditor');const tree=h.render();assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexVoiceSetupPanel').length,0);
   assert.ok(button(tree,'Official sources'));assert.ok(button(tree,'Activity forms'));
-  for(const label of ['Government rules','Training','Trade onboarding'])assert.equal(button(tree,label),undefined);
+  for(const label of ['Government rules','Training','Trade onboarding','Team access'])assert.equal(button(tree,label),undefined);
   const selector=nodes(tree,n=>n.type==='select'&&n.props.value==='cases')[0];assert.deepEqual(nodes(selector,n=>n.type==='option').map(n=>n.props.value),['cases','operations','submissions','forms','sources']);h.cleanup();
 });
 
 test('vertical keyboard navigation cycles through the visible authorised tabs',()=>{
   const h=portal();let tree=h.render();let prevented=false;button(tree,'Jobs').props.onKeyDown({key:'ArrowDown',preventDefault(){prevented=true;}});tree=h.render();assert.equal(prevented,true);assert.equal(button(tree,'Cases').props['aria-selected'],true);
-  button(tree,'Cases').props.onKeyDown({key:'End',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Government rules').props['aria-selected'],true);
-  button(tree,'Government rules').props.onKeyDown({key:'ArrowDown',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);
-  button(tree,'Jobs').props.onKeyDown({key:'ArrowUp',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Government rules').props['aria-selected'],true);
-  button(tree,'Government rules').props.onKeyDown({key:'Home',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);h.cleanup();
+  button(tree,'Cases').props.onKeyDown({key:'End',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Team access').props['aria-selected'],true);
+  button(tree,'Team access').props.onKeyDown({key:'ArrowDown',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);
+  button(tree,'Jobs').props.onKeyDown({key:'ArrowUp',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Team access').props['aria-selected'],true);
+  button(tree,'Team access').props.onKeyDown({key:'Home',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);h.cleanup();
 });
 
 test('mobile section selector opens the same panels and ignores unavailable destinations',()=>{
@@ -257,4 +257,15 @@ test('desktop, keyboard and mobile changes all respect unsaved training edits',(
   button(tree,'Jobs').props.onClick();tree=h.render();assert.equal(button(tree,'Training').props['aria-selected'],true);
   button(tree,'Training').props.onKeyDown({key:'Home',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Training').props['aria-selected'],true);
   nodes(tree,n=>n.type==='select'&&n.props.value==='compliance-questions')[0].props.onChange({target:{value:'forms'}});tree=h.render();assert.equal(button(tree,'Training').props['aria-selected'],true);h.cleanup();
+});
+
+test('activity form drafts survive desktop, keyboard, mobile and team-access navigation until discard is confirmed',()=>{
+  const h=portal('admin',{confirm:false});let tree=h.render();button(tree,'Activity forms').props.onClick();tree=h.render();
+  const governance=nodes(tree,n=>typeof n.props?.onFieldFormDirtyChange==='function')[0];governance.props.onFieldFormDirtyChange(true);
+  button(tree,'Jobs').props.onClick();tree=h.render();assert.equal(button(tree,'Activity forms').props['aria-selected'],true);
+  button(tree,'Activity forms').props.onKeyDown({key:'Home',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Activity forms').props['aria-selected'],true);
+  nodes(tree,n=>n.type==='select'&&n.props.value==='forms')[0].props.onChange({target:{value:'team'}});tree=h.render();assert.equal(button(tree,'Activity forms').props['aria-selected'],true);
+  governance.props.onManageFormAccess();tree=h.render();assert.equal(button(tree,'Activity forms').props['aria-selected'],true);
+  governance.props.onFieldFormDirtyChange(false);governance.props.onManageFormAccess();tree=h.render();assert.equal(button(tree,'Team access').props['aria-selected'],true);
+  assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexTeamAccess').length,1);h.cleanup();
 });

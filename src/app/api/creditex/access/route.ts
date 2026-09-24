@@ -9,6 +9,7 @@ import {
   loadCreditexAccess,
 } from "@/lib/creditex-operations-server";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
+import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -45,6 +46,7 @@ function errorResponse(error: unknown) {
   if (
     error instanceof ComplianceAccessError
     || error instanceof CreditexOperationsError
+    || error instanceof BoundedJsonRequestError
   ) {
     return json({ ok: false, code: error.code, error: error.message }, error.status);
   }
@@ -128,7 +130,7 @@ export async function POST(request: Request) {
   try {
     const database = getD1();
     const member = await requireAdministrator(request, database);
-    const body = requiredBody(await request.json().catch(() => null));
+    const body = requiredBody(await readBoundedJsonRequest(request));
     const result = await executeCreditexAccessAction(database, member, body);
     return json({ ok: true, result }, 201);
   } catch (error) {

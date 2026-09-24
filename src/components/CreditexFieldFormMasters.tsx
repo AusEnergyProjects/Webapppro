@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ActivityAnswer, ActivityCondition, ActivityDeclaration, ActivityField, ActivityForm, ActivityRecord, ActivityPhase } from "@/lib/trade-activity-forms";
+import { CreditexFormPhonePreview } from "./CreditexFormPhonePreview";
 import styles from "./CreditexActivityWorkPackGovernance.module.css";
 
 type Api = (path: string, init?: RequestInit) => Promise<Record<string, unknown>>;
@@ -131,16 +132,20 @@ function ConditionEditor({ form, targetKey, phase, condition, locked, label, onC
   </div>;
 }
 
-export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true }: { api: Api; actorMode: "admin" | "creditex"; canAuthor?: boolean }) {
+export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onManageAccess, onDirtyChange }: { api: Api; actorMode: "admin" | "creditex"; canAuthor?: boolean; onManageAccess?: () => void; onDirtyChange?: (dirty: boolean) => void }) {
   const [catalogue, setCatalogue] = useState<Option[]>([]);
   const [search, setSearch] = useState("");
   const [program, setProgram] = useState("");
   const [selected, setSelected] = useState(""); const [form, setForm] = useState<ActivityForm | null>(null);
   const [expectedVersion, setExpectedVersion] = useState(0); const [question, setQuestion] = useState(0);
-  const [busy, setBusy] = useState(canAuthor); const [dirty, setDirty] = useState(false); const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(true); const [dirty, setDirty] = useState(false); const [message, setMessage] = useState("");
   const [records, setRecords] = useState<ActivityRecord[]>([]);
   const [reviewLink, setReviewLink] = useState("");
   const endpoint = "/api/trade-activity-forms";
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
   useEffect(() => {
     if (!dirty) return;
     const prevent = (event: BeforeUnloadEvent) => { event.preventDefault(); };
@@ -152,14 +157,12 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true }: {
     return result.catalogue;
   }, [api, actorMode]);
   async function loadCatalogue() {
-    if (!canAuthor) return;
     setBusy(true); setMessage("");
     try { setCatalogue(await requestCatalogue()); }
     catch (error) { setMessage(error instanceof Error ? error.message : "Forms could not be loaded."); }
     finally { setBusy(false); }
   }
   useEffect(() => {
-    if (!canAuthor) return;
     const controller = new AbortController();
     void requestCatalogue(controller.signal).then((items) => {
       if (!controller.signal.aborted) setCatalogue(items);
@@ -169,9 +172,9 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true }: {
       if (!controller.signal.aborted) setBusy(false);
     });
     return () => controller.abort();
-  }, [canAuthor, requestCatalogue]);
+  }, [requestCatalogue]);
   async function load(templateId: string, variantId = "") {
-    if (!canAuthor || busy) return;
+    if (busy) return;
     if (dirty && !window.confirm("Discard unsaved master-form changes?")) return;
     setBusy(true); setMessage("");
     try { const result = await api(`${endpoint}?view=masters&actorMode=${actorMode}&activityTemplateId=${encodeURIComponent(templateId)}&variantId=${encodeURIComponent(variantId)}`);
@@ -186,7 +189,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true }: {
     setSearch(""); setProgram("");
   }
   async function save() {
-    if (!form) return; setBusy(true); setMessage("");
+    if (!form || !canAuthor || busy) return; setBusy(true); setMessage("");
     try { const result = await api(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "save_master", actorMode,
       activityTemplateId: form.activityTemplateId, variantId: form.variantId, expectedVersion, form }) });
       if (!result.form || typeof result.form !== "object") throw new Error("The master form was not saved.");
@@ -271,10 +274,11 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true }: {
     && `${item.programCode} ${item.activityCode} ${item.title}`.toLowerCase().includes(search.trim().toLowerCase()));
   return <section className={`${styles.builderSection} ${styles.masterLibrary}`} aria-label="Activity form editor">
     {form && <button className={styles.masterBack} type="button" disabled={busy} onClick={backToCatalogue}>Back to all forms</button>}
-    <header><div><h2>{form ? form.title : "Activity forms"}</h2><p>{form ? "Edit the questions, photos and declarations technicians complete. Saving makes the updated master available immediately." : "Browse your activity forms below. Choose Edit to open a form."}</p></div>
-      {!form && <button type="button" disabled={busy || !canAuthor} onClick={() => void loadCatalogue()}>{busy ? "Loading forms..." : "Refresh forms"}</button>}
-      <button type="button" disabled={busy || !canAuthor} onClick={() => void reviewQueue()}>Submitted field records</button></header>
-    {actorMode === "creditex" && !canAuthor ? <p role="note">Sign in with your named Creditex administrator, case manager or reviewer account to edit forms. Shared-mailbox and auditor accounts are read-only. AEA owners can use <a href="/operations/control-centre#form-governance">Admin → Activity forms</a>.</p> : null}
+    <header><div><h2>{form ? form.title : "Activity forms"}</h2><p>{canAuthor ? form ? "Changes appear in the phone as you type. Test the questions, then save when you are ready to publish." : "Choose a form to edit its questions and test the mobile experience here." : "Choose a form to test its questions in the phone preview."}</p></div>
+      {!form && <button type="button" disabled={busy} onClick={() => void loadCatalogue()}>{busy ? "Loading forms..." : "Refresh forms"}</button>}
+      {canAuthor && <button type="button" disabled={busy} onClick={() => void reviewQueue()}>Submitted field records</button>}
+      {onManageAccess && <button type="button" onClick={onManageAccess}>Set up form editors</button>}</header>
+    {actorMode === "creditex" && !canAuthor ? <div className={styles.masterAccess} role="note"><strong>You can preview and test every form.</strong><p>Sign in with your named Creditex administrator, case manager or reviewer account to edit forms. Shared-mailbox and auditor accounts are read-only. {onManageAccess ? "Use Set up form editors to invite a named member of your team." : "Ask your Creditex administrator to invite you through Team access."} AEA owners can use <a href="/operations/control-centre#form-governance">Admin → Activity forms</a>.</p></div> : null}
     {message ? <p role="status">{message}</p> : null}
     {reviewLink ? <p><a href={reviewLink} target="_blank" rel="noreferrer">Open the signed field report and original evidence</a> (link expires in one hour)</p> : null}
     {!form && catalogue.length > 0 && <>
@@ -291,20 +295,23 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true }: {
             <header><h3 id={`master-program-${actorMode}-${code}`}>{code}</h3><span>{items.length} built-in program {items.length === 1 ? "form" : "forms"}</span></header>
             <ul>{items.map((item) => <li key={item.activityTemplateId} className={styles.masterRow}>
               <span className={styles.masterCode}>{item.activityCode}</span><strong>{item.title}</strong>
-              <button type="button" disabled={busy || !canAuthor} aria-label={`Edit ${item.programCode} ${item.activityCode}: ${item.title}`} onClick={() => void load(item.activityTemplateId)}>Edit</button>
+              <button type="button" disabled={busy} aria-label={`${canAuthor ? "Edit" : "Preview"} ${item.programCode} ${item.activityCode}: ${item.title}`} onClick={() => void load(item.activityTemplateId)}>{canAuthor ? "Edit" : "Preview"}</button>
             </li>)}</ul>
           </section> : null;
         })}
         {!visibleCatalogue.length && <p className={styles.masterEmpty}>No forms match these filters. Clear the filters to see all forms.</p>}
       </div>
     </>}
-    {!form && !busy && canAuthor && !catalogue.length && !message && <p>No activity forms are available.</p>}
-    {form && field ? <fieldset disabled={busy || !canAuthor}>
+    {!form && !busy && !catalogue.length && !message && <p>No activity forms are available.</p>}
+    {form && field ? <div className={styles.masterEditingLayout}>
+    <div className={styles.masterEditor}>
+    <div className={styles.masterSaveBar}><span role="status">{canAuthor ? dirty ? "Unsaved changes" : "Published form" : "Read-only preview"} · Version {form.version}</span>{canAuthor && <button type="button" disabled={!dirty || busy} onClick={() => void save()}>{busy ? "Saving..." : "Save and publish master"}</button>}</div>
+    <label>Question to {canAuthor ? "edit" : "preview"}<select value={question} onChange={(event) => setQuestion(Number(event.target.value))}>{form.fields.map((item, index) => <option key={item.key} value={index}>{index + 1}. {item.section}: {item.label}</option>)}</select></label>
+    {form.variantOptions.length > 1 ? <label>Premises<select disabled={busy} value={form.variantId} onChange={(event) => void load(selected, event.target.value)}>{form.variantOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label> : null}
+    <fieldset disabled={busy || !canAuthor}>
       <legend>Master version {form.version}{dirty ? " | Unsaved changes" : ""}</legend>
       <small>New records and unsigned drafts use it when opened; signed and submitted records stay locked to what was agreed.</small>
-      {form.variantOptions.length > 1 ? <label>Premises<select value={form.variantId} onChange={(event) => void load(selected, event.target.value)}>{form.variantOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label> : null}
       <label>Form title<input value={form.title} maxLength={300} onChange={(event) => { setForm({ ...form, title: event.target.value }); setDirty(true); }} /></label>
-      <label>Question<select value={question} onChange={(event) => setQuestion(Number(event.target.value))}>{form.fields.map((item, index) => <option key={item.key} value={index}>{index + 1}. {item.section}: {item.label}</option>)}</select></label>
       {field.presentation === "derived" ? <p role="note"><strong>Filled automatically by TLink.</strong> The field app displays this as recorded job, customer, business, Team profile, document-delivery or signature data. The tradie is not asked to enter it.</p> : null}
       {field.presentation === "prefilled" ? <p role="note"><strong>Prefilled by TLink and editable in the field.</strong> The assigned worker or business profile supplies the starting value. The tradie can correct it when another licensed role holder performed that part of the work.</p> : null}
       {sourcePlacementControlled ? <p role="note"><strong>This evidence question is governed by its regulator requirement.</strong> Its wording, section, timing, evidence type, mandatory status and location rule stay linked to the requirement. Add an optional question if Creditex needs extra information.</p> : null}
@@ -347,7 +354,9 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true }: {
       })}<button type="button" onClick={addDeclaration}>Add declaration</button></details>
       <details><summary>Regulator sources and review notes</summary>{form.sources.map((source) => <p key={source.url}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a></p>)}{form.reviewNotes.map((note, index) => <p key={index}>{note}</p>)}</details>
       <button type="button" disabled={!dirty} onClick={() => void save()}>{busy ? "Saving..." : "Save and publish master"}</button>
-    </fieldset> : null}
+    </fieldset></div>
+    <CreditexFormPhonePreview key={`${form.activityTemplateId}:${form.variantId}`} form={form} canEdit={canAuthor} selectedFieldKey={field.key} onSelectField={(key) => { const index = form.fields.findIndex((item) => item.key === key); if (index >= 0) setQuestion(index); }} />
+    </div> : null}
     {records.length ? <table><thead><tr><th>Field record</th><th>Activity</th><th>Submitted</th><th>Job</th><th>Report</th></tr></thead><tbody>{records.map((record) => <tr key={record.id}><td>{record.recordNumber}</td><td>{record.form.title}</td><td>{record.submittedAt}</td><td>{record.workOrderId}</td><td><button type="button" disabled={busy} onClick={() => void viewReport(record.id)}>View report</button></td></tr>)}</tbody></table> : null}
   </section>;
 }

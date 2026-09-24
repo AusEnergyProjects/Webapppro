@@ -519,6 +519,30 @@ test("named Creditex field-master editors can author without governed-review per
   }
 });
 
+test("master previews accept read-only Creditex members without permitting write or another organisation", async () => {
+  let identity = { uid: "viewer", organisationId: "creditex-a", organisationCode: "CREDITEX-AU", role: "auditor", email: "info@creditex.example", displayName: "Creditex Office" };
+  let allowedRoles;
+  const masterActor = sourceFunction(read("../src/app/api/trade-activity-forms/route.ts"), "masterActor", {
+    canEditCreditexFieldMasters,
+    getD1: () => ({}),
+    requireComplianceAccess: async (_request, options) => {
+      allowedRoles = options.allowedRoles;
+      if (!allowedRoles.includes(identity.role)) throw new Error("ROLE_DENIED");
+      return identity;
+    },
+  });
+  const request = new Request("https://example.test/api/trade-activity-forms");
+  for (const role of ["auditor", "admin", "case_manager", "reviewer"]) {
+    identity = { ...identity, role };
+    assert.deepEqual(await masterActor(request, "creditex", true), { uid: "viewer", organisationId: "creditex-a" });
+    assert.ok(allowedRoles.includes("auditor"));
+    await assert.rejects(masterActor(request, "creditex"), /ROLE_DENIED|ACTIVITY_AUTHOR_REQUIRED/);
+  }
+  identity = { ...identity, organisationCode: "OTHER-PROVIDER" };
+  await assert.rejects(masterActor(request, "creditex", true), /ACTIVITY_AUTHOR_REQUIRED/);
+  await assert.rejects(masterActor(request, "other", true), /ACTIVITY_AUTHOR_REQUIRED/);
+});
+
 test("records cannot be opened or read across business or assigned-worker boundaries", async () => {
   const { database, server, access } = fixture();
   try {

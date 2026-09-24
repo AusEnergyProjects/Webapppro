@@ -62,6 +62,8 @@
 .claimFacts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; gap: .85rem; }
 .claimFacts dt { font-size: .73rem; color: var(--registry-muted); }.claimFacts dd { margin: .2rem 0 0; font-size: .88rem; font-weight: 650; color: var(--registry-ink); overflow-wrap: anywhere; }
 .connectionNotice { padding: .8rem; border-radius: 8px; background: var(--registry-raised); font-size: .82rem; }
+.nextStep { display: grid; gap: .85rem; padding: 1rem; background: var(--registry-raised); border: 1px solid var(--registry-line); border-left: 3px solid var(--registry-accent); border-radius: 10px; }
+.nextStep > div:first-child { display: grid; gap: .3rem; }.nextStep p { font-size: .8rem; }
 .reference { overflow-wrap: anywhere; font-size: .8rem; }
 .subsection { display: grid; gap: .7rem; padding-top: 1rem; border-top: 1px solid var(--registry-line); }
 .details { border: 1px solid var(--registry-line); border-radius: 10px; padding: .9rem; min-width: 0; }.details > summary { color: var(--registry-ink); font-size: .88rem; font-weight: 650; cursor: pointer; min-height: 28px; }.details[open] > summary { margin-bottom: .65rem; }.details > p { font-size: .82rem; }

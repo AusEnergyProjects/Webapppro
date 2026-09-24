@@ -104,14 +104,15 @@ function mergeApprovedProductOptions(results: readonly { facets: { brands: { val
   }
   return [...merged.values()].sort((left, right) => left.label.localeCompare(right.label) || left.value.localeCompare(right.value));
 }
-async function masterActor(request: Request, mode: string) {
+async function masterActor(request: Request, mode: string, readOnly = false) {
   if (mode === "admin") {
     const actor = await requireAdminIdentity(request, ["owner", "admin"]);
     return { uid: actor.uid, organisationId: await resolveActiveCreditexOfficialSourceOrganisation(getD1()) };
   }
   if (mode !== "creditex") throw new Error("ACTIVITY_AUTHOR_REQUIRED");
-  const actor = await requireComplianceAccess(request, { allowedRoles: ["admin", "case_manager", "reviewer"] }, getD1());
-  if (!canEditCreditexFieldMasters(actor)) throw new Error("ACTIVITY_AUTHOR_REQUIRED");
+  const actor = await requireComplianceAccess(request, { allowedRoles: readOnly ? ["admin", "case_manager", "reviewer", "auditor"] : ["admin", "case_manager", "reviewer"] }, getD1());
+  if (actor.organisationCode.trim().toUpperCase() !== "CREDITEX-AU"
+    || (!readOnly && !canEditCreditexFieldMasters(actor))) throw new Error("ACTIVITY_AUTHOR_REQUIRED");
   return { uid: actor.uid, organisationId: actor.organisationId };
 }
 
@@ -243,7 +244,7 @@ export async function GET(request: Request) {
     if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
     if (query.has("consumerDocument")) return bytesResponse(await readActivityConsumerDocument(query.get("consumerDocument") || ""));
     if (query.get("view") === "masters" || query.get("view") === "review_queue") {
-      const actor = await masterActor(request, query.get("actorMode") || "");
+      const actor = await masterActor(request, query.get("actorMode") || "", query.get("view") === "masters");
       if (query.get("view") === "review_queue") {
         const records = await getD1().prepare(`SELECT payload FROM trade_activity_field_records WHERE organisation_id = ? AND status = 'submitted_for_creditex_review' ORDER BY submitted_at DESC LIMIT 100`).bind(actor.organisationId).all<{ payload: string }>();
         return adminJson({ ok: true, records: records.results.map((row) => activityPresentation(JSON.parse(row.payload))) });

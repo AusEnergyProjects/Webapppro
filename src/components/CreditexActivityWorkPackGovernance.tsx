@@ -1058,6 +1058,8 @@ export function CreditexActivityWorkPackGovernance({
   sourceBatchEndpoint,
   canCaptureSource,
   fieldMasterCanAuthor,
+  onManageFormAccess,
+  onFieldFormDirtyChange,
   onDownloadSource,
   contextLabel,
 }: {
@@ -1067,6 +1069,8 @@ export function CreditexActivityWorkPackGovernance({
   sourceBatchEndpoint: string;
   canCaptureSource: boolean;
   fieldMasterCanAuthor?: boolean;
+  onManageFormAccess?: () => void;
+  onFieldFormDirtyChange?: (dirty: boolean) => void;
   onDownloadSource: (
     artifactId: string,
     originalFileName: string,
@@ -1436,7 +1440,7 @@ export function CreditexActivityWorkPackGovernance({
 
   return (
     <section className={styles.workspace} aria-label={`${contextLabel} compliance form governance`}>
-      <CreditexFieldFormMasters api={api} actorMode={endpoint.startsWith('/api/admin/') ? 'admin' : 'creditex'} canAuthor={fieldMasterCanAuthor ?? snapshot.access.canAuthor} />
+      <CreditexFieldFormMasters api={api} actorMode={endpoint.startsWith('/api/admin/') ? 'admin' : 'creditex'} canAuthor={fieldMasterCanAuthor ?? snapshot.access.canAuthor} onManageAccess={onManageFormAccess} onDirtyChange={onFieldFormDirtyChange} />
 
       <details className={styles.advancedGovernance}>
         <summary><strong>Source review &amp; publication rules</strong><span>{pendingCalculatorReviews.length ? `${pendingCalculatorReviews.length} calculations awaiting review · ` : ""}Official documents, governed versions and calculation approvals</span></summary>

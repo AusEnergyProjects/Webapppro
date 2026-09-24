@@ -103,7 +103,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /## Previous implementation: accounting export correctness and provider activation/);
   assert.match(releaseTruth, /## Previous implementation: lead access and technician service regions/);
   assert.match(releaseTruth, /## Historical public production release: predictive navigation and exact provenance/);
-  assert.match(releaseTruth, /Deployment baseline verified: Sites 613, source `0473715427d8d41718421e328695f9eafe06ada5`/);
+  assert.match(releaseTruth, /Deployment baseline verified: Sites 614, source `9b76d686fcbe7f49c2bae429b70c3e62910dd21e`/);
   assert.match(releaseTruth, /4908a1467d90b2fff57b70517fad5e41e18e12b0/);
   assert.match(releaseTruth, /Sites version 499/);
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_a43c371ac43c8191ad99a0f4189e7508/);

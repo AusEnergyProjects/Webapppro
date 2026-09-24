@@ -244,7 +244,7 @@ test('the native wizard uses Expo 57 File parts and hierarchical back navigation
 
 test('approved-product metadata drives the brand and filtered model choices for every supported activity', () => {
   const wizard = read('../src/components/ActivityFieldFormWizard.tsx');
-  const library = read('../../src/lib/trade-activity-forms-library.ts');
+  const library = read('../../src/lib/trade-activity-field-policy.ts');
   assert.match(wizard, /new URLSearchParams\(\{ recordId, view: 'official_products' \}\)/);
   assert.match(wizard, /field\.approvedProduct\?\.role === 'brand'/);
   assert.match(wizard, /field\.approvedProduct\?\.role === 'model'/);
@@ -264,7 +264,8 @@ test('approved-product metadata drives the brand and filtered model choices for 
 
 test('one signature page per signer covers every applicable declaration after the field pages', () => {
   const wizard = read('../src/components/ActivityFieldFormWizard.tsx');
-  const { streamlinedActivityPages } = loadFunctions(wizard, ['streamlinedActivityPages']);
+  assert.match(wizard, /import \{[^\n]*streamlinedActivityPages[^\n]*from '\.\.\/\.\.\/\.\.\/src\/lib\/trade-activity-form-flow'/);
+  const { streamlinedActivityPages } = flowExports;
   const pages = [
     { key: 'before-fields', kind: 'fields', phase: 'before', section: 'Before', fields: [], legacyStepKeys: ['before-fields'] },
     { key: 'installer-a', kind: 'signature', phase: 'before', declaration: { key: 'installer-a', role: 'technician' }, legacyStepKeys: ['installer-a'] },

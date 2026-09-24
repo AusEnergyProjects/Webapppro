@@ -448,8 +448,7 @@ type WorkspaceArea =
   | "submissions"
   | "certificates"
   | "reports"
-  | "rules"
-  | "access";
+  | "rules";
 
 type CreditexOperationsWorkspaceProps = {
   session: WorkspaceSession;
@@ -501,7 +500,6 @@ const AREAS: Array<{
     label: "Government activity sources",
     shortLabel: "Sources",
   },
-  { id: "access", label: "Access", shortLabel: "Access" },
 ];
 
 const EMPTY_OPERATIONS: OperationsSnapshot = {
@@ -2235,15 +2233,6 @@ export function CreditexOperationsWorkspace({
     return () => window.clearTimeout(timeout);
   }, [loadOperations]);
 
-  useEffect(() => {
-    if (area !== "access") return;
-    if (access.loaded) return;
-    const timeout = window.setTimeout(() => {
-      void loadAccess();
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, [access.loaded, area, loadAccess]);
-
   const operationalCases = operations.loaded
     ? operations.cases
     : seedCases.map(seedCase);
@@ -2363,7 +2352,7 @@ export function CreditexOperationsWorkspace({
     onRefreshSeedCases();
     await loadOperations();
     if (selectedCase?.id) await loadOperations(selectedCase.id);
-    if (area === "access") await loadAccess();
+    if (session.role === "admin") await loadAccess();
   }
 
   function applyFilters(nextFilters = draftFilters) {
@@ -3259,8 +3248,7 @@ export function CreditexOperationsWorkspace({
                           </button>
                           {!assignmentRoleMembers.length && (
                             <p className={`${styles.formNote} ${styles.formWide}`}>
-                              No compatible active members were returned by the
-                              admin access API.
+                              {loadingAccess ? "Loading team members..." : accessError || "No compatible active members. Invite a colleague through Team access."}
                             </p>
                           )}
                         </form>
@@ -4872,15 +4860,6 @@ export function CreditexOperationsWorkspace({
             </section>
           )}
 
-          {area === "access" && (
-            <AccessView
-              session={session}
-              access={access}
-              loading={loadingAccess}
-              error={accessError}
-              onRefresh={() => void loadAccess()}
-            />
-          )}
         </div>
       </div>
       <details className={styles.programShortcuts}><summary>Program shortcuts</summary><nav
@@ -5855,6 +5834,24 @@ function DisabledPanel({
   );
 }
 
+export function CreditexTeamAccess({ session }: { session: WorkspaceSession }) {
+  const [access, setAccess] = useState<AccessSnapshot>(EMPTY_ACCESS);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    if (session.role !== "admin") return;
+    setLoading(true); setError("");
+    try { setAccess(parseAccess(await authenticatedJson("/api/creditex/access"))); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : "Team access could not be loaded."); }
+    finally { setLoading(false); }
+  }, [session.role]);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [load]);
+  return <div className={styles.workspace}><AccessView session={session} access={access} loading={loading} error={error} onRefresh={() => void load()} /></div>;
+}
+
 function AccessView({
   session,
   access,
@@ -5913,7 +5910,7 @@ function AccessView({
     const created = await accessAction(
       "create_invitation",
       form,
-      "The named invitation record was created. Email delivery is not connected, so no invitation email was sent.",
+      `Invitation ready for ${form.displayName}. Give them the Creditex sign-in link and ask them to use ${form.email}. No invitation email was sent.`,
     );
     if (created) {
       setForm({ displayName: "", email: "", role: "reviewer" });
@@ -5959,9 +5956,9 @@ function AccessView({
     <section aria-labelledby="operations-access-title">
       <div className={styles.sectionHeader}>
         <div>
-          <h3 id="operations-access-title">Access</h3>
+          <h3 id="operations-access-title">Team access</h3>
           <p>
-            Verified Firebase identities and named Creditex memberships only.
+            Invite your team to edit and preview activity forms using their own accounts.
           </p>
         </div>
         {session.role === "admin" && (
@@ -5976,6 +5973,12 @@ function AccessView({
         )}
       </div>
       <div className={styles.accessPolicy}>
+        <strong>Ready to edit in three steps</strong>
+        <ol><li>Invite a named colleague as Reviewer, Case manager or Administrator below.</li><li>Give them <a href="/creditex/compliance" target="_blank" rel="noreferrer">the Creditex sign-in link</a>. They can use Continue with Google or an existing TLink login with the exact invited email, then complete the account security steps shown.</li><li>They can open Activity forms, choose Edit, test their changes in the phone and save the master.</li></ol>
+        <p>Reviewer is the default for form editors. Auditors can preview forms but cannot publish changes. Official source approvals remain separate.</p>
+      </div>
+      <details className={styles.accessPolicy}>
+        <summary>Initial administrator setup</summary>
         <span>Initial owner invitation</span>
         <strong>
           {access.ownerEmail || "info@ausenergyassessments.com"}
@@ -5987,7 +5990,7 @@ function AccessView({
           at least two named administrators are active, suspend the bootstrap
           mailbox membership below.
         </p>
-      </div>
+      </details>
       {session.role !== "admin" && (
         <EmptyState>
           Your {readable(session.role)} role can use operational work areas but
@@ -6182,11 +6185,6 @@ function AccessView({
           </div>
         </div>
       )}
-      <DisabledPanel
-        title="Private identity import"
-        reason="Bulk access imports and shared credentials are not permitted. Named invitations must be created through an approved local access action."
-        action="Import users"
-      />
     </section>
   );
 }
