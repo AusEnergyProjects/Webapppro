@@ -40,6 +40,11 @@
 .masterEditor { display: grid; gap: 14px; min-width: 0; }
 .masterSaveBar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px; background: var(--portal-soft, #edf7f3); border: 1px solid var(--portal-line, #c9ded7); border-radius: 12px; }
 .masterSaveBar > span { font-size: .82rem; font-weight: 750; }
+.masterRowActions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.masterDraftList { display: grid; gap: 10px; padding: 16px; margin: 14px 0; border: 1px solid var(--portal-line, #c9ded7); border-radius: 12px; background: var(--portal-soft, #edf7f3); }
+.masterDraftList > h3, .masterDraftList > p { margin: 0; }
+.masterDraftList > article { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px; border: 1px solid var(--portal-line, #c9ded7); border-radius: 10px; background: var(--portal-raised, #fff); }
+.masterDraftList > article > div { display: grid; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
 .masterAccess { padding: 14px 16px; border: 1px solid var(--portal-line, #c9ded7); border-radius: 12px; background: var(--portal-soft, #edf7f3); }
 .masterAccess p { margin: 8px 0 0; font-size: .85rem; line-height: 1.6; }
 @media (max-width: 1120px) { .masterEditingLayout { grid-template-columns: minmax(0, 1fr); } }
@@ -71,7 +76,7 @@
 .masterRow:hover { background: var(--portal-raised, #f3f7f8); }
 .masterEmpty { padding: 18px; border: 1px dashed var(--portal-line-strong, #b9d1cd); border-radius: 10px; }
 @media (max-width: 720px) { .masterFilters { grid-template-columns: 1fr; } }
-@media (max-width: 480px) { .masterGroup > header { align-items: start; flex-direction: column; gap: 4px; } .masterRow { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 12px; } .masterRow strong { grid-column: 1; } .masterRow button { grid-column: 2; grid-row: 1 / span 2; } }
+@media (max-width: 480px) { .masterGroup > header { align-items: start; flex-direction: column; gap: 4px; } .masterRow { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 12px; } .masterRow strong { grid-column: 1; } .masterRow > .masterRowActions { grid-column: 2; grid-row: 1 / span 2; flex-direction: column; align-items: stretch; } }
 
 .heading,
 .activityHeading,

@@ -1069,8 +1069,8 @@ test("Creditex program rails remain reachable and critical audit text is legible
 test("named member access can be changed without enabling shared team credentials", () => {
   assert.match(operations, /"update_member_access"/);
   assert.match(operations, /Apply access change/);
-  assert.match(operations, /at least two named administrators are active/);
-  assert.match(operations, /suspend the bootstrap[\s\S]*mailbox membership/i);
+  assert.match(operations, /Keep at least[\s\S]*two named administrators for continuity/);
+  assert.match(operations, /confirmed named owner can[\s\S]*keep using this account as their individual manager login/);
   assert.match(operations, /"revoke_invitation"/);
   assert.match(operations, /Shared or role-based mailboxes are rejected/);
 });

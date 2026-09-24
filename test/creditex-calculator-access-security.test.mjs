@@ -5,6 +5,7 @@ import { errors } from "jose";
 import ts from "typescript";
 import * as myobSecurityAudit from "../src/lib/myob-security-audit.ts";
 import * as firebaseMfa from "../src/lib/firebase-mfa.ts";
+import * as namedOwner from "../src/lib/creditex-named-owner-server.ts";
 
 import {
   FirebaseAuthError,
@@ -26,6 +27,7 @@ function loadTypescriptModule(path, mocks = {}) {
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
     if (specifier === "./firebase-mfa") return firebaseMfa;
+    if (specifier === "./creditex-named-owner-server") return namedOwner;
     if (specifier === "./myob-security-audit") return myobSecurityAudit;
     if (specifier === "./trade-compliance-intent") return { CREDITEX_PARTNER_ORGANISATION_CODE: "CREDITEX-AU" };
     if (specifier === "./firebase-mfa.ts") return firebaseMfa;

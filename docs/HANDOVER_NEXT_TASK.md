@@ -1,5 +1,22 @@
 # Next task handover
 
+Status: named Creditex manager confirmation, saved draft copies and visible signature authoring are in release validation. Baseline Sites 615 is live.
+Prepared: 24 September 2026
+
+## Active contract: named Creditex manager and editable draft forms, 24 September 2026
+
+Outcome: James Morris uses his existing verified info@ausenergyassessments.com owner login as Creditex's named administrator, manages individual staff access, and edits/test-signs saved copies of activity forms before deliberately replacing the published form.
+
+Owner: coordinating task in C:/Webproject/aea-energy-creditex-submissions, branch codex/creditex-registry-submissions, clean base 4283cec0618b63e21f1e3726091c65485ba8cb2a (verified Sites 615). Scope is Creditex membership confirmation, master-form draft storage/publication, clear signature-item authoring and the existing phone preview. Existing regulator approvals, signed job records, other shared-mailbox identities and real regulatory transactions remain protected.
+
+Acceptance: only the explicitly authorised existing owner identity can confirm James Morris; every confirmation is audited and cannot grant independent self-review. Other staff retain individual role boundaries. A saved duplicate survives reload without changing the published master, can be previewed and revised, and replaces the master only through explicit publication with draft and master concurrency checks. Signing controls use the existing real declaration/signature workflow. Phone navigation remains free without answers. Desktop and mobile layouts remain usable.
+
+Validation: focused membership, draft permission/concurrency/publication and signing-preview tests; root typecheck/lint, full required security/migration checks and production build; exact GitHub/Sites source verification and affected live flows. Stop for missing external authority, authentication or a materially different signature-document contract. Never infer that a normal document upload has been electronically signed.
+
+Implementation: additive migration 0190 stores draft copies independently from immutable masters. Exact owner/claimed-invitation preflight passed against live read-only records; activation still requires the authenticated confirmation action. Typecheck and full ESLint passed; the full validation stops at the existing expired source reviews. Full suite: 5,293 passed, 11 skipped, eight known baseline assertions, eight directly stale copy/migration/status assertions subsequently corrected and passed, and one worker access violation whose isolated rerun passed. Access/security checks passed 140/140, draft API checks 12/12, final editor/signing/identity/release checks 54/54. All 190 migrations replayed successfully; integration, PDF, source-custody and remaining required audit commands passed. The production build passed with exact migration inventory and public performance budgets. A separate lint worker crash passed when rerun serially. Synthetic browser flows passed desktop/mobile and day/night; final deployment and authenticated activation are recorded by the coordinator.
+
+## Previous milestone
+
 Status: Creditex registry operations published as Sites 614; form preview, named-team access and submission usability follow-up in validation. Direct regulator transmission remains dependent on approved interfaces and delegated access.
 Prepared: 24 September 2026
 

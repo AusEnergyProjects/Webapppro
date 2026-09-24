@@ -35,19 +35,23 @@ function previewAnswers(form: ActivityForm, answers: ActivityAnswers): ActivityA
   }));
 }
 
-export function CreditexFormPhonePreview({ form: sourceForm, selectedFieldKey, onSelectField, canEdit = true }: {
+export function CreditexFormPhonePreview({ form: sourceForm, selectedFieldKey, selectedDeclarationKey, onSelectField, onSelectDeclaration, canEdit = true }: {
   form: ActivityForm;
   selectedFieldKey?: string;
+  selectedDeclarationKey?: string;
   onSelectField?: (key: string) => void;
+  onSelectDeclaration?: (key: string) => void;
   canEdit?: boolean;
 }) {
   const form = useMemo(() => activityFieldWorkerForm(sourceForm), [sourceForm]);
+  const selectedKey = selectedDeclarationKey || selectedFieldKey || "";
+  const selection = selectedDeclarationKey ? `declaration:${selectedDeclarationKey}` : `field:${selectedFieldKey || ""}`;
   const [device, setDevice] = useState<"iphone" | "galaxy">("iphone");
   const [draft, setDraft] = useState<ActivityAnswers>({});
   const [evidence, setEvidence] = useState<Record<string, ActivityField["type"] | undefined>>({});
   const [signatures, setSignatures] = useState<Record<string, TestSignature>>({});
-  const [pageKey, setPageKey] = useState(selectedFieldKey || "");
-  const [trackedField, setTrackedField] = useState(selectedFieldKey);
+  const [pageKey, setPageKey] = useState(selectedKey);
+  const [trackedSelection, setTrackedSelection] = useState(selection);
   const [inspect, setInspect] = useState(false);
   const [showValidation, setShowValidation] = useState(false);
   const scroll = useRef<HTMLDivElement>(null);
@@ -56,24 +60,27 @@ export function CreditexFormPhonePreview({ form: sourceForm, selectedFieldKey, o
   const pages = streamlinedActivityPages(activityWizardPages(form, answers));
   const page = activityWizardPageForStepKey(pages, pageKey) || pages[0];
   const pageIndex = pages.findIndex((item) => item.key === page.key);
-  const selectedField = form.fields.find((field) => field.key === selectedFieldKey)
+  const selectedField = selectedDeclarationKey ? undefined : form.fields.find((field) => field.key === selectedFieldKey)
     || sourceForm.fields.find((field) => field.key === selectedFieldKey);
-  const selectedPage = selectedFieldKey ? activityWizardPageForStepKey(pages, selectedFieldKey) : undefined;
-  if (trackedField !== selectedFieldKey) {
-    setTrackedField(selectedFieldKey);
-    setPageKey(selectedFieldKey || "");
+  const selectedDeclaration = form.declarations.find((declaration) => declaration.key === selectedDeclarationKey);
+  const selectedPage = selectedKey ? activityWizardPageForStepKey(pages, selectedKey) : undefined;
+  if (trackedSelection !== selection) {
+    setTrackedSelection(selection);
+    setPageKey(selectedKey);
     setInspect(false);
     setShowValidation(false);
   }
-  useEffect(() => { scroll.current?.scrollTo({ top: 0 }); }, [page.key, selectedFieldKey, inspect]);
+  useEffect(() => { scroll.current?.scrollTo({ top: 0 }); }, [page.key, selection, inspect]);
 
   const fields = pages.flatMap((item) => item.kind === "fields" ? item.fields : []);
   const required = fields.filter((field) => field.required);
   const missing = (field: ActivityField) => field.type === "photo" || field.type === "document"
     ? evidence[field.key] !== field.type : !validAnswer(field, answers[field.key]) || (field.requiredValue !== undefined && answers[field.key] !== field.requiredValue);
   const missingFields = required.filter(missing);
-  const declarations = page.kind === "signature" ? form.declarations.filter((item) => page.legacyStepKeys.includes(item.key)) : [];
-  const signature = signatures[page.key] || emptySignature;
+  const declarations = inspect && selectedDeclaration ? [selectedDeclaration]
+    : !inspect && page.kind === "signature" ? form.declarations.filter((item) => page.legacyStepKeys.includes(item.key)) : [];
+  const signatureKey = inspect && selectedDeclaration ? `inspection:${selectedDeclaration.key}` : page.key;
+  const signature = signatures[signatureKey] || emptySignature;
   const signatureScope = JSON.stringify([form, answers, evidence]);
   const signatureComplete = (key: string) => {
     const value = signatures[key];
@@ -91,7 +98,7 @@ export function CreditexFormPhonePreview({ form: sourceForm, selectedFieldKey, o
   const repeatLabel = activityRepeatItemLabel(repeatGroup);
   const visibleFields: ExpandedActivityField[] = inspect && selectedField
     ? [{ ...selectedField, baseKey: selectedField.key, repeatIndex: 0 }]
-    : page.kind === "fields" ? page.fields : [];
+    : !inspect && page.kind === "fields" ? page.fields : [];
 
   function answer(field: ActivityField, value: ActivityAnswer) {
     setDraft((current) => ({ ...previewAnswers(form, current), [field.key]: value }));
@@ -105,10 +112,10 @@ export function CreditexFormPhonePreview({ form: sourceForm, selectedFieldKey, o
     if (nextPage) navigate(nextPage.key);
   }
   function reset() {
-    setDraft({}); setEvidence({}); setSignatures({}); setPageKey(selectedFieldKey || ""); setInspect(false); setShowValidation(false);
+    setDraft({}); setEvidence({}); setSignatures({}); setPageKey(selectedKey); setInspect(false); setShowValidation(false);
   }
   function updateSignature(patch: Partial<TestSignature>) {
-    setSignatures({ ...signatures, [page.key]: { ...signature, ...patch, scope: signatureScope } });
+    setSignatures({ ...signatures, [signatureKey]: { ...signature, ...patch, scope: signatureScope } });
   }
   function renderField(field: ExpandedActivityField) {
     const inputId = `${id}-${field.key}`;
@@ -143,6 +150,7 @@ export function CreditexFormPhonePreview({ form: sourceForm, selectedFieldKey, o
     <div className={styles.devicePicker} role="group" aria-label="Preview phone style"><button type="button" aria-pressed={device === "iphone"} onClick={() => setDevice("iphone")}>iPhone</button><button type="button" aria-pressed={device === "galaxy"} onClick={() => setDevice("galaxy")}>Samsung Galaxy</button></div>
     <p className={styles.caption}>Unsaved edits appear immediately. Test answers stay in this preview.</p>
     {selectedField && !selectedPage && <div className={styles.inspectionNotice}><p>{selectedField.presentation === "derived" ? "The selected field is recorded automatically and has no question screen." : "The selected question is hidden by its current routing or profile rules."}</p><button type="button" onClick={() => setInspect(!inspect)}>{inspect ? "Return to form flow" : "Inspect selected question"}</button></div>}
+    {selectedDeclaration && !selectedPage && <div className={styles.inspectionNotice}><p>The selected signing item is hidden by its current routing rules.</p><button type="button" onClick={() => setInspect(!inspect)}>{inspect ? "Return to form flow" : "Inspect selected signing item"}</button></div>}
     <div className={`${styles.phone} ${device === "galaxy" ? styles.galaxy : styles.iphone}`}>
       <div className={styles.screen}>
         <div className={styles.statusBar} aria-hidden="true"><span>9:41</span><i /><span>▮▮▮ ▰</span></div>
@@ -151,11 +159,11 @@ export function CreditexFormPhonePreview({ form: sourceForm, selectedFieldKey, o
         <div className={styles.pagePicker}><label htmlFor={`${id}-page`}>Jump to a section</label><select id={`${id}-page`} value={page.key} onChange={(event) => navigate(event.target.value)}>{pages.map((item, index) => <option key={item.key} value={item.key}>{index + 1}. {item.kind === "fields" ? `${item.phase === "before" ? "Before" : "After"}: ${item.section}${item.fields[0]?.repeatGroup ? ` · Item ${item.fields[0].repeatIndex + 1}` : ""}` : item.kind === "signature" ? `${item.declaration.role === "technician" ? "Installer" : item.declaration.role === "customer" ? "Customer" : "Other signer"} declarations` : "Review"}</option>)}</select></div>
         <div className={styles.body} ref={scroll}>
           <div className={styles.progress}><span>Form progress <b>{complete}/{total}</b></span><progress aria-label="Test form progress" value={complete} max={total || 1} /></div>
-          {inspect ? <p className={styles.notice}>Question inspection. Routing is temporarily bypassed here; return to the form to test the actual path.</p> : <div className={styles.sectionHeading}><small>{page.kind === "fields" ? page.phase === "before" ? "BEFORE WORK" : "WORK AND COMPLETION" : "FINISH AND REVIEW"}</small><h3>{page.kind === "fields" ? page.section : page.kind === "signature" ? `${page.declaration.role === "technician" ? "Installer" : page.declaration.role === "customer" ? "Customer" : "Other signer"} declarations` : "Review your test"}</h3></div>}
+          {inspect ? <p className={styles.notice}>{selectedDeclaration ? "Signing item inspection." : "Question inspection."} Routing is temporarily bypassed here; return to the form to test the actual path.</p> : <div className={styles.sectionHeading}><small>{page.kind === "fields" ? page.phase === "before" ? "BEFORE WORK" : "WORK AND COMPLETION" : "FINISH AND REVIEW"}</small><h3>{page.kind === "fields" ? page.section : page.kind === "signature" ? `${page.declaration.role === "technician" ? "Installer" : page.declaration.role === "customer" ? "Customer" : "Other signer"} declarations` : "Review your test"}</h3></div>}
           {!inspect && page.kind !== "review" && <div className={styles.validationTools}><button type="button" onClick={() => setShowValidation(true)}>Check these answers</button><small>Next works without answers in this preview.</small></div>}
           {visibleFields.map(renderField)}
           {!inspect && page.kind === "fields" && repeatField && !repeatContinues && repeatField.repeatIndex === repeatCount - 1 && <div className={styles.repeat}><strong>{repeatCount} {repeatLabel}{repeatCount === 1 ? "" : "s"}</strong><button type="button" disabled={repeatCount >= 20} onClick={() => { setDraft({ ...answers, [`$repeat.${repeatGroup}`]: repeatCount + 1 }); setSignatures({}); navigate(`${repeatField.baseKey}[${repeatCount}]`); }}>Add another {repeatLabel}</button>{repeatCount > 1 && <button type="button" onClick={() => { setDraft(removeLastActivityRepeat(form, answers, repeatGroup)); const removedKeys = new Set(form.fields.filter((field) => field.repeatGroup === repeatGroup).map((field) => activityRepeatKey(field.key, repeatCount - 1))); setEvidence((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !removedKeys.has(key)))); setSignatures({}); navigate(repeatField.baseKey); }}>Remove last {repeatLabel}</button>}</div>}
-          {!inspect && page.kind === "signature" && <section className={styles.signature}>{declarations.map((declaration) => <article key={declaration.key}><h4>{declaration.title}</h4><p>{boundActivityDeclaration(declaration, answers)}</p></article>)}<label>Test signer name<input value={signature.name} placeholder="Example signer" onChange={(event) => updateSignature({ name: event.target.value })} /></label><label className={styles.check}><input type="checkbox" checked={signature.accepted} onChange={(event) => updateSignature({ accepted: event.target.checked })} />I have read these declarations (test only)</label><TradeWorkPackSignaturePad label="Test signature" signerName={signature.name} signerCapacity="Preview only" value={signature.strokes} onChange={(strokes) => updateSignature({ strokes })} />{showValidation && !signatureComplete(page.key) && <p className={styles.error} role="alert">Enter a test signer name, acknowledge the declarations and draw a test signature.</p>}</section>}
+          {declarations.length > 0 && <section className={styles.signature}>{declarations.map((declaration) => <article key={declaration.key} data-selected={declaration.key === selectedDeclarationKey || undefined}><h4>{declaration.title}</h4><p>{boundActivityDeclaration(declaration, answers)}</p>{onSelectDeclaration && <button type="button" className={styles.editSigningItem} onClick={() => onSelectDeclaration(declaration.key)}>{canEdit ? "Edit this signing item" : "Select this signing item"}</button>}</article>)}<label>Test signer name<input value={signature.name} placeholder="Example signer" onChange={(event) => updateSignature({ name: event.target.value })} /></label><label className={styles.check}><input type="checkbox" checked={signature.accepted} onChange={(event) => updateSignature({ accepted: event.target.checked })} />I have read these declarations (test only)</label><TradeWorkPackSignaturePad label="Test signature" signerName={signature.name} signerCapacity="Preview only" value={signature.strokes} onChange={(strokes) => updateSignature({ strokes })} />{showValidation && !signatureComplete(signatureKey) && <p className={styles.error} role="alert">Enter a test signer name, acknowledge the declarations and draw a test signature.</p>}</section>}
           {!inspect && page.kind === "review" && <section className={styles.review}><p>{missingFields.length + missingSignatures.length ? `${missingFields.length + missingSignatures.length} required items remain in this test.` : "Every visible required item is complete in this test."}</p>{missingFields.map((field) => <button key={field.key} type="button" onClick={() => navigate(field.key)}>{field.label}</button>)}{missingSignatures.map((item) => <button key={item.key} type="button" onClick={() => navigate(item.key)}>{item.kind === "signature" ? item.declaration.title : "Declaration"}</button>)}<p className={styles.notice}>Preview complete. Nothing is saved, signed or submitted to Creditex.</p><button type="button" onClick={reset}>Start a new test</button></section>}
         </div>
         <footer className={styles.footer}>{inspect ? <button type="button" onClick={() => setInspect(false)}>Return to form flow</button> : <><button type="button" disabled={pageIndex === 0} onClick={() => navigate(pages[pageIndex - 1].key)}>Back</button><span>{pageIndex + 1} / {pages.length}</span><button type="button" disabled={!nextPage} onClick={next}>Next</button></>}</footer>

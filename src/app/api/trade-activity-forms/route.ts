@@ -8,6 +8,7 @@ import { resolveActiveCreditexOfficialSourceOrganisation } from "@/lib/creditex-
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
 import { activityFieldCatalogue, activityFieldWorkerForm, applyDefaultActivityFormPolicy, defaultActivityFieldForm } from "@/lib/trade-activity-forms-library";
 import { activityCanonical, activityHash, normaliseActivityAnswers, type ActivityForm } from "@/lib/trade-activity-forms";
+import type { ActivityMasterDraft, ActivityMasterDraftSummary } from "@/lib/trade-activity-master-drafts";
 import {
   activityPresentation, activitySigningProfileSetup, saveActivitySigningProfile, changeActivityVariant, listActivityRecords, loadActivityRecord, openActivityRecord, readActivityConsumerDocument, readActivityEvidence, readActivityPdf,
   saveActivityAnswers, shareActivityReport, sharedActivityRecord, signActivityDeclaration, submitActivityRecord, uploadActivityEvidence,
@@ -21,6 +22,10 @@ const errorMessages: Record<string, [number, string]> = {
   AUTH_REQUIRED: [401, "Sign in to continue."],
   ACTIVITY_ACCESS_REQUIRED: [403, "Your Team access does not include this action."],
   ACTIVITY_AUTHOR_REQUIRED: [403, "An authorised Australian Energy Assessments or Creditex master-form login is required."],
+  ACTIVITY_MASTER_DRAFT_NOT_FOUND: [404, "This draft copy was not found in your organisation."],
+  ACTIVITY_DRAFT_REVISION_CONFLICT: [409, "This draft copy changed in another session. Your unsaved edits are retained. Reopen the saved draft before trying again."],
+  ACTIVITY_MASTER_CHANGED: [409, "The published form changed after this copy was made. Keep this draft for reference and make a new copy of the current published form."],
+  ACTIVITY_MASTER_INTEGRITY_FAILED: [409, "This form could not pass its saved integrity check. Ask an administrator to review it."],
   ACTIVITY_RECORD_NOT_FOUND: [404, "This activity form was not found."],
   JOB_NOT_FOUND: [404, "Job not found."], JOB_NOT_ASSIGNED: [403, "This job is assigned to another worker."],
   ACTIVITY_INTENT_NOT_ACTIVE: [409, "This activity is no longer part of the job."],
@@ -227,6 +232,125 @@ function validateMaster(raw: unknown, expected: ActivityForm): ActivityForm {
   return { ...form, id: expected.id, version: expected.version, variantOptions: expected.variantOptions };
 }
 
+type DraftRow = {
+  id: string; activity_template_id: string; variant_id: string; revision: number; base_master_version: number;
+  base_form_sha256: string; form_json: string; form_sha256: string; status: ActivityMasterDraftSummary["status"];
+  created_at: string; updated_at: string;
+};
+async function currentMaster(database: D1Database, organisationId: string, templateId: string, variantId: string) {
+  const builtIn = defaultActivityFieldForm(templateId, variantId);
+  const saved = await database.prepare(`SELECT form_json, form_sha256, version FROM trade_activity_field_masters
+    WHERE organisation_id = ? AND activity_template_id = ? AND variant_id = ? ORDER BY version DESC LIMIT 1`)
+    .bind(organisationId, builtIn.activityTemplateId, builtIn.variantId).first<{ form_json: string; form_sha256: string; version: number }>();
+  const stored: ActivityForm = saved ? JSON.parse(saved.form_json) : builtIn;
+  if (saved && activityHash(stored) !== saved.form_sha256) throw new Error("ACTIVITY_MASTER_INTEGRITY_FAILED");
+  return { builtIn, version: saved?.version || 0, form: applyDefaultActivityFormPolicy(stored, builtIn) };
+}
+async function draftRow(database: D1Database, organisationId: string, id: string) {
+  const draft = await database.prepare(`SELECT id, activity_template_id, variant_id, revision, base_master_version,
+    base_form_sha256, form_json, form_sha256, status, created_at, updated_at
+    FROM trade_activity_field_master_drafts WHERE id = ? AND organisation_id = ?`)
+    .bind(id, organisationId).first<DraftRow>();
+  if (!draft) throw new Error("ACTIVITY_MASTER_DRAFT_NOT_FOUND");
+  const form: ActivityForm = JSON.parse(draft.form_json);
+  if (activityHash(form) !== draft.form_sha256) throw new Error("ACTIVITY_MASTER_INTEGRITY_FAILED");
+  return { draft, form };
+}
+async function readMasterDraft(database: D1Database, organisationId: string, id: string): Promise<ActivityMasterDraft> {
+  const { draft, form } = await draftRow(database, organisationId, id);
+  const current = await currentMaster(database, organisationId, draft.activity_template_id, draft.variant_id);
+  return { id: draft.id, activityTemplateId: draft.activity_template_id, variantId: draft.variant_id,
+    title: form.title, revision: draft.revision, baseMasterVersion: draft.base_master_version, status: draft.status,
+    createdAt: draft.created_at, updatedAt: draft.updated_at, form, currentMasterVersion: current.version,
+    baseIsCurrent: current.version === draft.base_master_version && activityHash(current.form) === draft.base_form_sha256 };
+}
+async function listMasterDrafts(database: D1Database, organisationId: string) {
+  const rows = await database.prepare(`SELECT id, activity_template_id activityTemplateId, variant_id variantId,
+    json_extract(form_json, '$.title') title, revision, base_master_version baseMasterVersion,
+    status, created_at createdAt, updated_at updatedAt
+    FROM trade_activity_field_master_drafts WHERE organisation_id = ? AND status = 'draft'
+    ORDER BY updated_at DESC, id DESC`).bind(organisationId).all<ActivityMasterDraftSummary>();
+  return rows.results;
+}
+function draftAudit(database: D1Database, actor: { uid: string; organisationId: string }, mode: string,
+  id: string, event: string, revision: number, now: string) {
+  // The preceding insert/update must have changed one row. A failed CAS records no successful audit event.
+  return database.prepare(`INSERT INTO compliance_audit_events
+    (id, organisation_id, actor_type, actor_uid, event_type, target_type, target_id, summary, metadata, created_at)
+    SELECT ?, ?, ?, ?, ?, 'trade_activity_master_draft', ?, ?, ?, ? WHERE changes() = 1`)
+    .bind(crypto.randomUUID(), actor.organisationId, mode === "admin" ? "platform" : "compliance", actor.uid,
+      `activity_master_draft.${event}`, id, `Activity form draft ${event}.`, JSON.stringify({ revision }), now);
+}
+async function mutateMasterDraft(database: D1Database, actor: { uid: string; organisationId: string }, body: Row) {
+  const action = str(body.action); const now = new Date().toISOString(); const mode = str(body.actorMode);
+  if (action === "create_master_draft") {
+    const current = await currentMaster(database, actor.organisationId, str(body.activityTemplateId), str(body.variantId));
+    if (body.expectedVersion !== current.version) throw new Error("ACTIVITY_MASTER_CHANGED");
+    const id = crypto.randomUUID(); const hash = activityHash(current.form);
+    const result = await database.batch([
+      database.prepare(`INSERT INTO trade_activity_field_master_drafts
+        (id, organisation_id, activity_template_id, variant_id, revision, base_master_version, base_form_sha256,
+         form_json, form_sha256, status, created_by_uid, updated_by_uid, created_at, updated_at)
+        SELECT ?, ?, ?, ?, 1, ?, ?, ?, ?, 'draft', ?, ?, ?, ?
+        WHERE COALESCE((SELECT MAX(version) FROM trade_activity_field_masters
+          WHERE organisation_id = ? AND activity_template_id = ? AND variant_id = ?), 0) = ?`)
+        .bind(id, actor.organisationId, current.form.activityTemplateId, current.form.variantId, current.version, hash,
+          activityCanonical(current.form), hash, actor.uid, actor.uid, now, now,
+          actor.organisationId, current.form.activityTemplateId, current.form.variantId, current.version),
+      draftAudit(database, actor, mode, id, "created", 1, now),
+    ]);
+    if (result[0].meta.changes !== 1) throw new Error("ACTIVITY_MASTER_CHANGED");
+    return { draft: await readMasterDraft(database, actor.organisationId, id) };
+  }
+  const id = str(body.draftId); const { draft, form: savedForm } = await draftRow(database, actor.organisationId, id);
+  if (draft.status !== "draft" || body.expectedRevision !== draft.revision) throw new Error("ACTIVITY_DRAFT_REVISION_CONFLICT");
+  if (action === "save_master_draft" || action === "discard_master_draft") {
+    const builtIn = defaultActivityFieldForm(draft.activity_template_id, draft.variant_id);
+    const form = action === "save_master_draft"
+      ? validateMaster(applyDefaultActivityFormPolicy(validateMaster(body.form, builtIn), builtIn), builtIn) : savedForm;
+    const status = action === "discard_master_draft" ? "discarded" : "draft";
+    const result = await database.batch([
+      database.prepare(`UPDATE trade_activity_field_master_drafts SET form_json = ?, form_sha256 = ?, status = ?,
+        revision = revision + 1, updated_by_uid = ?, updated_at = ?
+        WHERE id = ? AND organisation_id = ? AND revision = ? AND status = 'draft'`)
+        .bind(activityCanonical(form), activityHash(form), status, actor.uid, now, id, actor.organisationId, draft.revision),
+      draftAudit(database, actor, mode, id, status === "discarded" ? "discarded" : "saved", draft.revision + 1, now),
+    ]);
+    if (result[0].meta.changes !== 1) throw new Error("ACTIVITY_DRAFT_REVISION_CONFLICT");
+    return { draft: await readMasterDraft(database, actor.organisationId, id) };
+  }
+  const current = await currentMaster(database, actor.organisationId, draft.activity_template_id, draft.variant_id);
+  if (current.version !== draft.base_master_version || activityHash(current.form) !== draft.base_form_sha256) throw new Error("ACTIVITY_MASTER_CHANGED");
+  const governed = validateMaster(applyDefaultActivityFormPolicy(validateMaster(savedForm, current.builtIn), current.builtIn), current.builtIn);
+  const form = { ...governed, version: Math.max(current.builtIn.version, current.version) + 1 };
+  const masterId = crypto.randomUUID();
+  // D1 executes this batch atomically. The insert checks both independently editable versions;
+  // the following update/audit run only when this exact publication was inserted.
+  const result = await database.batch([
+    database.prepare(`INSERT INTO trade_activity_field_masters
+      (id, organisation_id, activity_template_id, variant_id, version, form_json, form_sha256, published_by_uid, published_at)
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? FROM trade_activity_field_master_drafts d
+      WHERE d.id = ? AND d.organisation_id = ? AND d.revision = ? AND d.status = 'draft'
+        AND d.form_sha256 = ? AND d.base_master_version = ? AND d.base_form_sha256 = ?
+        AND COALESCE((SELECT MAX(version) FROM trade_activity_field_masters
+          WHERE organisation_id = ? AND activity_template_id = ? AND variant_id = ?), 0) = ?`)
+      .bind(masterId, actor.organisationId, form.activityTemplateId, form.variantId, form.version, activityCanonical(form), activityHash(form), actor.uid, now,
+        id, actor.organisationId, draft.revision, draft.form_sha256, draft.base_master_version, draft.base_form_sha256,
+        actor.organisationId, form.activityTemplateId, form.variantId, current.version),
+    database.prepare(`UPDATE trade_activity_field_master_drafts SET status = 'published', published_master_id = ?,
+      revision = revision + 1, updated_by_uid = ?, updated_at = ?
+      WHERE id = ? AND organisation_id = ? AND revision = ? AND status = 'draft'
+        AND EXISTS (SELECT 1 FROM trade_activity_field_masters WHERE id = ? AND organisation_id = ?)`)
+      .bind(masterId, actor.uid, now, id, actor.organisationId, draft.revision, masterId, actor.organisationId),
+    draftAudit(database, actor, mode, id, "published", draft.revision + 1, now),
+  ]);
+  if (result[0].meta.changes !== 1) {
+    const latest = await readMasterDraft(database, actor.organisationId, id);
+    throw new Error(latest.baseIsCurrent ? "ACTIVITY_DRAFT_REVISION_CONFLICT" : "ACTIVITY_MASTER_CHANGED");
+  }
+  return { draft: await readMasterDraft(database, actor.organisationId, id), form, expectedVersion: form.version };
+}
+
 const escape = (value: unknown) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 export async function GET(request: Request) {
   try {
@@ -243,6 +367,11 @@ export async function GET(request: Request) {
     }
     if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
     if (query.has("consumerDocument")) return bytesResponse(await readActivityConsumerDocument(query.get("consumerDocument") || ""));
+    if (query.get("view") === "master_drafts") {
+      const actor = await masterActor(request, query.get("actorMode") || "", true); const database = getD1();
+      if (query.has("draftId")) return adminJson({ ok: true, draft: await readMasterDraft(database, actor.organisationId, query.get("draftId") || "") });
+      return adminJson({ ok: true, drafts: await listMasterDrafts(database, actor.organisationId) });
+    }
     if (query.get("view") === "masters" || query.get("view") === "review_queue") {
       const actor = await masterActor(request, query.get("actorMode") || "", query.get("view") === "masters");
       if (query.get("view") === "review_queue") {
@@ -250,7 +379,7 @@ export async function GET(request: Request) {
         return adminJson({ ok: true, records: records.results.map((row) => activityPresentation(JSON.parse(row.payload))) });
       }
       const templateId = query.get("activityTemplateId") || "";
-      if (!templateId) return adminJson({ ok: true, catalogue: activityFieldCatalogue() });
+      if (!templateId) return adminJson({ ok: true, catalogue: activityFieldCatalogue(), drafts: await listMasterDrafts(getD1(), actor.organisationId) });
       const builtIn = defaultActivityFieldForm(templateId, query.get("variantId") || "");
       const saved = await getD1().prepare("SELECT form_json, version FROM trade_activity_field_masters WHERE organisation_id = ? AND activity_template_id = ? AND variant_id = ? ORDER BY version DESC LIMIT 1")
         .bind(actor.organisationId, templateId, builtIn.variantId).first<{ form_json: string; version: number }>();
@@ -307,6 +436,10 @@ export async function POST(request: Request) {
     const parsed = await readBoundedJsonRequest(request, 1024 * 1024);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("INVALID_ACTIVITY_REQUEST");
     const body = parsed as Row; const action = str(body.action);
+    if (["create_master_draft", "save_master_draft", "publish_master_draft", "discard_master_draft"].includes(action)) {
+      const actor = await masterActor(request, str(body.actorMode));
+      return adminJson({ ok: true, ...await mutateMasterDraft(getD1(), actor, body) });
+    }
     if (action === "view_review_report") {
       const actor = await masterActor(request, str(body.actorMode));
       const record = await getD1().prepare(`SELECT id FROM trade_activity_field_records WHERE id = ? AND organisation_id = ? AND status = 'submitted_for_creditex_review'`)

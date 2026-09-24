@@ -7,6 +7,7 @@ import { ensureCreditexSchemaGuards } from "./creditex-schema-guards";
 import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, requireSecondFactor } from "./firebase-mfa";
 import { hasMyobIntegrationData, writeMyobSecurityEvent } from "./myob-security-audit";
 import { CREDITEX_PARTNER_ORGANISATION_CODE } from "./trade-compliance-intent";
+import { creditexNamedOwnerCapabilities } from "./creditex-named-owner-server";
 
 export const COMPLIANCE_ROLES = [
   "admin",
@@ -48,6 +49,8 @@ export type ComplianceIdentity = FirebaseIdentity & {
   displayName: string;
   role: ComplianceRole;
   governanceIdentityVerified: boolean;
+  canConfirmNamedOwner?: boolean;
+  namedOwnerConfirmed?: boolean;
 };
 
 export class ComplianceAccessError extends Error {
@@ -391,7 +394,7 @@ export async function requireComplianceIdentity(
       )
       .run();
   }
-  return access;
+  return { ...access, ...await creditexNamedOwnerCapabilities(db, access) };
 }
 
 export async function requireComplianceAccess(

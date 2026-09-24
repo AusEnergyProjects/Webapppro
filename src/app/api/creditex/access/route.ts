@@ -10,6 +10,7 @@ import {
 } from "@/lib/creditex-operations-server";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
+import { confirmCreditexNamedOwner, CreditexNamedOwnerError } from "@/lib/creditex-named-owner-server";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -47,6 +48,7 @@ function errorResponse(error: unknown) {
     error instanceof ComplianceAccessError
     || error instanceof CreditexOperationsError
     || error instanceof BoundedJsonRequestError
+    || error instanceof CreditexNamedOwnerError
   ) {
     return json({ ok: false, code: error.code, error: error.message }, error.status);
   }
@@ -131,7 +133,9 @@ export async function POST(request: Request) {
     const database = getD1();
     const member = await requireAdministrator(request, database);
     const body = requiredBody(await readBoundedJsonRequest(request));
-    const result = await executeCreditexAccessAction(database, member, body);
+    const result = body.action === "confirm_named_owner"
+      ? await confirmCreditexNamedOwner(database, member)
+      : await executeCreditexAccessAction(database, member, body);
     return json({ ok: true, result }, 201);
   } catch (error) {
     return errorResponse(error);

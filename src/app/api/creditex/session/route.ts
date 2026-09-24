@@ -88,6 +88,8 @@ export async function GET(request: Request) {
         role: member.role,
         governanceIdentityVerified: member.governanceIdentityVerified,
         canEditFieldMasters: canEditCreditexFieldMasters(member),
+        canConfirmNamedOwner: member.canConfirmNamedOwner === true,
+        namedOwnerConfirmed: member.namedOwnerConfirmed === true,
         organisation: {
           code: member.organisationCode,
           legalName: member.organisationLegalName,

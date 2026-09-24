@@ -5,6 +5,8 @@ import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import * as myobSecurityAudit from "../src/lib/myob-security-audit.ts";
 import * as firebaseMfa from "../src/lib/firebase-mfa.ts";
+import * as namedOwner from "../src/lib/creditex-named-owner-server.ts";
+import { canEditCreditexFieldMasters, isNamedCreditexIdentity } from "../src/lib/creditex-field-master-access.ts";
 import { installMissingDraftDeletionContext } from "./helpers/job-deletion-guard-fixture.mjs";
 import {
   canonicalCreditexSchemaGuardSql,
@@ -142,6 +144,7 @@ function loadTypescriptModule(path, mocks = {}) {
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
     if (specifier === "./firebase-mfa") return firebaseMfa;
+    if (specifier === "./creditex-named-owner-server") return namedOwner;
     if (specifier === "./myob-security-audit") return myobSecurityAudit;
     if (specifier === "./trade-compliance-intent") return { CREDITEX_PARTNER_ORGANISATION_CODE: "CREDITEX-AU" };
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
@@ -983,6 +986,8 @@ function seedAcceptedHandoff(database, {
 function seedComplianceUser(database, {
   id,
   firebaseUid,
+  email = `${firebaseUid}@example.com`,
+  displayName = firebaseUid,
   role,
   organisationId = "org_creditex_au",
   governanceVerified = false,
@@ -999,8 +1004,8 @@ function seedComplianceUser(database, {
       id,
       organisationId,
       firebaseUid,
-      `${firebaseUid}@example.com`,
-      firebaseUid,
+      email,
+      displayName,
       role,
       governanceVerified ? 1 : 0,
       governanceVerified ? governanceVerifierUid : "",
@@ -1234,6 +1239,110 @@ test("the verified bootstrap identity claims the invitation exactly once", async
   assert.throws(() => database.prepare(`UPDATE compliance_users
     SET status = 'suspended' WHERE firebase_uid = ?`).run(identity.uid),
   /COMPLIANCE_FINAL_ADMIN_REQUIRED/);
+});
+
+async function namedOwnerFixture(t, { claimBootstrap = true } = {}) {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date(TEST_NOW) });
+  const database = databaseWithComplianceOperations();
+  t.after(() => database.close());
+  database.exec("CREATE TABLE IF NOT EXISTS trade_crm_integrations(provider TEXT); CREATE TABLE IF NOT EXISTS trade_crm_accounting_documents(provider TEXT);");
+  const d1 = testD1(database);
+  const access = loadTypescriptModule("../src/lib/compliance-access-server.ts", {
+    "../../db": { getD1: () => d1 },
+    "./firebase-server": {},
+    "./creditex-schema-guards": { ensureCreditexSchemaGuards: async () => {} },
+  });
+  const firebase = { uid: "actual-owner-uid", email: "info@ausenergyassessments.com", emailVerified: true, authTime: 0, signInProvider: "password" };
+  database.prepare(`INSERT INTO admin_users (id, firebase_uid, email, display_name, role, status, invited_by_uid, last_login_at, created_at, updated_at)
+    VALUES ('aea-owner', ?, ?, 'AEA Owner', 'owner', 'active', 'platform', '', ?, ?)`).run(firebase.uid, firebase.email, TEST_NOW, TEST_NOW);
+  if (!claimBootstrap) seedComplianceUser(database, { id: "unclaimed-owner", firebaseUid: firebase.uid, email: firebase.email, displayName: "James Morris", role: "admin" });
+  const identity = await access.requireComplianceIdentity(firebase, {}, d1);
+  return { database, d1, identity, firebase, access };
+}
+
+test("existing verified AEA owner explicitly confirms James Morris without granting self-approved governance", async (t) => {
+  const { database, d1, identity, firebase, access } = await namedOwnerFixture(t);
+  assert.equal(identity.canConfirmNamedOwner, true);
+  assert.equal(identity.namedOwnerConfirmed, false);
+  assert.equal(canEditCreditexFieldMasters(identity), false);
+  const result = await namedOwner.confirmCreditexNamedOwner(d1, identity);
+  assert.deepEqual(result, { displayName: "James Morris", role: "admin", namedOwnerConfirmed: true, reused: false });
+  const refreshed = await access.requireComplianceIdentity(firebase, {}, d1);
+  assert.equal(refreshed.displayName, "James Morris");
+  assert.equal(refreshed.namedOwnerConfirmed, true);
+  assert.equal(refreshed.canConfirmNamedOwner, false);
+  assert.equal(refreshed.governanceIdentityVerified, false);
+  assert.equal(canEditCreditexFieldMasters(refreshed), true);
+  assert.equal(isNamedCreditexIdentity(refreshed), false, "the general shared-mailbox rule remains intact for other governed actions");
+  assert.deepEqual(await namedOwner.confirmCreditexNamedOwner(d1, refreshed), { ...result, reused: true });
+  const audits = database.prepare("SELECT * FROM compliance_audit_events WHERE event_type = 'membership.named_owner_confirmed'").all();
+  assert.equal(audits.length, 1);
+  assert.equal(audits[0].actor_uid, firebase.uid);
+  assert.equal(audits[0].target_id, identity.membershipId);
+  assert.equal(JSON.parse(audits[0].metadata).previousDisplayName, "AEA Creditex administrator");
+  assert.throws(() => database.prepare("UPDATE compliance_audit_events SET summary = 'rewrite' WHERE id = ?").run(audits[0].id), /IMMUTABLE|NO_UPDATE/);
+  assert.throws(() => database.prepare("UPDATE compliance_users SET role = 'reviewer' WHERE id = ?").run(identity.membershipId), /FINAL_ADMIN_REQUIRED/);
+  assert.throws(() => database.prepare(`UPDATE compliance_users SET governance_identity_verified = 1,
+    governance_identity_verified_by_uid = ?, governance_identity_verified_at = ?, governance_identity_verification_basis = 'Self approval' WHERE id = ?`)
+    .run(firebase.uid, TEST_NOW, identity.membershipId), /GOVERNANCE_IDENTITY/);
+});
+
+test("named owner confirmation rejects unverified, cross-tenant, wrong-UID and non-owner requests", async (t) => {
+  const { database, d1, identity } = await namedOwnerFixture(t);
+  for (const patch of [{ emailVerified: false }, { uid: "another-uid" }, { email: "info@another.example" },
+    { role: "reviewer" }, { organisationId: "another-org" }, { organisationCode: "OTHER" }, { membershipId: "another-member" }]) {
+    const candidate = { ...identity, ...patch };
+    assert.deepEqual(await namedOwner.creditexNamedOwnerCapabilities(d1, candidate), { canConfirmNamedOwner: false, namedOwnerConfirmed: false });
+    await assert.rejects(namedOwner.confirmCreditexNamedOwner(d1, candidate), (error) => error.code === "CREDITEX_NAMED_OWNER_REQUIRED");
+  }
+  database.prepare("UPDATE admin_users SET role = 'admin' WHERE id = 'aea-owner'").run();
+  await assert.rejects(namedOwner.confirmCreditexNamedOwner(d1, identity), (error) => error.code === "CREDITEX_NAMED_OWNER_REQUIRED");
+  assert.equal(database.prepare("SELECT COUNT(*) n FROM compliance_audit_events WHERE event_type = 'membership.named_owner_confirmed'").get().n, 0);
+});
+
+test("owner email and a named membership are insufficient without the original bootstrap claim", async (t) => {
+  const { d1, identity } = await namedOwnerFixture(t, { claimBootstrap: false });
+  assert.equal(identity.canConfirmNamedOwner, false);
+  assert.equal(identity.namedOwnerConfirmed, false);
+  assert.equal(canEditCreditexFieldMasters(identity), false);
+  await assert.rejects(namedOwner.confirmCreditexNamedOwner(d1, identity), (error) => error.code === "CREDITEX_NAMED_OWNER_REQUIRED");
+});
+
+test("named owner privileges disappear on owner revocation or display-name tampering", async (t) => {
+  const { database, d1, identity } = await namedOwnerFixture(t);
+  await namedOwner.confirmCreditexNamedOwner(d1, identity);
+  database.prepare("UPDATE admin_users SET status = 'suspended' WHERE id = 'aea-owner'").run();
+  assert.equal((await namedOwner.creditexNamedOwnerCapabilities(d1, identity)).namedOwnerConfirmed, false);
+  database.prepare("UPDATE admin_users SET status = 'active' WHERE id = 'aea-owner'").run();
+  database.prepare("UPDATE compliance_users SET display_name = 'Other Person' WHERE id = ?").run(identity.membershipId);
+  assert.deepEqual(await namedOwner.creditexNamedOwnerCapabilities(d1, identity), { canConfirmNamedOwner: false, namedOwnerConfirmed: false });
+  await assert.rejects(namedOwner.confirmCreditexNamedOwner(d1, identity), (error) => error.code === "CREDITEX_NAMED_OWNER_REQUIRED");
+  database.prepare("UPDATE compliance_users SET display_name = 'James Morris' WHERE id = ?").run(identity.membershipId);
+  seedComplianceUser(database, { id: "second-admin", firebaseUid: "second-admin", role: "admin" });
+  const operations = loadTypescriptModule("../src/lib/creditex-operations-server.ts");
+  await operations.executeCreditexAccessAction(d1, identity, { action: "update_member_access", memberId: identity.membershipId, role: "reviewer", status: "active" });
+  assert.equal((await namedOwner.creditexNamedOwnerCapabilities(d1, identity)).namedOwnerConfirmed, false);
+  assert.equal(database.prepare("SELECT COUNT(*) n FROM compliance_users WHERE role = 'admin' AND status = 'active'").get().n, 1);
+});
+
+test("confirmation rechecks owner authority atomically before changing the name or appending an audit", async (t) => {
+  const { database, d1, identity } = await namedOwnerFixture(t);
+  const originalBatch = d1.batch;
+  d1.batch = async (statements) => {
+    database.prepare("UPDATE admin_users SET role = 'admin' WHERE id = 'aea-owner'").run();
+    return originalBatch(statements);
+  };
+  await assert.rejects(namedOwner.confirmCreditexNamedOwner(d1, identity), (error) => error.code === "CREDITEX_NAMED_OWNER_CONFLICT" && error.status === 409);
+  assert.equal(database.prepare("SELECT display_name FROM compliance_users WHERE id = ?").get(identity.membershipId).display_name, "AEA Creditex administrator");
+  assert.equal(database.prepare("SELECT COUNT(*) n FROM compliance_audit_events WHERE event_type = 'membership.named_owner_confirmed'").get().n, 0);
+});
+
+test("a name or a client-supplied flag cannot relax general shared-mailbox form access", () => {
+  const owner = { email: "info@ausenergyassessments.com", displayName: "James Morris", role: "admin", organisationCode: "CREDITEX-AU" };
+  assert.equal(canEditCreditexFieldMasters(owner), false);
+  for (const patch of [{ email: "info@creditex.example" }, { displayName: "Another Person" }, { role: "reviewer" }, { organisationCode: "OTHER" }]) {
+    assert.equal(canEditCreditexFieldMasters({ ...owner, namedOwnerConfirmed: true, ...patch }), false);
+  }
 });
 
 test("ordinary Creditex administrators cannot confer governance identity", async () => {

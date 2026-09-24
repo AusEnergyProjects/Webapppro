@@ -20,6 +20,8 @@ type WorkspaceSession = {
   email: string;
   displayName: string;
   role: ComplianceRole;
+  canConfirmNamedOwner?: boolean;
+  namedOwnerConfirmed?: boolean;
   organisation: {
     code: string;
     legalName: string;
@@ -5834,7 +5836,7 @@ function DisabledPanel({
   );
 }
 
-export function CreditexTeamAccess({ session }: { session: WorkspaceSession }) {
+export function CreditexTeamAccess({ session, onSessionChanged }: { session: WorkspaceSession; onSessionChanged?: () => Promise<void> }) {
   const [access, setAccess] = useState<AccessSnapshot>(EMPTY_ACCESS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -5849,7 +5851,7 @@ export function CreditexTeamAccess({ session }: { session: WorkspaceSession }) {
     const timeout = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(timeout);
   }, [load]);
-  return <div className={styles.workspace}><AccessView session={session} access={access} loading={loading} error={error} onRefresh={() => void load()} /></div>;
+  return <div className={styles.workspace}><AccessView session={session} access={access} loading={loading} error={error} onRefresh={() => void load()} onSessionChanged={onSessionChanged} /></div>;
 }
 
 function AccessView({
@@ -5858,12 +5860,14 @@ function AccessView({
   loading,
   error,
   onRefresh,
+  onSessionChanged,
 }: {
   session: WorkspaceSession;
   access: AccessSnapshot;
   loading: boolean;
   error: string;
   onRefresh: () => void;
+  onSessionChanged?: () => Promise<void>;
 }) {
   const [form, setForm] = useState({
     displayName: "",
@@ -5915,6 +5919,11 @@ function AccessView({
     if (created) {
       setForm({ displayName: "", email: "", role: "reviewer" });
     }
+  }
+
+  async function confirmNamedOwner() {
+    const confirmed = await accessAction("confirm_named_owner", {}, "James Morris is now the named Creditex administrator for this login.");
+    if (confirmed && onSessionChanged) await onSessionChanged();
   }
 
   async function updateMemberAccess(member: AccessMember) {
@@ -5972,6 +5981,13 @@ function AccessView({
           </button>
         )}
       </div>
+      {session.canConfirmNamedOwner && <div className={styles.accessPolicy}>
+        <strong>Use this account as James Morris</strong>
+        <p>Confirm your existing {session.email} owner login as James Morris, Creditex Administrator. You can manage the workspace, edit and publish forms, invite individual team members and assign their roles.</p>
+        <p>Actions remain attributed to your verified login. Independent regulator and source approvals still require their separate reviewer.</p>
+        <button type="button" disabled={Boolean(busy) || loading} onClick={() => void confirmNamedOwner()}>{busy === "confirm_named_owner" ? "Confirming James Morris..." : "Confirm James Morris as administrator"}</button>
+      </div>}
+      {session.namedOwnerConfirmed && <div className={styles.accessPolicy}><strong>James Morris · Creditex Administrator</strong><p>Your existing {session.email} login has named manager access, including form editing and team access management.</p></div>}
       <div className={styles.accessPolicy}>
         <strong>Ready to edit in three steps</strong>
         <ol><li>Invite a named colleague as Reviewer, Case manager or Administrator below.</li><li>Give them <a href="/creditex/compliance" target="_blank" rel="noreferrer">the Creditex sign-in link</a>. They can use Continue with Google or an existing TLink login with the exact invited email, then complete the account security steps shown.</li><li>They can open Activity forms, choose Edit, test their changes in the phone and save the master.</li></ol>
@@ -5986,9 +6002,9 @@ function AccessView({
         <p>
           This address establishes the first administrator. It is not a shared
           Creditex login. The administrator must invite each team member by
-          their own verified email and assign the minimum role they need. Once
-          at least two named administrators are active, suspend the bootstrap
-          mailbox membership below.
+          their own verified email and assign the role they need. Keep at least
+          two named administrators for continuity. A confirmed named owner can
+          keep using this account as their individual manager login.
         </p>
       </details>
       {session.role !== "admin" && (
@@ -6095,7 +6111,7 @@ function AccessView({
                     <p>{member.email} | {readable(member.role)}</p>
                     <small>
                       Last login {dateTime(member.lastLoginAt)}
-                      {bootstrapMailbox ? " | Bootstrap mailbox membership" : ""}
+                      {bootstrapMailbox ? " | Initial owner account" : ""}
                     </small>
                     <div className={styles.memberAccessControls}>
                       <label>

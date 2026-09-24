@@ -13,11 +13,15 @@ const SHARED_EMAIL_LOCAL_PARTS = new Set([
   "team",
 ]);
 
+export const CREDITEX_NAMED_OWNER_EMAIL = "info@ausenergyassessments.com";
+export const CREDITEX_NAMED_OWNER_NAME = "James Morris";
+
 type CreditexFieldMasterIdentity = {
   email: string;
   displayName: string;
   role: string;
   organisationCode: string;
+  namedOwnerConfirmed?: boolean;
 };
 
 export function isNamedCreditexIdentity(
@@ -37,5 +41,8 @@ export function canEditCreditexFieldMasters(
 ) {
   return identity.organisationCode.trim().toUpperCase() === "CREDITEX-AU"
     && ["admin", "case_manager", "reviewer"].includes(identity.role)
-    && isNamedCreditexIdentity(identity);
+    && (isNamedCreditexIdentity(identity)
+      || (identity.namedOwnerConfirmed === true && identity.role === "admin"
+        && identity.email.trim().toLowerCase() === CREDITEX_NAMED_OWNER_EMAIL
+        && identity.displayName === CREDITEX_NAMED_OWNER_NAME));
 }

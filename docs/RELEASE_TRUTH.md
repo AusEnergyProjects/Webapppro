@@ -6,11 +6,19 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 24 September 2026
 
-Deployment baseline verified: Sites 614, source `9b76d686fcbe7f49c2bae429b70c3e62910dd21e`, environment 116. GitHub main matches this source.
+Deployment baseline verified: Sites 615, source `4283cec0618b63e21f1e3726091c65485ba8cb2a`, environment 116. GitHub main matches this source.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: Creditex registry submission operations
+## Current implementation: Creditex manager access and draft form editing
+
+The existing verified AEA owner can confirm James Morris as the named Creditex administrator using the same info@ausenergyassessments.com login. This one account must retain its active owner role, active Creditex administrator membership and original claimed bootstrap invitation; an immutable audit receipt attests the named-owner exception. Other shared-mailbox identities do not inherit the exception. Staff invitation, role management, final-administrator protection and independent governance approval remain governed by their existing server checks. Live read-only checks confirm that the owner and original invitation belong to the same identity; activation and its deployed verification are recorded by the coordinating task.
+
+Activity forms now expose Signature / declaration, signer and wording controls directly, with the phone jumping to the selected signing item. Existing real declaration signatures bind the signed wording, form and evidence; Upload document remains a separate evidence type and does not claim to electronically sign an arbitrary PDF. Draft copies persist through migration 0190, save without changing the active master, and replace it only through explicit confirmation. Draft revisions and the original published version/hash prevent stale overwrites; signed and submitted records retain their original version. Discarded drafts and publication audits are retained.
+
+Validation: 140 access/security checks, 12 draft API checks and 54 final editor/signing/identity/release checks passed, as did root typecheck, full ESLint, all 190 migrations, integration/PDF/source-custody audits and the production build with bundle/performance checks. Desktop/mobile day/night browser flows passed. Full required validation reaches the same expired source-review audit. The full suite's eight known baseline assertions remain; task-related stale assertions were corrected and passed, and a crashed worker passed in isolation. Final deployment and authenticated named-owner activation are recorded by the coordinator. No customer document was signed or production master replaced for testing.
+
+## Previous implementation: Creditex registry submission operations
 
 Implemented locally in the Creditex and administration workspaces: scheme accounts and authority scope, exact approved claim association, assisted official REC/TESSA CSV preparation, retained file preview and independent export review, private invoice/payment evidence, independent review of manual registry results, and read-only STC reconciliation against the official REC public action feed. Payment evidence never changes a claim to registered. Automatic results require exact account, installation reference, status and complete certificate quantity; ambiguous matches remain visible for review after refresh. New migrations 0188 and 0189 contain no synthetic population. Dispatch attempts are durably reserved before a provider call and cannot automatically retry an uncertain outcome.
 

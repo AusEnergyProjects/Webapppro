@@ -150,3 +150,54 @@ test('preview next skips required declarations and signatures without entering t
   assert.match(view.text(), /2 required items remain in this test/);
   assert.match(view.text(), /Nothing is saved, signed or submitted/);
 });
+
+const declaration = (key, extra = {}) => ({ key, title: key, text: `Wording for ${key}.`, role: 'customer', phase: 'after', required: true, sourceUrl: '', sourceTextSha256: '', ...extra });
+
+test('selecting a signing item opens its grouped signer page and highlights the exact declaration', () => {
+  const selected = [];
+  const draft = { ...form([field('question')]), declarations: [declaration('first-signing-item'), declaration('selected-signing-item')] };
+  const view = preview({ form: draft, selectedFieldKey: 'question', selectedDeclarationKey: 'selected-signing-item', onSelectDeclaration: (key) => selected.push(key) });
+  assert.match(view.text(), /Wording for first-signing-item/);
+  assert.match(view.text(), /Wording for selected-signing-item/);
+  assert.equal(view.nodes().some((node) => node.props.id === 'phone-test-question'), false);
+  const highlighted = view.nodes().filter((node) => node.type === 'article' && node.props['data-selected']);
+  assert.equal(highlighted.length, 1);
+  assert.match(view.text(highlighted[0]), /selected-signing-item/);
+  const edit = highlighted[0].props.children.find((node) => node?.type === 'button');
+  edit.props.onClick();
+  assert.deepEqual(selected, ['selected-signing-item']);
+  view.update({ form: { ...draft, declarations: [draft.declarations[0], { ...draft.declarations[1], text: 'Live changed signing wording.' }] } });
+  assert.match(view.text(), /Live changed signing wording/);
+  assert.doesNotMatch(view.text(), /Wording for selected-signing-item/);
+});
+
+test('hidden signing items can be inspected without answering routing questions or changing the real path', () => {
+  const draft = { ...form([field('consent', 'boolean')]), declarations: [declaration('conditional-signature', { condition: { fieldKey: 'consent', equals: true } })] };
+  const view = preview({ form: draft, selectedDeclarationKey: 'conditional-signature' });
+  assert.match(view.text(), /signing item is hidden by its current routing/);
+  view.click('Inspect selected signing item');
+  assert.match(view.text(), /Signing item inspection/);
+  assert.match(view.text(), /Wording for conditional-signature/);
+  assert.ok(view.nodes().some((node) => node.type === 'signature-pad'));
+  assert.equal(view.nodes().some((node) => node.props.id === 'phone-test-consent'), false);
+  view.click('Return to form flow');
+  assert.equal(view.nodes().some((node) => node.type === 'signature-pad'), false);
+  view.click('Yes');
+  view.jump('conditional-signature');
+  assert.match(view.text(), /Wording for conditional-signature/);
+  assert.doesNotMatch(view.text(), /signing item is hidden by its current routing/);
+});
+
+test('read-only signing selection and switching back to a question keep the preview usable', () => {
+  const selected = [];
+  const draft = { ...form([field('question')]), declarations: [declaration('signing-item')] };
+  const view = preview({ form: draft, selectedDeclarationKey: 'signing-item', onSelectDeclaration: (key) => selected.push(key), canEdit: false });
+  assert.equal(view.button('Edit this signing item'), undefined);
+  view.click('Select this signing item');
+  assert.deepEqual(selected, ['signing-item']);
+  view.click('Next');
+  assert.match(view.text(), /required items remain in this test/);
+  view.update({ selectedDeclarationKey: undefined, selectedFieldKey: 'question' });
+  assert.ok(view.nodes().some((node) => node.props.id === 'phone-test-question'));
+  assert.equal(view.nodes().some((node) => node.type === 'signature-pad'), false);
+});

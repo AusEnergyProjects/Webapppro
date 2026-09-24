@@ -6814,3 +6814,19 @@ export const creditexRegistryExportReviews = sqliteTable("creditex_registry_expo
   check("creditex_registry_export_reviews_decision_check", sql`${t.decision} IN ('approved','rejected')`),
   foreignKey({ columns: [t.organisationId, t.exportId], foreignColumns: [creditexRegistryExports.organisationId, creditexRegistryExports.id] }),
 ]);
+
+export const tradeActivityFieldMasterDrafts = sqliteTable("trade_activity_field_master_drafts", {
+  id: text("id").primaryKey(), organisationId: text("organisation_id").notNull(),
+  activityTemplateId: text("activity_template_id").notNull(), variantId: text("variant_id").notNull().default(""),
+  revision: integer("revision").notNull(), baseMasterVersion: integer("base_master_version").notNull(),
+  baseFormSha256: text("base_form_sha256").notNull(), formJson: text("form_json").notNull(), formSha256: text("form_sha256").notNull(),
+  status: text("status").notNull(), createdByUid: text("created_by_uid").notNull(), updatedByUid: text("updated_by_uid").notNull(),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(), publishedMasterId: text("published_master_id").notNull().default(""),
+}, t => [
+  index("trade_activity_master_drafts_org_status_idx").on(t.organisationId, t.status, t.updatedAt),
+  check("trade_activity_master_drafts_revision_check", sql`${t.revision} > 0 AND ${t.baseMasterVersion} >= 0`),
+  check("trade_activity_master_drafts_hash_check", sql`length(${t.baseFormSha256}) = 64 AND length(${t.formSha256}) = 64`),
+  check("trade_activity_master_drafts_form_check", sql`json_valid(${t.formJson}) AND COALESCE(json_extract(${t.formJson}, '$.activityTemplateId') = ${t.activityTemplateId} AND json_extract(${t.formJson}, '$.variantId') = ${t.variantId}, 0)`),
+  check("trade_activity_master_drafts_status_check", sql`${t.status} IN ('draft', 'published', 'discarded')`),
+  check("trade_activity_master_drafts_publication_check", sql`(${t.status} = 'published' AND ${t.publishedMasterId} <> '') OR (${t.status} <> 'published' AND ${t.publishedMasterId} = '')`),
+]);

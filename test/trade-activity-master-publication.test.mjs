@@ -48,7 +48,7 @@ test("the master editor supports safe routing, ordering and Creditex declaration
   assert.match(editor, /function moveDeclaration\(/);
   assert.match(editor, /function deleteDeclaration\(/);
   assert.match(editor, /declaration\.key\.startsWith\("custom\."\)/);
-  assert.match(editor, /Add declaration/);
+  assert.match(editor, /Add signature/);
   assert.match(editor, /Delete declaration/);
   assert.match(editor, /disabled=\{!custom\} value=\{declaration\.role\}/);
   assert.doesNotMatch(governance, /Published-ready|Coverage gaps/);

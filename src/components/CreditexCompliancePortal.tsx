@@ -68,6 +68,8 @@ type ComplianceSession = {
   role: ComplianceRole;
   governanceIdentityVerified: boolean;
   canEditFieldMasters: boolean;
+  canConfirmNamedOwner?: boolean;
+  namedOwnerConfirmed?: boolean;
   organisation: {
     code: string;
     legalName: string;
@@ -1416,7 +1418,7 @@ export function CreditexCompliancePortal() {
 
         {tab === "team" && session.role === "admin" && (
           <section className={styles.panel} id="creditex-panel-team" role="tabpanel" aria-labelledby="creditex-tab-team">
-            <CreditexTeamAccess session={session} />
+            <CreditexTeamAccess session={session} onSessionChanged={loadWorkspace} />
           </section>
         )}
 
