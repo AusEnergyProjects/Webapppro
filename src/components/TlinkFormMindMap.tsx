@@ -21,6 +21,7 @@ type Props = {
   onMoveQuestion: (fieldKey: string, pageKey: string) => void;
   onDropQuestion: (fieldKey: string, targetKey: string, position: "before" | "after") => boolean;
   editor: ReactNode; onCloseEditor: () => void;
+  historyControls?: ReactNode;
   onRenamePage: (pageKey: string) => void;
   onDelete: (kind: "question" | "page" | "signature", key: string) => void;
 };
@@ -44,7 +45,7 @@ function curve(from: Point, to: Point) {
 }
 const clampScale = (value: number) => Math.max(.05, Math.min(1.75, value));
 
-export function TlinkFormMindMap({ form, editable, selectedKey, onSelect, onEdit, onCondition, onAddPage, onAddQuestion, onMoveQuestion, onDropQuestion, onRenamePage, onDelete, editor, onCloseEditor }: Props) {
+export function TlinkFormMindMap({ form, editable, selectedKey, onSelect, onEdit, onCondition, onAddPage, onAddQuestion, onMoveQuestion, onDropQuestion, onRenamePage, onDelete, editor, onCloseEditor, historyControls }: Props) {
   const pages = useMemo(() => editorFormPages(form), [form]);
   const cards = useMemo(() => {
     const result: Card[] = pages.map((page, index) => ({ key: page.key, title: page.section,
@@ -292,7 +293,7 @@ export function TlinkFormMindMap({ form, editable, selectedKey, onSelect, onEdit
     : menu.kind === "signature" ? editorConditionLockReason(form, menu.key) : editorQuestionDeleteReason(form, menu.key);
   return <section className={styles.map} aria-label="TLink Mind Map for forms">
     <div className={styles.toolbar}><div className={styles.brand}><TlinkMindMapMark /><div><strong>TLink Mind Map</strong><small>Forms, page by page</small></div></div>
-      <div className={styles.tools}><button type="button" onClick={onAddPage} disabled={!editable}>+ Add page</button><button type="button" onClick={() => { setPositions({}); setView({ x: 15, y: 15, scale: .8 }); }}>Arrange cards</button><button type="button" onClick={focusSelection}>Find selected</button></div></div>
+      <div className={styles.tools}>{historyControls}<button type="button" onClick={onAddPage} disabled={!editable}>+ Add page</button><button type="button" onClick={() => { setPositions({}); setView({ x: 15, y: 15, scale: .8 }); }}>Arrange cards</button><button type="button" onClick={focusSelection}>Find selected</button></div></div>
     <p className={styles.help}>One card = one app page. Double-click to edit here. Right-click for options. Drag a question grip to reorder or move between cards; drag answer dots to connect.</p>
     <div className={styles.canvasShell}>
     <div ref={stage} className={styles.stage} tabIndex={0} aria-label="Form map canvas. Drag the background to pan, scroll to zoom. Plus and minus zoom; arrow keys pan; Escape cancels a connection."
