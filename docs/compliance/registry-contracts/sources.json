@@ -1,0 +1,56 @@
+[
+  {
+    "file": "rec-sgu-swh-september-2025.pdf",
+    "url": "https://cer.gov.au/document/rec-registry-guide-bulk-upload-small-generation-unit-and-solar-water-heater-installs",
+    "resolvedUrl": "https://cer.gov.au/document/rec-registry-guide-bulk-upload-small-generation-unit-and-solar-water-heater-installs",
+    "contentType": "application/pdf",
+    "retrievedAt": "2026-09-24T05:05:56.542821+00:00",
+    "sha256": "783d8b54f37a1c7a189d3de5c38b69057e8e574077abfeea550861a1a6dc39de",
+    "bytes": 963322
+  },
+  {
+    "file": "rec-battery-fields.pdf",
+    "url": "https://cer.gov.au/document/required-fields-solar-battery-bulk-upload",
+    "resolvedUrl": "https://cer.gov.au/document/required-fields-solar-battery-bulk-upload",
+    "contentType": "application/pdf",
+    "retrievedAt": "2026-09-24T05:05:56.562566+00:00",
+    "sha256": "208d23c2c4538f1002c5f23bf0e863db105560752a34285128982769d0de2e6a",
+    "bytes": 255473
+  },
+  {
+    "file": "nsw-csv-v1.7.xlsx",
+    "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Technical-Guide-CSV-Specification-ACPs-V1.7.XLSX",
+    "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Technical-Guide-CSV-Specification-ACPs-V1.7.XLSX",
+    "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "retrievedAt": "2026-09-24T05:05:57.104094+00:00",
+    "sha256": "3de9761a1fef72a7696612a645a55fc2544216450237e8e10f83587575ca1958",
+    "bytes": 31136
+  },
+  {
+    "file": "nsw-ess-example-v3.4.xlsx",
+    "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/ESS-Example-Template-CSV-Implementation-Data-22-July-2026-V3.4.XLSX",
+    "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/ESS-Example-Template-CSV-Implementation-Data-22-July-2026-V3.4.XLSX",
+    "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "retrievedAt": "2026-09-24T05:05:57.203470+00:00",
+    "sha256": "2acba8ad07d430f68f47d997d61b59e001e5473cfd731ea69453973de0bf44bf",
+    "bytes": 17453
+  },
+  {
+    "file": "nsw-pdrs-example-v2.6.xlsx",
+    "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/PDRS-Example-Template-CSV-Implementation-Data-22-July-2026-V2.6.XLSX",
+    "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/PDRS-Example-Template-CSV-Implementation-Data-22-July-2026-V2.6.XLSX",
+    "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "retrievedAt": "2026-09-24T05:07:47.894747+00:00",
+    "sha256": "c968e596681dba1b02e6b57c4b7f08acc206b7162b34efc7239f14194b539622",
+    "bytes": 15403
+  },
+  {
+    "file": "rec-battery-fields.docx",
+    "url": "https://cer.gov.au/document/required-fields-solar-battery-bulk-upload-0",
+    "resolvedUrl": "https://cer.gov.au/document/required-fields-solar-battery-bulk-upload-0",
+    "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "retrievedAt": "2026-09-24T05:07:47.939771+00:00",
+    "sha256": "92343887e3bd17555e47e755c0f8bace18a85d4443fb06b3f8a1d0d0cae14262",
+    "bytes": 99770
+  }
+]

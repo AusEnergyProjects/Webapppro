@@ -4,13 +4,21 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 23 September 2026
+Last reconciled locally: 24 September 2026
 
-Deployment baseline verified: Sites 609, source `16783d75ee21247771cff7f6ea01be52b9884e0b`, environment revision 112.
+Deployment baseline verified: Sites 613, source `0473715427d8d41718421e328695f9eafe06ada5`.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: customer/job maps and Google Business Profile quote links
+## Current implementation: Creditex registry submission operations
+
+Implemented locally in the Creditex and administration workspaces: scheme accounts and authority scope, exact approved claim association, assisted official REC/TESSA CSV preparation, retained file preview and independent export review, private invoice/payment evidence, independent review of manual registry results, and read-only STC reconciliation against the official REC public action feed. Payment evidence never changes a claim to registered. Automatic results require exact account, installation reference, status and complete certificate quantity; ambiguous matches remain visible for review after refresh. New migrations 0188 and 0189 contain no synthetic population. Dispatch attempts are durably reserved before a provider call and cannot automatically retry an uncertain outcome.
+
+The official formats cover REC small generation units, water heaters/heat pumps and solar batteries, plus NSW ESS and PDRS. Templates provide official columns and stable claim references; remaining installation fields and declarations require evidence-based completion. Every completed CSV has its own independent review, separate from the original approved calculation packet. Current source, account revision, activity scope and retained file bytes are checked before an approved export can be downloaded. REPS and EEIS retain their separate retailer-reporting meaning; this release does not represent them as tradable certificate issuance.
+
+Direct VEU transmission is unavailable until Creditex/ESC supplies approved UAT and production access plus the complete current authentication and activity contract. No public supported NSW or REC creation API has been established. Onboarding request downloads are prepared for the account holder to review and send; they do not grant authority or contact a regulator. No real claim, customer email or fee payment was performed. Publication, exact commit and final validation evidence are recorded by the coordinating task; implementation alone does not establish regulatory acceptance.
+
+## Previous implementation: customer/job maps and Google Business Profile quote links
 
 Customer and job registers now offer a Google Maps view of the current filtered page, with clickable pins, shared-location selection, record opening and directions. Existing pagination and server-authorised business/team scope remain authoritative. Job pins use the service-site address; missing and protected locations remain unpinned. Account changes clear map state and cached locations. Council dashboards are outside this slice.
 

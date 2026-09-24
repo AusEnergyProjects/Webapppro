@@ -70,6 +70,7 @@ function triggerlessSchemaDatabase() {
     database.exec(migration(name));
   }
   database.exec(migration("0169_creditex_master_author_save.sql"));
+  database.exec(migration("0188_creditex_output_dispatch_intents.sql"));
   return database;
 }
 
@@ -89,8 +90,8 @@ test("Sites migrations 0142 through 0147 contain no trigger statements", () => {
 });
 
 test("the prepared-statement guard inventory is exact and complete", () => {
-  assert.equal(CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.length, 72);
-  assert.equal(CREDITEX_WORK_PACK_REQUIRED_SCHEMA_TABLES.length, 17);
+  assert.equal(CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.length, 77);
+  assert.equal(CREDITEX_WORK_PACK_REQUIRED_SCHEMA_TABLES.length, 18);
   assert.equal(
     new Set(CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.map((item) => item.name)).size,
     CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.length,
@@ -194,7 +195,7 @@ test("runtime installation restores all guards before direct guarded work", asyn
   const installed = database.prepare(
     "SELECT name, sql FROM sqlite_schema WHERE type = 'trigger' ORDER BY name",
   ).all();
-  assert.equal(installed.length, 72);
+  assert.equal(installed.length, 77);
   for (const definition of CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS) {
     const row = installed.find((item) => item.name === definition.name);
     assert.ok(row, definition.name);

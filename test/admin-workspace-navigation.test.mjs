@@ -24,26 +24,28 @@ test("desktop and mobile navigation preserve every role boundary", () => {
     for (const link of links) link.props.onClick();
     const options = nodes(tree, node => node.type === "option").map(node => node.props.value);
     assert.deepEqual(selected, options);
-    assert.equal(selected.length, role === "owner" ? 19 : role === "support" ? 15 : 17);
+    assert.equal(selected.length, role === "owner" ? 20 : role === "support" ? 15 : 18);
     assert.equal(Boolean(button(tree, "Database")), role === "owner");
     assert.equal(Boolean(button(tree, "Access & audit")), role === "owner");
     assert.equal(Boolean(button(tree, "Training")), role !== "support");
+    assert.equal(Boolean(button(tree, "Submissions")), role !== "support");
     assert.equal(Boolean(button(tree, "AI answer reviews")), role !== "support");
     assert.ok(button(tree, "Activity forms"));
   }
 });
 
-test("Training and Activity forms are direct visible sections with labelled selection and icons", () => {
+test("Submissions, Training and Activity forms are direct visible compliance sections with labelled selection and icons", () => {
   const tree = navigation.AdminWorkspaceNavigation({ selected: "compliance-questions", role: "owner", unread: 4, onSelect: () => true });
-  const section = nodes(tree, node => node.type === "section" && node.props["aria-label"] === "Forms & training")[0];
+  const section = nodes(tree, node => node.type === "section" && node.props["aria-label"] === "Compliance")[0];
+  assert.ok(button(section, "Submissions"));
   assert.ok(button(section, "Training"));
   assert.ok(button(section, "Activity forms"));
-  for (const details of nodes(tree, node => node.type === "details")) assert.doesNotMatch(text(details), /Training|Activity forms/);
+  for (const details of nodes(tree, node => node.type === "details")) assert.doesNotMatch(text(details), /Submissions|Training|Activity forms/);
   assert.equal(button(tree, "Training").props["aria-current"], "page");
   assert.equal(nodes(tree, node => node.props?.["aria-current"] === "page").length, 1);
   assert.equal(nodes(tree, node => node.props?.["aria-label"] === "4 unread alerts").length, 1);
   const html = renderToStaticMarkup(tree);
-  assert.equal((html.match(/<svg /g) || []).length, 19);
+  assert.equal((html.match(/<svg /g) || []).length, 20);
   assert.match(html, /aria-hidden="true" focusable="false"/);
 });
 
@@ -66,6 +68,8 @@ test("deep links resolve only available sections, including the existing inbox a
   assert.equal(navigation.adminWorkspaceTabFromHash("", "admin"), "inbox");
   assert.equal(navigation.adminWorkspaceTabFromHash("#database", "reviewer"), null);
   assert.equal(navigation.adminWorkspaceTabFromHash("#compliance-questions", "support"), null);
+  assert.equal(navigation.adminWorkspaceTabFromHash("#compliance-submissions", "support"), null);
+  for (const role of ["owner", "admin", "reviewer"]) assert.equal(navigation.adminWorkspaceTabFromHash("#compliance-submissions", role), "compliance-submissions");
   assert.equal(navigation.adminWorkspaceTabFromHash("#unknown", "owner"), null);
 });
 
@@ -186,10 +190,14 @@ test("cancelling Forward restores its history position and keeps both destinatio
   h.cleanup();
 });
 
-test("form outputs stay secondary and shell provides an accessible content target", () => {
-  const h = portalHarness({ hash: "#form-governance" }); const tree = h.settle();
-  const outputs = nodes(tree, node => node.type === "details" && nodes(node, item => item.type === "summary" && text(item) === "Certificate outputs").length)[0];
-  assert.ok(outputs); assert.equal(Boolean(outputs.props.open), false);
+test("submission controls have one dedicated workspace and shell provides an accessible content target", () => {
+  const h = portalHarness({ hash: "#form-governance" }); let tree = h.settle();
+  assert.equal(nodes(tree, node => node.props?.endpoint === "/api/admin/compliance-registry").length, 0);
+  assert.equal(nodes(tree, node => node.props?.endpoint === "/api/admin/compliance-output-actions").length, 0);
+  h.nav(tree).onSelect("compliance-submissions"); tree = h.settle();
+  assert.equal(h.window.location.hash, "#compliance-submissions");
+  assert.equal(nodes(tree, node => node.props?.endpoint === "/api/admin/compliance-registry").length, 1);
+  assert.equal(nodes(tree, node => node.props?.endpoint === "/api/admin/compliance-output-actions").length, 1);
   assert.ok(nodes(tree, node => node.type === "a" && node.props.href === "#admin-workspace-content")[0]);
   assert.equal(nodes(tree, node => node.props?.id === "admin-workspace-content")[0].props.tabIndex, -1);
   h.cleanup();

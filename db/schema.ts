@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, primaryKey, sqliteTable, sqliteView, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, index, integer, primaryKey, sqliteTable, sqliteView, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const tradeAccounts = sqliteTable("trade_accounts", {
   firebaseUid: text("firebase_uid").primaryKey(),
@@ -6680,3 +6680,137 @@ export const creditexAuditCalls = sqliteTable("creditex_audit_calls", {
   check("creditex_audit_call_recording_status_check",sql`${t.recordingStatus} IN ('none','starting','recording','pending','saving','saved','failed','unknown')`),
   check("creditex_audit_call_consent_stage_check",sql`${t.consentStage} IN ('','notice','gather','consented')`),
   check("creditex_audit_call_saved_check",sql`${t.recordingStatus}<>'saved' OR (${t.recordingObjectKey}<>'' AND length(${t.recordingSha256})=64 AND ${t.recordingSizeBytes}>0 AND ${t.consentedAt}<>'' AND ${t.recordingId}<>'')`)]);
+
+export const complianceOutputDispatchIntents = sqliteTable("compliance_output_dispatch_intents", {
+  id: text("id").primaryKey(), organisationId: text("organisation_id").notNull(), packetId: text("packet_id").notNull(),
+  packetSha256: text("packet_sha256").notNull(), adapterId: text("adapter_id").notNull(), requestedByUid: text("requested_by_uid").notNull(),
+  status: text("status").notNull(), startedAt: text("started_at").notNull(), finishedAt: text("finished_at").notNull().default(""),
+  adapterReceiptId: text("adapter_receipt_id").notNull().default(""), failureCode: text("failure_code").notNull().default(""),
+}, t => [
+  uniqueIndex("compliance_output_dispatch_packet_idx").on(t.organisationId, t.packetId),
+  check("compliance_output_dispatch_status_check", sql`${t.status} IN ('dispatching','uncertain','completed')`),
+  check("compliance_output_dispatch_started_check", sql`datetime(${t.startedAt}) IS NOT NULL`),
+  check("compliance_output_dispatch_identity_check", sql`length(${t.id})>0 AND length(${t.organisationId})>0 AND length(${t.packetId})>0 AND length(${t.adapterId})>0 AND length(${t.requestedByUid})>0`),
+  check("compliance_output_dispatch_hash_check", sql`length(${t.packetSha256})=71 AND substr(${t.packetSha256},1,7)='sha256:' AND substr(${t.packetSha256},8) NOT GLOB '*[^0-9a-f]*'`),
+  check("compliance_output_dispatch_completion_check", sql`(${t.status}='dispatching' AND ${t.finishedAt}='' AND ${t.adapterReceiptId}='' AND ${t.failureCode}='') OR (${t.status}='uncertain' AND datetime(${t.finishedAt})>=datetime(${t.startedAt}) AND ${t.adapterReceiptId}='' AND length(${t.failureCode})>0) OR (${t.status}='completed' AND datetime(${t.finishedAt})>=datetime(${t.startedAt}) AND length(${t.adapterReceiptId})>0 AND ${t.failureCode}='')`),
+]);
+
+export const creditexRegistryAccounts = sqliteTable("creditex_registry_accounts", {
+  id: text("id").primaryKey(), organisationId: text("organisation_id").notNull(), scheme: text("scheme").notNull(),
+  accountReference: text("account_reference").notNull(), submitterReference: text("submitter_reference").notNull().default(""), legalName: text("legal_name").notNull(),
+  financeEmail: text("finance_email").notNull(), resultsEmail: text("results_email").notNull(), activityScope: text("activity_scope").notNull(),
+  authorityReference: text("authority_reference").notNull(), authorityExpiresOn: text("authority_expires_on").notNull().default(""),
+  version: integer("version").notNull().default(1), enabled: integer("enabled").notNull().default(1),
+  createdByUid: text("created_by_uid").notNull(), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, t => [
+  uniqueIndex("creditex_registry_accounts_reference_idx").on(t.organisationId, t.scheme, t.accountReference),
+  uniqueIndex("creditex_registry_accounts_org_id_idx").on(t.organisationId, t.id),
+  check("creditex_registry_accounts_scheme_check", sql`${t.scheme} IN ('veu','nsw_esc','nsw_prc','stc','reps','eeis','lgc')`),
+  check("creditex_registry_accounts_version_check", sql`${t.version}>0`),
+  check("creditex_registry_accounts_enabled_check", sql`${t.enabled} IN (0,1)`),
+]);
+
+export const creditexRegistryClaimAccounts = sqliteTable("creditex_registry_claim_accounts", {
+  organisationId: text("organisation_id").notNull(), packetId: text("packet_id").notNull(), accountId: text("account_id").notNull(),
+  packetSha256: text("packet_sha256").notNull(), boundByUid: text("bound_by_uid").notNull(), createdAt: text("created_at").notNull(),
+}, t => [primaryKey({ columns: [t.organisationId, t.packetId] }),
+  foreignKey({ columns: [t.organisationId, t.accountId], foreignColumns: [creditexRegistryAccounts.organisationId, creditexRegistryAccounts.id] }),
+]);
+
+export const creditexRegistryEvidence = sqliteTable("creditex_registry_evidence", {
+  id: text("id").primaryKey(), organisationId: text("organisation_id").notNull(), objectKey: text("object_key").notNull().unique(),
+  filename: text("filename").notNull(), contentType: text("content_type").notNull(), byteLength: integer("byte_length").notNull(),
+  sha256: text("sha256").notNull(), createdByUid: text("created_by_uid").notNull(), createdAt: text("created_at").notNull(),
+}, t => [uniqueIndex("creditex_registry_evidence_org_id_idx").on(t.organisationId, t.id),
+  check("creditex_registry_evidence_size_check", sql`${t.byteLength}>0`),
+  check("creditex_registry_evidence_hash_check", sql`length(${t.sha256})=71`),
+]);
+
+export const creditexRegistryInvoices = sqliteTable("creditex_registry_invoices", {
+  id: text("id").primaryKey(), organisationId: text("organisation_id").notNull(), accountId: text("account_id").notNull(), reference: text("reference").notNull(),
+  amountMinor: integer("amount_minor").notNull(), dueDate: text("due_date").notNull(), evidenceId: text("evidence_id").notNull(), payloadSha256: text("payload_sha256").notNull(),
+  status: text("status").notNull().default("active"), createdByUid: text("created_by_uid").notNull(), createdAt: text("created_at").notNull(),
+}, t => [
+  uniqueIndex("creditex_registry_invoices_reference_idx").on(t.organisationId, t.accountId, t.reference),
+  uniqueIndex("creditex_registry_invoices_org_id_idx").on(t.organisationId, t.id),
+  check("creditex_registry_invoices_amount_check", sql`${t.amountMinor}>0 AND ${t.amountMinor}<=1000000000000`),
+  check("creditex_registry_invoices_status_check", sql`${t.status} IN ('active','void')`),
+  foreignKey({ columns: [t.organisationId, t.accountId], foreignColumns: [creditexRegistryAccounts.organisationId, creditexRegistryAccounts.id] }),
+  foreignKey({ columns: [t.organisationId, t.evidenceId], foreignColumns: [creditexRegistryEvidence.organisationId, creditexRegistryEvidence.id] }),
+]);
+
+export const creditexRegistryInvoiceClaims = sqliteTable("creditex_registry_invoice_claims", {
+  organisationId: text("organisation_id").notNull(), invoiceId: text("invoice_id").notNull(), packetId: text("packet_id").notNull(),
+}, t => [primaryKey({ columns: [t.organisationId, t.invoiceId, t.packetId] }),
+  foreignKey({ columns: [t.organisationId, t.invoiceId], foreignColumns: [creditexRegistryInvoices.organisationId, creditexRegistryInvoices.id] }),
+  foreignKey({ columns: [t.organisationId, t.packetId], foreignColumns: [creditexRegistryClaimAccounts.organisationId, creditexRegistryClaimAccounts.packetId] }),
+]);
+
+export const creditexRegistryPayments = sqliteTable("creditex_registry_payments", {
+  id: text("id").primaryKey(), organisationId: text("organisation_id").notNull(), invoiceId: text("invoice_id").notNull(), reference: text("reference").notNull(),
+  amountMinor: integer("amount_minor").notNull(), paidAt: text("paid_at").notNull(), evidenceId: text("evidence_id").notNull(), payloadSha256: text("payload_sha256").notNull(),
+  createdByUid: text("created_by_uid").notNull(), createdAt: text("created_at").notNull(),
+}, t => [uniqueIndex("creditex_registry_payments_reference_idx").on(t.organisationId, t.invoiceId, t.reference),
+  check("creditex_registry_payments_amount_check", sql`${t.amountMinor}>0 AND ${t.amountMinor}<=1000000000000`),
+  foreignKey({ columns: [t.organisationId, t.invoiceId], foreignColumns: [creditexRegistryInvoices.organisationId, creditexRegistryInvoices.id] }),
+  foreignKey({ columns: [t.organisationId, t.evidenceId], foreignColumns: [creditexRegistryEvidence.organisationId, creditexRegistryEvidence.id] }),
+]);
+
+export const creditexRegistryResults = sqliteTable("creditex_registry_results", {
+  id: text("id").primaryKey(), organisationId: text("organisation_id").notNull(), packetId: text("packet_id").notNull(), accountId: text("account_id").notNull(),
+  externalReference: text("external_reference").notNull(), registryStatus: text("registry_status").notNull(), quantity: text("quantity").notNull().default(""),
+  occurredAt: text("occurred_at").notNull(), evidenceId: text("evidence_id").notNull(), note: text("note").notNull(), source: text("source").notNull(),
+  fingerprint: text("fingerprint").notNull(), recordedByUid: text("recorded_by_uid").notNull(), createdAt: text("created_at").notNull(),
+}, t => [uniqueIndex("creditex_registry_results_fingerprint_idx").on(t.organisationId, t.packetId, t.fingerprint),
+  uniqueIndex("creditex_registry_results_org_id_idx").on(t.organisationId, t.id),
+  index("creditex_registry_results_claim_idx").on(t.organisationId, t.packetId, t.occurredAt),
+  check("creditex_registry_results_status_check", sql`${t.registryStatus} IN ('submitted','assessment','registered','rejected','withdrawn')`),
+  check("creditex_registry_results_source_check", sql`${t.source} IN ('reviewed_document','rec_public_register')`),
+  foreignKey({ columns: [t.organisationId, t.packetId], foreignColumns: [creditexRegistryClaimAccounts.organisationId, creditexRegistryClaimAccounts.packetId] }),
+  foreignKey({ columns: [t.organisationId, t.accountId], foreignColumns: [creditexRegistryAccounts.organisationId, creditexRegistryAccounts.id] }),
+  foreignKey({ columns: [t.organisationId, t.evidenceId], foreignColumns: [creditexRegistryEvidence.organisationId, creditexRegistryEvidence.id] }),
+]);
+
+export const creditexRegistryResultReviews = sqliteTable("creditex_registry_result_reviews", {
+  organisationId: text("organisation_id").notNull(), resultId: text("result_id").notNull(), decision: text("decision").notNull(),
+  note: text("note").notNull(), reviewedByUid: text("reviewed_by_uid").notNull(), createdAt: text("created_at").notNull(),
+}, t => [primaryKey({ columns: [t.organisationId, t.resultId] }),
+  check("creditex_registry_result_reviews_decision_check", sql`${t.decision} IN ('approved','rejected')`),
+  foreignKey({ columns: [t.organisationId, t.resultId], foreignColumns: [creditexRegistryResults.organisationId, creditexRegistryResults.id] }),
+]);
+
+export const creditexRegistrySyncRuns = sqliteTable("creditex_registry_sync_runs", {
+  organisationId: text("organisation_id").notNull(), accountId: text("account_id").notNull(), sourceDate: text("source_date").notNull(),
+  attemptedAt: text("attempted_at").notNull(), completedAt: text("completed_at").notNull().default(""),
+  sourceSha256: text("source_sha256").notNull().default(""), matchedCount: integer("matched_count").notNull().default(0),
+}, t => [primaryKey({ columns: [t.organisationId, t.accountId, t.sourceDate] }),
+  foreignKey({ columns: [t.organisationId, t.accountId], foreignColumns: [creditexRegistryAccounts.organisationId, creditexRegistryAccounts.id] }),
+]);
+
+export const creditexRegistrySyncMatches = sqliteTable("creditex_registry_sync_matches", {
+  organisationId: text("organisation_id").notNull(), accountId: text("account_id").notNull(), sourceDate: text("source_date").notNull(),
+  packetId: text("packet_id").notNull(), evidenceId: text("evidence_id").notNull(), confirmed: integer("confirmed").notNull(), checkedAt: text("checked_at").notNull(),
+}, t => [primaryKey({ columns: [t.organisationId, t.accountId, t.sourceDate, t.packetId] }),
+  check("creditex_registry_sync_matches_confirmed_check", sql`${t.confirmed} IN (0,1)`),
+  foreignKey({ columns: [t.organisationId, t.accountId], foreignColumns: [creditexRegistryAccounts.organisationId, creditexRegistryAccounts.id] }),
+  foreignKey({ columns: [t.organisationId, t.evidenceId], foreignColumns: [creditexRegistryEvidence.organisationId, creditexRegistryEvidence.id] }),
+]);
+
+export const creditexRegistryExports = sqliteTable("creditex_registry_exports", {
+  id: text("id").primaryKey(), organisationId: text("organisation_id").notNull(), accountId: text("account_id").notNull(), formatKey: text("format_key").notNull(),
+  baseVintage: text("base_vintage").notNull().default(""), packetIds: text("packet_ids").notNull(), packetHashes: text("packet_hashes").notNull(), evidenceId: text("evidence_id").notNull(),
+  payloadSha256: text("payload_sha256").notNull(), accountVersion: integer("account_version").notNull(), formatSha256: text("format_sha256").notNull(),
+  createdByUid: text("created_by_uid").notNull(), createdAt: text("created_at").notNull(),
+}, t => [uniqueIndex("creditex_registry_exports_payload_idx").on(t.organisationId, t.accountId, t.payloadSha256),
+  uniqueIndex("creditex_registry_exports_org_id_idx").on(t.organisationId, t.id),
+  foreignKey({ columns: [t.organisationId, t.accountId], foreignColumns: [creditexRegistryAccounts.organisationId, creditexRegistryAccounts.id] }),
+  foreignKey({ columns: [t.organisationId, t.evidenceId], foreignColumns: [creditexRegistryEvidence.organisationId, creditexRegistryEvidence.id] }),
+]);
+
+export const creditexRegistryExportReviews = sqliteTable("creditex_registry_export_reviews", {
+  organisationId: text("organisation_id").notNull(), exportId: text("export_id").notNull(), decision: text("decision").notNull(),
+  note: text("note").notNull(), reviewedByUid: text("reviewed_by_uid").notNull(), createdAt: text("created_at").notNull(),
+}, t => [primaryKey({ columns: [t.organisationId, t.exportId] }),
+  check("creditex_registry_export_reviews_decision_check", sql`${t.decision} IN ('approved','rejected')`),
+  foreignKey({ columns: [t.organisationId, t.exportId], foreignColumns: [creditexRegistryExports.organisationId, creditexRegistryExports.id] }),
+]);

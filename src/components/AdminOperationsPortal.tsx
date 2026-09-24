@@ -31,6 +31,7 @@ import { AdminFormTemplates } from "@/components/AdminFormTemplates";
 const CreditexActivityWorkPackGovernance = dynamic(() => import("./CreditexActivityWorkPackGovernance").then((module) => module.CreditexActivityWorkPackGovernance), { loading: () => <p role="status">Loading master forms...</p> });
 const TrainingQuestionnaireEditor = dynamic(() => import("./TrainingQuestionnaireEditor").then((module) => module.TrainingQuestionnaireEditor), { loading: () => <p role="status">Loading compliance questions...</p> });
 import { CreditexOutputActions } from "@/components/CreditexOutputActions";
+import { CreditexRegistryWorkspace } from "@/components/CreditexRegistryWorkspace";
 import { AdminUsabilityPilot } from "@/components/AdminUsabilityPilot";
 import { AdminPerformancePanel } from "@/components/AdminPerformancePanel";
 import { AdminOpportunityWorkspace } from "@/components/AdminOpportunityWorkspace";
@@ -808,18 +809,23 @@ export function AdminOperationsPortal() {
                 contextLabel="Australian Energy Assessments operations"
               />
               <details className="admin-card admin-supporting-form-templates">
-                <summary>Certificate outputs</summary>
-                <CreditexOutputActions
-                  api={api}
-                  endpoint="/api/admin/compliance-output-actions"
-                  contextLabel="Australian Energy Assessments administration"
-                />
-              </details>
-              <details className="admin-card admin-supporting-form-templates">
                 <summary>Supporting non-program field templates</summary>
                 <AdminFormTemplates api={api} role={session.role} />
               </details>
             </>
+          )}
+          {tab === "compliance-submissions" && session.role !== "support" && (
+            <CreditexRegistryWorkspace
+              api={api}
+              endpoint="/api/admin/compliance-registry"
+              outputEndpoint="/api/admin/compliance-output-actions"
+            >
+              <CreditexOutputActions
+                api={api}
+                endpoint="/api/admin/compliance-output-actions"
+                contextLabel="Australian Energy Assessments administration"
+              />
+            </CreditexRegistryWorkspace>
           )}
           {tab === "field-pilot" && <AdminUsabilityPilot api={api} role={session.role} />}
           {tab === "compliance-questions" && session.role !== "support" && <TrainingQuestionnaireEditor api={api} canEdit={true} onDirtyChange={reportQuestionnaireDirty} />}

@@ -196,9 +196,13 @@ function testD1(database) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 187);
+  assert.equal(completeMigrationChain.length, 189);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0187_google_business_profile\.sql$/);
+  assert.match(completeMigrationChain.at(-1), /^0189_creditex_registry_operations\.sql$/);
+  assert.ok(
+    completeMigrationChain.includes("0188_creditex_output_dispatch_intents.sql"),
+    "the complete migration chain must include durable certificate dispatch reservations",
+  );
   assert.ok(
     completeMigrationChain.includes("0160_trade_rental_inspections.sql"),
     "the complete migration chain must include the rental inspection schema",

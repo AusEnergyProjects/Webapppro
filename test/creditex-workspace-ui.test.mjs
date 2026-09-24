@@ -218,21 +218,24 @@ test('selected work replaces the register, uses fresh private details and return
 // initial values; the session fixture follows those two state slots.
 function portal(role='admin', options={}) {return runtime('CreditexCompliancePortal',{}, {noEffects:true,...options,seed:{2:user,3:true,4:{role,email:'reviewer@example.invalid',displayName:'Test Reviewer',governanceIdentityVerified:true,canEditFieldMasters:role==='admin',organisation:{code:'creditex',legalName:'Creditex',tradingName:'Creditex'}},5:false}});}
 
-test('Jobs defaults and Training and Activity forms stay directly visible in the left rail',()=>{
+test('Jobs defaults and Submissions, Training and Activity forms stay directly visible in the left rail',()=>{
   const h=portal();let tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);
-  for(const label of ['Jobs','Cases','Training','Activity forms','Trade onboarding','Official sources','Government rules'])assert.ok(button(tree,label));
+  for(const label of ['Jobs','Cases','Submissions','Training','Activity forms','Trade onboarding','Official sources','Government rules'])assert.ok(button(tree,label));
   assert.doesNotMatch(text(tree),/Setup & rules|VEU test pilot/);
   assert.equal(nodes(tree,n=>n.props?.role==='tablist')[0].props['aria-orientation'],'vertical');
   button(tree,'Cases').props.onClick();tree=h.render();assert.equal(button(tree,'Cases').props['aria-selected'],true);assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexOperationsWorkspace').length,1);
   button(tree,'Activity forms').props.onClick();tree=h.render();assert.ok(nodes(tree,n=>n.props?.id==='creditex-panel-forms')[0]);
-  const outputs=nodes(tree,n=>n.type==='details'&&text(n).includes('Certificate outputs'))[0];assert.ok(outputs);assert.notEqual(outputs.props.open,true);h.cleanup();
+  assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexRegistryWorkspace').length,0);
+  button(tree,'Submissions').props.onClick();tree=h.render();assert.ok(nodes(tree,n=>n.props?.id==='creditex-panel-submissions')[0]);
+  assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexRegistryWorkspace').length,1);
+  assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexOutputActions').length,1);h.cleanup();
 });
 
 test('auditors retain forms and source access but never gain training or administrator tools',()=>{
   const h=portal('auditor');const tree=h.render();assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexVoiceSetupPanel').length,0);
   assert.ok(button(tree,'Official sources'));assert.ok(button(tree,'Activity forms'));
   for(const label of ['Government rules','Training','Trade onboarding'])assert.equal(button(tree,label),undefined);
-  const selector=nodes(tree,n=>n.type==='select'&&n.props.value==='cases')[0];assert.deepEqual(nodes(selector,n=>n.type==='option').map(n=>n.props.value),['cases','operations','forms','sources']);h.cleanup();
+  const selector=nodes(tree,n=>n.type==='select'&&n.props.value==='cases')[0];assert.deepEqual(nodes(selector,n=>n.type==='option').map(n=>n.props.value),['cases','operations','submissions','forms','sources']);h.cleanup();
 });
 
 test('vertical keyboard navigation cycles through the visible authorised tabs',()=>{

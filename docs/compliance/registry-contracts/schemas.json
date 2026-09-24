@@ -1,0 +1,4132 @@
+{
+  "rec_sgu": {
+    "fields": [
+      {
+        "name": "Type of system",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "S.G.U. – Solar (deemed) S.G.U. – Wind (deemed) S.G.U. – Hydro (deemed)",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 8, field 1"
+      },
+      {
+        "name": "Installation date",
+        "dataType": "Date",
+        "mandatory": "Yes",
+        "validation": "dd/mm/yyyy",
+        "business": "The installation date must be after 1/4/2001 and cannot be in the future The installation date for an SGU must be within the last 12 months from the date of completion This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "-",
+        "sourceLocation": "PDF page 9, field 2"
+      },
+      {
+        "name": "Was a solar retailer involved in the procurement and installation of the system?",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "PDF page 9, field 3"
+      },
+      {
+        "name": "System/panel brand",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Specified system brand and model must be on the CEC approved products list at the time of installation This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "CEC approved PV modules",
+        "sourceLocation": "PDF page 10, field 4"
+      },
+      {
+        "name": "System/panel model",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "For Wind and Hydro there is no list to choose from. Model numbers need to be entered manually This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "CEC approved PV modules",
+        "sourceLocation": "PDF page 10, field 5"
+      },
+      {
+        "name": "Inverter manufacturer",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "-",
+        "reference": "CEC approved inverters",
+        "sourceLocation": "PDF page 11, field 6"
+      },
+      {
+        "name": "Inverter series",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "-",
+        "reference": "CEC approved inverters",
+        "sourceLocation": "PDF page 11, field 7"
+      },
+      {
+        "name": "Inverter model number",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "-",
+        "reference": "CEC approved inverters",
+        "sourceLocation": "PDF page 11, field 8"
+      },
+      {
+        "name": "Type of connection to the electricity grid",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Connected to an electricity grid without battery storage Connected to an electricity grid Stand-alone (not connected to an electricity grid)",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 11, field 9"
+      },
+      {
+        "name": "System mounting type",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Building or structure Ground mounted or free standing",
+        "business": "*Applies to solar only *Mandatory for solar",
+        "reference": "-",
+        "sourceLocation": "PDF page 11, field 10"
+      },
+      {
+        "name": "Is a site specific audit report available?",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "Applies to wind and hydro only *Mandatory for wind and hydro",
+        "reference": "-",
+        "sourceLocation": "PDF page 12, field 11"
+      },
+      {
+        "name": "Are you installing a complete unit (adding capacity to an existing system is not considered a complete unit)?",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 12, field 12"
+      },
+      {
+        "name": "If this system is additional capacity to an existing system please provide detailed information on the position of the new panels and inverter (if applicable). System upgrades without a note explaining new panel locations will be failed by the Clean Energy Regulator",
+        "dataType": "Text (4000)",
+        "mandatory": "No*",
+        "validation": "Min length of string is 7",
+        "business": "*Mandatory if the answer is “No” to “Are you installing a complete unit (adding capacity to an existing system is not considered a complete unit)?”",
+        "reference": "-",
+        "sourceLocation": "PDF page 13, field 13"
+      },
+      {
+        "name": "For what period would you like to create RECs",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Refer to Reference data E: deeming period",
+        "business": "-",
+        "reference": "Deeming period",
+        "sourceLocation": "PDF page 13, field 14"
+      },
+      {
+        "name": "What is the rated power output (in kW) of your small generation unit",
+        "dataType": "Decimal (6,3)",
+        "mandatory": "Yes",
+        "validation": "Input up to 3 decimal places",
+        "business": "Solar (PV): must be greater than 0 and less than or equal to 100kW Wind: must be greater than 0 and less than or equal to 10kW Hydro: must be greater than 0 and less than or equal to 6.4kW This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "-",
+        "sourceLocation": "PDF page 14, field 15"
+      },
+      {
+        "name": "Number of panels",
+        "dataType": "Int",
+        "mandatory": "Yes*",
+        "validation": "Min 1 and Max 1000",
+        "business": "Applies to solar only *Mandatory for solar The number of panels must match the number of solar panel serial numbers provided This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "-",
+        "sourceLocation": "PDF page 15, field 16"
+      },
+      {
+        "name": "Number of inverters",
+        "dataType": "Int",
+        "mandatory": "Yes",
+        "validation": "Min 1 and Max 1000",
+        "business": "The number of inverters must match the number of inverter serial numbers provided",
+        "reference": "",
+        "sourceLocation": "PDF page 15, field 17"
+      },
+      {
+        "name": "Inverter serial number(s)",
+        "dataType": "Int",
+        "mandatory": "Yes",
+        "validation": "Multiple serial numbers – delimited by semicolons ';'. Each serial number can be up to 100 characters long. Users can enter up to 1000 serial numbers",
+        "business": "All serial numbers provided must be unique",
+        "reference": "",
+        "sourceLocation": "PDF page 15, field 18"
+      },
+      {
+        "name": "Do you wish to use the default resource availability figure?",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "Applies to wind and hydro only *Mandatory for wind and hydro",
+        "reference": "-",
+        "sourceLocation": "PDF page 16, field 19"
+      },
+      {
+        "name": "What is your resource availability (hours per annum) for your system?",
+        "dataType": "Int",
+        "mandatory": "Yes*",
+        "validation": "Min value: 1 and Max value: 8,760",
+        "business": "Applies to wind and hydro only *Mandatory for wind and hydro if the answer is “No” to “Do you wish to use the default resource availability figure?”",
+        "reference": "-",
+        "sourceLocation": "PDF page 16, field 20"
+      },
+      {
+        "name": "Equipment model serial number(s)",
+        "dataType": "Text (101,000)",
+        "mandatory": "Yes",
+        "validation": "Multiple serial numbers – delimited by semicolons ';'. Each serial number can be up to 100 characters long. Users can enter up to 1000 serial numbers",
+        "business": "All serial numbers provided must be unique This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "-",
+        "sourceLocation": "PDF page 17, field 21"
+      },
+      {
+        "name": "Are you creating certificates for a system that has previously been failed by the Clean Energy Regulator?",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 17, field 22"
+      },
+      {
+        "name": "Accreditation code",
+        "dataType": "Text (255)",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "*Mandatory if the answer is “Yes” to “Are you creating certificates for a system that has previously been failed by the Clean Energy Regulator” The accreditation code provided must exist within the system",
+        "reference": "-",
+        "sourceLocation": "PDF page 17, field 23"
+      },
+      {
+        "name": "Explanatory notes for re-creating certificates previously failed",
+        "dataType": "Text (4000)",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "*Mandatory if the answer is “Yes” to “Are you creating certificated for a system that has previously been failed by the Clean Energy Regulator?”",
+        "reference": "-",
+        "sourceLocation": "PDF page 18, field 24"
+      },
+      {
+        "name": "Reference",
+        "dataType": "Text (255)",
+        "mandatory": "No",
+        "validation": "-",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 18, field 25"
+      },
+      {
+        "name": "Certificate tag",
+        "dataType": "Text (255)",
+        "mandatory": "No",
+        "validation": "-",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 18, field 26"
+      },
+      {
+        "name": "Designer CEC accreditation statement",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Mandatory",
+        "reference": "-",
+        "sourceLocation": "PDF page 19, field 27"
+      },
+      {
+        "name": "Installer CEC accreditation statement",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Mandatory",
+        "reference": "",
+        "sourceLocation": "PDF page 20, field 28"
+      },
+      {
+        "name": "Design and Installation of Unit Statement",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Mandatory",
+        "reference": "",
+        "sourceLocation": "PDF page 21, field 29"
+      },
+      {
+        "name": "Local, State and Territory government requirements",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Mandatory",
+        "reference": "-",
+        "sourceLocation": "PDF page 22, field 30"
+      },
+      {
+        "name": "Electrical safety documentation",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Mandatory",
+        "reference": "",
+        "sourceLocation": "PDF page 22, field 31"
+      },
+      {
+        "name": "Unit componentry statements",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Mandatory",
+        "reference": "",
+        "sourceLocation": "PDF page 23, field 32"
+      },
+      {
+        "name": "On-site attendance written statements",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Mandatory",
+        "reference": "",
+        "sourceLocation": "PDF page 24, field 33"
+      },
+      {
+        "name": "On-site attendance evidence statements",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Mandatory",
+        "reference": "",
+        "sourceLocation": "PDF page 24, field 34"
+      },
+      {
+        "name": "Not grid-connected statement",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Mandatory Must be “Yes” if the answer is “Stand alone (not connected to electricity grid)”",
+        "reference": "-",
+        "sourceLocation": "PDF page 24, field 35"
+      },
+      {
+        "name": "True, correct and complete statement",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Mandatory",
+        "reference": "",
+        "sourceLocation": "PDF page 25, field 36"
+      },
+      {
+        "name": "Retailer CEC accreditation statement",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Applies to solar PV only *Mandatory if the answer is “Yes” to Was a solar retailer involved in the procurement and installation of the system?",
+        "reference": "",
+        "sourceLocation": "PDF page 25, field 37"
+      },
+      {
+        "name": "Retailer unit performance statement",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Applies to solar PV only *Mandatory if the answer is “Yes” to Was a solar retailer involved in the procurement and installation of the system?",
+        "reference": "",
+        "sourceLocation": "PDF page 26, field 38"
+      },
+      {
+        "name": "Retailer completion and connection statements",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Applies to solar PV only *Mandatory if the answer is “Yes” to Was a solar retailer involved in the procurement and installation of the system?",
+        "reference": "",
+        "sourceLocation": "PDF page 27, field 39"
+      },
+      {
+        "name": "Retailer provision of unit information statements",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Applies to solar PV only *Mandatory if the answer is “Yes” to Was a solar retailer involved in the procurement and installation of the system?",
+        "reference": "",
+        "sourceLocation": "PDF page 28, field 40"
+      },
+      {
+        "name": "Retailer Conflicts of interest",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Mandatory",
+        "reference": "",
+        "sourceLocation": "PDF page 29, field 41"
+      },
+      {
+        "name": "Retailer eligibility statement",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Applies to solar PV only *Mandatory if the answer is “Yes” to Was a solar retailer involved in the procurement and installation of the system?",
+        "reference": "",
+        "sourceLocation": "PDF page 29, field 42"
+      },
+      {
+        "name": "Retailer True, correct and complete statement",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Y/Yes or N/No",
+        "business": "*Applies to solar PV only *Mandatory if the answer is “Yes” to Was a solar retailer involved in the procurement and installation of the system?",
+        "reference": "",
+        "sourceLocation": "PDF page 30, field 43"
+      },
+      {
+        "name": "Installation property type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Residential School Commercial",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 30, field 44"
+      },
+      {
+        "name": "Single or multi-story",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Single story or Multi story",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 30, field 45"
+      },
+      {
+        "name": "Installation property name, boat name or chassis number",
+        "dataType": "Text (100)",
+        "mandatory": "No",
+        "validation": "-",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 30, field 46"
+      },
+      {
+        "name": "Installation unit type",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Refer to unit type reference data",
+        "business": "*Refer to the address validation rules section Must be a valid physical installation address located within Australia",
+        "reference": "Unit type",
+        "sourceLocation": "PDF page 31, field 47"
+      },
+      {
+        "name": "Installation unit number",
+        "dataType": "Text (10)",
+        "mandatory": "Yes*",
+        "validation": "Numbers and letters can be entered e.g. 3a",
+        "business": "*Refer to the address validation rules section Must be a valid physical installation address located within Australia",
+        "reference": "-",
+        "sourceLocation": "PDF page 31, field 48"
+      },
+      {
+        "name": "Installation street number",
+        "dataType": "Text (15)",
+        "mandatory": "Yes*",
+        "validation": "Numbers and letters can be entered e.g. 3a",
+        "business": "*Refer to the address validation rules section Must be a valid physical installation address located within Australia This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "-",
+        "sourceLocation": "PDF page 31, field 49"
+      },
+      {
+        "name": "Installation street name",
+        "dataType": "Text (45)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Refer to the address validation rules section Must be a valid physical installation address located within Australia This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "-",
+        "sourceLocation": "PDF page 32, field 50"
+      },
+      {
+        "name": "Installation street type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Refer to street type reference data",
+        "business": "Refer to the address validation rules section Must be a valid physical installation address located within Australia This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "Street type",
+        "sourceLocation": "PDF page 32, field 51"
+      },
+      {
+        "name": "Installation town/suburb",
+        "dataType": "Text (80)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Refer to the address validation rules section Must be a valid physical installation address located within Australia The postcode and suburb must match This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "-",
+        "sourceLocation": "PDF page 33, field 52"
+      },
+      {
+        "name": "Installation state",
+        "dataType": "Text (3)",
+        "mandatory": "Yes",
+        "validation": "Refer to State/Territory reference data",
+        "business": "Refer to the address validation rules section Must be a valid physical installation address located within Australia This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "State/Territory",
+        "sourceLocation": "PDF page 33, field 53"
+      },
+      {
+        "name": "Installation postcode",
+        "dataType": "Text (8)",
+        "mandatory": "Yes",
+        "validation": "Refer to postcode reference data",
+        "business": "Refer to the address validation rules section Must be a valid physical installation address located within Australia The postcode and suburb must match This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "Postcode",
+        "sourceLocation": "PDF page 34, field 54"
+      },
+      {
+        "name": "Installation latitude",
+        "dataType": "Decimal (12,9)",
+        "mandatory": "No",
+        "validation": "-90 to 90 Up to nine decimal places",
+        "business": "This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "-",
+        "sourceLocation": "PDF page 34, field 55"
+      },
+      {
+        "name": "Installation longitude",
+        "dataType": "Decimal (12,9)",
+        "mandatory": "No",
+        "validation": "-180’ to 180’ Up to nine decimal places",
+        "business": "This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "-",
+        "sourceLocation": "PDF page 34, field 56"
+      },
+      {
+        "name": "Is there more than one SGU at this address?",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "-",
+        "reference": "Yes or No",
+        "sourceLocation": "PDF page 34, field 57"
+      },
+      {
+        "name": "If the address entered above does not adequately describe the location of the system please provide further detailed information for the Clean Energy Regulator to locate the system",
+        "dataType": "Text (4000)",
+        "mandatory": "Yes*",
+        "validation": "Min length of string is 7",
+        "business": "*Mandatory if the answer is “Yes” to “Is there more than one SGU at this address?”",
+        "reference": "-",
+        "sourceLocation": "PDF page 35, field 58"
+      },
+      {
+        "name": "Additional system information",
+        "dataType": "Text (4000)",
+        "mandatory": "No",
+        "validation": "-",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 35, field 59"
+      },
+      {
+        "name": "Owner type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Individual Corporate body Government body Trustee",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 35, field 60"
+      },
+      {
+        "name": "Owner organisation name",
+        "dataType": "Text (200)",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "*Mandatory if the answer is “Government body, Corporate body, trustee” to “owner type”",
+        "reference": "-",
+        "sourceLocation": "PDF page 36, field 61"
+      },
+      {
+        "name": "Owner First Name",
+        "dataType": "Text (100)",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "*Mandatory if the answer is “Individual” to “Owner Type”. If “owner type is not individual must be blank.",
+        "reference": "-",
+        "sourceLocation": "PDF page 36, field 62"
+      },
+      {
+        "name": "Owner Surname",
+        "dataType": "Text (100)",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "*Mandatory if the answer is “Individual” to “Owner type”. If “owner type is not individual must be blank.",
+        "reference": "-",
+        "sourceLocation": "PDF page 36, field 63"
+      },
+      {
+        "name": "Owner phone",
+        "dataType": "Text (16)",
+        "mandatory": "Yes",
+        "validation": "Min length: 6 Must only contain digits [0-9] Can have an option + at the start",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 36, field 64"
+      },
+      {
+        "name": "Owner fax",
+        "dataType": "Text (16)",
+        "mandatory": "No",
+        "validation": "Min length: 6 Must only contain digits [0-9] Can have an optional + at the start",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 37, field 65"
+      },
+      {
+        "name": "Owner mobile",
+        "dataType": "Text (16)",
+        "mandatory": "No",
+        "validation": "Min length: 6 Must only contain digits [0-9] Can have an optional + at the start",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 37, field 66"
+      },
+      {
+        "name": "Owner email",
+        "dataType": "Text (255)",
+        "mandatory": "No",
+        "validation": "Valid email format",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 37, field 67"
+      },
+      {
+        "name": "Owner address type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Physical or Postal",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 37, field 68"
+      },
+      {
+        "name": "Owner postal delivery type",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "* Mandatory if the answer is “Postal” for owner postal delivery type",
+        "reference": "Postal delivery type",
+        "sourceLocation": "PDF page 37, field 69"
+      },
+      {
+        "name": "Owner postal delivery number",
+        "dataType": "Text (11)",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "*Refer to the address validation rules section",
+        "reference": "-",
+        "sourceLocation": "PDF page 38, field 70"
+      },
+      {
+        "name": "Owner unit type",
+        "dataType": "Select list",
+        "mandatory": "Yes*",
+        "validation": "Refer to unit type reference data",
+        "business": "*Refer to the address validation rules section",
+        "reference": "Unit type",
+        "sourceLocation": "PDF page 38, field 71"
+      },
+      {
+        "name": "Owner unit number",
+        "dataType": "Text (10)",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "*Refer to the address validation rules section",
+        "reference": "-",
+        "sourceLocation": "PDF page 38, field 72"
+      },
+      {
+        "name": "Owner street number",
+        "dataType": "Text (15)",
+        "mandatory": "Yes",
+        "validation": "Numbers and letters can be entered e.g. 3a",
+        "business": "Refer to the address validation rules section",
+        "reference": "-",
+        "sourceLocation": "PDF page 38, field 73"
+      },
+      {
+        "name": "Owner street name",
+        "dataType": "Text (45)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Refer to the address validation rules section",
+        "reference": "-",
+        "sourceLocation": "PDF page 38, field 74"
+      },
+      {
+        "name": "Owner street type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Refer to street type reference data",
+        "business": "Refer to the address validation rules section",
+        "reference": "Street type",
+        "sourceLocation": "PDF page 39, field 75"
+      },
+      {
+        "name": "Owner town/suburb",
+        "dataType": "Text (80)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Refer to the address validation rules section",
+        "reference": "-",
+        "sourceLocation": "PDF page 39, field 76"
+      },
+      {
+        "name": "Owner state",
+        "dataType": "Text (3)",
+        "mandatory": "Yes",
+        "validation": "Refer to State/Territory reference data",
+        "business": "Refer to the address validation rules section",
+        "reference": "State/Territory",
+        "sourceLocation": "PDF page 39, field 77"
+      },
+      {
+        "name": "Owner postcode",
+        "dataType": "Text (8)",
+        "mandatory": "Yes*",
+        "validation": "Refer to postcode reference data",
+        "business": "*Refer to the address validation rules section",
+        "reference": "Postcode",
+        "sourceLocation": "PDF page 39, field 78"
+      },
+      {
+        "name": "Owner country",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Refer to country reference data",
+        "business": "Refer to the address validation rules section",
+        "reference": "Country",
+        "sourceLocation": "PDF page 39, field 79"
+      },
+      {
+        "name": "Installer first name",
+        "dataType": "Text (100)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "The installer first name must match the name with which the installer received their CEC accreditation This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "-",
+        "sourceLocation": "PDF page 40, field 80"
+      },
+      {
+        "name": "Installer surname",
+        "dataType": "Text (100)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "The installer last name must match the name with which the installer received their CEC accreditation This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "-",
+        "sourceLocation": "PDF page 40, field 81"
+      },
+      {
+        "name": "CEC accredited installer number",
+        "dataType": "Text (100)",
+        "mandatory": "Yes",
+        "validation": "Grid connected CEC installer Stand-alone CEC installer",
+        "business": "The installer accreditation number must be a CEC accredited number and the system must be installed within the period of accreditation The installer number must be for an accredited CEC installer with the appropriate grid connection qualification i.e. if answered “Stand- alone (not connected to electricity grid)” to “Type of connection to the electricity grid”, the installer must have off- grid accreditation This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "-",
+        "sourceLocation": "PDF page 41, field 82"
+      },
+      {
+        "name": "Installer phone",
+        "dataType": "Text (16)",
+        "mandatory": "Yes",
+        "validation": "Min length: 6 Must only contain digits [0-9]",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 41, field 83"
+      },
+      {
+        "name": "Installer fax",
+        "dataType": "Text (16)",
+        "mandatory": "No",
+        "validation": "Min length: 6 Must only contain digits [0-9] Can have an optional + at the start",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 42, field 84"
+      },
+      {
+        "name": "Installer mobile",
+        "dataType": "Text (16)",
+        "mandatory": "No",
+        "validation": "Min length: 6 Must only contain digits [0-9] Can have an optional + at the start",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 42, field 85"
+      },
+      {
+        "name": "Installer email",
+        "dataType": "Text (255)",
+        "mandatory": "No",
+        "validation": "Valid email format",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 42, field 86"
+      },
+      {
+        "name": "Installer address type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Physical or Postal",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 43, field 87"
+      },
+      {
+        "name": "Installer postal delivery type",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "* Mandatory if the answer is “Postal”",
+        "reference": "Postal delivery type",
+        "sourceLocation": "PDF page 43, field 88"
+      },
+      {
+        "name": "Installer postal delivery number",
+        "dataType": "Text (11)",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "*Refer to the address validation rules section Must be a valid post office box number",
+        "reference": "-",
+        "sourceLocation": "PDF page 43, field 89"
+      },
+      {
+        "name": "Installer unit type",
+        "dataType": "Select list",
+        "mandatory": "Yes*",
+        "validation": "Refer to unit type reference data",
+        "business": "*Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "Unit type",
+        "sourceLocation": "PDF page 43, field 90"
+      },
+      {
+        "name": "Installer unit number",
+        "dataType": "Text (10)",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "*Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "-",
+        "sourceLocation": "PDF page 43, field 91"
+      },
+      {
+        "name": "Installer street number",
+        "dataType": "Text (15)",
+        "mandatory": "Yes*",
+        "validation": "Numbers and letters can be entered e.g. 3a",
+        "business": "*Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "-",
+        "sourceLocation": "PDF page 44, field 92"
+      },
+      {
+        "name": "Installer street name",
+        "dataType": "Text (45)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "-",
+        "sourceLocation": "PDF page 44, field 93"
+      },
+      {
+        "name": "Installer street type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Refer to street type reference data",
+        "business": "Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "Street type",
+        "sourceLocation": "PDF page 44, field 94"
+      },
+      {
+        "name": "Installer town/suburb",
+        "dataType": "Text (80)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Refer to the address validation rules section Must be a valid address located within Australia The postcode and suburb must match",
+        "reference": "-",
+        "sourceLocation": "PDF page 44, field 95"
+      },
+      {
+        "name": "Installer state",
+        "dataType": "Text (3)",
+        "mandatory": "Yes",
+        "validation": "Refer to State/Territory reference data",
+        "business": "Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "State/Territory",
+        "sourceLocation": "PDF page 45, field 96"
+      },
+      {
+        "name": "Installer postcode",
+        "dataType": "Text (8)",
+        "mandatory": "Yes",
+        "validation": "Refer to postcode reference data",
+        "business": "Refer to the address validation rules section Must be a valid address located within Australia The postcode and suburb must match",
+        "reference": "Postcode",
+        "sourceLocation": "PDF page 45, field 97"
+      },
+      {
+        "name": "Electrician first name",
+        "dataType": "Text (100)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 45, field 98"
+      },
+      {
+        "name": "Electrician surname",
+        "dataType": "Text (100)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 45, field 99"
+      },
+      {
+        "name": "Licensed electrician number",
+        "dataType": "Text (100)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 45, field 100"
+      },
+      {
+        "name": "Electrician phone",
+        "dataType": "Text (16)",
+        "mandatory": "Yes",
+        "validation": "Min length: 6 Must only contain digits [0-9] Can have an optional + at the start",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 46, field 101"
+      },
+      {
+        "name": "Electrician fax",
+        "dataType": "Text (16)",
+        "mandatory": "No",
+        "validation": "Min length: 6 Must only contain digits [0-9] Can have an optional + at the start",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 46, field 102"
+      },
+      {
+        "name": "Electrician mobile",
+        "dataType": "Text (16)",
+        "mandatory": "No",
+        "validation": "Min length: 6 Must only contain digits [0-9] Can have an optional + at the start",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 46, field 103"
+      },
+      {
+        "name": "Electrician email",
+        "dataType": "Text (255)",
+        "mandatory": "No",
+        "validation": "Valid email format",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 47, field 104"
+      },
+      {
+        "name": "Electrician address type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Physical or Postal",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 47, field 105"
+      },
+      {
+        "name": "Electrician postal delivery type",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "* Mandatory if the answer is “Postal”",
+        "reference": "Postal delivery type",
+        "sourceLocation": "PDF page 47, field 106"
+      },
+      {
+        "name": "Electrician postal delivery number",
+        "dataType": "Text (11)",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "*Refer to the address validation rules section",
+        "reference": "-",
+        "sourceLocation": "PDF page 47, field 107"
+      },
+      {
+        "name": "Electrician unit type",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Refer to unit type reference data",
+        "business": "*Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "Unit type",
+        "sourceLocation": "PDF page 47, field 108"
+      },
+      {
+        "name": "Electrician unit number",
+        "dataType": "Text (10)",
+        "mandatory": "Yes*",
+        "validation": "Numbers and letters can be entered e.g. 3a",
+        "business": "*Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "-",
+        "sourceLocation": "PDF page 48, field 109"
+      },
+      {
+        "name": "Electrician street number",
+        "dataType": "Text (15)",
+        "mandatory": "Yes*",
+        "validation": "Numbers and letters can be entered e.g. 3a",
+        "business": "*Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "-",
+        "sourceLocation": "PDF page 48, field 110"
+      },
+      {
+        "name": "Electrician street name",
+        "dataType": "Text (45)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "-",
+        "sourceLocation": "PDF page 48, field 111"
+      },
+      {
+        "name": "Electrician street type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Refer to street type reference data",
+        "business": "Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "Street type",
+        "sourceLocation": "PDF page 48, field 112"
+      },
+      {
+        "name": "Electrician town/suburb",
+        "dataType": "Text (80)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Refer to the address validation rules section Must be a valid address located within Australia. The postcode and suburb must match",
+        "reference": "-",
+        "sourceLocation": "PDF page 49, field 113"
+      },
+      {
+        "name": "Electrician state",
+        "dataType": "Text (3)",
+        "mandatory": "Yes",
+        "validation": "Refer to State/Territory reference data",
+        "business": "Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "State/Territory",
+        "sourceLocation": "PDF page 49, field 114"
+      },
+      {
+        "name": "Electrician postcode",
+        "dataType": "Text (8)",
+        "mandatory": "Yes",
+        "validation": "Refer to postcode reference data",
+        "business": "Refer to the address validation rules section Must be a valid address located within Australia. The postcode and suburb must match",
+        "reference": "Postcode",
+        "sourceLocation": "PDF page 49, field 115"
+      },
+      {
+        "name": "Designer first name",
+        "dataType": "Text (100)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "The first name must match the name with which the installer received their CEC accreditation",
+        "reference": "-",
+        "sourceLocation": "PDF page 49, field 116"
+      },
+      {
+        "name": "Designer surname",
+        "dataType": "Text (100)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "The last name must match the name with which the installer received their CEC accreditation",
+        "reference": "-",
+        "sourceLocation": "PDF page 50, field 117"
+      },
+      {
+        "name": "CEC accredited designer number",
+        "dataType": "Text (100)",
+        "mandatory": "Yes",
+        "validation": "Grid connected CEC designer Stand-alone CEC designer",
+        "business": "The designer number must be a CEC accredited designer number and the system must be installed within the period of accreditation The designer number must be for an accredited CEC designer with the appropriate grid connection qualification I.e. if answered “Stand- alone (not connected to electricity grid)” to “Type of connection to the electricity grid”, the designer must have off- grid design accreditation.",
+        "reference": "-",
+        "sourceLocation": "PDF page 51, field 118"
+      },
+      {
+        "name": "Designer phone",
+        "dataType": "Text (16)",
+        "mandatory": "Yes",
+        "validation": "Min length: 6 Must only contains digits [0-9] Can have an optional ‘+’ at the start",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 52, field 119"
+      },
+      {
+        "name": "Designer fax",
+        "dataType": "Text (16)",
+        "mandatory": "No",
+        "validation": "Min length: 6 Must only contains digits [0-9] Can have an optional ‘+’ at the start",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 52, field 120"
+      },
+      {
+        "name": "Designer mobile",
+        "dataType": "Text (16)",
+        "mandatory": "No",
+        "validation": "Min length: 6 Must only contains digits [0-9] Can have an optional ‘+’ at the start",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 52, field 121"
+      },
+      {
+        "name": "Designer email",
+        "dataType": "Text (255)",
+        "mandatory": "No",
+        "validation": "Valid email format",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 53, field 122"
+      },
+      {
+        "name": "Designer address type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Physical or Postal",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "PDF page 53, field 123"
+      },
+      {
+        "name": "Designer postal delivery type",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "* Mandatory if the answer is “Postal”",
+        "reference": "Postal delivery type",
+        "sourceLocation": "PDF page 53, field 124"
+      },
+      {
+        "name": "Designer postal delivery number",
+        "dataType": "Text 911)",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "*Refer to the address validation rules section Must be a valid post office box number",
+        "reference": "-",
+        "sourceLocation": "PDF page 53, field 125"
+      },
+      {
+        "name": "Designer unit type",
+        "dataType": "Select List",
+        "mandatory": "Yes*",
+        "validation": "Refer to unit type reference data",
+        "business": "*Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "Unit type",
+        "sourceLocation": "PDF page 53, field 126"
+      },
+      {
+        "name": "Designer unit number",
+        "dataType": "Text (10)",
+        "mandatory": "Yes*",
+        "validation": "Numbers and letters can be entered e.g. 3a",
+        "business": "*Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "-",
+        "sourceLocation": "PDF page 54, field 127"
+      },
+      {
+        "name": "Designer street number",
+        "dataType": "Text (15)",
+        "mandatory": "Yes*",
+        "validation": "Numbers and letters can be entered e.g. 3a",
+        "business": "*Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "-",
+        "sourceLocation": "PDF page 54, field 128"
+      },
+      {
+        "name": "Designer street name",
+        "dataType": "Text (45)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "-",
+        "sourceLocation": "PDF page 54, field 129"
+      },
+      {
+        "name": "Designer street type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Refer to street type reference data",
+        "business": "Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "Street type",
+        "sourceLocation": "PDF page 54, field 130"
+      },
+      {
+        "name": "Designer town/suburb",
+        "dataType": "Text (80)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Refer to the address validation rules section Must be a valid address located within Australia The postcode and suburb must match",
+        "reference": "-",
+        "sourceLocation": "PDF page 55, field 131"
+      },
+      {
+        "name": "Designer state",
+        "dataType": "Text (3)",
+        "mandatory": "Yes",
+        "validation": "Refer to State/Territory reference data",
+        "business": "Refer to the address validation rules section Must be a valid address located within Australia",
+        "reference": "State/Territory",
+        "sourceLocation": "PDF page 55, field 132"
+      },
+      {
+        "name": "Designer postcode",
+        "dataType": "Text (8)",
+        "mandatory": "Yes",
+        "validation": "Refer to postcode reference data",
+        "business": "Refer to the address validation rules section Must be a valid address located within Australia The postcode and suburb must match",
+        "reference": "Postcode",
+        "sourceLocation": "PDF page 55, field 133"
+      },
+      {
+        "name": "Retailer name",
+        "dataType": "Text (255)",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "*Applies to solar PV only *Mandatory if the answer is “Yes” to Was a solar retailer involved in the procurement and installation of the system? This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "-",
+        "sourceLocation": "PDF page 56, field 134"
+      },
+      {
+        "name": "Retailer ABN",
+        "dataType": "Text (80)",
+        "mandatory": "Yes*",
+        "validation": "Must only contain digits [0-9] Must be blank is value of ‘Retailer name’ column is ‘owner’ ABN is validated against the Retailer Entity name (as listed on the ABR website - ABN Lookup (business.gov.au) and checks that the ABN is Active at the time of the installation. Business or trading names are not valid.",
+        "business": "*Applies to solar PV only *Mandatory if the answer is “Yes” to Was a solar retailer involved in the procurement and installation of the system? This field must be left blank if a signed data package is used in the solar SGU application",
+        "reference": "-",
+        "sourceLocation": "PDF page 57, field 135"
+      },
+      {
+        "name": "Retailer representative",
+        "dataType": "Text (255)",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "*Mandatory if the answer is “Yes” to Was a solar retailer involved in the procurement and installation of the system?",
+        "reference": "",
+        "sourceLocation": "PDF page 57, field 136"
+      },
+      {
+        "name": "Retailer role",
+        "dataType": "Text (255)",
+        "mandatory": "Yes*",
+        "validation": "-",
+        "business": "*Mandatory if the answer is “Yes” to Was a solar retailer involved in the procurement and installation of the system?",
+        "reference": "",
+        "sourceLocation": "PDF page 58, field 137"
+      },
+      {
+        "name": "National metering identifier (NMI)",
+        "dataType": "Text (11)",
+        "mandatory": "No",
+        "validation": "Must only contain 10 or 11 characters",
+        "business": "Applies to solar PV only",
+        "reference": "-",
+        "sourceLocation": "PDF page 58, field 138"
+      },
+      {
+        "name": "Battery storage manufacturer",
+        "dataType": "Text (500)",
+        "mandatory": "No",
+        "validation": "Refer to Manufacturer reference data",
+        "business": "Applies to solar PV only",
+        "reference": "Manufacturer",
+        "sourceLocation": "PDF page 58, field 139"
+      },
+      {
+        "name": "Battery storage model",
+        "dataType": "Text (500)",
+        "mandatory": "No",
+        "validation": "Refer to battery storage reference data",
+        "business": "Applies to solar PV only",
+        "reference": "Model number",
+        "sourceLocation": "PDF page 58, field 140"
+      },
+      {
+        "name": "Is the battery system part of an aggregated control?",
+        "dataType": "Select List",
+        "mandatory": "No",
+        "validation": "Y/Yes or N/No",
+        "business": "Applies to solar PV only",
+        "reference": "-",
+        "sourceLocation": "PDF page 58, field 141"
+      },
+      {
+        "name": "Has the installer changed default manufacturer setting of the battery storage system?",
+        "dataType": "Select List",
+        "mandatory": "No",
+        "validation": "Y/Yes or N/No",
+        "business": "Applies to solar PV only",
+        "reference": "-",
+        "sourceLocation": "PDF page 58, field 142"
+      },
+      {
+        "name": "Signed data package",
+        "dataType": "Text (80)",
+        "mandatory": "No",
+        "validation": "Check that associated zip file of signed data packages contains one and only one file with a name that matches the corresponding application",
+        "business": "Applies to solar PV only",
+        "reference": "-",
+        "sourceLocation": "PDF page 59, field 143"
+      },
+      {
+        "name": "Documents Zip File",
+        "dataType": "Text (200)",
+        "mandatory": "No",
+        "validation": "File name must match the name of the .zip file being uploaded",
+        "business": "Applies to all fuel sources – SGU and SWH File size cannot exceed 10mb Documents cannot be altered or deleted once uploaded",
+        "reference": "-",
+        "sourceLocation": "PDF page 59, field 144"
+      },
+      {
+        "name": "Installation Type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "New system Replacement system Extension system Additional system",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 60, field 145"
+      },
+      {
+        "name": "Installation Type Additional Information",
+        "dataType": "Text (4000)",
+        "mandatory": "No*",
+        "validation": "Min length of string is 7",
+        "business": "*Mandatory if the answer is “Extension system” or “Additional system” to “Type of Installation”",
+        "reference": "-",
+        "sourceLocation": "PDF page 60, field 146"
+      }
+    ],
+    "sources": [
+      {
+        "file": "rec-sgu-swh-september-2025.pdf",
+        "url": "https://cer.gov.au/document/rec-registry-guide-bulk-upload-small-generation-unit-and-solar-water-heater-installs",
+        "resolvedUrl": "https://cer.gov.au/document/rec-registry-guide-bulk-upload-small-generation-unit-and-solar-water-heater-installs",
+        "contentType": "application/pdf",
+        "retrievedAt": "2026-09-24T05:05:56.542821+00:00",
+        "sha256": "783d8b54f37a1c7a189d3de5c38b69057e8e574077abfeea550861a1a6dc39de",
+        "bytes": 963322
+      }
+    ],
+    "version": "September 2025"
+  },
+  "rec_swh": {
+    "fields": [
+      {
+        "name": "System Brand",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "-",
+        "reference": "Register of solar water heaters",
+        "sourceLocation": "PDF page 61, field 1"
+      },
+      {
+        "name": "System model",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "-",
+        "reference": "Register of solar water heaters",
+        "sourceLocation": "PDF page 61, field 2"
+      },
+      {
+        "name": "Tank serial numbers (s)",
+        "dataType": "Text (101,000)",
+        "mandatory": "Yes",
+        "validation": "Multiple serial numbers delimited by semicolons – ‘;’. Each serial number can be up to 100 characters long User can enter up to 1000 serial numbers.",
+        "business": "Serial number",
+        "reference": "-",
+        "sourceLocation": "PDF page 61, field 3"
+      },
+      {
+        "name": "Number of panels",
+        "dataType": "Int",
+        "mandatory": "Yes",
+        "validation": "Min 0 and Max 1000",
+        "business": "Number of panels",
+        "reference": "-",
+        "sourceLocation": "PDF page 61, field 4"
+      },
+      {
+        "name": "Installation date",
+        "dataType": "Date",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "SWH creation rule",
+        "reference": "-",
+        "sourceLocation": "PDF page 61, field 5"
+      },
+      {
+        "name": "Installation type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "-",
+        "reference": "SWH Installation type",
+        "sourceLocation": "PDF page 62, field 6"
+      },
+      {
+        "name": "Is the volumetric capacity of this installation greater than 700L",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "-",
+        "reference": "Yes or No",
+        "sourceLocation": "PDF page 62, field 7"
+      },
+      {
+        "name": "Statutory declarations sent",
+        "dataType": "Select List",
+        "mandatory": "Yes (if previous question is answered ‘Yes’)",
+        "validation": "This question should be answered ‘Yes’ if question 7 is answered ‘Yes’",
+        "business": "-",
+        "reference": "Yes or No",
+        "sourceLocation": "PDF page 62, field 8"
+      },
+      {
+        "name": "Is your water heater second hand?",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Yes or No",
+        "reference": "-",
+        "sourceLocation": "PDF page 62, field 9"
+      },
+      {
+        "name": "Reference",
+        "dataType": "Text (255)",
+        "mandatory": "No",
+        "validation": "-",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 62, field 10"
+      },
+      {
+        "name": "Certificate tag",
+        "dataType": "Text (255)",
+        "mandatory": "No",
+        "validation": "-",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 62, field 11"
+      },
+      {
+        "name": "Installation property type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Residential School Commercial",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 63, field 12"
+      },
+      {
+        "name": "Installation single or multi story",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "Single story or Multi story",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 63, field 13"
+      },
+      {
+        "name": "Installation property name or boat name or chassis number",
+        "dataType": "Text (100)",
+        "mandatory": "No",
+        "validation": "-",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 63, field 14"
+      },
+      {
+        "name": "Installation unit type",
+        "dataType": "Select List",
+        "mandatory": "No*",
+        "validation": "-",
+        "business": "Valid installation address",
+        "reference": "Unit type",
+        "sourceLocation": "PDF page 63, field 15"
+      },
+      {
+        "name": "Installation unit number",
+        "dataType": "Text (10)",
+        "mandatory": "No*",
+        "validation": "-",
+        "business": "Valid installation address",
+        "reference": "-",
+        "sourceLocation": "PDF page 63, field 16"
+      },
+      {
+        "name": "Installation street number",
+        "dataType": "Text (15)",
+        "mandatory": "No*",
+        "validation": "-",
+        "business": "Valid installation address",
+        "reference": "-",
+        "sourceLocation": "PDF page 63, field 17"
+      },
+      {
+        "name": "Installation street name",
+        "dataType": "Text (45)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid installation address",
+        "reference": "-",
+        "sourceLocation": "PDF page 63, field 18"
+      },
+      {
+        "name": "Installation street type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid installation address",
+        "reference": "Street type",
+        "sourceLocation": "PDF page 63, field 19"
+      },
+      {
+        "name": "Installation town/suburb",
+        "dataType": "Text (80)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid installation address",
+        "reference": "-",
+        "sourceLocation": "PDF page 64, field 20"
+      },
+      {
+        "name": "Installation state",
+        "dataType": "Text (3)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid installation address",
+        "reference": "State",
+        "sourceLocation": "PDF page 64, field 21"
+      },
+      {
+        "name": "Installation postcode",
+        "dataType": "Text (8)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid installation address",
+        "reference": "Postcode",
+        "sourceLocation": "PDF page 64, field 22"
+      },
+      {
+        "name": "Installation latitude",
+        "dataType": "Decimal (3,9)",
+        "mandatory": "No",
+        "validation": "-90 to 90",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 64, field 23"
+      },
+      {
+        "name": "Installation longitude",
+        "dataType": "Decimal (3,9)",
+        "mandatory": "No",
+        "validation": "-180’ to 180’",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 64, field 24"
+      },
+      {
+        "name": "Is there more than one SWH/ASHP at this address?",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "-",
+        "reference": "Yes or No",
+        "sourceLocation": "PDF page 64, field 25"
+      },
+      {
+        "name": "Additional system information",
+        "dataType": "Text (4000)",
+        "mandatory": "No*",
+        "validation": "*Mandatory if answered “yes” to “Is there more than one SWH/ASHP at this address?”",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 64, field 26"
+      },
+      {
+        "name": "Creating certificates for previously failed SWH",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "-",
+        "reference": "Yes or No",
+        "sourceLocation": "PDF page 64, field 27"
+      },
+      {
+        "name": "Failed accreditation code",
+        "dataType": "Text (255)",
+        "mandatory": "Yes (if previous question is answered Yes)",
+        "validation": "-",
+        "business": "Accreditation code",
+        "reference": "-",
+        "sourceLocation": "PDF page 65, field 28"
+      },
+      {
+        "name": "Explanatory notes for failed accreditation code",
+        "dataType": "Text (4000)",
+        "mandatory": "Yes (is the previous question is answered Yes)",
+        "validation": "-",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 65, field 29"
+      },
+      {
+        "name": "Installation special address",
+        "dataType": "Text (4000)",
+        "mandatory": "No",
+        "validation": "Min length of string is 7",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 65, field 30"
+      },
+      {
+        "name": "Owner type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "-",
+        "reference": "Owner type",
+        "sourceLocation": "PDF page 65, field 31"
+      },
+      {
+        "name": "Owner organisation name",
+        "dataType": "Text 9200)",
+        "mandatory": "No",
+        "validation": "Mandatory if answered “Government body, Corporate body, Trustee” to “Owner type”",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 65, field 32"
+      },
+      {
+        "name": "Owner phone",
+        "dataType": "Text (16)",
+        "mandatory": "Yes",
+        "validation": "Min: 6 Must only contains digits [0-9] Can have an optional ‘+’ at the start.",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 66, field 33"
+      },
+      {
+        "name": "Owner fax",
+        "dataType": "Text (16)",
+        "mandatory": "No",
+        "validation": "Min: 6 Must only contains digits [0-9] Can have an optional ‘+’ at the start.",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 66, field 34"
+      },
+      {
+        "name": "Owner mobile",
+        "dataType": "Text (16)",
+        "mandatory": "No",
+        "validation": "Min: 6 Must only contains digits [0-9] Can have an optional ‘+’ at the start.",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 66, field 35"
+      },
+      {
+        "name": "Owner email",
+        "dataType": "Text (255)",
+        "mandatory": "Yes",
+        "validation": "Valid email format",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 66, field 36"
+      },
+      {
+        "name": "Owner address type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid owner address",
+        "reference": "Address type",
+        "sourceLocation": "PDF page 66, field 37"
+      },
+      {
+        "name": "Owner postal delivery type",
+        "dataType": "Select List",
+        "mandatory": "No*",
+        "validation": "-",
+        "business": "Valid owner address",
+        "reference": "Postal delivery type",
+        "sourceLocation": "PDF page 66, field 38"
+      },
+      {
+        "name": "Owner postal delivery number",
+        "dataType": "Text (11)",
+        "mandatory": "No*",
+        "validation": "-",
+        "business": "Valid owner address",
+        "reference": "-",
+        "sourceLocation": "PDF page 67, field 39"
+      },
+      {
+        "name": "Owner unit type",
+        "dataType": "Select List",
+        "mandatory": "No*",
+        "validation": "-",
+        "business": "Valid owner address",
+        "reference": "Unit type",
+        "sourceLocation": "PDF page 67, field 40"
+      },
+      {
+        "name": "Owner unit number",
+        "dataType": "Text (10)",
+        "mandatory": "No*",
+        "validation": "-",
+        "business": "Valid owner address",
+        "reference": "-",
+        "sourceLocation": "PDF page 67, field 41"
+      },
+      {
+        "name": "Owner street number",
+        "dataType": "Text (15)",
+        "mandatory": "No*",
+        "validation": "-",
+        "business": "Valid owner address",
+        "reference": "-",
+        "sourceLocation": "PDF page 67, field 42"
+      },
+      {
+        "name": "Owner street name",
+        "dataType": "Text (45)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid owner address",
+        "reference": "-",
+        "sourceLocation": "PDF page 67, field 43"
+      },
+      {
+        "name": "Owner street type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid owner address",
+        "reference": "Street type",
+        "sourceLocation": "PDF page 67, field 44"
+      },
+      {
+        "name": "Owner town/suburb",
+        "dataType": "Text (80)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid owner address",
+        "reference": "-",
+        "sourceLocation": "PDF page 67, field 45"
+      },
+      {
+        "name": "Owner state",
+        "dataType": "Text (3)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid owner address",
+        "reference": "State",
+        "sourceLocation": "PDF page 68, field 46"
+      },
+      {
+        "name": "Owner postcode",
+        "dataType": "Text (8)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid owner address",
+        "reference": "Postcode",
+        "sourceLocation": "PDF page 68, field 47"
+      },
+      {
+        "name": "Owner country",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid owner address",
+        "reference": "Country",
+        "sourceLocation": "PDF page 68, field 48"
+      },
+      {
+        "name": "Installer first name",
+        "dataType": "Text (100)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 68, field 49"
+      },
+      {
+        "name": "Installer surname",
+        "dataType": "Text (100)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 68, field 50"
+      },
+      {
+        "name": "Installer phone",
+        "dataType": "Text (16)",
+        "mandatory": "Yes",
+        "validation": "Min: 6 Must only contains digits [0-9] Can have an optional ‘+’ at the start.",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 68, field 51"
+      },
+      {
+        "name": "Installer fax",
+        "dataType": "Text (16)",
+        "mandatory": "No",
+        "validation": "Min: 6 Must only contains digits [0-9] Can have an optional ‘+’ at the start.",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 68, field 52"
+      },
+      {
+        "name": "Installer mobile",
+        "dataType": "Text (16)",
+        "mandatory": "No",
+        "validation": "Min: 6 Must only contains digits [0-9] Can have an optional ‘+’ at the start.",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 69, field 53"
+      },
+      {
+        "name": "Installer email",
+        "dataType": "Text (255)",
+        "mandatory": "No",
+        "validation": "Valid email format",
+        "business": "-",
+        "reference": "-",
+        "sourceLocation": "PDF page 69, field 54"
+      },
+      {
+        "name": "Installer address type",
+        "dataType": "Select list",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid installer address",
+        "reference": "Address type",
+        "sourceLocation": "PDF page 69, field 55"
+      },
+      {
+        "name": "Installer postal delivery type",
+        "dataType": "Select List",
+        "mandatory": "No*",
+        "validation": "-",
+        "business": "Valid installer address",
+        "reference": "Postal address type",
+        "sourceLocation": "PDF page 69, field 56"
+      },
+      {
+        "name": "Installer postal delivery number",
+        "dataType": "Text (11)",
+        "mandatory": "No*",
+        "validation": "-",
+        "business": "Valid installer address",
+        "reference": "-",
+        "sourceLocation": "PDF page 69, field 57"
+      },
+      {
+        "name": "Installer unit type",
+        "dataType": "Select List",
+        "mandatory": "No*",
+        "validation": "-",
+        "business": "Valid installer address",
+        "reference": "Unit type",
+        "sourceLocation": "PDF page 69, field 58"
+      },
+      {
+        "name": "Installer unit number",
+        "dataType": "Text (10)",
+        "mandatory": "No*",
+        "validation": "-",
+        "business": "Valid installer address",
+        "reference": "-",
+        "sourceLocation": "PDF page 69, field 59"
+      },
+      {
+        "name": "Installer street number",
+        "dataType": "Text (15)",
+        "mandatory": "No*",
+        "validation": "-",
+        "business": "Valid installer address",
+        "reference": "-",
+        "sourceLocation": "PDF page 70, field 60"
+      },
+      {
+        "name": "Installer street name",
+        "dataType": "Text (45)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid installer address",
+        "reference": "-",
+        "sourceLocation": "PDF page 70, field 61"
+      },
+      {
+        "name": "Installer street type",
+        "dataType": "Select List",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid installer address",
+        "reference": "Street type",
+        "sourceLocation": "PDF page 70, field 62"
+      },
+      {
+        "name": "Installer town/suburb",
+        "dataType": "Text (80)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid installer address",
+        "reference": "-",
+        "sourceLocation": "PDF page 70, field 63"
+      },
+      {
+        "name": "Installer state",
+        "dataType": "Text (3)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid installer address",
+        "reference": "State",
+        "sourceLocation": "PDF page 70, field 64"
+      },
+      {
+        "name": "Installer postcode",
+        "dataType": "Text (8)",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "Valid installer address",
+        "reference": "Postcode",
+        "sourceLocation": "PDF page 70, field 65"
+      }
+    ],
+    "sources": [
+      {
+        "file": "rec-sgu-swh-september-2025.pdf",
+        "url": "https://cer.gov.au/document/rec-registry-guide-bulk-upload-small-generation-unit-and-solar-water-heater-installs",
+        "resolvedUrl": "https://cer.gov.au/document/rec-registry-guide-bulk-upload-small-generation-unit-and-solar-water-heater-installs",
+        "contentType": "application/pdf",
+        "retrievedAt": "2026-09-24T05:05:56.542821+00:00",
+        "sha256": "783d8b54f37a1c7a189d3de5c38b69057e8e574077abfeea550861a1a6dc39de",
+        "bytes": 963322
+      }
+    ],
+    "version": "September 2025"
+  },
+  "rec_battery": {
+    "fields": [
+      {
+        "name": "Type of system",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "S.G.U. - solar battery (deemed)",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 1-A"
+      },
+      {
+        "name": "Installation date",
+        "dataType": "Date",
+        "mandatory": "Yes",
+        "validation": "dd/mm/yyyy",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 2-B"
+      },
+      {
+        "name": "Was a solar battery retailer involved in the procurement and installation of the system?",
+        "dataType": "Select list",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 3-C"
+      },
+      {
+        "name": "Retailer name",
+        "dataType": "Text",
+        "mandatory": "Yes*",
+        "validation": "",
+        "business": "*Mandatory if the answer is ‘Yes’ to ‘Was a solar battery retailer involved in the procurement and installation of the system?’",
+        "reference": "",
+        "sourceLocation": "DOCX field 4-D"
+      },
+      {
+        "name": "Retailer ABN",
+        "dataType": "Text",
+        "mandatory": "Yes*",
+        "validation": "Must only contain digits [0-9] Must be blank if value of ‘Retailer name’ column is ‘owner’. ABN is validated against the Retailer Entity name (as listed on the ABR website - ABN Lookup (business.gov.au) and checks that the ABN is Active at the time of the installation. Business or trading names are not valid.",
+        "business": "*Mandatory if the answer is ‘Yes’ to ‘Was a solar battery retailer involved in the procurement and installation of the system?’",
+        "reference": "",
+        "sourceLocation": "DOCX field 5-E"
+      },
+      {
+        "name": "Retailer representative",
+        "dataType": "Text",
+        "mandatory": "Yes*",
+        "validation": "",
+        "business": "*Mandatory if the answer is ‘Yes’ to ‘Was a solar battery retailer involved in the procurement and installation of the system?’",
+        "reference": "",
+        "sourceLocation": "DOCX field 6-F"
+      },
+      {
+        "name": "Retailer role",
+        "dataType": "Text",
+        "mandatory": "Yes*",
+        "validation": "",
+        "business": "*Mandatory if the answer is ‘Yes’ to ‘Was a solar battery retailer involved in the procurement and installation of the system?’",
+        "reference": "",
+        "sourceLocation": "DOCX field 7-G"
+      },
+      {
+        "name": "National Metering Identifier (NMI)",
+        "dataType": "Text",
+        "mandatory": "No",
+        "validation": "Must only contain 10 or 11 characters",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 8-H"
+      },
+      {
+        "name": "Is there an existing solar PV installation at this address?",
+        "dataType": "Select list",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 9-I"
+      },
+      {
+        "name": "Accreditation code (i.e. PVDxxxxxxx) of the related application (if known)",
+        "dataType": "Text",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 10-J"
+      },
+      {
+        "name": "Is the solar battery system part of, or capable of being part of, a Virtual Power Plant (VPP)?",
+        "dataType": "Select list",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 11-K"
+      },
+      {
+        "name": "Is the system retrospectively connected to an existing solar PV system or commissioned at the same time as a new solar PV system?",
+        "dataType": "Select list",
+        "mandatory": "Yes",
+        "validation": "Connected to existing PV or Installed with new solar installation",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 12-L"
+      },
+      {
+        "name": "Has the installer changed default manufacturer setting of the solar battery storage system?",
+        "dataType": "Select list",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 13-M"
+      },
+      {
+        "name": "Are you adding battery capacity to an existing battery stack?",
+        "dataType": "Select list",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 14-N"
+      },
+      {
+        "name": "Solar battery manufacturer",
+        "dataType": "Select list",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "Specified solar battery manufacturer must be on the CEC approved products list at the time of installation.",
+        "reference": "CEC approved solar batteries",
+        "sourceLocation": "DOCX field 15-O"
+      },
+      {
+        "name": "Solar battery brand",
+        "dataType": "Select list",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "Specified solar battery brand must be on the CEC approved products list at the time of installation.",
+        "reference": "CEC approved solar batteries",
+        "sourceLocation": "DOCX field 16-P"
+      },
+      {
+        "name": "Solar battery series",
+        "dataType": "Select list",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "Specified solar battery series must be on the CEC approved products list at the time of installation.",
+        "reference": "CEC approved solar batteries",
+        "sourceLocation": "DOCX field 17-Q"
+      },
+      {
+        "name": "Solar battery model",
+        "dataType": "Select list",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "Specified solar battery model must be on the CEC approved products list at the time of installation.",
+        "reference": "CEC approved solar batteries",
+        "sourceLocation": "DOCX field 18-R"
+      },
+      {
+        "name": "Number of solar batteries",
+        "dataType": "Integer",
+        "mandatory": "Yes",
+        "validation": "Min 1 and Max 1000",
+        "business": "The number of solar batteries must match the number of solar battery serial numbers provided.",
+        "reference": "",
+        "sourceLocation": "DOCX field 19-S"
+      },
+      {
+        "name": "Solar battery serial number(s)",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Multiple serial numbers – delimited by semicolons ';'. Each serial number can be up to 100 characters long. Users can enter up to 1000 serial numbers.",
+        "business": "All serial numbers provided must be unique.",
+        "reference": "",
+        "sourceLocation": "DOCX field 20-T"
+      },
+      {
+        "name": "Location of solar battery",
+        "dataType": "Select list",
+        "mandatory": "Yes",
+        "validation": "Indoor or Outdoor",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 21-U"
+      },
+      {
+        "name": "Are inverters being added as part of the solar battery system?",
+        "dataType": "Select list",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 22-V"
+      },
+      {
+        "name": "Inverter manufacturer",
+        "dataType": "Select list",
+        "mandatory": "*Yes, if inverters are added",
+        "validation": "",
+        "business": "",
+        "reference": "CEC approved inverters",
+        "sourceLocation": "DOCX field 23-W"
+      },
+      {
+        "name": "Inverter series",
+        "dataType": "Select list",
+        "mandatory": "*Yes, if inverters are added",
+        "validation": "",
+        "business": "",
+        "reference": "CEC approved inverters",
+        "sourceLocation": "DOCX field 24-X"
+      },
+      {
+        "name": "Inverter model number",
+        "dataType": "Select list",
+        "mandatory": "*Yes, if inverters are added",
+        "validation": "",
+        "business": "",
+        "reference": "CEC approved inverters",
+        "sourceLocation": "DOCX field 25-Y"
+      },
+      {
+        "name": "Number of inverters",
+        "dataType": "Integer",
+        "mandatory": "*Yes, if inverters are added",
+        "validation": "Min 1 and Max 1000",
+        "business": "The number of inverters must match the number of solar battery serial numbers provided.",
+        "reference": "",
+        "sourceLocation": "DOCX field 26-Z"
+      },
+      {
+        "name": "Inverter serial number(s)",
+        "dataType": "Text",
+        "mandatory": "*Yes, if inverters are added",
+        "validation": "Multiple serial numbers – delimited by semicolons ';'. Each serial number can be up to 100 characters long. Users can enter up to 1000 serial numbers.",
+        "business": "All serial numbers provided must be unique.",
+        "reference": "",
+        "sourceLocation": "DOCX field 27-AA"
+      },
+      {
+        "name": "What is the nominal power output (kWh) of your solar battery system?",
+        "dataType": "Float",
+        "mandatory": "Yes",
+        "validation": "Between 5 and 100",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 28-AB"
+      },
+      {
+        "name": "What is the usable power output (kWh) of your solar battery system?",
+        "dataType": "Float",
+        "mandatory": "Yes",
+        "validation": "Between 0.001 and 100",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 29-AC"
+      },
+      {
+        "name": "What is the nominal power output (kWh) of your existing solar battery system?",
+        "dataType": "Float",
+        "mandatory": "Yes*",
+        "validation": "Yes*, if answered yes to ‘Are you adding battery capacity to an existing battery stack?’",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 30-AD"
+      },
+      {
+        "name": "What is the usable power output (kWh) of your existing solar battery system?",
+        "dataType": "Float",
+        "mandatory": "Yes*",
+        "validation": "Yes*, if answered yes to ‘Are you adding battery capacity to an existing battery stack?’",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 31-AE"
+      },
+      {
+        "name": "Are you creating certificates for a solar battery system that has previously been failed by the Clean Energy Regulator?",
+        "dataType": "Select list",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 32-AF"
+      },
+      {
+        "name": "Failed accreditation code",
+        "dataType": "Text",
+        "mandatory": "*Yes",
+        "validation": "",
+        "business": "*Mandatory if the answer is ‘Yes’ to ‘Are you creating certificates for a system that has previously been failed by the Clean Energy Regulator’. The accreditation code provided must exist within the system.",
+        "reference": "",
+        "sourceLocation": "DOCX field 33-AG"
+      },
+      {
+        "name": "Explanatory notes for re-creating certificates previously failed",
+        "dataType": "Text",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 34-AH"
+      },
+      {
+        "name": "Type of connection to the electricity grid",
+        "dataType": "Select list",
+        "mandatory": "Yes",
+        "validation": "Connected to an electricity grid or Stand-alone (not connected to an electricity grid).",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 35-AI"
+      },
+      {
+        "name": "Reference",
+        "dataType": "Text (255)",
+        "mandatory": "No",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 36-AJ"
+      },
+      {
+        "name": "Certificate tag",
+        "dataType": "Text (255)",
+        "mandatory": "No",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 37-AK"
+      },
+      {
+        "name": "Designer accreditation statement",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 38-AL"
+      },
+      {
+        "name": "Installer accreditation statement",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 39-AM"
+      },
+      {
+        "name": "Design and installation of unit statement",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 40-AN"
+      },
+      {
+        "name": "Local, State and Territory government requirements",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 41-AO"
+      },
+      {
+        "name": "Electrical safety documentation",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 42-AP"
+      },
+      {
+        "name": "Unit componentry statements",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 43-AQ"
+      },
+      {
+        "name": "On-site attendance written statements",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 44-AR"
+      },
+      {
+        "name": "On-site attendance evidence statements",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 45-AS"
+      },
+      {
+        "name": "True, correct and complete statement",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 46-AT"
+      },
+      {
+        "name": "Retailer accreditation statement",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 47-AU"
+      },
+      {
+        "name": "Retailer unit performance statement",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 48-AV"
+      },
+      {
+        "name": "Retailer solar PV present statements",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 49-AW"
+      },
+      {
+        "name": "Retailer completion and connection statements",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 50-AX"
+      },
+      {
+        "name": "Retailer provision of unit information statements",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 51-AY"
+      },
+      {
+        "name": "Retailer conflicts of interest",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 52-AZ"
+      },
+      {
+        "name": "Retailer eligibility statement",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 53-BA"
+      },
+      {
+        "name": "Retailer true, correct and complete statement",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Y/Yes or N/No",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 54-BB"
+      },
+      {
+        "name": "Installation property type",
+        "dataType": "",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 55-BC"
+      },
+      {
+        "name": "Single or multi-story",
+        "dataType": "",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 56-BD"
+      },
+      {
+        "name": "Installation property name, boat name or chassis number",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 57-BE"
+      },
+      {
+        "name": "Installation unit type",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 58-BF"
+      },
+      {
+        "name": "Installation unit number",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 59-BG"
+      },
+      {
+        "name": "Installation street number",
+        "dataType": "",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 60-BH"
+      },
+      {
+        "name": "Installation street name",
+        "dataType": "",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 61-BI"
+      },
+      {
+        "name": "Installation street type",
+        "dataType": "",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 62-BJ"
+      },
+      {
+        "name": "Installation town/suburb",
+        "dataType": "",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 63-BK"
+      },
+      {
+        "name": "Installation state",
+        "dataType": "",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 64-BL"
+      },
+      {
+        "name": "Installation postcode",
+        "dataType": "",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 65-BM"
+      },
+      {
+        "name": "Installation latitude",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 66-BN"
+      },
+      {
+        "name": "Installation longitude",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 67-BO"
+      },
+      {
+        "name": "Additional system information",
+        "dataType": "Text",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 68-BP"
+      },
+      {
+        "name": "Owner type",
+        "dataType": "",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 69-BQ"
+      },
+      {
+        "name": "Owner organisation name",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 70-BR"
+      },
+      {
+        "name": "Owner first name",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 71-BS"
+      },
+      {
+        "name": "Owner surname",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 72-BT"
+      },
+      {
+        "name": "Owner phone",
+        "dataType": "",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 73-BU"
+      },
+      {
+        "name": "Owner mobile",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 74-BV"
+      },
+      {
+        "name": "Owner email",
+        "dataType": "",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 75-BW"
+      },
+      {
+        "name": "Owner address type",
+        "dataType": "",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 76-BX"
+      },
+      {
+        "name": "Owner postal delivery type",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 77-BY"
+      },
+      {
+        "name": "Owner postal delivery number",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 78-BZ"
+      },
+      {
+        "name": "Owner unit type",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 79-CA"
+      },
+      {
+        "name": "Owner unit number",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 80-CB"
+      },
+      {
+        "name": "Owner street number",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 81-CC"
+      },
+      {
+        "name": "Owner street name",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 82-CD"
+      },
+      {
+        "name": "Owner street type",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 83-CE"
+      },
+      {
+        "name": "Owner town/suburb",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 84-CF"
+      },
+      {
+        "name": "Owner state",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 85-CG"
+      },
+      {
+        "name": "Owner postcode",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 86-CH"
+      },
+      {
+        "name": "Owner country",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 87-CI"
+      },
+      {
+        "name": "Installer first name",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 88-CJ"
+      },
+      {
+        "name": "Installer surname",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 89-CK"
+      },
+      {
+        "name": "Solar battery installer accreditation number",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "The installer accreditation number must be a battery accredited number and the system must be installed within the period of accreditation. The installer number must be for an accredited CEC installer with the appropriate grid connection qualification. i.e. if answered ‘Stand-alone (not connected to electricity grid)’ to ‘Type of connection to the electricity grid’, the installer must have off-grid accreditation.",
+        "reference": "",
+        "sourceLocation": "DOCX field 90-CL"
+      },
+      {
+        "name": "Installer phone",
+        "dataType": "",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 91-CM"
+      },
+      {
+        "name": "Installer mobile",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 92-CN"
+      },
+      {
+        "name": "Installer email",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 93-CO"
+      },
+      {
+        "name": "Installer address type",
+        "dataType": "",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 94-CP"
+      },
+      {
+        "name": "Installer postal delivery type",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 95-CQ"
+      },
+      {
+        "name": "Installer postal delivery number",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 96-CR"
+      },
+      {
+        "name": "Installer unit type",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 97-CS"
+      },
+      {
+        "name": "Installer unit number",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 98-CT"
+      },
+      {
+        "name": "Installer street number",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 99-CU"
+      },
+      {
+        "name": "Installer street name",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 100-CV"
+      },
+      {
+        "name": "Installer street type",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 101-CW"
+      },
+      {
+        "name": "Installer town/suburb",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 102-CX"
+      },
+      {
+        "name": "Installer state",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 103-CY"
+      },
+      {
+        "name": "Installer postcode",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 104-CZ"
+      },
+      {
+        "name": "Electrician first name",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 105-DA"
+      },
+      {
+        "name": "Electrician surname",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 106-DB"
+      },
+      {
+        "name": "Licensed electrician number",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 107-DC"
+      },
+      {
+        "name": "Electrician phone",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 108-DD"
+      },
+      {
+        "name": "Electrician mobile",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 109-DE"
+      },
+      {
+        "name": "Electrician email",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 110-DF"
+      },
+      {
+        "name": "Electrician address type",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 111-DG"
+      },
+      {
+        "name": "Electrician postal delivery type",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 112-DH"
+      },
+      {
+        "name": "Electrician postal delivery number",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 113-DI"
+      },
+      {
+        "name": "Electrician unit type",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 114-DJ"
+      },
+      {
+        "name": "Electrician unit number",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 115-DK"
+      },
+      {
+        "name": "Electrician street number",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 116-DL"
+      },
+      {
+        "name": "Electrician street name",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 117-DM"
+      },
+      {
+        "name": "Electrician street type",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 118-DN"
+      },
+      {
+        "name": "Electrician town/suburb",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 119-DO"
+      },
+      {
+        "name": "Electrician state",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 120-DP"
+      },
+      {
+        "name": "Electrician postcode",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 121-DQ"
+      },
+      {
+        "name": "Designer first name",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 122-DR"
+      },
+      {
+        "name": "Designer surname",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 123-DS"
+      },
+      {
+        "name": "Solar battery designer accreditation number",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "The designer accreditation number must be a battery accredited number and the system must be installed within the period of accreditation. The installer number must be for an accredited CEC installer with the appropriate grid connection qualification. i.e. if answered ‘Stand-alone (not connected to electricity grid)’ to ‘Type of connection to the electricity grid’, the installer must have off-grid accreditation.",
+        "reference": "",
+        "sourceLocation": "DOCX field 124-DT"
+      },
+      {
+        "name": "Designer phone",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 125-DU"
+      },
+      {
+        "name": "Designer mobile",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 126-DV"
+      },
+      {
+        "name": "Designer email",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 127-DW"
+      },
+      {
+        "name": "Designer address type",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 128-DX"
+      },
+      {
+        "name": "Designer postal delivery type",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 129-DY"
+      },
+      {
+        "name": "Designer postal delivery number",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 130-DZ"
+      },
+      {
+        "name": "Designer unit type",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 131-EA"
+      },
+      {
+        "name": "Designer unit number",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 132-EB"
+      },
+      {
+        "name": "Designer street number",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 133-EC"
+      },
+      {
+        "name": "Designer street name",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 134-ED"
+      },
+      {
+        "name": "Designer street type",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 135-EE"
+      },
+      {
+        "name": "Designer town/suburb",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 136-EF"
+      },
+      {
+        "name": "Designer state",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 137-EG"
+      },
+      {
+        "name": "Designer postcode",
+        "dataType": "",
+        "mandatory": "",
+        "validation": "",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 138-EH"
+      },
+      {
+        "name": "Signed data package",
+        "dataType": "File",
+        "mandatory": "No",
+        "validation": "Check that associated zip file of signed data packages contains one and only one file with a name that matches the corresponding application.",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "DOCX field 139-EI"
+      },
+      {
+        "name": "Documents zip file",
+        "dataType": "File",
+        "mandatory": "No",
+        "validation": "File name must match the name of the .zip file being uploaded.",
+        "business": "File size cannot exceed 10mb. Documents cannot be altered or deleted once uploaded.",
+        "reference": "",
+        "sourceLocation": "DOCX field 140-EJ"
+      }
+    ],
+    "sources": [
+      {
+        "file": "rec-battery-fields.docx",
+        "url": "https://cer.gov.au/document/required-fields-solar-battery-bulk-upload-0",
+        "resolvedUrl": "https://cer.gov.au/document/required-fields-solar-battery-bulk-upload-0",
+        "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "retrievedAt": "2026-09-24T05:07:47.939771+00:00",
+        "sha256": "92343887e3bd17555e47e755c0f8bace18a85d4443fb06b3f8a1d0d0cae14262",
+        "bytes": 99770
+      },
+      {
+        "file": "rec-battery-fields.pdf",
+        "url": "https://cer.gov.au/document/required-fields-solar-battery-bulk-upload",
+        "resolvedUrl": "https://cer.gov.au/document/required-fields-solar-battery-bulk-upload",
+        "contentType": "application/pdf",
+        "retrievedAt": "2026-09-24T05:05:56.562566+00:00",
+        "sha256": "208d23c2c4538f1002c5f23bf0e863db105560752a34285128982769d0de2e6a",
+        "bytes": 255473
+      },
+      {
+        "file": "rec-sgu-swh-september-2025.pdf",
+        "url": "https://cer.gov.au/document/rec-registry-guide-bulk-upload-small-generation-unit-and-solar-water-heater-installs",
+        "resolvedUrl": "https://cer.gov.au/document/rec-registry-guide-bulk-upload-small-generation-unit-and-solar-water-heater-installs",
+        "contentType": "application/pdf",
+        "retrievedAt": "2026-09-24T05:05:56.542821+00:00",
+        "sha256": "783d8b54f37a1c7a189d3de5c38b69057e8e574077abfeea550861a1a6dc39de",
+        "bytes": 963322
+      }
+    ],
+    "version": "Retrieved 24 September 2026"
+  },
+  "nsw_esc": {
+    "fields": [
+      {
+        "name": "ACP Implementation Identifier",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must be unique across all individual implementations made under an accreditation",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A4:E4; example row 1"
+      },
+      {
+        "name": "Implementation Date",
+        "dataType": "Date",
+        "mandatory": "Yes",
+        "validation": "Must be within the date range of the selected Version of the Rule value Must be on or after the Original Date of Accreditation of the selected Accreditation Must not be a future date All implementation dates in a CSV file must belong to the same 'Vintage' for 'Deemed' methods Dates must be specified in 'dd/MM/yyyy' format E.g. Monday the 15th of January 2024 should be entered as 15/01/2024",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A5:E5; example row 1"
+      },
+      {
+        "name": "Address Line 1 ( Unit / Shop / Level , Unit Type )",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Should be left blank for implementation sites with a single address line Must be left blank if using the following Calculation Methods: • Deemed Energy Savings Method - Public Lighting Energy Savings Formula",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A6:E6; example row 1"
+      },
+      {
+        "name": "Address Line 2 ( Street No , Street Name )",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be specified unless using the following Calculation Methods: • Deemed Energy Savings Method - Public Lighting Energy Savings Formula",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A7:E7; example row 1"
+      },
+      {
+        "name": "Suburb",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must not contain numbers or special characters (!@#$%^&*()_+-=:\"{}|\\][<>?/.,)",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A8:E8; example row 1"
+      },
+      {
+        "name": "State",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must be entered as 'NSW'",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A9:E9; example row 1"
+      },
+      {
+        "name": "Postcode",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must consist of 4 numbers only",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A10:E10; example row 1"
+      },
+      {
+        "name": "End-User Business Classification",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must be a selection from the below list: A Agriculture, Forestry and Fishing B Mining C Manufacturing D Electricity, Gas, Water and Waste Services E Construction F Wholesale Trade G Retail Trade H Accommodation and Food Services I Transport, Postal and Warehousing J Information Media and Telecommunications K Financial and Insurance Services L Rental, Hiring and Real Estate Services M Professional, Scientific and Technical Services N Administrative and Support Services O Public Administration and Safety P Education and Training Q Health Care and Social Assistance R Arts and Recreation Services S Other Services Residential Unknown",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A11:E11; example row 1"
+      },
+      {
+        "name": "End User ABN",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be provided unless the End-User Business Classification is: • Residential • Unknown Must not contain letters or special characters (!@#$%^&*()_+-=:\"{}|\\][<>?/.,) This field is validated against Australian Business Register records",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A12:E12; example row 1"
+      },
+      {
+        "name": "End-Use Service",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must be a selection from the below list: Air compression Air handling, fans, ventilation Air heating and cooling Cleaning, washing Communications Computers, office equipment Cooking Electricity supply Home entertainment Lighting Materials handling, conveying Milling, mixing, grinding People movement, lifts, escalators Process drives Process heat Refrigeration and freezing Transport Water heating Water/liquid pumping Other machines Making available Air compression at a leased premises Making available Air handling, fans, ventilation at a leased premises Making available Air heating and cooling at a leased premises Making available Cleaning, washing at a leased premises Making available Communications at a leased premises Making available Computers, office equipment at a leased premises Making available Cooking at a leased premises Making available Electricity supply at a leased premises Making available Home entertainment at a leased premises Making available Lighting at a leased premises Making available Materials handling, conveying at a leased premises Making available Milling, mixing, grinding at a leased premises Making available People movement, lifts, escalators at a leased premises Making available Process drives at a leased premises Making available Process heat at a leased premises Making available Refrigeration and freezing at a leased premises Making available Transport at a leased premises Making available Water heating at a leased premises Making available Water/liquid pumping at a leased premises Making available Other machines at a leased premises",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A13:E13; example row 1"
+      },
+      {
+        "name": "Purchase Cost (Excluding GST)",
+        "dataType": "Currency",
+        "mandatory": "Yes",
+        "validation": "Must be specified to 2 decimal places Must be greater than $30.00 for all implementations with the below Calculation Methods: • Deemed Energy Savings Method - High Efficiency Motor Energy Savings Formula",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A14:E14; example row 1"
+      },
+      {
+        "name": "ESS Activity Definition",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Activity Definition must align to the appropriate calculaton method as per the ESS Rule. Possible values include: B1, B2, B3, B4, B5, B6, B7 C1, C2 D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D13, D14, D15, D16, D17, D18, D19, D20 E1, E2, E3, E4, E5, E6, E7, E8, E9, E10, E11, E12, E13 F1, F1.1, F1.2, F2, F3, F4, F5, F6, F7, F10, F11, F12, F13, F14, F15, F16, F17",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A15:E15; example row 1"
+      },
+      {
+        "name": "Calculation Method",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must be a selection from the below list: Deemed Energy Savings Method - High Efficiency Motor Energy Savings Formula Deemed Energy Savings Method - Home Energy Efficiency Retrofits Deemed Energy Savings Method - Installation of High Efficiency Appliances for Businesses Deemed Energy Savings Method - Power Factor Correction Energy Savings Formula Deemed Energy Savings Method - Public Lighting Energy Savings Formula Deemed Energy Savings Method - Removal of Old Appliances Metered Baseline Method - Aggregated Metered Baseline Metered Baseline Method - Baseline per unit of output Metered Baseline Method - Baseline unaffected by output Metered Baseline Method - NABERS Baseline Metered Baseline Method - Normalised baseline Project Impact Assessment Method Project Impact Assessment with Measurement and Verification Method",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A16:E16; example row 1"
+      },
+      {
+        "name": "Number of units installed",
+        "dataType": "Number",
+        "mandatory": "Conditionally",
+        "validation": "Must only be provided for the below Activity Definitions: • D16 • F1.1, F1.2, F3, F4, F16, F17",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A17:E17; example row 1"
+      },
+      {
+        "name": "Product Brand",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must only be provided for the below Activity Definitions: • D5, D16, D17, D18, D19, D20 • F1.1, F1.2, F3, F4, F16, F17 Must be entered exactly as it appears on the TESSA Accepted Products List, for the below Activity Definitions: • D17, D18, D19, D20 • F16, F17",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A18:E18; example row 1"
+      },
+      {
+        "name": "Product Model Number",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must only be provided for the below Activity Definitions: • D5, D16, D17, D18, D19, D20 • F1.1, F1.2, F3, F4, F16, F17 Must be entered exactly as it appears on the TESSA Accepted Products List, for the below Activity Definitions: • D17, D18, D19, D20 • F16, F17",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A19:E19; example row 1"
+      },
+      {
+        "name": "Refrigerant",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must only be provided for the below Activity Definitions (not required for water heater products): • D16 • F1.1, F1.2, F3, F4",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A20:E20; example row 1"
+      },
+      {
+        "name": "New or Replacement",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must only be provided for the below Activity Definitions: • D16 • F3, F4 Must be a selection from the below list: New Replacement",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A21:E21; example row 1"
+      },
+      {
+        "name": "Product class of removed equipment",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must only be provided for the below Activity Definitions: • F1.2 Must be a selection from the below list: 12 13 14 15",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A22:E22; example row 1"
+      },
+      {
+        "name": "Product class of installed equipment",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must only be provided for the below Activity Definitions: • F1.1 and F1.2 Must be a selection from the below list: 12 13 14 15",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A23:E23; example row 1"
+      },
+      {
+        "name": "RESA Method ID",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "If your Accreditation includes RESA IDs, you have to provide this information",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A24:E24; example row 1"
+      },
+      {
+        "name": "Measurement Date",
+        "dataType": "Date",
+        "mandatory": "Conditionally",
+        "validation": "Means measurement period end date after the implementation. Must be specified when using one of the following Calculation Methods: • Project Impact Assessment Method • Project Impact Assessment with Measurement and Verification Method • Metered Baseline Method - Baseline per unit of output • Metered Baseline Method - Baseline unaffected by output • Metered Baseline Method - Normalised baseline • Metered Baseline Method - NABERS Baseline (use the date the Scheme Administrator determines the NABERS rating was completed) • Metered Baseline Method - Aggregated Metered Baseline Must not be a future date Dates must be specified in 'dd/MM/yyyy' format E.g. Wednesday the 11th of May 2022 should be entered as 11/05/2022",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A25:E25; example row 1"
+      },
+      {
+        "name": "Electricity Savings (MWh)",
+        "dataType": "Number",
+        "mandatory": "Conditionally",
+        "validation": "The Electricity Savings amount without being multiplied by any Regional Network Factor. Either this field or one of the following savings fields must be provided: • Gas Savings (MWh) • Diesel Savings (MWh) • Biofuel Savings (MWh) • Biogas Savings (MWh) • Biomass Savings (MWh) • On-site Renewable Savings (MWh) Must be specified to 2 decimal places",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A26:E26; example row 1"
+      },
+      {
+        "name": "Gas Savings (MWh)",
+        "dataType": "Number",
+        "mandatory": "Conditionally",
+        "validation": "Either this field or one of the other Savings fields must be provided Must be specified to 2 decimal places Must be zero when using one of the following Calculation Methods: • Project Impact Assessment Method • Metered Baseline Method - Aggregated Metered Baseline • Deemed Energy Savings Method - High Efficiency Motor Energy Savings Formula • Deemed Energy Savings Method - Power Factor Correction Energy Savings Formula • Deemed Energy Savings Method - Public Lighting Energy Savings Formula • Deemed Energy Savings Method - Removal of Old Appliances",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A27:E27; example row 1"
+      },
+      {
+        "name": "Diesel Savings (MWh)",
+        "dataType": "Number",
+        "mandatory": "Conditionally",
+        "validation": "Either this field or one of the other Savings fields must be provided Must be specified to 2 decimal places Must be zero when using one of the following Calculation Methods: • Project Impact Assessment Method • Deemed Energy Savings Method - High Efficiency Motor Energy Savings Formula • Deemed Energy Savings Method - Power Factor Correction Energy Savings Formula • Deemed Energy Savings Method - Public Lighting Energy Savings Formula • Deemed Energy Savings Method - Removal of Old Appliances • Deemed Energy Savings Method - Home Energy Efficiency Retrofits • Deemed Energy Savings Method - Installation of High Efficiency Appliances for Businesses",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A28:E28; example row 1"
+      },
+      {
+        "name": "Biofuel Savings (MWh)",
+        "dataType": "Number",
+        "mandatory": "Conditionally",
+        "validation": "Either this field or one of the other Savings fields must be provided Must be specified to 2 decimal places Must be zero when using one of the following Calculation Methods: • Project Impact Assessment Method • Deemed Energy Savings Method - High Efficiency Motor Energy Savings Formula • Deemed Energy Savings Method - Power Factor Correction Energy Savings Formula • Deemed Energy Savings Method - Public Lighting Energy Savings Formula • Deemed Energy Savings Method - Removal of Old Appliances • Deemed Energy Savings Method - Home Energy Efficiency Retrofits • Deemed Energy Savings Method - Installation of High Efficiency Appliances for Businesses",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A29:E29; example row 1"
+      },
+      {
+        "name": "Biogas Savings (MWh)",
+        "dataType": "Number",
+        "mandatory": "Conditionally",
+        "validation": "Either this field or one of the other Savings fields must be provided Must be specified to 2 decimal places Must be zero when using one of the following Calculation Methods: • Project Impact Assessment Method • Deemed Energy Savings Method - High Efficiency Motor Energy Savings Formula • Deemed Energy Savings Method - Power Factor Correction Energy Savings Formula • Deemed Energy Savings Method - Public Lighting Energy Savings Formula • Deemed Energy Savings Method - Removal of Old Appliances • Deemed Energy Savings Method - Home Energy Efficiency Retrofits • Deemed Energy Savings Method - Installation of High Efficiency Appliances for Businesses",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A30:E30; example row 1"
+      },
+      {
+        "name": "Biomass Savings (MWh)",
+        "dataType": "Number",
+        "mandatory": "Conditionally",
+        "validation": "Either this field or one of the other Savings fields must be provided Must be specified to 2 decimal places Must be zero when using one of the following Calculation Methods: • Project Impact Assessment Method • Deemed Energy Savings Method - High Efficiency Motor Energy Savings Formula • Deemed Energy Savings Method - Power Factor Correction Energy Savings Formula • Deemed Energy Savings Method - Public Lighting Energy Savings Formula • Deemed Energy Savings Method - Removal of Old Appliances • Deemed Energy Savings Method - Home Energy Efficiency Retrofits • Deemed Energy Savings Method - Installation of High Efficiency Appliances for Businesses",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A31:E31; example row 1"
+      },
+      {
+        "name": "On-site Renewable Savings (MWh)",
+        "dataType": "Number",
+        "mandatory": "Conditionally",
+        "validation": "Either this field or one of the other Savings fields must be provided Must be specified to 2 decimal places Must be zero when using one of the following Calculation Methods: • Project Impact Assessment Method • Deemed Energy Savings Method - High Efficiency Motor Energy Savings Formula • Deemed Energy Savings Method - Power Factor Correction Energy Savings Formula • Deemed Energy Savings Method - Public Lighting Energy Savings Formula • Deemed Energy Savings Method - Removal of Old Appliances • Deemed Energy Savings Method - Home Energy Efficiency Retrofits • Deemed Energy Savings Method - Installation of High Efficiency Appliances for Businesses",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A32:E32; example row 1"
+      },
+      {
+        "name": "Regional Network Factor",
+        "dataType": "Number",
+        "mandatory": "Yes",
+        "validation": "Must match the Regional Network Factor of the specified Postcode value",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A33:E33; example row 1"
+      },
+      {
+        "name": "Estimated % of each of these savings attributed to fuel switching",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must not be greater than 200 characters Must not be blank if 2 or more savings fields have been populated",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A34:E34; example row 1"
+      },
+      {
+        "name": "Version of the Rule",
+        "dataType": "Date",
+        "mandatory": "Yes",
+        "validation": "The date of the Rule version under which you are applying to register certificates. Dates must be specified in 'dd/MM/yyyy' format Versions of the rule: 19/06/2024 12/09/2025 1/07/2026 E.g. Wednesday the 1st of July 2026 should be entered as 1/07/2026",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A35:E35; example row 1"
+      },
+      {
+        "name": "Company or individual responsible for work at site",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "-",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A36:E36; example row 1"
+      },
+      {
+        "name": "Plumbing licence",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be provided when the Implementation Date is on or after 1 November 2024, and using the following Activity Definitions: • Method: HEER • Activity Definitions: D19, D20, E6 • Method: IHEAB • Activity Definitions: F17 Must not contain decimals Must not contain special characters, such as Punctuation marks",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A37:E37; example row 1"
+      },
+      {
+        "name": "Plumbing contractor licence",
+        "dataType": "Text",
+        "mandatory": "No",
+        "validation": "Must not contain decimals Must not contain special characters, such as Punctuation marks",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A38:E38; example row 1"
+      },
+      {
+        "name": "Electrician licence",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be provided when the Implementation Date is on or after 1 November 2024, and using the following Activity Definitions: • Method: HEER • Activity Definitions: D14, D15, D16, D17, D18, D19, D20, E1, E2, E3, E4, E5, E11, E12, E13 • Method: IHEAB • Activity Definitions: F4, F17 Must not contain decimals Must not contain special characters, such as Punctuation marks",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A39:E39; example row 1"
+      },
+      {
+        "name": "Electrical contractor licence",
+        "dataType": "Text",
+        "mandatory": "No",
+        "validation": "Must not contain decimals Must not contain special characters, such as Punctuation marks",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A40:E40; example row 1"
+      },
+      {
+        "name": "Refrigerant handling licence",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be provided when the Implementation Date is on or after 1 November 2024, and using the following Activity Definitions: • Activity Definitions: F4 Must not contain decimals Must not contain special characters, such as Punctuation marks",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A41:E41; example row 1"
+      },
+      {
+        "name": "Refrigerant licence",
+        "dataType": "Text",
+        "mandatory": "No",
+        "validation": "Provide the refrigeration licence, not the refrigerant licence. Must not contain decimals Must not contain special characters, such as Punctuation marks",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A42:E42; example row 1"
+      },
+      {
+        "name": "SAA accreditation",
+        "dataType": "Text",
+        "mandatory": "No",
+        "validation": "Must not contain decimals Must not contain special characters, such as Punctuation marks",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A43:E43; example row 1"
+      },
+      {
+        "name": "Baseline period energy model type",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must only be specified when using the following Calculation Methods: • Project Impact Assessment with Measurement and Verification Method",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A44:E44; example row 1"
+      },
+      {
+        "name": "Baseline measurement period start date",
+        "dataType": "Date",
+        "mandatory": "Conditionally",
+        "validation": "Must only be specified when using the following Calculation Methods: • Project Impact Assessment with Measurement and Verification Method Must be less than the value specified for Baseline measurement period end date Dates must be specified in 'dd/MM/yyyy' format E.g. Wednesday the 11th of May 2022 should be entered as 11/05/2022",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A45:E45; example row 1"
+      },
+      {
+        "name": "Baseline measurement period end date",
+        "dataType": "Date",
+        "mandatory": "Conditionally",
+        "validation": "Must only be specified when using the following Calculation Methods: • Project Impact Assessment with Measurement and Verification Method Must be greater than the value specified for Baseline measurement period start date Dates must be specified in 'dd/MM/yyyy' format E.g. Wednesday the 11th of May 2022 should be entered as 11/05/2022",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A46:E46; example row 1"
+      },
+      {
+        "name": "Operating period energy model type",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must only be specified when using the following Calculation Methods: • Project Impact Assessment with Measurement and Verification Method",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A47:E47; example row 1"
+      },
+      {
+        "name": "Operating measuring period start date",
+        "dataType": "Date",
+        "mandatory": "Conditionally",
+        "validation": "Must only be specified when using the following Calculation Methods: • Project Impact Assessment with Measurement and Verification Method Must be greater than the value specified for Operating measuring period end date Dates must be specified in 'dd/MM/yyyy' format E.g. Wednesday the 11th of May 2022 should be entered as 11/05/2022",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A48:E48; example row 1"
+      },
+      {
+        "name": "Operating measuring period end date",
+        "dataType": "Date",
+        "mandatory": "Conditionally",
+        "validation": "Must only be specified when using the following Calculation Methods: • Project Impact Assessment with Measurement and Verification Method Must be greater than the value specified for Operating measuring period start date Dates must be specified in 'dd/MM/yyyy' format E.g. Wednesday the 11th of May 2022 should be entered as 11/05/2022",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A49:E49; example row 1"
+      },
+      {
+        "name": "End-user Equipment",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must only be specified when using the following Calculation Methods: • Project Impact Assessment with Measurement and Verification Method Possible values include: Building envelope Commercial heating/cooling Fluid transport and materials handling Industrial heating/cooling Industrial processes (other) Information and communication technology Lighting Power generation systems Power supply/distribution system Must be registered under the selected Accreditation",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A50:E50; example row 1"
+      },
+      {
+        "name": "Independent variables",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must only be specified when using the following Calculation Methods: • Project Impact Assessment with Measurement and Verification Method",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A51:E51; example row 1"
+      },
+      {
+        "name": "Site constants",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must only be specified when using the following Calculation Methods: • Project Impact Assessment with Measurement and Verification Method",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A52:E52; example row 1"
+      },
+      {
+        "name": "M&V Professional",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must only be specified when using the following Calculation Methods: • Project Impact Assessment with Measurement and Verification Method",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A53:E53; example row 1"
+      },
+      {
+        "name": "Multi split system",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be provided when using the following Activity Definition: •Activity Definition: D16 And when the implementation date is on or after 1st of July 2026 Must enter Yes or No.",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification ESS!A54:E54; example row 1"
+      }
+    ],
+    "sources": [
+      {
+        "file": "nsw-csv-v1.7.xlsx",
+        "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Technical-Guide-CSV-Specification-ACPs-V1.7.XLSX",
+        "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Technical-Guide-CSV-Specification-ACPs-V1.7.XLSX",
+        "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "retrievedAt": "2026-09-24T05:05:57.104094+00:00",
+        "sha256": "3de9761a1fef72a7696612a645a55fc2544216450237e8e10f83587575ca1958",
+        "bytes": 31136
+      },
+      {
+        "file": "nsw-ess-example-v3.4.xlsx",
+        "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/ESS-Example-Template-CSV-Implementation-Data-22-July-2026-V3.4.XLSX",
+        "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/ESS-Example-Template-CSV-Implementation-Data-22-July-2026-V3.4.XLSX",
+        "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "retrievedAt": "2026-09-24T05:05:57.203470+00:00",
+        "sha256": "2acba8ad07d430f68f47d997d61b59e001e5473cfd731ea69453973de0bf44bf",
+        "bytes": 17453
+      }
+    ],
+    "version": "TESSA CSV v1.7, 22 July 2026"
+  },
+  "nsw_prc": {
+    "fields": [
+      {
+        "name": "ACP Implementation Identifier",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must be unique across all individual implementations made under an accreditation",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A4:E4; example row 1"
+      },
+      {
+        "name": "Implementation Date",
+        "dataType": "Date",
+        "mandatory": "Yes",
+        "validation": "Must be within the date range of the selected Version of the Rule value Refer to Version of the Rule validation notes. If implementation date is before PDRS date of accreditation, then implementation date has to be after the corresponding ESS accreditation date. Otherwise, implementation date must be after PDRS date of accreditation. Must not be a future date If the PDRS Activity Definition is BESS1, the Implementation Date must be on or before 30/06/2025 or after 01/07/2026. All implementation dates in a CSV file must fall within the 12 month period between 1 April and 31 March that corresponds to the Base Vintage period selected. Dates must be specified in 'dd/MM/yyyy' format E.g. Monday the 15th of January 2024 should be entered as 15/01/2024",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A5:E5; example row 1"
+      },
+      {
+        "name": "Address Line 1 ( Unit / Shop / Level, Unit Type )",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Should be left blank for implementation sites with a single address line",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A6:E6; example row 1"
+      },
+      {
+        "name": "Address Line 2 ( Street No , Street Name )",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must include an address in NSW",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A7:E7; example row 1"
+      },
+      {
+        "name": "Suburb",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must not contain numbers or special characters (!@#$%^&*()_+-=:\"{}|\\][<>?/.,)",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A8:E8; example row 1"
+      },
+      {
+        "name": "State",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must be entered as 'NSW'",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A9:E9; example row 1"
+      },
+      {
+        "name": "Postcode",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must consist of 4 numbers only",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A10:E10; example row 1"
+      },
+      {
+        "name": "National Metering Identifier (NMI)",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must be alphanumeric. Must be provided when the Implementation Date is on or after 1 November 2024. Must be a minimum of 10 characters in length",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A11:E11; example row 1"
+      },
+      {
+        "name": "End-User Business Classification",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must be a selection from the below list: A Agriculture, Forestry and Fishing B Mining C Manufacturing D Electricity, Gas, Water and Waste Services E Construction F Wholesale Trade G Retail Trade H Accommodation and Food Services I Transport, Postal and Warehousing J Information Media and Telecommunications K Financial and Insurance Services L Rental, Hiring and Real Estate Services M Professional, Scientific and Technical Services N Administrative and Support Services O Public Administration and Safety P Education and Training Q Health Care and Social Assistance R Arts and Recreation Services S Other Services Residential Unknown",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A12:E12; example row 1"
+      },
+      {
+        "name": "ABN",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be provided unless the End-User Business Classification is: • Residential • Unknown Must not contain letters or special characters (!@#$%^&*()_+-=:\"{}|\\][<>?/.,) This field is validated against Australian Business Register records",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A13:E13; example row 1"
+      },
+      {
+        "name": "End-Use Service",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must be a selection from the below list: Air compression Air handling, fans, ventilation Air heating and cooling Cleaning, washing Communications Computers, office equipment Cooking Electricity supply Home entertainment Lighting Materials handling, conveying Milling, mixing, grinding People movement, lifts, escalators Process drives Process heat Refrigeration and freezing Transport Water heating Water/liquid pumping Other machines Making available Air compression at a leased premises Making available Air handling, fans, ventilation at a leased premises Making available Air heating and cooling at a leased premises Making available Cleaning, washing at a leased premises Making available Communications at a leased premises Making available Computers, office equipment at a leased premises Making available Cooking at a leased premises Making available Electricity supply at a leased premises Making available Home entertainment at a leased premises Making available Lighting at a leased premises Making available Materials handling, conveying at a leased premises Making available Milling, mixing, grinding at a leased premises Making available People movement, lifts, escalators at a leased premises Making available Process drives at a leased premises Making available Process heat at a leased premises Making available Refrigeration and freezing at a leased premises Making available Transport at a leased premises Making available Water heating at a leased premises Making available Water/liquid pumping at a leased premises Making available Other machines at a leased premises",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A14:E14; example row 1"
+      },
+      {
+        "name": "Purchase Cost (Excluding GST)",
+        "dataType": "Currency",
+        "mandatory": "Yes",
+        "validation": "Must be specified to 2 decimal places",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A15:E15; example row 1"
+      },
+      {
+        "name": "PDRS Activity Definition",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must be a selection from the below list: HVAC1 HVAC2 RF2 - Classes 1 - 6, 9, 10 RF2 - Classes 7, 8 and 11 (<3.3) RF2 - Classes 7, 8 and 11 (>=3.3) RF2 - Classes 12 - 15 SYS2 BESS1 BESS2 BESS3 BESS4 BESS5",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A16:E16; example row 1"
+      },
+      {
+        "name": "PDRS Calculation Method",
+        "dataType": "Text",
+        "mandatory": "Yes",
+        "validation": "Must be a selection from the below list: Peak Demand Savings Capacity - Reducing Demand Using Efficiency Activity Peak Demand Shifting Capacity - Store and Shift Capacity Peak Demand Response Capacity - Household Annual Demand Response Peak Demand Savings Capacity - Measured Peak Demand Savings",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A17:E17; example row 1"
+      },
+      {
+        "name": "Number of units installed",
+        "dataType": "Number",
+        "mandatory": "Conditionally",
+        "validation": "Must only be provided for the below Activity Definitions: • HVAC1 • HVAC2 • RF2",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A18:E18; example row 1"
+      },
+      {
+        "name": "Product Brand",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must only be provided for the below Activity Definitions: • HVAC1 • HVAC2 • RF2 • SYS2 • BESS1 • BESS3 • BESS4 • BESS5",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A19:E19; example row 1"
+      },
+      {
+        "name": "Product Model Number",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must only be provided for the below Activity Definitions: • HVAC1 • HVAC2 • RF2 • SYS2 • BESS1 • BESS3 • BESS4 • BESS5 Must be entered exactly as it appears on the CEC Approved Battery list for BESS1",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A20:E20; example row 1"
+      },
+      {
+        "name": "Refrigerant",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must only be provided for the below Activity Definitions (not required for water heater products): • HVAC1 • HVAC2 • RF2",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A21:E21; example row 1"
+      },
+      {
+        "name": "New or Replacement",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must only be provided for the below Activity Definitions: • HVAC1 • HVAC2 Must be a selection from the below list: New Replacement",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A22:E22; example row 1"
+      },
+      {
+        "name": "Product class of removed equipment",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be provided for the below Activity Definitions: • RF2 Must be a selection from the below list: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A23:E23; example row 1"
+      },
+      {
+        "name": "Product class of installed equipment",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be provided for the below Activity Definitions: • RF2 Must be a selection from the below list: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A24:E24; example row 1"
+      },
+      {
+        "name": "Peak demand reduction capacity (kW)",
+        "dataType": "Number",
+        "mandatory": "Yes",
+        "validation": "Must be specified to 2 decimal places",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A25:E25; example row 1"
+      },
+      {
+        "name": "Network Factor",
+        "dataType": "Number",
+        "mandatory": "Yes",
+        "validation": "Must match the Network Loss Factor of the specified distribution area",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A26:E26; example row 1"
+      },
+      {
+        "name": "Version of The Rule",
+        "dataType": "Date",
+        "mandatory": "Yes",
+        "validation": "Must match the start date of the version of the rule the implementation was made under Dates must be specified in 'dd/MM/yyyy' format E.g. Wednesday the 1st of July 2026 should be entered as 1/07/2026 Versions of the rule 13/09/2024 19/12/2024 01/07/2025 12/09/2025 01/04/2026 01/07/2026 If the PDRS Activity Definition is BESS2, the 1/07/2025 Version of the Rule may be used for implementation dates on or before 30 June 2025.",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A27:E27; example row 1"
+      },
+      {
+        "name": "Company or individual responsible for work at site",
+        "dataType": "Text",
+        "mandatory": "No",
+        "validation": "For HADR activities, provide the name of the Demand Response Aggregator in this field. For all other activites, provide the company or individual responsible for work at the site.",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A28:E28; example row 1"
+      },
+      {
+        "name": "Plumbing licence",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be provided when using the following Activity Definitions: • Activity Definitions: RF2 and when the Implementation Date is on or after 1 November 2024 When uploading Implementations for RF2, if a plumber was not required, may enter 'NA'. Must not contain decimals Must not contain special characters, such as Punctuation marks",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A29:E29; example row 1"
+      },
+      {
+        "name": "Plumbing contractor licence",
+        "dataType": "Text",
+        "mandatory": "No",
+        "validation": "Must not contain decimals Must not contain special characters, such as Punctuation marks",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A30:E30; example row 1"
+      },
+      {
+        "name": "Electrician licence",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be provided when using the following Activity Definitions: • Activity Definitions: HVAC1, HVAC2 (Implementation data from 1 November 2022) • Activity Definitions: BESS1 (Implementation data from 1 November 2024) • Activity Definitions: BESS3, BESS4, BESS5 (Implementation data from 1 September 2026) Must not contain decimals Must not contain special characters, such as Punctuation marks",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A31:E31; example row 1"
+      },
+      {
+        "name": "Electrical contractor licence",
+        "dataType": "Text",
+        "mandatory": "No",
+        "validation": "Must not contain decimals Must not contain special characters, such as Punctuation marks",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A32:E32; example row 1"
+      },
+      {
+        "name": "Refrigerant handling licence",
+        "dataType": "Text",
+        "mandatory": "No",
+        "validation": "Must not contain decimals Must not contain special characters, such as Punctuation marks",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A33:E33; example row 1"
+      },
+      {
+        "name": "Refrigerant licence",
+        "dataType": "Text",
+        "mandatory": "No",
+        "validation": "Provide the refrigeration licence, not the refrigerant licence. Must not contain decimals Must not contain special characters, such as Punctuation marks",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A34:E34; example row 1"
+      },
+      {
+        "name": "SAA accreditation",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be provided when using the following Activity Definitions: • Activity Definition: BESS1, BESS3, BESS4, BESS5 Must not contain decimals Must not contain special characters, such as Punctuation marks",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A35:E35; example row 1"
+      },
+      {
+        "name": "Was an Inverter installed",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Yes or No Must be provided when using the following Activity Definition: •Activity Definition: BESS1, BESS3, BESS4, BESS5 Enter Yes is if a new inverter was installed as part of the implementation. Enter No for integrated inverters or existing inverters.",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A36:E36; example row 1"
+      },
+      {
+        "name": "Inverter Brand",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be provided if a new inverter was installed. Field will accept alpha, numeric, and special characters. Entry must not precede with a blank space.",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A37:E37; example row 1"
+      },
+      {
+        "name": "Inverter Model Number",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be provided if a new inverter was installed. Field will accept alpha, numeric, and special characters. Entry must not precede with a blank space.",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A38:E38; example row 1"
+      },
+      {
+        "name": "Is a Solar PV system connected?",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be provided when using the following Activity Definition: Activity Definition: •BESS1 (Implementation date after 1 July 2026) •BESS3, BESS4, BESS5 (Implementation date after 1 September 2026) Must enter Yes for BESS1",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A39:E39; example row 1"
+      },
+      {
+        "name": "Existing Inverter capacity (kW)",
+        "dataType": "Number",
+        "mandatory": "Conditionally",
+        "validation": "Can be specified up to 2 decimal places Must be provided if the \"Is a Solar PV system connected?\" is Yes Must be provided when using the following Activity Definition: •BESS1 (Implementation date after 1 July 2026) •BESS3, BESS4, BESS5 (Implementation date after 1 September 2026)",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A40:E40; example row 1"
+      },
+      {
+        "name": "Existing Solar PV capacity (kW)",
+        "dataType": "Number",
+        "mandatory": "Conditionally",
+        "validation": "Can be specified up to 2 decimal places Must be provided if the \"is a solar PV system connected\" is Yes. Enter 0 if there was no existing system in place prior to implementation. Must be provided when using the following Activity Definition: •BESS1 (Implementation date after 1 July 2026) •BESS3, BESS4, BESS5 (Implementation date after 1 September 2026)",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A41:E41; example row 1"
+      },
+      {
+        "name": "Exempt Energy Program or Government site",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be provided when using the following Activity Definition: •Activity Definition: BESS1 And when the implementation date is on or after 1st of July 2026 Must be a selection from the below list: HESP Government site",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A42:E42; example row 1"
+      },
+      {
+        "name": "New Inverter capacity (kW)",
+        "dataType": "Number",
+        "mandatory": "Conditionally",
+        "validation": "Can be specified up to 2 decimal places Must be provided if the \"Is a Solar PV system connected?\" is Yes Must be provided when using the following Activity Definition: •BESS1 (Implementation date after 1 July 2026) •BESS3, BESS4, BESS5 (Implementation date after 1 September 2026) Enter 0 if no new inverter was installed as part of the implementation",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A43:E43; example row 1"
+      },
+      {
+        "name": "New Solar PV capacity (kW)",
+        "dataType": "Number",
+        "mandatory": "Conditionally",
+        "validation": "Can be specified up to 2 decimal places Must be provided if the \"Is a Solar PV system connected?\" is Yes Must be provided when using the following Activity Definition: •BESS1 (Implementation date after 1 July 2026) •BESS3, BESS4, BESS5 (Implementation date after 1 September 2026) Enter 0 if no new solar PV was installed as part of the upgrade",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A44:E44; example row 1"
+      },
+      {
+        "name": "Total Solar PV capacity (kW)",
+        "dataType": "Number",
+        "mandatory": "Conditionally",
+        "validation": "Can be specified up to 2 decimal places Must be provided if the \"Is a Solar PV system connected?\" is Yes Must be provided when using the following Activity Definition: •BESS1 (Implementation date after 1 July 2026) •BESS3, BESS4, BESS5 (Implementation date after 1 September 2026) This is the sum of the existing and new solar PV capacity",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A45:E45; example row 1"
+      },
+      {
+        "name": "Total Inverter capacity (kW)",
+        "dataType": "Number",
+        "mandatory": "Conditionally",
+        "validation": "Can be specified up to 2 decimal places Must be provided if the \"Is a Solar PV system connected?\" is Yes Must be provided when using the following Activity Definition: •BESS1 (Implementation date after 1 July 2026) •BESS3, BESS4, BESS5 (Implementation date after 1 September 2026) This is the sum of the existing and new inverter capacity",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A46:E46; example row 1"
+      },
+      {
+        "name": "Multi split system",
+        "dataType": "Text",
+        "mandatory": "Conditionally",
+        "validation": "Must be provided when using the following Activity Definition: •Activity Definition: HVAC1 And when the implementation date is on or after 1st of July 2026 Must enter Yes or No.",
+        "business": "",
+        "reference": "",
+        "sourceLocation": "Specification PDRS!A47:E47; example row 1"
+      }
+    ],
+    "sources": [
+      {
+        "file": "nsw-csv-v1.7.xlsx",
+        "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Technical-Guide-CSV-Specification-ACPs-V1.7.XLSX",
+        "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Technical-Guide-CSV-Specification-ACPs-V1.7.XLSX",
+        "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "retrievedAt": "2026-09-24T05:05:57.104094+00:00",
+        "sha256": "3de9761a1fef72a7696612a645a55fc2544216450237e8e10f83587575ca1958",
+        "bytes": 31136
+      },
+      {
+        "file": "nsw-pdrs-example-v2.6.xlsx",
+        "url": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/PDRS-Example-Template-CSV-Implementation-Data-22-July-2026-V2.6.XLSX",
+        "resolvedUrl": "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/PDRS-Example-Template-CSV-Implementation-Data-22-July-2026-V2.6.XLSX",
+        "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "retrievedAt": "2026-09-24T05:07:47.894747+00:00",
+        "sha256": "c968e596681dba1b02e6b57c4b7f08acc206b7162b34efc7239f14194b539622",
+        "bytes": 15403
+      }
+    ],
+    "version": "TESSA CSV v1.7, 22 July 2026"
+  }
+}

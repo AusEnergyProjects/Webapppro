@@ -37,6 +37,7 @@ const CreditexActivityWorkPackGovernance = dynamic(() => import("./CreditexActiv
 const CreditexOnboardingReviewWorkspace = dynamic(() => import("./CreditexOnboardingReviewWorkspace").then((module) => module.CreditexOnboardingReviewWorkspace), { loading: () => <p role="status">Loading onboarding reviews...</p> });
 const TrainingQuestionnaireEditor = dynamic(() => import("./TrainingQuestionnaireEditor").then((module) => module.TrainingQuestionnaireEditor), { loading: () => <p role="status">Loading training...</p> });
 import { CreditexOutputActions } from "./CreditexOutputActions";
+import { CreditexRegistryWorkspace } from "./CreditexRegistryWorkspace";
 import { CreditexOfficialSourceWorkbench } from "./CreditexOfficialSourceWorkbench";
 import { CreditexOperationsWorkspace } from "./CreditexOperationsWorkspace";
 import { CreditexPlannedIntakeQueue } from "./CreditexPlannedIntakeQueue";
@@ -44,12 +45,13 @@ import CreditexVoiceSetupPanel from "./CreditexVoiceSetupPanel";
 import styles from "./CreditexCompliancePortal.module.css";
 
 type ComplianceRole = "admin" | "case_manager" | "reviewer" | "auditor";
-type WorkspaceTab = "cases" | "operations" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance";
+type WorkspaceTab = "cases" | "operations" | "submissions" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance";
 
 function WorkspaceIcon({ tab }: { tab: WorkspaceTab }) {
   const paths: Record<WorkspaceTab, string> = {
     cases: "M8 6V4h8v2M4 6h16v14H4zM4 11h16M10 11v3h4v-3",
     operations: "M4 5h6l2 2h8v13H4zM8 12h8M8 16h5",
+    submissions: "M14 3H5v18h14V8zM14 3v5h5M8 14l3 3 5-6",
     "compliance-questions": "m2 8 10-5 10 5-10 5zM6 10v7c4 3 8 3 12 0v-7M22 8v9",
     forms: "M8 4h11v17H5V7M8 3H5v5h6V3zM9 12h6M9 16h6",
     onboarding: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M17 8h5M19.5 5.5v5",
@@ -1038,6 +1040,7 @@ export function CreditexCompliancePortal() {
   const primaryTabs: { id: WorkspaceTab; label: string }[] = [
     { id: "cases", label: "Jobs" },
     { id: "operations", label: "Cases" },
+    { id: "submissions", label: "Submissions" },
   ];
   const toolsTabs: { id: WorkspaceTab; label: string }[] = [
     ...(canOpenQuestionnaires ? [{ id: "compliance-questions" as const, label: "Training" }] : []),
@@ -1285,7 +1288,7 @@ export function CreditexCompliancePortal() {
           </div>
         </header>
         <div className={styles.content}>
-        {!["cases", "operations", "forms", "compliance-questions"].includes(tab) && (
+        {!["cases", "operations", "submissions", "forms", "compliance-questions"].includes(tab) && (
           <section className={styles.hero}>
             <div className={styles.heroCopy}>
               <h1>
@@ -1400,14 +1403,27 @@ export function CreditexCompliancePortal() {
               onDownloadSource={downloadOfficialSource}
               contextLabel="Creditex"
             />
-            <details className={styles.supportingTools}>
-              <summary>Certificate outputs</summary>
+          </section>
+        )}
+
+        {tab === "submissions" && (
+          <section
+            className={styles.panel}
+            id="creditex-panel-submissions"
+            role="tabpanel"
+            aria-labelledby="creditex-tab-submissions"
+          >
+            <CreditexRegistryWorkspace
+              api={api}
+              endpoint="/api/creditex/registry"
+              outputEndpoint="/api/creditex/output-actions"
+            >
               <CreditexOutputActions
                 api={api}
                 endpoint="/api/creditex/output-actions"
                 contextLabel="Creditex compliance"
               />
-            </details>
+            </CreditexRegistryWorkspace>
           </section>
         )}
 

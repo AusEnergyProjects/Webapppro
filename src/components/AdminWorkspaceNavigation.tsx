@@ -1,6 +1,6 @@
 "use client";
 
-export type AdminWorkspaceTab = "inbox" | "overview" | "directory" | "jobs" | "customers" | "partners" | "assistant-leads" | "assistant-reviews" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "compliance-questions" | "field-pilot" | "database" | "access";
+export type AdminWorkspaceTab = "inbox" | "overview" | "directory" | "jobs" | "customers" | "partners" | "assistant-leads" | "assistant-reviews" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "compliance-submissions" | "compliance-questions" | "field-pilot" | "database" | "access";
 type Role = "owner" | "admin" | "reviewer" | "support";
 type Item = { id: AdminWorkspaceTab; label: string; ownerOnly?: boolean; excludeSupport?: boolean };
 const groups: Array<{ label: string; secondary?: boolean; items: Item[] }> = [
@@ -9,7 +9,8 @@ const groups: Array<{ label: string; secondary?: boolean; items: Item[] }> = [
     { id: "jobs", label: "Jobs" }, { id: "customers", label: "Customers" },
     { id: "partners", label: "Trades & suppliers" }, { id: "opportunities", label: "Leads" },
   ] },
-  { label: "Forms & training", items: [
+  { label: "Compliance", items: [
+    { id: "compliance-submissions", label: "Submissions", excludeSupport: true },
     { id: "compliance-questions", label: "Training", excludeSupport: true },
     { id: "form-governance", label: "Activity forms" },
   ] },
@@ -49,6 +50,7 @@ const iconPaths: Record<AdminWorkspaceTab, string> = {
   opportunities: "M12 3a7 7 0 0 0-4 13v3h8v-3a7 7 0 0 0-4-13 M9 22h6 M12 7v5 M10 10l2 2 2-2",
   "compliance-questions": "m2 9 10-5 10 5-10 5z M6 11v6c4 3 8 3 12 0v-6 M22 9v8",
   "form-governance": "M14 3H5v18h14V8z M14 3v5h5 M8 12h8 M8 16h8",
+  "compliance-submissions": "M14 3H5v18h14V8z M14 3v5h5 M8 14l3 3 5-6",
   catalogue: "m12 3 9 5v9l-9 5-9-5V8z M3 8l9 5 9-5 M12 13v9 M8 5l9 5",
   enquiries: "M4 4h16v13H9l-5 4z M8 8h8 M8 12h5",
   handovers: "M5 3h14v18H5z M9 3v3h6V3 M8 13l3 3 5-6",

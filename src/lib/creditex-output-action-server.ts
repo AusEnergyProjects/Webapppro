@@ -94,6 +94,7 @@ function record(value: unknown): Record<string, unknown> {
 type OutputActionOptions = Readonly<{
   now?: () => string;
   id?: (scope: string) => string;
+  dispatchTimeoutMs?: number;
   resolveCoverage?: (
     database: D1Database,
     actor: CreditexWorkPackGovernanceActor,
@@ -1883,8 +1884,116 @@ export type CreditexOutputActionAdapter = Readonly<{
   id: string;
   submit: (
     action: Awaited<ReturnType<typeof loadCreditexOutputAction>>,
+    context: Readonly<{ intentId: string; idempotencyKey: string; signal: AbortSignal }>,
   ) => Promise<CreditexOutputActionAdapterResult>;
 }>;
+
+type OutputDispatchIntentRecord = {
+  id: string;
+  packet_id: string;
+  packet_sha256: string;
+  adapter_id: string;
+  requested_by_uid: string;
+  status: "dispatching" | "uncertain" | "completed";
+  started_at: string;
+  finished_at: string;
+  adapter_receipt_id: string;
+  failure_code: string;
+};
+
+async function findOutputDispatchIntent(database: D1Database, organisationId: string, packetId: string) {
+  return database.prepare(`SELECT id, packet_id, packet_sha256, adapter_id,
+      requested_by_uid, status, started_at, finished_at, adapter_receipt_id, failure_code
+    FROM compliance_output_dispatch_intents
+    WHERE organisation_id = ? AND packet_id = ? LIMIT 1`)
+    .bind(organisationId, packetId).first<OutputDispatchIntentRecord>();
+}
+
+export async function loadCreditexOutputDispatchIntent(
+  database: D1Database,
+  actor: CreditexWorkPackGovernanceActor,
+  packetId: string,
+) {
+  await outputActorCapabilities(database, actor);
+  await loadCreditexOutputAction(database, actor.organisationId, packetId);
+  const row = await findOutputDispatchIntent(database, actor.organisationId, packetId);
+  return row ? Object.freeze({
+    id: row.id, packetId: row.packet_id, packetSha256: row.packet_sha256,
+    adapterId: row.adapter_id, requestedByUid: row.requested_by_uid,
+    status: row.status, startedAt: row.started_at, finishedAt: row.finished_at,
+    adapterReceiptId: row.adapter_receipt_id, failureCode: row.failure_code,
+  }) : null;
+}
+
+async function requireUnreservedOutput(database: D1Database, organisationId: string, packetId: string) {
+  if (await findOutputDispatchIntent(database, organisationId, packetId)) {
+    return fail("OUTPUT_ACTION_DISPATCH_ALREADY_RESERVED", 409,
+      "An external submission attempt is already retained. Reconcile its result before any further submission.");
+  }
+}
+
+export async function recheckOutputDispatchEvidence(
+  database: D1Database,
+  actor: CreditexWorkPackGovernanceActor,
+  action: Awaited<ReturnType<typeof loadCreditexOutputAction>>,
+  options?: OutputActionOptions,
+) {
+  const row = await exactCoverageRow(database, actor, action.activityTemplateId,
+    action.workPackInstanceId, options);
+  const evidence = action.actionKind === "certificate_submission"
+    ? certificateEvidence(row, action.workPackInstanceId)
+    : operationalDefinition(row, action.workPackInstanceId).activation;
+  const packet = action.packet;
+  const workPack = record(packet.workPack);
+  const sourceManifest = {
+    contract: "creditex-output-action-source-manifest/v1",
+    sources: [...evidence.sourceBindings].map((binding) => ({
+      bindingId: binding.id, role: binding.role, targetKey: binding.targetKey,
+      artifactId: binding.artifactId,
+      artifactSha256: bareSha256(binding.artifactSha256, "Output-action source artifact"),
+      createdByUid: binding.createdByUid, reviewedByUid: binding.reviewedByUid,
+      reviewedAt: binding.reviewedAt,
+    })).sort((left, right) => left.bindingId.localeCompare(right.bindingId)),
+  };
+  const matches = creditexCanonicalSha256(packet) === action.packetSha256
+    && packet.activityVersionId === evidence.activityVersion.id
+    && workPack.instanceId === evidence.fieldCollection.instanceId
+    && workPack.revision === evidence.fieldCollection.revision
+    && workPack.versionId === evidence.workPackVersion.id
+    && workPack.definitionSha256 === evidence.workPackVersion.schemaSha256
+    && workPack.instanceSha256 === evidence.completion.instanceSha256
+    && workPack.responseSha256 === evidence.completion.responseSha256
+    && workPack.finalRecordId === evidence.completion.finalRecordId
+    && workPack.finalPdfSha256 === bareSha256(evidence.completion.pdfSha256, "Final work-pack PDF")
+    && creditexCanonicalSha256(packet.sourceManifest) === creditexCanonicalSha256(sourceManifest)
+    && creditexCanonicalSha256(packet.productEvidence) === creditexCanonicalSha256({
+      contract: "creditex-output-action-product-evidence/v1", ...evidence.productRegistrySnapshot,
+    })
+    && creditexCanonicalSha256(packet.scenarioEvidence) === creditexCanonicalSha256({
+      contract: "creditex-output-action-scenario-evidence/v1", ...evidence.scenarioRules,
+    });
+  const calculation = record(packet.calculation);
+  const calculator = evidence.authoritativeCalculator;
+  const classMatches = action.actionKind === "certificate_submission"
+    ? Boolean(calculator
+      && calculation.runId === calculator.runId
+      && calculation.inputSha256 === calculator.inputSha256
+      && calculation.outputSha256 === calculator.outputSha256
+      && calculation.receiptSha256 === calculator.receiptSha256
+      && calculation.calculatorVersionId === calculator.specificationId
+      && calculation.quantity === calculator.certificateQuantity
+      && calculation.unit === calculator.certificateUnit
+      && creditexCanonicalSha256(packet.programActivationEvidence ?? null)
+        === creditexCanonicalSha256(evidence.programActivationEvidence ?? null))
+    : creditexCanonicalSha256(packet.operationalOutputDefinition) === creditexCanonicalSha256({
+      contract: "creditex-operational-output-definition/v1", ...row.operationalOutputDefinition,
+      sourceSha256: bareSha256(row.operationalOutputDefinition?.sourceSha256, "Operational output source"),
+    });
+  if (!matches || !classMatches) {
+    return fail("OUTPUT_ACTION_EVIDENCE_CHANGED", 409,
+      "Current governed evidence no longer matches the approved submission packet.");
+  }
+}
 
 export async function submitCreditexOutputAction(
   database: D1Database,
@@ -1930,94 +2039,90 @@ export async function submitCreditexOutputAction(
     "OUTPUT_ACTION_ADAPTER_INVALID",
     "Output-action adapter",
   );
-  const result = await adapter.submit(packet);
-  if (
-    !["submitted", "provider_accepted", "rejected", "reconciliation_required"]
-      .includes(result.providerStatus)
-    || !Number.isInteger(result.httpStatus)
-    || result.httpStatus < 100
-    || result.httpStatus > 599
-    || Number.isNaN(Date.parse(result.responseReceivedAt))
-    || !Object.keys(record(result.requestSnapshot)).length
-    || !Object.keys(record(result.responseSnapshot)).length
-    || (result.providerStatus === "provider_accepted"
-      && !String(result.providerReference || "").trim())
-  ) {
-    return fail(
-      "OUTPUT_ACTION_ADAPTER_RESPONSE_INVALID",
-      502,
-      "The external program adapter did not retain a valid provider response.",
-    );
+  await requireUnreservedOutput(database, actor.organisationId, packetId);
+  await recheckOutputDispatchEvidence(database, actor, packet, options);
+  const dispatchTimeoutMs = options?.dispatchTimeoutMs ?? 30_000;
+  if (!Number.isInteger(dispatchTimeoutMs) || dispatchTimeoutMs < 1 || dispatchTimeoutMs > 60_000) {
+    return fail("OUTPUT_ACTION_DISPATCH_TIMEOUT_INVALID", 500, "The external submission timeout is invalid.");
   }
-  const now = outputNow(options);
-  const providerName = requiredText(
-    result.providerName,
-    180,
-    "OUTPUT_ACTION_ADAPTER_RESPONSE_INVALID",
-    "External program provider",
-  );
-  const responseReceivedAt = trustedManualOccurredAt(
-    result.responseReceivedAt,
-    packet.review?.reviewedAt || packet.preparedAt,
-    now,
-    "OUTPUT_ACTION_ADAPTER_RESPONSE_INVALID",
-    "Adapter provider response time",
-  );
-  const createdAt = retainedAt(now, responseReceivedAt);
-  const requestSha256 = creditexCanonicalSha256(result.requestSnapshot);
-  const responseSha256 = creditexCanonicalSha256(result.responseSnapshot);
-  const submittedReceiptId = outputId("output-action-adapter-receipt", options);
-  const finalReceiptId = result.providerStatus === "submitted"
-    ? submittedReceiptId
-    : outputId("output-action-adapter-receipt", options);
-  const statements = [
-    database.prepare(`INSERT INTO compliance_output_action_adapter_receipts (
-        id, organisation_id, packet_id, adapter_id, provider_name,
-        request_snapshot, request_sha256, response_snapshot, response_sha256,
-        provider_reference, provider_status, http_status,
-        response_received_at, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?)`)
-      .bind(
-        submittedReceiptId,
-        actor.organisationId,
-        packetId,
-        adapterId,
-        providerName,
-        JSON.stringify(result.requestSnapshot),
-        requestSha256,
-        JSON.stringify(result.responseSnapshot),
-        responseSha256,
-        result.providerReference || "",
-        result.httpStatus,
-        responseReceivedAt,
-        createdAt,
-      ),
-    database.prepare(`INSERT INTO compliance_output_action_events (
-        id, organisation_id, packet_id, sequence, from_status, to_status,
-        actor_kind, actor_uid, adapter_receipt_id, summary, metadata,
-        occurred_at, created_at
-      ) VALUES (?, ?, ?, 2, 'prepared', 'submitted', 'adapter', ?, ?,
-        'Authorised adapter submitted the governed output action.', '{}', ?, ?)`)
-      .bind(
-        outputId("output-action-event", options),
-        actor.organisationId,
-        packetId,
-        adapterId,
-        submittedReceiptId,
-        responseReceivedAt,
-        createdAt,
-      ),
-  ];
-  if (result.providerStatus !== "submitted") {
-    statements.push(
+  const intentId = outputId("output-dispatch-intent", options);
+  const startedAt = outputNow(options);
+  const reserved = await database.prepare(`INSERT INTO compliance_output_dispatch_intents (
+      id, organisation_id, packet_id, packet_sha256, adapter_id, requested_by_uid,
+      status, started_at
+    ) VALUES (?, ?, ?, ?, ?, ?, 'dispatching', ?)
+    ON CONFLICT (organisation_id, packet_id) DO NOTHING`)
+    .bind(intentId, actor.organisationId, packetId, packet.packetSha256,
+      adapterId, actor.actorUid, startedAt).run();
+  if (reserved.meta.changes !== 1) {
+    return fail("OUTPUT_ACTION_DISPATCH_ALREADY_RESERVED", 409,
+      "An external submission attempt is already retained. Reconcile its result before any further submission.");
+  }
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let completedReceiptId = "";
+  try {
+    requireOutputCapability(await outputActorCapabilities(database, actor), "canSubmit");
+    await recheckOutputDispatchEvidence(database, actor, packet, options);
+    const result = await Promise.race([
+      adapter.submit(packet, { intentId, idempotencyKey: intentId, signal: controller.signal }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new CreditexOutputActionError("OUTPUT_ACTION_DISPATCH_TIMEOUT", 504,
+            "The external submission response was not received in time."));
+        }, dispatchTimeoutMs);
+      }),
+    ]);
+    clearTimeout(timer);
+    if (
+      !["submitted", "provider_accepted", "rejected", "reconciliation_required"]
+        .includes(result.providerStatus)
+      || !Number.isInteger(result.httpStatus)
+      || result.httpStatus < 100
+      || result.httpStatus > 599
+      || Number.isNaN(Date.parse(result.responseReceivedAt))
+      || !Object.keys(record(result.requestSnapshot)).length
+      || !Object.keys(record(result.responseSnapshot)).length
+      || (result.providerStatus === "provider_accepted"
+        && !String(result.providerReference || "").trim())
+    ) {
+      return fail(
+        "OUTPUT_ACTION_ADAPTER_RESPONSE_INVALID",
+        502,
+        "The external program adapter did not retain a valid provider response.",
+      );
+    }
+    const now = outputNow(options);
+    const providerName = requiredText(
+      result.providerName,
+      180,
+      "OUTPUT_ACTION_ADAPTER_RESPONSE_INVALID",
+      "External program provider",
+    );
+    const responseReceivedAt = trustedManualOccurredAt(
+      result.responseReceivedAt,
+      packet.review?.reviewedAt || packet.preparedAt,
+      now,
+      "OUTPUT_ACTION_ADAPTER_RESPONSE_INVALID",
+      "Adapter provider response time",
+    );
+    const createdAt = retainedAt(now, responseReceivedAt);
+    const requestSha256 = creditexCanonicalSha256(result.requestSnapshot);
+    const responseSha256 = creditexCanonicalSha256(result.responseSnapshot);
+    const submittedReceiptId = outputId("output-action-adapter-receipt", options);
+    const finalReceiptId = result.providerStatus === "submitted"
+      ? submittedReceiptId
+      : outputId("output-action-adapter-receipt", options);
+    const statements = [
       database.prepare(`INSERT INTO compliance_output_action_adapter_receipts (
           id, organisation_id, packet_id, adapter_id, provider_name,
           request_snapshot, request_sha256, response_snapshot, response_sha256,
           provider_reference, provider_status, http_status,
           response_received_at, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?)`)
         .bind(
-          finalReceiptId,
+          submittedReceiptId,
           actor.organisationId,
           packetId,
           adapterId,
@@ -2027,7 +2132,6 @@ export async function submitCreditexOutputAction(
           JSON.stringify(result.responseSnapshot),
           responseSha256,
           result.providerReference || "",
-          result.providerStatus,
           result.httpStatus,
           responseReceivedAt,
           createdAt,
@@ -2036,30 +2140,88 @@ export async function submitCreditexOutputAction(
           id, organisation_id, packet_id, sequence, from_status, to_status,
           actor_kind, actor_uid, adapter_receipt_id, summary, metadata,
           occurred_at, created_at
-        ) VALUES (?, ?, ?, 3, 'submitted', ?, 'adapter', ?, ?,
-          'External program provider response retained for this output action.',
-          ?, ?, ?)`)
+        ) VALUES (?, ?, ?, 2, 'prepared', 'submitted', 'adapter', ?, ?,
+          'Authorised adapter submitted the governed output action.', '{}', ?, ?)`)
         .bind(
           outputId("output-action-event", options),
           actor.organisationId,
           packetId,
-          result.providerStatus,
           adapterId,
-          finalReceiptId,
-          JSON.stringify({
-            providerName,
-            providerReference: result.providerReference,
-            httpStatus: result.httpStatus,
-            responseSha256,
-          }),
+          submittedReceiptId,
           responseReceivedAt,
           createdAt,
         ),
-    );
+    ];
+    if (result.providerStatus !== "submitted") {
+      statements.push(
+        database.prepare(`INSERT INTO compliance_output_action_adapter_receipts (
+            id, organisation_id, packet_id, adapter_id, provider_name,
+            request_snapshot, request_sha256, response_snapshot, response_sha256,
+            provider_reference, provider_status, http_status,
+            response_received_at, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .bind(
+            finalReceiptId,
+            actor.organisationId,
+            packetId,
+            adapterId,
+            providerName,
+            JSON.stringify(result.requestSnapshot),
+            requestSha256,
+            JSON.stringify(result.responseSnapshot),
+            responseSha256,
+            result.providerReference || "",
+            result.providerStatus,
+            result.httpStatus,
+            responseReceivedAt,
+            createdAt,
+          ),
+        database.prepare(`INSERT INTO compliance_output_action_events (
+            id, organisation_id, packet_id, sequence, from_status, to_status,
+            actor_kind, actor_uid, adapter_receipt_id, summary, metadata,
+            occurred_at, created_at
+          ) VALUES (?, ?, ?, 3, 'submitted', ?, 'adapter', ?, ?,
+            'External program provider response retained for this output action.',
+            ?, ?, ?)`)
+          .bind(
+            outputId("output-action-event", options),
+            actor.organisationId,
+            packetId,
+            result.providerStatus,
+            adapterId,
+            finalReceiptId,
+            JSON.stringify({
+              providerName,
+              providerReference: result.providerReference,
+              httpStatus: result.httpStatus,
+              responseSha256,
+            }),
+            responseReceivedAt,
+            createdAt,
+          ),
+      );
+    }
+    statements.push(database.prepare(`UPDATE compliance_output_dispatch_intents
+      SET status = 'completed', finished_at = ?, adapter_receipt_id = ?
+      WHERE id = ? AND organisation_id = ? AND status = 'dispatching'`)
+      .bind(retainedAt(outputNow(options), responseReceivedAt), finalReceiptId,
+        intentId, actor.organisationId));
+    await database.batch(statements);
+    completedReceiptId = finalReceiptId;
+  } catch (error) {
+    await database.prepare(`UPDATE compliance_output_dispatch_intents
+      SET status = 'uncertain', finished_at = ?, failure_code = ?
+      WHERE id = ? AND organisation_id = ? AND status = 'dispatching'`)
+      .bind(retainedAt(outputNow(options), startedAt),
+        error instanceof CreditexOutputActionError ? error.code : "OUTPUT_ACTION_PROVIDER_OUTCOME_UNKNOWN",
+        intentId, actor.organisationId).run();
+    return fail("OUTPUT_ACTION_DISPATCH_UNCERTAIN", 502,
+      "The submission outcome requires reconciliation. The retained attempt prevents another send.");
+  } finally {
+    clearTimeout(timer);
   }
-  await database.batch(statements);
   return Object.freeze({
-    adapterReceiptId: finalReceiptId,
+    adapterReceiptId: completedReceiptId,
     action: await loadCreditexOutputAction(database, actor.organisationId, packetId),
   });
 }
@@ -2103,6 +2265,7 @@ export async function recordManualCreditexOutputSubmission(
     "Output action",
   );
   const packet = await loadCreditexOutputAction(database, actor.organisationId, packetId);
+  await requireUnreservedOutput(database, actor.organisationId, packetId);
   if (packet.packetSha256 !== exactSha256(
     input.expectedPacketSha256,
     "Output-action packet",

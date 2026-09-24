@@ -1,5 +1,24 @@
 # Next task handover
 
+Status: Creditex registry operations implemented locally; final validation and publication pending. Direct regulator transmission remains dependent on approved interfaces and delegated access.
+Prepared: 24 September 2026
+
+## Active contract: Creditex registry submission operations, 24 September 2026
+
+Outcome: Creditex manages claiming accounts, governed submission preparation, official file exports, regulator fees and evidence-backed registration results in one usable workspace. Direct transmission remains unavailable until the regulator's complete approved interface and delegated access are supplied; no fake connection or registration states.
+
+Owner: coordinating task, branch codex/creditex-registry-submissions, worktree C:/Webproject/aea-energy-creditex-submissions. Clean base 0473715427d8d41718421e328695f9eafe06ada5, opened from the current Sites source and retaining its fourteen commits beyond GitHub main 78f2d9c.
+
+Scope: existing output-action workflow; durable dispatch reservations; registry account, private evidence, fee and reconciliation records; exact public REC and TESSA file contracts; Creditex/admin workspace and one-time onboarding request downloads. Reuse existing independent review and activity-readiness gates. Regulator payments, certificate trading and live claims are not performed during verification. No customer data or credentials are required for development.
+
+Acceptance: server-side organisation and role boundaries; no duplicate dispatch on timeout or concurrency; approved immutable packets remain authoritative; official exports do not imply eligibility or lodgement; file evidence is private and integrity checked; fee payment never manufactures registration; manual registry outcomes require independent review; API-derived results match the exact claimant/reference; narrow and desktop layouts remain usable. All supported and unavailable routes are visible without misleading universal automation claims.
+
+Validation: behavioural SQLite, adapter failure/idempotency, evidence custody, permission, money and result reconciliation tests; exact official format fixtures; focused UI checks; typecheck, lint, migration replay, full required validation and publication build. Record pre-existing failures independently. External registry UAT and a real claim require approved provider access and are separate acceptance gates. The full validation reaches the existing expired Surge source-approval gate; no approval dates or statutory evidence were fabricated to bypass it.
+
+Stop conditions: missing private VEU schema/authentication or an unverified NSW/CER write interface blocks only its live connector. Continue all independent functionality. Preserve current source on concurrent changes; never invent government fields, approve source governance on behalf of Creditex, pay fees, transmit a live claim or publish mixed source.
+
+## Previous handover
+
 Status: Customer/job maps and Google Business Profile quote links are live; Google Maps activation and live map acceptance are complete.
 Prepared: 23 September 2026
 
