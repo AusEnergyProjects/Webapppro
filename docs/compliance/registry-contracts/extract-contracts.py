@@ -80,5 +80,5 @@ for key, schema in schemas.items():
     assert len(set(names)) == len(names), key
     assert not any("\ufffd" in name for name in names), key
 
-(ROOT / "schemas.json").write_text(json.dumps(schemas, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+(ROOT / "schemas.json").write_text(json.dumps(schemas, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
 print({key: len(schema["fields"]) for key, schema in schemas.items()})
