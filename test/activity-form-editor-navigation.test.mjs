@@ -42,10 +42,12 @@ test("custom questions and declarations remain deletable while program requireme
   const h = harness({ respond: async path => path.includes("activityTemplateId") ? { form: masterForm, expectedVersion: 2 } : { catalogue } });
   let tree = await h.mount(); edit(tree).props.onClick(); await flush(); tree = h.render();
   assert.equal(button(tree, "Delete question").props.disabled, false);
-  const declarationButtons = nodes(tree, node => node.type === "button" && text(node) === "Delete declaration");
+  const declarationButtons = nodes(tree, node => node.type === "button" && text(node) === "Delete signature");
   assert.deepEqual(declarationButtons.map(node => node.props.disabled), [false, true]);
-  declarationButtons[0].props.onClick(); tree = h.render(); assert.doesNotMatch(text(tree), /Extra confirmation/); assert.match(text(tree), /Program confirmation/);
+  declarationButtons[0].props.onClick(); tree = h.render(); assert.match(text(tree), /Extra confirmation/);
+  button(tree, "Confirm delete signature").props.onClick(); tree = h.render(); assert.doesNotMatch(text(tree), /Extra confirmation/); assert.match(text(tree), /Program confirmation/);
   button(tree, "Delete question").props.onClick(); tree = h.render();
+  button(tree, "Confirm delete question").props.onClick(); tree = h.render();
   assert.equal(button(tree, "Delete question").props.disabled, true); assert.match(text(tree), /regulator requirement/);
   assert.equal(h.requests.length, 2, "question edits stay local until Save and publish master is chosen");
 });

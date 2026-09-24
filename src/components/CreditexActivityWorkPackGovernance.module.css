@@ -41,6 +41,21 @@
 .masterSaveBar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px; background: var(--portal-soft, #edf7f3); border: 1px solid var(--portal-line, #c9ded7); border-radius: 12px; }
 .masterSaveBar > span { font-size: .82rem; font-weight: 750; }
 .masterRowActions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.masterLibrary .masterRowActions > button, .masterLibrary .masterPages > header > button { min-height: 44px; padding: 9px 13px; border: 1px solid var(--portal-line-strong, #b9d1cd); border-radius: 8px; font: inherit; font-size: .82rem; font-weight: 700; }
+.masterPages { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--portal-line, #c9ded7); border-radius: 12px; background: var(--portal-soft, #edf7f3); min-width: 0; }
+.masterPages > header { display: flex; align-items: start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.masterPages h3 { margin: 0; font-size: 1rem; }
+.masterPages p { margin: 4px 0 0; font-size: .82rem; }
+.masterPageQuestions { display: grid; gap: 6px; }
+.masterLibrary .masterPageQuestions > button { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 44px; padding: 9px 12px; text-align: left; background: var(--portal-raised, #fff); border: 1px solid var(--portal-line, #c9ded7); border-radius: 8px; }
+.masterPageQuestions strong { overflow-wrap: anywhere; font-size: .82rem; font-weight: 600; }
+.masterPageQuestions small { font-size: .72rem; }
+.masterLibrary .masterPageQuestions > button[aria-current="true"] { border-color: #0b9d8e; box-shadow: inset 3px 0 #0b9d8e; }
+.masterPageAction { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--portal-line-strong, #b9d1cd); border-radius: 10px; background: var(--portal-raised, #fff); }
+.masterPageAction p { margin: 0; }
+.masterLibrary button.masterDelete { color: var(--portal-danger, #a22f33); border-color: currentColor; }
+:global(html[data-tlink-colour-mode="night"]) .masterLibrary button.masterDelete { color: #ffb4b9; }
+@media (max-width: 480px) { .masterLibrary .masterPageQuestions > button { grid-template-columns: 20px minmax(0, 1fr); } .masterPageQuestions small { grid-column: 2; } }
 .masterDraftList { display: grid; gap: 10px; padding: 16px; margin: 14px 0; border: 1px solid var(--portal-line, #c9ded7); border-radius: 12px; background: var(--portal-soft, #edf7f3); }
 .masterDraftList > h3, .masterDraftList > p { margin: 0; }
 .masterDraftList > article { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px; border: 1px solid var(--portal-line, #c9ded7); border-radius: 10px; background: var(--portal-raised, #fff); }

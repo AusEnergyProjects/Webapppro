@@ -21,7 +21,7 @@ test("the master editor supports safe routing, ordering and Creditex declaration
   assert.match(editor, /sourcePlacementControlled = Boolean\(field\?\.sourceRequirementId\)/);
   assert.match(editor, /New records and unsigned drafts use it when opened; signed and submitted records stay locked to what was agreed/);
   assert.match(editor, /This evidence question is governed by its regulator requirement/);
-  assert.match(editor, /disabled=\{sourcePlacementControlled\} value=\{field\.section\}/);
+  assert.match(editor, /disabled=\{!selectedPage \|\| busy \|\| Boolean\(questionMoveReason\)\}/);
   assert.match(editor, /disabled=\{sourcePlacementControlled\} value=\{field\.label\}/);
   assert.match(editor, /Answer type<select disabled=\{profilePlacementControlled \|\| sourcePlacementControlled \|\| selectedFieldIsReferenced\}/);
   assert.match(editor, /Instructions<textarea disabled=\{sourcePlacementControlled\}/);
@@ -40,7 +40,8 @@ test("the master editor supports safe routing, ordering and Creditex declaration
   assert.match(editor, /function fieldMoveDestination\(/);
   assert.match(editor, /Move earlier in section/);
   assert.match(editor, /Move later in section/);
-  assert.match(editor, /fieldDeletionControlled \|\| selectedFieldIsReferenced/);
+  assert.match(editor, /editorQuestionDeleteReason\(form, field\.key\)/);
+  assert.match(editor, /disabled=\{busy \|\| Boolean\(questionDeleteReason\)\}/);
   assert.match(editor, /Delete question/);
   assert.match(editor, /Require accurate GPS location with each captured photo/);
   assert.match(editor, /type="checkbox" disabled=\{sourcePlacementControlled\} checked=\{Boolean\(field\.requireLocation\)\}/);
@@ -49,7 +50,7 @@ test("the master editor supports safe routing, ordering and Creditex declaration
   assert.match(editor, /function deleteDeclaration\(/);
   assert.match(editor, /declaration\.key\.startsWith\("custom\."\)/);
   assert.match(editor, /Add signature/);
-  assert.match(editor, /Delete declaration/);
+  assert.match(editor, /Delete signature/);
   assert.match(editor, /disabled=\{!custom\} value=\{declaration\.role\}/);
   assert.doesNotMatch(governance, /Published-ready|Coverage gaps/);
 });
