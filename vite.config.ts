@@ -12,6 +12,26 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    environments: {
+      client: {
+        build: {
+          rolldownOptions: {
+            output: {
+              codeSplitting: {
+                groups: [{
+                  // Keep shared schedule helpers from pulling the full Jobs workspace into the dashboard.
+                  name: "trade-schedule",
+                  test: /[\\/]src[\\/]lib[\\/]trade-schedule\.ts$/,
+                  priority: 20,
+                  minSize: 0,
+                  includeDependenciesRecursively: false,
+                }],
+              },
+            },
+          },
+        },
+      },
+    },
     plugins: [
       vinext(),
       sites(),
