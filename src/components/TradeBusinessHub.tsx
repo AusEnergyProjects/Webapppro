@@ -3,9 +3,11 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import { TradeHandoverCentre } from "./TradeHandoverCentre";
-import { InstallerCrmWorkspace } from "./InstallerCrmWorkspace";
+import { recoverableTradeWorkspace } from "./RecoverableTradeWorkspace";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
+
+const InstallerCrmWorkspace = recoverableTradeWorkspace(() => import("./InstallerCrmWorkspace").then((module) => module.InstallerCrmWorkspace));
 
 type PartnerType = "installer" | "supplier";
 type WorkTask = {
