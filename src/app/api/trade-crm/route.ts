@@ -207,7 +207,7 @@ const JOB_REGISTER_ACTIVITY_SQL = `(SELECT json_extract(ci.intent_snapshot, '$.a
   WHERE ci.work_order_id = w.id AND ci.installer_uid = w.firebase_uid
     AND ci.status IN ('planned', 'case_linked')
   ORDER BY ci.revision DESC, ci.created_at DESC LIMIT 1)`;
-const JOB_REGISTER_STATUS_RANK_SQL = tradeJobLifecycleRankSql(JOB_REGISTER_LIFECYCLE_SQL);
+const JOB_REGISTER_STATUS_RANK_SQL = tradeJobLifecycleRankSql("job_lifecycle.lifecycle_status");
 const JOB_SORTS: Record<string, CrmSort> = {
   "number-asc": crmSort([crmTerm("w.work_number COLLATE NOCASE", "asc", "work_number")], "w.id"),
   "number-desc": crmSort([crmTerm("w.work_number COLLATE NOCASE", "desc", "work_number")], "w.id"),
@@ -229,8 +229,8 @@ const JOB_SORTS: Record<string, CrmSort> = {
   "state-desc": crmSort([crmTerm(`${protectedJobCustomerText("ss.address_state")} COLLATE NOCASE`, "desc", "site_address_state")], "w.id"),
   "assignee-asc": crmSort([crmTerm("(trim(w.assignee_member_id) = '')", "asc", "assignment_empty", true), crmTerm("w.assignee_label COLLATE NOCASE", "asc", "assignee_label")], "w.id"),
   "assignee-desc": crmSort([crmTerm("(trim(w.assignee_member_id) = '')", "asc", "assignment_empty", true), crmTerm("w.assignee_label COLLATE NOCASE", "desc", "assignee_label")], "w.id"),
-  "status-asc": crmSort([crmTerm(JOB_REGISTER_STATUS_RANK_SQL, "asc", "register_status_rank", true)], "w.id"),
-  "status-desc": crmSort([crmTerm(JOB_REGISTER_STATUS_RANK_SQL, "desc", "register_status_rank", true)], "w.id"),
+  "status-asc": crmSort([crmTerm("register_status_rank", "asc", "register_status_rank", true)], "w.id"),
+  "status-desc": crmSort([crmTerm("register_status_rank", "desc", "register_status_rank", true)], "w.id"),
   "quote-total-asc": crmSort([crmTerm(`(${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL)`, "asc", "quote_total_empty", true), crmTerm(JOB_REGISTER_QUOTE_SORT_SQL, "asc", "quote_total_sort_cents", true)], "w.id"),
   "quote-total-desc": crmSort([crmTerm(`(${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL)`, "asc", "quote_total_empty", true), crmTerm(JOB_REGISTER_QUOTE_SORT_SQL, "desc", "quote_total_sort_cents", true)], "w.id"),
   "s-a": crmSort([crmTerm("0", "asc", "stc_certificate_count", true)], "w.id"),
@@ -923,7 +923,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     const operationalStatus = cleanAdminText(url.searchParams.get("operationalStatus"), 30).toLowerCase();
     if (operationalStatus) {
       if (!JOB_REGISTER_STATUS_SET.has(operationalStatus)) throw new Error("INVALID_JOB_STATUS");
-      conditions.push(`(${JOB_REGISTER_LIFECYCLE_SQL}) = ?`);
+      conditions.push("register_lifecycle_status = ?");
       bindings.push(operationalStatus);
     }
     const quoteTotalMin = url.searchParams.get("quoteTotalMin");
@@ -947,7 +947,10 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     else if (filter === "attention") conditions.push(`(w.stage = 'blocked' OR EXISTS (SELECT 1 FROM trade_crm_job_notes n
       WHERE n.work_order_id = w.id AND n.firebase_uid = w.firebase_uid AND n.note_type = 'issue' AND n.issue_status = 'open'))`);
     else if (filter !== "all") conditions.push("w.stage NOT IN ('completed', 'cancelled')");
-    const where = conditions.join(" AND ");
+    // Rows reuse their computed status alias. COUNT has no projection, so only
+    // that query expands the status expression. Keep each statement under D1's limit.
+    const where = conditions.map(condition => condition === "register_lifecycle_status = ?"
+      ? `(${JOB_REGISTER_LIFECYCLE_SQL}) = ?` : condition).join(" AND ");
     const joins = `FROM trade_work_orders w LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
       LEFT JOIN trade_crm_service_sites ss ON ss.id = d.service_site_id AND ss.firebase_uid = w.firebase_uid AND ss.record_status = 'active'`;
@@ -963,7 +966,12 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     const rowWhere = rowConditions.join(" AND ");
     const [countRow, rows] = await Promise.all([
       includeTotal ? db.prepare(`SELECT COUNT(*) total ${rowJoins} WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
-      db.prepare(`SELECT w.*, d.crm_customer_id, d.service_site_id, d.customer_source, d.pipeline_stage, d.building_type,
+      // Materialize once per owned job so filtering, sorting and cursor predicates
+      // reuse the status value instead of expanding its correlated plan again.
+      db.prepare(`WITH job_lifecycle AS MATERIALIZED (
+        SELECT w.id work_order_id, ${JOB_REGISTER_LIFECYCLE_SQL} lifecycle_status
+        ${rowJoins} WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
+      ) SELECT w.*, d.crm_customer_id, d.service_site_id, d.customer_source, d.pipeline_stage, d.building_type,
         d.description, d.customer_reference,
         d.next_action, d.tags job_tags, d.estimated_value_cents, d.quoted_value_cents, d.invoiced_value_cents,
         d.paid_value_cents, d.quote_status, d.invoice_status, d.payment_due_at,
@@ -987,7 +995,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         (SELECT status FROM trade_handover_packs hp WHERE hp.work_order_id = w.id AND hp.firebase_uid = w.firebase_uid ORDER BY hp.updated_at DESC LIMIT 1) handover_status,
         ${JOB_REGISTER_AUDIT_OUTCOME_SQL} register_audit_outcome,
         ${JOB_REGISTER_HAS_PROGRESS_SQL} register_has_progress,
-        ${JOB_REGISTER_LIFECYCLE_SQL} register_lifecycle_status,
+        job_lifecycle.lifecycle_status register_lifecycle_status,
         ${JOB_REGISTER_STATUS_RANK_SQL} register_status_rank,
         ${JOB_REGISTER_QUOTE_TOTAL_SQL} quote_total_ex_gst_cents,
         ${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL quote_total_empty,
@@ -995,8 +1003,9 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         0 stc_certificate_count, 0 veec_certificate_count, 0 esc_certificate_count, 0 other_certificate_count,
         trim(w.assignee_member_id) = '' assignment_empty,
         ${JOB_EFFECTIVE_SCHEDULE_SQL} = '' schedule_empty
-        ${rowJoins} WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
-        .bind(...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
+        ${rowJoins} JOIN job_lifecycle ON job_lifecycle.work_order_id = w.id
+        WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
+        .bind(identity.uid, ...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
     ]);
     const total = countRow ? Number(countRow.total || 0) : undefined;
     const hasNext = rows.results.length > pageSize; const pageRows = rows.results.slice(0, pageSize);

@@ -42,6 +42,10 @@
 .scheduled { background: #dff4ff; color: #005a78; }
 .partial { background: #fff4ce; color: #715600; }
 .completed { background: #e0f5e9; color: #11643b; }
+.reviewed { background: #e0f5e9; color: #11643b; }
+.submitted { background: #dff4ff; color: #005a78; }
+.paid { background: #d9f8ef; color: #00644f; }
+.correction_required, .failed, .no_show { background: #ffe7e5; color: #8a2119; }
 
 .actions {
   display: inline-flex;

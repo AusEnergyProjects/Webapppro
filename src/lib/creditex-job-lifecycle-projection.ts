@@ -118,6 +118,9 @@ export function creditexIntentLifecycleStatusSql(workAlias: string, scheduleSql:
   if (!/^[a-z][a-z_]*$/.test(workAlias)) throw new Error("INVALID_LIFECYCLE_SQL_ALIAS");
   const packetWhere = (predicate: string) => `EXISTS (SELECT 1 FROM json_each(source.packets) packet WHERE ${predicate})`;
   const packet = (key: string) => `json_extract(packet.value, '$.${key}')`;
+  // OFFSET prevents SQLite from flattening this one-row source and expanding
+  // each packet/snapshot query again for every CASE reference. D1 otherwise
+  // exhausts planner memory when the register also selects the status rank.
   return `(SELECT CASE
     WHEN ${workAlias}.record_status = 'archived' THEN 'deleted'
     WHEN ${packetWhere(`${packet('lodged')} = 1 AND (${packet('status')} = 'rejected' OR ${packet('registryStatus')} = 'rejected')`)} THEN 'failed'
@@ -139,12 +142,14 @@ export function creditexIntentLifecycleStatusSql(workAlias: string, scheduleSql:
     ELSE 'unscheduled' END
     FROM (SELECT ${SUBMISSION_PACKETS_SQL} packets, ${FIELD_PROGRESS_SQL} field, ${WORK_PACK_PROGRESS_SQL} packs,
       ${CREDITEX_AUDIT_SQL} audited, ${TRADE_REVIEW_SQL} reviewed, ${CREDITEX_PAYOUT_SQL} paid,
-      ${creditexIntentOpenCorrectionSql('intent')} correction) source)`;
+      ${creditexIntentOpenCorrectionSql('intent')} correction LIMIT 1 OFFSET 0) source)`;
 }
 
 /** Every current activity must reach a milestone before the whole job claims it. */
 export function creditexWholeJobLifecycleSql(workAlias: string, scheduleSql: string) {
   if (!/^[a-z][a-z_]*$/.test(workAlias)) throw new Error("INVALID_LIFECYCLE_SQL_ALIAS");
+  // Keep each activity status behind a non-flattening boundary as well. LIMIT
+  // -1 retains every activity; OFFSET 0 avoids repeated nested status plans.
   return `(SELECT CASE
     WHEN COUNT(*) = 0 THEN NULL
     WHEN SUM(status = 'deleted') > 0 THEN 'deleted'
@@ -167,5 +172,5 @@ export function creditexWholeJobLifecycleSql(workAlias: string, scheduleSql: str
         AND linked_case.installer_uid = intent.installer_uid AND linked_case.work_order_id = intent.work_order_id
         AND linked_case.compliance_intent_id = intent.id
       WHERE intent.work_order_id = ${workAlias}.id AND intent.installer_uid = ${workAlias}.firebase_uid
-        AND intent.status IN ('planned','case_linked')) activities)`;
+        AND intent.status IN ('planned','case_linked') LIMIT -1 OFFSET 0) activities)`;
 }

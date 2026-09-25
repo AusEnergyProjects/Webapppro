@@ -23,7 +23,8 @@ import { recoverableTradeWorkspace } from "./RecoverableTradeWorkspace";
 import type { TradeTeamPermissions } from "./TradeTeamSettings";
 import type { CustomerDocumentDelivery, CustomerDocumentSendResult } from "./TradeCustomerDocumentDeliveryPanel";
 import type { DataforceJobCsvRecord } from "@/lib/creditex-dataforce-job-csv";
-import { JOB_REGISTER_COLUMN_KEYS, type JobRegisterRecord } from "@/lib/trade-crm-job-register";
+import { JOB_REGISTER_COLUMN_KEYS, JOB_REGISTER_OPERATIONAL_STATUSES, type JobRegisterRecord } from "@/lib/trade-crm-job-register";
+import { TRADE_JOB_LIFECYCLE_LABELS } from "@/lib/trade-job-lifecycle";
 import { customerMapRecord, jobMapRecord } from "@/lib/trade-crm-map-records";
 import { defaultTradeMapDateRange } from "@/lib/trade-map-date-range";
 import { CUSTOMER_REGISTER_FILTER_VERSION, defaultCustomerCreatedRange } from "@/lib/customer-register-range";
@@ -146,9 +147,12 @@ type JobTab = "summary" | "schedule" | "quote" | "field" | "invoice" | "review";
 type JobDetailTab = JobTab | "files" | "forms" | "tasks" | "notes" | "handover";
 type JobReturnTarget = { kind: "jobs" } | { kind: "customer"; customerId: string; customerName: string };
 
-const lifecycleLabel = (value: string | null | undefined) => value
-  ? value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase())
-  : "";
+const jobStatusFilters = JOB_REGISTER_OPERATIONAL_STATUSES.filter(status => status !== "deleted");
+const lifecycleLabel = (value: string | null | undefined) => {
+  const status = JOB_REGISTER_OPERATIONAL_STATUSES.find(status => status === value);
+  return status ? TRADE_JOB_LIFECYCLE_LABELS[status]
+    : value ? value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase()) : "";
+};
 
 const serviceOptions = [
   ...ENERGY_SERVICE_OPTIONS,
@@ -308,7 +312,7 @@ function phoneHref(value: string): string {
 
 function normaliseJobOperationalStatus(value: unknown) {
   const status = String(value || "").trim().toLowerCase();
-  if (["unscheduled", "scheduled", "partial", "completed", "audited", "cancelled"].includes(status)) return status;
+  if (jobStatusFilters.some(option => option === status)) return status;
   if (status === "quoting") return "unscheduled";
   if (status === "assigned") return "scheduled";
   if (status === "complete") return "completed";
@@ -1350,7 +1354,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
           if (view === "jobs") { setSearch(event.target.value); setJobPage(1); }
           else { setCustomerSearch(event.target.value); setCustomerPage(1); }
         }} /></label>
-        {view === "jobs" && <label><span>Status</span><select value={jobOperationalStatus} onChange={(event) => { setJobOperationalStatus(event.target.value); setJobPage(1); }}><option value="">All statuses</option>{["unscheduled", "scheduled", "partial", "no_show", "completed", "audited", "cancelled"].map((value) => <option key={value} value={value}>{lifecycleLabel(value)}</option>)}</select></label>}
+        {view === "jobs" && <label><span>Status</span><select value={jobOperationalStatus} onChange={(event) => { setJobOperationalStatus(event.target.value); setJobPage(1); }}><option value="">All statuses</option>{jobStatusFilters.map((value) => <option key={value} value={value}>{lifecycleLabel(value)}</option>)}</select></label>}
       </div>
       {view === "jobs" && <div className={mapWorkspaceStyles.dates} role="group" aria-label="Scheduled date range">
         <label><span>Scheduled from</span><input type="date" data-date-range-group="map-job-scheduled" data-date-range-role="start" value={jobScheduledFrom} onChange={(event) => {
@@ -1408,7 +1412,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       <div className={`${registerStyles.toolbar} crm-job-toolbar`}>
         {canSearchCustomerFields && <label><span>Find a job</span><input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setJobPage(1); }} placeholder="Name, number, email, address or job ID" /></label>}
         {canSearchCustomerFields && <label><span>Last name</span><input value={jobLastName} onChange={(event) => { setJobLastName(event.target.value); setJobPage(1); }} placeholder="Filter surname" /></label>}
-        <label><span>Status</span><select value={jobOperationalStatus} onChange={(event) => { setJobOperationalStatus(event.target.value); setJobPage(1); }}><option value="">All statuses</option>{["unscheduled", "scheduled", "partial", "completed", "audited", "cancelled"].map((value) => <option key={value} value={value}>{lifecycleLabel(value)}</option>)}</select></label>
+        <label><span>Status</span><select value={jobOperationalStatus} onChange={(event) => { setJobOperationalStatus(event.target.value); setJobPage(1); }}><option value="">All statuses</option>{jobStatusFilters.map((value) => <option key={value} value={value}>{lifecycleLabel(value)}</option>)}</select></label>
         <label><span>Assigned worker</span><input value={jobAssignee} onChange={(event) => { setJobAssignee(event.target.value); setJobPage(1); }} placeholder="Any worker" /></label>
         <div className="crm-layout-toggle" role="group" aria-label="Job layout"><button type="button" className={jobLayout === "list" ? "active" : ""} aria-pressed={jobLayout === "list"} onClick={() => setJobLayout("list")}>Register</button><button type="button" className={jobLayout === "board" ? "active" : ""} aria-pressed={jobLayout === "board"} onClick={() => { setPipelineFocus(""); setJobLayout("board"); }}>Board</button><button type="button" className={jobLayout === "map" ? "active" : ""} aria-pressed={jobLayout === "map"} onClick={() => { setJobActionId(""); setJobLayout("map"); }}>Map</button></div>
       </div>

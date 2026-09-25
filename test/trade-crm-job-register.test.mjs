@@ -291,7 +291,10 @@ test("job register route and UI keep tenant scope, filters, sorting and accessib
 
 test("job register and detail use the canonical lifecycle labels", () => {
   const ui = read("../src/components/InstallerCrmWorkspace.tsx");
-  assert.match(ui, /\["unscheduled", "scheduled", "partial", "completed", "audited", "cancelled"\]/);
+  assert.match(ui, /const jobStatusFilters = JOB_REGISTER_OPERATIONAL_STATUSES\.filter\(status => status !== "deleted"\)/);
+  assert.equal((ui.match(/jobStatusFilters\.map\(\(value\)/g) || []).length, 2);
+  assert.match(ui, /jobStatusFilters\.some\(option => option === status\)/);
+  assert.match(ui, /TRADE_JOB_LIFECYCLE_LABELS\[status\]/);
   assert.match(ui, /job\.jobRegister\.operationalStatus === "audited" && auditOutcomeLabel/);
   assert.match(ui, /normaliseJobOperationalStatus\(preferences\.operationalStatus\)/);
   assert.match(ui, /<dt>Status<\/dt><dd>\{displayedLifecycle\}<\/dd>/);
