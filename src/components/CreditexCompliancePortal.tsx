@@ -379,6 +379,14 @@ export function CreditexCompliancePortal() {
   const canReviewTraining = Boolean(session?.governanceIdentityVerified && ["admin", "reviewer"].includes(session.role));
   // The editor endpoint also authorises internal operations editors. Let it resolve access.
   const canOpenQuestionnaires = Boolean(session && ["admin", "reviewer"].includes(session.role));
+  // The confirmed bootstrap owner already has platform access. These endpoints
+  // independently recheck that authority and retain the platform actor in audits.
+  const usePlatformSubmissionAccess = session?.namedOwnerConfirmed === true
+    && session.role === "admin" && session.organisation.code === "CREDITEX-AU";
+  const registryEndpoint = usePlatformSubmissionAccess
+    ? "/api/admin/compliance-registry" : "/api/creditex/registry";
+  const outputEndpoint = usePlatformSubmissionAccess
+    ? "/api/admin/compliance-output-actions" : "/api/creditex/output-actions";
 
   const api = useCallback(async (
     path: string,
@@ -1431,13 +1439,13 @@ export function CreditexCompliancePortal() {
           >
             <CreditexRegistryWorkspace
               api={api}
-              endpoint="/api/creditex/registry"
-              outputEndpoint="/api/creditex/output-actions"
+              endpoint={registryEndpoint}
+              outputEndpoint={outputEndpoint}
             >
               <CreditexOutputActions
                 api={api}
-                endpoint="/api/creditex/output-actions"
-                contextLabel="Creditex compliance"
+                endpoint={outputEndpoint}
+                contextLabel={usePlatformSubmissionAccess ? "Australian Energy Assessments administration" : "Creditex compliance"}
               />
             </CreditexRegistryWorkspace>
           </section>

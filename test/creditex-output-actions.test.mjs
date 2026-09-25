@@ -134,7 +134,8 @@ test("Creditex and admin expose one governed server-driven output workspace", as
   ]);
 
   assert.match(creditexPortal, /CreditexOutputActions/);
-  assert.match(creditexPortal, /endpoint="\/api\/creditex\/output-actions"/);
+  assert.match(creditexPortal, /const outputEndpoint = usePlatformSubmissionAccess\s*\? "\/api\/admin\/compliance-output-actions" : "\/api\/creditex\/output-actions"/);
+  assert.match(creditexPortal, /<CreditexOutputActions\s+api=\{api\}\s+endpoint=\{outputEndpoint\}/);
   assert.match(adminPortal, /CreditexOutputActions/);
   assert.match(adminPortal, /endpoint="\/api\/admin\/compliance-output-actions"/);
   assert.match(creditexPortal, /CreditexActivityWorkPackGovernance/);
