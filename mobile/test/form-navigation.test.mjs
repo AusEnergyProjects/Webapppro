@@ -133,3 +133,25 @@ test('activity form returns to the job after local storage without waiting for a
   await subject.leave();
   assert.deepEqual(calls, ['job', 'refresh']);
 });
+
+test('opening a correction resets a drawn signature even when the page and signer are unchanged', async () => {
+  const oldRecord = { id: 'signed-original', form: {} };
+  const target = { key: 'signature', kind: 'signature', declaration: { role: 'customer' } };
+  const calls = [];
+  const environment = {
+    cacheRef: { current: { record: oldRecord, stepKey: 'signature' } },
+    writes: { current: Promise.resolve() }, cacheKey: 'activity-form:job:intent',
+    activityWizardPages: () => [], streamlinedActivityPages: (pages) => pages,
+    activityWizardPageForStepKey: () => target,
+    activitySignerDefault: () => 'Customer', signatureDraft: (role,name) => ({ role,name,strokes:[] }),
+    setAcknowledged: (value) => calls.push(['acknowledged',value]),
+    setSignature: (value) => calls.push(['signature',value]),
+    setCache: () => {}, setSetting: async (_key,value) => calls.push(['saved',JSON.parse(value)]),
+  };
+  const subject = methods(activity, 'ActivityFieldFormWizard', ['remember'], environment);
+  await subject.remember({record:{id:'unsigned-correction',form:{}},answers:{},stepKey:'signature',pending:[],pendingSignatures:[]});
+  assert.deepEqual(calls[0],['acknowledged',false]);
+  assert.deepEqual(calls[1],['signature',{role:'customer',name:'Customer',strokes:[]}]);
+  assert.equal(calls[2][1].record.id,'unsigned-correction');
+  assert.match(activity,/if \(saved && saved\.record\.id !== fresh\.id\) saved = null;/);
+});

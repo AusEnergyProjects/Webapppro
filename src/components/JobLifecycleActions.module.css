@@ -1,0 +1,11 @@
+.panel { --job-surface:var(--trade-surface,var(--portal-raised,#fff)); --job-ink:var(--trade-ink,var(--portal-ink,#16343f)); border:1px solid var(--trade-line,var(--portal-line,#cedce1)); border-radius:12px; background:var(--job-surface); color:var(--job-ink); padding:16px; }
+.panel p,.panel label,.panel strong,.panel h3 {color:inherit;}
+.panel input,.panel textarea {background:var(--job-surface);color:var(--job-ink);border-color:var(--trade-line,var(--portal-line,#cedce1));}
+.panel div {border-color:var(--trade-line,var(--portal-line,#cedce1));}
+.panel [role="alert"] {color:var(--trade-danger,#c53737);}
+.panel [role="status"] {color:var(--trade-accent,#07816f);}
+.panel button {cursor:pointer;}
+.panel button:disabled {cursor:default;opacity:.5;}
+.panel button:focus-visible,.panel textarea:focus-visible,.panel input:focus-visible {outline:3px solid var(--trade-accent,#08a99a);outline-offset:2px;}
+.panel div[class*="bg-slate-50"] {background:var(--trade-surface-soft,var(--portal-soft,#f3f7f8));}
+.panel button[class*="border-slate"] {color:var(--job-ink);border-color:var(--trade-line,var(--portal-line,#cedce1));}

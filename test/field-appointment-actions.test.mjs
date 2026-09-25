@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import { mfaErrorResponse } from './helpers/admin-response-fixture.mjs';
 import { canAssignWithinScope, canRescheduleWithinScope } from "../src/lib/trade-team-permission-policy.mjs";
+import * as lifecycleSql from "../src/lib/creditex-job-lifecycle-sql.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -104,6 +105,13 @@ function fixture(overrides = {}, effects = {}) {
     INSERT INTO trade_crm_customer_contacts VALUES('customer','owner','Jane','Smith','0400000000','jane@example.test','before',1,'active');
   `);
   const db = testD1(database);
+  database.exec(`ALTER TABLE trade_crm_job_details ADD COLUMN pipeline_stage TEXT DEFAULT '';
+    CREATE TABLE trade_activity_field_records(id TEXT,work_order_id TEXT,owner_uid TEXT,status TEXT,submitted_at TEXT);
+    CREATE TABLE trade_activity_field_record_versions(record_id TEXT,payload TEXT);
+    CREATE TABLE compliance_activity_work_pack_instances(id TEXT,compliance_intent_id TEXT,organisation_id TEXT,work_order_id TEXT,status TEXT);
+    CREATE TABLE compliance_activity_work_pack_final_records(case_instance_id TEXT,organisation_id TEXT);
+    CREATE TABLE trade_work_order_compliance_intents(id TEXT,compliance_organisation_id TEXT,installer_uid TEXT);
+    CREATE TABLE trade_job_forms(work_order_id TEXT,firebase_uid TEXT,status TEXT);`);
   const access = { ownerUid: 'owner', actorUid: 'actor', memberId: 'worker', displayName: 'Worker', isOwner: false,
     jobScope: 'own', scheduleScope: 'own', canRescheduleJobs: true, canManageJobs: true, canManageCustomers: true, ...overrides };
   const guards = loadTypescriptModule('../src/lib/trade-compliance-intent-replan-server.ts');
@@ -123,6 +131,10 @@ function fixture(overrides = {}, effects = {}) {
     '@/lib/direct-appointment-invite-server': { sendDirectAppointmentCalendarInvite: async (args) => { messages.push(args); if (effects.email) await effects.email(args); return {status:'accepted'}; } },
     '@/lib/trade-rental-credentials': loadTypescriptModule('../src/lib/trade-rental-credentials.ts'),
     '@/lib/trade-job-deletion-server': { scheduleJobFileCleanup() {} },
+    '@/lib/trade-job-cancellation-server': loadTypescriptModule('../src/lib/trade-job-cancellation-server.ts',{
+      './creditex-job-lifecycle-sql':lifecycleSql,
+      './creditex-onboarding-server':loadTypescriptModule('../src/lib/creditex-onboarding-server.ts'),
+    }),
     '../../trade-schedule/route': { PATCH: async (request) => { const body = await request.json(); scheduleChanges.push(body); if (effects.schedule) await effects.schedule(body, database); return Response.json({ok:true,customerEmails:[],calendarSync:{failed:0}}); } },
   });
   const patch = (action, extra={}) => route.PATCH(new Request('https://example.test/api/field/appointment-actions', {
@@ -202,6 +214,24 @@ test('cancel changes appointment and job status and sends one cancellation updat
   const f=fixture();assert.equal((await f.patch('cancel')).status,200);
   assert.equal(f.messages[0].change,'cancelled');assert.equal(f.calendars.length,1);
   assert.equal((await f.patch('cancel')).status,409);assert.equal(f.messages.length,1);
+});
+
+test('cancellation cannot bypass current or historical field completion after the job stage changes',async()=>{
+  for(const historical of [false,true]){
+    const f=fixture();f.database.exec(`UPDATE trade_work_orders SET stage='in_progress';
+      INSERT INTO trade_activity_field_records VALUES('signed','job','owner','${historical?'draft':'submitted_for_creditex_review'}','')`);
+    if(historical)f.database.exec(`INSERT INTO trade_activity_field_record_versions VALUES('signed','{"status":"submitted_for_creditex_review"}')`);
+    assert.equal((await f.patch('cancel')).status,409);assert.equal(f.messages.length,0);assert.equal(f.calendars.length,0);
+    assert.equal(f.database.prepare('SELECT status FROM trade_crm_appointments').get().status,'scheduled');
+    f.database.close();
+  }
+});
+
+test('completion arriving during cancellation rolls back job and appointment changes before external effects',async()=>{
+  const f=fixture();f.db.setBeforeBatch(()=>f.database.exec(`INSERT INTO trade_activity_field_records VALUES('signed','job','owner','submitted_for_creditex_review','')`));
+  assert.equal((await f.patch('cancel')).status,409);assert.equal(f.messages.length,0);assert.equal(f.calendars.length,0);
+  assert.equal(f.database.prepare('SELECT stage FROM trade_work_orders').get().stage,'scheduled');
+  assert.equal(f.database.prepare('SELECT status FROM trade_crm_appointments').get().status,'scheduled');f.database.close();
 });
 test('other worker, protected customer and missing permission are rejected without writes or messages',async()=>{
   for(const kind of ['other','protected','permission']) {

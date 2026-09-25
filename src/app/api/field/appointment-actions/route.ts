@@ -10,6 +10,7 @@ import { cancelAppointmentInConnectedCalendars } from "@/lib/trade-calendar-sync
 import { sendDirectAppointmentCalendarInvite } from "@/lib/direct-appointment-invite-server";
 import { rentalAssignmentRequiredGates, rentalAssignmentCredentialSql } from "@/lib/trade-rental-credentials";
 import { deleteTradeJob, scheduleJobFileCleanup } from "@/lib/trade-job-deletion-server";
+import { assertTradeJobCanCancel,tradeJobCancellationGuard } from "@/lib/trade-job-cancellation-server";
 
 export const runtime = "edge";
 type Row = Record<string, unknown>;
@@ -49,6 +50,7 @@ function fail(error: unknown) {
   }
   const code = error instanceof Error ? error.message : '';
   if (code === 'INVALID_DATE') return adminJson({ ok: false, error: 'Choose a valid appointment date.' }, 400);
+  if(code.includes('JOB_CANCEL_COMPLETED'))return adminJson({ok:false,error:'A job that has been completed cannot be cancelled. Its completed records must be retained.'},409);
   if (code === 'AUTH_REQUIRED') return adminJson({ ok: false, error: 'Sign in to continue.' }, 401);
   if (['JOB_NOT_FOUND', 'APPOINTMENT_NOT_FOUND'].includes(code)) return adminJson({ ok: false, error: 'Job or appointment not found.' }, 404);
   if (code === 'REVISION_CONFLICT' || code.includes('trade_crm_write_guard_verified_check')) return adminJson({ ok: false, error: 'This job changed. Reopen its actions and try again.', code: 'REVISION_CONFLICT' }, 409);
@@ -175,10 +177,12 @@ export async function PATCH(request: Request) {
         calendarSync: result.calendarSync, email });
     }
     if (action === 'no_show' ? !permissions.noShow : !permissions.cancel) throw new Error('ACTION_NOT_ALLOWED');
+    if(action==='cancel')await assertTradeJobCanCancel(db,access.ownerUid,job.id);
     const status = action === 'no_show' ? 'no_show' : 'cancelled';
     if (!appointment) {
       const revision = nextJobRevision(job.revision);
       await db.batch([
+        tradeJobCancellationGuard(db,access.ownerUid,job.id),
         db.prepare(`UPDATE trade_work_orders SET stage = 'cancelled', scheduled_start = '', scheduled_end = '', revision = ?, updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND revision = ? AND assignee_member_id = ? AND stage = ?
             AND NOT EXISTS (SELECT 1 FROM trade_crm_appointments a WHERE a.work_order_id = trade_work_orders.id AND a.firebase_uid = trade_work_orders.firebase_uid)`)
@@ -197,6 +201,7 @@ export async function PATCH(request: Request) {
       .bind(job.id, access.ownerUid, appointment.id).all<Row>() : { results: [] };
     const revision = nextJobRevision(job.revision);
     await db.batch([
+      ...(action==='cancel'?[tradeJobCancellationGuard(db,access.ownerUid,job.id)]:[]),
       ...otherAppointments.results.flatMap(other => [
         db.prepare(`UPDATE trade_crm_appointments SET status = 'cancelled', revision = revision + 1, updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND revision = ? AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'no_show')`)

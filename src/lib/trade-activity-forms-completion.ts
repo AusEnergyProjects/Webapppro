@@ -9,6 +9,7 @@ export function submittedActivityFieldRecordSql(intentAlias: string) {
       AND field_record.organisation_id = ${intentAlias}.compliance_organisation_id
       AND field_record.activity_template_id = ${intentAlias}.activity_template_id
       AND field_record.status = 'submitted_for_creditex_review'
+      AND NOT EXISTS(SELECT 1 FROM trade_activity_field_records successor WHERE successor.supersedes_record_id=field_record.id)
       AND field_record.pdf_object_key <> '' AND length(field_record.pdf_sha256) = 64`;
 }
 

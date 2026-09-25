@@ -6,6 +6,9 @@ import {
 import { CREDITEX_PARTNER_ORGANISATION_CODE } from "@/lib/trade-compliance-intent";
 import { CreditexQueueFilterError, creditexJobIntentFilters, creditexQueueLike } from "@/lib/creditex-job-intent-filters";
 import { isCreditexCertificateType } from "@/lib/creditex-certificate-types";
+import { creditexJobSubmissionSummary, deriveCreditexJobLifecycle, type CreditexJobSubmissionPacket } from "@/lib/creditex-job-lifecycle";
+import { creditexIntentOpenCorrectionSql } from "@/lib/creditex-job-lifecycle-sql";
+import { SUBMISSION_PACKETS_SQL, FIELD_PROGRESS_SQL, WORK_PACK_PROGRESS_SQL, CREDITEX_AUDIT_SQL, TRADE_REVIEW_SQL, CREDITEX_PAYOUT_SQL, CREDITEX_CASE_CORRECTION_SQL } from "@/lib/creditex-job-lifecycle-projection";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -137,6 +140,8 @@ export async function GET(request: Request) {
       );
     }
     const url = new URL(request.url);
+    const view = url.searchParams.get("view") === "bin" ? "bin" : "active";
+    const visibilitySql = view === "bin" ? "AND work.record_status = 'archived'" : "AND COALESCE(work.record_status, '') <> 'archived'";
     const status = queueStatus(url.searchParams.get("status"));
     const search = String(url.searchParams.get("search") || "").trim().slice(0, 120);
     const searchLike = creditexQueueLike(search);
@@ -154,6 +159,7 @@ export async function GET(request: Request) {
     const count = await database.prepare(`SELECT count(*) total
       ${QUEUE_JOINS}
       ${QUEUE_WHERE}
+      ${visibilitySql}
       ${filterSql}`)
       .bind(...bindings)
       .first<Record<string, unknown>>();
@@ -165,6 +171,14 @@ export async function GET(request: Request) {
         linked_case.case_number,
         linked_case.status case_status,
         linked_case.evidence_status,
+        ${SUBMISSION_PACKETS_SQL} submission_packets,
+        ${FIELD_PROGRESS_SQL} field_progress,
+        ${WORK_PACK_PROGRESS_SQL} work_pack_progress,
+        ${CREDITEX_AUDIT_SQL} creditex_audit_approved,
+        ${TRADE_REVIEW_SQL} trade_review_outcome,
+        ${creditexIntentOpenCorrectionSql("intent")} trade_correction_required,
+        ${CREDITEX_CASE_CORRECTION_SQL} case_correction_required,
+        ${CREDITEX_PAYOUT_SQL} creditex_payout_recorded,
         work.work_number,
         work.created_at job_created_at,
         work.title job_title,
@@ -221,6 +235,7 @@ export async function GET(request: Request) {
         account.business_name installer_business
       ${QUEUE_JOINS}
       ${QUEUE_WHERE}
+      ${visibilitySql}
       ${filterSql}
       ORDER BY ${sortSql}
       LIMIT ? OFFSET ?`)
@@ -233,6 +248,7 @@ export async function GET(request: Request) {
     return json({
       ok: true,
       status,
+      view,
       certificateType,
       sort,
       sortDirection,
@@ -244,6 +260,20 @@ export async function GET(request: Request) {
         const snapshot = storedObject(row.intent_snapshot);
         const activity = storedObject(snapshot.activity);
         const program = storedObject(snapshot.program);
+        const packets = JSON.parse(String(row.submission_packets || "[]")) as CreditexJobSubmissionPacket[];
+        const field = storedObject(row.field_progress);
+        const workPacks = JSON.parse(String(row.work_pack_progress || "[]")) as Array<{ status: string; final: number }>;
+        const lifecycle = deriveCreditexJobLifecycle({
+          workStage: String(row.job_stage || ""), scheduledStart: String(row.scheduled_start || ""),
+          fieldComplete: Number(field.complete) === 1 || (workPacks.length > 0 && workPacks.every(pack => pack.status === "completed" && pack.final === 1)),
+          fieldProgress: Number(field.progress) === 1 || workPacks.some(pack => ["in_progress", "ready_to_sign"].includes(pack.status)),
+          creditexAuditApproved: Number(row.creditex_audit_approved) === 1,
+          correctionRequired: Number(row.trade_correction_required) === 1 || Number(row.case_correction_required) === 1,
+          tradeReviewed: row.trade_review_outcome === "reviewed",
+          creditexPayoutRecorded: Number(row.creditex_payout_recorded) === 1,
+          deleted: row.work_record_status === "archived",
+          packets,
+        });
         const customerName = String(row.customer_business_name || "").trim()
           || `${String(row.first_name || "").trim()} ${String(row.last_name || "").trim()}`.trim();
         return {
@@ -314,6 +344,8 @@ export async function GET(request: Request) {
           caseNumber: String(row.case_number || ""),
           caseStatus: String(row.case_status || ""),
           evidenceStatus: String(row.evidence_status || ""),
+          submission: creditexJobSubmissionSummary(packets),
+          lifecycle,
           updatedAt: String(row.updated_at),
         };
       }),

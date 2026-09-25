@@ -616,12 +616,38 @@ function authorSaveGuard(definition: { name: string; sql: string }) {
   return { name: definition.name, sql };
 }
 
+const CORRECTION_INSTANCE_GUARD = "compliance_work_pack_instance_insert_guard";
+function correctionInstanceGuard(definition: { name: string; sql: string }) {
+  if (definition.name !== CORRECTION_INSTANCE_GUARD) return definition;
+  const predecessor = "OR (prior.`status` = 'ready_to_sign' AND NEW.`status` IN ('in_progress', 'completed', 'void'))";
+  const permittedCorrection = `
+        OR (prior.\`status\` = 'completed' AND NEW.\`status\` = 'in_progress'
+          AND json_type(NEW.\`response_snapshot\`, '$.finalisation') = 'null'
+          AND EXISTS (SELECT 1 FROM creditex_job_lifecycle_events correction
+            JOIN compliance_cases correction_case ON correction_case.id=prior.\`compliance_case_id\`
+              AND correction_case.organisation_id=prior.\`organisation_id\`
+            JOIN json_each(correction.source_snapshot, '$.records') source
+            WHERE correction.action='correction_required'
+              AND correction.organisation_id=prior.\`organisation_id\`
+              AND correction.owner_uid=correction_case.installer_uid
+              AND correction.work_order_id=prior.\`work_order_id\`
+              AND correction.intent_id=prior.\`compliance_intent_id\`
+              AND correction.actor_uid=NEW.\`created_by_uid\`
+              AND correction.created_at=NEW.\`created_at\`
+              AND json_extract(source.value,'$.kind')='pack'
+              AND json_extract(source.value,'$.id')=prior.\`id\`
+              AND json_extract(source.value,'$.revision')=prior.\`revision\`
+              AND json_extract(source.value,'$.status')='completed'))`;
+  if (!definition.sql.includes(predecessor)) throw new Error("WORK_PACK_CORRECTION_PREDECESSOR_CHANGED");
+  return { name: definition.name, sql: definition.sql.replace(predecessor, predecessor + permittedCorrection) };
+}
+
 // Keep the exact superseded SQL so an already-initialised database can move
 // from the original, D1-incompatible trigger bodies to the flattened guards. Only
 // an exact known predecessor is replaceable; every other mismatch still fails
 // closed as possible schema drift or tampering.
 export const CREDITEX_WORK_PACK_SCHEMA_GUARD_REPLACEMENT_DEFINITIONS =
-  [...SRES_D1_EXPRESSION_DEPTH_GUARD_SQL.keys(), ...MASTER_AUTHOR_SAVE_GUARDS].map((name) => {
+  [...SRES_D1_EXPRESSION_DEPTH_GUARD_SQL.keys(), ...MASTER_AUTHOR_SAVE_GUARDS, CORRECTION_INSTANCE_GUARD].map((name) => {
     const previous = CREDITEX_WORK_PACK_SCHEMA_GUARD_BASE_DEFINITIONS.find(
       (definition) => definition.name === name,
     );
@@ -641,10 +667,11 @@ export const CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS =
   CREDITEX_WORK_PACK_SCHEMA_GUARD_BASE_DEFINITIONS.flatMap((definition) =>
     SRES_D1_EXPRESSION_DEPTH_GUARD_DEFINITIONS.get(definition.name)
       ?? [authorSaveGuard(definition)],
-  ).map((definition) => draftWorkPackDeletionGuardDefinitions.find((replacement) => replacement.name === definition.name) ?? definition);
+  ).map((definition) => correctionInstanceGuard(draftWorkPackDeletionGuardDefinitions.find((replacement) => replacement.name === definition.name) ?? definition));
 
 export const CREDITEX_WORK_PACK_REQUIRED_SCHEMA_TABLES = [
   "compliance_master_save_schema",
+  "creditex_job_lifecycle_events",
   "compliance_activity_work_pack_versions",
   "compliance_activity_work_pack_source_bindings",
   "compliance_activity_work_pack_instances",

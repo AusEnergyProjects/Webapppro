@@ -26,9 +26,11 @@ function guard(name: string, table: string, allowed: string, message: string, le
     WHEN COALESCE((${allowed}), 0) = 0 BEGIN SELECT RAISE(ABORT, '${message}'); END;` };
 }
 
-const draftRecord = (alias: string) => `${alias}.status = 'draft' AND ${alias}.submitted_at = ''
+const legacyDraftRecord = (alias: string) => `${alias}.status = 'draft' AND ${alias}.submitted_at = ''
   AND ${alias}.pdf_object_key = '' AND ${alias}.pdf_sha256 = ''
   AND NOT EXISTS (SELECT 1 FROM trade_activity_field_report_links link WHERE link.record_id = ${alias}.id)`;
+const draftRecord = (alias: string) => `${legacyDraftRecord(alias)}
+  AND json_type(${alias}.payload, '$.correction') IS NULL`;
 
 export const JOB_DELETION_SCHEMA_GUARDS: readonly JobDeletionGuard[] = [
   guard('trade_compliance_intent_delete_guard', 'trade_work_order_compliance_intents',
@@ -43,12 +45,19 @@ export const JOB_DELETION_SCHEMA_GUARDS: readonly JobDeletionGuard[] = [
   guard('trade_activity_field_record_no_delete', 'trade_activity_field_records',
     `${draftRecord('OLD')} AND ${jobDeletionPermitSql('OLD.work_order_id', 'OLD.owner_uid')}`,
     'Field record history must be retained.',
-    "CREATE TRIGGER trade_activity_field_record_no_delete BEFORE DELETE ON trade_activity_field_records BEGIN SELECT RAISE(ABORT, 'Field record history must be retained.'); END;"),
+    "CREATE TRIGGER trade_activity_field_record_no_delete BEFORE DELETE ON trade_activity_field_records BEGIN SELECT RAISE(ABORT, 'Field record history must be retained.'); END;",
+    [guard('trade_activity_field_record_no_delete', 'trade_activity_field_records',
+      `${legacyDraftRecord('OLD')} AND ${jobDeletionPermitSql('OLD.work_order_id', 'OLD.owner_uid')}`,
+      'Field record history must be retained.', '').sql]),
   guard('trade_activity_field_record_version_no_delete', 'trade_activity_field_record_versions',
     `json_extract(OLD.payload, '$.status') = 'draft' AND EXISTS (SELECT 1 FROM trade_activity_field_records r
       WHERE r.id = OLD.record_id AND ${draftRecord('r')} AND ${jobDeletionPermitSql('r.work_order_id', 'r.owner_uid')})`,
     'Field record audit versions must be retained.',
-    "CREATE TRIGGER trade_activity_field_record_version_no_delete BEFORE DELETE ON trade_activity_field_record_versions BEGIN SELECT RAISE(ABORT, 'Field record audit versions must be retained.'); END;"),
+    "CREATE TRIGGER trade_activity_field_record_version_no_delete BEFORE DELETE ON trade_activity_field_record_versions BEGIN SELECT RAISE(ABORT, 'Field record audit versions must be retained.'); END;",
+    [guard('trade_activity_field_record_version_no_delete', 'trade_activity_field_record_versions',
+      `json_extract(OLD.payload, '$.status') = 'draft' AND EXISTS (SELECT 1 FROM trade_activity_field_records r
+      WHERE r.id = OLD.record_id AND ${legacyDraftRecord('r')} AND ${jobDeletionPermitSql('r.work_order_id', 'r.owner_uid')})`,
+      'Field record audit versions must be retained.', '').sql]),
   guard('trade_crm_job_media_accepted_lead_delete_guard', 'trade_crm_job_media',
     `OLD.source <> 'accepted_public_lead' OR ${jobDeletionPermitSql('OLD.work_order_id', 'OLD.firebase_uid')}`,
     'accepted public lead job file is retained with job history',

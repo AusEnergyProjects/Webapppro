@@ -6,11 +6,21 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 25 September 2026
 
-Deployment baseline for this change: Sites 622, source `509ada1594d375fce066ed7b9b7dfca5ade4c6d0`. The coordinating release records the next matching GitHub/Sites identity.
+Deployment baseline for this change: Sites 624, source `e212b120a4798d448ce879fdf966ae4668222df2`. The coordinating release records the next matching GitHub/Sites identity.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: simpler submissions and complete certificate scheme routing
+## Current implementation: bulk lodgement and explicit job review
+
+The trade Jobs Actions and context menus now open Review alongside the existing private file viewer. Pass records an internal business review of the exact completed evidence. Correction required needs a note, returns editable unsigned work to the assigned technician, and queues an email containing the notes and job link. Provider acceptance, failure and uncertain email delivery remain visible; retries retain one delivery identity. Creditex can return audited work through the same correction process. Original signed records and PDFs remain unchanged, and corrected submissions require fresh signatures, business review and Creditex audit.
+
+Canonical status progresses from Unscheduled, Assigned, Partial and Complete to Reviewed, Audited, Submitted and Paid. Correction required can follow either review stage. Actual government rejection is Failed. Export alone is Audited with an awaiting-lodgement detail. Creditex payout records are separate from regulator fees and customer invoice payments. Cancellation is restricted to work that has not completed; Creditex and administration can bin and restore jobs while retaining evidence and audit history.
+
+Bulk export groups current approved claims by scheme, account and approved file. NSW and REC exports retain their exact approved upload files; retailer/project routes retain clearly labelled provider handover records and require their destination's reporting format. Confirm batch lodged records actual references in bounded resumable requests and updates only verified included claims. An export is not a submission. Migration 0192 retains batch custody, 0193 retains job lifecycle and notification events, and 0194 enables unsigned correction successors without overwriting signed field records.
+
+Local validation and final release evidence are retained under `C:/Webproject/outputs/creditex-job-lifecycle-2026-09-25/`. No real regulator claim, customer notification or payout is performed during verification. Native VEU access remains dependent on the existing ESC request and approved UAT; other schemes still need their current approved account and reporting contracts.
+
+## Previous implementation: simpler submissions and complete certificate scheme routing
 
 The claim screen now records actual lodgement references directly, applies the single eligible saved account during the next action, chooses the matching REC format and filters by scheme or work awaiting action. Multiple eligible accounts still require an explicit choice. Account details and retained history are collapsed until needed. Existing lodged claims remain reconcilable after authority expiry; current authority and activity scope are required for new submissions and exports.
 

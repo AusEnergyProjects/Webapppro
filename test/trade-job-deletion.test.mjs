@@ -359,6 +359,28 @@ test('known old triggers upgrade without weakening unrelated or unknown schema d
   await assert.rejects(upgradeJobDeletionGuards(f.db, JOB_DELETION_SCHEMA_GUARDS, canonicalTlinkSchemaGuardSql), /JOB_DELETION_SCHEMA_GUARD_MISMATCH/);
 });
 
+test('the previous unsigned-record delete guards upgrade exactly and correction history remains retained with a permit', async (t) => {
+  const f = fixture(t);
+  const a = addActivity(f);
+  const guards=JOB_DELETION_SCHEMA_GUARDS.filter(item => ['trade_activity_field_record_no_delete','trade_activity_field_record_version_no_delete'].includes(item.name));
+  for(const definition of guards) {
+    f.sql.exec(`DROP TRIGGER ${definition.name}`);
+    f.sql.exec(definition.legacySqlVariants[0]);
+  }
+  await upgradeJobDeletionGuards(f.db,JOB_DELETION_SCHEMA_GUARDS,canonicalTlinkSchemaGuardSql);
+  // Create a retained correction payload as fixture data. Its immutable update
+  // guard deliberately prevents an application from adding or removing this metadata.
+  const immutable=f.sql.prepare("SELECT sql FROM sqlite_schema WHERE name='trade_activity_field_record_immutable'").get().sql;
+  f.sql.exec("DROP TRIGGER trade_activity_field_record_immutable");
+  f.sql.prepare("UPDATE trade_activity_field_records SET revision=2,payload=? WHERE id=?")
+    .run(JSON.stringify({...a.payload,revision:2,correction:{eventId:'retained-event',sourceRecordId:'retained-original',sourceRevision:3}}),a.recordId);
+  f.sql.exec(immutable);
+  f.insert('trade_crm_write_guards',{id:'correction-delete-permit',firebase_uid:'owner',operation_id:'job-delete:job:4',step_number:1,verified:1,created_at:timestamp});
+  assert.throws(()=>f.sql.prepare("DELETE FROM trade_activity_field_record_versions WHERE record_id=?").run(a.recordId),/must be retained/);
+  assert.throws(()=>f.sql.prepare("DELETE FROM trade_activity_field_records WHERE id=?").run(a.recordId),/must be retained/);
+  assert.equal(f.sql.prepare("SELECT count(*) n FROM trade_activity_field_record_versions WHERE record_id=?").get(a.recordId).n,2);
+});
+
 test('release 569 runtime guards upgrade with their actual installed identifier quoting', async (t) => {
   const f = fixture(t);
   const previous = JSON.parse(fs.readFileSync(new URL('test/fixtures/job-deletion-guards-569.json', root), 'utf8'));

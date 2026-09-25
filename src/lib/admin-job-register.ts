@@ -1,4 +1,7 @@
 import { jobCreationDayStart } from "./job-register-dates.ts";
+import {creditexWholeJobLifecycleSql} from "./creditex-job-lifecycle-projection.ts";
+
+export const ADMIN_JOB_STATUS_SQL=`COALESCE(${creditexWholeJobLifecycleSql("w","w.scheduled_start")},w.stage)`;
 
 export const ADMIN_JOB_SORTS = {
   "created-desc": "w.created_at DESC, w.id ASC",
@@ -18,6 +21,7 @@ export type AdminJobRow = {
   id: string; workNumber: string; title: string; serviceCategory: string; stage: string;
   siteArea: string; scheduledStart: string; installerBusiness: string; customerName: string; updatedAt: string;
   customerFirstName: string; customerLastName: string; customerBusinessName: string; createdAt: string;
+  recordStatus?: string;
 };
 const clean = (value: string | null, max = 100) => (value || "").trim().slice(0, max);
 function dateFilter(value: string | null) {
@@ -38,7 +42,8 @@ export function adminJobQuery(params: URLSearchParams) {
   const requestedPage = Number(params.get("page") || 1);
   const page = Number.isInteger(requestedPage) ? Math.max(1, Math.min(requestedPage, 201)) : 1;
   const pageSize = 50;
-  const conditions = ["w.partner_type = 'installer'", "w.record_status = 'active'"];
+  const recordStatus=params.get("view")==="bin"?"archived":"active";
+  const conditions = ["w.partner_type = 'installer'", `w.record_status = '${recordStatus}'`];
   const values: string[] = [];
   for (const [column, value] of [["c.first_name", filters.firstName], ["c.last_name", filters.lastName]]) {
     if (value) {
@@ -51,14 +56,14 @@ export function adminJobQuery(params: URLSearchParams) {
     conditions.push("(LOWER(w.id) LIKE ? ESCAPE '\\' OR LOWER(w.work_number) LIKE ? ESCAPE '\\' OR LOWER(w.title) LIKE ? ESCAPE '\\' OR LOWER(a.business_name) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(c.business_name, '') || ' ' || COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) LIKE ? ESCAPE '\\' OR LOWER(w.site_area) LIKE ? ESCAPE '\\')");
     values.push(term, term, term, term, term, term);
   }
-  for (const [column, value] of [["w.stage", filters.stage], ["w.service_category", filters.service], ["a.business_name", filters.installer]]) {
+  for (const [column, value] of [[ADMIN_JOB_STATUS_SQL, filters.stage], ["w.service_category", filters.service], ["a.business_name", filters.installer]]) {
     if (value) { conditions.push(`${column} = ?`); values.push(value); }
   }
   if (filters.from) { conditions.push("substr(w.scheduled_start, 1, 10) >= ?"); values.push(filters.from); }
   if (filters.to) { conditions.push("substr(w.scheduled_start, 1, 10) <= ?"); values.push(filters.to); }
   if (filters.createdFrom) { conditions.push("datetime(w.created_at) >= datetime(?)"); values.push(jobCreationDayStart(filters.createdFrom)); }
   if (filters.createdTo) { conditions.push("datetime(w.created_at) < datetime(?)"); values.push(jobCreationDayStart(filters.createdTo, true)); }
-  return { filters, sort, page, pageSize, offset: (page - 1) * pageSize, where: conditions.join(" AND "), values, orderBy: ADMIN_JOB_SORTS[sort] };
+  return { filters, sort, page, pageSize,recordStatus, offset: (page - 1) * pageSize, where: conditions.join(" AND "), values, orderBy: ADMIN_JOB_SORTS[sort] };
 }
 
 export const ADMIN_JOB_JOINS = `FROM trade_work_orders w

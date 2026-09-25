@@ -1,3 +1,4 @@
+import { installFieldCorrectionFixture } from "./helpers/activity-field-corrections-fixture.mjs";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import assert from "node:assert/strict";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
@@ -59,8 +60,8 @@ test("the master editor supports safe routing, ordering and Creditex declaration
 
 function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
   const database = new DatabaseSync(":memory:");
-  database.exec(`CREATE TABLE trade_work_orders (id TEXT, firebase_uid TEXT, record_status TEXT, assignee_member_id TEXT, scheduled_start TEXT, revision INTEGER);
-    INSERT INTO trade_work_orders VALUES ('job','owner','active','worker','2026-09-08T09:00:00.000Z',1);
+  database.exec(`CREATE TABLE trade_work_orders (id TEXT, firebase_uid TEXT, record_status TEXT, assignee_member_id TEXT, scheduled_start TEXT, revision INTEGER, stage TEXT);
+    INSERT INTO trade_work_orders VALUES ('job','owner','active','worker','2026-09-08T09:00:00.000Z',1,'scheduled');
     CREATE TABLE trade_work_order_compliance_intents (id TEXT PRIMARY KEY, work_order_id TEXT, installer_uid TEXT, compliance_organisation_id TEXT, activity_template_id TEXT, status TEXT, intent_snapshot TEXT);
     CREATE TABLE trade_crm_job_details (work_order_id TEXT, firebase_uid TEXT, customer_source TEXT, crm_customer_id TEXT, service_site_id TEXT);
     CREATE TABLE trade_crm_customers (id TEXT, firebase_uid TEXT, first_name TEXT, last_name TEXT, email TEXT, phone TEXT, business_name TEXT, business_number TEXT);
@@ -71,6 +72,7 @@ function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
     CREATE TABLE trade_team_member_credentials (id TEXT, owner_uid TEXT, team_member_id TEXT, file_id TEXT, credential_number TEXT, name TEXT, rental_gate TEXT, credential_type TEXT, jurisdiction TEXT, expires_at TEXT, status TEXT, updated_at TEXT);
     CREATE TABLE trade_team_member_files (id TEXT, owner_uid TEXT, team_member_id TEXT, status TEXT, expires_at TEXT);`);
   database.exec(fs.readFileSync(new URL("../drizzle/0170_trade_activity_forms.sql", import.meta.url), "utf8"));
+  installFieldCorrectionFixture(database);
   database.exec("INSERT INTO trade_accounts(firebase_uid,address_state) VALUES ('owner','VIC'); INSERT INTO trade_team_members(id,owner_uid,member_uid,status,display_name) VALUES ('worker','owner','owner','active','Fixture owner')");
   installCreditexTrainingFixture(database);
   const d1 = { prepare(sql) { return { async all() { return { results: database.prepare(sql).all() }; }, bind(...values) { return {

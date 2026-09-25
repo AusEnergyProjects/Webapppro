@@ -1,11 +1,19 @@
+export { creditexWholeJobLifecycleSql } from "./creditex-job-lifecycle-projection.ts";
+
 export const TRADE_JOB_LIFECYCLE_STATUSES = [
   "unscheduled",
   "scheduled",
   "partial",
   "no_show",
   "completed",
+  "reviewed",
   "audited",
+  "correction_required",
+  "submitted",
+  "paid",
+  "failed",
   "cancelled",
+  "deleted",
 ] as const;
 
 export type TradeJobLifecycleStatus = typeof TRADE_JOB_LIFECYCLE_STATUSES[number];
@@ -22,12 +30,18 @@ export type TradeJobAuditOutcome = typeof TRADE_JOB_AUDIT_OUTCOMES[number];
 
 export const TRADE_JOB_LIFECYCLE_LABELS: Record<TradeJobLifecycleStatus, string> = {
   unscheduled: "Unscheduled",
-  scheduled: "Scheduled",
+  scheduled: "Assigned",
   partial: "Partial",
   no_show: "No show",
-  completed: "Completed",
+  completed: "Complete",
+  reviewed: "Reviewed",
   audited: "Audited",
+  correction_required: "Correction required",
+  submitted: "Submitted",
+  paid: "Paid",
+  failed: "Failed",
   cancelled: "Cancelled",
+  deleted: "Deleted",
 };
 
 export const TRADE_JOB_AUDIT_OUTCOME_LABELS: Record<TradeJobAuditOutcome, string> = {
@@ -44,6 +58,7 @@ export type TradeJobLifecycleInput = {
   scheduleDate?: unknown;
   hasProgress?: unknown;
   auditOutcome?: unknown;
+  authoritativeStatus?: unknown;
 };
 
 export type TradeJobLifecycle = {
@@ -68,6 +83,10 @@ export function normaliseTradeJobAuditOutcome(value: unknown): TradeJobAuditOutc
 }
 
 export function deriveTradeJobLifecycle(input: TradeJobLifecycleInput): TradeJobLifecycle {
+  const authoritative = TRADE_JOB_LIFECYCLE_STATUSES.find(status => status === text(input.authoritativeStatus));
+  if (authoritative) {
+    return { status: authoritative, auditOutcome: null };
+  }
   const workStage = text(input.workStage);
   const pipelineStage = text(input.pipelineStage);
   const auditOutcome = normaliseTradeJobAuditOutcome(input.auditOutcome);
@@ -235,6 +254,8 @@ export function tradeJobHasProgressSql(workAlias = "w") {
       SELECT 1 FROM trade_activity_field_records progress_record
       WHERE progress_record.work_order_id = ${workAlias}.id
         AND progress_record.owner_uid = ${workAlias}.firebase_uid
+        AND NOT EXISTS (SELECT 1 FROM trade_activity_field_records successor
+          WHERE successor.supersedes_record_id = progress_record.id)
         AND (progress_record.status IN ('draft', 'submitted_for_creditex_review')
           OR COALESCE(json_extract(progress_record.payload, '$.hasUserEdits'), 0) = 1
           OR COALESCE(json_array_length(progress_record.payload, '$.evidence'), 0) > 0
@@ -270,12 +291,13 @@ export function tradeJobLifecycleStatusSql(input: {
   scheduleSql: string;
   auditOutcomeSql?: string;
   hasProgressSql?: string;
+  activityStatusSql?: string;
 }) {
   const workAlias = input.workAlias || "w";
   const detailAlias = input.detailAlias || "d";
   const auditOutcomeSql = input.auditOutcomeSql || tradeJobAuditOutcomeSql(workAlias);
   const hasProgressSql = input.hasProgressSql || tradeJobHasProgressSql(workAlias);
-  return `CASE
+  const fallback = `CASE
     WHEN ${workAlias}.stage = 'cancelled' OR ${detailAlias}.pipeline_stage = 'lost' THEN 'cancelled'
     WHEN ${workAlias}.stage = 'no_show' THEN 'no_show'
     WHEN COALESCE(${auditOutcomeSql}, '') <> ''
@@ -289,6 +311,7 @@ export function tradeJobLifecycleStatusSql(input: {
       OR trim(${input.scheduleSql}) <> '' THEN 'scheduled'
     ELSE 'unscheduled'
   END`;
+  return input.activityStatusSql ? `COALESCE(${input.activityStatusSql}, ${fallback})` : fallback;
 }
 
 export function tradeJobLifecycleRankSql(statusSql: string) {
@@ -298,7 +321,13 @@ export function tradeJobLifecycleRankSql(statusSql: string) {
     WHEN 'no_show' THEN 3
     WHEN 'partial' THEN 3
     WHEN 'completed' THEN 4
-    WHEN 'audited' THEN 5
-    WHEN 'cancelled' THEN 6
+    WHEN 'reviewed' THEN 5
+    WHEN 'audited' THEN 6
+    WHEN 'correction_required' THEN 7
+    WHEN 'submitted' THEN 8
+    WHEN 'paid' THEN 9
+    WHEN 'failed' THEN 10
+    WHEN 'cancelled' THEN 11
+    WHEN 'deleted' THEN 12
     ELSE 0 END`;
 }

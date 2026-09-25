@@ -214,6 +214,26 @@ test('selected work replaces the register, uses fresh private details and return
   button(tree,'Back to jobs').props.onClick();tree=h.render();assert.equal(field(tree,'Filter customer').props.value,'Alex');h.cleanup();
 });
 
+test('Jobs keeps the canonical status and displays export as detail, with recoverable Bin actions',async()=>{
+  const current = {...jobs[0], lifecycle:{status:'audited',label:'Audited',detail:'Exported, awaiting lodgement'}};
+  const h=runtime('CreditexPlannedIntakeQueue',{}, {api:async path=>path.includes('?')?{ok:true,items:[current],total:1,page:1,totalPages:1}:audit(current)});
+  let tree=await h.mount();
+  const statusCell=nodes(tree,n=>n.type==='td'&&text(n).includes('Audited'))[0];
+  assert.equal(text(nodes(statusCell,n=>n.type==='span')[0]),'Audited');
+  assert.equal(text(nodes(statusCell,n=>n.type==='small')[0]),'Exported, awaiting lodgement');
+  assert.ok(nodes(tree,n=>n.type==='th'&&text(n)==='Customer paid').length);
+  button(tree,'Bin').props.onClick();tree=await h.settle();
+  assert.equal(new URL(h.requests.at(-1),'https://test.invalid').searchParams.get('view'),'bin');
+  assert.equal(button(tree,'Back to active jobs').props['aria-pressed'],true);
+  openJobButtons(tree)[0].props.onClick({currentTarget:{isConnected:false,focus(){}}});await flush();tree=h.render();
+  const actions=nodes(tree,n=>n.type?.displayName==='CreditexJobLifecycleActions')[0];
+  assert.equal(actions.props.intentId,current.id);assert.equal(actions.props.user,user);
+  actions.props.onChanged();tree=await h.settle();
+  assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexJobLifecycleActions').length,0);
+  button(tree,'Back to active jobs').props.onClick();await h.settle();
+  assert.equal(new URL(h.requests.at(-1),'https://test.invalid').searchParams.has('view'),false);h.cleanup();
+});
+
 // Keep the real MFA hook's resolver and the portal's mfaRequired state at their
 // initial values; the session fixture follows those two state slots.
 function portal(role='admin', options={}) {return runtime('CreditexCompliancePortal',{}, {noEffects:true,...options,seed:{2:user,3:true,4:{role,email:'reviewer@example.invalid',displayName:'Test Reviewer',governanceIdentityVerified:true,canEditFieldMasters:role==='admin',organisation:{code:'creditex',legalName:'Creditex',tradingName:'Creditex'}},5:false}});}

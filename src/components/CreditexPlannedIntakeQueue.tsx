@@ -9,9 +9,11 @@ import {
 import styles from "./CreditexPlannedIntakeQueue.module.css";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { CreditexAuditCallPanel } from "./CreditexAuditCallPanel";
+import { CreditexJobLifecycleActions } from "./CreditexJobLifecycleActions";
 import { JobActionsButton, JobRowMenu, useJobRowMenu } from "./JobRowActions";
 import { jobCreationDate } from "@/lib/job-register-dates";
 import { CREDITEX_CERTIFICATE_TYPES } from "@/lib/creditex-certificate-types";
+import type { CreditexJobLifecycle, CreditexJobSubmission } from "@/lib/creditex-job-lifecycle";
 
 type QueueStatus = "all" | "planned" | "case_linked" | "superseded";
 const PAGE_SIZE = 50;
@@ -70,6 +72,8 @@ type PlannedIntake = {
   caseNumber: string;
   caseStatus: string;
   evidenceStatus: string;
+  submission: CreditexJobSubmission;
+  lifecycle: CreditexJobLifecycle;
   siteSuburb: string;
   sitePostcode: string;
   claimOutputLabel: string;
@@ -241,6 +245,7 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
   const [actionMessage, setActionMessage] = useState("");
   const [certificateType, setCertificateType] = useState("all");
   const [draftFilters, setDraftFilters] = useState(EMPTY_FILTERS);
+  const [queueView, setQueueView] = useState<"active" | "bin">("active");
   const filterLauncherRef = useRef<HTMLButtonElement | null>(null);
   const filterHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const { menu, openMenu, closeMenu } = useJobRowMenu();
@@ -256,6 +261,7 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
   const tableScroll = useRef({ top: 0, left: 0 });
 
   const query = new URLSearchParams({ status, search, certificateType, page: String(page), sort, sortDirection });
+  if (queueView === "bin") query.set("view", "bin");
   for (const [key, value] of Object.entries(filters)) if (value) query.set(key, value);
   const queryKey = query.toString();
   const message = queueError?.query === queryKey ? queueError.text : "";
@@ -569,13 +575,16 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
       </select></label>
       <button ref={filterLauncherRef} type="button" className={styles.filterToggle} aria-expanded={showFilters} aria-controls="creditex-job-filters" onClick={toggleFilters}>Filters{activeFilters ? ` (${activeFilters})` : ""}</button>
       <button type="button" onClick={() => void load()} disabled={updating}>Refresh</button>
+      <button type="button" aria-pressed={queueView === "bin"} onClick={() => {
+        closeAudit(); setQueueView(queueView === "bin" ? "active" : "bin"); setPage(1);
+      }}>{queueView === "bin" ? "Back to active jobs" : "Bin"}</button>
     </div>
     <div className={styles.resultBar} aria-live="polite"><span>{updating ? "Updating jobs..." : message ? hasLoaded ? `${items.length} previously loaded ${items.length === 1 ? "record" : "records"} shown` : "Job count unavailable" : `${total} matching ${total === 1 ? "record" : "records"}${totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""}`}{!updating && !message && activeFilters ? ` · ${activeFilters} filters applied` : ""}</span>{(search || activeFilters || sort !== "plannedStart" || sortDirection !== "asc") && <button type="button" className={styles.detailButton} onClick={resetFilters}>Reset filters & sort</button>}</div>
     <p className={styles.tableHint}>Each row is a job activity. Click its Job ID to open it, or right-click for options. Scroll across for all details.</p>
     {actionMessage && <p className={styles.tableHint} role="status">{actionMessage}</p>}
     {message && <div className={`${styles.message} ${styles.loadError}`} role="alert"><div><strong>{hasLoaded ? "Jobs could not be updated" : "Jobs could not be loaded"}</strong><p>{message}</p>{hasLoaded && <p>Showing the last loaded results. They may not match the current filters.</p>}</div><button type="button" onClick={() => void load()} disabled={updating}>Retry</button></div>}
       <div ref={tableRef} className={styles.tableWrap} aria-busy={updating} data-stale={stale || undefined} tabIndex={0} role="region" aria-label="Assigned jobs. Scroll horizontally for all columns."><table>
-        <thead><tr>{sortableHeading("Job ID", "jobNumber")}{sortableHeading("Created", "createdAt")}{sortableHeading("Certificate", "certificateType")}{sortableHeading("First name", "customerFirstName")}{sortableHeading("Last name", "customerLastName")}<th scope="col">Job title</th>{sortableHeading("Stage", "jobStage")}<th scope="col">Case number</th><th scope="col">Case status</th><th scope="col">Evidence status</th>{sortableHeading("Program", "programCode")}<th scope="col">Activity code</th><th scope="col">Activity name</th><th scope="col">Service</th>{sortableHeading("Installer", "installerBusiness")}<th scope="col">Phone</th><th scope="col">Email</th><th scope="col">Customer ID</th><th scope="col">Business</th><th scope="col">ABN</th><th scope="col">Service address</th><th scope="col">Suburb</th><th scope="col">State</th><th scope="col">Postcode</th>{sortableHeading("Planned", "plannedStart")}<th scope="col">Scheduled end</th>{sortableHeading("Priority", "priority")}<th scope="col">Assigned to</th><th scope="col">Quote amount</th><th scope="col">Quote status</th><th scope="col">Invoice amount</th><th scope="col">Invoice status</th><th scope="col">Paid</th><th scope="col">Record status</th><th scope="col">Next action</th>{sortableHeading("Updated", "updatedAt")}</tr></thead>
+        <thead><tr>{sortableHeading("Job ID", "jobNumber")}{sortableHeading("Created", "createdAt")}{sortableHeading("Certificate", "certificateType")}{sortableHeading("First name", "customerFirstName")}{sortableHeading("Last name", "customerLastName")}<th scope="col">Job title</th><th scope="col">Status</th><th scope="col">Case number</th><th scope="col">Case status</th><th scope="col">Evidence status</th>{sortableHeading("Program", "programCode")}<th scope="col">Activity code</th><th scope="col">Activity name</th><th scope="col">Service</th>{sortableHeading("Installer", "installerBusiness")}<th scope="col">Phone</th><th scope="col">Email</th><th scope="col">Customer ID</th><th scope="col">Business</th><th scope="col">ABN</th><th scope="col">Service address</th><th scope="col">Suburb</th><th scope="col">State</th><th scope="col">Postcode</th>{sortableHeading("Planned", "plannedStart")}<th scope="col">Scheduled end</th>{sortableHeading("Priority", "priority")}<th scope="col">Assigned to</th><th scope="col">Quote amount</th><th scope="col">Quote status</th><th scope="col">Invoice amount</th><th scope="col">Invoice status</th><th scope="col">Customer paid</th><th scope="col">Record status</th><th scope="col">Next action</th>{sortableHeading("Updated", "updatedAt")}</tr></thead>
         <tbody>{items.map((item) => <tr key={item.id} onContextMenu={event => { if (!updating) openMenu(event, `creditex-job-menu-${item.id}`, item.jobNumber || item.jobId, launcher => rowActions(item, launcher)); }}>
             <td><div className={styles.jobActions}>
               <button type="button" id={`creditex-job-${item.id}`} className={styles.jobButton} onClick={(event) => void openAudit(item, event.currentTarget)} aria-label={`Open job ${item.jobNumber || item.jobId}`} aria-controls="creditex-full-audit-workspace">{item.jobNumber || item.jobId}</button>
@@ -586,7 +595,7 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
             <td>{item.customerFirstName || "Not recorded"}</td>
             <td>{item.customerLastName || "Not recorded"}</td>
             <td className={styles.longCell} title={item.jobTitle}>{item.jobTitle || "Retained job record"}</td>
-            <td>{humanField(item.jobStage)}</td>
+            <td><span className={styles.status}>{item.lifecycle?.label || "Status unavailable"}</span>{item.lifecycle?.detail && <small>{item.lifecycle.detail}</small>}</td>
             <td>{item.caseNumber || "No case"}</td>
             <td>{item.caseStatus ? humanField(item.caseStatus) : "No case"}</td>
             <td>{item.evidenceStatus ? humanField(item.evidenceStatus) : "No case"}</td>
@@ -673,6 +682,7 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
       {auditLoading && <p className={styles.message} role="status">Loading the authorised job overview...</p>}
       {auditMessage && <p className={styles.message} role="alert">{auditMessage}</p>}
       {audit && <>
+        {firebaseAuth.currentUser && <CreditexJobLifecycleActions user={firebaseAuth.currentUser} intentId={auditItem.id} onChanged={() => { closeAudit(); void load(); }} />}
         <div className={styles.auditSummary}>
           <div><span>Customer</span><strong>{auditCustomerName || "Not recorded"}</strong><p>{String(audit.customer?.phone || "No phone recorded")}</p><p>{String(audit.customer?.email || "")}</p></div>
           <div><span>Service site</span><strong>{auditAddress || "Not recorded"}</strong><p>{dateTime(String(audit.intent?.planned_start || ""))}</p></div>

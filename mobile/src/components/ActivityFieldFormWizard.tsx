@@ -25,7 +25,7 @@ import type { ActivityAnswers, ActivityRecord } from '../../../src/lib/trade-act
 import { activityBaseFieldKey, activityRepeatCount, activityRepeatItemLabel, activityRepeatKey, boundActivityDeclaration, removeLastActivityRepeat, activityWizardSteps, activityWizardPages, activityWizardPageForStepKey, streamlinedActivityPages, type ExpandedActivityField } from '../../../src/lib/trade-activity-form-flow';
 
 const endpoint = '/api/trade-activity-forms';
-export type ActivityFieldSummary = { id: string; intentId: string; title: string; status: 'not_started' | ActivityRecord['status']; lifecycleStatus?: 'unscheduled' | 'scheduled' | 'partial' | 'completed' | 'audited' | 'cancelled'; recordNumber: string; progress: { complete: number; total: number } };
+export type ActivityFieldSummary = { id: string; intentId: string; title: string; status: 'not_started' | ActivityRecord['status']; lifecycleStatus?: 'unscheduled' | 'scheduled' | 'partial' | 'completed' | 'audited' | 'correction_required' | 'cancelled'; recordNumber: string; progress: { complete: number; total: number } };
 type Presented = Omit<ActivityRecord, 'evidence'> & { evidence: Omit<ActivityRecord['evidence'][number], 'objectKey'>[]; missing: { key: string; label: string; kind: string }[]; signerDefaults: { technician: string; customer: string }; signingScopes?: { before: string; after: string }; signerSetup?: { firstName: string; lastName: string; canSave: boolean; firstNameLocked?: boolean; lastNameLocked?: boolean } };
 type CaptureMetadata = { capturedAt: string; latitude: number | null; longitude: number | null; accuracy: number | null; metadataOrigin: 'device_capture' | 'file_upload'; locationObservedAt?: string; mocked?: boolean | null };
 type PendingFile = { id: string; fieldKey: string; uri: string; name: string; contentType: string; metadata: CaptureMetadata };
@@ -170,7 +170,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     const previous = cacheRef.current;
     const target = activityWizardPageForStepKey(streamlinedActivityPages(activityWizardPages(value.record.form, value.answers)), value.stepKey);
     value = { ...value, stepKey: target?.key || 'review' };
-    if (previous?.stepKey !== value.stepKey) {
+    if (previous?.record.id !== value.record.id || previous?.stepKey !== value.stepKey) {
       setAcknowledged(false);
       if (target?.kind === 'signature') setSignature(signatureDraft(target.declaration.role, activitySignerDefault(value.record, target.declaration.role)));
     } else if (previous && target?.kind === 'signature') {
@@ -207,6 +207,9 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
         const response = await apiRequest<{ record: Presented }>(endpoint, { method: 'POST', body: JSON.stringify({ action: 'open', workOrderId, intentId, variantId }) });
         if (disposed) return;
         const fresh = response.record;
+        // A correction is a new unsigned record. Cached signatures, pending
+        // uploads and automatic completion belong only to their original ID.
+        if (saved && saved.record.id !== fresh.id) saved = null;
         const reconciliation = saved
           ? reconcileAnswers(saved.record.answers, saved.answers, fresh)
           : { merged: fresh.answers, conflicts: [] as string[] };
@@ -808,6 +811,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       scrollEnabled={true}
     >
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+      {record.correction && editable ? <View style={styles.group}><Text style={styles.section}>Corrections requested</Text><Text style={styles.text}>{record.correction.note}</Text><Text style={styles.small}>Answers and evidence have been copied into this new revision. Check the changes and sign again. The original signed report stays in the job history.</Text></View> : null}
       <ProgressMeter label="Form progress" complete={overallProgress.complete} total={overallProgress.total} />
       {overview ? <>
         <Text style={styles.title}>{record.form.title}</Text><Text style={styles.text}>Complete the questions, evidence and signatures, then submit to Creditex.</Text>

@@ -83,6 +83,7 @@ export type JobRegisterProjectionInput = {
   pipelineStage?: unknown;
   hasProgress?: unknown;
   auditOutcome?: unknown;
+  authoritativeStatus?: unknown;
   certificates?: Partial<Record<"stc" | "veec" | "esc" | "other", unknown>>;
   service?: unknown;
   quoteStatus?: unknown;
@@ -125,6 +126,7 @@ export function projectJobRegisterRecord(input: JobRegisterProjectionInput): Job
     scheduleDate: input.scheduleDate,
     hasProgress: input.hasProgress,
     auditOutcome: input.auditOutcome,
+    authoritativeStatus: input.authoritativeStatus,
   });
   return {
     jobId: text(input.jobId),

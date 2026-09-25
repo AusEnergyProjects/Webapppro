@@ -6,6 +6,9 @@ import type { AdminJobRow } from "@/lib/admin-job-register";
 import { jobCreationDate } from "@/lib/job-register-dates";
 import { JobActionsButton, JobRowMenu, useJobRowMenu } from "./JobRowActions";
 import styles from "./AdminJobDirectory.module.css";
+import type {User} from "firebase/auth";
+import {AdminCertificateJobActions} from "./AdminCertificateJobActions";
+import {TRADE_JOB_LIFECYCLE_STATUSES,tradeJobLifecycleLabel} from "@/lib/trade-job-lifecycle";
 
 const columns = [
   {key:"workNumber",label:"Job ID"}, {key:"createdAt",label:"Created"},
@@ -16,12 +19,13 @@ const columns = [
 type Column = typeof columns[number]["key"];
 const emptyFilters = {q:"",stage:"",service:"",installer:"",from:"",to:"",firstName:"",lastName:"",createdFrom:"",createdTo:""};
 function readable(value: string) { return value.replaceAll("_", " ").replaceAll("-", " "); }
+function statusLabel(value:string){const canonical=TRADE_JOB_LIFECYCLE_STATUSES.find(status=>status===value);return canonical?tradeJobLifecycleLabel(canonical):readable(value)||"Not set";}
 function dateTime(value: string) {
   if (!value) return "Not scheduled";
   const date = new Date(value);
   return Number.isFinite(date.getTime()) ? date.toLocaleString("en-AU",{dateStyle:"medium",timeStyle:"short"}) : value;
 }
-export function AdminJobDirectory({ api }: { api: (path: string, init?: RequestInit) => Promise<Record<string, unknown>> }) {
+export function AdminJobDirectory({ api,user }: { api: (path: string, init?: RequestInit) => Promise<Record<string, unknown>>;user?:User }) {
   const [filters,setFilters] = useState(emptyFilters);
   const [sort,setSort] = useState("updated-desc");
   const [page,setPage] = useState(1);
@@ -34,6 +38,7 @@ export function AdminJobDirectory({ api }: { api: (path: string, init?: RequestI
   const [error,setError] = useState("");
   const [selectedJob,setSelectedJob] = useState<AdminJobRow | null>(null);
   const [actionMessage,setActionMessage] = useState("");
+  const [view,setView]=useState<"active"|"bin">("active");
   const detailRef = useRef<HTMLDialogElement>(null);
   const detailLauncherRef = useRef<HTMLElement | null>(null);
   const { menu, openMenu, closeMenu } = useJobRowMenu();
@@ -59,7 +64,7 @@ export function AdminJobDirectory({ api }: { api: (path: string, init?: RequestI
     const timer=window.setTimeout(()=>{
       setLoading(true);setError("");
       closeMenu(false);
-      const params=new URLSearchParams({...filters,sort,page:String(page)});
+      const params=new URLSearchParams({...filters,sort,page:String(page),view});
       void api('/api/admin/jobs?'+params).then(result=>{
         if(!active)return;
         setJobs(Array.isArray(result.jobs)?result.jobs as AdminJobRow[]:[]);
@@ -69,25 +74,28 @@ export function AdminJobDirectory({ api }: { api: (path: string, init?: RequestI
         .finally(()=>{if(active)setLoading(false);});
     },220);
     return()=>{active=false;window.clearTimeout(timer);};
-  },[api,filters,sort,page,revision,closeMenu]);
+  },[api,filters,sort,page,revision,closeMenu,view]);
   const selectedColumns=visibleColumns.map(key=>columns.find(column=>column.key===key)).filter((column): column is typeof columns[number]=>Boolean(column));
   function cell(job:AdminJobRow,key:Column) {
     if(key==="createdAt")return jobCreationDate(job.createdAt);
     if(key==="scheduledStart")return dateTime(job[key]);
     if(key==="updatedAt")return job[key] ? dateTime(job[key]) : "Not recorded";
-    if(key==="stage"||key==="serviceCategory")return readable(job[key])||"Not set";
+    if(key==="stage"&&job.recordStatus==="archived")return "Deleted";
+    if(key==="stage")return statusLabel(job.stage);
+    if(key==="serviceCategory")return readable(job[key])||"Not set";
     return job[key]||"Not supplied";
   }
   return <section className={`admin-job-directory ${styles.directory}`}>
     <header className="admin-register-heading"><div><span>Daily work</span><h1>Jobs</h1><p>Find a job, check its progress and see who is responsible.</p></div>
       <button type="button" onClick={()=>setRevision(current=>current+1)} disabled={loading}>Refresh</button></header>
+    <nav aria-label="Job visibility"><button type="button" aria-pressed={view==="active"} onClick={()=>{setView("active");setPage(1);}}>Active jobs</button> <button type="button" aria-pressed={view==="bin"} onClick={()=>{setView("bin");setPage(1);}}>Bin</button></nav>
     <div className="admin-register-filters">
       <label className="admin-register-search">Search jobs<input type="search" value={filters.q} onChange={event=>filter("q",event.target.value)} placeholder="Job ID, customer, trade, work or location" /></label>
       <label>Created from<input type="date" data-date-range-group="admin-job-created" data-date-range-role="start" value={filters.createdFrom} onChange={event=>filter("createdFrom",event.target.value)} /></label>
       <label>Created to<input type="date" data-date-range-group="admin-job-created" data-date-range-role="end" min={filters.createdFrom || undefined} value={filters.createdTo} onChange={event=>filter("createdTo",event.target.value)} /></label>
       <label>First name<input type="search" value={filters.firstName} onChange={event=>filter("firstName",event.target.value)} placeholder="Customer first name" /></label>
       <label>Last name<input type="search" value={filters.lastName} onChange={event=>filter("lastName",event.target.value)} placeholder="Customer last name" /></label>
-      <label>Status<select value={filters.stage} onChange={event=>filter("stage",event.target.value)}><option value="">All statuses</option>{facets.stages.map(value=><option key={value} value={value}>{readable(value)}</option>)}</select></label>
+      <label>Status<select value={filters.stage} onChange={event=>filter("stage",event.target.value)}><option value="">All statuses</option>{facets.stages.map(value=><option key={value} value={value}>{statusLabel(value)}</option>)}</select></label>
       <label>Service<select value={filters.service} onChange={event=>filter("service",event.target.value)}><option value="">All services</option>{facets.services.map(value=><option key={value} value={value}>{readable(value)}</option>)}</select></label>
       <label>Trade<select value={filters.installer} onChange={event=>filter("installer",event.target.value)}><option value="">All trades</option>{facets.installers.map(value=><option key={value}>{value}</option>)}</select></label>
       <label>Scheduled from<input type="date" data-date-range-group="admin-job-scheduled" data-date-range-role="start" value={filters.from} onChange={event=>filter("from",event.target.value)} /></label>
@@ -120,6 +128,7 @@ export function AdminJobDirectory({ api }: { api: (path: string, init?: RequestI
     {selectedJob && <dialog ref={detailRef} className={styles.details} aria-labelledby="admin-job-detail-title" onCancel={event=>{event.preventDefault();closeDetails();}}>
       <header><div><span>Job details</span><h2 id="admin-job-detail-title">{selectedJob.workNumber}</h2></div><button type="button" onClick={closeDetails} autoFocus>Close</button></header>
       <dl>{columns.map(column=><div key={column.key}><dt>{column.label}</dt><dd>{cell(selectedJob,column.key)}</dd></div>)}{selectedJob.customerBusinessName&&<div><dt>Customer business</dt><dd>{selectedJob.customerBusinessName}</dd></div>}</dl>
+      {user&&<AdminCertificateJobActions user={user} workOrderId={selectedJob.id} api={api} onChanged={()=>{closeDetails();setRevision(value=>value+1);setActionMessage("Job updated. Deleted certificate jobs can be restored from the Bin.");}}/>}
     </dialog>}
   </section>;
 }

@@ -481,7 +481,7 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
     "@/lib/trade-team-permission-policy.mjs": {
       canRescheduleWithinScope: () => true,
     },
-    "@/lib/trade-job-lifecycle": tradeJobLifecycle,
+    "@/lib/trade-job-lifecycle": { ...tradeJobLifecycle, creditexWholeJobLifecycleSql: () => 'NULL' },
     "@/lib/trade-schedule-server": scheduleServerHelpers,
   });
 }

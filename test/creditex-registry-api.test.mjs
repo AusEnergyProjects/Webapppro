@@ -42,6 +42,12 @@ function fixture() {
     "@/lib/creditex-registry-rec": { syncRecRegistry: call("sync_rec", { updatedClaims: 0, matches: [] }) },
     "@/lib/australian-government-program-catalogue": { GOVERNMENT_ACTIVITY_TEMPLATES },
     "@/lib/creditex-registry": { registrySchemeForProgram },
+    "@/lib/creditex-registry-batches": {
+      loadRegistryBatchWorkspace: call("batch_workspace", { readyGroups: [], blockedClaims: [], batches: [], capabilities: { canOperate: true } }),
+      exportReadyRegistryBatch: call("export_ready_batch", { id: "retained-batch" }),
+      downloadRegistryBatch: call("download_batch", new Response("private zip", { headers: { "Content-Type": "application/zip" } })),
+      recordRegistryBatchLodgement: call("record_batch_lodgement", { submittedCount: 2, failedCount: 0, results: [] }),
+    },
   });
   const compliance = compile("../src/app/api/creditex/registry/route.ts", {
     "../../../../../db": { getD1: () => db },
@@ -66,6 +72,29 @@ function fixture() {
   return { state, shared, compliance, admin };
 }
 function jsonRequest(value, query = "") { return new Request(`https://example.test/api/creditex/registry${query}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) }); }
+
+test("batch readiness and private downloads use the authenticated organisation", async () => {
+  const f = fixture();
+  const plan = await f.compliance.GET(new Request("https://example.test/api/creditex/registry?view=batches&organisationId=untrusted"));
+  assert.equal(plan.status, 200); assert.deepEqual((await plan.json()).readyGroups, []);
+  assert.deepEqual(f.state.calls.find(call => call.name === "batch_workspace").args, [db, actor]);
+  const download = await f.compliance.GET(new Request("https://example.test/api/creditex/registry?download=batch&batchId=batch-one&organisationId=untrusted"));
+  assert.equal(await download.text(), "private zip");
+  assert.deepEqual(f.state.calls.find(call => call.name === "download_batch").args, [db, actor, "batch-one"]);
+});
+
+test("batch export and actual lodgement have distinct authenticated operations and return refreshed state", async () => {
+  for (const action of ["export_ready_batch", "record_batch_lodgement"]) {
+    const f = fixture(), input = { action, organisationId: "untrusted", actorUid: "spoofed", batchId: "batch-one", requestId: "request-one", expectedPacketIds: ["p1"], providerReference: "ACTUAL-1" };
+    const response = await f.compliance.POST(jsonRequest(input));
+    assert.equal(response.status, 200);
+    const result = await response.json(); assert.ok(action === "export_ready_batch" ? result.batch : result.outcome);
+    const operation = f.state.calls.find(call => call.name === action);
+    assert.deepEqual(operation.args.slice(0, 2), [db, actor]); assert.deepEqual(operation.args[2], input);
+    assert.ok(f.state.calls.find(call => call.name === "batch_workspace"));
+    assert.equal(f.state.calls.filter(call => call.name === (action === "export_ready_batch" ? "record_batch_lodgement" : "export_ready_batch")).length, 0);
+  }
+});
 
 test("compliance mutations use server-resolved organisation and actor despite supplied identity fields", async () => {
   const f = fixture();

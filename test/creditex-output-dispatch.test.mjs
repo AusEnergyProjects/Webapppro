@@ -6,6 +6,8 @@ import ts from "typescript";
 import { creditexCanonicalSha256 } from "../src/lib/creditex-interchange-preflight.ts";
 import { CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS } from "../src/lib/creditex-work-pack-schema-guards.ts";
 
+import * as lifecycleSql from "../src/lib/creditex-job-lifecycle-sql.ts";
+
 const NOW = "2026-09-24T00:00:00.000Z";
 const HASH = `sha256:${"a".repeat(64)}`;
 const actor = { actorUid: "submitter", organisationId: "org-one", actorKind: "compliance" };
@@ -26,6 +28,7 @@ function loadService() {
       },
     },
     "./creditex-interchange-preflight": { creditexCanonicalSha256 },
+    "./creditex-job-lifecycle-sql": lifecycleSql,
     "./creditex-work-pack-schema-guards": { async ensureCreditexWorkPackSchemaGuards() {} },
   };
   const moduleRecord = { exports: {} };
@@ -60,10 +63,18 @@ function fixture(t) {
       provider_name TEXT, request_snapshot TEXT, request_sha256 TEXT,
       response_snapshot TEXT, response_sha256 TEXT, provider_reference TEXT,
       provider_status TEXT, http_status INTEGER, response_received_at TEXT, created_at TEXT);
-    CREATE TABLE compliance_activity_work_pack_instances (id TEXT, organisation_id TEXT, work_order_id TEXT);
-    CREATE TABLE compliance_cases (id TEXT, organisation_id TEXT, case_number TEXT, installer_uid TEXT);
+    CREATE TABLE compliance_activity_work_pack_instances (id TEXT, organisation_id TEXT, work_order_id TEXT,
+      compliance_case_id TEXT, compliance_intent_id TEXT, instance_key TEXT, revision INTEGER, status TEXT);
+    CREATE TABLE compliance_activity_work_pack_final_records (id TEXT, case_instance_id TEXT, organisation_id TEXT, pdf_sha256 TEXT, object_key TEXT);
+    CREATE TABLE trade_work_order_compliance_intents (id TEXT, compliance_case_id TEXT, compliance_organisation_id TEXT,
+      installer_uid TEXT, work_order_id TEXT, revision INTEGER, intent_snapshot_sha256 TEXT, status TEXT);
+    CREATE TABLE trade_activity_field_records (id TEXT, intent_id TEXT, owner_uid TEXT, work_order_id TEXT, organisation_id TEXT,
+      revision INTEGER, status TEXT, pdf_sha256 TEXT, pdf_object_key TEXT, supersedes_record_id TEXT);
+    CREATE TABLE creditex_job_lifecycle_events (id TEXT, organisation_id TEXT, work_order_id TEXT, owner_uid TEXT,
+      intent_id TEXT, action TEXT, actor_kind TEXT, source_snapshot TEXT, created_at TEXT);
+    CREATE TABLE compliance_cases (id TEXT, organisation_id TEXT, case_number TEXT, installer_uid TEXT, work_order_id TEXT, compliance_intent_id TEXT, revision INTEGER, status TEXT, evidence_status TEXT);
     CREATE TABLE compliance_activity_versions (id TEXT, title TEXT);
-    CREATE TABLE trade_work_orders (id TEXT, firebase_uid TEXT, work_number TEXT, title TEXT);
+    CREATE TABLE trade_work_orders (id TEXT, firebase_uid TEXT, work_number TEXT, title TEXT, record_status TEXT, stage TEXT);
     CREATE TABLE trade_crm_job_details (work_order_id TEXT, firebase_uid TEXT, customer_source TEXT, crm_customer_id TEXT);
     CREATE TABLE trade_crm_customers (id TEXT, firebase_uid TEXT, record_status TEXT, business_name TEXT, first_name TEXT, last_name TEXT);
   `);
@@ -88,6 +99,7 @@ function fixture(t) {
   const coverage = { activityTemplateId: "veu-test", programCode: "VEU", outputClass: "tradable_certificate",
     certificateActionEnabled: true, certificateBlockers: [], activationEvidence: evidence };
   const packet = {
+    caseRevision: 1,
     activityVersionId: "version-one",
     workPack: { instanceId: "instance-one", revision: 1, versionId: "pack-one", definitionSha256: HASH,
       instanceSha256: HASH, responseSha256: HASH, finalRecordId: "final-one", finalPdfSha256: "a".repeat(64) },
@@ -110,13 +122,25 @@ function fixture(t) {
     ('org-one', 'packet-one', ?, 'approved', 'reviewer', 'compliance', '', ?)`).run(packetHash, NOW);
   sqlite.prepare(`INSERT INTO compliance_output_action_events VALUES
     ('prepared-one', 'org-one', 'packet-one', 1, '', 'prepared', 'compliance', 'author', '', '', '{}', ?, ?)`).run(NOW, NOW);
+  sqlite.exec(`ALTER TABLE compliance_output_action_packets ADD COLUMN case_revision INTEGER NOT NULL DEFAULT 1;
+    INSERT INTO trade_work_orders VALUES ('work-one','owner','JOB-1','Job','active','completed');
+    INSERT INTO compliance_cases VALUES ('case-one','org-one','CASE-1','owner','work-one','intent-one',1,'in_review','complete');
+    INSERT INTO trade_work_order_compliance_intents VALUES ('intent-one','case-one','org-one','owner','work-one',1,'intent-sha','case_linked');
+    INSERT INTO compliance_activity_work_pack_instances VALUES ('instance-one','org-one','work-one','case-one','intent-one','instance-key',1,'completed');
+    INSERT INTO compliance_activity_work_pack_final_records VALUES ('final-one','instance-one','org-one','final-sha','final.pdf');`);
+  const currentReviewSnapshot = () => sqlite.prepare(`SELECT ${lifecycleSql.creditexIntentCompletionSnapshotSql('intent')} snapshot
+    FROM trade_work_order_compliance_intents intent WHERE id='intent-one'`).get().snapshot;
+  const addReview = (id='business-review-one', action='reviewed', at=NOW) => sqlite.prepare(`INSERT INTO creditex_job_lifecycle_events
+    VALUES (?, 'org-one','work-one','owner','intent-one',?,'trade',?,?)`).run(id,action,currentReviewSnapshot(),at);
+  addReview();
+  let beforeRun;
   class Statement {
     constructor(sql, bindings = []) { this.sql = sql; this.bindings = bindings; }
     bind(...values) { return new Statement(this.sql, values); }
     async first() { return sqlite.prepare(this.sql).get(...this.bindings) || null; }
     async all() { return { results: sqlite.prepare(this.sql).all(...this.bindings) }; }
     runSync() { return { meta: { changes: Number(sqlite.prepare(this.sql).run(...this.bindings).changes) } }; }
-    async run() { return this.runSync(); }
+    async run() { beforeRun?.(this.sql); return this.runSync(); }
   }
   const database = {
     prepare: (sql) => new Statement(sql),
@@ -128,7 +152,8 @@ function fixture(t) {
   };
   const input = { packetId: "packet-one", expectedPacketSha256: packetHash };
   const options = { now: () => NOW, resolveCoverage: async () => [coverage] };
-  return { sqlite, database, input, options, coverage,
+  return { sqlite, database, input, options, coverage, addReview,
+    beforeRun: (callback) => { beforeRun = callback; },
     intent: () => sqlite.prepare("SELECT * FROM compliance_output_dispatch_intents").get(),
     send: (adapter, overrides = {}) => service.submitCreditexOutputAction(database, actor, input, adapter, { ...options, ...overrides }),
   };
@@ -340,4 +365,63 @@ test("an existing manual submission prevents an automatic reservation", async (t
   assert.throws(() => f.sqlite.prepare(`INSERT INTO compliance_output_dispatch_intents
     (id, organisation_id, packet_id, packet_sha256, adapter_id, requested_by_uid, status, started_at)
     VALUES ('bypass', 'org-one', 'packet-one', ?, 'synthetic-adapter', 'submitter', 'dispatching', ?)`).run(f.input.expectedPacketSha256, NOW), /NOT_READY/);
+});
+
+test("direct submission requires the latest exact-current trade business review", async (t) => {
+  for (const mutation of [
+    "DELETE FROM creditex_job_lifecycle_events",
+    "UPDATE creditex_job_lifecycle_events SET organisation_id='another-organisation'",
+    "UPDATE creditex_job_lifecycle_events SET owner_uid='another-business'",
+    "UPDATE creditex_job_lifecycle_events SET actor_kind='compliance'",
+    "UPDATE creditex_job_lifecycle_events SET source_snapshot='{}'",
+    "UPDATE trade_work_order_compliance_intents SET revision=2",
+    "UPDATE compliance_cases SET revision=2",
+    "UPDATE trade_work_orders SET record_status='archived'",
+    "UPDATE trade_work_orders SET stage='cancelled'",
+    "INSERT INTO compliance_activity_work_pack_instances VALUES ('instance-new','org-one','work-one','case-one','intent-one','instance-key',2,'in_progress')",
+    "INSERT INTO trade_activity_field_records VALUES ('new-draft','intent-one','owner','work-one','org-one',1,'draft','','',NULL)",
+  ]) {
+    const f = fixture(t);
+    f.sqlite.exec(mutation);
+    assert.equal((await service.listCreditexOutputActions(f.database, actor))[0].capabilities.canSubmit, false, mutation);
+    await assert.rejects(f.send({ id: "synthetic-adapter", async submit() { assert.fail("must not send"); } }),
+      { code: "OUTPUT_ACTION_BUSINESS_REVIEW_REQUIRED" }, mutation);
+    assert.equal(f.intent(), undefined, mutation);
+  }
+});
+
+test("a later correction or superseding review cannot resurrect a historical pass", async (t) => {
+  for (const action of ["correction_required", "reviewed"]) {
+    const f = fixture(t);
+    f.addReview("later-review", action, "2026-09-24T00:00:01.000Z");
+    if (action === "reviewed") f.sqlite.exec("UPDATE creditex_job_lifecycle_events SET source_snapshot='{}' WHERE id='later-review'");
+    await assert.rejects(f.send({ id: "synthetic-adapter", async submit() { assert.fail("must not send"); } }),
+      { code: "OUTPUT_ACTION_BUSINESS_REVIEW_REQUIRED" });
+    assert.equal(f.intent(), undefined);
+  }
+});
+
+test("a correction racing with dispatch reservation creates no intent and makes no provider call", async (t) => {
+  const f = fixture(t);
+  f.beforeRun(sql => {
+    if (sql.includes("INSERT INTO compliance_output_dispatch_intents")) {
+      f.addReview("racing-correction", "correction_required", "2026-09-24T00:00:01.000Z");
+    }
+  });
+  await assert.rejects(f.send({ id: "synthetic-adapter", async submit() { assert.fail("must not send"); } }),
+    { code: "OUTPUT_ACTION_BUSINESS_REVIEW_REQUIRED" });
+  assert.equal(f.intent(), undefined);
+});
+
+test("business review is checked again immediately before the provider call", async (t) => {
+  const f = fixture(t);
+  let checks = 0;
+  await assert.rejects(f.send({ id: "synthetic-adapter", async submit() { assert.fail("must not send"); } }, {
+    resolveCoverage: async () => {
+      if (++checks === 2) f.addReview("racing-correction", "correction_required", "2026-09-24T00:00:01.000Z");
+      return [f.coverage];
+    },
+  }), { code: "OUTPUT_ACTION_DISPATCH_UNCERTAIN" });
+  assert.equal(f.intent().status, "uncertain");
+  assert.equal(f.intent().failure_code, "OUTPUT_ACTION_BUSINESS_REVIEW_REQUIRED");
 });

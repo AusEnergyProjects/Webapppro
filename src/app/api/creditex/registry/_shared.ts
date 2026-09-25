@@ -12,6 +12,7 @@ import { listRegistryFormats } from "@/lib/creditex-registry-formats";
 import { syncRecRegistry } from "@/lib/creditex-registry-rec";
 import { GOVERNMENT_ACTIVITY_TEMPLATES } from "@/lib/australian-government-program-catalogue";
 import { registrySchemeForProgram } from "@/lib/creditex-registry";
+import { loadRegistryBatchWorkspace, exportReadyRegistryBatch, downloadRegistryBatch, recordRegistryBatchLodgement } from "@/lib/creditex-registry-batches";
 
 export function registryJson(body:object,status=200) {
   return Response.json(body,{status,headers:{"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
@@ -48,6 +49,8 @@ export async function handleRegistryRequest(request:Request,db:D1Database,actor:
   const url=new URL(request.url),query=url.searchParams;
   let sync:Awaited<ReturnType<typeof syncRecRegistry>>|undefined;
   if(request.method==="GET") {
+    if(query.get("view")==="batches") return registryJson({ok:true,...await loadRegistryBatchWorkspace(db,actor)});
+    if(query.get("download")==="batch") return downloadRegistryBatch(db,actor,query.get("batchId"));
     if(query.get("preview")==="export") return registryJson({ok:true,...await previewRegistryExport(db,actor,query.get("exportId"))});
     if(query.get("download")==="evidence") return downloadRegistryEvidence(db,actor,query.get("evidenceId"));
     if(query.get("download")==="onboarding") return fileResponse(await registryOnboardingRequest(db,actor,query.get("accountId")),"registry-connection-request.txt","text/plain; charset=utf-8");
@@ -59,6 +62,14 @@ export async function handleRegistryRequest(request:Request,db:D1Database,actor:
     if(!value||typeof value!=="object"||Array.isArray(value)) throw new CreditexRegistryError("REGISTRY_INPUT_INVALID",400,"Send a valid registry action.");
     const input=value as Record<string,unknown>;
     switch(input.action) {
+      case "export_ready_batch": {
+        const batch=await exportReadyRegistryBatch(db,actor,input);
+        return registryJson({ok:true,batch,...await loadRegistryBatchWorkspace(db,actor)});
+      }
+      case "record_batch_lodgement": {
+        const outcome=await recordRegistryBatchLodgement(db,actor,input);
+        return registryJson({ok:true,outcome,...await loadRegistryBatchWorkspace(db,actor)});
+      }
       case "download_template":return fileResponse(await registryExportTemplate(db,actor,input),"registry-template-to-complete.csv","text/csv; charset=utf-8");
       case "save_account":await saveRegistryAccount(db,actor,input);break;
       case "disable_account":await disableRegistryAccount(db,actor,input);break;

@@ -17,6 +17,7 @@ import type {
 import {
   ensureCreditexWorkPackSchemaGuards,
 } from "./creditex-work-pack-schema-guards";
+import { creditexIntentCompletionSnapshotSql } from "./creditex-job-lifecycle-sql";
 
 export const CREDITEX_OUTPUT_ACTION_PACKET_CONTRACT =
   "creditex-output-action-packet/v1" as const;
@@ -45,6 +46,47 @@ export class CreditexOutputActionError extends Error {
 
 function fail(code: string, status: number, message: string): never {
   throw new CreditexOutputActionError(code, status, message);
+}
+
+function currentBusinessReviewSql(organisation: string, caseId: string, caseRevision: string, instanceId: string) {
+  return `SELECT review.id FROM compliance_cases reviewed_case
+    JOIN trade_work_order_compliance_intents reviewed_intent
+      ON reviewed_intent.id=reviewed_case.compliance_intent_id AND reviewed_intent.compliance_case_id=reviewed_case.id
+      AND reviewed_intent.compliance_organisation_id=reviewed_case.organisation_id
+      AND reviewed_intent.installer_uid=reviewed_case.installer_uid AND reviewed_intent.work_order_id=reviewed_case.work_order_id
+    JOIN trade_work_orders reviewed_work ON reviewed_work.id=reviewed_intent.work_order_id
+      AND reviewed_work.firebase_uid=reviewed_intent.installer_uid
+    JOIN compliance_activity_work_pack_instances reviewed_pack ON reviewed_pack.id=${instanceId}
+      AND reviewed_pack.organisation_id=reviewed_case.organisation_id AND reviewed_pack.compliance_case_id=reviewed_case.id
+      AND reviewed_pack.work_order_id=reviewed_work.id AND reviewed_pack.compliance_intent_id=reviewed_intent.id
+    JOIN creditex_job_lifecycle_events review ON review.organisation_id=reviewed_intent.compliance_organisation_id
+      AND review.work_order_id=reviewed_intent.work_order_id AND review.owner_uid=reviewed_intent.installer_uid
+      AND review.intent_id=reviewed_intent.id
+    WHERE reviewed_case.organisation_id=${organisation} AND reviewed_case.id=${caseId} AND reviewed_case.revision=${caseRevision}
+      AND reviewed_case.status NOT IN ('changes_requested','rejected','closed') AND reviewed_case.evidence_status<>'changes_required'
+      AND reviewed_work.record_status='active' AND reviewed_work.stage<>'cancelled'
+      AND reviewed_intent.status IN ('planned','case_linked') AND reviewed_pack.status='completed'
+      AND NOT EXISTS(SELECT 1 FROM compliance_activity_work_pack_instances newer_pack
+        WHERE newer_pack.organisation_id=reviewed_pack.organisation_id AND newer_pack.instance_key=reviewed_pack.instance_key
+          AND newer_pack.revision>reviewed_pack.revision)
+      AND review.action='reviewed' AND review.actor_kind='trade'
+      AND review.source_snapshot=${creditexIntentCompletionSnapshotSql("reviewed_intent")}
+      AND NOT EXISTS(SELECT 1 FROM creditex_job_lifecycle_events later
+        WHERE later.organisation_id=review.organisation_id AND later.work_order_id=review.work_order_id
+          AND later.owner_uid=review.owner_uid AND later.intent_id=review.intent_id
+          AND later.action IN ('reviewed','correction_required')
+          AND (later.created_at>review.created_at OR (later.created_at=review.created_at AND later.id>review.id)))`;
+}
+
+const CURRENT_BUSINESS_REVIEW_SQL = currentBusinessReviewSql("?", "?", "?", "?");
+const businessReviewRequired = () => fail("OUTPUT_ACTION_BUSINESS_REVIEW_REQUIRED", 409,
+  "Complete the trade business review of the current job before preparing or submitting its claim.");
+
+async function requireCurrentBusinessReview(database: D1Database, organisationId: string, caseId: string, caseRevision: number, instanceId: string) {
+  // The instance placeholder occurs first in the shared query's JOIN.
+  const review = await database.prepare(CURRENT_BUSINESS_REVIEW_SQL)
+    .bind(instanceId, organisationId, caseId, caseRevision).first<{ id: string }>();
+  if (!review) return businessReviewRequired();
 }
 
 function requiredText(
@@ -711,6 +753,7 @@ type OutputActionPacketRecord = {
   job_label: string;
   customer_label: string;
   activity_title: string;
+  business_review_current: number;
 };
 
 function projectPacket(
@@ -731,6 +774,7 @@ function projectPacket(
       && row.status === "prepared"
       && row.review_decision === "approved"
       && !row.dispatch_status
+      && Number(row.business_review_current) === 1
     ),
     canRecordOutcome: Boolean(
       capabilities?.canRecordOutcome
@@ -777,6 +821,7 @@ function projectPacket(
 }
 
 const PACKET_PROJECTION_SQL = `SELECT packet.*,
+    EXISTS (${currentBusinessReviewSql("packet.organisation_id", "packet.compliance_case_id", "packet.case_revision", "packet.work_pack_instance_id")}) business_review_current,
     COALESCE(review.decision, '') review_decision,
     COALESCE(review.reviewed_by_uid, '') review_uid,
     COALESCE(review.reviewed_actor_kind, '') review_actor_kind,
@@ -980,6 +1025,7 @@ type OutputActionCandidateRecord = {
   existing_action_id: string;
   existing_action_kind: string;
   existing_status: string;
+  business_review_current: number;
 };
 
 /**
@@ -996,6 +1042,7 @@ export async function listCreditexOutputActionCandidates(
       instance.id case_instance_id,
       pack.activity_template_id,
       compliance_case.id compliance_case_id,
+      EXISTS (${currentBusinessReviewSql("instance.organisation_id", "compliance_case.id", "compliance_case.revision", "instance.id")}) business_review_current,
       compliance_case.case_number,
       COALESCE(NULLIF(trim(work_order.work_number), ''),
         compliance_case.case_number) work_number,
@@ -1088,6 +1135,7 @@ export async function listCreditexOutputActionCandidates(
       ...readinessBlockers,
       ...(!program ? ["governed_program_output_definition_required"] : []),
       ...(!capabilities.canPrepare ? ["actor_not_authorised_to_prepare"] : []),
+      ...(Number(candidate.business_review_current) !== 1 ? ["trade_business_review_required"] : []),
       ...(!existingActionMatches
         ? ["conflicting_output_action_already_prepared"]
         : candidate.existing_action_id
@@ -1211,6 +1259,7 @@ export async function prepareCreditexCertificateAction(
     calculator.runId,
   );
   assertCoreMatchesEvidence(core, coverage, evidence);
+  await requireCurrentBusinessReview(database, actor.organisationId, core.compliance_case_id, Number(core.case_revision), core.instance_id);
   const program = GOVERNMENT_PROGRAM_TEMPLATES.find((candidate) =>
     candidate.programCode === coverage.programCode
   );
@@ -1359,7 +1408,7 @@ export async function prepareCreditexCertificateAction(
   ], "Certificate packet preparation");
   const packetId = outputId("output-action-packet", options);
   const eventId = outputId("output-action-event", options);
-  await database.batch([
+  const prepared = await database.batch([
     database.prepare(`INSERT INTO compliance_output_action_packets (
         id, idempotency_key, contract, organisation_id, action_kind,
         output_class, output_code, program_code, activity_template_id,
@@ -1379,9 +1428,9 @@ export async function prepareCreditexCertificateAction(
         scenario_evidence_sha256, source_manifest_snapshot,
         source_manifest_sha256, quantity_text, unit, packet_snapshot,
         packet_sha256, prepared_by_uid, prepared_actor_kind, prepared_at, created_at
-      ) VALUES (?, ?, ?, ?, 'certificate_submission',
+      ) SELECT ?, ?, ?, ?, 'certificate_submission',
         'tradable_certificate', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (${CURRENT_BUSINESS_REVIEW_SQL})`)
       .bind(
         packetId,
         idempotencyKey,
@@ -1427,13 +1476,15 @@ export async function prepareCreditexCertificateAction(
         actor.actorKind,
         now,
         now,
+        core.instance_id, actor.organisationId, core.compliance_case_id, Number(core.case_revision),
       ),
     database.prepare(`INSERT INTO compliance_output_action_events (
         id, organisation_id, packet_id, sequence, from_status, to_status,
         actor_kind, actor_uid, adapter_receipt_id, summary, metadata,
         occurred_at, created_at
-      ) VALUES (?, ?, ?, 1, '', 'prepared', ?, ?, '',
-        'Immutable governed output action packet prepared.', '{}', ?, ?)`)
+      ) SELECT ?, ?, ?, 1, '', 'prepared', ?, ?, '',
+        'Immutable governed output action packet prepared.', '{}', ?, ?
+        WHERE EXISTS (SELECT 1 FROM compliance_output_action_packets WHERE id=? AND organisation_id=?)`)
       .bind(
         eventId,
         actor.organisationId,
@@ -1442,8 +1493,10 @@ export async function prepareCreditexCertificateAction(
         actor.actorUid,
         now,
         now,
+        packetId, actor.organisationId,
       ),
   ]);
+  if (Number(prepared[0]?.meta?.changes) !== 1) return businessReviewRequired();
   return Object.freeze({
     status: "prepared" as const,
     action: await loadCreditexOutputAction(database, actor.organisationId, packetId),
@@ -1526,6 +1579,7 @@ export async function prepareCreditexOperationalOutputAction(
     caseInstanceId,
   );
   assertOperationalCoreMatchesDefinition(core, coverage, resolved);
+  await requireCurrentBusinessReview(database, actor.organisationId, core.compliance_case_id, Number(core.case_revision), core.instance_id);
   const program = GOVERNMENT_PROGRAM_TEMPLATES.find((candidate) =>
     candidate.programCode === coverage.programCode
   );
@@ -1677,7 +1731,7 @@ export async function prepareCreditexOperationalOutputAction(
       action: projectPacket(priorForFinal),
     });
   }
-  await database.batch([
+  const prepared = await database.batch([
     database.prepare(`INSERT INTO compliance_output_action_packets (
         id, idempotency_key, contract, organisation_id, action_kind,
         output_class, output_code, program_code, activity_template_id,
@@ -1697,8 +1751,8 @@ export async function prepareCreditexOperationalOutputAction(
         scenario_evidence_sha256, source_manifest_snapshot,
         source_manifest_sha256, quantity_text, unit, packet_snapshot,
         packet_sha256, prepared_by_uid, prepared_actor_kind, prepared_at, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (${CURRENT_BUSINESS_REVIEW_SQL})`)
       .bind(
         packetId,
         idempotencyKey,
@@ -1736,13 +1790,15 @@ export async function prepareCreditexOperationalOutputAction(
         actor.actorKind,
         now,
         now,
+        core.instance_id, actor.organisationId, core.compliance_case_id, Number(core.case_revision),
       ),
     database.prepare(`INSERT INTO compliance_output_action_events (
         id, organisation_id, packet_id, sequence, from_status, to_status,
         actor_kind, actor_uid, adapter_receipt_id, summary, metadata,
         occurred_at, created_at
-      ) VALUES (?, ?, ?, 1, '', 'prepared', ?, ?, '',
-        'Immutable governed operational output packet prepared.', '{}', ?, ?)`)
+      ) SELECT ?, ?, ?, 1, '', 'prepared', ?, ?, '',
+        'Immutable governed operational output packet prepared.', '{}', ?, ?
+        WHERE EXISTS (SELECT 1 FROM compliance_output_action_packets WHERE id=? AND organisation_id=?)`)
       .bind(
         outputId("output-action-event", options),
         actor.organisationId,
@@ -1751,8 +1807,10 @@ export async function prepareCreditexOperationalOutputAction(
         actor.actorUid,
         now,
         now,
+        packetId, actor.organisationId,
       ),
   ]);
+  if (Number(prepared[0]?.meta?.changes) !== 1) return businessReviewRequired();
   return Object.freeze({
     status: "prepared" as const,
     action: await loadCreditexOutputAction(database, actor.organisationId, packetId),
@@ -1999,6 +2057,8 @@ export async function recheckOutputDispatchEvidence(
     return fail("OUTPUT_ACTION_EVIDENCE_CHANGED", 409,
       "Current governed evidence no longer matches the approved submission packet.");
   }
+  await requireCurrentBusinessReview(database, actor.organisationId, action.complianceCaseId,
+    Number(packet.caseRevision), action.workPackInstanceId);
 }
 
 export async function submitCreditexOutputAction(
@@ -2060,11 +2120,15 @@ export async function submitCreditexOutputAction(
   const reserved = await database.prepare(`INSERT INTO compliance_output_dispatch_intents (
       id, organisation_id, packet_id, packet_sha256, adapter_id, requested_by_uid,
       status, started_at
-    ) VALUES (?, ?, ?, ?, ?, ?, 'dispatching', ?)
+    ) SELECT ?, ?, ?, ?, ?, ?, 'dispatching', ?
+    WHERE EXISTS (${CURRENT_BUSINESS_REVIEW_SQL})
     ON CONFLICT (organisation_id, packet_id) DO NOTHING`)
     .bind(intentId, actor.organisationId, packetId, packet.packetSha256,
-      adapterId, actor.actorUid, startedAt).run();
+      adapterId, actor.actorUid, startedAt, packet.workPackInstanceId,
+      actor.organisationId, packet.complianceCaseId, Number(packet.packet.caseRevision)).run();
   if (reserved.meta.changes !== 1) {
+    await requireCurrentBusinessReview(database, actor.organisationId, packet.complianceCaseId,
+      Number(packet.packet.caseRevision), packet.workPackInstanceId);
     return fail("OUTPUT_ACTION_DISPATCH_ALREADY_RESERVED", 409,
       "An external submission attempt is already retained. Reconcile its result before any further submission.");
   }

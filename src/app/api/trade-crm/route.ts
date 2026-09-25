@@ -1,4 +1,5 @@
 import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard } from "@/lib/creditex-onboarding-server";
+import { assertTradeJobCanCancel,tradeJobCancellationGuard,cancelledJobAppointmentsStatement,reconcileCancelledJobCalendars } from "@/lib/trade-job-cancellation-server";
 import { getD1 } from "../../../../db";
 import { loadBusinessReport } from "@/lib/trade-business-reports-server";
 import { ReportInputError } from "@/lib/trade-business-reports";
@@ -64,6 +65,7 @@ import {
   projectJobRegisterRecord,
 } from "@/lib/trade-crm-job-register";
 import {
+  creditexWholeJobLifecycleSql,
   tradeJobAuditOutcomeSql,
   tradeJobHasProgressSql,
   tradeJobLifecycleRankSql,
@@ -198,6 +200,7 @@ const JOB_REGISTER_LIFECYCLE_SQL = tradeJobLifecycleStatusSql({
   scheduleSql: JOB_EFFECTIVE_SCHEDULE_SQL,
   auditOutcomeSql: JOB_REGISTER_AUDIT_OUTCOME_SQL,
   hasProgressSql: JOB_REGISTER_HAS_PROGRESS_SQL,
+  activityStatusSql: creditexWholeJobLifecycleSql("w", JOB_EFFECTIVE_SCHEDULE_SQL),
 });
 const JOB_REGISTER_ACTIVITY_SQL = `(SELECT json_extract(ci.intent_snapshot, '$.activity.title')
   FROM trade_work_order_compliance_intents ci
@@ -416,6 +419,7 @@ function errorResponse(error: unknown) {
   if (code === "ACTIVE_APPOINTMENT_REASSIGN") return adminJson({ ok: false, error: "This job already has an active appointment. Move or cancel that appointment before assigning the job to someone else." }, 409);
   if (code === "RENTAL_ACTIVE_APPOINTMENT") return adminJson({ ok: false, error: "This rental assessment already has an active appointment. Move or cancel that appointment instead of creating another one." }, 409);
   if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Completed or cancelled jobs cannot be scheduled." }, 409);
+  if (code.includes("JOB_CANCEL_COMPLETED")) return adminJson({ok:false,error:"A job that has been completed cannot be cancelled. Its completed records must be retained."},409);
   if (code === "JOB_RESCHEDULE_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow appointment scheduling or rescheduling." }, 403);
   if (code === "DISCOUNT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow discounts, credits or price reductions." }, 403);
   if (code === "CUSTOMER_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow customer records." }, 403);
@@ -630,6 +634,7 @@ function indexedJob(row: Record<string, unknown>, access: Pick<TeamAccess, "canV
     pipelineStage: row.pipeline_stage,
     hasProgress: row.register_has_progress,
     auditOutcome: row.register_audit_outcome,
+    authoritativeStatus: row.register_lifecycle_status,
     certificates: {
       stc: row.stc_certificate_count,
       veec: row.veec_certificate_count,
@@ -982,6 +987,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         (SELECT status FROM trade_handover_packs hp WHERE hp.work_order_id = w.id AND hp.firebase_uid = w.firebase_uid ORDER BY hp.updated_at DESC LIMIT 1) handover_status,
         ${JOB_REGISTER_AUDIT_OUTCOME_SQL} register_audit_outcome,
         ${JOB_REGISTER_HAS_PROGRESS_SQL} register_has_progress,
+        ${JOB_REGISTER_LIFECYCLE_SQL} register_lifecycle_status,
         ${JOB_REGISTER_STATUS_RANK_SQL} register_status_rank,
         ${JOB_REGISTER_QUOTE_TOTAL_SQL} quote_total_ex_gst_cents,
         ${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL quote_total_empty,
@@ -1134,6 +1140,7 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
     const [jobs, contacts, sites, siteContacts] = await Promise.all([
       db.prepare(`SELECT w.*, d.crm_customer_id, d.service_site_id, d.customer_source, d.pipeline_stage,
       d.next_action, d.quoted_value_cents, d.invoiced_value_cents, d.paid_value_cents,
+      ${creditexWholeJobLifecycleSql("w", "COALESCE(w.scheduled_start, '')")} register_lifecycle_status,
       CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name
       FROM trade_work_orders w JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
@@ -1164,6 +1171,7 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
   const row = await db.prepare(`SELECT w.*, d.crm_customer_id, d.service_site_id, d.customer_source, d.pipeline_stage, d.building_type, d.description,
     d.customer_reference, d.next_action, d.tags job_tags, d.estimated_value_cents, d.quoted_value_cents,
     d.invoiced_value_cents, d.paid_value_cents, d.quote_status, d.invoice_status, d.payment_due_at,
+    ${creditexWholeJobLifecycleSql("w", "COALESCE(w.scheduled_start, '')")} register_lifecycle_status,
     CASE WHEN ${tradeJobScheduleEligibilitySql("w", "d")} THEN 1 ELSE 0 END schedule_ready,
     CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name,
     (SELECT status FROM trade_handover_packs hp WHERE hp.work_order_id = w.id AND hp.firebase_uid = w.firebase_uid ORDER BY hp.updated_at DESC LIMIT 1) handover_status
@@ -3171,6 +3179,7 @@ export async function PATCH(request: Request) {
       && current?.customer_source === "public_lead_released";
     const pipelineStage = body.pipelineStage === undefined ? String(current?.pipeline_stage || (platformPrivate ? "qualifying" : "enquiry")) : cleanAdminText(body.pipelineStage, 30);
     const workStage = body.stage === undefined ? "" : cleanAdminText(body.stage, 30);
+    if(workStage==="cancelled") await assertTradeJobCanCancel(db,identity.uid,workOrderId);
     const priority = body.priority === undefined ? "" : cleanAdminText(body.priority, 20);
     const quoteStatus = body.quoteStatus === undefined ? String(current?.quote_status || "not_started") : cleanAdminText(body.quoteStatus, 20);
     const invoiceStatus = body.invoiceStatus === undefined ? String(current?.invoice_status || "not_started") : cleanAdminText(body.invoiceStatus, 20);
@@ -3233,11 +3242,14 @@ export async function PATCH(request: Request) {
           values.invoiced, values.paid, quoteStatus, invoiceStatus, values.paymentDue, now, now);
     const revision = nextJobRevision(expectedRevision);
     const nextStage = workStage || String(job.stage || "");
-    const statements = [detailStatement, db.prepare(`UPDATE trade_work_orders SET stage = ?,
+    const statements = [...(nextStage==="cancelled"?[tradeJobCancellationGuard(db,identity.uid,workOrderId)]:[]),detailStatement, db.prepare(`UPDATE trade_work_orders SET stage = ?,
+      scheduled_start=CASE WHEN ?='cancelled' THEN '' ELSE scheduled_start END,
+      scheduled_end=CASE WHEN ?='cancelled' THEN '' ELSE scheduled_end END,
       priority = COALESCE(NULLIF(?, ''), priority), revision = ?, updated_at = ?
       WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
         AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?`)
-      .bind(nextStage, priority, revision, now, workOrderId, identity.uid, String(job.stage || ""), expectedRevision)];
+      .bind(nextStage,nextStage,nextStage, priority, revision, now, workOrderId, identity.uid, String(job.stage || ""), expectedRevision)];
+    if(nextStage==="cancelled")statements.push(cancelledJobAppointmentsStatement(db,identity.uid,workOrderId,now));
     statements.push(db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
       VALUES (?, ?, ?, 'crm_updated', 'CRM job details updated.', ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, now));
     statements.push(...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision, changedAt: now,
@@ -3250,6 +3262,7 @@ export async function PATCH(request: Request) {
       jobRevision: revision,
       updatedAt: now,
     });
-    return adminJson({ ok: true, revision });
+    const calendarSync=nextStage==="cancelled"?await reconcileCancelledJobCalendars(db,identity.uid,workOrderId):undefined;
+    return adminJson({ ok: true, revision,...(calendarSync?{calendarSync}:{}) });
   } catch (error) { return errorResponse(error); }
 }

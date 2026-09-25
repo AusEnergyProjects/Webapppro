@@ -52,6 +52,7 @@ const errorMessages: Record<string, [number, string]> = {
   ACTIVITY_REPORT_NOT_READY: [409, "This completed report is not ready yet."],
   ACTIVITY_REPORT_UNAVAILABLE: [404, "This completed report could not be found."],
   ACTIVITY_REPORT_INTEGRITY_FAILED: [409, "This completed report failed its integrity check."],
+  ACTIVITY_CORRECTION_SOURCE_CHANGED: [409, "This correction relates to a previous form revision. Refresh the job to open the current correction draft."],
   ACTIVITY_STORAGE_UNAVAILABLE: [503, "The secure file store is temporarily unavailable."],
   INVALID_ACTIVITY_FILE: [400, "Choose a JPEG, PNG or PDF file up to 8 MB. Photo questions require an image."],
   ACTIVITY_EVIDENCE_LIMIT: [400, "This record has reached its evidence limit."],

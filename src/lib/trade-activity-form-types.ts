@@ -53,5 +53,6 @@ export type ActivityRecord = {
   evidence: ActivityEvidence[]; signatures: ActivitySignature[];
   signerDefaults: { customer: string; technician: string };
   hasUserEdits?: boolean;
+  correction?: { eventId: string; sourceRecordId: string; sourceRevision: number; note: string };
   createdAt: string; updatedAt: string; submittedAt: string; reportUrl: string;
 };

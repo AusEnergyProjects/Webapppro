@@ -71,6 +71,7 @@ function triggerlessSchemaDatabase() {
   }
   database.exec(migration("0169_creditex_master_author_save.sql"));
   database.exec(migration("0188_creditex_output_dispatch_intents.sql"));
+  database.exec("CREATE TABLE creditex_job_lifecycle_events (id TEXT PRIMARY KEY,organisation_id TEXT,owner_uid TEXT,work_order_id TEXT,intent_id TEXT,action TEXT,source_snapshot TEXT,actor_uid TEXT,created_at TEXT)");
   return database;
 }
 
@@ -91,7 +92,7 @@ test("Sites migrations 0142 through 0147 contain no trigger statements", () => {
 
 test("the prepared-statement guard inventory is exact and complete", () => {
   assert.equal(CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.length, 77);
-  assert.equal(CREDITEX_WORK_PACK_REQUIRED_SCHEMA_TABLES.length, 18);
+  assert.equal(CREDITEX_WORK_PACK_REQUIRED_SCHEMA_TABLES.length, 19);
   assert.equal(
     new Set(CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.map((item) => item.name)).size,
     CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.length,

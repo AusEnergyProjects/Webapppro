@@ -18,6 +18,8 @@ import {
   CREDITEX_INSTALLER_ACCOUNT_SELECT_SQL,
 } from "../src/lib/creditex-job-audit-sql.ts";
 import { creditexJobIntentFilters } from "../src/lib/creditex-job-intent-filters.ts";
+import * as jobLifecycleProjection from "../src/lib/creditex-job-lifecycle-projection.ts";
+import { creditexIntentOpenCorrectionSql } from "../src/lib/creditex-job-lifecycle-sql.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (file) => fs.readFileSync(path.join(here, file), "utf8");
@@ -178,9 +180,9 @@ function applyMigrationChain(database, names) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 191);
+  assert.equal(completeMigrationChain.length, 194);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0191_creditex_project_registry_schemes\.sql$/);
+  assert.match(completeMigrationChain.at(-1), /^0194_trade_activity_field_corrections\.sql$/);
   assert.ok(
     completeMigrationChain.includes("0190_trade_activity_master_drafts.sql"),
     "the complete migration chain must include activity master drafts",
@@ -954,8 +956,12 @@ test("Creditex planned-intake queue SQL executes against the complete migration 
   assert.ok(selectMatch, "Missing planned-intake register query");
   const filters = creditexJobIntentFilters(new URLSearchParams());
   const query = selectMatch[1]
+    .replace(/\$\{(SUBMISSION_PACKETS_SQL|FIELD_PROGRESS_SQL|WORK_PACK_PROGRESS_SQL|CREDITEX_AUDIT_SQL|TRADE_REVIEW_SQL|CREDITEX_PAYOUT_SQL|CREDITEX_CASE_CORRECTION_SQL)\}/g,
+      (_match, name) => jobLifecycleProjection[name])
+    .replace('${creditexIntentOpenCorrectionSql("intent")}', creditexIntentOpenCorrectionSql("intent"))
     .replace("${QUEUE_JOINS}", routeTemplate("QUEUE_JOINS"))
     .replace("${QUEUE_WHERE}", routeTemplate("QUEUE_WHERE"))
+    .replace("${visibilitySql}", "AND COALESCE(work.record_status, '') <> 'archived'")
     .replace("${filterSql}", filters.filterSql)
     .replace("${sortSql}", filters.sortSql);
   assert.doesNotMatch(query, /\$\{/);

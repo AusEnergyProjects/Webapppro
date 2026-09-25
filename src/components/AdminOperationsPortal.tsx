@@ -781,7 +781,7 @@ export function AdminOperationsPortal() {
               }}
             />
           )}
-          {tab === "jobs" && <AdminJobDirectory api={api} />}
+          {tab === "jobs" && <AdminJobDirectory api={api} user={user&&["owner","admin"].includes(session.role)?user:undefined} />}
           {tab === "customers" && (
             <AdminAccountDirectory
               api={api}

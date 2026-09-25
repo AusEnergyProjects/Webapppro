@@ -12,6 +12,7 @@ import {
   type RegistryWorkspaceResponse,
 } from "@/lib/creditex-registry";
 import styles from "./CreditexRegistryWorkspace.module.css";
+import { CreditexRegistryBatches } from "./CreditexRegistryBatches";
 
 type Api = (path: string, init?: RequestInit, options?: { requestTimeoutMs?: number }) => Promise<Record<string, unknown>>;
 type View = "claims" | "accounts" | "files" | "fees";
@@ -329,6 +330,7 @@ export function CreditexRegistryWorkspace({ api, endpoint, outputEndpoint, child
     {unresolvedSyncMatches.length > 0 && <div className={styles.section} aria-label="REC matches requiring reconciliation">{unresolvedSyncMatches.map((match) => <div className={styles.history} key={`${match.packetId}:${match.evidenceId}`}><strong>{claims.find((claim) => claim.packetId === match.packetId)?.jobLabel || "Claim requiring reconciliation"}</strong><p>The public register did not confirm the full approved quantity and status for {dateLabel(match.sourceDate)}. Open the retained response, then check the original registry result before recording evidence in Claims.</p><div className={styles.actions}>{evidenceButton(match.evidenceId)}<button type="button" data-variant="quiet" disabled={locked} onClick={() => { setView("claims"); setSearch(""); setFilter("all"); setSchemeFilter("all"); setSelectedPacket(match.packetId); }}>Open claim</button></div></div>)}</div>}
     {busy && <p className={styles.progress} role="status">{busy}…</p>}
     {loading && !workspace ? <p className={styles.empty}>Loading certificate submissions…</p> : workspace && <>
+      <CreditexRegistryBatches api={api} endpoint={endpoint} reloadKey={workspace} onChanged={() => { void refresh(); }} />
       <div className={styles.summary}>
         <div><span>Claims</span><strong>{claims.length}</strong></div>
         <div><span>Awaiting result review</span><strong>{pendingResults.length}</strong></div>

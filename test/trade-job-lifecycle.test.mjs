@@ -9,6 +9,13 @@ import {
   tradeJobLifecycleStatusSql,
 } from "../src/lib/trade-job-lifecycle.ts";
 
+test("authoritative per-activity lifecycle overrides installation stage without inventing an audit outcome", () => {
+  for (const status of ['reviewed','audited','correction_required','submitted','paid','failed','deleted']) {
+    assert.deepEqual(deriveTradeJobLifecycle({workStage:'completed',auditOutcome:'approved',authoritativeStatus:status}),{status,auditOutcome:null});
+  }
+  assert.deepEqual(deriveTradeJobLifecycle({workStage:'scheduled',authoritativeStatus:'invented'}),{status:'scheduled',auditOutcome:null});
+});
+
 test("job lifecycle keeps audit outcome subordinate to cancellation and independent of certificates", () => {
   assert.deepEqual(deriveTradeJobLifecycle({}), { status: "unscheduled", auditOutcome: null });
   assert.deepEqual(deriveTradeJobLifecycle({ scheduleDate: "2026-09-09T09:00:00Z" }), { status: "scheduled", auditOutcome: null });
@@ -34,7 +41,7 @@ test("SQL projection uses actual progress and the newest explicit audit result",
     CREATE TABLE trade_work_orders (id TEXT PRIMARY KEY, firebase_uid TEXT, stage TEXT, scheduled_start TEXT);
     CREATE TABLE trade_crm_job_details (work_order_id TEXT PRIMARY KEY, pipeline_stage TEXT);
     CREATE TABLE trade_job_forms (work_order_id TEXT, firebase_uid TEXT, status TEXT, answers TEXT);
-    CREATE TABLE trade_activity_field_records (work_order_id TEXT, owner_uid TEXT, status TEXT, payload TEXT);
+    CREATE TABLE trade_activity_field_records (work_order_id TEXT, owner_uid TEXT, status TEXT, payload TEXT, id TEXT, supersedes_record_id TEXT);
     CREATE TABLE compliance_activity_work_pack_instances (work_order_id TEXT, organisation_id TEXT, instance_key TEXT, revision INTEGER, status TEXT);
     CREATE TABLE trade_rental_inspections (id TEXT PRIMARY KEY, work_order_id TEXT, firebase_uid TEXT, status TEXT);
     CREATE TABLE trade_rental_inspection_modules (inspection_id TEXT, firebase_uid TEXT, status TEXT);
@@ -61,7 +68,7 @@ test("SQL projection uses actual progress and the newest explicit audit result",
       ('unscheduled', 'quoting'), ('scheduled', 'scheduled'), ('draft-activity', 'scheduled'), ('partial', 'scheduled'),
       ('completed', 'complete'), ('audited', 'complete'), ('cancelled', 'lost');
     INSERT INTO trade_job_forms VALUES ('partial', 'owner', 'draft', '{"existing":"captured"}');
-    INSERT INTO trade_activity_field_records VALUES ('draft-activity', 'owner', 'draft', '{}');
+    INSERT INTO trade_activity_field_records VALUES ('draft-activity', 'owner', 'draft', '{}', 'field-draft', NULL);
     INSERT INTO compliance_cases VALUES ('case-audited', 'creditex', 'audited', 'owner', '', 'accepted', '2026-09-09T10:00:00Z');
     INSERT INTO compliance_submission_batch_items VALUES ('item-audited', 'creditex', 'case-audited', 'accepted', '2026-09-09T11:00:00Z');
     INSERT INTO compliance_submission_responses VALUES ('response-audited', 'creditex', 'item-audited', 'duplicate', '2026-09-09T12:00:00Z');
@@ -97,7 +104,7 @@ test("a completed multi-activity job is audited only after every active activity
     CREATE TABLE trade_work_orders (id TEXT PRIMARY KEY, firebase_uid TEXT, stage TEXT, scheduled_start TEXT);
     CREATE TABLE trade_crm_job_details (work_order_id TEXT PRIMARY KEY, pipeline_stage TEXT);
     CREATE TABLE trade_job_forms (work_order_id TEXT, firebase_uid TEXT, status TEXT, answers TEXT);
-    CREATE TABLE trade_activity_field_records (work_order_id TEXT, owner_uid TEXT, status TEXT, payload TEXT);
+    CREATE TABLE trade_activity_field_records (work_order_id TEXT, owner_uid TEXT, status TEXT, payload TEXT, id TEXT, supersedes_record_id TEXT);
     CREATE TABLE compliance_activity_work_pack_instances (work_order_id TEXT, organisation_id TEXT, instance_key TEXT, revision INTEGER, status TEXT);
     CREATE TABLE trade_rental_inspections (id TEXT PRIMARY KEY, work_order_id TEXT, firebase_uid TEXT, status TEXT);
     CREATE TABLE trade_rental_inspection_modules (inspection_id TEXT, firebase_uid TEXT, status TEXT);

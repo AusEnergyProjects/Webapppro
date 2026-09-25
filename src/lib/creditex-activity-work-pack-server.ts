@@ -6675,6 +6675,46 @@ export async function commitAssignedCreditexActivityWorkPack(
   });
 }
 
+/** Compose with the authorised correction event in one transaction. Signed originals stay immutable. */
+export async function prepareCreditexCorrectionWorkPackStatements(
+  database: D1Database,
+  input: Readonly<{ eventId: string; organisationId: string; ownerUid: string; workOrderId: string;
+    intentId: string; sourceSnapshot: string; actorUid: string; now: string }>,
+): Promise<D1PreparedStatement[]> {
+  const source = parseObject(input.sourceSnapshot, "WORK_PACK_CORRECTION_SOURCE_INVALID", "The review source is invalid.");
+  if (!Array.isArray(source.records)) return fail("WORK_PACK_CORRECTION_SOURCE_INVALID", 409, "The review source has no retained records.");
+  const statements: D1PreparedStatement[] = [];
+  for (const value of source.records) {
+    const record = object(value, "WORK_PACK_CORRECTION_SOURCE_INVALID", "The review source is invalid.");
+    if (record.kind !== "pack") continue;
+    const id = text(record.id, 240, "WORK_PACK_CORRECTION_SOURCE_INVALID", "Reviewed work pack");
+    const row = await assignedInstanceRow(database, { ownerUid: input.ownerUid, actorUid: input.actorUid, actorMemberId: "", scope: "team" }, id);
+    if (row.id !== id || row.organisation_id !== input.organisationId || row.work_order_id !== input.workOrderId
+      || row.compliance_intent_id !== input.intentId || row.status !== "completed" || Number(row.revision) !== record.revision) {
+      return fail("WORK_PACK_CORRECTION_SOURCE_CHANGED", 409, "The reviewed work pack changed. Refresh the job before requesting corrections.");
+    }
+    const resolved = await resolvePinnedCreditexActivityWorkPack(database, {
+      organisationId: row.organisation_id, workPackVersionId: row.work_pack_version_id,
+      activityVersionId: row.activity_version_id, activityDate: row.activity_date,
+    });
+    const prior = validateInstanceEnvelope(row, resolved, { allowStaleExecutionContext: true });
+    statements.push(creditexWriteGuard(database, input.ownerUid,
+      `EXISTS (SELECT 1 FROM creditex_job_lifecycle_events correction
+        WHERE correction.id=? AND correction.organisation_id=? AND correction.owner_uid=?
+          AND correction.work_order_id=? AND correction.intent_id=? AND correction.action='correction_required'
+          AND correction.source_snapshot=? AND correction.actor_uid=?)
+        AND NOT EXISTS (SELECT 1 FROM compliance_activity_work_pack_instances successor WHERE successor.supersedes_instance_id=?)`,
+      [input.eventId, input.organisationId, input.ownerUid, input.workOrderId, input.intentId, input.sourceSnapshot, input.actorUid, row.id]),
+      ...await signatureRevocationStatements(database, row, input.now),
+      appendInstanceStatement(database, row, {
+        id: `work-pack:${row.compliance_case_id}:revision:${Number(row.revision) + 1}`,
+        status: "in_progress", envelope: nextInstanceEnvelope(prior, prior.response),
+        actorUid: input.actorUid, createdAt: input.now,
+      }));
+  }
+  return statements;
+}
+
 export async function selectAssignedCreditexActivityWorkPackScenario(
   database: D1Database,
   input: CreditexWorkPackTradeScope & Readonly<{

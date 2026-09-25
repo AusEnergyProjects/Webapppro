@@ -688,6 +688,7 @@ function tradeJobDerivedLifecycleChangedAtSql(workAlias = "w") {
       FROM trade_activity_field_records progress_record
       WHERE progress_record.work_order_id = ${workAlias}.id
         AND progress_record.owner_uid = ${workAlias}.firebase_uid
+        AND NOT EXISTS (SELECT 1 FROM trade_activity_field_records successor WHERE successor.supersedes_record_id = progress_record.id)
 
       UNION ALL
 

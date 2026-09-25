@@ -21,14 +21,14 @@ import { renderCreditexConsumerRightsPdf } from "../src/lib/trade-activity-forms
 function fixture() {
   const db = new DatabaseSync(":memory:");
   db.exec(`CREATE TABLE trade_work_order_compliance_intents (id TEXT, work_order_id TEXT, installer_uid TEXT, compliance_organisation_id TEXT, activity_template_id TEXT, status TEXT);
-    CREATE TABLE trade_activity_field_records (id TEXT, intent_id TEXT, work_order_id TEXT, owner_uid TEXT, organisation_id TEXT, activity_template_id TEXT, status TEXT, pdf_object_key TEXT, pdf_sha256 TEXT);
+    CREATE TABLE trade_activity_field_records (id TEXT, intent_id TEXT, work_order_id TEXT, owner_uid TEXT, organisation_id TEXT, activity_template_id TEXT, status TEXT, pdf_object_key TEXT, pdf_sha256 TEXT, supersedes_record_id TEXT);
     CREATE TABLE compliance_cases (id TEXT, compliance_intent_id TEXT, installer_uid TEXT, work_order_id TEXT, organisation_id TEXT, status TEXT);
     CREATE TABLE compliance_activity_work_pack_instances (id TEXT, compliance_case_id TEXT, compliance_intent_id TEXT, work_order_id TEXT, organisation_id TEXT, status TEXT, instance_key TEXT, work_pack_version_id TEXT, revision INTEGER);
     CREATE TABLE compliance_activity_work_pack_final_records (case_instance_id TEXT, organisation_id TEXT, instance_key TEXT, work_pack_version_id TEXT);
     INSERT INTO trade_work_order_compliance_intents VALUES ('intent-1','job','owner','creditex','activity-1','planned'), ('intent-2','job','owner','creditex','activity-2','planned');`);
   const missing = () => db.prepare(`SELECT COUNT(*) n FROM (${UNFINISHED_ACTIVITY_FIELD_INTENTS_SQL})`).get("job", "owner").n;
   const submit = (id, intent, activity, owner = "owner", organisation = "creditex", status = "submitted_for_creditex_review", pdf = "retained.pdf") => {
-    db.prepare("INSERT INTO trade_activity_field_records VALUES (?,?,?,?,?,?,?,?,?)").run(id, intent, "job", owner, organisation, activity, status, pdf, "a".repeat(64));
+    db.prepare("INSERT INTO trade_activity_field_records VALUES (?,?,?,?,?,?,?,?,?,NULL)").run(id, intent, "job", owner, organisation, activity, status, pdf, "a".repeat(64));
   };
   return { db, missing, submit };
 }
@@ -83,6 +83,18 @@ test("another tenant, organisation, activity, draft or missing PDF cannot satisf
   assert.equal(missing(), 2);
   assert.throws(() => submittedActivityFieldRecordSql("injected_alias; DROP TABLE anything"));
   assert.throws(() => submittedActivityFieldCaseSql("anything"));
+  db.close();
+});
+
+test("a requested correction blocks completion until its current replacement is signed", () => {
+  const {db,missing,submit}=fixture();
+  submit("original","intent-1","activity-1");
+  assert.equal(missing(),1);
+  submit("correction","intent-1","activity-1","owner","creditex","draft","");
+  db.exec("UPDATE trade_activity_field_records SET supersedes_record_id='original' WHERE id='correction'");
+  assert.equal(missing(),2);
+  db.exec("UPDATE trade_activity_field_records SET status='submitted_for_creditex_review',pdf_object_key='new.pdf' WHERE id='correction'");
+  assert.equal(missing(),1);
   db.close();
 });
 

@@ -1,5 +1,24 @@
 # Next task handover
 
+Status: bulk lodgement, trade review and the agreed job lifecycle are in release validation. Verified baseline Sites 624, source e212b120a4798d448ce879fdf966ae4668222df2.
+Prepared: 25 September 2026
+
+## Active contract: bulk lodgement and the agreed job lifecycle
+
+Prepared: 25 September 2026. Verified starting point: Sites 624, source e212b120a4798d448ce879fdf966ae4668222df2.
+
+Outcome: Creditex exports ready claims together, grouped by scheme, claiming account and approved file, then records the actual external lodgement references once per batch. James confirmed that Submitted means actually lodged with government or the retailer. Export alone is Exported, awaiting lodgement.
+
+Owner: coordinating task in C:/Webproject/aea-energy-creditex-submissions, branch codex/creditex-registry-submissions. Scope: registry batch service/storage, authenticated registry endpoints, bulk workspace, canonical Jobs status projection and job review/correction, cancellation, recoverable deletion and actual Creditex payout records. Reuse exact approved NSW/REC files and their existing review gates; other schemes get clearly labelled provider handover records, not invented official formats.
+
+Lifecycle: Unassigned, Assigned when scheduled, Partial, Complete after field completion, Reviewed after the trade business passes its review, Audited after Creditex passes its audit, Submitted only after actual lodgement, Paid only after Creditex payout. Either business review or Creditex audit can require corrections with reasons; government rejection is Failed. Cancelled is allowed only before completion. Admin/Creditex deletion at any stage is a recoverable bin, retaining signed evidence and audit history. Trade Jobs offers Review in both the right-click and Actions menu, all job files, Pass, and Correction required with mandatory notes returned and emailed to the assigned technician. No real customer email, lodgement, payout or deletion is performed in verification.
+
+Acceptance: few-click ready export, durable resumable downloads, account/scheme separation, exact packet/file hashes, no duplicate batch ownership, tenant isolation, explicit missing-ready-data reasons, actual-reference batch confirmation, truthful per-job status and visible partial failures. SA/ACT retailer-specific import templates and private VEU access remain external dependencies. Do not transmit a claim, pay fees, infer statutory declarations, or alter regulator status on download.
+
+Validation: focused SQLite/concurrency/permissions, batch/API/UI/job-status/review/correction tests, web and mobile typecheck, full tests and fresh D1 migration replay through 0194, publication build, exact GitHub/Sites provenance and affected desktop/narrow live checks. Correction migration tests must retain populated signed records, PDF references and report-link foreign keys. Stop only the blocked scheme-specific format when authoritative requirements are absent; continue the shared bulk workflow.
+
+## Previous access milestone
+
 Status: submission reliability and simplified account/claim actions are in release validation. Verified baseline Sites 622, source 509ada1594d375fce066ed7b9b7dfca5ade4c6d0. The coordinating release records the matching new deployment.
 Prepared: 25 September 2026
 

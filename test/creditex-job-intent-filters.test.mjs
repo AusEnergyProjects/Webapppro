@@ -5,6 +5,9 @@ import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import * as filters from "../src/lib/creditex-job-intent-filters.ts";
 import * as certificateTypes from "../src/lib/creditex-certificate-types.ts";
+import * as lifecycle from "../src/lib/creditex-job-lifecycle.ts";
+import * as lifecycleSql from "../src/lib/creditex-job-lifecycle-sql.ts";
+import * as lifecycleProjection from "../src/lib/creditex-job-lifecycle-projection.ts";
 import { GOVERNMENT_PROGRAM_TEMPLATES } from "../src/lib/australian-government-program-catalogue.ts";
 
 function fixture() {
@@ -168,7 +171,7 @@ test("route applies identical filter bindings to count and page query while reta
     { id: "current", job_created_at: "2026-09-19T14:00:00.000Z", created_at: "2026-09-23T00:00:00Z", first_name: "Mary Jane", last_name: "van Example", customer_business_name: "Example Business", intent_snapshot: JSON.stringify({ program: { claimOutputCode: "VEEC", claimOutputLabel: "Victorian energy efficiency certificates" }, activity: { title: "Heat pump installation", activityKey: "heat-pump" } }), case_number: "CX-100", case_status: "submitted", evidence_status: "verified", suburb: "Melbourne", postcode: "3000" },
     { id: "retained", job_created_at: null, created_at: "2026-09-23T00:00:00Z", first_name: null, last_name: null, customer_business_name: "Business Only Pty Ltd" },
   ] }) }; } }) };
-  const dependencies = { "../../../../../db": { getD1: () => database }, "@/lib/compliance-access-server": { ComplianceAccessError: AccessError, requireComplianceAccess: async () => ({ organisationCode, organisationId: "authorised-org" }) }, "@/lib/trade-compliance-intent": { CREDITEX_PARTNER_ORGANISATION_CODE: "creditex" }, "@/lib/creditex-job-intent-filters": filters, "@/lib/creditex-certificate-types": certificateTypes };
+  const dependencies = { "../../../../../db": { getD1: () => database }, "@/lib/compliance-access-server": { ComplianceAccessError: AccessError, requireComplianceAccess: async () => ({ organisationCode, organisationId: "authorised-org" }) }, "@/lib/trade-compliance-intent": { CREDITEX_PARTNER_ORGANISATION_CODE: "creditex" }, "@/lib/creditex-job-intent-filters": filters, "@/lib/creditex-certificate-types": certificateTypes, "@/lib/creditex-job-lifecycle": lifecycle, "@/lib/creditex-job-lifecycle-sql": lifecycleSql, "@/lib/creditex-job-lifecycle-projection": lifecycleProjection };
   const exported = {};
   Function("require", "exports", compiled)(name => { assert.ok(dependencies[name]); return dependencies[name]; }, exported);
   const request = new Request("https://example.test/api/creditex/job-intents?certificateType=VEEC&program=VEU&installer=Acme&plannedFrom=2026-09-21&createdFrom=2026-09-20&createdTo=2026-09-20&firstName=Mary&lastName=Example&sort=priority&sortDirection=desc&page=2");
@@ -185,6 +188,13 @@ test("route applies identical filter bindings to count and page query while reta
   for (const query of queries) { assert.match(query.sql, /intent\.program_code = \?/); assert.match(query.sql, /account\.business_name\) LIKE \?/); assert.match(query.sql, /substr\(intent\.planned_start, 1, 10\) >= \?/); assert.match(query.sql, /datetime\(work\.created_at\) >= datetime\(\?\)/); assert.match(query.sql, /datetime\(work\.created_at\) < datetime\(\?\)/); assert.match(query.sql, /customer\.first_name\) LIKE \?/); assert.match(query.sql, /customer\.last_name\) LIKE \?/); assert.doesNotMatch(query.sql, /Acme/); }
   assert.match(queries[1].sql, /work\.created_at job_created_at/);
   for (const query of queries) { assert.match(query.sql, /json_extract\(intent\.intent_snapshot, '\$\.program\.claimOutputCode'\) = \?/); assert.ok(query.bindings.includes("VEEC")); }
+  assert.equal(result.view, "active");
+  for (const query of queries) assert.match(query.sql, /COALESCE\(work\.record_status, ''\) <> 'archived'/);
+  assert.equal(result.items[0].lifecycle.status, "unscheduled", "A case status alone never asserts actual lodgement.");
+  queries.length = 0;
+  const bin = await exported.GET(new Request("https://example.test/api/creditex/job-intents?view=bin"));
+  assert.equal((await bin.json()).view, "bin");
+  for (const query of queries) { assert.match(query.sql, /work\.record_status = 'archived'/); assert.equal(query.bindings[0], "authorised-org"); }
   queries.length = 0;
   const invalid = await exported.GET(new Request("https://example.test/api/creditex/job-intents?certificateType=invented")); assert.equal(invalid.status, 400); assert.equal(queries.length, 0);
   assert.equal((await exported.GET(new Request(request, { headers: { origin: 'https://other.test' } }))).status, 403); assert.equal(queries.length, 0);

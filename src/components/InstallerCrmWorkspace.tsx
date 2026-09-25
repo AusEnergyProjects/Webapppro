@@ -45,6 +45,7 @@ const TradeActivityFieldRecords = dynamic(() => import("./TradeActivityFieldReco
 const TradeComplianceIntake = dynamic(() => import("./TradeComplianceIntake").then((module) => module.TradeComplianceIntake));
 const TradeFieldWorkPanel = dynamic(() => import("./TradeFieldWorkPanel").then((module) => module.TradeFieldWorkPanel));
 const TradeJobFilesPanel = dynamic(() => import("./TradeJobFilesPanel").then((module) => module.TradeJobFilesPanel));
+const TradeJobReviewPanel = dynamic(() => import("./TradeJobReviewPanel").then((module) => module.TradeJobReviewPanel));
 const TradeRentalActivityPicker = dynamic(() => import("./TradeRentalActivityPicker").then((module) => module.TradeRentalActivityPicker));
 const TradeJobFormsPanel = dynamic(() => import("./TradeJobFormsPanel").then((module) => module.TradeJobFormsPanel));
 const TradeDataImportWorkspace = dynamic(() => import("./TradeDataImportWorkspace").then((module) => module.TradeDataImportWorkspace));
@@ -141,7 +142,7 @@ type CrmMetrics = {
 type WorkloadBucket = { weekStart: string; weekEnd: string; visits: number; bookedMinutes: number };
 type CrmSummaryResult = { ok?: boolean; metrics?: CrmMetrics; workload?: WorkloadBucket[]; workStages?: Record<string, number>; upcomingAppointments?: ActivityAppointment[]; overdueTasks?: ActivityTask[]; openIssues?: ActivityNote[]; error?: string };
 type View = "today" | "leads" | "jobs" | "schedule" | "customers" | "pricebook" | "assets" | "templates" | "reports" | "import" | "integrations";
-type JobTab = "summary" | "schedule" | "quote" | "field" | "invoice";
+type JobTab = "summary" | "schedule" | "quote" | "field" | "invoice" | "review";
 type JobDetailTab = JobTab | "files" | "forms" | "tasks" | "notes" | "handover";
 type JobReturnTarget = { kind: "jobs" } | { kind: "customer"; customerId: string; customerName: string };
 
@@ -1103,6 +1104,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
         items[next]?.focus();
       }}>
         <button autoFocus role="menuitem" type="button" onClick={() => { setJobActionId(""); openFocusedJob(job.id, "summary"); }}>View details</button>
+        {(!staffPermissions || (staffPermissions.canManageJobs && staffPermissions.canViewFieldEvidence && staffPermissions.canManageFieldEvidence)) && <button role="menuitem" type="button" onClick={() => { setJobActionId(""); openFocusedJob(job.id, "review"); }}>Review</button>}
         {(!staffPermissions || staffPermissions.canManageJobs) && <button role="menuitem" type="button" onClick={() => { setJobActionId(""); openFocusedJob(job.id, "summary"); }}>Edit details</button>}
         {(!staffPermissions || (staffPermissions.canViewCustomers && staffPermissions.canManageCustomers)) && job.customerSource !== "platform_private" && job.crmCustomerId && <button role="menuitem" type="button" onClick={() => openJobCustomerEditor(job)}>Edit customer</button>}
         {canOpenScheduleAction && <button role="menuitem" type="button" onClick={() => { setJobActionId(""); openFocusedJob(job.id, "schedule"); }}>Schedule job</button>}
@@ -1805,6 +1807,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
   if (canViewQuotes) mainTabs.push(["quote", "Quote"]);
   if (canViewFieldEvidence) mainTabs.push(["field", job.serviceCategory === "rental-inspection" ? "Assessment" : "Field work"]);
   if (canViewFieldEvidence) mainTabs.push(["files", "Files"]);
+  if (canManageJobs && canViewFieldEvidence && canManageFieldEvidence) mainTabs.push(["review", "Review"]);
   if (canViewInvoices) mainTabs.push(["invoice", "Invoice"]);
   const moreTabs: Array<readonly [JobDetailTab, string]> = [["tasks", `Tasks (${job.tasks.filter((task) => task.status === "pending").length})`], ["notes", `Notes${openIssues ? ` (${openIssues})` : ""}`]];
   if (canViewFieldEvidence) moreTabs.unshift(["forms", job.serviceCategory === "rental-inspection" ? "Other forms" : "Forms"]);
@@ -1860,6 +1863,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
     {canViewFieldEvidence && <TradeRentalActivityPicker key={job.id} user={user} workOrderId={job.id} refreshKey={job.revision} active={activeTab === "field"} readOnly={!canManageFieldEvidence} initiallyAttached={job.serviceCategory === "rental-inspection"} onChanged={onReload} onAttachmentChanged={setRentalAttached} />}
     {activeTab === "field" && canViewFieldEvidence && <section className="crm-job-section">{complianceIntents.length > 0 && <TradeActivityFieldRecords key={user.uid + job.id} user={user} workOrderId={job.id} canShare={canManageFieldEvidence} refreshKey={job.revision} />}{job.serviceCategory === "rental-inspection" ? <details className="crm-field-secondary"><summary>Travel, time, signatures and general job files</summary><TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} canOpenHandover={!permissions} onNavigate={(next) => setTab(next)} onChanged={onReload} /></details> : <TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} canOpenHandover={!permissions} onNavigate={(next) => setTab(next)} onChanged={onReload} />}{!permissions && canManageFieldEvidence && !isProtected && customer && <details className="crm-field-secondary"><summary>Customer photo request</summary><TradePhotoRequestPanel user={user} workOrderId={job.id} /></details>}{!permissions && canManageFieldEvidence && <details className="crm-field-secondary" id="field-work-plan" open><summary>Work plan and actuals</summary><TradeJobReadinessPanel user={user} workOrderId={job.id} completionAction={false} onChanged={onReload} onOpenTeam={() => { const teamButton = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Team"); teamButton?.click(); }} /></details>}</section>}
     {activeTab === "files" && canViewFieldEvidence && <section className="crm-job-section"><TradeJobFilesPanel user={user} workOrderId={job.id} includeRentalReports={rentalAttached} includeHandover={!permissions} includeQuotes={canViewQuotes} includeInvoices={canViewInvoices} /></section>}
+    {activeTab === "review" && canManageJobs && canViewFieldEvidence && canManageFieldEvidence && <section className="crm-job-section" aria-label="Business job review"><TradeJobReviewPanel user={user} workOrderId={job.id} onChanged={onReload} /><TradeJobFilesPanel user={user} workOrderId={job.id} includeRentalReports={rentalAttached} includeHandover={!permissions} includeQuotes={canViewQuotes} includeInvoices={canViewInvoices} /></section>}
     {canViewFieldEvidence && <section className="crm-job-section" hidden={activeTab !== "forms"}>{canManageFieldEvidence && <button type="button" className="btn" onClick={() => setTab("field")}>Add activity or safety visit</button>}<TradeJobFormsPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence} /></section>}
     {activeTab === "schedule" && canOpenJobSchedule && <section className="crm-job-section crm-job-schedule-workspace">
       <div className="crm-job-schedule-layout">

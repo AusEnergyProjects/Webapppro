@@ -632,6 +632,7 @@ export async function listActivityRecords(access: TeamAccess, workOrderId: strin
     JOIN trade_work_orders work ON work.id = i.work_order_id AND work.firebase_uid = i.installer_uid
     LEFT JOIN trade_activity_field_records r ON r.intent_id = i.id
       AND r.owner_uid = i.installer_uid AND r.work_order_id = i.work_order_id
+      AND NOT EXISTS(SELECT 1 FROM trade_activity_field_records successor WHERE successor.supersedes_record_id=r.id)
     WHERE i.work_order_id = ? AND i.installer_uid = ? AND i.status IN ('planned', 'case_linked') ORDER BY i.created_at, i.id`)
     .bind(workOrderId, access.ownerUid).all<Row>();
   return rows.results.map((row) => {
@@ -646,8 +647,10 @@ export async function listActivityRecords(access: TeamAccess, workOrderId: strin
     });
     if (row.payload) { const record: ActivityRecord = JSON.parse(String(row.payload)); const p = activityPresentation(record);
       return { id: record.id, intentId: record.intentId, activityTemplateId: record.form.activityTemplateId, title: record.form.title,
-        programCode: record.form.programCode, status: record.status, lifecycleStatus: lifecycle.status, auditOutcome: lifecycle.auditOutcome,
-        revision: record.revision, progress: p.progress, recordNumber: record.recordNumber }; }
+        programCode: record.form.programCode, status: record.status,
+        lifecycleStatus: record.correction && record.status === "draft" ? "correction_required" : lifecycle.status,
+        auditOutcome: record.correction && record.status === "draft" ? null : lifecycle.auditOutcome,
+        revision: record.revision, progress: p.progress, recordNumber: record.recordNumber, correction: record.correction }; }
     const snapshot = JSON.parse(String(row.intent_snapshot));
     return { id: "", intentId: String(row.id), activityTemplateId: String(row.activity_template_id), title: String(snapshot.activity?.title || row.activity_template_id),
       programCode: String(row.program_code), status: "not_started", lifecycleStatus: lifecycle.status, auditOutcome: lifecycle.auditOutcome,
@@ -655,14 +658,75 @@ export async function listActivityRecords(access: TeamAccess, workOrderId: strin
   });
 }
 
+/** Appended after the authorised correction event in the same D1 transaction. */
+export async function prepareFieldCorrectionStatements(database: D1Database, input: {
+  eventId: string; ownerUid: string; workOrderId: string; intentId: string; sourceSnapshot: string;
+  actorUid: string; now: string; note?: string;
+}): Promise<D1PreparedStatement[]> {
+  const snapshot: { records?: { kind: string; id: string; revision: number; status: string; sha256?: string; objectKey?: string }[] } = JSON.parse(input.sourceSnapshot);
+  if (!Array.isArray(snapshot.records)) throw new Error("ACTIVITY_CORRECTION_SOURCE_CHANGED");
+  const statements: D1PreparedStatement[] = [];
+  for (const reference of snapshot.records.filter(item => item.kind === "field" && item.status === "submitted_for_creditex_review")) {
+    const source = await database.prepare(`SELECT source.payload,source.pdf_sha256,source.pdf_object_key FROM trade_activity_field_records source
+      WHERE source.id=? AND source.owner_uid=? AND source.work_order_id=? AND source.intent_id=? AND source.revision=?
+        AND source.status='submitted_for_creditex_review'
+        AND NOT EXISTS(SELECT 1 FROM trade_activity_field_records successor WHERE successor.supersedes_record_id=source.id)`)
+      .bind(reference.id, input.ownerUid, input.workOrderId, input.intentId, reference.revision)
+      .first<{ payload: string; pdf_sha256: string; pdf_object_key: string }>();
+    if (!source || source.pdf_sha256 !== reference.sha256 || source.pdf_object_key !== reference.objectKey) throw new Error("ACTIVITY_CORRECTION_SOURCE_CHANGED");
+    const previous: ActivityRecord = JSON.parse(source.payload);
+    if (activityHash(previous.form) !== previous.formSha256) throw new Error("ACTIVITY_FORM_INTEGRITY_FAILED");
+    const id = crypto.randomUUID(), note = input.note?.trim().slice(0, 2000) || "Review the requested corrections, then sign and submit this new revision.";
+    const next: ActivityRecord = { ...previous, id, recordNumber: `TAF-${id.slice(0, 8).toUpperCase()}`, revision: 1,
+      status: "draft", signatures: [], hasUserEdits: true, submittedAt: "", reportUrl: "", createdAt: input.now, updatedAt: input.now,
+      correction: { eventId: input.eventId, sourceRecordId: previous.id, sourceRevision: previous.revision, note } };
+    statements.push(database.prepare(`INSERT INTO trade_activity_field_records
+      (id,intent_id,work_order_id,owner_uid,organisation_id,activity_template_id,revision,status,payload,actor_uid,created_at,updated_at,supersedes_record_id,correction_event_id)
+      VALUES(?,?,?,?,?,?,1,'draft',?,?,?,?,?,?)`)
+      .bind(id, previous.intentId, previous.workOrderId, previous.ownerUid, previous.organisationId, previous.form.activityTemplateId,
+        activityCanonical(next), input.actorUid, input.now, input.now, previous.id, input.eventId));
+  }
+  return statements;
+}
+
 export async function openActivityRecord(access: TeamAccess, workOrderId: string, intentId: string, variantId = "") {
   assertActivityFieldAccess(access, true);
   const job = await assignedJob(access, workOrderId);
   await assertCertificateJobEligibility(getD1(), { ownerUid: access.ownerUid, actorMemberId: access.memberId,
     assignedMemberId: String(job.assignee_member_id || ""), workOrderId });
-  const current = await getD1().prepare("SELECT id FROM trade_activity_field_records WHERE intent_id = ? AND owner_uid = ? AND work_order_id = ?")
+  const current = await getD1().prepare(`SELECT source.id FROM trade_activity_field_records source WHERE source.intent_id = ? AND source.owner_uid = ? AND source.work_order_id = ?
+    AND NOT EXISTS(SELECT 1 FROM trade_activity_field_records successor WHERE successor.supersedes_record_id=source.id)`)
     .bind(intentId, access.ownerUid, workOrderId).first<{ id: string }>();
-  if (current) return upgradeDraftActivityPolicy(access, job, await loadActivityRecord(access, current.id));
+  if (current) {
+    const record = await loadActivityRecord(access, current.id);
+    if (record.status === "submitted_for_creditex_review") {
+      const event = await getD1().prepare(`SELECT id,source_snapshot,note FROM creditex_job_lifecycle_events
+        WHERE organisation_id=? AND owner_uid=? AND work_order_id=? AND intent_id=? AND action IN ('reviewed','correction_required')
+        ORDER BY created_at DESC,id DESC LIMIT 1`).bind(record.organisationId, access.ownerUid, workOrderId, intentId)
+        .first<{ id: string; source_snapshot: string; note: string }>();
+      if (event) {
+        const eligible = await getD1().prepare(`SELECT id FROM creditex_job_lifecycle_events WHERE id=? AND action='correction_required'
+          AND EXISTS(SELECT 1 FROM json_each(source_snapshot,'$.records') source WHERE json_extract(source.value,'$.kind')='field'
+            AND json_extract(source.value,'$.id')=? AND json_extract(source.value,'$.revision')=?)`)
+          .bind(event.id, record.id, record.revision).first();
+        if (eligible) {
+          try {
+            const statements = await prepareFieldCorrectionStatements(getD1(), { eventId: event.id, ownerUid: access.ownerUid,
+              workOrderId, intentId, sourceSnapshot: event.source_snapshot, actorUid: access.actorUid, now: iso(), note: event.note });
+            if (statements.length) await getD1().batch(statements);
+          } catch (error) {
+            if (!(error instanceof Error) || (!/UNIQUE constraint failed: trade_activity_field_records\.(supersedes_record_id|correction_event_id)/.test(error.message)
+              && error.message !== "ACTIVITY_CORRECTION_SOURCE_CHANGED")) throw error;
+          }
+          const successor = await getD1().prepare("SELECT id FROM trade_activity_field_records WHERE supersedes_record_id=? AND correction_event_id=?")
+            .bind(record.id, event.id).first<{ id: string }>();
+          if (!successor) throw new Error("ACTIVITY_CORRECTION_SOURCE_CHANGED");
+          return upgradeDraftActivityPolicy(access, job, await loadActivityRecord(access, successor.id));
+        }
+      }
+    }
+    return upgradeDraftActivityPolicy(access, job, record);
+  }
   const intent = await getD1().prepare(`SELECT activity_template_id, compliance_organisation_id, intent_snapshot FROM trade_work_order_compliance_intents
     WHERE id = ? AND work_order_id = ? AND installer_uid = ? AND status IN ('planned', 'case_linked')`)
     .bind(intentId, workOrderId, access.ownerUid).first<{ activity_template_id: string; compliance_organisation_id: string; intent_snapshot: string }>();
@@ -688,7 +752,9 @@ export async function openActivityRecord(access: TeamAccess, workOrderId: string
     (id, intent_id, work_order_id, owner_uid, organisation_id, activity_template_id, revision, status, payload, actor_uid, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, 1, 'draft', ?, ?, ?, ?)`)
     .bind(id, intentId, workOrderId, access.ownerUid, record.organisationId, form.activityTemplateId, activityCanonical(record), access.actorUid, now, now).run();
-  const stored = await getD1().prepare("SELECT id FROM trade_activity_field_records WHERE intent_id = ? AND owner_uid = ?").bind(intentId, access.ownerUid).first<{ id: string }>();
+  const stored = await getD1().prepare(`SELECT source.id FROM trade_activity_field_records source WHERE source.intent_id=? AND source.owner_uid=?
+    AND NOT EXISTS(SELECT 1 FROM trade_activity_field_records successor WHERE successor.supersedes_record_id=source.id)`)
+    .bind(intentId, access.ownerUid).first<{ id: string }>();
   if (!stored) throw new Error("ACTIVITY_SAVE_FAILED");
   return loadActivityRecord(access, stored.id);
 }

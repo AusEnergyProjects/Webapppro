@@ -1,3 +1,4 @@
+import { installFieldCorrectionFixture } from "./helpers/activity-field-corrections-fixture.mjs";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import * as activityCompletion from "../src/lib/trade-activity-forms-completion.ts";
 import * as fieldCompletionPolicy from "../src/lib/trade-field-completion-policy.ts";
@@ -150,6 +151,7 @@ function loadRoute(db) {
 function fixture() {
   const database = new DatabaseSync(":memory:");
   database.exec(fs.readFileSync(new URL("../drizzle/0170_trade_activity_forms.sql", import.meta.url), "utf8"));
+  installFieldCorrectionFixture(database);
   database.exec(`
     CREATE TABLE trade_work_orders (
       id text PRIMARY KEY NOT NULL,

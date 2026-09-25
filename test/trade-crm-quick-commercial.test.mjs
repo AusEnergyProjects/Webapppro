@@ -10,6 +10,7 @@ import * as tradeJobLifecycle from '../src/lib/trade-job-lifecycle.ts';
 
 const tradeJobLifecycleDependency = {
   ...tradeJobLifecycle,
+  creditexWholeJobLifecycleSql: () => 'NULL',
   tradeJobAuditOutcomeSql: () => 'NULL',
   tradeJobHasProgressSql: () => '0',
   tradeJobLifecycleStatusSql: input => tradeJobLifecycle.tradeJobLifecycleStatusSql({

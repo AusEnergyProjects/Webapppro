@@ -18,6 +18,8 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 
 ## Current certificate submission priority
 
+Publish and verify the bulk export, actual-lodgement confirmation and canonical job review lifecycle as one cohesive release. Then complete a Creditex-controlled pilot using its approved accounts and destination templates, including a correction returned to a technician and a partial batch outcome. Preserve signed history and distinguish trade payout from registry fees.
+
 Deliver the user-requested minimal-click VEU submission through approved access. The ESC developer invitation request has been sent with a demo offer. Complete UAT onboarding, obtain the current contract and Creditex delegation, then verify real regulator outcomes before production activation. Keep existing REC/TESSA file routes and the new REGO/ACCU project routes honest about their required portal steps. Account defaults and simpler claim actions reduce administration; they do not replace regulator approval or evidence requirements.
 
 ## Current onboarding priority

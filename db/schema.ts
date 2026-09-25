@@ -6815,6 +6815,65 @@ export const creditexRegistryExportReviews = sqliteTable("creditex_registry_expo
   foreignKey({ columns: [t.organisationId, t.exportId], foreignColumns: [creditexRegistryExports.organisationId, creditexRegistryExports.id] }),
 ]);
 
+export const creditexRegistryBatches = sqliteTable("creditex_registry_batches", {
+  id: text("id").primaryKey(), organisationId: text("organisation_id").notNull(),
+  requestId: text("request_id").notNull(), requestSha256: text("request_sha256").notNull(),
+  evidenceId: text("evidence_id").notNull(), manifestSnapshot: text("manifest_snapshot").notNull(),
+  manifestSha256: text("manifest_sha256").notNull(), createdByUid: text("created_by_uid").notNull(), createdAt: text("created_at").notNull(),
+}, t => [uniqueIndex("creditex_registry_batches_org_id_idx").on(t.organisationId, t.id),
+  uniqueIndex("creditex_registry_batches_request_idx").on(t.organisationId, t.requestId),
+  check("creditex_registry_batches_manifest_check", sql`json_valid(${t.manifestSnapshot})`),
+  foreignKey({ columns: [t.organisationId, t.evidenceId], foreignColumns: [creditexRegistryEvidence.organisationId, creditexRegistryEvidence.id] }),
+]);
+
+export const creditexRegistryBatchItems = sqliteTable("creditex_registry_batch_items", {
+  organisationId: text("organisation_id").notNull(), batchId: text("batch_id").notNull(), packetId: text("packet_id").notNull(),
+  packetSha256: text("packet_sha256").notNull(), accountId: text("account_id").notNull(), accountVersion: integer("account_version").notNull(),
+  scheme: text("scheme").notNull(), groupKey: text("group_key").notNull(), exportId: text("export_id").notNull().default(""),
+}, t => [primaryKey({ columns: [t.organisationId, t.packetId] }),
+  index("creditex_registry_batch_items_batch_idx").on(t.organisationId, t.batchId),
+  check("creditex_registry_batch_items_account_version_check", sql`${t.accountVersion}>0`),
+  foreignKey({ columns: [t.organisationId, t.batchId], foreignColumns: [creditexRegistryBatches.organisationId, creditexRegistryBatches.id] }),
+  foreignKey({ columns: [t.organisationId, t.packetId], foreignColumns: [creditexRegistryClaimAccounts.organisationId, creditexRegistryClaimAccounts.packetId] }),
+  foreignKey({ columns: [t.organisationId, t.accountId], foreignColumns: [creditexRegistryAccounts.organisationId, creditexRegistryAccounts.id] }),
+]);
+
+export const creditexJobLifecycleEvents = sqliteTable("creditex_job_lifecycle_events", {
+  id: text("id").primaryKey(), organisationId: text("organisation_id").notNull(),
+  workOrderId: text("work_order_id").notNull().references(() => tradeWorkOrders.id, { onDelete: "restrict" }),
+  ownerUid: text("owner_uid").notNull(), intentId: text("intent_id").notNull().default(""),
+  action: text("action").notNull(), sourceSnapshot: text("source_snapshot").notNull(), sourceSha256: text("source_sha256").notNull(),
+  reference: text("reference").notNull().default(""), amountMinor: integer("amount_minor").notNull().default(0),
+  recipientUid: text("recipient_uid").notNull().default(""), occurredAt: text("occurred_at").notNull(),
+  actorKind: text("actor_kind").notNull(), actorUid: text("actor_uid").notNull(), note: text("note").notNull(),
+  requestId: text("request_id").notNull(), requestSha256: text("request_sha256").notNull(), createdAt: text("created_at").notNull(),
+}, t => [
+  uniqueIndex("creditex_job_lifecycle_request_idx").on(t.actorKind,t.actorUid,t.requestId),
+  index("creditex_job_lifecycle_scope_idx").on(t.organisationId,t.workOrderId,t.ownerUid,t.intentId,t.action,t.createdAt),
+  uniqueIndex("creditex_job_payout_reference_idx").on(t.organisationId,t.intentId,t.reference).where(sql`${t.action}='payout_recorded'`),
+  uniqueIndex("creditex_job_payout_source_idx").on(t.organisationId,t.intentId,t.sourceSha256).where(sql`${t.action}='payout_recorded'`),
+  check("creditex_job_lifecycle_action_check",sql`${t.action} IN ('reviewed','correction_required','payout_recorded','cancelled','deleted','restored')`),
+  check("creditex_job_lifecycle_actor_check",sql`${t.actorKind} IN ('trade','compliance','admin')`),
+  check("creditex_job_lifecycle_source_check",sql`json_valid(${t.sourceSnapshot}) AND length(${t.sourceSha256})=64 AND length(${t.requestSha256})=64`),
+  check("creditex_job_lifecycle_scope_check",sql`(${t.action} IN ('reviewed','correction_required','payout_recorded') AND ${t.intentId}<>'') OR (${t.action} IN ('cancelled','deleted','restored') AND ${t.intentId}='')`),
+  check("creditex_job_lifecycle_review_actor_check",sql`${t.action}<>'reviewed' OR ${t.actorKind}='trade'`),
+  check("creditex_job_lifecycle_privileged_actor_check",sql`${t.action} NOT IN ('payout_recorded','deleted','restored') OR ${t.actorKind} IN ('compliance','admin')`),
+  check("creditex_job_lifecycle_payout_check",sql`(${t.action}='payout_recorded' AND ${t.amountMinor}>0 AND ${t.reference}<>'' AND ${t.recipientUid}=${t.ownerUid}) OR (${t.action}<>'payout_recorded' AND ${t.amountMinor}=0 AND ${t.reference}='' AND ${t.recipientUid}='')`),
+]);
+
+export const creditexJobCorrectionDeliveries = sqliteTable("creditex_job_correction_deliveries", {
+  id: text("id").primaryKey(), eventId: text("event_id").notNull().references(() => creditexJobLifecycleEvents.id, { onDelete: "restrict" }),
+  workOrderId: text("work_order_id").notNull().references(() => tradeWorkOrders.id, { onDelete: "restrict" }),
+  ownerUid: text("owner_uid").notNull(), memberId: text("member_id").notNull(), recipientEmail: text("recipient_email").notNull(),
+  subject: text("subject").notNull(), body: text("body").notNull(), status: text("status").notNull(),
+  providerReference: text("provider_reference").notNull().default(""), lastError: text("last_error").notNull().default(""),
+  attempts: integer("attempts").notNull().default(0), firstAttemptAt: text("first_attempt_at").notNull().default(""),
+  lastAttemptAt: text("last_attempt_at").notNull().default(""), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, t => [uniqueIndex("creditex_job_correction_delivery_event_member_idx").on(t.eventId,t.memberId),
+  index("creditex_job_correction_delivery_job_idx").on(t.ownerUid,t.workOrderId,t.status,t.createdAt),
+  check("creditex_job_correction_delivery_status_check",sql`${t.status} IN ('pending','sending','accepted','failed','uncertain')`),
+]);
+
 export const tradeActivityFieldMasterDrafts = sqliteTable("trade_activity_field_master_drafts", {
   id: text("id").primaryKey(), organisationId: text("organisation_id").notNull(),
   activityTemplateId: text("activity_template_id").notNull(), variantId: text("variant_id").notNull().default(""),
@@ -6829,4 +6888,25 @@ export const tradeActivityFieldMasterDrafts = sqliteTable("trade_activity_field_
   check("trade_activity_master_drafts_form_check", sql`json_valid(${t.formJson}) AND COALESCE(json_extract(${t.formJson}, '$.activityTemplateId') = ${t.activityTemplateId} AND json_extract(${t.formJson}, '$.variantId') = ${t.variantId}, 0)`),
   check("trade_activity_master_drafts_status_check", sql`${t.status} IN ('draft', 'published', 'discarded')`),
   check("trade_activity_master_drafts_publication_check", sql`(${t.status} = 'published' AND ${t.publishedMasterId} <> '') OR (${t.status} <> 'published' AND ${t.publishedMasterId} = '')`),
+]);
+
+export const tradeActivityFieldRecords = sqliteTable("trade_activity_field_records", {
+  id: text("id").primaryKey(), intentId: text("intent_id").notNull(), workOrderId: text("work_order_id").notNull(),
+  ownerUid: text("owner_uid").notNull(), organisationId: text("organisation_id").notNull(), activityTemplateId: text("activity_template_id").notNull(),
+  revision: integer("revision").notNull(), status: text("status").notNull(), payload: text("payload").notNull(),
+  pdfObjectKey: text("pdf_object_key").notNull().default(""), pdfSha256: text("pdf_sha256").notNull().default(""),
+  actorUid: text("actor_uid").notNull(), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(), submittedAt: text("submitted_at").notNull().default(""),
+  supersedesRecordId: text("supersedes_record_id"), correctionEventId: text("correction_event_id").references(() => creditexJobLifecycleEvents.id),
+}, t => [
+  uniqueIndex("trade_activity_field_record_original_idx").on(t.intentId).where(sql`${t.supersedesRecordId} IS NULL`),
+  uniqueIndex("trade_activity_field_record_successor_idx").on(t.supersedesRecordId).where(sql`${t.supersedesRecordId} IS NOT NULL`),
+  uniqueIndex("trade_activity_field_record_correction_idx").on(t.correctionEventId).where(sql`${t.correctionEventId} IS NOT NULL`),
+  index("trade_activity_field_record_job_idx").on(t.ownerUid,t.workOrderId,t.status),
+  index("trade_activity_field_record_review_idx").on(t.organisationId,t.status,t.updatedAt),
+  foreignKey({ columns: [t.supersedesRecordId], foreignColumns: [t.id] }),
+  check("trade_activity_field_record_revision_check",sql`${t.revision}>0`),
+  check("trade_activity_field_record_status_check",sql`${t.status} IN ('draft','submitted_for_creditex_review')`),
+  check("trade_activity_field_record_correction_check",sql`(${t.supersedesRecordId} IS NULL AND ${t.correctionEventId} IS NULL) OR (${t.supersedesRecordId} IS NOT NULL AND ${t.correctionEventId} IS NOT NULL)`),
+  check("trade_activity_field_record_identity_check",sql`json_valid(${t.payload}) AND COALESCE(json_extract(${t.payload},'$.id')=${t.id} AND json_extract(${t.payload},'$.intentId')=${t.intentId} AND json_extract(${t.payload},'$.workOrderId')=${t.workOrderId} AND json_extract(${t.payload},'$.ownerUid')=${t.ownerUid} AND json_extract(${t.payload},'$.organisationId')=${t.organisationId} AND json_extract(${t.payload},'$.revision')=${t.revision} AND json_extract(${t.payload},'$.status')=${t.status} AND json_extract(${t.payload},'$.form.activityTemplateId')=${t.activityTemplateId},0)`),
+  check("trade_activity_field_record_pdf_check",sql`${t.status}='draft' OR (${t.pdfObjectKey}<>'' AND length(${t.pdfSha256})=64 AND ${t.submittedAt}<>'')`),
 ]);

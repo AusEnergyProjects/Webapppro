@@ -1,4 +1,5 @@
 import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard } from "@/lib/creditex-onboarding-server";
+import { assertTradeJobCanCancel,tradeJobCancellationGuard,cancelledJobAppointmentsStatement,reconcileCancelledJobCalendars } from "@/lib/trade-job-cancellation-server";
 import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { getD1 } from "../../../../db";
 import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
@@ -169,6 +170,7 @@ function errorResponse(error: unknown) {
   if (code === "TASK_LIMIT_REACHED") return adminJson({ ok: false, error: "This work record has reached its checklist limit." }, 409);
   if (code === "WORK_NOT_FOUND") return adminJson({ ok: false, error: "Work record not found." }, 404);
   if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Completed and cancelled jobs are locked." }, 409);
+  if(code.includes("JOB_CANCEL_COMPLETED"))return adminJson({ok:false,error:"A job that has been completed cannot be cancelled. Its completed records must be retained."},409);
   if (code === "RENTAL_SCHEDULE_WORKFLOW_REQUIRED") return adminJson({ ok: false, error: "Use TLink Schedule to change a rental assessment appointment or assessor." }, 409);
   if (code === "ONLINE_MUTATION_CONFLICT") return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This work record changed elsewhere. Refresh it before saving." }, 409);
   if (code === "SOURCE_NOT_FOUND") return adminJson({ ok: false, error: "That platform work item is no longer available to convert." }, 404);
@@ -652,17 +654,18 @@ export async function PATCH(request: Request) {
     }
 
     const requestedStage = body.stage === undefined ? String(current.stage) : cleanAdminText(body.stage, 30);
+    if(requestedStage==="cancelled")await assertTradeJobCanCancel(db,identity.uid,workOrderId);
     const requestedPriority = body.priority === undefined ? String(current.priority) : cleanAdminText(body.priority, 20);
     if (!STAGES.has(requestedStage) || !PRIORITIES.has(requestedPriority)) {
       return adminJson({ ok: false, error: "Choose a valid work stage and priority." }, 400);
     }
-    const scheduledStart = body.scheduledStart === undefined ? String(current.scheduled_start) : dateValue(body.scheduledStart);
-    const scheduledEnd = body.scheduledEnd === undefined ? String(current.scheduled_end) : dateValue(body.scheduledEnd);
+    const scheduledStart = requestedStage==="cancelled"?"":body.scheduledStart === undefined ? String(current.scheduled_start) : dateValue(body.scheduledStart);
+    const scheduledEnd = requestedStage==="cancelled"?"":body.scheduledEnd === undefined ? String(current.scheduled_end) : dateValue(body.scheduledEnd);
     if (scheduledStart && scheduledEnd && scheduledEnd < scheduledStart) {
       return adminJson({ ok: false, error: "The planned finish cannot be before the planned start." }, 400);
     }
     const scheduleChanged = scheduledStart !== current.scheduled_start || scheduledEnd !== current.scheduled_end;
-    if (scheduleChanged && identity.partnerType === "installer") {
+    if (scheduleChanged && requestedStage!=="cancelled" && identity.partnerType === "installer") {
       await assertTradeJobReadyForScheduling(identity.uid, workOrderId);
     }
     const assigneeLabel = body.assigneeLabel === undefined ? String(current.assignee_label) : cleanAdminText(body.assigneeLabel, 80);
@@ -670,7 +673,7 @@ export async function PATCH(request: Request) {
     const certificateTeamAccess = identity.partnerType === "installer" ? teamAccess || await requireInstallerTeamAccess(request) : null;
     const certificateAccess = { ownerUid: identity.uid, actorMemberId: certificateTeamAccess?.memberId || "",
       assignedMemberId: assigneeMemberId, workOrderId };
-    if (identity.partnerType === "installer") await assertCertificateJobEligibility(db, certificateAccess);
+    if (identity.partnerType === "installer"&&requestedStage!=="cancelled") await assertCertificateJobEligibility(db, certificateAccess);
     if (assigneeLabel && !identity.teamAccess) throw new Error("TEAM_ACCESS_REQUIRED");
     if (privateDataDetected(assigneeLabel)) throw new Error("PRIVATE_DATA");
     const changes: string[] = [];
@@ -679,7 +682,7 @@ export async function PATCH(request: Request) {
     if (scheduleChanged) changes.push("Schedule updated.");
     if (assigneeLabel !== current.assignee_label) changes.push(assigneeLabel ? `Assigned to ${assigneeLabel}.` : "Crew assignment cleared.");
     const revision = nextJobRevision(current.revision);
-    const complianceIntentStatements = scheduledStart !== current.scheduled_start
+    const complianceIntentStatements = requestedStage!=="cancelled"&&scheduledStart !== current.scheduled_start
       ? await plannedComplianceIntentReplanStatements(db, {
         actorUid: identity.uid,
         changedAt: now,
@@ -689,8 +692,9 @@ export async function PATCH(request: Request) {
       })
       : [];
     await guardedOnlineJobMutationBatch(db, [
+      ...(requestedStage==="cancelled"?[tradeJobCancellationGuard(db,identity.uid,workOrderId)]:[]),
       ...complianceIntentStatements,
-      ...(identity.partnerType === "installer" ? await certificateJobEligibilityGuards(db, certificateAccess) : []),
+      ...(identity.partnerType === "installer"&&requestedStage!=="cancelled" ? await certificateJobEligibilityGuards(db, certificateAccess) : []),
       db.prepare(`UPDATE trade_work_orders SET stage = ?, priority = ?, scheduled_start = ?, scheduled_end = ?,
         assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
@@ -699,7 +703,8 @@ export async function PATCH(request: Request) {
           assigneeLabel, revision, now, workOrderId, identity.uid,
           String(current.stage), Number(current.revision)),
       eventStatement(db, identity.uid, workOrderId, "work_updated", changes.join(" ") || "Work record reviewed.", now),
-      ...(scheduleChanged && identity.partnerType === "installer"
+      ...(requestedStage==="cancelled"?[cancelledJobAppointmentsStatement(db,identity.uid,workOrderId,now)]:[]),
+      ...(scheduleChanged && requestedStage!=="cancelled" && identity.partnerType === "installer"
         ? [await tradeJobScheduleEligibilityGuardStatement(db, { ...certificateAccess, changedAt: now })]
         : []),
       ...offlineSyncStatements(db, identity, workOrderId, revision, now, assigneeMemberId,
@@ -717,7 +722,8 @@ export async function PATCH(request: Request) {
       updatedAt: now,
       workOrderId,
     });
-    return adminJson({ ok: true, ...(await workOrderPayload(identity)) });
+    const calendarSync=requestedStage==="cancelled"?await reconcileCancelledJobCalendars(db,identity.uid,workOrderId):undefined;
+    return adminJson({ ok: true, ...(await workOrderPayload(identity)),...(calendarSync?{calendarSync}:{}) });
   } catch (error) {
     return errorResponse(error);
   }

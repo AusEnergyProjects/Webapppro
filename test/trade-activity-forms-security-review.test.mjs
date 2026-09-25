@@ -1,4 +1,5 @@
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
+import { installFieldCorrectionFixture } from "./helpers/activity-field-corrections-fixture.mjs";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -70,6 +71,7 @@ function fixture(fieldForm = form(), options = {}) {
       ('intent-b','job-b','owner-b','creditex-b','sres-ashp','planned','TEST','{}','2026-09-07');
     INSERT INTO trade_team_members (id,owner_uid,status,display_name,first_name,last_name) VALUES ('worker-a','owner-a','active','Worker A','Worker','A');`);
   database.exec(read("../drizzle/0170_trade_activity_forms.sql"));
+  installFieldCorrectionFixture(database);
   database.exec("INSERT INTO trade_accounts(firebase_uid) VALUES ('owner-a')");
   database.exec("INSERT INTO trade_team_members(id,owner_uid,status,display_name,first_name,last_name,member_uid) VALUES ('manager','owner-a','active','Manager','Business','Manager','manager')");
   installCreditexTrainingFixture(database);
@@ -84,10 +86,15 @@ function fixture(fieldForm = form(), options = {}) {
       return { success: true, meta: { changes: Number(result.changes) } };
     },
   }); return statement(); } };
-  d1.batch = async (statements) => {
-    database.exec("BEGIN");
-    try { const results = []; for (const statement of statements) results.push(await statement.run()); database.exec("COMMIT"); return results; }
-    catch (error) { database.exec("ROLLBACK"); throw error; }
+  let transactionTail = Promise.resolve();
+  d1.batch = (statements) => {
+    const transaction = transactionTail.then(async () => {
+      database.exec("BEGIN");
+      try { const results = []; for (const statement of statements) results.push(await statement.run()); database.exec("COMMIT"); return results; }
+      catch (error) { database.exec("ROLLBACK"); throw error; }
+    });
+    transactionTail = transaction.catch(() => {});
+    return transaction;
   };
   const objects = new Map();
   const bucket = {
@@ -129,7 +136,7 @@ function fixture(fieldForm = form(), options = {}) {
   });
   const access = { ownerUid: "owner-a", actorUid: "field-member:worker-a", memberId: "worker-a", isOwner: false,
     jobScope: "own", canViewFieldEvidence: true, canManageFieldEvidence: true, businessName: "Test business", displayName: "Worker A" };
-  return { database, server, access, objects };
+  return { database, server, access, objects, d1 };
 }
 
 function acceptedCustomerDocumentDelivery(database, {
@@ -1674,4 +1681,81 @@ test("signing profile name confirmation cannot overwrite a concurrent name chang
       assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_member_events").get().count, 0);
     } finally { database.close(); }
   }
+});
+
+test("review correction creates a new editable form while the original PDF and share token remain immutable", async () => {
+  const { database, server, access, d1 } = fixture();
+  try {
+    let original = await server.openActivityRecord(access, "job-a", "intent-a");
+    original = await server.saveActivityAnswers(access, original.id, original.revision, { before_name: "Customer", after_model: "Unit" });
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=", "base64");
+    original = await server.uploadActivityEvidence(access, original.id, original.revision, "photo", new File([png], "installed.png", { type: "image/png" }), {});
+    for (const declaration of ["before_customer", "after_technician"]) original = await server.signActivityDeclaration(access, original.id, {
+      expectedRevision: original.revision, declarationKey: declaration, signerName: "Signer", acknowledged: true, strokes,
+    });
+    original = await server.submitActivityRecord(access, original.id, original.revision);
+    const row = database.prepare("SELECT * FROM trade_activity_field_records WHERE id=?").get(original.id);
+    const versions = database.prepare("SELECT * FROM trade_activity_field_record_versions WHERE record_id=? ORDER BY revision").all(original.id);
+    const token = new URL(await server.shareActivityReport(access, original.id, "https://example.test")).searchParams.get("reportToken");
+    const sourceSnapshot = JSON.stringify({ records: [{ kind: "field", id: original.id, revision: original.revision,
+      status: original.status, sha256: row.pdf_sha256, objectKey: row.pdf_object_key }] });
+    const correctionInput = { eventId: "correction-a", ownerUid: "owner-a", workOrderId: "job-a", intentId: "intent-a", sourceSnapshot,
+      actorUid: "reviewer", now: "2026-09-25T00:00:00.000Z", note: "Correct the installed model." };
+    const companion = await server.prepareFieldCorrectionStatements(d1, correctionInput);
+    await d1.batch([d1.prepare(`INSERT INTO creditex_job_lifecycle_events VALUES ('correction-a','creditex-a','owner-a','job-a','intent-a','correction_required',?,?,?)`)
+      .bind(sourceSnapshot, correctionInput.note, correctionInput.now), ...companion]);
+    const corrected = await server.openActivityRecord(access, "job-a", "intent-a");
+    assert.notEqual(corrected.id, original.id);
+    assert.equal(corrected.status, "draft");
+    assert.deepEqual(corrected.signatures, []);
+    assert.deepEqual(corrected.answers, original.answers);
+    assert.deepEqual(corrected.evidence, original.evidence);
+    assert.equal(corrected.evidence.length,1);
+    assert.deepEqual(Buffer.from((await server.readActivityEvidence(corrected,corrected.evidence[0].id)).bytes),png);
+    assert.equal(corrected.correction.note, correctionInput.note);
+    assert.equal(corrected.correction.sourceRecordId, original.id);
+    assert.equal(corrected.reportUrl, "");
+    assert.equal((await server.openActivityRecord(access, "job-a", "intent-a")).id, corrected.id);
+    assert.deepEqual(database.prepare("SELECT * FROM trade_activity_field_records WHERE id=?").get(original.id), row);
+    assert.deepEqual(database.prepare("SELECT * FROM trade_activity_field_record_versions WHERE record_id=? ORDER BY revision").all(original.id), versions);
+    assert.equal((await server.sharedActivityRecord(token)).id, original.id);
+    assert.equal(new TextDecoder().decode((await server.readActivityPdf(await server.sharedActivityRecord(token))).bytes), "%PDF-test-final-custody");
+    await assert.rejects(server.submitActivityRecord(access, corrected.id, corrected.revision), /ACTIVITY_FORM_INCOMPLETE/);
+    await assert.rejects(server.saveActivityAnswers(access, original.id, original.revision, { after_model: "Tamper" }), /ACTIVITY_ALREADY_SUBMITTED/);
+    await assert.rejects(server.prepareFieldCorrectionStatements(d1, correctionInput), /ACTIVITY_CORRECTION_SOURCE_CHANGED/);
+    let changed = await server.saveActivityAnswers(access, corrected.id, corrected.revision, { ...corrected.answers, after_model: "Corrected unit" });
+    assert.equal(changed.answers.after_model, "Corrected unit");
+    for (const declaration of ["before_customer", "after_technician"]) changed = await server.signActivityDeclaration(access, changed.id, {
+      expectedRevision: changed.revision, declarationKey: declaration, signerName: "Signer", acknowledged: true, strokes,
+    });
+    changed = await server.submitActivityRecord(access,changed.id,changed.revision);
+    assert.equal(changed.status,"submitted_for_creditex_review");
+    assert.equal((await server.openActivityRecord(access,"job-a","intent-a")).id,changed.id);
+    assert.equal((await server.sharedActivityRecord(token)).id,original.id);
+    assert.notEqual(database.prepare("SELECT pdf_object_key FROM trade_activity_field_records WHERE id=?").get(changed.id).pdf_object_key,row.pdf_object_key);
+    assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally { database.close(); }
+});
+
+test("the assigned technician can resume a correction event exactly once; stale and other-owner sources fail", async () => {
+  const { database, server, access, d1 } = fixture();
+  try {
+    let original = await server.openActivityRecord(access, "job-a", "intent-a");
+    original = await server.saveActivityAnswers(access, original.id, original.revision, { before_name: "Customer", after_model: "Unit" });
+    for (const declaration of ["before_customer", "after_technician"]) original = await server.signActivityDeclaration(access, original.id, {
+      expectedRevision: original.revision, declarationKey: declaration, signerName: "Signer", acknowledged: true, strokes,
+    });
+    original = await server.submitActivityRecord(access, original.id, original.revision);
+    const row = database.prepare("SELECT * FROM trade_activity_field_records WHERE id=?").get(original.id);
+    const source = { kind: "field", id: original.id, revision: original.revision, status: original.status, sha256: row.pdf_sha256, objectKey: row.pdf_object_key };
+    const input = { eventId: "fallback-correction", ownerUid: "owner-a", workOrderId: "job-a", intentId: "intent-a", sourceSnapshot: JSON.stringify({ records:[source] }), actorUid: "reviewer", now: "2026-09-25" };
+    await assert.rejects(server.prepareFieldCorrectionStatements(d1, { ...input, ownerUid: "owner-b" }), /ACTIVITY_CORRECTION_SOURCE_CHANGED/);
+    await assert.rejects(server.prepareFieldCorrectionStatements(d1, { ...input, sourceSnapshot: JSON.stringify({ records:[{...source,revision:1}] }) }), /ACTIVITY_CORRECTION_SOURCE_CHANGED/);
+    database.prepare("INSERT INTO creditex_job_lifecycle_events VALUES ('fallback-correction','creditex-a','owner-a','job-a','intent-a','correction_required',?,'Replace the photo','2026-09-25')").run(input.sourceSnapshot);
+    const records = await Promise.all([server.openActivityRecord(access,"job-a","intent-a"),server.openActivityRecord(access,"job-a","intent-a")]);
+    assert.equal(records[0].id, records[1].id);
+    assert.equal(records[0].correction.note, "Replace the photo");
+    assert.equal(database.prepare("SELECT count(*) n FROM trade_activity_field_records").get().n, 2);
+    await assert.rejects(server.openActivityRecord({...access,memberId:"unassigned"},"job-a","intent-a"), /JOB_NOT_ASSIGNED|JOB_ACCESS|ASSIGNED/);
+  } finally { database.close(); }
 });
