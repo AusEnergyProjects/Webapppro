@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build && npm run audit:sites-server-bundle && npm run audit:public-performance",
+    "package:sites": "node scripts/package-sites.mjs",
     "audit:links": "node scripts/audit-links.mjs --strict-network",
     "audit:seo-migration": "node scripts/audit-apex-url-migration.mjs",
     "rehearse:apex-cutover": "node scripts/rehearse-apex-cutover.mjs",
