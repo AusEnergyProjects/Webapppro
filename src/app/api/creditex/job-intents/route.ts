@@ -37,7 +37,9 @@ function errorResponse(error: unknown) {
   if (error instanceof Error && error.message === "AUTH_REQUIRED") {
     return json({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to continue." }, 401);
   }
-  console.error("Creditex planned job queue failed", error);
+  console.error("Creditex planned job queue failed", {
+    message: error instanceof Error ? error.message : "Unknown database error",
+  });
   return json({
     ok: false,
     code: "CREDITEX_JOB_INTENT_QUEUE_UNAVAILABLE",
