@@ -28,50 +28,5 @@ CREATE UNIQUE INDEX trade_activity_field_record_successor_idx ON trade_activity_
 CREATE UNIQUE INDEX trade_activity_field_record_correction_idx ON trade_activity_field_records(correction_event_id) WHERE correction_event_id IS NOT NULL;
 CREATE INDEX trade_activity_field_record_job_idx ON trade_activity_field_records(owner_uid,work_order_id,status);
 CREATE INDEX trade_activity_field_record_review_idx ON trade_activity_field_records(organisation_id,status,updated_at);
-CREATE TRIGGER trade_activity_field_record_intent_guard BEFORE INSERT ON trade_activity_field_records
-WHEN NOT EXISTS(SELECT 1 FROM trade_work_order_compliance_intents i WHERE i.id=NEW.intent_id AND i.work_order_id=NEW.work_order_id
-  AND i.installer_uid=NEW.owner_uid AND i.compliance_organisation_id=NEW.organisation_id AND i.activity_template_id=NEW.activity_template_id
-  AND i.status IN ('planned','case_linked'))
-BEGIN SELECT RAISE(ABORT,'Activity field record must match its active assigned intent.'); END;
-CREATE TRIGGER trade_activity_field_correction_guard BEFORE INSERT ON trade_activity_field_records
-WHEN NEW.supersedes_record_id IS NOT NULL
-BEGIN
-  SELECT CASE WHEN NEW.status<>'draft' OR NEW.revision<>1 OR NEW.pdf_object_key<>'' OR NEW.pdf_sha256<>'' OR NEW.submitted_at<>''
-    OR COALESCE(json_type(NEW.payload,'$.signatures')='array' AND json_array_length(NEW.payload,'$.signatures')=0,0)=0
-    THEN RAISE(ABORT,'ACTIVITY_CORRECTION_MUST_START_UNSIGNED') END;
-  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM trade_activity_field_records source
-    JOIN creditex_job_lifecycle_events event ON event.id=NEW.correction_event_id AND event.action='correction_required'
-      AND event.organisation_id=source.organisation_id AND event.owner_uid=source.owner_uid
-      AND event.work_order_id=source.work_order_id AND event.intent_id=source.intent_id
-    JOIN trade_work_orders work ON work.id=source.work_order_id AND work.firebase_uid=source.owner_uid
-    WHERE source.id=NEW.supersedes_record_id AND source.status='submitted_for_creditex_review'
-      AND source.intent_id=NEW.intent_id AND source.owner_uid=NEW.owner_uid AND source.work_order_id=NEW.work_order_id
-      AND source.organisation_id=NEW.organisation_id AND source.activity_template_id=NEW.activity_template_id
-      AND work.record_status='active' AND work.stage<>'cancelled'
-      AND json_extract(NEW.payload,'$.correction.sourceRecordId')=source.id
-      AND json_extract(NEW.payload,'$.correction.sourceRevision')=source.revision
-      AND json_extract(NEW.payload,'$.correction.eventId')=event.id
-      AND NOT EXISTS(SELECT 1 FROM creditex_job_lifecycle_events later
-        WHERE later.organisation_id=event.organisation_id AND later.owner_uid=event.owner_uid
-          AND later.work_order_id=event.work_order_id AND later.intent_id=event.intent_id
-          AND later.action IN ('reviewed','correction_required')
-          AND (later.created_at>event.created_at OR (later.created_at=event.created_at AND later.id>event.id)))
-      AND EXISTS(SELECT 1 FROM json_each(event.source_snapshot,'$.records') retained
-        WHERE json_extract(retained.value,'$.kind')='field' AND json_extract(retained.value,'$.id')=source.id
-          AND json_extract(retained.value,'$.revision')=source.revision AND json_extract(retained.value,'$.sha256')=source.pdf_sha256
-          AND json_extract(retained.value,'$.objectKey')=source.pdf_object_key)
-  ) THEN RAISE(ABORT,'ACTIVITY_CORRECTION_SOURCE_CHANGED') END;
-END;
-CREATE TRIGGER trade_activity_field_record_immutable BEFORE UPDATE ON trade_activity_field_records
-WHEN OLD.status='submitted_for_creditex_review' OR NEW.intent_id<>OLD.intent_id OR NEW.owner_uid<>OLD.owner_uid
-  OR NEW.organisation_id<>OLD.organisation_id OR NEW.work_order_id<>OLD.work_order_id
-  OR NEW.activity_template_id<>OLD.activity_template_id OR NEW.revision<>OLD.revision+1
-  OR NEW.supersedes_record_id IS NOT OLD.supersedes_record_id OR NEW.correction_event_id IS NOT OLD.correction_event_id
-  OR json_extract(NEW.payload,'$.correction') IS NOT json_extract(OLD.payload,'$.correction')
-BEGIN SELECT RAISE(ABORT,'Submitted field records and their scope are immutable.'); END;
-CREATE TRIGGER trade_activity_field_record_no_delete BEFORE DELETE ON trade_activity_field_records
-BEGIN SELECT RAISE(ABORT, 'Field record history must be retained.'); END;
-CREATE TRIGGER trade_activity_field_record_created AFTER INSERT ON trade_activity_field_records
-BEGIN INSERT INTO trade_activity_field_record_versions VALUES(NEW.id,NEW.revision,NEW.payload,NEW.actor_uid,NEW.updated_at); END;
-CREATE TRIGGER trade_activity_field_record_changed AFTER UPDATE ON trade_activity_field_records
-BEGIN INSERT INTO trade_activity_field_record_versions VALUES(NEW.id,NEW.revision,NEW.payload,NEW.actor_uid,NEW.updated_at); END;
+
+-- Trigger bodies are installed by ensureCreditexJobLifecycleSchemaGuards through complete D1 prepared statements.

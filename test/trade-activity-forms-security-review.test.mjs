@@ -1,5 +1,6 @@
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { installFieldCorrectionFixture } from "./helpers/activity-field-corrections-fixture.mjs";
+import { FIELD_CORRECTION_GUARD_NAMES, lifecycleGuardFixture } from "./helpers/creditex-lifecycle-guards-fixture.mjs";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -108,6 +109,7 @@ function fixture(fieldForm = form(), options = {}) {
   };
   const assignedJob = sourceFunction(read("../src/lib/trade-team-server.ts"), "assignedJob", { getD1: () => d1 });
   const server = loadModule(serverSource, {
+    "./creditex-job-lifecycle-schema-guards": lifecycleGuardFixture(database, FIELD_CORRECTION_GUARD_NAMES),
     "cloudflare:workers": { env: { EVIDENCE: bucket } },
     "../../db": { getD1: () => d1 }, "./trade-team-server": { assignedJob },
     "./trade-activity-forms-library.ts": {

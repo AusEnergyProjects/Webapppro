@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { FIELD_CORRECTION_GUARD_NAMES, lifecycleGuardFixture } from "./creditex-lifecycle-guards-fixture.mjs";
 
 export function installFieldCorrectionFixture(database) {
   database.exec(`CREATE TABLE IF NOT EXISTS creditex_job_lifecycle_events (
@@ -7,6 +8,7 @@ export function installFieldCorrectionFixture(database) {
   database.exec("BEGIN");
   try {
     database.exec(fs.readFileSync(new URL("../../drizzle/0194_trade_activity_field_corrections.sql", import.meta.url), "utf8"));
+    lifecycleGuardFixture(database, FIELD_CORRECTION_GUARD_NAMES);
     database.exec("COMMIT");
   } catch (error) { database.exec("ROLLBACK"); throw error; }
 }

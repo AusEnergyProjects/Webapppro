@@ -209,19 +209,24 @@ class TestD1Database {
 function applyMigrations(sqlite) {
   const migrations = fs.readdirSync(path.join(ROOT, "drizzle"))
     .filter((name) => /^\d{4}_.+\.sql$/.test(name)
-      && (name <= "0169_creditex_master_author_save.sql"
-        || name === "0188_creditex_output_dispatch_intents.sql"))
+      && (name <= "0170_trade_activity_forms.sql"
+        || name === "0188_creditex_output_dispatch_intents.sql"
+        || /^(0192|0193|0194)_/.test(name)))
     .filter((name) => name !== "0044_flimsy_omega_flight.sql")
     .sort();
   for (const migration of migrations) {
     sqlite.exec(fs.readFileSync(path.join(ROOT, "drizzle", migration), "utf8")
       .replaceAll("--> statement-breakpoint", ""));
   }
-  sqlite.exec(`CREATE TABLE creditex_job_lifecycle_events (
-    id TEXT PRIMARY KEY, organisation_id TEXT, owner_uid TEXT, work_order_id TEXT,
-    intent_id TEXT, action TEXT, source_snapshot TEXT, actor_uid TEXT, created_at TEXT, actor_kind TEXT);
-    CREATE TABLE trade_activity_field_records (id TEXT, intent_id TEXT, owner_uid TEXT, work_order_id TEXT, organisation_id TEXT,
-      revision INTEGER, status TEXT, pdf_sha256 TEXT, pdf_object_key TEXT, supersedes_record_id TEXT)`);
+}
+
+function insertLifecycleEvent(sqlite, id, action, sourceSnapshot, occurredAt) {
+  sqlite.prepare(`INSERT INTO creditex_job_lifecycle_events
+    (id,organisation_id,owner_uid,work_order_id,intent_id,action,source_snapshot,source_sha256,
+     occurred_at,actor_kind,actor_uid,note,request_id,request_sha256,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,'trade',?,'Runtime fixture review',?,?,?)`)
+    .run(id, ORGANISATION_ID, OWNER_UID, WORK_ORDER_ID, INTENT_ID, action, sourceSnapshot,
+      sha256(Buffer.from(sourceSnapshot)), occurredAt, OWNER_UID, id, sha256(Buffer.from(id)), occurredAt);
 }
 
 function runtimeDatabase() {
@@ -1604,8 +1609,7 @@ test("assigned work-pack rejects hidden evidence and binds commit, signatures, r
     assert.ok(statements.length > 1);
     assert.throws(() => statements[0].runSync(), /CHECK constraint failed|verified/);
     assert.deepEqual(sqlite.prepare("SELECT * FROM compliance_activity_work_pack_instances WHERE id=?").get(original.id), original);
-    sqlite.prepare("INSERT INTO creditex_job_lifecycle_events (id,organisation_id,owner_uid,work_order_id,intent_id,action,source_snapshot,actor_uid,created_at) VALUES (?,?,?,?,?,'correction_required',?,?,?)")
-      .run(correction.eventId, ORGANISATION_ID, OWNER_UID, WORK_ORDER_ID, INTENT_ID, sourceSnapshot, OWNER_UID, correction.now);
+    insertLifecycleEvent(sqlite, correction.eventId, "correction_required", sourceSnapshot, correction.now);
     for (const statement of statements) statement.runSync();
     const revised = await server.loadAssignedCreditexActivityWorkPack(database, { ...ownerScope(), caseInstanceId: original.id });
     assert.equal(revised.instance.status, "in_progress");
@@ -1677,10 +1681,7 @@ test("assigned work-pack rejects hidden evidence and binds commit, signatures, r
   assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM compliance_output_action_packets').get().n, 0);
   const reviewSource = sqlite.prepare(`SELECT ${creditexIntentCompletionSnapshotSql('intent')} snapshot
     FROM trade_work_order_compliance_intents intent WHERE id=?`).get(INTENT_ID).snapshot;
-  sqlite.prepare(`INSERT INTO creditex_job_lifecycle_events
-    (id,organisation_id,owner_uid,work_order_id,intent_id,action,source_snapshot,actor_uid,created_at,actor_kind)
-    VALUES ('business-review-runtime',?,?,?,?, 'reviewed',?,?,?,'trade')`)
-    .run(ORGANISATION_ID,OWNER_UID,WORK_ORDER_ID,INTENT_ID,reviewSource,OWNER_UID,'2026-08-15T00:00:12.500Z');
+  insertLifecycleEvent(sqlite, "business-review-runtime", "reviewed", reviewSource, "2026-08-15T00:00:12.500Z");
 
   const candidates = await outputActions.listCreditexOutputActionCandidates(
     database,
@@ -1755,10 +1756,7 @@ test("assigned work-pack rejects hidden evidence and binds commit, signatures, r
   );
 
   database.interceptNextBatch(statements => statements.some(statement => statement.sql.includes('INSERT INTO compliance_output_action_packets')), () => {
-    sqlite.prepare(`INSERT INTO creditex_job_lifecycle_events
-      (id,organisation_id,owner_uid,work_order_id,intent_id,action,source_snapshot,actor_uid,created_at,actor_kind)
-      VALUES ('racing-correction',?,?,?,?, 'correction_required',?,?,?,'trade')`)
-      .run(ORGANISATION_ID,OWNER_UID,WORK_ORDER_ID,INTENT_ID,reviewSource,OWNER_UID,'2026-08-15T00:00:12.600Z');
+    insertLifecycleEvent(sqlite, "racing-correction", "correction_required", reviewSource, "2026-08-15T00:00:12.600Z");
   });
   await assert.rejects(outputActions.prepareCreditexOperationalOutputAction(database, preparer, {
     idempotencyKey: 'business-review-race-runtime', activityTemplateId: ACTIVITY.templateId,
@@ -1766,10 +1764,7 @@ test("assigned work-pack rejects hidden evidence and binds commit, signatures, r
   }, { now: () => '2026-08-15T00:00:13.000Z' }), { code: 'OUTPUT_ACTION_BUSINESS_REVIEW_REQUIRED' });
   assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM compliance_output_action_packets').get().n, 0);
   assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM compliance_output_action_events').get().n, 0);
-  sqlite.prepare(`INSERT INTO creditex_job_lifecycle_events
-    (id,organisation_id,owner_uid,work_order_id,intent_id,action,source_snapshot,actor_uid,created_at,actor_kind)
-    VALUES ('business-review-after-race',?,?,?,?, 'reviewed',?,?,?,'trade')`)
-    .run(ORGANISATION_ID,OWNER_UID,WORK_ORDER_ID,INTENT_ID,reviewSource,OWNER_UID,'2026-08-15T00:00:12.750Z');
+  insertLifecycleEvent(sqlite, "business-review-after-race", "reviewed", reviewSource, "2026-08-15T00:00:12.750Z");
 
   const outputPrepared = await outputActions.prepareCreditexOperationalOutputAction(
     database,

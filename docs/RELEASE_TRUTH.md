@@ -20,6 +20,8 @@ Bulk export groups current approved claims by scheme, account and approved file.
 
 Local validation and final release evidence are retained under `C:/Webproject/outputs/creditex-job-lifecycle-2026-09-25/`. No real regulator claim, customer notification or payout is performed during verification. Native VEU access remains dependent on the existing ESC request and approved UAT; other schemes still need their current approved account and reporting contracts.
 
+Publication uses `npm run package:sites -- <absolute .tar path outside the checkout>` to build committed source and retain `dist/.openai/drizzle`, which Sites uses for migrations. The new migration files contain statements compatible with Sites splitting on semicolons. All 16 lifecycle, batch and correction triggers are installed and verified as complete prepared statements before the relevant mutations, following the existing runtime guard mechanism.
+
 ## Previous implementation: simpler submissions and complete certificate scheme routing
 
 The claim screen now records actual lodgement references directly, applies the single eligible saved account during the next action, chooses the matching REC format and filters by scheme or work awaiting action. Multiple eligible accounts still require an explicit choice. Account details and retained history are collapsed until needed. Existing lodged claims remain reconcilable after authority expiry; current authority and activity scope are required for new submissions and exports.

@@ -1,8 +1,10 @@
 import { creditexJobEverCompletedSql } from "./creditex-job-lifecycle-sql";
+import { ensureCreditexJobLifecycleSchemaGuards } from "./creditex-job-lifecycle-schema-guards";
 import { creditexWriteGuard } from "./creditex-onboarding-server";
 import { cancelAppointmentInConnectedCalendars } from "./trade-calendar-sync-server";
 
 export async function assertTradeJobCanCancel(db:D1Database,ownerUid:string,workOrderId:string) {
+  await ensureCreditexJobLifecycleSchemaGuards(db);
   const record=await db.prepare(`SELECT ${creditexJobEverCompletedSql("work")} completed
     FROM trade_work_orders work WHERE work.id=? AND work.firebase_uid=?`)
     .bind(workOrderId,ownerUid).first<{completed:number}>();

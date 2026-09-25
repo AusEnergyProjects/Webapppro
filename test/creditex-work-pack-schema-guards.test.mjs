@@ -13,6 +13,7 @@ import {
   CREDITEX_OFFICIAL_SOURCE_CUSTODY_SCHEMA_GUARD_DEFINITIONS,
   CREDITEX_SCHEMA_GUARD_DEFINITIONS,
 } from "../src/lib/creditex-schema-guards.ts";
+import { CREDITEX_JOB_LIFECYCLE_SCHEMA_GUARD_DEFINITIONS } from "../src/lib/creditex-job-lifecycle-schema-guards.ts";
 
 const migrationNames = [
   "0142_creditex_activity_work_packs.sql",
@@ -71,7 +72,10 @@ function triggerlessSchemaDatabase() {
   }
   database.exec(migration("0169_creditex_master_author_save.sql"));
   database.exec(migration("0188_creditex_output_dispatch_intents.sql"));
-  database.exec("CREATE TABLE creditex_job_lifecycle_events (id TEXT PRIMARY KEY,organisation_id TEXT,owner_uid TEXT,work_order_id TEXT,intent_id TEXT,action TEXT,source_snapshot TEXT,actor_uid TEXT,created_at TEXT)");
+  database.exec("CREATE TABLE trade_work_orders(id TEXT PRIMARY KEY,firebase_uid TEXT,stage TEXT); CREATE TABLE trade_work_order_compliance_intents(id TEXT PRIMARY KEY,work_order_id TEXT,installer_uid TEXT,compliance_organisation_id TEXT)");
+  for (const name of ["0170_trade_activity_forms.sql", "0192_creditex_registry_batches.sql", "0193_creditex_job_lifecycle.sql", "0194_trade_activity_field_corrections.sql"]) {
+    database.exec(migration(name));
+  }
   return database;
 }
 
@@ -177,6 +181,11 @@ test("the SRES activation guards stay below D1 expression depth without weakenin
 
 test("runtime installation restores all guards before direct guarded work", async () => {
   const database = triggerlessSchemaDatabase();
+  const retainedGuards = database.prepare("SELECT name,sql FROM sqlite_schema WHERE type='trigger' ORDER BY name").all();
+  assert.deepEqual(retainedGuards.map(guard => guard.name), [
+    "trade_activity_field_record_version_no_delete", "trade_activity_field_record_version_no_update",
+    "trade_activity_master_no_delete", "trade_activity_master_no_update",
+  ]);
   database.exec(`
     INSERT INTO compliance_output_action_events (
       id, organisation_id, packet_id, sequence, from_status, to_status,
@@ -196,8 +205,9 @@ test("runtime installation restores all guards before direct guarded work", asyn
   const installed = database.prepare(
     "SELECT name, sql FROM sqlite_schema WHERE type = 'trigger' ORDER BY name",
   ).all();
-  assert.equal(installed.length, 77);
-  for (const definition of CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS) {
+  const expectedGuards = [...CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_JOB_LIFECYCLE_SCHEMA_GUARD_DEFINITIONS];
+  assert.equal(installed.length, expectedGuards.length + retainedGuards.length);
+  for (const definition of [...expectedGuards, ...retainedGuards]) {
     const row = installed.find((item) => item.name === definition.name);
     assert.ok(row, definition.name);
     assert.equal(
@@ -224,8 +234,9 @@ test("runtime installation atomically replaces only exact known SRES predecessor
   const batchSql = [];
   await ensureCreditexWorkPackSchemaGuards(testD1(database, batchSql));
 
-  assert.ok(batchSql[0].every((sql) => /^DROP TRIGGER IF EXISTS /.test(sql)));
-  assert.ok(batchSql[1].every((sql) => /^CREATE TRIGGER IF NOT EXISTS /.test(sql)));
+  const replacementBatch = batchSql.findIndex(batch => batch.every((sql) => /^DROP TRIGGER IF EXISTS /.test(sql)));
+  assert.notEqual(replacementBatch, -1);
+  assert.ok(batchSql[replacementBatch + 1].every((sql) => /^CREATE TRIGGER IF NOT EXISTS /.test(sql)));
 
   const installed = new Map(database.prepare(
     "SELECT name, sql FROM sqlite_schema WHERE type = 'trigger'",
@@ -248,7 +259,7 @@ test("runtime installation fails closed for absent tables and mismatched guards"
   const missing = new DatabaseSync(":memory:");
   await assert.rejects(
     ensureCreditexWorkPackSchemaGuards(testD1(missing)),
-    /CREDITEX_WORK_PACK_SCHEMA_MIGRATIONS_REQUIRED/,
+    /CREDITEX_JOB_LIFECYCLE_MIGRATIONS_REQUIRED/,
   );
   missing.close();
 

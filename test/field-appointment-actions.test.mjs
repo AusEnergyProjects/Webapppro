@@ -6,6 +6,7 @@ import ts from "typescript";
 import { mfaErrorResponse } from './helpers/admin-response-fixture.mjs';
 import { canAssignWithinScope, canRescheduleWithinScope } from "../src/lib/trade-team-permission-policy.mjs";
 import * as lifecycleSql from "../src/lib/creditex-job-lifecycle-sql.ts";
+import { lifecycleGuardFixture } from "./helpers/creditex-lifecycle-guards-fixture.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -132,6 +133,7 @@ function fixture(overrides = {}, effects = {}) {
     '@/lib/trade-rental-credentials': loadTypescriptModule('../src/lib/trade-rental-credentials.ts'),
     '@/lib/trade-job-deletion-server': { scheduleJobFileCleanup() {} },
     '@/lib/trade-job-cancellation-server': loadTypescriptModule('../src/lib/trade-job-cancellation-server.ts',{
+      './creditex-job-lifecycle-schema-guards':lifecycleGuardFixture(database,['trade_job_cancel_completion_history_guard']),
       './creditex-job-lifecycle-sql':lifecycleSql,
       './creditex-onboarding-server':loadTypescriptModule('../src/lib/creditex-onboarding-server.ts'),
     }),

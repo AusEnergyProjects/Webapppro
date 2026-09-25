@@ -6,6 +6,7 @@ import {createHash} from 'node:crypto';
 import ts from 'typescript';
 import * as lifecycleSql from '../src/lib/creditex-job-lifecycle-sql.ts';
 import * as delivery from '../src/lib/service-reminder-delivery.ts';
+import { JOB_LIFECYCLE_GUARD_NAMES, lifecycleGuardFixture } from './helpers/creditex-lifecycle-guards-fixture.mjs';
 const NOW='2026-09-25T06:00:00.000Z',SHA='a'.repeat(64);
 const trade={kind:'trade',uid:'manager',access:{ownerUid:'owner',actorUid:'manager',isOwner:true,jobScope:'team',canManageJobs:true,canManageFieldEvidence:true,canViewFieldEvidence:true}};
 const admin={kind:'compliance',uid:'creditex',organisationId:'org',role:'admin'};
@@ -40,7 +41,7 @@ function fixture(t){
  class Statement{constructor(sql,values=[]){this.sql=sql;this.values=values;}bind(...v){return new Statement(this.sql,v);}async first(){return sqlite.prepare(this.sql).get(...this.values)||null;}async all(){return {results:sqlite.prepare(this.sql).all(...this.values)};}runSync(){return {meta:{changes:Number(sqlite.prepare(this.sql).run(...this.values).changes)}};}async run(){return this.runSync();}}
  let beforeBatch;
  const db={prepare:sql=>new Statement(sql),async batch(statements){if(beforeBatch){const fn=beforeBatch;beforeBatch=null;fn();}sqlite.exec('BEGIN');try{const r=statements.map(s=>s.runSync());sqlite.exec('COMMIT');return r;}catch(e){sqlite.exec('ROLLBACK');throw e;}}};
- const dependencies={'node:crypto':{createHash},'./trade-team-sync-server':{jobSyncChangeStatements:()=>[]},'./creditex-job-lifecycle-sql':lifecycleSql,'./service-reminder-delivery':delivery,
+ const dependencies={'./creditex-job-lifecycle-schema-guards':lifecycleGuardFixture(sqlite,JOB_LIFECYCLE_GUARD_NAMES),'node:crypto':{createHash},'./trade-team-sync-server':{jobSyncChangeStatements:()=>[]},'./creditex-job-lifecycle-sql':lifecycleSql,'./service-reminder-delivery':delivery,
  './trade-job-cancellation-server':{cancelledJobAppointmentsStatement:(db,owner,job,now)=>db.prepare(`UPDATE trade_crm_appointments SET status='cancelled',revision=revision+1,updated_at=? WHERE work_order_id=? AND firebase_uid=? AND status='scheduled'`).bind(now,job,owner),reconcileCancelledJobCalendars:async()=>({attempted:0,synced:0,failed:0})},
  './creditex-activity-work-pack-server':{prepareCreditexCorrectionWorkPackStatements:async()=>[]},
  './trade-activity-forms-server':{prepareFieldCorrectionStatements:async(db,input)=>{const sources=JSON.parse(input.sourceSnapshot).records.filter(r=>r.kind==='field');return sources.map(s=>db.prepare(`INSERT INTO trade_activity_field_records SELECT id||'-correction',intent_id,work_order_id,owner_uid,organisation_id,revision+1,'draft','','','',id FROM trade_activity_field_records WHERE id=?`).bind(s.id));}}};

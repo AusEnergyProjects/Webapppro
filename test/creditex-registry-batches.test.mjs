@@ -8,6 +8,7 @@ import * as registry from "../src/lib/creditex-registry.ts";
 import * as formats from "../src/lib/creditex-registry-formats.ts";
 import * as lifecycleSql from "../src/lib/creditex-job-lifecycle-sql.ts";
 import { fixture, HASH, NOW, author, reviewer, auditor } from "./helpers/creditex-registry-fixture.mjs";
+import { REGISTRY_BATCH_GUARD_NAMES, lifecycleGuardFixture } from "./helpers/creditex-lifecycle-guards-fixture.mjs";
 
 function load(name, dependencies) {
   const compiled = ts.transpileModule(readFileSync(new URL(`../src/lib/${name}.ts`, import.meta.url), "utf8"), {
@@ -65,6 +66,7 @@ function batchFixture(t) {
     "./creditex-registry": registry, "./creditex-registry-server": f.service, "./creditex-output-action-server": outputDependencies,
   });
   const service = load("creditex-registry-batches", {
+    "./creditex-job-lifecycle-schema-guards": lifecycleGuardFixture(f.sqlite, REGISTRY_BATCH_GUARD_NAMES),
     fflate, "./creditex-interchange-preflight": preflight, "./creditex-registry-formats": formats,
     "./creditex-registry": registry, "./creditex-registry-server": f.service,
     "./creditex-job-lifecycle-sql": lifecycleSql,

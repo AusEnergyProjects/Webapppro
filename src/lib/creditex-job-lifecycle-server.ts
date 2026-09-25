@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { ensureCreditexJobLifecycleSchemaGuards } from "./creditex-job-lifecycle-schema-guards";
 import type { TeamAccess } from "./trade-team-server";
 import { jobSyncChangeStatements } from "./trade-team-sync-server";
 import { creditexIntentCompletionSnapshotSql, creditexIntentSubmissionSnapshotSql, creditexJobEverCompletedSql } from "./creditex-job-lifecycle-sql";
@@ -29,6 +30,7 @@ const clean = (value: unknown, label: string, max = 240) => {
 };
 
 async function context(db: D1Database, actor: JobLifecycleActor, intentId: string) {
+  await ensureCreditexJobLifecycleSchemaGuards(db);
   const row = await db.prepare(`SELECT intent.id intent_id, intent.status intent_status,
       intent.compliance_organisation_id organisation_id, work.id work_order_id, work.firebase_uid owner_uid,
       COALESCE(account.business_name,'Trade business') business_name, work.work_number,work.title,work.stage,work.record_status,
@@ -256,6 +258,7 @@ export async function loadTradeJobReview(db:D1Database,actor:JobLifecycleActor,w
 export async function dispatchJobCorrectionEmail(db:D1Database,actor:JobLifecycleActor,deliveryId:string,
   options:{now?:()=>string;send?:typeof sendServiceReminderProviderMessage;expectedWorkOrderId?:string}={}) {
   if(!permissions(actor).correction) return fail("JOB_REVIEW_PERMISSION","Review access is required.",403);
+  await ensureCreditexJobLifecycleSchemaGuards(db);
   const delivery=await db.prepare(`SELECT d.* FROM creditex_job_correction_deliveries d
     JOIN creditex_job_lifecycle_events e ON e.id=d.event_id WHERE d.id=?
     AND ${actor.kind==="trade"?"d.owner_uid=?":"e.organisation_id=?"}`)

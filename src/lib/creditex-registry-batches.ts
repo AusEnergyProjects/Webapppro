@@ -1,4 +1,5 @@
 import { strToU8, zipSync, type Zippable } from "fflate";
+import { ensureCreditexJobLifecycleSchemaGuards } from "./creditex-job-lifecycle-schema-guards";
 import { creditexCanonicalSha256 } from "./creditex-interchange-preflight";
 import { downloadRegistryExport } from "./creditex-registry-exports";
 import { listRegistryFormats } from "./creditex-registry-formats";
@@ -65,6 +66,7 @@ function expectedIds(value: unknown): string[] | undefined {
 }
 async function operate(db: D1Database, actor: RegistryActor) {
   if (!(await registryCapabilities(db, actor)).canOperate) fail("REGISTRY_PERMISSION_DENIED", "Your role cannot export or record lodgement.", 403);
+  await ensureCreditexJobLifecycleSchemaGuards(db);
 }
 function audit(db: D1Database, actor: RegistryActor, id: string, at: string) {
   return db.prepare(`INSERT INTO compliance_audit_events(id,organisation_id,actor_type,actor_uid,event_type,target_type,target_id,summary,metadata,created_at)

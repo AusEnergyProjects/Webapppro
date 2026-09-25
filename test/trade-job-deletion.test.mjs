@@ -12,6 +12,8 @@ import { canonicalCreditexSchemaGuardSql, CREDITEX_PILOT_SCHEMA_GUARD_DEFINITION
 import { CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS } from '../src/lib/creditex-work-pack-schema-guards.ts';
 import { TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS } from '../src/lib/trade-rental-schema-guards.ts';
 import * as draftComplianceDeletion from '../src/lib/trade-job-draft-compliance-deletion.ts';
+import { CREDITEX_JOB_LIFECYCLE_SCHEMA_GUARD_DEFINITIONS } from '../src/lib/creditex-job-lifecycle-schema-guards.ts';
+import { FIELD_CORRECTION_GUARD_NAMES, lifecycleGuardFixture } from './helpers/creditex-lifecycle-guards-fixture.mjs';
 
 const root = new URL('../', import.meta.url);
 const load = (path, dependencies = {}) => {
@@ -25,7 +27,7 @@ const load = (path, dependencies = {}) => {
 const timestamp = '2026-09-10T01:00:00.000Z';
 
 function installAllRuntimeGuards(sql) {
-  for (const definition of [...TLINK_SCHEMA_GUARD_DEFINITIONS, ...TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS]) {
+  for (const definition of [...TLINK_SCHEMA_GUARD_DEFINITIONS, ...TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_JOB_LIFECYCLE_SCHEMA_GUARD_DEFINITIONS]) {
     sql.exec(`DROP TRIGGER IF EXISTS \`${definition.name}\``);
     sql.exec(definition.sql);
   }
@@ -52,6 +54,7 @@ function fixture(t) {
   for (const name of fs.readdirSync(new URL('drizzle/', root)).filter((name) => /^\d{4}_.+\.sql$/.test(name) && !name.startsWith('0044_')).sort()) {
     sql.exec(fs.readFileSync(new URL(`drizzle/${name}`, root), 'utf8').replaceAll('--> statement-breakpoint', ''));
   }
+  lifecycleGuardFixture(sql, FIELD_CORRECTION_GUARD_NAMES);
   let beforeBatch;
   class Statement {
     constructor(query, values = []) { this.query = query; this.values = values; }
@@ -386,7 +389,7 @@ test('release 569 runtime guards upgrade with their actual installed identifier 
   const previous = JSON.parse(fs.readFileSync(new URL('test/fixtures/job-deletion-guards-569.json', root), 'utf8'));
   const definitions = [...JOB_DELETION_SCHEMA_GUARDS, ...draftComplianceDeletion.draftComplianceDeletionGuardDefinitions, ...draftComplianceDeletion.draftWorkPackDeletionGuardDefinitions];
   assert.equal(previous.definitions.length, 13);
-  assert.equal(definitions.length - previous.definitions.length, 2, 'the two field-record guards originate only in migrations');
+  assert.equal(definitions.length - previous.definitions.length, 2, 'the two field-record guards come from the field-record guard contract');
   for (const historical of previous.definitions) {
     assert.ok(definitions.some((definition) => definition.name === historical.name));
     f.sql.exec(`DROP TRIGGER IF EXISTS \`${historical.name}\``);

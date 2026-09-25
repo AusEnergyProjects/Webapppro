@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../db";
+import { ensureCreditexJobLifecycleSchemaGuards } from "./creditex-job-lifecycle-schema-guards";
 import { assertCertificateJobEligibility, certificateJobEligibilityPredicate } from "./trade-certificate-eligibility";
 import { assignedJob, type TeamAccess } from "./trade-team-server";
 import {
@@ -503,6 +504,7 @@ function assertCurrentActivityRequirements(record: ActivityRecord) {
 
 export async function loadActivityRecord(access: TeamAccess, id: string, mutate = false): Promise<ActivityRecord> {
   assertActivityFieldAccess(access, mutate);
+  if (mutate) await ensureCreditexJobLifecycleSchemaGuards(getD1());
   const row = await getD1().prepare("SELECT payload FROM trade_activity_field_records WHERE id = ? AND owner_uid = ?")
     .bind(id, access.ownerUid).first<{ payload: string }>();
   if (!row) throw new Error("ACTIVITY_RECORD_NOT_FOUND");
@@ -663,6 +665,7 @@ export async function prepareFieldCorrectionStatements(database: D1Database, inp
   eventId: string; ownerUid: string; workOrderId: string; intentId: string; sourceSnapshot: string;
   actorUid: string; now: string; note?: string;
 }): Promise<D1PreparedStatement[]> {
+  await ensureCreditexJobLifecycleSchemaGuards(database);
   const snapshot: { records?: { kind: string; id: string; revision: number; status: string; sha256?: string; objectKey?: string }[] } = JSON.parse(input.sourceSnapshot);
   if (!Array.isArray(snapshot.records)) throw new Error("ACTIVITY_CORRECTION_SOURCE_CHANGED");
   const statements: D1PreparedStatement[] = [];
@@ -691,6 +694,7 @@ export async function prepareFieldCorrectionStatements(database: D1Database, inp
 
 export async function openActivityRecord(access: TeamAccess, workOrderId: string, intentId: string, variantId = "") {
   assertActivityFieldAccess(access, true);
+  await ensureCreditexJobLifecycleSchemaGuards(getD1());
   const job = await assignedJob(access, workOrderId);
   await assertCertificateJobEligibility(getD1(), { ownerUid: access.ownerUid, actorMemberId: access.memberId,
     assignedMemberId: String(job.assignee_member_id || ""), workOrderId });
@@ -760,6 +764,7 @@ export async function openActivityRecord(access: TeamAccess, workOrderId: string
 }
 
 async function saveRecord(access: TeamAccess, previous: ActivityRecord, next: ActivityRecord, pdf?: { key: string; hash: string }, expectedAssigneeMemberId = "") {
+  await ensureCreditexJobLifecycleSchemaGuards(getD1());
   // Re-check the current worker assignment at the mutation boundary.
   const job = await assignedJob(access, previous.workOrderId);
   const training = await certificateJobEligibilityPredicate(getD1(), { ownerUid: access.ownerUid,

@@ -1,4 +1,5 @@
 import { installFieldCorrectionFixture } from "./helpers/activity-field-corrections-fixture.mjs";
+import { FIELD_CORRECTION_GUARD_NAMES, lifecycleGuardFixture } from "./helpers/creditex-lifecycle-guards-fixture.mjs";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import assert from "node:assert/strict";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
@@ -92,6 +93,7 @@ function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
   const bucket = { async put(key, bytes) { objects.set(key, bytes); }, async delete(key) { objects.delete(key); },
     async get(key) { const bytes = objects.get(key); return bytes ? { arrayBuffer: async () => new Uint8Array(bytes).buffer } : null; } };
   const server = load(fs.readFileSync(new URL("../src/lib/trade-activity-forms-server.ts", import.meta.url), "utf8"), {
+    "./creditex-job-lifecycle-schema-guards": lifecycleGuardFixture(database, FIELD_CORRECTION_GUARD_NAMES),
     "cloudflare:workers": { env: { EVIDENCE: bucket } }, "../../db": { getD1: () => d1 },
     "./trade-team-server": { assignedJob: async (_access, id) => { assert.equal(id, "job"); return { assignee_member_id: "worker", assignee_label: "Worker", revision: 1 }; } },
     "./trade-activity-forms-library.ts": library, "./trade-activity-forms.ts": core, "./trade-activity-form-flow.ts": flow,

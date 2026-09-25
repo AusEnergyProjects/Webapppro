@@ -3,6 +3,7 @@
 // safely carry trigger bodies.
 import { draftWorkPackDeletionGuardDefinitions } from "./trade-job-draft-compliance-deletion.ts";
 import { upgradeJobDeletionGuards } from "./trade-job-deletion-schema-guards.ts";
+import { ensureCreditexJobLifecycleSchemaGuards } from "./creditex-job-lifecycle-schema-guards.ts";
 
 const CREDITEX_WORK_PACK_SCHEMA_GUARD_BASE_DEFINITIONS = [
   { name: "compliance_output_dispatch_insert_guard", sql: "CREATE TRIGGER IF NOT EXISTS compliance_output_dispatch_insert_guard\nBEFORE INSERT ON compliance_output_dispatch_intents\nBEGIN\n  SELECT CASE WHEN NEW.status <> 'dispatching' OR NOT EXISTS (\n    SELECT 1 FROM compliance_output_action_packets packet\n    JOIN compliance_output_action_reviews review\n      ON review.organisation_id = packet.organisation_id AND review.packet_id = packet.id\n      AND review.packet_sha256 = packet.packet_sha256 AND review.decision = 'approved'\n    WHERE packet.organisation_id = NEW.organisation_id AND packet.id = NEW.packet_id\n      AND packet.packet_sha256 = NEW.packet_sha256\n      AND datetime(NEW.started_at) >= datetime(review.reviewed_at)\n      AND NOT EXISTS (SELECT 1 FROM compliance_output_action_events event\n        WHERE event.organisation_id = packet.organisation_id AND event.packet_id = packet.id\n          AND event.sequence > 1)\n  ) THEN RAISE(ABORT, 'OUTPUT_ACTION_DISPATCH_NOT_READY') END;\nEND;" },
@@ -866,6 +867,7 @@ async function ensureCreditexSchemaGuards(
 export async function ensureCreditexWorkPackSchemaGuards(
   database: D1Database,
 ) {
+  await ensureCreditexJobLifecycleSchemaGuards(database);
   await ensureCreditexSchemaGuards(
     database,
     readinessByDatabase,

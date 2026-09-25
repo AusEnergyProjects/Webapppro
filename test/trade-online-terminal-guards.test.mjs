@@ -7,6 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import { ENERGY_SERVICE_IDS } from "../src/lib/energy-service-catalogue.mjs";
 import * as lifecycleSql from "../src/lib/creditex-job-lifecycle-sql.ts";
+import { lifecycleGuardDependency } from "./helpers/creditex-lifecycle-guards-fixture.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -349,6 +350,7 @@ function workOrdersRoute(db, staffAccess = null) {
     "../../db": { getD1: () => db },
   });
   const cancellationServer = loadTypescriptModule("../src/lib/trade-job-cancellation-server.ts", {
+    "./creditex-job-lifecycle-schema-guards": lifecycleGuardDependency(["trade_job_cancel_completion_history_guard"]),
     "./creditex-job-lifecycle-sql": lifecycleSql,
     "./trade-calendar-sync-server": { cancelAppointmentInConnectedCalendars: async () => { throw new Error("Unexpected external calendar call in terminal job guard test"); } },
   });
