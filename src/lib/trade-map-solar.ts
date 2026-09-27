@@ -4,7 +4,7 @@ export type SolarPanelSize = { widthM: number; lengthM: number };
 export type SolarPanelTilt = { lengthTilt: number; widthTilt: number };
 export type SolarPanelSettings = SolarPanelSize & SolarPanelTilt;
 export type SolarPanel = SolarPanelSettings & { id: number; center: google.maps.LatLngLiteral; heading: number };
-export type SolarLayout = { panels: SolarPanel[]; selectedId: number | null };
+export type SolarLayout = { panels: SolarPanel[]; selectedId: number | null; allPanels: boolean };
 export type SolarCopyDirection = "above" | "right" | "below" | "left";
 export const DEFAULT_SOLAR_PANEL_SIZE: SolarPanelSize = { widthM: 1.13, lengthM: 1.72 };
 // An editable roof-pitch assumption, not a measurement of the roof below the map.
@@ -34,8 +34,13 @@ export function adjacentSolarPanel(panel: SolarPanel, direction: SolarCopyDirect
     center: offset(panel.center, distance, solarHeading(panel.heading + bearing)) };
 }
 
-type SolarStyles = { panel: string; face: string; controls: string; ring: string; rotate: string; copy: string };
+type SolarStyles = { panel: string; face: string; controls: string; ring: string; rotate: string; copy: string; group: string; move: string };
 type Entry = { panel: SolarPanel; element: HTMLDivElement; face: HTMLButtonElement; controls: HTMLDivElement };
+type ProjectedPanel = { panel: SolarPanel; x: number; y: number };
+const layoutCentre = (panels: ProjectedPanel[]) => ({
+  x: panels.reduce((sum, panel) => sum + panel.x, 0) / panels.length,
+  y: panels.reduce((sum, panel) => sum + panel.y, 0) / panels.length,
+});
 
 /** A temporary, metre-scaled roof concept. Nothing is stored or sent to a server. */
 export function createTradeMapSolarLayout(api: typeof google.maps, map: google.maps.Map, styles: SolarStyles, onChange: (layout: SolarLayout) => void) {
@@ -45,12 +50,23 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
   const overlay = new api.OverlayView();
   let nextId = 1;
   let selectedId: number | null = null;
+  let allPanels = false;
   let editing = false;
   let capturing = false;
   let ready = false;
-  const state = (): SolarLayout => ({ panels: [...entries.values()].map(({ panel }) => ({ ...panel, center: { ...panel.center } })), selectedId });
+  let gesture: { button: HTMLButtonElement; pointerId: number; panels: ProjectedPanel[]; pivot: { x: number; y: number }; start: { x: number; y: number }; rotate: boolean } | null = null;
+  const state = (): SolarLayout => ({ panels: [...entries.values()].map(({ panel }) => ({ ...panel, center: { ...panel.center } })), selectedId, allPanels });
   const publish = () => { if (ready) overlay.draw(); onChange(state()); };
   const select = (id: number) => { selectedId = id; publish(); };
+  const group = document.createElement("div"); group.className = styles.group;
+  const groupControls = document.createElement("div"); groupControls.className = styles.controls;
+  const groupRing = document.createElement("div"); groupRing.className = styles.ring; groupRing.setAttribute("aria-hidden", "true");
+  const groupRotate = document.createElement("button"); groupRotate.type = "button"; groupRotate.className = styles.rotate; groupRotate.textContent = "↻";
+  groupRotate.setAttribute("aria-label", "Rotate all solar panels"); groupRotate.title = "Drag around the circle to rotate all panels. Arrow keys turn by 1°.";
+  const groupMove = document.createElement("button"); groupMove.type = "button"; groupMove.className = styles.move; groupMove.textContent = "✥";
+  groupMove.setAttribute("aria-label", "Move all solar panels"); groupMove.title = "Drag to move all panels. Arrow keys move by 10 cm; Shift moves by 1 m.";
+  groupControls.append(groupRing, groupRotate, groupMove); group.append(groupControls); host.append(group);
+  api.OverlayView.preventMapHitsAndGesturesFrom(group);
 
   overlay.onAdd = () => {
     const panes = overlay.getPanes();
@@ -59,6 +75,8 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
   overlay.onRemove = () => { ready = false; host.remove(); };
   overlay.draw = () => {
     const projection = overlay.getProjection();
+    const groupPoints: ProjectedPanel[] = [];
+    const radii = new Map<number, number>();
     for (const entry of entries.values()) {
       const { panel, element, face, controls } = entry;
       const center = projection.fromLatLngToDivPixel(new api.LatLng(panel.center));
@@ -76,52 +94,112 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
       face.style.transform = `matrix(${axes.width.x}, 0, ${-axes.length.x}, ${axes.length.y}, 0, 0)`;
       element.style.zIndex = panel.id === selectedId ? "2" : "1";
       element.style.pointerEvents = editing && !capturing ? "auto" : "none";
-      element.dataset.selected = String(panel.id === selectedId && editing && !capturing);
+      element.dataset.selected = String((allPanels || panel.id === selectedId) && editing && !capturing);
       face.tabIndex = editing && !capturing ? 0 : -1;
-      face.setAttribute("aria-pressed", String(panel.id === selectedId));
-      controls.hidden = panel.id !== selectedId || !editing || capturing;
+      face.setAttribute("aria-pressed", String(allPanels || panel.id === selectedId));
+      face.setAttribute("aria-label", `Solar panel ${panel.id}. Drag to move${allPanels ? " all panels" : ""}`);
+      controls.hidden = allPanels || panel.id !== selectedId || !editing || capturing;
       const ringSize = Math.max(100, Math.hypot(width * axes.width.x + height * axes.length.x, height * axes.length.y) + 52);
       controls.style.width = controls.style.height = `${ringSize}px`;
+      groupPoints.push({ panel, x: center.x, y: center.y });
+      radii.set(panel.id, (ringSize - 52) / 2);
+    }
+    group.hidden = !allPanels || !editing || capturing || !groupPoints.length;
+    if (!group.hidden) {
+      const pivot = layoutCentre(groupPoints);
+      const radius = Math.max(...groupPoints.map((point) => Math.hypot(point.x - pivot.x, point.y - pivot.y) + (radii.get(point.panel.id) ?? 0)));
+      group.style.left = `${pivot.x}px`; group.style.top = `${pivot.y}px`;
+      groupControls.style.width = groupControls.style.height = `${Math.max(100, radius * 2 + 52)}px`;
+      groupControls.style.transform = `translate(-50%, -50%) rotate(${groupPoints[0].panel.heading}deg)`;
     }
   };
   overlay.setMap(map);
 
-  function drag(button: HTMLButtonElement, entry: Entry, rotate: boolean) {
-    let pointerId: number | null = null;
-    let offset = { x: 0, y: 0 };
-    let headingOffset = 0;
+  function stopGesture() {
+    const previous = gesture; gesture = null;
+    if (previous?.button.hasPointerCapture(previous.pointerId)) previous.button.releasePointerCapture(previous.pointerId);
+  }
+  function snapshot(entry?: Entry): ProjectedPanel[] {
+    if (!ready) return [];
+    const targets = allPanels ? [...entries.values()] : entry ? [entry] : [];
+    const projection = overlay.getProjection();
+    return targets.flatMap(({ panel }) => {
+      const point = projection.fromLatLngToContainerPixel(new api.LatLng(panel.center));
+      return point ? [{ panel: { ...panel, center: { ...panel.center } }, x: point.x, y: point.y }] : [];
+    });
+  }
+  function transform(panels: ProjectedPanel[], pivot: { x: number; y: number }, dx: number, dy: number, rotation: number) {
+    const radians = rotation * Math.PI / 180, cos = Math.cos(radians), sin = Math.sin(radians);
+    const projection = overlay.getProjection();
+    for (const point of panels) {
+      const entry = entries.get(point.panel.id);
+      const x = point.x - pivot.x, y = point.y - pivot.y;
+      const position = projection.fromContainerPixelToLatLng(new api.Point(pivot.x + cos * x - sin * y + dx, pivot.y + sin * x + cos * y + dy));
+      if (entry && position) {
+        entry.panel.center = position.toJSON();
+        entry.panel.heading = solarHeading(point.panel.heading + rotation);
+      }
+    }
+    publish();
+  }
+  function rotateBy(degrees: number, entry?: Entry) {
+    if (!editing || capturing || !Number.isFinite(degrees)) return;
+    stopGesture();
+    const panels = snapshot(entry);
+    if (panels.length) transform(panels, layoutCentre(panels), 0, 0, degrees);
+  }
+  function nudge(event: KeyboardEvent, entry?: Entry) {
+    const directions: Record<string, number> = { ArrowUp: 0, ArrowRight: 90, ArrowDown: 180, ArrowLeft: 270 };
+    if (!editing || capturing || !(event.key in directions)) return;
+    event.preventDefault(); stopGesture();
+    if (entry) select(entry.panel.id);
+    const panels = snapshot(entry);
+    if (!panels.length) return;
+    const pivot = layoutCentre(panels), projection = overlay.getProjection();
+    const origin = projection.fromContainerPixelToLatLng(new api.Point(pivot.x, pivot.y));
+    if (!origin) return;
+    const target = projection.fromLatLngToContainerPixel(api.geometry.spherical.computeOffset(origin, event.shiftKey ? 1 : 0.1, directions[event.key]));
+    if (target) transform(panels, pivot, target.x - pivot.x, target.y - pivot.y, 0);
+  }
+  function rotationKey(event: KeyboardEvent, entry?: Entry) {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault(); rotateBy(["ArrowLeft", "ArrowDown"].includes(event.key) ? -1 : 1, entry);
+  }
+  function drag(button: HTMLButtonElement, entry: Entry | undefined, rotate: boolean) {
     button.addEventListener("pointerdown", (event) => {
       if (!editing || capturing || event.button !== 0 || !ready) return;
       event.preventDefault(); event.stopPropagation();
-      select(entry.panel.id);
-      const center = overlay.getProjection().fromLatLngToContainerPixel(new api.LatLng(entry.panel.center));
-      if (!center) return;
+      stopGesture();
+      if (entry) select(entry.panel.id);
+      const panels = snapshot(entry);
+      if (!panels.length) return;
       const bounds = map.getDiv().getBoundingClientRect();
-      offset = { x: event.clientX - bounds.left - center.x, y: event.clientY - bounds.top - center.y };
-      headingOffset = Math.atan2(offset.x, -offset.y) * 180 / Math.PI - entry.panel.heading;
-      pointerId = event.pointerId;
+      gesture = { button, pointerId: event.pointerId, panels, pivot: layoutCentre(panels), start: { x: event.clientX - bounds.left, y: event.clientY - bounds.top }, rotate };
       button.setPointerCapture(event.pointerId);
     }, { signal: events.signal });
     button.addEventListener("pointermove", (event) => {
-      if (pointerId !== event.pointerId || !editing || capturing) return;
+      const current = gesture;
+      if (!current || current.button !== button || current.pointerId !== event.pointerId || !editing || capturing) return;
       const bounds = map.getDiv().getBoundingClientRect();
       const x = event.clientX - bounds.left, y = event.clientY - bounds.top;
-      const projection = overlay.getProjection();
-      if (rotate) {
-        const center = projection.fromLatLngToContainerPixel(new api.LatLng(entry.panel.center));
-        if (!center) return;
-        entry.panel.heading = solarHeading(Math.atan2(x - center.x, center.y - y) * 180 / Math.PI - headingOffset);
+      if (current.rotate) {
+        const { pivot, start } = current;
+        if (Math.hypot(x - pivot.x, y - pivot.y) < 4) return;
+        const degrees = (Math.atan2(y - pivot.y, x - pivot.x) - Math.atan2(start.y - pivot.y, start.x - pivot.x)) * 180 / Math.PI;
+        transform(current.panels, pivot, 0, 0, degrees);
       } else {
-        const position = projection.fromContainerPixelToLatLng(new api.Point(x - offset.x, y - offset.y));
-        if (position) entry.panel.center = position.toJSON();
+        transform(current.panels, current.pivot, x - current.start.x, y - current.start.y, 0);
       }
-      publish();
     }, { signal: events.signal });
-    const stop = () => { pointerId = null; };
+    const stop = (event: PointerEvent) => { if (gesture?.button === button && gesture.pointerId === event.pointerId) stopGesture(); };
     button.addEventListener("pointerup", stop, { signal: events.signal });
     button.addEventListener("pointercancel", stop, { signal: events.signal });
     button.addEventListener("lostpointercapture", stop, { signal: events.signal });
   }
+  drag(groupMove, undefined, false); drag(groupRotate, undefined, true);
+  groupMove.addEventListener("keydown", (event) => nudge(event), { signal: events.signal });
+  groupRotate.addEventListener("keydown", (event) => rotationKey(event), { signal: events.signal });
+  const mapListeners = [map.addListener("zoom_changed", stopGesture), map.addListener("center_changed", stopGesture)];
 
   function addPanel(data: Omit<SolarPanel, "id">) {
     if (!validSolarPanelSize(data) || !validSolarPanelTilt(data) || !Number.isFinite(data.heading)) return;
@@ -142,17 +220,10 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
     const entry = { panel, element, face, controls };
     face.addEventListener("click", () => select(panel.id), { signal: events.signal });
     face.addEventListener("keydown", (event) => {
-      const directions: Record<string, number> = { ArrowUp: 0, ArrowRight: 90, ArrowDown: 180, ArrowLeft: 270 };
       if (event.key === "Delete" || event.key === "Backspace") { event.preventDefault(); select(panel.id); removeSelected(); return; }
-      if (!(event.key in directions)) return;
-      event.preventDefault();
-      panel.center = api.geometry.spherical.computeOffset(panel.center, event.shiftKey ? 1 : 0.1, directions[event.key]).toJSON();
-      select(panel.id);
+      nudge(event, entry);
     }, { signal: events.signal });
-    rotate.addEventListener("keydown", (event) => {
-      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
-      event.preventDefault(); panel.heading = solarHeading(panel.heading + (["ArrowLeft", "ArrowDown"].includes(event.key) ? -1 : 1)); publish();
-    }, { signal: events.signal });
+    rotate.addEventListener("keydown", (event) => rotationKey(event, entry), { signal: events.signal });
     const directions: [SolarCopyDirection, string][] = [["above", "↑"], ["right", "→"], ["below", "↓"], ["left", "←"]];
     for (const [direction, arrow] of directions) {
       const button = document.createElement("button");
@@ -171,19 +242,24 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
     if (source) addPanel(adjacentSolarPanel(source, direction, (from, distance, heading) => api.geometry.spherical.computeOffset(from, distance, heading).toJSON()));
   }
   function removeSelected() {
-    if (selectedId === null) return;
+    if (allPanels || selectedId === null || capturing) return;
+    stopGesture();
     entries.get(selectedId)?.element.remove(); entries.delete(selectedId); selectedId = null; publish();
   }
   return {
-    add: (settings: SolarPanelSettings) => { const center = map.getCenter(); if (center) addPanel({ ...settings, center: center.toJSON(), heading: 0 }); },
+    add: (settings: SolarPanelSettings) => { const center = map.getCenter(); if (center) { stopGesture(); allPanels = false; addPanel({ ...settings, center: center.toJSON(), heading: 0 }); } },
     updateSelected: (values: SolarPanelSettings & { heading: number }) => {
+      if (allPanels || capturing) return;
+      stopGesture();
       const selected = selectedId === null ? null : entries.get(selectedId);
       if (selected && validSolarPanelSize(values) && validSolarPanelTilt(values) && Number.isFinite(values.heading)) { Object.assign(selected.panel, values, { heading: solarHeading(values.heading) }); publish(); }
     },
     removeSelected,
-    clear: () => { entries.forEach(({ element }) => element.remove()); entries.clear(); selectedId = null; publish(); },
-    setEditing: (value: boolean) => { editing = value; publish(); },
-    setCapturing: (value: boolean) => { capturing = value; if (ready) overlay.draw(); },
-    dispose: () => { events.abort(); entries.clear(); overlay.setMap(null); },
+    setAllPanels: (value: boolean) => { stopGesture(); allPanels = value; publish(); },
+    rotateAll: (degrees: number) => { if (allPanels) rotateBy(degrees); },
+    clear: () => { stopGesture(); entries.forEach(({ element }) => element.remove()); entries.clear(); selectedId = null; allPanels = false; publish(); },
+    setEditing: (value: boolean) => { stopGesture(); editing = value; publish(); },
+    setCapturing: (value: boolean) => { stopGesture(); capturing = value; if (ready) overlay.draw(); },
+    dispose: () => { stopGesture(); mapListeners.forEach((listener) => listener.remove()); events.abort(); entries.clear(); overlay.setMap(null); },
   };
 }
