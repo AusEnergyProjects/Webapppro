@@ -21,6 +21,45 @@ type Submission = {
 };
 type State = { owner_uid: string; provider: TradeEmailProvider; encrypted_verifier: string; redirect_uri: string };
 
+type EmailConnectionStage = 'state_validation' | 'owner_validation' | 'verifier_decryption' | 'token_exchange' | 'identity_lookup' | 'connection_storage';
+type EmailConnectionReason = 'connection_invalid' | 'encryption_unavailable' | 'credentials_invalid' | 'provider_unavailable' | 'provider_reconnect'
+  | 'provider_rejected' | 'provider_response_invalid' | 'permission_required' | 'refresh_token_required' | 'identity_invalid' | 'input_invalid' | 'connection_failed';
+
+export class TradeEmailConnectionError extends Error {
+  readonly stage: EmailConnectionStage;
+  readonly reason: EmailConnectionReason;
+  constructor(stage: EmailConnectionStage, reason: EmailConnectionReason) {
+    super('EMAIL_CONNECTION_INVALID');
+    this.name = 'TradeEmailConnectionError';
+    this.stage = stage;
+    this.reason = reason;
+  }
+}
+
+function connectionFailureReason(error: unknown): EmailConnectionReason {
+  if (error instanceof TradeEmailProviderError) {
+    switch (error.code) {
+      case 'email_provider_unavailable': return 'provider_unavailable';
+      case 'email_provider_reconnect': return 'provider_reconnect';
+      case 'email_provider_rejected': return 'provider_rejected';
+      case 'email_provider_response_invalid': return 'provider_response_invalid';
+      case 'email_permission_required': return 'permission_required';
+      case 'email_refresh_token_required': return 'refresh_token_required';
+      case 'email_identity_invalid': return 'identity_invalid';
+      case 'email_input_invalid': return 'input_invalid';
+      default: return 'connection_failed';
+    }
+  }
+  if (error instanceof Error) {
+    switch (error.message) {
+      case 'EMAIL_CONNECTION_INVALID': return 'connection_invalid';
+      case 'INTEGRATION_ENCRYPTION_UNAVAILABLE': return 'encryption_unavailable';
+      case 'INTEGRATION_CREDENTIALS_INVALID': return 'credentials_invalid';
+    }
+  }
+  return 'connection_failed';
+}
+
 export function isTradeEmailProvider(value: unknown): value is TradeEmailProvider { return value === 'google' || value === 'microsoft'; }
 function settings(provider: TradeEmailProvider) {
   const values: EmailEnvironment = env;
@@ -70,32 +109,42 @@ export async function beginTradeEmailConnection(ownerUid: string, provider: Trad
 }
 
 export async function completeTradeEmailConnection(provider: TradeEmailProvider, state: string, browser: string, code: string, redirectUri: string, db: D1Database = getD1()) {
-  if (!state || !browser || !code) throw new Error('EMAIL_CONNECTION_INVALID');
-  const row = await db.prepare(`UPDATE trade_email_oauth_states SET consumed_at = ? WHERE provider = ? AND state_hash = ?
-    AND browser_hash = ? AND redirect_uri = ? AND consumed_at = '' AND expires_at > ? RETURNING owner_uid, provider, encrypted_verifier, redirect_uri`)
-    .bind(new Date().toISOString(), provider, await integrationStateHash(state), await integrationStateHash(browser), redirectUri, new Date().toISOString()).first<State>();
-  if (!row || !configured(provider, row.owner_uid)) throw new Error('EMAIL_CONNECTION_INVALID');
-  const owner = await db.prepare(`SELECT business_name FROM trade_accounts a WHERE a.firebase_uid = ? AND a.partner_type = 'installer'
-    AND ${verifiedTradeAccountPredicate('a')}`).bind(row.owner_uid).first<{ business_name: string }>();
-  if (!owner) throw new Error('EMAIL_CONNECTION_INVALID');
-  const payload = await decryptProtectedPayload(row.encrypted_verifier);
-  if (typeof payload.verifier !== 'string') throw new Error('EMAIL_CONNECTION_INVALID');
-  const credentials = await exchangeEmailCode(provider, settings(provider), { code, redirectUri, verifier: payload.verifier });
-  const identity = await getEmailIdentity(provider, credentials.accessToken);
-  const now = new Date().toISOString();
-  // The consumed state must still exist: disconnect/new connect invalidates an in-flight callback.
-  await db.prepare(`INSERT INTO trade_email_connections
-    (owner_uid, id, provider, external_id, sender_email, display_name, encrypted_credentials, status, created_at, updated_at)
-    SELECT ?, ?, ?, ?, ?, ?, ?, 'connected', ?, ? WHERE EXISTS
-      (SELECT 1 FROM trade_email_oauth_states s JOIN trade_accounts a ON a.firebase_uid = s.owner_uid
-       WHERE s.owner_uid = ? AND s.state_hash = ? AND s.consumed_at <> '' AND a.partner_type = 'installer'
-         AND ${verifiedTradeAccountPredicate('a')})
-    ON CONFLICT(owner_uid) DO UPDATE SET id = excluded.id, provider = excluded.provider, external_id = excluded.external_id,
-      sender_email = excluded.sender_email, display_name = excluded.display_name, encrypted_credentials = excluded.encrypted_credentials,
-      status = 'connected', refresh_lock = '', refresh_lock_until = '', last_test_at = '', last_error = '', updated_at = excluded.updated_at`)
-    .bind(row.owner_uid, crypto.randomUUID(), provider, identity.id, identity.email, owner.business_name,
-      await encryptProtectedPayload({ ...credentials }), now, now, row.owner_uid, await integrationStateHash(state)).run()
-    .then(result => { if (!result.meta.changes) throw new Error('EMAIL_CONNECTION_INVALID'); });
+  let stage: EmailConnectionStage = 'state_validation';
+  try {
+    if (!state || !browser || !code) throw new Error('EMAIL_CONNECTION_INVALID');
+    const row = await db.prepare(`UPDATE trade_email_oauth_states SET consumed_at = ? WHERE provider = ? AND state_hash = ?
+      AND browser_hash = ? AND redirect_uri = ? AND consumed_at = '' AND expires_at > ? RETURNING owner_uid, provider, encrypted_verifier, redirect_uri`)
+      .bind(new Date().toISOString(), provider, await integrationStateHash(state), await integrationStateHash(browser), redirectUri, new Date().toISOString()).first<State>();
+    if (!row || !configured(provider, row.owner_uid)) throw new Error('EMAIL_CONNECTION_INVALID');
+    stage = 'owner_validation';
+    const owner = await db.prepare(`SELECT business_name FROM trade_accounts a WHERE a.firebase_uid = ? AND a.partner_type = 'installer'
+      AND ${verifiedTradeAccountPredicate('a')}`).bind(row.owner_uid).first<{ business_name: string }>();
+    if (!owner) throw new Error('EMAIL_CONNECTION_INVALID');
+    stage = 'verifier_decryption';
+    const payload = await decryptProtectedPayload(row.encrypted_verifier);
+    if (typeof payload.verifier !== 'string') throw new Error('EMAIL_CONNECTION_INVALID');
+    stage = 'token_exchange';
+    const credentials = await exchangeEmailCode(provider, settings(provider), { code, redirectUri, verifier: payload.verifier });
+    stage = 'identity_lookup';
+    const identity = await getEmailIdentity(provider, credentials.accessToken);
+    stage = 'connection_storage';
+    const now = new Date().toISOString();
+    // The consumed state must still exist: disconnect/new connect invalidates an in-flight callback.
+    await db.prepare(`INSERT INTO trade_email_connections
+      (owner_uid, id, provider, external_id, sender_email, display_name, encrypted_credentials, status, created_at, updated_at)
+      SELECT ?, ?, ?, ?, ?, ?, ?, 'connected', ?, ? WHERE EXISTS
+        (SELECT 1 FROM trade_email_oauth_states s JOIN trade_accounts a ON a.firebase_uid = s.owner_uid
+         WHERE s.owner_uid = ? AND s.state_hash = ? AND s.consumed_at <> '' AND a.partner_type = 'installer'
+           AND ${verifiedTradeAccountPredicate('a')})
+      ON CONFLICT(owner_uid) DO UPDATE SET id = excluded.id, provider = excluded.provider, external_id = excluded.external_id,
+        sender_email = excluded.sender_email, display_name = excluded.display_name, encrypted_credentials = excluded.encrypted_credentials,
+        status = 'connected', refresh_lock = '', refresh_lock_until = '', last_test_at = '', last_error = '', updated_at = excluded.updated_at`)
+      .bind(row.owner_uid, crypto.randomUUID(), provider, identity.id, identity.email, owner.business_name,
+        await encryptProtectedPayload({ ...credentials }), now, now, row.owner_uid, await integrationStateHash(state)).run()
+      .then(result => { if (!result.meta.changes) throw new Error('EMAIL_CONNECTION_INVALID'); });
+  } catch (error) {
+    throw new TradeEmailConnectionError(stage, connectionFailureReason(error));
+  }
 }
 
 export async function disconnectTradeEmail(ownerUid: string, db: D1Database = getD1()) {

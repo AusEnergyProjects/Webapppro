@@ -20,6 +20,7 @@ function load(path, dependencies) {
 class TradeAccessError extends Error {
   constructor(message, status) { super(message); this.status = status; }
 }
+class TradeEmailConnectionError extends Error {}
 const adminJson = (body, status = 200) => Response.json(body, { status });
 const api = load("../src/lib/trade-email-api.ts", {
   "./admin-server": { adminJson, mfaErrorResponse }, "./trade-access-server": { TradeAccessError }, "./bounded-json-request": bounded,
@@ -44,6 +45,7 @@ function fixture(options = {}) {
     "@/lib/trade-team-server": { requireInstallerTeamAccess: async (...args) => { calls.auth.push(args); if (hooks.authError) throw hooks.authError; return { ...access, ...hooks.access }; } },
     "@/lib/trade-email-api": api,
     "@/lib/trade-email-server": {
+      TradeEmailConnectionError,
       isTradeEmailProvider: (value) => value === "google" || value === "microsoft",
       tradeEmailSettings: async (ownerUid) => { assert.equal(ownerUid, "owner"); return { providers: [], connection: { email: "office@example.test", status: "connected" } }; },
       beginTradeEmailConnection: async (...args) => { calls.begin.push(args); return { browser: "b".repeat(43), authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth?state=test" }; },

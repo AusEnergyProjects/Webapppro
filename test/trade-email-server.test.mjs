@@ -91,6 +91,54 @@ function fixture(overrides = {}) {
   return f;
 }
 
+test("Connection failures identify the exact stage using fixed codes and never retain private error data", async () => {
+  const privateValue = "private-token-state-email@example.test";
+  const cases = [
+    { stage: "state_validation", reason: "connection_invalid", prepare: (f, pending) => { pending.browser = "wrong"; } },
+    { stage: "owner_validation", reason: "connection_invalid", prepare: (f) => { f.sqlite.exec("UPDATE trade_accounts SET verified = 0 WHERE firebase_uid = 'owner'"); } },
+    { stage: "verifier_decryption", reason: "credentials_invalid", prepare: (f) => { f.sqlite.prepare("UPDATE trade_email_oauth_states SET encrypted_verifier = ?").run(privateValue); } },
+    { stage: "token_exchange", reason: "permission_required", prepare: (f) => { f.hooks.exchange = async () => { throw new emailProvider.TradeEmailProviderError("email_permission_required", "reconnect"); }; } },
+    { stage: "identity_lookup", reason: "identity_invalid", prepare: (f) => { f.hooks.identity = async () => { throw new emailProvider.TradeEmailProviderError("email_identity_invalid", "rejected"); }; } },
+    { stage: "connection_storage", reason: "connection_failed", prepare: (f) => { f.hooks.beforeRun = async (sql) => { if (sql.includes("INSERT INTO trade_email_connections")) throw new Error(privateValue); }; } },
+    { stage: "token_exchange", reason: "connection_failed", prepare: (f) => { f.hooks.exchange = async () => { throw new emailProvider.TradeEmailProviderError(privateValue, "rejected"); }; } },
+    { stage: "identity_lookup", reason: "connection_failed", prepare: (f) => { f.hooks.identity = async () => { throw Object.assign(new Error(privateValue), { code: privateValue, stage: privateValue, cause: { token: privateValue } }); }; } },
+    { stage: "token_exchange", reason: "connection_failed", prepare: (f) => { f.hooks.exchange = async () => { throw { code: "email_provider_rejected", raw: privateValue }; }; } },
+  ];
+  for (const item of cases) {
+    const f = fixture();
+    try {
+      const pending = await f.begin();
+      item.prepare(f, pending);
+      await assert.rejects(f.complete(pending), (error) => {
+        assert.ok(error instanceof f.server.TradeEmailConnectionError);
+        assert.equal(error.stage, item.stage);
+        assert.equal(error.reason, item.reason);
+        assert.equal(error.message, "EMAIL_CONNECTION_INVALID");
+        assert.equal(Object.hasOwn(error, "cause"), false);
+        assert.equal(JSON.stringify(error).includes(privateValue), false);
+        assert.equal(String(error).includes(privateValue), false);
+        return true;
+      });
+      assert.equal(f.row(), undefined);
+      assert.equal(f.calls.send.length, 0);
+    } finally { f.close(); }
+  }
+});
+
+test("Connection classifies only recognised provider codes without provider payloads", async () => {
+  for (const [code, reason] of [
+    ["email_provider_unavailable", "provider_unavailable"], ["email_provider_reconnect", "provider_reconnect"],
+    ["email_provider_rejected", "provider_rejected"], ["email_provider_response_invalid", "provider_response_invalid"],
+    ["email_refresh_token_required", "refresh_token_required"], ["email_input_invalid", "input_invalid"],
+  ]) {
+    const f = fixture({ exchange: async () => { throw new emailProvider.TradeEmailProviderError(code, "rejected"); } });
+    try {
+      const pending = await f.begin();
+      await assert.rejects(f.complete(pending), (error) => error.stage === "token_exchange" && error.reason === reason);
+    } finally { f.close(); }
+  }
+});
+
 test("Connection selects verified provider identity, uses business display name and protects tokens from settings", async () => {
   const f = fixture();
   try {
