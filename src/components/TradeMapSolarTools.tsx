@@ -34,7 +34,7 @@ export function TradeMapSolarTools({ api, map, active, disabled, onActivate, onC
     onActivate(); controller.current?.setEditing(true); setMessage("");
     if ((map.getZoom() ?? 0) < 20) map.setZoom(20);
     controller.current?.add(size);
-    map.getDiv().scrollIntoView({ block: "center", behavior: "smooth" });
+    requestAnimationFrame(() => map.getDiv().scrollIntoView({ block: "center", behavior: "smooth" }));
   }
   function applySize() {
     const size = { widthM: Number(width), lengthM: Number(length) };
@@ -56,6 +56,7 @@ export function TradeMapSolarTools({ api, map, active, disabled, onActivate, onC
     <div className={styles.toolbar}>
       <button type="button" disabled={disabled || capturing} onClick={addPanel}>Add solar panel</button>
       <button type="button" disabled={disabled || capturing} onClick={() => void captureImage()}>{capturing ? "Capturing…" : "Capture image"}</button>
+      {capturing && <button type="button" onClick={() => { capture.current?.abort(); setCapturing(false); setMessage("Capture cancelled."); }}>Cancel capture</button>}
       {layout.panels.length > 0 && <><span className={styles.count}>{layout.panels.length} {layout.panels.length === 1 ? "panel" : "panels"}</span>
         {!active && <button type="button" disabled={capturing} onClick={onActivate}>Edit panels</button>}
       </>}

@@ -44,7 +44,21 @@ export async function captureTradeMapPng(mapElement: HTMLElement, panelCount: nu
   try {
     const options: MapCaptureOptions = { audio: false, video: { displaySurface: "browser" }, preferCurrentTab: true,
       selfBrowserSurface: "include", surfaceSwitching: "exclude", monitorTypeSurfaces: "exclude" };
-    stream = await devices.getDisplayMedia(options);
+    stream = await new Promise<MediaStream>((resolve, reject) => {
+      let settled = false;
+      const finish = (error?: Error) => {
+        settled = true; window.clearTimeout(timer); signal.removeEventListener("abort", cancel);
+        if (error) reject(error);
+      };
+      const cancel = () => finish(new Error("Capture cancelled."));
+      const timer = window.setTimeout(() => finish(new Error("No tab was shared. If no sharing prompt appeared, open TLink in desktop Chrome or Edge and try Capture image again.")), 30000);
+      signal.addEventListener("abort", cancel, { once: true });
+      if (signal.aborted) { cancel(); return; }
+      void devices.getDisplayMedia(options).then((incoming) => {
+        if (settled || signal.aborted) { incoming.getTracks().forEach((track) => track.stop()); return; }
+        finish(); resolve(incoming);
+      }, (error: unknown) => { if (!settled) finish(error instanceof Error ? error : new Error("The browser could not share this tab.")); });
+    });
     const track: CaptureTrack | undefined = stream.getVideoTracks()[0];
     if (signal.aborted || !track || !isCurrentMapTab(track, token, origin)) throw new Error("Choose this TLink browser tab to capture the map. Other tabs and windows are not saved.");
     if (!track.cropTo) throw new Error("This browser cannot capture just the map. Use desktop Chrome or Edge, or your device's screenshot tool.");

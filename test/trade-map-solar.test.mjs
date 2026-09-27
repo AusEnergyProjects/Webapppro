@@ -40,11 +40,13 @@ test("capture identity accepts only the exact current tab, not another TLink tab
   assert.equal(isCurrentMapTab({ getSettings: () => ({ displaySurface: "browser" }) }, "current", origin), false);
 });
 
-function captureHarness(t, { wrongTab = false, rejectCrop = false, noCrop = false, denied = false, covered = false } = {}) {
+function captureHarness(t, { wrongTab = false, rejectCrop = false, noCrop = false, denied = false, covered = false, pending = false } = {}) {
   const originals = new Map();
   const global = (name, value) => { originals.set(name, Object.getOwnPropertyDescriptor(globalThis, name)); Object.defineProperty(globalThis, name, { configurable: true, value }); };
   t.after(() => { for (const [name, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, name, descriptor); else delete globalThis[name]; } });
   const calls = [];
+  const attempt = new AbortController();
+  let grant;
   let identity = null;
   const track = new EventTarget();
   track.getSettings = () => ({ displaySurface: "browser" });
@@ -54,7 +56,7 @@ function captureHarness(t, { wrongTab = false, rejectCrop = false, noCrop = fals
   const stream = { getVideoTracks: () => [track], getTracks: () => [track] };
   global("navigator", { mediaDevices: {
     setCaptureHandleConfig(config) { identity = config; calls.push(config.handle ? "identity" : "clear identity"); },
-    async getDisplayMedia() { calls.push("share"); if (denied) throw new DOMException("cancelled", "NotAllowedError"); return stream; },
+    async getDisplayMedia() { calls.push("share"); if (denied) throw new DOMException("cancelled", "NotAllowedError"); if (pending) return new Promise((resolve) => { grant = () => resolve(stream); }); return stream; },
   } });
   global("window", { CropTarget: { fromElement: async () => ({}) }, setTimeout, clearTimeout });
   global("location", { origin: "https://example.test" });
@@ -68,8 +70,8 @@ function captureHarness(t, { wrongTab = false, rejectCrop = false, noCrop = fals
   const link = { click() { calls.push("download"); }, remove() {} };
   const element = { scrollIntoView() {}, contains: () => !covered, getBoundingClientRect: () => ({ top: 0, left: 0, bottom: 400, right: 600 }) };
   global("document", { createElement(tag) { calls.push(`create ${tag}`); return { video, canvas, a: link }[tag]; }, body: { append() {} }, elementFromPoint: () => element });
-  const run = () => captureTradeMapPng(element, 4, () => calls.push("hide controls"), () => calls.push("restore controls"), new AbortController().signal);
-  return { calls, run, canvas, link };
+  const run = () => captureTradeMapPng(element, 4, () => calls.push("hide controls"), () => calls.push("restore controls"), attempt.signal);
+  return { calls, run, canvas, link, cancel: () => attempt.abort(), grant: () => grant() };
 }
 
 test("PNG capture crops before reading pixels and always stops sharing", async (t) => {
@@ -94,4 +96,17 @@ for (const reason of ["wrongTab", "rejectCrop", "noCrop", "denied", "covered"]) 
   assert.equal(h.calls.includes("download"), false);
   if (reason !== "denied") assert.ok(h.calls.includes("stop"));
   assert.ok(h.calls.includes("clear identity"));
+});
+
+test("cancelling a pending sharing prompt stops even a stream granted later", async (t) => {
+  const h = captureHarness(t, { pending: true });
+  const result = h.run();
+  h.cancel();
+  await assert.rejects(result, /cancelled/);
+  assert.ok(h.calls.includes("restore controls"));
+  h.grant();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(h.calls.includes("stop"));
+  assert.equal(h.calls.includes("create video"), false);
+  assert.equal(h.calls.includes("download"), false);
 });
