@@ -1,5 +1,4 @@
 import { env } from "cloudflare:workers";
-import { PDFDocument } from "pdf-lib";
 import { decodeQuoteRoofImage, parseQuoteRoofImage, quoteRoofImageDimensions, type TradeQuoteRoofImage } from "./trade-quote-roof-image";
 
 type RoofImageBucket = {
@@ -22,7 +21,10 @@ async function sha256(bytes: Uint8Array) {
 export async function storeQuoteRoofImage(input: { ownerUid: string; workOrderId: string; versionId: string; upload: unknown }): Promise<TradeQuoteRoofImage> {
   const { bytes, width, height } = decodeQuoteRoofImage(input.upload);
   // Parse the full PNG before storing it, so broken image data never becomes a saved quote attachment.
-  try { await (await PDFDocument.create()).embedPng(bytes); } catch { throw new Error("QUOTE_ROOF_IMAGE_INVALID"); }
+  try {
+    const { PDFDocument } = await import("pdf-lib");
+    await (await PDFDocument.create()).embedPng(bytes);
+  } catch { throw new Error("QUOTE_ROOF_IMAGE_INVALID"); }
   const hash = await sha256(bytes);
   const objectKey = `trade-quote-roofs/${encodeURIComponent(input.ownerUid)}/${encodeURIComponent(input.workOrderId)}/${encodeURIComponent(input.versionId)}/${crypto.randomUUID()}.png`;
   try {
