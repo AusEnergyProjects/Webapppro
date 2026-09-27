@@ -48,7 +48,7 @@ test("OAuth exchanges code with verifier and keeps provider identity out of toke
       count++;
       assert.equal(url, provider === "google" ? "https://oauth2.googleapis.com/token" : "https://login.microsoftonline.com/common/oauth2/v2.0/token");
       assert.equal(init.method, "POST");
-      assert.equal(init.redirect, "error");
+      assert.equal(init.redirect, "manual");
       assert.equal(init.body.get("code_verifier"), code.verifier);
       assert.equal(init.body.get("grant_type"), "authorization_code");
       assert.equal(init.body.get("redirect_uri"), callback);
@@ -105,7 +105,7 @@ test("Gmail sends MIME with Unicode text and subject, HTML alternative and intac
   const result = await sendMailboxEmail("google", "access-token", unicode, async (url, init) => {
     assert.equal(url, "https://gmail.googleapis.com/gmail/v1/users/me/messages/send");
     assert.equal(init.method, "POST");
-    assert.equal(init.redirect, "error");
+    assert.equal(init.redirect, "manual");
     assert.equal(init.headers.Authorization, "Bearer access-token");
     const body = JSON.parse(init.body);
     assert.match(body.raw, /^[A-Za-z0-9_-]+$/);
@@ -229,5 +229,27 @@ test("Send failures never retry and distinguish rejection, revoked access and un
   }
   for (const response of [new Response("not-json"), json({}), json([])]) {
     await assert.rejects(sendMailboxEmail("google", "token", input, async () => response), expectedError("email_provider_response_invalid", "uncertain"));
+  }
+});
+
+test("OAuth, refresh, identity and sends reject redirects without forwarding credentials or retrying", async () => {
+  for (const provider of ["google", "microsoft"]) {
+    for (const status of [301, 302, 303, 307, 308]) {
+      for (const operation of [
+        fetchImpl => exchangeEmailCode(provider, config, code, fetchImpl),
+        fetchImpl => refreshEmailCredentials(provider, config, { accessToken: "token", refreshToken: "refresh", expiresAt: new Date().toISOString() }, fetchImpl),
+        fetchImpl => getEmailIdentity(provider, "token", fetchImpl),
+        fetchImpl => sendMailboxEmail(provider, "token", input, fetchImpl),
+      ]) {
+        let calls = 0;
+        await assert.rejects(operation(async (url, init) => {
+          calls++;
+          assert.equal(init.redirect, "manual");
+          assert.notEqual(new URL(url).hostname, "redirect.example.test");
+          return new Response("Redirect must not be parsed or followed", { status, headers: { Location: "https://redirect.example.test/collect" } });
+        }), expectedError("email_provider_rejected", "rejected"));
+        assert.equal(calls, 1);
+      }
+    }
   }
 });

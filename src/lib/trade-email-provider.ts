@@ -89,10 +89,12 @@ export function buildEmailAuthorizationUrl(config: EmailProviderConfig, provider
 async function providerRequest(url: string, init: RequestInit, fetchImpl: typeof fetch): Promise<Response> {
   let response: Response;
   try {
-    response = await fetchImpl(url, { ...init, redirect: "error", signal: AbortSignal.timeout(20000) });
+    response = await fetchImpl(url, { ...init, redirect: "manual", signal: AbortSignal.timeout(20000) });
   } catch {
     throw new TradeEmailProviderError("email_provider_unavailable", "uncertain");
   }
+  // Workers supports manual/follow only. Reject redirects without forwarding credentials.
+  if (response.status >= 300 && response.status < 400) throw new TradeEmailProviderError("email_provider_rejected", "rejected");
   if (response.status === 401) throw new TradeEmailProviderError("email_provider_reconnect", "reconnect");
   if (response.status >= 500 || response.status === 408) throw new TradeEmailProviderError("email_provider_unavailable", "uncertain");
   if (!response.ok) throw new TradeEmailProviderError("email_provider_rejected", "rejected");
@@ -120,11 +122,12 @@ async function tokenRequest(provider: TradeEmailProvider, config: EmailProviderC
   let response: Response;
   try {
     response = await fetchImpl(provider === "google" ? "https://oauth2.googleapis.com/token" : "https://login.microsoftonline.com/common/oauth2/v2.0/token", {
-      method: "POST", redirect: "error", signal: AbortSignal.timeout(20000),
+      method: "POST", redirect: "manual", signal: AbortSignal.timeout(20000),
       headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
       body: new URLSearchParams({ client_id: config.clientId, client_secret: config.clientSecret, ...fields }),
     });
   } catch { throw new TradeEmailProviderError("email_provider_unavailable", "uncertain"); }
+  if (response.status >= 300 && response.status < 400) throw new TradeEmailProviderError("email_provider_rejected", "rejected");
   if (response.status === 401) throw new TradeEmailProviderError("email_provider_reconnect", "reconnect");
   if (response.status >= 500 || response.status === 408) throw new TradeEmailProviderError("email_provider_unavailable", "uncertain");
   const payload = await readObject(response);

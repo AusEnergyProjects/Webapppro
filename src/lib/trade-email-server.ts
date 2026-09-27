@@ -276,7 +276,7 @@ export async function sendTradeCustomerEmail(ownerUid: string, actorUid: string,
     sent = row && credentials ? await sendMailboxEmail(row.provider, credentials.accessToken, { senderEmail: row.sender_email, senderName: row.display_name,
       recipient: message.recipient, subject: message.subject, text: message.body, html: message.html,
       attachments: message.attachments, messageId: `<${id}@tlink.ausenergyassessments.com>` }) : await sendServiceReminderProviderMessage(message,
-        { fetchImpl: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(20_000), redirect: 'error' }) });
+        { fetchImpl: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(20_000), redirect: 'manual' }) });
   } catch (error) {
     const known = error instanceof TradeEmailProviderError;
     const uncertain = error instanceof ReminderProviderDeliveryError ? error.outcome === 'indeterminate' : !known || error.outcome === 'uncertain';
