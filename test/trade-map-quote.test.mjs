@@ -24,9 +24,23 @@ test("map line requires deliberate pricing and uses the ordinary quote totals", 
   assert.equal(totals.subtotalCents, 325000);
   assert.equal(totals.taxCents, 32500);
   assert.equal(totals.totalCents, 357500);
-  assert.equal(mapQuoteLine({ kind: "solar", quantity: 18 }).quantity, "18");
+  assert.equal(mapQuoteLine({ kind: "solar", quantity: 18 }).quantity, "1");
   assert.equal(mapQuoteKind("Included work"), null);
   assert.throws(() => mapQuoteLine({ kind: "distance", quantity: 0 }));
+});
+
+test("solar design count is separate from its single system price", () => {
+  const line = mapQuoteLine({ kind: "solar", quantity: 12 });
+  assert.equal(line.sectionHeading, "Solar system (12 panels)");
+  assert.equal(mapQuoteKind(line.sectionHeading), "solar");
+  assert.equal(mapQuoteKind("Map concept: solar panels"), "solar");
+  assert.equal(mapQuoteLine({ kind: "solar", quantity: 1 }).sectionHeading, "Solar system (1 panel)");
+  const totals = normaliseTradeQuoteLineGroup([{ ...line, unitPrice: "5000.00" }], String);
+  assert.equal(totals.subtotalCents, 500000);
+  assert.equal(totals.taxCents, 50000);
+  assert.equal(totals.totalCents, 550000);
+  for (const unit of ["system", "job", "per system"]) assert.equal(mapQuoteUnitMatches("solar", unit, line.sectionHeading), true);
+  for (const unit of ["panel", "each", "ea", "kW", "pack"]) assert.equal(mapQuoteUnitMatches("solar", unit, line.sectionHeading), false);
 });
 
 test("map import is bound to the chosen account, job and once-only intent", () => {

@@ -59,3 +59,23 @@ test("quote save checks the current saved item's unit before applying map quanti
   const ordinary = await fixture({ unitLabel: "pack" }).route.resolveLineGroup("business-owner", [{ ...line, sectionHeading: "Included work" }]);
   assert.equal(ordinary.calculated.totalCents, 357500);
 });
+
+test("solar system pricing saves once and rejects panel rates or multiplied quantities", async () => {
+  const line = { ...mapQuote.mapQuoteLine({ kind: "solar", quantity: 12 }), unitPrice: "5000.00" };
+  const custom = await fixture().route.resolveLineGroup("business-owner", [line]);
+  assert.equal(custom.calculated.totalCents, 550000);
+  assert.equal(custom.calculated.lines[0].quantityMilli, 1000);
+  assert.deepEqual(custom.sectionHeadings, ["Solar system (12 panels)"]);
+  for (const unitLabel of ["system", "job"]) {
+    const saved = await fixture({ unitLabel }).route.resolveLineGroup("business-owner", [{ ...line, priceBookItemId: "system-item" }]);
+    assert.equal(saved.calculated.totalCents, 550000);
+  }
+  for (const unitLabel of ["each", "panel", "ea"]) await assert.rejects(fixture({ unitLabel }).route.resolveLineGroup("business-owner", [{ ...line, priceBookItemId: "panel-item" }]), /MAP_QUOTE_UNIT_MISMATCH/);
+  for (const quantity of ["12", "0.5"]) await assert.rejects(fixture().route.resolveLineGroup("business-owner", [{ ...line, quantity }]), /MAP_QUOTE_SYSTEM_QUANTITY/);
+  await assert.rejects(fixture().route.resolveLineGroup("business-owner", [{ ...line, sectionHeading: ` ${line.sectionHeading} `, quantity: "12" }]), /MAP_QUOTE_SYSTEM_QUANTITY/);
+  await assert.rejects(fixture({ unitLabel: "each" }).route.resolveLineGroup("business-owner", [{ ...line, sectionHeading: ` ${line.sectionHeading} `, priceBookItemId: "panel-item" }]), /MAP_QUOTE_UNIT_MISMATCH/);
+  const legacy = { ...line, sectionHeading: "Map concept: solar panels", quantity: "12", unitPrice: "200.00", priceBookItemId: "panel-item" };
+  const kept = await fixture({ unitLabel: "each" }).route.resolveLineGroup("business-owner", [legacy]);
+  assert.equal(kept.calculated.totalCents, 264000);
+  assert.equal(kept.calculated.lines[0].quantityMilli, 12000);
+});

@@ -6,7 +6,7 @@ import {
   publicLeadQuoteAccessFingerprint,
 } from "@/lib/public-lead-quote-workflow.mjs";
 import { defaultTradeQuoteTotal, normaliseTradeQuoteLineGroup } from "@/lib/trade-quote";
-import { mapQuoteKind, mapQuoteUnitMatches } from "@/lib/trade-map-quote";
+import { mapQuoteKind, mapQuoteSystemPanels, mapQuoteUnitMatches } from "@/lib/trade-map-quote";
 import { assertQuoteRoofImageScope, parseQuoteRoofImage, quoteRoofImageMetadata, type TradeQuoteRoofImage } from "@/lib/trade-quote-roof-image";
 import { storeQuoteRoofImage, loadQuoteRoofImage, deleteUnclaimedQuoteRoofImage } from "@/lib/trade-quote-roof-image-server";
 import { normaliseQuoteChoices } from "@/lib/trade-quote-options";
@@ -169,6 +169,7 @@ function errorResponse(error: unknown) {
   if (["QUOTE_ISSUED_PDF_MISMATCH", "QUOTE_ISSUED_PDF_UNAVAILABLE"].includes(code)) return adminJson({ ok: false, error: "The exact issued quote PDF could not be verified. Create and issue a replacement quote version before sending." }, 409);
   if (code === "PRICE_BOOK_ITEM_UNAVAILABLE") return adminJson({ ok: false, error: "A saved item is no longer active. Remove it or add its replacement from the price book." }, 409);
   if (code === "MAP_QUOTE_UNIT_MISMATCH") return adminJson({ ok: false, error: "A saved item's unit no longer matches the map measurement. Reload the quote and choose a matching rate or a custom line." }, 409);
+  if (code === "MAP_QUOTE_SYSTEM_QUANTITY") return adminJson({ ok: false, error: "Enter one total price for the solar system." }, 400);
   if (["JOB_PACKET_UNAVAILABLE", "JOB_PACKET_DUPLICATE_LINE"].includes(code)) return adminJson({ ok: false, error: "That job packet changed or is no longer ready. Apply its current version again." }, 409);
   if (code === "INVALID_QUOTE_CHOICES") return adminJson({ ok: false, error: "Each customer choice needs a clear name, valid group and at least one priced line." }, 400);
   if (["INVALID_LINES", "INVALID_DECIMAL", "INVALID_QUANTITY", "INVALID_MONEY", "INVALID_TAX", "INVALID_TOTAL", "QUOTE_TOTAL_TOO_LARGE"].includes(code)) return adminJson({ ok: false, error: "Check every line description, quantity, price and tax selection." }, 400);
@@ -411,15 +412,19 @@ async function quotePayload(ownerUid: string, workOrderId: string, includeIntern
 async function resolveLineGroup(ownerUid: string, rawLines: unknown, allowEmpty = false) {
   const packet = await resolveJobPacketQuoteLines(ownerUid, rawLines);
   const priceBook = await resolvePriceBookQuoteLines(ownerUid, packet.lines);
-  if (Array.isArray(priceBook.lines)) priceBook.lines.forEach((line, index) => {
-    const kind = line && typeof line === "object" && "sectionHeading" in line ? mapQuoteKind(String(line.sectionHeading || "")) : null;
+  const raw = Array.isArray(priceBook.lines) ? priceBook.lines as Row[] : [];
+  const sectionHeadings = raw.map((line) => cleanAdminText(line?.sectionHeading, 120) || "Included work");
+  sectionHeadings.forEach((section, index) => {
+    const kind = mapQuoteKind(section);
     const reference = priceBook.references[index];
-    if (kind && reference && !mapQuoteUnitMatches(kind, reference.unitLabel)) throw new Error("MAP_QUOTE_UNIT_MISMATCH");
+    if (kind && reference && !mapQuoteUnitMatches(kind, reference.unitLabel, section)) throw new Error("MAP_QUOTE_UNIT_MISMATCH");
   });
   const calculated = normaliseTradeQuoteLineGroup(priceBook.lines, (value) => cleanAdminText(value, 500), allowEmpty);
-  const raw = Array.isArray(priceBook.lines) ? priceBook.lines as Row[] : [];
+  calculated.lines.forEach((line, index) => {
+    if (mapQuoteSystemPanels(sectionHeadings[index]) !== null && line.quantityMilli !== 1000) throw new Error("MAP_QUOTE_SYSTEM_QUANTITY");
+  });
   return { calculated, priceReferences: priceBook.references, packetReferences: packet.references,
-    sectionHeadings: raw.map((line) => cleanAdminText(line.sectionHeading, 120) || "Included work") };
+    sectionHeadings };
 }
 
 function choiceDefaultTotal(base: ResolvedGroup, choices: Array<{ input: ReturnType<typeof normaliseQuoteChoices>[number]; resolved: ResolvedGroup }>) {

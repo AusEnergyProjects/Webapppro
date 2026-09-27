@@ -96,7 +96,7 @@ export function TradeMapQuoteDialog({ user, measurement, access, onClose }: { us
     if (discardTo) setDiscardTo(null); else close();
   }}>
     <header className={styles.header}>
-      <div><h2 id="map-quote-title">{intent ? "Build your quote" : "Add to quote"}</h2><p><strong>{measurement.quantity.toLocaleString("en-AU")} {MAP_QUOTE_UNITS[measurement.kind]}</strong> from your map{measurement.roofImage ? " · Map image included" : ""} · Review the quantity and add your price.</p></div>
+      <div><h2 id="map-quote-title">{intent ? "Build your quote" : "Add to quote"}</h2><p><strong>{measurement.quantity.toLocaleString("en-AU")} {MAP_QUOTE_UNITS[measurement.kind]}</strong> from your map{measurement.roofImage ? " · Map image included" : ""} · {measurement.kind === "solar" ? "Add one price for the whole system." : "Review the quantity and add your price."}</p></div>
       <button type="button" disabled={busy} onClick={close}>Back to map</button>
     </header>
     {discardTo && <div className={styles.confirm} role="alert"><strong>Leave without saving these changes?</strong><p>Your map stays open. Any customer or job already created will remain in your workspace.</p><div><button ref={keepEditing} type="button" onClick={() => setDiscardTo(null)}>Keep editing</button><button type="button" onClick={() => {

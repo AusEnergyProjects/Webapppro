@@ -11,8 +11,15 @@ export function mapQuoteMeasurement(kind: MapQuoteKind, value: number): MapQuote
 }
 
 export function mapQuoteKind(section: string): MapQuoteKind | null {
+  if (mapQuoteSystemPanels(section) !== null) return "solar";
   for (const kind of ["area", "distance", "solar"] as const) if (SECTIONS[kind] === section) return kind;
   return null;
+}
+
+/** The count describes the design; the quote quantity is always one system. */
+export function mapQuoteSystemPanels(section: string): number | null {
+  const match = /^Solar system \((\d{1,6}(?:\.\d{1,3})?) panels?\)$/.exec(section);
+  return match && Number(match[1]) > 0 ? Number(match[1]) : null;
 }
 
 export function mapQuoteLine(measurement: MapQuoteMeasurement) {
@@ -20,8 +27,9 @@ export function mapQuoteLine(measurement: MapQuoteMeasurement) {
   if (!validated) throw new Error("Invalid map quantity");
   return {
     lineType: "product", description: measurement.kind === "area" ? "Roof area from map. Confirm actual insulation coverage on site."
-      : measurement.kind === "distance" ? "Approximate map distance. Confirm on site." : "Solar panels from roof concept. Confirm equipment and installation design.",
-    quantity: String(validated.quantity), unitPrice: "", taxCode: "gst", sectionHeading: SECTIONS[measurement.kind],
+      : measurement.kind === "distance" ? "Approximate map distance. Confirm on site." : "Solar system from roof concept. Confirm equipment and installation design.",
+    quantity: measurement.kind === "solar" ? "1" : String(validated.quantity), unitPrice: "", taxCode: "gst",
+    sectionHeading: measurement.kind === "solar" ? `Solar system (${validated.quantity} ${validated.quantity === 1 ? "panel" : "panels"})` : SECTIONS[measurement.kind],
   };
 }
 
@@ -30,8 +38,9 @@ export function canApplyMapQuoteIntent(intent: MapQuoteIntent, context: { ownerU
     && intent.workOrderId === context.workOrderId && mapQuoteMeasurement(intent.measurement.kind, intent.measurement.quantity));
 }
 
-export function mapQuoteUnitMatches(kind: MapQuoteKind, unit: string) {
+export function mapQuoteUnitMatches(kind: MapQuoteKind, unit: string, section = "") {
   const value = unit.toLowerCase().trim().replace(/^per\s+/, "").replace(/\s+/g, " ");
+  if (kind === "solar" && mapQuoteSystemPanels(section) !== null) return ["system", "systems", "job", "jobs"].includes(value);
   const units = {
     area: ["m²", "m2", "sqm", "sq m", "square metre", "square metres", "square meter", "square meters"],
     distance: ["m", "metre", "metres", "meter", "meters", "linear metre", "linear metres"],

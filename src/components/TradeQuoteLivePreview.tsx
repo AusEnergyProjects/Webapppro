@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { dollarsToCents, normaliseTradeQuoteLineGroup, overallTradeQuoteDiscountKind, OVERALL_PERCENT_DISCOUNT_SECTION, tradeQuoteChoiceValidationIssue, tradeQuoteLineValidationIssues } from "@/lib/trade-quote";
 import { tradeQuoteDocumentDisplayTotals } from "@/lib/trade-quote-document-totals.mjs";
-import { mapQuoteKind, MAP_QUOTE_UNITS } from "@/lib/trade-map-quote";
+import { mapQuoteKind, mapQuoteSystemPanels, MAP_QUOTE_UNITS } from "@/lib/trade-map-quote";
 import type { QuoteBusiness, QuoteChoice, QuoteJob, QuoteLine, QuoteRoofImage } from "./TradeQuotePanel";
 import styles from "./TradeQuoteLivePreview.module.css";
 
@@ -106,12 +106,13 @@ export function TradeQuoteLivePreview({ user, workOrderId, lines, choices, busin
         <section className={styles.items} aria-label="Included quote items"><div className={styles.tableHeading}><span>Included work</span><span>Incl GST</span></div>
           {lines.map((line, index) => {
             if (line.sectionHeading === OVERALL_PERCENT_DISCOUNT_SECTION) return null;
-            const kind = mapQuoteKind(line.sectionHeading), unit = kind ? MAP_QUOTE_UNITS[kind] : "";
+            const kind = mapQuoteKind(line.sectionHeading), unit = kind && kind !== "solar" ? MAP_QUOTE_UNITS[kind] : "";
+            const section = kind === "solar" && mapQuoteSystemPanels(line.sectionHeading) === null ? `Solar system (${line.quantity} panels)` : line.sectionHeading;
             const fixedDiscount = overallTradeQuoteDiscountKind(line) === "fixed";
             const calculated = document.complete ? document.base.lines[index] : null;
             let rateCents: number | null = null;
             try { rateCents = dollarsToCents(line.unitPrice, line.lineType === "adjustment"); } catch { /* Incomplete input has no display price. */ }
-            return <div className={styles.item} key={line.id || index}><div><strong>{line.description || "Item description needed"}</strong><small>{line.sectionHeading}{fixedDiscount ? "" : unit ? ` | ${line.quantity || "?"} ${unit}` : ` | Qty ${line.quantity || "?"}`}</small><small>{rateCents !== null ? fixedDiscount ? `${money(Math.abs(rateCents))} off incl GST` : `${money(rateCents)}${unit ? ` / ${unit}` : " each"} ex GST` : "Price needed"}</small></div><b>{calculated ? money(calculated.totalCents) : "Incomplete"}</b></div>;
+            return <div className={styles.item} key={line.id || index}><div><strong>{line.description || "Item description needed"}</strong><small>{section}{fixedDiscount || kind === "solar" ? "" : unit ? ` | ${line.quantity || "?"} ${unit}` : ` | Qty ${line.quantity || "?"}`}</small><small>{kind === "solar" ? "Whole system" : rateCents !== null ? fixedDiscount ? `${money(Math.abs(rateCents))} off incl GST` : `${money(rateCents)}${unit ? ` / ${unit}` : " each"} ex GST` : "Price needed"}</small></div><b>{calculated ? money(calculated.totalCents) : "Incomplete"}</b></div>;
           })}
           {!lines.length && <p className={styles.placeholder}>Scope is provided by the customer choices below.</p>}
         </section>

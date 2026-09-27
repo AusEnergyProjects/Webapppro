@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } fro
 import "./TradeRebateDocumentActions.css";
 import type { User } from "firebase/auth";
 import {
+  calculateTradeQuoteLine,
   consolidateTradeQuotePercentDiscountLines,
   moveTradeQuoteLine,
   normaliseTradeQuoteLineGroup,
@@ -11,6 +12,8 @@ import {
   percentInputToQuantity,
   persistedOverallDiscountUnitPrice,
   quantityToPercentInput,
+  dollarsToCents,
+  quantityToMilli,
   tradeQuoteChoiceValidationIssue,
   tradeQuoteLineValidationIssues,
   OVERALL_FIXED_DISCOUNT_SECTION,
@@ -20,7 +23,7 @@ import {
   type TradeQuoteLineValidationIssue,
 } from "@/lib/trade-quote";
 import { tradeQuoteDocumentDisplayTotals } from "@/lib/trade-quote-document-totals.mjs";
-import { canApplyMapQuoteIntent, mapQuoteKind, mapQuoteLine, mapQuoteUnitMatches, MAP_QUOTE_UNITS, type MapQuoteIntent } from "@/lib/trade-map-quote";
+import { canApplyMapQuoteIntent, mapQuoteKind, mapQuoteLine, mapQuoteSystemPanels, mapQuoteUnitMatches, MAP_QUOTE_UNITS, type MapQuoteIntent } from "@/lib/trade-map-quote";
 import { TradeQuoteLivePreview } from "./TradeQuoteLivePreview";
 import previewStyles from "./TradeQuoteLivePreview.module.css";
 import {
@@ -232,7 +235,7 @@ function firstQuoteEditorValidationIssue(lines: QuoteLine[], choices: QuoteChoic
   for (const scope of [{ key: "base", lines }, ...choices.map((choice) => ({ key: choice.clientKey, lines: choice.lines }))]) {
     const lineIndex = scope.lines.findIndex((line) => {
       const kind = mapQuoteKind(line.sectionHeading), item = priceBookItems.find((candidate) => candidate.id === line.priceBookItemId);
-      return kind && item && !mapQuoteUnitMatches(kind, item.unitLabel);
+      return kind && item && !mapQuoteUnitMatches(kind, item.unitLabel, line.sectionHeading);
     });
     if (lineIndex >= 0) return { kind: "line", scopeKey: scope.key, lineIndex, field: "lineType", code: "MAP_QUOTE_UNIT_MISMATCH",
       message: "Choose a price book rate with the same unit as the map quantity, or enter a custom rate." };
@@ -763,8 +766,15 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
   ) {
     const linked = Boolean(line.priceBookItemId);
     const mapKind = mapQuoteKind(line.sectionHeading);
-    const mapUnit = mapKind ? MAP_QUOTE_UNITS[mapKind] : "";
-    const compatibleItems = mapKind ? priceBookItems.filter((item) => mapQuoteUnitMatches(mapKind, item.unitLabel)) : priceBookItems;
+    const solar = mapKind === "solar";
+    const systemPanels = mapQuoteSystemPanels(line.sectionHeading);
+    const legacySolar = solar && systemPanels === null;
+    const mapUnit = mapKind && !solar ? MAP_QUOTE_UNITS[mapKind] : "";
+    const solarSection = legacySolar ? `Solar system (${line.quantity} ${line.quantity === "1" ? "panel" : "panels"})` : line.sectionHeading;
+    const compatibleItems = mapKind ? priceBookItems.filter((item) => (legacySolar && item.id === line.priceBookItemId) || mapQuoteUnitMatches(mapKind, item.unitLabel, solarSection)) : priceBookItems;
+    // Keep historical quantities and cost links until the user chooses custom pricing or a system item.
+    const displayedPrice = legacySolar ? (calculateTradeQuoteLine(quantityToMilli(line.quantity), dollarsToCents(line.unitPrice, line.lineType === "adjustment"), line.taxCode === "gst" ? "gst" : "none").subtotalCents / 100).toFixed(2) : line.unitPrice;
+    const systemLine = (): QuoteLine => ({ ...line, quantity: "1", unitPrice: displayedPrice, sectionHeading: solarSection });
     const overallDiscount = overallTradeQuoteDiscountKind(line);
     const discountLocked = !canApplyDiscounts && Number(line.unitPrice) < 0;
     const lineIssue = quoteValidationIssue?.kind === "line" && quoteValidationIssue.scopeKey === scopeKey && quoteValidationIssue.lineIndex === index
@@ -783,19 +793,20 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     };
     const selectPriceBookItem = (itemId: string) => {
       if (!itemId) {
-        onReplace({ ...line, priceBookItemId: "", jobPacketId: "", jobPacketLineId: "" });
+        onReplace({ ...(solar ? systemLine() : line), priceBookItemId: "", jobPacketId: "", jobPacketLineId: "" });
         return;
       }
+      if (legacySolar && itemId === line.priceBookItemId) return;
       const item = compatibleItems.find((candidate) => candidate.id === itemId);
       if (!item) return;
       onReplace({
-        ...line,
+        ...(solar ? systemLine() : line),
         priceBookItemId: item.id,
         jobPacketId: "",
         jobPacketLineId: "",
         lineType: item.lineType,
         description: item.description || item.name,
-        quantity: mapKind ? line.quantity : "1",
+        quantity: solar ? "1" : mapKind ? line.quantity : "1",
         unitPrice: (item.sellPriceCentsExGst / 100).toFixed(2),
         taxCode: item.taxCode,
       });
@@ -837,10 +848,13 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     </div>;
     return <div {...rowDragProps} className={`trade-quote-line${lineIssue ? " invalid" : ""}${isDragTarget ? " drag-target" : ""}`} key={`${index}:${line.id || "new"}`}>
       {orderControls}
-      <label className="trade-quote-field trade-quote-price-book-field"><span>Price book item</span><select {...validationAttributes("lineType")} aria-label={`Line ${index + 1} price book item`} value={line.priceBookItemId || ""} disabled={discountLocked} onChange={(event) => selectPriceBookItem(event.target.value)}><option value="">Custom line</option>{compatibleItems.map((item) => <option key={item.id} value={item.id}>{item.name} | {money(item.sellPriceCentsExGst)}{mapUnit ? ` / ${mapUnit}` : ""} ex GST</option>)}</select>{mapKind && <small>Only rates per {mapUnit} are shown. Pack and bundle prices need a separate line.</small>}{linked && <small>Current price book details are checked again when saved.</small>}</label>
-      <label className="trade-quote-description"><span>Description and section</span><input {...validationAttributes("description")} aria-label={`Line ${index + 1} description`} value={line.description} maxLength={500} readOnly={linked} onChange={(event) => onChange("description", event.target.value)} placeholder="Description" /><input className="trade-quote-section-input" aria-label={`Line ${index + 1} section heading`} value={line.sectionHeading} maxLength={120} readOnly={Boolean(mapKind)} onChange={(event) => onChange("sectionHeading", event.target.value)} placeholder="Customer section heading" />{line.priceBookItemId && <small>{line.jobPacketId ? "Common job item" : "Saved item"}, description, price and GST come from the current price book. Change the quantity{mapKind ? " here" : " or customer section here"}.</small>}</label>
-      <label className="trade-quote-field"><span>Quantity{mapUnit ? ` (${mapUnit})` : ""}</span><input {...validationAttributes("quantity")} aria-label={`Line ${index + 1} quantity${mapUnit ? ` (${mapUnit})` : ""}`} value={line.quantity} inputMode="decimal" readOnly={discountLocked} onChange={(event) => changeLine("quantity", event.target.value)} /></label>
-      <label className="trade-quote-field"><span>Unit price{mapUnit ? ` / ${mapUnit}` : ""}</span><input {...validationAttributes("unitPrice")} aria-label={`Line ${index + 1} unit price${mapUnit ? ` per ${mapUnit}` : ""}`} value={line.unitPrice} inputMode="decimal" placeholder={mapKind ? `Price per ${mapUnit}` : undefined} readOnly={linked || discountLocked} onChange={(event) => changeLine("unitPrice", event.target.value)} />{mapKind && !line.unitPrice.trim() && <small>Enter a rate or select a matching price book item.</small>}{discountLocked && <small>Discount amount is read-only for your access.</small>}</label>
+      <label className="trade-quote-field trade-quote-price-book-field"><span>{solar ? "System pricing" : "Price book item"}</span><select {...validationAttributes("lineType")} aria-label={`Line ${index + 1} price book item`} value={line.priceBookItemId || ""} disabled={discountLocked} onChange={(event) => selectPriceBookItem(event.target.value)}><option value="">{solar ? "Enter system price" : "Custom line"}</option>{compatibleItems.map((item) => <option key={item.id} value={item.id}>{item.name} | {legacySolar && item.id === line.priceBookItemId ? "Existing saved price" : `${money(item.sellPriceCentsExGst)}${mapUnit ? ` / ${mapUnit}` : ""} ex GST`}</option>)}</select>{mapKind && !solar && <small>Only rates per {mapUnit} are shown. Pack and bundle prices need a separate line.</small>}{linked && <small>{solar ? "Select Enter system price to set a custom total. Custom pricing has no saved item cost." : "Current price book details are checked again when saved."}</small>}</label>
+      <label className="trade-quote-description"><span>Description and section</span><input {...validationAttributes("description")} aria-label={`Line ${index + 1} description`} value={line.description} maxLength={500} readOnly={linked} onChange={(event) => onChange("description", event.target.value)} placeholder="Description" /><input className="trade-quote-section-input" aria-label={`Line ${index + 1} section heading`} value={line.sectionHeading} maxLength={120} readOnly={Boolean(mapKind)} onChange={(event) => onChange("sectionHeading", event.target.value)} placeholder="Customer section heading" />{line.priceBookItemId && !solar && <small>{line.jobPacketId ? "Common job item" : "Saved item"}, description, price and GST come from the current price book. Change the quantity{mapKind ? " here" : " or customer section here"}.</small>}</label>
+      {!solar && <label className="trade-quote-field"><span>Quantity{mapUnit ? ` (${mapUnit})` : ""}</span><input {...validationAttributes("quantity")} aria-label={`Line ${index + 1} quantity${mapUnit ? ` (${mapUnit})` : ""}`} value={line.quantity} inputMode="decimal" readOnly={discountLocked} onChange={(event) => changeLine("quantity", event.target.value)} /></label>}
+      <label className="trade-quote-field"><span>{solar ? "System price (ex GST)" : `Unit price${mapUnit ? ` / ${mapUnit}` : ""}`}</span><input {...validationAttributes("unitPrice")} aria-label={`Line ${index + 1} ${solar ? "system price" : `unit price${mapUnit ? ` per ${mapUnit}` : ""}`}`} value={displayedPrice} inputMode="decimal" placeholder={solar ? "Price for the whole system" : mapKind ? `Price per ${mapUnit}` : undefined} readOnly={linked || discountLocked} onChange={(event) => {
+        if (legacySolar && !linked && !discountLocked) onReplace({ ...systemLine(), unitPrice: event.target.value });
+        else changeLine("unitPrice", event.target.value);
+      }} />{solar ? <small>{systemPanels ?? line.quantity} panels in the design. One price for the whole system.</small> : mapKind && !line.unitPrice.trim() && <small>Enter a rate or select a matching price book item.</small>}{discountLocked && <small>Discount amount is read-only for your access.</small>}</label>
       <label className="trade-quote-field"><span>Tax</span><select {...validationAttributes("taxCode")} aria-label={`Line ${index + 1} tax`} value={line.taxCode} disabled={linked || discountLocked} onChange={(event) => changeLine("taxCode", event.target.value)}><option value="gst">GST 10%</option><option value="none">No GST</option></select></label>
       <button type="button" disabled={!canRemove} onClick={onRemove}>Remove</button>
       {lineIssue && <p id={validationErrorId} className="trade-quote-line-error" role="alert">{lineIssue.message}</p>}

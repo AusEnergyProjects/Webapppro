@@ -6,6 +6,7 @@ import { deflateSync, crc32 } from "node:zlib";
 import { PDFDocument, PDFName, PDFDict } from "pdf-lib";
 import * as roofImages from "../src/lib/trade-quote-roof-image.ts";
 import * as quoteMath from "../src/lib/trade-quote.ts";
+import * as mapQuote from "../src/lib/trade-map-quote.ts";
 import * as quoteOptions from "../src/lib/trade-quote-options.ts";
 import { createTradeQuotePdfBytes } from "../src/lib/trade-quote-pdf.mjs";
 import { canonicalGoogleBusinessProfileUrl } from "../src/lib/trade-google-business-profile.mjs";
@@ -107,7 +108,7 @@ function routeFixture({ owned = true, assigned = true, permitted = true, priorRo
     "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => access, canViewQuotes: value => value.canViewQuotes, canManageQuotes: value => value.canManageQuotes, assignedJob: async () => { if (!assigned) throw new Error("JOB_NOT_FOUND"); } },
     "@/lib/trade-quote-roof-image": roofImages,
     "@/lib/trade-quote-roof-image-server": { storeQuoteRoofImage: async input => { stored.push(input); return { ...reference, objectKey: reference.objectKey.replace("1234.png", "5678.png") }; }, loadQuoteRoofImage: async image => { loaded.push(image); return { bytes: png, contentType: "image/png" }; }, deleteUnclaimedQuoteRoofImage: async image => discarded.push(image) },
-    "@/lib/trade-quote": quoteMath, "@/lib/trade-quote-options": quoteOptions,
+    "@/lib/trade-quote": quoteMath, "@/lib/trade-quote-options": quoteOptions, "@/lib/trade-map-quote": mapQuote,
     "@/lib/trade-job-packet-server": { resolveJobPacketQuoteLines: async (_owner, lines) => ({ lines, references: [] }) },
     "@/lib/trade-price-book-server": { resolvePriceBookQuoteLines: async (_owner, lines) => ({ lines, references: [] }) },
     "@/lib/trade-discount-permissions": { quoteInputDiscountMagnitude: () => 0 },
