@@ -5,6 +5,8 @@ import { PDFDocument, PDFName, PDFDict, PDFString } from "pdf-lib";
 import { buildTradeQuoteEmail } from "../src/lib/trade-quote-email.ts";
 import { canonicalGoogleBusinessProfileUrl } from "../src/lib/trade-google-business-profile.mjs";
 import ts from "typescript";
+import * as jsxRuntime from "react/jsx-runtime";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
   contiguousTradeQuoteSections,
   createTradeQuotePdfBytes,
@@ -17,6 +19,23 @@ const reviewServer = read("../src/lib/trade-quote-review-server.ts");
 const reviewUi = read("../src/components/QuoteLinkReview.tsx");
 const pdfSource = read("../src/lib/trade-quote-pdf.mjs");
 const emailSource = read("../src/lib/trade-quote-email.ts");
+
+function reviewModule(getD1) {
+  const compiled = ts.transpileModule(reviewServer, { compilerOptions: {
+    module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
+  } }).outputText;
+  const dependencies = {
+    "../../db": { getD1 },
+    "@/lib/admin-server": {}, "@/lib/trade-quote-links": {}, "@/lib/trade-access-server": {},
+    "./trade-google-business-profile.mjs": { canonicalGoogleBusinessProfileUrl },
+  };
+  const exports = {};
+  Function("require", "exports", compiled)((id) => {
+    assert.ok(Object.hasOwn(dependencies, id), id);
+    return dependencies[id];
+  }, exports);
+  return exports;
+}
 
 function snapshot(schemaVersion = "trade-quote-document-v2") {
   return {
@@ -142,19 +161,7 @@ test("new quote emails and PDFs contain only a validated saved Google business l
 });
 
 test("issued quote links use the immutable snapshot without consulting the current business profile", async () => {
-  const compiled = ts.transpileModule(reviewServer, { compilerOptions: {
-    module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
-  } }).outputText;
-  const dependencies = {
-    "../../db": { getD1() { throw new Error("Issued quote must not reread the current profile"); } },
-    "@/lib/admin-server": {}, "@/lib/trade-quote-links": {}, "@/lib/trade-access-server": {},
-    "./trade-google-business-profile.mjs": { canonicalGoogleBusinessProfileUrl },
-  };
-  const exports = {};
-  Function("require", "exports", compiled)((id) => {
-    assert.ok(Object.hasOwn(dependencies, id), id);
-    return dependencies[id];
-  }, exports);
+  const exports = reviewModule(() => { throw new Error("Issued quote must not reread the current profile"); });
   for (const savedUrl of [undefined, "https://g.page/original-business", "javascript:alert(1)"]) {
     const saved = snapshot();
     if (savedUrl !== undefined) saved.business.googleBusinessProfileUrl = savedUrl;
@@ -165,6 +172,80 @@ test("issued quote links use the immutable snapshot without consulting the curre
     assert.equal(loaded.business.googleBusinessProfileUrl,
       savedUrl === undefined ? undefined : canonicalGoogleBusinessProfileUrl(savedUrl) || "");
   }
+});
+
+test("new quote snapshots ignore retired banners still stored on the business profile", async () => {
+  const row = {
+    quote_id: "quote-1", quote_version_id: "version-1", quote_number: "Q-1", version_number: 1,
+    work_order_id: "work-1", customer_id: "customer-1", service_site_id: "site-1",
+    trade_business_name: "Legacy Business", document_business_name: "Document Business",
+    logo_object_key: "brands/owner/logo.png", logo_content_type: "image/png",
+    banner_object_key: "brands/owner/retired-banner.jpg", banner_content_type: "image/jpeg",
+    banner_crop_x_basis_points: 1000, banner_crop_y_basis_points: 1000,
+    banner_crop_width_basis_points: 5000, banner_crop_height_basis_points: 5000,
+  };
+  const queries = [];
+  const exports = reviewModule(() => ({ prepare(sql) {
+    queries.push(sql);
+    return { bind(...parameters) {
+      assert.deepEqual(parameters, ["version-1", "owner-1"]);
+      return { first: async () => row, all: async () => ({ results: [] }) };
+    } };
+  } }));
+  const captured = await exports.buildTradeQuoteDocumentSnapshot("owner-1", "version-1");
+  assert.equal(captured.business.name, "Document Business");
+  assert.deepEqual(captured.business.logo, { objectKey: row.logo_object_key, contentType: "image/png" });
+  assert.equal(captured.business.banner, null);
+  assert.deepEqual(captured.business.bannerCrop, { xBasisPoints: 0, yBasisPoints: 0, widthBasisPoints: 10000, heightBasisPoints: 10000 });
+  assert.ok(exports.parseTradeQuoteDocumentSnapshot(JSON.stringify(captured)), "new captures must remain valid v2 documents");
+  assert.doesNotMatch(queries.join("\n"), /trade\.banner_/);
+});
+
+test("customer review hides legacy banners while preserving the issued snapshot and logo", async () => {
+  const saved = snapshot();
+  saved.business.logo = { objectKey: "brands/owner/logo.png", contentType: "image/png" };
+  saved.business.banner = { objectKey: "brands/owner/retired-banner.jpg", contentType: "image/jpeg" };
+  const issuedJson = JSON.stringify(saved);
+  const authorised = {
+    id: "link-1", document_snapshot_json: issuedJson, quote_id: saved.quoteId, quote_version_id: saved.quoteVersionId,
+    work_order_id: saved.work.id, crm_customer_id: saved.customer.id, firebase_uid: "owner-1", expires_at: "2026-10-01",
+  };
+  const exports = reviewModule(() => ({ prepare(sql) {
+    assert.match(sql, /FROM trade_crm_quote_questions/);
+    return { bind: () => ({ all: async () => ({ results: [] }) }) };
+  } }));
+  const loaded = await exports.quoteDocumentSnapshotForAuthorisedLink(authorised);
+  assert.deepEqual(loaded.business.banner, saved.business.banner);
+  assert.equal(authorised.document_snapshot_json, issuedJson);
+  const quote = await exports.buildTradeQuoteReviewPayload(authorised);
+  assert.equal(quote.business.hasBanner, false);
+  assert.equal(quote.business.hasLogo, true);
+
+  // A stale payload advertising a banner must still render the clean customer view.
+  quote.business.hasBanner = true;
+  let stateIndex = 0;
+  const dependencies = {
+    "react/jsx-runtime": jsxRuntime,
+    react: {
+      useState: (initial) => [stateIndex++ === 0 ? quote : initial, () => {}],
+      useRef: (value) => ({ current: value }), useEffect: () => {},
+      useCallback: (callback) => callback, useMemo: (callback) => callback(),
+    },
+    "@/lib/trade-quote-receipt": { isPayableQuoteDecisionInvoice: () => false },
+    "@/lib/trade-google-business-profile.mjs": { canonicalGoogleBusinessProfileUrl },
+  };
+  const compiled = ts.transpileModule(reviewUi, { compilerOptions: {
+    module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
+  } }).outputText;
+  const ui = {};
+  Function("require", "exports", compiled)((id) => {
+    assert.ok(Object.hasOwn(dependencies, id), id);
+    return dependencies[id];
+  }, ui);
+  const html = renderToStaticMarkup(ui.QuoteLinkReview({ token: "test-review-token" }));
+  assert.match(html, /media\/logo/);
+  assert.match(html, /Mikes Electrical/);
+  assert.doesNotMatch(html, /media\/banner|brand-banner|retired-banner/);
 });
 
 test("banner crop produces the same bounded 5 to 1 source geometry", () => {
@@ -256,7 +337,7 @@ test("final percentage is rendered by the PDF totals breakdown instead of the it
   assert.match(emailSource, /Final \$\{finalPercentBasisPoints \/ 10\}% discount on included items ex GST/);
 });
 
-test("v2 snapshot capture uses document identity, crop and signed adjustment fields", () => {
+test("v2 snapshot capture uses document identity and signed adjustment fields", () => {
   assert.match(
     reviewServer,
     /row\.schemaVersion === "trade-quote-document-v1"[\s\S]*row\.schemaVersion === "trade-quote-document-v2"/,
@@ -269,10 +350,6 @@ test("v2 snapshot capture uses document identity, crop and signed adjustment fie
     "document_business_name",
     "document_phone",
     "document_email",
-    "banner_crop_x_basis_points",
-    "banner_crop_y_basis_points",
-    "banner_crop_width_basis_points",
-    "banner_crop_height_basis_points",
   ]) {
     assert.match(reviewServer, new RegExp(column));
   }
@@ -291,8 +368,7 @@ test("v2 snapshot capture uses document identity, crop and signed adjustment fie
 });
 
 test("customer quote surfaces preserve explicit discount breakdown with a logo-first PDF", () => {
-  assert.match(reviewUi, /aspectRatio: "5 \/ 1"/);
-  assert.match(reviewUi, /bannerBackgroundStyle/);
+  assert.doesNotMatch(reviewUi, /CroppedBanner|bannerBackgroundStyle|quote-link-brand-banner/);
   assert.match(reviewUi, /Subtotal ex GST/);
   assert.match(reviewUi, /Discount ex GST/);
   assert.match(reviewUi, /Total incl GST/);

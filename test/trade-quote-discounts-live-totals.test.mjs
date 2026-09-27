@@ -309,10 +309,11 @@ test("every base and choice row uses one price-book dropdown or an editable cust
   const selection = ui.slice(ui.indexOf("const selectPriceBookItem"), ui.indexOf("const isDragTarget"));
   assert.match(ui, /<span>Price book item<\/span><select/);
   assert.match(ui, /<option value="">Custom line<\/option>/);
-  assert.match(ui, /priceBookItems\.map\(\(item\) => <option key=\{item\.id\} value=\{item\.id\}>/);
+  assert.match(ui, /const compatibleItems = mapKind \? priceBookItems\.filter\(\(item\) => mapQuoteUnitMatches\(mapKind, item\.unitLabel\)\) : priceBookItems/);
+  assert.match(ui, /compatibleItems\.map\(\(item\) => <option key=\{item\.id\} value=\{item\.id\}>/);
   assert.doesNotMatch(ui, /aria-label=\{`Line \$\{index \+ 1\} type`\}/);
-  assert.match(selection, /const item = priceBookItems\.find\(\(candidate\) => candidate\.id === itemId\)/);
-  assert.match(selection, /onReplace\(\{[\s\S]*?priceBookItemId: item\.id[\s\S]*?lineType: item\.lineType[\s\S]*?description: item\.description \|\| item\.name[\s\S]*?quantity: "1"[\s\S]*?unitPrice: \(item\.sellPriceCentsExGst \/ 100\)\.toFixed\(2\)[\s\S]*?taxCode: item\.taxCode/);
+  assert.match(selection, /const item = compatibleItems\.find\(\(candidate\) => candidate\.id === itemId\)/);
+  assert.match(selection, /onReplace\(\{[\s\S]*?priceBookItemId: item\.id[\s\S]*?lineType: item\.lineType[\s\S]*?description: item\.description \|\| item\.name[\s\S]*?quantity: mapKind \? line\.quantity : "1"[\s\S]*?unitPrice: \(item\.sellPriceCentsExGst \/ 100\)\.toFixed\(2\)[\s\S]*?taxCode: item\.taxCode/);
   assert.match(selection, /onReplace\(\{ \.\.\.line, priceBookItemId: "", jobPacketId: "", jobPacketLineId: "" \}\)/);
   assert.match(ui, /readOnly=\{linked\}/);
   assert.match(ui, /disabled=\{linked \|\| discountLocked\}/);

@@ -2885,7 +2885,6 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .quote-link-shell[data-border="square"] .quote-link-document, .quote-link-shell[data-border="square"] .quote-link-summary, .quote-link-shell[data-border="square"] .quote-link-block, .quote-link-shell[data-border="square"] .quote-link-terms, .quote-link-shell[data-border="square"] .quote-link-question, .quote-link-shell[data-border="square"] .quote-link-signature, .quote-link-shell[data-border="square"] .quote-link-total { border-radius: 2px; }
 .quote-link-shell[data-border="rounded"] .quote-link-document { border-radius: 28px; }
 .quote-link-shell[data-border="rounded"] .quote-link-summary, .quote-link-shell[data-border="rounded"] .quote-link-block, .quote-link-shell[data-border="rounded"] .quote-link-terms, .quote-link-shell[data-border="rounded"] .quote-link-question, .quote-link-shell[data-border="rounded"] .quote-link-signature, .quote-link-shell[data-border="rounded"] .quote-link-total { border-radius: 20px; }
-.quote-link-brand-banner { background-position: center; background-repeat: no-repeat; background-size: cover; height: clamp(110px, 22vw, 210px); margin: -28px -28px 0; }
 .quote-link-document > header { align-items: flex-start; border-bottom: 1px solid #dce8e3; display: flex; gap: 18px; justify-content: space-between; padding-bottom: 20px; }
 .quote-link-brand-heading { align-items: center; display: flex; gap: 16px; min-width: 0; }
 .quote-link-brand-logo { background-position: center; background-repeat: no-repeat; background-size: contain; flex: 0 0 84px; height: 64px; }
@@ -2983,7 +2982,6 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 @media (max-width: 720px) {
   .quote-link-shell { padding: 0; }
   .quote-link-document { border: 0; border-radius: 0; box-shadow: none; padding: 18px 14px 42px; }
-  .quote-link-brand-banner { margin: -18px -14px 0; }
   .quote-link-document > header { flex-direction: column; }
   .quote-link-brand-heading { align-items: flex-start; }
   .quote-link-summary, .quote-link-choices > div, .quote-link-choices.addons > div { grid-template-columns: 1fr; }

@@ -6,6 +6,7 @@ import {
   publicLeadQuoteAccessFingerprint,
 } from "@/lib/public-lead-quote-workflow.mjs";
 import { defaultTradeQuoteTotal, normaliseTradeQuoteLineGroup } from "@/lib/trade-quote";
+import { mapQuoteKind, mapQuoteUnitMatches } from "@/lib/trade-map-quote";
 import { normaliseQuoteChoices } from "@/lib/trade-quote-options";
 import { lowersAuthoritativeTotal, quoteInputAppliesDiscount, quoteInputDiscountMagnitude } from "@/lib/trade-discount-permissions";
 import { priceBookItemsForQuote, resolvePriceBookQuoteLines } from "@/lib/trade-price-book-server";
@@ -163,6 +164,7 @@ function errorResponse(error: unknown) {
   if (code === "QUOTE_DOCUMENT_TOO_LARGE") return adminJson({ ok: false, error: "This quote is too large to issue as one customer document." }, 400);
   if (["QUOTE_ISSUED_PDF_MISMATCH", "QUOTE_ISSUED_PDF_UNAVAILABLE"].includes(code)) return adminJson({ ok: false, error: "The exact issued quote PDF could not be verified. Create and issue a replacement quote version before sending." }, 409);
   if (code === "PRICE_BOOK_ITEM_UNAVAILABLE") return adminJson({ ok: false, error: "A saved item is no longer active. Remove it or add its replacement from the price book." }, 409);
+  if (code === "MAP_QUOTE_UNIT_MISMATCH") return adminJson({ ok: false, error: "A saved item's unit no longer matches the map measurement. Reload the quote and choose a matching rate or a custom line." }, 409);
   if (["JOB_PACKET_UNAVAILABLE", "JOB_PACKET_DUPLICATE_LINE"].includes(code)) return adminJson({ ok: false, error: "That job packet changed or is no longer ready. Apply its current version again." }, 409);
   if (code === "INVALID_QUOTE_CHOICES") return adminJson({ ok: false, error: "Each customer choice needs a clear name, valid group and at least one priced line." }, 400);
   if (["INVALID_LINES", "INVALID_DECIMAL", "INVALID_QUANTITY", "INVALID_MONEY", "INVALID_TAX", "INVALID_TOTAL", "QUOTE_TOTAL_TOO_LARGE"].includes(code)) return adminJson({ ok: false, error: "Check every line description, quantity, price and tax selection." }, 400);
@@ -404,6 +406,11 @@ async function quotePayload(ownerUid: string, workOrderId: string, includeIntern
 async function resolveLineGroup(ownerUid: string, rawLines: unknown, allowEmpty = false) {
   const packet = await resolveJobPacketQuoteLines(ownerUid, rawLines);
   const priceBook = await resolvePriceBookQuoteLines(ownerUid, packet.lines);
+  if (Array.isArray(priceBook.lines)) priceBook.lines.forEach((line, index) => {
+    const kind = line && typeof line === "object" && "sectionHeading" in line ? mapQuoteKind(String(line.sectionHeading || "")) : null;
+    const reference = priceBook.references[index];
+    if (kind && reference && !mapQuoteUnitMatches(kind, reference.unitLabel)) throw new Error("MAP_QUOTE_UNIT_MISMATCH");
+  });
   const calculated = normaliseTradeQuoteLineGroup(priceBook.lines, (value) => cleanAdminText(value, 500), allowEmpty);
   const raw = Array.isArray(priceBook.lines) ? priceBook.lines as Row[] : [];
   return { calculated, priceReferences: priceBook.references, packetReferences: packet.references,
@@ -453,9 +460,20 @@ export async function GET(request: Request) {
     const access = await installerAccess(request, "view"); const url = new URL(request.url); const workOrderId = cleanAdminText(url.searchParams.get("workOrderId"), 180);
     await assignedJob(access, workOrderId);
     const job = await directJob(access.ownerUid, workOrderId); const emails = await authorisedEmails(access.ownerUid, String(job.crm_customer_id), acceptedPublicEmail(job));
-    const business = await getD1().prepare(`SELECT business_name, brand_theme_key, brand_border_style, logo_object_key, banner_object_key,
+    const business = await getD1().prepare(`SELECT business_name, brand_theme_key, brand_border_style, logo_object_key, logo_content_type,
         quote_email_subject_template, quote_email_intro, quote_default_terms
       FROM trade_accounts WHERE firebase_uid = ? AND partner_type = 'installer' LIMIT 1`).bind(access.ownerUid).first<Row>();
+    if (url.searchParams.get("media") === "logo") {
+      const contentType = business?.logo_content_type;
+      if (!business?.logo_object_key || (contentType !== "image/png" && contentType !== "image/jpeg")) return adminJson({ ok: false, error: "Quote logo not found." }, 404);
+      const { loadBrandAsset } = await import("@/lib/trade-quote-pdf-server");
+      const asset = await loadBrandAsset({ objectKey: String(business.logo_object_key), contentType });
+      if (!asset) return adminJson({ ok: false, error: "Quote logo not found." }, 404);
+      return new Response(new Uint8Array(asset.bytes).buffer, { headers: {
+        "Content-Type": asset.contentType, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": `inline; filename="quote-logo.${asset.contentType === "image/png" ? "png" : "jpg"}"`,
+      } });
+    }
     const serviceCategories = parseJsonList(job.service_categories);
     const canViewInternal = access.isOwner || access.canViewPriceBook;
     return adminJson({ ok: true, access: quoteAccessPayload(access), job: {
@@ -469,7 +487,7 @@ export async function GET(request: Request) {
       enquiryServices: job.public_lead_enquiry ? serviceCategories.map((category) => ENERGY_SERVICE_LABELS[category] || category.replaceAll("-", " ")) : [],
       enquiryBrief: job.public_lead_enquiry ? String(job.description || "") : "" },
       business: { businessName: String(business?.business_name || ""), brandThemeKey: String(business?.brand_theme_key || "emerald_navy"),
-        brandBorderStyle: String(business?.brand_border_style || "soft"), hasLogo: Boolean(business?.logo_object_key), hasBanner: Boolean(business?.banner_object_key),
+        brandBorderStyle: String(business?.brand_border_style || "soft"), hasLogo: Boolean(business?.logo_object_key), hasBanner: false,
         quoteEmailSubjectTemplate: String(business?.quote_email_subject_template || "{business_name} sent quote {quote_number}"),
         quoteEmailIntro: String(business?.quote_email_intro || "Thank you for the opportunity to quote for your project. Review the scope, choices and total below."),
         quoteDefaultTerms: String(business?.quote_default_terms || "") },

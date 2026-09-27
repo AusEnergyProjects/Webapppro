@@ -4,7 +4,8 @@ export type SolarPanelSize = { widthM: number; lengthM: number };
 export type SolarPanelTilt = { lengthTilt: number; widthTilt: number };
 export type SolarPanelSettings = SolarPanelSize & SolarPanelTilt;
 export type SolarPanel = SolarPanelSettings & { id: number; center: google.maps.LatLngLiteral; heading: number };
-export type SolarLayout = { panels: SolarPanel[]; selectedId: number | null; allPanels: boolean };
+export type SolarSelectionMode = "one" | "all" | "choose" | "selection";
+export type SolarLayout = { panels: SolarPanel[]; selectedId: number | null; selectionMode: SolarSelectionMode; selectedIds: number[] };
 export type SolarCopyDirection = "above" | "right" | "below" | "left";
 export const DEFAULT_SOLAR_PANEL_SIZE: SolarPanelSize = { widthM: 1.13, lengthM: 1.72 };
 // An editable roof-pitch assumption, not a measurement of the roof below the map.
@@ -34,7 +35,7 @@ export function adjacentSolarPanel(panel: SolarPanel, direction: SolarCopyDirect
     center: offset(panel.center, distance, solarHeading(panel.heading + bearing)) };
 }
 
-type SolarStyles = { panel: string; face: string; controls: string; ring: string; rotate: string; copy: string; group: string; move: string };
+type SolarStyles = { panel: string; face: string; controls: string; ring: string; rotate: string; copy: string; group: string; move: string; selectionBox: string };
 type Entry = { panel: SolarPanel; element: HTMLDivElement; face: HTMLButtonElement; controls: HTMLDivElement };
 type ProjectedPanel = { panel: SolarPanel; x: number; y: number };
 const layoutCentre = (panels: ProjectedPanel[]) => ({
@@ -48,16 +49,24 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
   const host = document.createElement("div");
   const events = new AbortController();
   const overlay = new api.OverlayView();
+  const mapElement = map.getDiv();
+  const previousTouchAction = mapElement.style.touchAction;
+  const selectionBox = document.createElement("div"); selectionBox.className = styles.selectionBox; selectionBox.hidden = true;
+  selectionBox.setAttribute("aria-hidden", "true");
   let nextId = 1;
   let selectedId: number | null = null;
-  let allPanels = false;
+  let selectionMode: SolarSelectionMode = "one";
+  const selectedIds = new Set<number>();
   let editing = false;
   let capturing = false;
   let ready = false;
   let gesture: { button: HTMLButtonElement; pointerId: number; panels: ProjectedPanel[]; pivot: { x: number; y: number }; start: { x: number; y: number }; rotate: boolean } | null = null;
-  const state = (): SolarLayout => ({ panels: [...entries.values()].map(({ panel }) => ({ ...panel, center: { ...panel.center } })), selectedId, allPanels });
+  let selectionGesture: { pointerId: number; start: { x: number; y: number }; previousIds: number[]; moved: boolean } | null = null;
+  const state = (): SolarLayout => ({ panels: [...entries.values()].map(({ panel }) => ({ ...panel, center: { ...panel.center } })), selectedId, selectionMode, selectedIds: [...selectedIds] });
   const publish = () => { if (ready) overlay.draw(); onChange(state()); };
   const select = (id: number) => { selectedId = id; publish(); };
+  const canTransform = (entry?: Entry) => editing && !capturing && selectionMode !== "choose"
+    && (!entry || selectionMode === "one" || selectedIds.has(entry.panel.id));
   const group = document.createElement("div"); group.className = styles.group;
   const groupControls = document.createElement("div"); groupControls.className = styles.controls;
   const groupRing = document.createElement("div"); groupRing.className = styles.ring; groupRing.setAttribute("aria-hidden", "true");
@@ -70,10 +79,11 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
 
   overlay.onAdd = () => {
     const panes = overlay.getPanes();
-    if (panes) { panes.overlayMouseTarget.append(host); ready = true; }
+    if (panes) { panes.overlayMouseTarget.append(host); mapElement.append(selectionBox); ready = true; }
   };
-  overlay.onRemove = () => { ready = false; host.remove(); };
+  overlay.onRemove = () => { ready = false; host.remove(); selectionBox.remove(); mapElement.style.touchAction = previousTouchAction; };
   overlay.draw = () => {
+    mapElement.style.touchAction = editing && !capturing && selectionMode === "choose" ? "none" : previousTouchAction;
     const projection = overlay.getProjection();
     const groupPoints: ProjectedPanel[] = [];
     const radii = new Map<number, number>();
@@ -92,20 +102,29 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
       element.style.transform = `translate(-50%, -50%) rotate(${panel.heading}deg)`;
       const axes = solarPanelAxes(panel);
       face.style.transform = `matrix(${axes.width.x}, 0, ${-axes.length.x}, ${axes.length.y}, 0, 0)`;
-      element.style.zIndex = panel.id === selectedId ? "2" : "1";
+      const selected = selectionMode === "one" ? panel.id === selectedId : selectedIds.has(panel.id);
+      element.style.zIndex = selected ? "2" : "1";
       element.style.pointerEvents = editing && !capturing ? "auto" : "none";
-      element.dataset.selected = String((allPanels || panel.id === selectedId) && editing && !capturing);
+      element.dataset.selected = String(selected && editing && !capturing);
+      element.dataset.choosing = String(selectionMode === "choose");
+      element.dataset.movable = String(canTransform(entry));
       face.tabIndex = editing && !capturing ? 0 : -1;
-      face.setAttribute("aria-pressed", String(allPanels || panel.id === selectedId));
-      face.setAttribute("aria-label", `Solar panel ${panel.id}. Drag to move${allPanels ? " all panels" : ""}`);
-      controls.hidden = allPanels || panel.id !== selectedId || !editing || capturing;
+      face.setAttribute("aria-pressed", String(selected));
+      face.setAttribute("aria-label", `Solar panel ${panel.id}. ${selectionMode === "choose" ? `${selected ? "Remove from" : "Add to"} selection`
+        : selectionMode === "one" ? "Drag to move" : selected ? `Drag to move ${selectionMode === "all" ? "all" : "selected"} panels` : "Not selected"}`);
+      controls.hidden = selectionMode !== "one" || panel.id !== selectedId || !editing || capturing;
       const ringSize = Math.max(100, Math.hypot(width * axes.width.x + height * axes.length.x, height * axes.length.y) + 52);
       controls.style.width = controls.style.height = `${ringSize}px`;
-      groupPoints.push({ panel, x: center.x, y: center.y });
+      if (selectedIds.has(panel.id)) groupPoints.push({ panel, x: center.x, y: center.y });
       radii.set(panel.id, (ringSize - 52) / 2);
     }
-    group.hidden = !allPanels || !editing || capturing || !groupPoints.length;
+    group.hidden = (selectionMode !== "all" && selectionMode !== "selection") || !editing || capturing || !groupPoints.length;
     if (!group.hidden) {
+      const scope = selectionMode === "all" ? "all" : "selected";
+      groupRotate.setAttribute("aria-label", `Rotate ${scope} solar panels`);
+      groupRotate.title = `Drag around the circle to rotate ${scope} panels. Arrow keys turn by 1°.`;
+      groupMove.setAttribute("aria-label", `Move ${scope} solar panels`);
+      groupMove.title = `Drag to move ${scope} panels. Arrow keys move by 10 cm; Shift moves by 1 m.`;
       const pivot = layoutCentre(groupPoints);
       const radius = Math.max(...groupPoints.map((point) => Math.hypot(point.x - pivot.x, point.y - pivot.y) + (radii.get(point.panel.id) ?? 0)));
       group.style.left = `${pivot.x}px`; group.style.top = `${pivot.y}px`;
@@ -116,12 +135,60 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
   overlay.setMap(map);
 
   function stopGesture() {
+    stopSelection();
     const previous = gesture; gesture = null;
     if (previous?.button.hasPointerCapture(previous.pointerId)) previous.button.releasePointerCapture(previous.pointerId);
   }
+  function stopSelection(cancel = true) {
+    const previous = selectionGesture; selectionGesture = null; selectionBox.hidden = true;
+    if (!previous) return;
+    if (mapElement.hasPointerCapture(previous.pointerId)) mapElement.releasePointerCapture(previous.pointerId);
+    if (cancel && previous.moved) { selectedIds.clear(); previous.previousIds.forEach((id) => { if (entries.has(id)) selectedIds.add(id); }); publish(); }
+  }
+  function chooseWithin(x: number, y: number) {
+    if (!selectionGesture) return;
+    const { start } = selectionGesture;
+    if (!selectionGesture.moved && Math.hypot(x - start.x, y - start.y) < 4) return;
+    selectionGesture.moved = true;
+    const left = Math.min(start.x, x), right = Math.max(start.x, x), top = Math.min(start.y, y), bottom = Math.max(start.y, y);
+    selectionBox.hidden = false;
+    selectionBox.style.left = `${left}px`; selectionBox.style.top = `${top}px`;
+    selectionBox.style.width = `${right - left}px`; selectionBox.style.height = `${bottom - top}px`;
+    selectedIds.clear();
+    const projection = overlay.getProjection();
+    for (const { panel } of entries.values()) {
+      const point = projection.fromLatLngToContainerPixel(new api.LatLng(panel.center));
+      if (point && point.x >= left && point.x <= right && point.y >= top && point.y <= bottom) selectedIds.add(panel.id);
+    }
+    publish();
+  }
+  mapElement.addEventListener("pointerdown", (event) => {
+    if (!editing || capturing || !ready || selectionMode !== "choose" || event.button !== 0 || selectionGesture) return;
+    // Faces keep their native click/keyboard activation for individual toggles.
+    if ([...entries.values()].some(({ element }) => event.composedPath().includes(element))) return;
+    if (event.composedPath().some((target) => ["BUTTON", "A", "INPUT", "SELECT", "TEXTAREA"].includes(Reflect.get(target, "tagName")))) return;
+    event.preventDefault(); event.stopImmediatePropagation(); stopGesture();
+    const bounds = mapElement.getBoundingClientRect();
+    selectionGesture = { pointerId: event.pointerId, start: { x: event.clientX - bounds.left, y: event.clientY - bounds.top }, previousIds: [...selectedIds], moved: false };
+    mapElement.setPointerCapture(event.pointerId);
+  }, { signal: events.signal, capture: true });
+  mapElement.addEventListener("pointermove", (event) => {
+    if (selectionGesture?.pointerId !== event.pointerId) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    const bounds = mapElement.getBoundingClientRect(); chooseWithin(event.clientX - bounds.left, event.clientY - bounds.top);
+  }, { signal: events.signal, capture: true });
+  mapElement.addEventListener("pointerup", (event) => {
+    if (selectionGesture?.pointerId !== event.pointerId) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    const bounds = mapElement.getBoundingClientRect(); chooseWithin(event.clientX - bounds.left, event.clientY - bounds.top); stopSelection(false);
+  }, { signal: events.signal, capture: true });
+  const cancelSelection = (event: PointerEvent) => { if (selectionGesture?.pointerId === event.pointerId) stopSelection(); };
+  mapElement.addEventListener("pointercancel", cancelSelection, { signal: events.signal });
+  mapElement.addEventListener("lostpointercapture", cancelSelection, { signal: events.signal });
   function snapshot(entry?: Entry): ProjectedPanel[] {
     if (!ready) return [];
-    const targets = allPanels ? [...entries.values()] : entry ? [entry] : [];
+    const targets = selectionMode === "one" ? entry ? [entry] : []
+      : [...entries.values()].filter(({ panel }) => selectedIds.has(panel.id));
     const projection = overlay.getProjection();
     return targets.flatMap(({ panel }) => {
       const point = projection.fromLatLngToContainerPixel(new api.LatLng(panel.center));
@@ -143,14 +210,14 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
     publish();
   }
   function rotateBy(degrees: number, entry?: Entry) {
-    if (!editing || capturing || !Number.isFinite(degrees)) return;
+    if (!canTransform(entry) || !Number.isFinite(degrees)) return;
     stopGesture();
     const panels = snapshot(entry);
     if (panels.length) transform(panels, layoutCentre(panels), 0, 0, degrees);
   }
   function nudge(event: KeyboardEvent, entry?: Entry) {
     const directions: Record<string, number> = { ArrowUp: 0, ArrowRight: 90, ArrowDown: 180, ArrowLeft: 270 };
-    if (!editing || capturing || !(event.key in directions)) return;
+    if (!canTransform(entry) || !(event.key in directions)) return;
     event.preventDefault(); stopGesture();
     if (entry) select(entry.panel.id);
     const panels = snapshot(entry);
@@ -167,7 +234,7 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
   }
   function drag(button: HTMLButtonElement, entry: Entry | undefined, rotate: boolean) {
     button.addEventListener("pointerdown", (event) => {
-      if (!editing || capturing || event.button !== 0 || !ready) return;
+      if (!canTransform(entry) || event.button !== 0 || !ready) return;
       event.preventDefault(); event.stopPropagation();
       stopGesture();
       if (entry) select(entry.panel.id);
@@ -218,8 +285,16 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
     rotate.setAttribute("aria-label", "Rotate selected solar panel"); rotate.title = "Drag around the circle to rotate. Use arrow keys for 1° steps.";
     controls.append(rotate);
     const entry = { panel, element, face, controls };
-    face.addEventListener("click", () => select(panel.id), { signal: events.signal });
+    face.addEventListener("click", () => {
+      if (!editing || capturing) return;
+      if (selectionMode === "choose") {
+        stopGesture();
+        if (selectedIds.has(panel.id)) selectedIds.delete(panel.id); else selectedIds.add(panel.id);
+        publish();
+      } else if (selectionMode === "one") select(panel.id);
+    }, { signal: events.signal });
     face.addEventListener("keydown", (event) => {
+      if (!editing || capturing || selectionMode !== "one") { nudge(event, entry); return; }
       if (event.key === "Delete" || event.key === "Backspace") { event.preventDefault(); select(panel.id); removeSelected(); return; }
       nudge(event, entry);
     }, { signal: events.signal });
@@ -238,26 +313,34 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
     selectedId = panel.id; publish();
   }
   function copy(id: number, direction: SolarCopyDirection) {
+    if (!editing || capturing || selectionMode !== "one") return;
     const source = entries.get(id)?.panel;
     if (source) addPanel(adjacentSolarPanel(source, direction, (from, distance, heading) => api.geometry.spherical.computeOffset(from, distance, heading).toJSON()));
   }
   function removeSelected() {
-    if (allPanels || selectedId === null || capturing) return;
+    if (selectionMode !== "one" || selectedId === null || capturing) return;
     stopGesture();
-    entries.get(selectedId)?.element.remove(); entries.delete(selectedId); selectedId = null; publish();
+    entries.get(selectedId)?.element.remove(); entries.delete(selectedId); selectedIds.delete(selectedId); selectedId = null; publish();
   }
   return {
-    add: (settings: SolarPanelSettings) => { const center = map.getCenter(); if (center) { stopGesture(); allPanels = false; addPanel({ ...settings, center: center.toJSON(), heading: 0 }); } },
+    add: (settings: SolarPanelSettings) => { const center = map.getCenter(); if (center && !capturing) { stopGesture(); selectionMode = "one"; selectedIds.clear(); addPanel({ ...settings, center: center.toJSON(), heading: 0 }); } },
     updateSelected: (values: SolarPanelSettings & { heading: number }) => {
-      if (allPanels || capturing) return;
+      if (selectionMode !== "one" || capturing) return;
       stopGesture();
       const selected = selectedId === null ? null : entries.get(selectedId);
       if (selected && validSolarPanelSize(values) && validSolarPanelTilt(values) && Number.isFinite(values.heading)) { Object.assign(selected.panel, values, { heading: solarHeading(values.heading) }); publish(); }
     },
     removeSelected,
-    setAllPanels: (value: boolean) => { stopGesture(); allPanels = value; publish(); },
-    rotateAll: (degrees: number) => { if (allPanels) rotateBy(degrees); },
-    clear: () => { stopGesture(); entries.forEach(({ element }) => element.remove()); entries.clear(); selectedId = null; allPanels = false; publish(); },
+    setSelectionMode: (value: SolarSelectionMode) => {
+      if (capturing) return;
+      stopGesture();
+      if (value === "selection" && !selectedIds.size) return;
+      if (value === "one" || value === "all" || (value === "choose" && selectionMode !== "choose" && selectionMode !== "selection")) selectedIds.clear();
+      if (value === "all") entries.forEach(({ panel }) => selectedIds.add(panel.id));
+      selectionMode = value; publish();
+    },
+    rotateSelection: (degrees: number) => { if (selectionMode === "all" || selectionMode === "selection") rotateBy(degrees); },
+    clear: () => { stopGesture(); entries.forEach(({ element }) => element.remove()); entries.clear(); selectedId = null; selectedIds.clear(); selectionMode = "one"; publish(); },
     setEditing: (value: boolean) => { stopGesture(); editing = value; publish(); },
     setCapturing: (value: boolean) => { stopGesture(); capturing = value; if (ready) overlay.draw(); },
     dispose: () => { stopGesture(); mapListeners.forEach((listener) => listener.remove()); events.abort(); entries.clear(); overlay.setMap(null); },

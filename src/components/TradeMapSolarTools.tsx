@@ -4,13 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { createTradeMapSolarLayout, DEFAULT_SOLAR_PANEL_SIZE, DEFAULT_SOLAR_PANEL_TILT, validSolarPanelSize, validSolarPanelTilt, type SolarLayout } from "@/lib/trade-map-solar";
 import { captureTradeMapPng } from "@/lib/trade-map-capture";
 import styles from "./TradeMapSolarTools.module.css";
+import type { MapQuoteMeasurement } from "@/lib/trade-map-quote";
 
-type Props = { api: typeof google.maps; map: google.maps.Map; active: boolean; disabled: boolean; onActivate: () => void; onClose: () => void };
+type Props = { api: typeof google.maps; map: google.maps.Map; active: boolean; disabled: boolean; onActivate: () => void; onClose: () => void; onQuote?: (measurement: MapQuoteMeasurement) => void };
 
-export function TradeMapSolarTools({ api, map, active, disabled, onActivate, onClose }: Props) {
+export function TradeMapSolarTools({ api, map, active, disabled, onActivate, onClose, onQuote }: Props) {
   const controller = useRef<ReturnType<typeof createTradeMapSolarLayout> | null>(null);
   const capture = useRef<AbortController | null>(null);
-  const [layout, setLayout] = useState<SolarLayout>({ panels: [], selectedId: null, allPanels: false });
+  const [layout, setLayout] = useState<SolarLayout>({ panels: [], selectedId: null, selectionMode: "one", selectedIds: [] });
   const [width, setWidth] = useState(String(DEFAULT_SOLAR_PANEL_SIZE.widthM));
   const [length, setLength] = useState(String(DEFAULT_SOLAR_PANEL_SIZE.lengthM));
   const [angle, setAngle] = useState("0");
@@ -19,8 +20,10 @@ export function TradeMapSolarTools({ api, map, active, disabled, onActivate, onC
   const [message, setMessage] = useState("");
   const [capturing, setCapturing] = useState(false);
   const selected = layout.panels.find((panel) => panel.id === layout.selectedId);
+  const groupSelection = layout.selectionMode !== "one";
+  const choosing = layout.selectionMode === "choose";
   useEffect(() => {
-    const drawing = createTradeMapSolarLayout(api, map, { panel: styles.panel, face: styles.face, controls: styles.controls, ring: styles.ring, rotate: styles.rotate, copy: styles.copy, group: styles.group, move: styles.move }, (next) => {
+    const drawing = createTradeMapSolarLayout(api, map, { panel: styles.panel, face: styles.face, controls: styles.controls, ring: styles.ring, rotate: styles.rotate, copy: styles.copy, group: styles.group, move: styles.move, selectionBox: styles.selectionBox }, (next) => {
       setLayout(next);
       const panel = next.panels.find((item) => item.id === next.selectedId);
       if (panel) {
@@ -65,20 +68,24 @@ export function TradeMapSolarTools({ api, map, active, disabled, onActivate, onC
       <button type="button" disabled={disabled || capturing} onClick={() => void captureImage()}>{capturing ? "Capturing…" : "Capture image"}</button>
       {capturing && <button type="button" onClick={() => { capture.current?.abort(); setCapturing(false); setMessage("Capture cancelled."); }}>Cancel capture</button>}
       {layout.panels.length > 0 && <><span className={styles.count}>{layout.panels.length} {layout.panels.length === 1 ? "panel" : "panels"}</span>
+        {onQuote && <button type="button" disabled={capturing} onClick={() => onQuote({ kind: "solar", quantity: layout.panels.length })}>Add to quote</button>}
         {!active && <button type="button" disabled={capturing} onClick={onActivate}>Edit panels</button>}
       </>}
     </div>
     {active && <>
       <div className={styles.scope} role="group" aria-label="Move and rotate">
         <span>Move &amp; rotate</span>
-        <button type="button" aria-pressed={!layout.allPanels} disabled={capturing || !layout.panels.length} onClick={() => controller.current?.setAllPanels(false)}>One panel</button>
-        <button type="button" aria-pressed={layout.allPanels} disabled={capturing || !layout.panels.length} onClick={() => controller.current?.setAllPanels(true)}>All panels</button>
+        <button type="button" aria-pressed={layout.selectionMode === "one"} disabled={capturing || !layout.panels.length} onClick={() => controller.current?.setSelectionMode("one")}>One panel</button>
+        <button type="button" aria-pressed={layout.selectionMode === "all"} disabled={capturing || !layout.panels.length} onClick={() => controller.current?.setSelectionMode("all")}>All panels</button>
+        <button type="button" aria-pressed={layout.selectionMode === "choose" || layout.selectionMode === "selection"} disabled={capturing || !layout.panels.length} onClick={() => controller.current?.setSelectionMode("choose")}>Choose panels</button>
       </div>
       <div className={styles.settings}>
-        {layout.allPanels ? <>
-          <span className={styles.count}>{layout.panels.length} panels selected</span>
-          <button type="button" disabled={capturing || !layout.panels.length} aria-label="Rotate all panels left by 1 degree" onClick={() => controller.current?.rotateAll(-1)}>↶ 1°</button>
-          <button type="button" disabled={capturing || !layout.panels.length} aria-label="Rotate all panels right by 1 degree" onClick={() => controller.current?.rotateAll(1)}>↷ 1°</button>
+        {groupSelection ? <>
+          <span className={styles.count} role="status">{layout.selectedIds.length} of {layout.panels.length} panels selected</span>
+          {choosing ? <button type="button" disabled={capturing || !layout.selectedIds.length} onClick={() => controller.current?.setSelectionMode("selection")}>Move/rotate selection</button> : <>
+          <button type="button" disabled={capturing || !layout.selectedIds.length} aria-label="Rotate selected panels left by 1 degree" onClick={() => controller.current?.rotateSelection(-1)}>↶ 1°</button>
+          <button type="button" disabled={capturing || !layout.selectedIds.length} aria-label="Rotate selected panels right by 1 degree" onClick={() => controller.current?.rotateSelection(1)}>↷ 1°</button>
+          </>}
         </> : <>
         <label><span>Width (m)</span><input type="number" min="0.2" max="4" step="0.01" value={width} onChange={(event) => setWidth(event.target.value)} /></label>
         <label><span>Length (m)</span><input type="number" min="0.2" max="4" step="0.01" value={length} onChange={(event) => setLength(event.target.value)} /></label>
@@ -91,10 +98,11 @@ export function TradeMapSolarTools({ api, map, active, disabled, onActivate, onC
         <button type="button" disabled={!layout.panels.length || capturing} onClick={() => controller.current?.clear()}>Clear panels</button>
         <button type="button" disabled={capturing} onClick={onClose}>Done</button>
       </div>
-      <p className={styles.hint}>{layout.allPanels
-        ? "Drag any panel or the centre handle to move the whole layout. Drag the gold handle to rotate all panels around the centre. Spacing and tilt stay the same."
+      <p className={styles.hint}>{choosing
+        ? "Drag a box over the panels to select their centres. Tap panels to add or remove them, then choose Move/rotate selection. Keyboard: Tab to a panel and press Enter or Space."
+        : groupSelection ? "Drag a selected panel or the centre handle to move the selection. Drag the gold handle to rotate it around its centre. Other panels stay in place."
         : "Drag a panel onto the roof. Drag the gold handle around the circle to rotate. The four arrows add a matching panel with a 2 cm gap."}</p>
-      {!layout.allPanels && <p className={styles.hint}>Tilt shortens the overhead footprint. For a sideways 30° pitch, set length tilt to 0° and width tilt to 30°. The starting 22.5° pitch is an assumption; match it to the roof.</p>}
+      {!groupSelection && <p className={styles.hint}>Tilt shortens the overhead footprint. For a sideways 30° pitch, set length tilt to 0° and width tilt to 30°. The starting 22.5° pitch is an assumption; match it to the roof.</p>}
       <p className={styles.hint}>Concept layout only. Width and length are the physical panel dimensions. Confirm roof pitch, obstructions and installation clearances. Layouts are not saved; capture an image before leaving.</p>
     </>}
     {message && <p className={styles.hint} role="status">{message}</p>}

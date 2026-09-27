@@ -104,7 +104,7 @@ function quoteAssetBucket() {
   return (env as unknown as { EVIDENCE?: QuoteAssetBucket }).EVIDENCE;
 }
 
-async function loadBrandAsset(
+export async function loadBrandAsset(
   asset: TradeQuoteBrandAssetSnapshot | null,
 ): Promise<TradeQuotePdfBrandAsset | undefined> {
   if (!asset) return undefined;
@@ -140,11 +140,7 @@ async function loadBrandAsset(
 export async function loadTradeQuoteBrandAssets(
   snapshot: TradeQuoteDocumentSnapshot,
 ): Promise<TradeQuotePdfBrandAssets> {
-  const [logo, banner] = await Promise.all([
-    loadBrandAsset(snapshot.business.logo),
-    loadBrandAsset(snapshot.business.banner),
-  ]);
-  return { logo, banner };
+  return { logo: await loadBrandAsset(snapshot.business.logo) };
 }
 
 export function tradeQuoteBrandAssetSnapshot(

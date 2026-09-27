@@ -5,8 +5,9 @@ import { geocodeTradeMapAddress } from "@/lib/google-maps-client";
 import { createTradeMapMeasurement, EMPTY_MAP_MEASUREMENT, formatMapDistance, type TradeMapMeasureMode } from "@/lib/trade-map-measurement";
 import styles from "./TradeMapTools.module.css";
 import { TradeMapSolarTools } from "./TradeMapSolarTools";
+import { mapQuoteMeasurement, type MapQuoteMeasurement } from "@/lib/trade-map-quote";
 
-type Props = { api: typeof google.maps; map: google.maps.Map; onExplore: () => void; onMeasuring: (active: boolean) => void };
+type Props = { api: typeof google.maps; map: google.maps.Map; onExplore: () => void; onMeasuring: (active: boolean) => void; onQuote?: (measurement: MapQuoteMeasurement) => void };
 const VIEWS = [["roadmap", "Map"], ["satellite", "Satellite"], ["hybrid", "Satellite + labels"], ["terrain", "Terrain"]] as const;
 const number = (value: number) => new Intl.NumberFormat("en-AU", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value);
 
@@ -20,7 +21,7 @@ function bestImageryZoom(api: typeof google.maps, position: google.maps.LatLngLi
   });
 }
 
-export function TradeMapTools({ api, map, onExplore, onMeasuring }: Props) {
+export function TradeMapTools({ api, map, onExplore, onMeasuring, onQuote }: Props) {
   const [view, setView] = useState("roadmap");
   const [address, setAddress] = useState("");
   const [searching, setSearching] = useState(false);
@@ -101,6 +102,8 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring }: Props) {
   }
 
   const enoughPoints = measurement.points >= (mode === "area" ? 3 : 2);
+  const quoteMeasurement = mode && measurement.finished && !measurement.crossed
+    ? mapQuoteMeasurement(mode, mode === "area" ? measurement.areaM2 : measurement.lengthM) : null;
   return <div className={styles.tools}>
     <div className={styles.toolbar}>
       <form className={styles.addressSearch} onSubmit={(event) => void findAddress(event)} aria-label="Find any address on the map">
@@ -113,7 +116,7 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring }: Props) {
         else { setView("satellite"); startMeasure("area"); }
       }}>Measure</button>
     </div>
-    <TradeMapSolarTools api={api} map={map} active={solarEditing} disabled={searching} onActivate={() => {
+    <TradeMapSolarTools api={api} map={map} active={solarEditing} disabled={searching} onQuote={onQuote} onActivate={() => {
       onExplore(); setMode(null); setSolarEditing(true); setView("satellite");
     }} onClose={() => setSolarEditing(false)} />
     {addressMessage && <p className={styles.addressMessage} role="status">{addressMessage}</p>}
@@ -129,6 +132,7 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring }: Props) {
       </div>
       <p>{measurement.crossed ? "Move a corner or undo the last point so the edges do not cross." : measurement.finished ? "Drag the corners or edge handles to refine your measurement." : mode === "area" ? "Click or tap around the edge, then Finish. Use at least 3 corners." : "Click a start point, then move the pointer to see the distance. Click or tap to place each point, then Finish. The total follows your path."}</p>
       <div className={styles.actions}>
+        {onQuote && quoteMeasurement && <button type="button" className={styles.finish} onClick={() => onQuote(quoteMeasurement)}>Add to quote</button>}
         {!measurement.finished && <>
           <button type="button" onClick={() => drawing.current?.addCentre()}>Add centre point</button>
           <button type="button" disabled={!measurement.points} onClick={() => drawing.current?.undo()}>Undo</button>

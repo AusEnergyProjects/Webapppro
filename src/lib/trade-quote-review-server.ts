@@ -529,11 +529,8 @@ export async function buildTradeQuoteDocumentSnapshot(
         trade.suburb trade_suburb, trade.address_state trade_address_state,
         trade.postcode trade_postcode, trade.brand_theme_key,
         trade.brand_border_style, trade.logo_object_key, trade.logo_content_type,
-        trade.banner_object_key, trade.banner_content_type,
         trade.document_business_name, trade.document_phone,
-        trade.document_email, trade.banner_crop_x_basis_points,
-        trade.banner_crop_y_basis_points, trade.banner_crop_width_basis_points,
-        trade.banner_crop_height_basis_points,
+        trade.document_email,
         trade.quote_email_subject_template, trade.quote_email_intro
       FROM trade_crm_quote_versions version
       JOIN trade_crm_quotes quote
@@ -594,14 +591,6 @@ export async function buildTradeQuoteDocumentSnapshot(
     .map((value) => cleanText(value, 300))
     .filter(Boolean)
     .join(", ");
-  const bannerCrop =
-    normaliseBannerCrop({
-      xBasisPoints: row.banner_crop_x_basis_points,
-      yBasisPoints: row.banner_crop_y_basis_points,
-      widthBasisPoints: row.banner_crop_width_basis_points,
-      heightBasisPoints: row.banner_crop_height_basis_points,
-    }) || DEFAULT_BANNER_CROP;
-
   return {
     schemaVersion: "trade-quote-document-v2",
     capturedAt:
@@ -648,8 +637,9 @@ export async function buildTradeQuoteDocumentSnapshot(
       themeKey: cleanText(row.brand_theme_key, 60) || "emerald_navy",
       borderStyle: cleanText(row.brand_border_style, 30) || "soft",
       logo: imageAsset(row.logo_object_key, row.logo_content_type),
-      banner: imageAsset(row.banner_object_key, row.banner_content_type),
-      bannerCrop,
+      banner: null,
+      // Retain the required v2 shape while retiring banners from new documents.
+      bannerCrop: { ...DEFAULT_BANNER_CROP },
       quoteEmailSubjectTemplate: cleanText(
         row.quote_email_subject_template,
         240,
@@ -838,7 +828,7 @@ export async function buildTradeQuoteReviewPayload(
       themeKey: snapshot.business.themeKey,
       borderStyle: snapshot.business.borderStyle,
       hasLogo: Boolean(snapshot.business.logo),
-      hasBanner: Boolean(snapshot.business.banner),
+      hasBanner: false,
       bannerCrop: snapshot.business.bannerCrop || DEFAULT_BANNER_CROP,
     },
     subtotalCents: snapshot.subtotalCents,

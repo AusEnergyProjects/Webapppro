@@ -188,7 +188,7 @@ test("staff portal renders only permission-backed operations", () => {
 test("quote and invoice viewers keep context while every mutation follows exact access", () => {
   assert.match(quote, /const canEditQuote = !readOnly && serverCanManageQuotes/);
   assert.match(quote, /const canSendQuote = canEditQuote && canSend && serverCanSendQuotes/);
-  assert.match(quote, /if \(!canEditQuote \|\| !serverCanManageCustomers\) return/);
+  assert.match(quote, /if \(!canEditQuote \|\| !serverCanManageCustomers \|\| busy\) return/);
   assert.match(quote, /canEditQuote && canApplyDiscounts/);
   assert.match(quote, /!canEditQuote && jobSummary\?\.customerId[\s\S]*?Open customer details/);
   assert.match(invoice, /const canManageInvoice = !readOnly && serverCanManageInvoices/);
