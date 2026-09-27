@@ -8,6 +8,7 @@ const searchRoute = read("../src/app/api/tlink-search/route.ts");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const products = read("../src/components/InstallerProductMarketplace.tsx");
+const priceBook = read("../src/components/TradePriceBookWorkspace.tsx");
 const supplierProducts = read("../src/components/SupplierCatalogueWorkspace.tsx");
 const purchasing = read("../src/components/TradePurchasingWorkspace.tsx");
 const styles = [
@@ -32,7 +33,8 @@ test("the TLink command centre uses a bounded role scoped server search", () => 
   assert.match(searchRoute, /KIND_LIMIT = 8/);
   assert.match(searchRoute, /\.flat\(\)\.slice\(0, RESULT_LIMIT\)/);
   assert.match(searchRoute, /entitlements\.features\.business_operations/);
-  assert.match(searchRoute, /entitlements\.features\.installer_marketplace/);
+  assert.match(searchRoute, /teamAccess\?\.canViewPriceBook/);
+  assert.match(searchRoute, /FROM trade_price_book_items/);
   assert.match(searchRoute, /entitlements\.features\.team_access/);
   assert.match(command, /partnerType === "installer"/);
   assert.match(command, /Australian Energy Assessments protected household contact details are never indexed/);
@@ -46,7 +48,8 @@ test("command results open the matching focused workspace", () => {
   assert.match(crm, /navigationTarget\.kind === "job"/);
   assert.match(crm, /navigationTarget\.kind === "customer"/);
   assert.match(crm, /navigationTarget\.kind === "new-job"/);
-  assert.match(products, /navigationTarget\?\.kind !== "product"/);
+  assert.match(priceBook, /navigationTarget\?\.kind === "product"/);
+  assert.match(command, /Your products and prices/);
   assert.match(supplierProducts, /setCatalogueView\("catalogue"\)/);
   assert.match(purchasing, /setSelectedId\(navigationTarget\.id\)/);
   assert.match(command, /record\.kind !== "order"/);

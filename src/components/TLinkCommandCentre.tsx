@@ -25,7 +25,7 @@ type SearchRecord = {
 
 type CommandFeatures = {
   businessOperations: boolean;
-  marketplace: boolean;
+  priceBook: boolean;
   teamAccess: boolean;
 };
 
@@ -46,7 +46,7 @@ const kindLabels: Record<SearchKind | "all", string> = {
 };
 
 export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: CommandProps) {
-  const { businessOperations, marketplace, teamAccess } = features;
+  const { businessOperations, priceBook, teamAccess } = features;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<SearchKind | "all">("all");
@@ -134,11 +134,11 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
   const availableKinds = useMemo(() => (["job", "customer", "product", "order", "team"] as SearchKind[])
     .filter((kind) => {
       if (partnerType === "supplier") return kind === "product" || (kind === "order" && businessOperations);
-      if (kind === "product") return marketplace;
+      if (kind === "product") return priceBook;
       if (kind === "team") return teamAccess;
       if (kind === "order") return false;
       return businessOperations;
-    }), [businessOperations, marketplace, partnerType, teamAccess]);
+    }), [businessOperations, priceBook, partnerType, teamAccess]);
 
   function close() {
     setOpen(false);
@@ -230,7 +230,7 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
                 <button type="button" onClick={() => navigateAction("new-job", "work")}><b>+</b><span><strong>New job</strong><small>Start a system numbered job</small></span></button>
                 <button type="button" onClick={() => navigateAction("new-customer", "work")}><b>+</b><span><strong>New customer</strong><small>Add a direct business contact</small></span></button>
               </>}
-              {(partnerType === "supplier" || marketplace) && <button type="button" onClick={() => navigateAction("product", "products")}><b>P</b><span><strong>Products</strong><small>{partnerType === "supplier" ? "Open your catalogue" : "Search approved equipment"}</small></span></button>}
+              {(partnerType === "supplier" || priceBook) && <button type="button" onClick={() => navigateAction("product", "products")}><b>P</b><span><strong>Products</strong><small>{partnerType === "supplier" ? "Open your catalogue" : "Your products and prices"}</small></span></button>}
               {partnerType === "supplier" && businessOperations && <button type="button" onClick={() => navigateAction("order", "orders")}><b>O</b><span><strong>Orders</strong><small>Open purchasing and fulfilment</small></span></button>}
               {partnerType === "installer" && teamAccess && <button type="button" onClick={() => navigateAction("team", "team")}><b>T</b><span><strong>Team</strong><small>Open people, access and records</small></span></button>}
             </div>

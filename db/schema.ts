@@ -6959,6 +6959,38 @@ export const tradeSolarDesigns = sqliteTable("trade_solar_designs", {
   check("trade_solar_design_snapshot_check", sql`COALESCE(json_extract(${t.dataJson}, '$.customerId') = ${t.customerId} AND json_extract(${t.dataJson}, '$.workOrderId') = ${t.workOrderId} AND json_extract(${t.dataJson}, '$.title') = ${t.title} AND json_array_length(${t.dataJson}, '$.panels') = ${t.panelCount}, 0)`),
 ]);
 
+export const tradeNetworkMembers = sqliteTable("trade_network_members", {
+  ownerUid: text("owner_uid").primaryKey().notNull(), enabled: integer("enabled").notNull().default(0),
+  consentVersion: text("consent_version").notNull().default(""), consentAt: text("consent_at").notNull().default(""),
+  updatedByUid: text("updated_by_uid").notNull(), updatedAt: text("updated_at").notNull(),
+}, t => [check("trade_network_members_enabled", sql`${t.enabled} IN (0,1)`)]);
+
+export const tradeNetworkPosts = sqliteTable("trade_network_posts", {
+  id: text("id").primaryKey().notNull(), ownerUid: text("owner_uid").notNull(), kind: text("kind").notNull(),
+  title: text("title").notNull(), trade: text("trade").notNull(), suburb: text("suburb").notNull(),
+  postcode: text("postcode").notNull(), state: text("state").notNull(), details: text("details").notNull(),
+  rateCents: integer("rate_cents"), rateUnit: text("rate_unit").notNull(),
+  startsOn: text("starts_on").notNull().default(""), endsOn: text("ends_on").notNull().default(""),
+  status: text("status").notNull().default("active"), revision: integer("revision").notNull(), expiresAt: text("expires_at").notNull(),
+  lastRequestHash: text("last_request_hash").notNull(), createdByUid: text("created_by_uid").notNull(), updatedByUid: text("updated_by_uid").notNull(),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, t => [index("trade_network_posts_feed_idx").on(t.status,t.expiresAt,t.updatedAt,t.id), index("trade_network_posts_owner_idx").on(t.ownerUid,t.updatedAt,t.id),
+  check("trade_network_posts_kind",sql`${t.kind} IN ('work','available')`), check("trade_network_posts_rate",sql`${t.rateCents} IS NULL OR ${t.rateCents} BETWEEN 0 AND 100000000`),
+  check("trade_network_posts_rate_unit",sql`${t.rateUnit} IN ('hour','day','job')`), check("trade_network_posts_status",sql`${t.status} IN ('active','closed')`), check("trade_network_posts_revision",sql`${t.revision}>0`)]);
+
+export const tradeNetworkEnquiries = sqliteTable("trade_network_enquiries", {
+  id: text("id").primaryKey().notNull(), postId: text("post_id").notNull().references(() => tradeNetworkPosts.id),
+  senderOwnerUid: text("sender_owner_uid").notNull(), recipientOwnerUid: text("recipient_owner_uid").notNull(),
+  postTitle: text("post_title").notNull(), postKind: text("post_kind").notNull(), senderBusinessName: text("sender_business_name").notNull(), recipientBusinessName: text("recipient_business_name").notNull(),
+  message: text("message").notNull(), senderContactJson: text("sender_contact_json").notNull(), recipientContactJson: text("recipient_contact_json").notNull().default(""),
+  status: text("status").notNull().default("pending"), revision: integer("revision").notNull(), lastRequestHash: text("last_request_hash").notNull(),
+  createdByUid: text("created_by_uid").notNull(), updatedByUid: text("updated_by_uid").notNull(), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, t => [uniqueIndex("trade_network_enquiries_post_sender_idx").on(t.postId,t.senderOwnerUid),
+  index("trade_network_enquiries_sender_idx").on(t.senderOwnerUid,t.updatedAt,t.id), index("trade_network_enquiries_recipient_idx").on(t.recipientOwnerUid,t.updatedAt,t.id),
+  check("trade_network_enquiries_kind",sql`${t.postKind} IN ('work','available')`), check("trade_network_enquiries_sender_contact",sql`json_valid(${t.senderContactJson})`),
+  check("trade_network_enquiries_recipient_contact",sql`${t.recipientContactJson}='' OR json_valid(${t.recipientContactJson})`), check("trade_network_enquiries_revision",sql`${t.revision}>0`),
+  check("trade_network_enquiries_status",sql`${t.status} IN ('pending','connected','closed')`), check("trade_network_enquiries_parties",sql`${t.senderOwnerUid}<>${t.recipientOwnerUid}`)]);
+
 export const tradePriceBookDocuments = sqliteTable("trade_price_book_documents", {
   id: text("id").primaryKey(), ownerUid: text("owner_uid").notNull(), priceBookItemId: text("price_book_item_id").notNull(),
   fileName: text("file_name").notNull(), label: text("label").notNull(), sizeBytes: integer("size_bytes").notNull(), pageCount: integer("page_count").notNull(),

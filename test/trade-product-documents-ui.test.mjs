@@ -187,3 +187,54 @@ test("a save response without the item does not claim success or open an unrelat
   await nodes(tree, node => node.type === "form")[0].props.onSubmit({ preventDefault() {}, nativeEvent: { submitter: new SubmitButton("documents") } }); tree = await h.settle();
   assert.match(text(tree), /save was not confirmed/); assert.equal(nodes(tree, node => node.type === h.ProductDocuments).length, 0);
 });
+
+test("product search navigation opens the exact owned price-book result and returns to all items for the quick action", async t => {
+  const selected = { ...item, id: "selected-product", itemCode: "PB-002", name: "Selected heat pump" };
+  const h = harness(t, "TradePriceBookWorkspace", { props: { initialView: "packets", navigationTarget: { workspace: "products", kind: "product", id: selected.id, query: selected.itemCode, nonce: 1 } },
+    respond: url => response(url.includes("itemId=") ? { ok: true, history: [] } : { ...library, items: [item, selected] }) });
+  let tree = await h.settle();
+  assert.match(text(tree), /Edit Selected heat pump/);
+  assert.ok(h.requests.some(request => request.url.includes("search=PB-002&status=active")));
+  assert.equal(nodes(tree, node => node.type === h.ProductDocuments)[0].props.itemId, selected.id);
+  assert.ok(h.requests.some(request => request.url.endsWith("?itemId=selected-product")));
+  h.props.navigationTarget = { workspace: "products", kind: "product", id: "", query: "", nonce: 2 };
+  tree = await h.settle(); assert.equal(nodes(tree, node => node.type === "form").length, 0);
+  assert.equal(nodes(tree, node => node.type === "input" && node.props.type === "search")[0].props.value, "");
+  assert.match(text(tree), /Existing product/); assert.match(text(tree), /Selected heat pump/);
+});
+
+test("a missing or archived product search result cannot open a different item", async t => {
+  const archived = { ...item, recordStatus: "archived" };
+  const h = harness(t, "TradePriceBookWorkspace", { props: { navigationTarget: { workspace: "products", kind: "product", id: item.id, query: item.itemCode, nonce: 1 } },
+    respond: () => response({ ...library, items: [archived, { ...item, id: "different-product" }] }) });
+  const tree = await h.settle(); assert.equal(nodes(tree, node => node.type === "form").length, 0);
+  assert.match(text(tree), /no longer in the active price book/);
+  assert.equal(h.requests.filter(request => request.url.includes("itemId=")).length, 0);
+});
+
+test("product navigation preserves view-only access and does not fetch with an explicit denied permission", async t => {
+  const navigationTarget = { workspace: "products", kind: "product", id: item.id, query: item.itemCode, nonce: 1 };
+  const viewer = harness(t, "TradePriceBookWorkspace", { props: { navigationTarget, permissions: { canViewPriceBook: true, canManagePriceBook: false } },
+    respond: url => response(url.includes("itemId=") ? { ok: true, history: [] } : { ...library, access: { canManage: false } }) });
+  let tree = await viewer.settle(); assert.match(text(tree), /View Existing product/);
+  assert.equal(nodes(tree, node => node.type === "fieldset")[0].props.disabled, true);
+  assert.equal(button(tree, "Save changes"), undefined);
+  const denied = harness(t, "TradePriceBookWorkspace", { props: { navigationTarget, permissions: { canViewPriceBook: false, canManagePriceBook: false } } });
+  tree = await denied.settle(); assert.match(text(tree), /Ask the business owner for price-book access/);
+  assert.equal(denied.requests.length, 0); assert.equal(nodes(tree, node => node.type === "form").length, 0);
+});
+
+test("a slow previous search cannot replace the newly selected product", async t => {
+  let releaseFirst;
+  const second = { ...item, id: "second-product", itemCode: "PB-002", name: "Second product" };
+  const h = harness(t, "TradePriceBookWorkspace", { props: { navigationTarget: { workspace: "products", kind: "product", id: item.id, query: item.itemCode, nonce: 1 } },
+    respond: url => url.includes(`search=${item.itemCode}&`) ? new Promise(resolve => { releaseFirst = () => resolve(response(library)); })
+      : response(url.includes("itemId=") ? { ok: true, history: [] } : { ...library, items: [second] }) });
+  await h.settle(); assert.equal(typeof releaseFirst, "function");
+  h.props.navigationTarget = { workspace: "products", kind: "product", id: second.id, query: second.itemCode, nonce: 2 };
+  let tree = await h.settle(); assert.match(text(tree), /Edit Second product/);
+  releaseFirst(); tree = await h.settle(); assert.match(text(tree), /Edit Second product/);
+  assert.equal(nodes(tree, node => node.type === h.ProductDocuments)[0].props.itemId, second.id);
+  h.props.permissions = { canViewPriceBook: false, canManagePriceBook: false };
+  tree = h.render(); assert.doesNotMatch(text(tree), /Second product/); assert.equal(nodes(tree, node => node.type === "form").length, 0);
+});

@@ -50,7 +50,8 @@ import {
 } from "@/lib/tlink-colour-mode";
 
 const SupplierCatalogueWorkspace = dynamic(() => import("./SupplierCatalogueWorkspace").then((module) => module.SupplierCatalogueWorkspace));
-const InstallerProductMarketplace = dynamic(() => import("./InstallerProductMarketplace").then((module) => module.InstallerProductMarketplace));
+const TradePriceBookWorkspace = dynamic(() => import("./TradePriceBookWorkspace").then((module) => module.TradePriceBookWorkspace));
+const TradeNetworkWorkspace = dynamic(() => import("./TradeNetworkWorkspace").then((module) => module.TradeNetworkWorkspace), { loading: () => <p role="status">Loading trade network...</p> });
 const InstallerPlatformQuote = dynamic(() => import("./InstallerPlatformQuote").then((module) => module.InstallerPlatformQuote));
 const InstallerArrivalWindows = dynamic(() => import("./InstallerArrivalWindows").then((module) => module.InstallerArrivalWindows));
 const TradePurchasingWorkspace = dynamic(() => import("./TradePurchasingWorkspace").then((module) => module.TradePurchasingWorkspace));
@@ -226,10 +227,11 @@ const publicLeadHandoffStages = [
     detail: "The quote will open automatically as soon as the handoff is confirmed.",
   },
 ] as const;
-type DashboardWorkspace = "work" | "map" | "team" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
+type DashboardWorkspace = "work" | "map" | "network" | "team" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
   "map",
+  "network",
   "team",
   "training",
   "finance",
@@ -1358,7 +1360,6 @@ export function DirectTradeDashboard() {
 
   const isSupplier = profile?.partnerType === "supplier";
   const hasLeadAccess = Boolean(profile?.entitlements?.features?.installer_leads);
-  const hasMarketplaceAccess = Boolean(profile?.entitlements?.features?.installer_marketplace);
   const hasSupplierVisibility = Boolean(profile?.entitlements?.features?.supplier_visibility);
   const hasBulkImport = Boolean(profile?.entitlements?.features?.supplier_bulk_import);
   const hasBusinessOperations = Boolean(profile?.entitlements?.features?.business_operations);
@@ -2330,7 +2331,7 @@ export function DirectTradeDashboard() {
               partnerType={isSupplier ? "supplier" : "installer"}
               features={{
                 businessOperations: hasBusinessOperations,
-                marketplace: hasMarketplaceAccess,
+                priceBook: hasBusinessOperations,
                 teamAccess: hasTeamAccess,
               }}
               onNavigate={(target) => {
@@ -2437,7 +2438,7 @@ export function DirectTradeDashboard() {
               >
                 <button type="button" aria-current={workspace === "map" ? "page" : undefined} className={workspace === "map" ? "active" : ""} onClick={() => {
                   setWorkspace("map", () => { setCommandTarget(null); setMapNavigationNonce((current) => current + 1); });
-                }}><TLinkNavigationIcon name="map" /><span>Map</span><small>Customer and job locations</small></button>
+                }}><TLinkNavigationIcon name="map" /><span>Map &amp; quote</span><small>Measure roofs and design systems</small></button>
                 <button type="button" aria-current={workspace === "work" && activeWorkView !== "schedule" && activeWorkView !== "leads" ? "page" : undefined} className={workspace === "work" && activeWorkView !== "schedule" && activeWorkView !== "leads" ? "active" : ""} onClick={() => {
                   setWorkspace("work", () => {
                     setCommandTarget({ workspace: "work", kind: "crm-view", id: "today", query: "", nonce: Date.now() });
@@ -2464,7 +2465,8 @@ export function DirectTradeDashboard() {
                     setActiveWorkView("leads");
                   });
                 }}><TLinkNavigationIcon name="leads" /><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>Australian Energy Assessments protected opportunities</small></button>
-                <button type="button" aria-current={workspace === "products" ? "page" : undefined} className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><TLinkNavigationIcon name="products" /><span>Products</span><small>Approved trade catalogue</small></button>
+                <button type="button" aria-current={workspace === "network" ? "page" : undefined} className={workspace === "network" ? "active" : ""} onClick={() => setWorkspace("network")}><TLinkNavigationIcon name="network" /><span>Trade network</span><small>Find work and subcontractors</small></button>
+                <button type="button" aria-current={workspace === "products" ? "page" : undefined} className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products", () => setCommandTarget(null))}><TLinkNavigationIcon name="products" /><span>Products</span><small>Your items, prices and PDFs</small></button>
                 <button type="button" aria-current={workspace === "calculator" ? "page" : undefined} className={workspace === "calculator" ? "active" : ""} onClick={() => setWorkspace("calculator")}><TLinkNavigationIcon name="calculator" /><span>Calculator</span><small>Rebates for quotes and invoices</small></button>
                 <button type="button" aria-current={workspace === "account" ? "page" : undefined} className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><TLinkNavigationIcon name="business" /><span>Business</span><small>Settings and verification</small></button>
               </nav>
@@ -3005,16 +3007,16 @@ export function DirectTradeDashboard() {
                 </section>
               </>}
 
-              {workspace === "products" && (hasMarketplaceAccess ? (
-                <InstallerProductMarketplace user={user} navigationTarget={commandTarget} />
+              {workspace === "network" && <TradeNetworkWorkspace key={user.uid} user={user} />}
+              {workspace === "products" && (hasBusinessOperations ? (
+                <section className="dashboard-panel"><TradePriceBookWorkspace user={user} navigationTarget={commandTarget} /></section>
               ) : (
                 <section className="dashboard-panel dashboard-access-locked-panel">
                   <div className="dashboard-access-locked">
                     <span>Verification required</span>
-                    <h2>Wholesale product marketplace</h2>
+                    <h2>Your products and prices</h2>
                     <p>
-                      Complete business verification to compare approved equipment,
-                      trade pricing, stock, warranties and complete kit dependencies.
+                      Complete business verification to save your items, prices and product PDFs.
                     </p>
                     <a href="/direct-trade/dashboard/verification">Open verification centre</a>
                   </div>

@@ -6,11 +6,21 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 27 September 2026
 
-Deployment baseline for this change: Sites 643, source `d39e09671aab0417859f8f349a82345e5a1a8ca2`. The approved email-delivery update is preserved. The coordinating release records the next matching GitHub/Sites identity.
+Deployment baseline for this change: Sites 644, source `8b9f37bc521c4212f894cea9cb087f4d77534232`. Saved roof designs, product documents and approved email delivery are preserved. The coordinating release records the next matching GitHub/Sites identity.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: saved roof designs and simple map quoting
+## Current implementation: private trade network and direct product navigation
+
+Installer navigation now labels the map Map & quote and explains roof measurement and solar design. Products opens the business's own price book, including its items, prices and PDFs. Installer product search uses active owner-scoped price-book items and current price-book permission; supplier catalogue workspaces and supplier search remain available without promoting that catalogue to installers.
+
+The private Trade network has two post types: work needing a subcontractor and availability for work. Participation starts off, and only the owner can join or leave. Verified owners and non-field team-wide job managers can browse, publish and enquire. Feed projections contain business names, trade, suburb/state/postcode, post details and optional offered/minimum rates and dates, not account contacts or CRM records. Rates are labelled ex GST.
+
+Migration 0201 stores membership, posts and private enquiries. A sender explicitly shares business contact details with the post owner; Connect explicitly shares the recipient's contact details back. Only the two participating businesses can access that enquiry. No emails, public discussion feed, automatic customer imports or customer-lead access are introduced. Leaving atomically closes posts and prevents new enquiries; history remains private and available. Posts expire after 30 days, support renewal/closure and use revision conflicts and idempotent retries. Limits are 20 active posts per business and 100 enquiries per post, with bounded paginated results and payloads.
+
+Validation and release evidence are retained under `C:/Webproject/outputs/tlink-trade-network-2026-09-27/`. Live verification does not opt businesses in, publish listings or contact other trades.
+
+## Previous implementation: saved roof designs and simple map quoting
 
 The Google map supports an immediately usable generic 440 W panel (1.134 m by 1.762 m), editable dimensions and wattage, and selection from the business's own price book. A Solar panel product stores its dimensions and wattage once. A small manufacturer-linked starter list requires no catalogue upload. Model specifications are copied into each design, so later catalogue changes do not rewrite old designs. The generic panel is a concept default, not a claimed market average or certified installation design.
 

@@ -65,10 +65,29 @@ test("Map bookmarks select their own workspace without restoring stale Work job 
   assert.equal(helpers.dashboardCommandTargetFromSearch("?workspace=map&jobId=old-job&jobTab=quote"), null);
 });
 
+test("Products and Trade network have direct workspaces and preserve pending map saves", async () => {
+  const nav = find(dashboard, node => ts.isJsxElement(node) && node.openingElement.tagName.getText(dashboard) === "nav"
+    && node.openingElement.getText(dashboard).includes('aria-label="TLink installer account"'));
+  for (const [label, workspace] of [["Products", "products"], ["Trade network", "network"]]) {
+    assert.equal(helpers.dashboardWorkspaceFromSearch(`?workspace=${workspace}`), workspace);
+    const button = find(nav, node => ts.isJsxElement(node) && node.openingElement.tagName.getText(dashboard) === "button" && node.getText(dashboard).includes(`<span>${label}</span>`));
+    const guard = createMapNavigationGuard(), state = { workspace: "map", target: "design" };
+    const tree = evaluate(button, dashboard, { require: () => jsx, exports: {}, TLinkNavigationIcon() {}, workspace: "map", setCommandTarget: value => { state.target = value; }, setWorkspace: guardedWorkspaceSetter(value => { state.workspace = value; }, guard) });
+    guard.register(async () => { throw new Error("offline"); });
+    tree.props.onClick(); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(state.workspace, "map");
+    guard.register(async () => {}); tree.props.onClick(); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(state.workspace, workspace);
+  }
+  assert.ok(find(dashboard, node => ts.isJsxSelfClosingElement(node) && node.tagName.getText(dashboard) === "TradePriceBookWorkspace"));
+  assert.ok(find(dashboard, node => ts.isJsxSelfClosingElement(node) && node.tagName.getText(dashboard) === "TradeNetworkWorkspace"));
+  assert.equal(read("DirectTradeDashboard").includes("InstallerProductMarketplace"), false);
+});
+
 test("installer Map navigation is explicit, independently active and clears the previous command", () => {
   const button = find(dashboard, node => ts.isJsxElement(node)
     && node.openingElement.tagName.getText(dashboard) === "button"
-    && node.getText(dashboard).includes('<span>Map</span>'));
+    && node.getText(dashboard).includes('<span>Map &amp; quote</span>'));
   const captured = {};
   const context = {
     require: () => jsx, exports: {}, TLinkNavigationIcon() {}, workspace: "map",
@@ -95,7 +114,7 @@ test("installer Map navigation is explicit, independently active and clears the 
 test("Map button retains its current record when saving fails and waits for a successful retry", async () => {
   const button = find(dashboard, node => ts.isJsxElement(node)
     && node.openingElement.tagName.getText(dashboard) === "button"
-    && node.getText(dashboard).includes('<span>Map</span>'));
+    && node.getText(dashboard).includes('<span>Map &amp; quote</span>'));
   const guard = createMapNavigationGuard();
   const state = { workspace: "map", target: { kind: "job", id: "current-job" }, nonce: 1 };
   const tree = evaluate(button, dashboard, {

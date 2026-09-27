@@ -1,7 +1,19 @@
 # Next task handover
 
-Status: simple solar design and measured insulation quoting are in release validation. The approved email-delivery update is preserved from Sites 643, source d39e09671aab0417859f8f349a82345e5a1a8ca2.
+Status: private trade network and clearer product/map navigation are in release validation. Verified baseline Sites 644, source 8b9f37bc521c4212f894cea9cb087f4d77534232.
 Prepared: 27 September 2026
+
+## Active contract: private trade work and subcontractor enquiries
+
+Outcome: Map & quote explains measuring and designing for quotes; installer Products opens the business price book; an optional private Trade network connects verified businesses through work requests and availability posts.
+
+Owner: coordinating task in C:/Webproject/aea-energy-tlink-map, branch codex/tlink-customer-job-map. Scope: installer navigation, owner-scoped product search, network workspace/API and migration 0201. Supplier workspaces stay available; customer Leads and CRM records are unchanged.
+
+Acceptance: participation starts off; only the owner can join or leave; owners and non-field team-wide job managers may use the network. Posts show trade, suburb/state/postcode, details and optional rate/dates. Rates are explicitly ex GST. Private enquiries exchange only explicitly submitted contacts between the two businesses. Leaving atomically closes posts, stops new enquiries and retains private history. Posts expire after 30 days and can be closed or renewed. Revisions and idempotent requests protect concurrent edits and retries. No public forum, automatic emails, customer imports or paid gates.
+
+Validation: real SQLite permission, contact isolation, opt-out/concurrency and expiry tests; UI interaction and navigation tests; full suite, typecheck, migration replay, scoped lint and publication build. Inspect desktop/mobile and day/night screens using synthetic local data; live verification must not opt a business in or create posts/enquiries. Record exact GitHub/Sites provenance and unrelated baseline failures.
+
+## Previous milestone record: released with Sites 644
 
 ## Active contract: simple solar design to quote
 

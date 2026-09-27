@@ -5,7 +5,6 @@ import {
   requireVerifiedTradeIdentity,
   TradeAccessError,
   tradeAccountProjection,
-  verifiedTradeAccountPredicate,
 } from "@/lib/trade-access-server";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { canManageTeam, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
@@ -21,6 +20,7 @@ type SearchRecord = { id: string; kind: SearchKind; label: string; title: string
 
 const readable = (value: unknown) => String(value || "").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const money = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 });
+const price = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
 
 function errorResponse(error: unknown) {
   const mfa = mfaErrorResponse(error);
@@ -119,22 +119,19 @@ export async function GET(request: Request) {
         })));
     }
 
-    if (partnerType === "installer" && entitlements.features.installer_marketplace
+    if (partnerType === "installer" && entitlements.features.business_operations
       && Boolean(teamAccess?.canViewPriceBook) && matches("product", selectedKind)) {
-      searches.push(db.prepare(`SELECT p.id, p.model_number, p.brand, p.name, p.category, p.unit_price_cents_ex_gst,
-          p.stock_status, p.lead_time_days, a.business_name supplier_name
-        FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
-        WHERE p.listing_status = 'published' AND p.review_status = 'approved'
-          AND a.partner_type = 'supplier'
-          AND ${verifiedTradeAccountPredicate("a")}
-          AND LOWER(p.model_number || ' ' || p.brand || ' ' || p.name || ' ' || p.category || ' ' || a.business_name) LIKE ?
-        ORDER BY CASE WHEN LOWER(p.model_number) = LOWER(?) THEN 0 ELSE 1 END,
-          p.name COLLATE NOCASE, p.brand COLLATE NOCASE LIMIT ${KIND_LIMIT}`)
-        .bind(term, rawQuery).all<Record<string, unknown>>().then((rows: { results: Record<string, unknown>[] }) => rows.results.map((row: Record<string, unknown>) => ({
-          id: String(row.id), kind: "product" as const, label: "PR", title: String(row.name || row.model_number || "Product"),
-          detail: [row.brand, row.model_number].filter(Boolean).join(" "),
-          meta: [row.supplier_name, readable(row.stock_status), money.format(Number(row.unit_price_cents_ex_gst || 0) / 100)].filter(Boolean).join(" | "),
-          query: String(row.model_number || row.name || ""),
+      searches.push(db.prepare(`SELECT id, item_code, name, item_type, unit_label, sell_price_cents_ex_gst
+        FROM trade_price_book_items
+        WHERE firebase_uid = ? AND record_status = 'active'
+          AND LOWER(item_code || ' ' || name || ' ' || item_type || ' ' || supplier_name || ' ' || supplier_sku) LIKE ?
+        ORDER BY CASE WHEN LOWER(item_code) = LOWER(?) THEN 0 ELSE 1 END,
+          name COLLATE NOCASE, item_code LIMIT ${KIND_LIMIT}`)
+        .bind(ownerUid, term, rawQuery).all<Record<string, unknown>>().then((rows: { results: Record<string, unknown>[] }) => rows.results.map((row: Record<string, unknown>) => ({
+          id: String(row.id), kind: "product" as const, label: "PR", title: String(row.name || row.item_code || "Product"),
+          detail: String(row.item_code || "Price-book item"),
+          meta: [readable(row.item_type), `${price.format(Number(row.sell_price_cents_ex_gst || 0) / 100)} ex GST`, readable(row.unit_label)].filter(Boolean).join(" | "),
+          query: String(row.item_code || row.name || ""),
         }))));
     }
 
