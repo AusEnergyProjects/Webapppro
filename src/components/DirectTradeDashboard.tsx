@@ -300,6 +300,12 @@ function opportunityMatchFromSearch(search: string) {
   return opportunityMatchIdPattern.test(requested) ? requested : "";
 }
 
+function networkPostFromSearch(search: string) {
+  const params = new URLSearchParams(search);
+  const requested = params.get("networkPostId") || "";
+  return params.get("workspace") === "network" && opportunityMatchIdPattern.test(requested) ? requested : "";
+}
+
 function protectedIdentityContinuationIsCurrent(
   capturedUid = "",
   capturedRevision = -1,
@@ -818,6 +824,15 @@ export function DirectTradeDashboard() {
     return mapNavigation.run(() => { setWorkspaceState(next); after?.(); });
   }, [mapNavigation]);
   const [mapNavigationNonce, setMapNavigationNonce] = useState(0);
+  const [networkPostId, setNetworkPostId] = useState(() => typeof window === "undefined" ? "" : networkPostFromSearch(window.location.search));
+  const [networkNavigationNonce, setNetworkNavigationNonce] = useState(0);
+  const serviceAreaNavigation = useRef(false);
+  useEffect(() => {
+    if (workspace === "account" && serviceAreaNavigation.current) {
+      serviceAreaNavigation.current = false;
+      document.getElementById("business-settings-service")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [workspace]);
   const [financeView, setFinanceView] = useState<FinanceView>(() => typeof window === "undefined" ? "quotes" : dashboardFinanceViewFromSearch(window.location.search));
   const [financePriceBookView, setFinancePriceBookView] = useState<"items" | "packets">("items");
   const openFinance = (view: FinanceView, priceBookView: "items" | "packets" = "items") => {
@@ -907,6 +922,8 @@ export function DirectTradeDashboard() {
       void setWorkspace(nextWorkspace, () => {
         workspacePopstateSync.current = true;
         setFinanceView(dashboardFinanceViewFromSearch(nextSearch));
+        setNetworkPostId(networkPostFromSearch(nextSearch));
+        setNetworkNavigationNonce(value => value + 1);
         setActiveWorkView(nextWorkView);
         setSelectedOpportunityMatchId(nextMatchId);
         setFocusedOpportunityMatchId(nextMatchId);
@@ -937,6 +954,9 @@ export function DirectTradeDashboard() {
       : workspace;
     let changed = nextUrl.searchParams.get("workspace") !== routeWorkspace;
     nextUrl.searchParams.set("workspace", routeWorkspace);
+    if (workspace === "network" && networkPostId) {
+      if (nextUrl.searchParams.get("networkPostId") !== networkPostId) { nextUrl.searchParams.set("networkPostId", networkPostId); changed = true; }
+    } else if (nextUrl.searchParams.has("networkPostId")) { nextUrl.searchParams.delete("networkPostId"); changed = true; }
     if (workspace === "finance") {
       if (nextUrl.searchParams.get("financeView") !== financeView) { nextUrl.searchParams.set("financeView", financeView); changed = true; }
     } else if (nextUrl.searchParams.has("financeView")) { nextUrl.searchParams.delete("financeView"); changed = true; }
@@ -971,7 +991,7 @@ export function DirectTradeDashboard() {
     workspaceRouteInitialised.current = true;
     workspacePopstateSync.current = false;
     workspaceLocation.current = nextLocation;
-  }, [activeWorkView, commandTarget, financeView, selectedOpportunityMatchId, workspace]);
+  }, [activeWorkView, commandTarget, financeView, selectedOpportunityMatchId, workspace, networkPostId]);
   const photoLightboxOpener = useRef<HTMLElement | null>(null);
   const protectedOpportunityRequestControllers = useRef(
     new Set<AbortController>(),
@@ -2340,7 +2360,9 @@ export function DirectTradeDashboard() {
             />
             {!isSupplier && <TradeJobNotifications key={user.uid} user={user} onNavigate={(target) => {
               setWorkspace(target.workspace, () => setCommandTarget(target));
-            }} onOpenOpportunity={(matchId) => void openOpportunityNotification(matchId)} />}
+            }} onOpenOpportunity={(matchId) => void openOpportunityNotification(matchId)} onOpenNetwork={postId => {
+              setWorkspace("network", () => { setNetworkPostId(postId); setNetworkNavigationNonce(value => value + 1); });
+            }} />}
             <button
               type="button"
               className="tlink-colour-mode-toggle"
@@ -2378,7 +2400,7 @@ export function DirectTradeDashboard() {
             </div>
           </header>
 
-          {workspace !== "map" && <div className="trade-portal-intro">
+          {workspace !== "map" && workspace !== "network" && <div className="trade-portal-intro">
             <span>{isSupplier ? "Wholesale operations" : "Business operations"}</span>
             <h1>{isSupplier ? "Products, orders and supply in one place" : "Your workday, without the clutter"}</h1>
             <p>
@@ -2465,7 +2487,7 @@ export function DirectTradeDashboard() {
                     setActiveWorkView("leads");
                   });
                 }}><TLinkNavigationIcon name="leads" /><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>Australian Energy Assessments protected opportunities</small></button>
-                <button type="button" aria-current={workspace === "network" ? "page" : undefined} className={workspace === "network" ? "active" : ""} onClick={() => setWorkspace("network")}><TLinkNavigationIcon name="network" /><span>Trade network</span><small>Find work and subcontractors</small></button>
+                <button type="button" aria-current={workspace === "network" ? "page" : undefined} className={workspace === "network" ? "active" : ""} onClick={() => setWorkspace("network", () => { setNetworkPostId(""); setNetworkNavigationNonce(value => value + 1); })}><TLinkNavigationIcon name="network" /><span>Trade network</span><small>Local leads and subcontractors</small></button>
                 <button type="button" aria-current={workspace === "products" ? "page" : undefined} className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products", () => setCommandTarget(null))}><TLinkNavigationIcon name="products" /><span>Products</span><small>Your items, prices and PDFs</small></button>
                 <button type="button" aria-current={workspace === "calculator" ? "page" : undefined} className={workspace === "calculator" ? "active" : ""} onClick={() => setWorkspace("calculator")}><TLinkNavigationIcon name="calculator" /><span>Calculator</span><small>Rebates for quotes and invoices</small></button>
                 <button type="button" aria-current={workspace === "account" ? "page" : undefined} className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><TLinkNavigationIcon name="business" /><span>Business</span><small>Settings and verification</small></button>
@@ -2573,6 +2595,7 @@ export function DirectTradeDashboard() {
                     </p>
                     {hasLeadAccess && <div className="dashboard-opportunity-actions">
                       <button type="button" disabled={opportunitiesLoading} onClick={() => void refreshOpportunities()}>{opportunitiesLoading ? "Refreshing leads..." : "Refresh leads"}</button>
+                      <button type="button" onClick={() => setWorkspace("network", () => { setNetworkPostId(""); setNetworkNavigationNonce(value => value + 1); })}>Trade leads</button>
                     </div>}
                   </div>
                   {hasLeadAccess && opportunitiesLoading && <p className="dashboard-settings-status" role="status">Checking for new leads...</p>}
@@ -3007,7 +3030,9 @@ export function DirectTradeDashboard() {
                 </section>
               </>}
 
-              {workspace === "network" && <TradeNetworkWorkspace key={user.uid} user={user} />}
+              {workspace === "network" && <TradeNetworkWorkspace key={`${user.uid}:${networkNavigationNonce}`} user={user} initialPostId={networkPostId} onClearPost={() => setNetworkPostId("")} onOpenServiceAreas={() => {
+                setWorkspace("account", () => { serviceAreaNavigation.current = true; });
+              }} />}
               {workspace === "products" && (hasBusinessOperations ? (
                 <section className="dashboard-panel"><TradePriceBookWorkspace user={user} navigationTarget={commandTarget} /></section>
               ) : (

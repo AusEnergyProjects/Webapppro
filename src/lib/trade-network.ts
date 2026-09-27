@@ -3,6 +3,7 @@ export const NETWORK_MAX_BODY_BYTES = 16_384;
 export const NETWORK_STATES = ["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"] as const;
 export const NETWORK_TRADES = ["Electrical", "Plumbing", "Solar", "Batteries", "Air conditioning", "Hot water", "Insulation", "Roofing", "Carpentry", "Building", "Painting", "Other"] as const;
 export type NetworkKind = "work" | "available";
+export type NetworkAvailability = { openToWork: boolean; workTrades: string[]; serviceAreas: { postcode: string; radiusKm: number }[]; serviceStates: string[]; paused: boolean };
 export type NetworkContact = { name: string; email: string; phone: string };
 export type NetworkPostInput = {
   kind: NetworkKind; title: string; trade: string; suburb: string; postcode: string; state: string;
@@ -21,7 +22,10 @@ export type NetworkEnquiry = {
 export type NetworkWorkspace = {
   enabled: boolean; canManageMembership: boolean; posts: NetworkPost[]; myPosts: NetworkPost[];
   enquiries: NetworkEnquiry[]; hasMore: boolean; myHasMore: boolean; enquiriesHasMore: boolean;
+  availability: NetworkAvailability; leads: NetworkLead[]; leadCount: number; leadsHasMore: boolean;
 };
+export type NetworkLead = NetworkPost & { leadStatus: "new" | "viewed" | "dismissed"; receivedAt: string };
+export type NetworkLeadNotification = { id: string; title: string; summary: string; createdAt: string };
 export class NetworkError extends Error {
   code: string; status: number;
   constructor(code: string, message: string, status = 400) { super(message); this.code = code; this.status = status; }
@@ -76,4 +80,11 @@ export function normalizeNetworkContact(value: unknown, confirmed: unknown): Net
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return networkInvalid("Check the email address.");
   if (phone && (!/^[+\d()\s-]+$/.test(phone) || phone.replace(/\D/g, "").length < 8 || phone.replace(/\D/g, "").length > 15)) return networkInvalid("Check the phone number.");
   return { name, email, phone };
+}
+export function normalizeNetworkAvailability(openToWork: unknown, workTrades: unknown) {
+  if (typeof openToWork !== "boolean" || !Array.isArray(workTrades) || workTrades.length > NETWORK_TRADES.length
+    || !workTrades.every(trade => typeof trade === "string" && NETWORK_TRADES.some(known => known === trade))) return networkInvalid("Choose the trades you want work for.");
+  const selected: string[] = [...new Set<string>(workTrades)].sort();
+  if (openToWork && !selected.length) return networkInvalid("Choose at least one trade before turning on work leads.");
+  return { openToWork, workTrades: selected };
 }

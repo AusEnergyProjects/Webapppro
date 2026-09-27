@@ -6961,9 +6961,12 @@ export const tradeSolarDesigns = sqliteTable("trade_solar_designs", {
 
 export const tradeNetworkMembers = sqliteTable("trade_network_members", {
   ownerUid: text("owner_uid").primaryKey().notNull(), enabled: integer("enabled").notNull().default(0),
+  openToWork: integer("open_to_work").notNull().default(0), workTradesJson: text("work_trades_json").notNull().default("[]"),
   consentVersion: text("consent_version").notNull().default(""), consentAt: text("consent_at").notNull().default(""),
   updatedByUid: text("updated_by_uid").notNull(), updatedAt: text("updated_at").notNull(),
-}, t => [check("trade_network_members_enabled", sql`${t.enabled} IN (0,1)`)]);
+}, t => [check("trade_network_members_enabled", sql`${t.enabled} IN (0,1)`), check("trade_network_members_open", sql`${t.openToWork} IN (0,1)`),
+  check("trade_network_members_trades", sql`json_valid(${t.workTradesJson}) AND json_type(${t.workTradesJson})='array'`),
+  index("trade_network_members_available_idx").on(t.enabled,t.openToWork,t.ownerUid)]);
 
 export const tradeNetworkPosts = sqliteTable("trade_network_posts", {
   id: text("id").primaryKey().notNull(), ownerUid: text("owner_uid").notNull(), kind: text("kind").notNull(),
@@ -6975,8 +6978,16 @@ export const tradeNetworkPosts = sqliteTable("trade_network_posts", {
   lastRequestHash: text("last_request_hash").notNull(), createdByUid: text("created_by_uid").notNull(), updatedByUid: text("updated_by_uid").notNull(),
   createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, t => [index("trade_network_posts_feed_idx").on(t.status,t.expiresAt,t.updatedAt,t.id), index("trade_network_posts_owner_idx").on(t.ownerUid,t.updatedAt,t.id),
+  index("trade_network_posts_work_match_idx").on(t.kind,t.status,t.trade,t.state,t.id),
   check("trade_network_posts_kind",sql`${t.kind} IN ('work','available')`), check("trade_network_posts_rate",sql`${t.rateCents} IS NULL OR ${t.rateCents} BETWEEN 0 AND 100000000`),
   check("trade_network_posts_rate_unit",sql`${t.rateUnit} IN ('hour','day','job')`), check("trade_network_posts_status",sql`${t.status} IN ('active','closed')`), check("trade_network_posts_revision",sql`${t.revision}>0`)]);
+
+export const tradeNetworkLeads = sqliteTable("trade_network_leads", {
+  postId: text("post_id").notNull().references(() => tradeNetworkPosts.id), recipientOwnerUid: text("recipient_owner_uid").notNull(),
+  postRevision: integer("post_revision").notNull(), status: text("status").notNull().default("new"),
+  matchedAt: text("matched_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, t => [primaryKey({ columns: [t.postId,t.recipientOwnerUid] }), index("trade_network_leads_recipient_idx").on(t.recipientOwnerUid,t.status,t.matchedAt,t.postId),
+  check("trade_network_leads_revision",sql`${t.postRevision}>0`), check("trade_network_leads_status",sql`${t.status} IN ('new','viewed','dismissed')`)]);
 
 export const tradeNetworkEnquiries = sqliteTable("trade_network_enquiries", {
   id: text("id").primaryKey().notNull(), postId: text("post_id").notNull().references(() => tradeNetworkPosts.id),

@@ -1,9 +1,19 @@
 # Next task handover
 
-Status: private trade network and clearer product/map navigation are in release validation. Verified baseline Sites 644, source 8b9f37bc521c4212f894cea9cb087f4d77534232.
+Status: automatic trade leads and simple work availability are in release validation. Verified baseline Sites 645, source 410b90fc3ff71ce40363dbd5f8038ae5e89ba597.
 Prepared: 27 September 2026
 
-## Active contract: private trade work and subcontractor enquiries
+## Active contract: all matching trades receive local work leads
+
+Outcome: a work post becomes a lead for every verified business that explicitly switches on Open to work, selects the matching trade and covers the job postcode within its saved service states and areas. One copy per recipient, no recipient limit. The network opens Your leads and the notification bell opens the exact post.
+
+Owner: coordinating task in C:/Webproject/aea-energy-tlink-map, branch codex/tlink-customer-job-map. Scope: network preferences, matching, persistence and inbox; existing notification integration; migration 0202; direct service-area settings navigation. Customer lead consent and private enquiry contact sharing stay intact. No external emails or live test posts.
+
+Acceptance: defaults off; all matching recipients across bounded batches; existing service-area reuse; current verified access and paused-status checks; retry-safe delivery; dismissal retained across edits/renewal; exact lead navigation with no fallback; desktop/mobile and day/night clarity. Tests must use real SQLite and postcode geometry, test at least 100 recipients, and preserve prior permissions/contact-sharing checks.
+
+Validation: focused integration/UI/notification tests, full suite, typecheck, migration replay, scoped lint and committed publication build. Known unrelated test/lint failures remain separately recorded. Final GitHub/Sites identity and live read-only results belong in C:/Webproject/outputs/tlink-network-auto-leads-2026-09-27/.
+
+## Previous milestone: private trade work and subcontractor enquiries
 
 Outcome: Map & quote explains measuring and designing for quotes; installer Products opens the business price book; an optional private Trade network connects verified businesses through work requests and availability posts.
 

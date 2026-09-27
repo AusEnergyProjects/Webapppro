@@ -4,6 +4,7 @@ import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/a
 import { requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { listTradeTeamDocumentExpiryWarnings } from "@/lib/trade-team-document-expiry-server";
 import { tradeQuoteDeliveryPresentation } from "@/lib/trade-quote-delivery-policy.mjs";
+import { listNetworkLeadNotifications } from "@/lib/trade-network-server";
 
 export const runtime = "edge";
 
@@ -11,7 +12,7 @@ type Row = Record<string, unknown>;
 type JobTab = "schedule" | "quote" | "field" | "invoice";
 type JobNotification = {
   id: string;
-  targetKind: "job" | "opportunity" | "team";
+  targetKind: "job" | "opportunity" | "team" | "network";
   targetId: string;
   workOrderId: string;
   workNumber: string;
@@ -19,7 +20,7 @@ type JobNotification = {
   summary: string;
   createdAt: string;
   targetTab: JobTab;
-  source: "customer" | "field" | "team";
+  source: "customer" | "field" | "team" | "network";
   read: boolean;
 };
 
@@ -75,7 +76,7 @@ async function notifications(access: TeamAccess) {
   const scope = jobScope(access);
   const scheduling = scheduleScope(access);
   const none = () => Promise.resolve({ results: [] as Row[] });
-  const [photoCompletions, quoteQuestions, quoteDecisions, quoteViews, appointmentRequests, fieldEvents, signoffs, allocatedProjectLeads, acceptedProjectQuotes, quoteDeliveryAlerts, documentExpiries, reads] = await Promise.all([
+  const [photoCompletions, quoteQuestions, quoteDecisions, quoteViews, appointmentRequests, fieldEvents, signoffs, allocatedProjectLeads, acceptedProjectQuotes, quoteDeliveryAlerts, documentExpiries, networkLeads, reads] = await Promise.all([
     access.canViewFieldEvidence ? db.prepare(`SELECT completion.id, completion.work_order_id, completion.supplied_count, completion.completed_at,
         work.work_number, work.title, work.source_type, detail.customer_source
       FROM trade_crm_photo_request_completions completion
@@ -214,6 +215,7 @@ async function notifications(access: TeamAccess) {
       ? listTradeTeamDocumentExpiryWarnings(db, access.ownerUid)
         .then((results) => ({ results: results as unknown as Row[] }))
       : none(),
+    listNetworkLeadNotifications(access),
     db.prepare(`SELECT notification_key FROM trade_job_notification_reads
       WHERE firebase_uid = ? AND read_by_uid = ? ORDER BY read_at DESC LIMIT 500`)
       .bind(access.ownerUid, access.actorUid).all<Row>(),
@@ -316,6 +318,18 @@ async function notifications(access: TeamAccess) {
       createdAt: String(row.created_at),
       targetTab: "field" as const,
       source: "team" as const,
+    })),
+    ...networkLeads.map((lead) => ({
+      id: `network:${lead.id}`,
+      targetKind: "network" as const,
+      targetId: lead.id,
+      workOrderId: "",
+      workNumber: "Trade lead",
+      title: lead.title,
+      summary: limitedSummary(lead.summary, "A trade business needs help in your service area."),
+      createdAt: lead.createdAt,
+      targetTab: "quote" as const,
+      source: "network" as const,
     })),
   ];
   const readKeys = new Set(reads.results.map((row) => String(row.notification_key)));

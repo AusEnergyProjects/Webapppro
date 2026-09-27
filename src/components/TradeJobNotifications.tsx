@@ -6,7 +6,7 @@ import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 
 type JobNotification = {
   id: string;
-  targetKind: "job" | "opportunity" | "team";
+  targetKind: "job" | "opportunity" | "team" | "network";
   targetId: string;
   workOrderId: string;
   workNumber: string;
@@ -14,7 +14,7 @@ type JobNotification = {
   summary: string;
   createdAt: string;
   targetTab: "schedule" | "quote" | "field" | "invoice";
-  source: "customer" | "field" | "team";
+  source: "customer" | "field" | "team" | "network";
   read: boolean;
 };
 
@@ -24,10 +24,12 @@ export function TradeJobNotifications({
   user,
   onNavigate,
   onOpenOpportunity,
+  onOpenNetwork,
 }: {
   user: User;
   onNavigate: (target: TLinkCommandTarget) => void;
   onOpenOpportunity: (matchId: string) => void;
+  onOpenNetwork: (postId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<JobNotification[]>([]);
@@ -114,9 +116,13 @@ export function TradeJobNotifications({
         if (response.ok) {
           setItems(result.items || []); setUnreadCount(Number(result.unreadCount || 0));
         }
-      } catch { /* Opening the job remains available if the read receipt cannot be saved. */ }
+      } catch { /* Opening the record remains available if the read receipt cannot be saved. */ }
     }
     setOpen(false);
+    if (item.targetKind === "network") {
+      onOpenNetwork(item.targetId);
+      return;
+    }
     if (item.targetKind === "opportunity") {
       onOpenOpportunity(item.targetId);
       return;
@@ -171,7 +177,7 @@ export function TradeJobNotifications({
           {!status && !items.length && <div className="tlink-notification-empty"><strong>You are up to date</strong><span>New leads, customer decisions, quote delivery issues, questions, uploads, document expiry warnings, schedule requests and field team progress will appear here.</span></div>}
           {items.map((item) => <button type="button" key={item.id} className={item.read ? "read" : "unread"} onClick={() => void openItem(item)}>
             <span className="tlink-notification-dot" aria-hidden="true" />
-            <span><strong>{item.title}</strong><small>{item.summary}</small><em>{item.source === "customer" ? "Customer" : item.source === "team" ? "Team" : "Field team"} | {item.workNumber} | {new Date(item.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</em></span>
+            <span><strong>{item.title}</strong><small>{item.summary}</small><em>{item.source === "network" ? "Trade network" : item.source === "customer" ? "Customer" : item.source === "team" ? "Team" : "Field team"} | {item.workNumber} | {new Date(item.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</em></span>
           </button>)}
         </div>
       </section>

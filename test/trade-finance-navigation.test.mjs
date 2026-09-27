@@ -19,7 +19,7 @@ function evaluate(node, source, context = {}) {
   assert.ok(node, "The navigation expression must exist");
   return Function(...Object.keys(context), `${compile(`const expression = (${node.getText(source)});`)}\nreturn expression;`)(...Object.values(context));
 }
-const helperNames = ["dashboardWorkspaceFromSearch", "dashboardFinanceViewFromSearch", "dashboardWorkViewFromSearch", "jobNavigationFromSearch", "dashboardCommandTargetFromSearch", "opportunityMatchFromSearch"];
+const helperNames = ["dashboardWorkspaceFromSearch", "dashboardFinanceViewFromSearch", "dashboardWorkViewFromSearch", "jobNavigationFromSearch", "dashboardCommandTargetFromSearch", "opportunityMatchFromSearch", "networkPostFromSearch"];
 const variableNames = ["dashboardWorkspaces", "workOrderIdPattern", "opportunityMatchIdPattern"];
 const helpersSource = dashboard.statements.filter(node => ts.isFunctionDeclaration(node) && helperNames.includes(node.name?.text)
   || ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => variableNames.includes(declaration.name.getText(dashboard)))).map(node => node.getText(dashboard)).join("\n");
@@ -65,19 +65,56 @@ test("Map bookmarks select their own workspace without restoring stale Work job 
   assert.equal(helpers.dashboardCommandTargetFromSearch("?workspace=map&jobId=old-job&jobTab=quote"), null);
 });
 
+test("network bookmarks accept an exact UUID only in the network workspace", () => {
+  const id = "ea82d208-35a7-4783-af2c-85c5c8465e1e";
+  assert.equal(helpers.networkPostFromSearch(`?workspace=network&networkPostId=${id}`), id);
+  for (const search of ["?workspace=network", "?workspace=network&networkPostId=", "?workspace=network&networkPostId=bad-id", `?workspace=network&networkPostId=${id}%20`, `?workspace=work&networkPostId=${id}`]) {
+    assert.equal(helpers.networkPostFromSearch(search), "");
+  }
+  assert.equal(helpers.dashboardCommandTargetFromSearch(`?workspace=network&networkPostId=${id}&jobId=stale-job&jobTab=quote`), null);
+});
+
+test("network notification callback waits for the map save before opening the exact post and remounting its view", async () => {
+  const notification = find(dashboard, node => ts.isJsxSelfClosingElement(node) && node.tagName.getText(dashboard) === "TradeJobNotifications");
+  const callback = notification.attributes.properties.find(node => ts.isJsxAttribute(node) && node.name.getText(dashboard) === "onOpenNetwork");
+  const guard = createMapNavigationGuard(), state = { workspace: "map", postId: "previous-post", nonce: 2 };
+  const onOpenNetwork = evaluate(callback.initializer.expression, dashboard, {
+    setWorkspace: guardedWorkspaceSetter(value => { state.workspace = value; }, guard),
+    setNetworkPostId: value => { state.postId = value; }, setNetworkNavigationNonce: update => { state.nonce = update(state.nonce); },
+  });
+  const id = "ea82d208-35a7-4783-af2c-85c5c8465e1e";
+  guard.register(async () => { throw new Error("offline"); }); onOpenNetwork(id); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(state, { workspace: "map", postId: "previous-post", nonce: 2 });
+  let finish; guard.register(() => new Promise(resolve => { finish = resolve; }));
+  onOpenNetwork(id); assert.deepEqual(state, { workspace: "map", postId: "previous-post", nonce: 2 });
+  finish(); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(state, { workspace: "network", postId: id, nonce: 3 });
+  const network = find(dashboard, node => ts.isJsxSelfClosingElement(node) && node.tagName.getText(dashboard) === "TradeNetworkWorkspace");
+  const context = { require: () => jsx, exports: {}, TradeNetworkWorkspace() {}, user: { uid: "business-owner" }, networkNavigationNonce: state.nonce,
+    networkPostId: state.postId, setNetworkPostId: value => { state.postId = value; }, setWorkspace() {}, serviceAreaNavigation: { current: false } };
+  const tree = evaluate(network, dashboard, context);
+  assert.equal(tree.props.initialPostId, id); assert.equal(tree.key, "business-owner:3");
+  assert.notEqual(evaluate(network, dashboard, { ...context, networkNavigationNonce: 4 }).key, tree.key);
+  tree.props.onClearPost(); assert.equal(state.postId, "");
+});
+
 test("Products and Trade network have direct workspaces and preserve pending map saves", async () => {
   const nav = find(dashboard, node => ts.isJsxElement(node) && node.openingElement.tagName.getText(dashboard) === "nav"
     && node.openingElement.getText(dashboard).includes('aria-label="TLink installer account"'));
   for (const [label, workspace] of [["Products", "products"], ["Trade network", "network"]]) {
     assert.equal(helpers.dashboardWorkspaceFromSearch(`?workspace=${workspace}`), workspace);
     const button = find(nav, node => ts.isJsxElement(node) && node.openingElement.tagName.getText(dashboard) === "button" && node.getText(dashboard).includes(`<span>${label}</span>`));
-    const guard = createMapNavigationGuard(), state = { workspace: "map", target: "design" };
-    const tree = evaluate(button, dashboard, { require: () => jsx, exports: {}, TLinkNavigationIcon() {}, workspace: "map", setCommandTarget: value => { state.target = value; }, setWorkspace: guardedWorkspaceSetter(value => { state.workspace = value; }, guard) });
+    const guard = createMapNavigationGuard(), state = { workspace: "map", target: "design", networkPostId: "previous-lead", networkNonce: 0 };
+    const tree = evaluate(button, dashboard, { require: () => jsx, exports: {}, TLinkNavigationIcon() {}, workspace: "map", setCommandTarget: value => { state.target = value; },
+      setNetworkPostId: value => { state.networkPostId = value; }, setNetworkNavigationNonce: update => { state.networkNonce = update(state.networkNonce); },
+      setWorkspace: guardedWorkspaceSetter(value => { state.workspace = value; }, guard) });
     guard.register(async () => { throw new Error("offline"); });
     tree.props.onClick(); await new Promise(resolve => setImmediate(resolve));
     assert.equal(state.workspace, "map");
+    assert.equal(state.networkPostId, "previous-lead"); assert.equal(state.networkNonce, 0);
     guard.register(async () => {}); tree.props.onClick(); await new Promise(resolve => setImmediate(resolve));
     assert.equal(state.workspace, workspace);
+    if (workspace === "network") { assert.equal(state.networkPostId, ""); assert.equal(state.networkNonce, 1); }
   }
   assert.ok(find(dashboard, node => ts.isJsxSelfClosingElement(node) && node.tagName.getText(dashboard) === "TradePriceBookWorkspace"));
   assert.ok(find(dashboard, node => ts.isJsxSelfClosingElement(node) && node.tagName.getText(dashboard) === "TradeNetworkWorkspace"));
@@ -290,10 +327,26 @@ test("URL updates canonicalise legacy invoices and preserve section and job-tab 
   assert.equal(window.location.search, "?workspace=map");
 });
 
+test("network URL updates retain only the exact post and remove stale job and finance targets", () => {
+  const id = "ea82d208-35a7-4783-af2c-85c5c8465e1e", changes = [];
+  const window = { location: { href: "https://tlink.test/direct-trade/dashboard?workspace=finance&financeView=quotes&jobId=stale&jobTab=quote", search: "?workspace=finance&financeView=quotes&jobId=stale&jobTab=quote" }, history: { state: {} } };
+  for (const method of ["pushState", "replaceState"]) window.history[method] = (_, __, target) => { changes.push({ method, target }); window.location.href = `https://tlink.test${target}`; window.location.search = new URL(window.location.href).search; };
+  const context = { window, commandTarget: null, workspace: "network", networkPostId: id, financeView: "quotes", activeWorkView: "today", selectedOpportunityMatchId: "", workspaceRouteInitialised: { current: true }, workspacePopstateSync: { current: false }, workspaceLocation: { current: "" }, setCommandTarget() { assert.fail("A network link must not restore a job target"); } };
+  dashboardEffect("const routeWorkspace =", context)();
+  assert.equal(changes[0].method, "pushState"); assert.equal(window.location.search, `?workspace=network&networkPostId=${id}`);
+  dashboardEffect("const routeWorkspace =", { ...context, networkPostId: "" })();
+  assert.equal(window.location.search, "?workspace=network");
+  window.location.href = "https://tlink.test/direct-trade/dashboard?workspace=network&networkPostId=invalid";
+  window.location.search = "?workspace=network&networkPostId=invalid";
+  context.workspacePopstateSync.current = true;
+  dashboardEffect("const routeWorkspace =", { ...context, networkPostId: helpers.networkPostFromSearch(window.location.search) })();
+  assert.equal(changes.at(-1).method, "replaceState"); assert.equal(window.location.search, "?workspace=network");
+});
+
 test("browser back restores the Finance section and retains existing job targets", async () => {
-  const captured = {}, listeners = {};
+  const captured = { setNetworkNavigationNonce: 0 }, listeners = {};
   const context = { window: { location: { search: "?workspace=finance&financeView=pricebook" }, addEventListener: (name, fn) => listeners[name] = fn, removeEventListener() {} }, workspacePopstateSync: { current: false }, workspaceLocation: { current: "" }, pendingOpportunityMatchId: { current: "" }, exactOpportunityMatchId: { current: "" } };
-  for (const name of ["setWorkspace", "setFinanceView", "setActiveWorkView", "setSelectedOpportunityMatchId", "setFocusedOpportunityMatchId", "setOpportunityRouteRequestNonce", "setCommandTarget"]) context[name] = value => captured[name] = typeof value === "function" ? value(captured[name]) : value;
+  for (const name of ["setWorkspace", "setFinanceView", "setActiveWorkView", "setSelectedOpportunityMatchId", "setFocusedOpportunityMatchId", "setOpportunityRouteRequestNonce", "setCommandTarget", "setNetworkPostId", "setNetworkNavigationNonce"]) context[name] = value => captured[name] = typeof value === "function" ? value(captured[name]) : value;
   context.setWorkspace = guardedWorkspaceSetter(value => { captured.setWorkspace = value; });
   const cleanup = dashboardEffect('window.addEventListener("popstate"', context)();
   listeners.popstate(); await Promise.resolve(); assert.equal(captured.setWorkspace, "finance"); assert.equal(captured.setFinanceView, "pricebook");
@@ -301,6 +354,37 @@ test("browser back restores the Finance section and retains existing job targets
   listeners.popstate(); await Promise.resolve(); assert.equal(captured.setCommandTarget.id, "job-123"); assert.equal(captured.setCommandTarget.jobTab, "quote");
   context.window.location.search = "?workspace=map";
   listeners.popstate(); await Promise.resolve(); assert.equal(captured.setWorkspace, "map"); assert.equal(captured.setCommandTarget, null);
+  const postId = "ea82d208-35a7-4783-af2c-85c5c8465e1e";
+  context.window.location.search = `?workspace=network&networkPostId=${postId}`;
+  listeners.popstate(); await Promise.resolve(); assert.equal(captured.setWorkspace, "network"); assert.equal(captured.setNetworkPostId, postId);
+  assert.equal(captured.setNetworkNavigationNonce, 4); assert.equal(captured.setCommandTarget, null);
+  for (const query of ["?workspace=network", "?workspace=network&networkPostId=not-a-uuid"]) {
+    context.window.location.search = query; listeners.popstate(); await Promise.resolve();
+    assert.equal(captured.setNetworkPostId, ""); assert.equal(captured.setCommandTarget, null);
+  }
+  cleanup();
+});
+
+test("network browser history retains the current map on failed save and applies the exact target after retry", async () => {
+  const postId = "ea82d208-35a7-4783-af2c-85c5c8465e1e", listeners = {}, changes = [];
+  const guard = createMapNavigationGuard();
+  const captured = { setWorkspace: "map", setNetworkPostId: "previous-post", setNetworkNavigationNonce: 1, setCommandTarget: { kind: "job", id: "current-map-job" } };
+  const context = { window: { location: { search: `?workspace=network&networkPostId=${postId}` }, history: { state: {}, replaceState(_state, _title, target) { changes.push(target); context.window.location.search = new URL(target, "https://tlink.test").search; } },
+    addEventListener: (name, fn) => { listeners[name] = fn; }, removeEventListener() {} }, workspacePopstateSync: { current: false }, workspaceLocation: { current: "/direct-trade/dashboard?workspace=map" }, pendingOpportunityMatchId: { current: "" }, exactOpportunityMatchId: { current: "" } };
+  for (const name of ["setFinanceView", "setActiveWorkView", "setSelectedOpportunityMatchId", "setFocusedOpportunityMatchId", "setOpportunityRouteRequestNonce", "setCommandTarget", "setNetworkPostId", "setNetworkNavigationNonce"]) context[name] = value => { captured[name] = typeof value === "function" ? value(captured[name]) : value; };
+  context.setWorkspace = guardedWorkspaceSetter(value => { captured.setWorkspace = value; }, guard);
+  const cleanup = dashboardEffect('window.addEventListener("popstate"', context)();
+  guard.register(async () => { throw new Error("offline"); }); listeners.popstate(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(captured.setWorkspace, "map"); assert.equal(captured.setNetworkPostId, "previous-post");
+  assert.equal(captured.setNetworkNavigationNonce, 1); assert.equal(captured.setCommandTarget.id, "current-map-job");
+  assert.deepEqual(changes, ["/direct-trade/dashboard?workspace=map"]);
+  assert.equal(context.window.location.search, "?workspace=map");
+  let finish; guard.register(() => new Promise(resolve => { finish = resolve; }));
+  context.window.location.search = `?workspace=network&networkPostId=${postId}`; listeners.popstate();
+  assert.equal(captured.setWorkspace, "map"); assert.equal(captured.setNetworkPostId, "previous-post");
+  finish(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(captured.setWorkspace, "network"); assert.equal(captured.setNetworkPostId, postId);
+  assert.equal(captured.setNetworkNavigationNonce, 2); assert.equal(captured.setCommandTarget, null); assert.equal(context.workspacePopstateSync.current, true);
   cleanup();
 });
 

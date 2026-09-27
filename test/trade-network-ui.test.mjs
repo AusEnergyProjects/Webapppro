@@ -7,14 +7,16 @@ import * as contract from "../src/lib/trade-network.ts";
 
 const source = fs.readFileSync(new URL("../src/components/TradeNetworkWorkspace.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-const text = node => node == null || typeof node === "boolean" ? "" : typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join(" ") : typeof node.type === "function" ? text(node.type(node.props)) : text(node.props?.children);
+const text = node => node == null || typeof node === "boolean" || node.props?.["aria-hidden"] === "true" ? "" : typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join(" ") : typeof node.type === "function" ? text(node.type(node.props)) : text(node.props?.children);
 function nodes(node, predicate) {
   if (!node || typeof node !== "object") return [];
   if (Array.isArray(node)) return node.flatMap(child => nodes(child, predicate));
   if (typeof node.type === "function") return nodes(node.type(node.props), predicate);
   return [...(predicate(node) ? [node] : []), ...nodes(node.props?.children, predicate)];
 }
-const button = (tree, label) => nodes(tree, node => node.type === "button" && text(node) === label)[0];
+const button = (tree, label) => nodes(tree, node => node.type === "button" && text(node).trim() === label)[0];
+const viewButton = (tree, label) => nodes(tree, node => node.type === "button" && "aria-pressed" in node.props && text(node).trim().startsWith(label))[0];
+const workSwitch = tree => nodes(tree, node => node.props?.role === "switch" && node.props["aria-label"] === "Open to work")[0];
 const field = (tree, label) => {
   const parent = nodes(tree, node => node.type === "label" && text(node.props.children[0]) === label)[0];
   assert.ok(parent, `Missing field ${label}`);
@@ -25,10 +27,13 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 const response = body => Response.json({ ok: true, ...body });
 const post = (changes = {}) => ({ id: "b2510244-bf9b-45b5-994c-75cd84c301d0", kind: "work", title: "Plumber needed", trade: "Plumbing", suburb: "Richmond", postcode: "3121", state: "VIC", details: "Help with hot water installs.", rateCents: 9000, rateUnit: "hour", startsOn: "", endsOn: "", businessName: "Example Plumbing", isOwn: false, status: "active", revision: 1, expiresAt: "2026-10-27T00:00:00Z", createdAt: "2026-09-27T00:00:00Z", updatedAt: "2026-09-27T00:00:00Z", enquiryId: "", ...changes });
 const enquiry = { id: "20c4c35e-476c-4f77-9fba-e15371952f45", postId: post().id, postTitle: "Roofing work", postKind: "work", businessName: "Private Respondent", direction: "incoming", message: "Available tomorrow", senderContact: { name: "Pat Private", email: "private@example.test", phone: "0400000000" }, recipientContact: null, status: "pending", revision: 1, createdAt: "2026-09-27T00:00:00Z", updatedAt: "2026-09-27T00:00:00Z" };
-const workspace = changes => ({ enabled: true, canManageMembership: true, posts: [post()], myPosts: [], enquiries: [], hasMore: false, myHasMore: false, enquiriesHasMore: false, ...changes });
+const availability = changes => ({ openToWork: true, workTrades: ["Plumbing"], serviceAreas: [{ postcode: "3121", radiusKm: 20 }], serviceStates: ["VIC"], paused: false, ...changes });
+const lead = changes => ({ ...post(), leadStatus: "new", receivedAt: "2026-09-27T00:00:00Z", ...changes });
+const workspace = changes => ({ enabled: true, canManageMembership: true, posts: [post()], myPosts: [], enquiries: [], hasMore: false, myHasMore: false, enquiriesHasMore: false,
+  availability: availability(), leads: changes?.enabled === false ? [] : [lead()], leadCount: changes?.enabled === false ? 0 : 1, leadsHasMore: false, ...changes });
 function harness(t, options = {}) {
   let cursor = 0, uuid = 0, stopped = false;
-  const state = [], effects = [], pending = [], requests = [];
+  const state = [], effects = [], pending = [], requests = [], serviceAreaOpens = [], clearedPosts = [];
   const hooks = {
     useState(initial) { const i = cursor++; if (!(i in state)) state[i] = typeof initial === "function" ? initial() : initial; return [state[i], value => { state[i] = typeof value === "function" ? value(state[i]) : value; }]; },
     useRef(initial) { const i = cursor++; return state[i] ||= { current: initial }; },
@@ -43,11 +48,12 @@ function harness(t, options = {}) {
     return response(init.method === "POST" ? {} : workspace(options.data));
   };
   Function("require", "exports", "fetch", "crypto", compiled)(id => { assert.ok(dependencies[id], id); return dependencies[id]; }, exports, fetch, { randomUUID: () => `c83ddf25-1c1c-4adb-9c74-${String(++uuid).padStart(12, "0")}` });
-  const props = { user: { uid: "owner-a", displayName: "Alex", email: "alex@example.test", getIdToken: async () => "private-token" } };
+  const props = { user: { uid: "owner-a", displayName: "Alex", email: "alex@example.test", getIdToken: async () => "private-token" },
+    onOpenServiceAreas: () => serviceAreaOpens.push(true), onClearPost: () => { clearedPosts.push(props.initialPostId); props.initialPostId = ""; }, ...options.props };
   const render = () => { cursor = 0; const tree = exports.TradeNetworkWorkspace(props); for (const callback of pending.splice(0)) callback(); return tree; };
   const cleanup = () => { if (stopped) return; stopped = true; for (const effect of effects) effect?.cleanup?.(); };
   t.after(cleanup);
-  return { props, requests, render, cleanup, async settle() { let tree; for (let i = 0; i < 5; i++) { tree = render(); await tick(); } return tree; } };
+  return { props, requests, serviceAreaOpens, clearedPosts, render, cleanup, async settle() { let tree; for (let i = 0; i < 5; i++) { tree = render(); await tick(); } return tree; } };
 }
 function change(h, label, value) { field(h.render(), label).props.onChange({ target: { value } }); }
 function submit(tree, label) { const selected = form(tree, label); assert.ok(selected, `Missing form ${label}`); selected.props.onSubmit({ preventDefault() {} }); }
@@ -120,6 +126,7 @@ test("incoming enquiry does not share the poster contact until the reviewed Conn
 });
 test("filter apply and pagination send the selected query and reset the feed page", async t => {
   const h = harness(t, { data: { hasMore: true } }); let tree = await h.settle();
+  button(tree, "Work available").props.onClick(); tree = await h.settle();
   button(tree, "Next").props.onClick(); tree = await h.settle();
   assert.equal(new URL(h.requests.at(-1).url, "https://tlink.test").searchParams.get("offset"), "50");
   change(h, "Trade", "Electrical"); change(h, "State", "VIC"); change(h, "Search", "3121");
@@ -136,8 +143,8 @@ test("a stale load is aborted and cannot replace a newer business workspace", as
   h.render(); await tick();
   h.props.user = { ...h.props.user, uid: "owner-b" }; h.render(); await tick();
   assert.equal(h.requests[0].init.signal.aborted, true);
-  pending[1](response(workspace({ posts: [post({ title: "Latest business feed" })] }))); await tick();
-  pending[0](response(workspace({ posts: [post({ title: "Stale private feed" })] }))); await tick();
+  pending[1](response(workspace({ leads: [lead({ title: "Latest business feed" })] }))); await tick();
+  pending[0](response(workspace({ leads: [lead({ title: "Stale private feed" })] }))); await tick();
   const tree = h.render(); assert.match(text(tree), /Latest business feed/); assert.doesNotMatch(text(tree), /Stale private feed/);
   h.cleanup(); assert.equal(h.requests[1].init.signal.aborted, true);
 });
@@ -154,4 +161,89 @@ test("leaving clears an unfinished editor and keeps prior private enquiries acce
   button(tree, "Enquiries").props.onClick(); tree = await h.settle();
   assert.match(text(tree), /Private Respondent/); assert.match(text(tree), /private@example.test/);
   assert.equal(button(tree, "Connect"), undefined);
+});
+
+test("first Open to work toggle chooses trades before one save enables matching", async t => {
+  let current = availability({ openToWork: false, workTrades: [] }), finish;
+  const h = harness(t, { respond: request => {
+    if (!request.body) return response(workspace({ availability: current, leads: [], leadCount: 0 }));
+    return new Promise(resolve => { finish = () => { current = { ...current, openToWork: request.body.openToWork, workTrades: request.body.workTrades }; resolve(response({ availability: current })); }; });
+  } });
+  let tree = await h.settle(); assert.equal(workSwitch(tree).props["aria-checked"], false);
+  workSwitch(tree).props.onClick(); tree = h.render();
+  assert.ok(button(tree, "Save and switch on")); assert.equal(h.requests.filter(request => request.body).length, 0);
+  submit(tree, "Save and switch on"); tree = h.render();
+  assert.match(text(tree), /Choose at least one trade/); assert.equal(h.requests.filter(request => request.body).length, 0);
+  button(tree, "Plumbing").props.onClick(); button(h.render(), "Electrical").props.onClick(); tree = h.render();
+  const chooseForm = form(tree, "Save and switch on"); chooseForm.props.onSubmit({ preventDefault() {} }); chooseForm.props.onSubmit({ preventDefault() {} });
+  await tick(); tree = h.render();
+  assert.equal(workSwitch(tree).props.disabled, true); assert.equal(workSwitch(tree).props["aria-checked"], false);
+  const writes = h.requests.filter(request => request.body); assert.equal(writes.length, 1);
+  assert.deepEqual(writes[0].body, { action: "availability", openToWork: true, workTrades: ["Plumbing", "Electrical"] });
+  finish(); tree = await h.settle();
+  assert.equal(workSwitch(tree).props["aria-checked"], true); assert.match(text(tree), /You're open to work/);
+  assert.equal(button(tree, "Save and switch on"), undefined);
+});
+
+test("availability server rejection retains the prior switch and chosen trades without false success", async t => {
+  const h = harness(t, { respond: request => request.body ? Response.json({ ok: false, error: "Business availability is paused." }, { status: 409 })
+    : response(workspace({ availability: availability({ openToWork: false, workTrades: [] }), leads: [], leadCount: 0 })) });
+  let tree = await h.settle(); workSwitch(tree).props.onClick(); button(h.render(), "Plumbing").props.onClick(); submit(h.render(), "Save and switch on");
+  tree = await h.settle(); assert.equal(workSwitch(tree).props["aria-checked"], false);
+  assert.match(text(tree), /Business availability is paused/); assert.doesNotMatch(text(tree), /Your work preferences are saved|You're open to work/);
+  assert.equal(button(tree, "Plumbing").props["aria-pressed"], true); assert.ok(button(tree, "Save and switch on"));
+  assert.equal(h.requests.filter(request => request.body).length, 1);
+});
+
+test("Open to work switches off directly with saved trades and service-area edits use the callback", async t => {
+  const h = harness(t); let tree = await h.settle();
+  button(tree, "Edit service area").props.onClick(); assert.deepEqual(h.serviceAreaOpens, [true]);
+  assert.equal(h.requests.filter(request => request.body).length, 0);
+  workSwitch(tree).props.onClick(); await tick();
+  assert.deepEqual(h.requests.find(request => request.body).body, { action: "availability", openToWork: false, workTrades: ["Plumbing"] });
+});
+
+test("Your leads is the default view and has its own count and pagination", async t => {
+  const h = harness(t, { data: { leadCount: 72, leadsHasMore: true, hasMore: false } }); let tree = await h.settle();
+  assert.equal(viewButton(tree, "Your leads").props["aria-pressed"], true); assert.match(text(viewButton(tree, "Your leads")), /72/);
+  assert.equal(nodes(tree, node => node.type === "input" && node.props.type === "search").length, 0);
+  button(tree, "Next").props.onClick(); tree = await h.settle();
+  let query = new URL(h.requests.at(-1).url, "https://tlink.test").searchParams;
+  assert.equal(query.get("leadsOffset"), "50"); assert.equal(query.get("offset"), "0"); assert.match(text(tree), /Page\s+2/);
+  button(tree, "Previous").props.onClick(); tree = await h.settle();
+  query = new URL(h.requests.at(-1).url, "https://tlink.test").searchParams;
+  assert.equal(query.get("leadsOffset"), "0"); assert.equal(button(tree, "Previous").props.disabled, true);
+});
+
+test("dismissing a matched lead sends its exact post id and refreshes the inbox and count", async t => {
+  let dismissed = false;
+  const h = harness(t, { respond: request => {
+    if (request.body) { dismissed = true; return response({}); }
+    return response(workspace({ leads: dismissed ? [] : [lead()], leadCount: dismissed ? 0 : 1 }));
+  } });
+  let tree = await h.settle(); button(tree, "Dismiss").props.onClick(); tree = await h.settle();
+  assert.deepEqual(h.requests.find(request => request.body).body, { action: "lead_status", id: post().id, status: "dismissed" });
+  assert.match(text(tree), /Lead dismissed/); assert.doesNotMatch(text(tree), /Plumber needed/);
+  assert.equal(text(viewButton(tree, "Your leads")).trim(), "Your leads");
+});
+
+test("notification entry requests its exact lead and clearing it returns to all matched leads", async t => {
+  const exactId = "a71eec55-d146-41aa-bd9c-e96e3f7f0272";
+  const h = harness(t, { props: { initialPostId: exactId }, respond: request => {
+    const exact = new URL(request.url, "https://tlink.test").searchParams.get("leadPostId");
+    return response(workspace({ leads: exact ? [lead({ id: exactId, title: "Exact notified lead" })] : [lead()] }));
+  } });
+  let tree = await h.settle();
+  assert.equal(new URL(h.requests[0].url, "https://tlink.test").searchParams.get("leadPostId"), exactId);
+  assert.match(text(tree), /Exact notified lead/); assert.doesNotMatch(text(tree), /Plumber needed/);
+  button(tree, "All your leads").props.onClick(); tree = await h.settle();
+  assert.deepEqual(h.clearedPosts, [exactId]); assert.equal(new URL(h.requests.at(-1).url, "https://tlink.test").searchParams.has("leadPostId"), false);
+  assert.match(text(tree), /Plumber needed/); assert.equal(button(tree, "All your leads"), undefined);
+});
+
+test("an unavailable exact lead stays empty instead of opening a directory record", async t => {
+  const h = harness(t, { props: { initialPostId: post().id }, data: { leads: [], leadCount: 0, posts: [post({ title: "Unrelated directory work" })] } });
+  const tree = await h.settle(); assert.match(text(tree), /This lead is no longer available/);
+  assert.doesNotMatch(text(tree), /Unrelated directory work/); assert.equal(button(tree, "Enquire"), undefined); assert.equal(button(tree, "Dismiss"), undefined);
+  assert.equal(h.clearedPosts.length, 0); assert.equal(h.requests.length, 1);
 });

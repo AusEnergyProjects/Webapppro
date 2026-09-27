@@ -1,10 +1,13 @@
 import { getD1 } from "../../db";
 import type { TeamAccess } from "./trade-team-server";
 import { verifiedTradeAccountPredicate } from "./trade-access-server";
+import { postcodeCoordinate, postcodeDistanceKm } from "./postcode-distance";
+import { postcodeMatchesState } from "./australian-postcodes.mjs";
+import { closestQualifyingTradeServiceArea } from "./trade-service-area-matching.mjs";
 import {
   NETWORK_PAGE_SIZE, NetworkError, networkId, networkInvalid, networkRevision, networkText,
-  normalizeNetworkContact, normalizeNetworkPost, type NetworkContact, type NetworkEnquiry,
-  type NetworkPost, type NetworkPostInput, type NetworkWorkspace,
+  normalizeNetworkAvailability, normalizeNetworkContact, normalizeNetworkPost, type NetworkAvailability, type NetworkContact, type NetworkEnquiry,
+  type NetworkLead, type NetworkLeadNotification, type NetworkPost, type NetworkPostInput, type NetworkWorkspace,
 } from "./trade-network";
 
 type Row = Record<string, unknown>;
@@ -73,6 +76,173 @@ function offset(value: unknown) {
   if (!Number.isSafeInteger(result) || result < 0 || result > 1_000_000) return networkInvalid();
   return result;
 }
+
+function serviceAreasSql(ownerExpression: string) {
+  return `COALESCE((SELECT json_group_array(json_object('postcode',configured.postcode,'radiusKm',configured.radius_km))
+    FROM (SELECT postcode,radius_km FROM trade_account_service_areas WHERE firebase_uid=${ownerExpression}
+      AND record_status='active' ORDER BY position,id) configured),'[]')`;
+}
+const recipientColumns = `account.firebase_uid recipient_uid,account.service_states,account.availability_status,
+  account.postcode,account.service_base_postcode,account.service_radius_km,
+  membership.enabled,membership.open_to_work,membership.work_trades_json,
+  ${serviceAreasSql("account.firebase_uid")} active_service_areas`;
+const recipientEligibility = `membership.enabled=1 AND membership.open_to_work=1
+  AND account.availability_status IN ('open','limited') AND ${verifiedAccount}`;
+function strings(value: unknown): string[] {
+  try { const parsed: unknown = JSON.parse(String(value || "[]")); return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []; }
+  catch { return []; }
+}
+function availabilityProjection(row: Row): NetworkAvailability {
+  const configured: unknown = JSON.parse(String(row.active_service_areas || "[]"));
+  const serviceAreas: NetworkAvailability["serviceAreas"] = Array.isArray(configured) && configured.length ? configured.flatMap(area => {
+    if (!area || typeof area !== "object" || typeof area.postcode !== "string" || typeof area.radiusKm !== "number") return [];
+    return [{ postcode: area.postcode, radiusKm: area.radiusKm }];
+  }) : [{ postcode: String(row.service_base_postcode || row.postcode || ""), radiusKm: Number(row.service_radius_km || 50) }];
+  return { openToWork: row.open_to_work === 1, workTrades: strings(row.work_trades_json), serviceAreas,
+    serviceStates: strings(row.service_states), paused: !["open", "limited"].includes(String(row.availability_status)) };
+}
+async function networkRecipient(ownerUid: string): Promise<Row | null> {
+  return getD1().prepare(`SELECT ${recipientColumns} FROM trade_accounts account
+    LEFT JOIN trade_network_members membership ON membership.owner_uid=account.firebase_uid
+    WHERE account.firebase_uid=? AND ${verifiedAccount}`).bind(ownerUid).first<Row>();
+}
+function recipientMatchesPost(recipient: Row, post: Row): boolean {
+  if (recipient.enabled !== 1 || recipient.open_to_work !== 1 || !["open", "limited"].includes(String(recipient.availability_status))
+    || !strings(recipient.work_trades_json).includes(String(post.trade)) || !strings(recipient.service_states).includes(String(post.state))
+    || !postcodeCoordinate(String(post.postcode)) || !postcodeMatchesState(String(post.postcode), String(post.state))) return false;
+  return Boolean(closestQualifyingTradeServiceArea({ activeServiceAreas: recipient.active_service_areas,
+    legacyPostcode: recipient.service_base_postcode || recipient.postcode, legacyRadiusKm: recipient.service_radius_km,
+    destinationPostcode: post.postcode }, postcodeDistanceKm));
+}
+/** Every value used for geometry must still be current when a match is persisted or exposed. */
+function recipientSnapshotGuard(recipient: Row) {
+  return {
+    sql: `EXISTS (SELECT 1 FROM trade_accounts account JOIN trade_network_members membership ON membership.owner_uid=account.firebase_uid
+      WHERE account.firebase_uid=? AND ${recipientEligibility} AND membership.work_trades_json=? AND account.service_states=?
+      AND account.postcode=? AND account.service_base_postcode=? AND account.service_radius_km=? AND ${serviceAreasSql("account.firebase_uid")}=?)`,
+    bindings: [String(recipient.recipient_uid), String(recipient.work_trades_json), String(recipient.service_states), String(recipient.postcode),
+      String(recipient.service_base_postcode), Number(recipient.service_radius_km), String(recipient.active_service_areas)],
+  };
+}
+function deliveryStatement(post: Row, recipient: Row, now: string) {
+  const guard = recipientSnapshotGuard(recipient);
+  return getD1().prepare(`INSERT INTO trade_network_leads (post_id,recipient_owner_uid,post_revision,status,matched_at,updated_at)
+    SELECT post.id,?,post.revision,'new',?,? FROM trade_network_posts post
+    WHERE post.id=? AND post.revision=? AND post.owner_uid<>? AND post.kind='work' AND post.status='active' AND post.expires_at>?
+      AND ${enabledOwnerSql("post.owner_uid")} AND ${guard.sql}
+    ON CONFLICT(post_id,recipient_owner_uid) DO UPDATE SET post_revision=excluded.post_revision,updated_at=excluded.updated_at
+      WHERE trade_network_leads.post_revision<>excluded.post_revision`)
+    .bind(String(recipient.recipient_uid), now, now, String(post.id), Number(post.revision), String(recipient.recipient_uid), now, ...guard.bindings);
+}
+async function deliverNetworkPost(post: Row) {
+  if (post.kind !== "work" || post.status !== "active" || String(post.expires_at) <= new Date().toISOString()) return;
+  const db = getD1(), now = new Date().toISOString();
+  let cursor = "";
+  for (;;) {
+    const page = await db.prepare(`SELECT ${recipientColumns} FROM trade_accounts account
+      JOIN trade_network_members membership ON membership.owner_uid=account.firebase_uid
+      WHERE ${recipientEligibility} AND account.firebase_uid<>? AND account.firebase_uid>?
+        AND EXISTS (SELECT 1 FROM json_each(membership.work_trades_json) WHERE value=?)
+        AND EXISTS (SELECT 1 FROM json_each(account.service_states) WHERE value=?)
+        AND NOT EXISTS (SELECT 1 FROM trade_network_leads lead WHERE lead.post_id=? AND lead.recipient_owner_uid=account.firebase_uid AND lead.post_revision=?)
+      ORDER BY account.firebase_uid LIMIT 100`).bind(String(post.owner_uid), cursor, String(post.trade), String(post.state), String(post.id), Number(post.revision)).all<Row>();
+    const matches = page.results.filter(recipient => recipientMatchesPost(recipient, post));
+    for (let i = 0; i < matches.length; i += 25) await db.batch(matches.slice(i, i + 25).map(recipient => deliveryStatement(post, recipient, now)));
+    if (page.results.length < 100) return;
+    cursor = String(page.results.at(-1)?.recipient_uid);
+  }
+}
+async function reconcileRecipient(recipient: Row) {
+  if (recipient.enabled !== 1 || recipient.open_to_work !== 1 || !["open", "limited"].includes(String(recipient.availability_status))) return;
+  const db = getD1(), now = new Date().toISOString();
+  let cursor = "";
+  for (;;) {
+    const page = await db.prepare(`SELECT post.* FROM trade_network_posts post WHERE post.id>? AND post.owner_uid<>?
+      AND post.kind='work' AND post.status='active' AND post.expires_at>?
+      AND EXISTS (SELECT 1 FROM json_each(?) WHERE value=post.trade) AND EXISTS (SELECT 1 FROM json_each(?) WHERE value=post.state)
+      AND ${enabledOwnerSql("post.owner_uid")}
+      AND NOT EXISTS (SELECT 1 FROM trade_network_leads lead WHERE lead.post_id=post.id AND lead.recipient_owner_uid=? AND lead.post_revision=post.revision)
+      ORDER BY post.id LIMIT 100`).bind(cursor, String(recipient.recipient_uid), now, String(recipient.work_trades_json), String(recipient.service_states), String(recipient.recipient_uid)).all<Row>();
+    const matches = page.results.filter(post => recipientMatchesPost(recipient, post));
+    for (let i = 0; i < matches.length; i += 25) await db.batch(matches.slice(i, i + 25).map(post => deliveryStatement(post, recipient, now)));
+    if (page.results.length < 100) return;
+    cursor = String(page.results.at(-1)?.id);
+  }
+}
+function leadProjection(row: Row, access: TeamAccess): NetworkLead {
+  return { ...postProjection(row, access), leadStatus: row.lead_status === "viewed" ? "viewed" : row.lead_status === "dismissed" ? "dismissed" : "new", receivedAt: String(row.matched_at) };
+}
+async function readNetworkLeads(access: TeamAccess, recipient: Row, start = 0, exactId = "") {
+  const leads: NetworkLead[] = [];
+  let leadCount = 0, eligibleCount = 0, cursorTime = "9999", cursorId = "";
+  if (recipient.enabled !== 1 || recipient.open_to_work !== 1 || !["open", "limited"].includes(String(recipient.availability_status))) return { leads, leadCount, leadsHasMore: false };
+  const guard = recipientSnapshotGuard(recipient), now = new Date().toISOString();
+  for (;;) {
+    const page = await getD1().prepare(`SELECT post.*,account.business_name,lead.status lead_status,lead.matched_at,
+      (SELECT enquiry.id FROM trade_network_enquiries enquiry WHERE enquiry.post_id=post.id AND enquiry.sender_owner_uid=lead.recipient_owner_uid) enquiry_id
+      FROM trade_network_leads lead JOIN trade_network_posts post ON post.id=lead.post_id JOIN trade_accounts account ON account.firebase_uid=post.owner_uid
+      WHERE lead.recipient_owner_uid=? AND lead.status<>'dismissed' AND post.kind='work' AND post.status='active' AND post.expires_at>?
+        AND post.owner_uid<>lead.recipient_owner_uid AND ${enabledOwnerSql("post.owner_uid")} AND ${guard.sql}
+        AND (lead.matched_at,post.id)<(?,?)
+      ORDER BY lead.matched_at DESC,post.id DESC LIMIT 100`).bind(access.ownerUid, now, ...guard.bindings, cursorTime, cursorId).all<Row>();
+    for (const row of page.results) {
+      if (!recipientMatchesPost(recipient, row)) continue;
+      if (row.lead_status === "new") leadCount++;
+      if (exactId) { if (row.id === exactId) leads.push(leadProjection(row, access)); }
+      else if (eligibleCount >= start && leads.length < NETWORK_PAGE_SIZE) leads.push(leadProjection(row, access));
+      eligibleCount++;
+    }
+    if (page.results.length < 100) break;
+    cursorTime = String(page.results.at(-1)?.matched_at); cursorId = String(page.results.at(-1)?.id);
+  }
+  return { leads, leadCount, leadsHasMore: !exactId && eligibleCount > start + NETWORK_PAGE_SIZE };
+}
+export async function setNetworkAvailability(access: TeamAccess, openToWork: unknown, workTrades: unknown) {
+  await accountAccess(access, true);
+  const preferences = normalizeNetworkAvailability(openToWork, workTrades), recipient = await networkRecipient(access.ownerUid);
+  if (!recipient) throw unavailable();
+  const current = availabilityProjection(recipient);
+  if (preferences.openToWork && (!current.serviceStates.length || !current.serviceAreas.some(area => postcodeCoordinate(area.postcode) && Number.isFinite(area.radiusKm) && area.radiusKm >= 1))) {
+    throw new NetworkError("NETWORK_SERVICE_AREA_REQUIRED", "Set your service areas in Business settings before turning on work leads.", 409);
+  }
+  const result = await getD1().prepare(`UPDATE trade_network_members SET open_to_work=?,work_trades_json=?,updated_by_uid=?,updated_at=?
+    WHERE owner_uid=? AND enabled=1 AND ${verifiedOwnerSql("trade_network_members.owner_uid")}`)
+    .bind(preferences.openToWork ? 1 : 0, JSON.stringify(preferences.workTrades), access.actorUid, new Date().toISOString(), access.ownerUid).run();
+  if (Number(result.meta.changes) !== 1) throw unavailable();
+  const saved = await networkRecipient(access.ownerUid);
+  if (!saved) throw unavailable();
+  await reconcileRecipient(saved);
+  return { availability: availabilityProjection(saved) };
+}
+export async function setNetworkLeadStatus(access: TeamAccess, rawId: unknown, status: unknown) {
+  await accountAccess(access, true);
+  const id = networkId(rawId);
+  if (status !== "viewed" && status !== "dismissed") return networkInvalid();
+  const recipient = await networkRecipient(access.ownerUid);
+  if (!recipient) throw unavailable();
+  const current = await readNetworkLeads(access, recipient, 0, id);
+  if (!current.leads.length) {
+    const existing = await getD1().prepare("SELECT status FROM trade_network_leads WHERE post_id=? AND recipient_owner_uid=?").bind(id, access.ownerUid).first<Row>();
+    if (existing?.status === status) return { id, status };
+    throw unavailable();
+  }
+  const guard = recipientSnapshotGuard(recipient);
+  const result = await getD1().prepare(`UPDATE trade_network_leads SET status=?,updated_at=?
+    WHERE post_id=? AND recipient_owner_uid=? AND status<>'dismissed' AND ${guard.sql}
+      AND EXISTS (SELECT 1 FROM trade_network_posts post WHERE post.id=trade_network_leads.post_id AND post.revision=? AND post.status='active'
+        AND post.kind='work' AND post.expires_at>? AND ${enabledOwnerSql("post.owner_uid")})`)
+    .bind(status, new Date().toISOString(), id, access.ownerUid, ...guard.bindings, current.leads[0].revision, new Date().toISOString()).run();
+  if (Number(result.meta.changes) !== 1) throw unavailable();
+  return { id, status };
+}
+export async function listNetworkLeadNotifications(access: TeamAccess): Promise<NetworkLeadNotification[]> {
+  if (access.fieldSessionId || !(access.isOwner || (access.canManageJobs && access.jobScope === "team"))) return [];
+  const recipient = await networkRecipient(access.ownerUid);
+  if (!recipient || recipient.enabled !== 1 || recipient.open_to_work !== 1) return [];
+  await reconcileRecipient(recipient);
+  const { leads } = await readNetworkLeads(access, recipient);
+  return leads.map(lead => ({ id: lead.id, title: lead.title, summary: `${lead.trade} · ${lead.suburb}, ${lead.state} ${lead.postcode} · ${lead.businessName}`, createdAt: lead.receivedAt }));
+}
 export async function listNetwork(access: TeamAccess, filters: Record<string, unknown> = {}): Promise<NetworkWorkspace> {
   await accountAccess(access);
   const db = getD1(), now = new Date().toISOString();
@@ -81,6 +251,11 @@ export async function listNetwork(access: TeamAccess, filters: Record<string, un
   const kind = networkText(filters.kind, 12), trade = networkText(filters.trade, 60), state = networkText(filters.state, 3), search = networkText(filters.search, 100);
   if (kind && kind !== "work" && kind !== "available") return networkInvalid();
   const feedOffset = offset(filters.offset), myOffset = offset(filters.myOffset), enquiryOffset = offset(filters.enquiryOffset);
+  const leadsOffset = offset(filters.leadsOffset), leadPostId = filters.leadPostId ? networkId(filters.leadPostId) : "";
+  const recipient = await networkRecipient(access.ownerUid);
+  if (!recipient) throw unavailable();
+  await reconcileRecipient(recipient);
+  const leadInbox = await readNetworkLeads(access, recipient, leadsOffset, leadPostId);
   const feedBindings: (string | number)[] = [access.ownerUid, access.ownerUid, now, access.ownerUid, access.ownerUid];
   const predicates = [enabledOwnerSql("post.owner_uid"), "post.owner_uid <> ?", "post.status = 'active'", "post.expires_at > ?", enabledOwnerSql("?")];
   if (kind) { predicates.push("post.kind = ?"); feedBindings.push(kind); }
@@ -96,7 +271,7 @@ export async function listNetwork(access: TeamAccess, filters: Record<string, un
     WHERE post.owner_uid = ? ORDER BY post.updated_at DESC, post.id LIMIT ? OFFSET ?`).bind(access.ownerUid, NETWORK_PAGE_SIZE + 1, myOffset).all<Row>();
   const enquiries = await db.prepare(`SELECT * FROM trade_network_enquiries WHERE sender_owner_uid = ? OR recipient_owner_uid = ?
     ORDER BY updated_at DESC, id LIMIT ? OFFSET ?`).bind(access.ownerUid, access.ownerUid, NETWORK_PAGE_SIZE + 1, enquiryOffset).all<Row>();
-  return { enabled, canManageMembership: access.isOwner, posts: posts.results.slice(0, NETWORK_PAGE_SIZE).map(row => postProjection(row, access)),
+  return { enabled, canManageMembership: access.isOwner, availability: availabilityProjection(recipient), ...leadInbox, posts: posts.results.slice(0, NETWORK_PAGE_SIZE).map(row => postProjection(row, access)),
     myPosts: mine.results.slice(0, NETWORK_PAGE_SIZE).map(row => postProjection(row, access)), enquiries: enquiries.results.slice(0, NETWORK_PAGE_SIZE).map(row => enquiryProjection(row, access)),
     hasMore: posts.results.length > NETWORK_PAGE_SIZE, myHasMore: mine.results.length > NETWORK_PAGE_SIZE, enquiriesHasMore: enquiries.results.length > NETWORK_PAGE_SIZE };
 }
@@ -108,7 +283,8 @@ export async function setNetworkMembership(access: TeamAccess, enabled: unknown)
   const statements = [db.prepare(`INSERT INTO trade_network_members (owner_uid,enabled,consent_version,consent_at,updated_by_uid,updated_at)
     SELECT ?, ?, ?, ?, ?, ? WHERE ${verifiedOwnerSql("?")}
     ON CONFLICT(owner_uid) DO UPDATE SET enabled = excluded.enabled, consent_version = excluded.consent_version,
-      consent_at = excluded.consent_at, updated_by_uid = excluded.updated_by_uid, updated_at = excluded.updated_at`)
+      consent_at = excluded.consent_at, updated_by_uid = excluded.updated_by_uid, updated_at = excluded.updated_at,
+      open_to_work = CASE WHEN excluded.enabled=0 THEN 0 ELSE trade_network_members.open_to_work END`)
     .bind(access.ownerUid, enabled ? 1 : 0, CONSENT_VERSION, enabled ? now : "", access.actorUid, now, access.ownerUid)];
   if (!enabled) statements.push(db.prepare(`UPDATE trade_network_posts SET status = 'closed', revision = revision + 1,
     last_request_hash = '', updated_by_uid = ?, updated_at = ? WHERE owner_uid = ? AND status = 'active'
@@ -121,9 +297,10 @@ const postValues = (post: NetworkPostInput) => [post.kind, post.title, post.trad
 export async function saveNetworkPost(access: TeamAccess, rawId: unknown, revision: unknown, rawPost: unknown): Promise<NetworkPost> {
   await accountAccess(access, true);
   const id = networkId(rawId), expectedRevision = networkRevision(revision), post = normalizeNetworkPost(rawPost);
+  if (!postcodeCoordinate(post.postcode) || !postcodeMatchesState(post.postcode, post.state)) return networkInvalid("Choose a recognised postcode and its matching state.");
   const hash = await requestHash({ action: "save_post", id, expectedRevision, post }), db = getD1(), now = new Date().toISOString();
   const previous = await ownPost(access, id);
-  if (previous?.last_request_hash === hash) return postProjection(previous, access);
+  if (previous?.last_request_hash === hash) { await deliverNetworkPost(previous); return postProjection(previous, access); }
   if (expectedRevision > 0 && (!previous || Number(previous.revision) !== expectedRevision)) throw previous ? conflict() : unavailable();
   if (expectedRevision === 0) {
     const result = await db.prepare(`INSERT INTO trade_network_posts
@@ -133,7 +310,7 @@ export async function saveNetworkPost(access: TeamAccess, rawId: unknown, revisi
       ON CONFLICT(id) DO NOTHING`).bind(id, access.ownerUid, ...postValues(post), new Date(Date.now() + 30 * 86_400_000).toISOString(), hash, access.actorUid, access.actorUid, now, now, access.ownerUid, access.ownerUid, access.ownerUid, now).run();
     if (Number(result.meta.changes) !== 1) {
       const retry = await ownPost(access, id);
-      if (retry?.last_request_hash === hash) return postProjection(retry, access);
+      if (retry?.last_request_hash === hash) { await deliverNetworkPost(retry); return postProjection(retry, access); }
       throw new NetworkError("NETWORK_POST_LIMIT", "Could not publish. Refresh the network or close an old listing if you already have 20 active listings.", 409);
     }
   } else {
@@ -142,12 +319,13 @@ export async function saveNetworkPost(access: TeamAccess, rawId: unknown, revisi
       .bind(...postValues(post), hash, access.actorUid, now, id, access.ownerUid, expectedRevision).run();
     if (Number(result.meta.changes) !== 1) {
       const retry = await ownPost(access, id);
-      if (retry?.last_request_hash === hash) return postProjection(retry, access);
+      if (retry?.last_request_hash === hash) { await deliverNetworkPost(retry); return postProjection(retry, access); }
       throw conflict();
     }
   }
   const saved = await ownPost(access, id);
   if (!saved) throw unavailable();
+  await deliverNetworkPost(saved);
   return postProjection(saved, access);
 }
 export async function changeNetworkPost(access: TeamAccess, action: "close_post" | "renew_post", rawId: unknown, revision: unknown) {
@@ -155,7 +333,8 @@ export async function changeNetworkPost(access: TeamAccess, action: "close_post"
   const id = networkId(rawId), expectedRevision = networkRevision(revision), hash = await requestHash({ action, id, expectedRevision });
   const previous = await ownPost(access, id);
   if (!previous) throw unavailable();
-  if (previous.last_request_hash === hash) return postProjection(previous, access);
+  if (action === "renew_post" && (!postcodeCoordinate(String(previous.postcode)) || !postcodeMatchesState(String(previous.postcode), String(previous.state)))) return networkInvalid("Edit this post to choose a recognised postcode and its matching state before renewing.");
+  if (previous.last_request_hash === hash) { await deliverNetworkPost(previous); return postProjection(previous, access); }
   if (Number(previous.revision) !== expectedRevision) throw conflict();
   const now = new Date().toISOString(), renew = action === "renew_post";
   const result = await getD1().prepare(`UPDATE trade_network_posts SET status=?, expires_at=?, revision=revision+1,last_request_hash=?,updated_by_uid=?,updated_at=?
@@ -165,6 +344,7 @@ export async function changeNetworkPost(access: TeamAccess, action: "close_post"
   const saved = await ownPost(access, id);
   if (Number(result.meta.changes) !== 1 && saved?.last_request_hash !== hash) throw conflict();
   if (!saved) throw unavailable();
+  await deliverNetworkPost(saved);
   return postProjection(saved, access);
 }
 export async function createNetworkEnquiry(access: TeamAccess, body: Record<string, unknown>): Promise<NetworkEnquiry> {
@@ -172,7 +352,7 @@ export async function createNetworkEnquiry(access: TeamAccess, body: Record<stri
   const message = networkText(body.message, 1200, true, true), contact = normalizeNetworkContact(body.contact, body.confirmSharing);
   const hash = await requestHash({ action: "enquire", postId, message, contact });
   const prior = await getD1().prepare("SELECT * FROM trade_network_enquiries WHERE post_id=? AND sender_owner_uid=?").bind(postId, access.ownerUid).first<Row>();
-  if (prior) { if (prior.message === message && prior.sender_contact_json === JSON.stringify(contact)) return enquiryProjection(prior, access); throw new NetworkError("NETWORK_ALREADY_ENQUIRED", "You have already sent an enquiry for this listing. Open it in Enquiries.", 409); }
+  if (prior) { if (prior.message === message && prior.sender_contact_json === JSON.stringify(contact)) { await markRespondedLead(access, postId); return enquiryProjection(prior, access); } throw new NetworkError("NETWORK_ALREADY_ENQUIRED", "You have already sent an enquiry for this listing. Open it in Enquiries.", 409); }
   const now = new Date().toISOString();
   const result = await getD1().prepare(`INSERT INTO trade_network_enquiries
     (id,post_id,sender_owner_uid,recipient_owner_uid,post_title,post_kind,sender_business_name,recipient_business_name,message,sender_contact_json,recipient_contact_json,status,revision,last_request_hash,created_by_uid,updated_by_uid,created_at,updated_at)
@@ -186,7 +366,13 @@ export async function createNetworkEnquiry(access: TeamAccess, body: Record<stri
       postId, access.ownerUid, now, access.ownerUid, access.ownerUid).run();
   const saved = await getD1().prepare("SELECT * FROM trade_network_enquiries WHERE post_id=? AND sender_owner_uid=?").bind(postId, access.ownerUid).first<Row>();
   if (!saved || (Number(result.meta.changes) !== 1 && saved.last_request_hash !== hash)) throw unavailable();
+  await markRespondedLead(access, postId);
   return enquiryProjection(saved, access);
+}
+async function markRespondedLead(access: TeamAccess, postId: string) {
+  await getD1().prepare(`UPDATE trade_network_leads SET status='viewed',updated_at=? WHERE post_id=? AND recipient_owner_uid=? AND status='new'
+    AND EXISTS (SELECT 1 FROM trade_network_enquiries enquiry WHERE enquiry.post_id=trade_network_leads.post_id AND enquiry.sender_owner_uid=trade_network_leads.recipient_owner_uid)`)
+    .bind(new Date().toISOString(), postId, access.ownerUid).run();
 }
 export async function changeNetworkEnquiry(access: TeamAccess, action: "connect" | "close_enquiry", body: Record<string, unknown>) {
   await accountAccess(access, action === "connect");

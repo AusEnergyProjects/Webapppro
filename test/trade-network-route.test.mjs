@@ -14,7 +14,7 @@ function fixture({ authError = "", serviceError, allowed = true } = {}) {
     "@/lib/trade-access-server": { TradeAccessError },
     "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => { if (authError) throw new Error(authError); return access; } },
     "@/lib/trade-network": contract,
-    "@/lib/trade-network-server": { assertNetworkAccess: () => { if (!allowed) throw new contract.NetworkError("NETWORK_ACCESS_REQUIRED", "Blocked", 403); }, ...Object.fromEntries(["listNetwork", "setNetworkMembership", "saveNetworkPost", "changeNetworkPost", "createNetworkEnquiry", "changeNetworkEnquiry"].map(name => [name, service(name)])) },
+    "@/lib/trade-network-server": { assertNetworkAccess: () => { if (!allowed) throw new contract.NetworkError("NETWORK_ACCESS_REQUIRED", "Blocked", 403); }, ...Object.fromEntries(["listNetwork", "setNetworkMembership", "setNetworkAvailability", "setNetworkLeadStatus", "saveNetworkPost", "changeNetworkPost", "createNetworkEnquiry", "changeNetworkEnquiry"].map(name => [name, service(name)])) },
   };
   Function("require", "exports", compiled)(id => { assert.ok(dependencies[id], id); return dependencies[id]; }, route);
   const request = (body, headers = {}) => new Request("https://tlink.test/api/trade-network", { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: typeof body === "string" ? body : JSON.stringify(body) });
@@ -57,4 +57,13 @@ test("network lists are private and errors omit internal values", async () => {
     assert.equal(result.status, status); assert.equal(result.headers.get("cache-control"), "no-store");
     assert.doesNotMatch(await result.text(), /SQL private payload/);
   }
+});
+test("availability and lead status mutations receive the authenticated business scope", async () => {
+  const h = fixture();
+  assert.equal((await h.route.POST(h.request({ action: "availability", openToWork: true, workTrades: ["Plumbing"], ownerUid: "foreign" }))).status, 200);
+  assert.deepEqual(h.calls[0], { name: "setNetworkAvailability", args: [h.access, true, ["Plumbing"]] });
+  assert.equal((await h.route.POST(h.request({ action: "lead_status", id: "post-1", status: "dismissed", ownerUid: "foreign" }))).status, 200);
+  assert.deepEqual(h.calls[1], { name: "setNetworkLeadStatus", args: [h.access, "post-1", "dismissed"] });
+  await h.route.GET(new Request("https://tlink.test/api/trade-network?leadPostId=post-1&leadsOffset=50"));
+  assert.deepEqual(h.calls[2].args, [h.access, { leadPostId: "post-1", leadsOffset: "50" }]);
 });

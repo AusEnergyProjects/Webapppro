@@ -6,11 +6,21 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 27 September 2026
 
-Deployment baseline for this change: Sites 644, source `8b9f37bc521c4212f894cea9cb087f4d77534232`. Saved roof designs, product documents and approved email delivery are preserved. The coordinating release records the next matching GitHub/Sites identity.
+Deployment baseline for this change: Sites 645, source `410b90fc3ff71ce40363dbd5f8038ae5e89ba597`. Saved roof designs, product documents and approved email delivery are preserved. The coordinating release records the next matching GitHub/Sites identity.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: private trade network and direct product navigation
+## Current implementation: automatic trade leads and simple work availability
+
+Every active work post is delivered to every currently verified, opted-in business whose selected trades and saved service areas match. Open to work is an explicit separate preference, initially off; existing availability posts do not opt anyone in. Matching reuses all configured postcode/radius centres and service states, and respects paused business availability. No duplicate coverage form or customer-lead allocation is introduced.
+
+Migration 0202 adds work preferences and one durable lead per post and receiving business. Publication, edits and renewal reconcile all eligible recipients in bounded batches without limiting the number of recipients. Retries preserve one lead, and edits/renewal do not revive a dismissed lead. Catch-up reads match active work after preferences or coverage change. Current approval, membership, geography, trade, post status and expiry are rechecked before exposing a lead.
+
+Trade network now opens Your leads, with a clear Open to work switch, a compact trade selector and the existing service-area settings one click away. Incoming leads appear in the existing notification bell and open the exact post. Missing or ineligible links show an unavailable state rather than unrelated work. Contact sharing still requires Enquire or Connect; no automatic email or private customer data is sent. Customer Leads includes a Trade leads shortcut.
+
+Validation evidence and final GitHub/Sites identity are retained under C:/Webproject/outputs/tlink-network-auto-leads-2026-09-27/. Tests include 107 matching recipients across delivery pages, exact lead paging, opt-out and service-area changes, tenant isolation, dismissed retry stability, notifications and UI interaction. Browser verification uses synthetic data for opt-in/posting; live checks remain read-only.
+
+## Previous implementation: private trade network and direct product navigation
 
 Installer navigation now labels the map Map & quote and explains roof measurement and solar design. Products opens the business's own price book, including its items, prices and PDFs. Installer product search uses active owner-scoped price-book items and current price-book permission; supplier catalogue workspaces and supplier search remain available without promoting that catalogue to installers.
 

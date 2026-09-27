@@ -2,7 +2,7 @@ import { adminJson, mfaErrorResponse, sameOrigin } from "@/lib/admin-server";
 import { TradeAccessError } from "@/lib/trade-access-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { NETWORK_MAX_BODY_BYTES, NetworkError, networkInvalid } from "@/lib/trade-network";
-import { assertNetworkAccess, changeNetworkEnquiry, changeNetworkPost, createNetworkEnquiry, listNetwork, saveNetworkPost, setNetworkMembership } from "@/lib/trade-network-server";
+import { assertNetworkAccess, changeNetworkEnquiry, changeNetworkPost, createNetworkEnquiry, listNetwork, saveNetworkPost, setNetworkAvailability, setNetworkLeadStatus, setNetworkMembership } from "@/lib/trade-network-server";
 
 export const runtime = "edge";
 function errorResponse(error: unknown) {
@@ -50,6 +50,8 @@ export async function POST(request: Request) {
     assertNetworkAccess(access);
     const body = await readBody(request);
     if (body.action === "membership") return adminJson({ ok: true, ...await setNetworkMembership(access, body.enabled) });
+    if (body.action === "availability") return adminJson({ ok: true, ...await setNetworkAvailability(access, body.openToWork, body.workTrades) });
+    if (body.action === "lead_status") return adminJson({ ok: true, ...await setNetworkLeadStatus(access, body.id, body.status) });
     if (body.action === "save_post") return adminJson({ ok: true, post: await saveNetworkPost(access, body.id, body.expectedRevision, body.post) });
     if (body.action === "close_post" || body.action === "renew_post") return adminJson({ ok: true, post: await changeNetworkPost(access, body.action, body.id, body.expectedRevision) });
     if (body.action === "enquire") return adminJson({ ok: true, enquiry: await createNetworkEnquiry(access, body) });

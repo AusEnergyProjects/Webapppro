@@ -20,3 +20,8 @@ test("business contact sharing needs an explicit checkbox and valid contact", ()
   for (const confirmed of [false, undefined, "true"]) assert.throws(() => contract.normalizeNetworkContact(contact, confirmed), { code: "NETWORK_INVALID" });
   for (const raw of [{ name: "Pat" }, { ...contact, email: "invalid" }, { ...contact, phone: "call-me" }]) assert.throws(() => contract.normalizeNetworkContact(raw, true), { code: "NETWORK_INVALID" });
 });
+test("work availability defaults are explicit and accept only distinct supported trades", () => {
+  assert.deepEqual(contract.normalizeNetworkAvailability(false, []), { openToWork: false, workTrades: [] });
+  assert.deepEqual(contract.normalizeNetworkAvailability(true, ["Plumbing", "Electrical", "Plumbing"]), { openToWork: true, workTrades: ["Electrical", "Plumbing"] });
+  for (const [open, trades] of [[true, []], ["true", ["Plumbing"]], [true, ["invalid"]], [true, "Plumbing"]]) assert.throws(() => contract.normalizeNetworkAvailability(open, trades), { code: "NETWORK_INVALID" });
+});
