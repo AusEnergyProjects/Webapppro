@@ -3,7 +3,9 @@ export const NETWORK_MAX_BODY_BYTES = 16_384;
 export const NETWORK_STATES = ["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"] as const;
 export const NETWORK_TRADES = ["Electrical", "Plumbing", "Solar", "Batteries", "Air conditioning", "Hot water", "Insulation", "Roofing", "Carpentry", "Building", "Painting", "Other"] as const;
 export type NetworkKind = "work" | "available";
-export type NetworkAvailability = { openToWork: boolean; workTrades: string[]; serviceAreas: { postcode: string; radiusKm: number }[]; serviceStates: string[]; paused: boolean };
+export type NetworkMinimumRates = { hour: number | null; day: number | null; job: number | null };
+export type NetworkWorkPostAllowance = { limit: number; remaining: number; day: string; timeZone: "Australia/Sydney" };
+export type NetworkAvailability = { openToWork: boolean; workTrades: string[]; minimumRates: NetworkMinimumRates; serviceAreas: { postcode: string; radiusKm: number }[]; serviceStates: string[]; paused: boolean };
 export type NetworkContact = { name: string; email: string; phone: string };
 export type NetworkPostInput = {
   kind: NetworkKind; title: string; trade: string; suburb: string; postcode: string; state: string;
@@ -23,6 +25,7 @@ export type NetworkWorkspace = {
   enabled: boolean; canManageMembership: boolean; posts: NetworkPost[]; myPosts: NetworkPost[];
   enquiries: NetworkEnquiry[]; hasMore: boolean; myHasMore: boolean; enquiriesHasMore: boolean;
   availability: NetworkAvailability; leads: NetworkLead[]; leadCount: number; leadsHasMore: boolean;
+  workPostAllowance: NetworkWorkPostAllowance;
 };
 export type NetworkLead = NetworkPost & { leadStatus: "new" | "viewed" | "dismissed"; receivedAt: string };
 export type NetworkLeadNotification = { id: string; title: string; summary: string; createdAt: string };
@@ -65,10 +68,10 @@ export function normalizeNetworkPost(value: unknown): NetworkPostInput {
   const suburb = networkText(raw.suburb, 80, true), postcode = networkText(raw.postcode, 4, true), state = networkText(raw.state, 3, true);
   if (!/^\d{4}$/.test(postcode) || !NETWORK_STATES.some(item => item === state)) return networkInvalid("Add a four-digit postcode and state.");
   const details = networkText(raw.details, 2000, true, true);
-  const rateCents = raw.rateCents === undefined || raw.rateCents === null ? null : raw.rateCents;
-  if (rateCents !== null && (typeof rateCents !== "number" || !Number.isSafeInteger(rateCents) || rateCents < 0 || rateCents > 100_000_000)) return networkInvalid("Enter a valid rate.");
-  const rateUnit = raw.rateUnit ?? "hour";
-  if (rateUnit !== "hour" && rateUnit !== "day" && rateUnit !== "job") return networkInvalid();
+  const rateCents = raw.rateCents;
+  if (typeof rateCents !== "number" || !Number.isSafeInteger(rateCents) || rateCents < 1 || rateCents > 100_000_000) return networkInvalid("Enter a price greater than zero, excluding GST.");
+  const rateUnit = raw.rateUnit;
+  if (rateUnit !== "hour" && rateUnit !== "day" && rateUnit !== "job") return networkInvalid("Choose whether the price is per hour, day or job.");
   const startsOn = date(raw.startsOn), endsOn = date(raw.endsOn);
   if (startsOn && endsOn && endsOn < startsOn) return networkInvalid("The end date must be on or after the start date.");
   return { kind, title, trade, suburb, postcode, state, details, rateCents, rateUnit, startsOn, endsOn };
@@ -87,4 +90,16 @@ export function normalizeNetworkAvailability(openToWork: unknown, workTrades: un
   const selected: string[] = [...new Set<string>(workTrades)].sort();
   if (openToWork && !selected.length) return networkInvalid("Choose at least one trade before turning on work leads.");
   return { openToWork, workTrades: selected };
+}
+export function normalizeNetworkMinimumRates(value: unknown): Partial<NetworkMinimumRates> {
+  if (value === undefined) return {};
+  const raw = object(value), result: Partial<NetworkMinimumRates> = {};
+  if (Object.keys(raw).some(key => key !== "hour" && key !== "day" && key !== "job")) return networkInvalid("Choose a minimum per hour, day or job.");
+  for (const unit of ["hour", "day", "job"] as const) {
+    if (!Object.hasOwn(raw, unit)) continue;
+    const minimum = raw[unit];
+    if (minimum !== null && (typeof minimum !== "number" || !Number.isSafeInteger(minimum) || minimum < 1 || minimum > 100_000_000)) return networkInvalid("Enter a minimum greater than zero or leave it blank for any price.");
+    result[unit] = minimum;
+  }
+  return result;
 }

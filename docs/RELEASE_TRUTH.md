@@ -6,11 +6,19 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 27 September 2026
 
-Deployment baseline for this change: Sites 645, source `410b90fc3ff71ce40363dbd5f8038ae5e89ba597`. Saved roof designs, product documents and approved email delivery are preserved. The coordinating release records the next matching GitHub/Sites identity.
+Deployment baseline for this change: Sites 647, source `77d4dd7ba30bee8fb4e40659de56d49cc4a254ae`. Saved roof designs, product documents and approved email delivery are preserved. The coordinating release records the next matching GitHub/Sites identity.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: automatic trade leads and simple work availability
+## Current implementation: business minimum rates and five daily job posts
+
+Businesses can optionally set a minimum per hour, day and job in Trades & rates. Values are private, excluding GST, and blank means any positive price for that rate type. Automatic leads, counts and notifications require the offered rate to meet the matching minimum; the browse feed and explicit enquiries remain available regardless of minimums. New and edited posts require a positive price and a rate unit. Legacy unpriced posts remain browsable but cannot deliver leads or renew until a price is added.
+
+Each business can publish five work posts per Sydney calendar day, shared by its owner and team. New work posts, renewals and active availability-to-work conversions count; ordinary edits and successful request retries do not. The UI shows remaining posts and the midnight Sydney reset. Atomic D1 batches retain publication events with post writes, so concurrent requests cannot exceed five and failed writes consume no allowance.
+
+Migration 0203 adds nullable minimum rates and the private daily publication ledger. Existing clients that omit minimums preserve saved values. Validation and final release evidence are retained in C:/Webproject/outputs/tlink-network-minimum-rates-2026-09-27/. Live checks do not change business preferences, publish work or contact trades.
+
+## Previous implementation: automatic trade leads and simple work availability
 
 Every active work post is delivered to every currently verified, opted-in business whose selected trades and saved service areas match. Open to work is an explicit separate preference, initially off; existing availability posts do not opt anyone in. Matching reuses all configured postcode/radius centres and service states, and respects paused business availability. No duplicate coverage form or customer-lead allocation is introduced.
 

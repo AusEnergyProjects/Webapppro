@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     assertNetworkAccess(access);
     const body = await readBody(request);
     if (body.action === "membership") return adminJson({ ok: true, ...await setNetworkMembership(access, body.enabled) });
-    if (body.action === "availability") return adminJson({ ok: true, ...await setNetworkAvailability(access, body.openToWork, body.workTrades) });
+    if (body.action === "availability") return adminJson({ ok: true, ...await setNetworkAvailability(access, body.openToWork, body.workTrades, body.minimumRates) });
     if (body.action === "lead_status") return adminJson({ ok: true, ...await setNetworkLeadStatus(access, body.id, body.status) });
     if (body.action === "save_post") return adminJson({ ok: true, post: await saveNetworkPost(access, body.id, body.expectedRevision, body.post) });
     if (body.action === "close_post" || body.action === "renew_post") return adminJson({ ok: true, post: await changeNetworkPost(access, body.action, body.id, body.expectedRevision) });

@@ -14,6 +14,7 @@
 .header p, .editor header p { color: var(--trade-muted, #637971); margin-top: 7px; }
 .eyebrow { display: block; margin-bottom: 8px; color: var(--trade-accent-readable, #12634f); font-size: 12px; font-weight: 650; letter-spacing: .6px; text-transform: uppercase; }
 .header > button { flex-shrink: 0; }
+.workspace p.postAllowance { color: var(--trade-muted, #637971); font-size: 13px; margin-top: -12px; }
 .availability { border: 1px solid var(--trade-line, #cbded7); border-radius: 14px; padding: 20px; background: var(--trade-surface-soft, #f4f8f6); }
 .availability[data-receiving="true"] { border-color: var(--trade-accent, #146852); }
 .availabilityTop { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
@@ -32,6 +33,10 @@
 .tradeChooser { border-top: 1px solid var(--trade-line, #cbded7); margin-top: 10px; padding-top: 20px; }
 .tradeChips { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 0; }
 .tradeChips button[aria-pressed="true"] { background: var(--trade-accent, #146852); border-color: var(--trade-accent, #146852); color: var(--trade-on-accent, #fff); }
+.minimumRates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 14px 0 0; padding: 0; border: 0; min-width: 0; max-width: 720px; }
+.availability p.minimumHelp { margin: 12px 0 18px; }
+.availability p.rateSummary { margin-top: 6px; font-size: 13px; }
+@media (max-width: 620px) { .minimumRates { grid-template-columns: 1fr; } }
 .sectionHeading { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
 .sectionHeading p { color: var(--trade-muted, #637971); font-size: 14px; margin-top: 4px; }
 .actions { flex-wrap: wrap; gap: 8px; }

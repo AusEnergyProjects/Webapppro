@@ -6,10 +6,10 @@ const post = (changes = {}) => ({ kind: "work", title: "Plumber for hot water in
 test("network contract strips foreign ownership, customer and job data from posts", () => {
   const expected = post();
   assert.deepEqual(contract.normalizeNetworkPost({ ...expected, ownerUid: "another-business", customerId: "private-customer", workOrderId: "private-job", phone: "hidden" }), expected);
-  assert.deepEqual(contract.normalizeNetworkPost(post({ rateCents: null, startsOn: "", endsOn: "" })), post({ rateCents: null, startsOn: "", endsOn: "" }));
+  for (const kind of ["work", "available"]) for (const rateCents of [1, 100_000_000]) assert.deepEqual(contract.normalizeNetworkPost(post({ kind, rateCents, startsOn: "", endsOn: "" })), post({ kind, rateCents, startsOn: "", endsOn: "" }));
 });
 test("network contract rejects invalid prices, dates, oversized and unsupported fields", () => {
-  for (const changes of [{ rateCents: -1 }, { rateCents: 1.5 }, { rateCents: "8500" }, { rateCents: Infinity }, { startsOn: "2026-02-30" }, { endsOn: "2026-09-01" }, { trade: "invalid" }, { kind: "public" }, { postcode: "312" }, { state: "vic" }, { rateUnit: "week" }, { title: "x".repeat(121) }, { details: "x".repeat(2001) }]) {
+  for (const changes of [{ rateCents: undefined }, { rateCents: null }, { rateCents: 0 }, { rateCents: -1 }, { rateCents: 100_000_001 }, { rateCents: 1.5 }, { rateCents: "8500" }, { rateCents: Infinity }, { startsOn: "2026-02-30" }, { endsOn: "2026-09-01" }, { trade: "invalid" }, { kind: "public" }, { postcode: "312" }, { state: "vic" }, { rateUnit: undefined }, { rateUnit: null }, { rateUnit: "week" }, { title: "x".repeat(121) }, { details: "x".repeat(2001) }]) {
     assert.throws(() => contract.normalizeNetworkPost(post(changes)), { code: "NETWORK_INVALID" });
   }
   for (const revision of [-1, "1", 1.5, NaN]) assert.throws(() => contract.networkRevision(revision), { code: "NETWORK_INVALID" });
@@ -24,4 +24,10 @@ test("work availability defaults are explicit and accept only distinct supported
   assert.deepEqual(contract.normalizeNetworkAvailability(false, []), { openToWork: false, workTrades: [] });
   assert.deepEqual(contract.normalizeNetworkAvailability(true, ["Plumbing", "Electrical", "Plumbing"]), { openToWork: true, workTrades: ["Electrical", "Plumbing"] });
   for (const [open, trades] of [[true, []], ["true", ["Plumbing"]], [true, ["invalid"]], [true, "Plumbing"]]) assert.throws(() => contract.normalizeNetworkAvailability(open, trades), { code: "NETWORK_INVALID" });
+});
+test("private minimums support bounded integer cents, explicit clearing and omitted-unit preservation", () => {
+  assert.deepEqual(contract.normalizeNetworkMinimumRates(undefined), {});
+  assert.deepEqual(contract.normalizeNetworkMinimumRates({ hour: 1, day: 100_000_000, job: null }), { hour: 1, day: 100_000_000, job: null });
+  assert.deepEqual(contract.normalizeNetworkMinimumRates({ day: null }), { day: null });
+  for (const value of [null, [], "100", { week: 100 }, ...[undefined, 0, -1, 100_000_001, 1.5, "100", Infinity].map(hour => ({ hour }))]) assert.throws(() => contract.normalizeNetworkMinimumRates(value), { code: "NETWORK_INVALID" });
 });

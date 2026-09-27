@@ -61,9 +61,12 @@ test("network lists are private and errors omit internal values", async () => {
 test("availability and lead status mutations receive the authenticated business scope", async () => {
   const h = fixture();
   assert.equal((await h.route.POST(h.request({ action: "availability", openToWork: true, workTrades: ["Plumbing"], ownerUid: "foreign" }))).status, 200);
-  assert.deepEqual(h.calls[0], { name: "setNetworkAvailability", args: [h.access, true, ["Plumbing"]] });
+  assert.deepEqual(h.calls[0], { name: "setNetworkAvailability", args: [h.access, true, ["Plumbing"], undefined] });
   assert.equal((await h.route.POST(h.request({ action: "lead_status", id: "post-1", status: "dismissed", ownerUid: "foreign" }))).status, 200);
   assert.deepEqual(h.calls[1], { name: "setNetworkLeadStatus", args: [h.access, "post-1", "dismissed"] });
   await h.route.GET(new Request("https://tlink.test/api/trade-network?leadPostId=post-1&leadsOffset=50"));
   assert.deepEqual(h.calls[2].args, [h.access, { leadPostId: "post-1", leadsOffset: "50" }]);
+  const minimumRates = { hour: 9500, day: null, job: 100_000 };
+  assert.equal((await h.route.POST(h.request({ action: "availability", openToWork: true, workTrades: ["Plumbing"], minimumRates, ownerUid: "foreign" }))).status, 200);
+  assert.deepEqual(h.calls[3], { name: "setNetworkAvailability", args: [h.access, true, ["Plumbing"], minimumRates] });
 });

@@ -4,15 +4,31 @@ import { verifiedTradeAccountPredicate } from "./trade-access-server";
 import { postcodeCoordinate, postcodeDistanceKm } from "./postcode-distance";
 import { postcodeMatchesState } from "./australian-postcodes.mjs";
 import { closestQualifyingTradeServiceArea } from "./trade-service-area-matching.mjs";
+import { australianRegulatorDate } from "./creditex-australian-regulator-date";
 import {
   NETWORK_PAGE_SIZE, NetworkError, networkId, networkInvalid, networkRevision, networkText,
-  normalizeNetworkAvailability, normalizeNetworkContact, normalizeNetworkPost, type NetworkAvailability, type NetworkContact, type NetworkEnquiry,
-  type NetworkLead, type NetworkLeadNotification, type NetworkPost, type NetworkPostInput, type NetworkWorkspace,
+  normalizeNetworkAvailability, normalizeNetworkContact, normalizeNetworkMinimumRates, normalizeNetworkPost, type NetworkAvailability, type NetworkContact, type NetworkEnquiry,
+  type NetworkLead, type NetworkLeadNotification, type NetworkPost, type NetworkPostInput, type NetworkWorkspace, type NetworkWorkPostAllowance,
 } from "./trade-network";
 
 type Row = Record<string, unknown>;
 const CONSENT_VERSION = "tlink-private-trade-network-v1";
 const POST_LIMIT = 20;
+const DAILY_WORK_LIMIT = 5;
+const publicationGuard = `(SELECT COUNT(*) FROM trade_network_work_publications WHERE owner_uid=? AND publication_day=?) < ${DAILY_WORK_LIMIT}`;
+async function workPostAllowance(ownerUid: string, now: string): Promise<NetworkWorkPostAllowance> {
+  const day = australianRegulatorDate(now);
+  const row = await getD1().prepare("SELECT COUNT(*) used FROM trade_network_work_publications WHERE owner_uid=? AND publication_day=?").bind(ownerUid, day).first<Row>();
+  return { limit: DAILY_WORK_LIMIT, remaining: Math.max(0, DAILY_WORK_LIMIT - Number(row?.used || 0)), day, timeZone: "Australia/Sydney" };
+}
+function publicationStatement(access: TeamAccess, id: string, hash: string, now: string) {
+  return getD1().prepare(`INSERT INTO trade_network_work_publications (owner_uid,request_hash,post_id,publication_day,created_at)
+    SELECT owner_uid,?,?,?,? FROM trade_network_posts WHERE id=? AND owner_uid=? AND kind='work' AND last_request_hash=?
+    ON CONFLICT(owner_uid,request_hash) DO NOTHING`).bind(hash, id, australianRegulatorDate(now), now, id, access.ownerUid, hash);
+}
+async function enforceDailyLimit(ownerUid: string, now: string) {
+  if ((await workPostAllowance(ownerUid, now)).remaining === 0) throw new NetworkError("NETWORK_DAILY_WORK_LIMIT", "You have used your 5 work posts for today. You can post again after midnight Sydney time.", 409);
+}
 const verifiedAccount = `account.partner_type = 'installer' AND ${verifiedTradeAccountPredicate("account")}`;
 function verifiedOwnerSql(ownerExpression: string) {
   return `EXISTS (SELECT 1 FROM trade_accounts account WHERE account.firebase_uid = ${ownerExpression} AND ${verifiedAccount})`;
@@ -85,6 +101,7 @@ function serviceAreasSql(ownerExpression: string) {
 const recipientColumns = `account.firebase_uid recipient_uid,account.service_states,account.availability_status,
   account.postcode,account.service_base_postcode,account.service_radius_km,
   membership.enabled,membership.open_to_work,membership.work_trades_json,
+  membership.minimum_hour_cents,membership.minimum_day_cents,membership.minimum_job_cents,
   ${serviceAreasSql("account.firebase_uid")} active_service_areas`;
 const recipientEligibility = `membership.enabled=1 AND membership.open_to_work=1
   AND account.availability_status IN ('open','limited') AND ${verifiedAccount}`;
@@ -99,6 +116,7 @@ function availabilityProjection(row: Row): NetworkAvailability {
     return [{ postcode: area.postcode, radiusKm: area.radiusKm }];
   }) : [{ postcode: String(row.service_base_postcode || row.postcode || ""), radiusKm: Number(row.service_radius_km || 50) }];
   return { openToWork: row.open_to_work === 1, workTrades: strings(row.work_trades_json), serviceAreas,
+    minimumRates: { hour: row.minimum_hour_cents == null ? null : Number(row.minimum_hour_cents), day: row.minimum_day_cents == null ? null : Number(row.minimum_day_cents), job: row.minimum_job_cents == null ? null : Number(row.minimum_job_cents) },
     serviceStates: strings(row.service_states), paused: !["open", "limited"].includes(String(row.availability_status)) };
 }
 async function networkRecipient(ownerUid: string): Promise<Row | null> {
@@ -106,7 +124,14 @@ async function networkRecipient(ownerUid: string): Promise<Row | null> {
     LEFT JOIN trade_network_members membership ON membership.owner_uid=account.firebase_uid
     WHERE account.firebase_uid=? AND ${verifiedAccount}`).bind(ownerUid).first<Row>();
 }
+function pricedPost(post: Row): boolean {
+  return typeof post.rate_cents === "number" && Number.isSafeInteger(post.rate_cents) && post.rate_cents >= 1 && post.rate_cents <= 100_000_000
+    && ["hour", "day", "job"].includes(String(post.rate_unit));
+}
 function recipientMatchesPost(recipient: Row, post: Row): boolean {
+  if (!pricedPost(post)) return false;
+  const minimum = recipient[`minimum_${post.rate_unit}_cents`];
+  if (minimum != null && Number(post.rate_cents) < Number(minimum)) return false;
   if (recipient.enabled !== 1 || recipient.open_to_work !== 1 || !["open", "limited"].includes(String(recipient.availability_status))
     || !strings(recipient.work_trades_json).includes(String(post.trade)) || !strings(recipient.service_states).includes(String(post.state))
     || !postcodeCoordinate(String(post.postcode)) || !postcodeMatchesState(String(post.postcode), String(post.state))) return false;
@@ -114,13 +139,15 @@ function recipientMatchesPost(recipient: Row, post: Row): boolean {
     legacyPostcode: recipient.service_base_postcode || recipient.postcode, legacyRadiusKm: recipient.service_radius_km,
     destinationPostcode: post.postcode }, postcodeDistanceKm));
 }
-/** Every value used for geometry must still be current when a match is persisted or exposed. */
+/** Every matching preference must still be current when a lead is persisted or exposed. */
 function recipientSnapshotGuard(recipient: Row) {
   return {
     sql: `EXISTS (SELECT 1 FROM trade_accounts account JOIN trade_network_members membership ON membership.owner_uid=account.firebase_uid
       WHERE account.firebase_uid=? AND ${recipientEligibility} AND membership.work_trades_json=? AND account.service_states=?
+      AND membership.minimum_hour_cents IS ? AND membership.minimum_day_cents IS ? AND membership.minimum_job_cents IS ?
       AND account.postcode=? AND account.service_base_postcode=? AND account.service_radius_km=? AND ${serviceAreasSql("account.firebase_uid")}=?)`,
-    bindings: [String(recipient.recipient_uid), String(recipient.work_trades_json), String(recipient.service_states), String(recipient.postcode),
+    bindings: [String(recipient.recipient_uid), String(recipient.work_trades_json), String(recipient.service_states),
+      recipient.minimum_hour_cents == null ? null : Number(recipient.minimum_hour_cents), recipient.minimum_day_cents == null ? null : Number(recipient.minimum_day_cents), recipient.minimum_job_cents == null ? null : Number(recipient.minimum_job_cents), String(recipient.postcode),
       String(recipient.service_base_postcode), Number(recipient.service_radius_km), String(recipient.active_service_areas)],
   };
 }
@@ -135,7 +162,7 @@ function deliveryStatement(post: Row, recipient: Row, now: string) {
     .bind(String(recipient.recipient_uid), now, now, String(post.id), Number(post.revision), String(recipient.recipient_uid), now, ...guard.bindings);
 }
 async function deliverNetworkPost(post: Row) {
-  if (post.kind !== "work" || post.status !== "active" || String(post.expires_at) <= new Date().toISOString()) return;
+  if (!pricedPost(post) || post.kind !== "work" || post.status !== "active" || String(post.expires_at) <= new Date().toISOString()) return;
   const db = getD1(), now = new Date().toISOString();
   let cursor = "";
   for (;;) {
@@ -197,17 +224,23 @@ async function readNetworkLeads(access: TeamAccess, recipient: Row, start = 0, e
   }
   return { leads, leadCount, leadsHasMore: !exactId && eligibleCount > start + NETWORK_PAGE_SIZE };
 }
-export async function setNetworkAvailability(access: TeamAccess, openToWork: unknown, workTrades: unknown) {
+export async function setNetworkAvailability(access: TeamAccess, openToWork: unknown, workTrades: unknown, minimumRates?: unknown) {
   await accountAccess(access, true);
   const preferences = normalizeNetworkAvailability(openToWork, workTrades), recipient = await networkRecipient(access.ownerUid);
+  const minimums = normalizeNetworkMinimumRates(minimumRates);
   if (!recipient) throw unavailable();
   const current = availabilityProjection(recipient);
   if (preferences.openToWork && (!current.serviceStates.length || !current.serviceAreas.some(area => postcodeCoordinate(area.postcode) && Number.isFinite(area.radiusKm) && area.radiusKm >= 1))) {
     throw new NetworkError("NETWORK_SERVICE_AREA_REQUIRED", "Set your service areas in Business settings before turning on work leads.", 409);
   }
   const result = await getD1().prepare(`UPDATE trade_network_members SET open_to_work=?,work_trades_json=?,updated_by_uid=?,updated_at=?
+    ,minimum_hour_cents=CASE WHEN ? THEN ? ELSE minimum_hour_cents END
+    ,minimum_day_cents=CASE WHEN ? THEN ? ELSE minimum_day_cents END
+    ,minimum_job_cents=CASE WHEN ? THEN ? ELSE minimum_job_cents END
     WHERE owner_uid=? AND enabled=1 AND ${verifiedOwnerSql("trade_network_members.owner_uid")}`)
-    .bind(preferences.openToWork ? 1 : 0, JSON.stringify(preferences.workTrades), access.actorUid, new Date().toISOString(), access.ownerUid).run();
+    .bind(preferences.openToWork ? 1 : 0, JSON.stringify(preferences.workTrades), access.actorUid, new Date().toISOString(),
+      Object.hasOwn(minimums, "hour") ? 1 : 0, minimums.hour ?? null, Object.hasOwn(minimums, "day") ? 1 : 0, minimums.day ?? null,
+      Object.hasOwn(minimums, "job") ? 1 : 0, minimums.job ?? null, access.ownerUid).run();
   if (Number(result.meta.changes) !== 1) throw unavailable();
   const saved = await networkRecipient(access.ownerUid);
   if (!saved) throw unavailable();
@@ -271,7 +304,7 @@ export async function listNetwork(access: TeamAccess, filters: Record<string, un
     WHERE post.owner_uid = ? ORDER BY post.updated_at DESC, post.id LIMIT ? OFFSET ?`).bind(access.ownerUid, NETWORK_PAGE_SIZE + 1, myOffset).all<Row>();
   const enquiries = await db.prepare(`SELECT * FROM trade_network_enquiries WHERE sender_owner_uid = ? OR recipient_owner_uid = ?
     ORDER BY updated_at DESC, id LIMIT ? OFFSET ?`).bind(access.ownerUid, access.ownerUid, NETWORK_PAGE_SIZE + 1, enquiryOffset).all<Row>();
-  return { enabled, canManageMembership: access.isOwner, availability: availabilityProjection(recipient), ...leadInbox, posts: posts.results.slice(0, NETWORK_PAGE_SIZE).map(row => postProjection(row, access)),
+  return { enabled, canManageMembership: access.isOwner, availability: availabilityProjection(recipient), workPostAllowance: await workPostAllowance(access.ownerUid, now), ...leadInbox, posts: posts.results.slice(0, NETWORK_PAGE_SIZE).map(row => postProjection(row, access)),
     myPosts: mine.results.slice(0, NETWORK_PAGE_SIZE).map(row => postProjection(row, access)), enquiries: enquiries.results.slice(0, NETWORK_PAGE_SIZE).map(row => enquiryProjection(row, access)),
     hasMore: posts.results.length > NETWORK_PAGE_SIZE, myHasMore: mine.results.length > NETWORK_PAGE_SIZE, enquiriesHasMore: enquiries.results.length > NETWORK_PAGE_SIZE };
 }
@@ -302,24 +335,32 @@ export async function saveNetworkPost(access: TeamAccess, rawId: unknown, revisi
   const previous = await ownPost(access, id);
   if (previous?.last_request_hash === hash) { await deliverNetworkPost(previous); return postProjection(previous, access); }
   if (expectedRevision > 0 && (!previous || Number(previous.revision) !== expectedRevision)) throw previous ? conflict() : unavailable();
+  const publication = post.kind === "work" && (expectedRevision === 0 || (previous?.kind !== "work" && previous?.status === "active" && String(previous.expires_at) > now));
+  const publicationBindings = publication ? [access.ownerUid, australianRegulatorDate(now)] : [];
   if (expectedRevision === 0) {
-    const result = await db.prepare(`INSERT INTO trade_network_posts
+    const statement = db.prepare(`INSERT INTO trade_network_posts
       (id,owner_uid,kind,title,trade,suburb,postcode,state,details,rate_cents,rate_unit,starts_on,ends_on,status,revision,expires_at,last_request_hash,created_by_uid,updated_by_uid,created_at,updated_at)
       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, ?, ?, ?, ? WHERE ${enabledOwnerSql("?")}
       AND (SELECT COUNT(*) FROM trade_network_posts WHERE owner_uid = ? AND status = 'active' AND expires_at > ?) < ${POST_LIMIT}
-      ON CONFLICT(id) DO NOTHING`).bind(id, access.ownerUid, ...postValues(post), new Date(Date.now() + 30 * 86_400_000).toISOString(), hash, access.actorUid, access.actorUid, now, now, access.ownerUid, access.ownerUid, access.ownerUid, now).run();
+      ${publication ? `AND ${publicationGuard}` : ""}
+      ON CONFLICT(id) DO NOTHING`).bind(id, access.ownerUid, ...postValues(post), new Date(Date.now() + 30 * 86_400_000).toISOString(), hash, access.actorUid, access.actorUid, now, now, access.ownerUid, access.ownerUid, access.ownerUid, now, ...publicationBindings);
+    const result = publication ? (await db.batch([statement, publicationStatement(access, id, hash, now)]))[0] : await statement.run();
     if (Number(result.meta.changes) !== 1) {
       const retry = await ownPost(access, id);
       if (retry?.last_request_hash === hash) { await deliverNetworkPost(retry); return postProjection(retry, access); }
+      if (publication) await enforceDailyLimit(access.ownerUid, now);
       throw new NetworkError("NETWORK_POST_LIMIT", "Could not publish. Refresh the network or close an old listing if you already have 20 active listings.", 409);
     }
   } else {
-    const result = await db.prepare(`UPDATE trade_network_posts SET kind=?,title=?,trade=?,suburb=?,postcode=?,state=?,details=?,rate_cents=?,rate_unit=?,starts_on=?,ends_on=?,
-      revision=revision+1,last_request_hash=?,updated_by_uid=?,updated_at=? WHERE id=? AND owner_uid=? AND revision=? AND ${enabledOwnerSql("trade_network_posts.owner_uid")}`)
-      .bind(...postValues(post), hash, access.actorUid, now, id, access.ownerUid, expectedRevision).run();
+    const statement = db.prepare(`UPDATE trade_network_posts SET kind=?,title=?,trade=?,suburb=?,postcode=?,state=?,details=?,rate_cents=?,rate_unit=?,starts_on=?,ends_on=?,
+      revision=revision+1,last_request_hash=?,updated_by_uid=?,updated_at=? WHERE id=? AND owner_uid=? AND revision=? AND ${enabledOwnerSql("trade_network_posts.owner_uid")}
+      ${publication ? `AND ${publicationGuard}` : ""}`)
+      .bind(...postValues(post), hash, access.actorUid, now, id, access.ownerUid, expectedRevision, ...publicationBindings);
+    const result = publication ? (await db.batch([statement, publicationStatement(access, id, hash, now)]))[0] : await statement.run();
     if (Number(result.meta.changes) !== 1) {
       const retry = await ownPost(access, id);
       if (retry?.last_request_hash === hash) { await deliverNetworkPost(retry); return postProjection(retry, access); }
+      if (publication) await enforceDailyLimit(access.ownerUid, now);
       throw conflict();
     }
   }
@@ -333,16 +374,20 @@ export async function changeNetworkPost(access: TeamAccess, action: "close_post"
   const id = networkId(rawId), expectedRevision = networkRevision(revision), hash = await requestHash({ action, id, expectedRevision });
   const previous = await ownPost(access, id);
   if (!previous) throw unavailable();
+  if (action === "renew_post" && !pricedPost(previous)) return networkInvalid("Edit this post to add a price greater than zero before renewing.");
   if (action === "renew_post" && (!postcodeCoordinate(String(previous.postcode)) || !postcodeMatchesState(String(previous.postcode), String(previous.state)))) return networkInvalid("Edit this post to choose a recognised postcode and its matching state before renewing.");
   if (previous.last_request_hash === hash) { await deliverNetworkPost(previous); return postProjection(previous, access); }
   if (Number(previous.revision) !== expectedRevision) throw conflict();
   const now = new Date().toISOString(), renew = action === "renew_post";
-  const result = await getD1().prepare(`UPDATE trade_network_posts SET status=?, expires_at=?, revision=revision+1,last_request_hash=?,updated_by_uid=?,updated_at=?
+  const publication = renew && previous.kind === "work";
+  const statement = getD1().prepare(`UPDATE trade_network_posts SET status=?, expires_at=?, revision=revision+1,last_request_hash=?,updated_by_uid=?,updated_at=?
     WHERE id=? AND owner_uid=? AND revision=? AND ${renew ? enabledOwnerSql("trade_network_posts.owner_uid") : verifiedOwnerSql("trade_network_posts.owner_uid")}
-    ${renew ? `AND (SELECT COUNT(*) FROM trade_network_posts other WHERE other.owner_uid = trade_network_posts.owner_uid AND other.id <> trade_network_posts.id AND other.status='active' AND other.expires_at > ?) < ${POST_LIMIT}` : ""}`)
-    .bind(renew ? "active" : "closed", renew ? new Date(Date.now() + 30 * 86_400_000).toISOString() : previous.expires_at, hash, access.actorUid, now, id, access.ownerUid, expectedRevision, ...(renew ? [now] : [])).run();
+    ${renew ? `AND (SELECT COUNT(*) FROM trade_network_posts other WHERE other.owner_uid = trade_network_posts.owner_uid AND other.id <> trade_network_posts.id AND other.status='active' AND other.expires_at > ?) < ${POST_LIMIT}` : ""}
+    ${publication ? `AND ${publicationGuard}` : ""}`)
+    .bind(renew ? "active" : "closed", renew ? new Date(Date.now() + 30 * 86_400_000).toISOString() : previous.expires_at, hash, access.actorUid, now, id, access.ownerUid, expectedRevision, ...(renew ? [now] : []), ...(publication ? [access.ownerUid, australianRegulatorDate(now)] : []));
+  const result = publication ? (await getD1().batch([statement, publicationStatement(access, id, hash, now)]))[0] : await statement.run();
   const saved = await ownPost(access, id);
-  if (Number(result.meta.changes) !== 1 && saved?.last_request_hash !== hash) throw conflict();
+  if (Number(result.meta.changes) !== 1 && saved?.last_request_hash !== hash) { if (publication) await enforceDailyLimit(access.ownerUid, now); throw conflict(); }
   if (!saved) throw unavailable();
   await deliverNetworkPost(saved);
   return postProjection(saved, access);

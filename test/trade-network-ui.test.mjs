@@ -27,10 +27,11 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 const response = body => Response.json({ ok: true, ...body });
 const post = (changes = {}) => ({ id: "b2510244-bf9b-45b5-994c-75cd84c301d0", kind: "work", title: "Plumber needed", trade: "Plumbing", suburb: "Richmond", postcode: "3121", state: "VIC", details: "Help with hot water installs.", rateCents: 9000, rateUnit: "hour", startsOn: "", endsOn: "", businessName: "Example Plumbing", isOwn: false, status: "active", revision: 1, expiresAt: "2026-10-27T00:00:00Z", createdAt: "2026-09-27T00:00:00Z", updatedAt: "2026-09-27T00:00:00Z", enquiryId: "", ...changes });
 const enquiry = { id: "20c4c35e-476c-4f77-9fba-e15371952f45", postId: post().id, postTitle: "Roofing work", postKind: "work", businessName: "Private Respondent", direction: "incoming", message: "Available tomorrow", senderContact: { name: "Pat Private", email: "private@example.test", phone: "0400000000" }, recipientContact: null, status: "pending", revision: 1, createdAt: "2026-09-27T00:00:00Z", updatedAt: "2026-09-27T00:00:00Z" };
-const availability = changes => ({ openToWork: true, workTrades: ["Plumbing"], serviceAreas: [{ postcode: "3121", radiusKm: 20 }], serviceStates: ["VIC"], paused: false, ...changes });
+const availability = changes => ({ openToWork: true, workTrades: ["Plumbing"], minimumRates: { hour: null, day: null, job: null }, serviceAreas: [{ postcode: "3121", radiusKm: 20 }], serviceStates: ["VIC"], paused: false, ...changes });
 const lead = changes => ({ ...post(), leadStatus: "new", receivedAt: "2026-09-27T00:00:00Z", ...changes });
 const workspace = changes => ({ enabled: true, canManageMembership: true, posts: [post()], myPosts: [], enquiries: [], hasMore: false, myHasMore: false, enquiriesHasMore: false,
-  availability: availability(), leads: changes?.enabled === false ? [] : [lead()], leadCount: changes?.enabled === false ? 0 : 1, leadsHasMore: false, ...changes });
+  availability: availability(), leads: changes?.enabled === false ? [] : [lead()], leadCount: changes?.enabled === false ? 0 : 1, leadsHasMore: false,
+  workPostAllowance: { limit: 5, remaining: 5, day: "2026-09-27", timeZone: "Australia/Sydney" }, ...changes });
 function harness(t, options = {}) {
   let cursor = 0, uuid = 0, stopped = false;
   const state = [], effects = [], pending = [], requests = [], serviceAreaOpens = [], clearedPosts = [];
@@ -57,8 +58,8 @@ function harness(t, options = {}) {
 }
 function change(h, label, value) { field(h.render(), label).props.onChange({ target: { value } }); }
 function submit(tree, label) { const selected = form(tree, label); assert.ok(selected, `Missing form ${label}`); selected.props.onSubmit({ preventDefault() {} }); }
-function fillPost(h) {
-  for (const [label, value] of [["Title", "Plumber for installs"], ["Trade", "Plumbing"], ["Suburb", "Richmond"], ["Postcode", "3121"], ["State", "VIC"], ["What do you need?", "Plumbing work next week."]]) change(h, label, value);
+function fillPost(h, kind = "work") {
+  for (const [label, value] of [["Title", "Plumber for installs"], ["Trade", "Plumbing"], ["Suburb", "Richmond"], ["Postcode", "3121"], ["State", "VIC"], [kind === "work" ? "What do you need?" : "What work can you help with?", "Plumbing work next week."]]) change(h, label, value);
 }
 test("default-off UI hides feed and contacts, offers owner join and gives members a clear message", async t => {
   const h = harness(t, { data: { enabled: false, posts: [], enquiries: [enquiry] } });
@@ -179,7 +180,7 @@ test("first Open to work toggle chooses trades before one save enables matching"
   await tick(); tree = h.render();
   assert.equal(workSwitch(tree).props.disabled, true); assert.equal(workSwitch(tree).props["aria-checked"], false);
   const writes = h.requests.filter(request => request.body); assert.equal(writes.length, 1);
-  assert.deepEqual(writes[0].body, { action: "availability", openToWork: true, workTrades: ["Plumbing", "Electrical"] });
+  assert.deepEqual(writes[0].body, { action: "availability", openToWork: true, workTrades: ["Plumbing", "Electrical"], minimumRates: { hour: null, day: null, job: null } });
   finish(); tree = await h.settle();
   assert.equal(workSwitch(tree).props["aria-checked"], true); assert.match(text(tree), /You're open to work/);
   assert.equal(button(tree, "Save and switch on"), undefined);
@@ -196,7 +197,7 @@ test("availability server rejection retains the prior switch and chosen trades w
 });
 
 test("Open to work switches off directly with saved trades and service-area edits use the callback", async t => {
-  const h = harness(t); let tree = await h.settle();
+  const h = harness(t, { data: { availability: availability({ minimumRates: { hour: 9000, day: 65000, job: 120000 } }) } }); let tree = await h.settle();
   button(tree, "Edit service area").props.onClick(); assert.deepEqual(h.serviceAreaOpens, [true]);
   assert.equal(h.requests.filter(request => request.body).length, 0);
   workSwitch(tree).props.onClick(); await tick();
@@ -246,4 +247,92 @@ test("an unavailable exact lead stays empty instead of opening a directory recor
   const tree = await h.settle(); assert.match(text(tree), /This lead is no longer available/);
   assert.doesNotMatch(text(tree), /Unrelated directory work/); assert.equal(button(tree, "Enquire"), undefined); assert.equal(button(tree, "Dismiss"), undefined);
   assert.equal(h.clearedPosts.length, 0); assert.equal(h.requests.length, 1);
+});
+
+test("minimum rates prefill in dollars, save exact cents for every unit and clear back to any price", async t => {
+  let current = availability({ minimumRates: { hour: 9550, day: 65000, job: null } });
+  const h = harness(t, { respond: request => {
+    if (!request.body) return response(workspace({ availability: current }));
+    current = { ...current, minimumRates: request.body.minimumRates };
+    return response({ availability: current });
+  } });
+  let tree = await h.settle(); assert.match(text(tree), /Minimums:.*95\.5.*hour.*650.*day.*ex GST/);
+  button(tree, "Trades & rates").props.onClick(); tree = h.render();
+  assert.equal(field(tree, "Per hour").props.value, "95.50"); assert.equal(field(tree, "Per day").props.value, "650.00"); assert.equal(field(tree, "Per job").props.value, "");
+  assert.match(text(tree), /Only jobs meeting the matching minimum arrive as leads. You can still browse all posts/);
+  change(h, "Per hour", "100.25"); change(h, "Per day", "750.50"); change(h, "Per job", "1000");
+  submit(h.render(), "Save preferences"); tree = await h.settle();
+  assert.deepEqual(h.requests.find(request => request.body).body, { action: "availability", openToWork: true, workTrades: ["Plumbing"], minimumRates: { hour: 10025, day: 75050, job: 100000 } });
+  assert.match(text(tree), /Your work preferences are saved/); assert.equal(button(tree, "Save preferences"), undefined);
+  button(tree, "Trades & rates").props.onClick(); tree = h.render();
+  assert.equal(field(tree, "Per hour").props.value, "100.25"); assert.equal(field(tree, "Per day").props.value, "750.50"); assert.equal(field(tree, "Per job").props.value, "1000.00");
+  for (const label of ["Per hour", "Per day", "Per job"]) change(h, label, "");
+  submit(h.render(), "Save preferences"); tree = await h.settle();
+  assert.deepEqual(h.requests.filter(request => request.body).at(-1).body.minimumRates, { hour: null, day: null, job: null });
+  assert.doesNotMatch(text(tree), /Minimums:/);
+});
+
+test("invalid optional minimum rates are rejected before any save for each rate type", async t => {
+  const h = harness(t); const tree = await h.settle(); button(tree, "Trades & rates").props.onClick();
+  for (const label of ["Per hour", "Per day", "Per job"]) {
+    for (const value of ["0", "0.00", "-1", "1.234", "1e3", "not money", "1000000.01"]) {
+      change(h, label, value); submit(h.render(), "Save preferences"); await tick();
+      assert.ok(nodes(h.render(), node => node.props?.role === "alert").length, `${label}: ${value} must show an error`);
+      assert.equal(h.requests.filter(request => request.body).length, 0);
+    }
+    change(h, label, "");
+  }
+});
+
+test("cancelling trades and minimum rates sends no mutation and restores saved preferences", async t => {
+  const h = harness(t, { data: { availability: availability({ minimumRates: { hour: 9000, day: null, job: null } }) } });
+  let tree = await h.settle(); button(tree, "Trades & rates").props.onClick();
+  change(h, "Per hour", "125.50"); button(h.render(), "Electrical").props.onClick(); button(h.render(), "Cancel").props.onClick();
+  tree = h.render(); assert.equal(h.requests.filter(request => request.body).length, 0); assert.equal(button(tree, "Save preferences"), undefined);
+  button(tree, "Trades & rates").props.onClick(); tree = h.render();
+  assert.equal(field(tree, "Per hour").props.value, "90.00"); assert.equal(button(tree, "Electrical").props["aria-pressed"], false);
+  assert.equal(button(tree, "Plumbing").props["aria-pressed"], true);
+});
+
+for (const kind of ["work", "available"]) test(`${kind} posts require a positive price before submission`, async t => {
+  const h = harness(t); let tree = await h.settle();
+  if (kind === "work") button(tree, "Need a subcontractor").props.onClick();
+  else { button(tree, "Available trades").props.onClick(); tree = await h.settle(); button(tree, "List my business").props.onClick(); }
+  fillPost(h, kind);
+  const priceLabel = kind === "work" ? "Offered rate (ex GST)" : "Minimum rate (ex GST)", submitLabel = kind === "work" ? "Post work" : "Post availability";
+  assert.equal(field(h.render(), priceLabel).props.required, true);
+  for (const value of ["", "   ", "0", "0.00"]) {
+    change(h, priceLabel, value); submit(h.render(), submitLabel); tree = h.render();
+    assert.match(text(tree), /Enter a price before posting|Enter a price greater than zero/);
+    assert.equal(h.requests.filter(request => request.body).length, 0);
+  }
+  change(h, priceLabel, "125.50"); change(h, "Rate per", "job"); submit(h.render(), submitLabel); await tick();
+  assert.equal(h.requests.find(request => request.body).body.post.rateCents, 12550);
+  assert.equal(h.requests.find(request => request.body).body.post.rateUnit, "job");
+});
+
+for (const [status, rateCents] of [["closed", null], ["expired", 0]]) test(`legacy ${status} unpriced posts open the price editor before renewal`, async t => {
+  const legacy = post({ isOwn: true, status, rateCents, revision: 3 });
+  const h = harness(t, { data: { myPosts: [legacy], workPostAllowance: { limit: 5, remaining: 0, day: "2026-09-27", timeZone: "Australia/Sydney" } } }); let tree = await h.settle();
+  button(tree, "My posts").props.onClick(); tree = await h.settle();
+  assert.equal(button(tree, "Renew post"), undefined); button(tree, "Add price to renew").props.onClick(); tree = h.render();
+  assert.ok(button(tree, "Save changes")); assert.equal(field(tree, "Offered rate (ex GST)").props.required, true);
+  assert.equal(h.requests.filter(request => request.body).length, 0);
+  submit(tree, "Save changes"); await tick(); assert.equal(h.requests.filter(request => request.body).length, 0);
+  change(h, "Offered rate (ex GST)", "90"); submit(h.render(), "Save changes"); await tick();
+  const saved = h.requests.find(request => request.body).body;
+  assert.equal(saved.action, "save_post"); assert.equal(saved.id, legacy.id); assert.equal(saved.expectedRevision, 3); assert.equal(saved.post.rateCents, 9000);
+});
+
+test("daily work quota shows the remaining count and blocks new work and renewals while allowing existing edits", async t => {
+  const h = harness(t, { data: { workPostAllowance: { limit: 5, remaining: 0, day: "2026-09-27", timeZone: "Australia/Sydney" }, myPosts: [post({ isOwn: true, status: "closed" })] } });
+  let tree = await h.settle(); assert.equal(button(tree, "Need a subcontractor").props.disabled, true);
+  assert.match(text(tree), /0\s+of\s+5\s+job posts left today/); assert.match(text(tree), /Resets at midnight Sydney time/); assert.match(text(tree), /New posts and renewals count/);
+  button(tree, "My posts").props.onClick(); tree = await h.settle(); assert.equal(button(tree, "Renew post").props.disabled, true);
+  assert.equal(button(tree, "Edit").props.disabled, false); button(tree, "Edit").props.onClick(); tree = h.render();
+  assert.ok(button(tree, "Save changes")); assert.equal(button(tree, "Save changes").props.disabled, false);
+  button(tree, "Cancel").props.onClick(); button(h.render(), "Available trades").props.onClick(); tree = await h.settle();
+  assert.equal(button(tree, "List my business").props.disabled, false);
+  const available = harness(t, { data: { workPostAllowance: { limit: 5, remaining: 2, day: "2026-09-27", timeZone: "Australia/Sydney" } } });
+  tree = await available.settle(); assert.match(text(tree), /2\s+of\s+5\s+job posts left today/); assert.equal(button(tree, "Need a subcontractor").props.disabled, false);
 });

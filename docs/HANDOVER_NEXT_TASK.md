@@ -1,9 +1,17 @@
 # Next task handover
 
-Status: automatic trade leads and simple work availability are in release validation. Verified baseline Sites 645, source 410b90fc3ff71ce40363dbd5f8038ae5e89ba597.
+Status: minimum work rates and five daily job publications are in release validation. Verified baseline Sites 647, source 77d4dd7ba30bee8fb4e40659de56d49cc4a254ae.
 Prepared: 27 September 2026
 
-## Active contract: all matching trades receive local work leads
+## Active contract: simple work preferences and bounded job publication
+
+Outcome: businesses optionally save minimum hourly, daily and per-job rates; automatic leads respect the matching unit while all posts remain browsable. Every new or edited post requires a positive price. Each business may publish five work posts per Sydney calendar day, shared across team members. Renewals count; ordinary edits and successful retries do not. Available-trade listings retain the existing active-post limit.
+
+Scope: network contract, server, route, workspace, tests and migration 0203 in C:/Webproject/aea-energy-tlink-map on codex/tlink-customer-job-map. Preserve minimums omitted by older clients; private minimums never enter another business's post response. Legacy unpriced work is browse-only until edited and cannot renew unpriced.
+
+Acceptance: same-unit inclusive comparisons, no automatic rate conversion, private business preferences, all eligible recipients, D1 atomic cap and rollback, Sydney date/DST, no quota charge for retries/failed writes, simple desktop/mobile day/night UI. Validation: focused tests, typecheck, scoped lint, full suite, migration replay and committed publication build. Final release evidence belongs in C:/Webproject/outputs/tlink-network-minimum-rates-2026-09-27/.
+
+## Previous contract: all matching trades receive local work leads
 
 Outcome: a work post becomes a lead for every verified business that explicitly switches on Open to work, selects the matching trade and covers the job postcode within its saved service states and areas. One copy per recipient, no recipient limit. The network opens Your leads and the notification bell opens the exact post.
 

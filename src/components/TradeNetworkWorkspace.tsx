@@ -3,17 +3,28 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
 import { NETWORK_PAGE_SIZE, NETWORK_STATES, NETWORK_TRADES, networkText, normalizeNetworkContact, normalizeNetworkPost,
-  type NetworkContact, type NetworkEnquiry, type NetworkKind, type NetworkPost, type NetworkPostInput,
+  type NetworkContact, type NetworkEnquiry, type NetworkKind, type NetworkMinimumRates, type NetworkPost, type NetworkPostInput,
   type NetworkWorkspace } from "@/lib/trade-network";
 import styles from "./TradeNetworkWorkspace.module.css";
 
 type View = NetworkKind | "leads" | "mine" | "enquiries";
 type Editor = { id: string; revision: number; post: NetworkPostInput; rate: string };
+type RateInputs = { hour: string; day: string; job: string };
+type AvailabilityEditor = { trades: string[]; openToWork: boolean; minimumRates: RateInputs };
 type ContactEditor = { id: string; post?: NetworkPost; enquiry?: NetworkEnquiry; message: string; contact: NetworkContact };
 type ApiResult = Partial<NetworkWorkspace> & { ok?: boolean; error?: string };
 const blankPost = (kind: NetworkKind): NetworkPostInput => ({ kind, title: "", trade: "", suburb: "", postcode: "", state: "", details: "", rateCents: null, rateUnit: "hour", startsOn: "", endsOn: "" });
 const dateLabel = (date: string) => new Date(`${date.slice(0, 10)}T12:00:00Z`).toLocaleDateString("en-AU", { day: "numeric", month: "short" });
 const rateLabel = (post: NetworkPost) => post.rateCents === null ? "Rate to discuss" : `${post.kind === "available" ? "From " : ""}${new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: post.rateCents % 100 ? 2 : 0 }).format(post.rateCents / 100)} / ${post.rateUnit} ex GST`;
+const rateInputs = (rates: NetworkMinimumRates): RateInputs => ({ hour: rates.hour === null ? "" : (rates.hour / 100).toFixed(2), day: rates.day === null ? "" : (rates.day / 100).toFixed(2), job: rates.job === null ? "" : (rates.job / 100).toFixed(2) });
+const rateUnits = [["hour", "Per hour"], ["day", "Per day"], ["job", "Per job"]] as const;
+function minimumCents(value: string): number | null {
+  if (!value.trim()) return null;
+  if (!/^\d+(\.\d{1,2})?$/.test(value)) throw new Error("Enter minimum rates with up to two decimal places, or leave them blank.");
+  const cents = Math.round(Number(value) * 100);
+  if (!Number.isSafeInteger(cents) || cents < 1 || cents > 100_000_000) throw new Error("Enter a minimum greater than $0 and no more than $1,000,000, or leave it blank.");
+  return cents;
+}
 
 function ContactDetails({ contact }: { contact: NetworkContact }) {
   return <address className={styles.contact}><strong>{contact.name}</strong>{contact.email && <a href={`mailto:${contact.email}`}>{contact.email}</a>}{contact.phone && <a href={`tel:${contact.phone.replace(/[^+\d]/g, "")}`}>{contact.phone}</a>}</address>;
@@ -27,7 +38,7 @@ export function TradeNetworkWorkspace({ user, initialPostId = "", onClearPost, o
   const [applied, setApplied] = useState(filters);
   const [offset, setOffset] = useState(0), [myOffset, setMyOffset] = useState(0), [enquiryOffset, setEnquiryOffset] = useState(0);
   const [leadsOffset, setLeadsOffset] = useState(0);
-  const [availabilityEditor, setAvailabilityEditor] = useState<{ trades: string[]; openToWork: boolean } | null>(null);
+  const [availabilityEditor, setAvailabilityEditor] = useState<AvailabilityEditor | null>(null);
   const [reload, setReload] = useState(0);
   const [loaded, setLoaded] = useState<{ key: string; data: NetworkWorkspace } | null>(null);
   const [loadFailure, setLoadFailure] = useState<{ key: string; message: string } | null>(null);
@@ -55,11 +66,11 @@ export function TradeNetworkWorkspace({ user, initialPostId = "", onClearPost, o
     const controller = new AbortController();
     request({ signal: controller.signal }, query).then(result => {
       if (controller.signal.aborted) return;
-      if (typeof result.enabled !== "boolean" || typeof result.canManageMembership !== "boolean" || !Array.isArray(result.posts) || !Array.isArray(result.myPosts) || !Array.isArray(result.enquiries) || !Array.isArray(result.leads) || !result.availability || !Array.isArray(result.availability.workTrades) || !Array.isArray(result.availability.serviceAreas) || !Array.isArray(result.availability.serviceStates) || typeof result.availability.openToWork !== "boolean" || typeof result.availability.paused !== "boolean" || typeof result.leadCount !== "number") throw new Error("The trade network response was incomplete. Please try again.");
+      if (typeof result.enabled !== "boolean" || typeof result.canManageMembership !== "boolean" || !Array.isArray(result.posts) || !Array.isArray(result.myPosts) || !Array.isArray(result.enquiries) || !Array.isArray(result.leads) || !result.availability || !Array.isArray(result.availability.workTrades) || !Array.isArray(result.availability.serviceAreas) || !Array.isArray(result.availability.serviceStates) || typeof result.availability.openToWork !== "boolean" || typeof result.availability.paused !== "boolean" || typeof result.leadCount !== "number" || !result.workPostAllowance || !Number.isInteger(result.workPostAllowance.remaining) || !result.availability.minimumRates || !rateUnits.every(([unit]) => result.availability?.minimumRates[unit] === null || (Number.isSafeInteger(result.availability?.minimumRates[unit]) && Number(result.availability?.minimumRates[unit]) > 0))) throw new Error("The trade network response was incomplete. Please try again.");
       setLoaded({ key, data: { enabled: result.enabled, canManageMembership: result.canManageMembership,
         posts: result.posts, myPosts: result.myPosts, enquiries: result.enquiries, hasMore: result.hasMore === true,
         myHasMore: result.myHasMore === true, enquiriesHasMore: result.enquiriesHasMore === true,
-        availability: result.availability, leads: result.leads, leadCount: result.leadCount, leadsHasMore: result.leadsHasMore === true } });
+        availability: result.availability, leads: result.leads, leadCount: result.leadCount, leadsHasMore: result.leadsHasMore === true, workPostAllowance: result.workPostAllowance } });
     }).catch(reason => { if (!controller.signal.aborted) setLoadFailure({ key, message: reason instanceof Error ? reason.message : "The trade network could not be loaded." }); });
     return () => controller.abort();
   }, [request, query, key]);
@@ -95,7 +106,7 @@ export function TradeNetworkWorkspace({ user, initialPostId = "", onClearPost, o
   function toggleAvailability() {
     if (!data) return;
     if (!data.availability.openToWork && !data.availability.workTrades.length) {
-      setAvailabilityEditor({ trades: [], openToWork: true });
+      setAvailabilityEditor({ trades: [], openToWork: true, minimumRates: rateInputs(data.availability.minimumRates) });
       return;
     }
     void mutate({ action: "availability", openToWork: !data.availability.openToWork, workTrades: data.availability.workTrades }, data.availability.openToWork ? "New trade leads are switched off." : "You are open to work. Matching jobs will arrive here automatically.");
@@ -103,13 +114,18 @@ export function TradeNetworkWorkspace({ user, initialPostId = "", onClearPost, o
   function saveAvailability(event: FormEvent) {
     event.preventDefault(); if (!availabilityEditor) return;
     if (!availabilityEditor.trades.length) { setError("Choose at least one trade so we can match the right work."); return; }
-    void mutate({ action: "availability", openToWork: availabilityEditor.openToWork, workTrades: availabilityEditor.trades }, "Your work preferences are saved.", () => setAvailabilityEditor(null));
+    try {
+      const inputs = availabilityEditor.minimumRates;
+      const minimumRates = { hour: minimumCents(inputs.hour), day: minimumCents(inputs.day), job: minimumCents(inputs.job) };
+      void mutate({ action: "availability", openToWork: availabilityEditor.openToWork, workTrades: availabilityEditor.trades, minimumRates }, "Your work preferences are saved.", () => setAvailabilityEditor(null));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Check your minimum rates."); }
   }
   function contactField(name: keyof NetworkContact, value: string) { setContactEditor(current => current ? { ...current, contact: { ...current.contact, [name]: value } } : null); }
   function savePost(event: FormEvent) {
     event.preventDefault(); if (!editor || !data?.enabled) return;
     try {
-      if (editor.rate && !/^\d+(\.\d{1,2})?$/.test(editor.rate)) throw new Error("Enter a rate with up to two decimal places.");
+      if (!editor.rate.trim()) throw new Error("Enter a price before posting.");
+      if (!/^\d+(\.\d{1,2})?$/.test(editor.rate)) throw new Error("Enter a rate with up to two decimal places.");
       const post = normalizeNetworkPost({ ...editor.post, rateCents: editor.rate ? Math.round(Number(editor.rate) * 100) : null });
       void mutate({ action: "save_post", id: editor.id, expectedRevision: editor.revision, post }, post.kind === "work" ? "Work posted. Matching businesses open to work receive it as a lead." : "Your availability is posted.", () => { setEditor(null); setView("mine"); setMyOffset(0); });
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Check the post details."); }
@@ -131,8 +147,9 @@ export function TradeNetworkWorkspace({ user, initialPostId = "", onClearPost, o
 
   return <section className={`dashboard-panel ${styles.workspace}`} aria-labelledby="trade-network-heading">
     <header className={styles.header}><div><span className={styles.eyebrow}>Local trades. More opportunities.</span><h2 id="trade-network-heading">Trade network</h2><p>Work from other trades, matched to your area.</p></div>
-      {data?.enabled && <button className={styles.primary} disabled={busy} onClick={() => editPost("work")}><span aria-hidden="true">+</span> Need a subcontractor</button>}
+      {data?.enabled && <button className={styles.primary} disabled={busy || data.workPostAllowance.remaining === 0} onClick={() => editPost("work")}><span aria-hidden="true">+</span> Need a subcontractor</button>}
     </header>
+    {data?.enabled && <p className={styles.postAllowance}>{data.workPostAllowance.remaining} of {data.workPostAllowance.limit} job posts left today · Resets at midnight Sydney time. New posts and renewals count.</p>}
     {loadError && <div className={styles.error} role="alert">{loadError} <button onClick={() => setReload(value => value + 1)}>Try again</button></div>}
     {notice && <p className={styles.notice} role="status">{notice}</p>}
     {!data && !loadError && <p role="status" className={styles.empty}>Loading trade network…</p>}
@@ -144,8 +161,16 @@ export function TradeNetworkWorkspace({ user, initialPostId = "", onClearPost, o
         <div className={styles.availabilityTop}><div><h3><span className={styles.liveDot} aria-hidden="true" />{available.paused ? "Business availability is paused" : receiving ? "You're open to work" : "Receive work from local trades"}</h3><p>{available.paused ? "Update availability in Business settings to receive matching leads." : receiving ? `${available.workTrades.join(" · ")} jobs arrive here automatically.` : "Switch on to receive jobs that match your trades and service area."}</p></div>
           <button type="button" role="switch" aria-checked={available.openToWork} aria-label="Open to work" className={styles.toggle} disabled={busy} onClick={toggleAvailability}><span aria-hidden="true" />{available.openToWork ? "On" : "Off"}</button>
         </div>
-        <div className={styles.coverage}><span>{available.serviceAreas.length ? available.serviceAreas.map(area => `${area.postcode} + ${area.radiusKm} km`).join(" · ") : "Set your service area to receive matching work"}{available.serviceStates.length ? ` · ${available.serviceStates.join(", ")}` : ""}</span><div className={styles.actions}><button className={styles.textButton} disabled={busy} onClick={onOpenServiceAreas}>Edit service area</button><button className={styles.textButton} disabled={busy} onClick={() => { setAvailabilityEditor({ trades: available.workTrades, openToWork: available.openToWork }); setError(""); }}>Choose trades</button></div></div>
-        {availabilityEditor && <form className={styles.tradeChooser} onSubmit={saveAvailability}><h3>What work do you want?</h3><p>Choose your trades once. We use the service areas already in your business settings.</p><div className={styles.tradeChips}>{NETWORK_TRADES.map(trade => <button type="button" key={trade} disabled={busy} aria-pressed={availabilityEditor.trades.includes(trade)} onClick={() => setAvailabilityEditor(current => current ? { ...current, trades: current.trades.includes(trade) ? current.trades.filter(value => value !== trade) : [...current.trades, trade] } : null)}>{trade}</button>)}</div><div className={styles.actions}><button type="submit" className={styles.primary} disabled={busy}>{busy ? "Saving…" : availabilityEditor.openToWork && !available.openToWork ? "Save and switch on" : "Save trades"}</button><button type="button" disabled={busy} onClick={() => { setAvailabilityEditor(null); setError(""); }}>Cancel</button></div></form>}
+        <div className={styles.coverage}><span>{available.serviceAreas.length ? available.serviceAreas.map(area => `${area.postcode} + ${area.radiusKm} km`).join(" · ") : "Set your service area to receive matching work"}{available.serviceStates.length ? ` · ${available.serviceStates.join(", ")}` : ""}</span><div className={styles.actions}><button className={styles.textButton} disabled={busy} onClick={onOpenServiceAreas}>Edit service area</button><button className={styles.textButton} disabled={busy} onClick={() => { setAvailabilityEditor({ trades: available.workTrades, openToWork: available.openToWork, minimumRates: rateInputs(available.minimumRates) }); setError(""); }}>Trades & rates</button></div></div>
+        {!availabilityEditor && rateUnits.some(([unit]) => available.minimumRates[unit] !== null) && <p className={styles.rateSummary}>Minimums: {rateUnits.filter(([unit]) => available.minimumRates[unit] !== null).map(([unit]) => `$${Number(available.minimumRates[unit]) / 100} / ${unit}`).join(" · ")} ex GST</p>}
+        {availabilityEditor && <form className={styles.tradeChooser} onSubmit={saveAvailability}>
+          <h3>What work do you want?</h3><p>Choose your trades. We use the service areas already in your business settings.</p>
+          <div className={styles.tradeChips}>{NETWORK_TRADES.map(trade => <button type="button" key={trade} disabled={busy} aria-pressed={availabilityEditor.trades.includes(trade)} onClick={() => setAvailabilityEditor(current => current ? { ...current, trades: current.trades.includes(trade) ? current.trades.filter(value => value !== trade) : [...current.trades, trade] } : null)}>{trade}</button>)}</div>
+          <h3>Your minimum rates</h3><p id="network-minimum-help">Optional, excluding GST. Leave a field blank to accept any price for that rate type.</p>
+          <fieldset className={styles.minimumRates} disabled={busy} aria-label="Minimum rates" aria-describedby="network-minimum-help">{rateUnits.map(([unit, label]) => <label key={unit}>{label}<input inputMode="decimal" maxLength={10} placeholder="Any price" value={availabilityEditor.minimumRates[unit]} onChange={event => { const value = event.target.value; setAvailabilityEditor(current => current ? { ...current, minimumRates: { ...current.minimumRates, [unit]: value } } : null); }} /></label>)}</fieldset>
+          <p className={styles.minimumHelp}>Only jobs meeting the matching minimum arrive as leads. You can still browse all posts.</p>
+          <div className={styles.actions}><button type="submit" className={styles.primary} disabled={busy}>{busy ? "Saving…" : availabilityEditor.openToWork && !available.openToWork ? "Save and switch on" : "Save preferences"}</button><button type="button" disabled={busy} onClick={() => { setAvailabilityEditor(null); setError(""); }}>Cancel</button></div>
+        </form>}
       </section>}
       <nav className={styles.tabs} aria-label="Trade network views">{([ ["leads", "Your leads"], ["enquiries", "Enquiries"], ["work", "Work available"], ["available", "Available trades"], ["mine", "My posts"] ] as const).map(([value, label]) => <button key={value} aria-pressed={view === value} disabled={busy} onClick={() => selectView(value)}>{label}{value === "leads" && data.leadCount > 0 && <span className={styles.count}>{data.leadCount}</span>}</button>)}</nav>
       {editor && data.enabled ? <form className={styles.editor} onSubmit={savePost}>
@@ -157,8 +182,8 @@ export function TradeNetworkWorkspace({ user, initialPostId = "", onClearPost, o
           <label>Postcode<input required inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={editor.post.postcode} onChange={event => field("postcode", event.target.value)} /></label>
           <label>State<select required value={editor.post.state} onChange={event => field("state", event.target.value)}><option value="">Choose state</option>{NETWORK_STATES.map(state => <option key={state}>{state}</option>)}</select></label>
           <label className={styles.wide}>{editor.post.kind === "work" ? "What do you need?" : "What work can you help with?"}<textarea required rows={3} maxLength={2000} value={editor.post.details} onChange={event => field("details", event.target.value)} /><small>Use the suburb only. Keep customer names, site addresses and private documents out of your post.</small></label>
-          <label>{editor.post.kind === "work" ? "Offered rate (ex GST)" : "Minimum rate (ex GST)"}<input inputMode="decimal" placeholder="Optional, discuss later" maxLength={10} value={editor.rate} onChange={event => setEditor({ ...editor, rate: event.target.value })} /></label>
-          <label>Rate per<select value={editor.post.rateUnit} onChange={event => field("rateUnit", event.target.value === "day" ? "day" : event.target.value === "job" ? "job" : "hour")}><option value="hour">Hour</option><option value="day">Day</option><option value="job">Job</option></select></label>
+          <label>{editor.post.kind === "work" ? "Offered rate (ex GST)" : "Minimum rate (ex GST)"}<input required inputMode="decimal" placeholder="Required, e.g. 90.00" maxLength={10} value={editor.rate} onChange={event => setEditor({ ...editor, rate: event.target.value })} /></label>
+          <label>Rate per<select required value={editor.post.rateUnit} onChange={event => field("rateUnit", event.target.value === "day" ? "day" : event.target.value === "job" ? "job" : "hour")}><option value="hour">Hour</option><option value="day">Day</option><option value="job">Job</option></select></label>
           <details className={styles.wide}><summary>Add dates (optional)</summary><div className={styles.dateFields}><label>From<input type="date" data-date-range-group="trade-network-post" data-date-range-role="start" value={editor.post.startsOn} onChange={event => field("startsOn", event.target.value)} /></label><label>Until<input type="date" data-date-range-group="trade-network-post" data-date-range-role="end" min={editor.post.startsOn || undefined} value={editor.post.endsOn} onChange={event => field("endsOn", event.target.value)} /></label></div></details>
         </fieldset>
         {error && <p className={styles.error} role="alert">{error}</p>}
@@ -176,7 +201,8 @@ export function TradeNetworkWorkspace({ user, initialPostId = "", onClearPost, o
         <div className={styles.actions}><button type="submit" className={styles.primary} disabled={busy}>{busy ? "Saving…" : contactEditor.enquiry ? "Connect" : "Send enquiry"}</button><button type="button" disabled={busy} onClick={() => { setContactEditor(null); setError(""); }}>Cancel</button></div>
       </form> : <>
         {error && <p className={styles.error} role="alert">{error}</p>}
-        {view === "leads" && data.enabled && <div className={styles.sectionHeading}><div><h3>{initialPostId ? "Your trade lead" : "Matched to your business"}</h3><p>No searching needed. Jobs in your service area land here.</p></div>{initialPostId && <button onClick={() => selectView("leads")}>All your leads</button>}</div>}
+        {view === "leads" && data.enabled && <div className={styles.sectionHeading}><div><h3>{initialPostId ? "Your trade lead" : "Matched to your business"}</h3><p>Jobs that match your trades, service area and minimum rates land here.</p></div>{initialPostId && <button onClick={() => selectView("leads")}>All your leads</button>}</div>}
+        {view === "work" && data.enabled && <p className={styles.muted}>Browse all posted work. Your minimum rates only filter automatic leads.</p>}
         {view === "available" && data.enabled && <div className={styles.sectionHeading}><p>Find a business to contact, or add your own availability listing.</p><button disabled={busy} onClick={() => editPost("available")}>List my business</button></div>}
         {data.enabled && (view === "work" || view === "available") && <form className={styles.filters} onSubmit={event => { event.preventDefault(); setApplied(filters); setOffset(0); }}>
           <label>Trade<select value={filters.trade} onChange={event => setFilters({ ...filters, trade: event.target.value })}><option value="">All trades</option>{NETWORK_TRADES.map(trade => <option key={trade}>{trade}</option>)}</select></label>
@@ -199,7 +225,7 @@ export function TradeNetworkWorkspace({ user, initialPostId = "", onClearPost, o
             <h3>{post.title}</h3><p className={styles.muted}>{post.businessName}{post.isOwn ? " · Your business" : ""}</p><strong className={styles.rate}>{rateLabel(post)}</strong>
             <p className={styles.description}>{post.details}</p>{(post.startsOn || post.endsOn) && <p className={styles.muted}>{post.startsOn ? `From ${dateLabel(post.startsOn)}` : ""}{post.endsOn ? ` Until ${dateLabel(post.endsOn)}` : ""}</p>}
             <div className={styles.cardFooter}><span className={styles.muted}>{post.status === "active" ? `Closes ${dateLabel(post.expiresAt)}` : post.kind === "work" ? "Work request" : "Availability"}</span><div className={styles.actions}>
-              {post.isOwn ? <>{data.enabled && <button disabled={busy} onClick={() => editPost(post)}>Edit</button>}{post.status === "active" ? <button disabled={busy} onClick={() => void mutate({ action: "close_post", id: post.id, expectedRevision: post.revision }, "Post closed.")}>Close post</button> : data.enabled && <button disabled={busy} onClick={() => void mutate({ action: "renew_post", id: post.id, expectedRevision: post.revision }, "Post renewed for 30 days.")}>Renew post</button>}</> : post.enquiryId ? <button onClick={() => selectView("enquiries")}>View enquiry</button> : data.enabled && <button className={styles.primary} disabled={busy} onClick={() => openContact(post)}>Enquire</button>}
+              {post.isOwn ? <>{data.enabled && <button disabled={busy} onClick={() => editPost(post)}>Edit</button>}{post.status === "active" ? <button disabled={busy} onClick={() => void mutate({ action: "close_post", id: post.id, expectedRevision: post.revision }, "Post closed.")}>Close post</button> : data.enabled && <button disabled={busy || (post.kind === "work" && data.workPostAllowance.remaining === 0 && post.rateCents !== null && post.rateCents > 0)} onClick={() => post.rateCents === null || post.rateCents <= 0 ? editPost(post) : void mutate({ action: "renew_post", id: post.id, expectedRevision: post.revision }, "Post renewed for 30 days.")}>{post.rateCents === null || post.rateCents <= 0 ? "Add price to renew" : "Renew post"}</button>}</> : post.enquiryId ? <button onClick={() => selectView("enquiries")}>View enquiry</button> : data.enabled && <button className={styles.primary} disabled={busy} onClick={() => openContact(post)}>Enquire</button>}
               {view === "leads" && data.enabled && <button className={styles.textButton} disabled={busy} onClick={() => void mutate({ action: "lead_status", id: post.id, status: "dismissed" }, "Lead dismissed.")}>Dismiss</button>}
             </div></div>
           </article>)}
