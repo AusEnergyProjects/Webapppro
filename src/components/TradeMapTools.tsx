@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { geocodeTradeMapAddress } from "@/lib/google-maps-client";
 import { createTradeMapMeasurement, EMPTY_MAP_MEASUREMENT, formatMapDistance, type TradeMapMeasureMode } from "@/lib/trade-map-measurement";
 import styles from "./TradeMapTools.module.css";
+import { TradeMapSolarTools } from "./TradeMapSolarTools";
 
 type Props = { api: typeof google.maps; map: google.maps.Map; onExplore: () => void; onMeasuring: (active: boolean) => void };
 const VIEWS = [["roadmap", "Map"], ["satellite", "Satellite"], ["hybrid", "Satellite + labels"], ["terrain", "Terrain"]] as const;
@@ -27,6 +28,7 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring }: Props) {
   const addressRequest = useRef(0);
   const addressPin = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const [mode, setMode] = useState<TradeMapMeasureMode | null>(null);
+  const [solarEditing, setSolarEditing] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [measurement, setMeasurement] = useState(EMPTY_MAP_MEASUREMENT);
   const drawing = useRef<ReturnType<typeof createTradeMapMeasurement> | null>(null);
@@ -43,8 +45,11 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring }: Props) {
   }, [map]);
 
   useEffect(() => {
-    onMeasuring(Boolean(mode));
-    if (addressPin.current) addressPin.current.map = mode ? null : map;
+    onMeasuring(Boolean(mode) || solarEditing);
+    if (addressPin.current) addressPin.current.map = mode || solarEditing ? null : map;
+  }, [map, mode, solarEditing, onMeasuring]);
+
+  useEffect(() => {
     if (!mode) return;
     const previewLabel = document.createElement("div");
     previewLabel.className = styles.distancePreview;
@@ -61,6 +66,7 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring }: Props) {
     const request = ++addressRequest.current;
     onExplore();
     setMode(null);
+    setSolarEditing(false);
     setSearching(true);
     setAddressMessage("");
     if (addressPin.current) { addressPin.current.map = null; addressPin.current = null; }
@@ -88,6 +94,7 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring }: Props) {
 
   function startMeasure(nextMode: TradeMapMeasureMode) {
     onExplore();
+    setSolarEditing(false);
     setMode(nextMode);
     setMeasurement(EMPTY_MAP_MEASUREMENT);
     setAttempt((value) => value + 1);
@@ -106,6 +113,9 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring }: Props) {
         else { setView("satellite"); startMeasure("area"); }
       }}>Measure</button>
     </div>
+    <TradeMapSolarTools api={api} map={map} active={solarEditing} disabled={searching} onActivate={() => {
+      onExplore(); setMode(null); setSolarEditing(true); setView("satellite");
+    }} onClose={() => setSolarEditing(false)} />
     {addressMessage && <p className={styles.addressMessage} role="status">{addressMessage}</p>}
     {mode && <div className={styles.measurement} aria-label="Map measurement">
       <div className={styles.measurementTop}>

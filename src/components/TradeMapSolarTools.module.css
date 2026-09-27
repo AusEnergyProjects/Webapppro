@@ -1,0 +1,20 @@
+.solar { margin-top: 12px; }
+.toolbar, .settings { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.settings { align-items: end; background: var(--trade-surface-soft, #eff5f2); border: 1px solid var(--trade-line, #dbe5e2); border-radius: 12px; margin-top: 12px; padding: 14px; }
+.settings label { flex: 1 1 110px; max-width: 160px; }
+.settings input { width: 100%; }
+.hint { color: var(--trade-muted, #5b716a); font-size: .875rem; line-height: 1.5; margin: 10px 0 0; }
+.count { font-size: .875rem; font-weight: 650; padding: 0 6px; }
+.panel { position: absolute; transform-origin: center; }
+.face { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 1px solid #c1d2e0; border-radius: 1px; background-color: #10263e; background-image: repeating-linear-gradient(90deg, transparent 0 calc(33.333% - 1px), #9bb0c460 calc(33.333% - 1px) 33.333%), repeating-linear-gradient(0deg, transparent 0 calc(16.667% - 1px), #9bb0c460 calc(16.667% - 1px) 16.667%); box-shadow: 0 1px 3px #0008; cursor: grab; touch-action: none; }
+.panel[data-selected="true"] .face { outline: 2px solid #fbcf42; outline-offset: 1px; }
+.face:active { cursor: grabbing; }
+.controls { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.ring { position: absolute; inset: 9px; border: 1px dashed #fbcf42; border-radius: 50%; pointer-events: none; }
+.rotate, .copy { position: absolute; display: grid; place-items: center; width: 30px; height: 30px; border: 2px solid white; border-radius: 50%; padding: 0; background: #087567; color: white; font: 700 20px/1 system-ui, sans-serif; cursor: pointer; pointer-events: auto; touch-action: none; box-shadow: 0 2px 6px #0008; }
+.rotate { top: 0; right: 0; background: #a26600; cursor: grab; }
+.copy[data-direction="above"] { top: -6px; left: calc(50% - 15px); }
+.copy[data-direction="right"] { right: -6px; top: calc(50% - 15px); }
+.copy[data-direction="below"] { bottom: -6px; left: calc(50% - 15px); }
+.copy[data-direction="left"] { left: -6px; top: calc(50% - 15px); }
+.face:focus-visible, .rotate:focus-visible, .copy:focus-visible { outline: 3px solid #fbcf42; outline-offset: 3px; }
