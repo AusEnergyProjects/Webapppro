@@ -221,15 +221,7 @@ test("customer-facing document previews remain explicitly light in night mode", 
     "/* These canvases represent customer-facing documents and intentionally stay in day mode. */",
   );
 
-  for (const documentSelector of [
-    ".crm-invoice-preview",
-    ".trade-quote-document-sheet",
-  ]) {
-    assert.match(
-      documentReset,
-      new RegExp(documentSelector.replaceAll(".", "\\.")),
-    );
-  }
+  assert.match(documentReset, /\.crm-invoice-preview/);
   assert.match(
     documentReset,
     /\.crm-invoice-preview-dialog:not\(\.schedule-appointment-dialog\):not\(:has\(\.crm-retake-review-dialog\)\)/,
@@ -244,6 +236,16 @@ test("customer-facing document previews remain explicitly light in night mode", 
   ]) {
     assert.match(documentReset, lightDeclaration);
   }
+  const quotePreview = read("../src/components/TradeQuoteLivePreview.tsx");
+  const quoteSheet = extractBalancedBlock(read("../src/components/TradeQuoteLivePreview.module.css"), ".sheet {");
+  assert.match(quotePreview, /<article className=\{styles\.sheet\}/);
+  for (const lightDeclaration of [
+    /--trade-ink:\s*var\(--preview-ink\);/,
+    /--trade-muted:\s*#596e65;/,
+    /background:\s*#fff;/,
+    /color:\s*#243b36;/,
+    /color-scheme:\s*light;/,
+  ]) assert.match(quoteSheet, lightDeclaration);
 });
 
 test("night mode covers detailed job, task, and commercial handoff surfaces", () => {

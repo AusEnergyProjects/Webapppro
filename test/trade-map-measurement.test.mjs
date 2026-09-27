@@ -64,6 +64,20 @@ function harness(mode, computeLength = (points) => points.length === 5 ? 51 : 12
 const planarLength = (points) => points.slice(1).reduce((total, point, index) => total
   + Math.hypot(point.latValue - points[index].latValue, point.lngValue - points[index].lngValue), 0);
 
+for (const mode of ["area", "distance"]) test(`${mode} capture hides vertex handles and restores editing without changing the measurement`, () => {
+  const h = harness(mode);
+  h.click(0, 0); h.click(0, 10); h.click(10, 10); h.controller.finish();
+  const original = structuredClone(h.value());
+  h.controller.setCapturing(true);
+  assert.equal(h.shape.options.editable, false);
+  assert.equal(h.shape.map, h.map, "the measured shape remains visible");
+  assert.deepEqual(h.value(), original);
+  h.controller.setCapturing(false);
+  assert.equal(h.shape.options.editable, true);
+  assert.deepEqual(h.value(), original);
+  h.controller.dispose();
+});
+
 test("moving the pointer previews distance from the first point without committing it", () => {
   const h = harness("distance", planarLength);
   h.move(0, 10);

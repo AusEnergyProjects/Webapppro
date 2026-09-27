@@ -5,7 +5,7 @@ import type { User } from "firebase/auth";
 import { dollarsToCents, normaliseTradeQuoteLineGroup, overallTradeQuoteDiscountKind, OVERALL_PERCENT_DISCOUNT_SECTION, tradeQuoteChoiceValidationIssue, tradeQuoteLineValidationIssues } from "@/lib/trade-quote";
 import { tradeQuoteDocumentDisplayTotals } from "@/lib/trade-quote-document-totals.mjs";
 import { mapQuoteKind, MAP_QUOTE_UNITS } from "@/lib/trade-map-quote";
-import type { QuoteBusiness, QuoteChoice, QuoteJob, QuoteLine } from "./TradeQuotePanel";
+import type { QuoteBusiness, QuoteChoice, QuoteJob, QuoteLine, QuoteRoofImage } from "./TradeQuotePanel";
 import styles from "./TradeQuoteLivePreview.module.css";
 
 const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
@@ -42,11 +42,36 @@ type Props = {
   terms: string;
   validUntil: string;
   validationMessage: string;
+  roofImage?: QuoteRoofImage | null;
+  review?: boolean;
 };
 
-export function TradeQuoteLivePreview({ user, workOrderId, lines, choices, business, job, identity, customerMessage, terms, validUntil, validationMessage }: Props) {
+export function TradeQuoteLivePreview({ user, workOrderId, lines, choices, business, job, identity, customerMessage, terms, validUntil, validationMessage, roofImage, review = false }: Props) {
   const [logo, setLogo] = useState<{ ownerContext: string; url: string } | null>(null);
+  const [roofAsset, setRoofAsset] = useState<{ key: string; url: string; error: string } | null>(null);
   const ownerContext = `${user.uid}:${workOrderId}`;
+  const roofVersion = roofImage && "versionId" in roofImage ? roofImage.versionId : "";
+  const roofKey = `${ownerContext}:${roofVersion}:${roofImage && "sha256" in roofImage ? roofImage.sha256 : ""}`;
+  useEffect(() => {
+    if (!roofVersion) return;
+    const controller = new AbortController();
+    let objectUrl = "";
+    void user.getIdToken().then((token) => fetch(`/api/trade-quotes?workOrderId=${encodeURIComponent(workOrderId)}&media=roof&versionId=${encodeURIComponent(roofVersion)}`, {
+      headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal,
+    })).then(async (response) => {
+      if (!response.ok) throw new Error("The saved roof image could not be loaded. Reopen the quote or replace the image.");
+      const blob = await response.blob();
+      if (blob.type !== "image/png") throw new Error("The saved roof image could not be verified.");
+      if (controller.signal.aborted) return;
+      objectUrl = URL.createObjectURL(blob);
+      setRoofAsset({ key: roofKey, url: objectUrl, error: "" });
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) setRoofAsset({ key: roofKey, url: "", error: error instanceof Error ? error.message : "Could not load the roof image." });
+    });
+    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [roofKey, roofVersion, user, workOrderId]);
+  const roofUrl = roofImage && "dataUrl" in roofImage ? roofImage.dataUrl : roofAsset?.key === roofKey ? roofAsset.url : "";
+  const roofError = roofAsset?.key === roofKey ? roofAsset.error : "";
   useEffect(() => {
     if (!business?.hasLogo) return;
     const controller = new AbortController();
@@ -64,8 +89,8 @@ export function TradeQuoteLivePreview({ user, workOrderId, lines, choices, busin
   }, [business?.hasLogo, ownerContext, user, workOrderId]);
   const document = validationMessage ? { complete: false as const, message: validationMessage } : liveQuoteDocument(lines, choices);
   const name = business?.businessName || "Your trade business";
-  return <aside className={styles.preview} aria-label="Live quote document preview" data-theme={business?.brandThemeKey || "emerald_navy"} data-border={business?.brandBorderStyle || "soft"}>
-    <div className={styles.previewHeading}><div><span>Updates as you edit</span><h5>Customer quote preview</h5></div><span className={styles.draft}>Draft</span></div>
+  return <aside className={`${styles.preview}${review ? ` ${styles.review}` : ""}`} aria-label={review ? "Quote ready for review" : "Live quote document preview"} data-theme={business?.brandThemeKey || "emerald_navy"} data-border={business?.brandBorderStyle || "soft"}>
+    {!review && <div className={styles.previewHeading}><div><span>Updates as you edit</span><h5>Customer quote preview</h5></div><span className={styles.draft}>Draft</span></div>}
     <article className={styles.sheet}>
       <header className={styles.brand}>{business?.hasLogo && logo?.ownerContext === ownerContext
         ? <div className={styles.logo} role="img" aria-label={`${name} logo`} style={{ backgroundImage: `url("${logo.url}")` }} />
@@ -74,6 +99,10 @@ export function TradeQuoteLivePreview({ user, workOrderId, lines, choices, busin
         <section className={styles.parties}><div><small>Prepared for</small><strong>{job?.customerName || "Customer"}</strong><span>{job?.siteSummary || "Service address"}</span></div><div><small>{identity?.quoteNumber || "New quote"}</small><strong>{identity ? `Version ${identity.versionNumber}` : "Draft"}</strong><span>{validUntil ? `Valid until ${new Date(`${validUntil}T00:00:00`).toLocaleDateString("en-AU")}` : "Validity to be confirmed"}</span></div></section>
         {job?.title && <h6 className={styles.jobTitle}>{job.title}</h6>}
         {customerMessage && <p className={styles.introduction}>{customerMessage}</p>}
+        {roofImage && <figure className={styles.roofFigure}><h6>Proposed roof layout</h6>{roofUrl
+          // eslint-disable-next-line @next/next/no-img-element -- Private authorised PNG or a local captured image.
+          ? <img src={roofUrl} alt="Proposed roof layout from the map" />
+          : <p role={roofError ? "alert" : "status"}>{roofError || "Loading roof layout..."}</p>}<figcaption>Illustrative layout. Confirm dimensions, roof conditions and installation clearances on site.</figcaption></figure>}
         <section className={styles.items} aria-label="Included quote items"><div className={styles.tableHeading}><span>Included work</span><span>Incl GST</span></div>
           {lines.map((line, index) => {
             if (line.sectionHeading === OVERALL_PERCENT_DISCOUNT_SECTION) return null;
@@ -93,6 +122,6 @@ export function TradeQuoteLivePreview({ user, workOrderId, lines, choices, busin
         <footer className={styles.footer}><span>{name}</span><span>Draft · Not issued</span></footer>
       </div>
     </article>
-    <p className={styles.previewNote}>Live draft preview. Save, review and confirm the customer&apos;s email consent before sending.</p>
+    {!review && <p className={styles.previewNote}>Live draft preview. Save, review and confirm the customer&apos;s email consent before sending.</p>}
   </aside>;
 }

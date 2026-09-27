@@ -6,6 +6,7 @@ import { createTradeMapMeasurement, EMPTY_MAP_MEASUREMENT, formatMapDistance, ty
 import styles from "./TradeMapTools.module.css";
 import { TradeMapSolarTools } from "./TradeMapSolarTools";
 import { mapQuoteMeasurement, type MapQuoteMeasurement } from "@/lib/trade-map-quote";
+import { captureTradeMapQuoteImage } from "@/lib/trade-map-capture";
 
 type Props = { api: typeof google.maps; map: google.maps.Map; onExplore: () => void; onMeasuring: (active: boolean) => void; onQuote?: (measurement: MapQuoteMeasurement) => void };
 const VIEWS = [["roadmap", "Map"], ["satellite", "Satellite"], ["hybrid", "Satellite + labels"], ["terrain", "Terrain"]] as const;
@@ -33,6 +34,10 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring, onQuote }: Pro
   const [attempt, setAttempt] = useState(0);
   const [measurement, setMeasurement] = useState(EMPTY_MAP_MEASUREMENT);
   const drawing = useRef<ReturnType<typeof createTradeMapMeasurement> | null>(null);
+  const capture = useRef<AbortController | null>(null);
+  const [capturing, setCapturing] = useState(false);
+  const [measurementCapturing, setMeasurementCapturing] = useState(false);
+  const [captureMessage, setCaptureMessage] = useState("");
 
   useEffect(() => {
     map.setMapTypeId(view);
@@ -42,6 +47,7 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring, onQuote }: Pro
 
   useEffect(() => () => {
     addressRequest.current++;
+    capture.current?.abort();
     if (addressPin.current) addressPin.current.map = null;
   }, [map]);
 
@@ -99,6 +105,19 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring, onQuote }: Pro
     setMode(nextMode);
     setMeasurement(EMPTY_MAP_MEASUREMENT);
     setAttempt((value) => value + 1);
+    setCaptureMessage("");
+  }
+
+  async function addMeasurementToQuote(value: MapQuoteMeasurement) {
+    if (capture.current || !onQuote) return;
+    const attempt = new AbortController(); capture.current = attempt;
+    setCapturing(true); setMeasurementCapturing(true); setCaptureMessage("Choose this TLink tab in the sharing prompt to include your measured map.");
+    try {
+      const roofImage = await captureTradeMapQuoteImage(map.getDiv(), value, () => drawing.current?.setCapturing(true), () => drawing.current?.setCapturing(false), attempt.signal);
+      if (!attempt.signal.aborted) { setCaptureMessage(""); onQuote({ ...value, roofImage }); }
+    } catch (error) {
+      if (!attempt.signal.aborted) setCaptureMessage(error instanceof Error ? error.message : "Could not capture the map. Try again.");
+    } finally { if (!attempt.signal.aborted) { setCapturing(false); setMeasurementCapturing(false); } capture.current = null; }
   }
 
   const enoughPoints = measurement.points >= (mode === "area" ? 3 : 2);
@@ -107,24 +126,24 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring, onQuote }: Pro
   return <div className={styles.tools}>
     <div className={styles.toolbar}>
       <form className={styles.addressSearch} onSubmit={(event) => void findAddress(event)} aria-label="Find any address on the map">
-        <label><span>Go to address</span><input type="search" value={address} maxLength={300} placeholder="Street address, suburb or postcode" onChange={(event) => setAddress(event.target.value)} /></label>
-        <button type="submit" disabled={searching}>{searching ? "Finding…" : "Find address"}</button>
+        <label><span>Go to address</span><input disabled={capturing} type="search" value={address} maxLength={300} placeholder="Street address, suburb or postcode" onChange={(event) => setAddress(event.target.value)} /></label>
+        <button type="submit" disabled={searching || capturing}>{searching ? "Finding…" : "Find address"}</button>
       </form>
-      <label className={styles.view}><span>View</span><select value={view} onChange={(event) => { onExplore(); setView(event.target.value); }} aria-label="Map view">{VIEWS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <button type="button" disabled={searching} aria-pressed={Boolean(mode)} onClick={() => {
+      <label className={styles.view}><span>View</span><select disabled={capturing} value={view} onChange={(event) => { onExplore(); setView(event.target.value); }} aria-label="Map view">{VIEWS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <button type="button" disabled={searching || capturing} aria-pressed={Boolean(mode)} onClick={() => {
         if (mode) setMode(null);
         else { setView("satellite"); startMeasure("area"); }
       }}>Measure</button>
     </div>
-    <TradeMapSolarTools api={api} map={map} active={solarEditing} disabled={searching} onQuote={onQuote} onActivate={() => {
+    <TradeMapSolarTools api={api} map={map} active={solarEditing} disabled={searching || capturing} onCapturing={(value) => { setCapturing(value); drawing.current?.setCapturing(value); }} onQuote={onQuote} onActivate={() => {
       onExplore(); setMode(null); setSolarEditing(true); setView("satellite");
     }} onClose={() => setSolarEditing(false)} />
     {addressMessage && <p className={styles.addressMessage} role="status">{addressMessage}</p>}
     {mode && <div className={styles.measurement} aria-label="Map measurement">
       <div className={styles.measurementTop}>
         <div className={styles.modes} role="group" aria-label="Measurement type">
-          <button type="button" aria-pressed={mode === "area"} onClick={() => startMeasure("area")}>Area m²</button>
-          <button type="button" aria-pressed={mode === "distance"} onClick={() => startMeasure("distance")}>Distance m</button>
+          <button type="button" disabled={capturing} aria-pressed={mode === "area"} onClick={() => startMeasure("area")}>Area m²</button>
+          <button type="button" disabled={capturing} aria-pressed={mode === "distance"} onClick={() => startMeasure("distance")}>Distance m</button>
         </div>
         <output className={styles.result} aria-live={measurement.previewLengthM !== null ? "off" : "polite"} aria-label="Measurement result">
           {measurement.crossed ? "Outline crosses itself" : enoughPoints || measurement.previewLengthM !== null ? <><strong>{mode === "area" ? `${number(measurement.areaM2)} m²` : formatMapDistance(measurement.previewLengthM ?? measurement.lengthM)}</strong>{mode === "area" && <span>{number(measurement.lengthM)} m perimeter</span>}{measurement.previewLengthM !== null && <span>Live distance</span>}</> : <span>{measurement.points} {measurement.points === 1 ? "point" : "points"} placed</span>}
@@ -132,16 +151,18 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring, onQuote }: Pro
       </div>
       <p>{measurement.crossed ? "Move a corner or undo the last point so the edges do not cross." : measurement.finished ? "Drag the corners or edge handles to refine your measurement." : mode === "area" ? "Click or tap around the edge, then Finish. Use at least 3 corners." : "Click a start point, then move the pointer to see the distance. Click or tap to place each point, then Finish. The total follows your path."}</p>
       <div className={styles.actions}>
-        {onQuote && quoteMeasurement && <button type="button" className={styles.finish} onClick={() => onQuote(quoteMeasurement)}>Add to quote</button>}
+        {onQuote && quoteMeasurement && <button type="button" disabled={capturing} className={styles.finish} onClick={() => void addMeasurementToQuote(quoteMeasurement)}>{capturing ? "Capturing…" : "Add to quote"}</button>}
+        {measurementCapturing && <button type="button" onClick={() => { capture.current?.abort(); setCapturing(false); setMeasurementCapturing(false); setCaptureMessage("Capture cancelled. Your measurement is still here."); }}>Cancel capture</button>}
         {!measurement.finished && <>
           <button type="button" onClick={() => drawing.current?.addCentre()}>Add centre point</button>
           <button type="button" disabled={!measurement.points} onClick={() => drawing.current?.undo()}>Undo</button>
           <button type="button" className={styles.finish} disabled={!enoughPoints || measurement.crossed || (mode === "area" && measurement.areaM2 <= 0)} onClick={() => drawing.current?.finish()}>Finish</button>
         </>}
-        <button type="button" disabled={!measurement.points} onClick={() => startMeasure(mode)}>Clear</button>
-        <button type="button" onClick={() => setMode(null)}>Close measure</button>
+        <button type="button" disabled={capturing || !measurement.points} onClick={() => startMeasure(mode)}>Clear</button>
+        <button type="button" disabled={capturing} onClick={() => setMode(null)}>Close measure</button>
       </div>
-      <p className={styles.note}>Approximate {mode === "area" ? "flat area" : "map distance"} only. Roof pitch, overhangs and image accuracy can affect actual measurements. Not saved.</p>
+      <p className={styles.note}>Approximate {mode === "area" ? "flat area" : "map distance"} only. Roof pitch, overhangs and image accuracy can affect actual measurements. Add to quote includes this map image.</p>
+      {captureMessage && <p className={styles.note} role="status">{captureMessage}</p>}
     </div>}
   </div>;
 }

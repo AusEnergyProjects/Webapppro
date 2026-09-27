@@ -2186,6 +2186,7 @@ export const tradeCrmQuotes = sqliteTable("trade_crm_quotes", {
 ]);
 
 export const tradeCrmQuoteVersions = sqliteTable("trade_crm_quote_versions", {
+  roofImageJson: text("roof_image_json").notNull().default(""),
   id: text("id").primaryKey(),
   quoteId: text("quote_id").notNull(),
   firebaseUid: text("firebase_uid").notNull(),

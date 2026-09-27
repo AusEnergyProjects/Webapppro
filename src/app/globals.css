@@ -2771,65 +2771,6 @@ html[data-tlink-colour-mode="night"] .trade-quote-panel { --trade-document-dange
 .trade-quote-actions button { background: var(--trade-surface, #fff); border: 1px solid var(--color-aea-green-dark); border-radius: 8px; color: var(--trade-ink, #16372f); cursor: pointer; font-weight: 850; padding: 10px 14px; }
 .trade-quote-actions button.primary { background: var(--color-aea-green-dark); color: #fff; }
 .trade-quote-actions button:disabled { cursor: not-allowed; opacity: .55; }
-.trade-quote-send-preview { display: grid; flex: 1; gap: 14px; min-height: 0; overflow-y: auto; padding: 16px; }
-.crm-quote-preview-dialog { width: min(820px, 100%); }
-.trade-quote-send-footer { background: #fff; display: grid !important; flex: 0 0 auto; gap: 12px !important; grid-template-columns: minmax(0, 1fr) auto; position: sticky; bottom: 0; z-index: 3; }
-.trade-quote-send-consent { background: #eef9f4; border: 1px solid #b9dbce; border-radius: 9px; display: grid; gap: 8px; padding: 10px 12px; }
-.trade-quote-send-consent label { align-items: flex-start; color: #174c3e; cursor: pointer; display: flex; gap: 10px; line-height: 1.4; }
-.trade-quote-send-consent label input { flex: 0 0 auto; height: 22px; margin: 1px 0 0; width: 22px; }
-.trade-quote-send-consent label span { display: grid; font-size: .68rem; gap: 1px; }
-.trade-quote-send-consent label strong { color: #0b684e; font-size: .7rem; }
-.trade-quote-send-consent p { border-radius: 8px; font-size: .65rem; font-weight: 800; margin: 0; padding: 9px 11px; }
-.trade-quote-send-consent p.sending { background: #e9f2f9; color: #215c76; }
-.trade-quote-send-consent p.success { background: #dff4e9; color: #136346; }
-.trade-quote-send-consent p.attention, .trade-quote-send-consent p.error { background: #fff0e8; color: #8a392d; }
-.trade-quote-send-footer-actions { align-items: center; display: flex; gap: 9px; justify-content: flex-end; }
-.trade-quote-send-footer-actions button { background: #fff; border: 1px solid #bcd2ca; border-radius: 8px; color: #17684f; cursor: pointer; font-size: .64rem; font-weight: 850; min-height: 44px; padding: 9px 12px; }
-.trade-quote-send-footer-actions button.btn { background: var(--action-primary); border: 0; color: #fff; }
-.trade-quote-send-footer-actions button:disabled { cursor: not-allowed; opacity: .5; }
-.trade-quote-pdf-attachment:focus-visible { border-radius: 10px; outline: 3px solid rgba(11, 141, 99, .35); outline-offset: 3px; }
-.trade-quote-send-preview > section > span { color: var(--color-aea-green); display: block; font-size: .58rem; font-weight: 900; letter-spacing: .06em; margin-bottom: 7px; text-transform: uppercase; }
-.trade-quote-email-preview > article { background: #f4f9f7; border: 1px solid #d3e5de; border-radius: 12px; display: grid; gap: 8px; padding: 16px; }
-.trade-quote-email-preview h5 { color: #123f38; font-size: 1rem; margin: 2px 0 5px; }
-.trade-quote-email-preview p { color: #526f66; line-height: 1.55; margin: 0; }
-.trade-quote-email-preview button { background: #0d674d; border: 0; border-radius: 8px; color: #fff; font-weight: 850; justify-self: start; margin-top: 5px; padding: 10px 14px; }
-.trade-quote-email-preview small { color: #71837f; }
-.trade-quote-pdf-attachment > header { align-items: center; background: #eef5f2; border: 1px solid #cfe0d9; border-radius: 10px 10px 0 0; display: flex; gap: 12px; justify-content: space-between; padding: 10px 12px; }
-.trade-quote-pdf-attachment > header > div { align-items: center; display: flex; gap: 10px; }
-.trade-quote-pdf-attachment > header b { background: #a33d3d; border-radius: 6px; color: #fff; font-size: .62rem; padding: 8px 6px; }
-.trade-quote-pdf-attachment > header p { display: grid; gap: 2px; margin: 0; }
-.trade-quote-pdf-attachment > header small { color: #71837f; }
-.trade-quote-pdf-attachment > header em { background: #dff3e9; border-radius: 999px; color: #17684f; font-size: .58rem; font-style: normal; font-weight: 850; padding: 6px 9px; }
-.trade-quote-document-sheet { background: #fff; border: 1px solid #cfe0d9; border-radius: 0 0 10px 10px; box-shadow: 0 10px 28px rgba(0, 39, 51, .08); display: grid; gap: 14px; margin: 0 auto; max-width: 680px; padding: 20px; width: 100%; }
-.trade-quote-document-sheet > header { background: linear-gradient(135deg, #062d3d, #0b6b5a); border-radius: 10px; color: #fff; display: grid; gap: 16px; grid-template-columns: 1fr 1fr; padding: 16px; }
-.trade-quote-document-sheet > header div { display: grid; gap: 3px; }
-.trade-quote-document-sheet > header small, .trade-quote-document-sheet > header span { color: #c5e3de; font-size: .57rem; }
-.trade-quote-document-sheet > section > span { color: #0b8d63; display: block; font-size: .58rem; font-weight: 900; letter-spacing: .06em; margin-bottom: 7px; text-transform: uppercase; }
-.trade-quote-document-sheet > dl { margin: 0 0 0 auto; min-width: min(300px, 100%); }
-.trade-quote-document-sheet > dl div { display: flex; font-size: .62rem; justify-content: space-between; padding: 4px 0; }
-.trade-quote-document-sheet > dl dd { color: #173f38; font-weight: 900; margin: 0; }
-.trade-quote-document-sheet > dl .total { border-top: 1px solid #9fb9b0; font-size: .76rem; margin-top: 5px; padding-top: 8px; }
-.trade-quote-send-preview[data-theme="ocean_mint"] .trade-quote-document-sheet > header { background: linear-gradient(135deg, #063b50, #1aa98e); }
-.trade-quote-send-preview[data-theme="cobalt_aqua"] .trade-quote-document-sheet > header { background: linear-gradient(135deg, #112d7a, #00a4b8); }
-.trade-quote-send-preview[data-theme="violet_sunset"] .trade-quote-document-sheet > header { background: linear-gradient(135deg, #48207a, #e46b7f); }
-.trade-quote-send-preview[data-theme="amber_ink"] .trade-quote-document-sheet > header { background: linear-gradient(135deg, #161c25, #ad7600); }
-.trade-quote-send-preview[data-theme="charcoal_silver"] .trade-quote-document-sheet > header { background: linear-gradient(135deg, #171a1f, #69737d); }
-.trade-quote-send-preview[data-border="square"] .trade-quote-document-sheet, .trade-quote-send-preview[data-border="square"] .trade-quote-document-sheet > header { border-radius: 0; }
-.trade-quote-send-preview[data-border="rounded"] .trade-quote-document-sheet { border-radius: 18px; }
-.trade-quote-send-preview[data-border="rounded"] .trade-quote-document-sheet > header { border-radius: 13px; }
-.trade-quote-preview-lines, .trade-quote-preview-choices { border: 1px solid #dce8e3; border-radius: 10px; display: grid; overflow: hidden; }
-.trade-quote-preview-lines article, .trade-quote-preview-choices article { align-items: center; background: #fff; border-bottom: 1px solid #e3ece8; display: flex; gap: 12px; justify-content: space-between; padding: 11px 12px; }
-.trade-quote-preview-lines article:last-child, .trade-quote-preview-choices article:last-child { border-bottom: 0; }
-.trade-quote-preview-lines article > div, .trade-quote-preview-choices article > div { display: grid; gap: 3px; min-width: 0; }
-.trade-quote-preview-lines strong, .trade-quote-preview-choices strong, .trade-quote-preview-lines b, .trade-quote-preview-choices b { color: #173f38; font-size: .65rem; }
-.trade-quote-preview-lines small, .trade-quote-preview-choices small, .trade-quote-preview-lines p { color: #71837f; font-size: .54rem; margin: 0; }
-.trade-quote-preview-lines p { background: #fff; padding: 12px; }
-.trade-quote-send-preview > dl { margin: 0 0 0 auto; min-width: min(300px, 100%); }
-.trade-quote-send-preview > dl div { display: flex; font-size: .62rem; justify-content: space-between; padding: 4px 0; }
-.trade-quote-send-preview > dl dd { color: #173f38; font-weight: 900; margin: 0; }
-.trade-quote-send-preview > dl .total { border-top: 1px solid #9fb9b0; font-size: .76rem; margin-top: 5px; padding-top: 8px; }
-.trade-quote-preview-terms { background: #edf8f3; border-radius: 9px; padding: 11px 12px; }
-.trade-quote-preview-terms p { color: #536f67; font-size: .58rem; line-height: 1.5; margin: 0; white-space: pre-wrap; }
 .trade-quote-history { border-top: 1px solid var(--trade-line, #d9e5e0); padding-top: 12px; }
 .trade-quote-history summary { color: var(--trade-ink, #16372f); cursor: pointer; font-weight: 850; }
 .trade-quote-history article { align-items: center; border-top: 1px solid var(--trade-line, #e4ece8); display: flex; gap: 10px; justify-content: space-between; padding: 10px 0; }
@@ -2866,9 +2807,8 @@ html[data-tlink-colour-mode="night"] .trade-quote-panel { --trade-document-dange
   .trade-quote-line button { min-height: 42px; }
   .trade-quote-settings { grid-template-columns: 1fr; }
   .trade-quote-final-percent { align-items: stretch; grid-template-columns: 1fr; }
-  .trade-quote-recipient, .trade-quote-add-recipient > div, .trade-quote-document-sheet > header { grid-template-columns: 1fr; }
+  .trade-quote-recipient, .trade-quote-add-recipient > div { grid-template-columns: 1fr; }
   .trade-quote-recipient-actions { display: grid; }
-  .trade-quote-pdf-attachment > header { align-items: flex-start; flex-direction: column; }
   .trade-quote-packets { grid-template-columns: 1fr; }
   .trade-quote-packets > small { grid-column: auto; }
   .trade-quote-settings .wide { grid-column: auto; }
@@ -2883,10 +2823,6 @@ html[data-tlink-colour-mode="night"] .trade-quote-panel { --trade-document-dange
   .trade-quote-totals, .trade-quote-internal dl { grid-template-columns: 1fr; }
   .trade-quote-actions { align-items: stretch; flex-direction: column; }
   .trade-quote-packet-actions, .trade-quote-builder-actions { display: grid; }
-  .trade-quote-preview-lines article, .trade-quote-preview-choices article { align-items: flex-start; flex-direction: column; }
-  .trade-quote-send-footer { grid-template-columns: 1fr; }
-  .trade-quote-send-footer-actions { align-items: stretch; flex-direction: column-reverse; }
-  .trade-quote-send-footer-actions button { width: 100%; }
 }
 
 .quote-link-shell { --quote-accent: #0c7658; --quote-ink: #073f31; --quote-soft: #f3f8f5; --quote-line: #cfe0d9; background: #edf5f1; color: #123f35; min-height: 100vh; padding: 28px 16px 60px; }

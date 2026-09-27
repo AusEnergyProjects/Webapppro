@@ -18,7 +18,7 @@ function bytesBody(bytes: Uint8Array) {
 export async function GET(_request: Request, context: Context) {
   try {
     const params = await context.params;
-    if (params.kind !== "logo" && params.kind !== "banner") {
+    if (params.kind !== "logo" && params.kind !== "banner" && params.kind !== "roof") {
       return new Response("Brand image not found.", {
         status: 404,
         headers: {
@@ -31,7 +31,10 @@ export async function GET(_request: Request, context: Context) {
     const row = await authoriseTradeQuoteLink(params.token);
     const snapshot = await quoteDocumentSnapshotForAuthorisedLink(row);
     const { loadTradeQuoteBrandAsset } = await import("@/lib/trade-quote-pdf-server");
-    const asset = await loadTradeQuoteBrandAsset(snapshot, params.kind);
+    const { loadQuoteRoofImage } = await import("@/lib/trade-quote-roof-image-server");
+    const asset = params.kind === "roof"
+      ? (snapshot.roofImage ? await loadQuoteRoofImage(snapshot.roofImage) : undefined)
+      : await loadTradeQuoteBrandAsset(snapshot, params.kind);
     if (!asset) {
       return new Response("Brand image not found.", {
         status: 404,
@@ -47,7 +50,7 @@ export async function GET(_request: Request, context: Context) {
       status: 200,
       headers: {
         "Cache-Control": "private, no-store, max-age=0",
-        "Content-Disposition": `inline; filename="business-${params.kind}.${extension}"`,
+        "Content-Disposition": `inline; filename="${params.kind === "roof" ? "roof-design" : `business-${params.kind}`}.${extension}"`,
         "Content-Length": String(asset.bytes.byteLength),
         "Content-Security-Policy": "default-src 'none'; sandbox",
         "Content-Type": asset.contentType,

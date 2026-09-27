@@ -4,6 +4,7 @@ import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import { canonicalGoogleBusinessProfileUrl } from "../src/lib/trade-google-business-profile.mjs";
+import * as roofImages from "../src/lib/trade-quote-roof-image.ts";
 
 import {
   acceptedScopeSnapshot,
@@ -59,6 +60,7 @@ function adminJson(body, status = 200) {
 function publicErrorMapper() {
   return compile(reviewServerSource, "src/lib/trade-quote-review-server.ts", {
     "./trade-google-business-profile.mjs": { canonicalGoogleBusinessProfileUrl },
+    "./trade-quote-roof-image": roofImages,
     "../../db": { getD1: () => { throw new Error("Unexpected D1 access"); } },
     "@/lib/admin-server": { adminJson },
     "@/lib/trade-quote-links": {

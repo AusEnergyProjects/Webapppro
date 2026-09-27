@@ -109,6 +109,7 @@ export function createTradeMapMeasurement(api: typeof google.maps, map: google.m
   );
   update();
   return {
+    setCapturing: (value: boolean) => { shape.setOptions({ editable: !value }); },
     addCentre: () => add(map.getCenter() ?? null),
     undo: () => { if (!finished && path.getLength()) path.pop(); },
     finish: () => {

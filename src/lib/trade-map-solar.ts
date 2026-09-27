@@ -106,6 +106,7 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
       element.style.zIndex = selected ? "2" : "1";
       element.style.pointerEvents = editing && !capturing ? "auto" : "none";
       element.dataset.selected = String(selected && editing && !capturing);
+      element.dataset.capturing = String(capturing);
       element.dataset.choosing = String(selectionMode === "choose");
       element.dataset.movable = String(canTransform(entry));
       face.tabIndex = editing && !capturing ? 0 : -1;

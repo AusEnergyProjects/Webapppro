@@ -20,13 +20,16 @@ const item = (id, unitLabel) => ({ id, unitLabel, itemCode: id, name: `Rate ${id
 const intent = (overrides = {}) => ({ id: "map-once", ownerUid: "owner", workOrderId: "job-one", measurement: { kind: "area", quantity: 123.4 }, ...overrides });
 const product = (description = "Existing scope", unitPrice = "100.00") => ({ lineType: "product", description, quantity: "1", unitPrice, taxCode: "gst", sectionHeading: "Included work" });
 const finalDiscount = { lineType: "adjustment", description: "Final discount", quantity: "percent:10", unitPrice: "0.00", taxCode: "gst", sectionHeading: quoteMath.OVERALL_PERCENT_DISCOUNT_SECTION };
+const roofImage = { dataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/XcAAAAASUVORK5CYII=" };
+const roofMetadata = { contentType: "image/png", width: 1, height: 1, sha256: "a".repeat(64) };
+const imageIntent = (overrides = {}) => intent({ measurement: { kind: "solar", quantity: 10, roofImage }, ...overrides });
 const choice = (key, kind, groupKey, amount, recommended = false) => ({ clientKey: key, kind, groupKey, name: key, summary: "", recommended, lines: [product(key, amount)] });
 const savedLines = (lines) => quoteMath.normaliseTradeQuoteLineGroup(lines, (value) => String(value).trim(), true).lines.map((line, index) => ({
   ...line, id: `line-${index}`, priceBookItemId: lines[index].priceBookItemId || "", jobPacketId: "", jobPacketLineId: "", sectionHeading: lines[index].sectionHeading,
 }));
-const savedQuote = ({ lines, choices = [], customerEmail = "", terms = "", customerMessage = "", validUntil = "" }) => ({
+const savedQuote = ({ lines, choices = [], customerEmail = "", terms = "", customerMessage = "", validUntil = "", roofImage = null }) => ({
   id: "quote-one", quoteNumber: "Q-001", currentVersionNumber: 1, status: "draft", editableDraft: { id: "version-one", versionNumber: 1, updatedAt: "now" },
-  versions: [{ id: "version-one", versionNumber: 1, status: "draft", customerEmail, terms, customerMessage, validUntil, items: savedLines(lines), choices: choices.map((option) => ({ ...option, id: option.clientKey, items: savedLines(option.lines) })) }],
+  versions: [{ id: "version-one", versionNumber: 1, status: "draft", customerEmail, terms, customerMessage, validUntil, roofImage: roofImage?.dataUrl ? roofMetadata : roofImage, items: savedLines(lines), choices: choices.map((option) => ({ ...option, id: option.clientKey, items: savedLines(option.lines) })) }],
   link: null, timeline: [], questions: [], deliveries: [],
 });
 const result = (overrides = {}) => ({
@@ -39,7 +42,7 @@ const result = (overrides = {}) => ({
 
 function harness(t, initial = result(), options = {}) {
   let cursor = 0;
-  const state = [], effects = [], pending = [], requests = [], dirty = [], busy = [], frames = new Set();
+  const state = [], effects = [], pending = [], requests = [], dirty = [], busy = [], dialogs = [], frames = new Set();
   const hooks = {
     createElement,
     useState(initialValue) { const i = cursor++; if (!(i in state)) state[i] = typeof initialValue === "function" ? initialValue() : initialValue; return [state[i], (next) => { state[i] = typeof next === "function" ? next(state[i]) : next; }]; },
@@ -65,10 +68,20 @@ function harness(t, initial = result(), options = {}) {
   Function("require", "exports", "fetch", "window", "document", panelCode)(require, exports, fetch, window, document);
   const props = { user: { uid: "owner", getIdToken: async () => "test-token" }, workOrderId: "job-one", available: true, mapQuoteIntent: intent(), showLivePreview: true,
     onDraftDirtyChange: (value) => dirty.push(value), onBusyChange: (value) => busy.push(value), ...options.props };
-  const render = () => { cursor = 0; const tree = exports.TradeQuotePanel(props); for (const callback of pending.splice(0)) callback(); return tree; };
+  const render = () => {
+    cursor = 0;
+    const tree = exports.TradeQuotePanel(props);
+    for (const node of nodes(tree, (node) => node.props?.ref)) if (!node.props.ref.current) {
+      node.props.ref.current = node.type === "dialog"
+        ? { open: false, showModal() { this.open = true; dialogs.push("open"); }, close() { this.open = false; dialogs.push("close"); } }
+        : { isConnected: true, focus() {}, scrollIntoView() {} };
+    }
+    for (const callback of pending.splice(0)) callback();
+    return tree;
+  };
   const cleanup = () => { for (const effect of effects) effect?.cleanup?.(); for (const frame of frames) clearImmediate(frame); };
   t.after(cleanup);
-  return { render, requests, dirty, busy, props, cleanup, async settle() { let tree; for (let i = 0; i < 5; i++) { tree = render(); await flush(); } return tree; }, preview: (tree) => nodes(tree, (node) => node.type === LivePreview)[0] };
+  return { render, requests, dirty, busy, dialogs, props, cleanup, async settle() { let tree; for (let i = 0; i < 5; i++) { tree = render(); await flush(); } return tree; }, preview: (tree) => nodes(tree, (node) => node.type === LivePreview)[0], previews: tree => nodes(tree, node => node.type === LivePreview) };
 }
 
 test("authorized initial load replaces only the empty starter with one unpriced map line", async (t) => {
@@ -97,9 +110,10 @@ test("map handoff preserves existing choices and inserts before the final discou
 
 for (const blocked of ["user", "job", "permission", "readonly"]) test(`map handoff rejects mismatched ${blocked}`, async (t) => {
   const initial = result(blocked === "permission" ? { access: { canManageQuotes: false } } : {});
-  const props = blocked === "user" ? { mapQuoteIntent: intent({ ownerUid: "other-business" }) } : blocked === "job" ? { mapQuoteIntent: intent({ workOrderId: "other-job" }) } : blocked === "readonly" ? { readOnly: true } : {};
+  const props = { mapQuoteIntent: imageIntent(), ...(blocked === "user" ? { mapQuoteIntent: imageIntent({ ownerUid: "other-business" }) } : blocked === "job" ? { mapQuoteIntent: imageIntent({ workOrderId: "other-job" }) } : blocked === "readonly" ? { readOnly: true } : {}) };
   const h = harness(t, initial, { props }), tree = await h.settle();
   assert.equal(h.preview(tree).props.lines.some((line) => mapQuote.mapQuoteKind(line.sectionHeading)), false);
+  assert.equal(h.preview(tree).props.roofImage, null, "an unauthorized map handoff must not inject an image");
   assert.equal(h.dirty.at(-1), false);
 });
 
@@ -184,6 +198,121 @@ test("failed saves retain the unsaved map line and dirty baseline", async (t) =>
   button(tree, "Save draft").props.onClick(); tree = await h.settle();
   assert.equal(h.dirty.at(-1), true); assert.equal(h.preview(tree).props.lines[0].unitPrice, "4.50");
   assert.match(text(tree), /Save failed/);
+});
+
+test("map roof image reaches the preview and save, then reloads as a stored version image", async t => {
+  const h = harness(t, result(), { props: { mapQuoteIntent: imageIntent() } });
+  let tree = await h.settle();
+  assert.deepEqual(h.preview(tree).props.roofImage, roofImage);
+  assert.equal(h.preview(tree).props.lines[0].quantity, "10");
+  assert.equal(h.dirty.at(-1), true);
+  field(tree, "Line 1 unit price per panels").props.onChange({ target: { value: "200.00" } });
+  tree = h.render();
+  button(tree, "Save draft").props.onClick();
+  tree = await h.settle();
+  const saved = JSON.parse(h.requests.find(request => request.init.method).init.body);
+  assert.deepEqual(saved.roofImage, roofImage);
+  assert.equal(saved.lines[0].quantity, "10");
+  assert.deepEqual(h.preview(tree).props.roofImage, { versionId: "version-one", sha256: roofMetadata.sha256 });
+  assert.equal(h.dirty.at(-1), false);
+  assert.equal(h.preview(tree).props.lines.length, 1, "saving must not import the map a second time");
+});
+
+test("stored roof layout survives reload and resave, while removal explicitly clears it", async t => {
+  const existing = savedQuote({ lines: [product()], roofImage: roofMetadata });
+  const h = harness(t, result({ quote: existing }), {
+    props: { mapQuoteIntent: undefined },
+    respond: (_url, init, initial) => {
+      if (!init.method) return initial;
+      const body = JSON.parse(init.body);
+      return result({ quote: savedQuote({ ...body, roofImage: "roofImage" in body ? body.roofImage : roofMetadata }) });
+    },
+  });
+  let tree = await h.settle();
+  assert.deepEqual(h.preview(tree).props.roofImage, { versionId: "version-one", sha256: roofMetadata.sha256 });
+  assert.equal(h.dirty.at(-1), false);
+  button(tree, "Save draft").props.onClick(); tree = await h.settle();
+  const firstSave = JSON.parse(h.requests.find(request => request.init.method).init.body);
+  assert.equal("roofImage" in firstSave, false, "omit persisted image so the server retains its immutable bytes");
+  assert.deepEqual(h.preview(tree).props.roofImage, { versionId: "version-one", sha256: roofMetadata.sha256 });
+  button(field(tree, "Quote roof layout"), "Remove").props.onClick(); tree = h.render();
+  assert.equal(h.preview(tree).props.roofImage, null);
+  assert.equal(h.dirty.at(-1), true, "removing only the image must mark the draft dirty");
+  button(tree, "Save draft").props.onClick(); tree = await h.settle();
+  const lastSave = JSON.parse(h.requests.filter(request => request.init.method).at(-1).init.body);
+  assert.equal(lastSave.roofImage, null);
+  assert.equal(h.preview(tree).props.roofImage, null);
+  assert.equal(h.dirty.at(-1), false);
+});
+
+test("failed image save preserves the design and unsaved changes for retry", async t => {
+  const h = harness(t, result(), { props: { mapQuoteIntent: imageIntent() }, respond: (_url, init, initial) => init.method ? { ok: false, error: "Image storage unavailable" } : initial });
+  let tree = await h.settle();
+  field(tree, "Line 1 unit price per panels").props.onChange({ target: { value: "200.00" } }); tree = h.render();
+  button(tree, "Save draft").props.onClick(); tree = await h.settle();
+  assert.deepEqual(h.preview(tree).props.roofImage, roofImage);
+  assert.equal(h.dirty.at(-1), true);
+  assert.match(text(tree), /Image storage unavailable/);
+});
+
+test("native review uses the same document and requires a fresh consent checkbox without sending", async t => {
+  const existing = savedQuote({ lines: [product()], customerEmail: "customer@example.test", terms: "Installation only.", roofImage: roofMetadata });
+  const h = harness(t, result({ quote: existing }), { props: { mapQuoteIntent: undefined } });
+  let tree = await h.settle();
+  button(tree, "Preview and send").props.onClick(); tree = h.render();
+  const dialog = () => nodes(tree, node => node.type === "dialog")[0];
+  const consent = () => nodes(dialog(), node => node.type === "input" && node.props.type === "checkbox")[0];
+  assert.deepEqual(h.dialogs, ["open"]);
+  assert.equal(consent().props.checked, false);
+  assert.equal(button(dialog(), "Email quote").props.disabled, true);
+  const previews = h.previews(tree);
+  assert.equal(previews.length, 2);
+  for (const key of ["lines", "choices", "roofImage", "terms", "customerMessage", "validUntil"]) assert.equal(previews[1].props[key], previews[0].props[key]);
+  assert.equal(previews[1].props.review, true);
+  consent().props.onChange({ target: { checked: true } }); tree = h.render();
+  assert.equal(button(dialog(), "Email quote").props.disabled, false);
+  assert.match(text(dialog()), /Ready to send/);
+  consent().props.onChange({ target: { checked: false } }); tree = h.render();
+  assert.equal(button(dialog(), "Email quote").props.disabled, true);
+  button(dialog(), "Back to editing").props.onClick(); tree = h.render();
+  assert.equal(dialog(), undefined);
+  assert.deepEqual(h.dialogs, ["open", "close"]);
+  button(tree, "Preview and send").props.onClick(); tree = h.render();
+  assert.equal(consent().props.checked, false);
+  assert.equal(h.requests.some(request => request.init.method), false, "preview and consent alone must never save or email");
+});
+
+test("confirming the mocked send saves the roof image before issuing that exact version", async t => {
+  let saved;
+  const h = harness(t, result({ authorisedEmails: ["customer@example.test"], business: { ...result().business, quoteDefaultTerms: "Installation only." } }), {
+    props: { mapQuoteIntent: imageIntent() },
+    respond: (_url, init, initial) => {
+      if (!init.method) return initial;
+      const body = JSON.parse(init.body);
+      if (body.action === "save_draft") saved = savedQuote(body);
+      return result({ quote: saved, draftVersionId: "version-one", delivery: { presentation: { key: "accepted", label: "Submitted" } } });
+    },
+  });
+  let tree = await h.settle();
+  field(tree, "Line 1 unit price per panels").props.onChange({ target: { value: "200.00" } }); tree = h.render();
+  button(tree, "Preview and send").props.onClick(); tree = h.render();
+  let dialog = nodes(tree, node => node.type === "dialog")[0];
+  nodes(dialog, node => node.type === "input" && node.props.type === "checkbox")[0].props.onChange({ target: { checked: true } }); tree = h.render();
+  dialog = nodes(tree, node => node.type === "dialog")[0];
+  button(dialog, "Email quote").props.onClick(); await h.settle();
+  const posts = h.requests.filter(request => request.init.method).map(request => JSON.parse(request.init.body));
+  assert.deepEqual(posts.map(body => body.action), ["save_draft", "issue_quote"]);
+  assert.deepEqual(posts[0].roofImage, roofImage);
+  assert.equal(posts[1].quoteVersionId, "version-one");
+  assert.equal(posts[1].consentConfirmed, true);
+});
+
+test("server send permission removes the preview-send entry even when the client allows sending", async t => {
+  const initial = result({ quote: savedQuote({ lines: [product()], customerEmail: "customer@example.test", terms: "Installation only." }), access: { ...result().access, canSendQuotes: false } });
+  const h = harness(t, initial, { props: { mapQuoteIntent: undefined } }), tree = await h.settle();
+  assert.equal(button(tree, "Preview and send"), undefined);
+  assert.equal(nodes(tree, node => node.type === "dialog").length, 0);
+  assert.equal(h.requests.some(request => request.init.method), false);
 });
 
 for (const unitPrice of ["", "nonsense", "-10", "1.234"]) test(`live document labels invalid rate ${JSON.stringify(unitPrice)} incomplete without a fake total`, () => {

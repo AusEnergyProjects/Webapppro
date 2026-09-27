@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { adjacentSolarPanel, DEFAULT_SOLAR_PANEL_SIZE, DEFAULT_SOLAR_PANEL_TILT, solarHeading, solarPanelAxes, validSolarPanelSize, validSolarPanelTilt } from "../src/lib/trade-map-solar.ts";
-import { captureTradeMapPng, isCurrentMapTab } from "../src/lib/trade-map-capture.ts";
+import { captureTradeMapPng, captureTradeMapQuoteImage, isCurrentMapTab } from "../src/lib/trade-map-capture.ts";
 
 test("copies follow the selected panel's roof angle and physical dimensions", () => {
   const source = { id: 1, center: { lat: -37.8, lng: 145 }, widthM: 1.13, lengthM: 1.72, heading: 330, lengthTilt: 0, widthTilt: 0 };
@@ -111,7 +111,7 @@ test("capture identity accepts only the exact current tab, not another TLink tab
   assert.equal(isCurrentMapTab({ getSettings: () => ({ displaySurface: "browser" }) }, "current", origin), false);
 });
 
-function captureHarness(t, { wrongTab = false, rejectCrop = false, noCrop = false, denied = false, covered = false, pending = false } = {}) {
+function captureHarness(t, { wrongTab = false, rejectCrop = false, noCrop = false, denied = false, covered = false, pending = false, videoWidth = 600, videoHeight = 400, oversized = false, cancelEncoding = false, cancelFirstFrame = false } = {}) {
   const originals = new Map();
   const global = (name, value) => { originals.set(name, Object.getOwnPropertyDescriptor(globalThis, name)); Object.defineProperty(globalThis, name, { configurable: true, value }); };
   t.after(() => { for (const [name, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, name, descriptor); else delete globalThis[name]; } });
@@ -131,18 +131,27 @@ function captureHarness(t, { wrongTab = false, rejectCrop = false, noCrop = fals
   } });
   global("window", { CropTarget: { fromElement: async () => ({}) }, setTimeout, clearTimeout });
   global("location", { origin: "https://example.test" });
-  global("requestAnimationFrame", (callback) => setTimeout(callback, 0));
+  global("requestAnimationFrame", (callback) => setTimeout(() => { calls.push("paint"); callback(); }, 0));
+  global("cancelAnimationFrame", clearTimeout);
   global("innerWidth", 1000); global("innerHeight", 800);
-  let frameCallback;
-  const video = { videoWidth: 600, videoHeight: 400, requestVideoFrameCallback(callback) { frameCallback = callback; return 1; },
-    cancelVideoFrameCallback() {}, async play() { calls.push("play"); setTimeout(() => frameCallback(), 0); }, pause() {}, remove() {} };
-  const context = { drawImage() { calls.push("read pixels"); }, fillRect() {}, fillText() {} };
-  const canvas = { getContext: () => context, toBlob(callback, mime) { calls.push(mime); callback(new Blob(["PNG"], { type: mime })); } };
+  let frameCallback, playing = false, frameId = 0;
+  const cancelledFrames = new Set();
+  const video = { videoWidth, videoHeight, requestVideoFrameCallback(callback) {
+    const id = ++frameId;
+    const delivered = () => { if (cancelledFrames.has(id)) return; calls.push("video frame"); if (cancelFirstFrame && id === 1) attempt.abort(); callback(); };
+    if (playing) setTimeout(delivered, 0); else frameCallback = delivered;
+    return id;
+  }, cancelVideoFrameCallback(id) { cancelledFrames.add(id); }, async play() { calls.push("play"); playing = true; setTimeout(() => frameCallback(), 0); }, pause() {}, remove() {} };
+  const draws = [], captions = [];
+  const context = { drawImage(...args) { calls.push("read pixels"); draws.push(args); }, fillRect() {}, fillText(value) { captions.push(value); } };
+  let encodes = 0;
+  const canvas = { getContext: () => context, toBlob(callback, mime) { calls.push(mime); encodes++; if (cancelEncoding) attempt.abort(); callback(new Blob([oversized && encodes === 1 ? new Uint8Array(4_000_001) : "PNG"], { type: mime })); } };
   const link = { click() { calls.push("download"); }, remove() {} };
   const element = { scrollIntoView() {}, contains: () => !covered, getBoundingClientRect: () => ({ top: 0, left: 0, bottom: 400, right: 600 }) };
   global("document", { createElement(tag) { calls.push(`create ${tag}`); return { video, canvas, a: link }[tag]; }, body: { append() {} }, elementFromPoint: () => element });
   const run = () => captureTradeMapPng(element, 4, () => calls.push("hide controls"), () => calls.push("restore controls"), attempt.signal);
-  return { calls, run, canvas, link, cancel: () => attempt.abort(), grant: () => grant() };
+  const quote = (measurement = { kind: "solar", quantity: 4 }) => captureTradeMapQuoteImage(element, measurement, () => calls.push("hide controls"), () => calls.push("restore controls"), attempt.signal);
+  return { calls, run, quote, canvas, draws, captions, link, cancel: () => attempt.abort(), grant: () => grant() };
 }
 
 test("PNG capture crops before reading pixels and always stops sharing", async (t) => {
@@ -157,6 +166,12 @@ test("PNG capture crops before reading pixels and always stops sharing", async (
   assert.ok(h.calls.includes("stop"));
   assert.ok(h.calls.includes("clear identity"));
   assert.ok(h.calls.includes("restore controls"));
+  const frames = h.calls.flatMap((value, index) => value === "video frame" ? [index] : []);
+  assert.equal(frames.length, 2, "a potentially buffered first frame is discarded");
+  assert.ok(h.calls.indexOf("hide controls") < frames[0]);
+  assert.equal(h.calls.slice(frames[0] + 1, frames[1]).filter((value) => value === "paint").length, 2);
+  assert.ok(frames[1] < h.calls.indexOf("read pixels"));
+  assert.ok(h.calls.indexOf("restore controls") > h.calls.indexOf("image/png"));
 });
 
 for (const reason of ["wrongTab", "rejectCrop", "noCrop", "denied", "covered"]) test(`capture ${reason} never reads or downloads another surface`, async (t) => {
@@ -180,4 +195,41 @@ test("cancelling a pending sharing prompt stops even a stream granted later", as
   assert.ok(h.calls.includes("stop"));
   assert.equal(h.calls.includes("create video"), false);
   assert.equal(h.calls.includes("download"), false);
+});
+
+test("quote capture returns PNG data without downloading and preserves the entire map frame", async (t) => {
+  const h = captureHarness(t, { videoWidth: 3200, videoHeight: 1800 });
+  const image = await h.quote();
+  assert.deepEqual(image, { dataUrl: "data:image/png;base64,UE5H" });
+  assert.equal(h.calls.includes("download"), false);
+  assert.equal(h.canvas.width, 1600);
+  assert.equal(h.canvas.height, 962);
+  assert.equal(h.draws[0].length, 5, "the full source frame is resized, with no source crop that could remove attribution");
+  assert.deepEqual(h.draws[0].slice(1), [0, 0, 1600, 900]);
+  assert.ok(h.captions.includes("Solar layout concept · 4 panels"));
+  assert.ok(h.calls.includes("stop"));
+  assert.ok(h.calls.includes("restore controls"));
+});
+
+test("quote capture downscales an oversized PNG below the upload limit", async (t) => {
+  const h = captureHarness(t, { videoWidth: 1600, videoHeight: 900, oversized: true });
+  await h.quote();
+  assert.equal(h.calls.filter((call) => call === "image/png").length, 2);
+  assert.equal(h.canvas.width, 1280);
+  assert.equal(h.canvas.height, 782);
+});
+
+for (const measurement of [{ kind: "area", quantity: 162.5 }, { kind: "distance", quantity: 1.72 }]) test(`quote ${measurement.kind} capture labels the measured unit`, async (t) => {
+  const h = captureHarness(t);
+  await h.quote(measurement);
+  assert.ok(h.captions.includes(`Map ${measurement.kind} estimate · ${measurement.quantity} ${measurement.kind === "area" ? "m²" : "m"}`));
+  assert.equal(h.calls.includes("download"), false);
+});
+
+for (const reason of ["wrongTab", "denied", "cancelEncoding", "cancelFirstFrame"]) test(`quote capture ${reason} rejects rather than handing off an empty image`, async (t) => {
+  const h = captureHarness(t, { [reason]: true });
+  await assert.rejects(h.quote());
+  assert.equal(h.calls.includes("download"), false);
+  assert.ok(h.calls.includes("restore controls"));
+  if (reason === "cancelFirstFrame") assert.equal(h.calls.includes("read pixels"), false);
 });

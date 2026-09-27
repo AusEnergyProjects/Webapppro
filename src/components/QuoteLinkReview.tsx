@@ -70,6 +70,7 @@ type Quote = {
   terms: string;
   validUntil: string;
   issuedAt: string;
+  hasRoofImage?: boolean;
   consentStatement: string;
   expiresAt: string;
   items: Line[];
@@ -671,6 +672,14 @@ export function QuoteLinkReview({ token }: { token: string }) {
           <section className="quote-link-customer-message">
             <span>From {quote.business.name}</span>
             <p>{quote.customerMessage}</p>
+          </section>
+        )}
+        {quote.hasRoofImage && (
+          <section className="quote-link-block" aria-label="Roof design">
+            <h2>Roof design</h2>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`${endpoint}/media/roof`} alt="Proposed roof design" style={{ display: "block", width: "100%", height: "auto", borderRadius: 10 }} />
+            <p>Indicative layout. Confirm roof dimensions and installation details on site.</p>
           </section>
         )}
         {quote.items.length > 0 && (

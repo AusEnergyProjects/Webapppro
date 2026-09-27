@@ -321,24 +321,23 @@ test("every base and choice row uses one price-book dropdown or an editable cust
   assert.match(ui, /replaceChoiceLine\(choice\.clientKey, index, replacement\)/);
 });
 
-test("preview keeps one consent control in the sticky footer beside send actions", () => {
-  const modal = ui.slice(ui.indexOf('className="crm-invoice-preview-dialog crm-quote-preview-dialog"'));
-  const consent = modal.indexOf('className="trade-quote-send-consent"');
-  const pdf = modal.indexOf('id="trade-quote-pdf-preview"');
-  assert.ok(consent > pdf);
-  assert.equal(modal.match(/className="trade-quote-send-consent"/g)?.length, 1);
-  assert.match(modal, /className="trade-quote-send-footer"/);
-  assert.match(css, /\.trade-quote-send-footer \{[^}]*position: sticky;[^}]*bottom: 0/);
-  assert.match(css, /\.trade-quote-send-footer-actions[^}]*display: flex/);
-  assert.match(css, /\.trade-quote-send-footer \{ grid-template-columns: 1fr; \}/);
+test("native preview keeps one full-width consent control after the same live quote document", () => {
+  const modal = ui.slice(ui.indexOf("{canSendQuote && sendPreview && <dialog"));
+  const previewCss = fs.readFileSync(new URL("../src/components/TradeQuoteLivePreview.module.css", import.meta.url), "utf8");
+  const consent = modal.indexOf("className={previewStyles.sendConsent}");
+  const document = modal.indexOf("<TradeQuoteLivePreview");
+  assert.ok(document >= 0 && consent > document);
+  assert.equal(modal.match(/className=\{previewStyles\.sendConsent\}/g)?.length, 1);
+  assert.match(modal, /className=\{previewStyles\.sendFooter\}/);
+  assert.match(ui, /dialog\?\.showModal\(\)/);
+  assert.match(previewCss, /\.sendFooter \{[^}]*display: grid;[^}]*flex: 0 0 auto/);
+  assert.match(previewCss, /\.sendConsent \{[^}]*display: flex;[^}]*min-height: 44px/);
+  assert.match(previewCss, /\.sendActions \{[^}]*display: flex;[^}]*flex-wrap: wrap/);
   assert.match(modal, /disabled=\{Boolean\(busy\) \|\| !sendConsent\}/);
-  assert.match(modal, /previewGrossSubtotalCents/);
-  assert.match(modal, /previewOtherDiscountSubtotalCents/);
-  assert.match(modal, /previewFinalPercentSubtotalCents/);
-  assert.match(modal, /Review quote PDF/);
-  assert.match(modal, /previewPdfRef\.current\?\.scrollIntoView/);
-  assert.match(modal, /aria-controls="trade-quote-pdf-preview"/);
-  assert.doesNotMatch(modal, /<button type="button" disabled>Review quote securely<\/button>/);
+  assert.match(modal, /<TradeQuoteLivePreview[^>]*lines=\{lines\}[^>]*choices=\{choices\}[^>]*roofImage=\{roofImage\} review/);
+  assert.match(modal, /Tick the box above to enable sending\./);
+  assert.match(modal, /"Email quote"/);
+  assert.doesNotMatch(modal, /trade-quote-document-sheet|previewPdfRef|Review quote PDF/);
 });
 
 test("submit outcome stays visible in the modal and exact API errors can include a request reference", () => {

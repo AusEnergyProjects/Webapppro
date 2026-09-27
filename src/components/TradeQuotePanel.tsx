@@ -35,7 +35,8 @@ type PriceBookItem = { id: string; itemCode: string; name: string; description: 
 type JobPacket = { id: string; packetCode: string; name: string; revision: number; suggestedCrewSize: number; taskCount: number; formCount: number; activeCrewCount: number; crewReady: boolean; unavailableItemCount: number; canApply: boolean; summary: { sellCentsExGst: number; estimatedDurationMinutes: number }; lines: Array<{ id: string; priceBookItemId: string; name: string; lineType: string; quantityMilli: number; sellPriceCentsExGst: number; taxCode: string }> };
 export type QuoteChoice = { id?: string; clientKey: string; kind: "package" | "addon" | "choose_one"; groupKey: string; name: string; summary: string; recommended: boolean; subtotalCents?: number; taxCents?: number; totalCents?: number; lines: QuoteLine[] };
 type SavedChoice = Omit<QuoteChoice, "lines"> & { id: string; items: SavedLine[]; subtotalCents: number; taxCents: number; totalCents: number };
-type QuoteVersion = { id: string; versionNumber: number; status: string; customerEmail: string; subtotalCents: number; taxCents: number; totalCents: number; terms: string; customerMessage: string; validUntil: string; consentStatement: string; issuedAt: string; items: SavedLine[]; choices: SavedChoice[]; internalSummary?: { costCentsExGst: number; sellCentsExGst: number; marginCentsExGst: number }; acceptance: null | { decision: string; actorEmail: string; actorType: string; signerName: string; decidedAt: string; consentStatement: string; selectionSummary: string; selectedTotalCents: number } };
+export type QuoteRoofImage = { dataUrl: string } | { versionId: string; sha256: string };
+type QuoteVersion = { roofImage?: { contentType: "image/png"; width: number; height: number; sha256: string } | null; id: string; versionNumber: number; status: string; customerEmail: string; subtotalCents: number; taxCents: number; totalCents: number; terms: string; customerMessage: string; validUntil: string; consentStatement: string; issuedAt: string; items: SavedLine[]; choices: SavedChoice[]; internalSummary?: { costCentsExGst: number; sellCentsExGst: number; marginCentsExGst: number }; acceptance: null | { decision: string; actorEmail: string; actorType: string; signerName: string; decidedAt: string; consentStatement: string; selectionSummary: string; selectedTotalCents: number } };
 type QuoteDelivery = { id: string; channel: string; status: string; recipientPreview: string; sentAt: string; deliveredAt: string; createdAt: string; nextAttemptAt?: string; presentation?: { key: "sending" | "accepted" | "delivered" | "attention"; label: string; canRetry: boolean } };
 type QuoteDeliveryStatus = Pick<QuoteDelivery, "id" | "status" | "presentation"> & { attempts?: number; nextAttemptAt?: string; updatedAt?: string };
 type Quote = { id: string; quoteNumber: string; currentVersionNumber: number; status: string; versions: QuoteVersion[];
@@ -83,7 +84,7 @@ const editLine = (line: SavedLine, activeIds: Set<string>): QuoteLine => {
     quantity: (line.quantityMilli / 1000).toString(), unitPrice: persistedOverallDiscountUnitPrice(line) };
 };
 const choiceKey = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-type QuoteDraft = { lines: QuoteLine[]; choices: QuoteChoice[]; customerEmail: string; terms: string; customerMessage: string; validUntil: string };
+type QuoteDraft = { roofImage: QuoteRoofImage | null; lines: QuoteLine[]; choices: QuoteChoice[]; customerEmail: string; terms: string; customerMessage: string; validUntil: string };
 
 function draftFingerprint(draft: QuoteDraft, saveAsBusinessDefault = false) {
   const lineValues = (line: QuoteLine) => ({ priceBookItemId: line.priceBookItemId || "", jobPacketId: line.jobPacketId || "", jobPacketLineId: line.jobPacketLineId || "",
@@ -106,6 +107,7 @@ function resultDraft(result: QuoteResult): QuoteDraft {
     terms: current ? current.terms : result.business?.quoteDefaultTerms || "",
     customerMessage: current ? current.customerMessage || "" : result.business?.quoteEmailIntro || "",
     validUntil: current?.validUntil || "",
+    roofImage: current?.roofImage ? { versionId: current.id, sha256: current.roofImage.sha256 } : null,
   };
 }
 
@@ -278,6 +280,7 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
   const [lines, setLines] = useState<QuoteLine[]>([blankLine()]); const [choices, setChoices] = useState<QuoteChoice[]>([]); const [packetId, setPacketId] = useState("");
   const [jobSummary, setJobSummary] = useState<QuoteJob | null>(null); const [business, setBusiness] = useState<QuoteBusiness | null>(null);
   const [customerEmail, setCustomerEmail] = useState(""); const [terms, setTerms] = useState(""); const [customerMessage, setCustomerMessage] = useState(""); const [validUntil, setValidUntil] = useState("");
+  const [roofImage, setRoofImage] = useState<QuoteRoofImage | null>(null);
   const [saveAsBusinessDefault, setSaveAsBusinessDefault] = useState(false); const [addingRecipient, setAddingRecipient] = useState(false);
   const [recipientFirstName, setRecipientFirstName] = useState(""); const [recipientLastName, setRecipientLastName] = useState(""); const [recipientEmail, setRecipientEmail] = useState("");
   const [busy, setBusy] = useState(""); const [message, setMessage] = useState("");
@@ -307,12 +310,11 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
   const liveDiscountCents = useMemo(() => liveOverallDiscountCents(lines), [lines]);
   const quoteValidationIssue = useMemo(() => firstQuoteEditorValidationIssue(lines, choices, priceBookItems), [choices, lines, priceBookItems]);
   const previewTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const previewDialogRef = useRef<HTMLElement | null>(null);
-  const previewPdfRef = useRef<HTMLElement | null>(null);
+  const previewDialogRef = useRef<HTMLDialogElement | null>(null);
   const acceptedPhotoDialogRef = useRef<HTMLDivElement | null>(null);
   const acceptedPhotoCloseRef = useRef<HTMLButtonElement | null>(null);
   const acceptedPhotoOpenerRef = useRef<HTMLElement | null>(null);
-  const fingerprint = draftFingerprint({ lines, choices, customerEmail, terms, customerMessage, validUntil }, saveAsBusinessDefault);
+  const fingerprint = draftFingerprint({ lines, choices, customerEmail, terms, customerMessage, validUntil, roofImage }, saveAsBusinessDefault);
   const draftDirty = draftBaseline !== null && fingerprint !== draftBaseline || Boolean(recipientFirstName || recipientLastName || recipientEmail || answer);
   useEffect(() => { onDraftDirtyChange?.(draftDirty); }, [draftDirty, onDraftDirtyChange]);
   useEffect(() => { onBusyChange?.(Boolean(busy)); }, [busy, onBusyChange]);
@@ -358,8 +360,10 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     if (mode === "load" && intent && canApplyMapQuoteIntent(intent, { ownerUid: user.uid, workOrderId,
       canManage: !readOnly && result.access?.canManageQuotes === true, consumedId: consumedMapIntent.current })) {
       draft.lines = appendMapQuoteIntent(draft.lines, intent);
+      if (intent.measurement.roofImage) draft.roofImage = intent.measurement.roofImage;
       consumedMapIntent.current = intent.id;
     }
+    setRoofImage(draft.roofImage);
     setLines(draft.lines); setChoices(draft.choices); setCustomerEmail(draft.customerEmail);
     setTerms(draft.terms); setCustomerMessage(draft.customerMessage); setValidUntil(draft.validUntil);
   }, [readOnly, user.uid, workOrderId]);
@@ -462,44 +466,10 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     const returnFocus = previewTriggerRef.current;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const focusableElements = () => dialog
-      ? Array.from(dialog.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      )).filter((element) => element.getAttribute("aria-hidden") !== "true")
-      : [];
-    const focusFrame = window.requestAnimationFrame(() => {
-      const first = focusableElements()[0];
-      (first || dialog)?.focus({ preventScroll: true });
-    });
-    const containFocus = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault(); event.stopPropagation();
-        if (dialog?.getAttribute("aria-busy") !== "true") setSendPreview(null);
-        return;
-      }
-      if (event.key !== "Tab" || !dialog) return;
-      const focusable = focusableElements();
-      if (!focusable.length) {
-        event.preventDefault();
-        dialog.focus({ preventScroll: true });
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      if (event.shiftKey && (active === first || !dialog.contains(active))) {
-        event.preventDefault();
-        last.focus({ preventScroll: true });
-      } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
-        event.preventDefault();
-        first.focus({ preventScroll: true });
-      }
-    };
-    window.addEventListener("keydown", containFocus);
+    dialog?.showModal();
     return () => {
-      window.cancelAnimationFrame(focusFrame);
+      dialog?.close();
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", containFocus);
       if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
     };
   }, [sendPreview]);
@@ -624,12 +594,28 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
   function updateChoiceLine(key: string, index: number, field: keyof QuoteLine, value: string) { setChoices((current) => current.map((choice) => choice.clientKey === key ? { ...choice, lines: choice.lines.map((line, position) => position === index ? { ...line, [field]: value } : line) } : choice)); }
   function replaceChoiceLine(key: string, index: number, replacement: QuoteLine) { setChoices((current) => current.map((choice) => choice.clientKey === key ? { ...choice, lines: choice.lines.map((line, position) => position === index ? replacement : line) } : choice)); }
 
+  async function attachRoofImage(file: File | undefined) {
+    if (!file || !canEditQuote || busy) return;
+    if (file.type !== "image/png" || file.size > 4_000_000) { setMessage("Choose a PNG map image smaller than 4 MB."); return; }
+    setBusy("roof_image"); setMessage("");
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Could not read this image."));
+        reader.onerror = () => reject(new Error("Could not read this image."));
+        reader.readAsDataURL(file);
+      });
+      setRoofImage({ dataUrl });
+      setMessage("Roof layout added. Check it in the customer preview, then save your quote.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not attach this image."); }
+    finally { setBusy(""); }
+  }
   async function saveDraft() {
     if (!canEditQuote || busy) return;
     if (quoteValidationIssue) { setMessage(quoteValidationIssue.message); return; }
     setBusy("save_draft"); setMessage("");
     try {
-      const result = await request({ method: "POST", body: JSON.stringify({ action: "save_draft", workOrderId, lines, choices, customerEmail, terms, customerMessage, validUntil, saveAsBusinessDefault }) });
+      const result = await request({ method: "POST", body: JSON.stringify({ action: "save_draft", workOrderId, lines, choices, customerEmail, terms, customerMessage, validUntil, saveAsBusinessDefault, roofImage: roofImage && "dataUrl" in roofImage ? roofImage : roofImage ? undefined : null }) });
       applyResult({ ...result, authorisedEmails: emails, priceBookItems, jobPackets }, "saved"); await onChanged?.();
       setSaveAsBusinessDefault(false);
       setMessage(saveAsBusinessDefault ? "Draft and business quote defaults saved." : "Draft saved with server-calculated totals and internal margin controls.");
@@ -714,7 +700,7 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
         setMessage(outcome.message); await onChanged?.();
         return;
       }
-      const saved = await request({ method: "POST", body: JSON.stringify({ action: "save_draft", workOrderId, lines, choices, customerEmail, terms, customerMessage, validUntil, saveAsBusinessDefault }) });
+      const saved = await request({ method: "POST", body: JSON.stringify({ action: "save_draft", workOrderId, lines, choices, customerEmail, terms, customerMessage, validUntil, saveAsBusinessDefault, roofImage: roofImage && "dataUrl" in roofImage ? roofImage : roofImage ? undefined : null }) });
       draftSaved = true; applyResult({ ...saved, authorisedEmails: emails, priceBookItems, jobPackets }, "saved");
       setSaveAsBusinessDefault(false);
       if (!saved.draftVersionId) throw new Error("The saved quote version could not be verified. Refresh the quote before submitting it.");
@@ -895,19 +881,6 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
   const finalPercentIssue = quoteValidationIssue?.kind === "line" && quoteValidationIssue.scopeKey === "base"
     && quoteValidationIssue.lineIndex === finalPercentIndex ? quoteValidationIssue : null;
   const finalPercentErrorId = "quote-final-percent-error";
-  const previewHeadlineLines = sendPreview ? [
-    ...sendPreview.base.lines,
-    ...sendPreview.choices.filter((choice) => sendPreview.displayTotals.selectedChoiceIds.includes(choice.selectionId))
-      .flatMap((choice) => choice.totals.lines),
-  ] : [];
-  const previewFinalPercentLine = previewHeadlineLines.find((line) => line.sectionHeading === OVERALL_PERCENT_DISCOUNT_SECTION) || null;
-  const previewFinalPercentSubtotalCents = previewHeadlineLines.reduce((sum, line) =>
-    line.sectionHeading === OVERALL_PERCENT_DISCOUNT_SECTION ? sum + Math.min(0, line.subtotalCents) : sum, 0);
-  const previewOtherDiscountSubtotalCents = previewHeadlineLines.reduce((sum, line) =>
-    line.sectionHeading !== OVERALL_PERCENT_DISCOUNT_SECTION && line.subtotalCents < 0 ? sum + line.subtotalCents : sum, 0);
-  const previewGrossSubtotalCents = sendPreview
-    ? sendPreview.displayTotals.subtotalCents - previewOtherDiscountSubtotalCents - previewFinalPercentSubtotalCents
-    : 0;
   return <section className="trade-quote-panel">
     <header><div><span>Prepare quote</span><h4>{quote?.quoteNumber || "New quote"}{current ? ` | Version ${current.versionNumber}` : ""}</h4><p>Add your items and prices, then check the customer preview.</p></div>{current && <strong className={`quote-status ${current.status}`}>{current.status.replaceAll("_", " ")}</strong>}</header>
     {busy === "load" && <p role="status">Loading the authorised quote...</p>}
@@ -973,12 +946,13 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     </fieldset>
     {!canEditQuote && jobSummary?.customerId && !jobSummary.publicLead && onOpenCustomer && <div className="trade-quote-actions"><button type="button" onClick={() => onOpenCustomer(jobSummary.customerId)}>Open customer details</button></div>}
     {!canEditQuote && <p className="trade-import-status" role="status">View only. You can open the customer context, issued PDF and quote history, but you cannot change this quote.</p>}
+    <section className={previewStyles.roofAttachment} aria-label="Quote roof layout"><div><strong>Roof layout</strong><p>{roofImage ? "Included in this quote and its PDF." : "Add a map image to show the proposed layout."}</p></div>{canEditQuote && <div><label className={previewStyles.uploadButton}>{roofImage ? "Replace image" : "Add map image"}<input type="file" accept="image/png" aria-label={roofImage ? "Replace roof layout image" : "Add roof layout image"} disabled={Boolean(busy)} onChange={(event) => { void attachRoofImage(event.currentTarget.files?.[0]); event.currentTarget.value = ""; }} /></label>{roofImage && <button type="button" disabled={Boolean(busy)} onClick={() => setRoofImage(null)}>Remove</button>}</div>}</section>
     {canEditQuote && <div className="trade-quote-actions"><button type="button" disabled={Boolean(busy)} onClick={() => void saveDraft()}>{busy === "save_draft" ? "Saving..." : draftMode ? "Save draft" : "Save as next draft"}</button>{canSendQuote && <button ref={previewTriggerRef} className="primary" type="button" disabled={Boolean(busy)} onClick={openSendPreview}>{draftMode ? "Preview and send" : "Preview and send next version"}</button>}</div>}
     {quote?.link && <section className="trade-quote-share"><header><div><span>Effortless customer review</span><h5>One secure quote link and matching PDF</h5><p>The customer can review, ask, sign, accept or decline without creating an account. The PDF is generated from this exact issued version.</p></div><strong>{quote.link.status}</strong></header>{latestDelivery?.presentation && <aside className="trade-quote-internal" aria-label="Email delivery status"><div><span>Email delivery</span><strong>{latestDelivery.presentation.label}</strong></div><small>{latestDelivery.recipientPreview ? `Recipient ${latestDelivery.recipientPreview}.` : ""}</small>{canSendQuote && latestDelivery.presentation.canRetry && <button type="button" disabled={Boolean(busy) || !deliveryConfirmed} onClick={() => void linkAction("retry_quote_delivery", { deliveryId: latestDelivery.id })}>{busy === "retry_quote_delivery" ? "Retrying..." : "Retry email"}</button>}</aside>}{quote.link.shareUrl ? <><div className="trade-quote-share-link"><input aria-label="Secure quote link" readOnly value={quote.link.shareUrl} /><button type="button" onClick={() => void copyLink()}>Copy link</button><a href={quote.link.shareUrl} target="_blank" rel="noreferrer">Preview</a></div><small>Expires {new Date(quote.link.expiresAt).toLocaleDateString("en-AU")} | Current issue {quote.link.tokenIssue}</small>{canSendQuote && <label className="trade-quote-delivery-confirm"><input type="checkbox" checked={deliveryConfirmed} onChange={(event) => setDeliveryConfirmed(event.target.checked)} /><span>I confirm {quote.link.recipientPreview || "this customer"} asked to receive this current quote by email.</span></label>}<div className="trade-quote-share-actions">{canSendQuote && <button type="button" disabled={Boolean(busy) || !deliveryConfirmed} onClick={() => void linkAction("send_quote")}>{busy === "send_quote" ? "Submitting..." : "Email quote"}</button>}{quote.link.pdfUrl && <a href={quote.link.pdfUrl} target="_blank" rel="noreferrer">Download issued PDF</a>}{canEditQuote && <button type="button" disabled={Boolean(busy)} onClick={() => void linkAction("replace_link")}>Replace link</button>}{canEditQuote && <button type="button" disabled={Boolean(busy)} onClick={() => void linkAction("revoke_link")}>Revoke link</button>}</div>{canSendQuote && <small>SMS stays unavailable until the approved Australian sender gate is active.</small>}</> : canEditQuote ? <div className="trade-quote-share-actions"><button type="button" disabled={Boolean(busy) || quote.link.status === "accepted" || quote.link.status === "declined"} onClick={() => void linkAction("replace_link")}>Create replacement link</button></div> : null}</section>}
     {(quote?.timeline?.length || 0) > 0 && <details className="trade-quote-timeline"><summary>Quote activity ({quote?.timeline?.length || 0})</summary>{quote?.timeline?.map((event, index) => <article key={`${event.occurredAt}:${index}`}><strong>{event.type.replaceAll("_", " ")}</strong><span>{event.summary}</span><small>{new Date(event.occurredAt).toLocaleString("en-AU")}</small></article>)}</details>}
     {quote && quote.versions.length > 0 && <details className="trade-quote-history"><summary>Quote history ({quote.versions.length})</summary>{quote.versions.map((version) => <article key={version.id}><div><strong>Version {version.versionNumber} | {version.status.replaceAll("_", " ")}</strong><span>{version.choices.length ? `${version.choices.length} customer choices` : money(version.totalCents)}{version.issuedAt ? ` | Issued ${new Date(version.issuedAt).toLocaleDateString("en-AU")}` : " | Draft"}</span></div>{version.acceptance && <small>{version.acceptance.decision.replaceAll("_", " ")} by {version.acceptance.actorType === "secure_link_holder" ? version.acceptance.signerName : `verified account ${version.acceptance.actorEmail}`} on {new Date(version.acceptance.decidedAt).toLocaleString("en-AU")}{version.acceptance.selectionSummary ? ` | ${version.acceptance.selectionSummary} | ${money(version.acceptance.selectedTotalCents)}` : ""}</small>}</article>)}</details>}
     {message && <p className="trade-import-status" role="status">{message}</p>}
-    </div>{showLivePreview && <TradeQuoteLivePreview user={user} workOrderId={workOrderId} lines={lines} choices={choices} business={business} job={jobSummary} identity={nextQuoteIdentity(quote, jobSummary)} customerMessage={customerMessage} terms={terms} validUntil={validUntil} validationMessage={quoteValidationIssue?.message || ""} />}</div>
+    </div>{showLivePreview && <TradeQuoteLivePreview user={user} workOrderId={workOrderId} lines={lines} choices={choices} business={business} job={jobSummary} identity={nextQuoteIdentity(quote, jobSummary)} customerMessage={customerMessage} terms={terms} validUntil={validUntil} validationMessage={quoteValidationIssue?.message || ""} roofImage={roofImage} />}</div>
     {acceptedPhotoPreview && <div className="dashboard-photo-lightbox-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setAcceptedPhotoPreview(null); }}>
       <div ref={acceptedPhotoDialogRef} className="dashboard-photo-lightbox-dialog" role="dialog" aria-modal="true" aria-labelledby="trade-quote-photo-title" aria-describedby="trade-quote-photo-help" tabIndex={-1}>
         <header><div><span>Customer-shared quoting photo</span><h2 id="trade-quote-photo-title">{acceptedPhotoPreview.photo.label || "Quote preparation photo"}</h2></div><button ref={acceptedPhotoCloseRef} type="button" aria-label="Close full image" onClick={() => setAcceptedPhotoPreview(null)}><span aria-hidden="true">X</span></button></header>
@@ -991,23 +965,20 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
         <p id="trade-quote-photo-help">Select X, press Escape or click outside the image to close.</p>
       </div>
     </div>}
-    {canSendQuote && sendPreview && <div className="crm-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) setSendPreview(null); }}>
-      <section ref={previewDialogRef} className="crm-invoice-preview-dialog crm-quote-preview-dialog" role="dialog" aria-modal="true" aria-busy={Boolean(busy)} aria-labelledby="quote-send-preview-title" tabIndex={-1}>
-        <header><div><span>{sendPreview.delivery.identityKnown ? "Exact customer delivery" : "Pre-save customer delivery preview"}</span><strong id="quote-send-preview-title">{sendPreview.delivery.subject}</strong><small>{sendPreview.delivery.identityKnown ? `To ${customerEmail} | Issues ${sendPreview.delivery.quoteNumber} version ${sendPreview.delivery.versionNumber} | PDF attachment ${sendPreview.delivery.attachmentName}` : `To ${customerEmail} | Quote number, version and PDF filename will be confirmed by the server when this draft is saved.`}</small></div><button type="button" disabled={Boolean(busy)} onClick={() => setSendPreview(null)}>Close</button></header>
-        <div className="trade-quote-send-preview" data-theme={business?.brandThemeKey || "emerald_navy"} data-border={business?.brandBorderStyle || "soft"}>
-          <section className="trade-quote-email-preview"><span>Email preview</span><article><strong>{business?.businessName || "Your trade business"}</strong><h5>{sendPreview.delivery.subject}</h5><p>Hello {jobSummary?.customerName || "customer"},</p><p>{customerMessage || business?.quoteEmailIntro || "Thank you for the opportunity to quote for your project."}</p><p>The sent email opens a secure customer review. This preview button opens the matching PDF content below.</p><button type="button" aria-controls="trade-quote-pdf-preview" onClick={() => { previewPdfRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); previewPdfRef.current?.focus({ preventScroll: true }); }}>Review quote PDF</button><small>{validUntil ? `Quote valid until ${new Date(`${validUntil}T00:00:00`).toLocaleDateString("en-AU")}` : "Secure link expires 30 days after issue"}</small></article></section>
-          <section ref={previewPdfRef} id="trade-quote-pdf-preview" className="trade-quote-pdf-attachment" tabIndex={-1}><span>PDF attachment preview</span><header><div><b>PDF</b><p><strong>{sendPreview.delivery.attachmentName}</strong><small>{sendPreview.delivery.identityKnown ? `Server-generated from ${sendPreview.delivery.quoteNumber} version ${sendPreview.delivery.versionNumber} after issue` : "Pre-save document preview. The server assigns the final quote identity before issue."}</small></p></div><em>Submitted as attachment</em></header><article className="trade-quote-document-sheet"><header><div><small>Quote from</small><strong>{business?.businessName || "Your trade business"}</strong><span>{sendPreview.delivery.identityKnown ? `${sendPreview.delivery.quoteNumber} | Version ${sendPreview.delivery.versionNumber}` : "Quote identity pending server save"}</span></div><div><small>Prepared for</small><strong>{jobSummary?.customerName || "Customer"}</strong><span>{jobSummary?.siteSummary || ""}</span></div></header>
-            <section><span>Included work</span><div className="trade-quote-preview-lines">{sendPreview.base.lines.some((line) => line.sectionHeading !== OVERALL_PERCENT_DISCOUNT_SECTION) ? sendPreview.base.lines.filter((line) => line.sectionHeading !== OVERALL_PERCENT_DISCOUNT_SECTION).map((line, index) => <article key={`${line.description}:${index}`}><div><strong>{line.description}</strong><small>{line.sectionHeading} | {(line.quantityMilli / 1000).toLocaleString("en-AU")} x {money(line.unitPriceCents)}{line.taxCode === "gst" ? " plus GST" : " no GST"}</small></div><b>{money(line.totalCents)}</b></article>) : <p>No work is included before the customer chooses an option.</p>}</div></section>
-            {sendPreview.choices.length > 0 && <section><span>Customer choices</span><div className="trade-quote-preview-choices">{sendPreview.choices.map((choice) => <article key={choice.clientKey}><div><strong>{choice.name}{choice.recommended ? " | Recommended" : ""}</strong><small>{choice.summary || (choice.kind === "addon" ? "Optional extra" : "Customer choice")}</small></div><b>{choice.kind === "addon" ? `Adds ${money(choice.totals.totalCents)}` : `${money(sendPreview.base.totalCents + choice.totals.totalCents)} total`}</b></article>)}</div></section>}
-            <dl><div><dt>Subtotal ex GST</dt><dd>{money(previewGrossSubtotalCents)}</dd></div>{previewOtherDiscountSubtotalCents < 0 && <div><dt>Rebates and dollar discounts ex GST</dt><dd>{money(previewOtherDiscountSubtotalCents)}</dd></div>}{previewFinalPercentLine && <div><dt>{previewFinalPercentLine.description} | Final {(previewFinalPercentLine.quantityMilli / 10).toLocaleString("en-AU")}% discount on included items ex GST</dt><dd>{money(previewFinalPercentSubtotalCents)}</dd></div>}<div><dt>GST</dt><dd>{money(sendPreview.displayTotals.taxCents)}</dd></div><div className="total"><dt>{sendPreview.displayTotals.label}</dt><dd>{money(sendPreview.displayTotals.totalCents)}</dd></div></dl>
-            <section className="trade-quote-preview-terms"><span>Recorded terms</span><p>{terms}</p></section>
-          </article></section>
-        </div>
-        <footer className="trade-quote-send-footer"><div className="trade-quote-send-consent" aria-label="Confirm customer email consent"><label><input type="checkbox" checked={sendConsent} disabled={Boolean(busy) || sendOutcome.kind === "success" || sendOutcome.kind === "attention"} onChange={(event) => setSendConsent(event.target.checked)} /><span><strong>Confirm before sending</strong>I confirm this customer asked to receive this quote at {customerEmail}.</span></label>{sendOutcome.message && <p className={sendOutcome.kind} role={sendOutcome.kind === "error" || sendOutcome.kind === "attention" ? "alert" : "status"} aria-live="polite">{sendOutcome.message}</p>}{jobSummary?.publicLead && (sendOutcome.kind === "success" || sendOutcome.kind === "attention" || (sendOutcome.kind === "sending" && !busy)) && <p className="attention">This Australian Energy Assessments lead can be scheduled after the customer accepts the current quote.</p>}</div><div className="trade-quote-send-footer-actions">{sendOutcome.kind === "success" || sendOutcome.kind === "attention" || (sendOutcome.kind === "sending" && !busy)
-          ? <><button type="button" onClick={() => setSendPreview(null)}>Done</button>{onScheduleJob && !jobSummary?.publicLead && <button type="button" className="btn" onClick={() => { setSendPreview(null); onScheduleJob(); }}>Schedule and assign job</button>}</>
-          : <><button type="button" disabled={Boolean(busy)} onClick={() => setSendPreview(null)}>Go back and edit</button><button type="button" className="btn" disabled={Boolean(busy) || !sendConsent} onClick={() => void sendPreviewedQuote()}>{busy === "preview_send" ? "Saving and submitting..." : sendOutcome.kind === "error" ? "Try again safely" : "Confirm and submit email"}</button></>}</div>
-        </footer>
-      </section>
-    </div>}
+    {canSendQuote && sendPreview && <dialog ref={previewDialogRef} className={previewStyles.sendDialog} aria-busy={Boolean(busy)} aria-labelledby="quote-send-preview-title" onCancel={(event) => { event.preventDefault(); event.stopPropagation(); if (!busy) setSendPreview(null); }}>
+      <header className={previewStyles.sendHeader}><div><h3 id="quote-send-preview-title">Review your quote</h3><p>To <strong>{customerEmail}</strong></p></div><button type="button" disabled={Boolean(busy)} onClick={() => setSendPreview(null)}>Close</button></header>
+      <div className={previewStyles.sendBody}>
+        <TradeQuoteLivePreview user={user} workOrderId={workOrderId} lines={lines} choices={choices} business={business} job={jobSummary} identity={nextQuoteIdentity(quote, jobSummary)} customerMessage={customerMessage} terms={terms} validUntil={validUntil} validationMessage={quoteValidationIssue?.message || ""} roofImage={roofImage} review />
+        <details className={previewStyles.emailDetails}><summary>Email details</summary><p><strong>Subject</strong> {sendPreview.delivery.subject}</p><p><strong>PDF attachment</strong> {sendPreview.delivery.attachmentName}</p><p>Your customer receives a secure review link and the quote PDF.</p></details>
+      </div>
+      <footer className={previewStyles.sendFooter}>
+        <label className={previewStyles.sendConsent}><input type="checkbox" checked={sendConsent} disabled={Boolean(busy) || sendOutcome.kind === "success" || sendOutcome.kind === "attention"} onChange={(event) => setSendConsent(event.target.checked)} /><span>The customer asked to receive this quote by email.</span></label>
+        {sendOutcome.message && <p className={previewStyles.sendStatus} role={sendOutcome.kind === "error" || sendOutcome.kind === "attention" ? "alert" : "status"} aria-live="polite">{sendOutcome.message}</p>}
+        {jobSummary?.publicLead && (sendOutcome.kind === "success" || sendOutcome.kind === "attention" || (sendOutcome.kind === "sending" && !busy)) && <p className={previewStyles.sendStatus}>This job can be scheduled after the customer accepts the quote.</p>}
+        <div className={previewStyles.sendActions}>{sendOutcome.kind === "success" || sendOutcome.kind === "attention" || (sendOutcome.kind === "sending" && !busy)
+          ? <><button type="button" onClick={() => setSendPreview(null)}>Done</button>{onScheduleJob && !jobSummary?.publicLead && <button type="button" className={previewStyles.sendPrimary} onClick={() => { setSendPreview(null); onScheduleJob(); }}>Schedule job</button>}</>
+          : <><small>{sendConsent ? "Ready to send" : "Tick the box above to enable sending."}</small><button type="button" disabled={Boolean(busy)} onClick={() => setSendPreview(null)}>Back to editing</button><button type="button" className={previewStyles.sendPrimary} disabled={Boolean(busy) || !sendConsent} onClick={() => void sendPreviewedQuote()}>{busy === "preview_send" ? "Sending..." : sendOutcome.kind === "error" ? "Try again safely" : "Email quote"}</button></>}</div>
+      </footer>
+    </dialog>}
   </section>;
 }

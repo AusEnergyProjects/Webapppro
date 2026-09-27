@@ -76,6 +76,30 @@ const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9
 const positions = (h) => h.value().panels.map((panel) => ({ x: panel.center.lng, y: -panel.center.lat, heading: panel.heading }));
 const distance = (a, b) => Math.hypot(a.center.lat - b.center.lat, a.center.lng - b.center.lng);
 
+for (const mode of ["one", "all", "choose", "selection"]) test(`capture hides every editing overlay in ${mode} mode and restores the selection`, (t) => {
+  const h = harness(t); h.add(-4, 0); h.add(4, 0);
+  if (mode === "choose" || mode === "selection") { h.controller.setSelectionMode("choose"); h.face(1).emit("click"); }
+  h.controller.setSelectionMode(mode);
+  const original = structuredClone(h.value());
+  const visible = (element) => element && !element.hidden && (!element.parent || visible(element.parent));
+  const walk = (element) => [element, ...element.children.flatMap(walk)];
+  h.controller.setCapturing(true);
+  for (const element of walk(h.pane).filter((element) => ["controls", "ring", "rotate", "copy", "group", "move"].includes(element.className))) {
+    assert.equal(visible(element), false, `${element.className} must not appear in the image`);
+  }
+  assert.equal(h.selectionBox().hidden, true);
+  for (const id of [1, 2]) {
+    assert.equal(visible(h.face(id)), true, "the panels themselves remain visible");
+    assert.equal(h.face(id).parent.dataset.selected, "false");
+    assert.equal(h.face(id).parent.dataset.capturing, "true", "capture styling also suppresses focus outlines");
+  }
+  h.controller.setCapturing(false);
+  assert.deepEqual(h.value(), original);
+  assert.equal(h.face(1).parent.dataset.capturing, "false");
+  assert.equal(visible(h.group()), mode === "all" || mode === "selection");
+  assert.equal(visible(h.face(2).parent.children[1]), mode === "one");
+});
+
 test("dragging any face moves all panels from the gesture start without accumulating deltas", (t) => {
   const h = harness(t); h.add(-4, 0, 350); h.add(4, 0, 15, { lengthTilt: 0, widthTilt: 30 });
   const original = structuredClone(h.value().panels);

@@ -7,6 +7,8 @@ import {
 } from "@/lib/public-lead-quote-workflow.mjs";
 import { defaultTradeQuoteTotal, normaliseTradeQuoteLineGroup } from "@/lib/trade-quote";
 import { mapQuoteKind, mapQuoteUnitMatches } from "@/lib/trade-map-quote";
+import { assertQuoteRoofImageScope, parseQuoteRoofImage, quoteRoofImageMetadata, type TradeQuoteRoofImage } from "@/lib/trade-quote-roof-image";
+import { storeQuoteRoofImage, loadQuoteRoofImage, deleteUnclaimedQuoteRoofImage } from "@/lib/trade-quote-roof-image-server";
 import { normaliseQuoteChoices } from "@/lib/trade-quote-options";
 import { lowersAuthoritativeTotal, quoteInputAppliesDiscount, quoteInputDiscountMagnitude } from "@/lib/trade-discount-permissions";
 import { priceBookItemsForQuote, resolvePriceBookQuoteLines } from "@/lib/trade-price-book-server";
@@ -161,6 +163,8 @@ function errorResponse(error: unknown) {
   if (code === "QUOTE_NOT_FOUND") return adminJson({ ok: false, error: "Quote not found." }, 404);
   if (code === "IMMUTABLE_VERSION") return adminJson({ ok: false, error: "Issued quote versions cannot be changed. Create the next version instead." }, 409);
   if (code === "QUOTE_DOCUMENT_INVALID") return adminJson({ ok: false, error: "The issued quote document snapshot could not be verified. Create a replacement version before sending." }, 409);
+  if (code === "QUOTE_ROOF_IMAGE_INVALID") return adminJson({ ok: false, error: "The roof image could not be read. Add the map to the quote again." }, 400);
+  if (code === "QUOTE_ROOF_IMAGE_UNAVAILABLE") return adminJson({ ok: false, error: "The roof image could not be saved or loaded. Try again before sending this quote." }, 503);
   if (code === "QUOTE_DOCUMENT_TOO_LARGE") return adminJson({ ok: false, error: "This quote is too large to issue as one customer document." }, 400);
   if (["QUOTE_ISSUED_PDF_MISMATCH", "QUOTE_ISSUED_PDF_UNAVAILABLE"].includes(code)) return adminJson({ ok: false, error: "The exact issued quote PDF could not be verified. Create and issue a replacement quote version before sending." }, 409);
   if (code === "PRICE_BOOK_ITEM_UNAVAILABLE") return adminJson({ ok: false, error: "A saved item is no longer active. Remove it or add its replacement from the price book." }, 409);
@@ -387,6 +391,7 @@ async function quotePayload(ownerUid: string, workOrderId: string, includeIntern
         subtotalCents: Number(version.subtotal_cents), taxCents: Number(version.tax_cents), totalCents: Number(version.total_cents), terms: String(version.terms || ""), customerMessage: String(version.customer_message || ""),
         validUntil: String(version.valid_until || ""), consentStatement: String(version.consent_statement || ""), issuedAt: String(version.issued_at || ""),
         createdAt: String(version.created_at), updatedAt: String(version.updated_at),
+        roofImage: quoteRoofImageMetadata(version.roof_image_json),
         items: versionItems.filter((item) => !item.quote_choice_id).map((item) => itemPayload(item, includeInternal)),
         choices: versionChoices.map((choice) => ({ id: String(choice.id), clientKey: String(choice.choice_key), kind: String(choice.choice_kind),
           groupKey: String(choice.group_key), name: String(choice.name), summary: String(choice.summary || ""), recommended: Boolean(choice.recommended),
@@ -460,6 +465,22 @@ export async function GET(request: Request) {
     const access = await installerAccess(request, "view"); const url = new URL(request.url); const workOrderId = cleanAdminText(url.searchParams.get("workOrderId"), 180);
     await assignedJob(access, workOrderId);
     const job = await directJob(access.ownerUid, workOrderId); const emails = await authorisedEmails(access.ownerUid, String(job.crm_customer_id), acceptedPublicEmail(job));
+    if (url.searchParams.get("media") === "roof") {
+      const versionId = cleanAdminText(url.searchParams.get("versionId"), 180);
+      const version = await getD1().prepare(`SELECT version.roof_image_json
+        FROM trade_crm_quote_versions version JOIN trade_crm_quotes quote
+          ON quote.id = version.quote_id AND quote.firebase_uid = version.firebase_uid
+        WHERE version.id = ? AND version.firebase_uid = ? AND quote.work_order_id = ? LIMIT 1`)
+        .bind(versionId, access.ownerUid, workOrderId).first<Row>();
+      const reference = version ? parseQuoteRoofImage(version.roof_image_json) : null;
+      if (!reference) return adminJson({ ok: false, error: "Roof image not found." }, 404);
+      assertQuoteRoofImageScope(reference, access.ownerUid, workOrderId);
+      const asset = await loadQuoteRoofImage(reference);
+      return new Response(new Uint8Array(asset.bytes).buffer, { headers: {
+        "Content-Type": "image/png", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": 'inline; filename="roof-design.png"', "Cross-Origin-Resource-Policy": "same-origin",
+      } });
+    }
     const business = await getD1().prepare(`SELECT business_name, brand_theme_key, brand_border_style, logo_object_key, logo_content_type,
         quote_email_subject_template, quote_email_intro, quote_default_terms
       FROM trade_accounts WHERE firebase_uid = ? AND partner_type = 'installer' LIMIT 1`).bind(access.ownerUid).first<Row>();
@@ -596,6 +617,7 @@ export async function POST(request: Request) {
       const validUntil = cleanAdminText(body.validUntil, 10); if (validUntil && !DATE_PATTERN.test(validUntil)) return adminJson({ ok: false, error: "Choose a valid quote expiry date." }, 400);
       const terms = cleanAdminText(body.terms, 4000); const customerMessage = cleanAdminText(body.customerMessage, 1200);
       const quoteId = String(quote?.id || crypto.randomUUID()); let versionNumber = Number(quote?.current_version_number || 1); let versionId = ""; const statements: D1PreparedStatement[] = [];
+      let retainedRoofImage: TradeQuoteRoofImage | null = null;
       if (!quote && body.expectedVersionId !== undefined && body.expectedVersionId !== "") {
         return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This quote changed. Reload before saving." }, 409);
       }
@@ -621,6 +643,8 @@ export async function POST(request: Request) {
         if (pendingDraft?.status === "issuing") throw new Error("QUOTE_ISSUE_IN_PROGRESS");
         const editableVersion = current.status === "draft" ? current : pendingDraft;
         const loadedVersion = editableVersion || current;
+        retainedRoofImage = parseQuoteRoofImage(loadedVersion.roof_image_json);
+        assertQuoteRoofImageScope(retainedRoofImage, access.ownerUid, workOrderId);
         if (body.expectedVersionId !== undefined && (body.expectedVersionId !== loadedVersion.id
           || body.expectedUpdatedAt !== loadedVersion.updated_at)) {
           return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This quote changed in another session. Reload before saving your edits." }, 409);
@@ -695,6 +719,12 @@ export async function POST(request: Request) {
           if (current.status !== "issued") statements.push(db.prepare(`UPDATE trade_crm_quotes SET current_version_number = ?, status = 'draft', crm_customer_id = ?, service_site_id = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`).bind(versionNumber, job.crm_customer_id, job.service_site_id, now, quoteId, access.ownerUid));
         }
       }
+      const uploadedRoofImage = body.roofImage === undefined || body.roofImage === null ? null
+        : await storeQuoteRoofImage({ ownerUid: access.ownerUid, workOrderId, versionId, upload: body.roofImage });
+      const roofImage = body.roofImage === undefined ? retainedRoofImage : uploadedRoofImage;
+      statements.push(db.prepare(`UPDATE trade_crm_quote_versions SET roof_image_json = ?
+        WHERE id = ? AND firebase_uid = ? AND status = 'draft' AND updated_at = ?`)
+        .bind(roofImage ? JSON.stringify(roofImage) : "", versionId, access.ownerUid, now));
       let position = appendItems(db, statements, access.ownerUid, versionId, "", base, 1, now);
       choices.forEach(({ input, resolved }, index) => {
         const choiceId = crypto.randomUUID();
@@ -721,8 +751,16 @@ export async function POST(request: Request) {
           .bind(customerMessage, terms, now, now, access.ownerUid, versionId, access.ownerUid, now)
         : db.prepare(`UPDATE trade_accounts SET quote_email_intro = ?, quote_default_terms = ?, settings_updated_at = ?, updated_at = ? WHERE firebase_uid = ? AND partner_type = 'installer'`)
           .bind(customerMessage, terms, now, now, access.ownerUid));
+      const discardUnclaimedUpload = async () => {
+        if (uploadedRoofImage) await deleteUnclaimedQuoteRoofImage(uploadedRoofImage).catch(() => {
+          console.error("Unclaimed quote roof image cleanup failed.");
+        });
+      };
+      // A failed database response can be ambiguous. Keep its private upload until
+      // reference status is known rather than deleting a possibly committed image.
       const writeResults = await db.batch(statements);
       if (draftClaimIndex >= 0 && !writeResults[draftClaimIndex]?.meta.changes) {
+        await discardUnclaimedUpload();
         const racedVersion = versionId
           ? await db.prepare(`SELECT status FROM trade_crm_quote_versions
               WHERE id = ? AND quote_id = ? AND firebase_uid = ? LIMIT 1`)

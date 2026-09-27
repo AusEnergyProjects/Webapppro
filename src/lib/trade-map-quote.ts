@@ -1,5 +1,5 @@
 export type MapQuoteKind = "area" | "distance" | "solar";
-export type MapQuoteMeasurement = { kind: MapQuoteKind; quantity: number };
+export type MapQuoteMeasurement = { kind: MapQuoteKind; quantity: number; roofImage?: { dataUrl: string } };
 export type MapQuoteIntent = { id: string; ownerUid: string; workOrderId: string; measurement: MapQuoteMeasurement };
 export const MAP_QUOTE_UNITS = { area: "m²", distance: "m", solar: "panels" } as const;
 const SECTIONS = { area: "Map estimate: roof area (m²)", distance: "Map estimate: distance (m)", solar: "Map concept: solar panels" };

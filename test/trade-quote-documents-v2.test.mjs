@@ -4,6 +4,7 @@ import test from "node:test";
 import { PDFDocument, PDFName, PDFDict, PDFString } from "pdf-lib";
 import { buildTradeQuoteEmail } from "../src/lib/trade-quote-email.ts";
 import { canonicalGoogleBusinessProfileUrl } from "../src/lib/trade-google-business-profile.mjs";
+import * as roofImages from "../src/lib/trade-quote-roof-image.ts";
 import ts from "typescript";
 import * as jsxRuntime from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -28,6 +29,7 @@ function reviewModule(getD1) {
     "../../db": { getD1 },
     "@/lib/admin-server": {}, "@/lib/trade-quote-links": {}, "@/lib/trade-access-server": {},
     "./trade-google-business-profile.mjs": { canonicalGoogleBusinessProfileUrl },
+    "./trade-quote-roof-image": roofImages,
   };
   const exports = {};
   Function("require", "exports", compiled)((id) => {
