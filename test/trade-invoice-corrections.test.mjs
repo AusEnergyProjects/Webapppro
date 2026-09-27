@@ -110,7 +110,7 @@ test("draft correction and issued credit are explicit guarded actions", () => {
   assert.doesNotMatch(route, /trade_crm_invoice_payment_allocations/);
   assert.match(route, /accounting_activity/);
   assert.match(migration, /trade_crm_invoice_payment_allocations/);
-  assert.match(panel, /Correct this draft before sending/);
+  assert.match(panel, /Edit invoice items/);
   assert.match(panel, /Issue a credit/);
   assert.match(panel, /outstandingCents/);
 });

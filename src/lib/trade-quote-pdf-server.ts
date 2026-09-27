@@ -5,6 +5,7 @@ import {
   type TradeQuoteDocumentSnapshot,
 } from "@/lib/trade-quote-review-server";
 import { createTradeQuotePdfBytes } from "@/lib/trade-quote-pdf.mjs";
+import { loadQuoteRoofImage } from "./trade-quote-roof-image-server";
 
 const FONT_PATHS = {
   regular: "/fonts/LiberationSans-Regular.ttf",
@@ -31,6 +32,7 @@ export type TradeQuotePdfBrandAsset = {
 export type TradeQuotePdfBrandAssets = {
   logo?: TradeQuotePdfBrandAsset;
   banner?: TradeQuotePdfBrandAsset;
+  roof?: TradeQuotePdfBrandAsset;
 };
 
 export type RenderTradeQuotePdfOptions = {
@@ -104,7 +106,7 @@ function quoteAssetBucket() {
   return (env as unknown as { EVIDENCE?: QuoteAssetBucket }).EVIDENCE;
 }
 
-async function loadBrandAsset(
+export async function loadBrandAsset(
   asset: TradeQuoteBrandAssetSnapshot | null,
 ): Promise<TradeQuotePdfBrandAsset | undefined> {
   if (!asset) return undefined;
@@ -140,11 +142,11 @@ async function loadBrandAsset(
 export async function loadTradeQuoteBrandAssets(
   snapshot: TradeQuoteDocumentSnapshot,
 ): Promise<TradeQuotePdfBrandAssets> {
-  const [logo, banner] = await Promise.all([
-    loadBrandAsset(snapshot.business.logo),
-    loadBrandAsset(snapshot.business.banner),
+  const [logo, roof] = await Promise.all([
+    loadBrandAsset(snapshot.business.logo).catch(() => undefined),
+    snapshot.roofImage ? loadQuoteRoofImage(snapshot.roofImage) : undefined,
   ]);
-  return { logo, banner };
+  return { logo, roof };
 }
 
 export function tradeQuoteBrandAssetSnapshot(
@@ -169,7 +171,7 @@ export async function renderTradeQuotePdf(
     fontsForOrigin(options.origin).catch(() => null),
     options.assets
       ? Promise.resolve(options.assets)
-      : loadTradeQuoteBrandAssets(snapshot).catch(() => ({})),
+      : loadTradeQuoteBrandAssets(snapshot),
   ]);
   try {
     return new Uint8Array(

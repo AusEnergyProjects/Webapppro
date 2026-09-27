@@ -20,6 +20,8 @@ const acceptanceInvoiceMigration = read("../drizzle/0138_trade_quote_acceptance_
 const installerRoute = read("../src/app/api/trade-quotes/route.ts");
 const linkRoute = read("../src/app/api/quote-review/[token]/route.ts");
 const installerUi = read("../src/components/TradeQuotePanel.tsx");
+const livePreviewUi = read("../src/components/TradeQuoteLivePreview.tsx");
+const livePreviewStyles = read("../src/components/TradeQuoteLivePreview.module.css");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const styles = read("../src/app/globals.css");
 const linkUi = read("../src/components/QuoteLinkReview.tsx");
@@ -297,7 +299,7 @@ test("issued quote delivery is immutable, branded, attached and retry safe", () 
   );
   assert.match(installerRoute, /QUOTE_PDF_UNAVAILABLE/);
   assert.match(installerRoute, /X-TLink-Request-Id/);
-  assert.match(quoteDeliveryServer, /attachments: \[\{/);
+  assert.match(quoteDeliveryServer, /attachments: includeAttachment \? \[\{/);
   assert.match(quoteDeliveryServer, /replyTo: content\.replyTo/);
   assert.match(quoteDeliveryServer, /idempotencyKey: String\(row\.provider_idempotency_key \|\| row\.idempotency_key\)/);
   assert.match(documentEmail, /tradeQuoteDocumentDisplayTotals/);
@@ -429,6 +431,7 @@ test("quote SQL compiles against its production migration dependencies", () => {
   apply(db, deliveryOutboxMigration);
   apply(db, deliveryRendererMigration);
   apply(db, acceptanceInvoiceMigration);
+  apply(db, read("../drizzle/0195_trade_quote_roof_image.sql"));
   for (const [label, source] of [["installer", installerRoute], ["secure link", linkRoute]]) {
     const queries = [...source.matchAll(/prepare\(`([\s\S]*?)`\)/g)].map((match) => match[1]).filter((sql) => !sql.includes("${"));
     assert.ok(queries.length > 5, `${label} route should expose compiled prepared statements`);
@@ -437,7 +440,7 @@ test("quote SQL compiles against its production migration dependencies", () => {
 });
 
 test("installer and customer interfaces expose the version and consent contract", () => {
-  for (const copy of ["Issued versions are immutable", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Send quote to", "Save as next draft", "Preview and send", "Confirm and submit email", "Schedule and assign job", "Done", "Internal only", "Quote history", "Retry email"]) assert.match(installerUi, new RegExp(copy));
+  for (const copy of ["Add your items and prices, then check the customer preview", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Send quote to", "Save as next draft", "Preview and send", "Email quote", "Schedule job", "Done", "Internal only", "Quote history", "Retry email"]) assert.match(installerUi, new RegExp(copy));
   const sendFlow = installerUi.slice(installerUi.indexOf("async function sendPreviewedQuote"), installerUi.indexOf("async function addQuoteRecipient"));
   assert.match(sendFlow, /action: "save_draft"/);
   assert.match(sendFlow, /if \(!saved\.draftVersionId\)/);
@@ -450,14 +453,16 @@ test("installer and customer interfaces expose the version and consent contract"
   assert.match(sendFlow, /setPendingIssueVersionId\(saved\.draftVersionId\)/);
   assert.match(sendFlow, /quoteDeliveryOutcome\(issued\.delivery, "Quote saved and issued\."\)/);
   assert.match(installerUi, /tradeQuoteDocumentDisplayTotals\(\{[\s\S]*?groupKey: choice\.groupKey[\s\S]*?recommended: choice\.recommended/);
-  assert.match(installerUi, /sendPreview\.displayTotals\.subtotalCents[\s\S]*?sendPreview\.displayTotals\.taxCents[\s\S]*?sendPreview\.displayTotals\.label[\s\S]*?sendPreview\.displayTotals\.totalCents/);
+  assert.match(installerUi, /<TradeQuoteLivePreview[^>]*lines=\{lines\}[^>]*choices=\{choices\}[^>]*roofImage=\{roofImage\} review/);
+  assert.match(livePreviewUi, /tradeQuoteDocumentDisplayTotals\(\{[\s\S]*?groupKey: choice\.groupKey[\s\S]*?recommended: choice\.recommended/);
+  assert.match(livePreviewUi, /document\.totals\.subtotalCents[\s\S]*?document\.totals\.taxCents[\s\S]*?document\.totals\.label[\s\S]*?document\.totals\.totalCents/);
   assert.doesNotMatch(installerUi, /<dl><div><dt>Included before choices<\/dt>[\s\S]*?sendPreview\.base\.totalCents/);
   for (const modalBoundary of [
     "previewTriggerRef",
     "previewDialogRef",
-    'event.key === "Escape"',
-    'event.key !== "Tab"',
-    "event.shiftKey",
+    "dialog?.showModal()",
+    "dialog?.close()",
+    "onCancel={(event) => { event.preventDefault(); event.stopPropagation(); if (!busy) setSendPreview(null); }}",
     "document.body.style.overflow = \"hidden\"",
     "returnFocus.focus({ preventScroll: true })",
   ]) assert.match(installerUi, new RegExp(modalBoundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
@@ -471,12 +476,13 @@ test("installer and customer interfaces expose the version and consent contract"
   assert.match(installerUi, /onScheduleJob\?: \(\) => void/);
   assert.match(installerUi, /onScheduleJob && !jobSummary\?\.publicLead/);
   assert.match(installerUi, /setSendPreview\(null\); onScheduleJob\(\);/);
-  assert.match(installerUi, /This Australian Energy Assessments lead can be scheduled after the customer accepts the current quote/);
+  assert.match(installerUi, /This job can be scheduled after the customer accepts the quote/);
   assert.match(crm, /onScheduleJob=\{canStartJobScheduling && !isReleasedLead \? \(\) => setTab\("schedule"\) : undefined\}/);
   assert.doesNotMatch(crm, /name="quotedValue"|name="quoteStatus"/);
   assert.match(styles, /@media \(max-width: 720px\)[\s\S]*?\.trade-quote-line \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/);
   assert.match(styles, /\.trade-quote-field > span, \.trade-quote-description > span \{[^}]*display: block;/);
-  assert.match(styles, /\.trade-quote-send-preview/);
+  assert.match(livePreviewStyles, /\.sendDialog\[open\] \{ display: flex; flex-direction: column; \}/);
+  assert.match(livePreviewStyles, /\.sendBody \{[^}]*overflow-y: auto/);
   for (const copy of ["Download PDF", "Ask the trade business", "Type your name to sign", "Calculated and checked again by the server", "Accept for"]) assert.match(linkUi, new RegExp(copy));
   assert.doesNotMatch(linkUi, /window\.print/);
   for (const copy of ["One secure quote link", "Copy link", "Email quote", "Replace link", "Revoke link", "Quote activity"]) assert.match(installerUi, new RegExp(copy));

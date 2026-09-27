@@ -6,6 +6,7 @@ import {
 } from "@/lib/trade-quote-links";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 import { canonicalGoogleBusinessProfileUrl } from "./trade-google-business-profile.mjs";
+import { assertQuoteRoofImageScope, parseQuoteRoofImage, type TradeQuoteRoofImage } from "./trade-quote-roof-image";
 
 type Row = Record<string, unknown>;
 
@@ -99,6 +100,7 @@ export type TradeQuoteDocumentSnapshot = {
   validUntil: string;
   consentStatement: string;
   issuedAt: string;
+  roofImage?: TradeQuoteRoofImage | null;
   items: TradeQuoteLineSnapshot[];
   choices: TradeQuoteChoiceSnapshot[];
 };
@@ -130,6 +132,7 @@ export type TradeQuoteQuestionPayload = {
 };
 
 export type TradeQuoteReviewPayload = {
+  hasRoofImage: boolean;
   linkId: string;
   tokenIssue: number;
   quoteVersionId: string;
@@ -400,6 +403,9 @@ function snapshotFromObject(
     return null;
   }
   if (schemaVersion === "trade-quote-document-v2" && !bannerCrop) return null;
+  let roofImage: TradeQuoteRoofImage | null;
+  try { roofImage = parseQuoteRoofImage(row.roofImage); } catch { return null; }
+  if (roofImage && roofImage.objectKey.split("/")[2] !== encodeURIComponent(cleanText(work.id, 180))) return null;
   const sourceItems = Array.isArray(row.items)
     ? row.items.slice(0, 500)
     : [];
@@ -479,6 +485,7 @@ function snapshotFromObject(
     validUntil: cleanText(row.validUntil, 20),
     consentStatement: cleanText(row.consentStatement, 2_000, true),
     issuedAt: cleanText(row.issuedAt, 40),
+    ...(row.roofImage === undefined ? {} : { roofImage }),
     items,
     choices,
   };
@@ -513,7 +520,7 @@ export async function buildTradeQuoteDocumentSnapshot(
       `SELECT version.id quote_version_id, version.quote_id, version.version_number,
         version.acceptance_email, version.subtotal_cents, version.tax_cents,
         version.total_cents, version.customer_message, version.terms,
-        version.valid_until, version.consent_statement, version.issued_at,
+        version.valid_until, version.consent_statement, version.issued_at, version.roof_image_json,
         quote.quote_number, work.id work_order_id, work.work_number,
         work.title work_title, customer.id customer_id,
         customer.customer_number,
@@ -529,11 +536,8 @@ export async function buildTradeQuoteDocumentSnapshot(
         trade.suburb trade_suburb, trade.address_state trade_address_state,
         trade.postcode trade_postcode, trade.brand_theme_key,
         trade.brand_border_style, trade.logo_object_key, trade.logo_content_type,
-        trade.banner_object_key, trade.banner_content_type,
         trade.document_business_name, trade.document_phone,
-        trade.document_email, trade.banner_crop_x_basis_points,
-        trade.banner_crop_y_basis_points, trade.banner_crop_width_basis_points,
-        trade.banner_crop_height_basis_points,
+        trade.document_email,
         trade.quote_email_subject_template, trade.quote_email_intro
       FROM trade_crm_quote_versions version
       JOIN trade_crm_quotes quote
@@ -557,6 +561,8 @@ export async function buildTradeQuoteDocumentSnapshot(
     .bind(versionId, ownerUid)
     .first<Row>();
   if (!row) throw new Error("QUOTE_NOT_FOUND");
+  const roofImage = parseQuoteRoofImage(row.roof_image_json);
+  assertQuoteRoofImageScope(roofImage, ownerUid, String(row.work_order_id));
 
   const [itemRows, choiceRows] = await Promise.all([
     db
@@ -594,14 +600,6 @@ export async function buildTradeQuoteDocumentSnapshot(
     .map((value) => cleanText(value, 300))
     .filter(Boolean)
     .join(", ");
-  const bannerCrop =
-    normaliseBannerCrop({
-      xBasisPoints: row.banner_crop_x_basis_points,
-      yBasisPoints: row.banner_crop_y_basis_points,
-      widthBasisPoints: row.banner_crop_width_basis_points,
-      heightBasisPoints: row.banner_crop_height_basis_points,
-    }) || DEFAULT_BANNER_CROP;
-
   return {
     schemaVersion: "trade-quote-document-v2",
     capturedAt:
@@ -648,8 +646,9 @@ export async function buildTradeQuoteDocumentSnapshot(
       themeKey: cleanText(row.brand_theme_key, 60) || "emerald_navy",
       borderStyle: cleanText(row.brand_border_style, 30) || "soft",
       logo: imageAsset(row.logo_object_key, row.logo_content_type),
-      banner: imageAsset(row.banner_object_key, row.banner_content_type),
-      bannerCrop,
+      banner: null,
+      // Retain the required v2 shape while retiring banners from new documents.
+      bannerCrop: { ...DEFAULT_BANNER_CROP },
       quoteEmailSubjectTemplate: cleanText(
         row.quote_email_subject_template,
         240,
@@ -674,6 +673,7 @@ export async function buildTradeQuoteDocumentSnapshot(
       overrides.issuedAt === undefined ? row.issued_at : overrides.issuedAt,
       40,
     ),
+    roofImage,
     items: allItems.filter(
       (_item, index) => !String(itemRows.results[index]?.quote_choice_id || ""),
     ),
@@ -801,6 +801,7 @@ export async function quoteDocumentSnapshotForAuthorisedLink(
   ) {
     throw new Error("QUOTE_DOCUMENT_SNAPSHOT_INVALID");
   }
+  assertQuoteRoofImageScope(snapshot.roofImage, row.firebase_uid, row.work_order_id);
   return snapshot;
 }
 
@@ -838,7 +839,7 @@ export async function buildTradeQuoteReviewPayload(
       themeKey: snapshot.business.themeKey,
       borderStyle: snapshot.business.borderStyle,
       hasLogo: Boolean(snapshot.business.logo),
-      hasBanner: Boolean(snapshot.business.banner),
+      hasBanner: false,
       bannerCrop: snapshot.business.bannerCrop || DEFAULT_BANNER_CROP,
     },
     subtotalCents: snapshot.subtotalCents,
@@ -848,6 +849,7 @@ export async function buildTradeQuoteReviewPayload(
     terms: snapshot.terms,
     validUntil: snapshot.validUntil,
     issuedAt: snapshot.issuedAt,
+    hasRoofImage: Boolean(snapshot.roofImage),
     consentStatement: snapshot.consentStatement,
     expiresAt: row.expires_at,
     items: snapshot.items,

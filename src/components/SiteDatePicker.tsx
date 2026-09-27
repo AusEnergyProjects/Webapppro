@@ -15,6 +15,7 @@ import {
 
 type ActivePicker = {
   input: HTMLInputElement;
+  container: HTMLElement;
   kind: "date" | "datetime-local";
   rangeStartInput: HTMLInputElement | null;
   rangeEndInput: HTMLInputElement | null;
@@ -124,7 +125,10 @@ export function SiteDatePicker() {
     input.setAttribute("aria-haspopup", "dialog");
     input.setAttribute("aria-expanded", "true");
     updatePosition(input);
-    setActive({ input, kind, rangeStartInput: range.start, rangeEndInput: range.end, restoreFocusOnClose });
+    // A modal dialog makes everything outside its subtree inert. Its calendar
+    // must stay in that same top-layer subtree to remain visible and clickable.
+    const container = input.closest<HTMLDialogElement>("dialog[open]") || document.body;
+    setActive({ input, container, kind, rangeStartInput: range.start, rangeEndInput: range.end, restoreFocusOnClose });
   }, [updatePosition]);
 
   useEffect(() => {
@@ -171,6 +175,8 @@ export function SiteDatePicker() {
 
   useEffect(() => {
     if (!active) return;
+    const closeWithDialog = () => close(false);
+    active.container.addEventListener("close", closeWithDialog);
     const reposition = () => updatePosition(active.input, popoverRef.current?.getBoundingClientRect().height || 430);
     const frame = window.requestAnimationFrame(reposition);
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reposition);
@@ -182,8 +188,9 @@ export function SiteDatePicker() {
       observer?.disconnect();
       window.removeEventListener("resize", reposition);
       window.removeEventListener("scroll", reposition, true);
+      active.container.removeEventListener("close", closeWithDialog);
     };
-  }, [active, updatePosition]);
+  }, [active, close, updatePosition]);
 
   useEffect(() => {
     if (!active) return;
@@ -266,7 +273,7 @@ export function SiteDatePicker() {
       aria-label={isRange ? "Choose date range" : active.kind === "datetime-local" ? "Choose date and time" : "Choose date"}
       style={{ left: position.left, top: position.top }}
       onKeyDown={(event) => {
-        if (event.key === "Escape") { event.preventDefault(); close(); }
+        if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); return; }
         if (event.target instanceof HTMLSelectElement || event.target instanceof HTMLInputElement) return;
         if (event.key === "ArrowLeft") { event.preventDefault(); moveSelection(-1); }
         if (event.key === "ArrowRight") { event.preventDefault(); moveSelection(1); }
@@ -318,6 +325,6 @@ export function SiteDatePicker() {
         <button type="button" className="site-date-apply" disabled={!canApply} onClick={apply}>Apply</button>
       </div>
     </div>,
-    document.body,
+    active.container,
   );
 }

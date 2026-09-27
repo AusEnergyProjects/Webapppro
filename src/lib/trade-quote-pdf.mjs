@@ -335,6 +335,8 @@ export async function createTradeQuotePdfBytes(
     ? await pdf.embedFont(boldBytes, { subset: false })
     : await pdf.embedFont(StandardFonts.HelveticaBold);
   const logo = await embeddedImage(pdf, suppliedAssets.logo);
+  const roof = snapshot.roofImage ? await embeddedImage(pdf, suppliedAssets.roof) : null;
+  if (snapshot.roofImage && !roof) throw new Error("QUOTE_ROOF_IMAGE_UNAVAILABLE");
   const palette =
     THEMES[snapshot.business.themeKey] || THEMES.emerald_navy;
   const displayTotals = tradeQuoteDocumentDisplayTotals(snapshot);
@@ -501,6 +503,18 @@ export async function createTradeQuotePdfBytes(
       color: rgb(0.24, 0.35, 0.35),
       gapAfter: 8,
     });
+  }
+
+  if (roof) {
+    // Keep attribution inside the captured image by scaling the complete map without cropping.
+    y -= 12;
+    const imageWidth = Math.min(CONTENT_WIDTH, 390 * roof.width / roof.height);
+    const imageHeight = imageWidth * roof.height / roof.width;
+    ensureSpace(imageHeight + 68);
+    drawText("Roof design", { font: bold, size: 12, lineHeight: 17, gapAfter: 8 });
+    page.drawImage(roof, { x: MARGIN + (CONTENT_WIDTH - imageWidth) / 2, y: y - imageHeight, width: imageWidth, height: imageHeight });
+    y -= imageHeight + 12;
+    drawText("Indicative layout. Confirm roof dimensions and installation details on site.", { size: 8, lineHeight: 11, color: rgb(0.34, 0.43, 0.45), gapAfter: 12 });
   }
 
   const includedItems = snapshot.items?.filter((item) => !isFinalPercentDiscount(item)) || [];

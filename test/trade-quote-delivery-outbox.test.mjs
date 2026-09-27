@@ -14,6 +14,7 @@ import {
   resolveTradeQuoteEmailRendererRevision,
   tradeQuoteEmailContentSha256,
 } from "../src/lib/trade-quote-email.ts";
+import { sendMailboxEmail } from "../src/lib/trade-email-provider.ts";
 import {
   queueTradeQuoteDeliveryDispatch,
   TRADE_QUOTE_DELIVERY_DISPATCH_HEADER,
@@ -274,7 +275,7 @@ function rendererSnapshot() {
   };
 }
 
-test("0137 pins existing deliveries to renderer v1 and fresh issuance to v2", () => {
+test("0137 pins existing deliveries to renderer v1 and fresh issuance uses v3", () => {
   const { database } = fixture();
   insertLegacy(database, { status: "delivered" });
   apply(database, migration);
@@ -283,7 +284,8 @@ test("0137 pins existing deliveries to renderer v1 and fresh issuance to v2", ()
     FROM trade_crm_quote_deliveries WHERE id = 'delivery-1'`).get();
   assert.equal(row.email_renderer_revision, 1);
   assert.equal(resolveTradeQuoteEmailRendererRevision(1), 1);
-  assert.equal(resolveTradeQuoteEmailRendererRevision(), 2);
+  assert.equal(resolveTradeQuoteEmailRendererRevision(2), 2);
+  assert.equal(resolveTradeQuoteEmailRendererRevision(), 3);
   assert.throws(
     () => resolveTradeQuoteEmailRendererRevision(99),
     /QUOTE_DELIVERY_RENDERER_REVISION_UNSUPPORTED/,
@@ -294,7 +296,7 @@ test("0137 pins existing deliveries to renderer v1 and fresh issuance to v2", ()
   database.close();
 });
 
-test("frozen v1 and current v2 rebuild and dispatch their exact immutable email content", async () => {
+test("frozen v1 and v2 rebuild and dispatch their exact immutable email content", async () => {
   const email = {
     snapshot: rendererSnapshot(),
     shareUrl: "https://compare.ausenergyassessments.com/quote-review/link-1.legacy-secret",
@@ -305,10 +307,13 @@ test("frozen v1 and current v2 rebuild and dispatch their exact immutable email 
   const v1Hash = await tradeQuoteEmailContentSha256(v1);
   const v2Hash = await tradeQuoteEmailContentSha256(v2);
   assert.equal(v1Hash, "670db8730fbe710377b66b20304699467c2eab12f5dda6213f138a9d4b05eec5");
+  assert.equal(v2Hash, "3074f48acc2f04661c40a3d1eef9cc1500df84d318fb8d7aee962b9473e6cc58");
   assert.notEqual(v2Hash, v1Hash);
   assert.match(v1.text, /Discount ex GST/);
   assert.match(v1.text, /Final spring sale/);
   assert.match(v2.text, /Final 10% discount on included items ex GST/);
+  assert.match(v1.text, /A PDF copy is attached for your records/);
+  assert.match(v2.text, /A PDF copy is attached for your records/);
 
   for (const [revision, content, hash] of [[1, v1, v1Hash], [2, v2, v2Hash]]) {
     const { database, db } = fixture();
@@ -357,6 +362,164 @@ test("frozen v1 and current v2 rebuild and dispatch their exact immutable email 
     assert.equal(result.outcomes[0].outcome, "provider_accepted");
     assert.equal(sends, 1);
     database.close();
+  }
+});
+
+async function preparedPdfDelivery({ revision = 3, sizeBytes, mismatchedPdf = false }) {
+  const { database, db } = fixture();
+  insertLegacy(database);
+  apply(database, migration);
+  apply(database, rendererMigration);
+  initialiseOutbox(database);
+  database.exec(`INSERT INTO trade_crm_customers VALUES
+    ('customer-1', 'owner-1', 'customer@example.com', 'active')`);
+  const snapshot = rendererSnapshot();
+  const email = {
+    snapshot,
+    shareUrl: "https://compare.ausenergyassessments.com/quote-review/link-1.legacy-secret",
+    expiresAt: "2026-09-12T23:59:59.999Z",
+  };
+  const content = await buildTradeQuoteEmailForRevision(revision, email);
+  const { tradeQuoteRecipientEmailSha256 } = await import("../src/lib/trade-quote-delivery-server.ts");
+  database.prepare(`UPDATE trade_crm_quote_deliveries SET email_renderer_revision = ?,
+    idempotency_key = 'quote:version-1:1:email:initial', subject_snapshot = ?,
+    email_content_sha256 = ?, recipient_email_sha256 = ?, attachment_filename = 'quote.pdf',
+    attachment_sha256 = 'immutable-pdf-hash' WHERE id = 'delivery-1'`)
+    .run(revision, content.subject, await tradeQuoteEmailContentSha256(content),
+      await tradeQuoteRecipientEmailSha256("customer@example.com"));
+  const pdf = new Uint8Array(sizeBytes);
+  let pdfReads = 0;
+  const dependencies = {
+    "./service-reminder-delivery.ts": await import("../src/lib/service-reminder-delivery.ts"),
+    "./trade-quote-delivery-policy.mjs": await import("../src/lib/trade-quote-delivery-policy.mjs"),
+    "./trade-quote-email.ts": await import("../src/lib/trade-quote-email.ts"),
+    "./trade-quote-issued-pdf-server.ts": {
+      issuedTradeQuotePdf: async (input) => {
+        pdfReads++;
+        assert.equal(input.ownerUid, "owner-1");
+        assert.equal(input.quoteVersionId, "version-1");
+        assert.equal(input.snapshot, snapshot);
+        return { bytes: pdf, reference: { sha256: mismatchedPdf ? "different-pdf" : "immutable-pdf-hash" } };
+      },
+    },
+    "./trade-quote-links.ts": {
+      quoteReviewPath: (id, secret) => `/quote-review/${id}.${secret}`,
+      recoverQuoteLinkSecret: async () => "legacy-secret",
+    },
+    "./trade-quote-pdf-server.ts": {
+      tradeQuotePdfFilename: () => "quote.pdf",
+      tradeQuotePdfBase64: (bytes) => Buffer.from(bytes).toString("base64"),
+    },
+    "./trade-quote-review-server.ts": { parseTradeQuoteDocumentSnapshot: () => snapshot },
+  };
+  const compiled = ts.transpileModule(fs.readFileSync(
+    new URL("../src/lib/trade-quote-delivery-server.ts", import.meta.url), "utf8",
+  ), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const exports = {};
+  new Function("require", "exports", compiled)((id) => {
+    assert.ok(Object.hasOwn(dependencies, id), `Unexpected dependency ${id}`);
+    return dependencies[id];
+  }, exports);
+  const options = {
+    db, deliveryId: "delivery-1", emailConfigured: true,
+    now: new Date("2026-08-13T01:00:00.000Z"),
+    loadContext: async () => ({
+      ...database.prepare("SELECT * FROM trade_crm_quote_deliveries WHERE id = 'delivery-1'").get(),
+      quote_id: "quote-1", token_issue: 1, token_hash: "token-hash", encrypted_token: "protected",
+      work_status: "active", customer_status: "active", version_status: "issued", quote_status: "issued",
+      current_version_number: 1, version_number: 1, link_status: "active", expires_at: email.expiresAt,
+      acceptance_email: "customer@example.com",
+    }),
+  };
+  return { database, content, options, drain: exports.drainTradeQuoteDeliveries, pdfReads: () => pdfReads };
+}
+
+test("v3 secure review wording remains accurate with or without a PDF attachment", async () => {
+  const snapshot = rendererSnapshot();
+  snapshot.items = Array.from({ length: 9 }, (_, i) => ({ ...snapshot.items[0], id: `line-${i}` }));
+  const email = await buildTradeQuoteEmailForRevision(3, {
+    snapshot, shareUrl: "https://example.com/quote-review/private-token", expiresAt: "2026-09-12",
+  });
+  for (const body of [email.text, email.html]) {
+    assert.match(body, /Download a PDF copy for your records from your secure quote review/);
+    assert.match(body, /https:\/\/example\.com\/quote-review\/private-token/);
+    assert.doesNotMatch(body, /attached/);
+  }
+  assert.match(email.html, /in the full quote/);
+});
+
+test("v3 attachment threshold is stable across Google and Microsoft and large PDFs send by secure link", async () => {
+  const limit = 1.5 * 1024 * 1024;
+  for (const sizeBytes of [limit, limit + 1, 3_245_054]) {
+    const messages = [];
+    for (const provider of ["google", "microsoft"]) {
+      const fixture = await preparedPdfDelivery({ sizeBytes });
+      let requests = 0;
+      const result = await fixture.drain({ ...fixture.options, sendEmail: async (message) => {
+        messages.push(message);
+        const receipt = await sendMailboxEmail(provider, "mock-token", {
+          senderEmail: "trade@example.com", senderName: "Trade", recipient: message.recipient,
+          subject: message.subject, text: message.body, html: message.html, attachments: message.attachments,
+          messageId: "<quote-test@tlink.test>",
+        }, async () => {
+          requests++;
+          return provider === "google" ? Response.json({ id: "gmail-receipt" }) : new Response(null, { status: 202 });
+        });
+        return { provider, ...receipt, providerMessageId: receipt.providerMessageId || "submission:graph" };
+      } });
+      assert.equal(result.outcomes[0].outcome, "provider_accepted");
+      assert.equal(requests, 1);
+      assert.equal(fixture.pdfReads(), 1);
+      assert.equal(messages.at(-1).attachments.length, sizeBytes <= limit ? 1 : 0);
+      assert.equal(messages.at(-1).body, fixture.content.text);
+      fixture.database.close();
+    }
+    assert.deepEqual(messages[0], messages[1], "changing provider must not change the quote payload");
+  }
+});
+
+test("legacy revisions retain large attachments and v3 still rejects an immutable PDF mismatch", async () => {
+  for (const revision of [1, 2]) {
+    const fixture = await preparedPdfDelivery({ revision, sizeBytes: 1.5 * 1024 * 1024 + 1 });
+    let sent;
+    await fixture.drain({ ...fixture.options, sendEmail: async (message) => {
+      sent = message;
+      return { provider: "resend", providerMessageId: "legacy", providerStatus: "accepted" };
+    } });
+    assert.equal(sent.attachments.length, 1);
+    assert.match(sent.body, /A PDF copy is attached for your records/);
+    fixture.database.close();
+  }
+  const fixture = await preparedPdfDelivery({ sizeBytes: 3_245_054, mismatchedPdf: true });
+  let sends = 0;
+  const result = await fixture.drain({ ...fixture.options, sendEmail: async () => { sends++; } });
+  assert.equal(sends, 0);
+  assert.equal(fixture.pdfReads(), 1);
+  assert.equal(result.outcomes[0].code, "QUOTE_DELIVERY_CONTENT_CHANGED");
+  fixture.database.close();
+});
+
+test("large v3 retries preserve the payload and uncertain sends never automatically retry", async () => {
+  for (const outcome of ["rejected", "indeterminate"]) {
+    const fixture = await preparedPdfDelivery({ sizeBytes: 3_245_054 });
+    const messages = [];
+    const sendEmail = async (message) => {
+      messages.push(message);
+      if (messages.length === 1) throw new ReminderProviderDeliveryError(outcome, "mock-provider-error");
+      return { provider: "google", providerMessageId: "retry-receipt", providerStatus: "accepted" };
+    };
+    const first = await fixture.drain({ ...fixture.options, sendEmail });
+    const retry = await fixture.drain({ ...fixture.options, sendEmail, now: new Date("2026-08-13T01:10:00.000Z") });
+    if (outcome === "indeterminate") {
+      assert.equal(first.outcomes[0].status, "reconciliation_required");
+      assert.equal(retry.attempted, 0);
+      assert.equal(messages.length, 1);
+    } else {
+      assert.equal(retry.outcomes[0].status, "provider_accepted");
+      assert.deepEqual(messages[0], messages[1]);
+    }
+    assert.equal(messages[0].attachments.length, 0);
+    fixture.database.close();
   }
 });
 

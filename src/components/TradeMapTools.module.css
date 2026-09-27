@@ -20,6 +20,7 @@
 .measurement p { margin: 10px 0; }
 .measurement .note { color: var(--trade-muted, #5b716a); font-size: .8rem; margin-bottom: 0; }
 .addressPin { align-items: center; background: #9a3412; border: 3px solid white; border-radius: 50%; box-shadow: 0 2px 8px #0006; color: white; display: flex; font: 700 22px sans-serif; height: 34px; justify-content: center; width: 34px; }
+.distancePreview { position: absolute; pointer-events: none; user-select: none; background: #142d2b; border: 1px solid #fbcf42; border-radius: 8px; box-shadow: 0 2px 8px #0006; color: #fff; font: 700 16px/1.4 system-ui, sans-serif; font-variant-numeric: tabular-nums; padding: 6px 10px; white-space: nowrap; }
 @media (max-width: 680px) {
   .tools { padding: 12px 16px; }
   .addressSearch { flex-basis: 100%; }

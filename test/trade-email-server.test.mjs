@@ -31,7 +31,7 @@ const uncertain = (error) => error instanceof ReminderProviderDeliveryError && e
 function fixture(overrides = {}) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec("CREATE TABLE trade_accounts (firebase_uid TEXT PRIMARY KEY, business_name TEXT, partner_type TEXT, verified INTEGER);");
-  sqlite.exec(read("../drizzle/0195_trade_outgoing_email.sql").replaceAll("--> statement-breakpoint", ""));
+  sqlite.exec(read("../drizzle/0196_trade_outgoing_email.sql").replaceAll("--> statement-breakpoint", ""));
   sqlite.prepare("INSERT INTO trade_accounts VALUES (?, ?, 'installer', 1)").run("owner", "John's Electrical");
   sqlite.prepare("INSERT INTO trade_accounts VALUES (?, ?, 'installer', 1)").run("other", "Other Business");
   const env = {

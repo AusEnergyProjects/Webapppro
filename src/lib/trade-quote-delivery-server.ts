@@ -28,6 +28,7 @@ type DrainOptions = {
 };
 
 const CALLBACK_PATH = "/api/service-reminder-provider-events/resend";
+const MAX_QUOTE_EMAIL_PDF_ATTACHMENT_BYTES = 1.5 * 1024 * 1024;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function boundedLimit(value: number, maximum = 25) {
@@ -255,6 +256,9 @@ async function defaultPrepareMessage(db: D1Database, row: Row, now: Date) {
     filename !== String(row.attachment_filename || "")
     || issuedPdf.reference.sha256 !== String(row.attachment_sha256 || "")
   ) throw new Error("QUOTE_DELIVERY_CONTENT_CHANGED");
+  // Keep the payload stable across mailbox changes. Legacy revisions promise an attachment.
+  const includeAttachment = Number(row.email_renderer_revision) < 3
+    || issuedPdf.bytes.byteLength <= MAX_QUOTE_EMAIL_PDF_ATTACHMENT_BYTES;
   return {
     channel: "email" as const,
     recipient,
@@ -262,11 +266,11 @@ async function defaultPrepareMessage(db: D1Database, row: Row, now: Date) {
     body: content.text,
     html: content.html,
     replyTo: content.replyTo,
-    attachments: [{
+    attachments: includeAttachment ? [{
       filename,
       content: tradeQuotePdfBase64(issuedPdf.bytes),
       contentType: "application/pdf",
-    }],
+    }] : [],
     idempotencyKey: String(row.provider_idempotency_key || row.idempotency_key),
     callbackUrl: `${origin}${CALLBACK_PATH}`,
     messageType: "trade_quote",

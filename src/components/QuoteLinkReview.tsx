@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
 import { isPayableQuoteDecisionInvoice } from "@/lib/trade-quote-receipt";
 import { canonicalGoogleBusinessProfileUrl } from "@/lib/trade-google-business-profile.mjs";
@@ -33,12 +32,6 @@ type Choice = {
   taxCents: number;
   totalCents: number;
   items: Line[];
-};
-type BannerCrop = {
-  xBasisPoints: number;
-  yBasisPoints: number;
-  widthBasisPoints: number;
-  heightBasisPoints: number;
 };
 type Question = {
   id: string;
@@ -69,8 +62,6 @@ type Quote = {
     themeKey: string;
     borderStyle: string;
     hasLogo: boolean;
-    hasBanner: boolean;
-    bannerCrop: BannerCrop;
   };
   subtotalCents: number;
   taxCents: number;
@@ -79,6 +70,7 @@ type Quote = {
   terms: string;
   validUntil: string;
   issuedAt: string;
+  hasRoofImage?: boolean;
   consentStatement: string;
   expiresAt: string;
   items: Line[];
@@ -327,94 +319,6 @@ function QuoteDecisionReceiptView({
         </footer>
       </section>
     </main>
-  );
-}
-
-function clamp(value: number, minimum: number, maximum: number) {
-  return Math.min(maximum, Math.max(minimum, value));
-}
-
-function bannerBackgroundStyle(
-  crop: BannerCrop,
-  naturalWidth: number,
-  naturalHeight: number,
-): CSSProperties {
-  if (naturalWidth <= 0 || naturalHeight <= 0) {
-    return { backgroundPosition: "center", backgroundSize: "cover" };
-  }
-  let x = (clamp(crop.xBasisPoints, 0, 10_000) / 10_000) * naturalWidth;
-  let y = (clamp(crop.yBasisPoints, 0, 10_000) / 10_000) * naturalHeight;
-  let width =
-    (clamp(crop.widthBasisPoints, 1, 10_000) / 10_000) * naturalWidth;
-  let height =
-    (clamp(crop.heightBasisPoints, 1, 10_000) / 10_000) * naturalHeight;
-  width = Math.min(width, naturalWidth - x);
-  height = Math.min(height, naturalHeight - y);
-
-  if (width / height > 5) {
-    const nextWidth = height * 5;
-    x += (width - nextWidth) / 2;
-    width = nextWidth;
-  } else {
-    const nextHeight = width / 5;
-    y += (height - nextHeight) / 2;
-    height = nextHeight;
-  }
-
-  const xFraction = x / naturalWidth;
-  const yFraction = y / naturalHeight;
-  const widthFraction = width / naturalWidth;
-  const heightFraction = height / naturalHeight;
-  const position = (start: number, size: number) =>
-    size >= 0.999999 ? 50 : (start / (1 - size)) * 100;
-
-  return {
-    backgroundPosition: `${position(xFraction, widthFraction)}% ${position(
-      yFraction,
-      heightFraction,
-    )}%`,
-    backgroundSize: `${100 / widthFraction}% ${100 / heightFraction}%`,
-  };
-}
-
-function CroppedBanner({
-  endpoint,
-  business,
-}: {
-  endpoint: string;
-  business: Quote["business"];
-}) {
-  const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
-  const source = `${endpoint}/media/banner`;
-  useEffect(() => {
-    const image = new window.Image();
-    image.onload = () =>
-      setNaturalSize({
-        width: image.naturalWidth,
-        height: image.naturalHeight,
-      });
-    image.src = source;
-    return () => {
-      image.onload = null;
-    };
-  }, [source]);
-  return (
-    <div
-      className="quote-link-brand-banner"
-      role="img"
-      aria-label={`${business.name} banner`}
-      style={{
-        aspectRatio: "5 / 1",
-        height: "auto",
-        backgroundImage: `url("${source}")`,
-        backgroundRepeat: "no-repeat",
-        ...bannerBackgroundStyle(
-          business.bannerCrop,
-          naturalSize.width,
-          naturalSize.height,
-        ),
-      }}
-    />
   );
 }
 
@@ -708,9 +612,6 @@ export function QuoteLinkReview({ token }: { token: string }) {
       data-border={quote.business.borderStyle}
     >
       <article className="quote-link-document">
-        {quote.business.hasBanner && (
-          <CroppedBanner endpoint={endpoint} business={quote.business} />
-        )}
         <header>
           <div className="quote-link-brand-heading">
             {quote.business.hasLogo && (
@@ -771,6 +672,14 @@ export function QuoteLinkReview({ token }: { token: string }) {
           <section className="quote-link-customer-message">
             <span>From {quote.business.name}</span>
             <p>{quote.customerMessage}</p>
+          </section>
+        )}
+        {quote.hasRoofImage && (
+          <section className="quote-link-block" aria-label="Roof design">
+            <h2>Roof design</h2>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`${endpoint}/media/roof`} alt="Proposed roof design" style={{ display: "block", width: "100%", height: "auto", borderRadius: 10 }} />
+            <p>Indicative layout. Confirm roof dimensions and installation details on site.</p>
           </section>
         )}
         {quote.items.length > 0 && (

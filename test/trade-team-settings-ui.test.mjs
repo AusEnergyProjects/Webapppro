@@ -14,6 +14,7 @@ const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const newJob = read("../src/components/TradeNewJobForm.tsx");
 const schedule = read("../src/components/TradeScheduleWorkspace.tsx");
 const quote = read("../src/components/TradeQuotePanel.tsx");
+const quotePreview = read("../src/components/TradeQuoteLivePreview.tsx");
 const invoice = read("../src/components/TradeQuickInvoicePanel.tsx");
 const memberFilesRoute = read("../src/app/api/trade-team/member-files/route.ts");
 
@@ -188,7 +189,7 @@ test("staff portal renders only permission-backed operations", () => {
 test("quote and invoice viewers keep context while every mutation follows exact access", () => {
   assert.match(quote, /const canEditQuote = !readOnly && serverCanManageQuotes/);
   assert.match(quote, /const canSendQuote = canEditQuote && canSend && serverCanSendQuotes/);
-  assert.match(quote, /if \(!canEditQuote \|\| !serverCanManageCustomers\) return/);
+  assert.match(quote, /if \(!canEditQuote \|\| !serverCanManageCustomers \|\| busy\) return/);
   assert.match(quote, /canEditQuote && canApplyDiscounts/);
   assert.match(quote, /!canEditQuote && jobSummary\?\.customerId[\s\S]*?Open customer details/);
   assert.match(invoice, /const canManageInvoice = !readOnly && serverCanManageInvoices/);
@@ -206,7 +207,8 @@ test("accepted public leads keep disclosed customer and site context inside scop
   assert.match(crm, /isReleasedLead \? "Customer-authorised lead"/);
   assert.match(crm, /This customer-authorised lead contains only the contact and property details disclosed to your business/);
   assert.match(crm, /customerName=\{jobCustomerName\}/);
-  assert.match(quote, /jobSummary\?\.siteSummary/);
+  assert.match(quote, /<TradeQuoteLivePreview[^>]*job=\{jobSummary\}/);
+  assert.match(quotePreview, /job\?\.siteSummary/);
   assert.match(invoice, /invoice\.document\.customer\.name/);
   assert.match(invoice, /invoice\.document\.site\.summary/);
   assert.doesNotMatch(crm, /Current customer-shared contact and property details appear only in this job's Quote tab/);

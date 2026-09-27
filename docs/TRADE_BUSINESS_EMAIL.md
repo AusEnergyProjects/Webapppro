@@ -2,13 +2,15 @@
 
 Implementation branch: `codex/trade-outgoing-email`, based on `455c98938962024d319fab128313175bdb1a18c5`.
 
-This feature is implemented locally. Google provider registration has started; consent approval, deployment and real mailbox acceptance checks are still outstanding. Microsoft registration is still outstanding. Do not enable a provider merely because its buttons or mocked tests work.
+This feature is implemented locally. Google and Microsoft provider registration have started; provider approval, deployment and real mailbox acceptance checks are still outstanding. Do not enable a provider merely because its buttons or mocked tests work.
 
 ### Google activation progress, 27 September 2026
 
 The owner approved creating the dedicated Google email client and configuring send-only permission. The Gmail API is enabled in `australian-energy-assessments`. The `TLink Business Email` Web application client has the exact production callback below. Its dedicated client ID and secret are saved in Sites runtime revision 139, with the secret protected and `GOOGLE_EMAIL_ENABLED=false`. The existing encryption key and existing OAuth client were preserved. The downloaded credential file was removed after secure storage. The consent configuration now lists only `openid`, email identity and `gmail.send`, with a sending justification, the public TLink homepage, privacy URL and existing support address. Branding verification must precede sensitive-scope verification; neither has been submitted or approved.
 
 This is configuration preparation, not an activated connection or live release. Google branding and sensitive-scope verification, the public privacy disclosure, the application release and real mailbox acceptance checks must all be completed before broad onboarding.
+
+The owner also approved Microsoft registration, Platform Policies and dedicated credentials with delegated identity and send-only permission. `TLink Business Email` is registered for organisational and personal Microsoft accounts with the exact callback below. The Microsoft console reports that publisher verification is required for ordinary end-user consent to the new multitenant app; registration alone is not readiness.
 
 ## Business setup
 
@@ -55,7 +57,7 @@ For Microsoft:
 4. Install the client ID and secret as protected runtime secrets. Track the secret's expiry and rotate it before expiry.
 5. Enable after the delegated primary-mailbox flow passes real acceptance checks. Do not advertise delegated shared-mailbox send-as support.
 
-Apply `drizzle/0195_trade_outgoing_email.sql` through the normal Sites migration/package workflow before the new routes run. Release only from the reviewed revision, with the protected runtime values and approved provider configuration. No remote migration or deployment has been applied. Saved runtime changes take effect only with a deployment.
+Apply `drizzle/0196_trade_outgoing_email.sql` through the normal Sites migration/package workflow before the new routes run. The email migration follows the already live `0195_trade_quote_roof_image.sql`; never reuse that live sequence number. Release only from the reviewed revision, with the protected runtime values and approved provider configuration. No remote migration or deployment has been applied. Saved runtime changes take effect only with a deployment.
 
 Provider references: [Google Gmail scopes](https://developers.google.com/workspace/gmail/api/auth/scopes), [Google web-server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [Google refresh-token expiration](https://developers.google.com/identity/protocols/oauth2#expiration), [Microsoft authorisation code flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow), [Microsoft sendMail](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0).
 
@@ -70,7 +72,7 @@ Provider references: [Google Gmail scopes](https://developers.google.com/workspa
 - Timeouts, unknown responses and persistence failures after submission are treated as uncertain. The same request may check its saved result but cannot automatically send again. Confirm the mailbox result before any manual reconciliation; never reset a journal row just to retry it.
 - Known rejections can retry after the journal cooldown. A failed attempt cannot silently switch sender/provider. Old pre-migration delivery attempts without a journal are held for reconciliation when switching to a business mailbox.
 - Refresh leases prevent concurrent token rotation. Final submission reservations require a still-connected mailbox and an eligible installer account. Provider requests are bounded to 20 seconds with redirects disabled.
-- The serialized mailbox request is limited to 3 MiB. Rental PDFs above 1.5 MiB use the existing secure report link; other oversized messages fail explicitly.
+- The serialized mailbox request is limited to 3 MiB. Rental PDFs above 1.5 MiB use the existing secure report link. New quote emails (renderer revision 3) attach PDFs up to 1.5 MiB and always provide the secure review/download link; larger roof-design PDFs use that link. The threshold is provider-independent, and immutable PDF hashes are still checked. Historic quote renderer revisions 1 and 2 retain their exact content and attachment contract. Other oversized messages fail explicitly.
 - Disconnect removes stored credentials and pending OAuth state but preserves the sending journal. Closing the trade account also disconnects it. Provider-side application grants can additionally be removed in the mailbox account's security settings.
 
 ## Real acceptance checks before activation

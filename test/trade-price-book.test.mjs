@@ -146,9 +146,9 @@ test("active price-book items become authoritative direct-quote snapshots", () =
   assert.match(quoteUi, /description: item\.description \|\| item\.name/);
   assert.match(quoteUi, /<span>Price book item<\/span><select/);
   assert.match(quoteUi, /<option value="">Custom line<\/option>/);
-  assert.match(quoteUi, /priceBookItems\.map\(\(item\) => <option key=\{item\.id\} value=\{item\.id\}>/);
+  assert.match(quoteUi, /compatibleItems\.map\(\(item\) => <option key=\{item\.id\} value=\{item\.id\}>/);
   assert.match(quoteUi, /const selectPriceBookItem = \(itemId: string\) =>/);
-  assert.match(quoteUi, /onReplace\(\{[\s\S]*?priceBookItemId: item\.id[\s\S]*?lineType: item\.lineType[\s\S]*?description: item\.description \|\| item\.name[\s\S]*?quantity: "1"[\s\S]*?unitPrice: \(item\.sellPriceCentsExGst \/ 100\)\.toFixed\(2\)[\s\S]*?taxCode: item\.taxCode/);
+  assert.match(quoteUi, /onReplace\(\{[\s\S]*?priceBookItemId: item\.id[\s\S]*?lineType: item\.lineType[\s\S]*?description: item\.description \|\| item\.name[\s\S]*?quantity: mapKind \? line\.quantity : "1"[\s\S]*?unitPrice: \(item\.sellPriceCentsExGst \/ 100\)\.toFixed\(2\)[\s\S]*?taxCode: item\.taxCode/);
   assert.match(quoteUi, /onReplace\(\{ \.\.\.line, priceBookItemId: "", jobPacketId: "", jobPacketLineId: "" \}\)/);
   assert.match(quoteUi, /Manage price book/);
   assert.doesNotMatch(quoteUi, /Add a saved item|No saved items yet/);
@@ -157,7 +157,7 @@ test("active price-book items become authoritative direct-quote snapshots", () =
   assert.match(quoteUi, /disabled=\{linked \|\| discountLocked\}/);
   assert.match(quoteUi, /readOnly=\{linked\}/);
   assert.match(quoteUi, /readOnly=\{linked \|\| discountLocked\}/);
-  assert.match(quoteUi, /Change the quantity or customer section here/);
+  assert.match(quoteUi, /Change the quantity\{mapKind \? " here" : " or customer section here"\}/);
   assert.equal((crm.match(/onOpenPriceBook=\{\(\) => \{ setPriceBookView\("items"\); setView\("pricebook"\); \}\}/g) || []).length, 1);
   assert.equal((crm.match(/<JobDetail key=/g) || []).length, 1);
   assert.match(crm, /navigationTarget\.kind === "crm-view"/);

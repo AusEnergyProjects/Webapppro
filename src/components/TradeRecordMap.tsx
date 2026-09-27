@@ -27,6 +27,10 @@ import {
 } from "@/lib/trade-record-map";
 import styles from "./TradeRecordMap.module.css";
 import { TradeMapTools } from "./TradeMapTools";
+import dynamic from "next/dynamic";
+import type { MapQuoteMeasurement } from "@/lib/trade-map-quote";
+import type { MapQuoteAccess } from "./TradeMapQuoteDialog";
+const TradeMapQuoteDialog = dynamic(() => import("./TradeMapQuoteDialog").then((module) => module.TradeMapQuoteDialog));
 
 type Props = {
   user: User;
@@ -34,6 +38,7 @@ type Props = {
   loading?: boolean;
   total: number;
   onOpenRecord: (record: TradeMapRecord) => void;
+  quoteAccess?: MapQuoteAccess;
 };
 type Runtime = {
   ownerUid: string;
@@ -97,7 +102,8 @@ const geocodeMessages = {
   unavailable: "Address lookup is temporarily unavailable. The remaining addresses have not been checked.",
 };
 
-export function TradeRecordMap({ user, records, loading = false, total, onOpenRecord }: Props) {
+export function TradeRecordMap({ user, records, loading = false, total, onOpenRecord, quoteAccess }: Props) {
+  const [quoteMeasurement, setQuoteMeasurement] = useState<MapQuoteMeasurement | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const selectionRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef(new Map<string, MarkerEntry>());
@@ -333,7 +339,8 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
         </button>
       </header>
 
-      {runtime && mapState === "ready" && <TradeMapTools api={runtime.api} map={runtime.map} onExplore={exploreMap} onMeasuring={setMeasuring} />}
+      {runtime && mapState === "ready" && <TradeMapTools api={runtime.api} map={runtime.map} onExplore={exploreMap} onMeasuring={setMeasuring} onQuote={quoteAccess ? setQuoteMeasurement : undefined} />}
+      {quoteAccess && quoteMeasurement && <TradeMapQuoteDialog key={user.uid} user={user} measurement={quoteMeasurement} access={quoteAccess} onClose={() => setQuoteMeasurement(null)} />}
 
       <div className={styles.status} role="status" aria-live="polite">
         <span><i className={styles.dot} aria-hidden="true" />{locatedCount} mapped{pins.length ? ` at ${pins.length} ${pins.length === 1 ? "location" : "locations"}` : ""}</span>

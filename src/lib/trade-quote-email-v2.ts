@@ -1,71 +1,7 @@
 import type { TradeQuoteDocumentSnapshot } from "./trade-quote-review-server.ts";
 import { tradeQuoteDocumentDisplayTotals } from "./trade-quote-document-totals.mjs";
 import { canonicalGoogleBusinessProfileUrl } from "./trade-google-business-profile.mjs";
-
-export type TradeQuoteEmail = {
-  subject: string;
-  text: string;
-  html: string;
-  replyTo?: string;
-};
-
-export type BuildTradeQuoteEmailInput = {
-  snapshot: TradeQuoteDocumentSnapshot;
-  shareUrl: string;
-  expiresAt: string;
-  subjectTemplate?: string;
-};
-
-export const CURRENT_TRADE_QUOTE_EMAIL_RENDERER_REVISION = 3;
-
-export function resolveTradeQuoteEmailRendererRevision(
-  predecessorRevision?: unknown,
-) {
-  const revision = predecessorRevision === undefined
-    ? CURRENT_TRADE_QUOTE_EMAIL_RENDERER_REVISION
-    : Number(predecessorRevision);
-  if (revision !== 1 && revision !== 2 && revision !== CURRENT_TRADE_QUOTE_EMAIL_RENDERER_REVISION) {
-    throw new Error("QUOTE_DELIVERY_RENDERER_REVISION_UNSUPPORTED");
-  }
-  return revision;
-}
-
-export async function buildTradeQuoteEmailForRevision(
-  revision: number,
-  input: BuildTradeQuoteEmailInput,
-) {
-  if (resolveTradeQuoteEmailRendererRevision(revision) === 1) {
-    const { buildTradeQuoteEmailV1 } = await import("./trade-quote-email-v1.ts");
-    return buildTradeQuoteEmailV1(input);
-  }
-  if (revision === 2) {
-    const { buildTradeQuoteEmailV2 } = await import("./trade-quote-email-v2.ts");
-    return buildTradeQuoteEmailV2(input);
-  }
-  if (revision === CURRENT_TRADE_QUOTE_EMAIL_RENDERER_REVISION) {
-    return buildTradeQuoteEmail(input);
-  }
-  throw new Error("QUOTE_DELIVERY_RENDERER_REVISION_UNSUPPORTED");
-}
-
-export async function buildVerifiedTradeQuoteEmailForRevision(input: {
-  revision: number;
-  email: BuildTradeQuoteEmailInput;
-  expectedSubject: string;
-  expectedContentSha256: string;
-}): Promise<TradeQuoteEmail> {
-  const content = await buildTradeQuoteEmailForRevision(
-    input.revision,
-    input.email,
-  );
-  if (
-    content.subject !== input.expectedSubject
-    || await tradeQuoteEmailContentSha256(content) !== input.expectedContentSha256
-  ) {
-    throw new Error("QUOTE_DELIVERY_CONTENT_CHANGED");
-  }
-  return content;
-}
+import type { BuildTradeQuoteEmailInput, TradeQuoteEmail } from "./trade-quote-email.ts";
 
 function cleanText(value: unknown, maximum = 2_000) {
   return String(value || "")
@@ -157,7 +93,7 @@ const FINAL_PERCENT_DISCOUNT_SECTION = "Overall percentage discount";
 const isFinalPercentDiscount = (item: TradeQuoteDocumentSnapshot["items"][number]) =>
   item.sectionHeading === FINAL_PERCENT_DISCOUNT_SECTION;
 
-export function buildTradeQuoteEmail(
+export function buildTradeQuoteEmailV2(
   input: BuildTradeQuoteEmailInput,
 ): TradeQuoteEmail {
   const { snapshot } = input;
@@ -243,7 +179,7 @@ export function buildTradeQuoteEmail(
     shareUrl,
     "",
     expires ? `This private link expires ${expires}.` : "",
-    "Download a PDF copy for your records from your secure quote review.",
+    "A PDF copy is attached for your records.",
     "",
     contact ? `${snapshot.business.name} | ${contact}` : snapshot.business.name,
     snapshot.business.abn ? `ABN ${snapshot.business.abn}` : "",
@@ -276,7 +212,7 @@ export function buildTradeQuoteEmail(
               </td></tr>
             </table>
             ${lines.html ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:18px">${lines.html}</table>` : ""}
-            ${lines.remaining ? `<p style="margin:0 0 18px;font-size:13px;color:#55736f">Plus ${lines.remaining} more included item${lines.remaining === 1 ? "" : "s"} in the full quote.</p>` : ""}
+            ${lines.remaining ? `<p style="margin:0 0 18px;font-size:13px;color:#55736f">Plus ${lines.remaining} more included item${lines.remaining === 1 ? "" : "s"} in the attached quote.</p>` : ""}
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 24px;background:#063b42;border-radius:12px;color:#ffffff">
               <tr><td style="padding:18px 20px">
                 <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#8debd0">Total incl GST</div>
@@ -292,7 +228,7 @@ export function buildTradeQuoteEmail(
             ${snapshot.choices.length ? `<p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#55736f">This quote includes ${snapshot.choices.length} customer choice${snapshot.choices.length === 1 ? "" : "s"} to review online.</p>` : ""}
             ${displayTotals.hasChoices ? `<p style="margin:0 0 20px;font-size:13px;line-height:1.5;color:#6c827f">Your final total is calculated from the options you choose in the secure review.</p>` : ""}
             <table role="presentation" cellspacing="0" cellpadding="0"><tr><td style="border-radius:10px;background:#0bb47c"><a href="${escapeHtml(shareUrl)}" style="display:inline-block;padding:14px 22px;color:#ffffff;text-decoration:none;font-weight:700">Review your quote</a></td></tr></table>
-            <p style="margin:20px 0 0;font-size:13px;line-height:1.5;color:#6c827f">Use the private link to review the quote, ask a question, choose options, sign or decline.${expires ? ` It expires ${escapeHtml(expires)}.` : ""} Download a PDF copy for your records from your secure quote review.</p>
+            <p style="margin:20px 0 0;font-size:13px;line-height:1.5;color:#6c827f">Use the private link to review the quote, ask a question, choose options, sign or decline.${expires ? ` It expires ${escapeHtml(expires)}.` : ""} A PDF copy is attached for your records.</p>
           </td></tr>
           <tr><td style="padding:20px 32px;border-top:1px solid #d9e8e5;background:#f7fbfa;font-size:13px;line-height:1.55;color:#55736f">
             <strong style="color:#173f3b">${escapeHtml(snapshot.business.name)}</strong>${contact ? `<br>${escapeHtml(contact)}` : ""}${snapshot.business.abn ? `<br>ABN ${escapeHtml(snapshot.business.abn)}` : ""}${googleBusinessProfileUrl ? `<br><a href="${escapeHtml(googleBusinessProfileUrl)}" target="_blank" rel="noopener noreferrer" style="color:#0b6258">View Google business profile</a>` : ""}
@@ -309,14 +245,4 @@ export function buildTradeQuoteEmail(
     html,
     replyTo: cleanText(snapshot.business.email, 254) || undefined,
   };
-}
-
-export async function tradeQuoteEmailContentSha256(email: TradeQuoteEmail) {
-  const bytes = new TextEncoder().encode(
-    `${email.subject}\n${email.text}\n${email.html}`,
-  );
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(
-    "",
-  );
 }

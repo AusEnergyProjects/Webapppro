@@ -2081,7 +2081,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.supplier-command-n
 /* These canvases represent customer-facing documents and intentionally stay in day mode. */
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .crm-invoice-preview,
-  .trade-quote-document-sheet,
   .crm-invoice-preview-dialog:not(.schedule-appointment-dialog):not(:has(.crm-retake-review-dialog))
 ) {
   --trade-ink: #0c3738;
@@ -2113,7 +2112,7 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
 
 
 
-/* Date picker is portalled to document.body. */
+/* Date picker follows the active page or modal dialog in either colour mode. */
 html[data-tlink-colour-mode="night"] .site-date-popover {
   --color-aea-ink: #e9f3f0;
   background: #102027;
@@ -2150,7 +2149,7 @@ html[data-tlink-colour-mode="night"] .site-date-popover .site-date-grid button.s
   color: #ffffff;
 }
 
-html[data-tlink-colour-mode="night"] .site-date-popover select {
+html[data-tlink-colour-mode="night"] .site-date-popover :is(select, .site-date-jump input) {
   background: #0b1a20;
   border-color: #426066;
   color: #eef7f4;
