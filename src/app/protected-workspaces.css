@@ -1959,6 +1959,9 @@
   padding: 10px 11px;
   text-decoration: none;
 }
+@media (max-width: 760px) {
+  .business-settings-jump-nav { position: static; }
+}
 .business-settings-jump-nav a:hover,
 .business-settings-jump-nav a:focus-visible {
   background: var(--trade-accent-soft);

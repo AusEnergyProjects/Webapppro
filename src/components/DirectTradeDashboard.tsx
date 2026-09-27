@@ -830,7 +830,7 @@ export function DirectTradeDashboard() {
   useEffect(() => {
     if (workspace === "account" && serviceAreaNavigation.current) {
       serviceAreaNavigation.current = false;
-      document.getElementById("business-settings-service")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("business-settings-service")?.scrollIntoView({ behavior: "instant", block: "start" });
     }
   }, [workspace]);
   const [financeView, setFinanceView] = useState<FinanceView>(() => typeof window === "undefined" ? "quotes" : dashboardFinanceViewFromSearch(window.location.search));
