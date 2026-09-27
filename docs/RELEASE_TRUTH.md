@@ -4,13 +4,27 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 25 September 2026
+Last reconciled locally: 27 September 2026
 
-Deployment baseline for this change: Sites 624, source `e212b120a4798d448ce879fdf966ae4668222df2`. The coordinating release records the next matching GitHub/Sites identity.
+Deployment baseline for this change: Sites 643, source `d39e09671aab0417859f8f349a82345e5a1a8ca2`. The approved email-delivery update is preserved. The coordinating release records the next matching GitHub/Sites identity.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: bulk lodgement and explicit job review
+## Current implementation: saved roof designs and simple map quoting
+
+The Google map supports an immediately usable generic 440 W panel (1.134 m by 1.762 m), editable dimensions and wattage, and selection from the business's own price book. A Solar panel product stores its dimensions and wattage once. A small manufacturer-linked starter list requires no catalogue upload. Model specifications are copied into each design, so later catalogue changes do not rewrite old designs. The generic panel is a concept default, not a claimed market average or certified installation design.
+
+Solar layouts autosave with revision conflict protection, retain customer/job associations, and reopen with their geometry, equipment and notes. Leaving the map waits for saving; a failed save preserves the editor with Retry and Save a copy actions. Access is checked against the owning business and current customer/job assignment. Protected jobs remain inaccessible. Migration 0197 adds saved designs, 0198 adds immutable equipment snapshots to quote versions, and 0199 adds optional panel metadata to existing price-book items. No separate equipment catalogue or favourites store is introduced.
+
+Map quoting retains one price for a complete solar system. Optional solar, battery and hot-water choices reuse the existing quote engine, with explicit common and option-specific equipment. Customer previews and PDFs include model details and datasheet links. A printable crew sheet includes the captured roof design, equipment and installation notes. Captures hide editing handles while retaining map attribution. Re-adding the same saved solar design updates its map and panel count without duplicating its charge.
+
+A valid area or distance can be added to a quote directly; the action finishes the measurement and captures the marked map. The original measured image remains separate from the editable quantity charged, allowing insulation supply quantities to differ from the measured area. Switching to roll or pack pricing clears the previous unit rate and starts an editable item count, preventing square metres from being multiplied by a pack price. Issued quote versions retain their original snapshots.
+
+Product PDFs use a product dropdown and drag-and-drop or Upload PDF button. Warranty, brochure and information pages are uploaded once into private storage and automatically selected from the products used in a quote. Migration 0200 stores immutable document references and quote-version snapshots. Removing or replacing a product document affects future snapshots, while already saved/issued documents remain available. The complete PDF preview and outgoing quote include the actual PDF pages, labelled with their applicable option. Existing email delivery is preserved: small PDFs are attached, while larger complete PDFs remain available through the secure quote link. Limits are five PDFs per product, 8 MB/40 pages per upload, and 12 MB/100 attached pages per quote. PDF scripts, actions, form widgets and interactive annotations are not copied into the outgoing proposal.
+
+Validation and visual evidence are retained under `C:/Webproject/outputs/tlink-solar-design-2026-09-27/`. Focused storage/isolation/revision, map geometry/capture, equipment, package and PDF checks, desktop/mobile day/night checks, typecheck and migration replay through 0200 passed during implementation. The integrated full run reported 5,906 passed, 11 skipped and 11 independently established baseline assertion failures. Final focused regressions, exact-commit validation, publication and live verification are recorded by the coordinating release. No customer email, signature or payment is performed in verification.
+
+## Previous implementation: bulk lodgement and explicit job review
 
 The trade Jobs Actions and context menus now open Review alongside the existing private file viewer. Pass records an internal business review of the exact completed evidence. Correction required needs a note, returns editable unsigned work to the assigned technician, and queues an email containing the notes and job link. Provider acceptance, failure and uncertain email delivery remain visible; retries retain one delivery identity. Creditex can return audited work through the same correction process. Original signed records and PDFs remain unchanged, and corrected submissions require fresh signatures, business review and Creditex audit.
 

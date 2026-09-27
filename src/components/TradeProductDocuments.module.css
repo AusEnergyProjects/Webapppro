@@ -1,0 +1,20 @@
+.documents { border: 1px solid var(--trade-line, #d7e5df); border-radius: 12px; background: var(--trade-surface-soft, #f4f8f6); color: var(--trade-ink, #183b35); padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.documents header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.documents strong { font-size: .88rem; font-weight: 650; overflow-wrap: anywhere; }
+.documents p, .documents small, .documents li span { margin: 5px 0 0; font-size: .78rem; line-height: 1.5; color: var(--trade-muted, #5d7068); }
+.documents button { font: inherit; font-size: .8rem; font-weight: 600; min-height: 40px; padding: 9px 13px; white-space: nowrap; cursor: pointer; border: 1px solid var(--trade-line, #d7e5df); border-radius: 8px; color: var(--trade-ink, #183b35); background: var(--trade-field, white); }
+.documents header button { background: var(--trade-accent, #087567); color: white; border-color: transparent; }
+.documents button:disabled { opacity: .55; cursor: default; }
+.documents button:focus-visible, .documents a:focus-visible { outline: 3px solid var(--trade-accent, #087567); outline-offset: 2px; }
+.documents ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.dropZone { display: grid; gap: 5px; text-align: center; border: 1px dashed var(--trade-line, #b9cdc6); border-radius: 9px; padding: 22px 12px; background: var(--trade-field, white); }
+.dropZone span { font-size: .77rem; color: var(--trade-muted, #5d7068); }.dragging { border-color: var(--trade-accent, #087567); outline: 2px solid var(--trade-accent, #087567); }
+.documents li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--trade-line, #d7e5df); }
+.documents li > div:first-child { min-width: 0; display: grid; }
+.actions { display: flex; gap: 6px; }
+.preview { min-width: 0; display: grid; gap: 10px; }
+.preview > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.preview iframe { width: 100%; height: 480px; border: 1px solid var(--trade-line, #d7e5df); border-radius: 8px; background: white; }
+.preview a { color: var(--trade-accent-readable, #087567); font-size: .8rem; }
+.preview .previewLinks { justify-content: flex-start; flex-wrap: wrap; }
+@media (max-width: 560px) { .documents header, .documents li { align-items: stretch; flex-direction: column; }.documents { padding: 12px; }.actions button { flex: 1; }.preview iframe { height: 360px; } }

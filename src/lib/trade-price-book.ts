@@ -1,4 +1,33 @@
 import { dollarsToCents } from "./trade-quote.ts";
+import { normalizeSolarEquipmentItem, type SolarEquipmentItem } from "./trade-solar-equipment.ts";
+
+export type PriceBookSolarPanel = { watts: number; widthM: number; lengthM: number; manufacturer?: string; model?: string;
+  datasheetUrl?: string; imageUrl?: string; warrantyYears?: number };
+
+export function parsePriceBookSolarPanel(value: unknown): PriceBookSolarPanel | null {
+  if (value === undefined || value === null || value === "" || value === "null") return null;
+  let raw: unknown = value;
+  if (typeof value === "string") {
+    try { raw = JSON.parse(value) as unknown; } catch { throw new Error("INVALID_PRICE_BOOK_SOLAR_PANEL"); }
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("INVALID_PRICE_BOOK_SOLAR_PANEL");
+  try {
+    const panel = normalizeSolarEquipmentItem({ ...raw, id: "price-book-panel", kind: "panel", name: "Panel", model: "model" in raw ? raw.model || "Panel" : "Panel", quantity: 1 });
+    // The normalizer has required these for panel equipment; preserve optional product information only.
+    if (panel.watts === undefined || panel.widthM === undefined || panel.lengthM === undefined) throw new Error("INVALID_PRICE_BOOK_SOLAR_PANEL");
+    return { watts: panel.watts, widthM: panel.widthM, lengthM: panel.lengthM,
+      ...(panel.manufacturer ? { manufacturer: panel.manufacturer } : {}),
+      ...("model" in raw && raw.model ? { model: panel.model } : {}), ...(panel.datasheetUrl ? { datasheetUrl: panel.datasheetUrl } : {}),
+      ...(panel.imageUrl ? { imageUrl: panel.imageUrl } : {}), ...(panel.warrantyYears === undefined ? {} : { warrantyYears: panel.warrantyYears }) };
+  } catch { throw new Error("INVALID_PRICE_BOOK_SOLAR_PANEL"); }
+}
+
+export function priceBookSolarEquipment(row: { id: string; name: string; supplierSku?: string; supplierProductId?: string; solarPanel: PriceBookSolarPanel }): SolarEquipmentItem {
+  return normalizeSolarEquipmentItem({ ...row.solarPanel, id: row.id, kind: "panel", name: row.name,
+    priceBookItemId: row.id,
+    model: row.solarPanel.model || row.supplierSku || row.name, manufacturer: row.solarPanel.manufacturer || "", quantity: 1,
+    ...(row.supplierProductId ? { catalogueProductId: row.supplierProductId } : {}) });
+}
 
 export const PRICE_BOOK_ITEM_TYPES = [
   "labour", "material", "equipment", "subcontractor", "travel", "call_out",
@@ -24,7 +53,7 @@ export const PRICE_BOOK_TYPE_LABELS: Record<PriceBookItemType, string> = {
 };
 
 export const PRICE_BOOK_UNITS = [
-  ["each", "Each"], ["hour", "Hour"], ["day", "Day"], ["metre", "Metre"],
+  ["each", "Each"], ["roll", "Roll"], ["pack", "Pack"], ["bag", "Bag"], ["hour", "Hour"], ["day", "Day"], ["metre", "Metre"],
   ["square_metre", "Square metre"], ["kilometre", "Kilometre"], ["visit", "Visit"], ["fixed", "Fixed"],
 ] as const;
 
@@ -84,6 +113,8 @@ export function normalisePriceBookInput(raw: Record<string, unknown>, clean: (va
   if (!/^\d{1,5}$/.test(durationText)) throw new Error("INVALID_PRICE_BOOK_DURATION");
   const expectedDurationMinutes = Number(durationText);
   if (expectedDurationMinutes < 0 || expectedDurationMinutes > 10_080) throw new Error("INVALID_PRICE_BOOK_DURATION");
+  const solarPanel = Object.hasOwn(raw, "solarPanel") ? parsePriceBookSolarPanel(raw.solarPanel) : undefined;
+  if (solarPanel && itemType !== "material" && itemType !== "equipment") throw new Error("INVALID_PRICE_BOOK_SOLAR_PANEL_TYPE");
 
   return {
     name,
@@ -99,5 +130,6 @@ export function normalisePriceBookInput(raw: Record<string, unknown>, clean: (va
     supplierName: clean(raw.supplierName, 140),
     supplierSku: clean(raw.supplierSku, 100),
     supplierProductId: clean(raw.supplierProductId, 180),
+    ...(solarPanel === undefined ? {} : { solarPanel }),
   };
 }

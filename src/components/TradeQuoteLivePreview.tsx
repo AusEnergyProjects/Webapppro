@@ -4,9 +4,13 @@ import { useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { dollarsToCents, normaliseTradeQuoteLineGroup, overallTradeQuoteDiscountKind, OVERALL_PERCENT_DISCOUNT_SECTION, tradeQuoteChoiceValidationIssue, tradeQuoteLineValidationIssues } from "@/lib/trade-quote";
 import { tradeQuoteDocumentDisplayTotals } from "@/lib/trade-quote-document-totals.mjs";
-import { mapQuoteKind, mapQuoteSystemPanels, MAP_QUOTE_UNITS } from "@/lib/trade-map-quote";
+import { mapQuoteKind, mapQuoteMeasuredContext, mapQuoteSystemPanels, MAP_QUOTE_UNITS } from "@/lib/trade-map-quote";
+import type { QuoteProductDocumentSummary } from "@/lib/trade-quote-product-documents";
+import { QuoteCompletePdfPreview, QuoteProductDocuments } from "./TradeQuoteProductDocuments";
 import type { QuoteBusiness, QuoteChoice, QuoteJob, QuoteLine, QuoteRoofImage } from "./TradeQuotePanel";
 import styles from "./TradeQuoteLivePreview.module.css";
+import type { QuoteEquipment } from "@/lib/trade-quote-equipment";
+import { TradeQuoteEquipmentCards } from "./TradeQuoteEquipmentCards";
 
 const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
 const clean = (value: unknown) => String(value || "").trim().slice(0, 500);
@@ -43,10 +47,15 @@ type Props = {
   validUntil: string;
   validationMessage: string;
   roofImage?: QuoteRoofImage | null;
+  equipment?: QuoteEquipment;
+  productDocuments?: QuoteProductDocumentSummary[];
+  pdfVersionId?: string;
+  pdfUpdatedAt?: string;
+  draftDirty?: boolean;
   review?: boolean;
 };
 
-export function TradeQuoteLivePreview({ user, workOrderId, lines, choices, business, job, identity, customerMessage, terms, validUntil, validationMessage, roofImage, review = false }: Props) {
+export function TradeQuoteLivePreview({ user, workOrderId, lines, choices, business, job, identity, customerMessage, terms, validUntil, validationMessage, roofImage, equipment, productDocuments = [], pdfVersionId, pdfUpdatedAt, draftDirty = false, review = false }: Props) {
   const [logo, setLogo] = useState<{ ownerContext: string; url: string } | null>(null);
   const [roofAsset, setRoofAsset] = useState<{ key: string; url: string; error: string } | null>(null);
   const ownerContext = `${user.uid}:${workOrderId}`;
@@ -103,10 +112,11 @@ export function TradeQuoteLivePreview({ user, workOrderId, lines, choices, busin
           // eslint-disable-next-line @next/next/no-img-element -- Private authorised PNG or a local captured image.
           ? <img src={roofUrl} alt="Proposed roof layout from the map" />
           : <p role={roofError ? "alert" : "status"}>{roofError || "Loading roof layout..."}</p>}<figcaption>Illustrative layout. Confirm dimensions, roof conditions and installation clearances on site.</figcaption></figure>}
+        {equipment && <TradeQuoteEquipmentCards items={equipment.common} title={choices.length ? "Equipment included in every option" : "Selected equipment"} />}
         <section className={styles.items} aria-label="Included quote items"><div className={styles.tableHeading}><span>Included work</span><span>Incl GST</span></div>
           {lines.map((line, index) => {
             if (line.sectionHeading === OVERALL_PERCENT_DISCOUNT_SECTION) return null;
-            const kind = mapQuoteKind(line.sectionHeading), unit = kind && kind !== "solar" ? MAP_QUOTE_UNITS[kind] : "";
+            const kind = mapQuoteKind(line.sectionHeading), unit = mapQuoteMeasuredContext(line.sectionHeading)?.itemPricing ? "items" : kind && kind !== "solar" ? MAP_QUOTE_UNITS[kind] : "";
             const section = kind === "solar" && mapQuoteSystemPanels(line.sectionHeading) === null ? `Solar system (${line.quantity} panels)` : line.sectionHeading;
             const fixedDiscount = overallTradeQuoteDiscountKind(line) === "fixed";
             const calculated = document.complete ? document.base.lines[index] : null;
@@ -116,13 +126,15 @@ export function TradeQuoteLivePreview({ user, workOrderId, lines, choices, busin
           })}
           {!lines.length && <p className={styles.placeholder}>Scope is provided by the customer choices below.</p>}
         </section>
-        {choices.length > 0 && <section className={styles.choices}><h6>Customer choices</h6>{choices.map((choice, index) => <div className={styles.item} key={choice.clientKey}><div><strong>{choice.name || "Choice name needed"}{choice.recommended ? " · Recommended" : ""}</strong><small>{choice.summary || (choice.kind === "addon" ? "Optional extra" : "Choose one")}</small></div><b>{document.complete ? `${choice.kind === "addon" ? "+ " : ""}${money((choice.kind === "addon" ? 0 : document.base.totalCents) + document.options[index].totals.totalCents)}` : "Incomplete"}</b></div>)}</section>}
+        {choices.length > 0 && <section className={styles.choices}><h6>Customer choices</h6>{choices.map((choice, index) => <div key={choice.clientKey}><div className={styles.item}><div><strong>{choice.name || "Choice name needed"}{choice.recommended ? " · Recommended" : ""}</strong><small>{choice.summary || (choice.kind === "addon" ? "Optional extra" : "Choose one")}</small></div><b>{document.complete ? `${choice.kind === "addon" ? "+ " : ""}${money((choice.kind === "addon" ? 0 : document.base.totalCents) + document.options[index].totals.totalCents)}` : "Incomplete"}</b></div><TradeQuoteEquipmentCards items={equipment?.choices.find((group) => group.choiceKey === choice.clientKey)?.items || []} title={`Equipment in ${choice.name}`} /></div>)}</section>}
         {document.complete ? <dl className={styles.totals}><div><dt>Subtotal ex GST</dt><dd>{money(document.totals.subtotalCents - document.discounts)}</dd></div>{document.discounts < 0 && <div><dt>Discounts and rebates ex GST</dt><dd>{money(document.discounts)}</dd></div>}<div><dt>GST</dt><dd>{money(document.totals.taxCents)}</dd></div><div className={styles.total}><dt>{document.totals.label}</dt><dd>{money(document.totals.totalCents)}</dd></div></dl>
           : <div className={styles.incomplete} role="status"><strong>Total incomplete</strong><span>{document.message}</span></div>}
         <section className={styles.terms}><h6>Scope and terms</h6><p>{terms || "Your recorded terms will appear here."}</p></section>
+        {!draftDirty && <QuoteProductDocuments documents={productDocuments} choices={choices.map((choice) => ({ id: choice.clientKey, name: choice.name }))} />}
         <footer className={styles.footer}><span>{name}</span><span>Draft · Not issued</span></footer>
       </div>
     </article>
+    <QuoteCompletePdfPreview user={user} workOrderId={workOrderId} versionId={pdfVersionId} expectedUpdatedAt={pdfUpdatedAt} dirty={draftDirty} revisionKey={JSON.stringify(productDocuments)} />
     {!review && <p className={styles.previewNote}>Live draft preview. Save, review and confirm the customer&apos;s email consent before sending.</p>}
   </aside>;
 }

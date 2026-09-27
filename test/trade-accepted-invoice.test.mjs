@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { buildAcceptedInvoiceSnapshot } from "../src/lib/trade-accepted-invoice.ts";
+import { mapQuoteLine, mapQuoteSetItemPricing } from "../src/lib/trade-map-quote.ts";
+import { normaliseTradeQuoteLineGroup } from "../src/lib/trade-quote.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../drizzle/0138_trade_quote_acceptance_invoice.sql");
@@ -111,6 +113,18 @@ test("accepted invoice preserves exact signed STC scope and reconciled totals", 
   assert.match(built.sourceSnapshotSha256, /^[a-f0-9]{64}$/);
   assert.match(built.documentSnapshotSha256, /^[a-f0-9]{64}$/);
   assert.equal(JSON.parse(built.documentSnapshotJson).invoice.documentLabel, "Invoice");
+});
+
+test("accepted insulation quantity carries to the invoice while retaining the original map area", async () => {
+  const line = { ...mapQuoteSetItemPricing(mapQuoteLine({ kind: "area", quantity: 162.5 }), true), quantity: "8", unitPrice: "150", description: "R5 insulation rolls" };
+  const quote = normaliseTradeQuoteLineGroup([line], String);
+  const scope = quote.lines.map((item) => ({ lineId: "insulation-rolls", lineType: item.lineType, description: item.description,
+    section: line.sectionHeading, quantityMilli: item.quantityMilli, subtotalCents: item.subtotalCents, taxCents: item.taxCents, totalCents: item.totalCents }));
+  const totals = { subtotalCents: quote.subtotalCents, taxCents: quote.taxCents, totalCents: quote.totalCents };
+  const built = await buildAcceptedInvoiceSnapshot(input({ scope, totals }));
+  assert.equal(built.documentSnapshot.lines[0].quantityMilli, 8000);
+  assert.equal(built.documentSnapshot.lines[0].section, "Map estimate: roof area 162.5 m² (priced by item)");
+  assert.equal(built.documentSnapshot.totals.totalCents, 132000);
 });
 
 test("bank payment is frozen only when all required details are complete", async () => {

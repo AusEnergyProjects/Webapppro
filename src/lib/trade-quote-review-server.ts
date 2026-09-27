@@ -7,6 +7,9 @@ import {
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 import { canonicalGoogleBusinessProfileUrl } from "./trade-google-business-profile.mjs";
 import { assertQuoteRoofImageScope, parseQuoteRoofImage, type TradeQuoteRoofImage } from "./trade-quote-roof-image";
+import { normaliseQuoteEquipment, type QuoteEquipment } from "./trade-quote-equipment";
+import { normaliseQuoteProductDocuments, quoteProductDocumentSummaries, type QuoteProductDocument, type QuoteProductDocumentSummary } from "./trade-quote-product-documents";
+import { assertProductDocumentOwner } from "./trade-price-book-documents";
 
 type Row = Record<string, unknown>;
 
@@ -101,6 +104,8 @@ export type TradeQuoteDocumentSnapshot = {
   consentStatement: string;
   issuedAt: string;
   roofImage?: TradeQuoteRoofImage | null;
+  equipment?: QuoteEquipment;
+  productDocuments?: QuoteProductDocument[];
   items: TradeQuoteLineSnapshot[];
   choices: TradeQuoteChoiceSnapshot[];
 };
@@ -132,6 +137,8 @@ export type TradeQuoteQuestionPayload = {
 };
 
 export type TradeQuoteReviewPayload = {
+  equipment?: QuoteEquipment;
+  productDocuments?: QuoteProductDocumentSummary[];
   hasRoofImage: boolean;
   linkId: string;
   tokenIssue: number;
@@ -418,6 +425,18 @@ function snapshotFromObject(
   const choices = sourceChoices
     .map((choice) => normaliseChoice(choice, schemaVersion))
     .filter(Boolean) as TradeQuoteChoiceSnapshot[];
+  let equipment: QuoteEquipment | undefined;
+  let productDocuments: QuoteProductDocument[] | undefined;
+  try {
+    if (row.productDocuments !== undefined) {
+      productDocuments = normaliseQuoteProductDocuments(row.productDocuments);
+      if (productDocuments.some((entry) => entry.choiceKeys.some((key) => !choices.some((choice) => choice.id === key)))) return null;
+    }
+    if (row.equipment !== undefined) {
+      equipment = normaliseQuoteEquipment(row.equipment);
+      if (equipment.choices.some((group) => !choices.some((choice) => choice.id === group.choiceKey))) return null;
+    }
+  } catch { return null; }
   if (
     schemaVersion === "trade-quote-document-v2" &&
     (
@@ -486,6 +505,8 @@ function snapshotFromObject(
     consentStatement: cleanText(row.consentStatement, 2_000, true),
     issuedAt: cleanText(row.issuedAt, 40),
     ...(row.roofImage === undefined ? {} : { roofImage }),
+    ...(equipment ? { equipment } : {}),
+    ...(productDocuments ? { productDocuments } : {}),
     items,
     choices,
   };
@@ -520,7 +541,7 @@ export async function buildTradeQuoteDocumentSnapshot(
       `SELECT version.id quote_version_id, version.quote_id, version.version_number,
         version.acceptance_email, version.subtotal_cents, version.tax_cents,
         version.total_cents, version.customer_message, version.terms,
-        version.valid_until, version.consent_statement, version.issued_at, version.roof_image_json,
+        version.valid_until, version.consent_statement, version.issued_at, version.roof_image_json, version.equipment_json, version.product_documents_json,
         quote.quote_number, work.id work_order_id, work.work_number,
         work.title work_title, customer.id customer_id,
         customer.customer_number,
@@ -579,6 +600,20 @@ export async function buildTradeQuoteDocumentSnapshot(
       .all<Row>(),
   ]);
   const allItems = itemRows.results.map(lineSnapshot);
+  const savedEquipment = normaliseQuoteEquipment(row.equipment_json);
+  const productDocuments = normaliseQuoteProductDocuments(row.product_documents_json).map((entry) => {
+    assertProductDocumentOwner(entry.document, ownerUid);
+    return { ...entry, choiceKeys: entry.choiceKeys.map((key) => {
+      const choice = choiceRows.results.find((candidate) => String(candidate.choice_key) === key);
+      if (!choice) throw new Error("QUOTE_DOCUMENT_INVALID");
+      return String(choice.id);
+    }) };
+  });
+  const equipment: QuoteEquipment = { common: savedEquipment.common, choices: savedEquipment.choices.map((group) => {
+    const choice = choiceRows.results.find((candidate) => String(candidate.choice_key) === group.choiceKey);
+    if (!choice) throw new Error("QUOTE_DOCUMENT_INVALID");
+    return { choiceKey: String(choice.id), items: group.items };
+  }) };
   const releasedCustomer = overrides.releasedCustomer;
   const releasedSite = overrides.releasedSite;
   const siteSummary = [
@@ -674,6 +709,8 @@ export async function buildTradeQuoteDocumentSnapshot(
       40,
     ),
     roofImage,
+    equipment,
+    productDocuments,
     items: allItems.filter(
       (_item, index) => !String(itemRows.results[index]?.quote_choice_id || ""),
     ),
@@ -802,6 +839,7 @@ export async function quoteDocumentSnapshotForAuthorisedLink(
     throw new Error("QUOTE_DOCUMENT_SNAPSHOT_INVALID");
   }
   assertQuoteRoofImageScope(snapshot.roofImage, row.firebase_uid, row.work_order_id);
+  snapshot.productDocuments?.forEach((entry) => assertProductDocumentOwner(entry.document, row.firebase_uid));
   return snapshot;
 }
 
@@ -850,6 +888,8 @@ export async function buildTradeQuoteReviewPayload(
     validUntil: snapshot.validUntil,
     issuedAt: snapshot.issuedAt,
     hasRoofImage: Boolean(snapshot.roofImage),
+    ...(snapshot.equipment ? { equipment: snapshot.equipment } : {}),
+    productDocuments: quoteProductDocumentSummaries(snapshot.productDocuments || []),
     consentStatement: snapshot.consentStatement,
     expiresAt: row.expires_at,
     items: snapshot.items,

@@ -66,10 +66,10 @@ test("both map layouts preserve indexed filters, page controls, and focused-reco
   assert.match(ui, /<WorkspaceListControls page=\{customerPagination\.page\}/);
   assert.match(ui, /records=\{jobMapRecords\} loading=\{jobMapLoading\} total=\{jobPagination.total\} onOpenRecord=\{\(record\) => openFocusedJob\(record.id\)\}/);
   assert.match(ui, /records=\{customerMapRecords\} loading=\{customerMapLoading\} total=\{customerPagination.total\} onOpenRecord=\{\(record\) => setSelectedCustomerId\(record.id\)\}/);
-  assert.match(ui, /setJobLayout\(\(current\) => current === "map" \? "map" : "list"\)/);
+  assert.match(ui, /setJobLayoutState\(\(current\) => current === "map" \? "map" : "list"\)/);
   for (const kind of ["jobs", "customers"]) assert.match(ui, new RegExp(`Map shows this page of filtered ${kind}`));
   for (const layout of ["jobLayout", "customerLayout"]) assert.match(ui, new RegExp(`aria-pressed=\\{${layout} === "map"\\}`));
-  assert.equal((ui.match(/<TradeRecordMap key=\{user.uid\}/g) || []).length, 2);
+  assert.equal((ui.match(/<TradeRecordMap onRegisterMapSave=\{registerMapSave\} key=\{user.uid\}/g) || []).length, 2);
 });
 
 test("stale pages are withheld before the debounced index fetch and failed requests clear old records", () => {

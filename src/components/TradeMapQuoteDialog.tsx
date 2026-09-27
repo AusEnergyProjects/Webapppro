@@ -6,6 +6,7 @@ import { isMapQuoteJob, MAP_QUOTE_UNITS, type MapQuoteIntent, type MapQuoteJob, 
 import { TradeQuotePanel } from "./TradeQuotePanel";
 import { TradeMapNewQuote } from "./TradeMapNewQuote";
 import styles from "./TradeMapQuoteDialog.module.css";
+import type { SolarDesign } from "@/lib/trade-solar-design";
 
 export type MapQuoteAccess = { canCreate: boolean; canCreateCustomer: boolean; canSend: boolean };
 type QuoteIndex = { ok?: boolean; error?: string; items?: unknown[]; pagination?: { hasNext: boolean; nextCursor: string; pageCount: number } };
@@ -66,12 +67,16 @@ function QuotePicker({ user, onSelect }: { user: User; onSelect: (id: string) =>
   </div>;
 }
 
-export function TradeMapQuoteDialog({ user, measurement, access, onClose }: { user: User; measurement: MapQuoteMeasurement; access: MapQuoteAccess; onClose: () => void }) {
+export function TradeMapQuoteDialog({ user, measurement, access, onClose, onDesignLinked }: { user: User; measurement: MapQuoteMeasurement; access: MapQuoteAccess; onClose: () => void; onDesignLinked?: (design: SolarDesign) => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [intent, setIntent] = useState<MapQuoteIntent | null>(null);
+  const [intent, setIntent] = useState<MapQuoteIntent | null>(() => measurement.workOrderId ? { id: crypto.randomUUID(), ownerUid: user.uid, workOrderId: measurement.workOrderId, measurement } : null);
+  const [linkError, setLinkError] = useState("");
   const [mode, setMode] = useState<"existing" | "new">("existing");
   const [dirty, setDirty] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [panelBusy, setBusy] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const linkingRequest = useRef(false);
+  const busy = panelBusy || linking;
   const [discardTo, setDiscardTo] = useState<"map" | "existing" | null>(null);
   const keepEditing = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -89,7 +94,23 @@ export function TradeMapQuoteDialog({ user, measurement, access, onClose }: { us
   }, [dirty]);
   useEffect(() => { if (discardTo) keepEditing.current?.focus(); }, [discardTo]);
   function close() { if (busy) return; if (dirty) setDiscardTo("map"); else onClose(); }
-  function select(workOrderId: string) { setDirty(false); setIntent({ id: crypto.randomUUID(), ownerUid: user.uid, workOrderId, measurement }); }
+  async function select(workOrderId: string) {
+    if (linkingRequest.current) return;
+    linkingRequest.current = true;
+    setLinking(true); setLinkError("");
+    try {
+      if (measurement.designId) {
+        const token = await user.getIdToken();
+        const response = await fetch("/api/trade-solar-designs", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "attach", id: measurement.designId, expectedRevision: measurement.designRevision, workOrderId }) });
+        const result: { ok?: boolean; design?: SolarDesign; error?: string } = await response.json();
+        if (!response.ok || !result.ok || !result.design) throw new Error(result.error || "Could not link this design. Return to the map and try again.");
+        onDesignLinked?.(result.design);
+      }
+      setDirty(false); setIntent({ id: crypto.randomUUID(), ownerUid: user.uid, workOrderId, measurement });
+    } catch (error) { setLinkError(error instanceof Error ? error.message : "Could not link this design."); }
+    finally { linkingRequest.current = false; setLinking(false); }
+  }
   return <dialog ref={dialog} className={styles.dialog} aria-labelledby="map-quote-title" onCancel={(event) => {
     event.preventDefault();
     if (dialog.current?.querySelector('[role="dialog"][aria-modal="true"]')) return;
@@ -103,6 +124,8 @@ export function TradeMapQuoteDialog({ user, measurement, access, onClose }: { us
       if (discardTo === "map") onClose(); else { setMode("existing"); setDirty(false); setDiscardTo(null); }
     }}>Discard unsaved changes</button></div></div>}
     <div className={styles.content} inert={Boolean(discardTo)}>
+      {linkError && <p role="alert">{linkError}</p>}
+      {busy && !intent && <p role="status">Preparing quote...</p>}
       {intent ? <TradeQuotePanel key={intent.id} user={user} workOrderId={intent.workOrderId} available canSend={access.canSend} mapQuoteIntent={intent} showLivePreview onDraftDirtyChange={setDirty} onBusyChange={setBusy} /> : <>
         <div className={styles.tabs} role="group" aria-label="Quote destination">
           <button type="button" aria-pressed={mode === "existing"} disabled={busy} onClick={() => { if (dirty && mode !== "existing") setDiscardTo("existing"); else setMode("existing"); }}>Existing job or quote</button>

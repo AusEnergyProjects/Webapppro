@@ -66,7 +66,7 @@ test("solar system pricing saves once and rejects panel rates or multiplied quan
   assert.equal(custom.calculated.totalCents, 550000);
   assert.equal(custom.calculated.lines[0].quantityMilli, 1000);
   assert.deepEqual(custom.sectionHeadings, ["Solar system (12 panels)"]);
-  for (const unitLabel of ["system", "job"]) {
+  for (const unitLabel of ["system", "job", "fixed"]) {
     const saved = await fixture({ unitLabel }).route.resolveLineGroup("business-owner", [{ ...line, priceBookItemId: "system-item" }]);
     assert.equal(saved.calculated.totalCents, 550000);
   }
@@ -78,4 +78,14 @@ test("solar system pricing saves once and rejects panel rates or multiplied quan
   const kept = await fixture({ unitLabel: "each" }).route.resolveLineGroup("business-owner", [legacy]);
   assert.equal(kept.calculated.totalCents, 264000);
   assert.equal(kept.calculated.lines[0].quantityMilli, 12000);
+});
+
+test("quote save accepts manually charged packs and retains the separate measured area", async () => {
+  const line = { ...mapQuote.mapQuoteSetItemPricing(mapQuote.mapQuoteLine({ kind: "area", quantity: 162.5 }), true),
+    quantity: "8", unitPrice: "150", priceBookItemId: "insulation-packs" };
+  const saved = await fixture({ unitLabel: "pack" }).route.resolveLineGroup("business-owner", [line]);
+  assert.equal(saved.calculated.lines[0].quantityMilli, 8000);
+  assert.equal(saved.calculated.totalCents, 132000);
+  assert.deepEqual(saved.sectionHeadings, ["Map estimate: roof area 162.5 m² (priced by item)"]);
+  await assert.rejects(fixture({ unitLabel: "square_metre" }).route.resolveLineGroup("business-owner", [line]), /MAP_QUOTE_UNIT_MISMATCH/);
 });

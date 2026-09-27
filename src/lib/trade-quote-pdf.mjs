@@ -1,9 +1,13 @@
 import { drawTradeDocumentHeader, drawTradeDocumentMetadata } from "./trade-document-pdf-layout.mjs";
+import { solarEquipmentDescription, SOLAR_EQUIPMENT_LABELS } from "./trade-solar-equipment.ts";
+import { normaliseQuoteProductDocuments } from "./trade-quote-product-documents.ts";
+import { inspectProductPdf } from "./trade-price-book-documents.ts";
 import {
   PDFDocument,
   PDFName,
   PDFString,
   StandardFonts,
+  degrees,
   rgb,
 } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
@@ -517,6 +521,31 @@ export async function createTradeQuotePdfBytes(
     drawText("Indicative layout. Confirm roof dimensions and installation details on site.", { size: 8, lineHeight: 11, color: rgb(0.34, 0.43, 0.45), gapAfter: 12 });
   }
 
+  const equipmentCards = (items, title) => {
+    if (!Array.isArray(items) || !items.length) return;
+    ensureSpace(120);
+    y -= 10;
+    drawText(title, { font: bold, size: 11, lineHeight: 15, color: palette.primary, gapAfter: 10 });
+    for (const item of items) {
+      ensureSpace(85);
+      drawText(`${item.quantity} x ${SOLAR_EQUIPMENT_LABELS[item.kind]} | ${item.name}`, { font: bold, size: 9.5, lineHeight: 13, gapAfter: 3 });
+      drawText([item.manufacturer, item.model].filter(Boolean).join(" | "), { size: 8.5, lineHeight: 12, gapAfter: 3 });
+      const description = solarEquipmentDescription(item).replaceAll(" · ", " | ").replaceAll(" × ", " x ");
+      if (description) drawText(description, { size: 8.5, lineHeight: 12, gapAfter: 3 });
+      if (item.warrantyYears !== undefined) drawText(`${item.warrantyYears} year warranty`, { size: 8.5, lineHeight: 12, gapAfter: 3 });
+      if (item.datasheetUrl) {
+        ensureSpace(22);
+        const label = "Product datasheet";
+        page.node.addAnnot(pdf.context.register(pdf.context.obj({ Type: PDFName.of("Annot"), Subtype: PDFName.of("Link"),
+          Rect: [MARGIN, y - 2, MARGIN + regular.widthOfTextAtSize(label, 8.5), y + 10.5], Border: [0, 0, 0],
+          Contents: PDFString.of(label), A: { Type: PDFName.of("Action"), S: PDFName.of("URI"), URI: PDFString.of(item.datasheetUrl) } })));
+        drawText(label, { size: 8.5, lineHeight: 12, color: palette.primary, gapAfter: 4 });
+      }
+      y -= 9;
+    }
+  };
+  equipmentCards(snapshot.equipment?.common, snapshot.choices?.length ? "Equipment included in every option" : "Selected equipment");
+
   const includedItems = snapshot.items?.filter((item) => !isFinalPercentDiscount(item)) || [];
   if (includedItems.length) {
     const sections = contiguousTradeQuoteSections(includedItems);
@@ -648,6 +677,7 @@ export async function createTradeQuotePdfBytes(
       }
       tableHeading();
       choice.items?.filter((item) => !isFinalPercentDiscount(item)).forEach(lineItem);
+      equipmentCards(snapshot.equipment?.choices?.find((group) => group.choiceKey === choice.id)?.items, `Equipment in ${choice.name}`);
       drawText(
         `${
           choice.kind === "addon" ? "Optional extra" : "This choice"
@@ -731,6 +761,40 @@ export async function createTradeQuotePdfBytes(
     });
   });
 
+  // Embed only visible page content. Supplied documents cannot add actions,
+  // annotations, form widgets or document scripts to the customer proposal.
+  for (const { document, choiceKeys } of normaliseQuoteProductDocuments(snapshot.productDocuments)) {
+    const bytes = suppliedAssets.productDocuments?.find((asset) => asset.id === document.id)?.bytes;
+    if (!(bytes instanceof Uint8Array) || bytes.length !== document.sizeBytes) throw new Error("PRODUCT_DOCUMENT_INVALID");
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(bytes).buffer));
+    if (Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("") !== document.sha256) throw new Error("PRODUCT_DOCUMENT_INVALID");
+    if ((await inspectProductPdf(bytes)).pageCount !== document.pageCount) throw new Error("PRODUCT_DOCUMENT_INVALID");
+    const source = await PDFDocument.load(bytes, { ignoreEncryption: false, throwOnInvalidObject: true, updateMetadata: false });
+    const optionNames = choiceKeys.map((key) => {
+      const choice = snapshot.choices.find((candidate) => candidate.id === key);
+      if (!choice) throw new Error("QUOTE_PRODUCT_DOCUMENTS_INVALID");
+      return choice.name;
+    });
+    for (const [index, sourcePage] of source.getPages().entries()) {
+      const box = sourcePage.getCropBox();
+      const rotation = ((sourcePage.getRotation().angle % 360) + 360) % 360;
+      if (![0, 90, 180, 270].includes(rotation)) throw new Error("PRODUCT_DOCUMENT_INVALID");
+      const embedded = sourcePage.node.Contents() ? await pdf.embedPage(sourcePage, { left: box.x, bottom: box.y, right: box.x + box.width, top: box.y + box.height }) : null;
+      const sideways = rotation === 90 || rotation === 270;
+      const width = sideways ? box.height : box.width, height = sideways ? box.width : box.height;
+      const scale = Math.min(CONTENT_WIDTH / width, (A4_HEIGHT - 145) / height);
+      const attached = pdf.addPage([A4_WIDTH, A4_HEIGHT]);
+      const heading = safeText(document.label, regularCharacters);
+      attached.drawText(heading, { x: MARGIN, y: A4_HEIGHT - 38, font: bold, size: 11, maxWidth: CONTENT_WIDTH, lineHeight: 13 });
+      const scope = optionNames.length ? `Offered option: ${optionNames.slice(0, 2).map((name) => name.slice(0, 100)).join(" / ")}${optionNames.length > 2 ? ` and ${optionNames.length - 2} other options` : ""}` : snapshot.choices.length ? "Included with every option" : "Included product document";
+      attached.drawText(safeText(scope, regularCharacters), { x: MARGIN, y: A4_HEIGHT - 84, font: regular, size: 8, maxWidth: CONTENT_WIDTH, lineHeight: 10 });
+      const x = MARGIN + (CONTENT_WIDTH - width * scale) / 2;
+      const y = 44 + (A4_HEIGHT - 145 - height * scale) / 2;
+      if (embedded) attached.drawPage(embedded, { x: x + (rotation === 270 || rotation === 180 ? width * scale : 0), y: y + (rotation === 180 || rotation === 90 ? height * scale : 0), xScale: scale, yScale: scale, rotate: degrees(-rotation) });
+      attached.drawText(safeText(`${snapshot.quoteNumber} | Product document ${index + 1} of ${document.pageCount}`, regularCharacters), { x: MARGIN, y: 24, font: regular, size: 7.5, color: palette.ink });
+    }
+  }
+
   pdf.setTitle(
     safeText(
       `Quote ${snapshot.quoteNumber} from ${snapshot.business.name}`,
@@ -746,5 +810,7 @@ export async function createTradeQuotePdfBytes(
   );
   pdf.setCreator("TLink");
   pdf.setProducer("TLink");
-  return pdf.save({ useObjectStreams: false });
+  const bytes = await pdf.save({ useObjectStreams: false });
+  if (bytes.length > 12 * 1024 * 1024) throw new Error("PRODUCT_DOCUMENT_LIMIT");
+  return bytes;
 }

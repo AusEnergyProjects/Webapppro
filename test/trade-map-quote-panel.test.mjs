@@ -1,3 +1,5 @@
+import * as quoteEquipment from "../src/lib/trade-quote-equipment.ts";
+import * as solarPackages from "../src/lib/trade-solar-quote-packages.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -27,9 +29,9 @@ const choice = (key, kind, groupKey, amount, recommended = false) => ({ clientKe
 const savedLines = (lines) => quoteMath.normaliseTradeQuoteLineGroup(lines, (value) => String(value).trim(), true).lines.map((line, index) => ({
   ...line, id: `line-${index}`, priceBookItemId: lines[index].priceBookItemId || "", jobPacketId: "", jobPacketLineId: "", sectionHeading: lines[index].sectionHeading,
 }));
-const savedQuote = ({ lines, choices = [], customerEmail = "", terms = "", customerMessage = "", validUntil = "", roofImage = null }) => ({
+const savedQuote = ({ lines, choices = [], customerEmail = "", terms = "", customerMessage = "", validUntil = "", roofImage = null, equipment = { common: [], choices: [] }, designId = "" }) => ({
   id: "quote-one", quoteNumber: "Q-001", currentVersionNumber: 1, status: "draft", editableDraft: { id: "version-one", versionNumber: 1, updatedAt: "now" },
-  versions: [{ id: "version-one", versionNumber: 1, status: "draft", customerEmail, terms, customerMessage, validUntil, roofImage: roofImage?.dataUrl ? roofMetadata : roofImage, items: savedLines(lines), choices: choices.map((option) => ({ ...option, id: option.clientKey, items: savedLines(option.lines) })) }],
+  versions: [{ id: "version-one", versionNumber: 1, status: "draft", customerEmail, terms, customerMessage, validUntil, equipment, designId, roofImage: roofImage?.dataUrl ? roofMetadata : roofImage, items: savedLines(lines), choices: choices.map((option) => ({ ...option, id: option.clientKey, items: savedLines(option.lines) })) }],
   link: null, timeline: [], questions: [], deliveries: [],
 });
 const result = (overrides = {}) => ({
@@ -53,7 +55,7 @@ function harness(t, initial = result(), options = {}) {
   };
   const LivePreview = () => null;
   const require = (id) => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "@/lib/trade-quote" ? quoteMath
-    : id === "@/lib/trade-map-quote" ? mapQuote : id === "@/lib/trade-quote-document-totals.mjs" ? documentTotals
+    : id === "@/lib/trade-quote-equipment" ? quoteEquipment : id === "@/lib/trade-solar-quote-packages" ? solarPackages : id === "./TradeSolarEquipmentPicker" ? { TradeSolarEquipmentList: () => null } : id === "@/lib/trade-map-quote" ? mapQuote : id === "@/lib/trade-quote-document-totals.mjs" ? documentTotals
       : id === "./TradeQuoteLivePreview" ? { TradeQuoteLivePreview: LivePreview }
         : id === "@/lib/trade-rebate-draft" ? { loadTradeRebateEstimateDraft: () => null, clearTradeRebateEstimateDraft() {} } : { default: {} };
   const window = { requestAnimationFrame(callback) { const id = setImmediate(() => { frames.delete(id); callback(); }); frames.add(id); return id; }, cancelAnimationFrame(id) { clearImmediate(id); frames.delete(id); }, sessionStorage: {}, location: { origin: "https://tlink.test" }, addEventListener() {}, removeEventListener() {} };
@@ -101,11 +103,29 @@ test("map handoff preserves existing choices and inserts before the final discou
   const existing = savedQuote({ lines: [product(), finalDiscount], choices: [choice("extra", "addon", "extra", "10.00")] });
   const h = harness(t, result({ quote: existing }));
   let tree = await h.settle();
-  assert.deepEqual(h.preview(tree).props.lines.map((line) => line.sectionHeading), ["Included work", "Map estimate: roof area (m²)", quoteMath.OVERALL_PERCENT_DISCOUNT_SECTION]);
+  assert.deepEqual(h.preview(tree).props.lines.map((line) => line.sectionHeading), ["Included work", "Map estimate: roof area 123.4 m²", quoteMath.OVERALL_PERCENT_DISCOUNT_SECTION]);
   assert.equal(h.preview(tree).props.choices[0].name, "extra");
   h.props.mapQuoteIntent = { ...intent() }; tree = await h.settle();
   assert.equal(h.preview(tree).props.lines.filter((line) => mapQuote.mapQuoteKind(line.sectionHeading)).length, 1);
   assert.equal(h.requests.filter((request) => !request.init.method).length, 1);
+});
+
+test("reopening the same saved roof updates layout and panel count without another system charge", async (t) => {
+  const panel = { id: "panel-1", kind: "panel", name: "Selected panel", manufacturer: "Maker", model: "P440", quantity: 12, watts: 440, widthM: 1.134, lengthM: 1.762 };
+  const existing = savedQuote({ lines: [{ ...mapQuote.mapQuoteLine({ kind: "solar", quantity: 10 }), unitPrice: "5000" }], designId: "design-1", equipment: { common: [{ ...panel, quantity: 10 }], choices: [] } });
+  const h = harness(t, result({ quote: existing }), { props: { mapQuoteIntent: intent({ measurement: { kind: "solar", quantity: 12, roofImage, designId: "design-1", equipment: [panel] } }) } });
+  let tree = await h.settle();
+  const preview = h.preview(tree).props;
+  assert.equal(preview.lines.length, 1);
+  assert.equal(preview.lines[0].sectionHeading, "Solar system (12 panels)");
+  assert.equal(preview.lines[0].unitPrice, "5000.00");
+  assert.deepEqual(preview.equipment.common, [panel]);
+  button(tree, "Save draft").props.onClick(); tree = await h.settle();
+  const saved = JSON.parse(h.requests.find((request) => request.init.method).init.body);
+  assert.equal(saved.designId, "design-1");
+  assert.deepEqual(saved.equipment.common, [panel]);
+  assert.equal(h.preview(tree).props.lines.length, 1);
+  assert.equal(h.dirty.at(-1), false);
 });
 
 for (const blocked of ["user", "job", "permission", "readonly"]) test(`map handoff rejects mismatched ${blocked}`, async (t) => {
@@ -154,6 +174,47 @@ test("solar quote takes one system price and keeps the panel count through save 
   assert.equal(saved.lines[0].quantity, "1");
   assert.equal(saved.lines[0].unitPrice, "12.50");
   assert.equal(h.preview(tree).props.lines[0].sectionHeading, "Solar system (12 panels)");
+});
+
+test("insulation rolls use an editable charge quantity while preserving map measurement and image", async t => {
+  const h = harness(t, result(), { props: { mapQuoteIntent: intent({ measurement: { kind: "area", quantity: 123.4, roofImage } }) } });
+  let tree = await h.settle();
+  field(tree, "Line 1 price book item").props.onChange({ target: { value: "area" } }); tree = h.render();
+  field(tree, "Line 1 quantity (m²)").props.onChange({ target: { value: "130" } }); tree = h.render();
+  button(tree, "Use roll or pack pricing").props.onClick(); tree = h.render();
+  let line = h.preview(tree).props.lines[0];
+  assert.equal(line.quantity, "1"); assert.equal(line.unitPrice, ""); assert.equal(line.priceBookItemId, "");
+  assert.equal(line.sectionHeading, "Map estimate: roof area 123.4 m² (priced by item)");
+  assert.deepEqual(h.preview(tree).props.roofImage, roofImage);
+  const select = field(tree, "Line 1 price book item");
+  assert.deepEqual(nodes(select, node => node.type === "option").map(node => node.props.value), ["", "pack", "panel"]);
+  select.props.onChange({ target: { value: "area" } }); tree = h.render();
+  assert.equal(h.preview(tree).props.lines[0].priceBookItemId, "", "a square-metre rate cannot be injected into pack pricing");
+  select.props.onChange({ target: { value: "pack" } }); tree = h.render();
+  field(tree, "Line 1 quantity (items)").props.onChange({ target: { value: "8" } }); tree = h.render();
+  line = h.preview(tree).props.lines[0];
+  assert.equal(line.quantity, "8"); assert.equal(line.unitPrice, "12.50");
+  assert.equal(previewExports.liveQuoteDocument([line], []).totals.totalCents, 11000, "8 packs are charged, not123.4 square metres");
+  button(tree, "Save draft").props.onClick(); tree = await h.settle();
+  const body = JSON.parse(h.requests.find(request => request.init.method).init.body);
+  assert.equal(body.lines[0].quantity, "8"); assert.equal(body.lines[0].priceBookItemId, "pack");
+  assert.deepEqual(body.roofImage, roofImage); assert.equal(h.preview(tree).props.lines[0].quantity, "8");
+  assert.equal(h.dirty.at(-1), false);
+  button(tree, "Use m² pricing").props.onClick(); tree = h.render();
+  line = h.preview(tree).props.lines[0];
+  assert.equal(line.quantity, "123.4"); assert.equal(line.unitPrice, ""); assert.equal(line.priceBookItemId, "");
+  assert.equal(line.sectionHeading, "Map estimate: roof area 123.4 m²");
+});
+
+test("distance pricing can switch to manually counted items without changing the mapped distance", async t => {
+  const h = harness(t, result(), { props: { mapQuoteIntent: intent({ measurement: { kind: "distance", quantity: 25.37 } }) } });
+  let tree = await h.settle();
+  button(tree, "Use roll or pack pricing").props.onClick(); tree = h.render();
+  field(tree, "Line 1 quantity (items)").props.onChange({ target: { value: "3" } }); tree = h.render();
+  field(tree, "Line 1 unit price per items").props.onChange({ target: { value: "40" } }); tree = h.render();
+  const line = h.preview(tree).props.lines[0];
+  assert.equal(previewExports.liveQuoteDocument([line], []).totals.totalCents, 13200);
+  assert.deepEqual(mapQuote.mapQuoteMeasuredContext(line.sectionHeading), { kind: "distance", quantity: 25.37, itemPricing: true });
 });
 
 test("legacy panel prices and cost links remain until choosing a custom system total", async t => {
@@ -331,7 +392,7 @@ test("native review uses the same document and requires a fresh consent checkbox
   const existing = savedQuote({ lines: [product()], customerEmail: "customer@example.test", terms: "Installation only.", roofImage: roofMetadata });
   const h = harness(t, result({ quote: existing }), { props: { mapQuoteIntent: undefined } });
   let tree = await h.settle();
-  button(tree, "Preview and send").props.onClick(); tree = h.render();
+  button(tree, "Preview and send").props.onClick(); tree = await h.settle();
   const dialog = () => nodes(tree, node => node.type === "dialog")[0];
   const consent = () => nodes(dialog(), node => node.type === "input" && node.props.type === "checkbox")[0];
   assert.deepEqual(h.dialogs, ["open"]);
@@ -349,9 +410,9 @@ test("native review uses the same document and requires a fresh consent checkbox
   button(dialog(), "Back to editing").props.onClick(); tree = h.render();
   assert.equal(dialog(), undefined);
   assert.deepEqual(h.dialogs, ["open", "close"]);
-  button(tree, "Preview and send").props.onClick(); tree = h.render();
+  button(tree, "Preview and send").props.onClick(); tree = await h.settle();
   assert.equal(consent().props.checked, false);
-  assert.equal(h.requests.some(request => request.init.method), false, "preview and consent alone must never save or email");
+  assert.deepEqual(h.requests.filter(request => request.init.method).map(request => JSON.parse(request.init.body).action), ["save_draft", "save_draft"], "preview saves frozen documents, but consent alone never issues or emails");
 });
 
 test("confirming the mocked send saves the roof image before issuing that exact version", async t => {
@@ -367,7 +428,7 @@ test("confirming the mocked send saves the roof image before issuing that exact 
   });
   let tree = await h.settle();
   field(tree, "Line 1 system price").props.onChange({ target: { value: "200.00" } }); tree = h.render();
-  button(tree, "Preview and send").props.onClick(); tree = h.render();
+  button(tree, "Preview and send").props.onClick(); tree = await h.settle();
   let dialog = nodes(tree, node => node.type === "dialog")[0];
   nodes(dialog, node => node.type === "input" && node.props.type === "checkbox")[0].props.onChange({ target: { checked: true } }); tree = h.render();
   dialog = nodes(tree, node => node.type === "dialog")[0];
@@ -392,4 +453,28 @@ for (const unitPrice of ["", "nonsense", "-10", "1.234"]) test(`live document la
   const tree = previewExports.TradeQuoteLivePreview({ user: { uid: "owner" }, lines, choices: [], business: result().business, job: result().job, identity: null, customerMessage: "", terms: "", validUntil: "", validationMessage: "" });
   assert.match(text(tree), /Total incomplete/); assert.match(text(tree), /Price needed/);
   assert.doesNotMatch(text(tree), /\$0\.00|NaN|\$10\.00/);
+});
+
+test('lost issue response retries the reviewed revision without saving or refreshing its documents again', async t => {
+  let saved, attempts = 0;
+  const h = harness(t, result({ authorisedEmails: ['customer@example.test'], business: { ...result().business, quoteDefaultTerms: 'Installation only.' } }), {
+    props: { mapQuoteIntent: imageIntent() },
+    respond: (_url, init, initial) => {
+      if (!init.method) return initial;
+      const body = JSON.parse(init.body);
+      if (body.action === 'save_draft') saved = savedQuote(body);
+      if (body.action === 'issue_quote' && ++attempts === 1) throw new Error('Response lost');
+      return result({ quote: saved, draftVersionId: 'version-one', delivery: { presentation: { key: 'accepted', label: 'Submitted' } } });
+    },
+  });
+  let tree = await h.settle();
+  field(tree, 'Line 1 system price').props.onChange({ target: { value: '5000' } }); tree = h.render();
+  button(tree, 'Preview and send').props.onClick(); tree = await h.settle();
+  let dialog = nodes(tree, node => node.type === 'dialog')[0];
+  nodes(dialog, node => node.type === 'input' && node.props.type === 'checkbox')[0].props.onChange({ target: { checked: true } }); tree = h.render();
+  button(nodes(tree, node => node.type === 'dialog')[0], 'Email quote').props.onClick(); tree = await h.settle();
+  button(nodes(tree, node => node.type === 'dialog')[0], 'Try again safely').props.onClick(); await h.settle();
+  const posts = h.requests.filter(request => request.init.method).map(request => JSON.parse(request.init.body));
+  assert.deepEqual(posts.map(body => body.action), ['save_draft', 'issue_quote', 'issue_quote']);
+  assert.equal(posts[1].expectedUpdatedAt, 'now'); assert.deepEqual(posts[1], posts[2]);
 });

@@ -99,3 +99,17 @@
 .preview[data-border="rounded"] .sheet { border-radius: 20px; }
 @media (max-width: 1050px) { .composer { grid-template-columns: minmax(0, 1fr); } .preview { position: static; } }
 @media (max-width: 540px) { .editor :global(.trade-quote-line) { grid-template-columns: minmax(0, 1fr); } .brand { gap: 12px; padding: 20px 15px; } .brand strong { font-size: 1rem; } .logo { width: 56px; height: 52px; flex-basis: 56px; } .paper { padding: 15px; } .parties { gap: 10px; } .item { gap: 8px; } }
+
+.equipmentEditor { border: 1px solid var(--trade-line, #d9e5e0); border-radius: 10px; padding: 14px 16px; background: var(--trade-surface, #fff); }
+.equipmentEditor summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.equipmentEditor p { font-size: 13px; line-height: 1.5; color: var(--trade-muted, #61766b); margin: 10px 0; }
+.packageButtons { display: flex; flex-wrap: wrap; gap: 8px; }
+.productDocuments { margin: 20px 0; padding: 18px 0; border-top: 1px solid #d5e1de; color: #244840; }
+.productDocuments h6 { margin: 0 0 8px; font-size: 15px; }
+.productDocuments p, .productDocuments span { font-size: 13px; line-height: 1.5; color: #586b67; }
+.productDocuments ul { margin: 12px 0 0; padding: 0; list-style: none; }
+.productDocuments li { display: grid; gap: 4px; padding: 9px 0; font-size: 14px; }
+.completePdf { margin-top: 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.completePdf p { width: 100%; margin: 0; font-size: 13px; }
+.completePdf iframe { width: 100%; height: 680px; border: 1px solid var(--trade-border, #cadad6); border-radius: 10px; background: #fff; }
+.completePdf button, .completePdf a { font: inherit; font-size: 14px; }

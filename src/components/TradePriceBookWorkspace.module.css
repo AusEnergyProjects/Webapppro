@@ -39,7 +39,12 @@
 .fields { border: 0; display: grid; gap: 16px; margin: 0; min-width: 0; padding: 0; }
 .fields:disabled { opacity: .78; }
 .archived { background: #f3f5f4; border-radius: 9px; color: var(--color-aea-muted); font-size: .7rem; margin: 0; padding: 10px 12px; }
-.coreFields { display: grid; gap: 12px; grid-template-columns: minmax(220px, 1.4fr) repeat(4, minmax(120px, .65fr)); }
+.coreFields { display: grid; gap: 12px; grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(120px, .65fr)); }
+.solarPanel { display: grid; gap: 12px; background: var(--trade-surface-soft, #f4f8f6); border: 1px solid var(--trade-line, #d7e5df); border-radius: 10px; padding: 14px; color: var(--trade-ink, #183b35); }
+.solarPanel strong { font-size: .85rem; }.solarPanel p { margin: 4px 0 0; color: var(--trade-muted, #5d7068); font-size: .75rem; }
+.solarPanel label { display: grid; gap: 6px; font-size: .75rem; font-weight: 600; }
+.solarPanel input,.solarPanel select { width: 100%; min-width: 0; min-height: 42px; padding: 9px 11px; border: 1px solid var(--trade-line, #d7e5df); border-radius: 8px; font: inherit; color: var(--trade-field-ink, #183b35); background: var(--trade-field, #fff); }
+.panelDimensions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }.solarPanel a { font-size: .75rem; color: var(--trade-accent-readable, #087567); }.starter { max-width: 560px; }
 .preview { background: #06363b; border-radius: 11px; color: white; display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 13px 15px; }
 .preview span { color: #98c9ba; }
 .preview strong { display: block; font-size: .92rem; margin-top: 3px; }
@@ -52,6 +57,12 @@
 .actions button:disabled { cursor: wait; opacity: .55; }
 .danger { background: #fff2ef; border: 1px solid #efc4b9; border-radius: 10px; color: #9b351f; cursor: pointer; font-weight: 850; padding: 11px 15px; }
 .history { border-top: 1px solid var(--color-aea-line); padding-top: 12px; }
+.documentStart { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--trade-line, #d7e5df); border-radius: 10px; padding: 14px; background: var(--trade-surface-soft, #f4f8f6); }
+.documentStart div { display: grid; gap: 4px; }.documentStart strong { color: var(--trade-ink, #183b35); font-size: .85rem; }.documentStart span { color: var(--trade-muted, #5d7068); font-size: .75rem; }
+.documentStart button { background: var(--trade-field, white); border: 1px solid var(--trade-line, #d7e5df); border-radius: 8px; color: var(--trade-ink, #183b35); cursor: pointer; font: inherit; font-size: .8rem; padding: 10px 13px; min-height: 40px; }
+.documentProductFields { display: grid; gap: 12px; max-width: 640px; }
+.documentProductFields label { display: grid; gap: 6px; font-size: .8rem; font-weight: 600; color: var(--trade-ink, #183b35); }
+.documentProductFields input,.documentProductFields select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 42px; padding: 9px 11px; border: 1px solid var(--trade-line, #d7e5df); border-radius: 8px; font: inherit; color: var(--trade-field-ink, #183b35); background: var(--trade-field, #fff); }
 .history summary { color: var(--color-aea-green); cursor: pointer; font-size: .7rem; font-weight: 900; }
 .history article { align-items: center; border-bottom: 1px solid var(--color-aea-line); display: flex; font-size: .65rem; justify-content: space-between; padding: 10px 0; }
 .history article div span { color: var(--color-aea-muted); display: block; margin-top: 2px; }

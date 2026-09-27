@@ -6,6 +6,7 @@ import {
 } from "@/lib/trade-quote-review-server";
 import { createTradeQuotePdfBytes } from "@/lib/trade-quote-pdf.mjs";
 import { loadQuoteRoofImage } from "./trade-quote-roof-image-server";
+import { loadPriceBookDocument } from "./trade-price-book-documents-server";
 
 const FONT_PATHS = {
   regular: "/fonts/LiberationSans-Regular.ttf",
@@ -33,6 +34,7 @@ export type TradeQuotePdfBrandAssets = {
   logo?: TradeQuotePdfBrandAsset;
   banner?: TradeQuotePdfBrandAsset;
   roof?: TradeQuotePdfBrandAsset;
+  productDocuments?: { id: string; bytes: Uint8Array }[];
 };
 
 export type RenderTradeQuotePdfOptions = {
@@ -142,11 +144,12 @@ export async function loadBrandAsset(
 export async function loadTradeQuoteBrandAssets(
   snapshot: TradeQuoteDocumentSnapshot,
 ): Promise<TradeQuotePdfBrandAssets> {
-  const [logo, roof] = await Promise.all([
+  const [logo, roof, productDocuments] = await Promise.all([
     loadBrandAsset(snapshot.business.logo).catch(() => undefined),
     snapshot.roofImage ? loadQuoteRoofImage(snapshot.roofImage) : undefined,
+    Promise.all((snapshot.productDocuments || []).map(async ({ document }) => ({ id: document.id, ...(await loadPriceBookDocument(document)) }))),
   ]);
-  return { logo, roof };
+  return { logo, roof, productDocuments };
 }
 
 export function tradeQuoteBrandAssetSnapshot(

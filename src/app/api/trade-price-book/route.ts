@@ -1,6 +1,6 @@
 import { getD1 } from "../../../../db";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
-import { normalisePriceBookInput } from "@/lib/trade-price-book";
+import { normalisePriceBookInput, parsePriceBookSolarPanel, priceBookSolarEquipment } from "@/lib/trade-price-book";
 import { requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
@@ -21,6 +21,7 @@ function errorResponse(error: unknown) {
   if (code === "PRICE_BOOK_LIMIT") return adminJson({ ok: false, error: "This workspace has reached its 5,000 item price-book limit." }, 409);
   if (code === "CATALOGUE_ITEM_UNAVAILABLE") return adminJson({ ok: false, error: "That catalogue item is no longer available. Choose another item or enter the supplier details manually." }, 409);
   if (code === "INVALID_PRICE_BOOK_SKILL") return adminJson({ ok: false, error: "Choose a required skill already listed on the business profile." }, 400);
+  if (code.startsWith("INVALID_PRICE_BOOK_SOLAR_PANEL")) return adminJson({ ok: false, error: "Solar panels need valid watts, width and length from the datasheet. Use Material or Equipment as the item type." }, 400);
   if (code.startsWith("INVALID_PRICE_BOOK") || ["INVALID_DECIMAL", "INVALID_MONEY"].includes(code)) {
     return adminJson({ ok: false, error: "Check the item name, type, cost, sell price, GST and duration." }, 400);
   }
@@ -80,6 +81,7 @@ function itemPayload(row: Row) {
     requiredSkill: String(row.required_skill), supplierName: String(row.supplier_name), supplierSku: String(row.supplier_sku),
     supplierProductId: String(row.supplier_product_id), recordStatus: String(row.record_status), priceRevision: Number(row.price_revision),
     createdAt: String(row.created_at), updatedAt: String(row.updated_at),
+    solarPanel: parsePriceBookSolarPanel(row.solar_panel_json),
   };
 }
 
@@ -127,6 +129,24 @@ export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const access = await requireInstallerTeamAccess(request); requirePriceBookAccess(access); const url = new URL(request.url);
+    if (url.searchParams.get("mode") === "document_products") {
+      const rows = await getD1().prepare(`SELECT id, item_code, name FROM trade_price_book_items
+        WHERE firebase_uid = ? AND record_status = 'active' ORDER BY name COLLATE NOCASE, item_code LIMIT 5000`)
+        .bind(access.ownerUid).all<Row>();
+      return adminJson({ ok: true, products: rows.results.map((row) => ({ id: String(row.id), itemCode: String(row.item_code), name: String(row.name) })) });
+    }
+    if (url.searchParams.get("mode") === "solar_panels") {
+      const rows = await getD1().prepare(`SELECT id, name, supplier_sku, supplier_product_id, solar_panel_json
+        FROM trade_price_book_items WHERE firebase_uid = ? AND record_status = 'active'
+          AND solar_panel_json != 'null' AND item_type IN ('material', 'equipment')
+        ORDER BY name COLLATE NOCASE, item_code LIMIT 5000`).bind(access.ownerUid).all<Row>();
+      const solarPanels = rows.results.flatMap((row) => {
+        const solarPanel = parsePriceBookSolarPanel(row.solar_panel_json);
+        return solarPanel ? [priceBookSolarEquipment({ id: String(row.id), name: String(row.name),
+          supplierSku: String(row.supplier_sku || ""), supplierProductId: String(row.supplier_product_id || ""), solarPanel })] : [];
+      });
+      return adminJson({ ok: true, solarPanels });
+    }
     const itemId = cleanAdminText(url.searchParams.get("itemId"), 180);
     if (itemId) {
       await ownedItem(access.ownerUid, itemId);
@@ -158,12 +178,12 @@ export async function POST(request: Request) {
         (id, firebase_uid, item_code, name, description, item_type, unit_label, supplier_cost_cents_ex_gst,
         sell_price_cents_ex_gst, tax_code, markup_basis_points, margin_basis_points, expected_duration_minutes,
         required_skill, supplier_name, supplier_sku, supplier_product_id, record_status, price_revision,
-        created_by_uid, updated_by_uid, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, ?, ?)`)
+        created_by_uid, updated_by_uid, created_at, updated_at, solar_panel_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, ?, ?, ?)`)
         .bind(id, access.ownerUid, itemCode, input.name, input.description, input.itemType, input.unitLabel,
           input.supplierCostCentsExGst, input.sellPriceCentsExGst, input.taxCode, input.markupBasisPoints,
           input.marginBasisPoints, input.expectedDurationMinutes, input.requiredSkill, input.supplierName,
-          input.supplierSku, input.supplierProductId, access.actorUid, access.actorUid, now, now),
+          input.supplierSku, input.supplierProductId, access.actorUid, access.actorUid, now, now, JSON.stringify(input.solarPanel ?? null)),
       db.prepare(`INSERT INTO trade_price_book_price_history
         (id, price_book_item_id, firebase_uid, price_revision, supplier_cost_cents_ex_gst, sell_price_cents_ex_gst,
         tax_code, markup_basis_points, margin_basis_points, change_type, changed_by_uid, changed_at)
@@ -188,17 +208,17 @@ export async function PATCH(request: Request) {
     }
     if (action !== "update") return adminJson({ ok: false, error: "Unsupported price-book action." }, 400);
     if (existing.record_status !== "active") return adminJson({ ok: false, error: "Archived price-book items cannot be changed." }, 409);
-    const input = await preparedInput(access.ownerUid, body);
+    const input = await preparedInput(access.ownerUid, Object.hasOwn(body, "solarPanel") ? body : { ...body, solarPanel: parsePriceBookSolarPanel(existing.solar_panel_json) });
     const priceChanged = Number(existing.supplier_cost_cents_ex_gst) !== input.supplierCostCentsExGst
       || Number(existing.sell_price_cents_ex_gst) !== input.sellPriceCentsExGst || String(existing.tax_code) !== input.taxCode;
     const priceRevision = Number(existing.price_revision) + (priceChanged ? 1 : 0);
     const statements = [db.prepare(`UPDATE trade_price_book_items SET name = ?, description = ?, item_type = ?, unit_label = ?,
       supplier_cost_cents_ex_gst = ?, sell_price_cents_ex_gst = ?, tax_code = ?, markup_basis_points = ?, margin_basis_points = ?,
       expected_duration_minutes = ?, required_skill = ?, supplier_name = ?, supplier_sku = ?, supplier_product_id = ?,
-      price_revision = ?, updated_by_uid = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`)
+      price_revision = ?, updated_by_uid = ?, updated_at = ?, solar_panel_json = ? WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`)
       .bind(input.name, input.description, input.itemType, input.unitLabel, input.supplierCostCentsExGst, input.sellPriceCentsExGst,
         input.taxCode, input.markupBasisPoints, input.marginBasisPoints, input.expectedDurationMinutes, input.requiredSkill,
-        input.supplierName, input.supplierSku, input.supplierProductId, priceRevision, access.actorUid, now, itemId, access.ownerUid)];
+        input.supplierName, input.supplierSku, input.supplierProductId, priceRevision, access.actorUid, now, JSON.stringify(input.solarPanel ?? null), itemId, access.ownerUid)];
     if (priceChanged) statements.push(db.prepare(`INSERT INTO trade_price_book_price_history
       (id, price_book_item_id, firebase_uid, price_revision, supplier_cost_cents_ex_gst, sell_price_cents_ex_gst,
       tax_code, markup_basis_points, margin_basis_points, change_type, changed_by_uid, changed_at)

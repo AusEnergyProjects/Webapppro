@@ -7,8 +7,11 @@ import styles from "./TradeMapTools.module.css";
 import { TradeMapSolarTools } from "./TradeMapSolarTools";
 import { mapQuoteMeasurement, type MapQuoteMeasurement } from "@/lib/trade-map-quote";
 import { captureTradeMapQuoteImage } from "@/lib/trade-map-capture";
+import type { User } from "firebase/auth";
+import type { SolarDesign } from "@/lib/trade-solar-design";
+import type { SolarMapContext } from "./TradeMapSolarTools";
 
-type Props = { api: typeof google.maps; map: google.maps.Map; onExplore: () => void; onMeasuring: (active: boolean) => void; onQuote?: (measurement: MapQuoteMeasurement) => void };
+type Props = { user: User; onRegisterMapSave?: (save: (() => Promise<unknown>) | null) => void; context?: SolarMapContext; linkedDesign?: SolarDesign | null; api: typeof google.maps; map: google.maps.Map; onExplore: () => void; onMeasuring: (active: boolean) => void; onQuote?: (measurement: MapQuoteMeasurement) => void };
 const VIEWS = [["roadmap", "Map"], ["satellite", "Satellite"], ["hybrid", "Satellite + labels"], ["terrain", "Terrain"]] as const;
 const number = (value: number) => new Intl.NumberFormat("en-AU", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value);
 
@@ -22,11 +25,18 @@ function bestImageryZoom(api: typeof google.maps, position: google.maps.LatLngLi
   });
 }
 
-export function TradeMapTools({ api, map, onExplore, onMeasuring, onQuote }: Props) {
+export function TradeMapTools({ user, onRegisterMapSave, context, linkedDesign, api, map, onExplore, onMeasuring, onQuote }: Props) {
   const [view, setView] = useState("roadmap");
   const [address, setAddress] = useState("");
   const [searching, setSearching] = useState(false);
   const [addressMessage, setAddressMessage] = useState("");
+  const [locatedAddress, setLocatedAddress] = useState("");
+  const contextKey = JSON.stringify([context?.customerId, context?.workOrderId]);
+  const [locatedContext, setLocatedContext] = useState(contextKey);
+  if (locatedContext !== contextKey) {
+    setLocatedContext(contextKey);
+    setLocatedAddress("");
+  }
   const addressRequest = useRef(0);
   const addressPin = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const [mode, setMode] = useState<TradeMapMeasureMode | null>(null);
@@ -83,6 +93,7 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring, onQuote }: Pro
     if (request !== addressRequest.current) return;
     setSearching(false);
     if (result.status === "located") {
+      setLocatedAddress(query);
       const badge = document.createElement("div");
       badge.className = styles.addressPin;
       badge.textContent = "+";
@@ -110,6 +121,7 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring, onQuote }: Pro
 
   async function addMeasurementToQuote(value: MapQuoteMeasurement) {
     if (capture.current || !onQuote) return;
+    drawing.current?.finish();
     const attempt = new AbortController(); capture.current = attempt;
     setCapturing(true); setMeasurementCapturing(true); setCaptureMessage("Choose this TLink tab in the sharing prompt to include your measured map.");
     try {
@@ -121,7 +133,7 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring, onQuote }: Pro
   }
 
   const enoughPoints = measurement.points >= (mode === "area" ? 3 : 2);
-  const quoteMeasurement = mode && measurement.finished && !measurement.crossed
+  const quoteMeasurement = mode && enoughPoints && !measurement.crossed
     ? mapQuoteMeasurement(mode, mode === "area" ? measurement.areaM2 : measurement.lengthM) : null;
   return <div className={styles.tools}>
     <div className={styles.toolbar}>
@@ -135,7 +147,7 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring, onQuote }: Pro
         else { setView("satellite"); startMeasure("area"); }
       }}>Measure</button>
     </div>
-    <TradeMapSolarTools api={api} map={map} active={solarEditing} disabled={searching || capturing} onCapturing={(value) => { setCapturing(value); drawing.current?.setCapturing(value); }} onQuote={onQuote} onActivate={() => {
+    <TradeMapSolarTools user={user} onRegisterMapSave={onRegisterMapSave} context={locatedAddress ? { title: locatedAddress, customerId: "", workOrderId: "" } : context} linkedDesign={linkedDesign} api={api} map={map} active={solarEditing} disabled={searching || capturing} onCapturing={(value) => { setCapturing(value); drawing.current?.setCapturing(value); }} onQuote={onQuote} onActivate={() => {
       onExplore(); setMode(null); setSolarEditing(true); setView("satellite");
     }} onClose={() => setSolarEditing(false)} />
     {addressMessage && <p className={styles.addressMessage} role="status">{addressMessage}</p>}

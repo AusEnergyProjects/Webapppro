@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mapQuoteMeasurement, mapQuoteLine, mapQuoteKind, mapQuoteUnitMatches, canApplyMapQuoteIntent, isMapQuoteJob } from "../src/lib/trade-map-quote.ts";
+import { mapQuoteMeasurement, mapQuoteLine, mapQuoteMeasuredContext, mapQuoteSetItemPricing, mapQuoteKind, mapQuoteUnitMatches, canApplyMapQuoteIntent, isMapQuoteJob } from "../src/lib/trade-map-quote.ts";
 import { normaliseTradeQuoteLineGroup, tradeQuoteLineValidationIssues } from "../src/lib/trade-quote.ts";
 
 test("map quantities keep useful precision and reject unusable measurements", () => {
@@ -39,7 +39,7 @@ test("solar design count is separate from its single system price", () => {
   assert.equal(totals.subtotalCents, 500000);
   assert.equal(totals.taxCents, 50000);
   assert.equal(totals.totalCents, 550000);
-  for (const unit of ["system", "job", "per system"]) assert.equal(mapQuoteUnitMatches("solar", unit, line.sectionHeading), true);
+  for (const unit of ["system", "job", "per system", "fixed"]) assert.equal(mapQuoteUnitMatches("solar", unit, line.sectionHeading), true);
   for (const unit of ["panel", "each", "ea", "kW", "pack"]) assert.equal(mapQuoteUnitMatches("solar", unit, line.sectionHeading), false);
 });
 
@@ -54,11 +54,36 @@ test("map import is bound to the chosen account, job and once-only intent", () =
 });
 
 test("price-book units cannot turn a pack price into a square metre or metre rate", () => {
-  for (const unit of ["m²", "M2", "sqm", "per square metre"]) assert.equal(mapQuoteUnitMatches("area", unit), true);
+  for (const unit of ["m²", "M2", "sqm", "per square metre", "square_metre"]) assert.equal(mapQuoteUnitMatches("area", unit), true);
   for (const unit of ["pack", "roll", "ea", "m", "job"]) assert.equal(mapQuoteUnitMatches("area", unit), false);
   for (const unit of ["m", "metres", "per linear metre"]) assert.equal(mapQuoteUnitMatches("distance", unit), true);
   for (const unit of ["each", "panel", "ea"]) assert.equal(mapQuoteUnitMatches("solar", unit), true);
   assert.equal(mapQuoteUnitMatches("solar", "kW"), false);
+});
+
+test("roll pricing separates charge quantity from measured context and resets incompatible rates", () => {
+  const source = { ...mapQuoteLine({ kind: "area", quantity: 162.5 }), quantity: "170", unitPrice: "20", priceBookItemId: "area-rate", jobPacketId: "old", jobPacketLineId: "old-line" };
+  const packs = mapQuoteSetItemPricing(source, true);
+  assert.equal(packs.quantity, "1"); assert.equal(packs.unitPrice, ""); assert.equal(packs.priceBookItemId, "");
+  assert.equal(packs.jobPacketId, ""); assert.equal(packs.jobPacketLineId, "");
+  assert.deepEqual(mapQuoteMeasuredContext(packs.sectionHeading), { kind: "area", quantity: 162.5, itemPricing: true });
+  for (const unit of ["roll", "packs", "each", "bag", "bundle"]) assert.equal(mapQuoteUnitMatches("area", unit, packs.sectionHeading), true);
+  for (const unit of ["m²", "square_metre", "hour", "metre"]) assert.equal(mapQuoteUnitMatches("area", unit, packs.sectionHeading), false);
+  const back = mapQuoteSetItemPricing({ ...packs, quantity: "8", unitPrice: "150", priceBookItemId: "roll-rate" }, false);
+  assert.equal(back.quantity, "162.5"); assert.equal(back.unitPrice, ""); assert.equal(back.priceBookItemId, "");
+  assert.deepEqual(mapQuoteMeasuredContext(back.sectionHeading), { kind: "area", quantity: 162.5, itemPricing: false });
+  assert.equal(source.quantity, "170"); assert.equal(source.priceBookItemId, "area-rate", "source records are not mutated");
+});
+
+test("legacy measured lines remain readable and distance can use manually counted materials", () => {
+  assert.equal(mapQuoteKind("Map estimate: roof area (m²)"), "area");
+  assert.equal(mapQuoteKind("Map estimate: distance (m)"), "distance");
+  const old = { ...mapQuoteLine({ kind: "distance", quantity: 25.37 }), sectionHeading: "Map estimate: distance (m)" };
+  const converted = mapQuoteSetItemPricing(old, true);
+  assert.deepEqual(mapQuoteMeasuredContext(converted.sectionHeading), { kind: "distance", quantity: 25.37, itemPricing: true });
+  assert.equal(mapQuoteUnitMatches("distance", "roll", converted.sectionHeading), true);
+  assert.throws(() => mapQuoteSetItemPricing({ ...old, quantity: "" }, true));
+  assert.throws(() => mapQuoteSetItemPricing(mapQuoteLine({ kind: "solar", quantity: 12 }), true));
 });
 
 test("quote picker accepts only owner-released, linked and quotable job records", () => {

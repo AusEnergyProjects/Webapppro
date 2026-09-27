@@ -1,5 +1,28 @@
 # Next task handover
 
+Status: simple solar design and measured insulation quoting are in release validation. The approved email-delivery update is preserved from Sites 643, source d39e09671aab0417859f8f349a82345e5a1a8ca2.
+Prepared: 27 September 2026
+
+## Active contract: simple solar design to quote
+
+Outcome: a trade business chooses equipment, draws and reopens its roof design, enters a whole-system price, previews customer equipment details and exports a clean crew sheet with minimal clicks.
+
+Owner: coordinating task in C:/Webproject/aea-energy-tlink-map, branch codex/tlink-customer-job-map.
+
+Scope: existing Google map solar controls; owner-scoped editable design persistence; the business price book as the panel catalogue with a generic editable default; equipment snapshots in quote previews, issued documents and PDF; optional solar package choices using the existing quote engine; a printable crew sheet; measured area/distance quote handoff with editable charged quantities. Root owns map integration and release. Bounded agents own design storage, equipment utilities and quote integration separately.
+
+Acceptance: real selected or explicitly entered equipment specifications drive dimensions and kW; no invented model data or prices; one whole-system price per option; autosave/reopen preserves layout and equipment; customer/job links remain tenant and permission scoped; conflicts cannot silently overwrite another edit; map captures omit editing handles and retain attribution; narrow/day/night controls remain readable. Historical issued quotes stay immutable. Advanced details are optional and no paid access or imagery service is added. Subsequent user instructions add manual roll/pack quantities and product-linked warranty/brochure PDF upload by drag-and-drop or button, a product dropdown, and automatic appended PDF pages with a reviewable immutable quote snapshot.
+
+Validation: focused geometry, specification, persistence, isolation, conflict, quote/PDF and package tests; root typecheck and scoped lint; full suite and migration replay for the new storage contract; publication build; exact GitHub/Sites provenance; affected desktop/mobile browser checks. Record pre-existing failures separately. Do not send customer communications in verification.
+
+Out of scope: shading, financial savings simulation, compliance/electrical diagrams, new imagery providers, generic CRM redesign, automatic customer messages. Stop only for an unexpected identity/payment boundary, required paid service or unavailable release capability. Preserve all completed work and report evidence; no destructive cleanup.
+
+Status: implementation in progress. Final release evidence belongs in the coordinating task and RELEASE_TRUTH.md after verification.
+
+## Previous milestone record
+
+# Next task handover
+
 Status: bulk lodgement, trade review and the agreed job lifecycle are in release validation. Verified baseline Sites 624, source e212b120a4798d448ce879fdf966ae4668222df2.
 Prepared: 25 September 2026
 

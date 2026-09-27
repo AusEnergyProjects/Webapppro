@@ -76,6 +76,40 @@ const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9
 const positions = (h) => h.value().panels.map((panel) => ({ x: panel.center.lng, y: -panel.center.lat, heading: panel.heading }));
 const distance = (a, b) => Math.hypot(a.center.lat - b.center.lat, a.center.lng - b.center.lng);
 
+test("saved panels reopen at the same coordinates with independent model snapshots and identities", (t) => {
+  const h = harness(t);
+  const equipment = { id: "own-panel", kind: "panel", name: "Own 440", manufacturer: "Test", model: "P440", quantity: 1, watts: 440, widthM: 1.134, lengthM: 1.762 };
+  const panels = [{ id: 12, center: { lat: -37.8, lng: 145 }, heading: 37, lengthTilt: 22.5, widthTilt: 0, widthM: 1.134, lengthM: 1.762, equipment }];
+  h.controller.restore(panels);
+  assert.deepEqual(h.value().panels, panels);
+  assert.equal(h.value().selectedId, null);
+  h.face(12).emit("click"); h.copy(12, "right");
+  assert.equal(h.value().selectedId, 13);
+  assert.deepEqual(h.value().panels[1].equipment, equipment);
+  panels[0].center.lat = 0; equipment.watts = 900;
+  assert.equal(h.value().panels[0].center.lat, -37.8);
+  assert.equal(h.value().panels[0].equipment.watts, 440);
+});
+
+test("changing equipment affects only chosen panels; custom dimensions remove the model claim", (t) => {
+  const h = harness(t); h.add(0, 0); h.add(10, 0); h.add(20, 0);
+  const equipment = { id: "p440", kind: "panel", name: "440", manufacturer: "Test", model: "P440", quantity: 1, watts: 440, widthM: 1.134, lengthM: 1.762 };
+  h.controller.setSelectionMode("choose"); h.face(1).emit("click"); h.face(3).emit("click");
+  h.controller.applyEquipment(equipment);
+  assert.deepEqual(h.value().panels.map((p) => p.equipment?.watts), [440, undefined, 440]);
+  h.controller.setSelectionMode("one"); h.face(1).emit("click");
+  h.controller.updateSelected({ widthM: 1.2, lengthM: 1.8, lengthTilt: 0, widthTilt: 0, heading: 0 });
+  assert.equal(h.value().panels[0].equipment, undefined);
+  assert.equal(h.value().panels[2].equipment.watts, 440);
+});
+
+test("invalid restored geometry is rejected without losing the current layout", (t) => {
+  const h = harness(t); h.add(0, 0);
+  const before = structuredClone(h.value());
+  assert.throws(() => h.controller.restore([{ ...before.panels[0], center: { lat: NaN, lng: 0 } }]));
+  assert.deepEqual(h.value(), before);
+});
+
 for (const mode of ["one", "all", "choose", "selection"]) test(`capture hides every editing overlay in ${mode} mode and restores the selection`, (t) => {
   const h = harness(t); h.add(-4, 0); h.add(4, 0);
   if (mode === "choose" || mode === "selection") { h.controller.setSelectionMode("choose"); h.face(1).emit("click"); }

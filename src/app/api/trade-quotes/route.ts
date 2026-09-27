@@ -10,6 +10,10 @@ import { mapQuoteKind, mapQuoteSystemPanels, mapQuoteUnitMatches } from "@/lib/t
 import { assertQuoteRoofImageScope, parseQuoteRoofImage, quoteRoofImageMetadata, type TradeQuoteRoofImage } from "@/lib/trade-quote-roof-image";
 import { storeQuoteRoofImage, loadQuoteRoofImage, deleteUnclaimedQuoteRoofImage } from "@/lib/trade-quote-roof-image-server";
 import { normaliseQuoteChoices } from "@/lib/trade-quote-options";
+import { normaliseQuoteEquipment, quoteEquipmentForChoices, type QuoteEquipment } from "@/lib/trade-quote-equipment";
+import { normaliseQuoteProductDocuments, quoteProductDocumentSummaries } from "@/lib/trade-quote-product-documents";
+import { resolveQuoteProductDocuments } from "@/lib/trade-quote-product-documents-server";
+import { loadSolarDesign } from "@/lib/trade-solar-design-server";
 import { lowersAuthoritativeTotal, quoteInputAppliesDiscount, quoteInputDiscountMagnitude } from "@/lib/trade-discount-permissions";
 import { priceBookItemsForQuote, resolvePriceBookQuoteLines } from "@/lib/trade-price-book-server";
 import { jobPacketsForQuote, resolveJobPacketQuoteLines } from "@/lib/trade-job-packet-server";
@@ -145,6 +149,7 @@ async function revokeOwnedQuoteLink(
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof Error && /^(PRODUCT_DOCUMENT_|QUOTE_PRODUCT_DOCUMENTS_)/.test(error.message)) return adminJson({ ok: false, error: error.message.includes("LIMIT") ? "The quote's product PDFs are too large. Use smaller documents or fewer pages in the price book." : "A product PDF could not be verified. Check the product documents in your price book, then save the draft again." }, 400);
   const mfa = mfaErrorResponse(error);
   if (mfa) return mfa;
   const code = error instanceof Error ? error.message : "";
@@ -166,6 +171,8 @@ function errorResponse(error: unknown) {
   if (code === "IMMUTABLE_VERSION") return adminJson({ ok: false, error: "Issued quote versions cannot be changed. Create the next version instead." }, 409);
   if (code === "QUOTE_DOCUMENT_INVALID") return adminJson({ ok: false, error: "The issued quote document snapshot could not be verified. Create a replacement version before sending." }, 409);
   if (code === "QUOTE_ROOF_IMAGE_INVALID") return adminJson({ ok: false, error: "The roof image could not be read. Add the map to the quote again." }, 400);
+  if (code === "INVALID_QUOTE_EQUIPMENT") return adminJson({ ok: false, error: "Check the equipment details and customer choices before saving." }, 400);
+  if (code === "QUOTE_DESIGN_SCOPE_INVALID") return adminJson({ ok: false, error: "This roof design is not linked to this job. Add it from the map again." }, 409);
   if (code === "QUOTE_ROOF_IMAGE_UNAVAILABLE") return adminJson({ ok: false, error: "The roof image could not be saved or loaded. Try again before sending this quote." }, 503);
   if (code === "QUOTE_DOCUMENT_TOO_LARGE") return adminJson({ ok: false, error: "This quote is too large to issue as one customer document." }, 400);
   if (["QUOTE_ISSUED_PDF_MISMATCH", "QUOTE_ISSUED_PDF_UNAVAILABLE"].includes(code)) return adminJson({ ok: false, error: "The exact issued quote PDF could not be verified. Create and issue a replacement quote version before sending." }, 409);
@@ -223,7 +230,8 @@ async function renderQuotePdfOrThrow(
   try {
     const { renderTradeQuotePdf } = await import("@/lib/trade-quote-pdf-server");
     return await renderTradeQuotePdf(snapshot, { origin });
-  } catch {
+  } catch (cause) {
+    if (cause instanceof Error && /^(PRODUCT_DOCUMENT_|QUOTE_PRODUCT_DOCUMENTS_)/.test(cause.message)) throw cause;
     const error = new Error("QUOTE_PDF_UNAVAILABLE") as StagedQuoteError;
     error.stage = stage;
     throw error;
@@ -395,6 +403,9 @@ async function quotePayload(ownerUid: string, workOrderId: string, includeIntern
         validUntil: String(version.valid_until || ""), consentStatement: String(version.consent_statement || ""), issuedAt: String(version.issued_at || ""),
         createdAt: String(version.created_at), updatedAt: String(version.updated_at),
         roofImage: quoteRoofImageMetadata(version.roof_image_json),
+        equipment: normaliseQuoteEquipment(version.equipment_json),
+        productDocuments: quoteProductDocumentSummaries(normaliseQuoteProductDocuments(version.product_documents_json)),
+        designId: String(version.roof_design_id || ""),
         items: versionItems.filter((item) => !item.quote_choice_id).map((item) => itemPayload(item, includeInternal)),
         choices: versionChoices.map((choice) => ({ id: String(choice.id), clientKey: String(choice.choice_key), kind: String(choice.choice_kind),
           groupKey: String(choice.group_key), name: String(choice.name), summary: String(choice.summary || ""), recommended: Boolean(choice.recommended),
@@ -472,6 +483,25 @@ export async function GET(request: Request) {
     const access = await installerAccess(request, "view"); const url = new URL(request.url); const workOrderId = cleanAdminText(url.searchParams.get("workOrderId"), 180);
     await assignedJob(access, workOrderId);
     const job = await directJob(access.ownerUid, workOrderId); const emails = await authorisedEmails(access.ownerUid, String(job.crm_customer_id), acceptedPublicEmail(job));
+    if (url.searchParams.get("media") === "pdf") {
+      const versionId = cleanAdminText(url.searchParams.get("versionId"), 180);
+      const version = await getD1().prepare(`SELECT version.status, version.document_snapshot_json, version.updated_at
+        FROM trade_crm_quote_versions version JOIN trade_crm_quotes quote
+          ON quote.id = version.quote_id AND quote.firebase_uid = version.firebase_uid
+        WHERE version.id = ? AND version.firebase_uid = ? AND quote.work_order_id = ? LIMIT 1`)
+        .bind(versionId, access.ownerUid, workOrderId).first<Row>();
+      if (!version) return adminJson({ ok: false, error: "Quote PDF not found." }, 404);
+      if (version.status === "draft" && url.searchParams.has("expectedUpdatedAt") && url.searchParams.get("expectedUpdatedAt") !== version.updated_at) return adminJson({ ok: false, error: "This draft changed. Reload and review it before sending." }, 409);
+      const snapshot = version.status === "draft" ? await buildTradeQuoteDocumentSnapshot(access.ownerUid, versionId)
+        : parseTradeQuoteDocumentSnapshot(version.document_snapshot_json);
+      if (!snapshot || snapshot.work.id !== workOrderId || snapshot.quoteVersionId !== versionId) throw new Error("QUOTE_DOCUMENT_INVALID");
+      const bytes = version.status === "draft" ? await renderQuotePdfOrThrow(snapshot, url.origin, "draft_pdf_preview")
+        : (await issuedTradeQuotePdf({ ownerUid: access.ownerUid, quoteVersionId: versionId, snapshot, origin: url.origin })).bytes;
+      return new Response(new Uint8Array(bytes).buffer, { headers: {
+        "Content-Type": "application/pdf", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": `inline; filename="${await quotePdfFilename(snapshot)}"`, "Cross-Origin-Resource-Policy": "same-origin",
+      } });
+    }
     if (url.searchParams.get("media") === "roof") {
       const versionId = cleanAdminText(url.searchParams.get("versionId"), 180);
       const version = await getD1().prepare(`SELECT version.roof_image_json
@@ -568,11 +598,25 @@ export async function POST(request: Request) {
     }
     if (action === "save_draft") {
       const choiceInputs = normaliseQuoteChoices(body.choices, (value, maximum = 500) => cleanAdminText(value, maximum));
+      let requestedEquipment: QuoteEquipment | undefined;
+      if (body.equipment !== undefined) {
+        try { requestedEquipment = quoteEquipmentForChoices(body.equipment, choiceInputs.map((choice) => choice.clientKey)); }
+        catch { throw new Error("INVALID_QUOTE_EQUIPMENT"); }
+      }
+      let requestedDesignId: string | undefined;
+      if (body.designId !== undefined) {
+        requestedDesignId = cleanAdminText(body.designId, 180);
+        if (requestedDesignId) {
+          const design = await loadSolarDesign(access, requestedDesignId);
+          if (design.workOrderId !== workOrderId) throw new Error("QUOTE_DESIGN_SCOPE_INVALID");
+        }
+      }
       const base = await resolveLineGroup(access.ownerUid, body.lines, choiceInputs.length > 0);
       const choices = await Promise.all(choiceInputs.map(async (input) => ({ input, resolved: await resolveLineGroup(access.ownerUid, input.lines) })));
       if (!base.calculated.lines.length && !choices.length) throw new Error("INVALID_LINES");
       const groups = [base, ...choices.map((choice) => choice.resolved)];
-      const usesSavedLibrary = groups.some((group) => group.priceReferences.some(Boolean) || group.packetReferences.some(Boolean));
+      const usesSavedLibrary = groups.some((group) => group.priceReferences.some(Boolean) || group.packetReferences.some(Boolean))
+        || Boolean(requestedEquipment && [...requestedEquipment.common, ...requestedEquipment.choices.flatMap((choice) => choice.items)].some((item) => item.priceBookItemId));
       if (usesSavedLibrary && !access.canViewPriceBook) throw new Error("PRICE_BOOK_VIEW_REQUIRED");
       const proposedDisplayTotal = choiceDefaultTotal(base, choices);
       const proposedDiscountMagnitude = quoteInputDiscountMagnitude(groups);
@@ -625,6 +669,8 @@ export async function POST(request: Request) {
       const terms = cleanAdminText(body.terms, 4000); const customerMessage = cleanAdminText(body.customerMessage, 1200);
       const quoteId = String(quote?.id || crypto.randomUUID()); let versionNumber = Number(quote?.current_version_number || 1); let versionId = ""; const statements: D1PreparedStatement[] = [];
       let retainedRoofImage: TradeQuoteRoofImage | null = null;
+      let retainedEquipment: QuoteEquipment = { common: [], choices: [] };
+      let retainedDesignId = "";
       if (!quote && body.expectedVersionId !== undefined && body.expectedVersionId !== "") {
         return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This quote changed. Reload before saving." }, 409);
       }
@@ -651,6 +697,8 @@ export async function POST(request: Request) {
         const editableVersion = current.status === "draft" ? current : pendingDraft;
         const loadedVersion = editableVersion || current;
         retainedRoofImage = parseQuoteRoofImage(loadedVersion.roof_image_json);
+        retainedEquipment = normaliseQuoteEquipment(loadedVersion.equipment_json);
+        retainedDesignId = String(loadedVersion.roof_design_id || "");
         assertQuoteRoofImageScope(retainedRoofImage, access.ownerUid, workOrderId);
         if (body.expectedVersionId !== undefined && (body.expectedVersionId !== loadedVersion.id
           || body.expectedUpdatedAt !== loadedVersion.updated_at)) {
@@ -733,6 +781,17 @@ export async function POST(request: Request) {
       const uploadedRoofImage = body.roofImage === undefined || body.roofImage === null ? null
         : await storeQuoteRoofImage({ ownerUid: access.ownerUid, workOrderId, versionId, upload: body.roofImage });
       const roofImage = body.roofImage === undefined ? retainedRoofImage : uploadedRoofImage;
+      const equipment = requestedEquipment ?? { ...retainedEquipment, choices: retainedEquipment.choices.filter((group) => choiceInputs.some((choice) => choice.clientKey === group.choiceKey)) };
+      const productDocuments = await resolveQuoteProductDocuments(access.ownerUid, [
+        { choiceKey: "", productIds: base.priceReferences.flatMap((item) => item ? [item.id] : []) },
+        ...choices.map((choice) => ({ choiceKey: choice.input.clientKey, productIds: choice.resolved.priceReferences.flatMap((item) => item ? [item.id] : []) })),
+      ], equipment);
+      statements.push(db.prepare(`UPDATE trade_crm_quote_versions SET product_documents_json = ?
+        WHERE id = ? AND firebase_uid = ? AND status = 'draft' AND updated_at = ?`)
+        .bind(JSON.stringify(productDocuments), versionId, access.ownerUid, now));
+      statements.push(db.prepare(`UPDATE trade_crm_quote_versions SET equipment_json = ?, roof_design_id = ?
+        WHERE id = ? AND firebase_uid = ? AND status = 'draft' AND updated_at = ?`)
+        .bind(JSON.stringify(equipment), requestedDesignId ?? retainedDesignId, versionId, access.ownerUid, now));
       statements.push(db.prepare(`UPDATE trade_crm_quote_versions SET roof_image_json = ?
         WHERE id = ? AND firebase_uid = ? AND status = 'draft' AND updated_at = ?`)
         .bind(roofImage ? JSON.stringify(roofImage) : "", versionId, access.ownerUid, now));
@@ -1221,7 +1280,7 @@ export async function POST(request: Request) {
           SET status = 'draft', updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND status = 'issuing'
             AND consent_statement = ?`)
-          .bind(new Date().toISOString(), version.id, access.ownerUid,
+          .bind(version.updated_at, version.id, access.ownerUid,
             issueClaimToken)
           .run();
         throw error;

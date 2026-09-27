@@ -1,3 +1,6 @@
+import * as quoteProductDocuments from "../src/lib/trade-quote-product-documents.ts";
+import * as productDocuments from "../src/lib/trade-price-book-documents.ts";
+import * as quoteEquipment from "../src/lib/trade-quote-equipment.ts";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -8,6 +11,8 @@ import * as roofImages from "../src/lib/trade-quote-roof-image.ts";
 import ts from "typescript";
 import * as jsxRuntime from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
+import { extractText } from "unpdf";
+import { createHash } from "node:crypto";
 import {
   contiguousTradeQuoteSections,
   createTradeQuotePdfBytes,
@@ -29,7 +34,7 @@ function reviewModule(getD1) {
     "../../db": { getD1 },
     "@/lib/admin-server": {}, "@/lib/trade-quote-links": {}, "@/lib/trade-access-server": {},
     "./trade-google-business-profile.mjs": { canonicalGoogleBusinessProfileUrl },
-    "./trade-quote-roof-image": roofImages,
+    "./trade-quote-roof-image": roofImages, "./trade-quote-equipment": quoteEquipment, "./trade-quote-product-documents": quoteProductDocuments, "./trade-price-book-documents": productDocuments,
   };
   const exports = {};
   Function("require", "exports", compiled)((id) => {
@@ -162,6 +167,33 @@ test("new quote emails and PDFs contain only a validated saved Google business l
   }
 });
 
+test("issued equipment is frozen by option and appears in actual customer PDF with clickable datasheets", async () => {
+  const saved = snapshot();
+  const panel = { id: "panel-1", kind: "panel", name: "Selected solar panel", manufacturer: "Panel Co", model: "P440", quantity: 12, watts: 440, widthM: 1.134, lengthM: 1.762, warrantyYears: 25, datasheetUrl: "https://manufacturer.com/p440.pdf" };
+  const battery = { id: "battery-1", kind: "battery", name: "Selected battery", manufacturer: "Battery Co", model: "B10", quantity: 1, capacityKwh: 10 };
+  saved.choices = [{ id: "choice-1", kind: "addon", groupKey: "battery", name: "Battery option", summary: "Optional battery", recommended: false, items: [], subtotalCents: 500000, taxCents: 50000, totalCents: 550000 }];
+  saved.equipment = { common: [panel], choices: [{ choiceKey: "choice-1", items: [battery] }] };
+  const issuedJson = JSON.stringify(saved);
+  panel.model = "Later changed model";
+  const review = reviewModule(() => { throw new Error("Do not consult changed catalogue or draft"); });
+  const parsed = review.parseTradeQuoteDocumentSnapshot(issuedJson);
+  assert.equal(parsed.equipment.common[0].model, "P440");
+  assert.equal(parsed.equipment.choices[0].choiceKey, "choice-1");
+  const bytes = await createTradeQuotePdfBytes(parsed);
+  const text = (await extractText(new Uint8Array(bytes), { mergePages: true })).text;
+  assert.match(text, /Selected solar panel/);
+  assert.match(text, /P440/);
+  assert.match(text, /440 W/);
+  assert.match(text, /440 W \| 1\.762 x 1\.134 m/);
+  assert.match(text, /25 year warranty/);
+  assert.match(text, /Equipment in Battery option/);
+  assert.match(text, /Selected battery/);
+  const pdf = await PDFDocument.load(bytes);
+  const links = pdf.getPages().flatMap((page) => (page.node.Annots()?.asArray() || []).map((ref) => pdf.context.lookup(ref, PDFDict).lookup(PDFName.of("A"), PDFDict).lookup(PDFName.of("URI"), PDFString).decodeText()));
+  assert.ok(links.includes("https://manufacturer.com/p440.pdf"));
+  assert.equal(review.parseTradeQuoteDocumentSnapshot(JSON.stringify({ ...saved, equipment: { common: [], choices: [{ choiceKey: "missing-choice", items: [battery] }] } })), null);
+});
+
 test("issued quote links use the immutable snapshot without consulting the current business profile", async () => {
   const exports = reviewModule(() => { throw new Error("Issued quote must not reread the current profile"); });
   for (const savedUrl of [undefined, "https://g.page/original-business", "javascript:alert(1)"]) {
@@ -233,6 +265,7 @@ test("customer review hides legacy banners while preserving the issued snapshot 
       useRef: (value) => ({ current: value }), useEffect: () => {},
       useCallback: (callback) => callback, useMemo: (callback) => callback(),
     },
+    "./TradeQuoteEquipmentCards": { TradeQuoteEquipmentCards: () => null }, "./TradeQuoteProductDocuments": { QuoteProductDocuments: () => null }, "@/lib/trade-quote-product-documents": quoteProductDocuments,
     "@/lib/trade-quote-receipt": { isPayableQuoteDecisionInvoice: () => false },
     "@/lib/trade-google-business-profile.mjs": { canonicalGoogleBusinessProfileUrl },
   };
@@ -386,4 +419,97 @@ test("customer quote surfaces preserve explicit discount breakdown with a logo-f
   assert.match(emailSource, /Final percentage discount on included items ex GST/);
   assert.match(emailSource, /Total incl GST/);
   assert.doesNotMatch(emailSource, />Work<\/div>/);
+});
+
+async function productPdfFixture(id, label, pages = 1) {
+  const pdf = await PDFDocument.create();
+  for (let index = 0; index < pages; index++) {
+    const page = pdf.addPage([595, 842]);
+    page.drawText(`${label} page ${index + 1}`, { x: 45, y: 730, size: 24 });
+    page.drawText('Manufacturer supplied specification and warranty terms.', { x: 45, y: 680, size: 13 });
+    page.node.addAnnot(pdf.context.register(pdf.context.obj({ Type: 'Annot', Subtype: 'Link', Rect: [40, 700, 300, 740], A: { S: 'URI', URI: PDFString.of('https://untrusted.example') } })));
+  }
+  const bytes = await pdf.save();
+  const document = { id, priceBookItemId: `product-${id}`, fileName: `${id}.pdf`, label, contentType: 'application/pdf', sizeBytes: bytes.length, pageCount: pages,
+    sha256: createHash('sha256').update(bytes).digest('hex'), objectKey: `trade-price-book-documents/owner/product-${id}/${id}.pdf`, createdAt: '2026-09-27T00:00:00.000Z' };
+  return { document, bytes };
+}
+
+test('actual quote PDF appends every supplied page, labels option scope and strips interactive annotations', async () => {
+  const panel = await productPdfFixture('panel-doc', 'Selected panel data sheet', 2), battery = await productPdfFixture('battery-doc', 'Optional battery warranty');
+  const value = snapshot();
+  value.choices = [{ id: 'battery', name: 'Solar and battery', kind: 'addon', groupKey: 'extras', summary: '', recommended: false, subtotalCents: 10000, taxCents: 1000, totalCents: 11000, items: [] }];
+  value.productDocuments = [{ document: panel.document, choiceKeys: [] }, { document: battery.document, choiceKeys: ['battery'] }];
+  const base = await PDFDocument.load(await createTradeQuotePdfBytes({ ...value, productDocuments: [] }));
+  const bytes = await createTradeQuotePdfBytes(value, undefined, { productDocuments: [{ id: panel.document.id, bytes: panel.bytes }, { id: battery.document.id, bytes: battery.bytes }] });
+  const pdf = await PDFDocument.load(bytes);
+  assert.equal(pdf.getPageCount(), base.getPageCount() + 3);
+  if (process.env.TLINK_QUOTE_PDF_QA) fs.writeFileSync(process.env.TLINK_QUOTE_PDF_QA, bytes);
+  const text = (await extractText(new Uint8Array(bytes), { mergePages: true })).text;
+  assert.match(text, /Selected panel data sheet page 1/);
+  assert.match(text, /Selected panel data sheet page 2/);
+  assert.match(text, /Optional battery warranty page 1/);
+  assert.match(text, /Offered option: Solar and battery/);
+  for (const page of pdf.getPages().slice(base.getPageCount())) assert.equal(page.node.Annots()?.size() || 0, 0, 'embedded visible content does not inherit source actions');
+});
+
+test('product PDF snapshot fails closed on unavailable, corrupt or over-limit pages and unknown option scope', async () => {
+  const asset = await productPdfFixture('missing-doc', 'Panel warranty');
+  const value = { ...snapshot(), productDocuments: [{ document: asset.document, choiceKeys: [] }] };
+  await assert.rejects(createTradeQuotePdfBytes(value), /PRODUCT_DOCUMENT_INVALID/);
+  const changed = new Uint8Array(asset.bytes); changed[100] ^= 1;
+  await assert.rejects(createTradeQuotePdfBytes(value, undefined, { productDocuments: [{ id: asset.document.id, bytes: changed }] }), /PRODUCT_DOCUMENT_INVALID/);
+  await assert.rejects(createTradeQuotePdfBytes({ ...value, productDocuments: [{ document: { ...asset.document, pageCount: 41 }, choiceKeys: [] }] }), /PRODUCT_DOCUMENT_INVALID/);
+  await assert.rejects(createTradeQuotePdfBytes({ ...value, productDocuments: [{ document: asset.document, choiceKeys: ['another-option'] }] }, undefined, { productDocuments: [{ id: asset.document.id, bytes: asset.bytes }] }), /QUOTE_PRODUCT_DOCUMENTS_INVALID/);
+});
+
+test('a manufacturer PDF keeps blank separator pages without blocking preview or dropping following content', async () => {
+  const pdf = await PDFDocument.create(); pdf.addPage();
+  pdf.addPage().drawText('Installation instructions after blank separator', { x: 40, y: 700 });
+  const bytes = await pdf.save();
+  const fixture = await productPdfFixture('blank-separator', 'Installation manual');
+  const document = { ...fixture.document, pageCount: 2, sizeBytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+  const base = await PDFDocument.load(await createTradeQuotePdfBytes(snapshot()));
+  const result = await createTradeQuotePdfBytes({ ...snapshot(), productDocuments: [{ document, choiceKeys: [] }] }, undefined, { productDocuments: [{ id: document.id, bytes }] });
+  assert.equal((await PDFDocument.load(result)).getPageCount(), base.getPageCount() + 2);
+  assert.match((await extractText(result, { mergePages: true })).text, /Installation instructions after blank separator/);
+});
+
+test('historical quote documents stay frozen and scoped to their owner after live product replacement', async () => {
+  const asset = await productPdfFixture('original-doc', 'Original manufacturer warranty');
+  const value = { ...snapshot(), productDocuments: [{ document: asset.document, choiceKeys: [] }] };
+  const reviewApi = reviewModule(() => { throw new Error('Historical documents must not query the current product'); });
+  const row = { firebase_uid: 'owner', quote_id: value.quoteId, quote_version_id: value.quoteVersionId, work_order_id: value.work.id, crm_customer_id: value.customer.id, document_snapshot_json: JSON.stringify(value) };
+  const restored = await reviewApi.quoteDocumentSnapshotForAuthorisedLink(row);
+  assert.equal(restored.productDocuments[0].document.sha256, asset.document.sha256);
+  const summaries = quoteProductDocuments.quoteProductDocumentSummaries(restored.productDocuments);
+  assert.equal(summaries[0].label, 'Original manufacturer warranty');
+  assert.equal('objectKey' in summaries[0], false); assert.equal('sha256' in summaries[0], false);
+  await assert.rejects(reviewApi.quoteDocumentSnapshotForAuthorisedLink({ ...row, firebase_uid: 'another-owner' }), /PRODUCT_DOCUMENT_NOT_FOUND/);
+  assert.equal(reviewApi.parseTradeQuoteDocumentSnapshot({ ...value, productDocuments: [{ document: asset.document, choiceKeys: ['unknown'] }] }), null);
+});
+
+test('identical brochures are attached once, and public summaries follow selected choices', async () => {
+  const asset = await productPdfFixture('shared-doc', 'Shared brochure');
+  const docs = quoteProductDocuments.groupQuoteProductDocuments([{ choiceKey: 'solar', documents: [asset.document] }, { choiceKey: 'battery', documents: [asset.document] }]);
+  assert.equal(docs.length, 1); assert.deepEqual(docs[0].choiceKeys, ['solar', 'battery']);
+  assert.equal(quoteProductDocuments.selectedQuoteProductDocuments(docs, ['neither']).length, 0);
+  assert.equal(quoteProductDocuments.selectedQuoteProductDocuments(docs, ['battery']).length, 1);
+  const common = quoteProductDocuments.groupQuoteProductDocuments([{ choiceKey: 'battery', documents: [asset.document] }, { choiceKey: '', documents: [asset.document] }]);
+  assert.deepEqual(common[0].choiceKeys, []);
+  assert.equal(quoteProductDocuments.selectedQuoteProductDocuments(common, []).length, 1);
+});
+
+test('quote attachment resolver uses authenticated owner, authoritative price lines and explicit equipment product IDs', async () => {
+  const common = await productPdfFixture('common-doc', 'Panel specification'), extra = await productPdfFixture('extra-doc', 'Battery specification');
+  const calls = [];
+  const dependencies = { './trade-quote-product-documents': quoteProductDocuments,
+    './trade-price-book-documents-server': { resolvePriceBookDocuments: async (owner, ids) => { calls.push({ owner, ids }); return ids.includes('own-panel') ? [common.document] : ids.includes('own-battery') ? [extra.document] : []; } } };
+  const compiled = ts.transpileModule(read('../src/lib/trade-quote-product-documents-server.ts'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const exports = {}; Function('require', 'exports', compiled)(id => dependencies[id], exports);
+  const documents = await exports.resolveQuoteProductDocuments('owner', [{ choiceKey: '', productIds: ['own-labour'] }, { choiceKey: 'battery-option', productIds: [] }], {
+    common: [{ id: 'own-panel-spec-suffix', priceBookItemId: 'own-panel' }], choices: [{ choiceKey: 'battery-option', items: [{ id: 'arbitrary-id', priceBookItemId: 'own-battery' }] }],
+  });
+  assert.deepEqual(calls, [{ owner: 'owner', ids: ['own-labour', 'own-panel'] }, { owner: 'owner', ids: ['own-battery'] }]);
+  assert.deepEqual(documents.map(entry => entry.choiceKeys), [[], ['battery-option']]);
 });

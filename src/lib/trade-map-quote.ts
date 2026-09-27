@@ -1,5 +1,6 @@
+import type { SolarDesignEquipment } from "./trade-solar-equipment";
 export type MapQuoteKind = "area" | "distance" | "solar";
-export type MapQuoteMeasurement = { kind: MapQuoteKind; quantity: number; roofImage?: { dataUrl: string } };
+export type MapQuoteMeasurement = { kind: MapQuoteKind; quantity: number; roofImage?: { dataUrl: string }; equipment?: SolarDesignEquipment; designId?: string; designRevision?: number; workOrderId?: string };
 export type MapQuoteIntent = { id: string; ownerUid: string; workOrderId: string; measurement: MapQuoteMeasurement };
 export const MAP_QUOTE_UNITS = { area: "m²", distance: "m", solar: "panels" } as const;
 const SECTIONS = { area: "Map estimate: roof area (m²)", distance: "Map estimate: distance (m)", solar: "Map concept: solar panels" };
@@ -12,8 +13,35 @@ export function mapQuoteMeasurement(kind: MapQuoteKind, value: number): MapQuote
 
 export function mapQuoteKind(section: string): MapQuoteKind | null {
   if (mapQuoteSystemPanels(section) !== null) return "solar";
+  const measured = mapQuoteMeasuredContext(section);
+  if (measured) return measured.kind;
   for (const kind of ["area", "distance", "solar"] as const) if (SECTIONS[kind] === section) return kind;
   return null;
+}
+
+/** The measured figure is context, independent of the editable quantity being charged. */
+export function mapQuoteMeasuredContext(section: string): { kind: "area" | "distance"; quantity: number; itemPricing: boolean } | null {
+  const match = /^Map estimate: (roof area|distance) (\d{1,6}(?:\.\d{1,2})?) (m²|m)( \(priced by item\))?$/.exec(section);
+  if (!match || (match[1] === "roof area") !== (match[3] === "m²")) return null;
+  const kind = match[1] === "roof area" ? "area" : "distance";
+  const quantity = Number(match[2]);
+  return mapQuoteMeasurement(kind, quantity) ? { kind, quantity, itemPricing: Boolean(match[4]) } : null;
+}
+
+function measuredSection(kind: "area" | "distance", quantity: number, itemPricing = false) {
+  return `Map estimate: ${kind === "area" ? "roof area" : "distance"} ${quantity} ${MAP_QUOTE_UNITS[kind]}${itemPricing ? " (priced by item)" : ""}`;
+}
+
+/** Changing the charging unit must clear the old rate and references before a new price is chosen. */
+export function mapQuoteSetItemPricing<T extends { sectionHeading: string; quantity: string; unitPrice: string; description: string; lineType: string; taxCode: string }>(line: T, itemPricing: boolean) {
+  const context = mapQuoteMeasuredContext(line.sectionHeading);
+  const kind = context?.kind || mapQuoteKind(line.sectionHeading);
+  if (kind !== "area" && kind !== "distance") throw new Error("Only area and distance lines can change their charging unit.");
+  const measurement = mapQuoteMeasurement(kind, context?.quantity ?? Number(line.quantity));
+  if (!measurement) throw new Error("Enter a valid measured quantity before changing the charging unit.");
+  return { ...line, ...mapQuoteLine(measurement), taxCode: line.taxCode,
+    priceBookItemId: "", jobPacketId: "", jobPacketLineId: "", quantity: itemPricing ? "1" : String(measurement.quantity), unitPrice: "",
+    sectionHeading: measuredSection(kind, measurement.quantity, itemPricing) };
 }
 
 /** The count describes the design; the quote quantity is always one system. */
@@ -29,7 +57,7 @@ export function mapQuoteLine(measurement: MapQuoteMeasurement) {
     lineType: "product", description: measurement.kind === "area" ? "Roof area from map. Confirm actual insulation coverage on site."
       : measurement.kind === "distance" ? "Approximate map distance. Confirm on site." : "Solar system from roof concept. Confirm equipment and installation design.",
     quantity: measurement.kind === "solar" ? "1" : String(validated.quantity), unitPrice: "", taxCode: "gst",
-    sectionHeading: measurement.kind === "solar" ? `Solar system (${validated.quantity} ${validated.quantity === 1 ? "panel" : "panels"})` : SECTIONS[measurement.kind],
+    sectionHeading: measurement.kind === "solar" ? `Solar system (${validated.quantity} ${validated.quantity === 1 ? "panel" : "panels"})` : measuredSection(measurement.kind, validated.quantity),
   };
 }
 
@@ -39,8 +67,9 @@ export function canApplyMapQuoteIntent(intent: MapQuoteIntent, context: { ownerU
 }
 
 export function mapQuoteUnitMatches(kind: MapQuoteKind, unit: string, section = "") {
-  const value = unit.toLowerCase().trim().replace(/^per\s+/, "").replace(/\s+/g, " ");
-  if (kind === "solar" && mapQuoteSystemPanels(section) !== null) return ["system", "systems", "job", "jobs"].includes(value);
+  const value = unit.toLowerCase().trim().replace(/^per\s+/, "").replaceAll("_", " ").replace(/\s+/g, " ");
+  if (kind !== "solar" && mapQuoteMeasuredContext(section)?.itemPricing) return ["roll", "rolls", "pack", "packs", "bag", "bags", "box", "boxes", "bundle", "bundles", "ea", "each", "item", "items", "unit", "units", "piece", "pieces"].includes(value);
+  if (kind === "solar" && mapQuoteSystemPanels(section) !== null) return ["system", "systems", "job", "jobs", "fixed"].includes(value);
   const units = {
     area: ["m²", "m2", "sqm", "sq m", "square metre", "square metres", "square meter", "square meters"],
     distance: ["m", "metre", "metres", "meter", "meters", "linear metre", "linear metres"],

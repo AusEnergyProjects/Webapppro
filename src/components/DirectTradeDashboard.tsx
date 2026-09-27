@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type SetStateAction,
 } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
@@ -40,6 +41,7 @@ import {
   type TradeBusinessSettingsProfile,
 } from "./TradeBusinessSettingsWorkspace";
 import { resetTradeDashboardStateOnUidChange } from "./trade-rebate-calculator-state";
+import { createMapNavigationGuard } from "@/lib/trade-map-navigation";
 import {
   readTLinkColourMode,
   TLINK_COLOUR_MODE_STORAGE_KEY,
@@ -803,18 +805,21 @@ export function DirectTradeDashboard() {
   const [selectedOpportunityMatchId, setSelectedOpportunityMatchId] = useState(() =>
     typeof window === "undefined" ? "" : opportunityMatchFromSearch(window.location.search));
   const [opportunityRouteRequestNonce, setOpportunityRouteRequestNonce] = useState(0);
-  const [workspace, setWorkspace] = useState<DashboardWorkspace>(() =>
+  const [workspace, setWorkspaceState] = useState<DashboardWorkspace>(() =>
     typeof window === "undefined"
       ? "work"
       : dashboardWorkspaceFromSearch(window.location.search)
   );
+  const [mapNavigation] = useState(createMapNavigationGuard);
+  const registerMapSave = useCallback((save: (() => Promise<unknown>) | null) => mapNavigation.register(save), [mapNavigation]);
+  const setWorkspace = useCallback((next: SetStateAction<DashboardWorkspace>, after?: () => void) => {
+    return mapNavigation.run(() => { setWorkspaceState(next); after?.(); });
+  }, [mapNavigation]);
   const [mapNavigationNonce, setMapNavigationNonce] = useState(0);
   const [financeView, setFinanceView] = useState<FinanceView>(() => typeof window === "undefined" ? "quotes" : dashboardFinanceViewFromSearch(window.location.search));
   const [financePriceBookView, setFinancePriceBookView] = useState<"items" | "packets">("items");
   const openFinance = (view: FinanceView, priceBookView: "items" | "packets" = "items") => {
-    setFinanceView(view);
-    setFinancePriceBookView(priceBookView);
-    setWorkspace("finance");
+    setWorkspace("finance", () => { setFinanceView(view); setFinancePriceBookView(priceBookView); });
   };
   const [activeWorkView, setActiveWorkView] = useState(() =>
     typeof window === "undefined" ? "today" : dashboardWorkViewFromSearch(window.location.search)
@@ -840,6 +845,7 @@ export function DirectTradeDashboard() {
   const publicLeadHandoffRequestMatchId = useRef("");
   const workspaceRouteInitialised = useRef(false);
   const workspacePopstateSync = useRef(false);
+  const workspaceLocation = useRef(typeof window === "undefined" ? "" : `${window.location.pathname}${window.location.search}${window.location.hash}`);
   const pendingOpportunityMatchId = useRef(
     typeof window === "undefined"
       ? ""
@@ -890,28 +896,32 @@ export function DirectTradeDashboard() {
 
   useEffect(() => {
     const onPopstate = () => {
-      workspacePopstateSync.current = true;
+      const nextSearch = window.location.search;
       const nextWorkspace = dashboardWorkspaceFromSearch(window.location.search);
       const nextWorkView = dashboardWorkViewFromSearch(window.location.search);
       const nextMatchId = nextWorkspace === "work" && nextWorkView === "leads"
         ? opportunityMatchFromSearch(window.location.search)
         : "";
-      setWorkspace(nextWorkspace);
-      setFinanceView(dashboardFinanceViewFromSearch(window.location.search));
-      setActiveWorkView(nextWorkView);
-      setSelectedOpportunityMatchId(nextMatchId);
-      setFocusedOpportunityMatchId(nextMatchId);
-      pendingOpportunityMatchId.current = nextMatchId;
-      exactOpportunityMatchId.current = nextMatchId;
-      if (nextMatchId) setOpportunityRouteRequestNonce((value) => value + 1);
-      const nextTarget = dashboardCommandTargetFromSearch(window.location.search);
-      setCommandTarget((current) => nextTarget || (current?.kind === "job" && nextWorkspace === "work"
-        ? { workspace: "work", kind: "crm-view", id: "jobs", query: "", nonce: Date.now() }
-        : null));
+      void setWorkspace(nextWorkspace, () => {
+        workspacePopstateSync.current = true;
+        setFinanceView(dashboardFinanceViewFromSearch(nextSearch));
+        setActiveWorkView(nextWorkView);
+        setSelectedOpportunityMatchId(nextMatchId);
+        setFocusedOpportunityMatchId(nextMatchId);
+        pendingOpportunityMatchId.current = nextMatchId;
+        exactOpportunityMatchId.current = nextMatchId;
+        if (nextMatchId) setOpportunityRouteRequestNonce((value) => value + 1);
+        const nextTarget = dashboardCommandTargetFromSearch(nextSearch);
+        setCommandTarget((current) => nextTarget || (current?.kind === "job" && nextWorkspace === "work"
+          ? { workspace: "work", kind: "crm-view", id: "jobs", query: "", nonce: Date.now() }
+          : null));
+      }).then((changed) => {
+        if (!changed && workspaceLocation.current) window.history.replaceState(window.history.state, "", workspaceLocation.current);
+      });
     };
     window.addEventListener("popstate", onPopstate);
     return () => window.removeEventListener("popstate", onPopstate);
-  }, []);
+  }, [setWorkspace]);
 
   useEffect(() => {
     const initialJobTarget = dashboardCommandTargetFromSearch(window.location.search);
@@ -958,6 +968,7 @@ export function DirectTradeDashboard() {
     }
     workspaceRouteInitialised.current = true;
     workspacePopstateSync.current = false;
+    workspaceLocation.current = nextLocation;
   }, [activeWorkView, commandTarget, financeView, selectedOpportunityMatchId, workspace]);
   const photoLightboxOpener = useRef<HTMLElement | null>(null);
   const protectedOpportunityRequestControllers = useRef(
@@ -1138,6 +1149,7 @@ export function DirectTradeDashboard() {
 
   const clearProtectedInstallerState = useCallback(() => {
     abortProtectedOpportunityRequests();
+    mapNavigation.reset();
     revokeAllEvidenceObjectUrls();
     setProfile(null);
     setError("");
@@ -1154,7 +1166,7 @@ export function DirectTradeDashboard() {
     setLeadStatusFilter("");
     setLeadServiceFilter("");
     setLeadStateFilter("");
-    setWorkspace("work");
+    setWorkspaceState("work");
     setActiveWorkView("today");
     setCommandTarget(null);
     setInstallerPlanPreview(null);
@@ -1167,7 +1179,7 @@ export function DirectTradeDashboard() {
     setPhotoLightbox(null);
     setSelectedOpportunityMatchId("");
     setFocusedOpportunityMatchId("");
-  }, [abortProtectedOpportunityRequests, revokeAllEvidenceObjectUrls]);
+  }, [abortProtectedOpportunityRequests, revokeAllEvidenceObjectUrls, mapNavigation]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -1182,7 +1194,7 @@ export function DirectTradeDashboard() {
       setCommandTarget({ workspace: "work", kind: "crm-view", id: "integrations", query: "", nonce: Date.now() });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, []);
+  }, [setWorkspace]);
 
   useEffect(() => () => {
     abortProtectedOpportunityRequests();
@@ -1220,7 +1232,7 @@ export function DirectTradeDashboard() {
           setOpportunities([]);
         }
       }),
-    [clearProtectedInstallerState, scrubProtectedOpportunityNavigation],
+    [clearProtectedInstallerState, scrubProtectedOpportunityNavigation, setWorkspace],
   );
 
   useEffect(() => {
@@ -1273,7 +1285,7 @@ export function DirectTradeDashboard() {
     if (profile?.partnerType === "supplier" && (workspace === "calculator" || workspace === "map")) {
       setWorkspace("work");
     }
-  }, [profile?.partnerType, workspace]);
+  }, [profile?.partnerType, workspace, setWorkspace]);
 
   const refreshOpportunities = useCallback(async () => {
     if (!user || !profile || profile.partnerType === "supplier" || !profile.entitlements?.features?.installer_leads
@@ -1460,7 +1472,7 @@ export function DirectTradeDashboard() {
     } finally {
       protectedOpportunityRequestControllers.current.delete(controller);
     }
-  }, [user]);
+  }, [user, setWorkspace]);
 
   useEffect(() => {
     if (!user || !pendingOpportunityMatchId.current) return;
@@ -2322,13 +2334,11 @@ export function DirectTradeDashboard() {
                 teamAccess: hasTeamAccess,
               }}
               onNavigate={(target) => {
-                setCommandTarget(target);
-                setWorkspace(target.workspace);
+                setWorkspace(target.workspace, () => setCommandTarget(target));
               }}
             />
             {!isSupplier && <TradeJobNotifications key={user.uid} user={user} onNavigate={(target) => {
-              setCommandTarget(target);
-              setWorkspace(target.workspace);
+              setWorkspace(target.workspace, () => setCommandTarget(target));
             }} onOpenOpportunity={(matchId) => void openOpportunityNotification(matchId)} />}
             <button
               type="button"
@@ -2426,33 +2436,33 @@ export function DirectTradeDashboard() {
                 aria-label="TLink installer account"
               >
                 <button type="button" aria-current={workspace === "map" ? "page" : undefined} className={workspace === "map" ? "active" : ""} onClick={() => {
-                  setCommandTarget(null);
-                  setMapNavigationNonce((current) => current + 1);
-                  setWorkspace("map");
+                  setWorkspace("map", () => { setCommandTarget(null); setMapNavigationNonce((current) => current + 1); });
                 }}><TLinkNavigationIcon name="map" /><span>Map</span><small>Customer and job locations</small></button>
                 <button type="button" aria-current={workspace === "work" && activeWorkView !== "schedule" && activeWorkView !== "leads" ? "page" : undefined} className={workspace === "work" && activeWorkView !== "schedule" && activeWorkView !== "leads" ? "active" : ""} onClick={() => {
-                  setCommandTarget({ workspace: "work", kind: "crm-view", id: "today", query: "", nonce: Date.now() });
-                  setActiveWorkView("today");
-                  setWorkspace("work");
+                  setWorkspace("work", () => {
+                    setCommandTarget({ workspace: "work", kind: "crm-view", id: "today", query: "", nonce: Date.now() });
+                    setActiveWorkView("today");
+                  });
                 }}><TLinkNavigationIcon name="work" /><span>Work</span><small>Today and next actions</small></button>
                 <div className="dashboard-workspace-shortcuts" aria-label="Work shortcuts">
                   {([['jobs', 'Jobs'], ['customers', 'Customers']] as const).map(([view, label]) => <button type="button" key={view} onClick={() => {
-                    setCommandTarget({ workspace: "work", kind: "crm-view", id: view, query: "", nonce: Date.now() });
-                    setWorkspace("work");
+                    setWorkspace("work", () => setCommandTarget({ workspace: "work", kind: "crm-view", id: view, query: "", nonce: Date.now() }));
                   }}><TLinkNavigationIcon name={view} /><span>{label}</span></button>)}
                 </div>
                 <button type="button" aria-current={workspace === "team" ? "page" : undefined} className={workspace === "team" ? "active" : ""} onClick={() => setWorkspace("team")}><TLinkNavigationIcon name="team" /><span>Team</span><small>People, access and files</small></button>
                 <button type="button" aria-current={workspace === "training" ? "page" : undefined} className={workspace === "training" ? "active" : ""} onClick={() => setWorkspace("training")}><TLinkNavigationIcon name="training" /><span>To do &amp; training</span><small>Activity modules and Creditex onboarding</small></button>
                 <button type="button" aria-current={workspace === "work" && activeWorkView === "schedule" ? "page" : undefined} className={workspace === "work" && activeWorkView === "schedule" ? "active" : ""} onClick={() => {
-                  setCommandTarget({ workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() });
-                  setActiveWorkView("schedule");
-                  setWorkspace("work");
+                  setWorkspace("work", () => {
+                    setCommandTarget({ workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() });
+                    setActiveWorkView("schedule");
+                  });
                 }}><TLinkNavigationIcon name="schedule" /><span>Schedule</span><small>Capacity and dispatch</small></button>
                 <button type="button" aria-current={workspace === "finance" ? "page" : undefined} className={workspace === "finance" ? "active" : ""} onClick={() => setWorkspace("finance")}><TLinkNavigationIcon name="finance" /><span>Finance</span><small>Quotes, invoices, pricing and reports</small></button>
                 <button type="button" aria-current={workspace === "work" && activeWorkView === "leads" ? "page" : undefined} className={workspace === "work" && activeWorkView === "leads" ? "active" : ""} onClick={() => {
-                  setCommandTarget({ workspace: "work", kind: "crm-view", id: "leads", query: "", nonce: Date.now() });
-                  setActiveWorkView("leads");
-                  setWorkspace("work");
+                  setWorkspace("work", () => {
+                    setCommandTarget({ workspace: "work", kind: "crm-view", id: "leads", query: "", nonce: Date.now() });
+                    setActiveWorkView("leads");
+                  });
                 }}><TLinkNavigationIcon name="leads" /><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>Australian Energy Assessments protected opportunities</small></button>
                 <button type="button" aria-current={workspace === "products" ? "page" : undefined} className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><TLinkNavigationIcon name="products" /><span>Products</span><small>Approved trade catalogue</small></button>
                 <button type="button" aria-current={workspace === "calculator" ? "page" : undefined} className={workspace === "calculator" ? "active" : ""} onClick={() => setWorkspace("calculator")}><TLinkNavigationIcon name="calculator" /><span>Calculator</span><small>Rebates for quotes and invoices</small></button>
@@ -2466,26 +2476,23 @@ export function DirectTradeDashboard() {
                 fullAccess={hasBusinessOperations}
                 teamAccess={hasTeamAccess}
                 mapWorkspace={workspace === "map"}
+                onRegisterMapSave={registerMapSave}
                 navigationTarget={workspace === "map" ? null : commandTarget}
                 onOpenSchedule={(weekStart) => {
-                  setCommandTarget({
-                    workspace: "work",
-                    kind: "crm-view",
-                    id: "schedule",
-                    query: weekStart || "",
-                    nonce: Date.now(),
+                  setWorkspace("work", () => {
+                    setCommandTarget({ workspace: "work", kind: "crm-view", id: "schedule", query: weekStart || "", nonce: Date.now() });
+                    setActiveWorkView("schedule");
                   });
-                  setActiveWorkView("schedule");
-                  setWorkspace("work");
                 }}
                 onWorkViewChange={(nextView) => {
                   if (workspace === "map" && (nextView === "jobs" || nextView === "customers")) return;
                   if (nextView === "pricebook" || nextView === "reports") { openFinance(nextView); return; }
-                  setCommandTarget((current) => workspace === "map"
-                    ? { workspace: "work", kind: "crm-view", id: nextView, query: "", nonce: Date.now() }
-                    : current?.kind === "crm-view" && current.id !== nextView ? null : current);
-                  setActiveWorkView(nextView);
-                  setWorkspace("work");
+                  setWorkspace("work", () => {
+                    setCommandTarget((current) => workspace === "map"
+                      ? { workspace: "work", kind: "crm-view", id: nextView, query: "", nonce: Date.now() }
+                      : current?.kind === "crm-view" && current.id !== nextView ? null : current);
+                    setActiveWorkView(nextView);
+                  });
                 }}
                 onOpenInvoices={() => openFinance("invoices")}
                 onOpenFinance={openFinance}

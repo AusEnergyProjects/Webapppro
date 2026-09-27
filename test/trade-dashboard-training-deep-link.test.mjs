@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import { resetTradeDashboardStateOnUidChange } from "../src/components/trade-rebate-calculator-state.ts";
+import { createMapNavigationGuard } from "../src/lib/trade-map-navigation.ts";
 
 const source = fs.readFileSync(new URL("../src/components/DirectTradeDashboard.tsx", import.meta.url), "utf8");
 const parsed = ts.createSourceFile("DirectTradeDashboard.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -27,6 +28,7 @@ const workspaceFromSearch = evaluate(functionNamed("dashboardWorkspaceFromSearch
 const shouldClearDeepLink = evaluate(functionNamed("shouldClearOpportunityDeepLink"), {});
 const authCallback = findNode(node => ts.isCallExpression(node) && node.expression.getText(parsed) === "onAuthStateChanged").arguments[1].getText(parsed);
 const clearCallback = findNode(node => ts.isVariableDeclaration(node) && node.name.getText(parsed) === "clearProtectedInstallerState").initializer.arguments[0].getText(parsed);
+const setWorkspaceCallback = findNode(node => ts.isVariableDeclaration(node) && node.name.getText(parsed) === "setWorkspace").initializer.arguments[0].getText(parsed);
 const syncCallback = findNode(node => ts.isCallExpression(node) && node.expression.getText(parsed) === "useEffect"
   && node.arguments[0]?.getText(parsed).includes("const routeWorkspace =")).arguments[0].getText(parsed);
 
@@ -36,11 +38,13 @@ function harness(search = "?workspace=training") {
   const calls = [];
   const protectedIdentityUid = { current: null };
   const protectedIdentityRevision = { current: 0 };
+  const mapNavigation = createMapNavigationGuard();
+  const workspaceLocation = { current: `${url.pathname}${url.search}` };
   const window = { get location() { return url; }, history: { state: null,
     replaceState(_state, _title, next) { calls.push("replace"); url = new URL(next, url); },
     pushState(_state, _title, next) { calls.push("push"); url = new URL(next, url); },
   } };
-  const bindings = { window, protectedIdentityUid, protectedIdentityRevision, resetTradeDashboardStateOnUidChange,
+  const bindings = { window, protectedIdentityUid, protectedIdentityRevision, resetTradeDashboardStateOnUidChange, mapNavigation, workspaceLocation,
     dashboardWorkspaceFromSearch: workspaceFromSearch, shouldClearOpportunityDeepLink: shouldClearDeepLink,
     abortProtectedOpportunityRequests: () => calls.push("abort"), revokeAllEvidenceObjectUrls: () => calls.push("revoke"),
     publicLeadHandoffRequestMatchId: { current: "old-private-match" },
@@ -50,9 +54,10 @@ function harness(search = "?workspace=training") {
   };
   for (const setter of clearCallback.matchAll(/\b(set\w+)\(/g)) bindings[setter[1]] = value => calls.push([setter[1], value]);
   Object.assign(bindings, {
-    setWorkspace: value => { state.workspace = value; }, setActiveWorkView: value => { state.activeWorkView = value; },
+    setWorkspaceState: value => { state.workspace = typeof value === "function" ? value(state.workspace) : value; }, setActiveWorkView: value => { state.activeWorkView = value; },
     setCommandTarget: value => { state.commandTarget = value; }, setSelectedOpportunityMatchId: value => { state.selectedOpportunityMatchId = value; },
   });
+  bindings.setWorkspace = evaluate(setWorkspaceCallback, bindings);
   bindings.clearProtectedInstallerState = evaluate(clearCallback, bindings);
   const authenticate = evaluate(authCallback, bindings);
   const workspaceRouteInitialised = { current: false }, workspacePopstateSync = { current: false };

@@ -432,6 +432,8 @@ test("quote SQL compiles against its production migration dependencies", () => {
   apply(db, deliveryRendererMigration);
   apply(db, acceptanceInvoiceMigration);
   apply(db, read("../drizzle/0195_trade_quote_roof_image.sql"));
+  apply(db, read("../drizzle/0198_quote_solar_equipment.sql"));
+  apply(db, read("../drizzle/0200_trade_price_book_documents.sql"));
   for (const [label, source] of [["installer", installerRoute], ["secure link", linkRoute]]) {
     const queries = [...source.matchAll(/prepare\(`([\s\S]*?)`\)/g)].map((match) => match[1]).filter((sql) => !sql.includes("${"));
     assert.ok(queries.length > 5, `${label} route should expose compiled prepared statements`);
@@ -442,18 +444,16 @@ test("quote SQL compiles against its production migration dependencies", () => {
 test("installer and customer interfaces expose the version and consent contract", () => {
   for (const copy of ["Add your items and prices, then check the customer preview", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Send quote to", "Save as next draft", "Preview and send", "Email quote", "Schedule job", "Done", "Internal only", "Quote history", "Retry email"]) assert.match(installerUi, new RegExp(copy));
   const sendFlow = installerUi.slice(installerUi.indexOf("async function sendPreviewedQuote"), installerUi.indexOf("async function addQuoteRecipient"));
-  assert.match(sendFlow, /action: "save_draft"/);
-  assert.match(sendFlow, /if \(!saved\.draftVersionId\)/);
-  assert.match(sendFlow, /action: "issue_quote"[\s\S]*?quoteVersionId: saved\.draftVersionId[\s\S]*?consentConfirmed: true/);
-  assert.doesNotMatch(sendFlow, /action: "send_quote"/);
-  const replay = sendFlow.indexOf("if (pendingIssueVersionId)");
-  const save = sendFlow.indexOf('action: "save_draft"');
-  assert.ok(replay >= 0 && replay < save, "a lost issue response must replay the retained exact version before another save");
-  assert.match(sendFlow.slice(replay, save), /quoteVersionId: pendingIssueVersionId[\s\S]*?consentConfirmed: true/);
-  assert.match(sendFlow, /setPendingIssueVersionId\(saved\.draftVersionId\)/);
+  const previewFlow = installerUi.slice(installerUi.indexOf("async function openSendPreview"), installerUi.indexOf("async function sendPreviewedQuote"));
+  assert.match(previewFlow, /action: "save_draft"/);
+  assert.match(previewFlow, /if \(!saved\.draftVersionId\)/);
+  assert.ok(previewFlow.indexOf('action: "save_draft"') < previewFlow.indexOf('setSendPreview({'), "freeze product documents before showing review");
+  assert.match(previewFlow, /setPendingIssueVersionId\(saved\.draftVersionId\)/);
+  assert.match(sendFlow, /action: "issue_quote"[\s\S]*?quoteVersionId: pendingIssueVersionId[\s\S]*?consentConfirmed: true/);
+  assert.doesNotMatch(sendFlow, /action: "(?:send_quote|save_draft)"/);
   assert.match(sendFlow, /quoteDeliveryOutcome\(issued\.delivery, "Quote saved and issued\."\)/);
   assert.match(installerUi, /tradeQuoteDocumentDisplayTotals\(\{[\s\S]*?groupKey: choice\.groupKey[\s\S]*?recommended: choice\.recommended/);
-  assert.match(installerUi, /<TradeQuoteLivePreview[^>]*lines=\{lines\}[^>]*choices=\{choices\}[^>]*roofImage=\{roofImage\} review/);
+  assert.match(installerUi, /<TradeQuoteLivePreview[^>]*lines=\{lines\}[^>]*choices=\{choices\}[^>]*roofImage=\{roofImage\} equipment=\{equipment\}[^>]*productDocuments=\{current\?\.productDocuments\}[^>]*review/);
   assert.match(livePreviewUi, /tradeQuoteDocumentDisplayTotals\(\{[\s\S]*?groupKey: choice\.groupKey[\s\S]*?recommended: choice\.recommended/);
   assert.match(livePreviewUi, /document\.totals\.subtotalCents[\s\S]*?document\.totals\.taxCents[\s\S]*?document\.totals\.label[\s\S]*?document\.totals\.totalCents/);
   assert.doesNotMatch(installerUi, /<dl><div><dt>Included before choices<\/dt>[\s\S]*?sendPreview\.base\.totalCents/);

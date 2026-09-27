@@ -2107,6 +2107,7 @@ export const tradePriceBookItems = sqliteTable("trade_price_book_items", {
   description: text("description").notNull().default(""),
   itemType: text("item_type").notNull(),
   unitLabel: text("unit_label").notNull().default("each"),
+  solarPanelJson: text("solar_panel_json").notNull().default("null"),
   supplierCostCentsExGst: integer("supplier_cost_cents_ex_gst").notNull().default(0),
   sellPriceCentsExGst: integer("sell_price_cents_ex_gst").notNull(),
   taxCode: text("tax_code").notNull().default("gst"),
@@ -2214,6 +2215,9 @@ export const tradeCrmQuotes = sqliteTable("trade_crm_quotes", {
 ]);
 
 export const tradeCrmQuoteVersions = sqliteTable("trade_crm_quote_versions", {
+  productDocumentsJson: text("product_documents_json").notNull().default("[]"),
+  equipmentJson: text("equipment_json").notNull().default(""),
+  roofDesignId: text("roof_design_id").notNull().default(""),
   roofImageJson: text("roof_image_json").notNull().default(""),
   id: text("id").primaryKey(),
   quoteId: text("quote_id").notNull(),
@@ -6938,4 +6942,33 @@ export const tradeActivityFieldRecords = sqliteTable("trade_activity_field_recor
   check("trade_activity_field_record_correction_check",sql`(${t.supersedesRecordId} IS NULL AND ${t.correctionEventId} IS NULL) OR (${t.supersedesRecordId} IS NOT NULL AND ${t.correctionEventId} IS NOT NULL)`),
   check("trade_activity_field_record_identity_check",sql`json_valid(${t.payload}) AND COALESCE(json_extract(${t.payload},'$.id')=${t.id} AND json_extract(${t.payload},'$.intentId')=${t.intentId} AND json_extract(${t.payload},'$.workOrderId')=${t.workOrderId} AND json_extract(${t.payload},'$.ownerUid')=${t.ownerUid} AND json_extract(${t.payload},'$.organisationId')=${t.organisationId} AND json_extract(${t.payload},'$.revision')=${t.revision} AND json_extract(${t.payload},'$.status')=${t.status} AND json_extract(${t.payload},'$.form.activityTemplateId')=${t.activityTemplateId},0)`),
   check("trade_activity_field_record_pdf_check",sql`${t.status}='draft' OR (${t.pdfObjectKey}<>'' AND length(${t.pdfSha256})=64 AND ${t.submittedAt}<>'')`),
+]);
+
+export const tradeSolarDesigns = sqliteTable("trade_solar_designs", {
+  id: text("id").primaryKey(), ownerUid: text("owner_uid").notNull(),
+  customerId: text("customer_id").notNull().default(""), workOrderId: text("work_order_id").notNull().default(""),
+  title: text("title").notNull(), panelCount: integer("panel_count").notNull(), dataJson: text("data_json").notNull(),
+  revision: integer("revision").notNull().default(1), createdByUid: text("created_by_uid").notNull(), updatedByUid: text("updated_by_uid").notNull(),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, t => [
+  index("trade_solar_design_owner_updated_idx").on(t.ownerUid, t.updatedAt, t.id),
+  index("trade_solar_design_customer_idx").on(t.ownerUid, t.customerId, t.updatedAt),
+  index("trade_solar_design_work_idx").on(t.ownerUid, t.workOrderId, t.updatedAt),
+  check("trade_solar_design_identity_check", sql`length(${t.id}) BETWEEN 1 AND 180 AND length(${t.ownerUid}) > 0 AND length(trim(${t.title})) BETWEEN 1 AND 180`),
+  check("trade_solar_design_geometry_check", sql`${t.panelCount} BETWEEN 0 AND 500 AND ${t.revision} > 0 AND length(${t.dataJson}) <= 512000 AND json_valid(${t.dataJson})`),
+  check("trade_solar_design_snapshot_check", sql`COALESCE(json_extract(${t.dataJson}, '$.customerId') = ${t.customerId} AND json_extract(${t.dataJson}, '$.workOrderId') = ${t.workOrderId} AND json_extract(${t.dataJson}, '$.title') = ${t.title} AND json_array_length(${t.dataJson}, '$.panels') = ${t.panelCount}, 0)`),
+]);
+
+export const tradePriceBookDocuments = sqliteTable("trade_price_book_documents", {
+  id: text("id").primaryKey(), ownerUid: text("owner_uid").notNull(), priceBookItemId: text("price_book_item_id").notNull(),
+  fileName: text("file_name").notNull(), label: text("label").notNull(), sizeBytes: integer("size_bytes").notNull(), pageCount: integer("page_count").notNull(),
+  sha256: text("sha256").notNull(), objectKey: text("object_key").notNull().unique(), recordStatus: text("record_status").notNull().default("active"),
+  createdByUid: text("created_by_uid").notNull(), createdAt: text("created_at").notNull(), removedAt: text("removed_at").notNull().default(""),
+}, t => [
+  index("trade_price_book_documents_item_idx").on(t.ownerUid, t.priceBookItemId, t.recordStatus, t.createdAt),
+  uniqueIndex("trade_price_book_documents_active_hash_idx").on(t.ownerUid, t.priceBookItemId, t.sha256).where(sql`${t.recordStatus} = 'active'`),
+  check("trade_price_book_documents_bytes_check", sql`${t.sizeBytes} BETWEEN 8 AND 8388608`),
+  check("trade_price_book_documents_pages_check", sql`${t.pageCount} BETWEEN 1 AND 40`),
+  check("trade_price_book_documents_hash_check", sql`length(${t.sha256}) = 64`),
+  check("trade_price_book_documents_status_check", sql`${t.recordStatus} IN ('active', 'removed')`),
 ]);

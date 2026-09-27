@@ -1,3 +1,6 @@
+import * as quoteProductDocuments from "../src/lib/trade-quote-product-documents.ts";
+import * as productDocuments from "../src/lib/trade-price-book-documents.ts";
+import * as quoteEquipment from "../src/lib/trade-quote-equipment.ts";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -60,7 +63,7 @@ function adminJson(body, status = 200) {
 function publicErrorMapper() {
   return compile(reviewServerSource, "src/lib/trade-quote-review-server.ts", {
     "./trade-google-business-profile.mjs": { canonicalGoogleBusinessProfileUrl },
-    "./trade-quote-roof-image": roofImages,
+    "./trade-quote-roof-image": roofImages, "./trade-quote-equipment": quoteEquipment, "./trade-quote-product-documents": quoteProductDocuments, "./trade-price-book-documents": productDocuments,
     "../../db": { getD1: () => { throw new Error("Unexpected D1 access"); } },
     "@/lib/admin-server": { adminJson },
     "@/lib/trade-quote-links": {

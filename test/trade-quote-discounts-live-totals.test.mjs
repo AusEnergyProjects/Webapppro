@@ -334,7 +334,7 @@ test("native preview keeps one full-width consent control after the same live qu
   assert.match(previewCss, /\.sendConsent \{[^}]*display: flex;[^}]*min-height: 44px/);
   assert.match(previewCss, /\.sendActions \{[^}]*display: flex;[^}]*flex-wrap: wrap/);
   assert.match(modal, /disabled=\{Boolean\(busy\) \|\| !sendConsent\}/);
-  assert.match(modal, /<TradeQuoteLivePreview[^>]*lines=\{lines\}[^>]*choices=\{choices\}[^>]*roofImage=\{roofImage\} review/);
+  assert.match(modal, /<TradeQuoteLivePreview[^>]*lines=\{lines\}[^>]*choices=\{choices\}[^>]*roofImage=\{roofImage\} equipment=\{equipment\}[^>]*productDocuments=\{current\?\.productDocuments\}[^>]*review/);
   assert.match(modal, /Tick the box above to enable sending\./);
   assert.match(modal, /"Email quote"/);
   assert.doesNotMatch(modal, /trade-quote-document-sheet|previewPdfRef|Review quote PDF/);
@@ -482,20 +482,19 @@ test("send status copy is derived from the authoritative delivery presentation",
 
 test("preview confirmation performs one consented exact-version issue and no redundant send", () => {
   const flow = ui.slice(ui.indexOf("async function sendPreviewedQuote"), ui.indexOf("async function addQuoteRecipient"));
-  assert.match(flow, /action: "save_draft"/);
-  assert.match(flow, /if \(!saved\.draftVersionId\)/);
-  assert.match(flow, /action: "issue_quote"[\s\S]*quoteVersionId: saved\.draftVersionId[\s\S]*consentConfirmed: true/);
-  assert.doesNotMatch(flow, /action: "send_quote"/);
+  const preview = ui.slice(ui.indexOf("async function openSendPreview"), ui.indexOf("async function sendPreviewedQuote"));
+  assert.match(preview, /action: "save_draft"/);
+  assert.match(preview, /if \(!saved\.draftVersionId\)/);
+  assert.match(flow, /action: "issue_quote"[\s\S]*quoteVersionId: pendingIssueVersionId[\s\S]*consentConfirmed: true/);
+  assert.doesNotMatch(flow, /action: "(?:send_quote|save_draft)"/);
   assert.match(flow, /quoteDeliveryOutcome\(issued\.delivery/);
 });
 
 test("a lost issue response replays the retained exact version before any new save", () => {
   const flow = ui.slice(ui.indexOf("async function sendPreviewedQuote"), ui.indexOf("async function addQuoteRecipient"));
-  const replay = flow.indexOf("if (pendingIssueVersionId)");
-  const save = flow.indexOf('action: "save_draft"');
-  assert.ok(replay >= 0 && replay < save);
-  assert.match(flow.slice(replay, save), /quoteVersionId: pendingIssueVersionId[\s\S]*consentConfirmed: true/);
-  assert.match(flow, /setPendingIssueVersionId\(saved\.draftVersionId\)/);
+  assert.match(flow, /if \(!pendingIssueVersionId\)/);
+  assert.match(flow, /quoteVersionId: pendingIssueVersionId[\s\S]*consentConfirmed: true/);
+  assert.doesNotMatch(flow, /action: "save_draft"/);
   assert.match(flow, /setPendingIssueVersionId\(""\)/);
   assert.match(ui, /result\.quote\?\.editableDraft[\s\S]*version\.id === result\.quote\?\.editableDraft\?\.id/);
 });

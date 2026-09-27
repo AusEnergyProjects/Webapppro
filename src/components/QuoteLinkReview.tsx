@@ -9,6 +9,10 @@ import {
 } from "react";
 import { isPayableQuoteDecisionInvoice } from "@/lib/trade-quote-receipt";
 import { canonicalGoogleBusinessProfileUrl } from "@/lib/trade-google-business-profile.mjs";
+import type { QuoteEquipment } from "@/lib/trade-quote-equipment";
+import { selectedQuoteProductDocuments, type QuoteProductDocumentSummary } from "@/lib/trade-quote-product-documents";
+import { QuoteProductDocuments } from "./TradeQuoteProductDocuments";
+import { TradeQuoteEquipmentCards } from "./TradeQuoteEquipmentCards";
 
 type Line = {
   id: string;
@@ -42,6 +46,8 @@ type Question = {
   answeredAt: string;
 };
 type Quote = {
+  equipment?: QuoteEquipment;
+  productDocuments?: QuoteProductDocumentSummary[];
   linkId: string;
   quoteVersionId: string;
   quoteNumber: string;
@@ -687,6 +693,7 @@ export function QuoteLinkReview({ token }: { token: string }) {
             <QuoteLines lines={quote.items} />
           </section>
         )}
+        {quote.equipment && <TradeQuoteEquipmentCards items={quote.equipment.common} title={quote.choices.length ? "Equipment included in every option" : "Selected equipment"} />}
         {groups.map((group) => {
           const choices = quote.choices.filter(
             (choice) => `${choice.kind}:${choice.groupKey}` === group,
@@ -721,6 +728,7 @@ export function QuoteLinkReview({ token }: { token: string }) {
                       </strong>
                     </span>
                     <QuoteLines lines={choice.items} />
+                    <TradeQuoteEquipmentCards items={quote.equipment?.choices.find((group) => group.choiceKey === choice.id)?.items || []} title={`Equipment in ${choice.name}`} />
                   </label>
                 ))}
               </div>
@@ -748,6 +756,7 @@ export function QuoteLinkReview({ token }: { token: string }) {
                     <strong>+ {money(choice.totalCents)}</strong>
                   </span>
                   <QuoteLines lines={choice.items} />
+                  <TradeQuoteEquipmentCards items={quote.equipment?.choices.find((group) => group.choiceKey === choice.id)?.items || []} title={`Equipment in ${choice.name}`} />
                 </label>
               ))}
             </div>
@@ -780,6 +789,8 @@ export function QuoteLinkReview({ token }: { token: string }) {
           <span>Recorded terms</span>
           <h2>Scope, exclusions and completion terms</h2>
           <p>{quote.terms}</p>
+          <QuoteProductDocuments documents={selectedQuoteProductDocuments(quote.productDocuments || [], selected)} choices={quote.choices} />
+          {Boolean(quote.productDocuments?.some((document) => document.choiceKeys.length)) && <p>The proposal PDF includes clearly labelled documents for all offered options. The list above follows your selected options.</p>}
         </section>
         <section className="quote-link-question">
           <span>Need one detail clarified?</span>

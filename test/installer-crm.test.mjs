@@ -392,7 +392,7 @@ test("owner and staff CRM destinations follow the primary navigation and saved a
   assert.doesNotMatch(crm, /crm-more-nav/);
   assert.match(crm, /item === "import" \? "Import data"/);
   assert.match(crm, /if \(item === "jobs"\) \{ setFocusedJobId\(""\); setJobReturnTarget\(\{ kind: "jobs" \}\); \}/);
-  assert.match(crm, /if \(item === "customers"\) \{ setSelectedCustomerId\(""\); setSelectedCustomerDetail\(null\); \}/);
+  assert.match(crm, /if \(item === "customers"\) \{ setSelectedCustomerIdState\(""\); setSelectedCustomerDetail\(null\); \}/);
 });
 
 test("customer detail exposes prominent contact actions and dates every linked job", () => {
@@ -542,7 +542,7 @@ test("My day exposes owner scoped local workload and direct action charts", () =
   assert.match(hub, /onOpenInvoices=\{props\.onOpenInvoices\}/);
   assert.match(crm, /const \[scheduleWeekStart, setScheduleWeekStart\] = useState\(""\)/);
   assert.match(crm, /initialWeekStart=\{scheduleWeekStart\}/);
-  assert.match(dashboard, /onWorkViewChange=\{\(nextView\) => \{\s*if \(workspace === "map" && \(nextView === "jobs" \|\| nextView === "customers"\)\) return;\s*if \(nextView === "pricebook" \|\| nextView === "reports"\) \{ openFinance\(nextView\); return; \}\s*setCommandTarget\(\(current\) => workspace === "map"\s*\? \{ workspace: "work", kind: "crm-view", id: nextView, query: "", nonce: Date\.now\(\) \}\s*: current\?\.kind === "crm-view" && current\.id !== nextView \? null : current\);\s*setActiveWorkView\(nextView\);\s*setWorkspace\("work"\);\s*\}\}/);
+  assert.match(dashboard, /onWorkViewChange=\{\(nextView\) => \{\s*if \(workspace === "map" && \(nextView === "jobs" \|\| nextView === "customers"\)\) return;\s*if \(nextView === "pricebook" \|\| nextView === "reports"\) \{ openFinance\(nextView\); return; \}\s*setWorkspace\("work", \(\) => \{\s*setCommandTarget\(\(current\) => workspace === "map"\s*\? \{ workspace: "work", kind: "crm-view", id: nextView, query: "", nonce: Date\.now\(\) \}\s*: current\?\.kind === "crm-view" && current\.id !== nextView \? null : current\);\s*setActiveWorkView\(nextView\);\s*\}\);\s*\}\}/);
   assert.match(dashboard, /onOpenInvoices=\{\(\) => openFinance\("invoices"\)\}/);
 });
 

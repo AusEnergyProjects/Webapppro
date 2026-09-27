@@ -1,8 +1,10 @@
 /// <reference types="google.maps" />
 
+import type { SolarEquipmentItem } from "./trade-solar-equipment";
+
 export type SolarPanelSize = { widthM: number; lengthM: number };
 export type SolarPanelTilt = { lengthTilt: number; widthTilt: number };
-export type SolarPanelSettings = SolarPanelSize & SolarPanelTilt;
+export type SolarPanelSettings = SolarPanelSize & SolarPanelTilt & { equipment?: SolarEquipmentItem };
 export type SolarPanel = SolarPanelSettings & { id: number; center: google.maps.LatLngLiteral; heading: number };
 export type SolarSelectionMode = "one" | "all" | "choose" | "selection";
 export type SolarLayout = { panels: SolarPanel[]; selectedId: number | null; selectionMode: SolarSelectionMode; selectedIds: number[] };
@@ -32,6 +34,7 @@ export function adjacentSolarPanel(panel: SolarPanel, direction: SolarCopyDirect
   const distance = ((alongLength ? panel.lengthM : panel.widthM) + SOLAR_PANEL_GAP_M) * Math.hypot(axis.x, axis.y);
   const bearing = Math.atan2(axis.x, axis.y) * 180 / Math.PI + (direction === "below" || direction === "left" ? 180 : 0);
   return { widthM: panel.widthM, lengthM: panel.lengthM, lengthTilt: panel.lengthTilt, widthTilt: panel.widthTilt, heading: panel.heading,
+    ...(panel.equipment ? { equipment: { ...panel.equipment } } : {}),
     center: offset(panel.center, distance, solarHeading(panel.heading + bearing)) };
 }
 
@@ -43,7 +46,7 @@ const layoutCentre = (panels: ProjectedPanel[]) => ({
   y: panels.reduce((sum, panel) => sum + panel.y, 0) / panels.length,
 });
 
-/** A temporary, metre-scaled roof concept. Nothing is stored or sent to a server. */
+/** Metre-scaled roof concept. The owning component persists validated snapshots. */
 export function createTradeMapSolarLayout(api: typeof google.maps, map: google.maps.Map, styles: SolarStyles, onChange: (layout: SolarLayout) => void) {
   const entries = new Map<number, Entry>();
   const host = document.createElement("div");
@@ -60,10 +63,11 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
   let editing = false;
   let capturing = false;
   let ready = false;
+  let restoring = false;
   let gesture: { button: HTMLButtonElement; pointerId: number; panels: ProjectedPanel[]; pivot: { x: number; y: number }; start: { x: number; y: number }; rotate: boolean } | null = null;
   let selectionGesture: { pointerId: number; start: { x: number; y: number }; previousIds: number[]; moved: boolean } | null = null;
-  const state = (): SolarLayout => ({ panels: [...entries.values()].map(({ panel }) => ({ ...panel, center: { ...panel.center } })), selectedId, selectionMode, selectedIds: [...selectedIds] });
-  const publish = () => { if (ready) overlay.draw(); onChange(state()); };
+  const state = (): SolarLayout => ({ panels: [...entries.values()].map(({ panel }) => ({ ...panel, center: { ...panel.center }, ...(panel.equipment ? { equipment: { ...panel.equipment } } : {}) })), selectedId, selectionMode, selectedIds: [...selectedIds] });
+  const publish = () => { if (restoring) return; if (ready) overlay.draw(); onChange(state()); };
   const select = (id: number) => { selectedId = id; publish(); };
   const canTransform = (entry?: Entry) => editing && !capturing && selectionMode !== "choose"
     && (!entry || selectionMode === "one" || selectedIds.has(entry.panel.id));
@@ -269,9 +273,11 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
   groupRotate.addEventListener("keydown", (event) => rotationKey(event), { signal: events.signal });
   const mapListeners = [map.addListener("zoom_changed", stopGesture), map.addListener("center_changed", stopGesture)];
 
-  function addPanel(data: Omit<SolarPanel, "id">) {
+  function addPanel(data: Omit<SolarPanel, "id">, restoredId?: number) {
+    if (entries.size >= 500) return;
     if (!validSolarPanelSize(data) || !validSolarPanelTilt(data) || !Number.isFinite(data.heading)) return;
-    const panel: SolarPanel = { ...data, center: { ...data.center }, id: nextId++ };
+    const panel: SolarPanel = { ...data, center: { ...data.center }, ...(data.equipment ? { equipment: { ...data.equipment } } : {}), id: restoredId ?? nextId++ };
+    nextId = Math.max(nextId, panel.id + 1);
     const element = document.createElement("div");
     element.className = styles.panel;
     element.dataset.solarPanelId = String(panel.id);
@@ -329,7 +335,30 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
       if (selectionMode !== "one" || capturing) return;
       stopGesture();
       const selected = selectedId === null ? null : entries.get(selectedId);
-      if (selected && validSolarPanelSize(values) && validSolarPanelTilt(values) && Number.isFinite(values.heading)) { Object.assign(selected.panel, values, { heading: solarHeading(values.heading) }); publish(); }
+      if (selected && validSolarPanelSize(values) && validSolarPanelTilt(values) && Number.isFinite(values.heading)) {
+        if (!values.equipment && (selected.panel.widthM !== values.widthM || selected.panel.lengthM !== values.lengthM)) delete selected.panel.equipment;
+        Object.assign(selected.panel, values, { heading: solarHeading(values.heading) }); publish();
+      }
+    },
+    applyEquipment: (equipment: SolarEquipmentItem) => {
+      if (capturing || equipment.kind !== "panel" || equipment.widthM === undefined || equipment.lengthM === undefined) return;
+      stopGesture();
+      for (const { panel } of entries.values()) {
+        if (selectionMode === "one" ? panel.id === selectedId : selectedIds.has(panel.id)) {
+          Object.assign(panel, { widthM: equipment.widthM, lengthM: equipment.lengthM, equipment: { ...equipment } });
+        }
+      }
+      publish();
+    },
+    restore: (panels: readonly SolarPanel[]) => {
+      if (capturing) return;
+      if (panels.length > 500 || new Set(panels.map((panel) => panel.id)).size !== panels.length || panels.some((panel) =>
+        !Number.isSafeInteger(panel.id) || panel.id < 1 || !validSolarPanelSize(panel) || !validSolarPanelTilt(panel) || !Number.isFinite(panel.heading)
+        || !Number.isFinite(panel.center.lat) || Math.abs(panel.center.lat) > 90 || !Number.isFinite(panel.center.lng) || Math.abs(panel.center.lng) > 180)) throw new Error("This saved panel layout is not valid.");
+      stopGesture(); restoring = true;
+      entries.forEach(({ element }) => element.remove()); entries.clear(); selectedIds.clear(); selectedId = null; selectionMode = "one"; nextId = 1;
+      try { for (const { id, ...panel } of panels) addPanel(panel, id); } finally { restoring = false; }
+      selectedId = null; publish();
     },
     removeSelected,
     setSelectionMode: (value: SolarSelectionMode) => {

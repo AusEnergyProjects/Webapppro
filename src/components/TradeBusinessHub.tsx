@@ -131,6 +131,7 @@ export function TradeBusinessHub(props: {
   fullAccess: boolean;
   teamAccess: boolean;
   mapWorkspace?: boolean;
+  onRegisterMapSave?: (save: (() => Promise<unknown>) | null) => void;
   navigationTarget?: TLinkCommandTarget | null;
   onOpenSchedule?: (weekStart?: string) => void;
   onWorkViewChange?: (view: string) => void;
@@ -142,7 +143,7 @@ export function TradeBusinessHub(props: {
     return <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>Complete business verification to open CRM, jobs, scheduling, team, forms and purchasing. No payment details are required.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>;
   }
   if (props.partnerType === "installer" && props.fullAccess) {
-    return <InstallerCrmWorkspace user={props.user} teamAccess={props.teamAccess} mapWorkspace={props.mapWorkspace} navigationTarget={props.navigationTarget} onOpenSchedule={props.onOpenSchedule} onViewChange={props.onWorkViewChange} onOpenInvoices={props.onOpenInvoices} onOpenFinance={props.onOpenFinance} onCloseJobNavigation={props.onCloseJobNavigation} />;
+    return <InstallerCrmWorkspace user={props.user} teamAccess={props.teamAccess} mapWorkspace={props.mapWorkspace} onRegisterMapSave={props.onRegisterMapSave} navigationTarget={props.navigationTarget} onOpenSchedule={props.onOpenSchedule} onViewChange={props.onWorkViewChange} onOpenInvoices={props.onOpenInvoices} onOpenFinance={props.onOpenFinance} onCloseJobNavigation={props.onCloseJobNavigation} />;
   }
   return <BusinessHubFoundation {...props} />;
 }

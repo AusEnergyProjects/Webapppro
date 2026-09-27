@@ -30,6 +30,7 @@ import { TradeMapTools } from "./TradeMapTools";
 import dynamic from "next/dynamic";
 import type { MapQuoteMeasurement } from "@/lib/trade-map-quote";
 import type { MapQuoteAccess } from "./TradeMapQuoteDialog";
+import type { SolarDesign } from "@/lib/trade-solar-design";
 const TradeMapQuoteDialog = dynamic(() => import("./TradeMapQuoteDialog").then((module) => module.TradeMapQuoteDialog));
 
 type Props = {
@@ -39,6 +40,7 @@ type Props = {
   total: number;
   onOpenRecord: (record: TradeMapRecord) => void;
   quoteAccess?: MapQuoteAccess;
+  onRegisterMapSave?: (save: (() => Promise<unknown>) | null) => void;
 };
 type Runtime = {
   ownerUid: string;
@@ -102,8 +104,9 @@ const geocodeMessages = {
   unavailable: "Address lookup is temporarily unavailable. The remaining addresses have not been checked.",
 };
 
-export function TradeRecordMap({ user, records, loading = false, total, onOpenRecord, quoteAccess }: Props) {
+export function TradeRecordMap({ user, records, loading = false, total, onOpenRecord, quoteAccess, onRegisterMapSave }: Props) {
   const [quoteMeasurement, setQuoteMeasurement] = useState<MapQuoteMeasurement | null>(null);
+  const [linkedDesign, setLinkedDesign] = useState<SolarDesign | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const selectionRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef(new Map<string, MarkerEntry>());
@@ -339,8 +342,10 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
         </button>
       </header>
 
-      {runtime && mapState === "ready" && <TradeMapTools api={runtime.api} map={runtime.map} onExplore={exploreMap} onMeasuring={setMeasuring} onQuote={quoteAccess ? setQuoteMeasurement : undefined} />}
-      {quoteAccess && quoteMeasurement && <TradeMapQuoteDialog key={user.uid} user={user} measurement={quoteMeasurement} access={quoteAccess} onClose={() => setQuoteMeasurement(null)} />}
+      {runtime && mapState === "ready" && <TradeMapTools key={user.uid} user={user} onRegisterMapSave={onRegisterMapSave} linkedDesign={linkedDesign} context={selectedRecords.length === 1 ? { title: selectedRecords[0].address || selectedRecords[0].title,
+        customerId: selectedRecords[0].kind === "customer" ? selectedRecords[0].id : "", workOrderId: selectedRecords[0].kind === "job" ? selectedRecords[0].id : "" } : undefined}
+        api={runtime.api} map={runtime.map} onExplore={exploreMap} onMeasuring={setMeasuring} onQuote={quoteAccess ? setQuoteMeasurement : undefined} />}
+      {quoteAccess && quoteMeasurement && <TradeMapQuoteDialog key={user.uid} user={user} measurement={quoteMeasurement} access={quoteAccess} onDesignLinked={setLinkedDesign} onClose={() => setQuoteMeasurement(null)} />}
 
       <div className={styles.status} role="status" aria-live="polite">
         <span><i className={styles.dot} aria-hidden="true" />{locatedCount} mapped{pins.length ? ` at ${pins.length} ${pins.length === 1 ? "location" : "locations"}` : ""}</span>
