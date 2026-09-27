@@ -1,20 +1,37 @@
 /// <reference types="google.maps" />
 
 export type SolarPanelSize = { widthM: number; lengthM: number };
-export type SolarPanel = SolarPanelSize & { id: number; center: google.maps.LatLngLiteral; heading: number };
+export type SolarPanelTilt = { lengthTilt: number; widthTilt: number };
+export type SolarPanelSettings = SolarPanelSize & SolarPanelTilt;
+export type SolarPanel = SolarPanelSettings & { id: number; center: google.maps.LatLngLiteral; heading: number };
 export type SolarLayout = { panels: SolarPanel[]; selectedId: number | null };
 export type SolarCopyDirection = "above" | "right" | "below" | "left";
 export const DEFAULT_SOLAR_PANEL_SIZE: SolarPanelSize = { widthM: 1.13, lengthM: 1.72 };
+// An editable roof-pitch assumption, not a measurement of the roof below the map.
+export const DEFAULT_SOLAR_PANEL_TILT: SolarPanelTilt = { lengthTilt: 22.5, widthTilt: 0 };
 export const SOLAR_PANEL_GAP_M = 0.02;
 export const validSolarPanelSize = (size: SolarPanelSize) => [size.widthM, size.lengthM].every((value) => Number.isFinite(value) && value >= 0.2 && value <= 4);
+export const validSolarPanelTilt = (tilt: SolarPanelTilt) => [tilt.lengthTilt, tilt.widthTilt].every((value) => Number.isFinite(value) && value >= 0 && value <= 85);
 export const solarHeading = (value: number) => ((value % 360) + 360) % 360;
+
+/** Orthographic projection: pitch along the length, then roll along the width.
+ * Both rotations preserve the physical rectangle. Combined tilts produce a
+ * parallelogram overhead; rendering and copy spacing share these same axes.
+ * Coordinates are east/north before the panel's heading is applied.
+ */
+export function solarPanelAxes(tilt: SolarPanelTilt) {
+  const length = tilt.lengthTilt * Math.PI / 180, width = tilt.widthTilt * Math.PI / 180;
+  return { width: { x: Math.cos(width), y: 0 }, length: { x: Math.sin(length) * Math.sin(width), y: Math.cos(length) } };
+}
 
 export function adjacentSolarPanel(panel: SolarPanel, direction: SolarCopyDirection,
   offset: (from: google.maps.LatLngLiteral, distance: number, heading: number) => google.maps.LatLngLiteral): Omit<SolarPanel, "id"> {
-  const bearings = { above: 0, right: 90, below: 180, left: 270 };
-  const distance = (direction === "above" || direction === "below" ? panel.lengthM : panel.widthM) + SOLAR_PANEL_GAP_M;
-  return { widthM: panel.widthM, lengthM: panel.lengthM, heading: panel.heading,
-    center: offset(panel.center, distance, solarHeading(panel.heading + bearings[direction])) };
+  const alongLength = direction === "above" || direction === "below";
+  const axes = solarPanelAxes(panel), axis = alongLength ? axes.length : axes.width;
+  const distance = ((alongLength ? panel.lengthM : panel.widthM) + SOLAR_PANEL_GAP_M) * Math.hypot(axis.x, axis.y);
+  const bearing = Math.atan2(axis.x, axis.y) * 180 / Math.PI + (direction === "below" || direction === "left" ? 180 : 0);
+  return { widthM: panel.widthM, lengthM: panel.lengthM, lengthTilt: panel.lengthTilt, widthTilt: panel.widthTilt, heading: panel.heading,
+    center: offset(panel.center, distance, solarHeading(panel.heading + bearing)) };
 }
 
 type SolarStyles = { panel: string; face: string; controls: string; ring: string; rotate: string; copy: string };
@@ -55,13 +72,16 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
       element.style.width = `${width}px`;
       element.style.height = `${height}px`;
       element.style.transform = `translate(-50%, -50%) rotate(${panel.heading}deg)`;
+      const axes = solarPanelAxes(panel);
+      face.style.transform = `matrix(${axes.width.x}, 0, ${-axes.length.x}, ${axes.length.y}, 0, 0)`;
       element.style.zIndex = panel.id === selectedId ? "2" : "1";
       element.style.pointerEvents = editing && !capturing ? "auto" : "none";
       element.dataset.selected = String(panel.id === selectedId && editing && !capturing);
       face.tabIndex = editing && !capturing ? 0 : -1;
       face.setAttribute("aria-pressed", String(panel.id === selectedId));
       controls.hidden = panel.id !== selectedId || !editing || capturing;
-      controls.style.width = controls.style.height = `${Math.max(100, Math.hypot(width, height) + 52)}px`;
+      const ringSize = Math.max(100, Math.hypot(width * axes.width.x + height * axes.length.x, height * axes.length.y) + 52);
+      controls.style.width = controls.style.height = `${ringSize}px`;
     }
   };
   overlay.setMap(map);
@@ -104,7 +124,7 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
   }
 
   function addPanel(data: Omit<SolarPanel, "id">) {
-    if (!validSolarPanelSize(data) || !Number.isFinite(data.heading)) return;
+    if (!validSolarPanelSize(data) || !validSolarPanelTilt(data) || !Number.isFinite(data.heading)) return;
     const panel: SolarPanel = { ...data, center: { ...data.center }, id: nextId++ };
     const element = document.createElement("div");
     element.className = styles.panel;
@@ -155,10 +175,10 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
     entries.get(selectedId)?.element.remove(); entries.delete(selectedId); selectedId = null; publish();
   }
   return {
-    add: (size: SolarPanelSize) => { const center = map.getCenter(); if (center) addPanel({ ...size, center: center.toJSON(), heading: 0 }); },
-    updateSelected: (values: SolarPanelSize & { heading: number }) => {
+    add: (settings: SolarPanelSettings) => { const center = map.getCenter(); if (center) addPanel({ ...settings, center: center.toJSON(), heading: 0 }); },
+    updateSelected: (values: SolarPanelSettings & { heading: number }) => {
       const selected = selectedId === null ? null : entries.get(selectedId);
-      if (selected && validSolarPanelSize(values) && Number.isFinite(values.heading)) { Object.assign(selected.panel, values, { heading: solarHeading(values.heading) }); publish(); }
+      if (selected && validSolarPanelSize(values) && validSolarPanelTilt(values) && Number.isFinite(values.heading)) { Object.assign(selected.panel, values, { heading: solarHeading(values.heading) }); publish(); }
     },
     removeSelected,
     clear: () => { entries.forEach(({ element }) => element.remove()); entries.clear(); selectedId = null; publish(); },
