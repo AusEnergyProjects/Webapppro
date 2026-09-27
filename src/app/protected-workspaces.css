@@ -2349,6 +2349,7 @@
 .crm-quick-invoice-panel dl .total { border-top: 1px solid var(--trade-line, #b8cbc4); font-size: 1rem; font-weight: 700; margin-top: 4px; padding-top: 7px; }
 .crm-quick-invoice-panel { background: var(--trade-surface-soft, #f5fbf8); border: 1px solid var(--trade-line, #b9dacd); border-radius: 12px; color: var(--trade-ink, #16372f); display: grid; gap: 16px; margin-bottom: 16px; min-width: 0; padding: 20px; }
 .crm-invoice-field { display: grid; gap: 7px; min-width: 0; }
+.trade-portal-shell :is(.trade-quote-panel, .crm-quick-invoice-panel) button { font-family: inherit; font-size: 14px; font-weight: 600; line-height: 1.3; }
 .crm-invoice-field > span { color: var(--trade-ink, #16372f); font-size: .8rem; font-weight: 700; }
 .crm-quick-invoice-panel :is(input:not([type="checkbox"]), select, textarea, button) { min-height: 44px; font-size: .85rem; }
 .crm-quick-invoice-panel button:not(.btn) { background: var(--trade-surface, #fff); border: 1px solid var(--trade-line, #b9dacd); border-radius: 8px; color: var(--trade-ink, #16372f); cursor: pointer; padding: 9px 12px; }
