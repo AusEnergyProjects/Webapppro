@@ -104,7 +104,7 @@ test("saved direct-customer jobs can create and recover a quick invoice without 
   assert.match(invoiceRoute, /INSERT INTO trade_crm_quick_invoices/);
   assert.match(invoiceRoute, /INSERT INTO trade_crm_quick_invoice_revisions/);
   assert.match(invoiceRoute, /quick_invoice_created/);
-  assert.match(invoicePanel, /Create the invoice from this job/);
+  assert.match(invoicePanel, /Prepare invoice/);
   assert.match(invoicePanel, /action: "create_draft"/);
   assert.match(invoicePanel, /Create invoice draft/);
   assert.match(invoiceRoute, /retry_delivery/);

@@ -6,6 +6,7 @@
 .editor :global(.trade-quote-line.headings) { display: none; }
 .editor :global(.trade-quote-order-controls), .editor :global(.trade-quote-price-book-field), .editor :global(.trade-quote-description) { grid-column: 1 / -1; }
 .editor :global(.trade-quote-line) label { display: grid; align-content: start; gap: 5px; min-width: 0; }
+.editor :global(.trade-quote-line) label > span { display: block; color: var(--trade-ink, #16372f); font-size: .8rem; font-weight: 700; }
 .editor :global(.trade-quote-line) :is(input, select), .editor :global(.trade-quote-settings) :is(input:not([type="checkbox"]), select, textarea) { box-sizing: border-box; max-width: 100%; width: 100%; }
 .editor :global(.trade-quote-choice-grid), .editor :global(.trade-quote-settings) { grid-template-columns: minmax(0, 1fr); }
 .editor :global(.trade-quote-overall-discount), .editor :global(.trade-quote-final-percent) { grid-template-columns: minmax(0, 1fr); min-width: 0; }
@@ -13,7 +14,7 @@
 .editor :global(.trade-quote-totals) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .editor :global(.trade-quote-internal) { flex-wrap: wrap; }
 .editor :global(.trade-quote-internal) dl { flex-wrap: wrap; }
-.preview { --preview-ink: #103b38; --preview-accent: #087d69; --preview-soft: #edf6f2; --preview-line: #d6e4df; color: #243b36; min-width: 0; position: sticky; top: 16px; overflow-wrap: anywhere; }
+.preview { --preview-ink: #103b38; --preview-accent: #087d69; --preview-soft: #edf6f2; --preview-line: #d6e4df; color: var(--trade-ink, #243b36); min-width: 0; position: sticky; top: 16px; overflow-wrap: anywhere; }
 .preview[data-theme="ocean_mint"] { --preview-ink: #063b50; --preview-accent: #168f7d; }
 .preview[data-theme="cobalt_aqua"] { --preview-ink: #112d7a; --preview-accent: #148ea8; }
 .preview[data-theme="violet_sunset"] { --preview-ink: #48207a; --preview-accent: #c55272; }
@@ -21,9 +22,10 @@
 .preview[data-theme="charcoal_silver"] { --preview-ink: #171a1f; --preview-accent: #69737d; }
 .previewHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 12px; color: var(--trade-ink, #153e35); }
 .previewHeading span { font-size: .72rem; }
-.previewHeading h5 { font-size: 1rem; margin: 3px 0 0; }
-.draft { background: var(--preview-soft); border: 1px solid var(--preview-line); border-radius: 20px; color: var(--preview-accent); font-weight: 700; padding: 5px 10px; }
-.sheet { background: #fff; border: 1px solid var(--preview-line); border-radius: 10px; box-shadow: 0 8px 30px #153b3612; overflow: hidden; }
+.previewHeading h5 { color: var(--trade-ink, #153e35); font-size: 1rem; margin: 3px 0 0; }
+.draft { background: var(--preview-soft); border: 1px solid var(--preview-line); border-radius: 20px; color: var(--preview-ink); font-weight: 700; padding: 5px 10px; }
+/* The document keeps its paper palette when portal heading rules use night tokens. */
+.sheet { --trade-ink: var(--preview-ink); --trade-muted: #596e65; --color-aea-ink: var(--preview-ink); --color-aea-muted: #596e65; color: #243b36; color-scheme: light; background: #fff; border: 1px solid var(--preview-line); border-radius: 10px; box-shadow: 0 8px 30px #153b3612; overflow: hidden; }
 .brand { display: flex; align-items: center; gap: 16px; background: #fff; border-bottom: 3px solid var(--preview-accent); color: var(--preview-ink); padding: 26px 22px; }
 .brand > div:last-child { display: grid; gap: 5px; }
 .brand small { font-size: .65rem; opacity: .82; }
@@ -53,7 +55,7 @@
 .incomplete { display: grid; gap: 5px; border: 1px dashed #bc9b55; background: #fff9ec; border-radius: 7px; color: #705522; margin-top: 20px; padding: 13px; font-size: .75rem; line-height: 1.4; }
 .terms { border-top: 1px solid var(--preview-line); margin-top: 25px; padding-top: 17px; }
 .terms p, .placeholder { color: #667970; font-size: .68rem; line-height: 1.5; white-space: pre-wrap; margin: 0; }
-.footer { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--preview-line); color: #718179; font-size: .6rem; margin-top: 24px; padding-top: 12px; }
+.footer { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--preview-line); color: #596e65; font-size: .6rem; margin-top: 24px; padding-top: 12px; }
 .previewNote { color: var(--trade-muted, #61766b); font-size: .72rem; line-height: 1.5; margin: 10px 0 0; }
 .preview[data-border="square"] .sheet { border-radius: 0; }
 .preview[data-border="rounded"] .sheet { border-radius: 20px; }
