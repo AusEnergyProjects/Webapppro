@@ -2,7 +2,7 @@
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { geocodeTradeMapAddress } from "@/lib/google-maps-client";
-import { createTradeMapMeasurement, EMPTY_MAP_MEASUREMENT, type TradeMapMeasureMode } from "@/lib/trade-map-measurement";
+import { createTradeMapMeasurement, EMPTY_MAP_MEASUREMENT, formatMapDistance, type TradeMapMeasureMode } from "@/lib/trade-map-measurement";
 import styles from "./TradeMapTools.module.css";
 
 type Props = { api: typeof google.maps; map: google.maps.Map; onExplore: () => void; onMeasuring: (active: boolean) => void };
@@ -46,7 +46,10 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring }: Props) {
     onMeasuring(Boolean(mode));
     if (addressPin.current) addressPin.current.map = mode ? null : map;
     if (!mode) return;
-    const controller = createTradeMapMeasurement(api, map, mode, setMeasurement);
+    const previewLabel = document.createElement("div");
+    previewLabel.className = styles.distancePreview;
+    previewLabel.setAttribute("aria-hidden", "true");
+    const controller = createTradeMapMeasurement(api, map, mode, setMeasurement, previewLabel);
     drawing.current = controller;
     return () => { controller.dispose(); drawing.current = null; };
   }, [api, map, mode, attempt, onMeasuring]);
@@ -110,11 +113,11 @@ export function TradeMapTools({ api, map, onExplore, onMeasuring }: Props) {
           <button type="button" aria-pressed={mode === "area"} onClick={() => startMeasure("area")}>Area m²</button>
           <button type="button" aria-pressed={mode === "distance"} onClick={() => startMeasure("distance")}>Distance m</button>
         </div>
-        <output className={styles.result} aria-live="polite" aria-label="Measurement result">
-          {measurement.crossed ? "Outline crosses itself" : enoughPoints ? <><strong>{number(mode === "area" ? measurement.areaM2 : measurement.lengthM)} {mode === "area" ? "m²" : "m"}</strong>{mode === "area" && <span>{number(measurement.lengthM)} m perimeter</span>}</> : <span>{measurement.points} {measurement.points === 1 ? "point" : "points"} placed</span>}
+        <output className={styles.result} aria-live={measurement.previewLengthM !== null ? "off" : "polite"} aria-label="Measurement result">
+          {measurement.crossed ? "Outline crosses itself" : enoughPoints || measurement.previewLengthM !== null ? <><strong>{mode === "area" ? `${number(measurement.areaM2)} m²` : formatMapDistance(measurement.previewLengthM ?? measurement.lengthM)}</strong>{mode === "area" && <span>{number(measurement.lengthM)} m perimeter</span>}{measurement.previewLengthM !== null && <span>Live distance</span>}</> : <span>{measurement.points} {measurement.points === 1 ? "point" : "points"} placed</span>}
         </output>
       </div>
-      <p>{measurement.crossed ? "Move a corner or undo the last point so the edges do not cross." : measurement.finished ? "Drag the corners or edge handles to refine your measurement." : mode === "area" ? "Click or tap around the edge, then Finish. Use at least 3 corners." : "Click or tap along the distance, then Finish. Use at least 2 points."}</p>
+      <p>{measurement.crossed ? "Move a corner or undo the last point so the edges do not cross." : measurement.finished ? "Drag the corners or edge handles to refine your measurement." : mode === "area" ? "Click or tap around the edge, then Finish. Use at least 3 corners." : "Click a start point, then move the pointer to see the distance. Click or tap to place each point, then Finish. The total follows your path."}</p>
       <div className={styles.actions}>
         {!measurement.finished && <>
           <button type="button" onClick={() => drawing.current?.addCentre()}>Add centre point</button>
