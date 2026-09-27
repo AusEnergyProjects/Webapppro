@@ -99,6 +99,23 @@ test("basic website analytics is cookieless, bounded and can be disabled without
   assert.equal(analyticsConsent.match(/"page_view"/g)?.length, 1);
 });
 
+test("business mailbox privacy distinguishes send access and retained records from disconnection", () => {
+  assert.match(privacy, /Business email connections/);
+  assert.match(privacy, /Google or Microsoft mailbox/);
+  assert.match(privacy, /authorised team members[\s\S]*within their existing permissions/);
+  assert.match(privacy, /account identifier and email address/);
+  assert.match(privacy, /encrypts stored access and refresh tokens/);
+  assert.match(privacy, /does not read inbox messages or import replies/);
+  assert.match(privacy, /recipient, subject, message and attachments/);
+  assert.match(privacy, /sender, recipient, subject, acting user, time and provider result/);
+  assert.match(privacy, /clears the stored tokens and disables further use of the connection/);
+  assert.match(privacy, /does not delete sent mail, customer documents or retained submission records/);
+  assert.match(privacy, /revoked separately through Google or Microsoft/);
+  assert.match(privacy, /request review or deletion of retained information/);
+  assert.match(privacy, /https:\/\/developers\.google\.com\/terms\/api-services-user-data-policy/);
+  assert.match(privacy, /Limited Use requirements/);
+});
+
 test("customer evidence and shared navigation resolve to the public privacy route", () => {
   assert.match(upload, /href="\/privacy"/);
   assert.match(siteFooter, /href="\/privacy"[^>]*>Privacy and analytics/);

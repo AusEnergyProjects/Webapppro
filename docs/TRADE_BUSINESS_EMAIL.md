@@ -2,7 +2,13 @@
 
 Implementation branch: `codex/trade-outgoing-email`, based on `455c98938962024d319fab128313175bdb1a18c5`.
 
-This feature is implemented locally. Production provider registration, consent approval, deployment and real mailbox acceptance checks are still outstanding. Do not enable a provider merely because its buttons or mocked tests work.
+This feature is implemented locally. Google provider registration has started; consent approval, deployment and real mailbox acceptance checks are still outstanding. Microsoft registration is still outstanding. Do not enable a provider merely because its buttons or mocked tests work.
+
+### Google activation progress, 27 September 2026
+
+The owner approved creating the dedicated Google email client and configuring send-only permission. The Gmail API is enabled in `australian-energy-assessments`. The `TLink Business Email` Web application client has the exact production callback below. Its dedicated client ID and secret are saved in Sites runtime revision 139, with the secret protected and `GOOGLE_EMAIL_ENABLED=false`. The existing encryption key and existing OAuth client were preserved. The downloaded credential file was removed after secure storage. The consent configuration now lists only `openid`, email identity and `gmail.send`, with a sending justification, the public TLink homepage, privacy URL and existing support address. Branding verification must precede sensitive-scope verification; neither has been submitted or approved.
+
+This is configuration preparation, not an activated connection or live release. Google branding and sensitive-scope verification, the public privacy disclosure, the application release and real mailbox acceptance checks must all be completed before broad onboarding.
 
 ## Business setup
 
@@ -29,7 +35,9 @@ Use dedicated email OAuth clients. Calendar client credentials and permissions a
 | Google | `https://ausenergyassessments.com/api/trade-email/callback/google` | `GOOGLE_EMAIL_CLIENT_ID`, `GOOGLE_EMAIL_CLIENT_SECRET`, `GOOGLE_EMAIL_ENABLED=true` |
 | Microsoft | `https://ausenergyassessments.com/api/trade-email/callback/microsoft` | `MICROSOFT_EMAIL_CLIENT_ID`, `MICROSOFT_EMAIL_CLIENT_SECRET`, `MICROSOFT_EMAIL_ENABLED=true` |
 
-Both use the existing `CRM_INTEGRATION_ENCRYPTION_KEY`. Preserve that key: replacing it without migrating encrypted records breaks existing integrations. A provider stays unavailable unless its enable switch, both credentials and the encryption key are present.
+Both use the existing `CRM_INTEGRATION_ENCRYPTION_KEY`. Preserve that key: replacing it without migrating encrypted records breaks existing integrations. Public provider availability requires its enable switch, both credentials and the encryption key.
+
+For Google's required pre-approval demonstration only, `GOOGLE_EMAIL_TEST_OWNER_UIDS` can contain explicitly authorised test business owner UIDs, separated by commas. Exact owner matching permits those businesses while `GOOGLE_EMAIL_ENABLED=false`; an absent or empty list permits nobody. This enables real sending for that business's already authorised team, not just the test button, so use only an approved test business. It never bypasses account eligibility, customer access or team permissions. Remove the list when testing ends. No test owner is configured as part of the registration preparation above.
 
 For Google:
 
@@ -47,7 +55,7 @@ For Microsoft:
 4. Install the client ID and secret as protected runtime secrets. Track the secret's expiry and rotate it before expiry.
 5. Enable after the delegated primary-mailbox flow passes real acceptance checks. Do not advertise delegated shared-mailbox send-as support.
 
-Apply `drizzle/0195_trade_outgoing_email.sql` through the normal Sites migration/package workflow before the new routes run. Release only from the reviewed revision, with the protected runtime values and approved provider configuration. This task has not applied any remote migration or runtime change.
+Apply `drizzle/0195_trade_outgoing_email.sql` through the normal Sites migration/package workflow before the new routes run. Release only from the reviewed revision, with the protected runtime values and approved provider configuration. No remote migration or deployment has been applied. Saved runtime changes take effect only with a deployment.
 
 Provider references: [Google Gmail scopes](https://developers.google.com/workspace/gmail/api/auth/scopes), [Google web-server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [Google refresh-token expiration](https://developers.google.com/identity/protocols/oauth2#expiration), [Microsoft authorisation code flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow), [Microsoft sendMail](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0).
 

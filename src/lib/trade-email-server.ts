@@ -7,7 +7,7 @@ import { buildEmailAuthorizationUrl, exchangeEmailCode, getEmailIdentity, refres
 
 type EmailEnvironment = {
   CRM_INTEGRATION_ENCRYPTION_KEY?: string;
-  GOOGLE_EMAIL_CLIENT_ID?: string; GOOGLE_EMAIL_CLIENT_SECRET?: string; GOOGLE_EMAIL_ENABLED?: string;
+  GOOGLE_EMAIL_CLIENT_ID?: string; GOOGLE_EMAIL_CLIENT_SECRET?: string; GOOGLE_EMAIL_ENABLED?: string; GOOGLE_EMAIL_TEST_OWNER_UIDS?: string;
   MICROSOFT_EMAIL_CLIENT_ID?: string; MICROSOFT_EMAIL_CLIENT_SECRET?: string; MICROSOFT_EMAIL_ENABLED?: string;
 };
 type Connection = {
@@ -28,10 +28,12 @@ function settings(provider: TradeEmailProvider) {
     ? { clientId: values.GOOGLE_EMAIL_CLIENT_ID || '', clientSecret: values.GOOGLE_EMAIL_CLIENT_SECRET || '', enabled: values.GOOGLE_EMAIL_ENABLED === 'true' }
     : { clientId: values.MICROSOFT_EMAIL_CLIENT_ID || '', clientSecret: values.MICROSOFT_EMAIL_CLIENT_SECRET || '', enabled: values.MICROSOFT_EMAIL_ENABLED === 'true' };
 }
-function configured(provider: TradeEmailProvider) {
+function configured(provider: TradeEmailProvider, ownerUid: string) {
   const value = settings(provider);
   const values: EmailEnvironment = env;
-  return Boolean(value.enabled && value.clientId && value.clientSecret && values.CRM_INTEGRATION_ENCRYPTION_KEY);
+  const testOwner = provider === 'google' && Boolean(ownerUid)
+    && (values.GOOGLE_EMAIL_TEST_OWNER_UIDS || '').split(',').some(uid => uid.trim() !== '' && uid.trim() === ownerUid);
+  return Boolean(ownerUid && (value.enabled || testOwner) && value.clientId && value.clientSecret && values.CRM_INTEGRATION_ENCRYPTION_KEY);
 }
 async function connection(ownerUid: string, db: D1Database) {
   return db.prepare('SELECT * FROM trade_email_connections WHERE owner_uid = ?').bind(ownerUid).first<Connection>();
@@ -39,20 +41,20 @@ async function connection(ownerUid: string, db: D1Database) {
 export async function tradeEmailSettings(ownerUid: string, db: D1Database = getD1()) {
   const row = await connection(ownerUid, db);
   return {
-    providers: (['google', 'microsoft'] as const).map(id => ({ id, label: id === 'google' ? 'Google' : 'Microsoft', available: configured(id) })),
+    providers: (['google', 'microsoft'] as const).map(id => ({ id, label: id === 'google' ? 'Google' : 'Microsoft', available: configured(id, ownerUid) })),
     connection: row ? { provider: row.provider, email: row.sender_email, displayName: row.display_name, status: row.status,
       lastTestAt: row.last_test_at, lastError: row.last_error } : null,
   };
 }
 export async function tradeCustomerEmailReadiness(ownerUid: string, db: D1Database = getD1()) {
   const row = await connection(ownerUid, db);
-  if (row) return { configured: row.status === 'connected' && configured(row.provider), from: row.sender_email, provider: row.provider };
+  if (row) return { configured: row.status === 'connected' && configured(row.provider, ownerUid), from: row.sender_email, provider: row.provider };
   const legacy = serviceReminderProviderConfiguration().email;
   return { configured: legacy.configured, from: legacy.from, provider: legacy.provider };
 }
 
 export async function beginTradeEmailConnection(ownerUid: string, provider: TradeEmailProvider, origin: string, db: D1Database = getD1()) {
-  if (!configured(provider)) throw new Error('EMAIL_SETUP_UNAVAILABLE');
+  if (!configured(provider, ownerUid)) throw new Error('EMAIL_SETUP_UNAVAILABLE');
   const url = new URL(origin);
   if (url.origin !== origin || (url.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(url.hostname))) throw new Error('EMAIL_ORIGIN_INVALID');
   const state = newIntegrationState();
@@ -68,11 +70,11 @@ export async function beginTradeEmailConnection(ownerUid: string, provider: Trad
 }
 
 export async function completeTradeEmailConnection(provider: TradeEmailProvider, state: string, browser: string, code: string, redirectUri: string, db: D1Database = getD1()) {
-  if (!state || !browser || !code || !configured(provider)) throw new Error('EMAIL_CONNECTION_INVALID');
+  if (!state || !browser || !code) throw new Error('EMAIL_CONNECTION_INVALID');
   const row = await db.prepare(`UPDATE trade_email_oauth_states SET consumed_at = ? WHERE provider = ? AND state_hash = ?
     AND browser_hash = ? AND redirect_uri = ? AND consumed_at = '' AND expires_at > ? RETURNING owner_uid, provider, encrypted_verifier, redirect_uri`)
     .bind(new Date().toISOString(), provider, await integrationStateHash(state), await integrationStateHash(browser), redirectUri, new Date().toISOString()).first<State>();
-  if (!row) throw new Error('EMAIL_CONNECTION_INVALID');
+  if (!row || !configured(provider, row.owner_uid)) throw new Error('EMAIL_CONNECTION_INVALID');
   const owner = await db.prepare(`SELECT business_name FROM trade_accounts a WHERE a.firebase_uid = ? AND a.partner_type = 'installer'
     AND ${verifiedTradeAccountPredicate('a')}`).bind(row.owner_uid).first<{ business_name: string }>();
   if (!owner) throw new Error('EMAIL_CONNECTION_INVALID');
@@ -187,7 +189,7 @@ export async function sendTradeCustomerEmail(ownerUid: string, actorUid: string,
     if (previous.provider !== provider || previous.sender_email !== sender) throw new Error('EMAIL_CONNECTION_CHANGED');
   }
   if (!row && options.requireConnection) throw new Error('EMAIL_CONNECTION_REQUIRED');
-  if (row && (row.status !== 'connected' || !configured(row.provider))) throw new Error('EMAIL_RECONNECT_REQUIRED');
+  if (row && (row.status !== 'connected' || !configured(row.provider, ownerUid))) throw new Error('EMAIL_RECONNECT_REQUIRED');
   if (!row && !legacy.configured) throw new Error('EMAIL_SETUP_UNAVAILABLE');
   let credentials: EmailCredentials | null = null;
   if (row) {

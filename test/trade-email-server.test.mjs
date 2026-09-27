@@ -130,6 +130,103 @@ test("Provider availability requires encryption, credentials and explicit enable
   } finally { f.close(); }
 });
 
+test("Google test access requires an exact nonempty owner UID while public enablement remains unchanged", async () => {
+  const f = fixture();
+  try {
+    f.env.GOOGLE_EMAIL_ENABLED = "false";
+    f.env.GOOGLE_EMAIL_TEST_OWNER_UIDS = " , owner , reviewer-owner, ,";
+    const available = async (uid) => (await f.server.tradeEmailSettings(uid, f.db)).providers.find((provider) => provider.id === "google").available;
+    assert.equal(await available("owner"), true);
+    for (const uid of ["", "other", "unknown", "OWNER", "own", "owner-suffix", " owner "]) assert.equal(await available(uid), false, uid);
+    for (const uid of ["", "other", "unknown"]) await assert.rejects(f.begin(uid), /EMAIL_SETUP_UNAVAILABLE/);
+    for (const allowlist of ["", " , , ", "*", "owner-suffix,OWNER"]) {
+      f.env.GOOGLE_EMAIL_TEST_OWNER_UIDS = allowlist;
+      assert.equal(await available("owner"), false);
+    }
+    f.env.GOOGLE_EMAIL_ENABLED = "true";
+    assert.equal(await available("owner"), true);
+    assert.equal(await available("other"), true);
+    assert.equal(await available(""), false);
+  } finally { f.close(); }
+});
+
+test("Google allowlisting gates business settings, connection, readiness and send by owner rather than team actor", async () => {
+  const f = fixture();
+  try {
+    await f.connect("other");
+    f.env.GOOGLE_EMAIL_ENABLED = "false";
+    f.env.GOOGLE_EMAIL_TEST_OWNER_UIDS = "owner";
+    await f.connect("owner");
+    assert.equal((await f.server.tradeCustomerEmailReadiness("owner", f.db)).configured, true);
+    assert.equal((await f.server.tradeCustomerEmailReadiness("other", f.db)).configured, false);
+    await f.send({}, "owner", "staff-not-on-test-list");
+    await assert.rejects(f.send({}, "other", "owner"), /EMAIL_RECONNECT_REQUIRED/);
+    assert.equal(f.calls.send.length, 1);
+    assert.equal(f.calls.legacy.length, 0);
+    f.env.GOOGLE_EMAIL_TEST_OWNER_UIDS = "";
+    assert.equal((await f.server.tradeCustomerEmailReadiness("owner", f.db)).configured, false);
+    await assert.rejects(f.send({ idempotencyKey: "after-test-access-removed" }), /EMAIL_RECONNECT_REQUIRED/);
+    assert.equal(f.calls.send.length, 1);
+  } finally { f.close(); }
+});
+
+test("Google callback rechecks the server-stored owner allowlist before exchanging OAuth credentials", async () => {
+  const f = fixture();
+  try {
+    const otherPending = await f.begin("other");
+    f.env.GOOGLE_EMAIL_ENABLED = "false";
+    f.env.GOOGLE_EMAIL_TEST_OWNER_UIDS = "owner";
+    await assert.rejects(f.complete(otherPending), /EMAIL_CONNECTION_INVALID/);
+    assert.equal(f.calls.exchange.length, 0);
+    assert.equal(f.row("other"), undefined);
+    const ownerPending = await f.begin("owner");
+    f.env.GOOGLE_EMAIL_TEST_OWNER_UIDS = "other";
+    await assert.rejects(f.complete(ownerPending), /EMAIL_CONNECTION_INVALID/);
+    assert.equal(f.calls.exchange.length, 0);
+    assert.equal(f.row(), undefined);
+  } finally { f.close(); }
+});
+
+test("Google test allowlisting cannot replace provider credentials, encryption or verified installer eligibility", async () => {
+  for (const missing of ["GOOGLE_EMAIL_CLIENT_ID", "GOOGLE_EMAIL_CLIENT_SECRET", "CRM_INTEGRATION_ENCRYPTION_KEY"]) {
+    const f = fixture();
+    try {
+      f.env.GOOGLE_EMAIL_ENABLED = "false"; f.env.GOOGLE_EMAIL_TEST_OWNER_UIDS = "owner";
+      delete f.env[missing];
+      assert.equal((await f.server.tradeEmailSettings("owner", f.db)).providers.find((p) => p.id === "google").available, false);
+      await assert.rejects(f.begin(), /EMAIL_SETUP_UNAVAILABLE/);
+    } finally { f.close(); }
+  }
+  const f = fixture();
+  try {
+    f.env.GOOGLE_EMAIL_ENABLED = "false"; f.env.GOOGLE_EMAIL_TEST_OWNER_UIDS = "owner";
+    const pending = await f.begin();
+    f.sqlite.exec("UPDATE trade_accounts SET verified = 0 WHERE firebase_uid = 'owner'");
+    await assert.rejects(f.complete(pending), /EMAIL_CONNECTION_INVALID/);
+    assert.equal(f.calls.exchange.length, 0);
+    f.sqlite.exec("UPDATE trade_accounts SET verified = 1 WHERE firebase_uid = 'owner'");
+    await f.connect();
+    f.sqlite.exec("UPDATE trade_accounts SET verified = 0 WHERE firebase_uid = 'owner'");
+    await assert.rejects(f.send(), /EMAIL_ACCESS_REQUIRED/);
+    assert.equal(f.calls.send.length, 0);
+  } finally { f.close(); }
+});
+
+test("Google test owners do not enable Microsoft or restrict its existing public availability", async () => {
+  const f = fixture();
+  try {
+    f.env.GOOGLE_EMAIL_ENABLED = "false"; f.env.GOOGLE_EMAIL_TEST_OWNER_UIDS = "owner";
+    f.env.MICROSOFT_EMAIL_ENABLED = "false";
+    assert.equal((await f.server.tradeEmailSettings("owner", f.db)).providers.find((p) => p.id === "microsoft").available, false);
+    await assert.rejects(f.begin("owner", "microsoft"), /EMAIL_SETUP_UNAVAILABLE/);
+    f.env.MICROSOFT_EMAIL_ENABLED = "true";
+    assert.equal((await f.server.tradeEmailSettings("other", f.db)).providers.find((p) => p.id === "microsoft").available, true);
+    await f.connect("other", "microsoft");
+    await f.send({}, "other", "other-staff");
+    assert.equal(f.calls.send[0][0], "microsoft");
+  } finally { f.close(); }
+});
+
 test("Callback rejects wrong browser, wrong provider, changed redirect, expiry, replay and unverified owner", async () => {
   const f = fixture();
   try {

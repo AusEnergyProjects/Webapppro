@@ -55,6 +55,11 @@ const sections = [
     body: "A trade account owner chooses whether to connect Google Calendar, Outlook, Xero, MYOB or QuickBooks. The trade workspace sends only the information needed for the chosen action. The trade workspace remains the operational source of truth, and connected providers apply their own privacy terms. The trade workspace does not offer payment-provider connections or initiate customer payments. Account owners can disconnect a connected calendar or accounting provider from the integration workspace.",
   },
   {
+    title: "Business email connections",
+    body: "If a trade account owner connects a Google or Microsoft mailbox, authorised team members can use that address for customer communications within their existing permissions. TLink reads the connected account identifier and email address and encrypts stored access and refresh tokens. The connection sends email; it does not read inbox messages or import replies. The provider receives the recipient, subject, message and attachments to send communications such as lead replies, quotes and invoices. TLink retains connection details and submission records, including sender, recipient, subject, acting user, time and provider result, for audit and duplicate-send protection. Disconnecting in business email settings clears the stored tokens and disables further use of the connection. It does not delete sent mail, customer documents or retained submission records. Provider account access can be revoked separately through Google or Microsoft. Contact us to request review or deletion of retained information.",
+    googleApiData: true,
+  },
+  {
     title: "MYOB connection and financial information",
     body: "MYOB activation is subject to provider approval. When available, each business will authorise its own MYOB company file. The connection is limited to locating or creating the customer for a TLink invoice, creating a service invoice, reading its status and balance, and reading accounts and tax codes for mapping. MYOB information and credentials must not be supplied to AI development tools or used to train AI models. Disconnecting removes the stored connection credentials; it does not delete original invoices or records that need to remain for reconciliation, security or a documented legal purpose. Contact us to request a review or deletion of retained information. Security access records are retained for at least 365 days; other records are reviewed against their purpose rather than kept indefinitely.",
   },
@@ -98,7 +103,7 @@ export default function PrivacyPage() {
       <SiteHeader active="direct-trade-dashboard" />
       <header className="trade-information-hero">
         <div>
-          <span>Effective 22 September 2026</span>
+          <span>Effective 27 September 2026</span>
           <h1>Privacy notice</h1>
           <p>
             This notice explains what Australian Energy Assessments collects,
@@ -130,6 +135,13 @@ export default function PrivacyPage() {
             <article key={section.title}>
               <h2>{section.title}</h2>
               <p>{section.body}</p>
+              {section.googleApiData ? (
+                <p>
+                  TLink follows the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>,
+                  including its Limited Use requirements, when using or transferring
+                  information received from Google APIs.
+                </p>
+              ) : null}
               {section.analytics ? (
                 <>
                   <p>
