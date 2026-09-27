@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
 import ts from "typescript";
 import { rentalReportEmailDraft } from "../src/lib/rental-report-email-template.mjs";
+import { ReminderProviderDeliveryError, reminderProviderFailureOutcome } from "../src/lib/service-reminder-delivery.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -84,7 +85,7 @@ function loadTypescriptModule(path, mocks = {}) {
 
 
 
-function fixture({ failSend=false, largeReport=false, linkStatus="active" }={}) {
+function fixture({ failSend=false, largeReport=false, linkStatus="active", provider="resend", configured=true, indeterminate=false, pdfSize=0 }={}) {
  const database=new DatabaseSync(':memory:');
  database.exec(`CREATE TABLE trade_work_orders(id text,firebase_uid text,partner_type text,record_status text,source_type text);
  CREATE TABLE trade_crm_job_details(work_order_id text,firebase_uid text,crm_customer_id text,customer_source text);
@@ -98,15 +99,16 @@ function fixture({ failSend=false, largeReport=false, linkStatus="active" }={}) 
  INSERT INTO trade_rental_reports VALUES('report','owner','inspection','issued','RMS-123','hash');`);
  const migration = read('../drizzle/0160_trade_rental_inspections.sql');
  database.exec(migration.slice(migration.indexOf('CREATE TABLE `trade_rental_inspection_events`')).replaceAll('--> statement-breakpoint', ''));
- const db=testD1(database);const sent=[];let shouldFail=failSend;
+ const db=testD1(database);const sent=[];const sendOptions=[];let shouldFail=failSend;
  const api=loadTypescriptModule('../src/lib/trade-rental-report-email-server.ts',{
  './rental-report-email-template.mjs':{rentalReportEmailDraft},
  '../../db':{getD1:()=>db},'@/lib/trade-team-server':{assignedJob:async()=>({id:'job'})},
- '@/lib/trade-rental-report-server':{authenticatedRentalReportPdf:async()=>({bytes:largeReport ? new Uint8Array(18 * 1024 * 1024 + 1) : new Uint8Array([37,80,68,70,45]),reportNumber:'RMS-123'}),ownerRentalReportPresentation:async()=>[{id:'report',link:linkStatus ? {status:linkStatus,shareUrl:'https://example.test/rental-report/secure-test-link'} : null}]},
- '@/lib/service-reminder-delivery':{serviceReminderProviderConfiguration:()=>({email:{configured:true}}),sendServiceReminderProviderMessage:async(input)=>{sent.push(input);if(shouldFail)throw new Error('network');return{provider:'resend',providerMessageId:'message'};}},
+ '@/lib/trade-rental-report-server':{authenticatedRentalReportPdf:async()=>({bytes:largeReport ? new Uint8Array(18 * 1024 * 1024 + 1) : pdfSize ? new Uint8Array(pdfSize) : new Uint8Array([37,80,68,70,45]),reportNumber:'RMS-123'}),ownerRentalReportPresentation:async()=>[{id:'report',link:linkStatus ? {status:linkStatus,shareUrl:'https://example.test/rental-report/secure-test-link'} : null}]},
+ '@/lib/service-reminder-delivery':{reminderProviderFailureOutcome,sendServiceReminderProviderMessage:async()=>{throw new Error('Platform sender must not be called');}},
+ '@/lib/trade-email-server':{tradeCustomerEmailReadiness:async(ownerUid)=>{assert.equal(ownerUid,'owner');return{configured,provider,from:'team@trade.example'};},sendTradeCustomerEmail:async(ownerUid,actorUid,input,options)=>{assert.equal(ownerUid,'owner');assert.equal(actorUid,'actor');sent.push(input);sendOptions.push(options);if(shouldFail)throw indeterminate ? new ReminderProviderDeliveryError('indeterminate','unknown') : new Error('rejected');return{provider,providerMessageId:'message'};}},
  });
  const input={access:{ownerUid:'owner',actorUid:'actor',memberId:'worker',canRunReports:true,isOwner:false},workOrderId:'job',inspectionId:'inspection',reportId:'report',expectedRecipientEmail:'JANE@EXAMPLE.TEST',origin:'https://example.test'};
- return{database,db,sent,input,api,send:()=>api.emailRentalAssessmentReport(input),allowSend:()=>{shouldFail=false;}};
+ return{database,db,sent,sendOptions,input,api,send:()=>api.emailRentalAssessmentReport(input),allowSend:()=>{shouldFail=false;}};
 }
 
 test('report email stays within the production 50-byte LIKE pattern limit', async () => {
@@ -140,6 +142,34 @@ test('issued report email reads immutable PDF and persists acceptance without se
  const f=fixture();assert.equal((await f.send()).status,'accepted');assert.equal((await f.send()).status,'accepted');
  assert.equal(f.sent.length,1);assert.equal(f.sent[0].recipient,'jane@example.test');assert.equal(f.sent[0].attachments[0].contentType,'application/pdf');
  assert.equal((await f.api.rentalReportDeliveryState('owner','inspection')).status,'accepted');
+});
+
+for (const provider of ['google','microsoft']) test(`report uses the business ${provider} connection and records provider acceptance only`, async () => {
+ const f=fixture({provider});assert.equal((await f.send()).status,'accepted');assert.equal((await f.send()).status,'accepted');
+ assert.equal(f.sent.length,1);
+ const receipt=f.database.prepare("SELECT metadata FROM trade_rental_inspection_events WHERE event_type='report_email_accepted'").get();
+ assert.equal(JSON.parse(receipt.metadata).provider,provider);
+ assert.equal((await f.api.rentalReportDeliveryState('owner','inspection')).status,'accepted');
+});
+
+test('disconnected business sender blocks the report without falling back to platform email',async()=>{
+ const f=fixture({configured:false,provider:'google'});assert.equal((await f.send()).status,'failed');assert.equal(f.sent.length,0);
+});
+
+test('unknown provider outcome requires reconciliation and cannot send again',async()=>{
+ const f=fixture({provider:'microsoft',failSend:true,indeterminate:true});assert.equal((await f.send()).status,'reconciliation_required');
+ f.allowSend();assert.equal((await f.send()).status,'reconciliation_required');assert.equal(f.sent.length,1);
+ assert.equal((await f.api.rentalReportDeliveryState('owner','inspection')).status,'reconciliation_required');
+});
+
+for (const provider of ['google','microsoft']) test(`${provider} evidence reports beyond the direct-send allowance use their secure PDF link`,async()=>{
+ const f=fixture({provider,pdfSize:1.5*1024*1024+1});assert.equal((await f.send()).status,'accepted');
+ assert.equal(f.sent[0].attachments.length,0);assert.match(f.sent[0].body,/secure link/);assert.doesNotMatch(f.sent[0].body,/attached/);
+});
+
+for (const provider of ['google','microsoft']) test(`${provider} reports at the attachment allowance retain the PDF`,async()=>{
+ const f=fixture({provider,pdfSize:1.5*1024*1024});assert.equal((await f.send()).status,'accepted');
+ assert.equal(f.sent[0].attachments.length,1);assert.equal(Buffer.from(f.sent[0].attachments[0].content,'base64').length,1.5*1024*1024);
 });
 
 test('report email greets the client, describes its attachment and offers help without quoting copy',async()=>{
@@ -176,6 +206,7 @@ test('recipient changes, protected records, wrong assessor and missing report pe
 test('unconfirmed delivery retries with the same provider key and never reports sent on failure',async()=>{
  const f=fixture({failSend:true});assert.equal((await f.send()).status,'failed');f.allowSend();assert.equal((await f.send()).status,'accepted');
  assert.equal(f.sent.length,2);assert.equal(f.sent[0].idempotencyKey,f.sent[1].idempotencyKey);
+ assert.deepEqual(f.sendOptions.map(options=>options.previouslyAttempted),[false,true]);
 });
 test('ambiguous delivery beyond provider deduplication window requires review rather than duplicate email',async()=>{
  const f=fixture({failSend:true});await f.send();f.allowSend();

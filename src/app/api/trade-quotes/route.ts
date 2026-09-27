@@ -113,7 +113,9 @@ async function revokeOwnedQuoteLink(
           WHERE delivery.quote_link_id = trade_crm_quote_links.id
             AND delivery.firebase_uid = trade_crm_quote_links.firebase_uid
             AND (
-              delivery.status IN ('queued','sending','waiting_for_channel','provider_accepted','sent')
+              delivery.status IN ('queued','sending','waiting_for_channel','reconciliation_required')
+              OR (delivery.status IN ('provider_accepted','sent')
+                AND (delivery.provider NOT IN ('google','microsoft') OR delivery.provider_message_id = ''))
               OR (delivery.status = 'failed' AND delivery.next_attempt_at <> '')
             )
         )`)
@@ -637,7 +639,9 @@ export async function POST(request: Request) {
             FROM trade_crm_quote_deliveries
             WHERE quote_version_id = ? AND firebase_uid = ? AND channel = 'email'
               AND (
-                status IN ('queued','sending','waiting_for_channel','provider_accepted','sent')
+                status IN ('queued','sending','waiting_for_channel','reconciliation_required')
+                OR (status IN ('provider_accepted','sent')
+                  AND (provider NOT IN ('google','microsoft') OR provider_message_id = ''))
                 OR (status = 'failed' AND next_attempt_at <> '')
               )
             LIMIT 1`)
@@ -665,7 +669,9 @@ export async function POST(request: Request) {
                     AND pending_delivery.firebase_uid = authoritative.firebase_uid
                     AND pending_delivery.channel = 'email'
                     AND (
-                      pending_delivery.status IN ('queued','sending','waiting_for_channel','provider_accepted','sent')
+                      pending_delivery.status IN ('queued','sending','waiting_for_channel','reconciliation_required')
+                      OR (pending_delivery.status IN ('provider_accepted','sent')
+                        AND (pending_delivery.provider NOT IN ('google','microsoft') OR pending_delivery.provider_message_id = ''))
                       OR (pending_delivery.status = 'failed' AND pending_delivery.next_attempt_at <> '')
                     )
                 )
@@ -718,7 +724,9 @@ export async function POST(request: Request) {
             AND link.firebase_uid = delivery.firebase_uid
           WHERE link.quote_id = ? AND delivery.firebase_uid = ?
             AND (
-              delivery.status IN ('queued','sending','waiting_for_channel','provider_accepted','sent')
+              delivery.status IN ('queued','sending','waiting_for_channel','reconciliation_required')
+              OR (delivery.status IN ('provider_accepted','sent')
+                AND (delivery.provider NOT IN ('google','microsoft') OR delivery.provider_message_id = ''))
               OR (delivery.status = 'failed' AND delivery.next_attempt_at <> '')
             ) LIMIT 1`)
           .bind(quoteId, access.ownerUid).first<Row>();
@@ -909,7 +917,9 @@ export async function POST(request: Request) {
           WHERE pending_link.quote_id = ? AND pending_link.firebase_uid = ?
             AND pending_delivery.quote_version_id <> ?
             AND (
-              pending_delivery.status IN ('queued','sending','waiting_for_channel','provider_accepted','sent')
+              pending_delivery.status IN ('queued','sending','waiting_for_channel','reconciliation_required')
+              OR (pending_delivery.status IN ('provider_accepted','sent')
+                AND (pending_delivery.provider NOT IN ('google','microsoft') OR pending_delivery.provider_message_id = ''))
               OR (pending_delivery.status = 'failed' AND pending_delivery.next_attempt_at <> '')
             )
         )`;
@@ -1167,7 +1177,9 @@ export async function POST(request: Request) {
         const unsettled = await db.prepare(`SELECT 1 pending
           FROM trade_crm_quote_deliveries WHERE quote_link_id = ? AND firebase_uid = ?
             AND (
-              status IN ('queued','sending','waiting_for_channel','provider_accepted','sent')
+              status IN ('queued','sending','waiting_for_channel','reconciliation_required')
+              OR (status IN ('provider_accepted','sent')
+                AND (provider NOT IN ('google','microsoft') OR provider_message_id = ''))
               OR (status = 'failed' AND next_attempt_at <> '')
             ) LIMIT 1`)
           .bind(link.id, access.ownerUid).first<Row>();
@@ -1185,7 +1197,9 @@ export async function POST(request: Request) {
                 WHERE delivery.quote_link_id = trade_crm_quote_links.id
                   AND delivery.firebase_uid = trade_crm_quote_links.firebase_uid
                   AND (
-                    delivery.status IN ('queued','sending','waiting_for_channel','provider_accepted','sent')
+                    delivery.status IN ('queued','sending','waiting_for_channel','reconciliation_required')
+                    OR (delivery.status IN ('provider_accepted','sent')
+                      AND (delivery.provider NOT IN ('google','microsoft') OR delivery.provider_message_id = ''))
                     OR (delivery.status = 'failed' AND delivery.next_attempt_at <> '')
                   )
               )`)
@@ -1342,6 +1356,13 @@ export async function POST(request: Request) {
         }
         if (existing && ["provider_accepted", "sent", "delivered"].includes(String(existing.status))) {
           return adminJson({ ok: true, delivery: await tradeQuoteDeliveryStatus(db, String(existing.id), access.ownerUid), access: quoteAccessPayload(access), quote: await quotePayload(access.ownerUid, workOrderId, access.isOwner || access.canViewPriceBook, new URL(request.url).origin) });
+        }
+        if (existing?.status === "reconciliation_required") {
+          return adminJson({
+            ok: false,
+            error: "Check the outgoing mailbox before sending this quote again. Its previous delivery could not be confirmed.",
+            delivery: await tradeQuoteDeliveryStatus(db, String(existing.id), access.ownerUid),
+          }, 409);
         }
         if (
           action === "send_quote"

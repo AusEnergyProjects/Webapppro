@@ -1,8 +1,9 @@
 import { getD1 } from "../../db";
 import {
-  sendServiceReminderProviderMessage,
-  serviceReminderProviderConfiguration,
+  reminderProviderFailureOutcome,
+  type ReminderProviderMessage,
 } from "@/lib/service-reminder-delivery";
+import { sendTradeCustomerEmail, tradeCustomerEmailReadiness } from "@/lib/trade-email-server";
 import {
   normaliseQuickInvoiceDocumentSnapshot,
   quickInvoiceTotals,
@@ -787,7 +788,7 @@ export async function sendQuickInvoiceDelivery(input: {
   if (input.expectedRecipient !== undefined && validEmail(input.expectedRecipient) !== recipient) {
     throw new Error("QUICK_INVOICE_RECIPIENT_CHANGED");
   }
-  if (!serviceReminderProviderConfiguration().email.configured) {
+  if (!(await tradeCustomerEmailReadiness(input.ownerUid, db)).configured) {
     throw new Error("waiting_for_channel");
   }
   const now = new Date().toISOString();
@@ -850,6 +851,9 @@ export async function sendQuickInvoiceDelivery(input: {
   let acceptedProvider:
     | { provider: string; providerMessageId: string }
     | null = null;
+  const previouslyAttempted = Boolean(row.provider_message_id) || row.delivery_status === "sending"
+    || (Number(row.attempts || 0) > 0 && row.last_error !== "PROVIDER_NOT_DISPATCHED");
+  let providerInvoked = false;
   try {
     snapshot = await buildQuickInvoiceDocumentSnapshot(
       input.ownerUid,
@@ -872,7 +876,7 @@ export async function sendQuickInvoiceDelivery(input: {
       revision: expectedRevision,
       bytes: pdf,
     });
-    const result = await sendServiceReminderProviderMessage({
+    const message: ReminderProviderMessage = {
       channel: "email",
       recipient,
       subject: `${snapshot.business.name} | Invoice ${snapshot.invoiceNumber} for ${snapshot.customer.name}`,
@@ -889,7 +893,9 @@ export async function sendQuickInvoiceDelivery(input: {
       idempotencyKey: `quick-invoice:${input.invoiceId}:revision:${expectedRevision}`,
       callbackUrl: `${input.origin}/api/service-reminder-provider-events/resend`,
       messageType: "quick_invoice",
-    });
+    };
+    providerInvoked = true;
+    const result = await sendTradeCustomerEmail(input.ownerUid, input.actorUid, message, { db, previouslyAttempted });
     acceptedProvider = result;
     const snapshotJson = JSON.stringify(snapshot);
     const eventId = `quick-invoice-issued:${input.invoiceId}:${expectedRevision}`;
@@ -1087,23 +1093,28 @@ export async function sendQuickInvoiceDelivery(input: {
         .run();
       throw new Error("QUICK_INVOICE_ISSUE_CONFLICT");
     }
+    const indeterminate = reminderProviderFailureOutcome(error) === "indeterminate";
     await db
       .prepare(
         `UPDATE trade_crm_quick_invoices
-        SET delivery_status = 'failed', attempts = attempts + 1,
-          last_error = 'PROVIDER_SEND_FAILED', updated_at = ?
+        SET delivery_status = ?, attempts = attempts + 1,
+          last_error = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ?
           AND status = 'draft'
           AND revision = ?
           AND delivery_status = 'sending'`,
       )
       .bind(
+        indeterminate ? "reconciliation_required" : "failed",
+        indeterminate ? "PROVIDER_SEND_UNCONFIRMED"
+          : !providerInvoked && !previouslyAttempted ? "PROVIDER_NOT_DISPATCHED" : "PROVIDER_SEND_FAILED",
         now,
         input.invoiceId,
         input.ownerUid,
         expectedRevision,
       )
       .run();
+    if (indeterminate) throw new Error("QUICK_INVOICE_ISSUE_CONFLICT");
     if (
       error instanceof Error &&
       [

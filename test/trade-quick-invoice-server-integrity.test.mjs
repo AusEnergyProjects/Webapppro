@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
+import ts from "typescript";
+import { ReminderProviderDeliveryError, reminderProviderFailureOutcome } from "../src/lib/service-reminder-delivery.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const quickInvoiceMigration = read("../drizzle/0075_guided_quick_invoices.sql");
@@ -90,6 +92,77 @@ function insertDraft(
     );
 }
 
+function invoiceDeliveryFixture(failureStage, historicalAttempt = false) {
+  const database = invoiceDatabase();
+  database.exec(`CREATE TABLE trade_crm_job_details (work_order_id text,firebase_uid text,invoice_status text,invoiced_value_cents integer,payment_due_at text,updated_at text);
+    CREATE TABLE trade_work_order_events (id text PRIMARY KEY,work_order_id text,firebase_uid text,event_type text,summary text,created_at text);`);
+  const snapshot = { business: { name: "Johns Electrical", email: "team@jelec.example" }, customer: { name: "Jane", email: "jane@example.test" },
+    invoiceNumber: "INV-retry", work: { id: "job-retry" }, totalCents: 10000, dueAt: "2026-10-01" };
+  insertDraft(database, { id: "retry", snapshot: JSON.stringify(snapshot) });
+  if (historicalAttempt) database.exec("UPDATE trade_crm_quick_invoices SET attempts=1,delivery_status='failed',last_error='PROVIDER_SEND_FAILED'");
+  const db = {
+    prepare(sql) {
+      const statement = database.prepare(sql); let values = [];
+      const prepared = { bind(...input) { values = input; return prepared; },
+        async run() { return { meta: { changes: Number(statement.run(...values).changes) } }; } };
+      return prepared;
+    },
+    async batch(statements) {
+      database.exec("BEGIN");
+      try { const results = []; for (const statement of statements) results.push(await statement.run()); database.exec("COMMIT"); return results; }
+      catch (error) { database.exec("ROLLBACK"); throw error; }
+    },
+  };
+  let fail = true; const sends = [];
+  const dependencies = {
+    getD1: () => db,
+    invoiceDocumentRow: async () => ({ ...database.prepare("SELECT * FROM trade_crm_quick_invoices WHERE id='retry'").get(), customer_email: "jane@example.test" }),
+    isFinalisedProviderAcceptedInvoice: row => row.status === "issued" && row.delivery_status === "provider_accepted" && Boolean(row.issued_pdf_object_key),
+    PROVIDER_ACCEPTED_DELIVERY_STATES: ["provider_accepted", "sent", "delivered"],
+    clean: value => String(value || ""), validEmail: value => String(value || "").trim().toLowerCase(),
+    tradeCustomerEmailReadiness: async () => ({ configured: true }),
+    buildQuickInvoiceDocumentSnapshot: async () => { if (fail && failureStage === "snapshot") throw new Error("snapshot unavailable"); return snapshot; },
+    renderTradeQuickInvoicePdf: async () => { if (fail && failureStage === "pdf") throw new Error("PDF unavailable"); return new Uint8Array([37,80,68,70]); },
+    storeImmutableIssuedPdf: async () => { if (fail && failureStage === "storage") throw new Error("storage unavailable"); return { objectKey: "invoice.pdf", sha256: "a".repeat(64), sizeBytes: 4 }; },
+    deliveryBody: () => "Invoice", deliveryHtml: () => "<p>Invoice</p>", tradeQuickInvoicePdfFilename: () => "invoice.pdf", tradeQuickInvoicePdfBase64: bytes => {
+      if (fail && failureStage === "attachment") throw new Error("attachment preparation unavailable"); return Buffer.from(bytes).toString("base64");
+    },
+    reminderProviderFailureOutcome,
+    sendTradeCustomerEmail: async (ownerUid, actorUid, message, options) => {
+      sends.push({ ownerUid, actorUid, message, options });
+      if (options.previouslyAttempted) throw new ReminderProviderDeliveryError("indeterminate", "EMAIL_LEGACY_SEND_UNCERTAIN");
+      return { provider: "google", providerMessageId: "gmail-invoice-receipt", providerStatus: "accepted" };
+    },
+    ...Object.fromEntries(["QUICK_INVOICE_SEND_LOCK_SQL", "QUICK_INVOICE_SUCCESS_UPDATE_SQL", "QUICK_INVOICE_PROVIDER_ACCEPTED_RECOVERY_SQL", "QUICK_INVOICE_PROVIDER_ACCEPTED_CONFLICT_SQL"].map(name => [name, sourceSql(invoiceServer, name)])),
+  };
+  const parsed = ts.createSourceFile("invoice.ts", invoiceServer, ts.ScriptTarget.Latest, true);
+  const declaration = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "sendQuickInvoiceDelivery");
+  assert.ok(declaration);
+  const compiled = ts.transpileModule(declaration.getText(parsed).replace(/^export\s+/, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const send = new Function(...Object.keys(dependencies), `${compiled}; return sendQuickInvoiceDelivery;`)(...Object.values(dependencies));
+  return { database, sends, allowPreparation: () => { fail = false; }, send: () => send({ invoiceId: "retry", ownerUid: "owner-1", actorUid: "team-member", origin: "https://example.test", expectedRevision: 1 }) };
+}
+
+for (const stage of ["snapshot", "pdf", "storage", "attachment"]) test(`invoice ${stage} failure retries safely without hiding an earlier ambiguous send`, async () => {
+  for (const historical of [false, true]) {
+    const f = invoiceDeliveryFixture(stage, historical);
+    await assert.rejects(f.send, /QUICK_INVOICE_DELIVERY_FAILED/); assert.equal(f.sends.length, 0);
+    const failed = f.database.prepare("SELECT last_error FROM trade_crm_quick_invoices WHERE id='retry'").get();
+    assert.equal(failed.last_error, historical ? "PROVIDER_SEND_FAILED" : "PROVIDER_NOT_DISPATCHED");
+    f.allowPreparation();
+    if (historical) {
+      await assert.rejects(f.send, /QUICK_INVOICE_ISSUE_CONFLICT/);
+      assert.equal(f.database.prepare("SELECT delivery_status FROM trade_crm_quick_invoices WHERE id='retry'").get().delivery_status, "reconciliation_required");
+    } else {
+      assert.equal((await f.send()).ok, true); assert.equal((await f.send()).duplicate, true);
+      const receipt = f.database.prepare("SELECT status,delivery_status,provider_message_id FROM trade_crm_quick_invoices WHERE id='retry'").get();
+      assert.deepEqual({ ...receipt }, { status: "issued", delivery_status: "provider_accepted", provider_message_id: "gmail-invoice-receipt" });
+    }
+    assert.equal(f.sends.length, 1); assert.equal(f.sends[0].options.previouslyAttempted, historical);
+    assert.equal(f.sends[0].ownerUid, "owner-1"); assert.equal(f.sends[0].actorUid, "team-member"); f.database.close();
+  }
+});
+
 function applyProviderEvent(
   db,
   {
@@ -155,7 +228,7 @@ test("quick invoice send claims the exact draft revision before provider work", 
   );
   assert.ok(
     invoiceServer.indexOf("QUICK_INVOICE_SEND_LOCK_SQL")
-      < invoiceServer.indexOf("sendServiceReminderProviderMessage({"),
+      < invoiceServer.indexOf("sendTradeCustomerEmail(input.ownerUid, input.actorUid, message"),
     "The database claim must happen before provider submission.",
   );
 });
@@ -221,7 +294,7 @@ test("quick invoice provider idempotency is scoped to the exact claimed revision
 test("issued invoice PDF bytes are stored before provider submission and downloads read the verified artifact", () => {
   assert.ok(
     invoiceServer.indexOf("storeImmutableIssuedPdf({")
-      < invoiceServer.indexOf("sendServiceReminderProviderMessage({"),
+      < invoiceServer.indexOf("sendTradeCustomerEmail(input.ownerUid, input.actorUid, message"),
     "The immutable PDF must be retained before the provider can accept it.",
   );
   assert.match(invoiceServer, /issued_pdf_object_key/);

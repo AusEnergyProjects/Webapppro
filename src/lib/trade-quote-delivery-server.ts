@@ -1,4 +1,5 @@
 import type { ReminderProviderMessage } from "./service-reminder-delivery.ts";
+import { reminderProviderFailureOutcome } from "./service-reminder-delivery.ts";
 import {
   boundedTradeQuoteDeliveryFailure,
   TRADE_QUOTE_DELIVERY_MAX_ATTEMPTS,
@@ -280,14 +281,17 @@ async function finishFailure(
   now: Date,
 ) {
   const current = now.toISOString();
-  const code = boundedTradeQuoteDeliveryFailure(error);
-  const retryAt = tradeQuoteDeliveryRetryAt(attempts, now.getTime());
+  const indeterminate = reminderProviderFailureOutcome(error) === "indeterminate";
+  const code = indeterminate ? "QUOTE_DELIVERY_RECONCILIATION_REQUIRED" : boundedTradeQuoteDeliveryFailure(error);
+  const retryAt = indeterminate ? "" : tradeQuoteDeliveryRetryAt(attempts, now.getTime());
+  const status = indeterminate ? "reconciliation_required" : "failed";
   const failed = await db.prepare(`UPDATE trade_crm_quote_deliveries
-    SET status = 'failed', next_attempt_at = ?, lease_expires_at = '',
+    SET status = ?, next_attempt_at = ?, lease_expires_at = '',
       failure_code = ?, last_error = ?, updated_at = ?
     WHERE id = ? AND firebase_uid = ? AND status = 'sending' AND attempts = ?`)
-    .bind(retryAt, code,
-      retryAt ? "Delivery was not accepted and will retry automatically." : "Delivery needs attention.",
+    .bind(status, retryAt, code,
+      indeterminate ? "Check the outgoing mailbox before sending again. Delivery could not be confirmed."
+        : retryAt ? "Delivery was not accepted and will retry automatically." : "Delivery needs attention.",
       current, row.id, row.firebase_uid, attempts)
     .run();
   if (Number(failed.meta.changes || 0) !== 1) {
@@ -296,7 +300,7 @@ async function finishFailure(
   await recordEvent(db, String(row.id), retryAt ? "delivery_retrying" : "delivery_failed",
     retryAt ? "Quote email delivery will retry automatically." : "Quote email delivery needs attention.",
     `quote-delivery:${String(row.id)}:attempt:${attempts}:${code}`, current);
-  return { outcome: retryAt ? "retrying" : "failed", status: "failed", code, attempts, nextAttemptAt: retryAt };
+  return { outcome: retryAt ? "retrying" : status, status, code, attempts, nextAttemptAt: retryAt };
 }
 
 export async function drainTradeQuoteDeliveries(options: DrainOptions) {
@@ -304,18 +308,13 @@ export async function drainTradeQuoteDeliveries(options: DrainOptions) {
   const now = options.now || new Date();
   const current = now.toISOString();
   const provider = options.emailConfigured === undefined || !options.sendEmail
-    ? await import("./service-reminder-delivery.ts")
+    ? await import("./trade-email-server.ts")
     : null;
-  const configured = options.emailConfigured
-    ?? provider?.serviceReminderProviderConfiguration().email.configured
-    ?? false;
-  const sendEmail: SendEmail = options.sendEmail
-    || provider?.sendServiceReminderProviderMessage
-    || (async () => { throw new Error("QUOTE_DELIVERY_PROVIDER_UNAVAILABLE"); });
+  let configured = options.emailConfigured ?? false;
   await recoverInterrupted(db, now);
   const exactId = String(options.deliveryId || "").trim();
   const rows = await db.prepare(`SELECT id, firebase_uid, status, attempts,
-      next_attempt_at, created_at
+      next_attempt_at, last_attempt_at, provider_message_id, created_at
     FROM trade_crm_quote_deliveries
     WHERE channel = 'email'
       AND recipient_email_sha256 <> ''
@@ -331,7 +330,10 @@ export async function drainTradeQuoteDeliveries(options: DrainOptions) {
   const outcomes: Row[] = [];
 
   for (const candidate of rows.results) {
-    if (!configured) {
+    const candidateConfigured = options.emailConfigured
+      ?? (await provider!.tradeCustomerEmailReadiness(String(candidate.firebase_uid), db)).configured;
+    configured ||= candidateConfigured;
+    if (!candidateConfigured) {
       const attempts = Number(candidate.attempts || 0) + 1;
       const retryAt = tradeQuoteDeliveryRetryAt(attempts, now.getTime());
       const status = retryAt ? "waiting_for_channel" : "failed";
@@ -369,11 +371,11 @@ export async function drainTradeQuoteDeliveries(options: DrainOptions) {
     const attempts = Number(candidate.attempts || 0) + 1;
     const claim = await db.prepare(`UPDATE trade_crm_quote_deliveries
       SET status = 'sending', attempts = ?, next_attempt_at = '',
-        last_attempt_at = ?, lease_expires_at = ?, failure_code = '',
+        lease_expires_at = ?, failure_code = '',
         last_error = '', updated_at = ?
       WHERE id = ? AND firebase_uid = ? AND status = ? AND attempts = ?
         AND (next_attempt_at = '' OR next_attempt_at <= ?)`)
-      .bind(attempts, current, tradeQuoteDeliveryLeaseUntil(now.getTime()), current,
+      .bind(attempts, tradeQuoteDeliveryLeaseUntil(now.getTime()), current,
         candidate.id, candidate.firebase_uid, candidate.status,
         Number(candidate.attempts || 0), current).run();
     if (Number(claim.meta.changes || 0) !== 1) continue;
@@ -390,7 +392,19 @@ export async function drainTradeQuoteDeliveries(options: DrainOptions) {
       const message = options.prepareMessage
         ? await options.prepareMessage(row)
         : await defaultPrepareMessage(db, row, now);
-      const sent = await sendEmail(message);
+      // Readiness and document preparation can retry without ever reaching a provider.
+      // Preserve historical dispatch evidence until the adapter journals this submission.
+      const dispatch = await db.prepare(`UPDATE trade_crm_quote_deliveries SET last_attempt_at = ?
+        WHERE id = ? AND firebase_uid = ? AND status = 'sending' AND attempts = ?`)
+        .bind(current, row.id, row.firebase_uid, attempts).run();
+      if (Number(dispatch.meta.changes || 0) !== 1) {
+        outcomes.push({ deliveryId: row.id, ...(await observedDeliveryOutcome(db, String(row.id), String(row.firebase_uid))) });
+        continue;
+      }
+      const sent = options.sendEmail ? await options.sendEmail(message)
+        : await provider!.sendTradeCustomerEmail(String(row.firebase_uid),
+          String(row.requested_by_uid || row.created_by_uid || "system"), message,
+          { db, previouslyAttempted: Boolean(candidate.last_attempt_at || candidate.provider_message_id) });
       const accepted = await db.prepare(`UPDATE trade_crm_quote_deliveries
         SET status = 'provider_accepted', provider = ?, provider_message_id = ?,
           provider_status = ?, next_attempt_at = '', lease_expires_at = '',

@@ -1102,6 +1102,9 @@ export async function DELETE(request: Request) {
       now,
       identity.uid,
     ),
+    db.prepare('DELETE FROM trade_email_oauth_states WHERE owner_uid = ?').bind(identity.uid),
+    db.prepare(`UPDATE trade_email_connections SET status = 'disconnected', encrypted_credentials = '',
+      refresh_lock = '', refresh_lock_until = '', last_error = '', updated_at = ? WHERE owner_uid = ?`).bind(now, identity.uid),
     db.prepare("DELETE FROM trade_account_service_areas WHERE firebase_uid = ?")
       .bind(identity.uid),
     db.prepare(`

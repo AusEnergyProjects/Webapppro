@@ -168,7 +168,7 @@ export async function PATCH(request: Request) {
         ORDER BY a.updated_at DESC, a.created_at DESC LIMIT 1`).bind(job.id, access.ownerUid,
           action === 'reschedule' ? appointment?.id : '', action === 'reschedule' ? appointment?.id : '').first<Row>();
       const email = action === 'schedule' && saved ? await sendDirectAppointmentCalendarInvite({
-        ownerUid: access.ownerUid, appointmentId: String(saved.id), origin: new URL(request.url).origin,
+        ownerUid: access.ownerUid, actorUid: access.actorUid, appointmentId: String(saved.id), origin: new URL(request.url).origin,
       }) : Array.isArray(result.customerEmails) ? result.customerEmails[0] : null;
       return adminJson({ ok: true, jobPatch: saved ? { revision: Number(saved.revision), stage: saved.stage,
         lifecycleStatus: 'scheduled', appointmentId: saved.id, appointmentStatus: saved.status, appointmentStartsAt: saved.starts_at,

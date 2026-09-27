@@ -56,6 +56,10 @@ The MYOB income account is selected for each first export. This avoids guessing 
 
 QuickBooks invoice export is available only after the production OAuth application is configured and the installer connects a company. A disconnected provider leaves the accepted TLink handoff intact.
 
+## Business email
+
+Owner-managed Google and Microsoft outgoing mailbox setup, the supported customer communication routes, production activation requirements and delivery reconciliation are documented in [Business email connections](TRADE_BUSINESS_EMAIL.md). Email OAuth clients and scopes are separate from calendar integrations.
+
 ## Business calendars
 
 1. Register the production Google Calendar OAuth application with this exact redirect URI:

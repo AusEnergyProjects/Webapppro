@@ -17,8 +17,10 @@ import {
   sendServiceReminderProviderMessage,
   serviceReminderProviderConfiguration,
   serviceReminderRetryAt,
+  reminderProviderFailureOutcome,
   type ReminderChannel,
 } from "@/lib/service-reminder-delivery";
+import { sendTradeCustomerEmail, tradeCustomerEmailReadiness } from "@/lib/trade-email-server";
 
 type Row = Record<string, unknown>;
 
@@ -185,14 +187,22 @@ async function readiness(context: DeliveryContext, channel: ReminderChannel): Pr
 
   const setting = await channelSetting(channel);
   const providers = serviceReminderProviderConfiguration();
-  const configured = channel === "email" ? providers.email.configured && providers.email.callbacks
+  const tradeEmail = channel === "email" ? await tradeCustomerEmailReadiness(context.firebase_uid) : null;
+  const configured = tradeEmail ? tradeEmail.configured && (tradeEmail.provider !== "resend" || providers.email.callbacks)
     : providers.sms.configured && providers.sms.callbacks;
-  const selectedProvider = text(setting?.provider, 30) || provider;
+  const selectedProvider = tradeEmail?.provider || text(setting?.provider, 30) || provider;
   if (channel === "sms" && !smsSenderApproved()) return { allowed: false, status: "waiting_for_sender",
     reason: "TLink Australian SMS sender approval is still pending.", provider: selectedProvider, destination: "", preview,
     customerUid: text(account?.firebase_uid, 180), consentBasis, configured };
   if (!setting || !Boolean(setting.enabled) || !configured) return { allowed: false, status: "waiting_for_channel",
     reason: "This provider channel and its authenticated callbacks are not active.", provider: selectedProvider, destination: "", preview,
+    customerUid: text(account?.firebase_uid, 180), consentBasis, configured };
+  const uncertain = channel === "email" && await getD1().prepare(`SELECT 1 unresolved FROM trade_crm_photo_request_deliveries
+    WHERE photo_request_id = ? AND firebase_uid = ? AND token_issue = ? AND channel = 'email'
+      AND status = 'reconciliation_required' LIMIT 1`)
+    .bind(context.id, context.firebase_uid, context.token_issue).first<Row>();
+  if (uncertain) return { allowed: false, status: "reconciliation_required",
+    reason: "Check the outgoing mailbox before sending this photo request again.", provider: selectedProvider, destination: "", preview,
     customerUid: text(account?.firebase_uid, 180), consentBasis, configured };
   if (!(await dailyLimitAvailable(channel, Number(setting.daily_limit || 1)))) return { allowed: false, status: "waiting_for_limit",
     reason: "The channel daily safety limit has been reached.", provider: selectedProvider, destination: "", preview,
@@ -284,23 +294,33 @@ async function dispatchPhotoRequestDelivery(deliveryId: string, origin: string, 
       updated_at = ? WHERE id = ? AND status = ? AND attempts = ?`)
     .bind(attempts, now, deliveryId, delivery.status, delivery.attempts).run();
   if (!claim.meta.changes) return { ok: false, error: "DELIVERY_ALREADY_CLAIMED" };
+  const previouslyAttempted = Boolean(delivery.provider_message_id)
+    || (Number(delivery.attempts || 0) > 0 && delivery.last_error !== "PROVIDER_NOT_DISPATCHED");
+  let providerInvoked = false;
   try {
     const shareUrl = await currentShareUrl(context, origin);
+    const email = channel === "email" ? await tradeCustomerEmailReadiness(context.firebase_uid, db) : null;
     const draft = photoRequestDeliveryDraft({ intent: String(delivery.intent) as PhotoRequestDeliveryIntent,
       businessName: context.business_name, workNumber: context.work_number, shareUrl, expiresAt: context.expires_at,
       requirementLabel: retakeLabel, retakeGuidance, appointmentStartsAt: context.appointment_starts_at,
       appointmentEndsAt: context.appointment_ends_at, appointmentTimeZone: australianAppointmentTimeZone(context.appointment_state),
       calendarAttendeeEmail: channel === "email" ? ready.destination : "",
+      calendarOrganizerEmail: email?.from,
       calendarSequence: delivery.intent === "resend_2" ? 2 : delivery.intent === "resend_1" ? 1 : 0 });
     const attachments = channel === "email" && draft.calendar ? [textAttachment(
       draft.calendar.filename,
       draft.calendar.ics,
       `text/calendar; charset=utf-8; method=${draft.calendar.method}`,
     )] : undefined;
-    const result = await sendServiceReminderProviderMessage({ channel, recipient: ready.destination, subject: draft.subject, body: draft.body,
+    const message = { channel, recipient: ready.destination, subject: draft.subject, body: draft.body,
       idempotencyKey: String(delivery.idempotency_key), messageType: "photo_request_link",
       attachments,
-      callbackUrl: new URL("/api/service-reminder-provider-events/twilio", origin).toString() });
+      callbackUrl: new URL("/api/service-reminder-provider-events/twilio", origin).toString() };
+    providerInvoked = true;
+    const result = channel === "email"
+      ? await sendTradeCustomerEmail(context.firebase_uid, String(delivery.created_by_uid || "system"), message,
+        { db, previouslyAttempted })
+      : await sendServiceReminderProviderMessage(message);
     await db.batch([
       db.prepare(`UPDATE trade_crm_photo_request_deliveries SET status = 'sent', attempts = ?, provider = ?, provider_message_id = ?,
         provider_status = ?, eligibility_reason = '', last_error = '', sent_at = ?, updated_at = ? WHERE id = ?`)
@@ -315,9 +335,11 @@ async function dispatchPhotoRequestDelivery(deliveryId: string, origin: string, 
     return { ok: true };
   } catch (error) {
     const reason = error instanceof Error ? text(error.message, 180) : "Provider delivery failed.";
-    await db.prepare(`UPDATE trade_crm_photo_request_deliveries SET status = 'failed', attempts = ?, last_error = ?, failed_at = ?,
-      eligibility_reason = '', updated_at = ? WHERE id = ?`).bind(attempts, reason, now, now, deliveryId).run();
-    return { ok: false, error: reason, retryAt: serviceReminderRetryAt(attempts) };
+    const indeterminate = channel === "email" && reminderProviderFailureOutcome(error) === "indeterminate";
+    const storedReason = channel === "email" && !providerInvoked && !previouslyAttempted ? "PROVIDER_NOT_DISPATCHED" : reason;
+    await db.prepare(`UPDATE trade_crm_photo_request_deliveries SET status = ?, attempts = ?, last_error = ?, failed_at = ?,
+      eligibility_reason = '', updated_at = ? WHERE id = ?`).bind(indeterminate ? "reconciliation_required" : "failed", attempts, storedReason, now, now, deliveryId).run();
+    return { ok: false, error: reason, retryAt: indeterminate ? "" : serviceReminderRetryAt(attempts) };
   }
 }
 

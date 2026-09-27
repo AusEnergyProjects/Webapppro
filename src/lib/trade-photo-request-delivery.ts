@@ -47,6 +47,7 @@ export function photoRequestDeliveryDraft(input: {
   appointmentEndsAt?: string;
   appointmentTimeZone?: string;
   calendarAttendeeEmail?: string;
+  calendarOrganizerEmail?: string;
   calendarSequence?: number;
 }) {
   const reminder = input.intent === "expiry_reminder";
@@ -65,7 +66,7 @@ export function photoRequestDeliveryDraft(input: {
     endsAt: input.appointmentEndsAt || "",
     timeZone: input.appointmentTimeZone || "Australia/Sydney",
     attendeeEmail: input.calendarAttendeeEmail,
-    organizerEmail: "service@reminders.ausenergyassessments.com",
+    organizerEmail: input.calendarOrganizerEmail || "service@reminders.ausenergyassessments.com",
     sequence: input.calendarSequence,
   }) : null;
   return {

@@ -314,7 +314,7 @@ test("job and customer indexes use explicit open and direct contact actions", ()
   assert.match(crm, /className="crm-index-open-button"/);
   assert.match(crm, /className="crm-index-phone-link" href=\{phoneHref/);
   assert.match(crm, /return compact \? `tel:\$\{compact\}` : ""/);
-  assert.match(crm, /className="crm-index-email-link" href=\{`mailto:\$\{customer\.email\}`\}/);
+  assert.match(crm, /TradeCustomerEmailComposer user=\{user\} customerId=\{customer\.id\} recipient=\{customer\.email\} recipientName=\{customer\.displayName\} className="crm-index-email-link"/);
   const customerResultsStart = crm.indexOf('aria-label="Customer results"');
   assert.notEqual(customerResultsStart, -1);
   const customerResults = crm.slice(customerResultsStart, crm.indexOf("</section></div>", customerResultsStart));
@@ -398,7 +398,7 @@ test("owner and staff CRM destinations follow the primary navigation and saved a
 test("customer detail exposes prominent contact actions and dates every linked job", () => {
   assert.match(crm, /className="crm-customer-contact-actions"/);
   assert.match(crm, /className="crm-customer-call-action" href=\{phoneHref\(customer\.phone\)\}/);
-  assert.match(crm, /className="crm-customer-email-action" href=\{`mailto:\$\{customer\.email\}`\}/);
+  assert.match(crm, /TradeCustomerEmailComposer user=\{user\} customerId=\{customer\.id\} recipient=\{customer\.email\} recipientName=\{customer\.displayName\} label="Email customer" className="crm-customer-email-action"/);
   assert.match(crm, /job\.scheduledStart \? `Scheduled \$\{dateLabel\(job\.scheduledStart\)\}` : `Created \$\{dateLabel\(job\.createdAt\)\}`/);
 });
 

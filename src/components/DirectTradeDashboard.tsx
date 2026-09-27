@@ -23,6 +23,7 @@ import {
 } from "./TLinkChrome";
 import { TLinkCommandCentre, type TLinkCommandTarget } from "./TLinkCommandCentre";
 import { TradeJobNotifications } from "./TradeJobNotifications";
+import { TradeCustomerEmailComposer } from "./TradeCustomerEmailComposer";
 import { isCalendarIntegration, readIntegrationReturn } from "@/lib/trade-integration-return";
 import { CustomerPlanReportPreviewDialog } from "./CustomerPlanReportPreviewDialog";
 import { downloadCustomerPlanPdf } from "@/lib/customer-plan-pdf-client";
@@ -2774,9 +2775,7 @@ export function DirectTradeDashboard() {
                                     <div>
                                       <dt>Email</dt>
                                       <dd>
-                                        {releasedCustomerContact && !contactFieldIsRedacted(releasedCustomerContact, "email") ? <a href={`mailto:${releasedCustomerContact.email}`}>
-                                          {releasedCustomerContact.email}
-                                        </a> : "Awaiting customer release"}
+                                        {releasedCustomerContact && !contactFieldIsRedacted(releasedCustomerContact, "email") ? <TradeCustomerEmailComposer user={user} enquiryId={opportunity.matchId} recipient={releasedCustomerContact.email} recipientName={releasedCustomerName} /> : "Awaiting customer release"}
                                       </dd>
                                     </div>
                                     {releasedCustomerContact && <div className="dashboard-connected-customer-context">

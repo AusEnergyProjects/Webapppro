@@ -1,0 +1,40 @@
+.settings { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto); align-items: start; gap: 12px 24px; padding-top: 16px; border-top: 1px solid var(--trade-line); scroll-margin-top: 24px; }
+.settings p { margin: 0; font-size: .78rem; line-height: 1.5; }
+.label h4 { margin: 0 0 5px; color: var(--trade-ink); font-size: .85rem; }
+.label p, .controls > small { color: var(--trade-muted); }
+.controls { display: grid; gap: 8px; min-width: 0; max-width: 30rem; }
+.controls > small { font-size: .72rem; }
+.providers { display: flex; flex-wrap: wrap; gap: 8px; }
+.providers > button { padding: 8px 12px; min-height: 36px; color: var(--trade-ink); background: var(--trade-surface); border: 1px solid var(--trade-line); border-radius: 8px; font: inherit; font-size: .78rem; font-weight: 650; cursor: pointer; }
+.providers > button:hover:not(:disabled) { border-color: var(--trade-accent); background: color-mix(in srgb, var(--trade-accent) 7%, var(--trade-surface)); }
+.connection { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.address { font-size: .82rem; overflow-wrap: anywhere; min-width: 0; }
+.ready, .paused { border-radius: 999px; padding: 4px 9px; font-size: .7rem; font-weight: 800; }
+.ready { background: color-mix(in srgb, #2e9d70 18%, var(--trade-surface)); color: var(--trade-ink); }
+.paused { background: color-mix(in srgb, #d59d28 20%, var(--trade-surface)); color: var(--trade-ink); }
+.actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.secondary, .emailButton { color: var(--trade-ink); background: transparent; border: 1px solid var(--trade-line); border-radius: 8px; padding: 10px 13px; min-height: 40px; font: inherit; cursor: pointer; }
+.settings .secondary { padding: 7px 10px; min-height: 36px; font-size: .76rem; }
+.settings .notice, .settings .error { padding: 8px 10px; }
+.emailButton { color: var(--trade-accent); padding: 0; min-height: 32px; border: 0; text-align: left; text-decoration: underline; overflow-wrap: anywhere; }
+.notice, .error { padding: 12px 14px; border-radius: 9px; font-size: .85rem; }
+.notice { background: color-mix(in srgb, var(--trade-accent) 10%, var(--trade-surface)); }
+.error { background: color-mix(in srgb, #cf4c42 12%, var(--trade-surface)); color: var(--trade-ink); border: 1px solid color-mix(in srgb, #cf4c42 40%, var(--trade-line)); }
+.dialog { color: var(--trade-ink, #133144); background: var(--trade-surface, #fff); border: 1px solid var(--trade-line, #d7e0e7); border-radius: 18px; width: min(620px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); margin: auto; padding: 0; box-shadow: 0 24px 80px #00142155; }
+.dialog::backdrop { background: #00142199; }
+.dialog form { display: grid; gap: 16px; padding: 24px; }
+.dialog header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.dialog h3 { margin: 0; font-size: 1.25rem; }
+.dialog header p { margin: 6px 0 0; font-size: .85rem; color: var(--trade-muted, #566a76); }
+.dialog label { display: grid; gap: 6px; font-size: .85rem; font-weight: 650; }
+.dialog input, .dialog textarea { color: inherit; background: var(--trade-surface, #fff); border: 1px solid var(--trade-line, #d7e0e7); border-radius: 8px; padding: 11px 12px; font: inherit; font-weight: 400; width: 100%; box-sizing: border-box; }
+.dialog textarea { resize: vertical; min-height: 180px; }
+.dialog dl { display: grid; grid-template-columns: 45px minmax(0, 1fr); gap: 7px 12px; margin: 0; padding: 14px 0; border-block: 1px solid var(--trade-line, #d7e0e7); font-size: .85rem; }
+.dialog dt { color: var(--trade-muted, #566a76); }
+.dialog dd { margin: 0; overflow-wrap: anywhere; }
+.dialog footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.dialog a { color: var(--trade-accent, #007d85); }
+.settings button:disabled, .dialog button:disabled { opacity: .6; cursor: not-allowed; }
+.settings button:focus-visible, .dialog button:focus-visible, .dialog input:focus-visible, .dialog textarea:focus-visible, .emailButton:focus-visible { outline: 3px solid var(--trade-accent, #007d85); outline-offset: 3px; }
+@media (max-width: 760px) { .settings { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .dialog form { padding: 18px; } }

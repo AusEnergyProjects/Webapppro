@@ -40,6 +40,7 @@ function businessHarness(capabilities, serviceStates = ["VIC"], addressState = "
   const dependencies = {
     react: hooks, "react/jsx-runtime": jsx, "next/dynamic": { default: () => () => null },
     "next/image": { default: (props) => jsx.jsx("img", props) },
+    "./TradeEmailSettings": { TradeEmailSettings: () => null },
     "@/lib/trade-business-branding": branding, "@/lib/energy-service-catalogue.mjs": services,
     "@/lib/australian-postcodes.mjs": states,
     "@/lib/trade-google-business-profile.mjs": googleProfile,

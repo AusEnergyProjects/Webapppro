@@ -10,9 +10,11 @@ import {
   sendServiceReminderProviderMessage,
   serviceReminderProviderConfiguration,
   serviceReminderRetryAt,
+  reminderProviderFailureOutcome,
   type ReminderChannel,
 } from "@/lib/service-reminder-delivery";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
+import { sendTradeCustomerEmail, tradeCustomerEmailReadiness } from "@/lib/trade-email-server";
 
 type QueueInput = {
   appointmentId: string;
@@ -100,9 +102,12 @@ async function readiness(context: Context, audience: AppointmentNotificationAudi
   if (!consent.allowed) return { status: "skipped", reason: consent.reason, provider: channel === "email" ? "resend" : "twilio" };
   const setting = await channelSetting(channel);
   const providers = serviceReminderProviderConfiguration();
-  const configured = channel === "email" ? providers.email.configured && providers.email.callbacks
+  const tradeEmail = channel === "email" && audience === "customer"
+    ? await tradeCustomerEmailReadiness(String(context.installer_uid)) : null;
+  const configured = tradeEmail ? tradeEmail.configured && (tradeEmail.provider !== "resend" || providers.email.callbacks)
+    : channel === "email" ? providers.email.configured && providers.email.callbacks
     : providers.sms.configured && providers.sms.callbacks;
-  const provider = text(setting?.provider, 30) || (channel === "email" ? "resend" : "twilio");
+  const provider = tradeEmail?.provider || text(setting?.provider, 30) || (channel === "email" ? "resend" : "twilio");
   if (channel === "sms" && !senderApproved()) return { status: "waiting_for_sender", reason: "TLink Australian SMS sender approval is not confirmed.", provider };
   if (!setting || !Boolean(setting.enabled) || !configured) return { status: "waiting_for_channel", reason: "The delivery channel or authenticated callbacks are not active.", provider };
   if (!(await dailyLimitAvailable(channel, Number(setting.daily_limit || 1)))) return { status: "waiting_for_limit", reason: "The channel daily safety limit has been reached.", provider };
@@ -140,11 +145,15 @@ async function dispatchDelivery(deliveryId: string, origin: string, retry = fals
     .bind(attempts, now, deliveryId, delivery.status, delivery.attempts).run();
   if (!claim.meta.changes) return { ok: false, error: "DELIVERY_ALREADY_CLAIMED" };
   try {
-    const result = await sendServiceReminderProviderMessage({
+    const message = {
       channel, recipient: destination, subject: String(delivery.subject), body: String(delivery.body),
       idempotencyKey: String(delivery.idempotency_key), messageType: "appointment_notification",
       callbackUrl: new URL("/api/service-reminder-provider-events/twilio", origin).toString(),
-    });
+    };
+    const result = channel === "email" && audience === "customer"
+      ? await sendTradeCustomerEmail(String(delivery.installer_uid), "system", message,
+        { db, previouslyAttempted: Number(delivery.attempts || 0) > 0 })
+      : await sendServiceReminderProviderMessage(message);
     await db.batch([
       db.prepare(`UPDATE appointment_notification_deliveries SET status = 'sent', attempts = ?, provider = ?, provider_message_id = ?,
         provider_status = ?, eligibility_reason = '', last_error = '', sent_at = ?, updated_at = ? WHERE id = ?`)
@@ -157,9 +166,10 @@ async function dispatchDelivery(deliveryId: string, origin: string, retry = fals
     return { ok: true };
   } catch (error) {
     const reason = error instanceof Error ? text(error.message, 180) : "Provider delivery failed.";
-    await db.prepare(`UPDATE appointment_notification_deliveries SET status = 'failed', attempts = ?, last_error = ?, failed_at = ?,
-      eligibility_reason = '', updated_at = ? WHERE id = ?`).bind(attempts, reason, now, now, deliveryId).run();
-    return { ok: false, error: reason, retryAt: serviceReminderRetryAt(attempts) };
+    const indeterminate = channel === "email" && audience === "customer" && reminderProviderFailureOutcome(error) === "indeterminate";
+    await db.prepare(`UPDATE appointment_notification_deliveries SET status = ?, attempts = ?, last_error = ?, failed_at = ?,
+      eligibility_reason = '', updated_at = ? WHERE id = ?`).bind(indeterminate ? "reconciliation_required" : "failed", attempts, reason, now, now, deliveryId).run();
+    return { ok: false, error: reason, retryAt: indeterminate ? "" : serviceReminderRetryAt(attempts) };
   }
 }
 

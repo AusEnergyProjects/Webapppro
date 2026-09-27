@@ -1,6 +1,7 @@
 "use client";
 
 import { BookingTrainingLinks, type BookingTrainingModule } from "./BookingTrainingLinks";
+import { TradeCustomerEmailComposer } from "./TradeCustomerEmailComposer";
 
 import { type CSSProperties, FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -320,12 +321,12 @@ function normaliseJobOperationalStatus(value: unknown) {
   return "";
 }
 
-function jobIndexCell(job: Job, key: string, onOpen: () => void, actionNode: ReactNode): ReactNode {
+function jobIndexCell(job: Job, key: string, onOpen: () => void, actionNode: ReactNode, user: User): ReactNode {
   const record = job.jobRegister;
   if (key === "actions") return actionNode;
   if (key === "jobId") return <button type="button" className="crm-index-open-button" onClick={onOpen} aria-label={`Open job ${record.jobId}`}><strong>{record.jobId}</strong></button>;
   if (key === "contactNumber") return record.contactNumber ? <a className="crm-index-phone-link" href={phoneHref(record.contactNumber)}>{record.contactNumber}</a> : <span>Not added</span>;
-  if (key === "email") return record.email ? <a className="crm-index-email-link" href={`mailto:${record.email}`}>{record.email}</a> : <span>Not added</span>;
+  if (key === "email") return record.email ? <TradeCustomerEmailComposer user={user} workOrderId={job.id} recipient={record.email} className="crm-index-email-link" /> : <span>Not added</span>;
   if (key === "scheduleDate") return <span>{record.scheduleDate ? dateLabel(record.scheduleDate, record.scheduleDate.includes("T")) : "Unassigned"}</span>;
   if (key === "createdDate") return <span>{dateLabel(record.createdDate)}</span>;
   if (key === "operationalStatus") {
@@ -340,11 +341,11 @@ function jobIndexCell(job: Job, key: string, onOpen: () => void, actionNode: Rea
   return <span title={value}>{value || "Not added"}</span>;
 }
 
-function customerIndexCell(customer: Customer, key: CustomerRegisterColumnKey, onOpen: () => void): ReactNode {
+function customerIndexCell(customer: Customer, key: CustomerRegisterColumnKey, onOpen: () => void, user: User): ReactNode {
   if (key === "customer") return <button type="button" className="crm-index-open-button" onClick={onOpen} title={customer.displayName} aria-label={`Open customer ${customer.displayName}`}><strong>{customer.displayName}</strong></button>;
   if (key === "firstName") return <span title={customer.firstName}>{customer.firstName || "Not added"}</span>;
   if (key === "lastName") return <span title={customer.lastName}>{customer.lastName || "Not added"}</span>;
-  if (key === "email") return customer.email ? <a className="crm-index-email-link" href={`mailto:${customer.email}`} title={`Email ${customer.email}`}>{customer.email}</a> : <span>Not added</span>;
+  if (key === "email") return customer.email ? <TradeCustomerEmailComposer user={user} customerId={customer.id} recipient={customer.email} recipientName={customer.displayName} className="crm-index-email-link" /> : <span>Not added</span>;
   if (key === "phone") return customer.phone ? <a className="crm-index-phone-link" href={phoneHref(customer.phone)} title={`Call ${customer.phone}`}>{customer.phone}</a> : <span>Not added</span>;
   if (key === "suburb") return <span title={customer.suburb}>{customer.suburb || "Not added"}</span>;
   if (key === "postcode") return <span>{customer.postcode || "Not added"}</span>;
@@ -1441,7 +1442,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       {jobLayout !== "board" && <WorkspaceListControls page={jobPagination.page} pageCount={jobPagination.pageCount} pageSize={jobPagination.pageSize} total={jobPagination.total} hasNext={jobPagination.hasNext} saved={jobViewSaved} busy={viewBusy || indexLoading}
         onPage={(page) => setJobPage(page)} onPageSize={(size) => { setJobPageSize(size); setJobPage(1); }} onSave={() => void updateListView("installer-jobs", "PATCH")} onReset={() => void updateListView("installer-jobs", "DELETE")} showViewActions={!staffPermissions} />}
       {jobLayout === "map" ? <div><p className="crm-filter-notice">Map shows this page of filtered jobs. Use the page controls to see more.</p><TradeRecordMap key={user.uid} user={user} records={jobMapRecords} loading={jobMapLoading} total={jobPagination.total} onOpenRecord={(record) => openFocusedJob(record.id)} /></div> : jobLayout === "list" ? <div className="crm-jobs-layout">
-        <section className={`${registerStyles.register} crm-job-list crm-record-table`} role="table" aria-label="Job results"><div className="crm-record-columns crm-dynamic-columns" style={jobGridStyle} role="row">{jobColumns.map((key) => { const column = jobIndexColumns.find((item) => item.key === key); return column ? <SortableIndexHeading key={key} column={column} current={jobSort} onSort={changeJobRegisterSort} /> : null; })}</div>{indexedJobs.length ? indexedJobs.map((job) => <article key={job.id} tabIndex={0} role="row" className={`${registerStyles.row} crm-row-open crm-record-data-row crm-index-row`} style={jobGridStyle} onContextMenu={(event) => openJobActions(event, job.id)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openJobActions(event, job.id); else if (event.key === "Enter") openFocusedJob(job.id); }} onDoubleClick={(event) => { if ((event.target as HTMLElement).closest("a, button, input, select, textarea")) return; openFocusedJob(job.id); }}>{jobColumns.map((key) => <span className="crm-index-cell" role="cell" key={key}>{jobIndexCell(job, key, () => openFocusedJob(job.id), jobActionMenu(job))}</span>)}</article>) : <div className="crm-empty"><strong>{indexLoading ? "Loading jobs..." : "No matching jobs"}</strong><span>{indexLoading ? "Fetching this page securely." : "Try another search or filter."}</span></div>}</section>
+        <section className={`${registerStyles.register} crm-job-list crm-record-table`} role="table" aria-label="Job results"><div className="crm-record-columns crm-dynamic-columns" style={jobGridStyle} role="row">{jobColumns.map((key) => { const column = jobIndexColumns.find((item) => item.key === key); return column ? <SortableIndexHeading key={key} column={column} current={jobSort} onSort={changeJobRegisterSort} /> : null; })}</div>{indexedJobs.length ? indexedJobs.map((job) => <article key={job.id} tabIndex={0} role="row" className={`${registerStyles.row} crm-row-open crm-record-data-row crm-index-row`} style={jobGridStyle} onContextMenu={(event) => openJobActions(event, job.id)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openJobActions(event, job.id); else if (event.key === "Enter") openFocusedJob(job.id); }} onDoubleClick={(event) => { if ((event.target as HTMLElement).closest("a, button, input, select, textarea")) return; openFocusedJob(job.id); }}>{jobColumns.map((key) => <span className="crm-index-cell" role="cell" key={key}>{jobIndexCell(job, key, () => openFocusedJob(job.id), jobActionMenu(job), user)}</span>)}</article>) : <div className="crm-empty"><strong>{indexLoading ? "Loading jobs..." : "No matching jobs"}</strong><span>{indexLoading ? "Fetching this page securely." : "Try another search or filter."}</span></div>}</section>
       </div> : <div className="crm-pipeline-board">{[["enquiry", "New"], ["qualifying", "Checking"], ["quoting", "Quoting"], ["approved", "Approved"], ["scheduled", "Scheduled"], ["in_progress", "Underway"]].map(([stage, label]) => { const stageJobs = boardJobs[stage] || []; return <section key={stage}><header><button type="button" onClick={() => { setPipelineFocus(stage); setJobLayout("list"); }}>{label}</button><strong>{boardCounts[stage] || 0}</strong></header><div>{stageJobs.map((job) => <button type="button" key={job.id} onClick={() => openFocusedJob(job.id)}><span>{job.workNumber}</span><strong>{job.customerDisplayName || job.title}</strong><small>{serviceLabels[job.serviceCategory] || job.serviceCategory}</small><em>{job.nextAction || workStageLabels[job.stage] || job.stage}</em></button>)}{!stageJobs.length && <p>No jobs</p>}</div></section>; })}</div>}
     </div>}
 
@@ -1516,7 +1517,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
           }}
         >
           <label className="crm-row-select" role="cell"><input type="checkbox" checked={selectedCustomerIds.includes(customer.id)} onChange={(event) => setSelectedCustomerIds((current) => event.target.checked ? [...current, customer.id] : current.filter((id) => id !== customer.id))} /><span className="sr-only">Select {customer.displayName}</span></label>
-          {customerColumns.map((key) => <span className="crm-index-cell" role="cell" key={key}>{customerIndexCell(customer, key, () => setSelectedCustomerId(customer.id))}</span>)}
+          {customerColumns.map((key) => <span className="crm-index-cell" role="cell" key={key}>{customerIndexCell(customer, key, () => setSelectedCustomerId(customer.id), user)}</span>)}
           {customerActionMenu(customer)}
         </article>) : <div className="crm-empty"><strong>{indexLoading ? "Loading customers..." : "No direct customers in this view"}</strong><span>{indexLoading ? "Fetching this page securely." : "Change the search or add a customer from New."}</span></div>}
       </section></div>}
@@ -1845,7 +1846,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
               <div><dt>First name</dt><dd>{customer.firstName || "Not added"}</dd></div>
               <div><dt>Last name</dt><dd>{customer.lastName || "Not added"}</dd></div>
               <div><dt>Contact number</dt><dd>{customer.phone ? <a href={phoneHref(customer.phone)}>{customer.phone}</a> : "Not added"}</dd></div>
-              <div><dt>Email</dt><dd>{customer.email ? <a href={`mailto:${customer.email}`}>{customer.email}</a> : "Not added"}</dd></div>
+              <div><dt>Email</dt><dd>{customer.email ? <TradeCustomerEmailComposer user={user} workOrderId={job.id} recipient={customer.email} recipientName={customer.displayName} /> : "Not added"}</dd></div>
               <div className={registerStyles.wideDetail}><dt>Street address</dt><dd>{[jobSite?.addressLine1 || customer.addressLine1, jobSite?.addressLine2 || customer.addressLine2].filter(Boolean).join(", ") || "Not added"}</dd></div>
               <div><dt>Suburb</dt><dd>{jobSite?.suburb || customer.suburb || "Not added"}</dd></div>
               <div><dt>State</dt><dd>{jobSite?.addressState || customer.addressState || "Not added"}</dd></div>
@@ -1972,8 +1973,9 @@ function CustomerDetail({ user, customer, contacts, sites, jobs, busy, readOnly 
     </div>;
   };
 
-  return <section className={`crm-customer-detail ${registerStyles.customerEditor}`}><fieldset className={registerStyles.customerFieldset} disabled={readOnly}>
-    <header><div><span>{customer.customerNumber}</span><h3>{customer.displayName}</h3><small>{customerKind} | {additionalContacts.length} additional contact{additionalContacts.length === 1 ? "" : "s"} | {sites.length} service site{sites.length === 1 ? "" : "s"}</small></div><div className="crm-customer-header-actions"><strong>Private installer record</strong><div className="crm-customer-contact-actions">{customer.phone && <a className="crm-customer-call-action" href={phoneHref(customer.phone)}>Call {customer.phone}</a>}{customer.email && <a className="crm-customer-email-action" href={`mailto:${customer.email}`}>Email customer</a>}</div></div></header>
+  return <section className={`crm-customer-detail ${registerStyles.customerEditor}`}>
+    <header><div><span>{customer.customerNumber}</span><h3>{customer.displayName}</h3><small>{customerKind} | {additionalContacts.length} additional contact{additionalContacts.length === 1 ? "" : "s"} | {sites.length} service site{sites.length === 1 ? "" : "s"}</small></div><div className="crm-customer-header-actions"><strong>Private installer record</strong><div className="crm-customer-contact-actions">{customer.phone && <a className="crm-customer-call-action" href={phoneHref(customer.phone)}>Call {customer.phone}</a>}{customer.email && <TradeCustomerEmailComposer user={user} customerId={customer.id} recipient={customer.email} recipientName={customer.displayName} label="Email customer" className="crm-customer-email-action" />}</div></div></header>
+    <fieldset className={registerStyles.customerFieldset} disabled={readOnly}>
     {canUseSms && <TradeCustomerSmsPanel user={user} customerId={customer.id} onOpenIntegrations={onOpenIntegrations} />}
 
     <details className={registerStyles.customerPanel} open>

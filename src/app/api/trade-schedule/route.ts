@@ -892,7 +892,7 @@ export async function PATCH(request: Request) {
         for (const notification of notifications) {
           emails.push({ appointmentId: notification.appointmentId,
             ...await sendDirectAppointmentCalendarInvite({ appointmentId: notification.appointmentId,
-              ownerUid: access.ownerUid, origin: new URL(request.url).origin, change: 'rescheduled' }) });
+              ownerUid: access.ownerUid, actorUid: access.actorUid, origin: new URL(request.url).origin, change: 'rescheduled' }) });
         }
         return emails;
       })(),

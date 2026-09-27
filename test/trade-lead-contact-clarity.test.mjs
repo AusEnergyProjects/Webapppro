@@ -23,6 +23,8 @@ const panel = find(node => ts.isJsxElement(node) && node.openingElement.tagName.
   && node.openingElement.getText(parsed).includes('className="dashboard-connected-customer-identity"')).getText(parsed);
 const compiled = ts.transpileModule(`
 ${helper}
+const user = { uid: "test-owner" };
+const TradeCustomerEmailComposer = ({ enquiryId, recipient }) => <button type="button" data-enquiry-id={enquiryId}>{recipient}</button>;
 exports.render = (opportunity, isExpanded = true) => {
   const ${declaration("releasedCustomerContact")};
   const ${declaration("releasedCustomerName")};
@@ -33,7 +35,7 @@ exports.render = (opportunity, isExpanded = true) => {
 };`, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
 const production = {};
 Function("exports", "require", compiled)(production, id => { assert.equal(id, "react/jsx-runtime"); return jsx; });
-const render = (contact, expanded = true) => renderToStaticMarkup(production.render({ customerContact: contact, title: "Energy assessment" }, expanded));
+const render = (contact, expanded = true) => renderToStaticMarkup(production.render({ matchId: "assigned-lead-1", customerContact: contact, title: "Energy assessment" }, expanded));
 const contact = {
   name: "Jamie Example", email: "jamie@example.com", phone: "0400000000",
   addressLine1: "12 Example Street", addressLine2: "", suburb: "Melbourne", addressState: "VIC", postcode: "3000",
@@ -49,11 +51,11 @@ test("a selected lead with no active release keeps labelled contact rows and exp
   assert.doesNotMatch(html, /href=|tel:|mailto:|undefined|Invalid Date/);
 });
 
-test("available contact details provide direct phone and email links with address and message", () => {
+test("available contacts provide phone links and the shared business email composer with address and message", () => {
   const html = render(contact);
   assert.match(html, /<dt>Name<\/dt><dd>Jamie Example<\/dd>/);
   assert.match(html, /href="tel:0400000000"/);
-  assert.match(html, /href="mailto:jamie@example.com"/);
+  assert.match(html, /<button type="button" data-enquiry-id="assigned-lead-1">jamie@example.com<\/button>/);
   assert.match(html, /12 Example Street, Melbourne, VIC, 3000/);
   assert.match(html, /Please call in the afternoon/);
   assert.doesNotMatch(html, /Redacted|Not provided/);
@@ -63,7 +65,7 @@ test("partial release marks unavailable fields without rendering withheld values
   const html = render({ ...contact, name: "WITHHELD_NAME", phone: "WITHHELD_PHONE", redactedFields: ["name", "phone"] });
   assert.match(html, /<dt>Name<\/dt><dd>Redacted<\/dd>/);
   assert.match(html, /<dt>Phone<\/dt><dd>Redacted<\/dd>/);
-  assert.match(html, /href="mailto:jamie@example.com"/);
+  assert.match(html, /data-enquiry-id="assigned-lead-1">jamie@example.com<\/button>/);
   assert.match(html, /these details have not been released to your business/);
   assert.doesNotMatch(html, /WITHHELD_|tel:/);
 });
@@ -72,7 +74,7 @@ test("AEA authorization exposes complete contacts while legacy withheld fields r
   const html = render({ ...contact, releaseScope: "aea_only" });
   assert.match(html, /customer authorised Australian Energy Assessments/);
   assert.match(html, /href="tel:0400000000"/);
-  assert.match(html, /href="mailto:jamie@example.com"/);
+  assert.match(html, /data-enquiry-id="assigned-lead-1">jamie@example.com<\/button>/);
   assert.doesNotMatch(html, /Redacted|Not provided/);
   const legacy = render({ ...contact, phone: "PRIVATE_PHONE", releaseScope: "aea_only", redactedFields: ["phone"] });
   assert.match(legacy, /<dt>Phone<\/dt><dd>Redacted<\/dd>/);

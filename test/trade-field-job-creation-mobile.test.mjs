@@ -144,7 +144,11 @@ test("optional TLink invite is requested only after the job and appointment comm
   assert.ok(commit > 0 && invite > commit);
   assert.match(inviteServer, /messageType: "tlink_direct_appointment_invite"/);
   assert.match(inviteServer, /text\/calendar; charset=utf-8/);
-  assert.match(inviteServer, /AbortSignal\.timeout\(8_000\)/);
+  assert.match(inviteServer, /sendTradeCustomerEmail\(input\.ownerUid/);
+  const mailboxProvider = read("../src/lib/trade-email-provider.ts");
+  const emailServer = read("../src/lib/trade-email-server.ts");
+  assert.match(mailboxProvider, /redirect: "error", signal: AbortSignal\.timeout\(20000\)/);
+  assert.match(emailServer, /signal: AbortSignal\.timeout\(20_000\), redirect: 'error'/);
   assert.match(crmRoute, /customer_calendar_invite_accepted/);
 });
 

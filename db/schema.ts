@@ -1,6 +1,34 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, integer, primaryKey, sqliteTable, sqliteView, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
+export const tradeEmailConnections = sqliteTable("trade_email_connections", {
+  ownerUid: text("owner_uid").primaryKey().notNull(), id: text("id").notNull().unique(),
+  provider: text("provider").notNull(), externalId: text("external_id").notNull(), senderEmail: text("sender_email").notNull(),
+  displayName: text("display_name").notNull(), encryptedCredentials: text("encrypted_credentials").notNull(), status: text("status").notNull(),
+  refreshLock: text("refresh_lock").notNull().default(""), refreshLockUntil: text("refresh_lock_until").notNull().default(""),
+  lastTestAt: text("last_test_at").notNull().default(""), lastError: text("last_error").notNull().default(""),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, t => [check("trade_email_connection_provider", sql`${t.provider} IN ('google','microsoft')`),
+  check("trade_email_connection_status", sql`${t.status} IN ('connected','reconnect_required','disconnected')`)]);
+
+export const tradeEmailOauthStates = sqliteTable("trade_email_oauth_states", {
+  ownerUid: text("owner_uid").primaryKey().notNull(), provider: text("provider").notNull(), stateHash: text("state_hash").notNull().unique(),
+  browserHash: text("browser_hash").notNull(), encryptedVerifier: text("encrypted_verifier").notNull(), redirectUri: text("redirect_uri").notNull(),
+  expiresAt: text("expires_at").notNull(), consumedAt: text("consumed_at").notNull().default(""),
+}, t => [check("trade_email_state_provider", sql`${t.provider} IN ('google','microsoft')`)]);
+
+export const tradeEmailSubmissions = sqliteTable("trade_email_submissions", {
+  id: text("id").primaryKey().notNull(), ownerUid: text("owner_uid").notNull(), actorUid: text("actor_uid").notNull(),
+  connectionId: text("connection_id").notNull(), requestKey: text("request_key").notNull(), contentHash: text("content_hash").notNull(),
+  senderEmail: text("sender_email").notNull(), recipientEmail: text("recipient_email").notNull(), subject: text("subject").notNull(),
+  provider: text("provider").notNull(), status: text("status").notNull(), providerMessageId: text("provider_message_id").notNull().default(""),
+  errorCode: text("error_code").notNull().default(""), retryAfter: text("retry_after").notNull().default(""),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, t => [uniqueIndex("trade_email_submissions_owner_request").on(t.ownerUid, t.requestKey),
+  index("trade_email_submissions_owner_created").on(t.ownerUid, t.createdAt),
+  check("trade_email_submission_provider", sql`${t.provider} IN ('google','microsoft','resend')`),
+  check("trade_email_submission_status", sql`${t.status} IN ('sending','accepted','failed','uncertain')`)]);
+
 export const tradeAccounts = sqliteTable("trade_accounts", {
   firebaseUid: text("firebase_uid").primaryKey(),
   email: text("email").notNull(),

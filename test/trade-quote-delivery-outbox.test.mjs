@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import ts from "typescript";
 import { DatabaseSync } from "node:sqlite";
+import { ReminderProviderDeliveryError } from "../src/lib/service-reminder-delivery.ts";
 import {
   drainTradeQuoteDeliveries,
   tradeQuoteDeliveryStatus,
@@ -48,6 +50,7 @@ const callbackUpdateSql = callback.match(/db\.prepare\(`(UPDATE trade_crm_quote_
 const issueClaimSql = route.match(/const issueClaim = await db\.prepare\(`(UPDATE trade_crm_quote_versions[\s\S]*?updated_at = \?)`\)/)?.[1];
 const replacementDraftInsertSql = route.match(/db\.prepare\(`(INSERT OR IGNORE INTO trade_crm_quote_versions[\s\S]*?)`\)\.bind\(versionId/)?.[1];
 const revokeLinkSql = route.match(/db\.prepare\(`(UPDATE trade_crm_quote_links[\s\S]*?NOT EXISTS \([\s\S]*?\n        \))`\)\s*\.bind\(now, now, row\.link_id/)?.[1];
+const priorDeliverySettledSql = route.match(/const priorDeliverySettled = `(NOT EXISTS \([\s\S]*?\))`;/)?.[1];
 const issuedEventSqlTemplate = route.match(
   /(INSERT INTO trade_crm_quote_events\s*\([\s\S]*?SELECT \?, \?, \?, \?, \?, \?, 'issued',[\s\S]*?WHERE \$\{claimStillHeld\})/,
 )?.[1];
@@ -167,6 +170,17 @@ function initialiseOutbox(database, now = "2026-08-13T01:00:00.000Z") {
     failure_code = '', last_error = '', updated_at = ? WHERE id = 'delivery-1'`)
     .run(now, now, now);
 }
+
+const settlementCases = [
+  ...["google", "microsoft"].flatMap(provider => ["provider_accepted", "sent"].map(status => ({
+    provider, status, receipt: provider === "google" ? "gmail-message-id" : "submission:graph-acceptance", settled: true,
+  }))),
+  ...["provider_accepted", "sent"].map(status => ({ provider: "resend", status, receipt: "resend-message-id", settled: false })),
+  ...["google", "microsoft"].map(provider => ({ provider, status: "provider_accepted", receipt: "", settled: false })),
+  ...["queued", "sending", "waiting_for_channel", "reconciliation_required", "failed"].map(status => ({
+    provider: "google", status, receipt: "gmail-message-id", nextAttemptAt: status === "failed" ? "later" : "", settled: false,
+  })),
+];
 
 function rendererSnapshot() {
   return {
@@ -476,6 +490,97 @@ test("provider failure remains durable and retries on the bounded schedule", asy
   assert.equal(early.attempted, 0);
   assert.equal(sends, 1);
   database.close();
+});
+
+test("mailbox routing distinguishes unsent quote preparation from historical dispatch attempts", async () => {
+  const source = fs.readFileSync(new URL("../src/lib/trade-quote-delivery-server.ts", import.meta.url), "utf8");
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const dependencies = {
+    "./service-reminder-delivery.ts": await import("../src/lib/service-reminder-delivery.ts"),
+    "./trade-quote-delivery-policy.mjs": await import("../src/lib/trade-quote-delivery-policy.mjs"),
+  };
+  for (const previous of ["channel_wait", "preparation_failed", "historical_dispatch", "historical_receipt"]) {
+    const { database, db } = fixture();
+    insertLegacy(database); apply(database, migration); initialiseOutbox(database);
+    const calls = []; let configured = previous !== "channel_wait"; let failPreparation = previous === "preparation_failed";
+    const mocks = { ...dependencies, "./trade-email-server.ts": {
+      tradeCustomerEmailReadiness: async () => ({ configured, provider: "google", from: "trade@example.com" }),
+      sendTradeCustomerEmail: async (ownerUid, actorUid, message, options) => {
+        calls.push({ ownerUid, actorUid, message, options });
+        if (options.previouslyAttempted) throw new ReminderProviderDeliveryError("indeterminate", "EMAIL_LEGACY_SEND_UNCERTAIN");
+        return { provider: "google", providerMessageId: "gmail-receipt", providerStatus: "accepted" };
+      },
+    } };
+    const moduleRecord = { exports: {} };
+    new Function("require", "module", "exports", compiled)((key) => {
+      assert.ok(Object.hasOwn(mocks, key), `Unexpected dependency ${key}`); return mocks[key];
+    }, moduleRecord, moduleRecord.exports);
+    const options = {
+      db, deliveryId: "delivery-1", now: new Date("2026-08-13T01:00:00.000Z"),
+      loadContext: async () => database.prepare("SELECT * FROM trade_crm_quote_deliveries WHERE id='delivery-1'").get(),
+      prepareMessage: async () => {
+        if (failPreparation) throw new Error("QUOTE_DELIVERY_DOCUMENT_INVALID");
+        return { channel: "email", recipient: "customer@example.com", subject: "Quote", body: "Quote",
+          idempotencyKey: "provider-key", callbackUrl: "https://example.com/callback" };
+      },
+    };
+    if (previous.startsWith("historical_")) {
+      database.prepare(`UPDATE trade_crm_quote_deliveries SET attempts=1,last_attempt_at=?,provider_message_id=? WHERE id='delivery-1'`)
+        .run(previous === "historical_dispatch" ? "2026-08-13T00:30:00.000Z" : "", previous === "historical_receipt" ? "old-provider-receipt" : "");
+    } else {
+      await moduleRecord.exports.drainTradeQuoteDeliveries(options);
+      assert.equal(calls.length, 0, previous);
+      assert.equal(database.prepare("SELECT last_attempt_at FROM trade_crm_quote_deliveries WHERE id='delivery-1'").get().last_attempt_at, "", previous);
+      configured = true; failPreparation = false; options.now = new Date("2026-08-13T01:05:00.000Z");
+    }
+    const result = await moduleRecord.exports.drainTradeQuoteDeliveries(options);
+    const uncertain = previous.startsWith("historical_");
+    assert.equal(calls.length, 1, previous); assert.equal(calls[0].options.previouslyAttempted, uncertain, previous);
+    assert.equal(calls[0].ownerUid, "owner-1"); assert.equal(calls[0].actorUid, "system");
+    assert.equal(result.outcomes[0].status, uncertain ? "reconciliation_required" : "provider_accepted", previous);
+    const receipt = database.prepare("SELECT last_attempt_at,delivered_at FROM trade_crm_quote_deliveries WHERE id='delivery-1'").get();
+    assert.equal(receipt.last_attempt_at, options.now.toISOString()); assert.equal(receipt.delivered_at, ""); database.close();
+  }
+});
+
+test("indeterminate quote delivery requires reconciliation and never automatically resends", async () => {
+  const { database, db } = fixture();
+  insertLegacy(database); apply(database, migration); initialiseOutbox(database);
+  let sends = 0;
+  const options = {
+    db, deliveryId: "delivery-1", emailConfigured: true,
+    now: new Date("2026-08-13T01:00:00.000Z"),
+    prepareMessage: async () => ({ channel: "email", recipient: "customer@example.com", subject: "Quote",
+      body: "Quote", idempotencyKey: "quote:version-1:1:email:initial", callbackUrl: "https://example.com/callback" }),
+    loadContext: async () => database.prepare("SELECT * FROM trade_crm_quote_deliveries WHERE id = 'delivery-1'").get(),
+    sendEmail: async () => { sends++; throw new ReminderProviderDeliveryError("indeterminate", "Request timed out"); },
+  };
+  assert.equal((await drainTradeQuoteDeliveries(options)).outcomes[0].status, "reconciliation_required");
+  assert.equal((await drainTradeQuoteDeliveries({ ...options, now: new Date("2026-08-14T01:00:00.000Z") })).attempted, 0);
+  assert.equal(sends, 1);
+  const status = await tradeQuoteDeliveryStatus(db, "delivery-1", "owner-1");
+  assert.equal(status.presentation.canRetry, false);
+  assert.equal(status.presentation.label, "Check outgoing mailbox");
+  database.close();
+});
+
+for (const provider of ["google", "microsoft"]) test(`quote records ${provider} acceptance without claiming delivery or sending twice`, async () => {
+  const { database, db } = fixture();
+  insertLegacy(database); apply(database, migration); initialiseOutbox(database);
+  let sends = 0;
+  const options = {
+    db, deliveryId: "delivery-1", emailConfigured: true, now: new Date("2026-08-13T01:00:00.000Z"),
+    prepareMessage: async () => ({ channel: "email", recipient: "customer@example.com", subject: "Quote",
+      body: "Quote", idempotencyKey: "quote:version-1:1:email:initial", callbackUrl: "https://example.com/callback" }),
+    loadContext: async () => database.prepare("SELECT * FROM trade_crm_quote_deliveries WHERE id = 'delivery-1'").get(),
+    sendEmail: async () => { sends++; return { provider, providerMessageId: "provider-id", providerStatus: "accepted" }; },
+  };
+  await drainTradeQuoteDeliveries(options); await drainTradeQuoteDeliveries(options);
+  const receipt = database.prepare("SELECT provider, status, delivered_at FROM trade_crm_quote_deliveries WHERE id = 'delivery-1'").get();
+  assert.deepEqual({ ...receipt }, { provider, status: "provider_accepted", delivered_at: "" });
+  assert.equal(sends, 1); database.close();
 });
 
 test("a hanging provider cannot hold the browser route because dispatch exists only in the worker", async () => {
@@ -826,18 +931,7 @@ test("the exact issue transaction bindings persist an event and a durable queued
     SELECT 1 FROM trade_crm_quote_versions claimed
     WHERE claimed.id = ? AND claimed.firebase_uid = ?
       AND claimed.status = 'issuing' AND claimed.consent_statement = ?
-  ) AND NOT EXISTS (
-    SELECT 1 FROM trade_crm_quote_deliveries pending_delivery
-    JOIN trade_crm_quote_links pending_link
-      ON pending_link.id = pending_delivery.quote_link_id
-      AND pending_link.firebase_uid = pending_delivery.firebase_uid
-    WHERE pending_link.quote_id = ? AND pending_link.firebase_uid = ?
-      AND pending_delivery.quote_version_id <> ?
-      AND (
-        pending_delivery.status IN ('queued','sending','waiting_for_channel','provider_accepted','sent')
-        OR (pending_delivery.status = 'failed' AND pending_delivery.next_attempt_at <> '')
-      )
-  ) AND 1 = 1`;
+  ) AND ${priorDeliverySettledSql} AND 1 = 1`;
   const eventSql = issuedEventSqlTemplate.replace("${claimStillHeld}", claimStillHeld);
   const deliverySql = queuedDeliverySqlTemplate.replace("${claimStillHeld}", claimStillHeld);
   const { database, db } = fixture();
@@ -996,7 +1090,9 @@ test("worker drains automatically, callbacks own Delivered, and attention deep-l
 
 test("replacement drafts and links cannot abandon an unsettled delivery", () => {
   assert.match(route, /QUOTE_DELIVERY_PENDING/);
-  assert.match(route, /status IN \('queued','sending','waiting_for_channel','provider_accepted','sent'\)/);
+  assert.match(route, /status IN \('queued','sending','waiting_for_channel','reconciliation_required'\)/);
+  assert.equal([...route.matchAll(/provider NOT IN \('google','microsoft'\) OR (?:[a-z_]+\.)?provider_message_id = ''/g)].length, 7,
+    "all seven unsettled-delivery guards require a stored mailbox acceptance receipt");
   assert.match(route, /status IN \('queued','sending','waiting_for_channel'\)[\s\S]*status = 'failed' AND next_attempt_at <> ''/);
   assert.doesNotMatch(route, /A new quote draft superseded this secure link/);
   assert.match(route, /requestedVersion\.latest_version_number/);
@@ -1023,7 +1119,7 @@ test("a replacement draft is reusable while the issued version remains authorita
   assert.match(route, /current\.status === "issuing"[\s\S]{0,80}QUOTE_ISSUE_IN_PROGRESS/);
   assert.match(route, /authoritative\.version_number = parent\.current_version_number[\s\S]{0,100}authoritative\.status <> 'issuing'/);
   assert.match(route, /INSERT INTO trade_crm_quote_versions[\s\S]*SELECT \?, \?, \?, \?, 'draft'[\s\S]*authoritative\.updated_at = \?[\s\S]*NOT EXISTS \([\s\S]*pending_delivery/);
-  assert.match(route, /pending_delivery\.status IN \('queued','sending','waiting_for_channel','provider_accepted','sent'\)[\s\S]*pending_delivery\.status = 'failed' AND pending_delivery\.next_attempt_at <> ''/);
+  assert.match(route, /pending_delivery\.status IN \('queued','sending','waiting_for_channel','reconciliation_required'\)[\s\S]*pending_delivery\.status = 'failed' AND pending_delivery\.next_attempt_at <> ''/);
   assert.doesNotMatch(route, /if \(current\.status === "issued"\)[\s\S]{0,300}SET current_version_number = \?/);
 });
 
@@ -1062,11 +1158,11 @@ test("revoke and replacement issue cannot invalidate an unsettled emailed link",
   const errorStart = route.indexOf("function errorResponse", revokeStart);
   const revokeBranch = route.slice(revokeStart, errorStart);
   assert.match(revokeBranch, /NOT EXISTS \([\s\S]*trade_crm_quote_deliveries/);
-  assert.match(revokeBranch, /status IN \('queued','sending','waiting_for_channel','provider_accepted','sent'\)/);
+  assert.match(revokeBranch, /status IN \('queued','sending','waiting_for_channel','reconciliation_required'\)/);
   assert.match(revokeBranch, /Number\(revoked\[0\]\?\.meta\.changes \|\| 0\) !== 1/);
   assert.match(revokeBranch, /QUOTE_DELIVERY_PENDING/);
 
-  assert.match(route, /const priorDeliverySettled = `NOT EXISTS \([\s\S]*pending_delivery\.status IN \('queued','sending','waiting_for_channel','provider_accepted','sent'\)/);
+  assert.match(route, /const priorDeliverySettled = `NOT EXISTS \([\s\S]*pending_delivery\.status IN \('queued','sending','waiting_for_channel','reconciliation_required'\)/);
   assert.match(route, /claimStillHeld = `[\s\S]*\$\{priorDeliverySettled\}/);
   assert.match(route, /consent_statement = \?[\s\S]{0,120}\$\{priorDeliverySettled\} AND \$\{publicAccessHeld\.sql\}/);
   assert.match(route, /issueResults\[issueResults\.length - 1\][\s\S]{0,100}QUOTE_DELIVERY_PENDING/);
@@ -1117,6 +1213,25 @@ test("SQLite guards exact issue claims and replacement saves against interleavin
   );
   assert.equal(Number(inserted.changes), 0, "queued old delivery blocks replacement draft creation");
 
+  database.prepare(`INSERT INTO trade_crm_quote_links
+    (id, quote_id, quote_version_id, firebase_uid) VALUES ('link-1','quote-1','version-1','owner-1')`).run();
+  for (const scenario of settlementCases) {
+    const label = `${scenario.provider}/${scenario.status}/${scenario.receipt || "missing receipt"}`;
+    database.prepare(`UPDATE trade_crm_quote_deliveries SET provider=?,status=?,provider_message_id=?,next_attempt_at=?
+      WHERE id='delivery-1'`).run(scenario.provider, scenario.status, scenario.receipt, scenario.nextAttemptAt || "");
+    const replacement = database.prepare(replacementDraftInsertSql).run(
+      "version-2", "quote-1", "owner-1", 2, "c@example.com",
+      100, 10, 110, "terms", "message", "2026-09-01", "r2", "r2",
+      "quote-1", "owner-1", "version-1", "issued", "r1",
+    );
+    assert.equal(Number(replacement.changes), Number(scenario.settled), `replacement draft: ${label}`);
+    const issue = database.prepare(`SELECT ${priorDeliverySettledSql} AS settled`).get("quote-1", "owner-1", "version-2");
+    assert.equal(issue.settled, Number(scenario.settled), `replacement issue: ${label}`);
+    const receipt = database.prepare("SELECT status,delivered_at FROM trade_crm_quote_deliveries WHERE id='delivery-1'").get();
+    assert.deepEqual({ ...receipt }, { status: scenario.status, delivered_at: "" }, `acceptance remains honest: ${label}`);
+    database.prepare("DELETE FROM trade_crm_quote_versions WHERE id='version-2'").run();
+  }
+
   database.prepare("UPDATE trade_crm_quote_deliveries SET status='delivered', next_attempt_at='' WHERE id='delivery-1'").run();
   const draftInserted = database.prepare(replacementDraftInsertSql).run(
     "version-2", "quote-1", "owner-1", 2, "c@example.com",
@@ -1150,6 +1265,19 @@ test("SQLite revoke guard preserves links with unsettled delivery generations", 
   );
   assert.equal(Number(revoked.changes), 0);
   assert.equal(database.prepare("SELECT status FROM trade_crm_quote_links WHERE id='link-1'").get().status, "active");
+  database.prepare("UPDATE trade_crm_quote_deliveries SET status='reconciliation_required', next_attempt_at='' WHERE id='delivery-1'").run();
+  revoked = database.prepare(revokeLinkSql).run("now", "now", "link-1", "owner-1", 1);
+  assert.equal(Number(revoked.changes), 0, "Unknown outcome must not be bypassed by revoking the emailed link");
+  for (const scenario of settlementCases) {
+    const label = `${scenario.provider}/${scenario.status}/${scenario.receipt || "missing receipt"}`;
+    database.prepare(`UPDATE trade_crm_quote_deliveries SET provider=?,status=?,provider_message_id=?,next_attempt_at=?
+      WHERE id='delivery-1'`).run(scenario.provider, scenario.status, scenario.receipt, scenario.nextAttemptAt || "");
+    database.prepare("UPDATE trade_crm_quote_links SET status='active',token_hash='hash',encrypted_token='encrypted',revoked_at='',updated_at='r1' WHERE id='link-1'").run();
+    const changed = database.prepare(revokeLinkSql).run("now", "now", "link-1", "owner-1", 1);
+    assert.equal(Number(changed.changes), Number(scenario.settled), `revoke: ${label}`);
+    const receipt = database.prepare("SELECT status,delivered_at FROM trade_crm_quote_deliveries WHERE id='delivery-1'").get();
+    assert.deepEqual({ ...receipt }, { status: scenario.status, delivered_at: "" }, `acceptance remains honest: ${label}`);
+  }
   database.prepare("UPDATE trade_crm_quote_deliveries SET status='delivered', next_attempt_at='' WHERE id='delivery-1'").run();
   revoked = database.prepare(revokeLinkSql).run(
     "now", "now", "link-1", "owner-1", 1,

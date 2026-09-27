@@ -1,9 +1,10 @@
 import { getD1 } from "../../db";
 import { australianAppointmentTimeZone, textAttachment } from "@/lib/customer-appointment-calendar";
 import { directAppointmentInviteDraft } from "@/lib/direct-appointment-invite";
-import { sendServiceReminderProviderMessage, serviceReminderProviderConfiguration } from "@/lib/service-reminder-delivery";
+import { reminderProviderFailureOutcome } from "@/lib/service-reminder-delivery";
+import { sendTradeCustomerEmail, tradeCustomerEmailReadiness } from "@/lib/trade-email-server";
 
-type InviteStatus = "accepted" | "failed" | "unavailable";
+type InviteStatus = "accepted" | "failed" | "unavailable" | "reconciliation_required";
 
 export type DirectAppointmentInviteResult = {
   requested: true;
@@ -24,11 +25,12 @@ async function idempotencyKey(appointmentId: string, revision: number) {
 export async function sendDirectAppointmentCalendarInvite(input: {
   appointmentId: string;
   ownerUid: string;
+  actorUid?: string;
   origin: string;
   change?: "rescheduled" | "cancelled";
 }): Promise<DirectAppointmentInviteResult> {
-  const configuration = serviceReminderProviderConfiguration();
-  if (!configuration.email.configured) {
+  const configuration = await tradeCustomerEmailReadiness(input.ownerUid);
+  if (!configuration.configured) {
     return { requested: true, status: "unavailable", message: "Email delivery is not configured." };
   }
   const row = await getD1().prepare(`SELECT a.id appointment_id, a.revision, a.starts_at, a.ends_at,
@@ -59,7 +61,7 @@ export async function sendDirectAppointmentCalendarInvite(input: {
     businessName: String(row.trade_business_name || "Trade professional"),
     customerName: customerName(row),
     customerEmail: recipient,
-    organizerEmail: configuration.email.from,
+    organizerEmail: configuration.from,
     startsAt: String(row.starts_at || ""),
     endsAt: String(row.ends_at || ""),
     timeZone: australianAppointmentTimeZone(row.address_state),
@@ -69,7 +71,7 @@ export async function sendDirectAppointmentCalendarInvite(input: {
   });
   if (!draft) return { requested: true, status: "unavailable", message: "The saved appointment time could not be added to a calendar." };
   try {
-    await sendServiceReminderProviderMessage({
+    await sendTradeCustomerEmail(input.ownerUid, input.actorUid || "system", {
       channel: "email",
       recipient,
       subject: draft.subject,
@@ -83,11 +85,12 @@ export async function sendDirectAppointmentCalendarInvite(input: {
         `text/calendar; charset=utf-8; method=${draft.calendar.method}`,
       )],
       callbackUrl: new URL("/api/service-reminder-provider-events/twilio", input.origin).toString(),
-    }, {
-      fetchImpl: (resource, init) => fetch(resource, { ...init, signal: AbortSignal.timeout(8_000) }),
     });
     return { requested: true, status: "accepted", message: "The calendar invite was accepted for delivery." };
-  } catch {
+  } catch (error) {
+    if (reminderProviderFailureOutcome(error) === "indeterminate") {
+      return { requested: true, status: "reconciliation_required", message: "The job was saved. Check the outgoing mailbox before sending this calendar invite again." };
+    }
     return { requested: true, status: "failed", message: "The job was saved, but the calendar invite could not be sent." };
   }
 }

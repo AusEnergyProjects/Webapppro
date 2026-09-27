@@ -236,7 +236,7 @@ test("installer quote actions preserve direct-customer ownership and immutable i
   assert.match(installerRoute, /quote_status = 'issued'/);
   assert.match(installerRoute, /INSERT OR IGNORE INTO trade_crm_quote_deliveries[\s\S]*?'queued'/);
   assert.doesNotMatch(installerRoute, /sendServiceReminderProviderMessage/);
-  assert.match(quoteDeliveryServer, /sendServiceReminderProviderMessage/);
+  assert.match(quoteDeliveryServer, /provider!\.sendTradeCustomerEmail\(String\(row\.firebase_uid\)/);
   assert.match(quoteDeliveryServer, /SET status = 'provider_accepted'/);
   assert.match(deliveryWorker, /drainTradeQuoteDeliveries\(\{ db: getD1\(\) \}\)/);
   assert.doesNotMatch(installerRoute, /quote_status = 'sent'/);

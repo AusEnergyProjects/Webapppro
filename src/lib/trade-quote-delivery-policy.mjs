@@ -32,6 +32,9 @@ export function tradeQuoteDeliveryPublicOrigin(value) {
 
 export function tradeQuoteDeliveryPresentation(status, attempts = 0, nextAttemptAt = "", failureCode = "", generation = 1) {
   const state = String(status || "queued");
+  if (state === "reconciliation_required") {
+    return { key: "attention", label: "Check outgoing mailbox", canRetry: false };
+  }
   if (String(failureCode) === "QUOTE_DELIVERY_LEGACY_RETRY_REQUIRED") {
     return { key: "attention", label: "Needs attention", canRetry: Number(generation) === 1 };
   }

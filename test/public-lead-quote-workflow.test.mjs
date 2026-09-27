@@ -633,7 +633,7 @@ test("public lead save, issue and send use one immutable accepted recipient", ()
   const accessGuard = read("../src/lib/public-lead-quote-workflow.mjs");
   assert.doesNotMatch(quoteRoute, /sendServiceReminderProviderMessage/);
   assert.match(worker, /drainTradeQuoteDeliveries\(\{ db: getD1\(\) \}\)/);
-  assert.match(quoteDeliveryServer, /provider\?\.sendServiceReminderProviderMessage/);
+  assert.match(quoteDeliveryServer, /provider!\.sendTradeCustomerEmail\(String\(row\.firebase_uid\)/);
   assert.match(quoteDeliveryServer, /String\(row\.source_type \|\| ""\) === "public_lead"[\s\S]*acceptedDisclosure\.contract !== "tlink-public-lead-accepted-disclosure-v1"[\s\S]*acceptedDisclosure\.customer as Row \| undefined\)\?\.email[\s\S]*row\.customer_email/);
   assert.match(quoteDeliveryServer, /tradeQuoteRecipientEmailSha256\(email\) !== String\(row\.recipient_email_sha256 \|\| ""\)/);
   assert.match(quoteRoute, /INSERT OR IGNORE INTO trade_crm_quote_deliveries[\s\S]*'queued'/);

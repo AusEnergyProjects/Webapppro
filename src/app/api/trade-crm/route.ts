@@ -2565,6 +2565,7 @@ export async function POST(request: Request) {
         calendarInvite = await sendDirectAppointmentCalendarInvite({
           appointmentId,
           ownerUid: identity.uid,
+          actorUid: identity.access.actorUid,
           origin: new URL(request.url).origin,
         });
         try {

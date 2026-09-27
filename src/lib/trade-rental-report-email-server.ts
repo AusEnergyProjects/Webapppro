@@ -1,7 +1,8 @@
 import { getD1 } from '../../db';
 import { assignedJob, type TeamAccess } from '@/lib/trade-team-server';
 import { authenticatedRentalReportPdf, ownerRentalReportPresentation } from '@/lib/trade-rental-report-server';
-import { sendServiceReminderProviderMessage, serviceReminderProviderConfiguration } from '@/lib/service-reminder-delivery';
+import { reminderProviderFailureOutcome } from '@/lib/service-reminder-delivery';
+import { sendTradeCustomerEmail, tradeCustomerEmailReadiness } from '@/lib/trade-email-server';
 import { rentalReportEmailDraft } from './rental-report-email-template.mjs';
 
 type Row = Record<string, unknown>;
@@ -30,9 +31,11 @@ export async function rentalReportDeliveryState(ownerUid: string, inspectionId: 
     .bind(ownerUid, inspectionId).first<Row>();
   if (!row) return null;
   const meta = object(row.metadata);
-  const status = row.event_type === 'report_email_accepted' ? 'accepted' : row.event_type === 'report_email_failed' ? 'failed' : 'sending';
+  const status = row.event_type === 'report_email_accepted' ? 'accepted'
+    : meta.outcome === 'indeterminate' ? 'reconciliation_required' : row.event_type === 'report_email_failed' ? 'failed' : 'sending';
   return { status, reportId: String(row.report_id || ''), recipientSha256: /^[a-f0-9]{64}$/.test(String(meta.recipientSha256 || '')) ? String(meta.recipientSha256) : '',
     message: status === 'accepted' ? 'The report email was accepted for delivery.'
+    : status === 'reconciliation_required' ? 'Check the outgoing mailbox before sending this report again.'
     : status === 'failed' ? String(meta.error || 'The report could not be emailed. Retry from this assessment.') : 'The report email is being sent.', at: row.created_at };
 }
 
@@ -69,6 +72,7 @@ export async function emailRentalAssessmentReport(input: Input) {
       AND request_id >= ? AND request_id < ? ORDER BY created_at, request_id`)
     .bind(input.inspectionId, input.access.ownerUid, input.reportId, `${prefix}:`, `${prefix};`).all<Row>();
   if (events.results.some(row => row.event_type === 'report_email_accepted')) return { status: 'accepted', reportId: input.reportId, message: 'The report email was already accepted for delivery.' };
+  if (events.results.some(row => object(row.metadata).outcome === 'indeterminate')) return { status: 'reconciliation_required', reportId: input.reportId, message: 'Check the outgoing mailbox before sending this report again. Delivery could not be confirmed.' };
   const requests = events.results.filter(row => row.event_type === 'report_email_requested');
   const last = requests.at(-1);
   if (last && Date.now() - Date.parse(String(requests[0].created_at)) > 23 * 60 * 60 * 1000) {
@@ -76,7 +80,8 @@ export async function emailRentalAssessmentReport(input: Input) {
   }
   if (last && !events.results.some(row => row.request_id === `${last.request_id}:failed`)
     && Date.now() - Date.parse(String(last.created_at)) < 90_000) return { status: 'sending', reportId: input.reportId, message: 'The report email is being sent.' };
-  if (!serviceReminderProviderConfiguration().email.configured) return { status: 'failed', reportId: input.reportId, message: 'Email delivery is not configured. The completed report is saved.' };
+  const email = await tradeCustomerEmailReadiness(input.access.ownerUid, db);
+  if (!email.configured) return { status: 'failed', reportId: input.reportId, message: 'Email delivery is not configured. The completed report is saved.' };
   const pdf = await authenticatedRentalReportPdf({ access: input.access, workOrderId: input.workOrderId, reportId: input.reportId });
   // Large evidence reports travel by their existing secure report link rather than exceeding email attachment limits.
   const presentation = await ownerRentalReportPresentation({ ownerUid: input.access.ownerUid, inspectionId: input.inspectionId, origin: input.origin, includeSecret: true });
@@ -90,20 +95,23 @@ export async function emailRentalAssessmentReport(input: Input) {
   if (!claim.meta.changes) return { status: 'sending', reportId: input.reportId, message: 'The report email is being sent.' };
   try {
     const attachments = [];
-    if (pdf.bytes.length <= 18 * 1024 * 1024) {
+    const attachmentLimit = email.provider === 'resend' ? 18 * 1024 * 1024 : 1.5 * 1024 * 1024;
+    if (pdf.bytes.length <= attachmentLimit) {
       let binary = ''; for (const byte of pdf.bytes) binary += String.fromCharCode(byte);
       attachments.push({ filename: `${pdf.reportNumber.replace(/[^a-zA-Z0-9-]/g, '-')}.pdf`, content: btoa(binary), contentType: 'application/pdf' });
     }
     const draft = rentalReportEmailDraft({ recipientName: recipient.name, reportNumber: pdf.reportNumber,
       shareUrl: link.shareUrl, hasAttachment: attachments.length > 0 });
-    const result = await sendServiceReminderProviderMessage({ channel: 'email', recipient: recipient.email,
+    const result = await sendTradeCustomerEmail(input.access.ownerUid, input.access.actorUid, { channel: 'email', recipient: recipient.email,
       ...draft, attachments, idempotencyKey: key,
       messageType: 'tlink_rental_report', callbackUrl: new URL('/api/service-reminder-provider-events/twilio', input.origin).toString(),
-    }, { fetchImpl: (resource, init) => fetch(resource, { ...init, signal: AbortSignal.timeout(15_000) }) });
+    }, { db, previouslyAttempted: requests.length > 0 });
     await event(input, 'report_email_accepted', `${prefix}:accepted`, { recipientSha256: recipientHash, provider: result.provider, providerMessageId: result.providerMessageId });
     return { status: 'accepted', reportId: input.reportId, message: 'The report email was accepted for delivery.' };
-  } catch {
-    await event(input, 'report_email_failed', `${attempt}:failed`, { recipientSha256: recipientHash, error: 'The report email could not be confirmed. Retry to check delivery safely.' });
+  } catch (error) {
+    const outcome = reminderProviderFailureOutcome(error);
+    await event(input, 'report_email_failed', `${attempt}:failed`, { recipientSha256: recipientHash, outcome, error: 'The report email could not be confirmed. Retry to check delivery safely.' });
+    if (outcome === 'indeterminate') return { status: 'reconciliation_required', reportId: input.reportId, message: 'Check the outgoing mailbox before sending this report again. Delivery could not be confirmed.' };
     return { status: 'failed', reportId: input.reportId, message: 'The report email could not be confirmed. Your completed report is saved; retry email from this assessment.' };
   }
 }

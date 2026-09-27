@@ -12,6 +12,7 @@ import {
 import type { User } from "firebase/auth";
 import dynamic from "next/dynamic";
 import Image from "next/image";
+import { TradeEmailSettings } from "./TradeEmailSettings";
 
 const TradeDocumentSamplePreview = dynamic(() => import("./TradeDocumentSamplePreview").then(module => module.TradeDocumentSamplePreview));
 const TradeCreditexOnboarding = dynamic(() => import("./TradeTrainingWorkspace").then((module) => module.TradeCreditexOnboarding), { loading: () => <p role="status">Loading Creditex onboarding...</p> });
@@ -817,6 +818,7 @@ export function TradeBusinessSettingsWorkspace({
                 </a>
               )}
             </div>
+            {profile.partnerType === "installer" && <TradeEmailSettings user={user} />}
             <div className="dashboard-account-links">
               <a href="/direct-trade/partners">
                 <strong>Edit business identity</strong>
