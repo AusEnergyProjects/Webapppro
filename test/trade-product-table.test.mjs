@@ -28,10 +28,10 @@ function harness(t, { component = "TradeProductStockSwitch", props: overrides, r
     useCallback(callback, deps) { return hooks.useMemo(() => callback, deps); },
     useEffect(callback, deps) { const i = cursor++, old = effects[i]; if (!old || deps.some((value, j) => value !== old.deps[j])) { old?.cleanup?.(); effects[i] = { deps }; pending.push(() => { effects[i].cleanup = callback(); }); } },
   };
-  const StockWorkspace = () => null, StockSettings = () => null, StockSwitch = () => null;
+  const StockWorkspace = () => null, StockSettings = () => null, StockSwitch = () => null, CategoryField = () => null;
   const dependencies = { react: hooks, "react/jsx-runtime": jsx, "@/lib/trade-price-book": priceBook, "@/lib/trade-quote": quote, "@/lib/trade-solar-equipment": equipment,
     "./TradeStockWorkspace": { TradeStockProductSettings: StockSettings, TradeStockWorkspace: StockWorkspace }, "./TradeProductTableControls": { TradeProductStockSwitch: StockSwitch, TradeProductTableScroll: () => null },
-    "./TradeProductDocuments": { TradeProductDocuments: () => null }, "./TradeJobPacketWorkspace": { TradeJobPacketWorkspace: () => null }, "./TradePriceBookImport": { TradePriceBookImport: () => null } };
+    "./TradeProductDocuments": { TradeProductDocuments: () => null }, "./TradeJobPacketWorkspace": { TradeJobPacketWorkspace: () => null }, "./TradePriceBookImport": { TradePriceBookImport: () => null }, "./TradePriceBookCategoryField": { TradePriceBookCategoryField: CategoryField } };
   const exports = {}; const styles = new Proxy({}, { get: (_object, key) => key });
   const fetch = async (url, init = {}) => { requests.push({ url, init }); return respond ? respond(url, init) : response({ ok: true, item: stockItem({ tracked: true, revision: 1 }), history: [], canManage: true }); };
   const window = { setTimeout: callback => setImmediate(callback), clearTimeout: value => clearImmediate(value), confirm: () => true };
@@ -40,7 +40,7 @@ function harness(t, { component = "TradeProductStockSwitch", props: overrides, r
   const props = { user: { uid: "owner", getIdToken: async () => "token" }, itemId: "product-1", name: "Solar panel", stock: stockItem(), loading: false, failed: false, canManage: true, onChanged: value => changes.push(value), onRefresh: () => refreshes++, ...overrides };
   const render = () => { cursor = 0; const tree = exports[component](props); attachRefs?.(tree); for (const effect of pending.splice(0)) effect(); return tree; };
   const cleanup = () => { for (const effect of effects) effect?.cleanup?.(); }; t.after(cleanup);
-  return { props, requests, changes, observers, render, cleanup, StockWorkspace, StockSettings, StockSwitch, get refreshes() { return refreshes; }, async settle() { let tree; for (let i = 0; i < 5; i++) { tree = render(); await tick(); } return tree; } };
+  return { props, requests, changes, observers, render, cleanup, StockWorkspace, StockSettings, StockSwitch, CategoryField, get refreshes() { return refreshes; }, async settle() { let tree; for (let i = 0; i < 5; i++) { tree = render(); await tick(); } return tree; } };
 }
 
 test("inline tracking switch enables with one exact-revision mutation and no optimistic state", async t => {
@@ -150,7 +150,7 @@ test("tracked each items can gain editable roof dimensions without changing stoc
   let tree = await h.settle(); button(tree, "Solar panel").props.onClick(); tree = await h.settle();
   nodes(tree, node => node.type === h.StockSettings)[0].props.onLoaded(tracked); tree = h.render();
   const field = label => nodes(nodes(tree, node => node.type === "label" && nodes(node, child => child.type === "span" && text(child) === label).length)[0], node => node.type === "input")[0];
-  field("Category").props.onChange({ target: { value: "Roof panels" } }); tree = h.render();
+  nodes(tree, node => node.type === h.CategoryField)[0].props.onChange("Roof panels"); tree = h.render();
   const toggle = nodes(tree, node => node.type === "input" && node.props.type === "checkbox")[0]; assert.equal(toggle.props.disabled, false);
   toggle.props.onChange({ target: { checked: true } }); tree = h.render(); button(tree, "Use default size").props.onClick(); tree = h.render();
   assert.equal(field("Length (mm)").props.value, "1762"); assert.equal(field("Width (mm)").props.value, "1134"); assert.equal(field("Power (W)").props.value, "440");

@@ -47,7 +47,19 @@
 .fields { border: 0; display: grid; gap: 16px; margin: 0; min-width: 0; padding: 0; }
 .fields:disabled { opacity: .78; }
 .archived { background: #f3f5f4; border-radius: 9px; color: var(--color-aea-muted); font-size: .7rem; margin: 0; padding: 10px 12px; }
-.coreFields { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.coreFields { display: grid; align-items: start; gap: 16px 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.coreFields label { align-content: start; min-width: 0; line-height: 20px; }
+.coreFields input, .coreFields select { box-sizing: border-box; min-width: 0; height: 44px; min-height: 44px; font-size: 14px; font-weight: 400; line-height: 20px; }
+.categoryField { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.categoryControl { position: relative; min-width: 0; }
+.categoryControl input { padding-right: 44px; }
+.categoryControl .categoryToggle { position: absolute; inset: 0 0 auto auto; display: grid; place-items: center; width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 0 9px 9px 0; background: transparent; color: var(--trade-field-ink, #183b35); cursor: pointer; }
+.categoryMenu { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 20; padding: 4px; border: 1px solid var(--trade-line, #d7e5df); border-radius: 10px; background: var(--trade-field, #fff); color: var(--trade-field-ink, #183b35); box-shadow: 0 8px 24px #0002; }
+.categoryMenu > [role="listbox"] { max-height: 240px; overflow-y: auto; overscroll-behavior: contain; }
+.categoryMenu button { display: block; width: 100%; min-height: 44px; border: 0; border-radius: 6px; padding: 10px 12px; background: transparent; color: inherit; font-family: var(--font-aea-body, Arial, Helvetica, sans-serif); font-size: 14px; font-weight: 400; line-height: 20px; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+.categoryMenu button:hover, .categoryMenu button[aria-selected="true"] { background: var(--trade-surface-soft, #edf5f2); color: var(--trade-ink, #183b35); }
+.categoryMenu p { margin: 0; padding: 10px 12px; font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
+.categoryControl button:focus-visible { outline: 2px solid var(--trade-accent-readable, #087567); outline-offset: -2px; }
 .coreFields small { color: var(--trade-muted, #5d7068); font-size: 13px; font-weight: 400; line-height: 1.4; }
 .filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
 .filters label { display: grid; gap: 6px; color: var(--trade-ink, #183b35); font-size: 14px; font-weight: 600; min-width: 180px; max-width: 320px; }

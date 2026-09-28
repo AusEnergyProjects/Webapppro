@@ -13,6 +13,7 @@ import { TradePriceBookImport } from "./TradePriceBookImport";
 import { TradeProductDocuments } from "./TradeProductDocuments";
 import { TradeStockProductSettings, TradeStockWorkspace } from "./TradeStockWorkspace";
 import { TradeProductStockSwitch, TradeProductTableScroll } from "./TradeProductTableControls";
+import { TradePriceBookCategoryField } from "./TradePriceBookCategoryField";
 import type { StockItem, StockListResponse } from "@/lib/trade-stock";
 import styles from "./TradePriceBookWorkspace.module.css";
 
@@ -274,7 +275,7 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
       <div className={styles.coreFields}>
         <label><span>Item name</span><input required maxLength={140} value={draft.name} onChange={(event) => change("name", event.target.value)} placeholder="e.g. Licensed electrician labour" /></label>
         <label><span>Type</span><select value={draft.itemType} disabled={stockLocksUnits} onChange={(event) => changeItemType(event.target.value as PriceBookItemType)}>{PRICE_BOOK_ITEM_TYPES.map((type) => <option key={type} value={type}>{PRICE_BOOK_TYPE_LABELS[type]}</option>)}</select></label>
-        <label><span>Category</span><input list="price-book-categories" maxLength={80} value={draft.category} onChange={(event) => change("category", event.target.value)} placeholder="Choose or type your own" /><datalist id="price-book-categories">{[...new Set([...categories, "Insulation", "Solar panels", "Heat pumps"])].map((category) => <option key={category} value={category} />)}</datalist><small>For example, Insulation or Solar panels. Saved for your business.</small></label>
+        <TradePriceBookCategoryField value={draft.category} categories={categories} onChange={(value) => change("category", value)} />
         <label><span>Code / SKU</span><input maxLength={100} value={draft.supplierSku} readOnly={Boolean(draft.supplierProductId)} onChange={(event) => change("supplierSku", event.target.value)} placeholder="Your product or supplier code" /></label>
         <label><span>Sell price ex GST</span><input required inputMode="decimal" value={draft.sellPrice} onChange={(event) => change("sellPrice", event.target.value)} placeholder={priceBookItemAllowsNegativeSellPrice(draft.itemType) ? "-38.00" : "0.00"} />{draft.itemType === "certificate" && <small>Enter the certificate value as a negative amount per certificate, such as -38.00 per STC.</small>}</label>
         <label><span>GST</span><select value={draft.taxCode} onChange={(event) => change("taxCode", event.target.value)}><option value="gst">Add 10% GST</option><option value="none">No GST</option></select></label>
