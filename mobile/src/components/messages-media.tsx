@@ -158,6 +158,18 @@ export function MessageMediaComposer({ threadId, disabled, callsBusy, count, onA
     } catch (caught) { report(caught instanceof Error ? caught.message : 'The voice note is still here. Tap Attach voice note to try again.'); }
     finally { markBusy(false); }
   }
+  async function discardRecording() {
+    if (busyRef.current) return;
+    markBusy(true);
+    try {
+      if (recording.current) { await recorder.stop(); recording.current = false; }
+      if (recorder.uri) deleteCacheFile(new File(recorder.uri));
+      localAudio.current = null;
+      if (alive.current) setHasRecording(false);
+      if (!callsBusyRef.current) await setAudioModeAsync({ allowsRecording: false, shouldPlayInBackground: false });
+    } catch (caught) { report(caught instanceof Error ? caught.message : 'The recording could not be stopped. Try again.'); }
+    finally { markBusy(false); }
+  }
   useEffect(() => {
     if (recording.current && !state.isRecording && state.durationMillis >= 119000) {
       recording.current = false; setHasRecording(true); onBusyChange(false);
@@ -172,7 +184,7 @@ export function MessageMediaComposer({ threadId, disabled, callsBusy, count, onA
   return <View style={styles.tools}>
     {state.isRecording || hasRecording ? <>
       <Text style={[messageStyles.muted, messageStyles.grow]}>{state.isRecording ? `Recording · ${Math.floor(state.durationMillis / 1000)}s / 120s` : 'Voice note ready'}</Text>
-      <MessageIconButton icon="delete-outline" label="Discard voice note" disabled={busy} onPress={() => { if (recording.current) { recording.current = false; void recorder.stop().then(() => { if (recorder.uri) deleteCacheFile(new File(recorder.uri)); }); } else if (recorder.uri) deleteCacheFile(new File(recorder.uri)); setHasRecording(false); onBusyChange(false); }} />
+      <MessageIconButton icon="delete-outline" label="Discard voice note" disabled={busy} onPress={() => void discardRecording()} />
       <MessageIconButton icon={state.isRecording ? 'stop-circle-outline' : 'paperclip'} label={state.isRecording ? 'Stop and attach voice note' : 'Attach voice note'} disabled={busy || callsBusy} onPress={() => void finishRecording()} />
     </> : <>
       <MessageIconButton icon="camera-outline" label="Take photo" disabled={disabled || busy || count >= 4} onPress={() => void photo(true)} />
