@@ -4,6 +4,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { ApiError, apiRequest, publicApiRequest } from '@/lib/api';
 import { subscribeAllRentalSaves } from '@/lib/rental-save-queue';
@@ -27,7 +28,7 @@ import {
   queueCounts,
 } from '@/lib/database';
 import { APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
-import { forgetPushToken, getDeviceId, getDeviceName, rememberPushToken } from '@/lib/device';
+import { forgetPushToken, getDeviceId, getDeviceName, notificationDeviceState, rememberPushToken } from '@/lib/device';
 import type { EvidenceCaptureEnvelope } from '@/lib/evidence';
 import {
   clearFieldSession,
@@ -251,9 +252,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (online && signedIn) void syncNow();
     });
     const response = Notifications.addNotificationResponseReceivedListener(() => { void syncNow(); });
+    const foreground = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && signedIn) void syncNow();
+    });
     const token = Notifications.addPushTokenListener(async (nextToken) => {
       if (!signedIn) return;
-      await rememberPushToken(String(nextToken.data));
+      const state = await notificationDeviceState().catch(() => null);
+      const pushToken = state?.granted && !state.muted ? String(nextToken.data) : '';
+      if (pushToken) await rememberPushToken(pushToken);
+      else await forgetPushToken();
       const modes = await resolveFieldAccessModes().catch(() => []);
       const deviceId = await getDeviceId();
       void Promise.allSettled(modes.map((mode) =>
@@ -267,13 +274,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             appVersion: APP_VERSION,
             deviceName: getDeviceName(),
             isPhysicalDevice: Device.isDevice,
-            pushToken: String(nextToken.data),
+            pushToken,
             pushProvider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm',
           }),
         }).catch((error) => { void handleAccessError(error); })
       ));
     });
-    return () => { network(); response.remove(); token.remove(); };
+    return () => { network(); response.remove(); foreground.remove(); token.remove(); };
   }, [handleAccessError, signedIn, syncNow]);
 
   const saveAction = useCallback(async (action: Omit<OfflineAction, 'clientActionId'>) => {

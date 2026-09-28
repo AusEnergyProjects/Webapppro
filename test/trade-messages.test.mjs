@@ -53,12 +53,65 @@ test("message route rejects oversized UTF-8 bodies before any conversation mutat
   const route = load("../src/app/api/trade-messages/route.ts", {
     "@/lib/admin-server": { sameOrigin:()=>true, mfaErrorResponse:()=>null, adminJson:(body,status=200)=>Response.json(body,{status}) },
     "@/lib/trade-access-server": {TradeAccessError:class extends Error {}},
-    "@/lib/trade-team-server": {requireInstallerTeamAccess:async()=>owner},
+    "@/lib/trade-communications-access": {requireTeamCommunicationAccess:async()=>owner},
+    "cloudflare:workers":{waitUntil:()=>assert.fail("Oversized body scheduled notification")},
+    "@/lib/trade-push-server":{notifyTeamMessage:()=>assert.fail("Oversized body dispatched notification")},
     "@/lib/bounded-request-body.mjs":bounded,
     "@/lib/trade-messages-server": {sendTeamMessage:()=>assert.fail("Oversized body reached message mutation")},
   });
   const response = await route.POST(new Request("https://tlink.test/api/trade-messages",{method:"POST",body:JSON.stringify({action:"send",body:"é".repeat(7000)})}));
   assert.equal(response.status,413);
+});
+
+test("notification deep links select an authorised conversation beyond the first inbox page",async()=>{
+  const f=fixture();try{
+    const target=await create(f,owner,["jane"]);
+    f.sqlite.prepare("UPDATE trade_message_threads SET updated_at='2000-01-01' WHERE id=?").run(target.id);
+    for(let i=1;i<=55;i++)await create(f,owner,["jane","john"],`Newer group ${i}`,request(i+100));
+    const inbox=await f.server.messagesWorkspace(jane,"",1,f.db);
+    assert.equal(inbox.threads.length,50);assert.equal(inbox.hasMore,true);assert.ok(!inbox.threads.some(thread=>thread.id===target.id));
+    const selected=await f.server.messagesWorkspace(jane,"",1,f.db,target.id);
+    assert.equal(selected.threads.length,1);assert.equal(selected.threads[0].id,target.id);assert.equal(selected.hasMore,false);
+    for(const actor of [john,foreign])await assert.rejects(f.server.messagesWorkspace(actor,"",1,f.db,target.id),/MESSAGE_ACCESS_REQUIRED/);
+    await assert.rejects(f.server.messagesWorkspace(jane,"",1,f.db,"missing-thread"),/MESSAGE_ACCESS_REQUIRED/);
+    f.sqlite.exec("UPDATE trade_team_members SET status='suspended' WHERE id='jane'");
+    await assert.rejects(f.server.messagesWorkspace(jane,"",1,f.db,target.id),/MESSAGE_ACCESS_REQUIRED/);
+  }finally{f.close();}
+});
+
+function messageRouteFixture({sendFailure="",authFailure="",deferSave=false,deferPush=false}={}){
+  const events=[],background=[];let releaseSave,releasePush,saved=false;
+  const server={sendTeamMessage:async(actor,threadId,body,requestId,_db,attachmentIds)=>{events.push("send");assert.equal(actor,owner);assert.equal(threadId,"thread-a");assert.equal(body,"Hello");assert.equal(requestId,request(99));assert.deepEqual(attachmentIds,[]);if(deferSave)await new Promise(resolve=>{releaseSave=resolve;});if(sendFailure)throw new Error(sendFailure);saved=true;events.push("saved");return{id:"message-a",body:"Hello"};},
+    messagesWorkspace:async(...args)=>{events.push({name:"workspace",args});return{threads:[{id:"thread-a",kind:"dm",members:[]}]};}};
+  const route=load("../src/app/api/trade-messages/route.ts",{
+    "@/lib/admin-server":{sameOrigin:()=>true,mfaErrorResponse:()=>null,adminJson:(body,status=200)=>Response.json(body,{status})},
+    "@/lib/trade-access-server":{TradeAccessError:class extends Error{}},
+    "@/lib/trade-communications-access":{requireTeamCommunicationAccess:async()=>{events.push("access");if(authFailure)throw new Error(authFailure);return owner;}},
+    "cloudflare:workers":{waitUntil:promise=>{events.push("waitUntil");background.push(promise);}},
+    "@/lib/trade-push-server":{notifyTeamMessage:async(actor,threadId,messageId)=>{assert.equal(saved,true);assert.equal(actor,owner);assert.equal(threadId,"thread-a");assert.equal(messageId,"message-a");events.push("notify");if(deferPush)await new Promise(resolve=>{releasePush=resolve;});return{failed:1};}},
+    "@/lib/bounded-request-body.mjs":bounded,"@/lib/trade-messages-server":server,
+  });
+  return{route,events,background,releaseSave:()=>releaseSave(),releasePush:()=>releasePush()};
+}
+const sendRequest=()=>new Request("https://tlink.test/api/trade-messages",{method:"POST",body:JSON.stringify({action:"send",threadId:"thread-a",body:"Hello",requestId:request(99),attachmentIds:[]})});
+
+test("saved messages schedule background notification without waiting for push acceptance",async()=>{
+  const f=messageRouteFixture({deferSave:true,deferPush:true}),pending=f.route.POST(sendRequest());
+  await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(f.events,["access","send"]);assert.equal(f.background.length,0);
+  f.releaseSave();const response=await pending;assert.equal(response.status,200);assert.deepEqual(f.events,["access","send","saved","notify","waitUntil"]);
+  assert.equal((await response.json()).message.id,"message-a");f.releasePush();await Promise.all(f.background);
+});
+
+test("failed authentication or message save never starts notification delivery",async()=>{
+  for(const [options,status] of [[{authFailure:"AUTH_REQUIRED"},401],[{sendFailure:"MESSAGE_ACCESS_REQUIRED"},403],[{sendFailure:"MESSAGE_REQUEST_CONFLICT"},409]]){
+    const f=messageRouteFixture(options);assert.equal((await f.route.POST(sendRequest())).status,status);assert.ok(!f.events.includes("notify"));assert.equal(f.background.length,0);
+  }
+});
+
+test("thread view forwards the exact deep-link ID to the participant-scoped workspace lookup",async()=>{
+  const f=messageRouteFixture(),response=await f.route.GET(new Request("https://tlink.test/api/trade-messages?view=thread&threadId=thread-a"));
+  assert.equal(response.status,200);assert.deepEqual(f.events.at(-1),{name:"workspace",args:[owner,"",1,undefined,"thread-a"]});
+  assert.deepEqual(await response.json(),{ok:true,thread:{id:"thread-a",kind:"dm",members:[]}});
 });
 
 test("team message input is bounded, plain text and gives groups a required simple name", () => {

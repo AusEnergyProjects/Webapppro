@@ -83,6 +83,29 @@ export class TeamCallConnections {
     }
   }
 
+  async replaceVideoTrack(track: MediaStreamTrack) {
+    if (this.closed) throw new Error("The call has ended.");
+    const previous = this.options.local.getVideoTracks()[0];
+    if (!previous) throw new Error("This call started with voice only.");
+    // Update the shared stream first so a teammate joining mid-switch gets the
+    // same camera. replaceTrack preserves the existing call and microphone.
+    this.options.local.removeTrack(previous);
+    this.options.local.addTrack(track);
+    const replace = async (next: MediaStreamTrack) => {
+      const outcomes = await Promise.allSettled([...this.peers.values()].map(async peer => {
+        const sender = peer.connection.getSenders().find(item => item.track?.kind === "video");
+        if (sender && peer.connection.connectionState !== "closed") await sender.replaceTrack(next);
+      }));
+      return outcomes.some(result => result.status === "rejected");
+    };
+    if (await replace(track)) {
+      this.options.local.removeTrack(track);
+      this.options.local.addTrack(previous);
+      if (await replace(previous)) this.options.failed("The camera connection failed. Hang up and call again.");
+      throw new Error("The camera could not switch. Try again.");
+    }
+  }
+
   close() {
     this.closed = true;
     for (const peer of this.peers.values()) { peer.connection.ontrack = null; peer.connection.onicecandidate = null; peer.connection.onconnectionstatechange = null; peer.connection.close(); }

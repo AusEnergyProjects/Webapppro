@@ -20,9 +20,17 @@ test("Creditex audit page permits only same-origin microphone use and keeps othe
 });
 
 test("public pages, neighbouring routes and call APIs retain the microphone prohibition", () => {
-  for (const path of ["/", "/account", "/direct-trade/dashboard", "/creditex/compliance-elsewhere", "/api/creditex/audit-calls"]) {
+  for (const path of ["/", "/account", "/direct-trade/dashboard-elsewhere", "/direct-trade/team/invite", "/direct-trade/messages/elsewhere", "/creditex/compliance-elsewhere", "/api/creditex/audit-calls", "/api/trade-team-calls"]) {
     const response = secureResponse(new Response("page"), new Request(`https://example.test${path}`));
     assert.equal(response.headers.get("Permissions-Policy"), "camera=(), geolocation=(), microphone=()");
+  }
+});
+
+test("TLink communication pages allow same-origin camera and microphone, with private HTML", () => {
+  for (const path of ["/direct-trade/dashboard", "/direct-trade/team", "/direct-trade/messages", "/direct-trade/messages/"]) {
+    const response = secureResponse(new Response("page", {headers:{"Content-Type":"text/html"}}), new Request(`https://example.test${path}`));
+    assert.equal(response.headers.get("Permissions-Policy"), "camera=(self), geolocation=(), microphone=(self)");
+    assert.equal(response.headers.get("Cache-Control"), "private, no-store, max-age=0");
   }
 });
 

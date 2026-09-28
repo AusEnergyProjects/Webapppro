@@ -7,6 +7,8 @@ TLink is the native iOS and Android app for technicians, trades and assessors us
 - TLink-issued one-time setup PIN sign-in using the worker's exact name, with a device-bound 90-day field session stored in the secure store.
 - Optional Firebase email and password sign-in for office users who need the broader web account path.
 - Registered installation-specific devices with app-version enforcement, native push tokens and owner-controlled revocation.
+- A Messages tab opens team chat and voice/video calls in the system browser through a short-lived, single-use authenticated handoff. Field-session tokens are never placed in a browser URL.
+- Explicit notification permission setup, phone-settings recovery, per-device mute and safe team-conversation routing from notification taps.
 - A worker-specific week calendar, day schedule, assigned-job cards and one-tap workflow launch.
 - A simple plus flow for workers who are allowed to create a new self-assigned rental or safety job.
 - Independent rental minimum standards, electrical safety, gas safety and smoke alarm scopes. Minimum standards is selected by default, every scope can be cleared and at least one scope is required.
@@ -51,6 +53,8 @@ Before iOS or public app-store distribution, create and add:
 - The Apple Developer team and Google Play application record.
 
 These credentials are not source code and must not be committed. TLink name and PIN sign-in, offline operation and secure API sync do not depend on Google OAuth being configured.
+
+Team calls run in Safari or Chrome rather than a native calling module. The browser requests microphone/camera permission when a person starts or answers a call and must stay open during the call. Background push delivery additionally requires the server's FCM/APNs sender configuration; obtaining a device token alone does not prove delivery. Android channels are `field-sync`, `team-messages` and `team-calls`. Team push data uses `type: team_message | team_call`, `threadId` and optional `callId`. Taps wait for approved field access before opening the authenticated conversation.
 
 ## Evidence capture boundary
 

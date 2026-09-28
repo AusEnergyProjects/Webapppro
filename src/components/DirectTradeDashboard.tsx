@@ -12,6 +12,7 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
+import { disableTradeDeviceNotifications } from "@/lib/trade-notification-client";
 import { isMfaRequiredResponse, MFA_SETUP_URL } from "@/lib/firebase-mfa";
 import type { FinanceView } from "./TradeFinanceWorkspace";
 import { TLinkNavigationIcon } from "./TLinkNavigationIcon";
@@ -799,6 +800,12 @@ export function DirectTradeDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [mfaRequired, setMfaRequired] = useState(false);
+  async function leaveAccount() {
+    try {
+      await disableTradeDeviceNotifications(async ():Promise<Record<string,string>> => user ? {Authorization: `Bearer ${await user.getIdToken()}`} : {});
+      await signOut(firebaseAuth);
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "Sign out could not be completed. Try again."); }
+  }
   const [opportunities, setOpportunities] = useState<DashboardOpportunity[]>(
     [],
   );
@@ -2302,7 +2309,7 @@ export function DirectTradeDashboard() {
           <button
             className="btn"
             type="button"
-            onClick={() => void signOut(firebaseAuth)}
+            onClick={() => void leaveAccount()}
           >
             Sign out
           </button>
@@ -2400,7 +2407,7 @@ export function DirectTradeDashboard() {
               <button type="button" onClick={() => setWorkspace("account")}>
                 Business
               </button>
-              <button type="button" onClick={() => void signOut(firebaseAuth)}>
+              <button type="button" onClick={() => void leaveAccount()}>
                 Sign out
               </button>
             </div>
@@ -2453,7 +2460,7 @@ export function DirectTradeDashboard() {
                   }
                   onAccountClosed={() => {
                     setProfile(null);
-                    void signOut(firebaseAuth);
+                    void leaveAccount();
                   }}
                 />
               )}
@@ -2585,7 +2592,7 @@ export function DirectTradeDashboard() {
                   }
                   onAccountClosed={() => {
                     setProfile(null);
-                    void signOut(firebaseAuth);
+                    void leaveAccount();
                   }}
                 />
               )}

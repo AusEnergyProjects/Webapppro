@@ -7249,3 +7249,29 @@ export const tradeStockTransfers = sqliteTable("trade_stock_transfers", {
 }, (table) => [uniqueIndex("trade_stock_transfers_replay_idx").on(table.firebaseUid,table.operationId),check("trade_stock_transfers_valid",sql`${table.quantityMilli} BETWEEN 1 AND 1000000000 AND ${table.onHandMilli} BETWEEN 0 AND 1000000000 AND ${table.expectedRevision}>0 AND json_valid(${table.payloadJson})`)]);
 
 export const tradeStockLocationRollout = sqliteTable("trade_stock_location_rollout", { id:integer("id").primaryKey().notNull(),installedAt:text("installed_at").notNull() }, (table)=>[check("trade_stock_location_rollout_single",sql`${table.id}=1`)]);
+
+export const tradeCommunicationHandoffs = sqliteTable("trade_communication_handoffs", {
+  id:text("id").primaryKey().notNull(),ownerUid:text("owner_uid").notNull(),memberId:text("member_id").notNull(),
+  codeHash:text("code_hash").notNull().unique(),sessionHash:text("session_hash").notNull().default(""),encryptedAuth:text("encrypted_auth").notNull(),
+  threadId:text("thread_id").notNull().default(""),callId:text("call_id").notNull().default(""),createdAt:text("created_at").notNull(),
+  redeemBefore:text("redeem_before").notNull(),expiresAt:text("expires_at").notNull(),consumedAt:text("consumed_at").notNull().default(""),
+},t=>[index("trade_communication_handoffs_expiry_idx").on(t.expiresAt),index("trade_communication_handoffs_member_idx").on(t.ownerUid,t.memberId,t.createdAt),
+  uniqueIndex("trade_communication_handoffs_session_idx").on(t.sessionHash).where(sql`${t.sessionHash}<>''`)]);
+
+export const tradePushSubscriptions = sqliteTable("trade_push_subscriptions", {
+  id: text("id").primaryKey().notNull(), ownerUid: text("owner_uid").notNull(), memberId: text("member_id").notNull().references(() => tradeTeamMembers.id),
+  actorUid: text("actor_uid").notNull(), fieldSessionId: text("field_session_id").notNull().default(""),
+  endpointHash: text("endpoint_hash").notNull().unique(), endpoint: text("endpoint").notNull(), p256dh: text("p256dh").notNull(), auth: text("auth").notNull(),
+  messages: integer("messages").notNull().default(1), calls: integer("calls").notNull().default(1), enabled: integer("enabled").notNull().default(1),
+  expiresAt: text("expires_at").notNull(), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, t => [index("trade_push_subscriptions_member_idx").on(t.ownerUid,t.memberId,t.enabled,t.expiresAt),
+  check("trade_push_subscriptions_hash",sql`length(${t.endpointHash})=64`),check("trade_push_subscriptions_endpoint",sql`length(${t.endpoint}) BETWEEN 20 AND 2048`),
+  check("trade_push_subscriptions_p256dh",sql`length(${t.p256dh})=87`),check("trade_push_subscriptions_auth",sql`length(${t.auth})=22`),
+  check("trade_push_subscriptions_messages",sql`${t.messages} IN (0,1)`),check("trade_push_subscriptions_calls",sql`${t.calls} IN (0,1)`),check("trade_push_subscriptions_enabled",sql`${t.enabled} IN (0,1)`)]);
+
+export const tradePushDeliveries = sqliteTable("trade_push_deliveries", {
+  eventKind:text("event_kind").notNull(),eventId:text("event_id").notNull(),endpointHash:text("endpoint_hash").notNull(),ownerUid:text("owner_uid").notNull(),
+  memberId:text("member_id").notNull(),status:text("status").notNull().default("attempted"),createdAt:text("created_at").notNull(),updatedAt:text("updated_at").notNull(),
+},t=>[primaryKey({columns:[t.eventKind,t.eventId,t.endpointHash]}),index("trade_push_deliveries_owner_created_idx").on(t.ownerUid,t.createdAt),
+  check("trade_push_deliveries_kind",sql`${t.eventKind} IN ('team-message','team-call')`),check("trade_push_deliveries_hash",sql`length(${t.endpointHash})=64`),
+  check("trade_push_deliveries_status",sql`${t.status} IN ('attempted','accepted','failed','expired')`)]);

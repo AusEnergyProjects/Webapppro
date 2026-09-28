@@ -1,6 +1,6 @@
 import { getD1 } from "../../../../db";
 import { getCustomerProjectEvidenceBucket } from "@/lib/customer-project-evidence-bucket";
-import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
+import { requireTeamCommunicationAccess } from "@/lib/trade-communications-access";
 import { TradeAccessError } from "@/lib/trade-access-server";
 import { mfaErrorResponse } from "@/lib/admin-server";
 import { deleteMessageMedia, readMessageMedia, uploadMessageMedia } from "@/lib/trade-message-media-server";
@@ -32,7 +32,7 @@ function failure(error: unknown) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const actor = await requireInstallerTeamAccess(request), query = new URL(request.url).searchParams;
+    const actor = await requireTeamCommunicationAccess(request), query = new URL(request.url).searchParams;
     const record = await readMessageMedia(getD1(), actor, { id: query.get("id") || undefined, avatarMemberId: query.get("avatarMemberId") || undefined, revision: query.get("revision") || undefined });
     if (!record) return json({ ok: false, error: "Media not found." }, 404);
     const object = await getCustomerProjectEvidenceBucket().get(record.object_key);
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const actor = await requireInstallerTeamAccess(request);
+    const actor = await requireTeamCommunicationAccess(request);
     // Bound the actual multipart request, including requests without Content-Length.
     if (Number(request.headers.get("content-length")) > 5 * 1024 * 1024 + 16384) return json({ ok: false, error: "Upload is too large." }, 413);
     const reader = request.body?.getReader();
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const actor = await requireInstallerTeamAccess(request);
+    const actor = await requireTeamCommunicationAccess(request);
     await deleteMessageMedia(getD1(), getCustomerProjectEvidenceBucket(), actor, new URL(request.url).searchParams.get("id") || "");
     return json({ ok: true });
   } catch (error) { return failure(error); }

@@ -1,6 +1,8 @@
 import { adminJson, mfaErrorResponse, sameOrigin } from "@/lib/admin-server";
 import { TradeAccessError } from "@/lib/trade-access-server";
-import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
+import { requireTeamCommunicationAccess } from "@/lib/trade-communications-access";
+import { waitUntil } from "cloudflare:workers";
+import { notifyTeamCall } from "@/lib/trade-push-server";
 import { readBoundedRequestText, RequestBodyTooLargeError } from "@/lib/bounded-request-body.mjs";
 import { assertTeamCallJoined, incomingTeamCalls, joinTeamCall, leaveTeamCall, reserveTeamCallIce, sendTeamCallSignal, startTeamCall, teamCallStatus } from "@/lib/trade-team-calls-server";
 import { teamCallIceServers, teamCallTurnCredentials } from "@/lib/trade-team-calls-provider";
@@ -25,7 +27,7 @@ export async function GET(request: Request) {
     if (!sameOrigin(request))
         return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
     try {
-        const actor = await requireInstallerTeamAccess(request), params = new URL(request.url).searchParams;
+        const actor = await requireTeamCommunicationAccess(request), params = new URL(request.url).searchParams;
         if (params.get('view') === 'incoming')
             return adminJson({ ok: true, memberId: actor.memberId, calls: await incomingTeamCalls(actor) });
         return adminJson({ ok: true, memberId: actor.memberId, ...await teamCallStatus(actor, { callId: params.get('callId') || undefined, threadId: params.get('threadId') || undefined, sessionId: params.get('sessionId') || undefined, after: params.get('after') || '0' }) });
@@ -38,14 +40,16 @@ export async function POST(request: Request) {
     if (!sameOrigin(request))
         return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
     try {
-        const actor = await requireInstallerTeamAccess(request);
+        const actor = await requireTeamCommunicationAccess(request);
         const raw: unknown = JSON.parse(await readBoundedRequestText(request, 70000));
         if (!raw || typeof raw !== 'object' || Array.isArray(raw))
             throw new Error('CALL_INPUT_INVALID');
         const body = raw as Record<string, unknown>;
         if (body.action === 'start') {
             teamCallTurnCredentials(); // A missing relay must not create a ringing call.
-            return adminJson({ ok: true, memberId: actor.memberId, call: await startTeamCall(actor, body) });
+            const call = await startTeamCall(actor, body);
+            waitUntil(notifyTeamCall(actor, call));
+            return adminJson({ ok: true, memberId: actor.memberId, call });
         }
         if (body.action === 'join')
             return adminJson({ ok: true, memberId: actor.memberId, call: await joinTeamCall(actor, body.callId, body.sessionId) });

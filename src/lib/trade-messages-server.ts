@@ -107,10 +107,11 @@ export async function readTeamConversation(actor: MessageActor, threadId: string
   if (!result.meta.changes) throw new Error("MESSAGE_ACCESS_REQUIRED");
 }
 
-export async function messagesWorkspace(actor: MessageActor, search = "", page = 1, db: D1Database = getD1()) {
+export async function messagesWorkspace(actor: MessageActor, search = "", page = 1, db: D1Database = getD1(), targetThreadId = "") {
   if (!Number.isSafeInteger(page) || page < 1 || page > 1000) throw new Error("MESSAGE_CURSOR_INVALID");
   const guard = actorGuard(actor);
   await assertGuard(db, guard);
+  if (targetThreadId) await assertGuard(db, participantGuard(actor, targetThreadId));
   const term = `%${search.trim().slice(0, 100).replace(/[!%_]/g, character => `!${character}`)}%`;
   const members = (await db.prepare(`SELECT id, display_name, member_uid FROM trade_team_members WHERE owner_uid = ? AND status = 'active' AND ${guard.sql} ORDER BY display_name LIMIT 250`)
     .bind(actor.ownerUid, ...guard.values).all<{ id: string; display_name: string; member_uid: string }>()).results;
@@ -121,10 +122,10 @@ export async function messagesWorkspace(actor: MessageActor, search = "", page =
     (SELECT json_group_array(json_object('id', other.id, 'name', other.display_name, 'active', other.status='active')) FROM trade_message_participants tp
       JOIN trade_team_members other ON other.id=tp.member_id AND other.owner_uid=tp.owner_uid WHERE tp.thread_id=t.id AND tp.owner_uid=t.owner_uid) members
     FROM trade_message_threads t JOIN trade_message_participants p ON p.thread_id=t.id AND p.owner_uid=t.owner_uid AND p.member_id=?
-    WHERE t.owner_uid=? AND ${guard.sql} AND (t.subject LIKE ? ESCAPE '!' OR EXISTS (SELECT 1 FROM trade_message_participants tp
+    WHERE t.owner_uid=? AND ${guard.sql} ${targetThreadId ? "AND t.id=?" : ""} AND (t.subject LIKE ? ESCAPE '!' OR EXISTS (SELECT 1 FROM trade_message_participants tp
       JOIN trade_team_members person ON person.id=tp.member_id AND person.owner_uid=tp.owner_uid WHERE tp.thread_id=t.id AND tp.owner_uid=t.owner_uid AND person.display_name LIKE ? ESCAPE '!'))
     ORDER BY t.updated_at DESC,t.id DESC LIMIT 51 OFFSET ?`)
-    .bind(actor.memberId, actor.memberId, actor.ownerUid, ...guard.values, term, term, (page - 1) * 50)
+    .bind(actor.memberId, actor.memberId, actor.ownerUid, ...guard.values, ...(targetThreadId ? [targetThreadId] : []), term, term, (page - 1) * 50)
     .all<{ id: string; kind: string; subject: string; latest: string; latest_sender: string; unread: number; members: string }>()).results;
   const avatars = await teamAvatarRevisions(db, actor);
   return { memberId: actor.memberId, canUseSms: actor.isOwner || Boolean(actor.canSendSms), canUseQuotes: actor.isOwner || Boolean(actor.canViewQuotes), canCreateSmsContact: actor.isOwner, canManageTeam: actor.isOwner || Boolean(actor.canManageTeam),

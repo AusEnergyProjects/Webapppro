@@ -197,7 +197,7 @@ function route(f, actor = owner) {
   return load("../src/app/api/trade-message-media/route.ts", {
     "../../../../db": { getD1: () => f.db },
     "@/lib/customer-project-evidence-bucket": { getCustomerProjectEvidenceBucket: () => f.bucket },
-    "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => actor },
+    "@/lib/trade-communications-access": { requireTeamCommunicationAccess: async () => actor },
     "@/lib/trade-access-server": { TradeAccessError: class extends Error {} },
     "@/lib/admin-server": { mfaErrorResponse: () => null },
     "@/lib/trade-message-media-server": server,

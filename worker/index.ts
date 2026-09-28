@@ -88,14 +88,15 @@ function secureResponse(response: Response, request: Request, environment?: unkn
   const headers = new Headers(response.headers);
   const pathname = new URL(request.url).pathname;
   if (
-    (pathname === "/account" || pathname.startsWith("/account/"))
+    (pathname === "/account" || pathname.startsWith("/account/") || pathname.startsWith("/direct-trade/"))
     && (headers.get("content-type") || "").includes("text/html")
   ) {
     headers.set("Cache-Control", PRIVATE_HTML_CACHE_CONTROL);
   }
-  const microphonePolicy = pathname === "/creditex/compliance"
+  const teamMediaPage = /^\/direct-trade\/(dashboard|team|messages)\/?$/.test(pathname);
+  const microphonePolicy = teamMediaPage || pathname === "/creditex/compliance"
     || pathname === "/creditex/compliance/" ? "(self)" : "()";
-  headers.set("Permissions-Policy", `camera=(), geolocation=(), microphone=${microphonePolicy}`);
+  headers.set("Permissions-Policy", `camera=${teamMediaPage ? "(self)" : "()"}, geolocation=(), microphone=${microphonePolicy}`);
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Frame-Options", "SAMEORIGIN");

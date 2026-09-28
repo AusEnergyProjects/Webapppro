@@ -110,7 +110,7 @@ test("closed accounts receive a terminal dashboard state without profile recreat
   const closedState = dashboard.slice(closedStateStart, incompleteStateStart);
   assert.match(closedState, /This TLink account is closed/);
   assert.match(closedState, /authorised administrator\s+recovery process/);
-  assert.match(closedState, /onClick=\{\(\) => void signOut\(firebaseAuth\)\}/);
+  assert.match(closedState, /onClick=\{\(\) => void leaveAccount\(\)\}/);
   assert.doesNotMatch(closedState, /direct-trade\/partners/);
   assert.doesNotMatch(closedState, /Update business profile/);
 });

@@ -64,6 +64,7 @@
 .groupName { display: grid; gap: 6px; margin-top: 12px; max-width: 480px; }
 .actions, .pagination { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; }
 .pagination { justify-content: space-between; padding: 12px; font-size: 12px; }
+.back { display: none; }
 @media(max-width: 760px) {
   .heading { align-items: flex-start; flex-direction: column; }
   .layout { grid-template-columns: minmax(0,1fr); }
@@ -72,5 +73,11 @@
   .welcome { min-height: 180px; }
   .messages li:not(.empty) { max-width: 94%; }
   .people { grid-template-columns: minmax(0,1fr); }
-  .composer button { width: 100%; }
+  .composer > button { width: 100%; }
+  .messages { min-height: 140px; max-height: 32dvh; }
+  .conversation header > p { display: none; }
+  .layout:not(.chatOpen) .detail { display: none; }
+  .chatOpen .list { display: none; }
+  .back { display: inline-flex; align-items: center; border: 0; background: transparent; color: var(--trade-ink, #163e37); font-weight: 700; min-height: 44px; margin-bottom: 12px; cursor: pointer; }
+  .layout:not(.chatOpen) .list { max-height: 65vh; }
 }

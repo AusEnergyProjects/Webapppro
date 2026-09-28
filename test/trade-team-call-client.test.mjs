@@ -10,14 +10,16 @@ const {TeamCallConnections}=record.exports;
 const people=[{memberId:'a',name:'Alex',sessionId:'session-a',joinedAt:''},{memberId:'b',name:'Blake',sessionId:'session-b',joinedAt:''}];
 function fixture(memberId='a') {
   const connections=[],sent=[],changes=[],failures=[];
-  const client=new TeamCallConnections({memberId,sessionId:`session-${memberId}`,local:{getTracks:()=>[{id:'mic'},{id:'camera'}]},iceServers:[{urls:'turn:example.test'}],
+  const localTracks=[{id:'mic',kind:'audio'},{id:'camera',kind:'video'}];
+  const local={getTracks:()=>[...localTracks],getVideoTracks:()=>localTracks.filter(t=>t.kind==='video'),removeTrack:track=>localTracks.splice(localTracks.indexOf(track),1),addTrack:track=>localTracks.push(track)};
+  const client=new TeamCallConnections({memberId,sessionId:`session-${memberId}`,local,iceServers:[{urls:'turn:example.test'}],
     send:async(target,type,payload)=>sent.push({target,type,payload}),changed:value=>changes.push(value),failed:message=>failures.push(message),
     createPeer:configuration=>{const pc={configuration,connectionState:'new',signalingState:'stable',tracks:[],candidates:[],closed:false,
-      addTrack(track){this.tracks.push(track);},async createOffer(){return{type:'offer',sdp:'v=0 offer'};},async createAnswer(){return{type:'answer',sdp:'v=0 answer'};},
+      senders:[],addTrack(track){this.tracks.push(track);this.senders.push({track,async replaceTrack(next){this.track=next;}});},getSenders(){return this.senders;},async createOffer(){return{type:'offer',sdp:'v=0 offer'};},async createAnswer(){return{type:'answer',sdp:'v=0 answer'};},
       async setLocalDescription(description){this.localDescription=description;this.signalingState=description.type==='offer'?'have-local-offer':'stable';},
       async setRemoteDescription(description){this.remoteDescription=description;this.signalingState=description.type==='offer'?'have-remote-offer':'stable';},
       async addIceCandidate(candidate){this.candidates.push(candidate);},close(){this.closed=true;this.connectionState='closed';}};connections.push(pc);return pc;}});
-  return{client,connections,sent,changes,failures};
+  return{client,connections,sent,changes,failures,local};
 }
 const signal=(overrides={})=>({id:'signal',sequence:1,fromMemberId:'a',fromSessionId:'session-a',toSessionId:'session-b',requestId:'request',type:'ice',payload:{candidate:'candidate:test',sdpMid:'0',sdpMLineIndex:0},...overrides});
 
@@ -49,4 +51,31 @@ test('leaving disconnects removed peers and close disables all future signalling
 });
 test('pre-description ICE is bounded against a participant flooding memory',async()=>{
   const f=fixture('b');await f.client.sync(people);for(let i=0;i<128;i++)await f.client.receive(signal());await assert.rejects(f.client.receive(signal()),/Too many/);f.client.close();
+});
+
+test('camera switching replaces every video sender and future joins without touching microphone or renegotiating',async()=>{
+  const f=fixture();await f.client.sync([...people,{memberId:'c',name:'Chris',sessionId:'session-c'}]);
+  const offers=f.sent.length,mic=f.local.getTracks()[0],camera={id:'back-camera',kind:'video'};
+  await f.client.replaceVideoTrack(camera);
+  for(const peer of f.connections){assert.equal(peer.getSenders()[1].track,camera);assert.equal(peer.getSenders()[0].track,mic);assert.equal(peer.closed,false);}
+  assert.equal(f.sent.length,offers);assert.equal(f.local.getVideoTracks()[0],camera);
+  await f.client.sync([...people,{memberId:'c',name:'Chris',sessionId:'session-c'},{memberId:'d',name:'Drew',sessionId:'session-d'}]);
+  assert.equal(f.connections[2].getSenders()[1].track,camera);f.client.close();
+});
+
+test('a failed camera switch rolls every peer and the shared local stream back',async()=>{
+  const f=fixture();await f.client.sync([...people,{memberId:'c',name:'Chris',sessionId:'session-c'}]);
+  const old=f.local.getVideoTracks()[0],camera={id:'back-camera',kind:'video'};
+  const sender=f.connections[1].getSenders()[1];
+  sender.replaceTrack=async function(next){if(next===camera)throw new Error('Camera cannot be encoded');this.track=next;};
+  await assert.rejects(f.client.replaceVideoTrack(camera),/could not switch/);
+  assert.equal(f.local.getVideoTracks()[0],old);
+  for(const peer of f.connections)assert.equal(peer.getSenders()[1].track,old);
+  assert.equal(f.failures.length,0);f.client.close();
+});
+
+test('camera replacement cannot revive a closed call',async()=>{
+  const f=fixture();await f.client.sync(people);const old=f.local.getVideoTracks()[0];f.client.close();
+  await assert.rejects(f.client.replaceVideoTrack({id:'new-camera',kind:'video'}),/ended/);
+  assert.equal(f.local.getVideoTracks()[0],old);
 });

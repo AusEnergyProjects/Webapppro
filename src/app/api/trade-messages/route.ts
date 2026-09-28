@@ -1,6 +1,8 @@
 import { adminJson, mfaErrorResponse, sameOrigin } from "@/lib/admin-server";
 import { TradeAccessError } from "@/lib/trade-access-server";
-import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
+import { requireTeamCommunicationAccess } from "@/lib/trade-communications-access";
+import { waitUntil } from "cloudflare:workers";
+import { notifyTeamMessage } from "@/lib/trade-push-server";
 import { readBoundedRequestText, RequestBodyTooLargeError } from "@/lib/bounded-request-body.mjs";
 import { createTeamConversation, customerMessageThreads, messagesWorkspace, readTeamConversation, searchMessageContacts, sendTeamMessage, teamConversation } from "@/lib/trade-messages-server";
 
@@ -30,9 +32,13 @@ function messageError(error: unknown) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const actor = await requireInstallerTeamAccess(request);
+    const actor = await requireTeamCommunicationAccess(request);
     const params = new URL(request.url).searchParams;
     const threadId = params.get("threadId");
+    if (threadId && params.get("view") === "thread") {
+      const workspace = await messagesWorkspace(actor, "", 1, undefined, threadId);
+      return adminJson({ok:true,thread:workspace.threads[0]});
+    }
     if (threadId) return adminJson({ ok: true, ...await teamConversation(actor, threadId, Number(params.get("before") || 0)) });
     if (params.get("view") === "contacts") return adminJson({ ok: true, ...await searchMessageContacts(actor, params.get("search") || "") });
     if (params.get("view") === "customers") return adminJson({ ok: true, ...await customerMessageThreads(actor, params.get("search") || "", Number(params.get("page") || 1)) });
@@ -43,7 +49,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const actor = await requireInstallerTeamAccess(request);
+    const actor = await requireTeamCommunicationAccess(request);
     const raw = await readBoundedRequestText(request,12000);
     let body: Record<string, unknown>;
     try {
@@ -52,7 +58,12 @@ export async function POST(request: Request) {
       body = value as Record<string, unknown>;
     } catch { throw new Error("MESSAGE_INVALID"); }
     if (body.action === "create") return adminJson({ ok: true, thread: await createTeamConversation(actor, body) });
-    if (body.action === "send") return adminJson({ ok: true, message: await sendTeamMessage(actor, String(body.threadId || ""), body.body, body.requestId, undefined, body.attachmentIds) });
+    if (body.action === "send") {
+      const threadId = String(body.threadId || "");
+      const message = await sendTeamMessage(actor, threadId, body.body, body.requestId, undefined, body.attachmentIds);
+      waitUntil(notifyTeamMessage(actor, threadId, message.id));
+      return adminJson({ ok: true, message });
+    }
     if (body.action === "read") {
       await readTeamConversation(actor, String(body.threadId || ""), body.throughSequence);
       return adminJson({ ok: true });

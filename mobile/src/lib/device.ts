@@ -9,6 +9,7 @@ import { APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
 
 const DEVICE_ID_KEY = 'aea-field-device-id-v1';
 const PUSH_TOKEN_KEY = 'aea-field-native-push-token-v1';
+const NOTIFICATIONS_MUTED_KEY = 'aea-field-notifications-muted-v1';
 
 export async function getDeviceId() {
   const existing = await SecureStore.getItemAsync(DEVICE_ID_KEY);
@@ -24,27 +25,71 @@ export function getDeviceName() {
   return [Device.manufacturer, Device.modelName].filter(Boolean).join(' ') || Application.applicationName || 'Field device';
 }
 
-export async function getNativePushToken() {
-  const existing = await SecureStore.getItemAsync(PUSH_TOKEN_KEY) || '';
-  if (!Device.isDevice) return { token: '', provider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm' };
+export async function notificationsMuted() {
+  return (await SecureStore.getItemAsync(NOTIFICATIONS_MUTED_KEY)) === 'true';
+}
+
+export async function setNotificationsMuted(muted: boolean) {
+  await SecureStore.setItemAsync(NOTIFICATIONS_MUTED_KEY, String(muted), {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  });
+  if (muted) await forgetPushToken();
+}
+
+export async function notificationDeviceState() {
+  const [muted, permission] = await Promise.all([notificationsMuted(), Notifications.getPermissionsAsync()]);
+  return { muted, granted: permission.granted, canAskAgain: permission.canAskAgain, physicalDevice: Device.isDevice };
+}
+
+export async function configureNotificationChannels() {
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('field-sync', {
+      name: 'Field work updates',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 200],
+      lightColor: '#07966f',
+    });
+    await Notifications.setNotificationChannelAsync('team-messages', {
+      name: 'Team messages',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      sound: 'default',
+    });
+    await Notifications.setNotificationChannelAsync('team-calls', {
+      name: 'Team calls',
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: 'default',
+      vibrationPattern: [0, 250, 250, 250],
+    });
+  }
+}
+
+export async function getNativePushToken(requestPermission = false) {
+  const provider = MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm';
+  if (!Device.isDevice || await notificationsMuted()) {
+    await forgetPushToken();
+    return { token: '', provider };
+  }
+  let permissionGranted = false;
   try {
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('field-sync', {
-        name: 'Field work updates',
-        importance: Notifications.AndroidImportance.DEFAULT,
-        vibrationPattern: [0, 200],
-        lightColor: '#07966f',
-      });
-    }
+    await configureNotificationChannels();
     const current = await Notifications.getPermissionsAsync();
-    const permission = current.granted ? current : await Notifications.requestPermissionsAsync();
-    if (!permission.granted) return { token: existing, provider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm' };
+    const permission = !current.granted && current.canAskAgain && requestPermission
+      ? await Notifications.requestPermissionsAsync() : current;
+    if (!permission.granted) {
+      await forgetPushToken();
+      return { token: '', provider };
+    }
+    permissionGranted = true;
     const token = await Notifications.getDevicePushTokenAsync();
     const value = String(token.data);
-    await SecureStore.setItemAsync(PUSH_TOKEN_KEY, value, { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
-    return { token: value, provider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm' };
+    // The preference may change while the operating system registers the device.
+    if (await notificationsMuted()) return { token: '', provider };
+    await rememberPushToken(value);
+    return { token: value, provider };
   } catch {
-    return { token: existing, provider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm' };
+    const token = permissionGranted && !await notificationsMuted()
+      ? await SecureStore.getItemAsync(PUSH_TOKEN_KEY) || '' : '';
+    return { token, provider };
   }
 }
 

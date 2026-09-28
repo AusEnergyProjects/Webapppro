@@ -1,9 +1,15 @@
 # Next task handover
 
-Status: Messages, internal calling and practical stock workflows are in release validation. Verified baseline Sites 667, source 9511bc6c635fd56f81579a8810b13ea036e8608d.
+Status: Team communications and device notifications are in release validation. Verified baseline Sites 668, source abac4a953463b077540164afd5068ef625de3e8f.
 Prepared: 28 September 2026
 
-## Active contract: simple communications and stock completion
+## Active contract: straightforward team calls and notifications
+
+Publish the exact team communications usability slice, migrations 0217/0218, browser notification setup and native Messages entry. Validate permissions, revoked devices, cross-tab identity, one-use handoffs, chat deep links, logout cleanup and mobile day/night controls. Evidence: C:/Webproject/outputs/tlink-team-usability-2026-09-28/. Keep customer SMS on the existing business number.
+
+After web publication, verify a consented office-to-phone call and real OS notification receipt with named test participants. Native Expo exports are build checks, not an app-store release; FCM/APNs configuration and mobile distribution remain separate. Keep ClickSend partnership approval and provider replacement out of this change.
+
+## Previous contract: simple communications and stock completion
 
 Outcome: one Messages workspace for customers and internal team chats, name/phone lookup, private groups, member photos, internal camera/photo/voice notes, internet voice/video calls and secure quote questions after acceptance. Preserve per-business and per-job scope, consent and participant-only internal conversations. Calls are available in the open dashboard/team portal with six participants, one-hour expiry, no recording and short-lived relay credentials from the existing Twilio account. No new telephone number or email-mailbox permission is required for internal chat/calls.
 

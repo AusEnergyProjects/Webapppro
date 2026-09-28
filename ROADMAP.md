@@ -16,7 +16,11 @@ The dated audit is the immutable evidence baseline. [Release truth](./docs/RELEA
 
 Sequence is dependency based, not a calendar promise. A source change is not a release. A roadmap item is complete only when its required tests, release identity and runtime evidence are recorded.
 
-## Current Messages and practical stock completion gate
+## Current team communication usability completion gate
+
+Release the restricted camera/microphone policy fix, clear permission recovery, voice-only answer, camera switching, compact phone conversations, opt-in web push and exact chat/call links. Publish migrations 0217/0218 and verify one-use field-app handoff with current authority and per-tab identity checks. Native mobile configuration/distribution and an authorised two-device media/push check remain operational gates. Evidence: C:/Webproject/outputs/tlink-team-usability-2026-09-28/.
+
+## Previous Messages and practical stock completion gate
 
 Release and verify one simple Messages workspace with tenant/job/participant-scoped customer SMS, secure quote questions, internal DMs/groups, private images/voice notes, staff avatars and internal internet voice/video calls. Preserve existing SMS consent and provider routing. Calls use short-lived existing Twilio relay credentials, six concurrent members, one-hour expiry and no recording. Operational two-device calling and provider delivery must be evidenced separately from synthetic tests.
 

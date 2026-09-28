@@ -6,11 +6,21 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 28 September 2026
 
-Deployment baseline for this change: Sites 667, source `9511bc6c635fd56f81579a8810b13ea036e8608d`. Final publication identity and verification evidence belong in C:/Webproject/outputs/tlink-operations-2026-09-28/.
+Deployment baseline for this change: Sites 668, source `abac4a953463b077540164afd5068ef625de3e8f`. Final publication identity and verification evidence belong in C:/Webproject/outputs/tlink-team-usability-2026-09-28/.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: Messages, internal calls and practical stock workflows
+## Current implementation: team communication usability and device notifications
+
+TLink camera and microphone permissions are permitted only on the dashboard, team portal and dedicated Messages page. Start/Answer requests device permission; blocked permission has retry and voice-only recovery. Camera switching preserves the microphone and existing peers. Mobile chat switches cleanly between the inbox and conversation.
+
+Opt-in browser Web Push has separate message/call switches, generic lock-screen previews, bounded encrypted delivery and exact conversation links. Every dispatch rechecks current business approval, membership, participation, device/session revocation, mute and read/join state. Notification taps never answer a call. iPhone web push needs a Home Screen installation. Migration 0217 stores device subscriptions and duplicate-prevention delivery claims; VAPID values are runtime settings, not repository secrets.
+
+Migration 0218 supports short-lived one-use native-to-browser handoffs with encrypted authority, hashed tokens, HttpOnly cookies and per-tab member binding. Communications-only access is revalidated on every request and cannot reach finance/job APIs. The field app has a Messages entry, notification permission controls and tap routing. Native FCM/APNs delivery and mobile store distribution still need their own configuration/release; publishing Sites updates the web experience only. Physical office-to-field media and OS push receipt remain unverified by synthetic tests.
+
+Customer SMS retains one connected number per business and sender attribution; internal chat and calls need no number. No customer messages or unsolicited calls are sent during validation.
+
+## Previous implementation: Messages, internal calls and practical stock workflows
 
 Messages is a dedicated installer and team navigation workspace with name/phone search, private direct/group team chats, shared customer SMS and secure quote questions. Customer and team conversations have separate colours and explicit labels. New phone contacts use canonical owner-only CRM intake with stable IDs and number matching. Staff SMS starts off and requires current permission and authorised job scope; ambiguous customer replies stay with the office until linked to the correct job. Quote questions can continue after acceptance while customer access remains valid.
 

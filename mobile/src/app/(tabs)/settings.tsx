@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 
 import { FieldButton } from '@/components/field-button';
+import { DeviceNotificationSettings } from '@/components/device-notification-settings';
 import { Screen } from '@/components/screen';
 import { APP_VERSION } from '@/lib/config';
 import { getDeviceId, getDeviceName } from '@/lib/device';
@@ -42,6 +43,7 @@ export default function SettingsScreen() {
         <Text style={styles.title}>{user?.displayName || 'Installer team member'}</Text>
         <Text style={styles.body}>{user?.email}</Text>
       </View>
+      <DeviceNotificationSettings />
       <View style={styles.card}>
         <Text style={styles.label}>APP UPDATES</Text>
         <Text style={styles.title}>Keep this phone current</Text>

@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
+import { disableTradeDeviceNotifications } from "@/lib/trade-notification-client";
 import { FirebaseAccountSecurity, FirebaseMfaChallenge, useFirebaseMfaChallenge } from "./FirebaseMfa";
 import { SiteFooter } from "./ComparatorChrome";
 import { TLinkHeader } from "./TLinkChrome";
@@ -36,6 +37,12 @@ export function TradeTeamPortal() {
   const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [data, setData] = useState<Result>({}); const [loading, setLoading] = useState(false); const [busy, setBusy] = useState(""); const [status, setStatus] = useState("");
   const [selectedJobId, setSelectedJobId] = useState("");
+  async function leaveAccount() {
+    try {
+      await disableTradeDeviceNotifications(async ():Promise<Record<string,string>> => user ? {Authorization: `Bearer ${await user.getIdToken()}`} : {});
+      await signOut(firebaseAuth);
+    } catch (failure) { setStatus(failure instanceof Error ? failure.message : "Sign out could not be completed. Try again."); }
+  }
   const [portalView, setPortalView] = useState<"work" | "business" | "team" | "training" | "messages">("work");
   const [crmTarget, setCrmTarget] = useState<TLinkCommandTarget | null>(null);
   const [assigneeSearch, setAssigneeSearch] = useState("");
@@ -45,7 +52,8 @@ export function TradeTeamPortal() {
 
   useEffect(() => {
     const applyTrainingLink = () => {
-      if (new URLSearchParams(window.location.search).get("workspace") === "training") setPortalView("training");
+      const workspace = new URLSearchParams(window.location.search).get("workspace");
+      if (workspace === "training" || workspace === "messages") setPortalView(workspace);
     };
     applyTrainingLink();
     window.addEventListener("popstate", applyTrainingLink);
@@ -166,11 +174,11 @@ export function TradeTeamPortal() {
   ));
 
   if (resolver) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseMfaChallenge resolver={resolver} onCancel={clearMfaChallenge} onComplete={clearMfaChallenge} /></main>;
-  if (user && mfaRequired) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); setData(await loadWork()); }} /><button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></main>;
+  if (user && mfaRequired) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); setData(await loadWork()); }} /><button type="button" onClick={() => void leaveAccount()}>Sign out</button></main>;
 
   return <TradeTeamCallProvider user={user} enabled={Boolean(data.access)}><main className="wrap trade-team-page"><TLinkHeader active="team" />
-    {!authReady ? <section className="dashboard-state-card"><p>Opening the secure staff portal...</p></section> : !user ? <section className="team-auth-shell"><div className="team-auth-intro"><span>TLink installer team access</span><h1>Your workday, without the office clutter</h1><p>Use the email address your employer invited. Your workspace shows only the jobs, customers and business tools your saved access permits.</p></div><div className="team-auth-card"><button className="customer-google-button" type="button" onClick={() => void google()} disabled={busy === "auth"}>Continue with Google</button><div className="customer-auth-tabs"><button type="button" className={mode === "signin" ? "selected" : ""} onClick={() => setMode("signin")}>Sign in</button><button type="button" className={mode === "create" ? "selected" : ""} onClick={() => setMode("create")}>Create login</button></div><form onSubmit={emailAuth}>{mode === "create" && <label><span>Your name</span><input value={name} required onChange={(event) => setName(event.target.value)} /></label>}<label><span>Invited email</span><input type="email" value={email} required onChange={(event) => setEmail(event.target.value)} /></label><label><span>Password</span><input type="password" minLength={8} required value={password} onChange={(event) => setPassword(event.target.value)} /></label><button className="btn" disabled={busy === "auth"}>{busy === "auth" ? "Please wait..." : mode === "create" ? "Create team login" : "Sign in"}</button>{mode === "signin" && <button className="customer-reset-link" type="button" onClick={() => void reset()}>Reset password</button>}</form>{status && <p role="status">{status}</p>}</div></section> : loading ? <section className="dashboard-state-card"><p>Loading assigned work...</p></section> : !data.access ? <section className="dashboard-state-card"><span>Team access required</span><h1>This login is not connected to an active installer team</h1><p>{status || "Open the invitation link from your employer, or ask them to create a fresh link."}</p><button className="btn" type="button" onClick={() => void signOut(firebaseAuth)}>Use another account</button></section> : <>
-      <header className="team-portal-hero"><div><span>Team portal</span><h1>{data.access.businessName}</h1><p>Welcome, {data.access.displayName}. {permissions?.jobScope === "own" ? "Only work assigned to you is visible. Customer details are limited to assigned jobs." : "Coordinate the active work queue from one place."}</p></div><div><strong>{todayJobs.length}</strong><span>jobs today</span><button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></div></header>
+    {!authReady ? <section className="dashboard-state-card"><p>Opening the secure staff portal...</p></section> : !user ? <section className="team-auth-shell"><div className="team-auth-intro"><span>TLink installer team access</span><h1>Your workday, without the office clutter</h1><p>Use the email address your employer invited. Your workspace shows only the jobs, customers and business tools your saved access permits.</p></div><div className="team-auth-card"><button className="customer-google-button" type="button" onClick={() => void google()} disabled={busy === "auth"}>Continue with Google</button><div className="customer-auth-tabs"><button type="button" className={mode === "signin" ? "selected" : ""} onClick={() => setMode("signin")}>Sign in</button><button type="button" className={mode === "create" ? "selected" : ""} onClick={() => setMode("create")}>Create login</button></div><form onSubmit={emailAuth}>{mode === "create" && <label><span>Your name</span><input value={name} required onChange={(event) => setName(event.target.value)} /></label>}<label><span>Invited email</span><input type="email" value={email} required onChange={(event) => setEmail(event.target.value)} /></label><label><span>Password</span><input type="password" minLength={8} required value={password} onChange={(event) => setPassword(event.target.value)} /></label><button className="btn" disabled={busy === "auth"}>{busy === "auth" ? "Please wait..." : mode === "create" ? "Create team login" : "Sign in"}</button>{mode === "signin" && <button className="customer-reset-link" type="button" onClick={() => void reset()}>Reset password</button>}</form>{status && <p role="status">{status}</p>}</div></section> : loading ? <section className="dashboard-state-card"><p>Loading assigned work...</p></section> : !data.access ? <section className="dashboard-state-card"><span>Team access required</span><h1>This login is not connected to an active installer team</h1><p>{status || "Open the invitation link from your employer, or ask them to create a fresh link."}</p><button className="btn" type="button" onClick={() => void leaveAccount()}>Use another account</button></section> : <>
+      <header className="team-portal-hero"><div><span>Team portal</span><h1>{data.access.businessName}</h1><p>Welcome, {data.access.displayName}. {permissions?.jobScope === "own" ? "Only work assigned to you is visible. Customer details are limited to assigned jobs." : "Coordinate the active work queue from one place."}</p></div><div><strong>{todayJobs.length}</strong><span>jobs today</span><button type="button" onClick={() => void leaveAccount()}>Sign out</button></div></header>
       <nav className="crm-nav" aria-label="Staff workspace">
         <button type="button" className={portalView === "work" ? "active" : ""} aria-current={portalView === "work" ? "page" : undefined} onClick={() => setPortalView("work")}>Assigned work</button>
         <button type="button" className={portalView === "training" ? "active" : ""} aria-current={portalView === "training" ? "page" : undefined} onClick={() => setPortalView("training")}>My to do &amp; training</button>
