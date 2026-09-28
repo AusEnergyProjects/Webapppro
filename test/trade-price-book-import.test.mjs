@@ -7,7 +7,8 @@ import ts from "typescript";
 import { planPriceBookImport, validatePriceBookImportRows, PRICE_BOOK_IMPORT_MAX_BODY_BYTES } from "../src/lib/trade-price-book-import.ts";
 import { importPriceBook, PriceBookImportError } from "../src/lib/trade-price-book-import-server.ts";
 import { readBoundedRequestText, RequestBodyTooLargeError } from "../src/lib/bounded-request-body.mjs";
-import { normalisePriceBookInput } from "../src/lib/trade-price-book.ts";
+import { normalisePriceBookInput, parsePriceBookSolarPanel, priceBookSolarEquipment } from "../src/lib/trade-price-book.ts";
+import { detectPriceBookColumns, mapPriceBookRows, priceBookTemplateCsv, readPriceBookSpreadsheet } from "../src/lib/trade-price-book-spreadsheet.ts";
 
 const clean = (value, maximum) => String(value ?? "").trim().slice(0, maximum);
 const row = (rowNumber, values) => ({ rowNumber, values });
@@ -16,6 +17,7 @@ const input = (values = {}) => normalisePriceBookInput({ name: "Call out fee", i
 function existing(values = {}, overrides = {}) {
   const item = input(values);
   return { id: "item-a", item_code: "PB-A", name: item.name, description: item.description, item_type: item.itemType,
+    category: item.category || "", solar_panel_json: JSON.stringify(item.solarPanel ?? null),
     unit_label: item.unitLabel, supplier_cost_cents_ex_gst: item.supplierCostCentsExGst,
     sell_price_cents_ex_gst: item.sellPriceCentsExGst, tax_code: item.taxCode, markup_basis_points: item.markupBasisPoints,
     margin_basis_points: item.marginBasisPoints, expected_duration_minutes: item.expectedDurationMinutes,
@@ -27,6 +29,8 @@ function fixture() {
   const sqlite = new DatabaseSync(":memory:");
   const migration = fs.readFileSync(new URL("../drizzle/0064_trade_price_book.sql", import.meta.url), "utf8");
   sqlite.exec(migration.slice(0, migration.indexOf("ALTER TABLE")));
+  sqlite.exec(fs.readFileSync(new URL("../drizzle/0199_trade_price_book_solar_panel.sql", import.meta.url), "utf8"));
+  sqlite.exec(fs.readFileSync(new URL("../drizzle/0209_trade_price_book_categories.sql", import.meta.url), "utf8"));
   sqlite.exec("CREATE TABLE trade_accounts (firebase_uid TEXT PRIMARY KEY, capabilities TEXT); INSERT INTO trade_accounts VALUES ('owner-a', '[\"electrical\"]'), ('owner-b', '[]'); CREATE TABLE trade_crm_quote_items (id TEXT, price_book_item_id TEXT, unit_price_cents INTEGER); INSERT INTO trade_crm_quote_items VALUES ('quote-1', 'item-a', 20000)");
   const api = { beforeBatch: null, afterCommit: null, failAt: -1, batches: 0,
     prepare(sql) {
@@ -66,6 +70,135 @@ async function previewAndImport(api, rows, extra = {}) {
   const result = await importPriceBook(api, "owner-a", "staff-a", { action: "import", rows, ...extra, previewToken: preview.preview.token });
   return { preview, result };
 }
+
+const panelDetails = { watts: 440, lengthM: 1.762, widthM: 1.134, manufacturer: "Example maker", model: "Example model",
+  warrantyYears: 25, datasheetUrl: "https://manufacturer.com/panel.pdf" };
+const panelValues = { name: "Example panel", itemType: "material", category: "Solar panels", unitLabel: "each", solarPanel: panelDetails };
+const importedPanel = { name: "Imported panel", itemType: "material", productKind: "solar_panel", supplierSku: "PANEL-01", sellPrice: "180",
+  category: "Solar panels", panelWatts: "440", panelLengthMm: "1762", panelWidthMm: "1134" };
+
+test("downloaded sample imports correct product/service types and exact panel dimensions into map equipment", async () => {
+  const { sqlite, api } = fixture();
+  const [sheet] = await readPriceBookSpreadsheet(new File([priceBookTemplateCsv()], "TLink-price-book-template.csv"));
+  const rows = mapPriceBookRows(sheet, 0, detectPriceBookColumns(sheet.data[0]));
+  const { preview } = await previewAndImport(api, rows);
+  assert.equal(preview.preview.canImport, true); assert.equal(preview.preview.counts.added, 4);
+  const saved = sqlite.prepare("SELECT * FROM trade_price_book_items ORDER BY supplier_sku").all();
+  const panel = saved.find((item) => item.supplier_sku === "EXAMPLE-PANEL-440");
+  assert.deepEqual(parsePriceBookSolarPanel(panel.solar_panel_json), { watts: 440, widthM: 1.134, lengthM: 1.762 });
+  const equipment = priceBookSolarEquipment({ id: panel.id, name: panel.name, supplierSku: panel.supplier_sku,
+    solarPanel: parsePriceBookSolarPanel(panel.solar_panel_json) });
+  assert.equal(equipment.priceBookItemId, panel.id); assert.equal(equipment.watts, 440);
+  assert.equal(equipment.lengthM, 1.762); assert.equal(equipment.widthM, 1.134);
+  assert.equal(panel.category, "Solar panels");
+  const insulation = saved.find((item) => item.supplier_sku === "EXAMPLE-INS-ROLL");
+  assert.equal(insulation.item_type, "material"); assert.equal(insulation.unit_label, "roll"); assert.equal(insulation.category, "Insulation");
+  const labour = saved.find((item) => item.supplier_sku === "EXAMPLE-LABOUR");
+  assert.equal(labour.item_type, "labour"); assert.equal(labour.unit_label, "hour");
+  const callout = saved.find((item) => item.supplier_sku === "EXAMPLE-CALLOUT");
+  assert.equal(callout.item_type, "call_out"); assert.equal(callout.unit_label, "visit");
+  assert.ok(saved.every((item) => /^PB-[A-F0-9]{8}$/.test(item.item_code)));
+  const repeat = await importPriceBook(api, "owner-a", "staff-a", { action: "import", rows, previewToken: preview.preview.token });
+  assert.equal(repeat.preview.counts.unchanged, 4); assert.equal(api.batches, 1);
+});
+
+test("price-only updates retain panel specifications, documents and category with omitted or blank optional cells", async () => {
+  const { sqlite, api, seed } = fixture(); seed(existing(panelValues));
+  const rows = [row(2, { itemCode: "PB-A", sellPrice: "220", category: "", productKind: "", panelLengthMm: "" })];
+  const { preview } = await previewAndImport(api, rows);
+  const saved = sqlite.prepare("SELECT * FROM trade_price_book_items").get();
+  assert.deepEqual(JSON.parse(saved.solar_panel_json), panelDetails); assert.equal(saved.category, "Solar panels");
+  assert.deepEqual(preview.preview.items[0].solarPanel, parsePriceBookSolarPanel(panelDetails));
+  assert.equal(preview.preview.items[0].itemType, "material"); assert.equal(preview.preview.items[0].unitLabel, "each");
+  const kept = await importPriceBook(api, "owner-a", "staff-a", { action: "import", rows, previewToken: preview.preview.token });
+  assert.equal(kept.preview.counts.unchanged, 1); assert.equal(api.batches, 1);
+});
+
+test("panel and category metadata changes persist without bumping unchanged price history", async () => {
+  const { sqlite, api, seed } = fixture(); seed(existing(panelValues));
+  const rows = [row(2, { itemCode: "PB-A", category: "  Residential   solar ", productKind: "solar_panel", panelWatts: "455", panelLengthMm: "1800", panelWidthMm: "1134.5" })];
+  const { preview } = await previewAndImport(api, rows);
+  assert.equal(preview.preview.counts.updated, 1);
+  const saved = sqlite.prepare("SELECT * FROM trade_price_book_items").get();
+  assert.equal(saved.category, "Residential solar"); assert.equal(saved.price_revision, 1);
+  assert.deepEqual(JSON.parse(saved.solar_panel_json), { ...panelDetails, watts: 455, lengthM: 1.8, widthM: 1.1345 });
+  assert.equal(sqlite.prepare("SELECT COUNT(*) count FROM trade_price_book_price_history").get().count, 1);
+});
+
+test("explicit general classification removes solar metadata and permits changing to a service type", async () => {
+  const { sqlite, api, seed } = fixture(); seed(existing(panelValues));
+  const invalid = planPriceBookImport([row(2, { itemCode: "PB-A", itemType: "labour" })], [existing(panelValues)], []);
+  assert.match(invalid.issues[0].message, /Material or Equipment/);
+  await previewAndImport(api, [row(2, { itemCode: "PB-A", itemType: "labour", productKind: "general", category: "Installation" })]);
+  const saved = sqlite.prepare("SELECT * FROM trade_price_book_items").get();
+  assert.equal(saved.solar_panel_json, "null"); assert.equal(saved.item_type, "labour"); assert.equal(saved.category, "Installation");
+});
+
+test("solar import rejects partial, unclassified, incompatible and invalid dimensions with row-specific errors", () => {
+  for (const [overrides, expected] of [
+    [{ productKind: "" }, /Choose Solar panel/], [{ productKind: "general" }, /Choose Solar panel/],
+    [{ productKind: "hot_water" }, /Product kind must/], [{ panelWidthMm: "" }, /Supply panel watts, length and width together/],
+    [{ panelWatts: "", panelLengthMm: "", panelWidthMm: "" }, /new solar panel needs/],
+    [{ itemType: "labour" }, /Material or Equipment/], [{ panelLengthMm: "1.762 m" }, /millimetres/],
+    [{ panelLengthMm: "1.762" }, /200 to 4,000 mm/], [{ panelWidthMm: "4001" }, /200 to 4,000 mm/],
+    [{ panelWatts: "0" }, /watts from 1 to 2,000/], [{ panelWatts: "2001" }, /watts from 1 to 2,000/],
+    [{ panelWatts: "NaN" }, /positive numbers/], [{ panelLengthMm: "-1762" }, /positive numbers/],
+    [{ category: "a".repeat(81) }, /no more than 80/], [{ category: "Bad\u0000category" }, /category of up to 80/],
+  ]) {
+    const plan = planPriceBookImport([row(7, { ...importedPanel, ...overrides })], [], []);
+    assert.equal(plan.issues.length, 1, JSON.stringify(overrides)); assert.equal(plan.issues[0].rowNumber, 7);
+    assert.match(plan.issues[0].message, expected, JSON.stringify(overrides));
+  }
+  const categoryOnly = planPriceBookImport([row(2, { name: "General product", category: "Solar panel", sellPrice: "100" })], [], []);
+  assert.equal(categoryOnly.issues.length, 0); assert.equal(categoryOnly.changes[0].input.solarPanel, null);
+});
+
+test("saved panel can retain all dimensions but a partial dimension edit is rejected", () => {
+  const item = existing(panelValues);
+  const unchanged = planPriceBookImport([row(2, { itemCode: "PB-A", productKind: "solar_panel" })], [item], []);
+  assert.equal(unchanged.issues.length, 0); assert.equal(unchanged.counts.unchanged, 1);
+  const partial = planPriceBookImport([row(2, { itemCode: "PB-A", productKind: "solar_panel", panelWatts: "450" })], [item], []);
+  assert.match(partial.issues[0].message, /Supply panel watts, length and width together/);
+});
+
+test("invalid solar specifications prevent the entire mixed upload from changing existing products", async () => {
+  const { sqlite, api, seed } = fixture(); seed(existing(panelValues));
+  const rows = [row(2, { itemCode: "PB-A", sellPrice: "220" }), row(3, { ...importedPanel, panelWidthMm: "" })];
+  const { preview } = await importPriceBook(api, "owner-a", "staff-a", { action: "preview", rows });
+  assert.equal(preview.canImport, false); assert.equal(preview.issues[0].rowNumber, 3);
+  await assert.rejects(importPriceBook(api, "owner-a", "staff-a", { action: "import", rows, previewToken: preview.token }), (error) => error.status === 400);
+  assert.equal(api.batches, 0);
+  const saved = sqlite.prepare("SELECT * FROM trade_price_book_items").all();
+  assert.equal(saved.length, 1); assert.equal(saved[0].sell_price_cents_ex_gst, 20000);
+  assert.deepEqual(JSON.parse(saved[0].solar_panel_json), panelDetails);
+});
+
+test("panel/category changes invalidate preview and concurrent atomic assertions even with unchanged timestamps", async () => {
+  for (const atomic of [false, true]) for (const field of ["category", "solar_panel_json"]) {
+    const { sqlite, api, seed } = fixture(); seed(existing(panelValues));
+    const rows = [row(2, { itemCode: "PB-A", sellPrice: "220" }), row(3, { name: "New product", sellPrice: "50" })];
+    const { preview } = await importPriceBook(api, "owner-a", "staff-a", { action: "preview", rows });
+    const mutate = () => sqlite.prepare(`UPDATE trade_price_book_items SET ${field}=? WHERE id='item-a'`).run(field === "category" ? "Changed group" : JSON.stringify({ ...panelDetails, watts: 450 }));
+    if (atomic) api.beforeBatch = mutate; else mutate();
+    await assert.rejects(importPriceBook(api, "owner-a", "staff-a", { action: "import", rows, previewToken: preview.token }), (error) => error.status === 409);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) count FROM trade_price_book_items").get().count, 1);
+    assert.equal(sqlite.prepare("SELECT sell_price_cents_ex_gst FROM trade_price_book_items").get().sell_price_cents_ex_gst, 20000);
+  }
+});
+
+test("new panel/category import is replay-safe after a lost commit response and isolated to its business", async () => {
+  const { sqlite, api, seed } = fixture();
+  seed(existing({ ...panelValues, supplierSku: "PANEL-01" }), "owner-b");
+  const rows = [row(2, importedPanel)];
+  api.afterCommit = () => { throw new Error("Lost response"); };
+  const { preview, result } = await previewAndImport(api, rows);
+  assert.equal(result.imported, true); assert.equal(result.preview.counts.unchanged, 1);
+  const own = sqlite.prepare("SELECT * FROM trade_price_book_items WHERE firebase_uid='owner-a'").get();
+  assert.equal(own.category, "Solar panels"); assert.equal(own.created_by_uid, "staff-a"); assert.equal(JSON.parse(own.solar_panel_json).watts, 440);
+  assert.deepEqual(JSON.parse(sqlite.prepare("SELECT solar_panel_json FROM trade_price_book_items WHERE firebase_uid='owner-b'").get().solar_panel_json), panelDetails);
+  await importPriceBook(api, "owner-a", "staff-a", { action: "import", rows, previewToken: preview.preview.token });
+  assert.equal(api.batches, 1); assert.equal(sqlite.prepare("SELECT COUNT(*) count FROM trade_price_book_items").get().count, 2);
+});
 
 test("latest upload updates the same call-out fee from $200 to $220 and retains omitted details", async () => {
   const { sqlite, api, seed } = fixture(); seed();

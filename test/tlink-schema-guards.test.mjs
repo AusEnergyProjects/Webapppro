@@ -584,6 +584,13 @@ test("runtime installer requires the specialist credential role schema", async (
   missingCredentials.close();
 });
 
+test("runtime installer requires the price-book category migration", async () => {
+  const missingCategory = schemaDatabase();
+  missingCategory.exec("ALTER TABLE trade_price_book_items DROP COLUMN category");
+  await assert.rejects(ensureTlinkSchemaGuards(testD1(missingCategory)), /TLINK_SCHEMA_MIGRATIONS_REQUIRED:column:trade_price_book_items.category/);
+  missingCategory.close();
+});
+
 test("team access, Interested handoff, health and minute cron install guards before guarded work", () => {
   const access = fs.readFileSync(new URL("../src/lib/trade-team-server.ts", import.meta.url), "utf8");
   const workflow = fs.readFileSync(new URL("../src/lib/public-lead-quote-workflow-server.ts", import.meta.url), "utf8");

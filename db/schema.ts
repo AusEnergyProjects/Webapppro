@@ -2106,6 +2106,7 @@ export const tradePriceBookItems = sqliteTable("trade_price_book_items", {
   name: text("name").notNull(),
   description: text("description").notNull().default(""),
   itemType: text("item_type").notNull(),
+  category: text("category").notNull().default(""),
   unitLabel: text("unit_label").notNull().default("each"),
   solarPanelJson: text("solar_panel_json").notNull().default("null"),
   supplierCostCentsExGst: integer("supplier_cost_cents_ex_gst").notNull().default(0),
@@ -2129,6 +2130,7 @@ export const tradePriceBookItems = sqliteTable("trade_price_book_items", {
   index("trade_price_book_items_owner_status_name_idx").on(table.firebaseUid, table.recordStatus, table.name),
   index("trade_price_book_items_owner_type_idx").on(table.firebaseUid, table.recordStatus, table.itemType, table.updatedAt),
   index("trade_price_book_items_supplier_product_idx").on(table.supplierProductId, table.recordStatus),
+  check("trade_price_book_items_category_length", sql`length(${table.category}) <= 80`),
 ]);
 
 export const tradePriceBookPriceHistory = sqliteTable("trade_price_book_price_history", {

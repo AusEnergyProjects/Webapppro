@@ -1,10 +1,12 @@
-import { normalisePriceBookInput, PRICE_BOOK_ITEM_TYPES, PRICE_BOOK_UNITS } from "./trade-price-book.ts";
+import { normalisePriceBookInput, parsePriceBookSolarPanel, PRICE_BOOK_ITEM_TYPES, PRICE_BOOK_UNITS,
+  type PriceBookItemType, type PriceBookSolarPanel } from "./trade-price-book.ts";
 import { dollarsToCents } from "./trade-quote.ts";
 
 export const PRICE_BOOK_IMPORT_MAX_ROWS = 2_000;
 export const PRICE_BOOK_IMPORT_MAX_BODY_BYTES = 2 * 1024 * 1024;
 export const PRICE_BOOK_IMPORT_FIELDS = ["name", "itemCode", "supplierSku", "supplierName", "sellPrice", "supplierCost",
-  "itemType", "unitLabel", "taxCode", "description", "expectedDurationMinutes", "requiredSkill"] as const;
+  "itemType", "category", "unitLabel", "taxCode", "description", "expectedDurationMinutes", "requiredSkill",
+  "productKind", "panelWatts", "panelLengthMm", "panelWidthMm"] as const;
 export type PriceBookImportField = typeof PRICE_BOOK_IMPORT_FIELDS[number];
 export type PriceBookImportRow = { rowNumber: number; values: Partial<Record<PriceBookImportField, string | number>> };
 export type PriceBookImportPrices = { sellPriceCentsExGst: number; supplierCostCentsExGst: number };
@@ -12,6 +14,7 @@ export type PriceBookImportPreview = {
   token: string;
   counts: { added: number; updated: number; unchanged: number; superseded: number };
   items: { rowNumber: number; status: "added" | "updated" | "unchanged"; name: string; itemCode: string;
+    itemType: PriceBookItemType; category: string; supplierSku: string; unitLabel: string; solarPanel: PriceBookSolarPanel | null;
     before: PriceBookImportPrices | null; after: PriceBookImportPrices }[];
   issues: { rowNumber: number; message: string }[];
   canImport: boolean;
@@ -28,11 +31,11 @@ export function priceBookImportIdentity(value: unknown) {
 
 const limits: Record<PriceBookImportField, number> = { name: 140, itemCode: 100, supplierSku: 100, supplierName: 140,
   sellPrice: 40, supplierCost: 40, itemType: 30, unitLabel: 30, taxCode: 20, description: 500,
-  expectedDurationMinutes: 10, requiredSkill: 80 };
+  expectedDurationMinutes: 10, requiredSkill: 80, category: 80, productKind: 30, panelWatts: 20, panelLengthMm: 20, panelWidthMm: 20 };
 const clean = (value: unknown, maximum: number) => String(value ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").trim().slice(0, maximum);
 const supplied = (value: unknown) => value !== undefined && value !== null && String(value).trim() !== "";
 const inputColumns = {
-  name: "name", description: "description", itemType: "item_type", unitLabel: "unit_label",
+  name: "name", description: "description", itemType: "item_type", category: "category", unitLabel: "unit_label",
   supplierCostCentsExGst: "supplier_cost_cents_ex_gst", sellPriceCentsExGst: "sell_price_cents_ex_gst",
   taxCode: "tax_code", markupBasisPoints: "markup_basis_points", marginBasisPoints: "margin_basis_points",
   expectedDurationMinutes: "expected_duration_minutes", requiredSkill: "required_skill", supplierName: "supplier_name",
@@ -46,6 +49,9 @@ function validationMessage(error: unknown) {
   if (code === "INVALID_PRICE_BOOK_NON_BILLABLE") return "Non-billable items need a sell price of zero.";
   if (code === "INVALID_PRICE_BOOK_SELL_PRICE") return "Enter a sell price greater than zero for this item type.";
   if (code === "INVALID_PRICE_BOOK_DURATION") return "Duration must be a whole number from 0 to 10,080 minutes.";
+  if (code === "INVALID_PRICE_BOOK_CATEGORY") return "Use a category of up to 80 characters without control characters.";
+  if (code === "INVALID_PRICE_BOOK_SOLAR_PANEL_TYPE") return "Solar panels must use the Material or Equipment item type.";
+  if (code === "INVALID_PRICE_BOOK_SOLAR_PANEL") return "Enter panel watts from 1 to 2,000 and length and width from 200 to 4,000 mm. Use the product datasheet.";
   return "Check the item name, type, unit, cost, sell price and GST setting.";
 }
 
@@ -106,12 +112,29 @@ function inputForRow(values: PriceBookImportRow["values"], existing: PriceBookIm
   capabilities: string[], pricesIncludeGst: boolean): PriceBookImportInput {
   const raw: Record<string, unknown> = existing ? {
     name: existing.name, description: existing.description, itemType: existing.item_type, unitLabel: existing.unit_label,
+    category: existing.category || "", solarPanel: parsePriceBookSolarPanel(existing.solar_panel_json),
     supplierCost: (Number(existing.supplier_cost_cents_ex_gst) / 100).toFixed(2),
     sellPrice: (Number(existing.sell_price_cents_ex_gst) / 100).toFixed(2), taxCode: existing.tax_code,
     expectedDurationMinutes: existing.expected_duration_minutes, requiredSkill: existing.required_skill,
     supplierName: existing.supplier_name, supplierSku: existing.supplier_sku, supplierProductId: existing.supplier_product_id,
-  } : { itemType: "material", unitLabel: "each", taxCode: "gst", supplierCost: "0", expectedDurationMinutes: "0" };
+  } : { itemType: "material", category: "", unitLabel: "each", taxCode: "gst", supplierCost: "0", expectedDurationMinutes: "0", solarPanel: null };
   for (const field of PRICE_BOOK_IMPORT_FIELDS) if (supplied(values[field])) raw[field] = values[field];
+  const kind = supplied(values.productKind) ? String(values.productKind).trim() : "";
+  if (kind && kind !== "general" && kind !== "solar_panel") throw new Error("Product kind must be General item or Solar panel. Use Category for your own groups.");
+  const panelFields = ["panelWatts", "panelLengthMm", "panelWidthMm"] as const;
+  const dimensionCount = panelFields.filter((field) => supplied(values[field])).length;
+  if (dimensionCount && kind !== "solar_panel") throw new Error("Choose Solar panel in Product kind when supplying panel watts and dimensions.");
+  if (dimensionCount && dimensionCount !== panelFields.length) throw new Error("Supply panel watts, length and width together. Leave all three blank to keep an existing panel's dimensions.");
+  if (kind === "general") raw.solarPanel = null;
+  if (kind === "solar_panel") {
+    if (dimensionCount) {
+      for (const field of panelFields) {
+        if (!/^\d+(?:\.\d{1,3})?$/.test(String(values[field]).trim())) throw new Error("Panel watts and dimensions must be positive numbers without unit text. Enter length and width in millimetres.");
+      }
+      raw.solarPanel = { ...parsePriceBookSolarPanel(raw.solarPanel), watts: Number(values.panelWatts),
+        lengthM: Number(values.panelLengthMm) / 1000, widthM: Number(values.panelWidthMm) / 1000 };
+    } else if (!raw.solarPanel) throw new Error("A new solar panel needs its watts, length and width in millimetres from the product datasheet.");
+  }
   if (!existing && !supplied(values.sellPrice)) throw new Error("A sell price is required for a new item. Existing items can be updated with just a cost and matching identifier.");
   if (raw.itemType && !PRICE_BOOK_ITEM_TYPES.includes(raw.itemType as typeof PRICE_BOOK_ITEM_TYPES[number])) throw new Error("Choose a recognised item type, such as Material, Labour or Call-out.");
   if (!PRICE_BOOK_UNITS.some(([unit]) => unit === raw.unitLabel)) throw new Error("Choose a recognised unit, such as Each, Hour or Visit.");
@@ -151,7 +174,9 @@ export function planPriceBookImport(rows: PriceBookImportRow[], existing: PriceB
       const key = match ? `id:${match.id}` : input.supplierSku ? `sku:${JSON.stringify([priceBookImportIdentity(input.supplierName), priceBookImportIdentity(input.supplierSku)])}` : `name:${JSON.stringify([priceBookImportIdentity(input.name), priceBookImportIdentity(input.supplierName)])}`;
       const priceChanged = !match || Number(match.supplier_cost_cents_ex_gst) !== input.supplierCostCentsExGst
         || Number(match.sell_price_cents_ex_gst) !== input.sellPriceCentsExGst || match.tax_code !== input.taxCode;
-      const status = !match ? "added" : Object.entries(inputColumns).some(([field, column]) => input[field as keyof typeof inputColumns] !== match[column]) ? "updated" : "unchanged";
+      const detailsChanged = match && (Object.entries(inputColumns).some(([field, column]) => input[field as keyof typeof inputColumns] !== match[column])
+        || JSON.stringify(input.solarPanel ?? null) !== JSON.stringify(parsePriceBookSolarPanel(match.solar_panel_json)));
+      const status = !match ? "added" : detailsChanged ? "updated" : "unchanged";
       if (changes.has(key)) superseded++;
       changes.set(key, { rowNumber: row.rowNumber, existing: match, input, status, priceChanged });
     } catch (error) {

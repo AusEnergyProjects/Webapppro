@@ -4,12 +4,13 @@ import fs from "node:fs";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
 import * as spreadsheet from "../src/lib/trade-price-book-spreadsheet.ts";
+import * as priceBook from "../src/lib/trade-price-book.ts";
 
 const source = fs.readFileSync(new URL("../src/components/TradePriceBookImport.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
 const sheet = { name: "Catalogue", data: [["Item name", "Sell price ex GST", "Cost ex GST"], ["Call-out", 220, 0]] };
 const preview = () => ({ token: "a".repeat(64), counts: { added: 0, updated: 1, unchanged: 0, superseded: 0 }, canImport: true, issues: [],
-  items: [{ rowNumber: 2, status: "updated", name: "Call-out", itemCode: "PB-callout", before: { sellPriceCentsExGst: 20000, supplierCostCentsExGst: 0 }, after: { sellPriceCentsExGst: 22000, supplierCostCentsExGst: 0 } }] });
+  items: [{ rowNumber: 2, status: "updated", name: "Call-out", itemCode: "PB-callout", itemType: "call_out", category: "Service fees", supplierSku: "CALL-01", unitLabel: "visit", solarPanel: null, before: { sellPriceCentsExGst: 20000, supplierCostCentsExGst: 0 }, after: { sellPriceCentsExGst: 22000, supplierCostCentsExGst: 0 } }] });
 const text = (node) => node == null || typeof node === "boolean" ? "" : typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join(" ") : text(node.props?.children);
 function nodes(node, predicate) {
   if (!node || typeof node !== "object") return [];
@@ -29,6 +30,7 @@ function harness(responder, options = {}) {
   const exports = {};
   const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "@/lib/trade-price-book-spreadsheet"
     ? { ...spreadsheet, readPriceBookSpreadsheet: async () => options.sheets || [sheet] }
+    : id === "@/lib/trade-price-book" ? priceBook
     : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : (() => { throw new Error(`Unexpected import ${id}`); })();
   const fetch = async (url, init) => { const body = JSON.parse(init.body); requests.push({ url, init, body }); const result = await responder(body); return { ok: result.ok !== false, json: async () => result }; };
   Function("require", "exports", "fetch", "window", compiled)(require, exports, fetch, options.window || { setTimeout, clearTimeout });
@@ -51,6 +53,28 @@ test("upload auto-maps and previews the price replacement without saving until I
   assert.equal(h.refreshed.length, 1);
   assert.match(text(tree), /Import complete/);
   assert.equal(button(tree, "Import 1 item"), undefined);
+});
+
+test("solar upload previews its exact type, category, identifiers, watts and millimetres before import", async () => {
+  const result = preview();
+  Object.assign(result.items[0], { name: "Example panel", itemType: "equipment", category: "Roof products", supplierSku: "SOL-440",
+    unitLabel: "each", solarPanel: { watts: 440, lengthM: 1.762, widthM: 1.134 } });
+  const h = harness(async () => ({ ok: true, preview: result }), { sheets: [{ name: "Panels", data: [
+    ["Item name", "Price ex GST", "Type", "Category", "SKU", "Product kind", "Panel watts", "Panel length (mm)", "Panel width (mm)"],
+    ["Example panel", "180", "Equipment", "Roof products", "SOL-440", "Solar panel", "440", "1762", "1134"],
+  ] }] });
+  const tree = await h.upload(); const content = text(tree);
+  const values = h.requests[0].body.rows[0].values;
+  assert.equal(values.productKind, "solar_panel"); assert.equal(values.category, "Roof products");
+  assert.equal(values.panelLengthMm, "1762"); assert.equal(values.panelWidthMm, "1134");
+  assert.match(content, /Type \/ Category/); assert.match(content, /Code \/ SKU/);
+  assert.match(content, /Equipment/); assert.match(content, /Roof products/); assert.match(content, /SOL-440/);
+  assert.match(content, /440\s+W/); assert.match(content, /1762\s+×\s+1134\s+mm/);
+  assert.match(content, /opening counts and team assignments/);
+  assert.equal(h.requests.filter((request) => request.body.action === "import").length, 0);
+  const selects = nodes(tree, (node) => node.type === "label").map(text);
+  assert.ok(selects.some((label) => /^Type\s/.test(label)), "Type remains mappable even when a source header is unrecognised");
+  assert.ok(selects.some((label) => /^Charge by\s/.test(label)));
 });
 
 test("invalid rows cannot be imported and explain the affected row", async () => {

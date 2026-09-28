@@ -16,6 +16,7 @@ function fixture() {
   const migration = read("../drizzle/0064_trade_price_book.sql");
   sqlite.exec(migration.slice(0, migration.indexOf("ALTER TABLE")));
   sqlite.exec(read("../drizzle/0199_trade_price_book_solar_panel.sql"));
+  sqlite.exec(read("../drizzle/0209_trade_price_book_categories.sql"));
   sqlite.exec("CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY, capabilities TEXT); INSERT INTO trade_accounts VALUES ('owner-a','[]'),('owner-b','[]')");
   let databaseCalls = 0;
   let access = { ownerUid: "owner-a", actorUid: "staff-a", isOwner: false, canViewPriceBook: true, canManagePriceBook: true };

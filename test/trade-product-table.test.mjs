@@ -85,23 +85,23 @@ test("the product table exposes consistent financial, stock and location columns
   const inventory = stockItem({ tracked: true, onHandMilli: 12000, reservedMilli: 20000, availableMilli: -8000, locations: [{ locationId: "main", name: "Main storage", onHandMilli: 9000, responsibleName: "" }, { locationId: "john", name: "John", onHandMilli: 3000, responsibleName: "John" }] });
   const h = harness(t, { component: "TradePriceBookWorkspace", respond: url => response(url.startsWith("/api/trade-stock") ? { ok: true, items: [inventory], canManage: true } : library()) });
   let tree = await h.settle(); const table = nodes(tree, node => node.type === "table")[0];
-  assert.deepEqual(nodes(table, node => node.type === "th" && node.props.scope === "col").map(text), ["Product", "Track stock", "Cost ex GST", "Margin", "Sale price ex GST", "On hand", "Committed", "Available", "Locations", "Unit", "Supplier"]);
-  const cells = nodes(table, node => node.type === "td"); assert.equal(text(cells[1]), "$100.00"); assert.equal(text(cells[2]), "50.0%"); assert.equal(text(cells[3]), "$200.00"); assert.equal(text(cells[4]), "12"); assert.equal(text(cells[5]), "20"); assert.equal(text(cells[6]), "-8"); assert.match(cells[6].props.className, /negativeValue/); assert.match(text(cells[7]), /Main storage/); assert.equal(text(cells[7]).match(/John/g)?.length, 1);
+  assert.deepEqual(nodes(table, node => node.type === "th" && node.props.scope === "col").map(text), ["Product", "Type", "Category", "Code / SKU", "Track stock", "Cost ex GST", "Margin", "Sale price ex GST", "On hand", "Committed", "Available", "Stock alert", "Locations", "Unit", "Supplier", "Panel size / power"]);
+  const cells = nodes(table, node => node.type === "td"); assert.equal(text(cells[0]), "Material"); assert.match(text(cells[2]), /P-440.*TLink:.*PB-1/); assert.equal(text(cells[4]), "$100.00"); assert.equal(text(cells[5]), "50.0%"); assert.equal(text(cells[6]), "$200.00"); assert.equal(text(cells[7]), "12"); assert.equal(text(cells[8]), "20"); assert.equal(text(cells[9]), "-8"); assert.match(cells[9].props.className, /negativeValue/); assert.equal(text(cells[10]), "Order 8"); assert.match(text(cells[11]), /Main storage/); assert.equal(text(cells[11]).match(/John/g)?.length, 1);
   nodes(tree, node => node.props?.["aria-label"] === "Manage stock and locations for Solar panel")[0].props.onClick(); tree = h.render(); assert.equal(nodes(tree, node => node.type === h.StockWorkspace)[0].props.initialItemId, "product-1");
 });
 
 test("nonphysical rows have no stock switch and a failed lookup never invents zero stock", async t => {
   const h = harness(t, { component: "TradePriceBookWorkspace", respond: url => url.startsWith("/api/trade-stock") ? response({ ok: false }, 503) : response(library([product(), product({ id: "labour", name: "Labour", itemType: "labour" })])) });
   const tree = await h.settle(), table = nodes(tree, node => node.type === "table")[0], rows = nodes(table, node => node.type === "tr").slice(1);
-  const productCells = nodes(rows[0], node => node.type === "td"); for (const index of [4, 5, 6]) assert.equal(text(productCells[index]), "Unavailable");
+  const productCells = nodes(rows[0], node => node.type === "td"); for (const index of [7, 8, 9, 10]) assert.equal(text(productCells[index]), "Unavailable");
   assert.equal(nodes(rows[1], node => node.type === h.StockSwitch).length, 0); assert.match(text(rows[1]), /Not applicable/);
 });
 
 test("paused saved stock stays visible and prevents relabelling its unit", async t => {
   const paused = stockItem({ tracked: false, onHandMilli: 4000, availableMilli: 4000 });
   const h = harness(t, { component: "TradePriceBookWorkspace", respond: url => response(url.startsWith("/api/trade-stock") ? { ok: true, items: [paused], canManage: true } : library()) });
-  let tree = await h.settle(); const cells = nodes(tree, node => node.type === "td"); assert.equal(text(cells[4]), "4"); assert.match(cells[4].props.className, /stockPaused/);
-  nodes(tree, node => node.type === "button" && text(node).includes("Solar panel") && text(node).includes("PB-1"))[0].props.onClick(); tree = await h.settle();
+  let tree = await h.settle(); const cells = nodes(tree, node => node.type === "td"); assert.equal(text(cells[7]), "4"); assert.match(cells[7].props.className, /stockPaused/);
+  button(tree, "Solar panel").props.onClick(); tree = await h.settle();
   nodes(tree, node => node.type === h.StockSettings)[0].props.onLoaded(paused); tree = h.render(); assert.match(text(tree), /Clear saved stock counts before changing/);
   const label = nodes(tree, node => node.type === "label" && text(node).startsWith("Charge by"))[0]; assert.equal(nodes(label, node => node.type === "select")[0].props.disabled, true);
 });
@@ -128,4 +128,46 @@ test("newly saved products refresh stock snapshots so their inline switch is imm
   let tree = await h.settle(); button(tree, "New item").props.onClick(); tree = h.render(); await nodes(tree, node => node.type === "form")[0].props.onSubmit({ preventDefault() {}, nativeEvent: { submitter: null } }); tree = await h.settle();
   const control = nodes(tree, node => node.type === h.StockSwitch && node.props.itemId === "new-product")[0]; assert.equal(control.props.stock.itemId, "new-product"); assert.equal(control.props.loading, false); assert.equal(control.props.failed, false);
   assert.equal(h.requests.filter(row => row.url === "/api/trade-stock").length, 2);
+});
+
+test("type and custom category filters reach the server and clear together", async t => {
+  const h = harness(t, { component: "TradePriceBookWorkspace", respond: url => response(url.startsWith("/api/trade-stock") ? { ok: true, items: [], canManage: true } : { ...library(), categoryOptions: ["Insulation", "Solar panels"] }) });
+  let tree = await h.settle();
+  nodes(tree, node => node.props?.["aria-label"] === "Filter by type")[0].props.onChange({ target: { value: "material" } });
+  tree = await h.settle();
+  nodes(tree, node => node.props?.["aria-label"] === "Filter by category")[0].props.onChange({ target: { value: "Solar panels" } });
+  tree = await h.settle();
+  const filtered = new URL(h.requests.filter(row => row.url.startsWith("/api/trade-price-book?")).at(-1).url, "https://example.test");
+  assert.equal(filtered.searchParams.get("itemType"), "material"); assert.equal(filtered.searchParams.get("category"), "Solar panels");
+  button(tree, "Clear filters").props.onClick(); tree = await h.settle();
+  assert.equal(nodes(tree, node => node.props?.["aria-label"] === "Filter by type")[0].props.value, "");
+  assert.equal(nodes(tree, node => node.props?.["aria-label"] === "Filter by category")[0].props.value, "");
+});
+
+test("tracked each items can gain editable roof dimensions without changing stock units", async t => {
+  const tracked = stockItem({ tracked: true, onHandMilli: 6000 });
+  const h = harness(t, { component: "TradePriceBookWorkspace", respond: (url, init) => response(url.startsWith("/api/trade-stock") ? { ok: true, items: [tracked], canManage: true } : init.method ? { ok: true, item: product({ category: "Roof panels" }) } : library()) });
+  let tree = await h.settle(); button(tree, "Solar panel").props.onClick(); tree = await h.settle();
+  nodes(tree, node => node.type === h.StockSettings)[0].props.onLoaded(tracked); tree = h.render();
+  const field = label => nodes(nodes(tree, node => node.type === "label" && nodes(node, child => child.type === "span" && text(child) === label).length)[0], node => node.type === "input")[0];
+  field("Category").props.onChange({ target: { value: "Roof panels" } }); tree = h.render();
+  const toggle = nodes(tree, node => node.type === "input" && node.props.type === "checkbox")[0]; assert.equal(toggle.props.disabled, false);
+  toggle.props.onChange({ target: { checked: true } }); tree = h.render(); button(tree, "Use default size").props.onClick(); tree = h.render();
+  assert.equal(field("Length (mm)").props.value, "1762"); assert.equal(field("Width (mm)").props.value, "1134"); assert.equal(field("Power (W)").props.value, "440");
+  field("Length (mm)").props.onChange({ target: { value: "1800" } }); tree = h.render();
+  await nodes(tree, node => node.type === "form")[0].props.onSubmit({ preventDefault() {}, nativeEvent: { submitter: null } });
+  const body = JSON.parse(h.requests.find(row => row.init.method === "PATCH").init.body);
+  assert.equal(body.category, "Roof panels"); assert.equal(body.itemType, "material"); assert.equal(body.unitLabel, "each");
+  assert.deepEqual(body.solarPanel, { watts: 440, widthM: 1.134, lengthM: 1.8 });
+});
+
+test("category, exact panel size and low-stock signals are visible in their own cells", async t => {
+  const item = product({ category: "Solar panels", solarPanel: { watts: 450, widthM: 1.134, lengthM: 1.8 } });
+  const inventory = stockItem({ tracked: true, onHandMilli: 4000, reservedMilli: 3000, availableMilli: 1000, lowStockMilli: 2000 });
+  const h = harness(t, { component: "TradePriceBookWorkspace", respond: url => response(url.startsWith("/api/trade-stock") ? { ok: true, items: [inventory], canManage: true } : library([item])) });
+  const tree = await h.settle(), cells = nodes(tree, node => node.type === "td");
+  assert.equal(text(cells[1]), "Solar panels"); assert.equal(text(cells[10]), "Low stock");
+  assert.match(text(cells[14]), /1800.*1134.*mm.*450.*W/);
+  nodes(tree, node => node.props?.["aria-label"] === "Edit panel dimensions for Solar panel")[0].props.onClick();
+  assert.match(text(h.render()), /Panel size for the roof designer/);
 });

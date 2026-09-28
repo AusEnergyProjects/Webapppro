@@ -6,11 +6,17 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 28 September 2026
 
-Deployment baseline for this change: Sites 662, source `945cc437bc62294095792b3dbecf0f7f779020ed`. Final publication identity and live evidence are recorded in C:/Webproject/outputs/tlink-stock-columns-2026-09-28/.
+Deployment baseline for this change: Sites 664, source `fdbbb0c66aae69ff4a03d48cff8aac6a479951fe`. Final publication identity and live evidence are recorded in C:/Webproject/outputs/tlink-product-categories-2026-09-28/.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: product columns and stock by storage or team member
+## Current implementation: product categories and dimension-aware imports
+
+Products exposes Type, business-defined Category and Code / SKU separately, with server-side type/category filtering, stock alerts and editable solar-panel specifications. Migration 0209 adds an optional category label to each business-owned item; older updates preserve it. Categories are suggested from that business's saved products without another setup screen.
+
+The example price sheet includes correctly typed materials, labour and call-outs, categories, units and panel watts/length/width in millimetres. Import preview and atomic save preserve unspecified categories and solar details, reject partial panel specifications and retain owner/replay/stale-preview safeguards. Stock counts and team assignments use the existing Stock controls and are not overwritten by price-sheet uploads. Validation and release evidence: C:/Webproject/outputs/tlink-product-categories-2026-09-28/.
+
+## Previous implementation: product columns and stock by storage or team member
 
 Products uses a compact table with cost, sale price, margin, units, inline stock switches, on hand, committed, signed available and location counts. Tracking remains optional per physical product. Available is on hand minus the full job commitment, including negative values. Shortages stay advisory for quotes.
 

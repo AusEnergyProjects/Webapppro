@@ -28,7 +28,7 @@
 .panel thead th { background: var(--trade-surface-soft, #f4f9f7); position: sticky; top: 0; }
 .panel tbody th { min-width: 160px; font-weight: 750; }
 .panel td { min-width: 90px; }
-.panel th small, .panel del { color: var(--color-aea-muted, #5d7068); display: block; font-size: .65rem; font-weight: 500; margin-top: 3px; }
+.panel th small, .panel td small, .panel del { color: var(--color-aea-muted, #5d7068); display: block; font-size: .65rem; font-weight: 500; margin-top: 3px; }
 .panel del { margin: 0 0 3px; }
 .error, .success { border: 1px solid #dfb1a7; border-radius: 9px; font-size: .78rem; line-height: 1.5; padding: 13px; }
 .error { background: #fff3ef; color: #842d1c; overflow-wrap: anywhere; }

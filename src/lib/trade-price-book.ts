@@ -92,6 +92,13 @@ export function priceBookItemRequiresZeroSupplierCost(itemType: PriceBookItemTyp
   return priceBookItemAllowsNegativeSellPrice(itemType);
 }
 
+export function normalisePriceBookCategory(value: unknown): string {
+  if (typeof value !== "string") throw new Error("INVALID_PRICE_BOOK_CATEGORY");
+  const category = value.trim().replace(/\s+/gu, " ");
+  if (category.length > 80 || /[\u0000-\u001f\u007f]/u.test(category)) throw new Error("INVALID_PRICE_BOOK_CATEGORY");
+  return category;
+}
+
 export function normalisePriceBookInput(raw: Record<string, unknown>, clean: (value: unknown, length: number) => string) {
   const itemType = clean(raw.itemType, 30) as PriceBookItemType;
   const name = clean(raw.name, 140);
@@ -120,6 +127,7 @@ export function normalisePriceBookInput(raw: Record<string, unknown>, clean: (va
     name,
     description,
     itemType,
+    ...(Object.hasOwn(raw, "category") ? { category: normalisePriceBookCategory(raw.category) } : {}),
     unitLabel,
     supplierCostCentsExGst,
     sellPriceCentsExGst,

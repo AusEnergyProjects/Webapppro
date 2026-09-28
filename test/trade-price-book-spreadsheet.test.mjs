@@ -8,10 +8,10 @@ import { checkPriceBookWorkbookArchive, detectPriceBookColumns, mapPriceBookRows
 const sheet = (headers, rows) => ({ name: "Prices", data: [headers, ...rows] });
 const parse = (headers, rows) => mapPriceBookRows(sheet(headers, rows), 0, detectPriceBookColumns(headers));
 
-test("common catalogue headings map names, cost, price and supplier identifiers without confusing categories or external codes", () => {
+test("common catalogue headings map categories separately from item types and external identifiers", () => {
   const headers = ["Product name", "Item code", "Cost ex GST", "Selling price inc. GST", "Category", "TLink item code"];
   const mapping = detectPriceBookColumns(headers);
-  assert.deepEqual(mapping, { name: 0, sellPrice: 3, supplierCost: 2, itemCode: 5, supplierSku: 1 });
+  assert.deepEqual(mapping, { name: 0, sellPrice: 3, supplierCost: 2, itemCode: 5, supplierSku: 1, category: 4 });
   assert.equal(priceBookHeaderGstBasis(headers, mapping), "mixed");
   assert.equal(priceBookHeaderGstBasis(["Name", "Price (incl GST)", "Cost inclusive GST"], { name: 0, sellPrice: 1, supplierCost: 2 }), "inclusive");
   assert.equal(priceBookHeaderGstBasis(["Name", "Sell_price_ex_gst"], { name: 0, sellPrice: 1 }), "exclusive");
@@ -54,11 +54,28 @@ test("CSV upload handles quoted commas and its downloadable example is directly 
   assert.deepEqual(mapPriceBookRows(csv, 0, detectPriceBookColumns(csv.data[0])), [{ rowNumber: 2, values: { name: "Call out, weekend", sellPrice: "220", description: 'Includes "after hours"' } }]);
   const [template] = await readPriceBookSpreadsheet(new File([priceBookTemplateCsv()], "template.csv"));
   const rows = mapPriceBookRows(template, 0, detectPriceBookColumns(template.data[0]));
-  assert.equal(rows.length, 2); assert.equal(rows[0].values.itemType, undefined);
-  assert.equal(rows[0].values.unitLabel, undefined);
-  assert.ok(!template.data[0].includes("Type") && !template.data[0].includes("Charge by"));
-  assert.equal(rows[0].values.sellPrice, "200.00");
+  assert.equal(rows.length, 4); assert.equal(rows[0].values.itemType, "material");
+  assert.equal(rows[0].values.unitLabel, "roll"); assert.equal(rows[0].values.category, "Insulation");
+  assert.equal(rows[1].values.productKind, "solar_panel"); assert.equal(rows[1].values.panelWatts, "440");
+  assert.equal(rows[1].values.panelLengthMm, "1762"); assert.equal(rows[1].values.panelWidthMm, "1134");
+  assert.equal(rows[2].values.itemType, "call_out"); assert.equal(rows[2].values.unitLabel, "visit");
+  assert.equal(rows[3].values.itemType, "labour"); assert.equal(rows[3].values.unitLabel, "hour");
+  assert.ok(rows.every((row) => !row.values.itemCode), "TLink references are assigned when example products are created");
+  assert.equal(rows[2].values.sellPrice, "200.00");
   await assert.rejects(readPriceBookSpreadsheet(new File(["old workbook"], "prices.xls")), /save older .xls/);
+});
+
+test("physical product aliases include packaging units and explicit panel headings without using category as classification", () => {
+  const rows = parse(["Name", "Price", "Type", "Category", "Charge by", "Product kind", "Panel watts", "Length (mm)", "Width (mm)"], [
+    ["Insulation", "90", "Material", "Solar panel", "Rolls", "Standard", null, null, null],
+    ["Fixings", "15", "Material", "Fixings", "Packs", "General item", null, null, null],
+    ["Mortar", "20", "Material", "Masonry", "Bags", "general", null, null, null],
+    ["Panel", "180", "Equipment", "Roof equipment", "Each", "Solar panel", 440, 1762, 1134],
+  ]);
+  assert.deepEqual(rows.map(({ values }) => values.unitLabel), ["roll", "pack", "bag", "each"]);
+  assert.equal(rows[0].values.category, "Solar panel"); assert.equal(rows[0].values.productKind, "general");
+  assert.equal(rows[3].values.productKind, "solar_panel"); assert.equal(rows[3].values.panelLengthMm, "1762");
+  assert.equal(detectPriceBookColumns(["Panel length m", "Panel width m"]).panelLengthMm, undefined, "Never reinterpret metre dimensions as millimetres");
 });
 
 function workbook(extraEntries = {}) {

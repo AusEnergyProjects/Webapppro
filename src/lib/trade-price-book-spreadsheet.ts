@@ -14,11 +14,16 @@ export const PRICE_BOOK_IMPORT_COLUMNS: { key: PriceBookImportField; label: stri
   { key: "supplierSku", label: "SKU / product code", aliases: ["sku", "supplier sku", "product code", "product sku", "stock code", "item code", "code"] },
   { key: "supplierName", label: "Supplier", aliases: ["supplier", "supplier name", "vendor"] },
   { key: "itemType", label: "Type", aliases: ["type", "item type"] },
+  { key: "category", label: "Category", aliases: ["category", "item category", "product category", "subcategory", "sub category"] },
   { key: "unitLabel", label: "Charge by", aliases: ["unit", "units", "unit label", "charge by", "uom"] },
   { key: "taxCode", label: "GST", aliases: ["gst", "tax", "tax code", "tax rate", "gst rate"] },
   { key: "description", label: "Description", aliases: ["description", "details", "item description", "product description"] },
   { key: "expectedDurationMinutes", label: "Expected minutes", aliases: ["expected minutes", "expected duration minutes", "duration minutes", "minutes"] },
   { key: "requiredSkill", label: "Required service", aliases: ["required skill", "required service", "required capability", "capability"] },
+  { key: "productKind", label: "Product kind", aliases: ["product kind", "product classification"] },
+  { key: "panelWatts", label: "Panel watts", aliases: ["panel watts", "panel wattage", "panel power w", "panel power watts"] },
+  { key: "panelLengthMm", label: "Panel length (mm)", aliases: ["panel length mm", "length mm"] },
+  { key: "panelWidthMm", label: "Panel width (mm)", aliases: ["panel width mm", "width mm"] },
 ];
 
 function headerKey(value: unknown) {
@@ -85,10 +90,11 @@ export function mapPriceBookRows(sheet: PriceBookSheet, headerRow: number, mappi
 }
 
 const cellAliases: Partial<Record<PriceBookImportField, Record<string, string>>> = {
+  productKind: { general: "general", "general item": "general", standard: "general", "standard item": "general", "solar panel": "solar_panel", panel: "solar_panel", "solar pv panel": "solar_panel" },
   itemType: { labor: "labour", labour: "labour", product: "material", products: "material", materials: "material", material: "material",
     equipment: "equipment", subcontractor: "subcontractor", subcontract: "subcontractor", travel: "travel", callout: "call_out", "call out": "call_out",
     "call out fee": "call_out", disposal: "disposal", certificate: "certificate", rebate: "rebate", discount: "discount", "non billable": "non_billable", "one off": "one_off", "one off work": "one_off" },
-  unitLabel: { each: "each", ea: "each", unit: "each", hour: "hour", hours: "hour", hr: "hour", hrs: "hour", day: "day", days: "day", metre: "metre", metres: "metre", meter: "metre", meters: "metre", m: "metre", "square metre": "square_metre", "square metres": "square_metre", sqm: "square_metre", m2: "square_metre", "m²": "square_metre", kilometre: "kilometre", kilometres: "kilometre", km: "kilometre", visit: "visit", visits: "visit", fixed: "fixed", "fixed price": "fixed" },
+  unitLabel: { each: "each", ea: "each", unit: "each", roll: "roll", rolls: "roll", pack: "pack", packs: "pack", bag: "bag", bags: "bag", hour: "hour", hours: "hour", hr: "hour", hrs: "hour", day: "day", days: "day", metre: "metre", metres: "metre", meter: "metre", meters: "metre", m: "metre", "square metre": "square_metre", "square metres": "square_metre", sqm: "square_metre", m2: "square_metre", "m²": "square_metre", kilometre: "kilometre", kilometres: "kilometre", km: "kilometre", visit: "visit", visits: "visit", fixed: "fixed", "fixed price": "fixed" },
   taxCode: { gst: "gst", "10%": "gst", "10": "gst", "0.1": "gst", yes: "gst", true: "gst", taxable: "gst", "gst 10%": "gst", none: "none", "0": "none", "0%": "none", no: "none", false: "none", "no gst": "none", "gst free": "none", "tax free": "none" },
 };
 
@@ -133,5 +139,11 @@ export async function readPriceBookSpreadsheet(file: File): Promise<PriceBookShe
 }
 
 export function priceBookTemplateCsv() {
-  return "Item name,SKU,Sell price ex GST,Cost ex GST,GST,Supplier,Description\r\nCall out fee,CALLOUT,200.00,0.00,gst,,Standard call out\r\nElectrician labour per hour,LABOUR,120.00,60.00,gst,,One hour of labour\r\n";
+  return [
+    "Item name,Type,Category,TLink item code,SKU,Charge by,Sell price ex GST,Cost ex GST,GST,Supplier,Product kind,Panel watts,Panel length (mm),Panel width (mm),Description",
+    "Example insulation roll,Material,Insulation,,EXAMPLE-INS-ROLL,Roll,95.00,65.00,GST,,General item,,,,Example prices only. Replace with your product and coverage per roll.",
+    "Example 440 W solar panel,Material,Solar panels,,EXAMPLE-PANEL-440,Each,180.00,120.00,GST,,Solar panel,440,1762,1134,Example specifications only. Replace watts and dimensions with your product datasheet values.",
+    "Call out fee,Call-out,Service fees,,EXAMPLE-CALLOUT,Visit,200.00,0.00,GST,,General item,,,,Example prices only. Standard call out.",
+    "Electrician labour per hour,Labour,Electrical,,EXAMPLE-LABOUR,Hour,120.00,60.00,GST,,General item,,,,Example prices only. One hour of labour.",
+  ].join("\r\n") + "\r\n";
 }

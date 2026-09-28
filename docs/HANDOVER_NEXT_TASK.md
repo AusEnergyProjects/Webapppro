@@ -1,9 +1,15 @@
 # Next task handover
 
-Status: product columns and stock locations are in release validation. Verified baseline Sites 662, source 945cc437bc62294095792b3dbecf0f7f779020ed.
+Status: product categories and panel imports are in release validation. Verified baseline Sites 664, source fdbbb0c66aae69ff4a03d48cff8aac6a479951fe.
 Prepared: 28 September 2026
 
-## Active contract: simple product stock columns and team member locations
+## Active contract: product categories and panel imports
+
+Outcome: separate Type, Category and Code / SKU columns; optional business-defined categories; simple type/category filters; stock alerts; editable solar-panel millimetre dimensions; and an updated example sheet whose physical and service items import with the correct types. Existing stock ownership and quantity rules remain authoritative.
+
+Scope: price-book table/editor/API/import, additive migration 0209 and regression tests. Validate owner scoping, filtering before row limits, older-client preservation, category/panel preview races, sample-to-map dimensions and full migration replay. Publish the exact scoped commit to the current GitHub branch and matching Sites artifact. Evidence: C:/Webproject/outputs/tlink-product-categories-2026-09-28/.
+
+## Previous contract: simple product stock columns and team member locations
 
 Outcome: readable product columns, inline tracking switches, signed availability and separate physical counts in Main storage, optional storage locations or directly with a team member. Move stock keeps the total unchanged. Existing quote and actual-use flows retain their stock rules and business permissions.
 

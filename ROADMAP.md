@@ -16,7 +16,11 @@ The dated audit is the immutable evidence baseline. [Release truth](./docs/RELEA
 
 Sequence is dependency based, not a calendar promise. A source change is not a release. A roadmap item is complete only when its required tests, release identity and runtime evidence are recorded.
 
-## Current optional stock completion gate
+## Current product category and import completion gate
+
+Publish and verify business-defined product categories through migration 0209, separate type/category/code columns, simple filters and solar-panel specification imports. Preserve the released stock-location model and keep price-sheet uploads separate from stock-count changes. Exact-source release evidence belongs in C:/Webproject/outputs/tlink-product-categories-2026-09-28/.
+
+## Previous optional stock completion gate
 
 Optional product tracking, receipts, stocktake and job allocations are implemented through migration 0207. Complete exact-source publication and affected day/night desktop/mobile checks. Stock stays off for businesses buying as needed. Quotes remain sendable during shortages; accepted quotes allocate available tracked products and cancellations release unused allocations. Physical use stays connected to the existing job checklist.
 

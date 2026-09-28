@@ -13,7 +13,7 @@ export class PriceBookImportError extends Error {
 
 type ImportDatabase = Pick<D1Database, "prepare" | "batch">;
 type ImportRequest = { action: "preview" | "import"; rows: PriceBookImportRow[]; previewToken?: string; pricesIncludeGst?: boolean };
-const snapshotColumns = ["id", "item_code", "name", "description", "item_type", "unit_label", "supplier_cost_cents_ex_gst",
+const snapshotColumns = ["id", "item_code", "name", "description", "item_type", "category", "solar_panel_json", "unit_label", "supplier_cost_cents_ex_gst",
   "sell_price_cents_ex_gst", "tax_code", "markup_basis_points", "margin_basis_points", "expected_duration_minutes",
   "required_skill", "supplier_name", "supplier_sku", "supplier_product_id", "record_status", "price_revision", "updated_at", "updated_by_uid"];
 
@@ -41,14 +41,16 @@ async function snapshot(db: ImportDatabase, ownerUid: string) {
 function publicPreview(plan: ReturnType<typeof planPriceBookImport>, token: string): PriceBookImportPreview {
   return { token, counts: plan.counts, issues: plan.issues, canImport: plan.issues.length === 0,
     items: plan.changes.map(({ rowNumber, existing, input, status }) => ({ rowNumber, status, name: input.name,
-      itemCode: existing?.item_code || "New item", before: existing ? { sellPriceCentsExGst: Number(existing.sell_price_cents_ex_gst),
+      itemCode: existing?.item_code || "Assigned on import", itemType: input.itemType, category: input.category || "",
+      supplierSku: input.supplierSku, unitLabel: input.unitLabel, solarPanel: input.solarPanel ?? null,
+      before: existing ? { sellPriceCentsExGst: Number(existing.sell_price_cents_ex_gst),
         supplierCostCentsExGst: Number(existing.supplier_cost_cents_ex_gst) } : null,
       after: { sellPriceCentsExGst: input.sellPriceCentsExGst, supplierCostCentsExGst: input.supplierCostCentsExGst } })) };
 }
 
 /** Token binds the exact rows, tax interpretation and owner state shown in the preview. */
 async function previewToken(ownerUid: string, request: ImportRequest, state: Awaited<ReturnType<typeof snapshot>>) {
-  const bytes = new TextEncoder().encode(JSON.stringify({ version: 1, ownerUid, rows: request.rows,
+  const bytes = new TextEncoder().encode(JSON.stringify({ version: 2, ownerUid, rows: request.rows,
     pricesIncludeGst: request.pricesIncludeGst === true, existing: state.existing, capabilities: state.capabilitiesJson }));
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -76,7 +78,7 @@ export async function importPriceBook(db: ImportDatabase, ownerUid: string, acto
   const now = new Date().toISOString();
   const changes = plan.changes.filter((item) => item.status !== "unchanged").map((change) => {
     const id = change.existing?.id || crypto.randomUUID();
-    return { ...change.input, id, itemCode: change.existing?.item_code || `PB-${id.slice(0, 8).toUpperCase()}`,
+    return { ...change.input, solarPanelJson: JSON.stringify(change.input.solarPanel ?? null), id, itemCode: change.existing?.item_code || `PB-${id.slice(0, 8).toUpperCase()}`,
       status: change.status, priceChanged: change.priceChanged,
       priceRevision: change.existing ? Number(change.existing.price_revision) + (change.priceChanged ? 1 : 0) : 1,
       historyId: crypto.randomUUID() };
@@ -101,6 +103,7 @@ export async function importPriceBook(db: ImportDatabase, ownerUid: string, acto
     statements.push(db.prepare(`UPDATE trade_price_book_items SET
       name = json_extract(imported.value, '$.name'), description = json_extract(imported.value, '$.description'),
       item_type = json_extract(imported.value, '$.itemType'), unit_label = json_extract(imported.value, '$.unitLabel'),
+      category = json_extract(imported.value, '$.category'), solar_panel_json = json_extract(imported.value, '$.solarPanelJson'),
       supplier_cost_cents_ex_gst = json_extract(imported.value, '$.supplierCostCentsExGst'),
       sell_price_cents_ex_gst = json_extract(imported.value, '$.sellPriceCentsExGst'), tax_code = json_extract(imported.value, '$.taxCode'),
       markup_basis_points = json_extract(imported.value, '$.markupBasisPoints'), margin_basis_points = json_extract(imported.value, '$.marginBasisPoints'),
@@ -111,12 +114,13 @@ export async function importPriceBook(db: ImportDatabase, ownerUid: string, acto
         AND firebase_uid = ? AND record_status = 'active' AND json_extract(imported.value, '$.status') = 'updated'`)
       .bind(now, actorUid, json, ownerUid));
     statements.push(db.prepare(`INSERT INTO trade_price_book_items
-      (id, firebase_uid, item_code, name, description, item_type, unit_label, supplier_cost_cents_ex_gst,
+      (id, firebase_uid, item_code, name, description, item_type, category, solar_panel_json, unit_label, supplier_cost_cents_ex_gst,
        sell_price_cents_ex_gst, tax_code, markup_basis_points, margin_basis_points, expected_duration_minutes,
        required_skill, supplier_name, supplier_sku, supplier_product_id, record_status, price_revision,
        created_by_uid, updated_by_uid, created_at, updated_at)
       SELECT json_extract(value, '$.id'), ?, json_extract(value, '$.itemCode'), json_extract(value, '$.name'),
-       json_extract(value, '$.description'), json_extract(value, '$.itemType'), json_extract(value, '$.unitLabel'),
+       json_extract(value, '$.description'), json_extract(value, '$.itemType'), json_extract(value, '$.category'),
+       json_extract(value, '$.solarPanelJson'), json_extract(value, '$.unitLabel'),
        json_extract(value, '$.supplierCostCentsExGst'), json_extract(value, '$.sellPriceCentsExGst'), json_extract(value, '$.taxCode'),
        json_extract(value, '$.markupBasisPoints'), json_extract(value, '$.marginBasisPoints'), json_extract(value, '$.expectedDurationMinutes'),
        json_extract(value, '$.requiredSkill'), json_extract(value, '$.supplierName'), json_extract(value, '$.supplierSku'), '', 'active', 1,

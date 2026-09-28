@@ -1,6 +1,6 @@
 import { getD1 } from "../../../../db";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
-import { normalisePriceBookInput, parsePriceBookSolarPanel, priceBookSolarEquipment } from "@/lib/trade-price-book";
+import { normalisePriceBookInput, normalisePriceBookCategory, parsePriceBookSolarPanel, priceBookSolarEquipment, PRICE_BOOK_ITEM_TYPES } from "@/lib/trade-price-book";
 import { requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
@@ -23,6 +23,7 @@ function errorResponse(error: unknown) {
   if (code === "PRICE_BOOK_LIMIT") return adminJson({ ok: false, error: "This workspace has reached its 5,000 item price-book limit." }, 409);
   if (code === "CATALOGUE_ITEM_UNAVAILABLE") return adminJson({ ok: false, error: "That catalogue item is no longer available. Choose another item or enter the supplier details manually." }, 409);
   if (code === "INVALID_PRICE_BOOK_SKILL") return adminJson({ ok: false, error: "Choose a required skill already listed on the business profile." }, 400);
+  if (code === "INVALID_PRICE_BOOK_CATEGORY") return adminJson({ ok: false, error: "Use a category name of up to 80 characters, or leave it blank." }, 400);
   if (code.startsWith("INVALID_PRICE_BOOK_SOLAR_PANEL")) return adminJson({ ok: false, error: "Solar panels need valid watts, width and length from the datasheet. Use Material or Equipment as the item type." }, 400);
   if (code.startsWith("INVALID_PRICE_BOOK") || ["INVALID_DECIMAL", "INVALID_MONEY"].includes(code)) {
     return adminJson({ ok: false, error: "Check the item name, type, cost, sell price, GST and duration." }, 400);
@@ -77,7 +78,7 @@ async function preparedInput(ownerUid: string, body: Row) {
 function itemPayload(row: Row) {
   return {
     id: String(row.id), itemCode: String(row.item_code), name: String(row.name), description: String(row.description),
-    itemType: String(row.item_type), unitLabel: String(row.unit_label), supplierCostCentsExGst: Number(row.supplier_cost_cents_ex_gst),
+    itemType: String(row.item_type), category: String(row.category || ""), unitLabel: String(row.unit_label), supplierCostCentsExGst: Number(row.supplier_cost_cents_ex_gst),
     sellPriceCentsExGst: Number(row.sell_price_cents_ex_gst), taxCode: String(row.tax_code), markupBasisPoints: Number(row.markup_basis_points),
     marginBasisPoints: Number(row.margin_basis_points), expectedDurationMinutes: Number(row.expected_duration_minutes),
     requiredSkill: String(row.required_skill), supplierName: String(row.supplier_name), supplierSku: String(row.supplier_sku),
@@ -96,16 +97,21 @@ async function ownedItem(ownerUid: string, itemId: string) {
 
 async function libraryPayload(ownerUid: string, url: URL) {
   const search = cleanAdminText(url.searchParams.get("search"), 100);
+  const itemType = url.searchParams.get("itemType") || "";
+  if (itemType && !PRICE_BOOK_ITEM_TYPES.some((type) => type === itemType)) throw new Error("INVALID_PRICE_BOOK_TYPE");
+  const category = normalisePriceBookCategory(url.searchParams.get("category") || "");
   const status = ["active", "archived", "all"].includes(url.searchParams.get("status") || "") ? url.searchParams.get("status")! : "active";
   const conditions = ["firebase_uid = ?"]; const bindings: unknown[] = [ownerUid];
   if (status !== "all") { conditions.push("record_status = ?"); bindings.push(status); }
+  if (itemType) { conditions.push("item_type = ?"); bindings.push(itemType); }
+  if (category) { conditions.push("category = ? COLLATE NOCASE"); bindings.push(category); }
   if (search) {
-    conditions.push("(name LIKE ? ESCAPE '\\' OR item_code LIKE ? ESCAPE '\\' OR supplier_name LIKE ? ESCAPE '\\' OR supplier_sku LIKE ? ESCAPE '\\')");
+    conditions.push("(name LIKE ? ESCAPE '\\' OR item_code LIKE ? ESCAPE '\\' OR supplier_name LIKE ? ESCAPE '\\' OR supplier_sku LIKE ? ESCAPE '\\' OR category LIKE ? ESCAPE '\\')");
     const pattern = `%${search.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
-    bindings.push(pattern, pattern, pattern, pattern);
+    bindings.push(pattern, pattern, pattern, pattern, pattern);
   }
   const db = getD1();
-  const [items, counts, capabilities, catalogue] = await Promise.all([
+  const [items, counts, capabilities, catalogue, categories] = await Promise.all([
     db.prepare(`SELECT * FROM trade_price_book_items WHERE ${conditions.join(" AND ")}
       ORDER BY record_status = 'archived', name COLLATE NOCASE, item_code LIMIT 500`).bind(...bindings).all<Row>(),
     db.prepare(`SELECT COUNT(*) total, SUM(CASE WHEN record_status = 'active' THEN 1 ELSE 0 END) active_count,
@@ -117,11 +123,15 @@ async function libraryPayload(ownerUid: string, url: URL) {
       WHERE p.listing_status = 'published' AND p.review_status = 'approved'
         AND ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'supplier'
       ORDER BY p.updated_at DESC, p.name COLLATE NOCASE LIMIT 100`).all<Row>(),
+    db.prepare(`SELECT MIN(category) category FROM trade_price_book_items
+      WHERE firebase_uid = ? AND category <> '' GROUP BY category COLLATE NOCASE
+      ORDER BY category COLLATE NOCASE`).bind(ownerUid).all<Row>(),
   ]);
   return {
     items: items.results.map(itemPayload),
     counts: { total: Number(counts?.total || 0), active: Number(counts?.active_count || 0), archived: Number(counts?.archived_count || 0) },
     capabilityOptions: capabilities,
+    categoryOptions: categories.results.map((row) => String(row.category)),
     catalogueOptions: catalogue.results.map((row) => ({ id: String(row.id), supplierSku: String(row.model_number), name: String(row.name),
       supplierCostCentsExGst: Number(row.unit_price_cents_ex_gst), supplierName: String(row.business_name) })),
   };
@@ -180,12 +190,12 @@ export async function POST(request: Request) {
         (id, firebase_uid, item_code, name, description, item_type, unit_label, supplier_cost_cents_ex_gst,
         sell_price_cents_ex_gst, tax_code, markup_basis_points, margin_basis_points, expected_duration_minutes,
         required_skill, supplier_name, supplier_sku, supplier_product_id, record_status, price_revision,
-        created_by_uid, updated_by_uid, created_at, updated_at, solar_panel_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, ?, ?, ?)`)
+        created_by_uid, updated_by_uid, created_at, updated_at, solar_panel_json, category)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, ?, ?, ?, ?)`)
         .bind(id, access.ownerUid, itemCode, input.name, input.description, input.itemType, input.unitLabel,
           input.supplierCostCentsExGst, input.sellPriceCentsExGst, input.taxCode, input.markupBasisPoints,
           input.marginBasisPoints, input.expectedDurationMinutes, input.requiredSkill, input.supplierName,
-          input.supplierSku, input.supplierProductId, access.actorUid, access.actorUid, now, now, JSON.stringify(input.solarPanel ?? null)),
+          input.supplierSku, input.supplierProductId, access.actorUid, access.actorUid, now, now, JSON.stringify(input.solarPanel ?? null), input.category ?? ""),
       db.prepare(`INSERT INTO trade_price_book_price_history
         (id, price_book_item_id, firebase_uid, price_revision, supplier_cost_cents_ex_gst, sell_price_cents_ex_gst,
         tax_code, markup_basis_points, margin_basis_points, change_type, changed_by_uid, changed_at)
@@ -217,10 +227,10 @@ export async function PATCH(request: Request) {
     const statements = [db.prepare(`UPDATE trade_price_book_items SET name = ?, description = ?, item_type = ?, unit_label = ?,
       supplier_cost_cents_ex_gst = ?, sell_price_cents_ex_gst = ?, tax_code = ?, markup_basis_points = ?, margin_basis_points = ?,
       expected_duration_minutes = ?, required_skill = ?, supplier_name = ?, supplier_sku = ?, supplier_product_id = ?,
-      price_revision = ?, updated_by_uid = ?, updated_at = ?, solar_panel_json = ? WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`)
+      price_revision = ?, updated_by_uid = ?, updated_at = ?, solar_panel_json = ?, category = COALESCE(?, category) WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`)
       .bind(input.name, input.description, input.itemType, input.unitLabel, input.supplierCostCentsExGst, input.sellPriceCentsExGst,
         input.taxCode, input.markupBasisPoints, input.marginBasisPoints, input.expectedDurationMinutes, input.requiredSkill,
-        input.supplierName, input.supplierSku, input.supplierProductId, priceRevision, access.actorUid, now, JSON.stringify(input.solarPanel ?? null), itemId, access.ownerUid)];
+        input.supplierName, input.supplierSku, input.supplierProductId, priceRevision, access.actorUid, now, JSON.stringify(input.solarPanel ?? null), input.category ?? null, itemId, access.ownerUid)];
     if (priceChanged) statements.push(db.prepare(`INSERT INTO trade_price_book_price_history
       (id, price_book_item_id, firebase_uid, price_revision, supplier_cost_cents_ex_gst, sell_price_cents_ex_gst,
       tax_code, markup_basis_points, margin_basis_points, change_type, changed_by_uid, changed_at)

@@ -7,7 +7,7 @@ import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import { dollarsToCents } from "@/lib/trade-quote";
 import { calculatePriceBookRates, priceBookItemAllowsNegativeSellPrice, priceBookItemRequiresZeroSupplierCost,
   PRICE_BOOK_ITEM_TYPES, PRICE_BOOK_TYPE_LABELS, PRICE_BOOK_UNITS, type PriceBookItemType, type PriceBookSolarPanel } from "@/lib/trade-price-book";
-import { SOLAR_STARTER_PANELS } from "@/lib/trade-solar-equipment";
+import { DEFAULT_SOLAR_EQUIPMENT, SOLAR_STARTER_PANELS } from "@/lib/trade-solar-equipment";
 import { TradeJobPacketWorkspace } from "./TradeJobPacketWorkspace";
 import { TradePriceBookImport } from "./TradePriceBookImport";
 import { TradeProductDocuments } from "./TradeProductDocuments";
@@ -21,16 +21,16 @@ type PriceBookItem = {
   supplierCostCentsExGst: number; sellPriceCentsExGst: number; taxCode: string; markupBasisPoints: number;
   marginBasisPoints: number; expectedDurationMinutes: number; requiredSkill: string; supplierName: string;
   supplierSku: string; supplierProductId: string; recordStatus: string; priceRevision: number; createdAt: string; updatedAt: string;
-  solarPanel?: PriceBookSolarPanel | null;
+  category?: string; solarPanel?: PriceBookSolarPanel | null;
 };
 type CatalogueOption = { id: string; supplierSku: string; name: string; supplierCostCentsExGst: number; supplierName: string };
 type PriceHistory = { priceRevision: number; supplierCostCentsExGst: number; sellPriceCentsExGst: number; taxCode: string; markupBasisPoints: number; marginBasisPoints: number; changeType: string; changedAt: string };
 type Result = { ok?: boolean; items?: PriceBookItem[]; item?: PriceBookItem; counts?: { total: number; active: number; archived: number };
   products?: Array<Pick<PriceBookItem, "id" | "itemCode" | "name">>;
-  capabilityOptions?: string[]; catalogueOptions?: CatalogueOption[]; history?: PriceHistory[]; access?: { canView?: boolean; canManage?: boolean }; error?: string };
+  categoryOptions?: string[]; capabilityOptions?: string[]; catalogueOptions?: CatalogueOption[]; history?: PriceHistory[]; access?: { canView?: boolean; canManage?: boolean }; error?: string };
 type Draft = { name: string; description: string; itemType: PriceBookItemType; unitLabel: string; supplierCost: string;
   sellPrice: string; taxCode: string; expectedDurationMinutes: string; requiredSkill: string; supplierName: string;
-  supplierSku: string; supplierProductId: string; productKind: "general" | "solar_panel";
+  supplierSku: string; supplierProductId: string; category: string; productKind: "general" | "solar_panel";
   panelWatts: string; panelWidthMm: string; panelLengthMm: string; panelDetails: PriceBookSolarPanel | null };
 
 const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
@@ -39,12 +39,12 @@ const stockQuantity = (milli: number) => new Intl.NumberFormat("en-AU", { maximu
 const words = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const blankDraft = (): Draft => ({ name: "", description: "", itemType: "material", unitLabel: "each", supplierCost: "0.00",
   sellPrice: "", taxCode: "gst", expectedDurationMinutes: "0", requiredSkill: "", supplierName: "", supplierSku: "", supplierProductId: "",
-  productKind: "general", panelWatts: "", panelWidthMm: "", panelLengthMm: "", panelDetails: null });
+  category: "", productKind: "general", panelWatts: "", panelWidthMm: "", panelLengthMm: "", panelDetails: null });
 const editDraft = (item: PriceBookItem): Draft => ({ name: item.name, description: item.description, itemType: item.itemType,
   unitLabel: item.unitLabel, supplierCost: (item.supplierCostCentsExGst / 100).toFixed(2), sellPrice: (item.sellPriceCentsExGst / 100).toFixed(2),
   taxCode: item.taxCode, expectedDurationMinutes: String(item.expectedDurationMinutes), requiredSkill: item.requiredSkill,
   supplierName: item.supplierName, supplierSku: item.supplierSku, supplierProductId: item.supplierProductId,
-  productKind: item.solarPanel ? "solar_panel" : "general", panelWatts: item.solarPanel?.watts.toString() || "",
+  category: item.category || "", productKind: item.solarPanel ? "solar_panel" : "general", panelWatts: item.solarPanel?.watts.toString() || "",
   panelWidthMm: item.solarPanel ? String(Number((item.solarPanel.widthM * 1000).toFixed(3))) : "",
   panelLengthMm: item.solarPanel ? String(Number((item.solarPanel.lengthM * 1000).toFixed(3))) : "", panelDetails: item.solarPanel || null });
 
@@ -63,6 +63,8 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
   const [items, setItems] = useState<PriceBookItem[]>([]); const [counts, setCounts] = useState({ total: 0, active: 0, archived: 0 });
   const [capabilities, setCapabilities] = useState<string[]>([]); const [catalogue, setCatalogue] = useState<CatalogueOption[]>([]);
   const [search, setSearch] = useState(""); const [status, setStatus] = useState("active"); const [loading, setLoading] = useState(true);
+  const [itemTypeFilter, setItemTypeFilter] = useState(""); const [categoryFilter, setCategoryFilter] = useState("");
+  const [categories, setCategories] = useState<string[]>([]);
   const [editing, setEditing] = useState<PriceBookItem | "new" | null>(null); const [draft, setDraft] = useState<Draft>(blankDraft());
   const [history, setHistory] = useState<PriceHistory[]>([]); const [busy, setBusy] = useState(""); const [message, setMessage] = useState("");
   const [confirmedCanManage, setCanManage] = useState(() => permissions?.canManagePriceBook === true);
@@ -85,7 +87,7 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
 
   if (navigationTarget?.kind === "product" && navigationTarget.workspace === "products"
     && navigationTarget.nonce !== productNavigation?.nonce) {
-    setProductNavigation(navigationTarget); setLibraryView("items"); setSearch(navigationTarget.query); setStatus("active");
+    setProductNavigation(navigationTarget); setLibraryView("items"); setSearch(navigationTarget.query); setStatus("active"); setItemTypeFilter(""); setCategoryFilter("");
     setEditing(null); setImporting(false); setDocumentsOpen(false); setMessage("");
   }
 
@@ -109,10 +111,10 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
 
   const load = useCallback(async (signal?: AbortSignal) => {
     if (!canView) { setItems([]); setCanManage(false); setMessage("Ask the business owner for price-book access."); return; }
-    const result = await request(`?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}`, { signal });
+    const result = await request(`?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}&itemType=${encodeURIComponent(itemTypeFilter)}&category=${encodeURIComponent(categoryFilter)}`, { signal });
     if (signal?.aborted) return;
     setItems(result.items || []); setCounts(result.counts || { total: 0, active: 0, archived: 0 });
-    setCapabilities(result.capabilityOptions || []); setCatalogue(result.catalogueOptions || []);
+    setCapabilities(result.capabilityOptions || []); setCatalogue(result.catalogueOptions || []); setCategories(result.categoryOptions || []);
     if (result.access) setCanManage(result.access.canManage === true);
     if (productNavigation && openedNavigationNonce.current !== productNavigation.nonce && search === productNavigation.query) {
       openedNavigationNonce.current = productNavigation.nonce;
@@ -122,7 +124,7 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
         else setMessage("This product is no longer in the active price book. Search your items or check Archived.");
       }
     }
-  }, [canView, edit, productNavigation, request, search, status]);
+  }, [canView, edit, productNavigation, request, search, status, itemTypeFilter, categoryFilter]);
 
   useEffect(() => {
     if (!canView) return;
@@ -203,7 +205,7 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
     const next = blankDraft();
     if (preset === "labour") Object.assign(next, { itemType: "labour", unitLabel: "hour", name: "Labour" });
     if (preset === "material") Object.assign(next, { itemType: "material", unitLabel: "each" });
-    if (preset === "solar_panel") Object.assign(next, { productKind: "solar_panel", itemType: "material", unitLabel: "each" });
+    if (preset === "solar_panel") Object.assign(next, { productKind: "solar_panel", itemType: "material", unitLabel: "each", category: "Solar panels" });
     if (preset === "call_out") Object.assign(next, { itemType: "call_out", unitLabel: "visit", name: "Call-out" });
     if (preset === "stc") Object.assign(next, { itemType: "certificate", unitLabel: "each", name: "STC" });
     if (preset === "veec") Object.assign(next, { itemType: "certificate", unitLabel: "each", name: "VEEC" });
@@ -271,25 +273,27 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
       <fieldset className={styles.fields} disabled={!canManage || (editing !== "new" && editing.recordStatus === "archived")}>
       <div className={styles.coreFields}>
         <label><span>Item name</span><input required maxLength={140} value={draft.name} onChange={(event) => change("name", event.target.value)} placeholder="e.g. Licensed electrician labour" /></label>
-        <label><span>Product kind</span><select value={draft.productKind} disabled={stockLocksUnits} onChange={(event) => { const productKind = event.target.value === "solar_panel" ? "solar_panel" : "general"; setDraft((current) => ({ ...current, productKind, ...(productKind === "solar_panel" ? { itemType: current.itemType === "equipment" ? "equipment" : "material", unitLabel: "each" } : {}) })); }}><option value="general">General item</option><option value="solar_panel">Solar panel</option></select></label>
+        <label><span>Type</span><select value={draft.itemType} disabled={stockLocksUnits} onChange={(event) => changeItemType(event.target.value as PriceBookItemType)}>{PRICE_BOOK_ITEM_TYPES.map((type) => <option key={type} value={type}>{PRICE_BOOK_TYPE_LABELS[type]}</option>)}</select></label>
+        <label><span>Category</span><input list="price-book-categories" maxLength={80} value={draft.category} onChange={(event) => change("category", event.target.value)} placeholder="Choose or type your own" /><datalist id="price-book-categories">{[...new Set([...categories, "Insulation", "Solar panels", "Heat pumps"])].map((category) => <option key={category} value={category} />)}</datalist><small>For example, Insulation or Solar panels. Saved for your business.</small></label>
+        <label><span>Code / SKU</span><input maxLength={100} value={draft.supplierSku} readOnly={Boolean(draft.supplierProductId)} onChange={(event) => change("supplierSku", event.target.value)} placeholder="Your product or supplier code" /></label>
         <label><span>Sell price ex GST</span><input required inputMode="decimal" value={draft.sellPrice} onChange={(event) => change("sellPrice", event.target.value)} placeholder={priceBookItemAllowsNegativeSellPrice(draft.itemType) ? "-38.00" : "0.00"} />{draft.itemType === "certificate" && <small>Enter the certificate value as a negative amount per certificate, such as -38.00 per STC.</small>}</label>
         <label><span>GST</span><select value={draft.taxCode} onChange={(event) => change("taxCode", event.target.value)}><option value="gst">Add 10% GST</option><option value="none">No GST</option></select></label>
       </div>
+      {(draft.itemType === "material" || draft.itemType === "equipment") && <label className={styles.panelToggle}><input type="checkbox" checked={draft.productKind === "solar_panel"} disabled={stockLocksUnits && draft.unitLabel !== "each"} onChange={(event) => setDraft((current) => ({ ...current, productKind: event.target.checked ? "solar_panel" : "general", ...(event.target.checked ? { unitLabel: "each" } : {}) }))} /><span>Solar panel for Map &amp; quote<small>Save the panel size below to draw it accurately on a roof.</small></span></label>}
       {draft.productKind === "solar_panel" && <section className={styles.solarPanel}><div><strong>Panel size for the roof designer</strong><p>Enter the datasheet values once. This model then appears in your map.</p></div><label className={styles.starter}><span>Fill from a starter model, optional</span><select value="" onChange={(event) => choosePanelStarter(event.target.value)}><option value="">Choose an exact model or enter below</option>{SOLAR_STARTER_PANELS.map((panel) => <option key={panel.id} value={panel.id}>{panel.manufacturer} {panel.model} · {panel.watts} W</option>)}</select></label><div className={styles.panelDimensions}>
         <label><span>Power (W)</span><input type="number" required min="1" max="2000" step="any" inputMode="decimal" value={draft.panelWatts} onChange={(event) => change("panelWatts", event.target.value)} /></label>
         <label><span>Width (mm)</span><input type="number" required min="200" max="4000" step="any" inputMode="decimal" value={draft.panelWidthMm} onChange={(event) => change("panelWidthMm", event.target.value)} /></label>
         <label><span>Length (mm)</span><input type="number" required min="200" max="4000" step="any" inputMode="decimal" value={draft.panelLengthMm} onChange={(event) => change("panelLengthMm", event.target.value)} /></label>
-      </div>{draft.panelDetails?.datasheetUrl && <a href={draft.panelDetails.datasheetUrl} target="_blank" rel="noopener noreferrer">Manufacturer datasheet</a>}</section>}
+      </div><div className={styles.panelHelp}><button type="button" className={styles.secondary} onClick={() => setDraft((current) => ({ ...current, panelWatts: String(DEFAULT_SOLAR_EQUIPMENT.watts), panelWidthMm: String(Number(DEFAULT_SOLAR_EQUIPMENT.widthM) * 1000), panelLengthMm: String(Number(DEFAULT_SOLAR_EQUIPMENT.lengthM) * 1000), panelDetails: null }))}>Use default size</button><small>Editable starting size: 1,762 × 1,134 mm, 440 W. Check the actual product before quoting.</small></div>{draft.panelDetails?.datasheetUrl && <a href={draft.panelDetails.datasheetUrl} target="_blank" rel="noopener noreferrer">Manufacturer datasheet</a>}</section>}
       {preview && <div className={styles.preview}><div><span>Cost</span><strong>{money(preview.cost)}</strong></div><div><span>Sell</span><strong>{money(preview.sell)}</strong></div><div><span>Markup</span><strong>{percentage(preview.markupBasisPoints)}</strong></div><div><span>Margin</span><strong>{percentage(preview.marginBasisPoints)}</strong></div></div>}
       <details className={styles.advanced}><summary>More details, optional</summary><div>
-        <label><span>Type</span><select value={draft.itemType} disabled={stockLocksUnits} onChange={(event) => changeItemType(event.target.value as PriceBookItemType)}>{PRICE_BOOK_ITEM_TYPES.map((type) => <option key={type} value={type}>{PRICE_BOOK_TYPE_LABELS[type]}</option>)}</select></label>
         <label><span>Charge by</span><select value={draft.unitLabel} disabled={stockLocksUnits} onChange={(event) => change("unitLabel", event.target.value)}>{PRICE_BOOK_UNITS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{stockLocksUnits && <small>{editingStockTracked ? "Stock uses this type and unit. Stop tracking before changing them." : editingStockOnHand !== null && editingStockOnHand > 0 ? "Clear saved stock counts before changing the type or unit." : "Loading stock settings before changing the type or unit."}</small>}</label>
         <label className={styles.wide}><span>Description</span><textarea rows={3} maxLength={500} value={draft.description} onChange={(event) => change("description", event.target.value)} placeholder="What is included in this item" /></label>
         <label><span>Supplier cost ex GST</span><input inputMode="decimal" value={draft.supplierCost} readOnly={priceBookItemRequiresZeroSupplierCost(draft.itemType)} onChange={(event) => change("supplierCost", event.target.value)} />{priceBookItemRequiresZeroSupplierCost(draft.itemType) && <small>Certificate, rebate and discount items use zero supplier cost.</small>}</label>
         <label><span>Expected minutes</span><input type="number" min="0" max="10080" value={draft.expectedDurationMinutes} onChange={(event) => change("expectedDurationMinutes", event.target.value)} /></label>
         <label><span>Required capability</span><select value={draft.requiredSkill} onChange={(event) => change("requiredSkill", event.target.value)}><option value="">No capability required</option>{capabilities.map((capability) => <option key={capability} value={capability}>{words(capability)}</option>)}</select><small>Uses the business profile, so this list stays in one place.</small></label>
         {!priceBookItemRequiresZeroSupplierCost(draft.itemType) && <label className={styles.wide}><span>Approved catalogue item</span><select value={draft.supplierProductId} onChange={(event) => chooseCatalogue(event.target.value)}><option value="">Enter supplier details manually</option>{catalogue.map((option) => <option key={option.id} value={option.id}>{option.supplierName} | {option.supplierSku} | {option.name} | {money(option.supplierCostCentsExGst)}</option>)}</select><small>Choosing a catalogue item fills its current supplier, SKU and cost.</small></label>}
-        {!priceBookItemRequiresZeroSupplierCost(draft.itemType) && !draft.supplierProductId && <><label><span>Supplier</span><input maxLength={140} value={draft.supplierName} onChange={(event) => change("supplierName", event.target.value)} /></label><label><span>Supplier SKU</span><input maxLength={100} value={draft.supplierSku} onChange={(event) => change("supplierSku", event.target.value)} /></label></>}
+        {!priceBookItemRequiresZeroSupplierCost(draft.itemType) && !draft.supplierProductId && <label><span>Supplier</span><input maxLength={140} value={draft.supplierName} onChange={(event) => change("supplierName", event.target.value)} /></label>}
       </div></details>
       </fieldset>
       {editing !== "new" && <TradeProductDocuments key={`${user.uid}:${editing.id}`} user={user} itemId={editing.id} canManage={canManage && editing.recordStatus === "active"} disabled={Boolean(busy)} />}
@@ -297,9 +301,10 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
       {canManage && (editing === "new" || editing.recordStatus === "active") && <div className={styles.actions}><button type="submit" disabled={Boolean(busy)}>{busy === "save" ? "Saving..." : editing === "new" ? "Save and use in quotes" : "Save changes"}</button>{editing === "new" && (draft.itemType === "material" || draft.itemType === "equipment") && <button type="submit" className={styles.secondary} name="afterSave" value="stock" disabled={Boolean(busy)}>Save &amp; set up stock</button>}{editing !== "new" && <button type="button" className={styles.danger} disabled={Boolean(busy)} onClick={() => void archive(editing)}>{busy === `archive:${editing.id}` ? "Archiving..." : "Archive item"}</button>}</div>}
       {history.length > 0 && <details className={styles.history}><summary>Price history ({history.length})</summary>{history.map((entry) => <article key={entry.priceRevision}><div><strong>Revision {entry.priceRevision}</strong><span>{new Date(entry.changedAt).toLocaleString("en-AU")}</span></div><span>Cost {money(entry.supplierCostCentsExGst)} | Sell {money(entry.sellPriceCentsExGst)} | Margin {percentage(entry.marginBasisPoints)} | {entry.taxCode === "gst" ? "GST" : "No GST"}</span></article>)}</details>}
     </form>{editing !== "new" && editingAllowsStock && <TradeStockProductSettings key={`${user.uid}:${editing.id}`} user={user} itemId={editing.id} canManage={canManage} disabled={Boolean(busy) || productHasUnsavedChanges} initialAction={stockSetup ? "enable" : null} onLoaded={(item) => { setEditingStockTracked(item.tracked); setEditingStockOnHand(item.onHandMilli); }} onChanged={stockChanged} />}</> : <>
-      <div className={styles.toolbar}><label><span>Find an item</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, code, supplier or SKU" /></label><div role="group" aria-label="Price-book status">{[["active", "Ready"], ["archived", "Archived"], ["all", "All"]].map(([value, label]) => <button type="button" key={value} className={status === value ? styles.active : ""} onClick={() => setStatus(value)}>{label}</button>)}</div></div>
+      <div className={styles.toolbar}><label><span>Find an item</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, category, code or supplier" /></label><div role="group" aria-label="Price-book status">{[["active", "Ready"], ["archived", "Archived"], ["all", "All"]].map(([value, label]) => <button type="button" key={value} className={status === value ? styles.active : ""} onClick={() => setStatus(value)}>{label}</button>)}</div></div>
+      <div className={styles.filters}><label><span>Type</span><select aria-label="Filter by type" value={itemTypeFilter} onChange={(event) => setItemTypeFilter(event.target.value)}><option value="">All types</option>{PRICE_BOOK_ITEM_TYPES.map((type) => <option key={type} value={type}>{PRICE_BOOK_TYPE_LABELS[type]}</option>)}</select></label><label><span>Category</span><select aria-label="Filter by category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="">All categories</option>{[...new Set([...categories, ...(categoryFilter ? [categoryFilter] : [])])].map((category) => <option key={category} value={category}>{category}</option>)}</select></label>{(itemTypeFilter || categoryFilter) && <button type="button" className={styles.secondary} onClick={() => { setItemTypeFilter(""); setCategoryFilter(""); }}>Clear filters</button>}</div>
       {canManage && !loading && !search && status === "active" && counts.active === 0 && <section className={styles.firstRun}><span>Start in under a minute</span><h4>Save the work you price most often</h4><p>Choose a quick start, enter the sell price, and it becomes available inside every direct-job quote.</p><div><button type="button" onClick={() => startNew("labour")}>Add labour hour</button><button type="button" onClick={() => startNew("material")}>Add material</button><button type="button" onClick={() => startNew("call_out")}>Add call-out</button><button type="button" onClick={() => startNew("stc")}>Add certificate credit</button></div></section>}
-      {items.length > 0 && <TradeProductTableScroll><table className={styles.productTable} aria-label="Products and stock"><thead><tr><th scope="col">Product</th><th scope="col">Track stock</th><th scope="col" className={styles.numeric}>Cost ex GST</th><th scope="col" className={styles.numeric}>Margin</th><th scope="col" className={styles.numeric}>Sale price ex GST</th><th scope="col" className={styles.numeric}>On hand</th><th scope="col" className={styles.numeric}>Committed</th><th scope="col" className={styles.numeric}>Available</th><th scope="col">Locations</th><th scope="col">Unit</th><th scope="col">Supplier</th></tr></thead><tbody>{items.map((item) => {
+      {items.length > 0 && <TradeProductTableScroll><table className={styles.productTable} aria-label="Products and stock"><thead><tr><th scope="col">Product</th><th scope="col">Type</th><th scope="col">Category</th><th scope="col">Code / SKU</th><th scope="col">Track stock</th><th scope="col" className={styles.numeric}>Cost ex GST</th><th scope="col" className={styles.numeric}>Margin</th><th scope="col" className={styles.numeric}>Sale price ex GST</th><th scope="col" className={styles.numeric}>On hand</th><th scope="col" className={styles.numeric}>Committed</th><th scope="col" className={styles.numeric}>Available</th><th scope="col">Stock alert</th><th scope="col">Locations</th><th scope="col">Unit</th><th scope="col">Supplier</th><th scope="col">Panel size / power</th></tr></thead><tbody>{items.map((item) => {
         const physical = item.itemType === "material" || item.itemType === "equipment";
         const stock = stockItems.find((row) => row.itemId === item.id) || null;
         const stockKnown = stockLoaded && !stockLoadError && stock !== null;
@@ -307,19 +312,21 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
         const paused = stockKnown && !stock.tracked;
         const stockNumberClass = `${styles.numeric}${paused ? ` ${styles.stockPaused}` : ""}`;
         return <tr key={item.id}>
-          <th scope="row"><button type="button" className={styles.productName} onClick={() => void edit(item)}><strong>{item.name}</strong><span>{item.itemCode} · {PRICE_BOOK_TYPE_LABELS[item.itemType]}</span></button></th>
+          <th scope="row"><button type="button" className={styles.productName} onClick={() => void edit(item)}><strong>{item.name}</strong></button></th>
+          <td>{PRICE_BOOK_TYPE_LABELS[item.itemType]}</td><td className={styles.categoryCell}>{item.category || "-"}</td><td className={styles.productCode}><span>{item.supplierSku || item.itemCode}</span>{item.supplierSku && <small>TLink: {item.itemCode}</small>}</td>
           <td>{physical ? <TradeProductStockSwitch key={`${user.uid}:${item.id}`} user={user} itemId={item.id} name={item.name} stock={stock} loading={!stockLoaded && !stockLoadError} failed={Boolean(stockLoadError)} canManage={canManage && stockCanManage && item.recordStatus === "active"} onChanged={stockChanged} onRefresh={() => setStockReload((value) => value + 1)} /> : <span className={styles.stockReadOnly}>Not applicable</span>}</td>
           <td className={styles.numeric}>{money(item.supplierCostCentsExGst)}</td><td className={`${styles.numeric}${item.marginBasisPoints < 0 ? ` ${styles.negativeValue}` : ""}`}>{percentage(item.marginBasisPoints)}</td><td className={styles.numeric}><strong>{money(item.sellPriceCentsExGst)}</strong></td>
           <td className={stockNumberClass} title={paused ? "Tracking is off. This is the saved count." : undefined}>{stockText ?? (stock && stockQuantity(stock.onHandMilli))}</td>
           <td className={stockNumberClass}>{stockText ?? (stock && stockQuantity(stock.reservedMilli))}</td>
           <td className={`${stockNumberClass}${stockKnown && stock.availableMilli < 0 ? ` ${styles.negativeValue}` : ""}`}>{stockText ?? (stock && <strong>{stockQuantity(stock.availableMilli)}</strong>)}</td>
+          <td className={stockKnown && stock.tracked && stock.availableMilli <= stock.lowStockMilli ? styles.negativeValue : undefined}>{stockText ?? (stock && (!stock.tracked ? "Off" : stock.availableMilli < 0 ? `Order ${stockQuantity(-stock.availableMilli)}` : stock.availableMilli === 0 ? "Out of stock" : stock.availableMilli <= stock.lowStockMilli ? "Low stock" : "In stock"))}</td>
           <td>{!physical ? "-" : stockKnown ? <button type="button" className={styles.stockLocations} aria-label={`Manage stock and locations for ${item.name}`} onClick={() => { setStockInitialItemId(item.id); setLibraryView("stock"); }}>{stock.locations.filter((location) => location.onHandMilli > 0 || stock.locations.length === 1).slice(0, 2).map((location) => <span key={location.locationId}><span>{location.name}</span><b>{stockQuantity(location.onHandMilli)}</b></span>)}{stock.locations.filter((location) => location.onHandMilli > 0).length > 2 && <small>+{stock.locations.filter((location) => location.onHandMilli > 0).length - 2} more</small>}<small>Stock details</small></button> : stockText}</td>
-          <td>{PRICE_BOOK_UNITS.find(([value]) => value === item.unitLabel)?.[1] || item.unitLabel}</td><td><span className={styles.supplierName}>{item.supplierName || "-"}</span>{item.supplierSku && <small className={styles.supplierSku}>{item.supplierSku}</small>}</td>
+          <td>{PRICE_BOOK_UNITS.find(([value]) => value === item.unitLabel)?.[1] || item.unitLabel}</td><td><span className={styles.supplierName}>{item.supplierName || "-"}</span></td><td>{item.solarPanel ? <button type="button" className={styles.panelSpec} aria-label={`Edit panel dimensions for ${item.name}`} onClick={() => void edit(item)}><span>{Math.round(item.solarPanel.lengthM * 1000)} × {Math.round(item.solarPanel.widthM * 1000)} mm</span><small>{item.solarPanel.watts} W</small></button> : "-"}</td>
         </tr>;
       })}</tbody></table></TradeProductTableScroll>}
-      {items.length > 0 && <p className={styles.stockHint}>Select a product name to edit. Committed is stock needed for accepted jobs. Negative availability shows what to order. Tracking is optional.</p>}
+      {items.length > 0 && <p className={styles.stockHint}>Select a product to edit its type, category or size. Committed is stock needed for accepted jobs. Negative availability shows what to order. Tracking is optional.</p>}
       {items.length === 500 && <p className={styles.listLimit}>Showing the first 500 matches. Search by name or SKU to find another item.</p>}
-      {!items.length && !loading && (search || counts.total > 0) && <div className={styles.empty}><strong>No matching items</strong><span>Change the search or status filter.</span></div>}
+      {!items.length && !loading && (search || itemTypeFilter || categoryFilter || counts.total > 0) && <div className={styles.empty}><strong>No matching items</strong><span>Change the search, type, category or status filter.</span></div>}
       {loading && <p className={styles.loading}>Loading the price book...</p>}
     </>}
     {stockLoadError && <p className={styles.stockHint} role="status">{stockLoadError} <button type="button" className={styles.secondary} onClick={() => setStockReload((value) => value + 1)}>Retry stock</button></p>}

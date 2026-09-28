@@ -138,7 +138,7 @@ test("Stock view filters only tracked low-stock items and can find a product by 
 test("businesses without tracked products keep their usual price book and stock setup is outside its form", async t => {
   const h = harness(t, { component: "TradePriceBookWorkspace", respond: url => response(url.startsWith("/api/trade-stock") ? { ok: true, items: [], canManage: true } : library) });
   let tree = await h.settle(); assert.equal(button(tree, "Stock"), undefined); assert.ok(button(tree, "New item"));
-  nodes(tree, node => node.type === "button" && text(node).includes("Solar panel") && text(node).includes("PB-1"))[0].props.onClick(); tree = await h.settle();
+  button(tree, "Solar panel").props.onClick(); tree = await h.settle();
   const stockSettings = nodes(tree, node => node.type === h.ProductStock)[0]; assert.ok(stockSettings); assert.equal(stockSettings.props.initialAction, null);
   const form = nodes(tree, node => node.type === "form")[0]; assert.equal(nodes(form, node => node.type === h.ProductStock).length, 0);
   stockSettings.props.onLoaded(item()); tree = h.render();
@@ -149,9 +149,10 @@ test("businesses without tracked products keep their usual price book and stock 
 test("tracked products expose Stock and lock type and units until tracking stops", async t => {
   const h = harness(t, { component: "TradePriceBookWorkspace", respond: url => response(url.startsWith("/api/trade-stock") ? { ok: true, items: [item({ tracked: true })], canManage: true } : library) });
   let tree = await h.settle(); assert.ok(button(tree, "Stock"));
-  nodes(tree, node => node.type === "button" && text(node).includes("Solar panel") && text(node).includes("PB-1"))[0].props.onClick(); tree = await h.settle();
+  button(tree, "Solar panel").props.onClick(); tree = await h.settle();
   nodes(tree, node => node.type === h.ProductStock)[0].props.onLoaded(item({ tracked: true })); tree = h.render();
-  for (const label of ["Type", "Charge by", "Product kind"]) { const field = nodes(tree, node => node.type === "label" && text(node).startsWith(label))[0]; assert.equal(nodes(field, node => node.type === "select")[0].props.disabled, true); }
+  for (const label of ["Type", "Charge by"]) { const field = nodes(tree, node => node.type === "label" && text(node).startsWith(label))[0]; assert.equal(nodes(field, node => node.type === "select")[0].props.disabled, true); }
+  assert.equal(input(tree, "Solar panel for Map").props.disabled, false, "Each items can add map specifications without relabelling physical stock units");
   assert.match(text(tree), /Stop tracking before changing them/);
 });
 

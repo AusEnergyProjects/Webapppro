@@ -28,6 +28,7 @@ export const TLINK_SCHEMA_GUARD_DEFINITIONS: readonly TlinkSchemaGuardDefinition
 const readinessByDatabase = new WeakSet<object>();
 
 const REQUIRED_COLUMNS = {
+  trade_price_book_items: ["id", "firebase_uid", "category"],
   trade_team_members: [
     "id", "owner_uid", "member_uid", "status", "can_create_jobs", "can_manage_jobs",
     "can_assign_jobs", "can_view_customers", "can_manage_customers", "can_view_quotes",
