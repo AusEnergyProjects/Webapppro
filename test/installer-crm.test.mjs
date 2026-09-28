@@ -278,9 +278,10 @@ test("job and customer directories expose granular server filters and single-lin
   const jobColumnsBlock = crm.match(/const jobIndexColumns = \[([\s\S]*?)\n\] as const satisfies readonly JobIndexColumn\[\]/);
   assert.ok(jobColumnsBlock);
   const jobColumnLines = jobColumnsBlock[1].split("\n").filter((line) => line.includes("{ key:"));
-  assert.equal(jobColumnLines.filter((line) => line.includes("sort: null")).length, 1);
-  assert.match(jobColumnLines.find((line) => line.includes('key: "actions"')), /sort: null/);
-  for (const line of jobColumnLines.filter((line) => !line.includes('key: "actions"'))) {
+  const unsorted = ["actions", "customerBilling", "invoicePayment"];
+  assert.equal(jobColumnLines.filter((line) => line.includes("sort: null")).length, unsorted.length);
+  for (const key of unsorted) assert.match(jobColumnLines.find((line) => line.includes(`key: "${key}"`)), /sort: null/);
+  for (const line of jobColumnLines.filter((line) => !unsorted.some(key => line.includes(`key: "${key}"`)))) {
     assert.match(line, /sort: \["[^"]+", "[^"]+"\]/);
   }
   assert.match(crm, /export type JobIndexColumnCoverage = AssertNever<Exclude<JobRegisterColumnKey, typeof jobIndexColumns\[number\]\["key"\]>>/);

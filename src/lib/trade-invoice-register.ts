@@ -42,11 +42,8 @@ export function projectTradeInvoiceRegisterFinance(row: InvoiceRegisterRow) {
         : acceptedConflict
           ? cents(row.invoiced_value_cents)
           : cents(row.accepted_total_cents || row.invoiced_value_cents);
-  const paidCents = quickInvoice
-    ? 0
-    : accountingInvoice
-      ? cents(row.accounting_paid_amount_cents)
-      : cents(row.paid_value_cents);
+  const paidCents = Math.max(0, cents(row.paid_value_cents),
+    accountingInvoice ? cents(row.accounting_paid_amount_cents) : 0);
   const accountingStatus = String(row.accounting_status || "");
   const quickDeliveryStatus = String(row.quick_delivery_status || "");
   const status = accountingStatus === "error" || quickDeliveryStatus === "failed" || acceptedConflict

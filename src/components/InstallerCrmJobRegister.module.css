@@ -12,6 +12,49 @@
   overflow-y: visible;
 }
 
+.registerScroll { min-width: 0; }
+.topScroll { overflow-x: auto; overflow-y: hidden; height: 18px; margin-bottom: 6px; border: 1px solid var(--trade-line, #c9ddd8); border-radius: 6px; background: var(--trade-surface-soft, #f5f9f7); }
+.topScroll[hidden] { display: none; }
+.scrollTrack { height: 1px; }
+.topScroll, .register { scrollbar-color: #779e93 var(--trade-surface-soft, #edf6f2); scrollbar-width: auto; }
+.topScroll:focus-visible { outline: 2px solid var(--trade-accent, #087f68); outline-offset: 2px; }
+
+.register .row .cellEdit { background: transparent; border: 0; border-radius: 5px; color: var(--trade-ink, #123f37); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 3px 0; max-width: 100%; text-align: left; }
+.cellEdit::after { content: "✎"; color: var(--trade-muted, #526d64); font-size: 12px; }
+.cellEdit:hover, .cellEdit:focus-visible { background: var(--trade-accent-soft, #eaf5f1); outline: 2px solid var(--trade-accent, #087f68); outline-offset: 2px; }
+.detailAction { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.detailAction button { background: var(--trade-surface-soft, #f5f9f7); border: 1px solid var(--trade-line, #c9ddd8); border-radius: 6px; color: var(--trade-accent-readable, #087c69); cursor: pointer; font: inherit; font-size: 12px; padding: 5px 9px; }
+.planningDetails { margin: 12px 0; }
+.planningDetails > summary { cursor: pointer; color: var(--trade-muted, #526d64); font-size: 13px; padding: 10px 0; }
+.paymentDialog { width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); margin: auto !important; padding: 24px; border: 1px solid var(--trade-line, #c9ddd8); border-radius: 16px; background: var(--trade-surface, #fff); color: var(--trade-ink, #123f37); box-shadow: 0 20px 70px #0004; }
+.paymentDialog::backdrop { background: #061d2699; }
+.paymentDialog header, .paymentDialog footer, .paymentChoices { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.paymentDialog h3 { font-size: 20px; margin: 4px 0; }
+.paymentDialog p, .paymentDialog label { font-size: 14px; line-height: 1.5; }
+.paymentDialog small { color: var(--trade-muted, #526d64); font-size: 12px; }
+.paymentDialog label { display: grid; gap: 6px; margin: 16px 0 5px; }
+.paymentDialog input, .paymentDialog button { font: inherit; font-size: 14px; border: 1px solid var(--trade-line, #c9ddd8); border-radius: 8px; background: var(--trade-surface-soft, #f5f9f7); color: inherit; min-height: 40px; padding: 8px 12px; }
+.paymentDialog button { cursor: pointer; }
+.paymentDialog footer { margin-top: 20px; justify-content: flex-end; }
+.paymentDialog button[type="submit"] { background: #087c69; border-color: #087c69; color: #fff; }
+.paymentDialog [role="alert"] { color: var(--trade-danger, #ab352f); }
+.paymentDialog button:disabled { opacity: .6; cursor: wait; }
+
+/* Explicitly match plain headings and sortable buttons despite portal button defaults. */
+.register [role="columnheader"],
+.register [role="columnheader"] button {
+  color: inherit;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.35;
+  text-align: left;
+  text-transform: none;
+}
+.register [role="columnheader"] { min-width: 0; padding-right: 8px; }
+.register [role="columnheader"] button { min-height: 32px; padding: 0; }
+
 .row {
   position: relative;
 }

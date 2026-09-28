@@ -1,5 +1,7 @@
 "use client";
 
+import { TradeInvoicePaymentDialog } from "./TradeInvoicePaymentDialog";
+import { JobRegisterScroll } from "./JobRegisterScroll";
 import { TradeFollowUpDialog } from "./TradeFollowUpDialog";
 import { BookingTrainingLinks, type BookingTrainingModule } from "./BookingTrainingLinks";
 import { TradeCustomerEmailComposer } from "./TradeCustomerEmailComposer";
@@ -332,22 +334,31 @@ function JobInvoiceStatus({ job }: { job: Job }) {
   return settlement ? <span className={registerStyles.invoiceStatus} data-tone={payment?.tone || "muted"} title={payment?.label}>{settlement}</span> : <span>Restricted</span>;
 }
 
-function jobIndexCell(job: Job, key: string, onOpen: () => void, actionNode: ReactNode, user: User): ReactNode {
+function jobIndexCell(job: Job, key: string, onOpen: (tab?: JobTab) => void, onPayment: () => void, actionNode: ReactNode, user: User, permissions?: TradeTeamPermissions): ReactNode {
   const record = job.jobRegister;
+  const canViewInvoice = !permissions || permissions.canViewInvoices;
+  const canViewQuote = !permissions || permissions.canViewQuotes;
+  const edit = (content: ReactNode, label: string, onClick: () => void) => <button type="button" className={registerStyles.cellEdit} aria-label={label + " for " + record.jobId} onClick={onClick}>{content}</button>;
   if (key === "actions") return actionNode;
-  if (key === "jobId") return <button type="button" className="crm-index-open-button" onClick={onOpen} aria-label={`Open job ${record.jobId}`}><strong>{record.jobId}</strong></button>;
+  if (key === "jobId") return <button type="button" className="crm-index-open-button" onClick={() => onOpen()} aria-label={`Open job ${record.jobId}`}><strong>{record.jobId}</strong></button>;
   if (key === "contactNumber") return record.contactNumber ? <a className="crm-index-phone-link" href={phoneHref(record.contactNumber)}>{record.contactNumber}</a> : <span>Not added</span>;
   if (key === "email") return record.email ? <TradeCustomerEmailComposer user={user} workOrderId={job.id} recipient={record.email} className="crm-index-email-link" /> : <span>Not added</span>;
-  if (key === "scheduleDate") return <span>{record.scheduleDate ? dateLabel(record.scheduleDate, record.scheduleDate.includes("T")) : "Unassigned"}</span>;
+  if (key === "scheduleDate") return edit(record.scheduleDate ? dateLabel(record.scheduleDate, record.scheduleDate.includes("T")) : "Unassigned", "Edit schedule", () => onOpen("schedule"));
+  if (key === "assignedWorker") return edit(record.assignedWorker || "Unassigned", "Edit assigned worker", () => onOpen("schedule"));
   if (key === "createdDate") return <span>{dateLabel(record.createdDate)}</span>;
-  if (key === "customerBilling") return <span>{jobCustomerBillingStatus(job) || "Restricted"}</span>;
-  if (key === "invoicePayment") return <JobInvoiceStatus job={job} />;
+  if (key === "customerBilling") {
+    const billing = jobCustomerBillingStatus(job);
+    const invoiced = billing === "Invoiced" || billing === "Paid";
+    return billing && (invoiced ? canViewInvoice : canViewQuote)
+      ? edit(billing, "Edit customer billing", () => onOpen(invoiced ? "invoice" : "quote")) : <span>{billing || "Restricted"}</span>;
+  }
+  if (key === "invoicePayment") return canViewInvoice ? edit(<JobInvoiceStatus job={job} />, "Edit invoice payment", onPayment) : <span>Restricted</span>;
   if (key === "operationalStatus") {
     const auditOutcome = lifecycleLabel(record.auditOutcome || "");
     const label = lifecycleLabel(record.operationalStatus);
-    return <span className={`${registerStyles.status} ${registerStyles[record.operationalStatus]}`}>{record.operationalStatus === "audited" && auditOutcome ? `${label} | ${auditOutcome}` : label}</span>;
+    return edit(<span className={`${registerStyles.status} ${registerStyles[record.operationalStatus]}`}>{record.operationalStatus === "audited" && auditOutcome ? `${label} | ${auditOutcome}` : label}</span>, "Edit job / compliance", () => onOpen("summary"));
   }
-  if (key === "quoteTotalExGst") return <span>{record.quoteTotalExGstCents === null ? (record.quoteStatus === "restricted" ? "Restricted" : "Not quoted") : registerMoney(record.quoteTotalExGstCents)}</span>;
+  if (key === "quoteTotalExGst") return canViewQuote ? edit(record.quoteTotalExGstCents === null ? "Not quoted" : registerMoney(record.quoteTotalExGstCents), "Edit quote", () => onOpen("quote")) : <span>Restricted</span>;
   if (key === "stc" || key === "veec" || key === "esc") return <span title={record.certificates.state === "pending" ? "Pending" : undefined}>{record.certificates[key]}</span>;
   if (key === "otherCertificates") return <span title={record.certificates.state === "pending" ? "Pending" : undefined}>{record.certificates.other}</span>;
   const value = String(record[key as keyof JobRegisterRecord] || "");
@@ -416,6 +427,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   const [jobScheduledTo, setJobScheduledTo] = useState(() => mapWorkspace ? defaultTradeMapDateRange().to : "");
   const [jobCreatedFrom, setJobCreatedFrom] = useState("");
   const [jobCreatedTo, setJobCreatedTo] = useState("");
+  const [paymentJob, setPaymentJob] = useState<Job | null>(null);
   const [jobInvoiceStatus, setJobInvoiceStatus] = useState("");
   const [jobCustomerReference, setJobCustomerReference] = useState("");
   const [jobEmail, setJobEmail] = useState("");
@@ -1013,6 +1025,13 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     });
   }
 
+  function editInvoicePayment(job: Job) {
+    if ((!staffPermissions || staffPermissions.canManageInvoices) && job.sourceType !== "opportunity"
+      && job.stage !== "cancelled" && job.invoicedValueCents > 0
+      && ["issued", "part_paid", "part_credited", "paid", "overdue"].includes(job.invoiceStatus)) setPaymentJob(job);
+    else openFocusedJob(job.id, "invoice");
+  }
+
   function closeFocusedJob() {
     setFocusedJobId("");
     setSelectedJobDetail(null);
@@ -1434,7 +1453,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
 
     {view === "jobs" && creating !== "job" && focusedJobId && <div className="crm-view crm-job-workspace">
       <div className="crm-page-heading"><div><span>Job workspace</span><h3>{selectedJobDetail?.id === focusedJobId ? selectedJobDetail.workNumber : "Opening job"}</h3><p>Edit the job, schedule, quote, field record and invoice from one focused page.</p></div><button type="button" className="crm-back-button" onClick={closeFocusedJob}>{jobReturnTarget.kind === "customer" ? `Back to ${jobReturnTarget.customerName}` : mapWorkspace ? "Back to map" : "Back to all jobs"}</button></div>
-      {selectedJobDetail?.id === focusedJobId ? <JobDetail key={`${selectedJobDetail.id}:${focusedJobTab}`} job={selectedJobDetail} customer={selectedJobCustomer || undefined} sites={selectedJobSites} user={user} busy={busy} refreshing={focusedJobRefreshing} teamMembers={teamMembers} permissions={staffPermissions} initialTab={focusedJobTab} onCrm={crmRequest} onWorkOrder={crmRequest} onOpenJob={(workOrderId) => openFocusedJob(workOrderId, "schedule")} onOpenPriceBook={() => openPriceBook()} onOpenCustomer={(customerId) => { setFocusedJobId(""); setSelectedJobDetail(null); setSelectedCustomerId(customerId); setView("customers"); }} onOpenIntegrations={() => setView("integrations")} onReload={async () => { setFocusedJobRefreshing(true); setRefreshNonce((value) => value + 1); }} /> : <div className="crm-empty"><strong>Loading job...</strong><span>The full job record will open here.</span></div>}
+      {selectedJobDetail?.id === focusedJobId ? <JobDetail key={`${selectedJobDetail.id}:${focusedJobTab}`} job={selectedJobDetail} customer={selectedJobCustomer || undefined} sites={selectedJobSites} user={user} busy={busy} refreshing={focusedJobRefreshing} teamMembers={teamMembers} permissions={staffPermissions} initialTab={focusedJobTab} onEditPayment={() => editInvoicePayment(selectedJobDetail)} onCrm={crmRequest} onWorkOrder={crmRequest} onOpenJob={(workOrderId) => openFocusedJob(workOrderId, "schedule")} onOpenPriceBook={() => openPriceBook()} onOpenCustomer={(customerId) => { setFocusedJobId(""); setSelectedJobDetail(null); setSelectedCustomerId(customerId); setView("customers"); }} onOpenIntegrations={() => setView("integrations")} onReload={async () => { setFocusedJobRefreshing(true); setRefreshNonce((value) => value + 1); }} /> : <div className="crm-empty"><strong>Loading job...</strong><span>The full job record will open here.</span></div>}
     </div>}
 
     {!mapWorkspace && view === "jobs" && creating !== "job" && !focusedJobId && <div className="crm-view">
@@ -1471,10 +1490,11 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       {jobLayout !== "board" && <WorkspaceListControls page={jobPagination.page} pageCount={jobPagination.pageCount} pageSize={jobPagination.pageSize} total={jobPagination.total} hasNext={jobPagination.hasNext} saved={jobViewSaved} busy={viewBusy || indexLoading}
         onPage={(page) => setJobPage(page)} onPageSize={(size) => { setJobPageSize(size); setJobPage(1); }} onSave={() => void updateListView("installer-jobs", "PATCH")} onReset={() => void updateListView("installer-jobs", "DELETE")} showViewActions={!staffPermissions} />}
       {jobLayout === "map" ? <div><p className="crm-filter-notice">Map shows this page of filtered jobs. Use the page controls to see more.</p><TradeRecordMap onRegisterMapSave={registerMapSave} key={user.uid} quoteAccess={mapQuoteAccess} user={user} records={jobMapRecords} loading={jobMapLoading} total={jobPagination.total} onOpenRecord={(record) => openFocusedJob(record.id)} /></div> : jobLayout === "list" ? <div className="crm-jobs-layout">
-        <section className={`${registerStyles.register} crm-job-list crm-record-table`} role="table" aria-label="Job results"><div className="crm-record-columns crm-dynamic-columns" style={jobGridStyle} role="row">{jobColumns.map((key) => { const column = jobIndexColumns.find((item) => item.key === key); return column ? <SortableIndexHeading key={key} column={column} current={jobSort} onSort={changeJobRegisterSort} /> : null; })}</div>{indexedJobs.length ? indexedJobs.map((job) => <article key={job.id} tabIndex={0} role="row" className={`${registerStyles.row} crm-row-open crm-record-data-row crm-index-row`} style={jobGridStyle} onContextMenu={(event) => openJobActions(event, job.id)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openJobActions(event, job.id); else if (event.key === "Enter") openFocusedJob(job.id); }} onDoubleClick={(event) => { if ((event.target as HTMLElement).closest("a, button, input, select, textarea")) return; openFocusedJob(job.id); }}>{jobColumns.map((key) => <span className="crm-index-cell" role="cell" key={key}>{jobIndexCell(job, key, () => openFocusedJob(job.id), jobActionMenu(job), user)}</span>)}</article>) : <div className="crm-empty"><strong>{indexLoading ? "Loading jobs..." : "No matching jobs"}</strong><span>{indexLoading ? "Fetching this page securely." : "Try another search or filter."}</span></div>}</section>
+        <JobRegisterScroll><div className="crm-record-columns crm-dynamic-columns" style={jobGridStyle} role="row">{jobColumns.map((key) => { const column = jobIndexColumns.find((item) => item.key === key); return column ? <SortableIndexHeading key={key} column={column} current={jobSort} onSort={changeJobRegisterSort} /> : null; })}</div>{indexedJobs.length ? indexedJobs.map((job) => <article key={job.id} tabIndex={0} role="row" className={`${registerStyles.row} crm-row-open crm-record-data-row crm-index-row`} style={jobGridStyle} onContextMenu={(event) => openJobActions(event, job.id)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openJobActions(event, job.id); else if (event.key === "Enter") openFocusedJob(job.id); }} onDoubleClick={(event) => { if ((event.target as HTMLElement).closest("a, button, input, select, textarea")) return; openFocusedJob(job.id); }}>{jobColumns.map((key) => <span className="crm-index-cell" role="cell" key={key}>{jobIndexCell(job, key, (tab) => openFocusedJob(job.id, tab), () => editInvoicePayment(job), jobActionMenu(job), user, staffPermissions)}</span>)}</article>) : <div className="crm-empty"><strong>{indexLoading ? "Loading jobs..." : "No matching jobs"}</strong><span>{indexLoading ? "Fetching this page securely." : "Try another search or filter."}</span></div>}</JobRegisterScroll>
       </div> : <div className="crm-pipeline-board">{[["enquiry", "New"], ["qualifying", "Checking"], ["quoting", "Quoting"], ["approved", "Approved"], ["scheduled", "Scheduled"], ["in_progress", "Underway"]].map(([stage, label]) => { const stageJobs = boardJobs[stage] || []; return <section key={stage}><header><button type="button" onClick={() => { setPipelineFocus(stage); setJobLayout("list"); }}>{label}</button><strong>{boardCounts[stage] || 0}</strong></header><div>{stageJobs.map((job) => <button type="button" key={job.id} onClick={() => openFocusedJob(job.id)}><span>{job.workNumber}</span><strong>{job.customerDisplayName || job.title}</strong><small>{serviceLabels[job.serviceCategory] || job.serviceCategory}</small><em>{job.nextAction || workStageLabels[job.stage] || job.stage}</em></button>)}{!stageJobs.length && <p>No jobs</p>}</div></section>; })}</div>}
     </div>}
 
+    {paymentJob && <TradeInvoicePaymentDialog user={user} job={paymentJob} onClose={() => setPaymentJob(null)} onSaved={() => { setPaymentJob(null); setRefreshNonce(value => value + 1); }} />}
     {view === "schedule" && <div className="crm-view crm-dispatch-view"><TradeScheduleWorkspace user={user} permissions={staffPermissions} initialWeekStart={scheduleWeekStart} onOpenJob={(id) => openFocusedJob(id)} onOpenQuote={(!staffPermissions || staffPermissions.canViewQuotes) ? (id) => openFocusedJob(id, "quote") : undefined} /></div>}
 
     {view === "customers" && creating === "customer" && <div className="crm-view crm-create-screen">
@@ -1680,7 +1700,7 @@ function CrmAddressFields({ user, initialValue }: { user: User; initialValue?: C
   </>;
 }
 
-function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamMembers, permissions, initialTab = "summary", onCrm, onWorkOrder, onOpenJob, onOpenPriceBook, onOpenCustomer, onOpenIntegrations, onReload }: { job: Job; customer?: Customer; sites: ServiceSite[]; user: User; busy: string; refreshing?: boolean; teamMembers: TeamMember[]; permissions?: TradeTeamPermissions; initialTab?: JobTab; onCrm: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onWorkOrder: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onOpenJob: (workOrderId: string) => void; onOpenPriceBook: () => void; onOpenCustomer: (customerId: string) => void; onOpenIntegrations: () => void; onReload: () => Promise<void> }) {
+function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamMembers, permissions, initialTab = "summary", onEditPayment, onCrm, onWorkOrder, onOpenJob, onOpenPriceBook, onOpenCustomer, onOpenIntegrations, onReload }: { job: Job; customer?: Customer; sites: ServiceSite[]; user: User; busy: string; refreshing?: boolean; teamMembers: TeamMember[]; permissions?: TradeTeamPermissions; initialTab?: JobTab; onEditPayment: () => void; onCrm: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onWorkOrder: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onOpenJob: (workOrderId: string) => void; onOpenPriceBook: () => void; onOpenCustomer: (customerId: string) => void; onOpenIntegrations: () => void; onReload: () => Promise<void> }) {
   const activeJobAppointmentKey = job.appointments
     .filter((item) => ["scheduled", "en_route", "arrived", "in_progress"].includes(item.status))
     .map((item) => `${item.id}:${item.status}`)
@@ -1861,9 +1881,9 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
           <h4 id={`job-information-${job.id}`}>Job information</h4>
           <dl className={registerStyles.detailGrid}>
             <div><dt>Job ID</dt><dd>{job.workNumber}</dd></div>
-            <div><dt>Job / compliance</dt><dd>{displayedLifecycle}</dd></div>
-            {(canViewQuotes || canViewInvoices) && <div><dt>Customer billing</dt><dd>{jobCustomerBillingStatus(job) || "Restricted"}</dd></div>}
-            {canViewInvoices && <div><dt>Invoice payment</dt><dd><JobInvoiceStatus job={job} /></dd></div>}
+            <div><dt>Job / compliance</dt><dd className={registerStyles.detailAction}><span>{displayedLifecycle}</span>{canOpenJobSchedule && <button type="button" onClick={() => setTab("schedule")}>Schedule</button>}{canViewFieldEvidence && <button type="button" onClick={() => setTab("field")}>Update work</button>}{canManageJobs && canManageFieldEvidence && <button type="button" onClick={() => setTab("review")}>Review</button>}</dd></div>
+            {(canViewQuotes || canViewInvoices) && <div><dt>Customer billing</dt><dd className={registerStyles.detailAction}><span>{jobCustomerBillingStatus(job) || "Restricted"}</span>{canViewQuotes && <button type="button" onClick={() => setTab("quote")}>Edit quote</button>}{canViewInvoices && <button type="button" onClick={() => setTab("invoice")}>Edit invoice</button>}</dd></div>}
+            {canViewInvoices && <div><dt>Invoice payment</dt><dd className={registerStyles.detailAction}><JobInvoiceStatus job={job} />{canManageInvoices && <button type="button" onClick={onEditPayment}>Edit payment</button>}</dd></div>}
             <div><dt>Work type</dt><dd>{serviceLabels[job.serviceCategory] || job.serviceCategory || "Not added"}</dd></div>
             <div><dt>Assigned worker</dt><dd>{job.assigneeLabel || "Unassigned"}</dd></div>
             <div><dt>Scheduled date</dt><dd>{job.scheduledStart ? dateLabel(job.scheduledStart, true) : "Unassigned"}</dd></div>
@@ -1889,8 +1909,9 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
       {requiresBookingDocuments && <TradeCustomerDocumentDeliveryPanel delivery={job.customerDocuments} jobId={job.id} onReload={onReload} user={user} />}
       {complianceIntents.length > 0 && canViewFieldEvidence && <TradeActivityFieldRecords key={user.uid + job.id} user={user} workOrderId={job.id} canShare={canManageFieldEvidence} refreshKey={job.revision} />}
       <form className="crm-form" onSubmit={saveSummary}><fieldset disabled={!canManageJobs} style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}>
-        <div className="crm-form-grid">{canSearchCustomerRecords && !isProtected && !isReleasedLead && <CustomerLookupSelect user={user} initialCustomer={customer} />}{!isProtected && !isReleasedLead && customer && <label><span>Authoritative service site</span><select name="serviceSiteId" defaultValue={job.serviceSiteId}><option value="">Choose later</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.siteLabel} | {[site.suburb, site.addressState, site.postcode].filter(Boolean).join(" ") || "Address not added"}</option>)}</select></label>}<label><span>Sales stage</span><select name="pipelineStage" defaultValue={job.pipelineStage}>{Object.entries(pipelineLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Work stage</span><select name="stage" defaultValue={job.stage}>{Object.entries(workStageLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Building type</span><select name="buildingType" defaultValue={job.buildingType || "not_sure"}>{[["house_townhouse", "House or townhouse"], ["apartment_unit", "Apartment or unit"], ["commercial_office", "Commercial or office"], ["retail_hospitality", "Retail or hospitality"], ["industrial_warehouse", "Industrial or warehouse"], ["institutional_community_health", "Institutional, community or health"], ["other", "Other"], ["not_sure", "Not sure"]].map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Priority</span><select name="priority" defaultValue={job.priority}><option value="low">Low</option><option value="standard">Standard</option><option value="high">High</option><option value="urgent">Urgent</option></select></label></div>
-        {canManageJobs && <button className="btn" disabled={busy === `job:${job.id}`}>Save summary</button>}
+        <div className="crm-form-grid">{canSearchCustomerRecords && !isProtected && !isReleasedLead && <CustomerLookupSelect user={user} initialCustomer={customer} />}{!isProtected && !isReleasedLead && customer && <label><span>Authoritative service site</span><select name="serviceSiteId" defaultValue={job.serviceSiteId}><option value="">Choose later</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.siteLabel} | {[site.suburb, site.addressState, site.postcode].filter(Boolean).join(" ") || "Address not added"}</option>)}</select></label>}<label><span>Building type</span><select name="buildingType" defaultValue={job.buildingType || "not_sure"}>{[["house_townhouse", "House or townhouse"], ["apartment_unit", "Apartment or unit"], ["commercial_office", "Commercial or office"], ["retail_hospitality", "Retail or hospitality"], ["industrial_warehouse", "Industrial or warehouse"], ["institutional_community_health", "Institutional, community or health"], ["other", "Other"], ["not_sure", "Not sure"]].map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Priority</span><select name="priority" defaultValue={job.priority}><option value="low">Low</option><option value="standard">Standard</option><option value="high">High</option><option value="urgent">Urgent</option></select></label></div>
+        <details className={registerStyles.planningDetails}><summary>Board and work planning</summary><p>These organise your work board. Billing comes from the quote and invoice; compliance follows the completed work and review.</p><div className="crm-form-grid"><label><span>Board stage</span><select name="pipelineStage" defaultValue={job.pipelineStage}>{Object.entries(pipelineLabels).filter(([value]) => !["invoiced", "paid"].includes(value) || value === job.pipelineStage).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Work planning</span><select name="stage" defaultValue={job.stage}>{Object.entries(workStageLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label></div></details>
+        {canManageJobs && <button className="btn" disabled={busy === `job:${job.id}`}>Save details</button>}
       </fieldset></form>
       {canOpenDirectCustomerCompliance && unlinkedComplianceIntents.length > 0 && <details className="crm-field-secondary"><summary>Optional compliance case setup</summary><p>Field forms are available in the app. Use this section only to link an existing governed case.</p>{unlinkedComplianceIntents.map((intent) => <TradeComplianceIntake key={intent.id} user={user} workOrderId={job.id} initialIntent={intent} onChanged={onReload} />)}</details>}
       {canOpenDirectCustomerCompliance && customer && complianceIntents.length === 0 && complianceCases.length === 0 && <TradeComplianceIntake user={user} workOrderId={job.id} onChanged={onReload} />}

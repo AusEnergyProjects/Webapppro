@@ -15,7 +15,7 @@ function fixture({owner=true,authenticated=true,connected=true}={}) {
     server[name]=async(...args)=>{calls.push({name,args});return name==="queueManualFollowUp"?"message-id":name==="deliverFollowUp"?"accepted":[];};
   }
   server.followUpConfiguration=async(...args)=>{calls.push({name:"config",args});return {templates:[],settings:{invoiceEnabled:false,appointmentEnabled:false}};};
-  server.previewFollowUp=async(...args)=>{calls.push({name:"preview",args});return {recipient:"customer@example.test",recipientName:"Alex",subject:"Visit",body:"Hello Alex",contextHash:"hash",missing:[],context:{private:"never expose"}};};
+  server.previewFollowUp=async(...args)=>{calls.push({name:"preview",args});return {recipient:"customer@example.test",recipientName:"Alex",subject:"Visit",body:"Hello Alex",contextHash:"hash",missing:[],context:{private:"never expose",fields:{job_number:"TLJ-123"}}};};
   const deps={
     "../../../../db":{getD1:()=>db},
     "@/lib/admin-server":{adminJson:json,sameOrigin:r=>r.headers.get("origin")==="https://example.test"},

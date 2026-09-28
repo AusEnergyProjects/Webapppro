@@ -20,7 +20,7 @@ test("restricted invoice information has no payment badge even with positive amo
 });
 
 test("safe recorded balances recognise paid and part-paid invoices", () => {
-  for (const status of ["issued", "part_paid", "overdue"]) {
+  for (const status of ["issued", "part_paid", "part_credited", "overdue"]) {
     assert.equal(invoice(status, 11000, 11000).status, "paid");
     assert.equal(invoice(status, 11000, 12000).status, "paid");
   }

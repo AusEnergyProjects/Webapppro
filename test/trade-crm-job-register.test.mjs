@@ -23,7 +23,7 @@ test("controlled job lifecycle is derived from authoritative job facts", () => {
   assert.equal(deriveJobRegisterOperationalStatus({ workStage: "completed" }), "completed");
   assert.equal(deriveJobRegisterOperationalStatus({ workStage: "cancelled" }), "cancelled");
   assert.equal(deriveJobRegisterOperationalStatus({ pipelineStage: "lost", auditOutcome: "passed" }), "cancelled");
-  assert.equal(deriveJobRegisterOperationalStatus({ pipelineStage: "paid" }), "completed");
+  assert.equal(deriveJobRegisterOperationalStatus({ pipelineStage: "paid" }), "unscheduled");
   assert.equal(deriveJobRegisterOperationalStatus({ auditOutcome: "passed", workStage: "completed" }), "audited");
   assert.equal(deriveJobRegisterOperationalStatus({ certifiedQuantity: 4 }), "unscheduled");
 });
@@ -298,10 +298,10 @@ test("job register and detail preserve canonical status values with explicit reb
   assert.match(ui, /const payment = jobInvoicePaymentStatus\(job\)/);
   assert.match(ui, /key: "customerBilling", label: "Customer billing"/);
   assert.match(ui, /key: "invoicePayment", label: "Invoice payment"/);
-  assert.match(ui, /canViewInvoices && <div><dt>Invoice payment<\/dt><dd><JobInvoiceStatus job=\{job\}/);
+  assert.match(ui, /canViewInvoices && <div><dt>Invoice payment<\/dt><dd className=\{registerStyles.detailAction\}><JobInvoiceStatus job=\{job\}/);
   assert.match(ui, /job\.jobRegister\.operationalStatus === "audited" && auditOutcomeLabel/);
   assert.match(ui, /normaliseJobOperationalStatus\(preferences\.operationalStatus\)/);
-  assert.match(ui, /<dt>Job \/ compliance<\/dt><dd>\{displayedLifecycle\}<\/dd>/);
+  assert.match(ui, /<dt>Job \/ compliance<\/dt><dd className=\{registerStyles.detailAction\}><span>\{displayedLifecycle\}<\/span>/);
   for (const obsolete of ["quoting", "assigned", "certified"]) {
     assert.doesNotMatch(ui, new RegExp(`<option value="${obsolete}">`));
   }

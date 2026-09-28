@@ -1,6 +1,6 @@
 import type { TeamAccess } from "./trade-team-server";
 import { DEFAULT_FOLLOW_UP_SETTINGS, DEFAULT_FOLLOW_UP_TEMPLATES, followUpTemplate, followUpSettings,
-  renderFollowUp, followUpLocalTime, followUpAppointmentEpoch, followUpTimingHours, type FollowUpTemplate } from "./trade-follow-ups.ts";
+  renderFollowUp, followUpJobSubject, followUpLocalTime, followUpAppointmentEpoch, followUpTimingHours, type FollowUpTemplate } from "./trade-follow-ups.ts";
 import { australianAppointmentTimeZone } from "./customer-appointment-calendar.ts";
 
 type Row = Record<string, unknown>;
@@ -178,11 +178,16 @@ export async function queueManualFollowUp(db: D1Database, services: FollowUpServ
   if (!/^[\w-]{16,100}$/.test(requestId) || !/^[\w-]{1,180}$/.test(workOrderId)) invalid("EMAIL_INPUT_INVALID");
   const checked=followUpTemplate({id:templateId,name:"Follow up",kind:"general",subject:input.subject,body:input.body});
   if (/\{[^{}]+\}/.test(checked.subject+checked.body)) invalid("FOLLOW_UP_FIELD_MISSING");
+  const originalSubject = checked.subject;
+  const jobReference = await db.prepare(`SELECT work_number FROM trade_work_orders
+    WHERE id=? AND firebase_uid=? AND partner_type='installer' AND record_status='active'`)
+    .bind(workOrderId,access.ownerUid).first<{work_number:string}>();
+  checked.subject=followUpJobSubject(checked.subject,jobReference?.work_number || "");
   const eventKey=`manual:${requestId}`;
   const previous=await db.prepare("SELECT * FROM trade_follow_up_messages WHERE owner_uid=? AND event_key=?").bind(access.ownerUid,eventKey).first<Row>();
   if (previous) {
     if (previous.actor_uid!==access.actorUid || previous.work_order_id!==workOrderId || previous.template_id!==templateId
-      || previous.subject!==checked.subject || previous.body!==checked.body || previous.context_hash!==input.contextHash) invalid("EMAIL_REQUEST_CONFLICT");
+      || (previous.subject!==checked.subject && previous.subject!==originalSubject) || previous.body!==checked.body || previous.context_hash!==input.contextHash) invalid("EMAIL_REQUEST_CONFLICT");
     await services.recipient(access,workOrderId);
     return text(previous.id);
   }

@@ -28,7 +28,7 @@ export function jobInvoicePaymentStatus(input: InvoicePaymentInput): InvoicePaym
   if (status === "not_started") return { label: "Not invoiced", tone: "muted", status };
 
   const { invoicedValueCents: invoiced, paidValueCents: paid } = input;
-  if (!["issued", "part_paid", "overdue"].includes(status)
+  if (!["issued", "part_paid", "part_credited", "overdue"].includes(status)
     || !Number.isSafeInteger(invoiced) || invoiced < 0
     || !Number.isSafeInteger(paid) || paid < 0) {
     return { label: "Invoice status unavailable", tone: "muted", status: "unavailable" };
@@ -45,7 +45,7 @@ export function jobCustomerBillingStatus(input: CustomerBillingInput): string | 
   const payment = jobInvoicePaymentStatus(input);
   if (!payment) return null;
   if (payment.status === "paid") return "Paid";
-  if (["issued", "part_paid", "overdue"].includes(input.invoiceStatus)) return "Invoiced";
+  if (["issued", "part_paid", "part_credited", "overdue"].includes(input.invoiceStatus)) return "Invoiced";
   if (!["not_started", "draft", "void", "credited"].includes(input.invoiceStatus)) return "-";
   if (input.quoteStatus === "restricted") return null;
   if (["issued", "sent", "accepted", "declined"].includes(input.quoteStatus)) return "Quoted";
@@ -58,7 +58,7 @@ export function jobInvoiceSettlementStatus(input: InvoicePaymentInput): string |
   const payment = jobInvoicePaymentStatus(input);
   if (!payment) return null;
   if (payment.status === "paid") return "Paid";
-  if (["issued", "part_paid", "overdue"].includes(payment.status)) return "Unpaid";
+  if (["issued", "part_paid", "part_credited", "overdue"].includes(payment.status)) return "Unpaid";
   return "-";
 }
 

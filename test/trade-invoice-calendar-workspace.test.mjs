@@ -244,3 +244,10 @@ test("calendar mirroring is provider-neutral, revision mapped and privacy safe",
 test("new invoice and calendar sources avoid prohibited dash characters", () => {
   assert.doesNotMatch(`${invoiceRoute}\n${invoiceUi}\n${calendarRoute}\n${calendarServer}\n${schedule}`, /[\u2013\u2014]/);
 });
+
+test("invoice register includes local receipts and preserves provider payment floor",()=>{
+  const quick=projectTradeInvoiceRegisterFinance({quick_invoice_number:"INV-1",quick_total_cents:11000,paid_value_cents:11000});
+  assert.equal(quick.paidCents,11000);assert.equal(quick.outstandingCents,0);assert.equal(quick.status,"paid");
+  const linked=projectTradeInvoiceRegisterFinance({accounting_document_id:"x",accounting_amount_cents:11000,accounting_paid_amount_cents:9000,paid_value_cents:1000});
+  assert.equal(linked.paidCents,9000);
+});

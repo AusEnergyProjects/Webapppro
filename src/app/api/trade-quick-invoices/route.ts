@@ -70,6 +70,7 @@ function invoiceError(error: unknown) {
   if (code === "QUICK_INVOICE_DOCUMENT_UNAVAILABLE") return adminJson({ ok: false, error: "This historical invoice has no verified issued PDF artifact and cannot be regenerated." }, 409);
   if (code === "INVALID_INVOICE_CREDIT") return adminJson({ ok: false, error: "Add a credit description, reason and valid amount." }, 400);
   if (code === "INVOICE_BALANCE_EXCEEDED") return adminJson({ ok: false, error: "The credit cannot exceed the invoice balance still outstanding." }, 409);
+  if (code === "INVOICE_BELOW_PAYMENT") return adminJson({ ok: false, error: "The invoice total cannot be less than money already received. Check the recorded payment before changing the invoice." }, 409);
   if (code === "INVALID_QUICK_INVOICE") return adminJson({ ok: false, error: "Add one to eight valid invoice lines." }, 400);
   return adminJson({ ok: false, error: "The quick invoice request could not be completed." }, 500);
 }
@@ -87,6 +88,9 @@ function cleanDate(value: unknown) {
 
 async function invoiceRow(ownerUid: string, clause: "id" | "work_order_id", value: string) {
   return getD1().prepare(`SELECT q.*,
+      COALESCE((SELECT detail.paid_value_cents FROM trade_crm_job_details detail
+        WHERE detail.work_order_id = q.work_order_id AND detail.firebase_uid = q.firebase_uid
+          AND detail.crm_customer_id = q.crm_customer_id), 0) paid_value_cents,
       COALESCE((SELECT customer.email FROM trade_crm_customers customer
         WHERE customer.id = q.crm_customer_id AND customer.firebase_uid = q.firebase_uid
           AND customer.record_status = 'active'), '') delivery_email,
@@ -261,7 +265,7 @@ function payload(
   let lines: unknown[] = [];
   try { lines = JSON.parse(String(row.line_items_json || "[]")); }
   catch { lines = []; }
-  const balance = invoiceBalance({ totalCents: Number(row.total_cents), creditedCents: Number(row.credited_cents || 0), paidCents: 0 });
+  const balance = invoiceBalance({ totalCents: Number(row.total_cents), creditedCents: Number(row.credited_cents || 0), paidCents: Number(row.paid_value_cents || 0) });
   const deliveryStatus = String(row.delivery_status);
   const correctableDelivery = ["queued", "failed"].includes(deliveryStatus);
   return {
@@ -347,7 +351,8 @@ export async function POST(request: Request) {
       const job = await db.prepare(`SELECT
           work.id,
           work.work_number,
-          details.crm_customer_id
+          details.crm_customer_id,
+          details.paid_value_cents
         FROM trade_work_orders work
         JOIN trade_crm_job_details details
           ON details.work_order_id = work.id
@@ -386,6 +391,7 @@ export async function POST(request: Request) {
         quoteTemplate?.lines || body.lines,
         quoteTemplate?.discountCents ?? body.discountCents,
         access.isOwner || access.canViewPriceBook);
+      if (draft.totalCents < Number(job.paid_value_cents || 0)) throw new Error("INVOICE_BELOW_PAYMENT");
       const dueAt = cleanDate(body.dueAt);
       if (dueAt < australiaSydneyToday) throw new Error("INVALID_QUICK_INVOICE");
       const invoiceId = crypto.randomUUID();
@@ -403,6 +409,10 @@ export async function POST(request: Request) {
             WHERE NOT EXISTS (
               SELECT 1 FROM trade_crm_accepted_invoices accepted
               WHERE accepted.firebase_uid = ? AND accepted.work_order_id = ?
+            ) AND EXISTS (
+              SELECT 1 FROM trade_crm_job_details details
+              WHERE details.work_order_id = ? AND details.firebase_uid = ?
+                AND details.crm_customer_id = ? AND details.paid_value_cents <= ?
             )`)
             .bind(
               invoiceId,
@@ -421,6 +431,10 @@ export async function POST(request: Request) {
               now,
               access.ownerUid,
               workOrderId,
+              workOrderId,
+              access.ownerUid,
+              job.crm_customer_id,
+              draft.totalCents,
             ),
           db.prepare(`INSERT INTO trade_crm_quick_invoice_revisions
             (id, invoice_id, firebase_uid, revision, line_items_json, subtotal_cents,
@@ -474,7 +488,8 @@ export async function POST(request: Request) {
             ),
         ]);
         if (Number(results[0]?.meta.changes || 0) !== 1) {
-          throw new Error("ACCEPTED_INVOICE_EXISTS");
+          if (await acceptedInvoiceRow(access.ownerUid, workOrderId)) throw new Error("ACCEPTED_INVOICE_EXISTS");
+          throw new Error("QUICK_INVOICE_CHANGED");
         }
       } catch (error) {
         if (error instanceof Error && error.message === "ACCEPTED_INVOICE_EXISTS") throw error;
@@ -516,6 +531,7 @@ export async function POST(request: Request) {
       if (Number(body.expectedRevision) !== Number(current.revision || 1)) throw new Error("QUICK_INVOICE_CHANGED");
       const draft = await resolveQuickInvoiceDraft(access.ownerUid, body.lines, body.discountCents,
         access.isOwner || access.canViewPriceBook);
+      if (draft.totalCents < Number(current.paid_value_cents || 0)) throw new Error("INVOICE_BELOW_PAYMENT");
       if (!access.isOwner && !access.canApplyDiscounts
         && (draft.discountCents > Number(current.discount_cents || 0)
           || lowersAuthoritativeTotal(draft.totalCents, current.total_cents))) {
@@ -532,9 +548,13 @@ export async function POST(request: Request) {
           issued_pdf_object_key = '', issued_pdf_sha256 = '',
           issued_pdf_size_bytes = 0, updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND revision = ?
-            AND status = 'draft' AND delivery_status IN ('queued', 'failed')`)
+            AND status = 'draft' AND delivery_status IN ('queued', 'failed')
+            AND ? >= COALESCE((SELECT d.paid_value_cents FROM trade_crm_job_details d
+              WHERE d.work_order_id=trade_crm_quick_invoices.work_order_id
+                AND d.firebase_uid=trade_crm_quick_invoices.firebase_uid
+                AND d.crm_customer_id=trade_crm_quick_invoices.crm_customer_id), 0)`)
           .bind(linesJson, draft.subtotalCents, draft.discountCents, draft.taxCents, draft.totalCents, dueAt, nextRevision, now,
-            invoiceId, access.ownerUid, current.revision),
+            invoiceId, access.ownerUid, current.revision, draft.totalCents),
         db.prepare(`INSERT INTO trade_crm_quick_invoice_revisions
           (id, invoice_id, firebase_uid, revision, line_items_json, subtotal_cents, discount_cents, tax_cents, total_cents,
            due_at, change_reason, created_by_uid, created_at, document_snapshot_json)
@@ -574,7 +594,9 @@ export async function POST(request: Request) {
           SELECT ?, q.id, q.work_order_id, q.firebase_uid, ?, ?, ?, ?, ?, 'issued', ?, ?, ?
           FROM trade_crm_quick_invoices q WHERE q.id = ? AND q.firebase_uid = ?
             AND ? <= q.total_cents
-              - COALESCE((SELECT SUM(c.total_cents) FROM trade_crm_quick_invoice_credits c WHERE c.invoice_id = q.id AND c.status = 'issued'), 0)`)
+              - COALESCE((SELECT SUM(c.total_cents) FROM trade_crm_quick_invoice_credits c WHERE c.invoice_id = q.id AND c.status = 'issued'), 0)
+              - COALESCE((SELECT d.paid_value_cents FROM trade_crm_job_details d
+                WHERE d.work_order_id=q.work_order_id AND d.firebase_uid=q.firebase_uid AND d.crm_customer_id=q.crm_customer_id), 0)`)
           .bind(creditId, creditNumber, description, totals.subtotalCents, totals.taxCents, totals.totalCents,
             reason, access.actorUid, now, invoiceId, access.ownerUid, totals.totalCents),
         db.prepare(`UPDATE trade_crm_quick_invoices SET status = CASE

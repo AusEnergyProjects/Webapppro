@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   DEFAULT_FOLLOW_UP_SETTINGS, DEFAULT_FOLLOW_UP_TEMPLATES, followUpTemplate,
-  FOLLOW_UP_FIELDS, followUpEditorText, followUpStoredText, followUpSettings, followUpTimingHours, renderFollowUp, followUpLocalTime, followUpAppointmentEpoch,
+  FOLLOW_UP_FIELDS, followUpEditorText, followUpStoredText, followUpSettings, followUpTimingHours, followUpJobSubject, renderFollowUp, followUpLocalTime, followUpAppointmentEpoch,
 } from "../src/lib/trade-follow-ups.ts";
 
 test("automatic reminders default off and starter templates render customer details", () => {
@@ -31,14 +31,14 @@ test("rendering never substitutes inherited properties", () => {
   const result = renderFollowUp({ subject: "Hello", body: "{toString} {customer_name}" }, {});
   assert.equal(result.body, "{toString} {customer_name}");
   assert.ok(result.missing.includes("Customer name"));
-  assert.equal(result.missing.length, 2);
+  assert.equal(result.missing.length, 3);
 });
 
 test("unavailable fields stay visible and report their labels", () => {
   const result = renderFollowUp({ subject: "Invoice {invoice_number}", body: "Due {invoice_due_date}" }, { invoice_number: "INV-1" });
   assert.equal(result.subject, "Invoice INV-1");
   assert.equal(result.body, "Due {invoice_due_date}");
-  assert.deepEqual(result.missing, ["Invoice due date"]);
+  assert.deepEqual(result.missing, ["Invoice due date", "Job number"]);
 });
 
 test("template validation rejects header controls and oversized content", () => {
@@ -91,10 +91,24 @@ test("readable insert labels round-trip every supported field without exposing c
     assert.equal(followUpEditorText(stored),friendly);assert.equal(followUpStoredText(friendly),stored);
   }
   const value='Hi [Customer first name], your appointment is [Appointment time].';
-  const ready=renderFollowUp({subject:'Visit',body:followUpStoredText(value)},{customer_first_name:'Alex',appointment_time:'9 am'});
+  const ready=renderFollowUp({subject:'Visit',body:followUpStoredText(value)},{job_number:'TLJ-123',customer_first_name:'Alex',appointment_time:'9 am'});
   assert.equal(ready.body,'Hi Alex, your appointment is 9 am.');assert.deepEqual(ready.missing,[]);
 });
 test("readable field conversion preserves ordinary brackets and rejects inherited fields", () => {
   assert.equal(followUpStoredText('[bring ID] [constructor]'),'[bring ID] [constructor]');
   assert.equal(followUpEditorText('{constructor}'),'{constructor}');
+});
+
+test("every starter and custom template subject identifies the job once",()=>{
+  const fields=Object.fromEntries(Object.keys(FOLLOW_UP_FIELDS).map(key=>[key,"Example"]));fields.job_number="TLJ-123";
+  for(const template of [...DEFAULT_FOLLOW_UP_TEMPLATES,{subject:"Custom message",body:"Hello"}]) {
+    const rendered=renderFollowUp(template,fields);assert.match(rendered.subject,/TLJ-123/);assert.equal(rendered.subject.length<=200,true);
+  }
+  assert.equal(followUpJobSubject("Re: TLJ-123 question","TLJ-123"),"Re: TLJ-123 question");
+  assert.equal(followUpJobSubject("re: tlj-123 question","TLJ-123"),"re: tlj-123 question");
+  assert.equal(followUpJobSubject("TLJ-1234 question","TLJ-123"),"[TLJ-123] TLJ-1234 question");
+  assert.equal(followUpJobSubject("x".repeat(200),"TLJ-123").length,200);
+  assert.ok(followUpJobSubject("x".repeat(199)+" TLJ-123","TLJ-123").startsWith("[TLJ-123]"));
+  assert.throws(()=>followUpJobSubject("Subject",""),/FIELD_MISSING/);
+  assert.throws(()=>followUpJobSubject("Subject\nBcc: bad","TLJ-123"),/FIELD_MISSING/);
 });

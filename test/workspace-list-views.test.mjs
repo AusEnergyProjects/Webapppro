@@ -135,9 +135,10 @@ test("installer indexes apply named views, movable columns and matching visible 
 });
 
 test("installer job rows preserve the selected register column grid", () => {
-  const jobResultsStart = crmUi.indexOf('aria-label="Job results"');
+  const jobResultsStart = crmUi.indexOf('<JobRegisterScroll>');
   assert.notEqual(jobResultsStart, -1);
-  const jobResults = crmUi.slice(jobResultsStart, crmUi.indexOf("</section>", jobResultsStart));
+  const jobResults = crmUi.slice(jobResultsStart, crmUi.indexOf("</JobRegisterScroll>", jobResultsStart));
+  assert.match(read("../src/components/JobRegisterScroll.tsx"), /role="table" aria-label="Job results"/);
   assert.match(
     jobResults,
     /<article key=\{job\.id\} tabIndex=\{0\} role="row" className=\{`\$\{registerStyles\.row\} crm-row-open crm-record-data-row crm-index-row`\} style=\{jobGridStyle\}/,

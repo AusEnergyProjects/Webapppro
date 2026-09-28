@@ -417,3 +417,50 @@ test("invoice PDF and delivery reuse the immutable owner-scoped document snapsho
   assert.match(invoicePdf, /Discount \(ex GST\)/);
   assert.match(panel, /invoice\.document\.payment\.accountName/);
 });
+
+test("credits cannot exceed the unpaid balance, including a payment recorded after preview",()=>{
+  const start=route.indexOf('} else if (action === "issue_credit")');
+  const sql=route.slice(start).match(/db\.prepare\(`(INSERT INTO trade_crm_quick_invoice_credits[\s\S]*?)`\)/)?.[1];
+  assert.ok(sql);
+  const db=new DatabaseSync(":memory:");
+  db.exec(`CREATE TABLE trade_crm_quick_invoices(id TEXT,work_order_id TEXT,firebase_uid TEXT,crm_customer_id TEXT,total_cents INTEGER);
+    CREATE TABLE trade_crm_job_details(work_order_id TEXT,firebase_uid TEXT,crm_customer_id TEXT,paid_value_cents INTEGER);
+    CREATE TABLE trade_crm_quick_invoice_credits(id TEXT,invoice_id TEXT,work_order_id TEXT,firebase_uid TEXT,credit_number TEXT,description TEXT,subtotal_cents INTEGER,tax_cents INTEGER,total_cents INTEGER,status TEXT,reason TEXT,created_by_uid TEXT,created_at TEXT);
+    INSERT INTO trade_crm_quick_invoices VALUES('invoice','job','owner','customer',10000);
+    INSERT INTO trade_crm_job_details VALUES('job','owner','customer',8000);`);
+  const credit=amount=>db.prepare(sql).run(crypto.randomUUID(),'CN-1','Credit',amount,0,amount,'Correction','owner','2026-09-28','invoice','owner',amount).changes;
+  assert.equal(credit(3000),0);
+  assert.equal(credit(1000),1);
+  db.exec("UPDATE trade_crm_job_details SET paid_value_cents=9000");
+  assert.equal(credit(1),0);
+  assert.equal(db.prepare("SELECT SUM(total_cents) total FROM trade_crm_quick_invoice_credits").get().total,1000);
+  db.close();
+});
+
+test("invoice creation and correction cannot lower the total below recorded payments", () => {
+  const createSql = route.match(/db\.prepare\(`(INSERT INTO trade_crm_quick_invoices[\s\S]*?)`\)/)?.[1];
+  const correction = route.slice(route.indexOf('} else if (action === "correct_draft")'));
+  const correctSql = correction.match(/db\.prepare\(`(UPDATE trade_crm_quick_invoices SET[\s\S]*?)`\)/)?.[1];
+  assert.ok(createSql); assert.ok(correctSql);
+  const db = new DatabaseSync(":memory:");
+  apply(db, quickInvoiceMigration);
+  db.exec(`CREATE TABLE trade_crm_payment_links (
+    id text PRIMARY KEY, work_order_id text, firebase_uid text, commercial_reference text, purpose text,
+    provider text, provider_payment_id text, paid_amount_cents integer, paid_at text, status text
+  )`);
+  apply(db, migration); apply(db, invoiceDocumentMigration); applyQuickInvoicePdfMigration(db);
+  db.exec(`CREATE TABLE trade_crm_job_details(work_order_id TEXT,firebase_uid TEXT,crm_customer_id TEXT,paid_value_cents INTEGER);
+    CREATE TABLE trade_crm_accepted_invoices(firebase_uid TEXT,work_order_id TEXT);
+    INSERT INTO trade_crm_job_details VALUES('job','owner','customer',8000);`);
+  const create = amount => db.prepare(createSql).run('invoice','job','owner','customer','INV-1','[]',amount,0,0,amount,'2026-10-30','owner','now','now','owner','job','job','owner','customer',amount).changes;
+  assert.equal(create(5000), 0);
+  assert.equal(create(10000), 1);
+  const correct = amount => db.prepare(correctSql).run('[]',amount,0,0,amount,'2026-10-30',2,'now','invoice','owner',1,amount).changes;
+  assert.equal(correct(5000), 0);
+  db.exec("UPDATE trade_crm_job_details SET paid_value_cents=9000");
+  assert.equal(correct(8500), 0);
+  assert.equal(correct(9000), 1);
+  assert.equal(db.prepare("SELECT total_cents FROM trade_crm_quick_invoices").get().total_cents, 9000);
+  assert.equal(db.prepare("SELECT paid_value_cents FROM trade_crm_job_details").get().paid_value_cents, 9000);
+  db.close();
+});

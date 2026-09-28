@@ -48,7 +48,7 @@ export async function POST(request:Request) {
     }
     if (input.action==="preview") {
       const draft=await previewFollowUp(db,services,access,String(input.workOrderId || ""),String(input.templateId || ""));
-      return adminJson({ok:true,recipient:draft.recipient,recipientName:draft.recipientName,subject:draft.subject,body:draft.body,contextHash:draft.contextHash,missing:draft.missing});
+      return adminJson({ok:true,recipient:draft.recipient,recipientName:draft.recipientName,jobNumber:draft.context.fields.job_number,subject:draft.subject,body:draft.body,contextHash:draft.contextHash,missing:draft.missing});
     }
     if (input.action==="send") {
       const id=await queueManualFollowUp(db,services,access,input),status=await deliverFollowUp(db,services,id,access);

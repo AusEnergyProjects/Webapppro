@@ -2869,8 +2869,11 @@ export async function PATCH(request: Request) {
       throw new Error("JOB_RESCHEDULE_REQUIRED");
     }
     const scopedJobId = cleanAdminText(body.workOrderId, 180);
-    if (!identity.access.isOwner && scopedJobId && (jobMutationActions.has(action) || action === "update_job")) {
+    if (!identity.access.isOwner && scopedJobId && (jobMutationActions.has(action) || action === "update_job" || action === "record_invoice_payment")) {
       await assignedJob(identity.access, scopedJobId);
+    }
+    if (action === "record_invoice_payment" && !identity.access.isOwner && !identity.access.canManageInvoices) {
+      throw new Error("INVOICE_MANAGEMENT_REQUIRED");
     }
     if (action === "update_job") {
       const hasAny = (keys: string[]) => keys.some((key) => body[key] !== undefined);
@@ -3175,7 +3178,7 @@ export async function PATCH(request: Request) {
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);
     const job = await ownedJob(db, identity, workOrderId);
-    if (action !== "update_job") return adminJson({ ok: false, error: "Unsupported CRM update." }, 400);
+    if (action !== "update_job" && action !== "record_invoice_payment") return adminJson({ ok: false, error: "Unsupported CRM update." }, 400);
     const current = await db.prepare("SELECT * FROM trade_crm_job_details WHERE work_order_id = ? AND firebase_uid = ?")
       .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
     const expectedRevision = Number(body.expectedRevision);
@@ -3183,6 +3186,56 @@ export async function PATCH(request: Request) {
       return adminJson({ ok: false, error: "Refresh this job before saving changes." }, 400);
     }
     if (expectedRevision !== Number(job.revision)) throw new Error("REVISION_CONFLICT");
+    if (action === "record_invoice_payment") {
+      if (job.source_type === "opportunity" || current?.customer_source === "platform_private") {
+        return adminJson({ ok: false, error: "Customer payments for this job are managed by Australian Energy Assessments." }, 403);
+      }
+      if (job.stage === "cancelled" || !current
+        || !["issued", "part_paid", "part_credited", "paid", "overdue"].includes(String(current.invoice_status))) {
+        return adminJson({ ok: false, error: "Issue an invoice before recording payment." }, 400);
+      }
+      const total = Number(current.invoiced_value_cents);
+      const previousPaid = Number(current.paid_value_cents);
+      const paid = body.paidValueCents;
+      if (typeof paid !== "number" || !Number.isSafeInteger(paid) || paid < 0
+        || !Number.isSafeInteger(total) || total <= 0 || paid > total) {
+        return adminJson({ ok: false, error: "Enter the amount received, from zero up to the invoice total." }, 400);
+      }
+      if (body.expectedInvoicedValueCents !== total || body.expectedPaidValueCents !== previousPaid
+        || body.expectedInvoiceStatus !== current.invoice_status) throw new Error("REVISION_CONFLICT");
+      const providerPaid = await db.prepare(`SELECT COALESCE(MAX(paid_amount_cents), 0) paid
+        FROM trade_crm_accounting_documents WHERE firebase_uid = ? AND work_order_id = ? AND document_type = 'invoice'`)
+        .bind(identity.uid, workOrderId).first<{ paid: number }>();
+      if (paid < Number(providerPaid?.paid || 0)) {
+        return adminJson({ ok: false, error: "Your bookkeeping software has already recorded a higher payment. Correct it there, then refresh the invoice." }, 400);
+      }
+      const invoiceStatus = paid === total ? "paid" : paid > 0 ? "part_paid"
+        : current.invoice_status === "overdue" ? "overdue" : "issued";
+      const revision = nextJobRevision(expectedRevision);
+      try { await guardedOnlineJobMutationBatch(db, [
+        // Accounting can update balances without changing the job revision.
+        creditexWriteGuard(db, identity.uid, `EXISTS (SELECT 1 FROM trade_crm_job_details d
+          WHERE d.work_order_id=? AND d.firebase_uid=? AND d.invoice_status=?
+            AND d.invoiced_value_cents=? AND d.paid_value_cents=? AND d.customer_source<> 'platform_private')
+          AND COALESCE((SELECT MAX(paid_amount_cents) FROM trade_crm_accounting_documents
+            WHERE firebase_uid=? AND work_order_id=? AND document_type='invoice'), 0) <= ?`,
+        [workOrderId, identity.uid, String(current.invoice_status), total, previousPaid, identity.uid, workOrderId, paid]),
+        db.prepare(`UPDATE trade_crm_job_details SET paid_value_cents=?, invoice_status=?, updated_at=?
+          WHERE work_order_id=? AND firebase_uid=?`).bind(paid, invoiceStatus, now, workOrderId, identity.uid),
+        db.prepare(`UPDATE trade_work_orders SET revision=?, updated_at=?
+          WHERE id=? AND firebase_uid=? AND record_status='active' AND stage=? AND revision=?`)
+          .bind(revision, now, workOrderId, identity.uid, String(job.stage), expectedRevision),
+        db.prepare(`INSERT INTO trade_work_order_events (id,work_order_id,firebase_uid,event_type,summary,created_at)
+          VALUES (?,?,?,'invoice_payment_recorded',?,?)`).bind(crypto.randomUUID(), workOrderId, identity.uid,
+          `Customer payment total changed from ${previousPaid} to ${paid} cents by ${identity.access.actorUid}.`, now),
+        ...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision, changedAt: now,
+          audienceMemberId: String(job.assignee_member_id || "") }),
+      ], { kind: "stage", ownerUid: identity.uid, workOrderId, jobStage: String(job.stage), jobRevision: revision, updatedAt: now }); } catch (error) {
+        if (creditexMutationConflict(error)) throw new Error("REVISION_CONFLICT");
+        throw error;
+      }
+      return adminJson({ ok: true, revision });
+    }
     if (["completed", "cancelled"].includes(String(job.stage || ""))) throw new Error("REVISION_CONFLICT");
     const platformPrivate = job.source_type === "opportunity";
     const releasedPublicLead = job.source_type === "public_lead"

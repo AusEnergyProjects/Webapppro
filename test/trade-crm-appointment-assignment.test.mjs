@@ -424,7 +424,11 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
     },
     "@/lib/trade-access-server": { TradeAccessError },
     "@/lib/trade-team-server": {
-      assignedJob: async () => ({ id: "job-1" }),
+      assignedJob: async (scope, id) => {
+        const job = await d1.prepare("SELECT id FROM trade_work_orders WHERE id=? AND firebase_uid=? AND record_status='active' AND (?='team' OR assignee_member_id=?)").bind(id, scope.ownerUid, scope.jobScope, scope.memberId).first();
+        if (!job) throw Error("JOB_NOT_FOUND");
+        return job;
+      },
       canAssignJob: (currentAccess, fromMemberId, toMemberId) => canAssignWithinScope(currentAccess, fromMemberId, toMemberId),
       canCreateJobs: (currentAccess) => currentAccess.isOwner || currentAccess.canCreateJobs,
       canManageJobs: (currentAccess) => currentAccess.isOwner || currentAccess.canManageJobs,
@@ -1073,4 +1077,64 @@ test('national certificate booking rolls back when technician coverage changes a
     assert.deepEqual(certificateBookingMutationState(database), before);
     assert.equal(database.prepare("SELECT service_states FROM trade_team_members WHERE id='member-a'").get().service_states, '["NSW"]', 'the concurrent region update remains saved');
   } finally { database.close(); }
+});
+
+function paymentFixture() {
+  const f = fixture();
+  f.database.exec("CREATE TABLE trade_crm_accounting_documents (firebase_uid TEXT,work_order_id TEXT,document_type TEXT,paid_amount_cents INTEGER);");
+  f.database.exec("UPDATE trade_work_orders SET stage='completed',assignee_member_id='member-a'; UPDATE trade_crm_job_details SET invoice_status='issued',invoiced_value_cents=11000,paid_value_cents=0;");
+  return f;
+}
+function paymentRequest(overrides = {}) {
+  return new Request("https://example.test/api/trade-crm", {method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({action:"record_invoice_payment",workOrderId:"job-1",expectedRevision:3,paidValueCents:11000,expectedInvoicedValueCents:11000,expectedPaidValueCents:0,expectedInvoiceStatus:"issued",...overrides})});
+}
+test("customer payment is recorded on completed work without changing compliance or quote", async () => {
+  const {database,d1}=paymentFixture();
+  const before=database.prepare("SELECT pipeline_stage,quote_status FROM trade_crm_job_details").get();
+  const response=await crmRoute(d1,access({canManageInvoices:true})).PATCH(paymentRequest());
+  assert.equal(response.status,200,JSON.stringify(await response.json()));
+  assert.equal(database.prepare("SELECT stage FROM trade_work_orders").get().stage,"completed");
+  assert.deepEqual(database.prepare("SELECT pipeline_stage,quote_status FROM trade_crm_job_details").get(),before);
+  assert.deepEqual({...database.prepare("SELECT paid_value_cents,invoice_status FROM trade_crm_job_details").get()},{paid_value_cents:11000,invoice_status:"paid"});
+  assert.equal(database.prepare("SELECT count(*) n FROM trade_work_order_events WHERE event_type='invoice_payment_recorded'").get().n,1);
+  assert.equal(database.prepare("SELECT revision FROM trade_work_orders").get().revision,4);
+});
+test("customer partial payment and correcting an unpaid balance are recorded independently", async()=>{
+  for(const [paid,status] of [[2500,"part_paid"],[0,"issued"]]) {
+    const {database,d1}=paymentFixture();
+    assert.equal((await crmRoute(d1,access({isOwner:true})).PATCH(paymentRequest({paidValueCents:paid}))).status,200);
+    assert.equal(database.prepare("SELECT invoice_status FROM trade_crm_job_details").get().invoice_status,status);
+  }
+});
+test("customer payment rejects invalid amounts, stale balances and unavailable invoices",async()=>{
+  for(const paidValueCents of [-1,0.5,11001,"100",null]) {
+    const {d1}=paymentFixture();assert.equal((await crmRoute(d1,access({isOwner:true})).PATCH(paymentRequest({paidValueCents}))).status,400);
+  }
+  for(const invoiceStatus of ["not_started","draft","void","credited"]) {
+    const {database,d1}=paymentFixture();database.prepare("UPDATE trade_crm_job_details SET invoice_status=?").run(invoiceStatus);
+    assert.equal((await crmRoute(d1,access({isOwner:true})).PATCH(paymentRequest({expectedInvoiceStatus:invoiceStatus}))).status,400);
+  }
+  const {d1}=paymentFixture();assert.equal((await crmRoute(d1,access({isOwner:true})).PATCH(paymentRequest({expectedPaidValueCents:100}))).status,409);
+});
+test("customer payment enforces permissions, business ownership, assignment and customer protection",async()=>{
+  for(const scope of [{},{canManageInvoices:true,ownerUid:"other"},{canManageInvoices:true,memberId:"other"}]) {
+    const {database,d1}=paymentFixture();const result=await crmRoute(d1,access(scope)).PATCH(paymentRequest());
+    assert.ok(result.status===403||result.status===404,result.status);
+    assert.equal(database.prepare("SELECT paid_value_cents FROM trade_crm_job_details").get().paid_value_cents,0);
+  }
+  for(const change of ["UPDATE trade_work_orders SET source_type='opportunity'","UPDATE trade_work_orders SET stage='cancelled'","UPDATE trade_work_orders SET record_status='archived'"]) {
+    const {database,d1}=paymentFixture();database.exec(change);const result=await crmRoute(d1,access({isOwner:true})).PATCH(paymentRequest());
+    assert.ok(result.status>=400);assert.equal(database.prepare("SELECT paid_value_cents FROM trade_crm_job_details").get().paid_value_cents,0);
+  }
+});
+test("customer payment cannot erase provider-confirmed payment or race an accounting refresh",async()=>{
+  const f=paymentFixture();f.database.exec("INSERT INTO trade_crm_accounting_documents VALUES ('owner-1','job-1','invoice',5000)");
+  assert.equal((await crmRoute(f.d1,access({isOwner:true})).PATCH(paymentRequest({paidValueCents:0}))).status,400);
+  for(const change of ["UPDATE trade_crm_job_details SET paid_value_cents=3000", "UPDATE trade_work_orders SET revision=9", "INSERT INTO trade_crm_accounting_documents VALUES ('owner-1','job-1','invoice',11000)"]) {
+    const {database,d1}=paymentFixture();d1.setBeforeBatch(()=>database.exec(change));
+    const response=await crmRoute(d1,access({isOwner:true})).PATCH(paymentRequest({paidValueCents:5000}));
+    assert.equal(response.status,409);
+    assert.equal(database.prepare("SELECT count(*) n FROM trade_work_order_events WHERE event_type='invoice_payment_recorded'").get().n,0);
+    assert.equal(database.prepare("SELECT stage FROM trade_work_orders").get().stage,"completed");
+  }
 });

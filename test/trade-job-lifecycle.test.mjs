@@ -155,3 +155,15 @@ test("a completed multi-activity job is audited only after every active activity
 test('no show remains ready to reschedule even when an earlier form has progress', () => {
   assert.deepEqual(deriveTradeJobLifecycle({ workStage: 'no_show', pipelineStage: 'scheduled', hasProgress: true }), { status: 'no_show', auditOutcome: null });
 });
+
+test("invoicing and customer payment never complete work in JS or SQL",()=>{
+  const db=new DatabaseSync(":memory:");
+  db.exec("CREATE TABLE work(stage TEXT); CREATE TABLE details(pipeline_stage TEXT); INSERT INTO work VALUES ('backlog'); INSERT INTO details VALUES ('paid');");
+  const sql=tradeJobLifecycleStatusSql({workAlias:"w",detailAlias:"d",scheduleSql:"''",auditOutcomeSql:"''",hasProgressSql:"0"});
+  for(const pipelineStage of ['invoiced','paid']) {
+    db.prepare("UPDATE details SET pipeline_stage=?").run(pipelineStage);
+    assert.equal(deriveTradeJobLifecycle({workStage:'backlog',pipelineStage}).status,'unscheduled');
+    assert.equal(db.prepare(`SELECT ${sql} status FROM work w,details d`).get().status,'unscheduled');
+  }
+  db.close();
+});

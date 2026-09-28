@@ -492,3 +492,20 @@ test("custom after-visit templates use past visits without a built-in ID", async
   const draft=await f.preview("job","custom-after",{now:NOW});
   assert.deepEqual(draft.missing,[]);assert.equal(draft.context.appointmentId,"done");assert.match(draft.body,/Hi Alex,/);
 });
+
+test("manual custom subject always keeps job reference and remains replayable",async t=>{
+  const f=fixture(t),draft=await f.preview();
+  const input={workOrderId:"job",templateId:"general-follow-up",requestId:"reference-request-123456",subject:"Your custom message",body:draft.body,contextHash:draft.contextHash};
+  const id=await queueManualFollowUp(f.db,f.services,ownerAccess(),input);
+  assert.equal(f.rows()[0].subject,"[TLJ-job] Your custom message");
+  assert.equal(await queueManualFollowUp(f.db,f.services,ownerAccess(),input),id);
+  await deliverFollowUp(f.db,f.services,id,ownerAccess());assert.equal(f.sends[0].subject,"[TLJ-job] Your custom message");
+});
+
+test("already queued legacy subjects retain exact replay after reference rollout",async t=>{
+  const f=fixture(t),{id,input}=await f.manual();
+  const oldSubject="Legacy subject without a reference";
+  f.sqlite.prepare("UPDATE trade_follow_up_messages SET subject=? WHERE id=?").run(oldSubject,id);
+  assert.equal(await queueManualFollowUp(f.db,f.services,ownerAccess(),{...input,subject:oldSubject}),id);
+  assert.equal(f.rows()[0].subject,oldSubject);
+});

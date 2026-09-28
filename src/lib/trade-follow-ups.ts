@@ -68,13 +68,26 @@ export function followUpSettings(value: unknown): FollowUpSettings {
     invoiceTemplateId: v.invoiceTemplateId, appointmentTemplateId: v.appointmentTemplateId,
     invoiceTiming: timing(v.invoiceTiming), appointmentTiming: timing(v.appointmentTiming) };
 }
+export function followUpJobSubject(subject: string, jobNumber: string) {
+  const reference = jobNumber.trim();
+  if (!reference || reference.length > 80 || /[\u0000-\u001f\u007f]/.test(reference + subject)) throw new Error("FOLLOW_UP_FIELD_MISSING");
+  const escaped = reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const hasReference = new RegExp(`(^|[^A-Za-z0-9-])${escaped}(?=$|[^A-Za-z0-9-])`, "i");
+  const trimmed = subject.trim();
+  if (hasReference.test(trimmed.slice(0, 200))) return trimmed.slice(0, 200);
+  const prefix = `[${reference}] `;
+  return prefix + trimmed.slice(0, 200 - prefix.length);
+}
+
 export function renderFollowUp(template: Pick<FollowUpTemplate, "subject" | "body">, fields: Record<string, string>) {
   const missing = new Set<string>();
   const fill = (text: string) => text.replace(/\{([^{}]+)\}/g, (token, key: string) => {
     if (!Object.hasOwn(fields, key) || !fields[key]) { missing.add(Object.hasOwn(FOLLOW_UP_FIELDS, key) ? FOLLOW_UP_FIELDS[key] : key); return token; }
     return fields[key];
   });
-  const subject = fill(template.subject), body = fill(template.body);
+  const filledSubject = fill(template.subject), body = fill(template.body);
+  if (!Object.hasOwn(fields, "job_number") || !fields.job_number) missing.add("Job number");
+  const subject = fields.job_number ? followUpJobSubject(filledSubject, fields.job_number) : filledSubject;
   return { subject, body, missing: [...missing] };
 }
 export function followUpLocalTime(date: Date, timeZone: string) {

@@ -2,7 +2,7 @@
 
 import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import type { User } from "firebase/auth";
-import { FOLLOW_UP_FIELDS, followUpEditorText, followUpStoredText, type FollowUpSettings, type FollowUpTemplate } from "@/lib/trade-follow-ups";
+import { FOLLOW_UP_FIELDS, followUpEditorText, followUpStoredText, renderFollowUp, type FollowUpSettings, type FollowUpTemplate } from "@/lib/trade-follow-ups";
 import { TRADE_EMAIL_SETTINGS_HREF } from "./TradeEmailSettings";
 import styles from "./TradeEmailTemplatesWorkspace.module.css";
 
@@ -24,8 +24,8 @@ const SAMPLE_FIELDS: Record<string, string> = {
   site_address: "12 Example Street, Melbourne", invoice_number: "INV-1042", invoice_due_date: "28 September 2026",
   invoice_amount: "$1,250.00", appointment_date: "30 September 2026", appointment_time: "9:00 am",
 };
-function example(text: string) {
-  return followUpStoredText(text).replace(/\{([^{}]+)\}/g, (token: string, key: string) => Object.hasOwn(SAMPLE_FIELDS,key) ? SAMPLE_FIELDS[key] : token);
+function example(template: FollowUpTemplate) {
+  return renderFollowUp({ subject: followUpStoredText(template.subject), body: followUpStoredText(template.body) }, SAMPLE_FIELDS);
 }
 function isKind(value: string): value is FollowUpTemplate["kind"] {
   return value === "general" || value === "quote" || value === "invoice" || value === "appointment" || value === "appointment_after";
@@ -183,9 +183,10 @@ export function TradeEmailTemplatesWorkspace({ user }: { user: User }) {
             <label className={styles.field}><span>Use for</span><select value={draft.kind} disabled={!canManage || busy || activeReminderTemplate} onChange={event => { if (isKind(event.target.value)) setDraft({ ...draft, kind: event.target.value }); }}>{Object.entries(KIND_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           </div>
           <label className={styles.field}><span>Email subject</span><input ref={subjectRef} required maxLength={200} value={draft.subject} readOnly={!canManage || busy} onFocus={() => setInsertTarget("subject")} onChange={event => setDraft({ ...draft, subject: event.target.value })} /></label>
+          <small>The job number is always included in the subject.</small>
           <label className={styles.field}><span>Message</span><textarea ref={bodyRef} required rows={8} maxLength={8000} value={draft.body} readOnly={!canManage || busy} onFocus={() => setInsertTarget("body")} onChange={event => setDraft({ ...draft, body: event.target.value })} /></label>
           {canManage && <div className={styles.insertFields}><p>Insert into {insertTarget === "subject" ? "subject" : "message"}</p><div>{["customer_first_name", "appointment_date", "appointment_time", "invoice_amount", "invoice_due_date", "job_number"].map(key => <button key={key} type="button" disabled={busy} onClick={() => insertField(key)}>+ {FOLLOW_UP_FIELDS[key]}</button>)}</div><details><summary>More details</summary><div>{Object.keys(FOLLOW_UP_FIELDS).filter(key => !["customer_first_name", "appointment_date", "appointment_time", "invoice_amount", "invoice_due_date", "job_number"].includes(key)).map(key => <button key={key} type="button" disabled={busy} onClick={() => insertField(key)}>+ {FOLLOW_UP_FIELDS[key]}</button>)}</div></details><small>Choose a button to add the detail where you are typing. It fills in for each customer.</small></div>}
-          <details open className={styles.preview}><summary>Preview with example details</summary><div><small>Example only</small><strong>{example(draft.subject) || "Email subject"}</strong><p>{example(draft.body) || "Your message will appear here."}</p></div></details>
+          <details open className={styles.preview}><summary>Preview with example details</summary><div><small>Example only</small><strong>{example(draft).subject || "Email subject"}</strong><p>{example(draft).body || "Your message will appear here."}</p></div></details>
           {canManage && <footer className={styles.editorFooter}>
             <div>{savedDraft && <button type="button" className={styles.danger} disabled={busy || activeReminderTemplate} onClick={() => setConfirmDelete(true)}>Delete template</button>}{activeReminderTemplate && <small>Used by an active reminder.</small>}</div>
             <div className={styles.actions}><button type="button" className={styles.secondary} disabled={busy || !templateDirty} onClick={() => { const original = savedDraft || data.templates[0] || null; setDraft(original); setSavedDraft(original); setConfirmDelete(false); }}>Cancel changes</button><button type="submit" className={styles.primary} disabled={busy || !templateDirty || !draft.name.trim() || !draft.subject.trim() || !draft.body.trim()}>{busy ? "Saving..." : "Save template"}</button></div>

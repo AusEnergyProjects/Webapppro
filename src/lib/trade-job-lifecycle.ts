@@ -94,8 +94,7 @@ export function deriveTradeJobLifecycle(input: TradeJobLifecycleInput): TradeJob
     return { status: "cancelled", auditOutcome: null };
   }
   if (workStage === "no_show") return { status: "no_show", auditOutcome: null };
-  const completed = workStage === "completed"
-    || ["complete", "invoiced", "paid"].includes(pipelineStage);
+  const completed = workStage === "completed" || pipelineStage === "complete";
   if (auditOutcome && completed) return { status: "audited", auditOutcome };
   if (completed) {
     return { status: "completed", auditOutcome: null };
@@ -301,8 +300,8 @@ export function tradeJobLifecycleStatusSql(input: {
     WHEN ${workAlias}.stage = 'cancelled' OR ${detailAlias}.pipeline_stage = 'lost' THEN 'cancelled'
     WHEN ${workAlias}.stage = 'no_show' THEN 'no_show'
     WHEN COALESCE(${auditOutcomeSql}, '') <> ''
-      AND (${workAlias}.stage = 'completed' OR ${detailAlias}.pipeline_stage IN ('complete', 'invoiced', 'paid')) THEN 'audited'
-    WHEN ${workAlias}.stage = 'completed' OR ${detailAlias}.pipeline_stage IN ('complete', 'invoiced', 'paid') THEN 'completed'
+      AND (${workAlias}.stage = 'completed' OR ${detailAlias}.pipeline_stage = 'complete') THEN 'audited'
+    WHEN ${workAlias}.stage = 'completed' OR ${detailAlias}.pipeline_stage = 'complete' THEN 'completed'
     WHEN ${workAlias}.stage IN ('in_progress', 'blocked')
       OR ${detailAlias}.pipeline_stage = 'in_progress'
       OR ${hasProgressSql} THEN 'partial'

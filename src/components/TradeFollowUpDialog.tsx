@@ -3,7 +3,7 @@
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { User } from "firebase/auth";
-import { FOLLOW_UP_FIELDS, type FollowUpTemplate } from "@/lib/trade-follow-ups";
+import { FOLLOW_UP_FIELDS, followUpJobSubject, type FollowUpTemplate } from "@/lib/trade-follow-ups";
 import { TRADE_EMAIL_SETTINGS_HREF } from "./TradeEmailSettings";
 import styles from "./TradeEmailTemplatesWorkspace.module.css";
 
@@ -14,7 +14,7 @@ type FollowUpData = {
   history: Array<{ id: string; subject: string; status: string; createdAt: string; error?: string }>;
   error?: string;
 };
-type Preview = { ok: boolean; recipient: string; recipientName: string; subject: string; body: string; contextHash: string; missing: string[]; error?: string };
+type Preview = { jobNumber: string; ok: boolean; recipient: string; recipientName: string; subject: string; body: string; contextHash: string; missing: string[]; error?: string };
 
 export function TradeFollowUpDialog({ user, workOrderId, onClose }: { user: User; workOrderId: string; onClose: () => void }) {
   const [portalTarget, setPortalTarget] = useState<Element | null>(null);
@@ -97,7 +97,7 @@ export function TradeFollowUpDialog({ user, workOrderId, onClose }: { user: User
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (sending.current || !preview || preview.missing.length || !preview.recipient || loading || previewing || data?.connection?.status !== "connected" || status === "accepted" || !subject.trim() || !body.trim()) return;
-    const content = { workOrderId, templateId, subject: subject.trim(), body: body.trim(), contextHash: preview.contextHash };
+    const content = { workOrderId, templateId, subject: followUpJobSubject(subject.trim(), preview.jobNumber), body: body.trim(), contextHash: preview.contextHash };
     const signature = JSON.stringify(content);
     if (request.current.signature !== signature) request.current = { signature, id: crypto.randomUUID() };
     sending.current = true; setBusy(true); setError("");
@@ -138,7 +138,7 @@ export function TradeFollowUpDialog({ user, workOrderId, onClose }: { user: User
         {preview && <>
           <dl className={styles.addresses}><dt>From</dt><dd>{connected ? data.connection?.email : "Business email not connected"}</dd><dt>To</dt><dd>{preview.recipient ? <>{preview.recipientName && <strong>{preview.recipientName}<br /></strong>}{preview.recipient}</> : "No authorised customer email available"}</dd></dl>
           {preview.missing.length > 0 && <p className={styles.notice} role="status">This template needs: {preview.missing.map(field => FOLLOW_UP_FIELDS[field] || field).join(", ")}. Update the job details or choose another template before sending.</p>}
-          <label className={styles.field}><span>Subject</span><input required maxLength={200} value={subject} readOnly={locked} onChange={event => { setSubject(event.target.value); setError(""); }} /></label>
+          <p className={styles.subtle}>Job reference: {preview.jobNumber}. Always included in the subject.</p><label className={styles.field}><span>Subject</span><input required maxLength={200} value={subject} readOnly={locked} onBlur={() => { if (preview.jobNumber) setSubject(value => followUpJobSubject(value, preview.jobNumber)); }} onChange={event => { setSubject(event.target.value); setError(""); }} /></label>
           <label className={styles.field}><span>Message</span><textarea required rows={8} maxLength={8000} value={body} readOnly={locked} onChange={event => { setBody(event.target.value); setError(""); }} /></label>
           {status === "" && <p className={styles.subtle}>Changes here apply to this email only. Your saved template stays the same.</p>}
         </>}
