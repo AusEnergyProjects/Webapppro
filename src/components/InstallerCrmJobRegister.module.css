@@ -45,7 +45,7 @@
 .register [role="columnheader"] button {
   color: inherit;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0;
   line-height: 1.35;
@@ -54,6 +54,14 @@
 }
 .register [role="columnheader"] { min-width: 0; padding-right: 8px; }
 .register [role="columnheader"] button { min-height: 32px; padding: 0; }
+
+.register .row [role="cell"],
+.register .row [role="cell"] > :is(span, a, button),
+.register .row [role="cell"] > button > strong {
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+}
 
 .row {
   position: relative;
