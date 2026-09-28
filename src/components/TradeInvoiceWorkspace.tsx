@@ -57,7 +57,7 @@ export function TradeInvoiceWorkspace({ user, onOpenJob }: { user: User; onOpenJ
 
   if (loading) return <section className="dashboard-panel invoice-workspace"><div className="crm-empty"><strong>Opening invoices</strong><span>Loading current job and accounting records.</span></div></section>;
   return <section className="dashboard-panel invoice-workspace">
-    <header className="invoice-heading"><div><span>Invoices</span><h2>Get paid without retyping the job</h2><p>Open a job to preview the exact accepted scope, then create or check its accounting draft.</p></div></header>
+    <header className="invoice-heading"><div><span>Invoices</span><h2>Get paid without retyping the job</h2><p>New quote acceptances create and email an invoice automatically. Open an invoice to check payment and bookkeeping.</p></div></header>
     <section className="invoice-metrics" aria-label="Invoice summary">
       <article><span>Ready</span><strong>{metrics.ready}</strong><small>Accepted work to prepare</small></article>
       <article className={metrics.attention ? "attention" : ""}><span>Needs attention</span><strong>{metrics.attention}</strong><small>Provider or overdue issue</small></article>
@@ -75,7 +75,7 @@ export function TradeInvoiceWorkspace({ user, onOpenJob }: { user: User; onOpenJ
         <div><span>Invoice</span><strong>{item.externalNumber || item.commercialReference || "Not created"}</strong><small>{item.provider ? `${item.provider.toUpperCase()} | ${statusLabels[item.status] || item.status}` : statusLabels[item.status] || item.status}{item.dueAt ? ` | Due ${new Date(`${item.dueAt}T00:00:00`).toLocaleDateString("en-AU")}` : ""}</small>{item.lastError && <em>{item.lastError === "ACCEPTED_INVOICE_CONFLICT" ? "Acceptance recorded. Confirm the existing invoice before payment." : "The last invoice sync needs attention."}</em>}</div>
         <div><span>Total</span><strong>{item.externalNumber || item.commercialReference ? money(item.totalCents) : "Not ready"}</strong><small>{item.outstandingCents ? `${money(item.outstandingCents)} outstanding` : item.status === "credited" ? "Credited in full" : item.paidCents ? "Paid in full" : "No balance yet"}</small></div>
         <button type="button" onClick={() => onOpenJob(item.id)}>{item.externalNumber || item.commercialReference ? "Open invoice" : "Open job"}</button>
-      </article>) : <div className="crm-empty"><strong>No invoices in this view</strong><span>Try All, or finish an accepted job to prepare its invoice.</span></div>}
+      </article>) : <div className="crm-empty"><strong>No invoices in this view</strong><span>Try All. New customer quote acceptances create their invoices automatically.</span></div>}
     </div>
     {status && <p className="crm-inline-status" role="status">{status}</p>}
   </section>;
