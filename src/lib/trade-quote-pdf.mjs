@@ -19,6 +19,8 @@ const A4_HEIGHT = 841.89;
 const MARGIN = 42;
 const CONTENT_WIDTH = A4_WIDTH - MARGIN * 2;
 const MAX_FONT_BYTES = 2_000_000;
+const MAX_COMPRESSED_QUOTE_PDF_BYTES = 24_000_000;
+const MAX_LEGACY_QUOTE_PDF_BYTES = 12 * 1024 * 1024;
 const FINAL_PERCENT_DISCOUNT_SECTION = "Overall percentage discount";
 const isFinalPercentDiscount = (item) => item?.sectionHeading === FINAL_PERCENT_DISCOUNT_SECTION;
 
@@ -297,6 +299,7 @@ export async function createTradeQuotePdfBytes(
   suppliedSnapshot,
   suppliedFonts = {},
   suppliedAssets = {},
+  { compress = true } = {},
 ) {
   const snapshot =
     suppliedSnapshot &&
@@ -333,10 +336,10 @@ export async function createTradeQuotePdfBytes(
   const pdf = await PDFDocument.create();
   if (useEmbeddedFonts) pdf.registerFontkit(fontkit);
   const regular = useEmbeddedFonts
-    ? await pdf.embedFont(regularBytes, { subset: false })
+    ? await pdf.embedFont(regularBytes, { subset: compress })
     : await pdf.embedFont(StandardFonts.Helvetica);
   const bold = useEmbeddedFonts
-    ? await pdf.embedFont(boldBytes, { subset: false })
+    ? await pdf.embedFont(boldBytes, { subset: compress })
     : await pdf.embedFont(StandardFonts.HelveticaBold);
   const logo = await embeddedImage(pdf, suppliedAssets.logo);
   const roof = snapshot.roofImage ? await embeddedImage(pdf, suppliedAssets.roof) : null;
@@ -775,11 +778,23 @@ export async function createTradeQuotePdfBytes(
       if (!choice) throw new Error("QUOTE_PRODUCT_DOCUMENTS_INVALID");
       return choice.name;
     });
-    for (const [index, sourcePage] of source.getPages().entries()) {
+    const sourcePages = source.getPages();
+    const pagesWithContent = sourcePages.filter((sourcePage) => sourcePage.node.Contents());
+    const boundingBoxes = pagesWithContent.map((sourcePage) => {
+      const box = sourcePage.getCropBox();
+      return { left: box.x, bottom: box.y, right: box.x + box.width, top: box.y + box.height };
+    });
+    // One copier per document preserves shared fonts and images across its pages.
+    // Embedding each page separately duplicates those resources in the quote.
+    const embeddedPages = compress ? await pdf.embedPages(pagesWithContent, boundingBoxes) : [];
+    let contentIndex = 0;
+    for (const [index, sourcePage] of sourcePages.entries()) {
       const box = sourcePage.getCropBox();
       const rotation = ((sourcePage.getRotation().angle % 360) + 360) % 360;
       if (![0, 90, 180, 270].includes(rotation)) throw new Error("PRODUCT_DOCUMENT_INVALID");
-      const embedded = sourcePage.node.Contents() ? await pdf.embedPage(sourcePage, { left: box.x, bottom: box.y, right: box.x + box.width, top: box.y + box.height }) : null;
+      const embedded = sourcePage.node.Contents()
+        ? compress ? embeddedPages[contentIndex++] : await pdf.embedPage(sourcePage, { left: box.x, bottom: box.y, right: box.x + box.width, top: box.y + box.height })
+        : null;
       const sideways = rotation === 90 || rotation === 270;
       const width = sideways ? box.height : box.width, height = sideways ? box.width : box.height;
       const scale = Math.min(CONTENT_WIDTH / width, (A4_HEIGHT - 145) / height);
@@ -810,7 +825,7 @@ export async function createTradeQuotePdfBytes(
   );
   pdf.setCreator("TLink");
   pdf.setProducer("TLink");
-  const bytes = await pdf.save({ useObjectStreams: false });
-  if (bytes.length > 12 * 1024 * 1024) throw new Error("PRODUCT_DOCUMENT_LIMIT");
+  const bytes = await pdf.save({ useObjectStreams: compress });
+  if (bytes.length > (compress ? MAX_COMPRESSED_QUOTE_PDF_BYTES : MAX_LEGACY_QUOTE_PDF_BYTES)) throw new Error("PRODUCT_DOCUMENT_LIMIT");
   return bytes;
 }

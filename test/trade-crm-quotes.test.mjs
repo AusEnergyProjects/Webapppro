@@ -300,6 +300,7 @@ test("issued quote delivery is immutable, branded, attached and retry safe", () 
   assert.match(installerRoute, /QUOTE_PDF_UNAVAILABLE/);
   assert.match(installerRoute, /X-TLink-Request-Id/);
   assert.match(quoteDeliveryServer, /attachments: includeAttachment \? \[\{/);
+  assert.match(quoteDeliveryServer, /MAX_QUOTE_EMAIL_PDF_ATTACHMENT_BYTES = 18_000_000/);
   assert.match(quoteDeliveryServer, /replyTo: content\.replyTo/);
   assert.match(quoteDeliveryServer, /idempotencyKey: String\(row\.provider_idempotency_key \|\| row\.idempotency_key\)/);
   assert.match(documentEmail, /tradeQuoteDocumentDisplayTotals/);

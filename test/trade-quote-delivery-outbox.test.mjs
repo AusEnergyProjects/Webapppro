@@ -448,7 +448,7 @@ test("v3 secure review wording remains accurate with or without a PDF attachment
   assert.match(email.html, /in the full quote/);
 });
 
-test("v3 attachment threshold is stable across Google and Microsoft and large PDFs send by secure link", async () => {
+test("ordinary quote PDFs remain attached with the same payload across mailbox changes", async () => {
   const limit = 1.5 * 1024 * 1024;
   for (const sizeBytes of [limit, limit + 1, 3_245_054]) {
     const messages = [];
@@ -467,10 +467,13 @@ test("v3 attachment threshold is stable across Google and Microsoft and large PD
         });
         return { provider, ...receipt, providerMessageId: receipt.providerMessageId || "submission:graph" };
       } });
-      assert.equal(result.outcomes[0].outcome, "provider_accepted");
-      assert.equal(requests, 1);
+      const fitsMailbox = provider === "google" || sizeBytes < 3_000_000;
+      assert.equal(result.outcomes[0].outcome, fitsMailbox ? "provider_accepted" : "failed");
+      assert.equal(requests, fitsMailbox ? 1 : 0);
       assert.equal(fixture.pdfReads(), 1);
-      assert.equal(messages.at(-1).attachments.length, sizeBytes <= limit ? 1 : 0);
+      assert.equal(messages.at(-1).attachments.length, 1);
+      assert.equal(Buffer.from(messages.at(-1).attachments[0].content, "base64").length, sizeBytes);
+      assert.equal(messages.at(-1).attachments[0].filename, "quote.pdf");
       assert.equal(messages.at(-1).body, fixture.content.text);
       fixture.database.close();
     }
@@ -478,9 +481,31 @@ test("v3 attachment threshold is stable across Google and Microsoft and large PD
   }
 });
 
+test("modern quotes attach PDFs below and at 18 MB and use the unchanged secure link above it", async () => {
+  for (const sizeBytes of [17_999_999, 18_000_000, 18_000_001]) {
+    const fixture = await preparedPdfDelivery({ sizeBytes });
+    let sent;
+    const result = await fixture.drain({ ...fixture.options, sendEmail: async (message) => {
+      sent = message;
+      return { provider: "google", providerMessageId: "gmail-receipt", providerStatus: "accepted" };
+    } });
+    assert.equal(result.outcomes[0].outcome, "provider_accepted");
+    assert.equal(fixture.pdfReads(), 1);
+    assert.equal(sent.attachments.length, sizeBytes <= 18_000_000 ? 1 : 0);
+    if (sent.attachments.length) {
+      assert.equal(Buffer.from(sent.attachments[0].content, "base64").length, sizeBytes);
+      assert.equal(sent.attachments[0].filename, "quote.pdf");
+    }
+    assert.equal(sent.body, fixture.content.text);
+    assert.equal(sent.html, fixture.content.html);
+    assert.match(sent.body, /Download a PDF copy for your records from your secure quote review/);
+    fixture.database.close();
+  }
+});
+
 test("legacy revisions retain large attachments and v3 still rejects an immutable PDF mismatch", async () => {
   for (const revision of [1, 2]) {
-    const fixture = await preparedPdfDelivery({ revision, sizeBytes: 1.5 * 1024 * 1024 + 1 });
+    const fixture = await preparedPdfDelivery({ revision, sizeBytes: 18_000_001 });
     let sent;
     await fixture.drain({ ...fixture.options, sendEmail: async (message) => {
       sent = message;
@@ -518,9 +543,30 @@ test("large v3 retries preserve the payload and uncertain sends never automatica
       assert.equal(retry.outcomes[0].status, "provider_accepted");
       assert.deepEqual(messages[0], messages[1]);
     }
-    assert.equal(messages[0].attachments.length, 0);
+    assert.equal(messages[0].attachments.length, 1);
     fixture.database.close();
   }
+});
+
+test("a mailbox-specific size rejection is visibly blocked without changing the journalled payload", async () => {
+  const fixture = await preparedPdfDelivery({ sizeBytes: 3_245_054 });
+  let attempts = 0;
+  const sendEmail = async (message) => {
+    attempts++;
+    assert.equal(message.attachments.length, 1);
+    throw new ReminderProviderDeliveryError("definite_failure", "EMAIL_MESSAGE_TOO_LARGE");
+  };
+  const result = await fixture.drain({ ...fixture.options, sendEmail });
+  assert.equal(result.outcomes[0].status, "failed");
+  assert.equal(result.outcomes[0].code, "EMAIL_MESSAGE_TOO_LARGE");
+  assert.equal(result.outcomes[0].nextAttemptAt, "");
+  const retry = await fixture.drain({ ...fixture.options, sendEmail, now: new Date("2026-08-13T02:00:00.000Z") });
+  assert.equal(retry.attempted, 0);
+  assert.equal(attempts, 1);
+  assert.deepEqual(tradeQuoteDeliveryPresentation("failed", 1, "", "EMAIL_MESSAGE_TOO_LARGE"), {
+    key: "attention", label: "PDF too large to email. Reduce its size and issue a new version.", canRetry: false,
+  });
+  fixture.database.close();
 });
 
 test("unknown renderer revisions fail before the email provider is called", async () => {

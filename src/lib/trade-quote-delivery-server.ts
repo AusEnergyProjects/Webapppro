@@ -28,7 +28,8 @@ type DrainOptions = {
 };
 
 const CALLBACK_PATH = "/api/service-reminder-provider-events/resend";
-const MAX_QUOTE_EMAIL_PDF_ATTACHMENT_BYTES = 1.5 * 1024 * 1024;
+// MIME base64 expansion leaves an 18 MB PDF below common 25 MB email limits.
+const MAX_QUOTE_EMAIL_PDF_ATTACHMENT_BYTES = 18_000_000;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function boundedLimit(value: number, maximum = 25) {
@@ -287,7 +288,8 @@ async function finishFailure(
   const current = now.toISOString();
   const indeterminate = reminderProviderFailureOutcome(error) === "indeterminate";
   const code = indeterminate ? "QUOTE_DELIVERY_RECONCILIATION_REQUIRED" : boundedTradeQuoteDeliveryFailure(error);
-  const retryAt = indeterminate ? "" : tradeQuoteDeliveryRetryAt(attempts, now.getTime());
+  const attachmentTooLarge = code === "EMAIL_MESSAGE_TOO_LARGE";
+  const retryAt = indeterminate || attachmentTooLarge ? "" : tradeQuoteDeliveryRetryAt(attempts, now.getTime());
   const status = indeterminate ? "reconciliation_required" : "failed";
   const failed = await db.prepare(`UPDATE trade_crm_quote_deliveries
     SET status = ?, next_attempt_at = ?, lease_expires_at = '',
@@ -295,6 +297,7 @@ async function finishFailure(
     WHERE id = ? AND firebase_uid = ? AND status = 'sending' AND attempts = ?`)
     .bind(status, retryAt, code,
       indeterminate ? "Check the outgoing mailbox before sending again. Delivery could not be confirmed."
+        : attachmentTooLarge ? "The quote PDF exceeds this mailbox's attachment limit. No email was sent. Reduce the document size and issue a new version."
         : retryAt ? "Delivery was not accepted and will retry automatically." : "Delivery needs attention.",
       current, row.id, row.firebase_uid, attempts)
     .run();
@@ -325,6 +328,7 @@ export async function drainTradeQuoteDeliveries(options: DrainOptions) {
       AND queued_at <> ''
       AND attempts < ?
       AND status IN ('queued', 'failed', 'waiting_for_channel')
+      AND failure_code <> 'EMAIL_MESSAGE_TOO_LARGE'
       AND (next_attempt_at = '' OR next_attempt_at <= ?)
       AND (? = '' OR id = ?)
     ORDER BY created_at, id LIMIT ?`)
@@ -408,7 +412,8 @@ export async function drainTradeQuoteDeliveries(options: DrainOptions) {
       const sent = options.sendEmail ? await options.sendEmail(message)
         : await provider!.sendTradeCustomerEmail(String(row.firebase_uid),
           String(row.requested_by_uid || row.created_by_uid || "system"), message,
-          { db, previouslyAttempted: Boolean(candidate.last_attempt_at || candidate.provider_message_id) });
+          { db, previouslyAttempted: Boolean(candidate.last_attempt_at || candidate.provider_message_id),
+            quoteEmailRendererRevision: Number(row.email_renderer_revision) });
       const accepted = await db.prepare(`UPDATE trade_crm_quote_deliveries
         SET status = 'provider_accepted', provider = ?, provider_message_id = ?,
           provider_status = ?, next_attempt_at = '', lease_expires_at = '',

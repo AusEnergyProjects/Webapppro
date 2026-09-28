@@ -28,6 +28,17 @@ const deferred = () => {
 };
 const uncertain = (error) => error instanceof ReminderProviderDeliveryError && error.outcome === "indeterminate";
 
+test("attachment size rejection stays specific so quote delivery can stop instead of dropping its PDF", async () => {
+  const f = fixture({ send: async () => { throw new emailProvider.TradeEmailProviderError("email_message_too_large", "rejected"); } });
+  try {
+    await f.connect();
+    await assert.rejects(f.send(), error => error instanceof ReminderProviderDeliveryError
+      && error.outcome === "definite_failure" && error.message === "EMAIL_MESSAGE_TOO_LARGE");
+    assert.equal(f.submission().status, "failed");
+    assert.equal(f.submission().error_code, "email_message_too_large");
+  } finally { f.close(); }
+});
+
 function fixture(overrides = {}) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec("CREATE TABLE trade_accounts (firebase_uid TEXT PRIMARY KEY, business_name TEXT, partner_type TEXT, verified INTEGER);");
@@ -86,10 +97,92 @@ function fixture(overrides = {}) {
   f.complete = async (pending) => server.completeTradeEmailConnection(pending.provider, pending.state, pending.browser, "oauth-code", pending.redirectUri, db);
   f.connect = async (owner = "owner", provider = "google") => { const pending = await f.begin(owner, provider); await f.complete(pending); return pending; };
   f.send = (changes = {}, owner = "owner", actor = "staff-1") => server.sendTradeCustomerEmail(owner, actor, { ...message, ...changes }, { db });
+  f.sendQuote = (changes = {}, options = {}) => server.sendTradeCustomerEmail("owner", "staff-1",
+    { ...message, messageType: "trade_quote", ...changes }, { db, quoteEmailRendererRevision: 3, ...options });
   f.row = (owner = "owner") => sqlite.prepare("SELECT * FROM trade_email_connections WHERE owner_uid = ?").get(owner);
   f.submission = () => sqlite.prepare("SELECT * FROM trade_email_submissions WHERE owner_uid = 'owner'").get();
   return f;
 }
+
+const quoteAttachment = (sizeBytes) => ({ filename: "quote.pdf", contentType: "application/pdf", content: Buffer.alloc(sizeBytes, 87).toString("base64") });
+
+test("Microsoft quote PDFs attach below and at 2 MB, with secure-link fallback above the cutoff", async () => {
+  for (const sizeBytes of [1_999_999, 2_000_000, 2_000_001, 9_484_416]) {
+    const f = fixture();
+    try {
+      await f.connect("owner", "microsoft");
+      await f.sendQuote({ attachments: [quoteAttachment(sizeBytes)] });
+      const sent = f.calls.send[0][2];
+      assert.equal(sent.attachments.length, sizeBytes <= 2_000_000 ? 1 : 0);
+      assert.equal(sent.text, message.body);
+      assert.equal(f.submission().status, "accepted");
+      assert.equal(f.submission().provider, "microsoft");
+    } finally { f.close(); }
+  }
+});
+
+test("Microsoft fallback checks the full encoded message envelope before journalling", async () => {
+  const f = fixture();
+  try {
+    await f.connect("owner", "microsoft");
+    const html = "a".repeat(500_000);
+    await f.sendQuote({ html, attachments: [quoteAttachment(2_000_000)] });
+    const sent = f.calls.send[0][2];
+    assert.deepEqual(sent.attachments, []);
+    assert.equal(sent.html, html);
+    assert.doesNotThrow(() => emailProvider.validateMailboxEmail("microsoft", sent));
+  } finally { f.close(); }
+});
+
+test("Google keeps a 9.48 MB PDF attached while legacy Microsoft renderer promises remain unchanged", async () => {
+  for (const [provider, revision, sizeBytes] of [["google", 3, 9_484_416], ["microsoft", 1, 2_000_001], ["microsoft", 2, 2_000_001]]) {
+    const f = fixture();
+    try {
+      await f.connect("owner", provider);
+      const attachment = quoteAttachment(sizeBytes);
+      await f.sendQuote({ attachments: [attachment] }, { quoteEmailRendererRevision: revision });
+      assert.deepEqual(f.calls.send[0][2].attachments, [attachment]);
+    } finally { f.close(); }
+  }
+});
+
+test("quote retries preserve their journalled provider and attachment choice across connection changes", async () => {
+  for (const provider of ["google", "microsoft"]) {
+    const f = fixture({ send: async () => { throw new emailProvider.TradeEmailProviderError("email_provider_rejected", "rejected"); } });
+    try {
+      await f.connect("owner", provider);
+      const attachments = [quoteAttachment(3_245_054)];
+      await assert.rejects(f.sendQuote({ attachments }), /EMAIL_SEND_REJECTED/);
+      const recorded = f.submission();
+      f.sqlite.exec("UPDATE trade_email_submissions SET retry_after = ''");
+      f.sqlite.prepare("UPDATE trade_email_connections SET provider = ? WHERE owner_uid = 'owner'").run(provider === "google" ? "microsoft" : "google");
+      await assert.rejects(f.sendQuote({ attachments }), /EMAIL_CONNECTION_CHANGED/);
+      assert.equal(f.submission().content_hash, recorded.content_hash);
+      assert.equal(f.submission().provider, provider);
+      assert.equal(f.calls.send.length, 1);
+      f.sqlite.prepare("UPDATE trade_email_connections SET provider = ? WHERE owner_uid = 'owner'").run(provider);
+      f.hooks.send = async () => ({ providerMessageId: "retry-id", providerStatus: "accepted" });
+      await f.sendQuote({ attachments });
+      assert.deepEqual(f.calls.send[1][2].attachments, f.calls.send[0][2].attachments);
+      assert.equal(f.calls.send[1][0], provider);
+      assert.equal(f.submission().content_hash, recorded.content_hash);
+    } finally { f.close(); }
+  }
+});
+
+test("accepted link-only quote journals stay immutable after the attachment threshold increases", async () => {
+  const f = fixture();
+  try {
+    await f.connect();
+    await f.sendQuote({ attachments: [] });
+    const recorded = f.submission();
+    await f.sendQuote({ attachments: [quoteAttachment(9_484_416)] });
+    assert.equal(f.calls.send.length, 1);
+    assert.equal(f.submission().content_hash, recorded.content_hash);
+    assert.equal(f.submission().id, recorded.id);
+    await assert.rejects(f.sendQuote({ subject: "Changed quote", attachments: [quoteAttachment(9_484_416)] }), /EMAIL_REQUEST_CONFLICT/);
+  } finally { f.close(); }
+});
 
 test("Connection failures identify the exact stage using fixed codes and never retain private error data", async () => {
   const privateValue = "private-token-state-email@example.test";

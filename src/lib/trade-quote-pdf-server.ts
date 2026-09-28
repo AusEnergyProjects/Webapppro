@@ -40,6 +40,8 @@ export type TradeQuotePdfBrandAssets = {
 export type RenderTradeQuotePdfOptions = {
   origin: string;
   assets?: TradeQuotePdfBrandAssets;
+  /** Legacy hash recovery must retain the original PDF encoding. */
+  compress?: boolean;
 };
 
 const fontCache = new Map<
@@ -178,12 +180,12 @@ export async function renderTradeQuotePdf(
   ]);
   try {
     return new Uint8Array(
-      await createTradeQuotePdfBytes(snapshot, fonts || undefined, assets),
+      await createTradeQuotePdfBytes(snapshot, fonts || undefined, assets, { compress: options.compress }),
     );
   } catch (error) {
     if (!fonts) throw error;
     return new Uint8Array(
-      await createTradeQuotePdfBytes(snapshot, undefined, assets),
+      await createTradeQuotePdfBytes(snapshot, undefined, assets, { compress: options.compress }),
     );
   }
 }

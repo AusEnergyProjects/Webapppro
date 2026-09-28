@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 
 const MAX_STANDARD_ISSUED_PDF_BYTES = 12 * 1024 * 1024;
+const MAX_QUOTE_ISSUED_PDF_BYTES = 24_000_000;
 const MAX_RENTAL_REPORT_PDF_BYTES = 50 * 1024 * 1024;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 
@@ -56,6 +57,7 @@ function exactArrayBuffer(bytes: Uint8Array) {
 }
 
 function issuedPdfLimit(kind: ImmutableIssuedPdfIdentity["kind"]) {
+  if (kind === "quote") return MAX_QUOTE_ISSUED_PDF_BYTES;
   return kind === "rental-report" ? MAX_RENTAL_REPORT_PDF_BYTES : MAX_STANDARD_ISSUED_PDF_BYTES;
 }
 

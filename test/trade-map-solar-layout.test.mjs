@@ -1,9 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createTradeMapSolarLayout, DEFAULT_SOLAR_PANEL_SIZE, DEFAULT_SOLAR_PANEL_TILT } from "../src/lib/trade-map-solar.ts";
+import { createTradeMapSolarLayout, DEFAULT_SOLAR_PANEL_SIZE, DEFAULT_SOLAR_PANEL_TILT, sameSolarPanelGeometry, solarPanelCorners } from "../src/lib/trade-map-solar.ts";
 
-function harness(t) {
+function harness(t, options = {}) {
   const original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  const originalFrame = Object.getOwnPropertyDescriptor(globalThis, "requestAnimationFrame");
+  const originalCancelFrame = Object.getOwnPropertyDescriptor(globalThis, "cancelAnimationFrame");
+  Object.defineProperty(globalThis, "requestAnimationFrame", { configurable: true, value: (callback) => setImmediate(() => callback(0)) });
+  Object.defineProperty(globalThis, "cancelAnimationFrame", { configurable: true, value: clearImmediate });
   class Element {
     children = []; style = {}; dataset = {}; attributes = {}; listeners = new Map(); captured = new Set(); hidden = false;
     append(...children) { for (const child of children) { child.parent = this; this.children.push(child); } }
@@ -17,21 +21,40 @@ function harness(t) {
     setPointerCapture(id) { this.captured.add(id); }
     hasPointerCapture(id) { return this.captured.has(id); }
     releasePointerCapture(id) { this.captured.delete(id); this.emit("lostpointercapture", { pointerId: id }); }
+    getBoundingClientRect() {
+      const element = this.parent, width = Number.parseFloat(element?.style.width ?? 0), height = Number.parseFloat(element?.style.height ?? 0);
+      const matrix = (this.style.transform?.match(/matrix\(([^)]+)\)/)?.[1] ?? "1,0,0,1").split(",").map(Number);
+      const angle = Number(element?.style.transform?.match(/rotate\(([^d]+)deg\)/)?.[1] ?? 0) * Math.PI / 180;
+      const cx = Number.parseFloat(element?.style.left ?? 0), cy = Number.parseFloat(element?.style.top ?? 0);
+      const points = [[-1,-1],[1,-1],[1,1],[-1,1]].map(([sx, sy]) => {
+        const x = sx * width / 2 * matrix[0] + sy * height / 2 * matrix[2], y = sy * height / 2 * matrix[3];
+        return { x: cx + x * Math.cos(angle) - y * Math.sin(angle), y: cy + x * Math.sin(angle) + y * Math.cos(angle) };
+      });
+      const left = Math.min(...points.map((p) => p.x)), right = Math.max(...points.map((p) => p.x));
+      const top = Math.min(...points.map((p) => p.y)), bottom = Math.max(...points.map((p) => p.y));
+      return { left, right, top, bottom, width: right - left, height: bottom - top };
+    }
   }
   const pane = new Element();
   const mapElement = new Element(); mapElement.style.touchAction = "pan-y";
-  mapElement.getBoundingClientRect = () => ({ left: 0, top: 0 });
+  mapElement.getBoundingClientRect = () => ({ left: 0, top: 0, right: 400, bottom: 300, width: 400, height: 300 });
   Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => new Element() } });
   t.after(() => { if (original) Object.defineProperty(globalThis, "document", original); else delete globalThis.document; });
+  t.after(() => {
+    if (originalFrame) Object.defineProperty(globalThis, "requestAnimationFrame", originalFrame); else delete globalThis.requestAnimationFrame;
+    if (originalCancelFrame) Object.defineProperty(globalThis, "cancelAnimationFrame", originalCancelFrame); else delete globalThis.cancelAnimationFrame;
+  });
   class LatLng {
     constructor(value) { this.value = value instanceof LatLng ? value.toJSON() : { ...value }; }
     toJSON() { return { ...this.value }; }
   }
   class Point { constructor(x, y) { this.x = x; this.y = y; } }
+  class LatLngBounds { points = []; extend(point) { this.points.push(point); return this; } }
+  let scale = 1, shift = { x: 0, y: 0 };
   const projection = {
-    fromLatLngToDivPixel: (point) => new Point(point.toJSON().lng, -point.toJSON().lat),
-    fromLatLngToContainerPixel: (point) => new Point(point.toJSON().lng, -point.toJSON().lat),
-    fromContainerPixelToLatLng: (point) => new LatLng({ lat: -point.y, lng: point.x }),
+    fromLatLngToDivPixel: (point) => new Point(point.toJSON().lng * scale + shift.x, -point.toJSON().lat * scale + shift.y),
+    fromLatLngToContainerPixel: (point) => new Point(point.toJSON().lng * scale + shift.x, -point.toJSON().lat * scale + shift.y),
+    fromContainerPixelToLatLng: (point) => new LatLng({ lat: -(point.y - shift.y) / scale, lng: (point.x - shift.x) / scale }),
   };
   class Overlay {
     static preventMapHitsAndGesturesFrom() {}
@@ -39,13 +62,34 @@ function harness(t) {
     getPanes() { return { overlayMouseTarget: pane }; }
     getProjection() { return projection; }
   }
-  const mapListeners = new Map();
-  let mapCenter = { lat: 0, lng: 0 }, value;
+  const mapListeners = new Map(), listenerGroups = new Map();
+  let mapCenter = { lat: 0, lng: 0 }, mapZoom = 20, value;
+  const mapOptions = { draggable: true, gestureHandling: "cooperative", scrollwheel: true, keyboardShortcuts: true,
+    disableDoubleClickZoom: false, zoomControl: true, cameraControl: false, fullscreenControl: true };
+  const fitCalls = [];
   const map = {
     getCenter: () => new LatLng(mapCenter), getDiv: () => mapElement,
-    addListener(name, listener) { mapListeners.set(name, listener); return { remove: () => mapListeners.delete(name) }; },
+    get: (key) => mapOptions[key], setOptions: (value) => Object.assign(mapOptions, value), getZoom: () => mapZoom,
+    setCenter: (center) => { mapCenter = center instanceof LatLng ? center.toJSON() : { ...center }; }, setZoom: (value) => { mapZoom = value; },
+    fitBounds(bounds, padding) {
+      fitCalls.push({ points: bounds.points, padding });
+      if (options.fitMoves !== false) {
+        const xs = bounds.points.map((p) => p.lng), ys = bounds.points.map((p) => -p.lat);
+        const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+        scale = Math.min((400 - padding * 2) / (maxX - minX), (300 - padding * 2) / (maxY - minY), 24);
+        shift = { x: 200 - (minX + maxX) / 2 * scale, y: 150 - (minY + maxY) / 2 * scale };
+        mapCenter = { lng: (minX + maxX) / 2, lat: -(minY + maxY) / 2 }; mapZoom = 19;
+        mapListeners.get("center_changed")?.(); mapListeners.get("zoom_changed")?.();
+      }
+      if (options.fitIdle !== false) queueMicrotask(() => mapListeners.get("idle")?.());
+    },
+    addListener(name, listener) {
+      const group = listenerGroups.get(name) ?? new Set(); group.add(listener); listenerGroups.set(name, group);
+      mapListeners.set(name, () => { for (const callback of [...group]) callback(); });
+      return { remove: () => { group.delete(listener); if (!group.size) { listenerGroups.delete(name); mapListeners.delete(name); } } };
+    },
   };
-  const api = { OverlayView: Overlay, LatLng, Point, geometry: { spherical: { computeOffset(from, metres, heading) {
+  const api = { OverlayView: Overlay, LatLng, LatLngBounds, Point, geometry: { spherical: { computeOffset(from, metres, heading) {
     const point = from instanceof LatLng ? from.toJSON() : from, radians = heading * Math.PI / 180;
     return new LatLng({ lat: point.lat + metres * Math.cos(radians), lng: point.lng + metres * Math.sin(radians) });
   } } } };
@@ -57,7 +101,7 @@ function harness(t) {
   const elements = () => walk(pane);
   const panel = (id) => elements().find((element) => element.dataset.solarPanelId === String(id));
   return {
-    controller, value: () => value, pane, mapElement, mapListeners,
+    controller, value: () => value, pane, mapElement, mapListeners, map, mapOptions, fitCalls,
     selectionBox: () => mapElement.children.find((element) => element.className === "selectionBox"),
     face: (id) => panel(id).children[0],
     group: () => elements().find((element) => element.className === "group"),
@@ -331,4 +375,77 @@ test("selection edits cannot alter dimensions or delete panels, and add/remove/c
   h.controller.removeSelected(); assert.equal(h.value().panels.length, 2);
   h.controller.setSelectionMode("all"); assert.deepEqual(h.value().selectedIds, [1, 2]);
   h.controller.clear(); assert.deepEqual(h.value().selectedIds, []); assert.equal(h.value().panels.length, 0); assert.equal(h.group().hidden, true);
+});
+
+test("capture fits every rotated and tilted face before attaching a layout that was off-screen", async (t) => {
+  const h = harness(t); h.add(-50, -30, 37); h.add(450, 330, 120, { lengthTilt: 35, widthTilt: 20 });
+  const original = structuredClone(h.value()), options = { ...h.mapOptions }, listeners = h.mapListeners.size;
+  const abort = new AbortController(); let invalidations = 0;
+  const capture = h.controller.beginCapture(abort.signal, () => { invalidations++; abort.abort(); });
+  assert.equal(h.mapOptions.gestureHandling, "none"); assert.equal(h.mapOptions.zoomControl, false);
+  assert.equal(h.face(1).parent.children[1].hidden, true);
+  await capture.ensureVisible();
+  assert.equal(invalidations, 0, "camera movement while fitting is allowed");
+  assert.equal(h.fitCalls.length, 1); assert.equal(h.fitCalls[0].padding, 48);
+  const expected = original.panels.flatMap((panel) => solarPanelCorners(panel, (from, metres, heading) => ({
+    lat: from.lat + metres * Math.cos(heading * Math.PI / 180), lng: from.lng + metres * Math.sin(heading * Math.PI / 180),
+  })));
+  assert.deepEqual(h.fitCalls[0].points, expected, "the bounds include all actual face corners");
+  capture.assertVisible();
+  h.controller.clear(); h.controller.removeSelected(); h.controller.add({ ...DEFAULT_SOLAR_PANEL_SIZE, ...DEFAULT_SOLAR_PANEL_TILT });
+  assert.deepEqual(h.value(), original, "capture freezes the geometry against editing");
+  capture.restore(); capture.restore();
+  assert.deepEqual(h.mapOptions, options); assert.equal(h.mapListeners.size, listeners);
+  assert.deepEqual(h.value(), original);
+});
+
+test("capture preserves a view where all panels are already visible", async (t) => {
+  const h = harness(t); h.add(100, 100); h.add(200, 200);
+  const capture = h.controller.beginCapture(new AbortController().signal, () => assert.fail("camera should not change"));
+  await capture.ensureVisible(); capture.assertVisible(); capture.restore();
+  assert.equal(h.fitCalls.length, 0);
+});
+
+test("failed fitting refuses capture rather than claiming invisible panels are included", async (t) => {
+  const h = harness(t, { fitMoves: false }); h.add(-50, -30);
+  const capture = h.controller.beginCapture(new AbortController().signal, () => assert.fail("no camera change"));
+  await assert.rejects(capture.ensureVisible(), /full solar layout is not visible/);
+  capture.restore(); assert.equal(h.mapOptions.gestureHandling, "cooperative");
+});
+
+for (const event of ["center_changed", "zoom_changed", "heading_changed", "tilt_changed", "maptypeid_changed"]) {
+  test(`${event} after fitting invalidates capture and restores camera controls`, async (t) => {
+    const h = harness(t); h.add(100, 100);
+    const before = structuredClone(h.value()), options = { ...h.mapOptions }, listeners = h.mapListeners.size;
+    const abort = new AbortController(); let invalidations = 0;
+    const capture = h.controller.beginCapture(abort.signal, () => { invalidations++; abort.abort(); });
+    await capture.ensureVisible(); h.mapListeners.get(event)();
+    assert.equal(invalidations, 1); assert.equal(abort.signal.aborted, true);
+    assert.throws(() => capture.assertVisible(), /Capture cancelled/);
+    assert.deepEqual(h.mapOptions, options); assert.deepEqual(h.value(), before);
+    assert.equal(h.mapListeners.size, listeners, "only capture listeners are removed");
+  });
+}
+
+test("cancelling while fitting restores the prior camera and removes the pending idle listener", async (t) => {
+  const h = harness(t, { fitIdle: false }); h.add(-50, -30);
+  const center = h.map.getCenter().toJSON(), zoom = h.map.getZoom(), options = { ...h.mapOptions }, listeners = h.mapListeners.size;
+  const abort = new AbortController();
+  const capture = h.controller.beginCapture(abort.signal, () => abort.abort());
+  const fitting = capture.ensureVisible(); abort.abort();
+  await assert.rejects(fitting, /Capture cancelled/);
+  assert.deepEqual(h.map.getCenter().toJSON(), center); assert.equal(h.map.getZoom(), zoom);
+  assert.deepEqual(h.mapOptions, options); assert.equal(h.mapListeners.size, listeners);
+});
+
+test("saved geometry equality is independent of ordering and rejects every changed face attribute", () => {
+  const first = { id: 1, center: { lat: -37.8, lng: 144.96 }, ...DEFAULT_SOLAR_PANEL_SIZE, ...DEFAULT_SOLAR_PANEL_TILT, heading: 15 };
+  const second = { ...first, id: 2, center: { lat: -37.9, lng: 144.97 } };
+  assert.equal(sameSolarPanelGeometry([first, second], [structuredClone(second), structuredClone(first)]), true);
+  assert.equal(sameSolarPanelGeometry([first, second], [first]), false);
+  assert.equal(sameSolarPanelGeometry([first, second], [first, first]), false);
+  for (const key of ["id", "widthM", "lengthM", "lengthTilt", "widthTilt", "heading"]) {
+    assert.equal(sameSolarPanelGeometry([first], [{ ...first, [key]: first[key] + 1 }]), false, key);
+  }
+  for (const key of ["lat", "lng"]) assert.equal(sameSolarPanelGeometry([first], [{ ...first, center: { ...first.center, [key]: first.center[key] + 0.01 } }]), false, key);
 });

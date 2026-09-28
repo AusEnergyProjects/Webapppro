@@ -5,6 +5,7 @@ import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
 import * as quote from "../src/lib/trade-map-quote.ts";
 import * as solarEquipment from "../src/lib/trade-solar-equipment.ts";
+import * as solar from "../src/lib/trade-map-solar.ts";
 
 const text = (node) => node == null || typeof node === "boolean" ? "" : typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join("") : text(node.props?.children);
 const nodes = (node, predicate) => !node || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap((child) => nodes(child, predicate)) : [...(predicate(node) ? [node] : []), ...nodes(node.props?.children, predicate)];
@@ -24,12 +25,24 @@ function harness(t, component, captureImage, options = {}) {
     useEffect(callback, deps) { const id = cursor++; if (!effects[id] || deps.some((value, index) => value !== effects[id].deps[index])) { pending.push(() => { effects[id]?.cleanup?.(); effects[id] = { deps, cleanup: callback() }; }); } },
   };
   const panel = { id: 1, center: { lat: -37.8, lng: 144.96 }, widthM: 1.13, lengthM: 1.72, heading: 0, lengthTilt: 22.5, widthTilt: 0 };
+  const layout = { panels: [panel], selectedId: 1, selectedIds: [1], selectionMode: "one" };
   let measurementChanged;
-  const drawing = { setEditing() {}, setCapturing(value) { controls.push(value); }, finish() { events.push("finish"); measurementChanged?.({ ...measurement, finished: true }); }, dispose() {} };
+  let invalidate;
+  const drawing = { setEditing() {}, setCapturing(value) { controls.push(value); }, finish() { events.push("finish"); measurementChanged?.({ ...measurement, finished: true }); }, dispose() {},
+    beginCapture(signal, onInvalid) {
+      controls.push(true); let restored = false;
+      const restore = () => { if (!restored) { restored = true; controls.push(false); signal.removeEventListener("abort", restore); } };
+      signal.addEventListener("abort", restore, { once: true }); invalidate = onInvalid;
+      return { layout: structuredClone(layout), restore,
+        async ensureVisible() { events.push("ensureVisible"); await options.ensureVisible?.(); },
+        assertVisible() { events.push("assertVisible"); if (signal.aborted) throw new Error("Capture cancelled."); },
+      };
+    },
+  };
   const measurement = { points: 4, areaM2: 162.5, lengthM: 52, previewLengthM: null, crossed: false, finished: true, ...options.measurement };
   const element = { scrollIntoView() {} };
   const map = { getDiv: () => element, setMapTypeId() {}, setTilt() {}, setHeading() {}, getCenter: () => ({ toJSON: () => ({ lat: -37.8, lng: 144.96 }) }), getZoom: () => 20 };
-  const savedDesign = { id: "saved-design", revision: 3, workOrderId: "job-one" };
+  const savedDesign = { id: "saved-design", revision: 3, workOrderId: "job-one", panels: [structuredClone(panel)] };
   const persistence = { status: "Saved", error: "", design: null, update(input) { savedInputs.push(input); }, accept() {},
     async ensureSaved() { events.push("ensureSaved"); return options.ensureSaved ? options.ensureSaved() : savedDesign; }, async saveCopy() { return savedDesign; } };
   const require = (id) => {
@@ -39,7 +52,7 @@ function harness(t, component, captureImage, options = {}) {
     if (id === "@/lib/trade-solar-equipment") return solarEquipment;
     if (id === "./useTradeSolarDesign") return { useTradeSolarDesign: () => persistence };
     if (id === "@/lib/trade-map-capture") return { captureTradeMapQuoteImage: captureImage, captureTradeMapPng: () => { throw new Error("Quote must not start a download"); } };
-    if (id === "@/lib/trade-map-solar") return { DEFAULT_SOLAR_PANEL_SIZE: panel, DEFAULT_SOLAR_PANEL_TILT: panel, createTradeMapSolarLayout(_api, _map, _styles, changed) { changed({ panels: [panel], selectedId: 1, selectedIds: [1], selectionMode: "one" }); return drawing; } };
+    if (id === "@/lib/trade-map-solar") return { ...solar, createTradeMapSolarLayout(_api, _map, _styles, changed) { changed(layout); return drawing; } };
     if (id === "@/lib/trade-map-measurement") return { EMPTY_MAP_MEASUREMENT: measurement, createTradeMapMeasurement(_api, _map, _mode, changed) { measurementChanged = changed; changed(measurement); return drawing; }, formatMapDistance: (value) => `${value} m` };
     return { default: {}, TradeMapSolarTools: () => null };
   };
@@ -49,7 +62,7 @@ function harness(t, component, captureImage, options = {}) {
   const render = () => { cursor = 0; const tree = exports[component](props); for (const callback of pending.splice(0)) callback(); return tree; };
   const cleanup = () => { for (const effect of effects) effect?.cleanup?.(); };
   t.after(cleanup);
-  return { render, quoted, controls, busy, element, events, savedInputs };
+  return { render, quoted, controls, busy, element, events, savedInputs, panel, invalidate: () => invalidate() };
 }
 
 test("solar capture also hides an active measurement's vertex handles", (t) => {
@@ -90,20 +103,53 @@ for (const measurement of [{ points: 2, finished: false }, { crossed: true, fini
   });
 }
 
-test("solar quote waits for its saved revision before capture and carries the exact design identity", async (t) => {
-  let finishSave;
+test("solar sharing starts in the click before fitting or saving; quote carries the verified saved revision", async (t) => {
+  let finishSave, finishFit, grantSharing;
   const h = harness(t, "TradeMapSolarTools", async (_element, value, prepare, restore) => {
-    assert.equal(value.designId, "saved-late"); assert.equal(value.designRevision, 7); assert.equal(value.workOrderId, "job-linked");
-    prepare(); restore(); return { dataUrl: "data:image/png;base64,UE5H" };
-  }, { ensureSaved: () => new Promise((resolve) => { finishSave = resolve; }) });
-  h.render(); button(h.render(), "Add to quote").props.onClick(); await flush();
-  assert.deepEqual(h.events, ["ensureSaved"]);
-  assert.deepEqual(h.controls, [], "capture controls cannot change while design saving is pending");
+    h.events.push("sharing");
+    assert.equal(value.designId, undefined, "the unsaved measurement does not claim a saved identity");
+    await new Promise((resolve) => { grantSharing = resolve; });
+    await prepare(); restore(); return { dataUrl: "data:image/png;base64,UE5H" };
+  }, { ensureVisible: () => new Promise((resolve) => { finishFit = resolve; }), ensureSaved: () => new Promise((resolve) => { finishSave = resolve; }) });
+  h.render(); button(h.render(), "Add to quote").props.onClick();
+  assert.deepEqual(h.events, ["sharing"], "the sharing API is invoked synchronously from the click");
+  assert.deepEqual(h.controls, [true], "editing is frozen before sharing");
+  grantSharing(); await flush();
+  assert.deepEqual(h.events, ["sharing", "ensureVisible"]);
+  finishFit(); await flush();
+  assert.deepEqual(h.events, ["sharing", "ensureVisible", "ensureSaved"]);
   assert.deepEqual(h.quoted, []);
-  finishSave({ id: "saved-late", revision: 7, workOrderId: "job-linked" }); await flush();
+  finishSave({ id: "saved-late", revision: 7, workOrderId: "job-linked", panels: [h.panel] }); await flush();
   assert.equal(h.quoted[0].designId, "saved-late");
+  assert.equal(h.quoted[0].designRevision, 7);
+  assert.equal(h.quoted[0].workOrderId, "job-linked");
   assert.equal(h.quoted[0].quantity, 1);
+  assert.deepEqual(h.savedInputs.at(-1).panels, [h.panel]);
+  assert.deepEqual(h.events, ["sharing", "ensureVisible", "ensureSaved", "assertVisible"]);
   assert.deepEqual(h.controls, [true, false]);
+});
+
+test("a saved revision with different panel geometry cannot be attached to a quote", async (t) => {
+  const h = harness(t, "TradeMapSolarTools", async (_element, _value, prepare) => {
+    await prepare(); return { dataUrl: "data:image/png;base64,UE5H" };
+  }, { ensureSaved: () => ({ id: "wrong-design", revision: 1, panels: [{ ...h.panel, heading: 90 }] }) });
+  h.render(); button(h.render(), "Add to quote").props.onClick(); await flush();
+  assert.deepEqual(h.quoted, []);
+  assert.match(text(h.render()), /saved roof layout does not match/);
+  assert.deepEqual(h.controls, [true, false]);
+});
+
+test("camera invalidation aborts a pending solar capture and suppresses a late image", async (t) => {
+  let finish;
+  const h = harness(t, "TradeMapSolarTools", async (_element, _value, prepare) => {
+    await prepare(); return new Promise((resolve) => { finish = () => resolve({ dataUrl: "data:image/png;base64,UE5H" }); });
+  });
+  h.render(); button(h.render(), "Add to quote").props.onClick(); await flush();
+  h.invalidate(); finish(); await flush();
+  assert.deepEqual(h.quoted, []);
+  assert.match(text(h.render()), /map moved while capturing/);
+  assert.deepEqual(h.controls, [true, false]);
+  assert.equal(button(h.render(), "Add to quote").props.disabled, false);
 });
 
 for (const component of ["TradeMapSolarTools", "TradeMapTools"]) {
@@ -114,7 +160,7 @@ for (const component of ["TradeMapSolarTools", "TradeMapTools"]) {
     const h = harness(t, component, async (element, value, prepare, restore) => {
       assert.equal(element, h.element);
       assert.equal(value.kind, component === "TradeMapSolarTools" ? "solar" : "area");
-      prepare(); await new Promise((resolve) => { finish = resolve; }); restore();
+      await prepare(); await new Promise((resolve) => { finish = resolve; }); restore();
       return { dataUrl: "data:image/png;base64,UE5H" };
     });
     button(start(h), "Add to quote").props.onClick();

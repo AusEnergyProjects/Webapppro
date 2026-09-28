@@ -3,7 +3,7 @@ import { getD1 } from '../../db';
 import { encryptProtectedPayload, decryptProtectedPayload, integrationStateHash, newIntegrationState } from './trade-integration-crypto';
 import { verifiedTradeAccountPredicate } from './trade-access-server';
 import { ReminderProviderDeliveryError, sendServiceReminderProviderMessage, serviceReminderProviderConfiguration, type ReminderProviderMessage } from './service-reminder-delivery';
-import { buildEmailAuthorizationUrl, exchangeEmailCode, getEmailIdentity, refreshEmailCredentials, sendMailboxEmail, TradeEmailProviderError, type TradeEmailProvider, type EmailCredentials } from './trade-email-provider';
+import { buildEmailAuthorizationUrl, exchangeEmailCode, getEmailIdentity, refreshEmailCredentials, sendMailboxEmail, validateMailboxEmail, TradeEmailProviderError, type TradeEmailProvider, type EmailCredentials } from './trade-email-provider';
 
 type EmailEnvironment = {
   CRM_INTEGRATION_ENCRYPTION_KEY?: string;
@@ -194,21 +194,60 @@ function submissionResult(row: Pick<Submission, 'id' | 'provider' | 'provider_me
   return { provider: row.provider, providerMessageId: row.provider_message_id || `submission:${row.id}`, providerStatus: 'accepted' };
 }
 
+function emailContentHash(message: ReminderProviderMessage) {
+  return integrationStateHash(JSON.stringify({ recipient: message.recipient, subject: message.subject,
+    body: message.body, html: message.html || '', attachments: message.attachments || [] }));
+}
+
+async function prepareQuoteEmailForSubmission(message: ReminderProviderMessage, rendererRevision: number | undefined,
+  row: Connection | null, previous: Submission | null) {
+  const originalHash = await emailContentHash(message);
+  if (message.messageType !== 'trade_quote' || Number(rendererRevision) < 3 || rendererRevision === undefined || !message.attachments?.length) {
+    return { message, hash: originalHash };
+  }
+  const linkedMessage = { ...message, attachments: [] };
+  // A retry replays the journalled payload even after limits or connections change.
+  if (previous) {
+    if (previous.content_hash === originalHash) return { message, hash: originalHash };
+    const linkedHash = await emailContentHash(linkedMessage);
+    if (previous.content_hash === linkedHash) return { message: linkedMessage, hash: linkedHash };
+    throw new Error('EMAIL_REQUEST_CONFLICT');
+  }
+  const provider = row?.provider || 'resend';
+  if (provider !== 'microsoft') return { message, hash: originalHash };
+  const attachmentBytes = message.attachments.reduce((total, attachment) => total
+    + attachment.content.length / 4 * 3 - (attachment.content.endsWith('==') ? 2 : attachment.content.endsWith('=') ? 1 : 0), 0);
+  let useLink = attachmentBytes > 2_000_000;
+  if (!useLink && row) {
+    try {
+      // Check the same complete JSON envelope as the actual Graph request.
+      validateMailboxEmail('microsoft', { senderEmail: row.sender_email, senderName: row.display_name,
+        recipient: message.recipient, subject: message.subject, text: message.body, html: message.html,
+        attachments: message.attachments, messageId: `<${crypto.randomUUID()}@tlink.ausenergyassessments.com>` });
+    } catch (error) {
+      if (!(error instanceof TradeEmailProviderError) || error.code !== 'email_message_too_large') throw error;
+      useLink = true;
+    }
+  }
+  return useLink ? { message: linkedMessage, hash: await emailContentHash(linkedMessage) } : { message, hash: originalHash };
+}
+
 export async function sendTradeCustomerEmail(ownerUid: string, actorUid: string, message: ReminderProviderMessage,
-  options: { db?: D1Database; requireConnection?: boolean; previouslyAttempted?: boolean; beforeSend?: () => Promise<void> } = {}) {
+  options: { db?: D1Database; requireConnection?: boolean; previouslyAttempted?: boolean; beforeSend?: () => Promise<void>; quoteEmailRendererRevision?: number } = {}) {
   const db = options.db || getD1();
   if (!ownerUid || !actorUid || message.channel !== 'email' || !message.idempotencyKey || message.idempotencyKey.length > 300) throw new Error('EMAIL_INPUT_INVALID');
-  const hash = await integrationStateHash(JSON.stringify({ recipient: message.recipient, subject: message.subject,
-    body: message.body, html: message.html || '', attachments: message.attachments || [] }));
   let previous = await db.prepare('SELECT * FROM trade_email_submissions WHERE owner_uid = ? AND request_key = ?')
     .bind(ownerUid, message.idempotencyKey).first<Submission>();
+  const row = await connection(ownerUid, db);
+  const prepared = await prepareQuoteEmailForSubmission(message, options.quoteEmailRendererRevision, row, previous);
+  message = prepared.message;
+  const hash = prepared.hash;
   if (previous) {
     if (previous.content_hash !== hash) throw new Error('EMAIL_REQUEST_CONFLICT');
     if (previous.status === 'accepted') return submissionResult(previous);
     if (previous.status !== 'failed') throw new ReminderProviderDeliveryError('indeterminate', 'EMAIL_SEND_UNCERTAIN');
     if (previous.retry_after > new Date().toISOString()) throw new Error('EMAIL_RETRY_LATER');
   }
-  const row = await connection(ownerUid, db);
   // An attempt made before the journal existed cannot be safely retried through a new provider.
   if (row && !previous && options.previouslyAttempted) throw new ReminderProviderDeliveryError('indeterminate', 'EMAIL_LEGACY_SEND_UNCERTAIN');
   const legacy = serviceReminderProviderConfiguration().email;
@@ -287,7 +326,8 @@ export async function sendTradeCustomerEmail(ownerUid: string, actorUid: string,
       if (row && known && error.outcome === 'reconnect') await db.prepare(`UPDATE trade_email_connections SET status = 'reconnect_required',
         last_error = 'Reconnect your email account to resume sending.' WHERE owner_uid = ? AND id = ? AND status = 'connected'`).bind(ownerUid, row.id).run();
     } catch { throw new ReminderProviderDeliveryError('indeterminate', 'EMAIL_SEND_UNCERTAIN'); }
-    throw new ReminderProviderDeliveryError(uncertain ? 'indeterminate' : 'definite_failure', uncertain ? 'EMAIL_SEND_UNCERTAIN' : 'EMAIL_SEND_REJECTED');
+    throw new ReminderProviderDeliveryError(uncertain ? 'indeterminate' : 'definite_failure', uncertain ? 'EMAIL_SEND_UNCERTAIN'
+      : known && error.code === 'email_message_too_large' ? 'EMAIL_MESSAGE_TOO_LARGE' : 'EMAIL_SEND_REJECTED');
   }
   // A database failure after acceptance must never be reported as a definite provider rejection.
   try {

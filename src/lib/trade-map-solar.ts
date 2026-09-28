@@ -27,6 +27,28 @@ export function solarPanelAxes(tilt: SolarPanelTilt) {
   return { width: { x: Math.cos(width), y: 0 }, length: { x: Math.sin(length) * Math.sin(width), y: Math.cos(length) } };
 }
 
+/** The four overhead face corners, using the same pitch/roll axes as rendering. */
+export function solarPanelCorners(panel: SolarPanel,
+  offset: (from: google.maps.LatLngLiteral, distance: number, heading: number) => google.maps.LatLngLiteral) {
+  const axes = solarPanelAxes(panel);
+  return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([widthSign, lengthSign]) => {
+    const east = widthSign * panel.widthM * axes.width.x / 2 + lengthSign * panel.lengthM * axes.length.x / 2;
+    const north = lengthSign * panel.lengthM * axes.length.y / 2;
+    return offset(panel.center, Math.hypot(east, north), solarHeading(panel.heading + Math.atan2(east, north) * 180 / Math.PI));
+  });
+}
+
+export function sameSolarPanelGeometry(first: readonly SolarPanel[], second: readonly SolarPanel[]): boolean {
+  if (first.length !== second.length) return false;
+  const byId = new Map(second.map((panel) => [panel.id, panel]));
+  return byId.size === first.length && first.every((panel) => {
+    const other = byId.get(panel.id);
+    return other && panel.center.lat === other.center.lat && panel.center.lng === other.center.lng
+      && panel.widthM === other.widthM && panel.lengthM === other.lengthM && panel.heading === other.heading
+      && panel.lengthTilt === other.lengthTilt && panel.widthTilt === other.widthTilt;
+  });
+}
+
 export function adjacentSolarPanel(panel: SolarPanel, direction: SolarCopyDirection,
   offset: (from: google.maps.LatLngLiteral, distance: number, heading: number) => google.maps.LatLngLiteral): Omit<SolarPanel, "id"> {
   const alongLength = direction === "above" || direction === "below";
@@ -64,6 +86,8 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
   let capturing = false;
   let ready = false;
   let restoring = false;
+  let disposed = false;
+  let releaseCapture: (() => void) | null = null;
   let gesture: { button: HTMLButtonElement; pointerId: number; panels: ProjectedPanel[]; pivot: { x: number; y: number }; start: { x: number; y: number }; rotate: boolean } | null = null;
   let selectionGesture: { pointerId: number; start: { x: number; y: number }; previousIds: number[]; moved: boolean } | null = null;
   const state = (): SolarLayout => ({ panels: [...entries.values()].map(({ panel }) => ({ ...panel, center: { ...panel.center }, ...(panel.equipment ? { equipment: { ...panel.equipment } } : {}) })), selectedId, selectionMode, selectedIds: [...selectedIds] });
@@ -329,7 +353,102 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
     stopGesture();
     entries.get(selectedId)?.element.remove(); entries.delete(selectedId); selectedIds.delete(selectedId); selectedId = null; publish();
   }
+  function beginCapture(signal: AbortSignal, onInvalid: () => void) {
+    if (signal.aborted || disposed) throw new Error("Capture cancelled.");
+    if (capturing || !ready || !entries.size) throw new Error("Wait for your solar panels to appear, then capture again.");
+    stopGesture();
+    const wasEditing = editing;
+    const previousCenter = map.getCenter();
+    const previousZoom = map.getZoom();
+    const frozenOptions = { draggable: false, gestureHandling: "none", scrollwheel: false, keyboardShortcuts: false,
+      disableDoubleClickZoom: true, zoomControl: false, cameraControl: false, fullscreenControl: false };
+    const previousOptions = Object.fromEntries(Object.keys(frozenOptions).map((key) => [key, map.get(key)]));
+    capturing = true;
+    map.setOptions(frozenOptions);
+    overlay.draw();
+    const layout = state();
+    let released = false, fitting = false, invalidated = false;
+    const cameraListeners = ["center_changed", "zoom_changed", "heading_changed", "tilt_changed", "maptypeid_changed"].map((event) => map.addListener(event, () => {
+      if (released || fitting) return;
+      invalidated = true;
+      onInvalid();
+    }));
+    function restore() {
+      if (released) return;
+      released = true;
+      cameraListeners.forEach((listener) => listener.remove());
+      signal.removeEventListener("abort", restore);
+      releaseCapture = null;
+      map.setOptions(previousOptions);
+      if (signal.aborted && !disposed) {
+        if (previousCenter) map.setCenter(previousCenter);
+        if (previousZoom !== undefined) map.setZoom(previousZoom);
+      }
+      capturing = false;
+      editing = wasEditing;
+      if (ready && !disposed) overlay.draw();
+    }
+    releaseCapture = restore;
+    signal.addEventListener("abort", restore, { once: true });
+    function allFacesVisible() {
+      const bounds = mapElement.getBoundingClientRect();
+      return ready && bounds.width > 0 && bounds.height > 0 && [...entries.values()].every(({ element, face }) => {
+        const rect = face.getBoundingClientRect();
+        return !element.hidden && rect.width > 0 && rect.height > 0
+          && rect.left >= bounds.left + 2 && rect.top >= bounds.top + 2
+          && rect.right <= bounds.right - 2 && rect.bottom <= bounds.bottom - 2;
+      });
+    }
+    function assertVisible() {
+      if (signal.aborted || released || disposed || invalidated) throw new Error("Capture cancelled.");
+      overlay.draw();
+      if (!allFacesVisible()) throw new Error("The full solar layout is not visible. Re-centre the panels and try capture again.");
+    }
+    async function ensureVisible() {
+      if (signal.aborted || released || disposed || invalidated) throw new Error("Capture cancelled.");
+      if (!allFacesVisible()) {
+        const bounds = new api.LatLngBounds();
+        for (const panel of layout.panels) for (const corner of solarPanelCorners(panel,
+          (from, distance, heading) => api.geometry.spherical.computeOffset(from, distance, heading).toJSON())) bounds.extend(corner);
+        fitting = true;
+        try { await new Promise<void>((resolve, reject) => {
+          let settled = false;
+          const finish = (error?: Error) => {
+            if (settled) return;
+            settled = true; clearTimeout(timer); idle.remove(); signal.removeEventListener("abort", cancel);
+            if (error) reject(error); else resolve();
+          };
+          const cancel = () => finish(new Error("Capture cancelled."));
+          const timer = setTimeout(() => finish(new Error("The map is still moving. Try capture again when your panels are visible.")), 5000);
+          const idle = map.addListener("idle", () => finish());
+          signal.addEventListener("abort", cancel, { once: true });
+          if (signal.aborted) { cancel(); return; }
+          try { map.fitBounds(bounds, 48); } catch { finish(new Error("The map could not show the full solar layout.")); }
+        }); } finally { fitting = false; }
+      }
+      await new Promise<void>((resolve, reject) => {
+        let settled = false, frame = 0;
+        const finish = (error?: Error) => {
+          if (settled) return;
+          settled = true; clearTimeout(timer); cancelAnimationFrame(frame); signal.removeEventListener("abort", cancel);
+          if (error) reject(error); else resolve();
+        };
+        const cancel = () => finish(new Error("Capture cancelled."));
+        const timer = setTimeout(() => finish(new Error("The panels have not finished drawing. Try capture again.")), 2000);
+        signal.addEventListener("abort", cancel, { once: true });
+        if (signal.aborted) { cancel(); return; }
+        frame = requestAnimationFrame(() => {
+          if (settled) return;
+          overlay.draw();
+          frame = requestAnimationFrame(() => finish());
+        });
+      });
+      assertVisible();
+    }
+    return { layout, ensureVisible, assertVisible, restore };
+  }
   return {
+    beginCapture,
     add: (settings: SolarPanelSettings) => { const center = map.getCenter(); if (center && !capturing) { stopGesture(); selectionMode = "one"; selectedIds.clear(); addPanel({ ...settings, center: center.toJSON(), heading: 0 }); } },
     updateSelected: (values: SolarPanelSettings & { heading: number }) => {
       if (selectionMode !== "one" || capturing) return;
@@ -370,9 +489,9 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
       selectionMode = value; publish();
     },
     rotateSelection: (degrees: number) => { if (selectionMode === "all" || selectionMode === "selection") rotateBy(degrees); },
-    clear: () => { stopGesture(); entries.forEach(({ element }) => element.remove()); entries.clear(); selectedId = null; selectedIds.clear(); selectionMode = "one"; publish(); },
+    clear: () => { if (capturing) return; stopGesture(); entries.forEach(({ element }) => element.remove()); entries.clear(); selectedId = null; selectedIds.clear(); selectionMode = "one"; publish(); },
     setEditing: (value: boolean) => { stopGesture(); editing = value; publish(); },
     setCapturing: (value: boolean) => { stopGesture(); capturing = value; if (ready) overlay.draw(); },
-    dispose: () => { stopGesture(); mapListeners.forEach((listener) => listener.remove()); events.abort(); entries.clear(); overlay.setMap(null); },
+    dispose: () => { disposed = true; releaseCapture?.(); stopGesture(); mapListeners.forEach((listener) => listener.remove()); events.abort(); entries.clear(); overlay.setMap(null); },
   };
 }

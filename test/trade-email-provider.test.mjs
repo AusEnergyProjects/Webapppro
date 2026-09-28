@@ -193,10 +193,33 @@ test("Encoded payload size limit includes attachment, MIME and JSON overhead", a
     let calls = 0;
     const fetch = async () => { calls++; return json({ id: "bad" }); };
     await assert.rejects(sendMailboxEmail(provider, "token", { ...input, text: "é".repeat(1600000) }, fetch), expectedError("email_message_too_large", "rejected"));
-    await assert.rejects(sendMailboxEmail(provider, "token", { ...input, attachments: [{ filename: "huge.pdf", contentType: "application/pdf", content: Buffer.alloc(3 * 1024 * 1024).toString("base64") }] }, fetch), expectedError("email_message_too_large", "rejected"));
+    const oversizedBytes = provider === "google" ? 19_000_000 : 3 * 1024 * 1024;
+    await assert.rejects(sendMailboxEmail(provider, "token", { ...input, attachments: [{ filename: "huge.pdf", contentType: "application/pdf", content: Buffer.alloc(oversizedBytes).toString("base64") }] }, fetch), expectedError("email_message_too_large", "rejected"));
     assert.equal(calls, 0);
   }
-  await assert.rejects(sendMailboxEmail("google", "token", { ...input, text: "a".repeat(2000000) }, async () => { throw new Error("should not send"); }), expectedError("email_message_too_large", "rejected"));
+  // This attachment fits the preliminary base64 bound, but MIME plus JSON
+  // encoding takes the final Gmail request above its conservative limit.
+  await assert.rejects(sendMailboxEmail("google", "token", { ...input, attachments: [{ filename: "quote.pdf", contentType: "application/pdf", content: Buffer.alloc(19_000_000).toString("base64") }] }, async () => { throw new Error("should not send"); }), expectedError("email_message_too_large", "rejected"));
+});
+
+test("9.48 MB and exact 18 MB cutoff PDFs survive Gmail encoding with intact attachment bytes", async () => {
+  for (const sizeBytes of [9_484_416, 18_000_000]) {
+    const bytes = Buffer.alloc(sizeBytes, 87);
+    const result = await sendMailboxEmail("google", "token", { ...input, attachments: [{
+      filename: "quote-roof-design.pdf", contentType: "application/pdf", content: bytes.toString("base64"),
+    }] }, async (_url, options) => {
+      assert.ok(Buffer.byteLength(options.body) < 34_000_000);
+      const mimeBytes = Buffer.from(JSON.parse(options.body).raw, "base64url");
+      assert.ok(mimeBytes.length < 25_000_000, "MIME including the base64 PDF stays below 25 MB");
+      const mime = mimeBytes.toString("utf8");
+      assert.match(mime, /Content-Disposition: attachment;/);
+      assert.match(mime, /quote-roof-design\.pdf/);
+      const attachmentPart = mime.split("Content-Type: application/pdf")[1].split("\r\n\r\n")[1].split("\r\n--")[0];
+      assert.deepEqual(Buffer.from(attachmentPart.replaceAll("\r\n", ""), "base64"), bytes);
+      return json({ id: "roof-design-email" });
+    });
+    assert.equal(result.providerMessageId, "roof-design-email");
+  }
 });
 
 test("A typical one MiB PDF fits both providers without expensive base64 validation recursion", async () => {

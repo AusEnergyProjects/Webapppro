@@ -169,6 +169,7 @@ export async function issuedTradeQuotePdf(input: {
   const { renderTradeQuotePdf } = await import("@/lib/trade-quote-pdf-server");
   const legacyBytes = await renderTradeQuotePdf(input.snapshot, {
     origin: input.origin,
+    compress: false,
   });
   const legacySha256 = await immutableIssuedPdfSha256(legacyBytes);
   const deliveryRows = await getD1()

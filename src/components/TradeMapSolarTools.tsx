@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
-import { createTradeMapSolarLayout, DEFAULT_SOLAR_PANEL_TILT, validSolarPanelSize, validSolarPanelTilt, type SolarLayout } from "@/lib/trade-map-solar";
+import { createTradeMapSolarLayout, DEFAULT_SOLAR_PANEL_TILT, sameSolarPanelGeometry, validSolarPanelSize, validSolarPanelTilt, type SolarLayout } from "@/lib/trade-map-solar";
 import { captureTradeMapPng, captureTradeMapQuoteImage } from "@/lib/trade-map-capture";
 import { solarEquipmentSummary, DEFAULT_SOLAR_EQUIPMENT, SOLAR_STARTER_PANELS, SOLAR_EQUIPMENT_LABELS, type SolarEquipmentItem, type SolarEquipmentKind } from "@/lib/trade-solar-equipment";
 import { openSolarCrewSheet, reserveSolarCrewSheetWindow } from "@/lib/trade-solar-crew-sheet";
@@ -165,29 +165,55 @@ export function TradeMapSolarTools({ user, onRegisterMapSave, context, linkedDes
     const crewWindow = action === "crew" ? reserveSolarCrewSheetWindow() : null;
     if (action === "crew" && !crewWindow) { setMessage("Allow the crew sheet window, then try again."); return; }
     const attempt = new AbortController(); capture.current = attempt;
+    let session: ReturnType<ReturnType<typeof createTradeMapSolarLayout>["beginCapture"]> | null = null;
     setCapturing(true); onCapturing(true); setMessage("Choose this TLink tab in the sharing prompt to include your roof image.");
     try {
-      const savedDesign = onQuote ? await ensureSaved() : null;
-      if (attempt.signal.aborted) return;
-      const prepare = () => controller.current?.setCapturing(true), restore = () => controller.current?.setCapturing(false);
+      const drawing = controller.current;
+      if (!drawing) throw new Error("Wait for your solar panels to appear, then capture again.");
+      const capturedSession = drawing.beginCapture(attempt.signal, () => {
+        attempt.abort(); setCapturing(false); onCapturing(false);
+        setMessage("The map moved while capturing. Your design is unchanged. Try again.");
+      });
+      session = capturedSession;
+      const capturedPanels = capturedSession.layout.panels;
+      const saved: { design: SolarDesign | null } = { design: null };
+      setLayout(capturedSession.layout); setPickerOpen(false); setSavedOpen(false);
+      // The sharing prompt must open in the click's activation window. Fit/save only after permission.
+      const prepare = async () => {
+        await capturedSession.ensureVisible();
+        if (attempt.signal.aborted) throw new Error("Capture cancelled.");
+        const center = map.getCenter()?.toJSON();
+        if (!center) throw new Error("The map is not ready. Try capture again.");
+        update({ title: title.trim() || context?.title.slice(0, 180) || "Roof design", panels: capturedPanels, equipment,
+          installationNotes: notes, center, zoom: map.getZoom() ?? 20, ...links });
+        saved.design = onQuote ? await ensureSaved() : null;
+        if (attempt.signal.aborted) throw new Error("Capture cancelled.");
+        if (onQuote && (!saved.design || !sameSolarPanelGeometry(capturedPanels, saved.design.panels))) {
+          throw new Error("The saved roof layout does not match this map. Save your current design and try capture again.");
+        }
+        capturedSession.assertVisible();
+      };
+      const restore = capturedSession.restore;
       if (action !== "image") {
-        const measurement: MapQuoteMeasurement = { kind: "solar", quantity: layout.panels.length,
-          equipment: [...summary.models, ...equipment.filter((item) => item.kind !== "panel")],
-          ...(savedDesign ? { designId: savedDesign.id, designRevision: savedDesign.revision, workOrderId: savedDesign.workOrderId } : {}) };
+        const measurement: MapQuoteMeasurement = { kind: "solar", quantity: capturedPanels.length,
+          equipment: [...solarEquipmentSummary(capturedPanels).models, ...equipment.filter((item) => item.kind !== "panel")] };
         const roofImage = await captureTradeMapQuoteImage(map.getDiv(), measurement, prepare, restore, attempt.signal);
+        capturedSession.restore();
         if (!attempt.signal.aborted) {
           setMessage("");
-          if (action === "quote") onQuote?.({ ...measurement, roofImage });
-          else if (crewWindow) openSolarCrewSheet({ title: title || "Roof design", imageDataUrl: roofImage.dataUrl, panels: layout.panels, equipment, installationNotes: notes }, crewWindow);
+          const savedDesign = saved.design;
+          if (action === "quote") onQuote?.({ ...measurement, roofImage,
+            ...(savedDesign ? { designId: savedDesign.id, designRevision: savedDesign.revision, workOrderId: savedDesign.workOrderId } : {}) });
+          else if (crewWindow) openSolarCrewSheet({ title: title || "Roof design", imageDataUrl: roofImage.dataUrl, panels: capturedPanels, equipment, installationNotes: notes }, crewWindow);
         }
       } else {
-        await captureTradeMapPng(map.getDiv(), layout.panels.length, prepare, restore, attempt.signal);
+        await captureTradeMapPng(map.getDiv(), capturedPanels.length, prepare, restore, attempt.signal);
         if (!attempt.signal.aborted) setMessage("PNG download started. Your map attribution and panel layout are included.");
       }
     } catch (error) {
       crewWindow?.close();
       if (!attempt.signal.aborted) setMessage(error instanceof Error ? error.message : "Could not capture the map. Try again.");
-    } finally { if (attempt.signal.aborted) crewWindow?.close(); if (!attempt.signal.aborted) setCapturing(false); onCapturing(false); capture.current = null; }
+    } finally { session?.restore(); if (attempt.signal.aborted) crewWindow?.close(); if (!attempt.signal.aborted) setCapturing(false); onCapturing(false); capture.current = null; }
   }
   return <div className={styles.solar} aria-label="Solar panel layout">
     <div className={styles.toolbar}>

@@ -32,6 +32,9 @@ export function tradeQuoteDeliveryPublicOrigin(value) {
 
 export function tradeQuoteDeliveryPresentation(status, attempts = 0, nextAttemptAt = "", failureCode = "", generation = 1) {
   const state = String(status || "queued");
+  if (state === "failed" && String(failureCode) === "EMAIL_MESSAGE_TOO_LARGE") {
+    return { key: "attention", label: "PDF too large to email. Reduce its size and issue a new version.", canRetry: false };
+  }
   if (state === "reconciliation_required") {
     return { key: "attention", label: "Check outgoing mailbox", canRetry: false };
   }

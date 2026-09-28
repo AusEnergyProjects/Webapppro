@@ -26,6 +26,9 @@ export class TradeEmailProviderError extends Error {
 }
 
 const maxMessageBytes = 3 * 1024 * 1024;
+// Gmail supports larger attachments than Graph's single-request send path.
+// Accommodate an 18 MB PDF after MIME and request base64 encoding.
+const maxGoogleRequestBytes = 34_000_000;
 const googleSendScope = "https://www.googleapis.com/auth/gmail.send";
 const googleScope = `openid email ${googleSendScope}`;
 const microsoftScope = "openid profile email offline_access User.Read Mail.Send";
@@ -166,7 +169,7 @@ export async function getEmailIdentity(provider: TradeEmailProvider, accessToken
   return { id, email, name: safeString(name, 200) ? name : email };
 }
 
-function validateMessage(input: MailboxEmail) {
+function validateMessage(input: MailboxEmail, maxRequestBytes: number) {
   if (!validEmail(input.senderEmail) || !validEmail(input.recipient) || typeof input.senderName !== "string" || input.senderName.length > 200 || controls.test(input.senderName)
     || !safeString(input.subject, 998) || typeof input.text !== "string" || (input.html !== undefined && typeof input.html !== "string")
     || !safeString(input.messageId, 254) || !/^<[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?>$/.test(input.messageId)) invalid();
@@ -178,7 +181,7 @@ function validateMessage(input: MailboxEmail) {
       || !safeString(attachment.contentType, 128) || !mimeType.test(attachment.contentType)
       || typeof attachment.content !== "string") invalid();
     encodedSize += attachment.content.length;
-    if (encodedSize > maxMessageBytes) invalid("email_message_too_large");
+    if (encodedSize > maxRequestBytes) invalid("email_message_too_large");
     if (attachment.content.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(attachment.content)) invalid();
     try { if (btoa(atob(attachment.content)) !== attachment.content) invalid(); } catch { invalid(); }
     try { encodeURIComponent(attachment.filename); } catch { invalid(); }
@@ -236,10 +239,10 @@ function mimeMessage(input: MailboxEmail): string {
   return `From: ${input.senderName ? `${encodedHeader(input.senderName)} ` : ""}<${input.senderEmail}>\r\nTo: <${input.recipient}>\r\nSubject: ${encodedHeader(input.subject)}\r\nMessage-ID: ${input.messageId}\r\nDate: ${new Date().toUTCString()}\r\nMIME-Version: 1.0\r\n${body}`;
 }
 
-export async function sendMailboxEmail(provider: TradeEmailProvider, accessToken: string, input: MailboxEmail, fetchImpl: typeof fetch = fetch): Promise<{ providerMessageId: string; providerStatus: "accepted" }> {
+function mailboxEmailRequest(provider: TradeEmailProvider, input: MailboxEmail): string {
   assertProvider(provider);
-  if (!safeString(accessToken)) invalid();
-  validateMessage(input);
+  const maxRequestBytes = provider === "google" ? maxGoogleRequestBytes : maxMessageBytes;
+  validateMessage(input, maxRequestBytes);
   const body = provider === "google"
     ? JSON.stringify({ raw: utf8Base64(mimeMessage(input)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") })
     : JSON.stringify({
@@ -253,7 +256,17 @@ export async function sendMailboxEmail(provider: TradeEmailProvider, accessToken
       },
       saveToSentItems: true,
     });
-  if (new TextEncoder().encode(body).length > maxMessageBytes) invalid("email_message_too_large");
+  if (new TextEncoder().encode(body).length > maxRequestBytes) invalid("email_message_too_large");
+  return body;
+}
+
+export function validateMailboxEmail(provider: TradeEmailProvider, input: MailboxEmail): void {
+  mailboxEmailRequest(provider, input);
+}
+
+export async function sendMailboxEmail(provider: TradeEmailProvider, accessToken: string, input: MailboxEmail, fetchImpl: typeof fetch = fetch): Promise<{ providerMessageId: string; providerStatus: "accepted" }> {
+  if (!safeString(accessToken)) invalid();
+  const body = mailboxEmailRequest(provider, input);
   const response = await providerRequest(provider === "google" ? "https://gmail.googleapis.com/gmail/v1/users/me/messages/send" : "https://graph.microsoft.com/v1.0/me/sendMail", {
     method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json", Accept: "application/json" }, body,
   }, fetchImpl);

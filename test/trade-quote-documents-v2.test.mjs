@@ -4,7 +4,8 @@ import * as quoteEquipment from "../src/lib/trade-quote-equipment.ts";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { PDFDocument, PDFName, PDFDict, PDFString } from "pdf-lib";
+import { PDFDocument, PDFName, PDFDict, PDFRawStream, PDFString } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
 import { buildTradeQuoteEmail } from "../src/lib/trade-quote-email.ts";
 import { canonicalGoogleBusinessProfileUrl } from "../src/lib/trade-google-business-profile.mjs";
 import * as roofImages from "../src/lib/trade-quote-roof-image.ts";
@@ -473,6 +474,60 @@ test('a manufacturer PDF keeps blank separator pages without blocking preview or
   const result = await createTradeQuotePdfBytes({ ...snapshot(), productDocuments: [{ document, choiceKeys: [] }] }, undefined, { productDocuments: [{ id: document.id, bytes }] });
   assert.equal((await PDFDocument.load(result)).getPageCount(), base.getPageCount() + 2);
   assert.match((await extractText(result, { mergePages: true })).text, /Installation instructions after blank separator/);
+});
+
+test('quote compression preserves every product page and supported text while sharing repeated font resources', async () => {
+  const fonts = {
+    regular: new Uint8Array(fs.readFileSync(new URL('../public/fonts/LiberationSans-Regular.ttf', import.meta.url))),
+    bold: new Uint8Array(fs.readFileSync(new URL('../public/fonts/LiberationSans-Bold.ttf', import.meta.url))),
+  };
+  const manual = await PDFDocument.create();
+  manual.registerFontkit(fontkit);
+  const manualFont = await manual.embedFont(fonts.regular, { subset: false });
+  const manualImage = await manual.embedPng(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF1cAAAAASUVORK5CYII=', 'base64'));
+  for (let index = 0; index < 8; index++) {
+    const page = manual.addPage();
+    if (index !== 3) {
+      page.drawText(`Manufacturer warranty page ${index + 1}: façade 12 m²`, { x: 40, y: 700, font: manualFont });
+      page.drawImage(manualImage, { x: 40, y: 600, width: 20, height: 20 });
+    }
+  }
+  const manualBytes = await manual.save();
+  const fixture = await productPdfFixture('shared-resources', 'Product instructions');
+  const document = { ...fixture.document, pageCount: 8, sizeBytes: manualBytes.length, sha256: createHash('sha256').update(manualBytes).digest('hex') };
+  const value = { ...snapshot(), customerMessage: 'Prepared for Élodie Müller: façade 12 m².', productDocuments: [{ document, choiceKeys: [] }] };
+  const assets = { productDocuments: [{ id: document.id, bytes: manualBytes }] };
+  const legacyBytes = await createTradeQuotePdfBytes(value, fonts, assets, { compress: false });
+  const compactBytes = await createTradeQuotePdfBytes(value, fonts, assets);
+  const legacy = await PDFDocument.load(legacyBytes), compact = await PDFDocument.load(compactBytes);
+  assert.equal(compact.getPageCount(), legacy.getPageCount());
+  assert.ok(compactBytes.length < legacyBytes.length / 2, `${compactBytes.length} compact bytes versus ${legacyBytes.length} legacy bytes`);
+  const beforeText = (await extractText(new Uint8Array(legacyBytes), { mergePages: true })).text;
+  const afterText = (await extractText(new Uint8Array(compactBytes), { mergePages: true })).text;
+  assert.equal(afterText, beforeText, 'compression keeps selectable text and page order unchanged');
+  assert.match(afterText, /Élodie Müller: façade 12 m²/);
+  assert.match(afterText, /Manufacturer warranty page 8: façade 12 m²/);
+  const images = pdf => pdf.context.enumerateIndirectObjects().map(([, object]) => object)
+    .filter(object => object instanceof PDFRawStream && object.dict.get(PDFName.of('Subtype')) === PDFName.of('Image'));
+  assert.equal(images(compact).length, 1, 'one shared image is embedded once across all product pages');
+  assert.deepEqual(images(compact)[0].contents, images(legacy)[0].contents, 'image pixels retain their original encoding');
+  for (const page of compact.getPages().slice(-8)) assert.equal(page.node.Annots()?.size() || 0, 0);
+});
+
+test('generated quote output supports the email-link fallback while retaining bounded and legacy limits', async (t) => {
+  // Stub serialization so the output-size boundary does not need a large source PDF.
+  const backing = new Uint8Array(24_000_001);
+  let size = 24_000_000;
+  t.mock.method(PDFDocument.prototype, 'save', async () => backing.subarray(0, size));
+  assert.equal((await createTradeQuotePdfBytes(snapshot())).length, 24_000_000);
+  size = 24_000_001;
+  await assert.rejects(createTradeQuotePdfBytes(snapshot()), /PRODUCT_DOCUMENT_LIMIT/);
+  size = 12 * 1024 * 1024;
+  assert.equal((await createTradeQuotePdfBytes(snapshot(), undefined, undefined, { compress: false })).length, size);
+  size++;
+  await assert.rejects(createTradeQuotePdfBytes(snapshot(), undefined, undefined, { compress: false }), /PRODUCT_DOCUMENT_LIMIT/);
+  assert.equal(productDocuments.MAX_QUOTE_PRODUCT_DOCUMENT_BYTES, 12 * 1024 * 1024, 'uploaded product documents keep their existing aggregate bound');
+  assert.equal(productDocuments.MAX_PRODUCT_DOCUMENT_BYTES, 8 * 1024 * 1024, 'individual uploaded PDFs keep their existing bound');
 });
 
 test('historical quote documents stay frozen and scoped to their owner after live product replacement', async () => {
