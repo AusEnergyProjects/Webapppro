@@ -41,8 +41,8 @@
 .paymentDialog button:disabled { opacity: .6; cursor: wait; }
 
 /* Explicitly match plain headings and sortable buttons despite portal button defaults. */
-.register [role="columnheader"],
-.register [role="columnheader"] button {
+:global(.trade-portal-shell) .register [role="columnheader"],
+:global(.trade-portal-shell) .register [role="columnheader"] button {
   color: inherit;
   font-family: inherit;
   font-size: 14px;
