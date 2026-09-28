@@ -289,12 +289,15 @@ test("job register route and UI keep tenant scope, filters, sorting and accessib
   assert.doesNotMatch(ui, /key=\{`[^\n]*selectedJobDetail\.assigneeMemberId/);
 });
 
-test("job register and detail use the canonical lifecycle labels", () => {
+test("job register and detail preserve canonical status values with explicit rebate and invoice labels", () => {
   const ui = read("../src/components/InstallerCrmWorkspace.tsx");
   assert.match(ui, /const jobStatusFilters = JOB_REGISTER_OPERATIONAL_STATUSES\.filter\(status => status !== "deleted"\)/);
   assert.equal((ui.match(/jobStatusFilters\.map\(\(value\)/g) || []).length, 2);
   assert.match(ui, /jobStatusFilters\.some\(option => option === status\)/);
-  assert.match(ui, /TRADE_JOB_LIFECYCLE_LABELS\[status\]/);
+  assert.match(ui, /jobProgressStatusLabel\(status\)/);
+  assert.match(ui, /const payment = jobInvoicePaymentStatus\(job\)/);
+  assert.match(ui, /registerStyles\.statusStack/);
+  assert.match(ui, /canViewInvoices && <JobInvoiceStatus job=\{job\}/);
   assert.match(ui, /job\.jobRegister\.operationalStatus === "audited" && auditOutcomeLabel/);
   assert.match(ui, /normaliseJobOperationalStatus\(preferences\.operationalStatus\)/);
   assert.match(ui, /<dt>Status<\/dt><dd>\{displayedLifecycle\}<\/dd>/);

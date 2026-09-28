@@ -322,6 +322,16 @@ test("automatic overdue reminder uses the invoice's original recipient", async t
   assert.equal((await f.preview("job", "overdue-invoice", { now: NOW, automatic: true })).context.invoiceReady, false);
 });
 
+test("completed job progress is independent of whether the customer invoice still needs chasing", async t => {
+  const f = fixture(t);
+  f.quick();
+  f.sqlite.exec("UPDATE trade_work_orders SET stage='completed'");
+  assert.equal((await f.preview("job", "overdue-invoice", { now: NOW, automatic: true })).context.invoiceReady, true);
+  f.sqlite.exec("UPDATE trade_crm_job_details SET invoice_status='paid',paid_value_cents=11000");
+  assert.equal((await f.preview("job", "overdue-invoice", { now: NOW, automatic: true })).context.invoiceReady, false);
+  assert.equal(f.sqlite.prepare("SELECT stage FROM trade_work_orders WHERE id='job'").get().stage, "completed");
+});
+
 test("accepted invoice requires a matching accepted quote-link and acceptance chain", async t => {
   const f = fixture(t);
   f.accepted();

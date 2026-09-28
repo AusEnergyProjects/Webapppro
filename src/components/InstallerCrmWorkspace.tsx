@@ -26,7 +26,7 @@ import type { TradeTeamPermissions } from "./TradeTeamSettings";
 import type { CustomerDocumentDelivery, CustomerDocumentSendResult } from "./TradeCustomerDocumentDeliveryPanel";
 import type { DataforceJobCsvRecord } from "@/lib/creditex-dataforce-job-csv";
 import { JOB_REGISTER_COLUMN_KEYS, JOB_REGISTER_OPERATIONAL_STATUSES, type JobRegisterRecord } from "@/lib/trade-crm-job-register";
-import { TRADE_JOB_LIFECYCLE_LABELS } from "@/lib/trade-job-lifecycle";
+import { jobInvoicePaymentStatus, jobProgressStatusLabel } from "@/lib/trade-job-payment-status";
 import { customerMapRecord, jobMapRecord } from "@/lib/trade-crm-map-records";
 import { createMapNavigationGuard } from "@/lib/trade-map-navigation";
 import { defaultTradeMapDateRange } from "@/lib/trade-map-date-range";
@@ -153,7 +153,7 @@ type JobReturnTarget = { kind: "jobs" } | { kind: "customer"; customerId: string
 const jobStatusFilters = JOB_REGISTER_OPERATIONAL_STATUSES.filter(status => status !== "deleted");
 const lifecycleLabel = (value: string | null | undefined) => {
   const status = JOB_REGISTER_OPERATIONAL_STATUSES.find(status => status === value);
-  return status ? TRADE_JOB_LIFECYCLE_LABELS[status]
+  return status ? jobProgressStatusLabel(status)
     : value ? value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase()) : "";
 };
 
@@ -233,7 +233,7 @@ const jobIndexColumns = [
   { key: "assignedWorker", label: "Assigned worker", width: 160, sort: ["assignee-asc", "assignee-desc"] },
   { key: "scheduleDate", label: "Schedule date", width: 150, sort: ["date-asc", "date-desc"] },
   { key: "createdDate", label: "Created date", width: 135, sort: ["created-asc", "created-desc"] },
-  { key: "operationalStatus", label: "Status", width: 105, sort: ["status-asc", "status-desc"] },
+  { key: "operationalStatus", label: "Status", width: 190, sort: ["status-asc", "status-desc"] },
   { key: "quoteTotalExGst", label: "Quote total ex GST", width: 145, sort: ["quote-total-asc", "quote-total-desc"] },
   { key: "stc", label: "STC", width: 78, sort: ["s-a", "s-d"] },
   { key: "veec", label: "VEEC", width: 78, sort: ["v-a", "v-d"] },
@@ -323,6 +323,12 @@ function normaliseJobOperationalStatus(value: unknown) {
   return "";
 }
 
+function JobInvoiceStatus({ job, compact = true }: { job: Job; compact?: boolean }) {
+  const payment = jobInvoicePaymentStatus(job);
+  if (compact && payment?.status === "not_started") return null;
+  return payment ? <span className={registerStyles.invoiceStatus} data-tone={payment.tone} title="Customer invoice payment. Separate from job and rebate progress.">{payment.label}</span> : null;
+}
+
 function jobIndexCell(job: Job, key: string, onOpen: () => void, actionNode: ReactNode, user: User): ReactNode {
   const record = job.jobRegister;
   if (key === "actions") return actionNode;
@@ -334,7 +340,7 @@ function jobIndexCell(job: Job, key: string, onOpen: () => void, actionNode: Rea
   if (key === "operationalStatus") {
     const auditOutcome = lifecycleLabel(record.auditOutcome || "");
     const label = lifecycleLabel(record.operationalStatus);
-    return <span className={`${registerStyles.status} ${registerStyles[record.operationalStatus]}`}>{record.operationalStatus === "audited" && auditOutcome ? `${label} | ${auditOutcome}` : label}</span>;
+    return <span className={registerStyles.statusStack}><span className={`${registerStyles.status} ${registerStyles[record.operationalStatus]}`}>{record.operationalStatus === "audited" && auditOutcome ? `${label} | ${auditOutcome}` : label}</span><JobInvoiceStatus job={job} /></span>;
   }
   if (key === "quoteTotalExGst") return <span>{record.quoteTotalExGstCents === null ? (record.quoteStatus === "restricted" ? "Restricted" : "Not quoted") : registerMoney(record.quoteTotalExGstCents)}</span>;
   if (key === "stc" || key === "veec" || key === "esc") return <span title={record.certificates.state === "pending" ? "Pending" : undefined}>{record.certificates[key]}</span>;
@@ -1843,7 +1849,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
     const frame = window.requestAnimationFrame(() => void loadAllJobAssignees());
     return () => window.cancelAnimationFrame(frame);
   }, [activeTab, canAssignJobs, loadAllJobAssignees]);
-  return <article className="crm-job-card"><header className="crm-job-card-header"><div><span>{job.workNumber}</span><h3>{job.title}</h3><small>{serviceLabels[job.serviceCategory] || job.serviceCategory}{job.siteArea ? ` | ${job.siteArea}` : ""}</small></div><div className="crm-job-header-actions"><strong>{displayedLifecycle}</strong><span className={isProtected ? "protected" : "owned"}>{isProtected ? "Australian Energy Assessments protected" : customer ? "Your customer" : "Internal"}</span>{canViewFieldEvidence && !isProtected && customer && <button type="button" className="crm-request-info-button" onClick={() => setTab("field")}>Request info</button>}</div></header>
+  return <article className="crm-job-card"><header className="crm-job-card-header"><div><span>{job.workNumber}</span><h3>{job.title}</h3><small>{serviceLabels[job.serviceCategory] || job.serviceCategory}{job.siteArea ? ` | ${job.siteArea}` : ""}</small></div><div className="crm-job-header-actions"><strong>{displayedLifecycle}</strong>{canViewInvoices && <JobInvoiceStatus job={job} />}<span className={isProtected ? "protected" : "owned"}>{isProtected ? "Australian Energy Assessments protected" : customer ? "Your customer" : "Internal"}</span>{canViewFieldEvidence && !isProtected && customer && <button type="button" className="crm-request-info-button" onClick={() => setTab("field")}>Request info</button>}</div></header>
     <nav className="crm-job-tabs" aria-label="Job card sections">{mainTabs.map(([value, label]) => <button key={value} type="button" className={activeTab === value ? "active" : ""} onClick={() => setTab(value)}>{label}</button>)}<AccessibleMenu className="crm-job-more" active={moreActive} label={moreActive ? activeTab[0].toUpperCase() + activeTab.slice(1) : "More"}>{(close) => moreTabs.map(([value, label]) => <button role="menuitem" key={value} type="button" className={activeTab === value ? "active" : ""} onClick={() => { setTab(value); close(); }}>{label}</button>)}</AccessibleMenu></nav>
     {activeTab === "summary" && <section className="crm-job-section crm-summary-workspace">
         <section className={registerStyles.detailSection} aria-labelledby={`job-information-${job.id}`}>
@@ -1851,6 +1857,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
           <dl className={registerStyles.detailGrid}>
             <div><dt>Job ID</dt><dd>{job.workNumber}</dd></div>
             <div><dt>Status</dt><dd>{displayedLifecycle}</dd></div>
+            {canViewInvoices && <div><dt>Customer invoice</dt><dd><JobInvoiceStatus job={job} compact={false} /></dd></div>}
             <div><dt>Work type</dt><dd>{serviceLabels[job.serviceCategory] || job.serviceCategory || "Not added"}</dd></div>
             <div><dt>Assigned worker</dt><dd>{job.assigneeLabel || "Unassigned"}</dd></div>
             <div><dt>Scheduled date</dt><dd>{job.scheduledStart ? dateLabel(job.scheduledStart, true) : "Unassigned"}</dd></div>
